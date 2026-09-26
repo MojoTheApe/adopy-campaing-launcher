@@ -1,5 +1,27 @@
 # System history
 
+## Sentry events carry the failing page section; a read-only triage digest — ACL-1325
+
+2026-09-26 a new "Suggest an audience" Audience layout on one account broke "Further
+limit the reach" and was found only because the run was on the owner's machine: the
+Sentry event had step and reason, not the page. Owner decisions 2026-09-26: attach a
+scrubbed copy of the failing section — yes; screenshots — no; react immediately; the
+digest goes to the owner's Claude chat.
+
+- Blocking-failure and campaign-stop events get `section_<step>.html` (≤ 200 KB): the
+  card the failing step works on (plus an open dialog), taken in the page at the
+  failure and rebuilt from a whitelist when sent — campaign/account/ad set/ad names,
+  URLs, `act=`/`*_id=`, e-mails, phones, 6+ digit runs, tokens replaced; `js_*` ids →
+  `syn_N`; text cut at 300 chars. Tag `page_snapshot=section`, context
+  `page_snapshot`. Off per machine: `ACL_SENTRY_PAGE_SNAPSHOT=0`. Nothing new on disk.
+- `scripts/sentry_triage.py`: new/regressed issues since a cursor, latest event and
+  section per issue, grouped by `step:reason`, matched to tasks in
+  `config/sentry_triage_map.json`, printed as JSON + markdown. Never writes to Sentry
+  or GitHub; `--apply` only records the cursor; no token → "skipped", exit 0.
+- `docs/system/SENTRY_TRIAGE.md`: the routine (Sentry alert + desktop scheduled task
+  every 10 minutes) and the owner's one-time setup. No alert rule or schedule is
+  created by the code.
+
 ## "Publish all" runs only as many profiles at once as the machine's memory allows — ACL-1321
 
 On the owner's laptop three Multilogin profiles with Ads Manager already used 85–89 %
