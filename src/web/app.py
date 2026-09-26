@@ -755,13 +755,40 @@ def _build_account_map_view(
         key=lambda mc: (-float((mc.get("book") or {}).get("spend") or 0), (mc["country"] or "").lower())
     )
 
-    available = [
-        {"account": label, "assets": account_links.values_for(label, "asset")}
-        for label in account_links.available_accounts(all_known)
-    ]
+    # ACL-1319: Available accounts — только те, с кем есть смысл работать.
+    # `all_known` остаётся прежним: из него строятся выпадающие списки
+    # привязки, и там нужен каждый аккаунт. Сужается только этот список и его
+    # счётчик; правило и его причины — в `available_accounts.py`.
+    from src.web import available_accounts as _avail
+
+    try:
+        hidden = account_links.hidden_keys()
+    except Exception:  # pragma: no cover - испорченная настройка вида не гасит карту
+        hidden = set()
+    # Окно активности меряется по всей книге, не по периоду на экране:
+    # «работает ли аккаунт» не должно зависеть от выбранных дат.
+    activity = _avail.workbook_activity(df)
+    buckets = _avail.split_available(
+        account_links.available_accounts(all_known),
+        connected=known,
+        placed=[a for a, _v in account_links.all_pairs("country")],
+        activity=activity,
+        hidden=hidden,
+    )
+
+    def _with_assets(rows: list[dict]) -> list[dict]:
+        return [{**r, "assets": account_links.values_for(r["account"], "asset")} for r in rows]
+
+    available = _with_assets(buckets["shown"])
     return {
         "countries": countries,
         "available": available,
+        "available_inactive": _with_assets(buckets["inactive"]),
+        "available_hidden": buckets["hidden"],
+        "activity_window": (
+            {"from": activity.window_from, "to": activity.window_to, "days": _avail.WINDOW_DAYS}
+            if activity else None
+        ),
         "all_accounts": all_known,
         "dates": dates,
         "live": live,
@@ -3268,6 +3295,37 @@ async def account_map_fragment(
     )
 
 
+@app.get("/account-map/available")
+async def account_map_available_fragment(
+    request: Request, date_from: str = "", date_to: str = "", span: str = ""
+) -> Response:
+    """Только блок Available accounts — после Remove/Restore (ACL-1319).
+
+    Собирается тем же путём, что и Home: отчёт за период на экране и
+    привязанные аккаунты. Фрагмент /account-map берёт отчёт без периода, и
+    его список мог бы отличаться от того, что человек только что видел, —
+    после «Remove» на месте списка появился бы другой.
+    """
+    import html as _html
+    from copy import deepcopy
+
+    try:
+        report, df, _warnings = get_cached_report()
+        date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
+        report = deepcopy(report_for_period(report, df, date_from, date_to))
+        _add_linked_accounts_to_builder(report)
+        _enrich_country_overview(report)
+        view = _build_account_map_view(report, df, date_from, date_to, span.strip())
+    except Exception as exc:
+        return HTMLResponse(
+            f'<div class="amap-empty">Could not rebuild Available accounts: {_html.escape(str(exc))}</div>',
+            status_code=503,
+        )
+    return templates.TemplateResponse(
+        "_account_map_available.html", {"request": request, "amap": view}
+    )
+
+
 @app.get("/goals")
 async def goals_read(cm: str = "") -> JSONResponse:
     from src.web import goals as goals_store
@@ -3455,6 +3513,65 @@ async def account_links_edit(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": f"Could not save: {exc}"}, status_code=500)
 
     return JSONResponse({"ok": False, "error": f"Unknown action {action!r}"}, status_code=400)
+
+
+#: Больше, чем бывает аккаунтов у одного байера, и достаточно мало, чтобы
+#: случайный огромный запрос не переписывал файл десятки тысяч раз.
+_AVAILABLE_HIDE_MAX = 1000
+
+
+@app.post("/api/available-accounts/hidden")
+async def api_available_accounts_hidden(request: Request) -> JSONResponse:
+    """Убрать аккаунты из Available accounts на этой машине или вернуть их.
+
+    ACL-1319. Настройка вида одного списка: строка карты, профиль Multilogin,
+    размещения и история не трогаются. Аккаунт, стоящий в стране, отсюда не
+    убирается — сначала его надо вынуть из страны; такие приходят в `skipped`.
+
+    Body JSON: {accounts: [str, ...], hidden: bool}
+    """
+    from src.web import account_links
+    from src.web.available_accounts import alias_key
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Expected JSON"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
+    accounts = body.get("accounts")
+    hide = body.get("hidden", True)
+    if not isinstance(accounts, list) or not all(isinstance(a, str) for a in accounts):
+        return JSONResponse({"ok": False, "error": "accounts must be a list of names"}, status_code=400)
+    if not isinstance(hide, bool):
+        return JSONResponse({"ok": False, "error": "hidden must be a boolean"}, status_code=400)
+    names = [" ".join(a.split()) for a in accounts if a and a.strip()]
+    if not names:
+        return JSONResponse({"ok": False, "error": "Pick at least one account"}, status_code=400)
+    if len(names) > _AVAILABLE_HIDE_MAX:
+        return JSONResponse({"ok": False, "error": "Too many accounts in one request"}, status_code=400)
+
+    skipped: list[str] = []
+    try:
+        if hide:
+            placed = {alias_key(a) for a, _v in account_links.all_pairs("country") if alias_key(a)}
+            skipped = [n for n in names if alias_key(n) in placed]
+            changed = account_links.hide_accounts([n for n in names if n not in skipped])
+        else:
+            changed = account_links.restore_accounts(names)
+        count = len(account_links.hidden_accounts())
+    except OSError:
+        return JSONResponse(
+            {"ok": False, "error": "Could not save this machine's hidden accounts. Try again."},
+            status_code=500,
+        )
+    return JSONResponse({
+        "ok": True,
+        "hidden": hide,
+        "changed": changed,
+        "skipped": skipped,
+        "hidden_count": count,
+    })
 
 
 def _accounts_spending_today(accounts: list[str]) -> list[str]:
@@ -3911,6 +4028,22 @@ async def publish_jobs_status(job_id: str) -> JSONResponse:
     if job is None:
         return JSONResponse({"error": "Job not found."}, status_code=404)
     return JSONResponse(job)
+
+
+@app.get("/publish-jobs/{job_id}/progress")
+async def publish_jobs_progress(job_id: str) -> JSONResponse:
+    """Где каждая кампания задания: итог, последний шаг робота, тишина (ACL-1315).
+
+    Читает хвост телеметрии — ящик билдера ставит по этому ответу точку у
+    имени кампании. 404, как и у статуса: после перезапуска дешборда задания
+    нет, и страница перестаёт показывать его идущим.
+    """
+    from src.web.publish_progress import job_progress
+
+    job = get_job(job_id)
+    if job is None:
+        return JSONResponse({"error": "Job not found."}, status_code=404)
+    return JSONResponse(job_progress(job))
 
 
 @app.post("/build-upload")

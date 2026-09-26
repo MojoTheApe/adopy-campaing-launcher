@@ -27,7 +27,11 @@ import logging
 import os
 import re
 import sys
+import threading
+import time
 import uuid
+from collections import OrderedDict
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
@@ -302,9 +306,27 @@ def set_current_run(run_id: str = "", campaign: str = "") -> None:
     """
     old = _current_state()
     _current_var.set({
-        "run_id": run_id or old["run_id"],
-        "campaign": campaign or old["campaign"],
+        **old,
+        "run_id": run_id or old.get("run_id", ""),
+        "campaign": campaign or old.get("campaign", ""),
     })
+
+
+def set_current_job(job_id: str) -> None:
+    """Запомнить задание публикации дешборда, которое идёт в этом потоке.
+
+    ACL-1315, повторное ревью PR #314: точка сборки в билдере сопоставляла
+    строки телеметрии с кампанией только по имени — два задания с
+    одноимёнными кампаниями на разных аккаунтах получали шаги и блокеры друг
+    друга. Номер задания в строке (`job`) делает сопоставление точным.
+    """
+    state = dict(_current_state())
+    state["job"] = job_id or ""
+    _current_var.set(state)
+
+
+def current_job_id() -> str:
+    return _current_state().get("job") or ""
 
 
 def clear_current_run() -> None:
@@ -372,6 +394,9 @@ def record(
         campaign = campaign or current_campaign()
         if campaign:
             rec["campaign"] = campaign
+        job = current_job_id()
+        if job:
+            rec["job"] = job
         if duration_s is not None:
             rec["duration_s"] = round(duration_s, 1)
         if diag:
@@ -393,27 +418,80 @@ def record(
         except Exception:
             pass  # Even a broken logging handler must not abort browser work.
 
-    # Отказ шага уезжает ещё и в общий приёмник (ACL-354). Место выбрано
-    # одно — здесь, — по той же причине, по какой здесь же присваивается
-    # номер прогона: сорок три места вызова получают это даром и не могут
-    # разойтись с журналом.
-    #
-    # Отдельно от записи в файл намеренно: если запись не удалась, сообщить
-    # об отказе тем более нужно. И под своим `except`: отправка не смеет
-    # уронить прогон — то же правило, что у самой телеметрии.
+    # ACL-354 отправлял в Sentry каждую строку с `ok=False`. ACL-1318: так
+    # больше не делаем — 25.09 список тикетов состоял из диагностики
+    # (`advantage_plus_off: still-on` ×36, `click_target_covered: silent`
+    # ×14, `create_took`, строки промежуточных попыток), и настоящий отказ
+    # `ad2_copy` в нём терялся. Здесь строка только запоминается: какой шаг
+    # в каком прогоне отказал и чем объяснил. В Sentry уходят лишь отказы,
+    # которые портят кампанию, — их решает `sentry_signal` в конце попытки и
+    # по итогу кампании, а контекст берёт отсюда.
     if ok is False:
         try:
-            from src import acl_sentry
-
-            acl_sentry.report_step_failure(
-                step,
-                _why_of(note, diag),
-                run_id=run_id or current_run_id(),
-                campaign=campaign or current_campaign(),
-                diag=diag,
-            )
+            _remember_failure(run_id or current_run_id(), step, _why_of(note, diag), diag)
         except Exception:
             pass
+
+
+#: Последний отказ каждого шага в каждом прогоне: (run_id, step) -> {why, diag}.
+#: Ограничен по размеру — процесс дешборда живёт сутками.
+_FAILURES: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
+_FAILURES_LOCK = threading.Lock()
+_FAILURES_MAX = 512
+
+
+def _remember_failure(run_id: str, step: str, why: str, diag: dict[str, Any] | None) -> None:
+    key = (run_id or "", step or "")
+    with _FAILURES_LOCK:
+        known = _FAILURES.pop(key, None) or {}
+        _FAILURES[key] = {
+            # Шаг часто пишет две строки: первая с причиной, вторая — общий
+            # отказ со снимком страницы и пустой причиной (audience_location
+            # 25.09 17:54). Причина первой не должна теряться.
+            "why": why or known.get("why", ""),
+            "diag": scrub_diag(diag) if diag else None,
+        }
+        while len(_FAILURES) > _FAILURES_MAX:
+            _FAILURES.popitem(last=False)
+
+
+def last_failure(step: str, run_id: str = "") -> dict[str, Any] | None:
+    """Последний отказ шага `step` в прогоне (по умолчанию — текущем).
+
+    `{"why": …, "diag": …}` — `diag` уже вычищен тем же `scrub_diag`, что и
+    журнал. `None`, если шаг в этом прогоне не отказывал.
+    """
+    key = (run_id or current_run_id(), step or "")
+    with _FAILURES_LOCK:
+        found = _FAILURES.get(key)
+        return dict(found) if found else None
+
+
+@contextmanager
+def phase(name: str, *, campaign: str = "", diag: dict[str, Any] | None = None):
+    """Строка `job_phase` с длительностью этапа задания (ACL-1313).
+
+    От нажатия в дешборде до подключения к профилю уходило ~60 с, и
+    сказать, на что, было нечем: телеметрия начиналась с первого шага в Ads
+    Manager. Этапы начала задания (сборка черновиков, библиотека, ожидание
+    профиля, подключение, первый переход) пишут себя сами. Вызывающий может
+    дополнить `diag` по ходу — он отдаётся в `with … as info`.
+
+    Исключение этапа не глотается; строка тогда с `ok=None` и типом ошибки —
+    сам отказ сообщает тот, кто его поймает.
+    """
+    started = time.monotonic()
+    info: dict[str, Any] = dict(diag or {})
+    ok: bool | None = None
+    try:
+        yield info
+        ok = True
+    except BaseException as exc:
+        info["error"] = type(exc).__name__
+        raise
+    finally:
+        record("job_phase", ok, campaign=campaign, note=name,
+               duration_s=time.monotonic() - started, diag=info or None)
 
 
 def _why_of(note: str, diag: dict[str, Any] | None) -> str:

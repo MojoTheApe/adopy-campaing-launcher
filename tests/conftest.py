@@ -39,6 +39,46 @@ if str(_PROJ_ROOT) not in sys.path:
 os.environ["ACL_SENTRY_DSN"] = ""
 
 
+# Тесты не пишут в живой журнал телеметрии (PR #314, ревью).
+#
+# `run_telemetry.TELEMETRY_PATH` смотрит в `output/rpa_telemetry.jsonl` рабочей
+# папки — тот же файл, который читают разбор прогонов и дешборд. Десятки
+# тестов зовут `record()` (часто с `ok=False`, ради отказов), и без этой
+# фикстуры выдуманные отказы оседали в настоящем журнале. Замок журнала
+# (`<путь>.lock`, `acl_log.append_line`) идёт следом за путём. Тест, который
+# ставит свой путь сам (`monkeypatch.setattr(rt, "TELEMETRY_PATH", ...)`),
+# делает это позже этой фикстуры — его путь и действует. Папка своя у
+# каждого теста и не совпадает с `tmp_path`: тесты, которые считают файлы в
+# `tmp_path`, лишнего не увидят.
+# Тесты не пишут в живую машинную папку ACL (ревью v3 PR #314).
+#
+# `config.paths.get_local_config_dir()` — это `%LOCALAPPDATA%\ACL`: там
+# `draft_status.json` (что видит человек на дешборде), реестры таргетинга и
+# текстов, карта аккаунтов. `test_three_accounts_publish_at_once.py` через
+# `publish_jobs._finish` записал туда фиктивные `Doc19`, `DQ501`, а какой-то
+# тест обновил `library_synced_at` в `targeting_registry.json`. Все пути
+# машинной папки считаются при вызове, не при импорте, поэтому переменной
+# окружения на время теста достаточно; тест, который ставит свою
+# `ACL_CONFIG_DIR` (или убирает её, проверяя путь по умолчанию), делает это
+# позже этой фикстуры, и действует его значение.
+@pytest.fixture(autouse=True)
+def _machine_config_off_the_live_folder(tmp_path_factory, monkeypatch):
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path_factory.mktemp("acl_config")))
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _telemetry_off_the_live_journal(tmp_path_factory, monkeypatch):
+    try:
+        from src.fb_ads_rpa import run_telemetry
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(run_telemetry, "TELEMETRY_PATH",
+                        tmp_path_factory.mktemp("telemetry") / "rpa_telemetry.jsonl")
+    yield
+
+
 @pytest.fixture
 def enriched_df() -> pd.DataFrame:
     """Return an enriched DataFrame as if compute_metrics + enrich_structure ran.

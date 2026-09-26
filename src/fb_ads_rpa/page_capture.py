@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import time
@@ -65,6 +66,26 @@ KEEP_RUNS = 20
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}")
 
 _taken: dict[str, int] = {}
+
+
+def success_captures_enabled() -> bool:
+    """Снимать ли страницу и PNG на УДАЧНОМ шаге. По умолчанию — нет.
+
+    ACL-1313, прогоны 25.09: снимки удачных шагов стоили 1–6 с разметкой
+    (advantage_plus_before/control, library_pick_selected, ad_media_ready,
+    targeting_and_groups — 15–20 с на кампанию) и 5–7 с каждый PNG, и вдобавок
+    съедали лимит MAX_PER_RUN, так что настоящему отказу в конце прогона
+    снимка уже не доставалось. Отказы снимаются всегда. Вернуть снимки на
+    каждом шаге: FB_RPA_SHOT_ALL=1.
+    """
+    return os.environ.get("FB_RPA_SHOT_ALL", "").strip().lower() in ("1", "true", "yes")
+
+
+def capture_on_success(page, **kwargs) -> str:
+    """`capture` для удачного шага: только при FB_RPA_SHOT_ALL=1, иначе ""."""
+    if not success_captures_enabled():
+        return ""
+    return capture(page, **kwargs)
 
 
 def _root() -> Path:

@@ -40,6 +40,18 @@ WARNING = "warning"
 # Names are the base part, before any ":detail" suffix. Add a new step here in
 # the same commit that starts producing it, otherwise it blocks by default.
 POLICY: dict[str, tuple[str, str]] = {
+    "account_blocked": (
+        BLOCKING,
+        "Meta has restricted this ad account (\"Verification required to advertise\", "
+        "\"Account disabled\" or \"Start authentication\"); the campaign was stopped and "
+        "will not be retried - complete the verification in Meta, then run it again",
+    ),
+    "browser_closed": (
+        BLOCKING,
+        "the profile's browser tab was closed while the ads were being built; the "
+        "draft is incomplete and was not retried (a replay would duplicate it) - "
+        "check the draft in Ads Manager and finish or delete it",
+    ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),
     # ── Ad level ────────────────────────────────────────────────────────────
@@ -96,6 +108,11 @@ POLICY: dict[str, tuple[str, str]] = {
         BLOCKING,
         "the requested manual placements were not verified; leaving Advantage+ "
         "changes where budget can be spent",
+    ),
+    "advantage_plus_audience": (
+        BLOCKING,
+        "the Audience card still reads 'Advantage+ on': the age range is only a "
+        "suggestion and Meta may deliver outside it",
     ),
     "devices_ios": (
         BLOCKING,

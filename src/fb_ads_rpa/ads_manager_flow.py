@@ -12,7 +12,7 @@ RPA_FLOW_VERSION = "v96"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
-from src.fb_ads_rpa import failure_policy, retry_policy
+from src.fb_ads_rpa import failure_policy, retry_policy, sentry_signal
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.page_diagnostics import diagnose_and_recover
 from src.fb_ads_rpa.meta_dom import (
@@ -64,6 +64,7 @@ from src.fb_ads_rpa.pacing import (
     end_teach_wait,
     get_teach_state,
 )
+from src.fb_ads_rpa.run_telemetry import phase as _telemetry_phase
 from src.fb_ads_rpa.screenshots import capture
 from src.fb_ads_rpa.selectors import load_selectors
 
@@ -1023,7 +1024,8 @@ class AdsManagerFlow:
 
     def _shot(self, label: str, result: RpaPublishResult) -> str:
         path = capture(self.page, label)
-        result.screenshot_paths.append(path)
+        if path:  # "" — окно свёрнуто, снимка нет (screenshots._page_hidden)
+            result.screenshot_paths.append(path)
         return path
 
     def _wait_ad_set_level(self, *, timeout_s: float = 12) -> bool:
@@ -1154,10 +1156,36 @@ class AdsManagerFlow:
             "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act_id}"
         )
         url = url_tpl.format(act_id=act)
-        self.page.goto(url, wait_until="domcontentloaded", timeout=self.nav_timeout)
-        pause_after_navigation()
+        # 20.09 06:50 (KLD_BFL_S15): самый первый переход падал с
+        # ERR_SSL_PROTOCOL_ERROR, и кампания не начиналась вовсе — обрыв
+        # соединения профиля лечится повтором, а не отказом всего задания.
+        last_exc = None
+        # ACL-1313: переход на список кампаний — последний этап начала
+        # задания; его длительность — в телеметрию (`job_phase`).
+        with _telemetry_phase("open_campaigns", campaign=draft.name) as info:
+            for attempt in range(3):
+                try:
+                    self.page.goto(url, wait_until="domcontentloaded", timeout=self.nav_timeout)
+                    last_exc = None
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    if "ERR_" not in str(exc):
+                        raise
+                    log.warning("campaigns goto failed (%s/3): %s", attempt + 1, str(exc)[:80])
+                    time.sleep(8.0)
+            info["attempts"] = attempt + 1
+            if last_exc is not None:
+                raise last_exc
+            pause_after_navigation()
         result.steps_completed.append("open_campaigns")
-        self._shot("01_campaigns", result)
+        # ACL-1313: удачный переход — без PNG (5–7 с при трёх профилях);
+        # вернуть: FB_RPA_SHOT_ALL=1.
+        from src.fb_ads_rpa.screenshots import capture_on_success
+
+        shot = capture_on_success(self.page, "01_campaigns")
+        if shot:
+            result.screenshot_paths.append(shot)
 
     def _start_create_wizard(self, result: RpaPublishResult) -> None:
         sels = self.cfg.get("selectors") or {}
@@ -2198,28 +2226,43 @@ class AdsManagerFlow:
                 # would otherwise be reported against the draft that replaced it.
                 ad_soft_fails.clear()
                 self._goto_campaigns(draft, result)
-                fail_step = run_recorded_campaign_flow(
-                    self.page,
-                    campaign_name=draft.name,
-                    budget=str(ad_set.daily_budget or ""),
-                    adset_name=ad_set.name,
-                    country=draft.country,
-                    age_min=ad_set.age_min,
-                    age_max=ad_set.age_max,
-                    targeting_label=ad_set.targeting_label,
-                    language_names=[draft.language] if draft.language else None,
-                    ad_name=ad.ad_name(),
-                    creative_type=ad.creative_type,
-                    creative_path=ad.creative_path or "",
-                    ad_title=ad.ad_title,
-                    ad_body=ad.ad_body,
-                    destination_url=draft.link,
-                    os_val=ad_set.os,
-                    additional_ads=additional_ads,
-                    soft_fails_out=ad_soft_fails,
-                )
+                try:
+                    fail_step = run_recorded_campaign_flow(
+                        self.page,
+                        campaign_name=draft.name,
+                        budget=str(ad_set.daily_budget or ""),
+                        adset_name=ad_set.name,
+                        country=draft.country,
+                        age_min=ad_set.age_min,
+                        age_max=ad_set.age_max,
+                        targeting_label=ad_set.targeting_label,
+                        language_names=[draft.language] if draft.language else None,
+                        ad_name=ad.ad_name(),
+                        creative_type=ad.creative_type,
+                        creative_path=ad.creative_path or "",
+                        ad_title=ad.ad_title,
+                        ad_body=ad.ad_body,
+                        destination_url=draft.link,
+                        os_val=ad_set.os,
+                        additional_ads=additional_ads,
+                        soft_fails_out=ad_soft_fails,
+                    )
+                finally:
+                    try:
+                        from src.fb_ads_rpa.browser import put_window_back
+                        put_window_back(self.page)
+                    except Exception:
+                        pass
                 if not fail_step:
                     break
+                # ACL-1318: попытка кончилась — это настоящий отказ кампании, и
+                # в Sentry он уходит здесь, по событию на попытку. Прогон
+                # попытки назван внутри `run_recorded_campaign_flow`, так что
+                # номер и контекст шага берутся из текущего потока.
+                sentry_signal.report_campaign_stop(
+                    fail_step, campaign=draft.name,
+                    account=draft.account_label or "", attempt=attempt,
+                )
                 decision = retry_policy.disposition(fail_step)
                 if decision.action != retry_policy.RETRY_CAMPAIGN:
                     result.steps_completed.append(
@@ -2239,12 +2282,17 @@ class AdsManagerFlow:
                 result.steps_completed.append(
                     f"recorded_flow_retry_scheduled:{fail_step}:attempt{attempt + 1}"
                 )
-                time.sleep(1.5)
+                time.sleep(retry_policy.backoff_s(fail_step, attempt))
 
             result.steps_completed.append("recorded_flow:reached_ad" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step
             if fail_step:
                 result.error = f"Recorded flow failed at: {fail_step}"
+                # ACL-1313: остановку, которую повтор не лечит (account_blocked),
+                # человек должен понять из самой ошибки, без разбора телеметрии.
+                if fail_step.split(":", 1)[0] in ("account_blocked", "browser_closed"):
+                    result.error += " - " + failure_policy.reason(fail_step)
+                    result.blocking_failures.append(fail_step)
 
             # Reaching the ad level is not the same as building a publishable
             # draft. An ad whose creative or destination step failed still
@@ -2255,6 +2303,12 @@ class AdsManagerFlow:
             # invite a re-run that builds a duplicate), but say plainly that
             # this one must not go out untouched.
             apply_step_failures(result, ad_soft_fails)
+            # ACL-1318: блокирующие отказы итога — по событию на каждый, один
+            # раз на кампанию (по выжившей попытке). Остальные `ok=False` из
+            # телеметрии в Sentry не уходят — см. `sentry_signal`.
+            sentry_signal.report_blocking_failures(
+                ad_soft_fails, campaign=draft.name, account=draft.account_label or "",
+            )
             return result
 
         # LLM agent (opt-in, FB_RPA_ENGINE=llm_agent): live Claude-driven loop —
@@ -2343,7 +2397,8 @@ class AdsManagerFlow:
                     )
         except (AdsManagerFlowError, PlaywrightTimeout) as exc:
             shot = capture(self.page, f"error_{draft.name[:20]}")
-            result.screenshot_paths.append(shot)
+            if shot:
+                result.screenshot_paths.append(shot)
             result.error = str(exc)
             if isinstance(exc, AdsManagerFlowError) and exc.screenshot:
                 result.screenshot_paths.append(exc.screenshot)

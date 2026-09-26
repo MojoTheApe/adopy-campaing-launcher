@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from config.paths import get_ad_account_map_path
@@ -16,6 +17,7 @@ from src.fb_ads_rpa.config import get_browser_provider as get_browser_provider_n
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.operations import serialized_browser
 from src.fb_ads_rpa.enrich_draft import enrich_campaign_drafts
+from src.fb_ads_rpa import run_telemetry as _telemetry
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
 
 log = logging.getLogger(__name__)
@@ -73,17 +75,23 @@ class RpaPublisher:
         activate: bool = False,
         preview_mode: bool = False,
     ) -> list[CampaignDraft]:
-        drafts = slots_to_campaign_drafts(
-            slots,
-            account_label=account_label,
-            country=country,
-            activate=activate,
-        )
-        return enrich_campaign_drafts(
-            drafts,
-            account_label=account_label,
-            preview_mode=preview_mode,
-        )
+        # ACL-1313: длительность сборки (вместе с библиотекой и книгой) — в
+        # телеметрию, а момент конца — для замера ожидания профиля.
+        with _telemetry.phase("build_drafts", diag={"slots": len(slots or []),
+                                                    "preview": bool(preview_mode)}):
+            drafts = slots_to_campaign_drafts(
+                slots,
+                account_label=account_label,
+                country=country,
+                activate=activate,
+            )
+            drafts = enrich_campaign_drafts(
+                drafts,
+                account_label=account_label,
+                preview_mode=preview_mode,
+            )
+        self._built_at = time.monotonic()
+        return drafts
 
     def _resolve_entry(self, account_label: str):
         account_map = load_ad_account_map(get_ad_account_map_path())
@@ -322,7 +330,20 @@ class RpaPublisher:
         # hand_off: fill everything but leave browser open; treat as DRAFT status
         if self.hand_off:
             draft.status = "DRAFT"
-        conn = self._ensure_browser(draft.account_label)
+        # ACL-1313: от конца сборки черновиков до сюда — ожидание очереди
+        # профиля (publish_lease) и подготовки; замеряется один раз на сборку.
+        campaign_name = str(getattr(draft, "name", "") or "")
+        built_at = getattr(self, "_built_at", None)
+        if built_at is not None:
+            self._built_at = None
+            _telemetry.record("job_phase", True, campaign=campaign_name, note="profile_queue",
+                              duration_s=time.monotonic() - built_at)
+        if getattr(self, "_conn", None) is None:
+            with _telemetry.phase("browser_attach", campaign=campaign_name) as info:
+                conn = self._ensure_browser(draft.account_label)
+                info["provider"] = str(getattr(conn, "provider", "") or type(getattr(self, "_provider", None)).__name__)
+        else:
+            conn = self._ensure_browser(draft.account_label)
         flow = AdsManagerFlow(conn.page, selectors_path=self.selectors_path)
         try:
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
@@ -429,7 +450,10 @@ class RpaPublisher:
             wait_until="domcontentloaded",
             timeout=30000,
         )
-        page.wait_for_timeout(3000)
+        # ACL-1313: без `wait_for_timeout(3000)`. Цель — уйти из редактора,
+        # и она достигнута, когда goto вернулся: документ редактора выгружен
+        # (domcontentloaded нового). Браузер профиля после close() остаётся
+        # открытым и догружает список сам; 3 с ожидания ничего не добавляли.
 
     def __enter__(self) -> "RpaPublisher":
         return self
