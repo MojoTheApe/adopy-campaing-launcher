@@ -367,3 +367,25 @@ def test_the_publisher_restarts_through_its_provider_and_follows_the_page(monkey
     assert flow._restart_profile() == "restarted-page"
     assert calls == ["disconnect", ("entry", "FacebookDoc19")]
     assert pub._conn is new_conn
+
+
+def test_the_last_create_of_a_round_gets_a_real_window(env, monkeypatch):
+    """Ревью PR #323 (F2): два промаха подряд (нажатие увело со списка),
+    возврат на список по 20 с — раунд почти съеден, но окну цели после
+    последнего нажатия дают не меньше `CAMPAIGN_OPEN_AFTER_CREATE_S`."""
+    env.sc.took = "left_list"
+    monkeypatch.setattr(md, "_back_to_list", lambda p, u: env.clock.sleep(20))
+    env.run()
+    waits = [e for e in env.ev if e[0] == "wait"]
+    assert waits[0][2] >= md.CAMPAIGN_OPEN_AFTER_CREATE_S, waits[0]
+    assert all(w[2] <= w[3] for w in waits), "окно шире общего бюджета"
+
+
+def test_the_create_window_never_outgrows_the_budget(env, monkeypatch):
+    env.sc.took = "left_list"
+    monkeypatch.setattr(md, "CAMPAIGN_OPEN_BUDGET_S", 60.0)
+    monkeypatch.setattr(md, "_back_to_list", lambda p, u: env.clock.sleep(20))
+    env.run()
+    waits = [e for e in env.ev if e[0] == "wait"]
+    assert waits and waits[0][2] < md.CAMPAIGN_OPEN_AFTER_CREATE_S
+    assert env.clock.now - env.start <= 60.0 + md.OBJECTIVE_POLL_S + 10

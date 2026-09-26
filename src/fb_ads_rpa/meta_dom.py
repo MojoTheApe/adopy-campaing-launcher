@@ -3705,6 +3705,13 @@ CAMPAIGN_OPEN_FRESH_TAB_ROUND = 3
 #: прежде чем её сменят на свежую, не дожидаясь третьего раунда.
 CAMPAIGN_OPEN_FROZEN_LIMIT = 2
 
+#: Ревью PR #323 (F2): сколько минимум ждать окно цели после последнего
+#: нажатия Create раунда, даже если раунд из-за этого удлиняется (в пределах
+#: общего бюджета). Выше медианы create→leads (18.6 с по 156 переходам):
+#: быстрые повторы и возврат на список съедали раунд, и последнему нажатию
+#: доставалось 2.5 с.
+CAMPAIGN_OPEN_AFTER_CREATE_S = 25.0
+
 #: ACL-1320, живой прогон 26.09: раунд, в котором все вызовы упали сразу,
 #: не должен тут же начинать следующий — не короче стольких секунд.
 CAMPAIGN_OPEN_MIN_ROUND_S = 2.0
@@ -3908,7 +3915,9 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
                 break
             continue
         out: dict = {}
-        if _wait_objective_dialog(page, first_s=max(round_end - time.time(), OBJECTIVE_POLL_S),
+        first_s = min(max(round_end - time.time(), CAMPAIGN_OPEN_AFTER_CREATE_S),
+                      max(_left(), OBJECTIVE_POLL_S))
+        if _wait_objective_dialog(page, first_s=first_s,
                                   loading_max_s=max(_left(), OBJECTIVE_POLL_S), out=out):
             outcome = "radio"
             break
