@@ -172,6 +172,14 @@ def test_the_pending_drafts_counter_is_read_from_the_button(env):
             m = _re.search(r"\((\d+)\)", self.text)
             return int(m.group(1)) if m else (0 if "Review and publish" in self.text else None)
 
+        # ACL-1320: счётчик читается через `_eval_bounded` — ожидание с
+        # таймаутом драйвера, ответ в поле `v`.
+        def wait_for_function(self, script, arg=None, timeout=None):
+            from types import SimpleNamespace as _NS
+
+            got = self.evaluate(script)
+            return _NS(json_value=lambda: {"v": got}, dispose=lambda: None)
+
     assert md._pending_drafts(Btn("Review and publish (11)")) == 11
     assert md._pending_drafts(Btn("Review and publish")) == 0
     assert md._pending_drafts(Btn("")) is None

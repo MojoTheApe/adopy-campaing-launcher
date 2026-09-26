@@ -1854,7 +1854,20 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     (microsoft/playwright#41286): ClickAsync succeeds but the page never
     gets a click. Raw CDP mouseMoved → mousePressed → mouseReleased is the
     community workaround used by Multilogin/CDP harnesses.
+
+    ACL-1320: сначала — отвечает ли вкладка (`_tab_frozen`, 3 с с таймаутом
+    драйвера). `Input.dispatchMouseEvent` ждёт подтверждения от рендерера, и
+    на зависшей вкладке (cf563b4ba594, 26.09) нажатие висело минутами. Не
+    отвечает — нажатия нет вовсе: для вызывающего это тот же промах, что и
+    клик мимо, а проверки после клика и сторож ожидания уже есть.
     """
+    if _tab_frozen(page):
+        try:
+            _telemetry.record("tab_frozen", None, note="cdp_click",
+                              diag={"x": round(float(x)), "y": round(float(y))})
+        except Exception:
+            pass
+        return
     for attempt in range(2):
         sent = {"any": False}
         try:
@@ -2643,27 +2656,39 @@ def _chrome_error_page(page: Page) -> str:
 _ROUTE_PLACEHOLDER_SEL = '[data-non-int-surface*="AdsPERouteLoadPlaceholder"]'
 
 
+_ROUTE_PLACEHOLDER_JS = """(sel) => [...document.querySelectorAll(sel)].some((e) => {
+     const r = e.getBoundingClientRect();
+     if (r.width <= 0 || r.height <= 0) return false;
+     const s = getComputedStyle(e);
+     return s.visibility !== 'hidden' && s.display !== 'none';
+   })"""
+
+
 def _route_placeholder_visible(page: Page) -> bool:
-    """Виден ли маршрутный спиннер Meta на месте страницы."""
+    """Виден ли маршрутный спиннер Meta на месте страницы.
+
+    ACL-1320: через `_eval_bounded` — голый `page.evaluate` на зависшей
+    вкладке не возвращался никогда.
+    """
     try:
-        return bool(page.evaluate(
-            """(sel) => [...document.querySelectorAll(sel)].some((e) => {
-                 const r = e.getBoundingClientRect();
-                 if (r.width <= 0 || r.height <= 0) return false;
-                 const s = getComputedStyle(e);
-                 return s.visibility !== 'hidden' && s.display !== 'none';
-               })""",
-            _ROUTE_PLACEHOLDER_SEL,
-        ))
+        return _eval_bounded(page, _ROUTE_PLACEHOLDER_JS, _ROUTE_PLACEHOLDER_SEL) is True
     except Exception:
         return False
 
 
 def _loading_visible(page: Page) -> bool:
-    """Накладка «Loading…» или маршрутный спиннер — страница ещё грузится."""
+    """Накладка «Loading…» или маршрутный спиннер — страница ещё грузится.
+
+    ACL-1320: сначала ограниченная проверка живости. `locator.count()` и
+    `is_visible(timeout=…)` таймаута не соблюдают (у `is_visible` он
+    устарел и игнорируется), и на зависшей вкладке оба висели минутами.
+    Вкладка не отвечает — «загрузки не видно»: что с ней делать, решает
+    вызывающий по своей проверке `_tab_frozen`.
+    """
+    if _tab_frozen(page):
+        return False
     try:
-        overlay = page.get_by_text(_LOADING_TEXT).first
-        if bool(overlay.count()) and overlay.is_visible(timeout=200):
+        if page.get_by_text(_LOADING_TEXT).first.is_visible():
             return True
     except Exception:
         pass
@@ -2680,7 +2705,7 @@ def _loading_kind(page: Page) -> str:
     """
     try:
         overlay = page.get_by_text(_LOADING_TEXT).first
-        if bool(overlay.count()) and overlay.is_visible(timeout=200):
+        if overlay.is_visible():
             text = re.sub(r"\s+", " ", overlay.inner_text(timeout=300) or "").strip()
             return "text:" + text[:40]
     except Exception:
@@ -2714,7 +2739,8 @@ def _network_trouble(page: Page) -> bool:
 
 
 def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
-    """Отозвалась ли страница на Create: "ok" / "left_list" / "nothing".
+    """Отозвалась ли страница на Create: "ok" / "left_list" / "nothing" /
+    "frozen" (вкладка не ответила на проверку живости, ACL-1320).
 
     ACL-1313: с 20.09 первый Create после загрузки открывал окно цели в 42%
     случаев, остальные ждали 75–180 с и перезагрузку. На снимках 25.09 у
@@ -2724,9 +2750,13 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
     base = (list_url or "").split("?", 1)[0]
     deadline = time.time() + timeout_s
     while time.time() < deadline:
+        # ACL-1320: вкладка не отвечает — так и говорим ("frozen"), а не
+        # висим в `is_visible` (его таймаут Playwright не соблюдает).
+        if _tab_frozen(page):
+            return "frozen"
         try:
-            if page.get_by_role("radio", name="Leads").first.is_visible(timeout=300):
-                return "ok"
+            page.get_by_role("radio", name="Leads").first.wait_for(state="visible", timeout=300)
+            return "ok"
         except Exception:
             pass
         if _loading_visible(page):
@@ -2858,10 +2888,15 @@ _PENDING_DRAFTS_JS = r"""
 
 
 def _pending_drafts(page: Page) -> int | None:
+    # ACL-1320: ограниченно — в прогоне cf563b4ba594 это было первое, что
+    # спрашивали у зависшей вкладки перед Create.
     try:
-        return page.evaluate(_PENDING_DRAFTS_JS)
+        got = _eval_bounded(page, _PENDING_DRAFTS_JS)
     except Exception:
         return None
+    if isinstance(got, bool) or not isinstance(got, (int, float)):
+        return None
+    return int(got)
 
 
 #: Сколько одно ожидание может тянуться, прежде чем страницу «растолкают»
@@ -2896,6 +2931,45 @@ def _page_responsive(page: Page, timeout_s: float = 5.0) -> bool | None:
         if "timeout" in type(exc).__name__.lower() or "Timeout" in str(exc):
             return False
         return None
+
+
+#: ACL-1320: сколько ждать ответа вкладки перед ожиданием, нажатием или
+#: чтением страницы. Живая вкладка отвечает за миллисекунды; прогон
+#: cf563b4ba594 (26.09) ~14 из 19 минут просидел в вызовах без таймаута
+#: (`locator.count()`, `is_visible`, `page.evaluate`, CDP `send`) на вкладке,
+#: которая не отвечала вовсе.
+LIVENESS_PROBE_S = 3.0
+
+
+def _tab_frozen(page: Page) -> bool:
+    """Вкладка не ответила за `LIVENESS_PROBE_S` (таймаут соблюдает драйвер).
+
+    None от `_page_responsive` (спросить не удалось: закрыта, подставная
+    страница без `wait_for_function`) — не «зависла»: решать за неё нечего.
+    """
+    return _page_responsive(page, LIVENESS_PROBE_S) is False
+
+
+def _eval_bounded(page: Page, js: str, arg=None, timeout_s: float = LIVENESS_PROBE_S):
+    """`page.evaluate` с таймаутом, который соблюдает драйвер (ACL-1320).
+
+    `page.wait_for_function` — единственный вызов с таким таймаутом (см.
+    `_page_responsive`). Функция `js` заворачивается в объект `{v: …}`:
+    объект всегда «истинен», поэтому ожидание кончается на первом же
+    вычислении, а ответ — в поле `v`. На зависшей вкладке — TimeoutError
+    через `timeout_s`, а не вечное ожидание. Остаток риска — чтение
+    результата (`json_value`) сразу после ответа страницы.
+    """
+    handle = page.wait_for_function(f"(arg) => ({{ v: ({js})(arg) }})", arg=arg,
+                                    timeout=int(timeout_s * 1000))
+    try:
+        got = handle.json_value()
+    finally:
+        try:
+            handle.dispose()
+        except Exception:
+            pass
+    return got.get("v") if isinstance(got, dict) else None
 
 
 def _on_editor(page: Page) -> bool:
@@ -2971,11 +3045,15 @@ class _StallWatch:
         self.start = time.time()
         self.fired = ""
 
-    def check(self) -> str:
+    def check(self, *, frozen: bool = False) -> str:
+        """`frozen=True` — вкладка только что не ответила на проверку
+        живости: бюджет не ждём (ACL-1320, cf563b4ba594: сторож срабатывал
+        на 108-й и 224-й секунде вместо 60-й — проверка стояла только в
+        начале попытки, а попытка висела в вызовах без таймаута)."""
         if self.fired:
             return ""
         waited = time.time() - self.start
-        if waited < self.budget_s:
+        if waited < self.budget_s and not frozen:
             return ""
         editor = _on_editor(self.page) if self.editor is None else self.editor
         self.fired = _unstick(self.page, self.where, editor=editor, waited_s=waited, reload=self.reload)
@@ -3449,9 +3527,16 @@ def run_recorded_campaign_flow(
         # собирался, и выбирал весь таймаут. Тридцать секунд урезаны до
         # восьми — накладка, не ушедшая за восемь секунд, уже не переходная,
         # и следующая попытка действия всё равно проверит заново.
+        #
+        # ACL-1320: сначала ограниченная проверка живости — `count()` и
+        # `is_visible(timeout=200)` таймаута не соблюдают и на зависшей
+        # вкладке висели минутами. Не отвечает — сразу назад: `_click` /
+        # `_fill` сами зовут сторожа.
+        if _tab_frozen(page):
+            return
         try:
             overlay = page.get_by_text(_LOADING_TEXT).first
-            if overlay.count() and overlay.is_visible(timeout=200):
+            if overlay.is_visible():
                 overlay.wait_for(state="hidden", timeout=8000)
                 return
         except Exception:
@@ -3475,12 +3560,19 @@ def run_recorded_campaign_flow(
         # (и, если висит, перезагружаем) один раз, потом повторы идут дальше.
         watch = _watch(where)
         for _ in range(attempts):
+            # ACL-1320: вкладка не отвечает — сторож действует сразу, не
+            # дожидаясь бюджета, а попытка не лезет в вызовы без таймаута.
+            if _tab_frozen(page):
+                watch.check(frozen=True)
+                _sleep_h(0.6)
+                continue
             watch.check()
             _wait_loading()
+            watch.check()
             try:
                 loc.wait_for(state="visible", timeout=8000)
                 loc.scroll_into_view_if_needed(timeout=3000)
-                box = loc.bounding_box()
+                box = loc.bounding_box(timeout=3000)
                 if box and box.get("width", 0) > 0:
                     _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
                 else:
@@ -3493,8 +3585,13 @@ def run_recorded_campaign_flow(
     def _fill(loc, value: str, *, where: str, attempts: int = 5) -> bool:
         watch = _watch(where)
         for _ in range(attempts):
+            if _tab_frozen(page):
+                watch.check(frozen=True)
+                _sleep_h(0.6)
+                continue
             watch.check()
             _wait_loading()
+            watch.check()
             try:
                 loc.wait_for(state="visible", timeout=8000)
                 loc.click(timeout=3000)
@@ -11130,6 +11227,11 @@ def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
     перезагрузки его открываем снова (`_reopen_ad_after_reload`), итог —
     `reopened_ad:ok` / `reopened_ad:failed` в возвращаемом списке.
     """
+    # ACL-1320: на зависшей вкладке каждый из поисков ниже висел без
+    # таймаута. Не отвечает — ничего не закрываем, так и говорим.
+    if _tab_frozen(page):
+        _telemetry.record("tab_frozen", None, note="overlays", diag={"where": where})
+        return ["tab_frozen"]
     closed: list[str] = []
     trouble = _network_trouble(page)
     how = _close_ad_blocker_modal(page)
