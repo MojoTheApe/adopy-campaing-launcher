@@ -780,9 +780,34 @@ def _home_point(bounds: dict) -> dict:
 _PARK_TOLERANCE = 8
 
 
+#: Места, куда наша парковка ставила окна в этом процессе (left, top).
+#: Финальное ревью PR #314: окно на парковке потом расширяют
+#: (`_widen_parked_window` — ширина растёт, left остаётся), и формула
+#: `left == -(width + 400)` его больше не узнаёт: домом считалось место за
+#: краем экрана, и `put_window_back` сворачивал окно туда — из панели задач
+#: оно разворачивалось за экраном. Запомненное место от ширины не зависит.
+_PARK_SPOTS: set[tuple[int, int]] = set()
+
+
+def _park_spot(width: int) -> tuple[int, int]:
+    """Место парковки по умолчанию для окна шириной `width` — и запомнить его."""
+    spot = (-(width + 400), 0)
+    _PARK_SPOTS.add(spot)
+    return spot
+
+
 def _parked_by_us(left: int, top: int, width: int) -> bool:
-    """Стоит ли окно там, куда его уводит наша парковка по умолчанию."""
-    return abs(left + width + 400) <= _PARK_TOLERANCE and abs(top) <= _PARK_TOLERANCE
+    """Стоит ли окно там, куда его уводит наша парковка по умолчанию.
+
+    Два признака: формула парковки при нынешней ширине (окно, оставшееся с
+    прошлого процесса) или место, куда парковка ставила окно в этом процессе
+    (окно с тех пор расширили). Положение без них — законный монитор слева
+    или сверху: такое окно человека не трогаем (ревью v3 PR #314).
+    """
+    if abs(left + width + 400) <= _PARK_TOLERANCE and abs(top) <= _PARK_TOLERANCE:
+        return True
+    return any(abs(left - x) <= _PARK_TOLERANCE and abs(top - y) <= _PARK_TOLERANCE
+               for x, y in _PARK_SPOTS)
 
 
 def _restore_offscreen(context, page) -> bool:
@@ -814,7 +839,7 @@ def _restore_offscreen(context, page) -> bool:
     if left is None:
         # По умолчанию окно уезжает за левый край: пользователь держит профили
         # свёрнутыми и не хочет, чтобы они выскакивали поверх его работы.
-        left, top = -(width + 400), 0
+        left, top = _park_spot(width)
     session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": {
         "left": left, "top": top, "width": width, "height": height}})
     time.sleep(1.0)
@@ -1134,7 +1159,7 @@ def _unminimize_before_attach(browser) -> list[dict]:
             height = max(int(normal.get("height") or 0), 900)
             left, top = window_home()
             if left is None:
-                left, top = -(width + 400), 0
+                left, top = _park_spot(width)
             session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {
                 "left": left, "top": top, "width": width, "height": height}})
             done.append({"window": wid, "was": _home_point(normal)})
