@@ -1,0 +1,14 @@
+{
+  "_comment": "Known ACL failure kinds -> tracker tasks, for scripts/sentry_triage.py (ACL-1325). step/reason are fnmatch patterns over the Sentry tags 'step' (ad2_/ad3_ folded to ad_) and 'reason'. First match wins. A group with no match is reported as a NEW KIND. Add a row when a task is filed for a new kind; remove it when the task is closed and the kind should alert again.",
+  "known": [
+    {"step": "further_limit_reach_radio", "reason": "*", "task": "ACL-1324", "note": "'Suggest an audience' layout of the Audience card"},
+    {"step": "pick_further_limit_radio", "reason": "*", "task": "ACL-1324", "note": "'Suggest an audience' layout of the Audience card"},
+    {"step": "simple_create_layout", "reason": "*", "task": "ACL-1320", "note": "Meta's single-screen campaign editor (simple_create) - not supported yet"},
+    {"step": "profile_logged_out", "reason": "*", "task": "ACL-1320", "note": "profile logged out of Facebook - buyer action, not code"},
+    {"step": "profile_network", "reason": "*", "task": "ACL-1320", "note": "profile proxy/network - buyer action, not code"},
+    {"step": "profile_open_by_hand", "reason": "*", "task": "ACL-1320", "note": "profile open by hand - buyer action, not code"},
+    {"step": "profile_restart_failed", "reason": "*", "task": "ACL-1320", "note": "MLX restart of an unresponsive profile failed"},
+    {"step": "profile_unresponsive", "reason": "*", "task": "ACL-1320", "note": "profile browser did not answer"},
+    {"step": "account_blocked", "reason": "*", "task": "ACL-1313", "note": "Meta restricted the ad account - buyer action, not code"}
+  ]
+}
