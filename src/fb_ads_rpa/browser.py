@@ -1801,8 +1801,9 @@ def _record_profile_restart(entry: AccountMapEntry, profile_id: str, *, ok: bool
     try:
         from src.fb_ads_rpa import run_telemetry as rt
 
-        diag = {"where": where, "profile": (profile_id or "")[:8],
-                "workspace": (getattr(entry, "multilogin_instance", "") or "A")}
+        # Ревью PR #323 (F11): ни id профиля, ни его начала — вычиститель
+        # ловит только полный uuid; хватает рабочего пространства.
+        diag = {"where": where, "workspace": (getattr(entry, "multilogin_instance", "") or "A")}
         if error:
             diag["error"] = error
         rt.record("profile_restarted_unresponsive", ok, note=where, diag=diag)

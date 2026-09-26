@@ -269,3 +269,14 @@ def test_an_attach_time_stop_reaches_sentry(monkeypatch):
                           ad_sets=[AdSetDraft("Set", ads=[AdDraft(ad_title="t", ad_body="b")])])
     pub.publish_draft(draft)
     assert sent == [(pt.OPEN_BY_HAND, "A")]
+
+
+def test_restart_telemetry_carries_no_part_of_the_profile_id(monkeypatch):
+    """Ревью PR #323 (F11): префикс uuid профиля вычиститель не ловит."""
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    rows: list = []
+    monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append(kw))
+    br._record_profile_restart(_entry(), PROFILE, ok=False, where="attach", error="x")
+    text = repr(rows)
+    assert rows and PROFILE[:4] not in text and "profile" not in rows[0]["diag"]
