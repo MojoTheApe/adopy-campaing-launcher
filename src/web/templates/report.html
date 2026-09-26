@@ -2741,7 +2741,9 @@
        собирает; оранжевая дышит — встала или ждёт человека; оранжевая
        ровная — собрана с ошибками; зелёная — черновик готов. Пустое серое
        кольцо — задание потеряно после перезапуска дешборда: не дышит,
-       потому что про него больше ничего не известно. */
+       потому что про него больше ничего не известно. Серое кольцо с точкой
+       внутри — задание ждёт в очереди свободного места или свой профиль
+       (ACL-1321): робот его ещё не трогал, дышать нечему. */
     .cbd-ind[class*="cbd-ind-build-"] { border: none; border-radius: 50%; transform: none; }
     .cbd-ind[class*="cbd-ind-build-"] > span {
       display: block; width: 0.55rem; height: 0.55rem; border-radius: 50%;
@@ -2752,6 +2754,11 @@
     .cbd-ind-build-ok { color: var(--good); }
     .cbd-ind-build-lost { color: var(--muted); }
     .cbd-ind-build-lost > span { background: transparent !important; border: 1.5px solid currentColor; }
+    .cbd-ind-build-wait { color: var(--muted); }
+    .cbd-ind-build-wait > span {
+      box-sizing: border-box; border: 1.5px solid currentColor;
+      background: radial-gradient(circle, currentColor 0 1.2px, transparent 1.7px) !important;
+    }
     .cbd-ind-build-run > span, .cbd-ind-build-attn > span {
       animation: cbd-build-pulse 1.4s ease-in-out infinite;
     }
@@ -5108,6 +5115,23 @@ window.cbTree = (function () {
       var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
       lines.unshift('<div class="cbd-q-head">Done — ' + ok + ' of ' + p.of + ' accounts</div>');
       if (btn) btn.disabled = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
+    } else if (p.live && p.live.length) {
+      // Каждый неоконченный аккаунт своей строкой (ACL-1321): кто
+      // проверяется, кто собирается, кто ждёт места в очереди профилей.
+      p.live.forEach(function (x) {
+        var q = x.queue || {};
+        var what = x.stage === 'checking' ? 'checking'
+          : x.stage === 'queued'
+            ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
+               : 'queued — waiting for a free slot'
+                 + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
+          : 'building the draft';
+        lines.push('<div class="cbd-q-line' + (x.stage === 'queued' ? ' cbd-q-queued' : '') + '">'
+          + '<span class="cbd-q-run">' + (x.stage === 'queued' ? '◌' : '⏳') + '</span> '
+          + aclEscHtml(x.account) + ' — ' + what + '</div>');
+      });
+      lines.push('<div class="cbd-q-line"><span class="cbd-q-why">' + (p.of - (p.report || []).length)
+        + ' of ' + p.of + ' accounts still going</span></div>');
     } else {
       lines.push('<div class="cbd-q-line"><span class="cbd-q-run">⏳</span> '
         + aclEscHtml(p.account) + ' — '
@@ -5454,6 +5478,18 @@ window.cbBuild = (function () {
 
   function stepText(step) { return String(step || '').replace(/_/g, ' '); }
 
+  /* Точка задания в очереди профилей: сколько заданий впереди и чего ждёт. */
+  function waiting(q) {
+    q = q || {};
+    var ahead = Math.max(0, parseInt(q.ahead, 10) || 0);
+    if (q.reason === 'profile') {
+      return { state: 'build-wait', sign: '',
+               why: 'Waiting for the Multilogin profile — another run is using it' };
+    }
+    return { state: 'build-wait', sign: '',
+             why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
+  }
+
   /* Состояние точки для одной кампании задания. */
   function classify(j, name) {
     if (j.lost) {
@@ -5465,6 +5501,9 @@ window.cbBuild = (function () {
     var c = null;
     (p.campaigns || []).forEach(function (x) { if (x && x.name === name) c = x; });
     var active = isActive(p);
+    // ACL-1321: задание ждёт места (памяти машины на ещё один профиль) или
+    // свой профиль — робот его не трогал, точка не дышит.
+    if (p.status === 'queued') return waiting(p.queue);
     if (!c) return active ? { state: 'build-run', sign: '', why: 'Waiting for its turn' } : null;
 
     var r = c.result;
@@ -10792,8 +10831,9 @@ window.cbPublishAll = function (onProgress) {
   _safeConfirm('Build every campaign as a draft?',
     'Accounts: <strong>' + forms.length + '</strong><br>'
     + '<span style="color:var(--muted);font-size:0.85rem">' + aclEscHtml(names.join(', ')) + '</span><br><br>'
-    + '<span style="color:var(--muted);font-size:0.85rem">Accounts run at the same time, each in its own Multilogin profile; '
-    + 'two jobs on one profile queue. '
+    + '<span style="color:var(--muted);font-size:0.85rem">Accounts run at the same time, each in its own Multilogin profile — '
+    + 'as many at once as this computer has memory for; the rest wait as queued and start on their own. '
+    + 'Two jobs on one profile queue. '
     + 'A campaign whose preview shows an error is skipped; the rest of its account still go.</span><br>'
     + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
     + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
@@ -10833,10 +10873,26 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
   var states = forms.map(function() { return "new"; });
   var settled = 0;     // сколько заданий дошли до конца (или отпали)
   var stopped = false;
+  // ACL-1321: что сейчас с каждым неоконченным аккаунтом — список внизу
+  // ящика показывает все, а не последний отправленный: сервер пускает
+  // разом столько профилей, сколько тянет память, остальные «queued».
+  var live = forms.map(function() { return null; });
+  onProgress = (function (send) {
+    return function (p) {
+      p.live = live.filter(Boolean).map(function (x) {
+        return { account: x.account, stage: x.stage, queue: x.queue || null };
+      });
+      send(p);
+    };
+  })(onProgress);
+  function track(i, account, stage, queue) {
+    live[i] = { account: account, stage: stage, queue: queue || null };
+  }
 
   function settle(i, entry) {
     if (window.CB_QUEUE !== batch || states[i] === "settled") return;
     states[i] = "settled";
+    live[i] = null;
     report.push(entry);
     settled += 1;
     onProgress({ at: settled, of: forms.length, account: entry.account, stage: 'settled', report: report });
@@ -10863,6 +10919,7 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
     states[i] = "preview";
     var form = forms[i];
     var label = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
+    track(i, label, 'checking');
     onProgress({ at: i + 1, of: forms.length, account: label, stage: 'checking', report: report });
 
     window.cbPreview(form, function (plan, error, snapshot) {
@@ -10883,6 +10940,7 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
         return;
       }
 
+      track(i, label, 'publishing');
       onProgress({ at: i + 1, of: forms.length, account: label, stage: 'publishing',
                    skipped: skipped, report: report });
 
@@ -10920,6 +10978,15 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
               && (job.results || []).every(function (r) { return r.publishable === true; });
             settle(i, { account: label, state: ok ? 'ok' : 'bad', skipped: skipped,
                      why: ok ? '' : 'draft blocked — see the account panel' });
+          }, function (job) {
+            // Каждый опрос: ждёт ли аккаунт место или уже собирается.
+            if (window.CB_QUEUE !== batch || states[i] === "settled") return;
+            var stage = job.status === 'queued' ? 'queued' : 'publishing';
+            var was = live[i] || {};
+            var q = job.queue || null;
+            if (was.stage === stage && JSON.stringify(was.queue || null) === JSON.stringify(q)) return;
+            track(i, label, stage, q);
+            onProgress({ at: i + 1, of: forms.length, account: label, stage: stage, report: report });
           });
         })
         .catch(function (e) {
@@ -11379,7 +11446,7 @@ function _doCbPublish(form) {
 // `done` — необязательный: зовётся один раз, когда работа кончилась любым
 // образом. Нужен очереди «Publish all»: профиль в Multilogin один, и
 // следующий аккаунт начинается только после того, как закончился прошлый.
-function cbPollJob(jobId, statusPanel, publishBtn, done) {
+function cbPollJob(jobId, statusPanel, publishBtn, done, onTick) {
   var stopBtnId = 'cb-stop-' + jobId.replace(/-/g, '').slice(0, 12);
 
   function renderStatus(job) {
@@ -11389,12 +11456,19 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
     var jobPublishable = job.publishable === true;
     var isCancelled = job.status === 'cancelled';
     var isCancelling = job.status === 'cancelling';
-    var isRunning = job.status === 'running' || job.status === 'pending' || isCancelling;
+    var isQueued = job.status === 'queued';
+    var isRunning = job.status === 'running' || job.status === 'pending' || isQueued || isCancelling;
     var statusIcon = isCancelled ? '⏹'
       : (isCancelling ? '⏹'
       : (job.status === 'done' ? (jobPublishable ? '✓' : '❌') : '⏳'));
+    var queue = job.queue || {};
     var doneLabel = isCancelled ? 'stopped'
       : (isCancelling ? 'stopping… (the Multilogin window stays open)'
+      // ACL-1321: профилей разом — сколько тянет память машины; остальные ждут.
+      : isQueued ? (queue.reason === 'profile'
+          ? 'queued — waiting for the Multilogin profile (another run is using it)'
+          : 'queued — waiting for a free slot'
+            + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
         ? (jobPublishable
           ? 'draft ready — the campaign is in Ads Manager, Publish was not clicked'
@@ -11570,6 +11644,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done) {
         if (job === null) return;
         statusPanel.innerHTML = renderStatus(job);
         bindStopButton();
+        if (onTick) { try { onTick(job); } catch (e) { /* список очереди подождёт */ } }
         if (!scrolledToStatus) {
           scrolledToStatus = true;
           statusPanel.scrollIntoView({behavior: 'smooth', block: 'nearest'});

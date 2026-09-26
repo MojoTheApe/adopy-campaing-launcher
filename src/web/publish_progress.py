@@ -254,5 +254,7 @@ def job_progress(
         "stall_after_s": stall_after_for(steps_seen.get(current, [])),
         "idle_s": idle_s,
         "current": current,
+        # ACL-1321: задание ждёт места или свой профиль — сколько впереди.
+        "queue": dict(job["queue"]) if status == "queued" and isinstance(job.get("queue"), dict) else None,
         "campaigns": campaigns,
     }

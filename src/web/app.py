@@ -4012,6 +4012,18 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     return JSONResponse({"job_id": job_id, "total": total})
 
 
+@app.get("/publish-jobs/slots")
+async def publish_jobs_slots() -> JSONResponse:
+    """Сколько профилей публикуют разом и почему (ACL-1321).
+
+    Объявлен до `/publish-jobs/{job_id}`: иначе «slots» ушло бы туда номером
+    задания. Решение — по свободной памяти или по `ACL_MAX_PARALLEL_PROFILES`.
+    """
+    from src.web.publish_jobs import slots_snapshot
+
+    return JSONResponse(slots_snapshot())
+
+
 @app.post("/publish-jobs/{job_id}/cancel")
 async def publish_jobs_cancel(job_id: str) -> JSONResponse:
     """Stop a running publish/RPA job; Multilogin window stays open."""
