@@ -489,6 +489,99 @@ def test_a_failure_in_another_run_does_not_lend_its_section(events):
     assert "page_snapshot" not in event["tags"]
 
 
+# ── Чужой прогон и чужая кампания (ревью PR #328, F2) ───────────────────────
+
+class _SectionPage:
+    """Страница, отдающая готовый раздел (как `_SECTION_JS`), — без браузера."""
+
+    def __init__(self, html: str):
+        self.html = html
+
+    def evaluate(self, _js, _arg):
+        return [{"name": "audience", "html": self.html}]
+
+
+_ALPHA = "Alpha Spring Promo"
+_ALPHA_SECTION = f"<div><span>{_ALPHA}</span><span>Alpha adset Bogota</span></div>"
+
+
+def _profile_stop_calls(monkeypatch) -> list:
+    sent: list = []
+    monkeypatch.setattr(acl_sentry, "report_step_failure",
+                        lambda step, why, **kw: sent.append((step, kw)) or "e1")
+    return sent
+
+
+def test_an_attach_time_stop_of_the_next_campaign_carries_no_section_and_no_old_run(monkeypatch):
+    """Сценарий ревью: кампания A оставила раздел, у кампании B профиль не
+    подключился. Событие B — без раздела A и без номера прогона A."""
+    from src.fb_ads_rpa import profile_trouble as pt
+    from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft
+    from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+
+    sent = _profile_stop_calls(monkeypatch)
+    rt.set_current_job("job-7")
+    rt.set_current_run("runA", _ALPHA)
+    assert pc.remember_section(_SectionPage(_ALPHA_SECTION), step="audience_location",
+                               run_id="runA", campaign=_ALPHA)
+
+    pub = RpaPublisher.__new__(RpaPublisher)
+    pub.hand_off = pub.dry_run = False
+    pub.selectors_path = None
+    pub._conn = None
+    pub._built_at = None
+
+    def ensure(_label):
+        raise pt.ProfileStop(pt.RESTART_FAILED, "x")
+
+    monkeypatch.setattr(pub, "_ensure_browser", ensure)
+    draft = CampaignDraft("Beta Launch", "MX", "FacebookDoc19",
+                          ad_sets=[AdSetDraft("Set", ads=[AdDraft(ad_title="t", ad_body="b")])])
+    pub.publish_draft(draft)
+
+    (step, kw), = sent
+    assert step == pt.RESTART_FAILED and kw["campaign"] == "Beta Launch"
+    assert kw.get("attachment") is None
+    assert kw["run_id"] == ""
+    # Номер задания пережил смену кампании.
+    assert rt.current_job_id() == "job-7" and rt.current_run_id() == ""
+
+
+def test_a_profile_stop_never_carries_a_section_even_of_its_own_campaign(monkeypatch):
+    """Вкладка упала посреди кампании, переподключение не удалось: раздел,
+    снятый до падения, к остановке профиля не едет."""
+    from src.fb_ads_rpa import profile_trouble as pt
+    from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+
+    sent = _profile_stop_calls(monkeypatch)
+    rt.set_current_run("runB", "Beta Launch")
+    assert pc.remember_section(_SectionPage("<div>Beta section</div>"), step=pt.RESTART_FAILED,
+                               run_id="runB", campaign="Beta Launch")
+    RpaPublisher._report_profile_stop(pt.ProfileStop(pt.RESTART_FAILED, "x"), "Beta Launch",
+                                      "FacebookDoc19", "reattach")
+    (_step, kw), = sent
+    assert kw.get("attachment") is None
+
+
+def test_a_section_of_another_campaign_is_never_attached():
+    assert pc.remember_section(_SectionPage(_ALPHA_SECTION), step="audience_location",
+                               run_id="r1", campaign=_ALPHA)
+    # Тот же прогон, тот же шаг, другая кампания — ни точного, ни запасного.
+    assert pc.section_attachment("audience_location", "r1", campaign="Beta Launch") is None
+    assert pc.section_attachment("objective_leads", "r1", campaign="Beta Launch") is None
+    assert pc.section_attachment("audience_location", "r1", campaign=_ALPHA) is not None
+
+
+def test_without_a_run_id_there_is_no_last_section_fallback():
+    assert pc.remember_section(_SectionPage(_ALPHA_SECTION), step="audience_location",
+                               run_id="", campaign=_ALPHA)
+    assert pc.section_attachment("objective_leads", "", campaign=_ALPHA) is None
+    # Без номера прогона — только точный шаг и только своя, названная кампания.
+    assert pc.section_attachment("audience_location", "", campaign="") is None
+    assert pc.section_attachment("audience_location", "", campaign="Beta Launch") is None
+    assert pc.section_attachment("audience_location", "", campaign=_ALPHA) is not None
+
+
 @pytest.mark.parametrize("value", ["0", "false", "off", "no"])
 def test_the_machine_setting_turns_the_snapshot_off(events, monkeypatch, value):
     monkeypatch.setenv(pc.SECTION_SETTING, value)

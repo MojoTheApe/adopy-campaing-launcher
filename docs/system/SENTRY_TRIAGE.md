@@ -49,6 +49,11 @@ The attachment is built in `src/fb_ads_rpa/page_capture.py`:
    of 6+, tokens and uuids (`run_telemetry.scrub`); Meta render ids `js_*` → `syn_N`
    (references stay linked). Each text is cut at 300 characters, the whole file at
    200 KB with tags closed and `truncated: yes` in its header.
+   A section is attached only to an event of the same run and the same campaign it
+   was taken in; without a run id only the exact step of the same named campaign
+   counts (no "last section" fallback). Profile stops (the profile did not attach or
+   re-attach) carry no section, and each campaign starts with the previous one's run
+   forgotten.
 3. `acl_sentry.report_step_failure(..., attachment=...)` adds it with
    `scope.add_attachment` and a second size check (`before_send` does not see
    attachments). A failed attachment never loses the event.

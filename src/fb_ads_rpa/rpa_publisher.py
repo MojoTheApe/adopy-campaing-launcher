@@ -372,7 +372,11 @@ class RpaPublisher:
                              account: str, where: str) -> None:
         """Остановка из-за профиля до кампании (подключение): строка
         телеметрии и событие Sentry — как у остановки внутри кампании
-        (ревью PR #323, F7: open-by-hand чаще всего случается именно здесь)."""
+        (ревью PR #323, F7: open-by-hand чаще всего случается именно здесь).
+
+        Без раздела страницы (ревью PR #328, F2): страницы этой кампании не
+        было, а раздел, оставшийся в памяти, снят другой кампанией или до
+        падения вкладки."""
         try:
             _telemetry.record(stop.code, False, campaign=campaign_name, note=where,
                               diag={"detail": stop.detail, "message": profile_trouble.message(stop.code)})
@@ -382,7 +386,26 @@ class RpaPublisher:
             from src.fb_ads_rpa import sentry_signal
 
             sentry_signal.report_campaign_stop(stop.code, campaign=campaign_name,
-                                               account=account or "", attempt=1)
+                                               account=account or "", attempt=1,
+                                               attach_section=False)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _begin_campaign_context() -> None:
+        """Забыть прогон предыдущей кампании в этом потоке (ревью PR #328, F2).
+
+        Задание публикует кампании аккаунта по очереди в одном потоке, а
+        номер прогона называет только поток кампании (`set_current_run`).
+        Без этого остановка при подключении кампании B шла с номером прогона
+        кампании A — и разбор шёл по чужому прогону. Номер задания (ACL-1315)
+        сохраняется: он общий для всех кампаний задания.
+        """
+        try:
+            job = _telemetry.current_job_id()
+            _telemetry.clear_current_run()
+            if job:
+                _telemetry.set_current_job(job)
         except Exception:
             pass
 
@@ -418,6 +441,7 @@ class RpaPublisher:
         # ACL-1313: от конца сборки черновиков до сюда — ожидание очереди
         # профиля (publish_lease) и подготовки; замеряется один раз на сборку.
         campaign_name = str(getattr(draft, "name", "") or "")
+        self._begin_campaign_context()
         built_at = getattr(self, "_built_at", None)
         if built_at is not None:
             self._built_at = None

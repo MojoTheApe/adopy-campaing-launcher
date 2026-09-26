@@ -90,6 +90,7 @@ def _send(
     run_id: str,
     attempt: int | None = None,
     names: Iterable[str] = (),
+    attach_section: bool = True,
 ) -> str:
     from src import acl_sentry
 
@@ -106,7 +107,8 @@ def _send(
         diag["failure"] = failure
     if kind == BLOCKING:
         diag["policy"] = failure_policy.reason(failure)
-    attachment = _section(step, run_id, campaign=campaign, account=account, names=names)
+    attachment = (_section(step, run_id, campaign=campaign, account=account, names=names)
+                  if attach_section else None)
     return acl_sentry.report_step_failure(
         step,
         why or failure,
@@ -161,8 +163,14 @@ def report_campaign_stop(
     run_id: str = "",
     attempt: int | None = None,
     names: Iterable[str] = (),
+    attach_section: bool = True,
 ) -> str:
-    """Попытка кампании кончилась на шаге `fail_step` — одно событие."""
+    """Попытка кампании кончилась на шаге `fail_step` — одно событие.
+
+    `attach_section=False` — остановка, у которой страницы кампании не было
+    (профиль не подключился): раздел страницы к ней не прикладывается
+    (ревью PR #328, F2).
+    """
     if not fail_step:
         return ""
     try:
@@ -174,6 +182,7 @@ def report_campaign_stop(
             run_id=run_id or _telemetry.current_run_id(),
             attempt=attempt,
             names=names,
+            attach_section=attach_section,
         )
     except Exception:
         return ""

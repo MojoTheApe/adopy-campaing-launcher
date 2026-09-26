@@ -540,16 +540,35 @@ def remember_section(page, *, step: str, run_id: str = "", campaign: str = "") -
         return False
 
 
-def _find_section(run_id: str, steps: Iterable[str]) -> dict[str, Any] | None:
+def _same_campaign(entry: dict[str, Any], run_id: str, campaign: str) -> bool:
+    """Раздел снят в той же кампании, о которой событие (ревью PR #328, F2).
+
+    С номером прогона — разные известные имена кампании значат чужой раздел.
+    Без номера прогона ключ ("", шаг) общий для всех кампаний потока, и
+    раздел годится только при совпадении обоих известных имён.
+    """
+    mine = str(entry.get("campaign") or "").strip()
+    theirs = (campaign or "").strip()
+    if run_id:
+        return not (mine and theirs and mine != theirs)
+    return bool(mine and theirs and mine == theirs)
+
+
+def _find_section(run_id: str, steps: Iterable[str], campaign: str = "") -> dict[str, Any] | None:
+    run_id = run_id or ""
     with _sections_lock:
         for step in steps:
-            found = _sections.get((run_id or "", step))
-            if found:
+            found = _sections.get((run_id, step))
+            if found and _same_campaign(found, run_id, campaign):
                 return found
+        # Без номера прогона «последний раздел прогона» — это последний раздел
+        # чего угодно в процессе: не берём (ревью PR #328, F2).
+        if not run_id:
+            return None
         # Сам шаг снимка не оставил (отказ без `_shot`, итог кампании):
         # последний раздел этого прогона — с честной пометкой, чей он.
         for (rid, _step), entry in reversed(_sections.items()):
-            if rid == (run_id or ""):
+            if rid == run_id and _same_campaign(entry, run_id, campaign):
                 return entry
     return None
 
@@ -812,7 +831,7 @@ def section_attachment(
         return None
     try:
         related = list(related or ())
-        entry = _find_section(run_id, [step, *related])
+        entry = _find_section(run_id, [step, *related], campaign)
         if not entry:
             return None
         campaign = campaign or entry.get("campaign") or ""
