@@ -128,8 +128,33 @@ def test_a_profile_the_robot_started_becomes_its_own(mlx):
 def test_attaching_over_the_automation_port_makes_the_profile_the_robots(provider, monkeypatch):
     monkeypatch.setattr(provider.prov._direct, "_try_attach_existing",
                         lambda *a, **kw: SimpleNamespace(page="attached"))
+    monkeypatch.setattr(provider.prov._direct, "_discover_owned_debug_port", lambda udd: 9222)
     provider.prov.open(_entry(), "FacebookDoc19")
     assert br._robot_profile(PROFILE) is True
+
+
+def test_a_port_not_owned_by_the_profile_does_not_make_it_the_robots(provider, monkeypatch):
+    """Ревью PR #323 (F6): нестрогий поиск порта (старый DevToolsActivePort,
+    общий 19222) — не доказательство, что профиль поднимал робот."""
+    monkeypatch.setattr(provider.prov._direct, "_try_attach_existing",
+                        lambda *a, **kw: SimpleNamespace(page="attached"))
+    monkeypatch.setattr(provider.prov._direct, "_discover_owned_debug_port", lambda udd: None)
+    provider.prov.open(_entry(), "FacebookDoc19")
+    assert br._robot_profile(PROFILE) is False
+
+
+def test_an_unowned_silent_port_never_stops_the_profile(provider, monkeypatch):
+    def attach(*a, **kw):
+        raise br.ProfileUnresponsive("silent")
+
+    monkeypatch.setattr(provider.prov._direct, "_try_attach_existing", attach)
+    monkeypatch.setattr(provider.prov._direct, "_discover_owned_debug_port", lambda udd: None)
+    monkeypatch.setattr(provider.prov, "_start_via_mlx_api",
+                        lambda *a, **kw: provider.ev.append("start") or "started")
+    with pytest.raises(pt.ProfileStop) as stop:
+        provider.prov.open(_entry(), "FacebookDoc19")
+    assert stop.value.code == pt.OPEN_BY_HAND
+    assert provider.ev == []
 
 
 def test_the_publisher_ends_the_accounts_job_with_the_message(monkeypatch):

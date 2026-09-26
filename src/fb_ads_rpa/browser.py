@@ -2027,13 +2027,22 @@ class MultiloginAttachOnlyProvider:
                         profile_id)
             reused = None
             unresponsive = True
-            # У него был порт автоматизации — это профиль робота, не ручной.
-            _mark_robot_profile(profile_id, udd)
+        # Ревью PR #323 (F6): публикация цепляется по нестрогому поиску порта
+        # (старый DevToolsActivePort, общий 19222). Профилем робота считаем
+        # его только если порт слушает процесс именно этого профиля.
+        owned = self._owns_port(udd)
         if reused is not None:
             log.info("Attached to already-open Multilogin profile %s", profile_id)
-            _mark_robot_profile(profile_id, udd)
+            if owned:
+                _mark_robot_profile(profile_id, udd)
             return reused
         if unresponsive:
+            if not owned:
+                # Порт не доказан как порт этого профиля — окно могло быть
+                # открыто руками; останавливать его не вправе.
+                raise _open_by_hand(profile_id, account_label, "unowned_port")
+            # У него есть свой порт автоматизации — это профиль робота.
+            _mark_robot_profile(profile_id, udd)
             self._stop_profile(entry, account_label, profile_id, udd)
 
         # Manually (Quick) launched MLX profiles expose no CDP port, so we cannot
@@ -2059,6 +2068,15 @@ class MultiloginAttachOnlyProvider:
         if unresponsive:
             _record_profile_restart(entry, profile_id, ok=True, where="attach")
         return conn
+
+    def _owns_port(self, udd: str) -> bool:
+        """Отладочный порт слушает процесс Mimic именно этого профиля (F6)."""
+        if not udd:
+            return False
+        try:
+            return self._direct._discover_owned_debug_port(udd) is not None
+        except Exception:
+            return False
 
     def _connect_started(self, started: Any, profile_id: str) -> BrowserConnection:
         ws = started.ws_endpoint or ""

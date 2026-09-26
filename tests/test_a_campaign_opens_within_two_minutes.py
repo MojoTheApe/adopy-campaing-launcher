@@ -308,6 +308,8 @@ def test_an_attached_profile_that_does_not_answer_is_restarted(monkeypatch):
 
     monkeypatch.setattr(provider._direct, "_try_attach_existing", attach)
     monkeypatch.setattr(provider._direct, "_profile_process_running", lambda *a: True)
+    # Порт слушает процесс именно этого профиля (ревью PR #323, F6).
+    monkeypatch.setattr(provider._direct, "_discover_owned_debug_port", lambda udd: 9222)
     monkeypatch.setattr(provider, "_stop_profile", lambda *a: ev.append(("stop",)))
     monkeypatch.setattr(provider, "_start_via_mlx_api", lambda *a, **kw: ev.append(("start",)) or "s")
     monkeypatch.setattr(provider, "_connect_started", lambda started, pid: SimpleNamespace(page="p"))
