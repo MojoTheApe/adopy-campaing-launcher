@@ -77,20 +77,27 @@ copy failures), cut at 300 characters per text.
 python scripts/sentry_triage.py                  # since the saved cursor (first run: 24 h)
 python scripts/sentry_triage.py --since 2h       # explicit window
 python scripts/sentry_triage.py --format md      # markdown only
-python scripts/sentry_triage.py --apply          # also record the cursor (the only write)
+python scripts/sentry_triage.py --apply          # also record the cursor (its only write)
+python scripts/sentry_triage.py --attachments-dir "%LOCALAPPDATA%\ACL\sentry_triage"
+                                                 # also save the section files there
 ```
 
 It lists new (`is:unresolved firstSeen:>cursor`) and regressed
 (`is:regressed lastSeen:>cursor`) issues, reads each issue's latest event (tags,
-contexts) and downloads its `section_*.html` attachment into
-`%LOCALAPPDATA%\ACL\sentry_triage\<issue>\`, groups issues by `step:reason`
-(`ad2_copy` and `ad3_copy` are one group), marks each group with a known tracker task
-from `config/sentry_triage_map.json` or as **NEW KIND**, and prints JSON (for the
+contexts) and downloads its `section_*.html` attachment into memory, groups issues
+by `step:reason` (`ad2_copy` and `ad3_copy` are one group), marks each group with a
+known tracker task from `config/sentry_triage_map.json` or as **NEW KIND**, and
+prints JSON (for the
 agent) and markdown (for the owner) — including the headings and control labels of
 the attached section, so a new Meta layout is visible without opening the file.
 
-It never writes to Sentry or GitHub. Without `SENTRY_AUTH_TOKEN`, without network or
-without access it prints `"skipped": "<why>"` and exits 0.
+It never writes to Sentry or GitHub. Locally it writes nothing by default: the
+section outline is built from the downloaded bytes in memory. `--apply` writes only the
+state file (the cursor). Section files are saved only into an explicitly named
+`--attachments-dir` (as `sentry_issue_<id>\section_<step>.html`); there the latest 50
+issue folders are kept and older `sentry_issue_*` folders are removed (nothing else in
+that folder is touched). Without `SENTRY_AUTH_TOKEN`, without network or without access
+it prints `"skipped": "<why>"` and exits 0.
 
 State: `%LOCALAPPDATA%\ACL\sentry_triage_state.json` (`cursor`, last seen `lastSeen`
 per issue). Overrides: `SENTRY_ORG`, `SENTRY_BASE_URL` (default
@@ -112,9 +119,11 @@ Trigger — whichever comes first:
 For each group marked NEW KIND (or a known kind that regressed after its task was
 closed), the session:
 
-1. Reads the evidence: the digest, the downloaded section snapshot, the event tags
-   (release, machine, account label) — or the same via the Sentry MCP tools
-   (`search_issues`, `get_sentry_resource`).
+1. Reads the evidence: the digest (with the outline of the section snapshot), the
+   event tags (release, machine, account label) — or the same via the Sentry MCP tools
+   (`search_issues`, `get_sentry_resource`). When the full section is needed (step 3),
+   re-runs the script for that window with
+   `--attachments-dir "%LOCALAPPDATA%\ACL\sentry_triage"` to save the files.
 2. Checks the tracker for an existing task (GitHub Issues in
    `MojoTheApe/adopy-campaing-launcher`, `python scripts/task_tracker.py guide`).
    Files a new task (English, per repo rules) with: what broke, since which release,

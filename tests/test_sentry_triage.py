@@ -5,7 +5,9 @@ Sentry здесь — записанные ответы API (форма отве
 issues/…/events/latest/, projects/…/attachments/), подставленные вместо
 HTTP. Проверяется: группировка по «шаг + причина», сверка с таблицей
 известных задач, разбор вложения-раздела, курсор только при `--apply`,
-только чтение и мягкий пропуск без токена или прав.
+разделы на диск — только в названную `--attachments-dir` и не больше
+KEEP_SAVED_ISSUES папок (ревью PR #328, F3), только чтение и мягкий пропуск
+без токена или прав.
 """
 from __future__ import annotations
 
@@ -135,8 +137,8 @@ def _run(tmp_path, fake, *args, env_token="tok-123", monkeypatch=None):
         for name in ("SENTRY_ORG", "SENTRY_BASE_URL", "SENTRY_PROJECT"):
             monkeypatch.delenv(name, raising=False)
     out = io.StringIO()
-    code = st.main(["--state", str(tmp_path / "state.json"), "--attachments-dir", str(tmp_path / "att"),
-                    "--format", "json", *args], fetch=fake, now=NOW, out=out)
+    code = st.main(["--state", str(tmp_path / "state.json"), "--format", "json", *args],
+                   fetch=fake, now=NOW, out=out)
     assert code == 0
     return json.loads(out.getvalue())
 
@@ -178,12 +180,19 @@ def test_the_digest_groups_by_step_and_reason_and_flags_new_kinds(tmp_path, monk
     assert regressed["issues"][0]["change"] == "regressed"
 
 
+def _files(root: Path) -> list[str]:
+    return sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+
+
 def test_the_section_snapshot_is_downloaded_and_outlined(tmp_path, monkeypatch):
     digest = _run(tmp_path, _world(), monkeypatch=monkeypatch)
     known = next(g for g in digest["groups"] if g["step"] == "further_limit_reach_radio")
     att = known["issues"][0]["attachment"]
     assert att["name"] == "section_further_limit_reach_radio.html"
-    assert Path(att["saved"]).is_file()
+    # Скелет построен из байтов в памяти: без `--attachments-dir` на диске
+    # ничего (ревью PR #328, F3).
+    assert "saved" not in att
+    assert _files(tmp_path) == []
     assert "captured at step: pick_further_limit_radio" in att["header"]
     # По скелету раздела видно новую раскладку — без машины владельца.
     assert "Suggest an audience" in att["headings"]
@@ -211,6 +220,48 @@ def test_it_only_reads(tmp_path, monkeypatch):
     assert not any(re.search(r"/(comments|notes|assign|resolve|bulk)", u) for u in fake.calls)
     assert all(h["Authorization"] == "Bearer tok-123" for h in fake.headers_seen)
     assert not [name for name in dir(st.SentryClient) if re.match(r"(put|post|delete|update|resolve)", name)]
+
+
+def test_the_snapshot_is_saved_only_into_a_named_folder(tmp_path, monkeypatch):
+    save = tmp_path / "att"
+    digest = _run(tmp_path, _world(), "--attachments-dir", str(save), monkeypatch=monkeypatch)
+    att = next(g for g in digest["groups"] if g["step"] == "further_limit_reach_radio")["issues"][0]["attachment"]
+    assert Path(att["saved"]).is_file() and Path(att["saved"]).parent.parent == save
+    assert "Suggest an audience" in att["headings"]
+    assert _files(tmp_path) == [str(Path("att") / "sentry_issue_101" / "section_further_limit_reach_radio.html")]
+
+
+def test_apply_writes_only_the_state_file(tmp_path, monkeypatch):
+    _run(tmp_path, _world(), "--apply", monkeypatch=monkeypatch)
+    assert _files(tmp_path) == ["state.json"]
+
+
+def test_the_saved_folder_keeps_only_the_latest_issues(tmp_path, monkeypatch):
+    import os
+    import time
+
+    save = tmp_path / "att"
+    old = time.time() - 3600
+    for i in range(st.KEEP_SAVED_ISSUES + 5):
+        folder = save / f"sentry_issue_{900 + i}"
+        folder.mkdir(parents=True)
+        (folder / "section_x.html").write_text("<div>x</div>", encoding="utf-8")
+        os.utime(folder, (old + i, old + i))
+    # Чужое в названной папке не трогается.
+    (save / "notes").mkdir()
+    (save / "notes" / "section_mine.html").write_text("mine", encoding="utf-8")
+    (save / "sentry_issue_keep").mkdir()
+    (save / "sentry_issue_keep" / "other.txt").write_text("mine", encoding="utf-8")
+    os.utime(save / "sentry_issue_keep", (old - 10, old - 10))
+
+    _run(tmp_path, _world(), "--attachments-dir", str(save), monkeypatch=monkeypatch)
+    issues = sorted(d.name for d in save.iterdir() if d.name.startswith("sentry_issue_")
+                    and any(d.glob("section_*.html")))
+    assert len(issues) == st.KEEP_SAVED_ISSUES
+    assert "sentry_issue_101" in issues
+    assert "sentry_issue_900" not in issues
+    assert (save / "notes" / "section_mine.html").is_file()
+    assert (save / "sentry_issue_keep" / "other.txt").is_file()
 
 
 def test_the_cursor_is_recorded_only_with_apply(tmp_path, monkeypatch):

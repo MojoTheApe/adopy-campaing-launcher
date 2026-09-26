@@ -9,16 +9,21 @@
 агента и markdown для человека.
 
 Чего НЕ делает. Ничего не пишет ни в Sentry, ни в GitHub: не закрывает, не
-назначает, не комментирует. `--apply` только запоминает курсор (время
-разбора) в локальном файле состояния, чтобы следующий запуск показал лишь
-новое. Без токена или без сети — честно говорит «пропущено» и выходит с 0:
-расписанию незачем падать из-за того, что машина сейчас без доступа.
+назначает, не комментирует. На диск без флагов не пишет ничего: вложение
+скачивается в память, и скелет раздела строится из байтов (ревью PR #328,
+F3). `--apply` только запоминает курсор (время разбора) в локальном файле
+состояния, чтобы следующий запуск показал лишь новое. Сами разделы
+сохраняются только в явно названную `--attachments-dir`, и там остаются
+последние KEEP_SAVED_ISSUES тикетов. Без токена или без сети — честно говорит
+«пропущено» и выходит с 0: расписанию незачем падать из-за того, что машина
+сейчас без доступа.
 
   python scripts/sentry_triage.py                   # сводка с прошлого курсора (или за сутки)
   python scripts/sentry_triage.py --since 6h        # окно вместо курсора
   python scripts/sentry_triage.py --apply           # и запомнить курсор
   python scripts/sentry_triage.py --format json     # только JSON
   python scripts/sentry_triage.py --no-attachments  # не скачивать вложения
+  python scripts/sentry_triage.py --attachments-dir DIR  # и сохранить разделы в DIR
 
 Доступ: `SENTRY_AUTH_TOKEN` (личный токен владельца с правами org:read,
 project:read, event:read; чтение вложений — роль не ниже member). Можно
@@ -55,6 +60,13 @@ DEFAULT_SINCE = timedelta(hours=24)
 MAX_ISSUES = 100
 #: Потолок одного скачанного вложения (у робота — 200 КБ, запас на чужие).
 MAX_ATTACHMENT_BYTES = 1_000_000
+#: Сколько папок тикетов держать в `--attachments-dir`. Разбор идёт каждые
+#: десять минут; хранилище, которое только растёт, однажды кончится.
+KEEP_SAVED_ISSUES = 50
+#: Папка одного тикета в `--attachments-dir`. Подчищаются только такие папки
+#: и только файлы разделов в них: папку назвал человек, чужое там не трогаем.
+_ISSUE_DIR_PREFIX = "sentry_issue_"
+_ISSUE_DIR_RE = re.compile(r"^sentry_issue_[A-Za-z0-9_-]{1,40}$")
 TIMEOUT_S = 20
 
 #: Ответ HTTP: код, тело, заголовки. Подменяется в тестах.
@@ -332,9 +344,12 @@ def _issue_row(issue: dict[str, Any], event: dict[str, Any], kind: str,
 
 
 def triage(client: SentryClient, *, since: datetime, rows: list[dict[str, str]],
-           project: str = "", attachments_dir: Path | None = None,
+           project: str = "", attachments: bool = True, attachments_dir: Path | None = None,
            seen: dict[str, str] | None = None) -> dict[str, Any]:
-    """Сводка новых и вернувшихся тикетов с момента `since`."""
+    """Сводка новых и вернувшихся тикетов с момента `since`.
+
+    `attachments` — скачивать ли разделы (в память, для скелета);
+    `attachments_dir` — куда их ещё и сохранить (None — никуда)."""
     stamp = _iso(since)
     found: dict[str, tuple[dict[str, Any], str]] = {}
     for issue in client.issues(f"is:unresolved firstSeen:>{stamp}", project=project):
@@ -355,7 +370,7 @@ def triage(client: SentryClient, *, since: datetime, rows: list[dict[str, str]],
         attachment = None
         event_id = event.get("eventID") or event.get("id") or ""
         proj = (issue.get("project") or {}).get("slug") or project
-        if attachments_dir is not None and event_id and proj:
+        if attachments and event_id and proj:
             attachment = _fetch_section(client, proj, event_id, issue_id, attachments_dir)
         row = _issue_row(issue, event, kind, attachment)
         step = _group_step(row["latest_event"]["step"]) or (issue.get("title") or "").split(":", 1)[0]
@@ -389,7 +404,9 @@ def triage(client: SentryClient, *, since: datetime, rows: list[dict[str, str]],
 
 
 def _fetch_section(client: SentryClient, project: str, event_id: str, issue_id: str,
-                   out_dir: Path) -> dict[str, Any] | None:
+                   out_dir: Path | None) -> dict[str, Any] | None:
+    """Раздел последнего события: скелет из байтов в памяти; на диск — только
+    в названную `out_dir`."""
     try:
         listed = client.attachments(project, event_id)
     except SentryUnavailable as exc:
@@ -402,13 +419,42 @@ def _fetch_section(client: SentryClient, project: str, event_id: str, issue_id: 
             body = client.attachment_bytes(project, event_id, str(att.get("id")))
         except SentryUnavailable as exc:
             return {"name": name, "error": str(exc)}
-        safe = re.sub(r"[^A-Za-z0-9_.-]", "_", name)[:80]
-        target = out_dir / re.sub(r"[^A-Za-z0-9_-]", "_", issue_id)[:40] / safe
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(body)
         text = body.decode("utf-8", "replace")
-        return {"name": name, "bytes": len(body), "saved": str(target), **outline_attachment(text)}
+        found = {"name": name, "bytes": len(body), **outline_attachment(text)}
+        if out_dir is not None:
+            safe = re.sub(r"[^A-Za-z0-9_.-]", "_", name)[:80]
+            folder = out_dir / (_ISSUE_DIR_PREFIX + re.sub(r"[^A-Za-z0-9_-]", "_", issue_id)[:40])
+            try:
+                folder.mkdir(parents=True, exist_ok=True)
+                target = folder / safe
+                target.write_bytes(body)
+                found["saved"] = str(target)
+            except OSError as exc:
+                found["save_error"] = type(exc).__name__
+            prune_saved(out_dir)
+        return found
     return None
+
+
+def prune_saved(out_dir: Path, keep: int = KEEP_SAVED_ISSUES) -> int:
+    """Оставить в `out_dir` последние `keep` папок тикетов. Возвращает, сколько
+    убрано. Трогает только папки `sentry_issue_*` и файлы `section_*.html` в
+    них; папка, где лежит что-то ещё, остаётся на месте."""
+    try:
+        folders = sorted((d for d in out_dir.iterdir() if d.is_dir() and _ISSUE_DIR_RE.match(d.name)),
+                         key=lambda d: d.stat().st_mtime)
+    except OSError:
+        return 0
+    removed = 0
+    for old in folders[: max(0, len(folders) - keep)]:
+        try:
+            for f in old.glob("section_*.html"):
+                f.unlink()
+            old.rmdir()
+            removed += 1
+        except OSError:
+            continue
+    return removed
 
 
 # ── Вывод ───────────────────────────────────────────────────────────────────
@@ -456,10 +502,14 @@ def main(argv: list[str] | None = None, *, fetch: Fetch | None = None,
     parser.add_argument("--state", default="", help="state file (default: machine config dir)")
     parser.add_argument("--map", default=str(MAP_PATH), help="known failures → tracker tasks")
     parser.add_argument("--project", default=os.environ.get("SENTRY_PROJECT", ""))
-    parser.add_argument("--attachments-dir", default="", help="where to save section snapshots")
-    parser.add_argument("--no-attachments", action="store_true")
+    parser.add_argument("--attachments-dir", default="",
+                        help="also save the downloaded section snapshots here (never saved otherwise;"
+                             f" the latest {KEEP_SAVED_ISSUES} issue folders are kept)")
+    parser.add_argument("--no-attachments", action="store_true",
+                        help="do not download section snapshots at all")
     parser.add_argument("--format", choices=("json", "md", "both"), default="both")
-    parser.add_argument("--apply", action="store_true", help="record the cursor (no other writes, ever)")
+    parser.add_argument("--apply", action="store_true",
+                        help="record the cursor in the state file (its only write)")
     args = parser.parse_args(argv)
     out = out or sys.stdout
     now = now or datetime.now(timezone.utc)
@@ -480,9 +530,11 @@ def main(argv: list[str] | None = None, *, fetch: Fetch | None = None,
         since = parse_since(state["cursor"], now=now)
     else:
         since = now - DEFAULT_SINCE
+    # Без явной папки разделы только в памяти: запуск каждые десять минут не
+    # копит на диске копии страниц (ревью PR #328, F3).
     attachments_dir = None
-    if not args.no_attachments:
-        attachments_dir = Path(args.attachments_dir) if args.attachments_dir else state_path.parent / "sentry_triage"
+    if args.attachments_dir and not args.no_attachments:
+        attachments_dir = Path(args.attachments_dir)
 
     try:
         client = SentryClient(
@@ -492,7 +544,8 @@ def main(argv: list[str] | None = None, *, fetch: Fetch | None = None,
             fetch=fetch,
         )
         digest = triage(client, since=since, rows=load_map(Path(args.map)), project=args.project,
-                        attachments_dir=attachments_dir, seen=state.get("seen") or {})
+                        attachments=not args.no_attachments, attachments_dir=attachments_dir,
+                        seen=state.get("seen") or {})
     except SentryUnavailable as exc:
         digest = {"skipped": str(exc), "since": _iso(since) + "Z"}
 

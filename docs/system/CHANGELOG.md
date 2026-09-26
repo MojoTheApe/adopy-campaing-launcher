@@ -21,7 +21,9 @@ digest goes to the owner's Claude chat.
 - `scripts/sentry_triage.py`: new/regressed issues since a cursor, latest event and
   section per issue, grouped by `step:reason`, matched to tasks in
   `config/sentry_triage_map.json`, printed as JSON + markdown. Never writes to Sentry
-  or GitHub; `--apply` only records the cursor; no token → "skipped", exit 0.
+  or GitHub; `--apply` only records the cursor; section files are saved only into an
+  explicit `--attachments-dir` (latest 50 issue folders kept), otherwise the outline is
+  built in memory and nothing is written; no token → "skipped", exit 0.
 - `docs/system/SENTRY_TRIAGE.md`: the routine (Sentry alert + desktop scheduled task
   every 10 minutes) and the owner's one-time setup. No alert rule or schedule is
   created by the code.
