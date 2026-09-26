@@ -1773,6 +1773,15 @@
     .amap-tag.other { background: var(--accent-soft); color: var(--accent); }
     .amap .nodata { color: var(--muted); }
     .amap-available > summary { background: var(--bg-subtle); }
+    /* ACL-1319: выбор и убирание в Available accounts. */
+    .amap-avail-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; padding: 0.45rem 0.8rem; }
+    .amap-avail-opt { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; cursor: pointer; }
+    .amap .amap-avail-pickcol { width: 2rem; }
+    .amap-avail-row[hidden] { display: none; }
+    .amap-avail-inactive td { color: var(--muted); }
+    .amap-avail-rule { padding: 0.35rem 0.8rem 0.5rem; font-size: 0.72rem; color: var(--muted); }
+    .amap-avail-hidden { margin: 0 0.8rem 0.6rem; }
+    .amap-avail-hidden > summary { cursor: pointer; font-size: 0.8rem; color: var(--muted); padding: 0.3rem 0; }
     /* ── Календарь периода ────────────────────────────────────────────
        Дни, которых нет в книге, не кликаются. Предлагать полный месяц, когда
        в файле два дня, — значит приглашать выбрать день и решить, что аккаунты
@@ -7759,6 +7768,148 @@ function amapClose(kind, value, label) {
     + 'Nothing is deleted — they keep their Multilogin profile, proxy and history.')) return;
   amapSend({ action: 'close', kind: kind, value: value }, null);
 }
+
+// ── Available accounts: выбрать и убрать (ACL-1319) ───────────────────
+// Убирание — настройка вида одного списка на этой машине: сервер пишет имя в
+// available_hidden.csv рядом со связями, и больше ничего не трогается. После
+// ответа блок перерисовывается с сервера целиком (/account-map/available,
+// тот же шаблон, что в карте), а не правится на месте: счётчики, «Hidden
+// accounts» и «Show inactive» считает один источник, и разойтись им не с чем.
+var amapAvailInactiveOn = false;
+try { amapAvailInactiveOn = localStorage.getItem('amap-avail-inactive') === '1'; } catch (e) {}
+
+function amapAvailBox(el) {
+  return (el && el.closest && el.closest('.amap-available')) || document.querySelector('.amap-available');
+}
+
+function amapAvailVisiblePicks(box) {
+  return Array.prototype.filter.call(box.querySelectorAll('.amap-avail-pick'), function (cb) {
+    var row = cb.closest('tr');
+    return !(row && row.hidden);
+  });
+}
+
+function amapAvailSync(el) {
+  var box = amapAvailBox(el);
+  if (!box) return;
+  var picks = amapAvailVisiblePicks(box);
+  var on = picks.filter(function (cb) { return cb.checked; }).length;
+  var all = box.querySelector('.amap-avail-all');
+  if (all) {
+    all.checked = picks.length > 0 && on === picks.length;
+    all.indeterminate = on > 0 && on < picks.length;
+  }
+  var btn = box.querySelector('.amap-avail-remove');
+  if (btn) {
+    btn.disabled = on === 0;
+    btn.textContent = on > 1 ? 'Remove selected (' + on + ')' : 'Remove selected';
+  }
+}
+
+function amapAvailAll(cb) {
+  var box = amapAvailBox(cb);
+  if (!box) return;
+  amapAvailVisiblePicks(box).forEach(function (p) { p.checked = cb.checked; });
+  amapAvailSync(cb);
+}
+
+function amapAvailApplyInactive(box) {
+  var toggle = box.querySelector('.amap-avail-show-inactive');
+  if (toggle) toggle.checked = amapAvailInactiveOn;
+  box.querySelectorAll('tr.amap-avail-inactive').forEach(function (row) {
+    row.hidden = !amapAvailInactiveOn;
+    // Спрятанная строка не должна уйти в «Remove selected» незамеченной.
+    if (row.hidden) { var p = row.querySelector('.amap-avail-pick'); if (p) p.checked = false; }
+  });
+  amapAvailSync(box);
+}
+
+function amapAvailShowInactive(cb) {
+  amapAvailInactiveOn = !!cb.checked;
+  try { localStorage.setItem('amap-avail-inactive', amapAvailInactiveOn ? '1' : '0'); } catch (e) {}
+  var box = amapAvailBox(cb);
+  if (box) amapAvailApplyInactive(box);
+}
+
+function amapAvailMsg(box, text, bad) {
+  var msg = box && box.querySelector('.amap-avail-msg');
+  if (msg) { msg.textContent = text || ''; msg.className = 'amap-msg amap-avail-msg' + (bad ? ' bad' : ''); }
+  else if (bad && text) alert(text);
+}
+
+function amapAvailRemove(btn) {
+  var box = amapAvailBox(btn);
+  if (!box) return;
+  var names = amapAvailVisiblePicks(box).filter(function (cb) { return cb.checked; })
+    .map(function (cb) { return cb.value; });
+  if (!names.length) return;
+  if (names.length > 1 && !confirm('Remove ' + names.length + ' accounts from Available accounts?\n\n'
+      + 'They are only hidden from this list on this machine. Nothing is deleted — '
+      + 'profiles, the account map, placements and history stay. '
+      + 'You can bring them back from "Hidden accounts".')) return;
+  return amapAvailSave(box, names, true);
+}
+
+function amapAvailRestore(btn, name) {
+  return amapAvailSave(amapAvailBox(btn), [name], false);
+}
+
+async function amapAvailSave(box, names, hide) {
+  amapAvailMsg(box, 'saving…', false);
+  var data = null, status = 0;
+  try {
+    var r = await fetch('/api/available-accounts/hidden', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ accounts: names, hidden: hide })
+    });
+    status = r.status;
+    try { data = await r.json(); } catch (e) { data = null; }
+  } catch (e) { data = null; }
+  if (!data || !data.ok) {
+    amapAvailMsg(box, (data && data.error) ? data.error : ('Could not save (HTTP ' + status + ')'), true);
+    return false;
+  }
+  var ok = await amapAvailReload(box);
+  if (ok && data.skipped && data.skipped.length) {
+    amapAvailMsg(amapAvailBox(), data.skipped.join(', ') + ' is placed in a country — take it out of the country first.', true);
+  }
+  return ok;
+}
+
+async function amapAvailReload(box) {
+  var per = (typeof amapPeriod === 'function') ? amapPeriod() : { from: '', to: '', span: '' };
+  try {
+    // Свой маршрут, а не /account-map: тот считает по отчёту без периода, и
+    // список после Remove мог бы оказаться не тем, что был на экране.
+    var r = await fetch('/account-map/available?date_from=' + encodeURIComponent(per.from || '')
+                        + '&date_to=' + encodeURIComponent(per.to || '')
+                        + '&span=' + encodeURIComponent(per.span || ''), { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var fresh = new DOMParser().parseFromString(await r.text(), 'text/html').querySelector('.amap-available');
+    if (!fresh) throw new Error('no list in the response');
+    var hiddenOpen = !!(box && box.querySelector('.amap-avail-hidden[open]'));
+    var live = box || document.querySelector('.amap-available');
+    var node = document.importNode(fresh, true);
+    node.open = true;
+    var h = node.querySelector('.amap-avail-hidden');
+    if (h && hiddenOpen) h.open = true;
+    live.replaceWith(node);
+    amapAvailApplyInactive(node);
+    return true;
+  } catch (e) {
+    // Сохранено, но перерисовать не вышло — честнее перезагрузить страницу,
+    // чем оставить на экране список, который уже неправда.
+    location.reload();
+    return false;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  var box = document.querySelector('.amap-available');
+  if (box) amapAvailApplyInactive(box);
+});
 
 // Найти профиль в Multilogin и подключить его к стране одним движением.
 // Поиск идёт по хвосту имени — «X01» находит KLD_BFL_X01, — потому что именно
