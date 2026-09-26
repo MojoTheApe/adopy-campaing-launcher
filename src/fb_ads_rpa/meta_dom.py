@@ -2891,6 +2891,10 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
             break
     if out is not None:
         out.update(outcome=outcome, frozen=frozen_polls, woke=getattr(watch, "fired", ""))
+    if not found:
+        # ACL-1320: окна цели нет — доказательства, пока страница та же.
+        _stall_evidence(page, "objective_wait", outcome=outcome,
+                        responsive=False if outcome == "unresponsive" else None)
     try:
         _telemetry.record("objective_wait", None, note=outcome,
                           duration_s=time.time() - start,
@@ -3063,6 +3067,9 @@ def _unstick(page: Page, where: str, *, editor: bool, waited_s: float = 0.0,
     # Не отвечает — не будим: перезагрузка списка или свежая вкладка у
     # `_open_campaign` делают это без сессии на ней.
     responsive = _page_responsive(page)
+    # ACL-1320: сначала — что было на экране и сколько весила вкладка, пока
+    # мы ещё ничего не трогали.
+    _stall_evidence(page, where, responsive=responsive, outcome="stall")
     if responsive is False:
         woke = {"skipped": "unresponsive"}
     else:
@@ -3092,6 +3099,75 @@ def _unstick(page: Page, where: str, *, editor: bool, waited_s: float = 0.0,
                       diag={"where": where[:80], "waited_s": round(waited_s, 1), "editor": editor,
                             "responsive": responsive, "loading": loading, "woke": woke})
     return how
+
+
+#: ACL-1320: сколько раз за прогон снимать доказательства зависания.
+STALL_EVIDENCE_MAX = 4
+
+#: Прогон → сколько доказательств уже снято.
+_STALL_EVIDENCE_TAKEN: dict[str, int] = {}
+
+#: Метрики вкладки. Имена — как у CDP `Performance.getMetrics` (JSHeapUsedSize,
+#: Nodes), но читаются из страницы через `_eval_bounded`: у CDP `send` в sync
+#: Playwright таймаута нет, а доказательство зависания не имеет права
+#: зависнуть само. `Nodes` здесь — элементы документа (у CDP — все узлы,
+#: включая отсоединённые), `JSHeapUsedSize` — `performance.memory` Chrome.
+_TAB_METRICS_JS = """() => {
+  const m = performance.memory || {};
+  return {
+    JSHeapUsedSize: m.usedJSHeapSize || null,
+    JSHeapTotalSize: m.totalJSHeapSize || null,
+    Nodes: document.getElementsByTagName('*').length,
+    Frames: window.frames.length,
+  };
+}"""
+
+
+def _stall_evidence(page: Page, where: str, *, responsive: bool | None = None, outcome: str = "") -> dict:
+    """Снять доказательства зависания: PNG, разметку, метрики вкладки (ACL-1320).
+
+    Разбор cf563b4ba594 пришлось делать по косвенным строкам: ни снимка, ни
+    размера кучи вкладки, которая 14 минут не отвечала. Теперь на
+    `stall_unstuck` и на ожидании окна цели без радио — снимок, разметка и
+    метрики, всё ограничено: PNG только путём Playwright с таймаутом (без
+    CDP-запасного), разметка — `inner_html(timeout)`, метрики —
+    `_eval_bounded`. Вкладка не отвечает — не трогаем её вовсе, пишем только
+    это. Не больше `STALL_EVIDENCE_MAX` на прогон. Строка `stall_evidence`.
+    """
+    run = _telemetry.current_run_id() or "no_run"
+    taken = _STALL_EVIDENCE_TAKEN.get(run, 0)
+    out: dict = {"where": where[:80], "outcome": outcome}
+    if taken >= STALL_EVIDENCE_MAX:
+        return out
+    _STALL_EVIDENCE_TAKEN[run] = taken + 1
+    if responsive is None:
+        responsive = _page_responsive(page, LIVENESS_PROBE_S)
+    out["responsive"] = responsive
+    if responsive:
+        try:
+            got = _eval_bounded(page, _TAB_METRICS_JS)
+            out["metrics"] = got if isinstance(got, dict) else None
+        except Exception as exc:
+            out["metrics"] = None
+            out["metrics_error"] = str(exc)[:80]
+        label = re.sub(r"[^A-Za-z0-9_]+", "_", f"stall_{where}")[:60]
+        try:
+            from src.fb_ads_rpa.screenshots import capture as _capture
+
+            out["png"] = _capture(page, label, cdp_fallback=False) or ""
+        except Exception as exc:
+            out["png_error"] = str(exc)[:80]
+        try:
+            from src.fb_ads_rpa import page_capture as _pages
+
+            out["page"] = _pages.capture(page, step=label, diag={"where": where, "outcome": outcome}) or ""
+        except Exception as exc:
+            out["page_error"] = str(exc)[:80]
+    try:
+        _telemetry.record("stall_evidence", None, note=outcome or where[:40], diag=out)
+    except Exception:
+        pass
+    return out
 
 
 def _reload_awake(page: Page, where: str) -> bool:
