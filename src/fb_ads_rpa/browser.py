@@ -1056,7 +1056,17 @@ def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
                 if kind:
                     diag["why"], diag["detail"] = kind, detail
                     raise profile_trouble.ProfileStop(kind, detail) from exc
-                raise
+                if "timeout" not in type(exc).__name__.lower() and "Timeout" not in str(exc):
+                    raise
+                # Ревью PR #323 (F10): медленный переход сам по себе — не повод
+                # перезапускать профиль. Старая вкладка уже закрыта; новая
+                # отвечает — работаем в ней (раунд `_open_campaign` сам
+                # вернёт её на список и нажмёт Create).
+                if page_answers(new, 5.0) is False:
+                    diag["why"] = "meta_silent_in_new_tab"
+                    return None
+                diag["why"], diag["note"] = "", "goto_timeout_kept"
+                return new
             profile_trouble.note_nav_ok(new)
             kind, detail = profile_trouble.classify_page(new, history=False)
             if kind:

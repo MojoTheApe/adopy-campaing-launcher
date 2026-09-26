@@ -545,3 +545,25 @@ def test_the_new_single_screen_editor_stops_the_whole_account():
     from src.fb_ads_rpa import profile_trouble as pt
     assert "simple_create_layout" in pt.ACCOUNT_STOPS
     assert "single-screen" in pt.message("simple_create_layout")
+
+
+def test_a_slow_navigation_in_a_fresh_tab_keeps_the_tab(monkeypatch):
+    """Ревью PR #323 (F10): переход в свежей вкладке упал по таймауту, а
+    вкладка отвечает — её и отдаём (не None → не перезапуск профиля)."""
+    class _New:
+        url = "about:blank"
+
+        def goto(self, url, **kw):
+            raise TimeoutError("Page.goto: Timeout 30000ms exceeded.")
+
+    new = _New()
+    old = SimpleNamespace(url=LIST_URL, close=lambda **kw: None,
+                          context=SimpleNamespace(browser=SimpleNamespace(is_connected=lambda: True)))
+    monkeypatch.setattr(br, "_open_tab_via_browser", lambda ctx, **kw: new)
+    monkeypatch.setattr(br, "page_answers", lambda p, t=5.0: True)
+    monkeypatch.setattr(br, "_disable_background_throttling", lambda c, p: None)
+    monkeypatch.setattr(br, "_keep_renderer_active", lambda c, p: None)
+    assert br.fresh_tab(old, LIST_URL) is new
+    answers = iter([True, False])
+    monkeypatch.setattr(br, "page_answers", lambda p, t=5.0: next(answers))
+    assert br.fresh_tab(old, LIST_URL) is None, "молчащую вкладку после таймаута отдали"
