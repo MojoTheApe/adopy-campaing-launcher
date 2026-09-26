@@ -4886,7 +4886,7 @@ def run_recorded_campaign_flow(
             if not _fill(page.get_by_placeholder("Enter your ad name here..."), final_ad_name, where="ad_name"):
                 _shot("fail_ad_name")
                 ad_level_fails.append("ad_name")
-                copy_ad_name = _name_in_the_field(page)
+                copy_ad_name = _name_in_the_field(page, final_ad_name)
             else:
                 _shot("after_ad_name")
 
@@ -5029,7 +5029,7 @@ def run_recorded_campaign_flow(
                 if not _fill(page.get_by_placeholder("Enter your ad name here..."), extra_name, where=f"{tag}_name"):
                     _shot(f"fail_{tag}_name")
                     ad_level_fails.append(f"{tag}_name")
-                    extra_copy_name = _name_in_the_field(page)
+                    extra_copy_name = _name_in_the_field(page, extra_name)
                 else:
                     _shot(f"after_{tag}_name")
 
@@ -11701,7 +11701,11 @@ def _open_ad_name(page: Page) -> str | None:
         return None
 
 
-def _name_in_the_field(page: Page) -> str:
+#: Имя свежей заготовки объявления Meta (поле имени до нашего ввода).
+_FRESH_AD_NAME = "New Leads Ad"
+
+
+def _name_in_the_field(page: Page, intended: str) -> str:
     """Имя, с которым сверять объявление, когда своё имя вписать не удалось.
 
     Финальное ревью PR #314 (c): шаг имени отказал — в поле осталось имя Meta
@@ -11709,9 +11713,19 @@ def _name_in_the_field(page: Page) -> str:
     и с `wrong_ad_open`: один отказ имени стоил объявлению и текста. Открыто
     то самое объявление, чьё имя не встало, — сверяем с тем, что в поле
     сейчас; не прочитать — с именем свежей заготовки Meta.
+
+    Ревью PR #323 (F5): принимаем из поля только наше имя или имя свежей
+    заготовки («New Leads Ad», без учёта регистра). Любое другое имя — это
+    другое объявление (перезагрузка открыла, например, первое): сверка идёт с
+    нашим именем, и `write_ad_copy` честно скажет `wrong_ad_open`, а текст
+    второго объявления не ляжет в первое.
     """
     got = _open_ad_name(page)
-    return got if got is not None else "New Leads Ad"
+    if got is None:
+        return _FRESH_AD_NAME
+    if got.strip().lower() in ((intended or "").strip().lower(), _FRESH_AD_NAME.lower()):
+        return got
+    return intended
 
 
 def _reopen_ad_after_reload(page: Page, ad_name: str) -> bool:

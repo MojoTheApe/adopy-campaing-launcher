@@ -48,3 +48,27 @@ def test_an_unreadable_field_after_a_failed_name_falls_back_to_metas_default(flo
     flow["fail_upload"] = set()
     flow["run"]()
     assert flow["copies"] and flow["copies"][0][0] == "New Leads Ad"
+
+
+def test_another_ads_name_in_the_field_keeps_the_check_on_our_name(flow, monkeypatch):
+    """Ревью PR #323 (F5): шаг имени второго объявления отказал после
+    перезагрузки, открывшей первое, — в поле «Example Ad». Сверка остаётся с
+    НАШИМ именем («Ad 2»), и текст второго не ляжет в первое."""
+    loc = flow["page"].get_by_placeholder.return_value
+
+    def fill(value, timeout=None):
+        if value == "Ad 2":
+            raise TimeoutError("the name field did not take the text")
+
+    loc.fill.side_effect = fill
+    monkeypatch.setattr(md, "_open_ad_name", lambda p: "Example Ad")
+    flow["fail_upload"] = set()
+    flow["run"]()
+    names = [c[0] for c in flow["copies"]]
+    assert names[-1] == "Ad 2", names
+
+
+def test_the_fresh_shell_name_is_accepted_in_any_case(monkeypatch):
+    for got, want in (("new leads ad", "new leads ad"), ("Example Ad 1", "Ad 2"), ("AD 2", "AD 2")):
+        monkeypatch.setattr(md, "_open_ad_name", lambda p, g=got: g)
+        assert md._name_in_the_field(object(), "Ad 2") == want
