@@ -60,8 +60,8 @@ MESSAGES = {
     # ACL-1327: условия Lead Ads страницы не приняты («Please read and accept
     # Meta's Lead Ads Terms…») — принимает человек в Meta, робот «Accept» не
     # жмёт. Страница у кампаний аккаунта одна — следующая упрётся в то же.
-    LEAD_TERMS: "The Facebook Page has not accepted Meta's Lead Ads Terms - open the Page's lead "
-                "ads terms in Meta, accept them, then publish again",
+    LEAD_TERMS: "Lead Generation terms are not accepted on the Page (Meta's Lead Ads Terms) - "
+                "open the Page's lead ads terms in Meta, accept them, then publish again",
 }
 
 #: Остановки, после которых остальные кампании задания этого аккаунта не
