@@ -181,17 +181,21 @@ def test_every_section_and_create_clears_overlays_first(flow, monkeypatch):
 
 
 def test_a_cleared_ad_blocker_replaces_the_blind_reload(flow, monkeypatch):
-    """Окно закрыто и список уже перезагружен — второй reload не нужен."""
+    """Окно закрыто и список уже перезагружен — второй reload не нужен.
+
+    ACL-1320: раунд без окна цели идёт на список заново (`_open_campaign`),
+    окна поверх него закрываются перед новым Create; `recover_stuck_page` на
+    этом пути не зовётся вовсе."""
     calls = []
 
     def clear(p, where, **kw):
         calls.append(where)
-        return ["ad_blocker_modal:ok", "network_trouble:reloaded"] if where == "objective" else []
+        return ["ad_blocker_modal:ok", "network_trouble:reloaded"] if where == "create_retry" else []
 
     monkeypatch.setattr(md, "_clear_blocking_overlays", clear)
     flow["waits"][:] = [False, True]
     flow["run"]()
     ev = flow["events"]
-    assert "objective" in calls and "create_retry" in calls
-    assert ("recover", "objective") not in ev
+    assert "create" in calls and "create_retry" in calls
+    assert not [e for e in ev if e[0] == "recover" and e[1] in ("objective", "create")]
     assert ev.count(("create_button",)) >= 2, "после закрытия окна Create не нажали"

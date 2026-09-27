@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
+from src.fb_ads_rpa import profile_trouble
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 
 log = logging.getLogger(__name__)
@@ -780,9 +781,34 @@ def _home_point(bounds: dict) -> dict:
 _PARK_TOLERANCE = 8
 
 
+#: Места, куда наша парковка ставила окна в этом процессе (left, top).
+#: Финальное ревью PR #314: окно на парковке потом расширяют
+#: (`_widen_parked_window` — ширина растёт, left остаётся), и формула
+#: `left == -(width + 400)` его больше не узнаёт: домом считалось место за
+#: краем экрана, и `put_window_back` сворачивал окно туда — из панели задач
+#: оно разворачивалось за экраном. Запомненное место от ширины не зависит.
+_PARK_SPOTS: set[tuple[int, int]] = set()
+
+
+def _park_spot(width: int) -> tuple[int, int]:
+    """Место парковки по умолчанию для окна шириной `width` — и запомнить его."""
+    spot = (-(width + 400), 0)
+    _PARK_SPOTS.add(spot)
+    return spot
+
+
 def _parked_by_us(left: int, top: int, width: int) -> bool:
-    """Стоит ли окно там, куда его уводит наша парковка по умолчанию."""
-    return abs(left + width + 400) <= _PARK_TOLERANCE and abs(top) <= _PARK_TOLERANCE
+    """Стоит ли окно там, куда его уводит наша парковка по умолчанию.
+
+    Два признака: формула парковки при нынешней ширине (окно, оставшееся с
+    прошлого процесса) или место, куда парковка ставила окно в этом процессе
+    (окно с тех пор расширили). Положение без них — законный монитор слева
+    или сверху: такое окно человека не трогаем (ревью v3 PR #314).
+    """
+    if abs(left + width + 400) <= _PARK_TOLERANCE and abs(top) <= _PARK_TOLERANCE:
+        return True
+    return any(abs(left - x) <= _PARK_TOLERANCE and abs(top - y) <= _PARK_TOLERANCE
+               for x, y in _PARK_SPOTS)
 
 
 def _restore_offscreen(context, page) -> bool:
@@ -814,7 +840,7 @@ def _restore_offscreen(context, page) -> bool:
     if left is None:
         # По умолчанию окно уезжает за левый край: пользователь держит профили
         # свёрнутыми и не хочет, чтобы они выскакивали поверх его работы.
-        left, top = -(width + 400), 0
+        left, top = _park_spot(width)
     session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": {
         "left": left, "top": top, "width": width, "height": height}})
     time.sleep(1.0)
@@ -828,6 +854,12 @@ def put_window_back(page) -> None:
         return
     if window_home()[0] is not None:
         # Окно стоит там, где его попросили держать — не трогаем и не сворачиваем.
+        return
+    # ACL-1320: CDP-сессия на вкладке с зависшим рендерером висела 197 с.
+    # Не отвечает — окно не трогаем (оно за краем экрана и никому не мешает;
+    # профиль всё равно перезапустят или сменят вкладку).
+    if page_answers(page, 3.0) is False:
+        log.info("put_window_back skipped: the tab does not answer")
         return
     try:
         session = page.context.new_cdp_session(page)
@@ -884,6 +916,207 @@ def wake_page(page) -> dict:
         out["front"] = True
     except Exception as exc:
         log.debug("wake_page front: %s", exc)
+    _disable_background_throttling(context, page)
+    return out
+
+
+class ProfileUnresponsive(RuntimeError):
+    """Профиль не отвечает: ни его вкладка, ни свежая вкладка рядом (ACL-1320)."""
+
+
+def page_answers(page, timeout_s: float = 5.0) -> bool | None:
+    """Отвечает ли вкладка: True / False (не за `timeout_s`) / None (не спросить).
+
+    Та же проверка, что `meta_dom._page_responsive`: `wait_for_function` —
+    вызов, таймаут которого соблюдает драйвер, и `() => true` отвечает на
+    первом же вычислении, без кадров анимации. Ушедшую вкладку (закрыта,
+    браузер отсоединён) не спрашивает вовсе — `page_liveness.answers`.
+    """
+    from src.fb_ads_rpa.page_liveness import answers
+
+    return answers(page, timeout_s)
+
+
+def _open_tab_via_browser(context, timeout_s: float = 10.0, *, like_url: str = ""):
+    """Новая фоновая вкладка через сессию самого браузера.
+
+    `_new_background_page` открывает вкладку через сессию первой вкладки
+    контекста — а это может быть та самая, что зависла. Сессия браузера
+    (`new_browser_cdp_session`) с рендерером не говорит вовсе. `background`
+    — чтобы окно профиля не поднималось поверх работы человека (решение
+    19.09). Вкладку узнаём как ту, которой не было в `context.pages` до.
+    `like_url` — адрес вкладки, рядом с которой открыть: по нему из списка
+    целей браузера берётся её контекст (у Multilogin он один, но так вкладка
+    точно попадёт в `context`). Сессию на самой вкладке не открываем:
+    `context.new_cdp_session` на вкладке с зависшим рендерером висел 197 с
+    (замер ACL-1320 на настоящем Chromium).
+    """
+    before = {id(p) for p in context.pages}
+    session = context.browser.new_browser_cdp_session()
+    try:
+        params: dict = {"url": "about:blank", "background": True}
+        if like_url:
+            infos = (session.send("Target.getTargets") or {}).get("targetInfos") or []
+            ids = {t.get("browserContextId") for t in infos
+                   if t.get("type") == "page" and t.get("url") == like_url and t.get("browserContextId")}
+            if len(ids) == 1:
+                params["browserContextId"] = ids.pop()
+        target = (session.send("Target.createTarget", params) or {}).get("targetId")
+    finally:
+        try:
+            session.detach()
+        except Exception:
+            pass
+    if not target:
+        return None
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        for candidate in list(context.pages):
+            if id(candidate) not in before:
+                return candidate
+        # ACL-1320: браузер отсоединился — `wait_for_event` падал бы сразу,
+        # и цикл крутился бы до `deadline` без паузы.
+        try:
+            if context.browser is not None and context.browser.is_connected() is False:
+                return None
+        except Exception:
+            return None
+        since = time.time()
+        try:
+            context.wait_for_event("page", timeout=500)
+            continue
+        except Exception:
+            pass
+        left = 0.5 - (time.time() - since)
+        if left > 0:
+            time.sleep(left)
+    return None
+
+
+def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
+    """Свежая вкладка того же профиля вместо зависшей (ACL-1320).
+
+    Прогон cf563b4ba594 (26.09, Doc19): рендерер долгоживущей вкладки списка
+    кампаний не отвечал ~14 минут, и ни пробуждение, ни перезагрузка той же
+    вкладки не помогали. Новая вкладка — новый документ (и, как правило,
+    новый процесс рендерера) в том же профиле: те же куки, прокси и отпечаток
+    Multilogin. Никакого простого браузера.
+
+    Порядок: новая фоновая вкладка через сессию браузера (ни одной сессии на
+    зависшей) → она отвечает? → троттлинг снят, скринкаст, трекер мыши (как
+    при подключении) → старая закрыта (`page.close(run_before_unload=False)`
+    идёт через браузер, её рендерер не ждёт — и новая не делит с ней
+    процесс) → переход на
+    `url` → Meta в новой вкладке отвечает? Всё удалось — новая страница,
+    иначе None: профиль не отвечает целиком, решать вызывающему (перезапуск
+    профиля через MLX API).
+    """
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    context = page.context
+    diag: dict = {"url": (url or "")[:160]}
+    new = None
+    try:
+        from src.fb_ads_rpa.page_liveness import browser_gone
+
+        if browser_gone(page):
+            # ACL-1320: профиль остановлен — свежей вкладке взяться неоткуда.
+            diag["why"] = "browser_gone"
+            return None
+        new = _open_tab_via_browser(context, like_url=page.url or "")
+        if new is None:
+            diag["why"] = "no_new_tab"
+            return None
+        if page_answers(new, 5.0) is False:
+            diag["why"] = "new_tab_silent"
+            return None
+        _disable_background_throttling(context, new)
+        _keep_renderer_active(context, new)
+        try:
+            from src.fb_ads_rpa.pacing import _install_mouse_tracker
+
+            _install_mouse_tracker(new)
+        except Exception:
+            pass
+        try:
+            page.close(run_before_unload=False)
+            diag["old_closed"] = True
+        except Exception as exc:
+            diag["old_closed"] = False
+            diag["close_error"] = str(exc)[:80]
+        if url:
+            try:
+                new.goto(url, wait_until="domcontentloaded", timeout=int(goto_timeout_s * 1000))
+            except Exception as exc:
+                # ACL-1320: свежая вкладка упёрлась во вход Facebook или в
+                # сеть профиля — это не зависание, и перезапуск не поможет.
+                kind, detail = profile_trouble.classify_error(exc)
+                if kind == profile_trouble.NETWORK:
+                    profile_trouble.note_net_error(new, detail)
+                if kind:
+                    diag["why"], diag["detail"] = kind, detail
+                    raise profile_trouble.ProfileStop(kind, detail) from exc
+                if "timeout" not in type(exc).__name__.lower() and "Timeout" not in str(exc):
+                    raise
+                # Ревью PR #323 (F10): медленный переход сам по себе — не повод
+                # перезапускать профиль. Старая вкладка уже закрыта; новая
+                # отвечает — работаем в ней (раунд `_open_campaign` сам
+                # вернёт её на список и нажмёт Create).
+                if page_answers(new, 5.0) is False:
+                    diag["why"] = "meta_silent_in_new_tab"
+                    return None
+                diag["why"], diag["note"] = "", "goto_timeout_kept"
+                return new
+            profile_trouble.note_nav_ok(new)
+            kind, detail = profile_trouble.classify_page(new, history=False)
+            if kind:
+                diag["why"], diag["detail"] = kind, detail
+                raise profile_trouble.ProfileStop(kind, detail)
+        if page_answers(new, 5.0) is False:
+            diag["why"] = "meta_silent_in_new_tab"
+            return None
+        diag["why"] = ""
+        return new
+    except profile_trouble.ProfileStop:
+        raise
+    except Exception as exc:
+        diag["why"] = f"{type(exc).__name__}: {str(exc)[:80]}"
+        return None
+    finally:
+        try:
+            rt.record("fresh_tab", not diag.get("why"), note=diag.get("why") or "ok", diag=diag)
+        except Exception:
+            pass
+
+
+def wake_page_quietly(page) -> dict:
+    """Разбудить вкладку перед первым Create — не выводя окно вперёд (ACL-1320).
+
+    Прогон cf563b4ba594: первое нажатие Create шло во вкладку, которая с
+    прошлого прогона жила в фоне, и Chrome мог держать её придержанной или
+    замороженной. Будим так же, как `wake_page`, но без `bring_to_front`:
+    окно профиля по решению владельца (19.09) остаётся за краем экрана и не
+    должно всплывать поверх его работы. Свёрнутое окно — в обычное состояние
+    за краем экрана (`_restore_offscreen`), троттлинг и заморозка сняты
+    заново (`_disable_background_throttling`). Вызывать только для вкладки,
+    которая отвечает: CDP-сессия на зависшей висит (см. `fresh_tab`).
+    """
+    out: dict = {"minimized": None, "restored": False}
+    context = page.context
+    try:
+        session = context.new_cdp_session(page)
+        try:
+            bounds = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+        finally:
+            try:
+                session.detach()
+            except Exception:
+                pass
+        out["minimized"] = bounds.get("windowState") == "minimized"
+        if out["minimized"]:
+            out["restored"] = _restore_offscreen(context, page)
+    except Exception as exc:
+        out["error"] = str(exc)[:80]
     _disable_background_throttling(context, page)
     return out
 
@@ -970,7 +1203,7 @@ def _unminimize_before_attach(browser) -> list[dict]:
             height = max(int(normal.get("height") or 0), 900)
             left, top = window_home()
             if left is None:
-                left, top = -(width + 400), 0
+                left, top = _park_spot(width)
             session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {
                 "left": left, "top": top, "width": width, "height": height}})
             done.append({"window": wid, "was": _home_point(normal)})
@@ -992,7 +1225,8 @@ def _unminimize_before_attach(browser) -> list[dict]:
     return done
 
 
-def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None, new_page: bool = False) -> BrowserConnection:
+def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None,
+                        new_page: bool = False, check_responsive: bool = False) -> BrowserConnection:
     ensure_playwright_browsers_path()
     # Prior failed attach may have left sync Playwright's loop running in-thread.
     _stop_thread_playwright()
@@ -1010,6 +1244,23 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
                 page = _new_background_page(context) or context.new_page()
             else:
                 page = context.pages[0] if context.pages else context.new_page()
+                # ACL-1320: к уже открытому профилю — сначала ограниченный
+                # вопрос «отвечает ли вкладка». Всё ниже (троттлинг, размер
+                # окна, скринкаст) — CDP-вызовы без таймаута, и на зависшей
+                # вкладке подключение висело бы вместе с ними. Не отвечает —
+                # свежая вкладка рядом; не отвечает и она — профиль целиком
+                # (`ProfileUnresponsive`, перезапуск через MLX API).
+                if check_responsive and page_answers(page, 5.0) is False:
+                    # ACL-1320: не отвечает — сперва диагноз. Вход в Facebook
+                    # или сеть профиля — остановка аккаунта (ни свежей
+                    # вкладки, ни перезапуска профиля через MLX API).
+                    kind, detail = profile_trouble.classify_page(page)
+                    if kind:
+                        raise profile_trouble.ProfileStop(kind, detail)
+                    replacement = fresh_tab(page, page.url if (page.url or "").startswith("http") else "")
+                    if replacement is None:
+                        raise ProfileUnresponsive("the profile's tabs do not answer")
+                    page = replacement
         else:
             context = browser.new_context()
             prior = None
@@ -1356,7 +1607,8 @@ class MultiloginDirectCDPProvider:
         return self._profile_process_running(user_data_dir, profile_id)
 
     def _try_attach_existing(
-        self, profile_id: str, user_data_dir: str, *, strict_profile: bool = False, new_page: bool = False
+        self, profile_id: str, user_data_dir: str, *, strict_profile: bool = False, new_page: bool = False,
+        check_responsive: bool = False,
     ) -> "BrowserConnection | None":
         """Reuse an already-running Mimic for this profile (do not kill/restart)."""
         import logging
@@ -1379,9 +1631,14 @@ class MultiloginDirectCDPProvider:
                 debug_port=str(port),
                 ws_endpoint=None,
                 new_page=new_page,
+                # Только когда просили: чтение спенда цепляется без неё.
+                **({"check_responsive": True} if check_responsive else {}),
             )
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
             return conn
+        except (ProfileUnresponsive, profile_trouble.ProfileStop):
+            # Вызывающий просил проверить живость — ему и решать (ACL-1320).
+            raise
         except Exception as exc:
             log.warning("Could not attach to running Mimic (%s)", exc)
             return None
@@ -1538,13 +1795,104 @@ class MultiloginDirectCDPProvider:
         self._profile_id_cache = None
 
 
+def _record_profile_restart(entry: AccountMapEntry, profile_id: str, *, ok: bool, where: str,
+                            error: str = "") -> None:
+    """Строка телеметрии `profile_restarted_unresponsive` (ACL-1320)."""
+    try:
+        from src.fb_ads_rpa import run_telemetry as rt
+
+        # Ревью PR #323 (F11): ни id профиля, ни его начала — вычиститель
+        # ловит только полный uuid; хватает рабочего пространства.
+        diag = {"where": where, "workspace": (getattr(entry, "multilogin_instance", "") or "A")}
+        if error:
+            diag["error"] = error
+        rt.record("profile_restarted_unresponsive", ok, note=where, diag=diag)
+    except Exception:
+        pass
+
+
+#: ACL-1320: профили, которые робот в этом процессе сам поднял через MLX API
+#: или к которым цеплялся по порту автоматизации (его даёт только запуск с
+#: автоматизацией). Только такой профиль без порта робот вправе остановить и
+#: поднять заново: профиль, открытый руками, может держать сессию Facebook,
+#: которую Multilogin ещё не сохранил (живой прогон 26.09 — владелец входил в
+#: новые аккаунты, пока робот останавливал их окна).
+#:
+#: Профиль → процессы Mimic, которые робот поднял или к которым цеплялся.
+#: Профиль робота мог умереть, а человек — открыть его заново руками: тогда
+#: процесс уже другой, и это окно человека (живой прогон 26.09 15:50:
+#: Facebook_9943 после неудачного перезапуска). Пустое множество — процессы
+#: прочитать не удалось; тогда решает само членство.
+_ROBOT_PROFILES: dict[str, frozenset[int]] = {}
+
+
+def _profile_pids(user_data_dir: str, profile_id: str) -> frozenset[int]:
+    """Главные процессы Mimic этого профиля (без `--type=`), пусто — не прочесть."""
+    try:
+        import psutil  # type: ignore
+    except Exception:
+        return frozenset()
+    udd = (user_data_dir or "").lower().replace("/", "\\").rstrip("\\")
+    # Как `_profile_process_running`: полный путь, его последняя часть (MLX
+    # укорачивает пути) и id профиля.
+    needles = [n for n in (udd, udd.rsplit("\\", 1)[-1], (profile_id or "").lower()) if n]
+    if not needles:
+        return frozenset()
+    found: set[int] = set()
+    try:
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                if "chrome" not in (proc.info.get("name") or "").lower():
+                    continue
+                cmd = " ".join(proc.info.get("cmdline") or []).lower().replace("/", "\\")
+                if "--type=" in cmd or not any(n in cmd for n in needles):
+                    continue
+                found.add(int(proc.info["pid"]))
+            except Exception:
+                continue
+    except Exception:
+        return frozenset()
+    return frozenset(found)
+
+
+def _mark_robot_profile(profile_id: str, user_data_dir: str = "") -> None:
+    if profile_id:
+        _ROBOT_PROFILES[profile_id] = _profile_pids(user_data_dir, profile_id)
+
+
+def _robot_profile(profile_id: str, user_data_dir: str = "") -> bool:
+    """Профиль робота — и работает всё тот же процесс, что робот поднимал."""
+    if not profile_id or profile_id not in _ROBOT_PROFILES:
+        return False
+    known = _ROBOT_PROFILES.get(profile_id) or frozenset()
+    if not known:
+        return True
+    now = _profile_pids(user_data_dir, profile_id)
+    return not now or bool(now & known)
+
+
+def _open_by_hand(profile_id: str, account_label: str, where: str) -> profile_trouble.ProfileStop:
+    """Профиль открыт руками — не останавливаем, говорим человеку (ACL-1320)."""
+    log.warning(
+        "%s: profile %s is open by hand (no automation port) - not stopping it; "
+        "the job stops with %s (%s)", account_label, profile_id, profile_trouble.OPEN_BY_HAND, where)
+    return profile_trouble.ProfileStop(profile_trouble.OPEN_BY_HAND, where)
+
+
 class MultiloginAttachOnlyProvider:
     """Connect to Multilogin via MLX automation API when the user clicks Publish.
 
     Does NOT fall back to vanilla Playwright Chromium or DirectCDP relaunch.
     MLX exposes CDP only when the profile is started with automation_type=playwright;
-    a profile opened manually in MLX Desktop has no debug port. In that case we close
-    the manual Mimic window locally and restart the same profile through the MLX API.
+    a profile opened manually in MLX Desktop has no debug port.
+
+    ACL-1320 (live run 2026-09-26): such a hand-opened window is never stopped -
+    stopping it can lose a Facebook session the owner has just created and
+    Multilogin has not saved yet. The job fails fast with
+    `profile_open_by_hand` ("close its window, then press Publish again").
+    Only a profile the robot itself started (or attached to over its
+    automation port) in this process is stopped and restarted through the
+    MLX API when it has no debug port.
     """
 
     def __init__(self) -> None:
@@ -1591,6 +1939,7 @@ class MultiloginAttachOnlyProvider:
                 )
                 if started.port:
                     self._api_started = True
+                    _mark_robot_profile(profile_id, udd)
                     return started
                 last_exc = MultiloginLauncherError(
                     "MLX API did not return a CDP port after start"
@@ -1615,13 +1964,17 @@ class MultiloginAttachOnlyProvider:
                         f"{account_label}: profile is already running; no stop or restart was performed. "
                         "Close it in Multilogin Desktop before opening it with automation."
                     ) from exc
+                if lock_conflict and not _robot_profile(profile_id, udd):
+                    # ACL-1320: MLX держит профиль, а робот его не поднимал —
+                    # значит, открыт руками. Не останавливаем.
+                    raise _open_by_hand(profile_id, account_label, "mlx_lock") from exc
                 if attempt < 2 and lock_conflict:
                     # Gracefully stop ONLY this profile via MLX API. This releases MLX
                     # Desktop's lock, preserves the profile's cookies/login, and does
                     # NOT touch any of the user's other open profiles.
                     log.warning(
-                        "Profile %s is locked (opened manually in MLX). Stopping it via "
-                        "MLX API and restarting with automation enabled…",
+                        "Profile %s (started by the robot earlier) is locked without automation. "
+                        "Stopping it via MLX API and restarting with automation enabled…",
                         profile_id,
                     )
                     try:
@@ -1672,27 +2025,85 @@ class MultiloginAttachOnlyProvider:
             )
         udd = str(user_data_dir) if user_data_dir is not None else ""
 
-        reused = (self._direct._try_attach_existing(profile_id, udd, strict_profile=not allow_restart)
-                  if udd else None)
+        unresponsive = False
+        try:
+            reused = (self._direct._try_attach_existing(profile_id, udd, strict_profile=not allow_restart,
+                                                        check_responsive=allow_restart)
+                      if udd else None)
+        except ProfileUnresponsive:
+            # ACL-1320: открытый профиль не отвечает — ни его вкладка, ни
+            # свежая. Ждать старую вкладку бессмысленно: останавливаем профиль
+            # через MLX API его же рабочего пространства и поднимаем заново.
+            log.warning("Profile %s is open but does not answer; restarting it through the MLX API",
+                        profile_id)
+            reused = None
+            unresponsive = True
+        # Ревью PR #323 (F6): публикация цепляется по нестрогому поиску порта
+        # (старый DevToolsActivePort, общий 19222). Профилем робота считаем
+        # его только если порт слушает процесс именно этого профиля.
+        owned = self._owns_port(udd)
         if reused is not None:
             log.info("Attached to already-open Multilogin profile %s", profile_id)
+            if owned:
+                _mark_robot_profile(profile_id, udd)
             return reused
+        if unresponsive:
+            if not owned:
+                # Порт не доказан как порт этого профиля — окно могло быть
+                # открыто руками; останавливать его не вправе.
+                raise _open_by_hand(profile_id, account_label, "unowned_port")
+            # У него есть свой порт автоматизации — это профиль робота.
+            _mark_robot_profile(profile_id, udd)
+            self._stop_profile(entry, account_label, profile_id, udd)
 
         # Manually (Quick) launched MLX profiles expose no CDP port, so we cannot
-        # attach. _start_via_mlx_api gracefully stops ONLY this profile via the MLX
-        # API (releasing MLX's lock, keeping cookies) and restarts it with automation
-        # enabled. It does NOT kill other open profiles.
-        if self._direct._profile_process_running(udd or profile_id, profile_id):
+        # attach. ACL-1320: such a window is NOT stopped any more - it may hold a
+        # Facebook session the owner has just created and Multilogin has not saved
+        # yet; the job stops with `profile_open_by_hand`. Only a profile the robot
+        # started itself earlier is restarted through the MLX API here (graceful
+        # stop of ONLY this profile, cookies kept, other profiles untouched).
+        elif self._direct._profile_process_running(udd or profile_id, profile_id):
             if not allow_restart:
                 raise RuntimeError(f"{account_label}: profile is already running; no restart was performed")
+            if not _robot_profile(profile_id, udd):
+                raise _open_by_hand(profile_id, account_label, "no_automation_port")
             log.info(
-                "Profile %s is open in MLX manual mode (no CDP). Will restart it via "
+                "Profile %s (started by the robot earlier) has no CDP port. Will restart it via "
                 "MLX automation API (other profiles untouched).",
                 profile_id,
             )
 
-        started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
-                                          allow_restart=allow_restart, allow_kill=allow_kill)
+        if not unresponsive:
+            started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
+                                              allow_restart=allow_restart, allow_kill=allow_kill)
+            return self._connect_started(started, profile_id)
+        # Ревью PR #323 (F7): робот сам остановил не отвечавший профиль — не
+        # поднялся он, значит профиль мог остаться закрытым. Это та же
+        # остановка, что у `restart_unresponsive`: строка телеметрии и
+        # `profile_restart_failed` с текстом для человека.
+        try:
+            started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
+                                              allow_restart=allow_restart, allow_kill=allow_kill)
+            conn = self._connect_started(started, profile_id)
+        except profile_trouble.ProfileStop:
+            raise
+        except Exception as exc:
+            detail = f"{type(exc).__name__}: {str(exc)[:120]}"
+            _record_profile_restart(entry, profile_id, ok=False, where="attach", error=detail)
+            raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
+        _record_profile_restart(entry, profile_id, ok=True, where="attach")
+        return conn
+
+    def _owns_port(self, udd: str) -> bool:
+        """Отладочный порт слушает процесс Mimic именно этого профиля (F6)."""
+        if not udd:
+            return False
+        try:
+            return self._direct._discover_owned_debug_port(udd) is not None
+        except Exception:
+            return False
+
+    def _connect_started(self, started: Any, profile_id: str) -> BrowserConnection:
         ws = started.ws_endpoint or ""
         if ws and not ws.startswith("/"):
             ws = f"/{ws}"
@@ -1708,6 +2119,59 @@ class MultiloginAttachOnlyProvider:
             debug_port=started.port,
             ws_endpoint=started.ws_endpoint,
         )
+
+    def _stop_profile(self, entry: AccountMapEntry, account_label: str, profile_id: str, udd: str) -> None:
+        """Остановить профиль через MLX API его рабочего пространства (ACL-1320).
+
+        Токен — по `entry.multilogin_instance` (A = Inhouse, B = KLD), как у
+        запуска. `start_profile` на уже запущенном с автоматизацией профиле
+        возвращает его старый порт — то есть тот же зависший браузер, —
+        поэтому сначала явная остановка. Не остановился через API — как и в
+        пути «открыт руками в MLX»: закрыть Mimic только этого профиля.
+        """
+        from src.meta_campaign_agent.multilogin_config import get_multilogin_instance
+        from src.meta_campaign_agent.multilogin_launcher import (
+            MultiloginLauncher,
+            MultiloginLauncherError,
+        )
+
+        folder_id = (entry.folder_id or "").strip() or _folder_id_from_profile_dir(udd)
+        launcher = MultiloginLauncher(get_multilogin_instance(entry.multilogin_instance))
+        try:
+            launcher.stop_profile(profile_id, folder_id=folder_id)
+            log.info("%s: unresponsive profile %s stopped through the MLX API", account_label, profile_id)
+        except MultiloginLauncherError as exc:
+            log.warning("%s: MLX stop failed (%s); closing Mimic of this profile only", account_label, exc)
+            if udd:
+                _kill_chrome_for_user_data_dir(udd, profile_id, mlx_only=True)
+        time.sleep(3)
+
+    def restart_unresponsive(self, entry: AccountMapEntry, account_label: str) -> BrowserConnection:
+        """Перезапустить профиль, который не отвечает (ACL-1320).
+
+        Зовёт публикатор, когда кампания не открылась и свежая вкладка не
+        помогла (`run_recorded_campaign_flow` → "profile_unresponsive").
+        Остановка и запуск — через MLX API со своим токеном рабочего
+        пространства, подключение — по новому порту. Простой браузер — никогда.
+        """
+        profile_id = entry.profile_id
+        if not profile_id:
+            raise RuntimeError(f"{account_label}: profile_id is required")
+        # Публикатор зовёт это только для профиля, к которому робот был
+        # подключён по порту автоматизации, — профиль робота.
+        user_data_dir = _find_mlx_profile_dir(profile_id)
+        udd = str(user_data_dir) if user_data_dir is not None else ""
+        _mark_robot_profile(profile_id, udd)
+        try:
+            self._stop_profile(entry, account_label, profile_id, udd)
+            started = self._start_via_mlx_api(entry, account_label, profile_id, udd)
+            conn = self._connect_started(started, profile_id)
+        except Exception as exc:
+            _record_profile_restart(entry, profile_id, ok=False, where="campaign_open",
+                                    error=f"{type(exc).__name__}: {str(exc)[:120]}")
+            raise
+        _record_profile_restart(entry, profile_id, ok=True, where="campaign_open")
+        return conn
 
     def close(self, entry: AccountMapEntry, *, keep_browser_open: bool = False) -> None:
         # Never stop the Multilogin profile — user keeps their window.

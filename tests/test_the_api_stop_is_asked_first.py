@@ -184,6 +184,10 @@ def attach_provider(monkeypatch):
     import src.meta_campaign_agent.multilogin_launcher as launcher_mod
 
     monkeypatch.setattr(launcher_mod, "MultiloginLauncher", make_launcher)
+    # ACL-1320: останавливать и поднимать заново робот вправе только профиль,
+    # который сам поднимал раньше; открытый руками — `profile_open_by_hand`
+    # (tests/test_a_hand_opened_profile_is_never_stopped.py).
+    monkeypatch.setattr(browser_mod, "_ROBOT_PROFILES", {PROFILE: frozenset()})
     return {"provider": browser_mod.MultiloginAttachOnlyProvider(), "kills": kills, "holder": holder}
 
 

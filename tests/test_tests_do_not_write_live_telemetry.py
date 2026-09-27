@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import sys
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -22,11 +23,18 @@ LIVE = (get_runtime_workspace() / "output" / "rpa_telemetry.jsonl").resolve()
 
 
 def test_record_goes_to_a_temporary_journal():
-    assert rt.TELEMETRY_PATH.resolve() != LIVE
-    before = LIVE.stat().st_size if LIVE.exists() else None
-    rt.record("test_only_step", False, note="must not reach the live journal")
-    assert "test_only_step" in rt.TELEMETRY_PATH.read_text(encoding="utf-8")
-    assert (LIVE.stat().st_size if LIVE.exists() else None) == before
+    # Финальное ревью PR #314 (e): путь — ДО записи. Сломанная фикстура
+    # должна уронить тест, не оставив в живом журнале ни строки; и ни один
+    # вызов `record` не идёт, пока не доказано, что журнал временный.
+    path = rt.TELEMETRY_PATH.resolve()
+    assert path != LIVE, "фикстура не увела журнал: запись ушла бы в живой"
+    assert LIVE.parent not in path.parents, "журнал теста лежит в живой папке output/"
+    # Строка узнаётся по своей метке, а не по размеру живого файла: робот,
+    # работающий на этой машине, может писать туда в это же время.
+    marker = f"guard-{uuid.uuid4().hex}"
+    rt.record("test_only_step", False, note=marker)
+    assert marker in path.read_text(encoding="utf-8")
+    assert not LIVE.exists() or marker not in LIVE.read_text(encoding="utf-8", errors="replace")
 
 
 def test_a_test_that_sets_its_own_path_keeps_it(tmp_path, monkeypatch):

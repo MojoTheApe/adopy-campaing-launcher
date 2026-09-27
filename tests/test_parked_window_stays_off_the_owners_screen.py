@@ -269,3 +269,36 @@ def test_the_park_formula_is_what_counts():
     assert br._home_point({"left": -1779, "top": 3, "width": 1376}) == {"left": 0, "top": 0}
     assert br._home_point({"left": -1920, "top": 0, "width": 1400}) == {"left": -1920, "top": 0}
     assert br._home_point({"left": 100, "top": 50, "width": 1400}) == {"left": 100, "top": 50}
+
+
+def test_a_widened_parked_window_is_still_recognised_as_parked(monkeypatch):
+    """Финальное ревью PR #314 (a): окно на парковке расширили — ширина
+    выросла, left остался, и формула `left == -(width + 400)` его больше не
+    узнавала. Запомненное место парковки от ширины не зависит."""
+    monkeypatch.setattr(br, "_PARK_SPOTS", set())
+    win = _Window(state="minimized", left=100, top=50, width=1000)
+    conn = _attach(monkeypatch, win, zoom=0.8)
+    try:
+        parked_left = win.left
+        assert win.width + 400 != -parked_left, "предпосылка: окно расширено на парковке"
+        # Кампания кончилась без возврата окна (прогон оборвался), окно
+        # свернули; следующая кампания выводит его из свёрнутого.
+        br._OFFSCREEN.clear()
+        win.state = "minimized"
+        assert br._restore_offscreen(conn.page.context, conn.page) is True
+        home = br._OFFSCREEN[id(conn.page.context)]
+        assert (home["left"], home["top"]) == (0, 0), "дом — место за краем экрана"
+    finally:
+        br._OFFSCREEN.clear()
+
+
+def test_a_remembered_spot_does_not_capture_a_left_monitor():
+    spots = set(br._PARK_SPOTS)
+    try:
+        br._PARK_SPOTS.clear()
+        br._park_spot(1368)
+        assert br._home_point({"left": -1768, "top": 0, "width": 1700}) == {"left": 0, "top": 0}
+        assert br._home_point({"left": -1920, "top": 0, "width": 1700}) == {"left": -1920, "top": 0}
+    finally:
+        br._PARK_SPOTS.clear()
+        br._PARK_SPOTS.update(spots)

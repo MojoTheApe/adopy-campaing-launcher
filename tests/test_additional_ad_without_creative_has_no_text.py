@@ -94,6 +94,7 @@ def flow(monkeypatch, tmp_path):
         return result, soft
 
     state["run"] = run
+    state["page"] = page
     return state
 
 

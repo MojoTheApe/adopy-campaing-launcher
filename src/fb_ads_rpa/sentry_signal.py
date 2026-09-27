@@ -25,11 +25,16 @@
 `ok=False` остаётся в локальной телеметрии.
 
 Отправка никогда не роняет прогон: любые ошибки здесь глотаются.
+
+ACL-1325: к обоим видам событий прикладывается вычищенный раздел страницы
+упавшего шага (`page_capture.section_attachment`, решение владельца 26.09;
+скриншоты — нет). Имена кампании, кабинета, групп и объявлений прогона
+известны здесь и заменяются заглушками; выключается `ACL_SENTRY_PAGE_SNAPSHOT=0`.
 """
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Iterable
 
 from src.fb_ads_rpa import failure_policy
 from src.fb_ads_rpa import run_telemetry as _telemetry
@@ -84,6 +89,8 @@ def _send(
     account: str,
     run_id: str,
     attempt: int | None = None,
+    names: Iterable[str] = (),
+    attach_section: bool = True,
 ) -> str:
     from src import acl_sentry
 
@@ -100,6 +107,8 @@ def _send(
         diag["failure"] = failure
     if kind == BLOCKING:
         diag["policy"] = failure_policy.reason(failure)
+    attachment = (_section(step, run_id, campaign=campaign, account=account, names=names)
+                  if attach_section else None)
     return acl_sentry.report_step_failure(
         step,
         why or failure,
@@ -112,7 +121,38 @@ def _send(
         kind=kind,
         group_step=group_step(step),
         attempt=attempt,
+        attachment=attachment,
     ) or ""
+
+
+def _section(step: str, run_id: str, *, campaign: str, account: str,
+             names: Iterable[str]) -> dict[str, Any] | None:
+    """Вычищенный раздел страницы шага — или его помощника из `_RELATED`."""
+    try:
+        from src.fb_ads_rpa import page_capture
+
+        related = [helper for pattern, helpers in _RELATED if pattern.match(step) for helper in helpers]
+        return page_capture.section_attachment(
+            step, run_id, campaign=campaign, account=account, names=names, related=related,
+        )
+    except Exception:
+        return None
+
+
+def draft_names(draft: Any) -> list[str]:
+    """Имена групп и объявлений черновика — их нет в разделе, который уезжает."""
+    names: list[str] = []
+    try:
+        for ad_set in getattr(draft, "ad_sets", None) or []:
+            names.append(str(getattr(ad_set, "name", "") or ""))
+            for ad in getattr(ad_set, "ads", None) or []:
+                try:
+                    names.append(str(ad.ad_name() or ""))
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return [n for n in names if n]
 
 
 def report_campaign_stop(
@@ -122,8 +162,15 @@ def report_campaign_stop(
     account: str = "",
     run_id: str = "",
     attempt: int | None = None,
+    names: Iterable[str] = (),
+    attach_section: bool = True,
 ) -> str:
-    """Попытка кампании кончилась на шаге `fail_step` — одно событие."""
+    """Попытка кампании кончилась на шаге `fail_step` — одно событие.
+
+    `attach_section=False` — остановка, у которой страницы кампании не было
+    (профиль не подключился): раздел страницы к ней не прикладывается
+    (ревью PR #328, F2).
+    """
     if not fail_step:
         return ""
     try:
@@ -134,6 +181,8 @@ def report_campaign_stop(
             account=account,
             run_id=run_id or _telemetry.current_run_id(),
             attempt=attempt,
+            names=names,
+            attach_section=attach_section,
         )
     except Exception:
         return ""
@@ -145,6 +194,7 @@ def report_blocking_failures(
     campaign: str = "",
     account: str = "",
     run_id: str = "",
+    names: Iterable[str] = (),
 ) -> list[str]:
     """По событию на каждый блокирующий отказ итога кампании.
 
@@ -161,7 +211,7 @@ def report_blocking_failures(
     for failure in blocking:
         try:
             sent.append(_send(failure, kind=BLOCKING, campaign=campaign,
-                              account=account, run_id=run_id))
+                              account=account, run_id=run_id, names=names))
         except Exception:
             sent.append("")
     return sent

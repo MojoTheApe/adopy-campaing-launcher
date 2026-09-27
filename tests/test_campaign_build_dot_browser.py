@@ -4,9 +4,12 @@
 отдаёт то, что задаёт тест. Проверяются четыре состояния точки (серая с
 пульсом, оранжевая с пульсом, оранжевая ровная, зелёная), встающая
 кампания, заблокированный аккаунт, задание, потерянное после перезапуска
-дешборда (404), и отказ от пульса при `prefers-reduced-motion`.
+дешборда (404), и отказ от пульса при `prefers-reduced-motion`. ACL-1321:
+задание в очереди профилей — неподвижное кольцо с точкой и местом в
+очереди, а список «Publish all» внизу ящика пишет «queued».
 """
 import os
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -62,7 +65,8 @@ def _route_for(html, state):
             if state['progress'] is None:
                 r.fulfill(status=404, json={'error': 'Job not found.'})
                 return
-            data = {'status': state['progress']['status'], 'results': [], 'errors': []}
+            data = {'status': state['progress']['status'], 'results': [], 'errors': [],
+                    'queue': state['progress'].get('queue')}
         r.fulfill(json=data)
     return route
 
@@ -260,8 +264,9 @@ def test_reduced_motion_shows_a_ring_instead_of_a_pulse(browser, html):
         show(page, state, progress('running', [camp(a, step='create'), camp(b)], current=a, idle_s=1))
         expect(dot(page, a)).to_have_class('cbd-ind cbd-ind-build-run')
         span = dot(page, a).locator('span')
-        assert span.evaluate('e => getComputedStyle(e).animationName') == 'none'
-        assert span.evaluate('e => getComputedStyle(e).boxShadow') != 'none'
+        # Ждущие проверки: узел мог уйти при перерисовке ящика (см. animation()).
+        expect(span).to_have_css('animation-name', 'none')
+        expect(span).not_to_have_css('box-shadow', 'none')
     finally:
         context.close()
 
@@ -281,3 +286,48 @@ def test_same_named_campaigns_of_two_accounts_keep_their_own_dots(ui):
     p.evaluate('cbBuild.refresh()')
     expect(dot(p, a)).to_have_class('cbd-ind cbd-ind-build-run')
     expect(dot(p, a)).to_have_attribute('title', 'Building: ad copy')
+
+
+# ── ACL-1321: задание ждёт места в очереди профилей ──────────────────────
+
+def queued(campaigns, *, reason='slot', ahead=0):
+    p = progress('queued', campaigns)
+    p['queue'] = {'reason': reason, 'ahead': ahead, 'limit': 2, 'running': 2, 'available_mb': 1500}
+    return p
+
+
+def test_a_queued_job_shows_a_still_ring_with_its_place_in_line(ui):
+    p, state = ui
+    a, b = publish_demo(p)
+    show(p, state, queued([camp(a), camp(b)], ahead=2))
+    for name in (a, b):
+        expect(dot(p, name)).to_have_class('cbd-ind cbd-ind-build-wait')
+        expect(dot(p, name)).to_have_attribute('title', 'Waiting for a free slot (2 ahead)')
+        assert animation(p, name) == 'none', 'ждущее задание дышит, будто робот уже работает'
+    span = dot(p, a).locator('span')
+    # Не «потеряно»: у потерянного пустое кольцо, у ждущего — кольцо с точкой.
+    # Ящик перерисовывается сам (repaintSoon): узел, найденный за миг до
+    # перерисовки, уже вне документа и отдаёт пустой стиль (CI 3.13, PR #328) —
+    # поэтому ждущие проверки expect, они перечитывают узел.
+    expect(span).to_have_css('background-image', re.compile('radial-gradient'))
+    expect(span).to_have_css('border-top-style', 'solid')
+
+    show(p, state, queued([camp(a), camp(b)], reason='profile'))
+    expect(dot(p, a)).to_have_attribute('title', 'Waiting for the Multilogin profile — another run is using it')
+
+    # Место дали — точка задышала.
+    show(p, state, progress('running', [camp(a, step='create', idle_s=2), camp(b)], current=a, idle_s=2))
+    expect(dot(p, a)).to_have_class('cbd-ind cbd-ind-build-run')
+    assert animation(p, a) == 'cbd-build-pulse'
+
+
+def test_the_publish_all_list_says_queued_and_then_building(ui):
+    p, state = ui
+    publish_demo(p)
+    show(p, state, queued([], ahead=1))
+    box = p.locator('.cbd-queue')
+    expect(box).to_contain_text('Demo — queued — waiting for a free slot (1 ahead)', timeout=6000)
+    expect(box.locator('.cbd-q-queued')).to_have_count(1)
+    show(p, state, progress('running', [], idle_s=1))
+    expect(box).to_contain_text('Demo — building the draft', timeout=6000)
+    expect(box.locator('.cbd-q-queued')).to_have_count(0)

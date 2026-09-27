@@ -121,7 +121,10 @@ def _page_hidden(page: Page) -> bool:
         return False
 
 
-def capture(page: Page, label: str, *, base_dir: str | Path = "output/rpa_screenshots") -> str:
+def capture(page: Page, label: str, *, base_dir: str | Path = "output/rpa_screenshots",
+            cdp_fallback: bool = True) -> str:
+    """PNG страницы. `cdp_fallback=False` — только ограниченный путь Playwright
+    (ACL-1320: доказательства зависания не имеют права зависнуть сами)."""
     root = screenshot_dir(base_dir)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in label)[:60]
@@ -162,6 +165,8 @@ def capture(page: Page, label: str, *, base_dir: str | Path = "output/rpa_screen
     except Exception as exc:
         log.debug("Playwright screenshot failed for %s (%s); trying CDP", label, exc)
 
+    if not cdp_fallback:
+        return ""
     if not _capture_via_cdp(page, path):
         log.warning("Screenshot skipped for %s (both paths failed)", label)
     return str(path)

@@ -114,12 +114,16 @@ def test_meta_dom_takes_no_unconditional_debug_png():
     """Отладочные PNG посреди шагов (возраст, локации) — только опционально.
 
     Единственный безусловный PNG в meta_dom — в `_shot`, и он там сам
-    спрашивает `_shot_worth_a_picture` для не-отказов.
+    спрашивает `_shot_worth_a_picture` для не-отказов. ACL-1320: второй —
+    доказательство зависания `_stall_evidence`; это путь отказа (сторож
+    сработал, окна цели нет), не удачного шага, и он ограничен числом на прогон.
     """
     tree = ast.parse(META_DOM.read_text(encoding="utf-8"))
+    evidence = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_stall_evidence")
+    in_evidence = {id(n) for n in ast.walk(evidence)}
     plain = [
         node.lineno for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom) and node.module == "src.fb_ads_rpa.screenshots"
-        and any(a.name == "capture" for a in node.names)
+        and any(a.name == "capture" for a in node.names) and id(node) not in in_evidence
     ]
     assert len(plain) == 1, plain

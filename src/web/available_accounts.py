@@ -30,6 +30,8 @@
 """
 from __future__ import annotations
 
+import threading
+import weakref
 from dataclasses import dataclass, field
 
 WINDOW_DAYS = 30
@@ -47,12 +49,25 @@ class Activity:
     ever: set[str] = field(default_factory=set)
     #: все ключи книги — для сведения по хвосту
     names: list[str] = field(default_factory=list)
+    #: те же ключи множеством — строится один раз, а не на каждый аккаунт
+    #: списка (финальное ревью PR #314)
+    name_set: frozenset[str] = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        if not self.name_set and self.names:
+            self.name_set = frozenset(self.names)
 
 
 def alias_key(label: str) -> str:
     from src.analysis_agent.analyze_fb_stats import normalize_account_alias
 
     return normalize_account_alias(label).casefold()
+
+
+#: Последний ответ `workbook_activity`: книга (слабая ссылка на тот же
+#: DataFrame), её длина, окно — и ответ.
+_ACTIVITY_CACHE: dict = {"ref": None, "rows": None, "days": None, "value": None}
+_ACTIVITY_LOCK = threading.Lock()
 
 
 def workbook_activity(df, days: int = WINDOW_DAYS) -> Activity | None:
@@ -62,7 +77,33 @@ def workbook_activity(df, days: int = WINDOW_DAYS) -> Activity | None:
     Колонка CM не сужает: аккаунт, который тратит, активен, чьим бы ни был
     ряд, — а список и так собран только из аккаунтов этой машины и отчёта
     этого байера.
+
+    Финальное ревью PR #314: считалось заново на каждой отрисовке Home
+    (разбор дат и группировка всей книги). Теперь — один раз на ревизию
+    книги: кэш отчёта (`web.cache`) держит один и тот же DataFrame, пока не
+    сменится файл или не пересоберётся отчёт, и новый DataFrame — новая
+    ревизия. Ключ — сам объект (слабая ссылка: кэш не держит старую книгу
+    в памяти), его длина и окно.
     """
+    if df is None:
+        return None
+    rows = len(df) if hasattr(df, "__len__") else None
+    with _ACTIVITY_LOCK:
+        ref = _ACTIVITY_CACHE["ref"]
+        if (ref is not None and ref() is df and _ACTIVITY_CACHE["rows"] == rows
+                and _ACTIVITY_CACHE["days"] == days):
+            return _ACTIVITY_CACHE["value"]
+    value = _workbook_activity(df, days)
+    try:
+        new_ref = weakref.ref(df)
+    except TypeError:
+        return value
+    with _ACTIVITY_LOCK:
+        _ACTIVITY_CACHE.update(ref=new_ref, rows=rows, days=days, value=value)
+    return value
+
+
+def _workbook_activity(df, days: int) -> Activity | None:
     try:
         import pandas as pd
 
@@ -101,7 +142,7 @@ def workbook_key(label: str, activity: Activity, *, by_tail: bool = False) -> st
     key = alias_key(label)
     if not key:
         return ""
-    if key in activity.ever or key in set(activity.names):
+    if key in activity.ever or key in activity.name_set:
         return key
     if not by_tail:
         return ""

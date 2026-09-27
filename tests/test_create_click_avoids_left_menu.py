@@ -209,7 +209,14 @@ class _FakePage:
         self.radio = radio
 
     def get_by_role(self, role, name=None, **kw):
-        return SimpleNamespace(first=SimpleNamespace(is_visible=lambda timeout=0: self.radio))
+        # ACL-1320: радио ждут `wait_for` с таймаутом драйвера — у
+        # `is_visible` таймаут не соблюдается.
+        def wait_for(state="visible", timeout=0):
+            if not self.radio:
+                raise TimeoutError(f"Timeout {timeout}ms exceeded")
+
+        return SimpleNamespace(first=SimpleNamespace(is_visible=lambda timeout=0: self.radio,
+                                                     wait_for=wait_for))
 
 
 @pytest.fixture

@@ -39,17 +39,6 @@ if str(_PROJ_ROOT) not in sys.path:
 os.environ["ACL_SENTRY_DSN"] = ""
 
 
-# Тесты не пишут в живой журнал телеметрии (PR #314, ревью).
-#
-# `run_telemetry.TELEMETRY_PATH` смотрит в `output/rpa_telemetry.jsonl` рабочей
-# папки — тот же файл, который читают разбор прогонов и дешборд. Десятки
-# тестов зовут `record()` (часто с `ok=False`, ради отказов), и без этой
-# фикстуры выдуманные отказы оседали в настоящем журнале. Замок журнала
-# (`<путь>.lock`, `acl_log.append_line`) идёт следом за путём. Тест, который
-# ставит свой путь сам (`monkeypatch.setattr(rt, "TELEMETRY_PATH", ...)`),
-# делает это позже этой фикстуры — его путь и действует. Папка своя у
-# каждого теста и не совпадает с `tmp_path`: тесты, которые считают файлы в
-# `tmp_path`, лишнего не увидят.
 # Тесты не пишут в живую машинную папку ACL (ревью v3 PR #314).
 #
 # `config.paths.get_local_config_dir()` — это `%LOCALAPPDATA%\ACL`: там
@@ -67,6 +56,17 @@ def _machine_config_off_the_live_folder(tmp_path_factory, monkeypatch):
     yield
 
 
+# Тесты не пишут в живой журнал телеметрии (PR #314, ревью).
+#
+# `run_telemetry.TELEMETRY_PATH` смотрит в `output/rpa_telemetry.jsonl` рабочей
+# папки — тот же файл, который читают разбор прогонов и дешборд. Десятки
+# тестов зовут `record()` (часто с `ok=False`, ради отказов), и без этой
+# фикстуры выдуманные отказы оседали в настоящем журнале. Замок журнала
+# (`<путь>.lock`, `acl_log.append_line`) идёт следом за путём. Тест, который
+# ставит свой путь сам (`monkeypatch.setattr(rt, "TELEMETRY_PATH", ...)`),
+# делает это позже этой фикстуры — его путь и действует. Папка своя у
+# каждого теста и не совпадает с `tmp_path`: тесты, которые считают файлы в
+# `tmp_path`, лишнего не увидят.
 @pytest.fixture(autouse=True)
 def _telemetry_off_the_live_journal(tmp_path_factory, monkeypatch):
     try:

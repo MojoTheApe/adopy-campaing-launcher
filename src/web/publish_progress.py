@@ -56,7 +56,23 @@ _ACTIVE = frozenset({"pending", "queued", "running", "cancelling"})
 _BLOCKERS = {
     "account_blocked": "Account restricted by Meta — complete the verification in Ads Manager",
     "lead_terms_not_accepted": "Lead Generation terms are not accepted on the Page — accept them in Meta",
+    # ACL-1320: новый редактор Meta «в один экран».
+    "simple_create_layout": "Meta opened its new single-screen campaign editor for this account; "
+                            "the robot does not support it yet",
 }
+
+
+def _profile_blockers() -> dict[str, str]:
+    """ACL-1320: остановки из-за профиля (вход, сеть, перезапуск, открыт
+    руками) — тем же текстом, что и в итоге кампании."""
+    try:
+        from src.fb_ads_rpa import profile_trouble
+    except Exception:
+        return {}
+    return dict(profile_trouble.MESSAGES)
+
+
+_BLOCKERS.update(_profile_blockers())
 
 
 def _telemetry_path() -> Path:
@@ -238,5 +254,7 @@ def job_progress(
         "stall_after_s": stall_after_for(steps_seen.get(current, [])),
         "idle_s": idle_s,
         "current": current,
+        # ACL-1321: задание ждёт места или свой профиль — сколько впереди.
+        "queue": dict(job["queue"]) if status == "queued" and isinstance(job.get("queue"), dict) else None,
         "campaigns": campaigns,
     }

@@ -58,6 +58,7 @@ def env(monkeypatch):
 
     monkeypatch.setattr(md, "recover_stuck_page", recover)
     monkeypatch.setattr(md, "_reload_editor", lambda p, edit_url="": ev.append("reload"))
+    monkeypatch.setattr(md, "_reload_awake", lambda p, where: ev.append("reload") or True)
     page = SimpleNamespace(url="https://adsmanager.facebook.com/adsmanager/manage/adsets/edit?x=1")
     return SimpleNamespace(clock=clock, ev=ev, rows=rows, state=state, page=page)
 
@@ -181,7 +182,9 @@ def test_flow_watches_are_keyed_by_step_and_never_reload_an_additional_ad(flow, 
         def __init__(self, page, where, *, budget_s=None, editor=None, reload=True):
             made.append((where, reload))
 
-        def check(self):
+        fired = ""
+
+        def check(self, *, frozen=False):
             return ""
 
     monkeypatch.setattr(md, "_StallWatch", _Rec)
