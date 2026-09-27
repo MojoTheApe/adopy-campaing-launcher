@@ -584,7 +584,7 @@
       "source_sha": "47152afe0febf85145b04bf9c18f1ec0cf98af8d",
       "main_tree": "c5fec384dc5d611b3c7dc0d06639a855e11778b9",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-09-27T05:02:36+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -826,6 +826,54 @@
         ],
         "state": "pending",
         "recorded_at": "2026-09-26T11:49:57+00:00"
+      },
+      "320": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 333,
+            "merge_sha": "3e816217f9c352f0922522264d6a26f7343ba947",
+            "tree_sha": "2e0100ce34d348542e59777d2450f5229d01e4cf"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-27T11:38:45+00:00"
+      },
+      "321": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 333,
+            "merge_sha": "3e816217f9c352f0922522264d6a26f7343ba947",
+            "tree_sha": "2e0100ce34d348542e59777d2450f5229d01e4cf"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-27T11:38:46+00:00"
+      },
+      "324": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 333,
+            "merge_sha": "3e816217f9c352f0922522264d6a26f7343ba947",
+            "tree_sha": "2e0100ce34d348542e59777d2450f5229d01e4cf"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-27T11:38:46+00:00"
+      },
+      "325": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 333,
+            "merge_sha": "3e816217f9c352f0922522264d6a26f7343ba947",
+            "tree_sha": "2e0100ce34d348542e59777d2450f5229d01e4cf"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-27T11:38:47+00:00"
       }
     },
     "promotions": {
@@ -1300,6 +1348,44 @@
           ]
         },
         "verified_at": "2026-09-26T10:37:24+00:00"
+      },
+      "333": {
+        "pr": 328,
+        "issues": [
+          320,
+          324,
+          321,
+          325
+        ],
+        "tree_sha": "2e0100ce34d348542e59777d2450f5229d01e4cf",
+        "source_sha": "47152afe0febf85145b04bf9c18f1ec0cf98af8d",
+        "main_tree": "c5fec384dc5d611b3c7dc0d06639a855e11778b9",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-09-27T05:02:36+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "pr": 328,
+          "tree_sha": "2e0100ce34d348542e59777d2450f5229d01e4cf",
+          "environment": "GitHub Actions on the stage branch, head 47152af; the owner's dashboard running from a stage checkout (47152af) on the owner's machine",
+          "report": "Stage verification of ACL-1320, ACL-1324, ACL-1321 and ACL-1325 (PR #328, squash-merged into stage as 47152af). All three workflows on stage head 47152af finished successfully: CI (Classify and check project tooling, test (3.11) and test (3.13) on windows-latest, ACL verification), Windows installer (Classify installer changes, Verify build inputs, Build, install, repair, and uninstall on a clean Windows runner, Installer verification) and Delivery setup. The stage tree 2e0100ce is the tree independently reviewed and approved on the working branch (review chain ending at 619e378). Live on the owner's machine 2026-09-27 on this tree: campaigns opened within 1-2 minutes on three Colombia accounts; honest account stops worked (simple_create_layout on two accounts using Meta's new editor, profile_open_by_hand on a hand-opened profile); the Facebook_6540 'Suggest an audience' account built drafts but not clean (placements layout not recognised; later attempts slowed by the profile network). Known follow-up: ACL-1332 (Further limit the reach patience). The owner chose to release this stage build to the team now.",
+          "source_sha": "47152afe0febf85145b04bf9c18f1ec0cf98af8d",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "checks": [
+            "CI / Classify and check project tooling: success",
+            "CI / test (3.11) on windows-latest: success",
+            "CI / test (3.13) on windows-latest: success",
+            "CI / ACL verification: success",
+            "Windows installer / Classify installer changes: success",
+            "Windows installer / Verify build inputs: success",
+            "Windows installer / Build, install, repair, and uninstall: success",
+            "Windows installer / Installer verification: success",
+            "Delivery setup (draft adoption): success",
+            "Owner live runs on the stage tree 2026-09-27: campaigns open within 2 minutes; honest stops; 6540 not clean (tracked ACL-1332 and follow-ups)"
+          ]
+        },
+        "verified_at": "2026-09-27T06:20:03+00:00"
       }
     }
   }
