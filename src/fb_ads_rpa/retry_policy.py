@@ -85,9 +85,14 @@ CAMPAIGN_RETRY_STEPS = frozenset(
 # sections and for FB_RPA_SIMPLE_CREATE=0.
 # lead_terms_not_accepted (ACL-1327): the Page has not accepted Meta's Lead Ads
 # Terms; only a person can accept them, a replay hits the same card.
+# objective_inline (ACL-1327, review of PR #340 F4): the single-screen editor
+# already holds the draft when its objective is checked; a replay would leave
+# it behind and create another one, and a deterministic refusal (e.g. Meta asks
+# to confirm the change) would leave three.
 NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "browser_closed",
                                       "profile_logged_out", "profile_network",
-                                      "simple_create_layout", "lead_terms_not_accepted"})
+                                      "simple_create_layout", "lead_terms_not_accepted",
+                                      "objective_inline"})
 
 
 # Stops and field failures that block publication and need review.
@@ -106,6 +111,7 @@ BLOCKING_REVIEW_STEPS = frozenset(
         "profile_open_by_hand",
         "simple_create_layout",
         "lead_terms_not_accepted",
+        "objective_inline",
         "simple_create_more_ads",
         "conversion_event",
         "audience_age",

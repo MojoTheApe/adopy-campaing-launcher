@@ -138,9 +138,17 @@ def test_the_lead_ads_terms_stop_the_account(sim):
     assert "Lead Ads Terms" in failure_policy.reason(got)
 
 
-def test_an_objective_that_cannot_be_set_fails_the_campaign(sim):
+def test_an_objective_that_cannot_be_set_stops_without_a_second_draft(sim):
+    """Ревью PR #340 (F4): к проверке цели черновик уже есть — повтор
+    кампании бросил бы его и сделал новый. Отдельная неповторяемая остановка."""
     sim["state"]["objective"] = "failed"
-    assert sim["run"]() == "objective_leads"
+    got = sim["run"]()
+    assert got == "objective_inline"
+    assert got in retry_policy.NON_RETRYABLE_FLOW_STEPS
+    assert retry_policy.should_retry_campaign(got, completed_attempts=0) is False
+    assert failure_policy.severity(got) == failure_policy.BLOCKING
+    assert "not retried" in failure_policy.reason(got)
+    assert got not in profile_trouble.ACCOUNT_STOPS
     assert ("level", "adset") not in sim["calls"]
     # Цель проверяется сразу после имени — до бюджета, а не перед группой.
     assert ("card", "Budget") not in sim["calls"]
@@ -231,7 +239,7 @@ def test_the_objective_wait_ends_when_the_new_editor_is_drawn(monkeypatch):
 
 
 def test_the_objective_dialog_is_skipped_when_create_opened_the_new_editor(sim, monkeypatch):
-    monkeypatch.setattr(dom, "_simple_create_ready", lambda p: True)
+    monkeypatch.setattr(dom, "_simple_create_url", lambda p: True)
     monkeypatch.setattr(dom, "_visible_now", lambda loc: False)   # окна цели нет
     page = sim["page"]
     pressed: list = []
@@ -247,3 +255,60 @@ def test_the_objective_dialog_is_skipped_when_create_opened_the_new_editor(sim, 
     assert "Continue" not in pressed, "жали Continue окна цели, которого нет"
     assert ("simple_create", None, "no_objective_dialog") in sim["rows"]
     assert sim["calls"].count(("objective",)) == 1, "цель в самом редакторе не проверили"
+
+
+def test_the_objective_dialog_over_the_new_editor_is_still_answered(sim, monkeypatch):
+    """Ревью PR #340 (F3): редактор уже отрисован, но поверх него окно цели
+    (радио Leads видно) — жмём Leads и Continue, как прежде."""
+    monkeypatch.setattr(dom, "_simple_create_url", lambda p: True)
+    monkeypatch.setattr(dom, "_visible_now", lambda loc: True)
+    page = sim["page"]
+    pressed: list = []
+    real = page.get_by_role.side_effect
+
+    def by_role(role, name=None, **kw):
+        if name == "Continue":
+            pressed.append(name)
+        return real(role, name=name, **kw)
+
+    page.get_by_role.side_effect = by_role
+    assert sim["run"]() == ""
+    assert pressed == ["Continue"]
+    assert ("simple_create", None, "no_objective_dialog") not in sim["rows"]
+
+
+def test_the_editor_is_ready_only_when_its_name_field_is_drawn():
+    """Ревью PR #340 (F3): один адрес — ещё не готовый редактор."""
+    from unittest.mock import MagicMock
+
+    page = MagicMock()
+    page.url = SIMPLE_URL
+    page.get_by_placeholder.return_value.first.is_visible.return_value = False
+    assert dom._simple_create_ready(page) is False
+    page.get_by_placeholder.return_value.first.is_visible.return_value = True
+    assert dom._simple_create_ready(page) is True
+    page.url = EDIT_URL
+    assert dom._simple_create_ready(page) is False
+
+
+def test_a_hanging_editor_shell_is_not_taken_for_an_empty_screen(monkeypatch):
+    """Ревью PR #340 (F2): Create открыл заготовку нового редактора, а она
+    висит с полосами «Loading...» — это не пустой экран: `idle` вернул бы
+    поток на список и дал второй Create (второй черновик). Ждём до потолка и
+    отдаём заготовку потоку — зависшую страницу лечит шаг имени кампании."""
+    from unittest.mock import MagicMock
+
+    page = MagicMock()
+    page.url = SIMPLE_URL
+    page.get_by_role.return_value.first.wait_for.side_effect = TimeoutError("no radio")
+    page.get_by_placeholder.return_value.first.is_visible.return_value = False
+    monkeypatch.setattr(rt, "record", lambda *a, **k: None)
+    monkeypatch.setattr(dom, "_tab_gone", lambda p: False)
+    monkeypatch.setattr(dom, "_tab_frozen", lambda p: False)
+    monkeypatch.setattr(dom, "_loading_visible", lambda p: False)
+    monkeypatch.setattr(dom, "_stall_evidence", lambda *a, **k: None)
+    out: dict = {}
+    got = dom._wait_objective_dialog(page, first_s=0.05, idle_s=0.05, loading_max_s=0.4,
+                                     poll_s=0.01, out=out)
+    assert out["outcome"] == "simple_create_shell"
+    assert got is True

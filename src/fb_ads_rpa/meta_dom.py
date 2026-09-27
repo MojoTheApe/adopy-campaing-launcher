@@ -2862,6 +2862,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     frozen_run = 0
     slow_polls = 0
     loading_kinds: dict[str, int] = {}
+    shell_polls = 0
     outcome = "idle"
     found = False
     poll_start = None
@@ -2902,6 +2903,19 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
         if now - poll_start > OBJECTIVE_SLOW_POLL_FACTOR * poll_s:
             slow_polls += 1
             last_busy = now
+        # Ревью PR #340 (F2): Create открыл заготовку нового редактора, а она
+        # ещё грузится (полосы `role=progressbar` «Loading...», их
+        # `_loading_visible` не видит). Это не пустой экран: `idle` вернул бы
+        # поток на список и дал второй Create — второй черновик. Ждём до
+        # потолка и отдаём заготовку потоку: зависшую страницу лечит шаг
+        # имени кампании (`recover_stuck_page`).
+        if _simple_create_url(page):
+            shell_polls += 1
+            last_busy = now
+            if now - start >= loading_max_s:
+                found, outcome = True, "simple_create_shell"
+                break
+            continue
         if _loading_visible(page):
             loading_polls += 1
             last_busy = now
@@ -2945,11 +2959,20 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                                 "loading_kinds": loading_kinds,
                                 "frozen_polls": frozen_polls,
                                 "slow_polls": slow_polls,
+                                "simple_create_shell_polls": shell_polls,
                                 "woke": getattr(watch, "fired", ""),
                                 "idle_s": round(time.time() - last_busy, 1)})
     except Exception:
         pass
     return found
+
+
+def _simple_create_url(page: Page) -> bool:
+    """Вкладка на адресе нового редактора (без обращения к разметке)."""
+    try:
+        return _simple.url_is_simple_create(page.url)
+    except Exception:
+        return False
 
 
 def _simple_create_ready(page: Page) -> bool:
@@ -4538,15 +4561,16 @@ def run_recorded_campaign_flow(
         objective_checked = True
         got = _simple.ensure_leads_objective(page)
         if got == "failed":
-            _shot("fail_objective_leads", note="simple_create_inline")
+            _shot("fail_objective_inline", note="simple_create_inline")
             return True
         _telemetry.record("simple_objective", None, note=got)
         return False
 
     # ACL-1327: Create может открыть новый редактор сразу, без окна цели
-    # (`_wait_objective_dialog` → "simple_create") — тогда цель выбирается в
-    # самом редакторе, а Leads / Continue окна жать нечего.
-    if _simple_create_ready(page) and not _visible_now(page.get_by_role("radio", name="Leads")):
+    # (`_wait_objective_dialog` → "simple_create" / "simple_create_shell") —
+    # тогда цель выбирается в самом редакторе, а Leads / Continue окна жать
+    # нечего. Окно цели поверх редактора (радио Leads видно) — жмём, как прежде.
+    if _simple_create_url(page) and not _visible_now(page.get_by_role("radio", name="Leads")):
         if not _enter_simple("no_objective_dialog"):
             return "simple_create_layout"
     if not simple:
@@ -4662,8 +4686,10 @@ def run_recorded_campaign_flow(
     wait_editor_saved(page)
     _shot("after_campaign_name")
     # ACL-1327: имя вписано — редактор отрисован, список целей на месте.
+    # Ревью PR #340 (F4): черновик уже есть — отказ не повторяется
+    # (`objective_inline`), иначе каждый повтор бросал бы ещё один черновик.
     if simple and _simple_objective_failed():
-        return "objective_leads"
+        return "objective_inline"
 
     # ACL-1327: в новом редакторе карточка бюджета может быть свёрнута.
     if simple:
@@ -4718,7 +4744,7 @@ def run_recorded_campaign_flow(
             return "simple_create_layout"
     if simple:
         if _simple_objective_failed():
-            return "objective_leads"
+            return "objective_inline"
         _close_onboarding_tour(page, "simple_adset")
         level = _simple.scroll_to_level(page, "adset")
         if not level.get("ok"):

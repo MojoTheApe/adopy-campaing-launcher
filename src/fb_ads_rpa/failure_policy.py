@@ -102,6 +102,14 @@ POLICY: dict[str, tuple[str, str]] = {
         "them in Meta, so the campaign was stopped and not retried - a partial draft is left "
         "in Ads Manager - " + _profile.MESSAGES[_profile.LEAD_TERMS],
     ),
+    # ACL-1327 (review of PR #340, F4): the draft already exists when the
+    # objective is checked inside the single-screen editor.
+    "objective_inline": (
+        BLOCKING,
+        "Meta's single-screen campaign editor did not switch the campaign objective to Leads; "
+        "the draft was left in Ads Manager and not retried (a retry would leave another "
+        "draft) - set the objective to Leads by hand or delete the draft",
+    ),
     # ACL-1327: the single-screen editor path builds the first ad only.
     "simple_create_more_ads": (
         BLOCKING,
