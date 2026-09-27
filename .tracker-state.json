@@ -567,6 +567,22 @@
           332
         ],
         "recorded_at": "2026-09-27T11:24:37+00:00"
+      },
+      "340": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "independent subagent (Claude Opus 5.5)",
+        "implementer": "ACL-1327 implementation subagent",
+        "head_sha": "c9b276baad9dfed8e5f74b94ea10a892fa69eae9",
+        "base_sha": "47152afe0febf85145b04bf9c18f1ec0cf98af8d",
+        "tree_sha": "7d4ca6ad822e7165b4db677576d09ae857121cc4",
+        "report": "Re-review of 9967664..c9b276b: all findings are addressed. F1: _CARD_JS now clears both card marks, and the fallback DOM click (_CARD_DOM_CLICK_JS) only clicks the button whose mark equals its own toolbar id and whose aria-labelledby names that toolbar. F2: while the tab is on the simple_create URL, _wait_objective_dialog counts the wait as busy and ends at the ceiling with found=True (outcome simple_create_shell), so Create is not pressed a second time. This path is URL-path gated (_simple_create_url) and cannot fire in the classic wizard; a visible Leads radio is still answered first. F3: the three surviving mutants now have tests. F4: the new campaign stop objective_inline is in NON_RETRYABLE_FLOW_STEPS, BLOCKING_REVIEW_STEPS and POLICY (BLOCKING), not in ACCOUNT_STOPS, and the drift tests pass. F5: the PR body and fixture README are corrected. Tests pass file by file (flow 17, walked 28, onboarding 17, policy/retry/quick-retry, plus 7 objective-wait/open/stall/sentry files). All 8 spot mutations are caught: F1 x2, the 3 former survivors, F2 and F4 x2. Nit, not blocking: objective_inline is not in the ads_manager_flow.py:2475 list, so result.error does not get the failure_policy reason text; other non-account stops such as window_too_small behave the same way.",
+        "main_sha": "3e816217f9c352f0922522264d6a26f7343ba947",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          327
+        ],
+        "recorded_at": "2026-09-27T11:44:30+00:00"
       }
     },
     "stage": {
