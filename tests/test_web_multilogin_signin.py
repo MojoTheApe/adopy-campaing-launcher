@@ -35,25 +35,39 @@ class _Response:
         return self._payload
 
 
-def _signin(monkeypatch, *, token_response: _Response, saved: list) -> dict:
-    """Drive /multilogin-signin with the Multilogin API stubbed out."""
+def _signin(monkeypatch, *, signin_response: _Response, saved: list) -> tuple[dict, list]:
+    """Drive /multilogin-signin with the Multilogin API stubbed out.
+
+    ACL-1335: подключение больше не просит токен автоматизации (27.09
+    Multilogin отвечает на это 403 всем) — оно сохраняет вход. Поэтому
+    записывается, о чём спросили, а сохранение ловится у поставщика входа.
+    """
     import requests
 
+    asked: list = []
+    monkeypatch.delenv("MULTILOGIN_AUTOMATION_TOKEN_A", raising=False)
+
     def fake_post(url, **kwargs):
+        asked.append(url)
         if url.endswith("/user/signin"):
-            return _Response(200, {"data": {"token": "bearer-abc"}})
+            return signin_response
+        if url.endswith("/user/refresh_token"):
+            return _Response(200, {"data": {"token": "bearer-ws", "refresh_token": "refresh-2"}})
         return _Response(200, {"data": {"profiles": []}})
 
     def fake_get(url, **kwargs):
+        asked.append(url)
+        if url.endswith("/user/workspaces"):
+            return _Response(200, {"data": [{"workspace_id": "ws-1", "name": "Inhouse", "role": "launcher"}]})
         if "automation_token" in url:
-            return token_response
+            return _Response(403, {"status": {"message": "Request is not allowed"}})
         return _Response(200, {"data": {}})
 
     monkeypatch.setattr(requests, "post", fake_post)
     monkeypatch.setattr(requests, "get", fake_get)
     monkeypatch.setattr(
-        "src.web.app.update_machine_env",
-        lambda values: saved.append(values) or "C:/fake/.env",
+        "src.meta_campaign_agent.mlx_credentials._persist",
+        lambda values: saved.append(values),
     )
 
     async def _run():
@@ -66,34 +80,41 @@ def _signin(monkeypatch, *, token_response: _Response, saved: list) -> dict:
             )
             return response.json()
 
-    return asyncio.run(_run())
+    return asyncio.run(_run()), asked
 
 
-def test_signin_without_an_automation_token_does_not_report_a_saved_token(monkeypatch):
+def test_signin_without_a_refresh_token_saves_nothing_and_says_why(monkeypatch):
+    """Вход без refresh-токена продлить нечем: через полчаса робот встал бы."""
     saved: list = []
-    body = _signin(
+    body, _asked = _signin(
         monkeypatch,
-        token_response=_Response(403, {"status": {"message": "only workspace owner"}}),
+        signin_response=_Response(200, {"data": {"token": "bearer-abc"}}),
         saved=saved,
     )
 
-    assert body["token_saved"] is False
-    assert not saved, "nothing may be written when there is no token to write"
-    assert "403" in body["token_error"]
-    assert "only workspace owner" in body["token_error"]
+    assert body["ok"] is False
+    assert not saved, "nothing may be written when the sign-in cannot renew itself"
+    assert "no refresh token" in body["error"]
 
 
-def test_signin_with_a_token_saves_it_and_reports_no_problem(monkeypatch):
+def test_signin_saves_the_sign_in_and_never_asks_for_an_automation_token(monkeypatch):
     saved: list = []
-    body = _signin(
+    body, asked = _signin(
         monkeypatch,
-        token_response=_Response(200, {"data": {"token": "automation-xyz"}}),
+        signin_response=_Response(200, {"data": {"token": "bearer-abc", "refresh_token": "refresh-1"}}),
         saved=saved,
     )
 
-    assert body["token_saved"] is True
+    assert body["ok"] is True and body["token_saved"] is True
     assert body["token_error"] == ""
-    assert saved == [{"MULTILOGIN_AUTOMATION_TOKEN_A": "automation-xyz"}]
+    assert saved == [{
+        "MULTILOGIN_EMAIL_A": "a@b.co",
+        "MULTILOGIN_REFRESH_TOKEN_A": "refresh-2",
+        "MULTILOGIN_WORKSPACE_ID_A": "ws-1",
+        "MULTILOGIN_WORKSPACE_NAME_A": "Inhouse",
+        "MULTILOGIN_WORKSPACE_ROLE_A": "launcher",
+    }]
+    assert not [u for u in asked if "automation_token" in u]
 
 
 def test_the_two_multilogin_accounts_are_named_not_lettered():

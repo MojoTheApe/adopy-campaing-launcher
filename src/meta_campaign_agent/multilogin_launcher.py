@@ -28,11 +28,42 @@ class MultiloginLauncher:
         self.config = config
         self.timeout = timeout
 
-    def _headers(self) -> dict[str, str]:
+    def _token(self) -> str:
+        """Действующий токен слота: живой токен автоматизации или вход (ACL-1335)."""
+        from src.meta_campaign_agent import mlx_credentials
+
+        try:
+            return mlx_credentials.bearer_for(self.config)
+        except mlx_credentials.MlxCredentialError as exc:
+            raise MultiloginLauncherError(str(exc)) from exc
+
+    def _headers(self, token: str | None = None) -> dict[str, str]:
         return {
             "Accept": "application/json",
-            "Authorization": f"Bearer {self.config.automation_token}",
+            "Authorization": f"Bearer {self._token() if token is None else token}",
         }
+
+    def _get(self, url: str, **kwargs):
+        """GET с токеном слота; на 401 — одно продление и один повтор.
+
+        401 от лаунчера бывает и не про токен («Profile Authorization error»
+        на уже открытом профиле, 31.07): тогда повтор ответит тем же, и
+        наверх уйдёт исходный отказ. Цена ошибки — один лишний запрос.
+        """
+        from src.meta_campaign_agent import mlx_credentials
+
+        token = self._token()
+        r = requests.get(url, headers=self._headers(token), **kwargs)
+        if getattr(r, "status_code", 0) != 401:
+            return r
+        try:
+            fresh = mlx_credentials.renew_after_401(self.config, token)
+        except mlx_credentials.MlxCredentialError as exc:
+            raise MultiloginLauncherError(str(exc)) from exc
+        if not fresh or fresh == token:
+            return r
+        log.info("MLX answered 401; retrying once with the renewed sign-in")
+        return requests.get(url, headers=self._headers(fresh), **kwargs)
 
     def _resolve_folder_id(self, profile_id: str) -> str | None:
         """Try to find folder_id for a profile_id via the workspace profiles API."""
@@ -42,7 +73,7 @@ class MultiloginLauncher:
         ]
         for ep in endpoints:
             try:
-                r = requests.get(ep, headers=self._headers(), timeout=15)
+                r = self._get(ep, timeout=15)
                 if r.status_code != 200:
                     continue
                 body = r.json()
@@ -75,7 +106,7 @@ class MultiloginLauncher:
             f"{self.config.launcher_base_v2}/profile/f/{resolved_folder}/p/{profile_id}/start"
             f"?automation_type=playwright&headless_mode={headless_str}"
         )
-        r = requests.get(url, headers=self._headers(), timeout=self.timeout)
+        r = self._get(url, timeout=self.timeout)
         try:
             body: dict[str, Any] = r.json()
         except ValueError:
@@ -120,7 +151,13 @@ class MultiloginLauncher:
                         folder_id=resolved_folder or "",
                         port=running_port,
                     )
-            raise MultiloginLauncherError(f"Start profile failed HTTP {r.status_code}: {msg}")
+            hint = ""
+            if r.status_code == 403:
+                # Вход без прав на запуск — сказать прямо, а не «403» (ACL-1335).
+                from src.meta_campaign_agent.mlx_credentials import forbidden_hint
+
+                hint = forbidden_hint(self.config)
+            raise MultiloginLauncherError(f"Start profile failed HTTP {r.status_code}: {msg}{hint}")
 
         data = body.get("data") if isinstance(body.get("data"), dict) else {}
         port = data.get("port")
@@ -144,7 +181,7 @@ class MultiloginLauncher:
             f"{self.config.launcher_base_v2}/profiles/running",
         ]:
             try:
-                r = requests.get(endpoint, headers=self._headers(), timeout=10)
+                r = self._get(endpoint, timeout=10)
                 if r.status_code != 200:
                     continue
                 items = r.json()
@@ -199,7 +236,7 @@ class MultiloginLauncher:
         for url in candidates:
             params = {"profile_id": profile_id} if url.endswith("/profile/stop") else {}
             try:
-                r = requests.get(url, headers=self._headers(), params=params, timeout=self.timeout)
+                r = self._get(url, params=params, timeout=self.timeout)
             except Exception as exc:
                 last_err = str(exc)
                 continue

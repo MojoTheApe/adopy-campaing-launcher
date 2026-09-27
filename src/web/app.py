@@ -20,6 +20,7 @@ import re as _re
 import re
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlencode, urlsplit
@@ -4103,28 +4104,22 @@ async def build_upload(request: Request) -> Response:
     )
 
 
-@app.get("/multilogin-token-status")
-async def multilogin_token_status(instance: str = "A") -> JSONResponse:
-    """Is the saved automation token alive? (token-first connect, no re-login)
+def _mlx_slot(value) -> str:
+    slot = (value or "A").strip().upper() if isinstance(value, str) else "A"
+    return slot if slot in ("A", "B") else "A"
 
-    Checks locally first (MLX automation tokens are JWTs — decode `exp`
-    without a network call), then confirms with one light API request.
-    Never touches credentials: the token either works or the client falls
-    back to the login form.
+
+def _automation_token_status(token: str) -> dict:
+    """Жив ли токен автоматизации: локально по `exp`, потом одним лёгким запросом.
+
+    Без изменений со времён «token-first connect»; вынесено из обработчика,
+    чтобы статус входа (ACL-1335) шёл следом тем же путём.
     """
     import base64 as _b64
     import json as _json
     import time as _time
 
     import requests as _req
-
-    instance = (instance or "A").strip().upper()
-    if instance not in ("A", "B"):
-        instance = "A"
-    env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
-    token = (os.environ.get(env_key) or "").strip()
-    if not token:
-        return JSONResponse({"ok": True, "has_token": False, "alive": False})
 
     expires_at: str | None = None
     email: str | None = None
@@ -4139,8 +4134,8 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
                 from datetime import datetime, timezone
                 expires_at = datetime.fromtimestamp(exp, tz=timezone.utc).isoformat()
                 if exp < _time.time() + 60:
-                    return JSONResponse({"ok": True, "has_token": True, "alive": False,
-                                         "reason": "expired", "expires_at": expires_at})
+                    return {"ok": True, "has_token": True, "alive": False,
+                            "reason": "expired", "expires_at": expires_at}
         except Exception:
             pass  # not a decodable JWT — let the API call decide
 
@@ -4151,20 +4146,62 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
             timeout=12,
         )
     except Exception as exc:
-        return JSONResponse({"ok": True, "has_token": True, "alive": False,
-                             "reason": f"network: {exc}", "expires_at": expires_at})
+        return {"ok": True, "has_token": True, "alive": False,
+                "reason": f"network: {exc}", "expires_at": expires_at}
     if r.status_code == 401:
-        return JSONResponse({"ok": True, "has_token": True, "alive": False,
-                             "reason": "expired", "expires_at": expires_at})
-    return JSONResponse({"ok": True, "has_token": True, "alive": r.status_code == 200,
-                         "expires_at": expires_at, "email": email})
+        return {"ok": True, "has_token": True, "alive": False,
+                "reason": "expired", "expires_at": expires_at, "rejected": True}
+    return {"ok": True, "has_token": True, "alive": r.status_code == 200,
+            "expires_at": expires_at, "email": email}
+
+
+@app.get("/multilogin-token-status")
+async def multilogin_token_status(instance: str = "A") -> JSONResponse:
+    """How is this Multilogin slot connected, and does it work right now?
+
+    Two ways (ACL-1335): a saved automation token (checked as before — `exp`
+    locally, then one light API request) or a saved sign-in (email, refresh
+    token, workspace) that renews itself. The automation token wins while it
+    is alive, exactly like the robot's credential provider; a dead one gives
+    way to the sign-in. Never returns a token.
+    """
+    from src.meta_campaign_agent import mlx_credentials as _cred
+
+    instance = _mlx_slot(instance)
+    creds = _cred.for_slot(instance)
+    session = _cred.saved_session(instance)
+    token = creds.automation_token()
+
+    if token:
+        auto = _automation_token_status(token)
+        if auto.get("alive") or session is None:
+            auto.pop("rejected", None)
+            auto["method"] = "automation"
+            return JSONResponse(auto)
+        if auto.pop("rejected", False):
+            creds.reject_automation(token)
+
+    if session is None:
+        return JSONResponse({"ok": True, "has_token": False, "alive": False})
+
+    state = {"ok": True, "has_token": True, "method": "signin", "email": session.email,
+             "workspace": session.workspace_name, "role": session.role, "renews": True}
+    try:
+        creds.bearer()
+    except _cred.MlxSignInExpired as exc:
+        return JSONResponse({**state, "alive": False, "reason": "signin_expired", "error": str(exc)})
+    except _cred.MlxCredentialError as exc:
+        return JSONResponse({**state, "alive": False, "reason": "network", "error": str(exc)})
+    return JSONResponse({**state, "alive": True})
 
 
 @app.post("/multilogin-search")
 async def multilogin_search(request: Request) -> JSONResponse:
-    """Search ML profiles using saved automation token (no re-login needed).
+    """Search ML profiles with the slot's credentials (no re-login needed).
 
     Body JSON: {search_text: str, instance?: 'A'|'B'}
+    The bearer comes from the slot's credential provider (ACL-1335): an alive
+    automation token or the saved sign-in, renewed once on a 401.
     """
     try:
         data = await request.json()
@@ -4172,43 +4209,41 @@ async def multilogin_search(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
 
     search_text = (data.get("search_text") or "").strip()
-    instance = (data.get("instance") or "A").strip().upper()
-    if instance not in ("A", "B"):
-        instance = "A"
+    instance = _mlx_slot(data.get("instance"))
 
     import requests as _req
 
-    env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
-    token = (os.environ.get(env_key) or "").strip()
-    if not token:
-        return JSONResponse({"ok": False, "error": f"{env_key} not set — sign in first to save a token"})
+    from src.meta_campaign_agent import mlx_credentials as _cred
+
+    creds = _cred.for_slot(instance)
+    try:
+        token = creds.bearer()
+    except _cred.MlxCredentialError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)})
 
     MLX_API = "https://api.multilogin.com"
-    H = {"Accept": "application/json", "Content-Type": "application/json",
-         "Authorization": f"Bearer {token}"}
 
-    folders: list[dict] = []
-    try:
-        rf = _req.get(f"{MLX_API}/workspace/folders", headers=H, timeout=15)
-        if rf.status_code == 200:
-            fd = rf.json().get("data") or {}
-            raw = fd.get("folders") if isinstance(fd, dict) else fd
-            folders = [
-                {"folder_id": f.get("folderID") or f.get("folder_id") or f.get("id") or "",
-                 "name": f.get("name") or f.get("folder_name") or ""}
-                for f in (raw if isinstance(raw, list) else [])
-            ]
-    except Exception:
-        pass
+    def _headers(bearer: str) -> dict:
+        return {"Accept": "application/json", "Content-Type": "application/json",
+                "Authorization": f"Bearer {bearer}"}
 
-    # A 401 here means the saved automation token is dead; anything else is
-    # Multilogin refusing, and it says why. Both used to arrive as "0 profiles".
+    H = _headers(token)
+    # A 401 here means the token is dead; anything else is Multilogin
+    # refusing, and it says why. Both used to arrive as "0 profiles".
     profiles, error = _mlx_search_all(_req, H, search_text)
+    if error.startswith("HTTP 401"):
+        try:
+            fresh = creds.renew_after_401(token)
+        except _cred.MlxCredentialError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)})
+        if fresh and fresh != token:
+            H = _headers(fresh)
+            profiles, error = _mlx_search_all(_req, H, search_text)
     if error:
         if error.startswith("HTTP 401"):
-            return JSONResponse(
-                {"ok": False, "error": "The token has expired — sign in again through Connect"}
-            )
+            message = (_cred.SIGNIN_EXPIRED if creds.method() == "signin"
+                       else "The token has expired — sign in again through Connect")
+            return JSONResponse({"ok": False, "error": message})
         # Multilogin отвечает и HTML-страницей ошибки. Вывалить её в подпись
         # под полем — значит показать человеку разметку вместо причины.
         clean = _re.sub(r"<[^>]+>", " ", error)
@@ -4217,7 +4252,23 @@ async def multilogin_search(request: Request) -> JSONResponse:
             clean = clean[:160].rstrip() + "…"
         return JSONResponse({"ok": False, "error": f"Multilogin refused the profile list: {clean}"})
 
-    return JSONResponse({"ok": True, "profiles": profiles, "folders": folders})
+    return JSONResponse({"ok": True, "profiles": profiles, "folders": _mlx_folders(_req, H, MLX_API)})
+
+
+def _mlx_folders(requests_mod, headers: dict, api: str) -> list[dict]:
+    try:
+        rf = requests_mod.get(f"{api}/workspace/folders", headers=headers, timeout=15)
+        if rf.status_code != 200:
+            return []
+        fd = rf.json().get("data") or {}
+        raw = fd.get("folders") if isinstance(fd, dict) else fd
+        return [
+            {"folder_id": f.get("folderID") or f.get("folder_id") or f.get("id") or "",
+             "name": f.get("name") or f.get("folder_name") or ""}
+            for f in (raw if isinstance(raw, list) else [])
+        ]
+    except Exception:
+        return []
 
 
 @app.post("/multilogin-start-direct")
@@ -4262,13 +4313,104 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "instance": instance, "env_key": env_key})
 
 
+#: Входы, ждущие выбора рабочего пространства (ACL-1335): nonce → что нужно
+#: для переключения. Пароля здесь нет — только refresh-токен, и тот живёт
+#: минуты: не выбрали за `_MLX_PENDING_TTL` — входить заново.
+_MLX_PENDING: dict[str, dict] = {}
+_MLX_PENDING_LOCK = threading.Lock()
+_MLX_PENDING_TTL = 600.0
+
+
+def _mlx_pending_put(item: dict) -> str:
+    import secrets as _secrets
+    import time as _time
+
+    nonce = _secrets.token_urlsafe(18)
+    with _MLX_PENDING_LOCK:
+        now = _time.time()
+        for key in [k for k, v in _MLX_PENDING.items() if now - v["at"] > _MLX_PENDING_TTL]:
+            _MLX_PENDING.pop(key, None)
+        _MLX_PENDING[nonce] = {**item, "at": now}
+    return nonce
+
+
+def _mlx_pending_take(nonce: str) -> dict | None:
+    import time as _time
+
+    with _MLX_PENDING_LOCK:
+        item = _MLX_PENDING.pop(nonce or "", None)
+    if item is None or _time.time() - item["at"] > _MLX_PENDING_TTL:
+        return None
+    return item
+
+
+def _mlx_finish_connect(requests_mod, *, instance: str, email: str, refresh_token: str,
+                        workspace, save: bool) -> JSONResponse:
+    """Переключиться на выбранное пространство, сохранить вход, показать профили.
+
+    Переключение — тот же `/user/refresh_token`, которым вход потом
+    продлевается: если он не сработал сейчас, не сработает и в прогоне, и
+    лучше узнать это здесь. Сохраняется только после успеха — «Reconnect»
+    ничего не стирает, пока новый вход не удался.
+    """
+    from src.meta_campaign_agent import mlx_credentials as _cred
+    from src.web.multilogin_auth import MLX_API, refresh_session
+
+    label = mlx_instance_labels().get(instance, instance)
+    where = workspace.name or "this workspace"
+    if not workspace.can_launch:
+        return JSONResponse({"ok": False, "error": (
+            f"Your role in {where} is {workspace.role}: it cannot start profiles. "
+            "Ask the workspace owner for the Launcher role or higher, or pick another workspace.")})
+
+    switched = refresh_session(email, refresh_token, workspace.workspace_id,
+                               requests_module=requests_mod)
+    if not switched.ok:
+        return JSONResponse({"ok": False,
+                             "error": f"Signed in, but could not open {where}: {switched.error}"})
+
+    if save:
+        try:
+            _cred.save_session(instance, email=email, refresh_token=switched.refresh_token,
+                               workspace_id=workspace.workspace_id, workspace_name=workspace.name,
+                               role=workspace.role, bearer=switched.bearer)
+        except Exception as exc:
+            return JSONResponse(
+                {"ok": False, "error": f"Signed in, but failed to save machine settings: {exc}"},
+                status_code=500,
+            )
+
+    H = {"Accept": "application/json", "Content-Type": "application/json",
+         "Authorization": f"Bearer {switched.bearer}"}
+    profiles, profiles_error = _mlx_search_all(requests_mod, H, "")
+    return JSONResponse({
+        "ok": True,
+        "instance": instance,
+        "method": "signin",
+        # Имя поля — ради совместимости со страницей: «сохранено ли то, чем
+        # робот будет открывать профили». Теперь это вход, а не токен.
+        "token_saved": bool(save),
+        "token_error": "",
+        "email": email,
+        "workspace": workspace.name,
+        "role": workspace.role,
+        "label": label,
+        "folders": _mlx_folders(requests_mod, H, MLX_API),
+        "profiles": profiles,
+        "debug": [f"search -> {profiles_error}"] if profiles_error else [],
+    })
+
+
 @app.post("/multilogin-signin")
 async def multilogin_signin(request: Request) -> JSONResponse:
-    """Sign in to Multilogin, return folders + profiles list.
+    """Connect a Multilogin slot by email and password (ACL-1335).
 
-    Body JSON: {email, password, save_token?: bool}
-    Credentials are used for a single API call and never persisted.
-    If save_token is true, updates the token in machine-local settings.
+    Body JSON: {email, password, instance?: 'A'|'B', workspace_id?, save_token?: bool}
+    Sign in → list the account's workspaces → the only one, the one asked for,
+    or return the list for the page to pick from (`needs_workspace` + a short-
+    lived `pending` handle for /multilogin-signin-workspace) → switch → save
+    email, refresh token and workspace for the slot in the machine `.env`.
+    The password is used for one request and never stored, nor its hash.
     """
     try:
         data = await request.json()
@@ -4277,85 +4419,65 @@ async def multilogin_signin(request: Request) -> JSONResponse:
 
     email = (data.get("email") or "").strip()
     password = (data.get("password") or "").strip()
-    save_token = bool(data.get("save_token", True))
-    instance = (data.get("instance") or "A").strip().upper()
-    if instance not in ("A", "B"):
-        instance = "A"
+    save = bool(data.get("save_token", True))
+    instance = _mlx_slot(data.get("instance"))
+    wanted = (data.get("workspace_id") or "").strip()
 
     if not email or not password:
         return JSONResponse({"ok": False, "error": "email and password are required"}, status_code=400)
 
     import requests as _req
 
-    from src.web.multilogin_auth import MLX_API, sign_in
+    from src.web.multilogin_auth import list_workspaces, open_session
 
-    # Вход живёт одним местом на дешборд и мастер установки (ACL-1303):
-    # мастер работает до того, как дешборд существует, а две копии одного
-    # входа однажды разъедутся — починят одну и забудут вторую.
-    signed = sign_in(email, password, requests_module=_req)
-    if not signed.ok:
-        return JSONResponse({"ok": False, "error": signed.error})
-    bearer = signed.bearer
-    auto_token = signed.automation_token
-    token_error = signed.token_error
-    H = {"Accept": "application/json", "Content-Type": "application/json"}
+    # Вход живёт одним местом (ACL-1303): подробности про MD5 и адреса их
+    # API — в multilogin_auth.
+    session = open_session(email, password, requests_module=_req)
+    if not session.ok:
+        return JSONResponse({"ok": False, "error": session.error})
+    workspaces, ws_error = list_workspaces(session.bearer, requests_module=_req)
+    if ws_error:
+        return JSONResponse({"ok": False, "error": f"Signed in, but {ws_error[0].lower()}{ws_error[1:]}"})
 
-    working_token = auto_token or bearer
+    chosen = next((w for w in workspaces if w.workspace_id == wanted), None) if wanted else None
+    if chosen is None and len(workspaces) == 1:
+        chosen = workspaces[0]
+    if chosen is None:
+        pending = _mlx_pending_put({"instance": instance, "email": session.email,
+                                    "refresh_token": session.refresh_token,
+                                    "workspaces": workspaces, "save": save})
+        return JSONResponse({"ok": True, "needs_workspace": True, "pending": pending,
+                             "instance": instance, "token_saved": False,
+                             "workspaces": [w.as_dict() for w in workspaces]})
+    return _mlx_finish_connect(_req, instance=instance, email=session.email,
+                               refresh_token=session.refresh_token, workspace=chosen, save=save)
 
-    # Step 3 — save token outside the checkout. Never claim success when the
-    # token works for this request but could not be persisted for next launch.
-    env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
-    if save_token and auto_token:
-        try:
-            update_machine_env({env_key: auto_token})
-        except Exception as exc:
-            return JSONResponse(
-                {
-                    "ok": False,
-                    "error": f"Signed in, but failed to save machine settings: {exc}",
-                },
-                status_code=500,
-            )
 
-    auth_h2 = {**H, "Authorization": f"Bearer {working_token}"}
-
-    # Step 4 — list folders
-    folders: list[dict] = []
+@app.post("/multilogin-signin-workspace")
+async def multilogin_signin_workspace(request: Request) -> JSONResponse:
+    """Finish a sign-in that had several workspaces: {pending, workspace_id, instance}."""
     try:
-        rf = _req.get(f"{MLX_API}/workspace/folders", headers=auth_h2, timeout=20)
-        if rf.status_code == 200:
-            fd = rf.json().get("data") or {}
-            raw = fd.get("folders") if isinstance(fd, dict) else fd
-            folders = [
-                {"folder_id": f.get("folderID") or f.get("folder_id") or f.get("id") or "",
-                 "name": f.get("name") or f.get("folder_name") or ""}
-                for f in (raw if isinstance(raw, list) else [])
-            ]
+        data = await request.json()
     except Exception:
-        pass
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    nonce = data.get("pending") or ""
+    item = _mlx_pending_take(nonce)
+    if item is None:
+        return JSONResponse({"ok": False, "error": "The sign-in has timed out — press Connect again."})
+    instance = _mlx_slot(data.get("instance") or item["instance"])
+    if instance != item["instance"]:
+        return JSONResponse({"ok": False, "error": "The Multilogin account changed — press Connect again."})
+    wanted = (data.get("workspace_id") or "").strip()
+    chosen = next((w for w in item["workspaces"] if w.workspace_id == wanted), None)
+    if chosen is None or not chosen.can_launch:
+        # Выбор не подошёл — вход остаётся ждать другого выбора, пароль заново не нужен.
+        with _MLX_PENDING_LOCK:
+            _MLX_PENDING[nonce] = item
+        if chosen is None:
+            return JSONResponse({"ok": False, "error": "Pick one of the listed workspaces."})
 
-    # Step 5 — list profiles.
-    #
-    # One request, paged. The three fallbacks that used to live here were built
-    # around a mystery — "sub-accounts may need a search term", "some MLX
-    # versions" — and none of them was the answer: every attempt asked for 200
-    # profiles, and Multilogin refuses anything over 100 with a flat
-    # "limit invalid". So all three failed identically, for the same reason, and
-    # the panel reported "No profiles found" for workspaces that were full.
-    profiles, profiles_error = _mlx_search_all(_req, auth_h2, "")
-    profile_debug: list[str] = []
-    if profiles_error:
-        profile_debug.append(f"search -> {profiles_error}")
+    import requests as _req
 
-    return JSONResponse({
-        "ok": True,
-        "instance": instance,
-        "token_saved": save_token and bool(auto_token),
-        # Why there is no token, in the account's own words. Without this the
-        # page could only say "not saved", which reads as a detail rather than
-        # as the reason the next Publish will fail.
-        "token_error": token_error if (save_token and not auto_token) else "",
-        "folders": folders,
-        "profiles": profiles,
-        "debug": profile_debug,
-    })
+    return _mlx_finish_connect(_req, instance=instance, email=item["email"],
+                               refresh_token=item["refresh_token"], workspace=chosen,
+                               save=item["save"])

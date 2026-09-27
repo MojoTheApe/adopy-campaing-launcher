@@ -47,6 +47,11 @@ def get_browser_provider() -> str:
         return "multilogin_attach"
     token_a = (os.environ.get("MULTILOGIN_AUTOMATION_TOKEN_A") or "").strip()
     if not token_a:
+        # ACL-1335: сохранённый вход заменяет токен автоматизации.
+        from src.meta_campaign_agent.mlx_credentials import has_saved_session
+
+        token_a = "signin" if has_saved_session("A") else ""
+    if not token_a:
         return "multilogin_direct"
     return "multilogin"
 
