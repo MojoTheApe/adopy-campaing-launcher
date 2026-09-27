@@ -91,6 +91,10 @@ def flow(monkeypatch, tmp_path):
         return step == "objective"
 
     monkeypatch.setattr(dom, "recover_stuck_page", recover)
+    # ACL-1320: третий раунд `_open_campaign` жмёт Create в свежей вкладке.
+    fresh: dict = {"page": page}
+    monkeypatch.setattr(br, "fresh_tab",
+                        lambda p, url, **kw: events.append(("fresh_tab", url)) or fresh["page"])
     took = ["ok"]
     waits = [True]
 
@@ -118,7 +122,7 @@ def flow(monkeypatch, tmp_path):
             destination_url="https://example.com")
 
     return {"run": run, "events": events, "took": took, "waits": waits, "page": page,
-            "radio_absent": radio_absent}
+            "radio_absent": radio_absent, "fresh": fresh}
 
 
 def _after(events, first, then):
@@ -161,13 +165,15 @@ def test_the_quick_rounds_are_bounded(flow):
 
 
 def test_the_long_wait_returns_to_the_list_before_reloading(flow):
-    """Окно цели не пришло, страница ушла со списка: сначала список, потом reload."""
+    """Окно цели не пришло, страница ушла со списка: список заново и новый
+    Create — без перезагрузки поверх чужой страницы (ACL-1320: без неё вовсе)."""
     flow["waits"][:] = [False, True]
     flow["run"]()
     ev = flow["events"]
-    assert ("recover", "objective") in ev
-    assert ("goto", LIST_URL) in ev
-    assert ev.index(("goto", LIST_URL)) < ev.index(("recover", "objective"))
+    first_wait = ev.index(("wait_dialog",))
+    assert ("goto", LIST_URL) in ev[first_wait:]
+    assert _after(ev[first_wait:], ("goto", LIST_URL), ("create_button",))
+    assert not [e for e in ev if e[0] == "recover" and e[1] in ("objective", "create")]
 
 
 def test_an_absent_objective_dialog_fails_after_one_bounded_wait(flow, monkeypatch):

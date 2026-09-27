@@ -52,7 +52,9 @@ jobs:
     needs: scope
     if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.windows != 'false') }}
     runs-on: windows-latest
-    timeout-minutes: 20
+    # 2026-09-27: the suite passed 3300 tests and runs ~19-20 min on the hosted
+    # runner (3.13: 19m13s; 3.11 was cancelled at 20m16s on PR #328). Keep headroom.
+    timeout-minutes: 35
 
     # Belt and braces alongside scripts/_console.py: the runner's console is not
     # UTF-8, and a Russian line printed by any step would abort it.

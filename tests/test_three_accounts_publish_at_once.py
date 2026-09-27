@@ -37,6 +37,12 @@ def quiet_runner(monkeypatch):
     monkeypatch.setattr(pj, "keep_display_awake", lambda label: _Noop())
     monkeypatch.setattr(pj, "_watch_screen_lock", lambda job_id: _Noop())
     monkeypatch.setattr(pj, "profile_key_for", lambda label: label)  # ярлык = профиль
+    # ACL-1321: сколько профилей разом, решает память машины. Здесь проверяется
+    # параллельность, а не память ноутбука, на котором идут тесты.
+    from src.web.profile_slots import ProfileSlots, SlotSettings
+
+    monkeypatch.setattr(pj, "_slots", ProfileSlots(
+        memory=lambda: None, settings=lambda: SlotSettings(override=4), tick_s=0.05))
 
     entered: dict[str, threading.Event] = {}
     release: dict[str, threading.Event] = {}

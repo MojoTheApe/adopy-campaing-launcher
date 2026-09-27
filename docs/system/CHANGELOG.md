@@ -1,5 +1,145 @@
 # System history
 
+## Sentry events carry the failing page section; a read-only triage digest — ACL-1325
+
+2026-09-26 a new "Suggest an audience" Audience layout on one account broke "Further
+limit the reach" and was found only because the run was on the owner's machine: the
+Sentry event had step and reason, not the page. Owner decisions 2026-09-26: attach a
+scrubbed copy of the failing section — yes; screenshots — no; react immediately; the
+digest goes to the owner's Claude chat.
+
+- Blocking-failure and campaign-stop events get `section_<step>.html` (≤ 200 KB): the
+  card the failing step works on (plus an open dialog), taken in the page at the
+  failure and rebuilt from a whitelist when sent — campaign/account/ad set/ad names,
+  URLs, `act=`/`*_id=`, e-mails, phones, 6+ digit runs, tokens replaced; `js_*` ids →
+  `syn_N`; text cut at 300 chars. Tag `page_snapshot=section`, context
+  `page_snapshot`. Off per machine: `ACL_SENTRY_PAGE_SNAPSHOT=0`. Nothing new on disk.
+  Review of PR #328: a failure on the campaigns list no longer sends the whole page —
+  the open dialog, otherwise the list region, capped in the page (inside the
+  Multilogin browser only; ids/URLs/contacts/tokens removed). A section never goes
+  with an event of another run or campaign; profile stops carry none. The page is asked
+  with a 5 s bound; a hung tab gives no section.
+- `scripts/sentry_triage.py`: new/regressed issues since a cursor, latest event and
+  section per issue, grouped by `step:reason`, matched to tasks in
+  `config/sentry_triage_map.json`, printed as JSON + markdown. Never writes to Sentry
+  or GitHub; `--apply` only records the cursor; section files are saved only into an
+  explicit `--attachments-dir` (latest 50 issue folders kept), otherwise the outline is
+  built in memory and nothing is written; no token → "skipped", exit 0.
+- `docs/system/SENTRY_TRIAGE.md`: the routine (Sentry alert + desktop scheduled task
+  every 10 minutes) and the owner's one-time setup. No alert rule or schedule is
+  created by the code.
+
+## "Publish all" runs only as many profiles at once as the machine's memory allows — ACL-1321
+
+On the owner's laptop three Multilogin profiles with Ads Manager already used 85–89 %
+of the memory and made every step 1.2–2.7× slower (2026-09-25/26); "Publish all" with
+six accounts started all six. Owner decision 2026-09-26: the dashboard decides from
+free memory, with a floor of one, a ceiling, and a per-machine override.
+
+- Publish jobs now take a place from a profile queue (`src/web/profile_slots.py`)
+  before the profile lock. Before each start: nothing running — start (floor);
+  `ACL_MAX_PARALLEL_PROFILES=N` in the machine `.env` — exactly N at once, memory not
+  asked; otherwise at most `ACL_MAX_PARALLEL_CEILING` (4) and only while free physical
+  memory ≥ `ACL_PROFILE_MEMORY_GB` (1.5) + `ACL_MEMORY_RESERVE_GB` (1.5). A profile
+  started less than 90 s ago is counted as not yet using its memory; an unreadable
+  memory probe allows two. Settings are read at every decision (no restart).
+- Waiting jobs are `queued`, start in submission order, and re-check when a job ends,
+  when a job is cancelled, and every 2 s (memory can free up without a job ending). A
+  job whose profile is busy waits for its profile without holding a place, and takes
+  it first when it frees. Cancelling a queued job ends it at once.
+- Telemetry: one `job_phase` row `slot_queue` per job — wait time, the memory reading
+  and the decision that let it start, and why it had to wait. `GET /publish-jobs/slots`
+  shows the current mode, what runs, what waits and the next decision.
+- Dashboard: a queued campaign shows a still grey ring with a dot ("Waiting for a free
+  slot (N ahead)" / "Waiting for the Multilogin profile"), the Publish-all list shows
+  each unfinished account ("queued — waiting for a free slot (N ahead)" / "building
+  the draft"), and the account panel shows "queued" with a Stop button.
+
+## A campaign opens within two minutes, even when its tab freezes — ACL-1320
+
+Run `cf563b4ba594` (2026-09-26, FacebookDoc19): the first campaign opened in 19.2,
+16.3 and 1.3 minutes in three runs on the same profile process. For about 14 of the
+19 minutes the campaigns-list tab did not answer at all, and the robot sat in calls
+that have no effective timeout — `locator.count()`, `is_visible(timeout)` (Playwright
+ignores that timeout), `page.evaluate`, CDP `send` — while the stall guard, checked
+only at the start of an attempt, fired at 108 s and 224 s instead of 60 s. The
+workspace hypothesis (a profile running from the inactive Multilogin workspace) was
+ruled out by the log: the cause is a frozen renderer of a long-lived tab.
+
+- Opening a campaign has a hard budget (`meta_dom._open_campaign`): about 45 s per
+  round while nothing is visibly loading, 120 s in total. A round without the
+  objective dialog goes back to the list and presses Create again (no more 75/180-s
+  rounds and no reload on this path); while "Loading creation" is visibly spinning on
+  a tab that answers, the round may use the rest of the budget. On the third round,
+  or after the second "tab did not answer", Create is pressed in a fresh tab of the
+  same profile (the frozen tab is closed); if the fresh tab does not answer either, the
+  campaign stops with `profile_unresponsive`, and the publisher restarts the profile
+  once through the MLX API with the token of its own workspace (A = Inhouse, B = KLD)
+  and retries the campaign. Attaching to an already-open profile checks its tab first
+  and does the same. Never a plain browser. Telemetry: `campaign_open_budget`,
+  `fresh_tab`, `profile_restarted_unresponsive`.
+- Every wait on the list asks first, with a driver-enforced 3-s timeout, whether the
+  tab answers (`_tab_frozen`); page reads go through `_eval_bounded`. A frozen tab
+  hands over to the stall guard at once, and the guard itself, the step log, the
+  screenshot and the window put-back never open a CDP session on a frozen tab
+  (measured on real Chromium: `new_cdp_session` on a hung renderer blocked 197 s).
+- The objective wait gives a woken tab 18 s of fresh time, counts a slow poll as a
+  busy page rather than an empty one, and hands a tab that twice did not answer back
+  to the budget.
+- The campaigns list must show a visible Create and no route spinner within 30 s of
+  the goto, else it is reloaded once (`campaigns_list_ready`); the tab is woken before
+  the first Create without bringing the window forward — it stays parked off screen
+  (decision of 2026-09-19); the guard's reload re-applies the throttling fix.
+- A stall leaves evidence: a PNG (bounded Playwright path only), a page capture and
+  the tab's `JSHeapUsedSize` / `Nodes`, at most four per run (`stall_evidence`).
+
+Carried from the final review of PR #314: a parked window that was later widened is
+still recognised as our parking (the spot is remembered), so its off-screen place is
+never taken for its home; the second wrong-ad check after re-reveal and the
+"name field unreadable → still type" path are pinned by tests; a failed ad-name step
+no longer also fails that ad's copy with `wrong_ad_open` (the copy is checked against
+the name actually in the field); an exception from building a job's drafts reaches
+Sentry like one from publishing, and the `job_exception` tags are tested; the test
+telemetry guard proves the journal is temporary before the first write; Home computes
+the workbook's activity once per workbook revision, and "A, B is placed in a country"
+reads "A, B are placed in countries".
+
+After the live run of the candidate on 2026-09-26 15:21–15:57 UTC (new accounts
+Facebook_1443, _6540, _9943; the build was pulled back to the released one):
+
+- A stopped profile no longer spins the publish thread. On a gone tab every
+  Playwright call fails in milliseconds; the liveness probe answered "could not ask"
+  and the wait loops went round again with the GIL held until the dashboard stopped
+  answering. `page_liveness` now says "the tab is gone" (closed page, disconnected
+  browser, or a closed-connection error seen once), the objective wait and the campaign
+  opener end with `browser_closed` at once, and no poll round is shorter than its step.
+- A Facebook login page (`profile_logged_out`) and a broken proxy (`profile_network`:
+  `ERR_SOCKS_*`, `ERR_PROXY_*`, `ERR_TUNNEL_*`, `ERR_CONNECTION_*`,
+  `ERR_SSL_PROTOCOL_ERROR`, a Chrome error page, three failed navigations or a recent
+  network error of the same profile) are diagnosed before any fresh tab or restart and
+  stop the account's job with a message for the operator; a failed MLX restart is
+  `profile_restart_failed`. Only a genuinely unresponsive tab gets a fresh tab / restart.
+- A profile opened by hand (no automation port, not the robot's own Mimic process) is
+  never stopped: the job fails at once with `profile_open_by_hand` — "Close its window
+  (so Multilogin saves the session), then press Publish again."
+- Meta's onboarding tour ("A streamlined way to create campaigns", pager "1 of 3") is
+  closed by its own X only, never Next; Meta's new single-screen editor
+  (`/adsmanager/manage/simple_create`) stops the campaign with `simple_create_layout`
+  instead of failing later.
+
+Independent review of PR #323 (request-changes) addressed: a round no longer cuts a
+slow "Loading creation" (once loading was seen, only idle time after it or the budget
+ends the wait) and the last Create of a round gets at least 25 s; 120 s is a hard
+ceiling (steps inside the open read its deadline); `profile_network` is decided from
+facts of the current tab, and from history only with two unresolved errors after the
+last successful navigation off a normal Meta page; a busy tab is kept (5-s probe,
+consecutive failures, a 10-s confirmation before a fresh tab); a slow goto in a fresh
+tab keeps the tab; the tour is recognised by its own text and never inside the editor;
+after a failed name step only our name or "New Leads Ad" is accepted; the robot-profile
+mark needs a port owned by the profile's process; an attach-time restart failure is
+`profile_restart_failed`, attach-time stops reach Sentry; no profile-id prefix in
+telemetry.
+
 ## Sentry receives only real campaign failures — ACL-1318 (phase 1)
 
 Every telemetry row with `ok=False` used to become a Sentry event, so the list of
@@ -105,8 +245,9 @@ limit" radio is not a failure; the last Create of the objective retry gets a ful
 wait; the ad-set naming-template dialog is cancelled; `objective_wait` says what was
 loading; and a wait longer than 60 s wakes the tab and reloads it only when it is
 stuck (`stall_unstuck`, once per step, never on the second or third ad). Re-review:
-a window minimised mid-run keeps its real home, and a home that is itself off screen
-is replaced by a visible point.
+a window minimised mid-run keeps its real home, and a home that is exactly our
+parking spot is replaced by a visible point (0, 0); any other off-screen position is
+taken for a monitor to the left or above and kept.
 
 What does not ship. ACL-1311 (Multilogin Team access, PR #312) is reverted in the port
 until the two-machine token check.

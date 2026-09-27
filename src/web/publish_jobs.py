@@ -24,6 +24,7 @@ from src.fb_ads_rpa.draft import RpaPublishResult
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher, profile_key_for
 from src.fb_ads_rpa.operations import publish_lease
 from src.web.keep_awake import keep_display_awake
+from src.web.profile_slots import ProfileSlots
 
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
@@ -33,6 +34,9 @@ _update_reserved = False
 # profiles run at once; two jobs on one profile still queue (acl-1210).
 _publish_serial = publish_lease
 _active_publishers: dict[str, RpaPublisher] = {}
+# Сколько профилей публикуют разом — по свободной памяти машины (ACL-1321).
+# Задания сверх решения ждут в «queued» в порядке отправки; см. profile_slots.
+_slots = ProfileSlots()
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -115,9 +119,13 @@ def cancel_job(job_id: str) -> dict[str, Any]:
             return {"ok": False, "error": f"Job already {job['status']}"}
         job["cancel_requested"] = True
         # Surface immediate feedback in the poll UI before the worker finishes.
-        if job["status"] in ("pending", "running"):
+        if job["status"] in ("pending", "queued", "running"):
             job["status"] = "cancelling"
         publisher = _active_publishers.get(job_id)
+
+    # Задание, ждущее места в очереди профилей, узнаёт об отмене сразу, а не
+    # по таймеру. Вне замка заданий: очередь берёт его из-под своего.
+    _slots.wake()
 
     if publisher is not None:
         try:
@@ -126,6 +134,11 @@ def cancel_job(job_id: str) -> dict[str, Any]:
             pass
 
     return {"ok": True, "job_id": job_id}
+
+
+def slots_snapshot() -> dict[str, Any]:
+    """Сколько профилей разом разрешено сейчас, что идёт и что ждёт (ACL-1321)."""
+    return _slots.snapshot()
 
 
 def active_job_count() -> int:
@@ -173,6 +186,8 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         snap["errors"] = list(job["errors"])
         snap["creative_notices"] = list(job.get("creative_notices", []))
         snap["campaign_names"] = list(job.get("campaign_names", []))
+        if isinstance(job.get("queue"), dict):
+            snap["queue"] = dict(job["queue"])
         expected = int(snap.get("total") or 0)
         snap["publishable"] = (
             snap.get("status") == "done"
@@ -280,45 +295,94 @@ def _run_job(
     # Playwright; two jobs on the same profile still queue here in "queued"
     # until the first finishes — never two drivers on one browser. The lease
     # is held for the WHOLE run, not just the status flip.
+    #
+    # ACL-1321: и не больше профилей разом, чем тянет память машины. Место
+    # даёт `_slots` (в порядке отправки; задание на занятый профиль ждёт свой
+    # профиль, не держа места), замок профиля берётся уже с местом.
     with _jobs_lock:
-        _jobs[job_id]["status"] = "queued"
-    with _publish_serial(profile_key_for(account_label)):
-        if _is_cancelled(job_id):
-            _finish(job_id, cancelled=True)
-            return
+        job = _jobs[job_id]
+        if job.get("status") == "pending":
+            job["status"] = "queued"
+        job["queued_at"] = _now_iso()
+        first_campaign = next(iter(job.get("campaign_names") or []), "")
+    # Каждая строка телеметрии этого потока несёт номер задания — по нему
+    # точка сборки берёт только свои строки (ACL-1315). С начала ожидания:
+    # строка очереди тоже его.
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        _rt.set_current_job(job_id)
+    except Exception:
+        _rt = None
+
+    def _show_wait(verdict: dict[str, Any]) -> None:
         with _jobs_lock:
-            _jobs[job_id]["status"] = "running"
-            _jobs[job_id]["started_at"] = _now_iso()
-        # Каждая строка телеметрии этого потока несёт номер задания — по нему
-        # точка сборки берёт только свои строки (ACL-1315).
-        try:
-            from src.fb_ads_rpa import run_telemetry as _rt
+            job = _jobs.get(job_id)
+            if job is not None:
+                job["queue"] = {
+                    # «profile» — ждёт свой профиль; иначе — свободное место.
+                    "reason": "profile" if verdict.get("reason") == "profile" else "slot",
+                    "ahead": int(verdict.get("ahead") or 0),
+                    "limit": verdict.get("limit"),
+                    "running": verdict.get("running"),
+                    "available_mb": verdict.get("available_mb"),
+                }
 
-            _rt.set_current_job(job_id)
-        except Exception:
-            pass
-
-        if activate or not use_rpa_publish():
-            _fatal(job_id, "ACL safety gate: only draft-only RPA jobs are allowed")
-            return
-        # Заблокированный экран останавливает сборку: система уходит на
-        # защищённый рабочий стол, браузер перестаёт получать время, и
-        # креатив, который грузится 74 секунды, грузился 42 минуты. Пока
-        # работа идёт, просим не гасить экран; просьба снимается сама,
-        # чем бы работа ни кончилась. Держится она вокруг ВСЕЙ работы, а
-        # не вокруг шага: прерывать нельзя всю. Очередь в это время ждёт
-        # снаружи — держать экран ради ожидания незачем.
-        with keep_display_awake(account_label), _watch_screen_lock(job_id):
-            _run_rpa(
-                job_id,
-                slots,
-                account_label=account_label,
-                country=country,
-                activate=False,
-                dry_run=dry_run,
-                hand_off=True,
-            )
+    profile = profile_key_for(account_label)
+    grant = _slots.acquire(
+        job_id,
+        profile,
+        cancelled=lambda: _is_cancelled(job_id),
+        on_wait=_show_wait,
+    )
+    if grant is None:
+        with _jobs_lock:
+            _jobs[job_id].pop("queue", None)
+        _finish(job_id, cancelled=True)
         return
+    try:
+        with _jobs_lock:
+            _jobs[job_id].pop("queue", None)
+            _jobs[job_id]["slot_wait_s"] = grant["waited_s"]
+        # Сколько задание ждало места и почему его пустили — в телеметрию.
+        if _rt is not None:
+            try:
+                _rt.record("job_phase", True, campaign=first_campaign, note="slot_queue",
+                           duration_s=float(grant["waited_s"]),
+                           diag={"account": account_label, "decision": grant["decision"],
+                                 "first_hold": grant["first_hold"]})
+            except Exception:
+                pass
+        with _publish_serial(profile):
+            if _is_cancelled(job_id):
+                _finish(job_id, cancelled=True)
+                return
+            with _jobs_lock:
+                _jobs[job_id]["status"] = "running"
+                _jobs[job_id]["started_at"] = _now_iso()
+
+            if activate or not use_rpa_publish():
+                _fatal(job_id, "ACL safety gate: only draft-only RPA jobs are allowed")
+                return
+            # Заблокированный экран останавливает сборку: система уходит на
+            # защищённый рабочий стол, браузер перестаёт получать время, и
+            # креатив, который грузится 74 секунды, грузился 42 минуты. Пока
+            # работа идёт, просим не гасить экран; просьба снимается сама,
+            # чем бы работа ни кончилась. Держится она вокруг ВСЕЙ работы, а
+            # не вокруг шага: прерывать нельзя всю. Очередь в это время ждёт
+            # снаружи — держать экран ради ожидания незачем.
+            with keep_display_awake(account_label), _watch_screen_lock(job_id):
+                _run_rpa(
+                    job_id,
+                    slots,
+                    account_label=account_label,
+                    country=country,
+                    activate=False,
+                    dry_run=dry_run,
+                    hand_off=True,
+                )
+    finally:
+        _slots.release(job_id)
 
 
 def _append_result(job_id: str, res: dict[str, Any]) -> None:
@@ -468,6 +532,15 @@ def _run_rpa(
         )
     except Exception as e:
         _fatal(job_id, f"Failed to build campaign drafts: {e}")
+        # Финальное ревью PR #314 (d): исключение сборки черновиков кончает
+        # задание так же, как исключение публикации, — и тоже едет в Sentry
+        # со стеком (раньше — только строка в задании).
+        try:
+            from src import acl_sentry
+
+            acl_sentry.report_job_exception(e, job=job_id, account=account_label, phase="build_drafts")
+        except Exception:
+            pass
         with _jobs_lock:
             _active_publishers.pop(job_id, None)
         return
@@ -534,7 +607,7 @@ def _run_rpa(
             try:
                 from src import acl_sentry
 
-                acl_sentry.report_job_exception(e, job=job_id, account=account_label)
+                acl_sentry.report_job_exception(e, job=job_id, account=account_label, phase="publish")
             except Exception:
                 pass
     finally:
