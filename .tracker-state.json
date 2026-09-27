@@ -538,6 +538,22 @@
           325
         ],
         "recorded_at": "2026-09-26T23:19:01+00:00"
+      },
+      "338": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "independent subagent (Claude Opus 5.5)",
+        "implementer": "ACL-1337 implementer (main session)",
+        "head_sha": "19fadc33f0c322651e0a9042edc6c6b95c8cb8ae",
+        "base_sha": "47152afe0febf85145b04bf9c18f1ec0cf98af8d",
+        "tree_sha": "f4d92c5361dcf21dbc9b2c4fc18cb32fe508360e",
+        "report": "Approved. The change to _discover_owned_debug_port.norm (src/fb_ads_rpa/browser.py:1542-1554) is correct and fixes the root cause of the 2026-09-27 stage incident. On this machine (Python 3.14.3), os.path.realpath of a real GetShortPathNameW name in a temp dir returns the long path, identical to realpath of the long form. A missing tail under a short prefix still expands the existing prefix. A junction resolves to its target, so the same profile can't look like two different ones, and two different directories can't collapse into one. Quotes are stripped before realpath. Live psutil on this machine shows every Mimic --user-data-dir fully in 8.3 form (C:\\Users\\EVGENI~1\\mlx\\profiles\\B18D03~1\\3EF7F4~1\\5D508A~1). The stage log confirms the chain: at 08:45 the profiles were reattached, but ownership failed on the path compare, so _mark_robot_profile was never called. At 12:33 connect_over_cdp timed out and _robot_profile returned False, so the job stopped with no_automation_port (browser.py:2076-2080). The earlier 1443 unowned_port stop at 08:45:47 has the same cause (browser.py:2062-2065). The hand-opened-profile protection is unchanged: a process still has to own a LISTEN socket on its debug port and accept CDP. The new test file, plus the hand-opened, spend-regression and two-minute suites, pass: 67 passed in a detached worktree. Both short-path tests fail against base 47152af, so they do guard the regression. Non-blocking notes: (1) Four substring helpers build needles from the long path and its leaf, and those needles never match 8.3 command lines: _kill_chrome_for_user_data_dir (browser.py:145-184), _profile_process_running (1450-1476), _discover_debug_port (1478-1531) and _profile_pids (1840-1866). They still work only because the main Mimic process carries the profile id in --client-session-id (4/4 live main processes). That is an undocumented MLX detail, so a realpath-based compare there would be sturdier. (2) After this fix, a robot profile whose CDP connect times out now goes to _start_via_mlx_api (browser.py:2090). That may return the same hung port, so the live acceptance criterion should be checked on a real run. (3) realpath costs about 1 ms per call here, roughly 40 ms per check across 38 Mimic processes. That is acceptable, and a raw-string equality short-circuit or cache would remove it. The except fallback is effectively dead. For an unreachable UNC path, realpath returned instantly with an odd C:\\host\\... result, which is harmless because profiles are local. (4) account_spend._dir_spellings (src/analysis_agent/account_spend.py:525) is now a redundant workaround; dashboard track can simplify it later. Follow-up: the only change after the reviewed head 2d1a42d is a merge of work/main (19fadc3); the tree is byte-identical (f4d92c5361dcf21dbc9b2c4fc18cb32fe508360e), so the approval carries over unchanged.",
+        "main_sha": "3e816217f9c352f0922522264d6a26f7343ba947",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          337
+        ],
+        "recorded_at": "2026-09-27T11:24:27+00:00"
       }
     },
     "stage": {
