@@ -1540,7 +1540,18 @@ class MultiloginDirectCDPProvider:
         import psutil
 
         def norm(value: str) -> str:
-            return os.path.normcase(os.path.abspath(value.strip('"'))).replace("\\", "/").rstrip("/").lower()
+            # ACL-1337: Windows отдаёт командную строку профиля с короткими
+            # именами 8.3 (C:\Users\EVGENI~1\mlx\profiles\B18D03~1\…), а ждём мы
+            # длинный путь. abspath короткие имена не раскрывает, и профиль,
+            # поднятый самим роботом, выглядел «открытым руками» — аккаунт
+            # останавливался (27.09, 6540 и 9943 на stage 47152af). realpath
+            # на Windows раскрывает их в длинные.
+            value = value.strip('"')
+            try:
+                value = os.path.realpath(value)
+            except (OSError, ValueError):
+                value = os.path.abspath(value)
+            return os.path.normcase(value).replace("\\", "/").rstrip("/").lower()
 
         wanted = norm(user_data_dir)
         for proc in psutil.process_iter(["name", "exe", "cmdline"]):
