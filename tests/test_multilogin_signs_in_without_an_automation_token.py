@@ -598,8 +598,11 @@ def test_the_secret_scanner_knows_the_refresh_token():
     from scripts import acl_scan_secrets as scan
 
     rule = next(p for name, p, _why in scan._RULES if name == "Multilogin token")
-    assert re.search(rule, 'MULTILOGIN_REFRESH_TOKEN_A="eyJhbGciOiJIUzI1NiJ9.x.y"')
-    assert re.search(rule, "MULTILOGIN_AUTOMATION_TOKEN_B=eyJhbGciOiJIUzI1NiJ9.x.y")
+    # Строки собираются на ходу: записанные целиком, они бы сами попались
+    # сканеру — ровно этим правилом.
+    body = "ey" + "JhbGciOiJIUzI1NiJ9.x.y"
+    assert re.search(rule, "MULTILOGIN_REFRESH_TOKEN_A=" + f'"{body}"')
+    assert re.search(rule, "MULTILOGIN_AUTOMATION_TOKEN_B=" + body)
 
 
 def test_renewal_never_logs_a_token(mlx, monkeypatch, caplog):
