@@ -80,10 +80,14 @@ CAMPAIGN_RETRY_STEPS = frozenset(
 # person has to log in or fix the proxy.
 # simple_create_layout (ACL-1320): Meta opened its new single-screen campaign
 # editor (/adsmanager/manage/simple_create); the recorded flow does not know
-# it, and every replay would leave one more partial draft.
+# it, and every replay would leave one more partial draft.  ACL-1327: the flow
+# walks this editor now; the stop is left for a layout without the Ad set / Ad
+# sections and for FB_RPA_SIMPLE_CREATE=0.
+# lead_terms_not_accepted (ACL-1327): the Page has not accepted Meta's Lead Ads
+# Terms; only a person can accept them, a replay hits the same card.
 NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "browser_closed",
                                       "profile_logged_out", "profile_network",
-                                      "simple_create_layout"})
+                                      "simple_create_layout", "lead_terms_not_accepted"})
 
 
 # Stops and field failures that block publication and need review.
@@ -101,6 +105,8 @@ BLOCKING_REVIEW_STEPS = frozenset(
         # account's job before any campaign instead of closing the window.
         "profile_open_by_hand",
         "simple_create_layout",
+        "lead_terms_not_accepted",
+        "simple_create_more_ads",
         "conversion_event",
         "audience_age",
         "audience_location",

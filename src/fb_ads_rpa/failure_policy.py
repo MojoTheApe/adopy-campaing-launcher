@@ -86,11 +86,28 @@ POLICY: dict[str, tuple[str, str]] = {
         + _profile.MESSAGES[_profile.RESTART_FAILED],
     ),
     # ACL-1320: Meta's new single-screen editor (URL .../simple_create).
+    # ACL-1327: the robot walks this editor; the stop is left for a layout it
+    # does not recognise (no Ad set / Ad section) and for FB_RPA_SIMPLE_CREATE=0.
     "simple_create_layout": (
         BLOCKING,
-        "Meta opened its new single-screen campaign editor for this account; the robot "
-        "does not support it yet - the campaign was stopped and not retried; a partial "
+        "Meta opened its new single-screen campaign editor for this account, and the robot "
+        "could not find its Ad set / Ad sections (or this editor is switched off with "
+        "FB_RPA_SIMPLE_CREATE=0) - the campaign was stopped and not retried; a partial "
         "draft may be left in Ads Manager - check it and delete or finish it by hand",
+    ),
+    # ACL-1327: "Please read and accept Meta's Lead Ads Terms" stayed after Website.
+    _profile.LEAD_TERMS: (
+        BLOCKING,
+        "the Facebook Page has not accepted Meta's Lead Ads Terms; only a person can accept "
+        "them in Meta, so the campaign was stopped and not retried - a partial draft is left "
+        "in Ads Manager - " + _profile.MESSAGES[_profile.LEAD_TERMS],
+    ),
+    # ACL-1327: the single-screen editor path builds the first ad only.
+    "simple_create_more_ads": (
+        BLOCKING,
+        "Meta's single-screen campaign editor was used, and the robot builds only the first "
+        "ad there - the other ads of this campaign were not created; add them by hand in Ads "
+        "Manager or publish the campaign again once the robot supports more ads in this editor",
     ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),

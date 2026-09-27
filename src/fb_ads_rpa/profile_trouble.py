@@ -35,6 +35,7 @@ NETWORK = "profile_network"
 RESTART_FAILED = "profile_restart_failed"
 OPEN_BY_HAND = "profile_open_by_hand"
 SIMPLE_CREATE = "simple_create_layout"
+LEAD_TERMS = "lead_terms_not_accepted"
 
 #: Что сказать человеку — английский, это видно в дешборде.
 MESSAGES = {
@@ -51,8 +52,16 @@ MESSAGES = {
     # ACL-1320, решение координатора 26.09: новый одно-экранный редактор Meta
     # включается на весь кабинет — следующая кампания того же аккаунта упрётся
     # в него же и оставит ещё один недособранный черновик. Останавливаем аккаунт.
-    SIMPLE_CREATE: "Meta opened its new single-screen campaign editor for this account; "
-                   "the robot does not support it yet (ACL-1327)",
+    # ACL-1327: робот этот редактор проходит; остановка осталась для его
+    # разметки, которой робот не знает (нет раздела группы / объявления), и
+    # для отката FB_RPA_SIMPLE_CREATE=0.
+    SIMPLE_CREATE: "Meta opened its new single-screen campaign editor for this account, and the "
+                   "robot could not find its Ad set / Ad sections - check the draft in Ads Manager",
+    # ACL-1327: условия Lead Ads страницы не приняты («Please read and accept
+    # Meta's Lead Ads Terms…») — принимает человек в Meta, робот «Accept» не
+    # жмёт. Страница у кампаний аккаунта одна — следующая упрётся в то же.
+    LEAD_TERMS: "The Facebook Page has not accepted Meta's Lead Ads Terms - open the Page's lead "
+                "ads terms in Meta, accept them, then publish again",
 }
 
 #: Остановки, после которых остальные кампании задания этого аккаунта не
