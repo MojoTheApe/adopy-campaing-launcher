@@ -2771,6 +2771,10 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
         if _loading_visible(page):
             return "ok"
         try:
+            # ACL-1327: Create открыл сразу новый редактор «в один экран» —
+            # это не уход со списка, а удачное нажатие.
+            if _simple.url_is_simple_create(page.url):
+                return "ok"
             if base and page.url.split("?", 1)[0] != base:
                 return "left_list"
         except Exception:
@@ -2874,6 +2878,11 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
         if _tab_gone(page):
             outcome = "gone"
             break
+        # ACL-1327: Create открыл сразу новый редактор — цель выбирается в
+        # нём самом, окна не будет. Ждём, пока отрисуется поле имени.
+        if _simple_create_ready(page):
+            found, outcome = True, "simple_create"
+            break
         frozen = _tab_frozen(page)
         woke = watch.check(frozen=True) if frozen else watch.check()
         now = time.time()
@@ -2941,6 +2950,17 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     except Exception:
         pass
     return found
+
+
+def _simple_create_ready(page: Page) -> bool:
+    """Новый редактор «в один экран» открыт (по адресу) и отрисован (видно
+    поле имени кампании). Только адрес — без чтения разметки на каждом опросе."""
+    try:
+        if not _simple.url_is_simple_create(page.url):
+            return False
+        return page.get_by_placeholder(_simple.NAME_FIELDS["campaign"]).first.is_visible()
+    except Exception:
+        return False
 
 
 def _all_edits_saved(page: Page) -> bool:
@@ -4487,45 +4507,88 @@ def run_recorded_campaign_flow(
     if opened == "create":
         return "create"
 
-    # New Meta UI sometimes shows a Guided/Manual choice before the objective
-    # picker enables Campaign name — click Manual if present, best-effort
-    # (the recording's session apparently started already past this choice).
-    # ACL-1313: сюда приходим, когда окно цели уже отрисовано (радио Leads
-    # видно) — есть ли в нём «Manual campaign setup» и заголовок «Leads»,
-    # видно сразу. Прежде клик по отсутствующему элементу ждал 3 с и 5 с на
-    # каждой кампании.
-    manual = page.get_by_text("Manual campaign setup", exact=False)
-    if _visible_now(manual):
-        try:
-            manual.first.click(timeout=3000)
-            _shot("after_manual")
-        except Exception:
-            pass
+    # ACL-1327: новый редактор Meta «в один экран» (кампания, группа и
+    # объявление — разделы одной страницы). Прежде (ACL-1320) здесь была
+    # остановка аккаунта; теперь свой путь: те же обработчики карточек, но до
+    # раздела уровня доходим прокруткой вместо Next, свёрнутые карточки
+    # раскрываем перед обработчиком, цель кампании проверяем на месте.
+    # Узнаём его в любой момент — по адресу или по разметке (`_simple_create_layout`).
+    # Откат к прежней остановке: FB_RPA_SIMPLE_CREATE=0.
+    simple = False
+    objective_checked = False
 
-    leads_heading = page.get_by_role("heading", name="Leads")
-    if _visible_now(leads_heading):
-        try:
-            leads_heading.first.click(timeout=5000)
-        except Exception:
-            pass
-    # ACL-1313: окна нет — одно ограниченное ожидание, а не пять заходов
-    # `_click` по 8+8 с (~83 с) ради того же отказа.
-    leads_radio = page.get_by_role("radio", name="Leads")
-    try:
-        leads_radio.first.wait_for(state="visible", timeout=int(OBJECTIVE_RADIO_LAST_WAIT_S * 1000))
-        radio_there = True
-    except Exception:
-        radio_there = False
-    if not radio_there or not _click(leads_radio, where="objective_leads"):
-        _shot("fail_objective_leads")
-        return "objective_leads"
-    _shot("after_leads")
+    def _enter_simple(where: str) -> bool:
+        """Включить путь нового редактора; False — он выключен (откат)."""
+        nonlocal simple
+        if simple:
+            return True
+        if _simple.disabled():
+            _shot("fail_simple_create_layout", note="simple_create")
+            return False
+        simple = True
+        _telemetry.record("simple_create", None, note=where)
+        _close_onboarding_tour(page, "simple_create")
+        return True
 
-    if not _click(page.get_by_role("button", name="Continue"), where="objective_continue"):
-        _shot("fail_objective_continue")
-        return "objective_continue"
-    _wait_loading()
-    _shot("after_continue")
+    def _simple_objective_failed() -> bool:
+        """Цель кампании в новом редакторе — Leads (один раз на кампанию)."""
+        nonlocal objective_checked
+        if objective_checked:
+            return False
+        objective_checked = True
+        got = _simple.ensure_leads_objective(page)
+        if got == "failed":
+            _shot("fail_objective_leads", note="simple_create_inline")
+            return True
+        _telemetry.record("simple_objective", None, note=got)
+        return False
+
+    # ACL-1327: Create может открыть новый редактор сразу, без окна цели
+    # (`_wait_objective_dialog` → "simple_create") — тогда цель выбирается в
+    # самом редакторе, а Leads / Continue окна жать нечего.
+    if _simple_create_ready(page) and not _visible_now(page.get_by_role("radio", name="Leads")):
+        if not _enter_simple("no_objective_dialog"):
+            return "simple_create_layout"
+    if not simple:
+        # New Meta UI sometimes shows a Guided/Manual choice before the objective
+        # picker enables Campaign name — click Manual if present, best-effort
+        # (the recording's session apparently started already past this choice).
+        # ACL-1313: сюда приходим, когда окно цели уже отрисовано (радио Leads
+        # видно) — есть ли в нём «Manual campaign setup» и заголовок «Leads»,
+        # видно сразу. Прежде клик по отсутствующему элементу ждал 3 с и 5 с на
+        # каждой кампании.
+        manual = page.get_by_text("Manual campaign setup", exact=False)
+        if _visible_now(manual):
+            try:
+                manual.first.click(timeout=3000)
+                _shot("after_manual")
+            except Exception:
+                pass
+
+        leads_heading = page.get_by_role("heading", name="Leads")
+        if _visible_now(leads_heading):
+            try:
+                leads_heading.first.click(timeout=5000)
+            except Exception:
+                pass
+        # ACL-1313: окна нет — одно ограниченное ожидание, а не пять заходов
+        # `_click` по 8+8 с (~83 с) ради того же отказа.
+        leads_radio = page.get_by_role("radio", name="Leads")
+        try:
+            leads_radio.first.wait_for(state="visible", timeout=int(OBJECTIVE_RADIO_LAST_WAIT_S * 1000))
+            radio_there = True
+        except Exception:
+            radio_there = False
+        if not radio_there or not _click(leads_radio, where="objective_leads"):
+            _shot("fail_objective_leads")
+            return "objective_leads"
+        _shot("after_leads")
+
+        if not _click(page.get_by_role("button", name="Continue"), where="objective_continue"):
+            _shot("fail_objective_continue")
+            return "objective_continue"
+        _wait_loading()
+        _shot("after_continue")
 
     # Live evidence (2026-07-23, first run ever on a fresh account —
     # FacebookDQ204 CR): a one-time onboarding modal ("You no longer need to
@@ -4566,43 +4629,7 @@ def run_recorded_campaign_flow(
     # ACL-1320: окно-экскурсия нового редактора — только своим крестиком.
     _close_onboarding_tour(page, "onboarding_modal")
     _shot("after_onboarding_modal")
-    # ACL-1327: новый редактор Meta «в один экран» (кампания, группа и
-    # объявление — разделы одной страницы). Прежде (ACL-1320) здесь была
-    # остановка аккаунта; теперь свой путь: те же обработчики карточек, но до
-    # раздела уровня доходим прокруткой вместо Next, свёрнутые карточки
-    # раскрываем перед обработчиком, цель кампании проверяем на месте.
-    # Узнаём его в любой момент — по адресу или по разметке (`_simple_create_layout`).
-    # Откат к прежней остановке: FB_RPA_SIMPLE_CREATE=0.
-    simple = False
-    objective_checked = False
-
-    def _enter_simple(where: str) -> bool:
-        """Включить путь нового редактора; False — он выключен (откат)."""
-        nonlocal simple
-        if simple:
-            return True
-        if _simple.disabled():
-            _shot("fail_simple_create_layout", note="simple_create")
-            return False
-        simple = True
-        _telemetry.record("simple_create", None, note=where)
-        _close_onboarding_tour(page, "simple_create")
-        return True
-
-    def _simple_objective_failed() -> bool:
-        """Цель кампании в новом редакторе — Leads (один раз на кампанию)."""
-        nonlocal objective_checked
-        if objective_checked:
-            return False
-        objective_checked = True
-        got = _simple.ensure_leads_objective(page)
-        if got == "failed":
-            _shot("fail_objective_leads", note="simple_create_inline")
-            return True
-        _telemetry.record("simple_objective", None, note=got)
-        return False
-
-    if _simple_create_layout(page) and not _enter_simple("after_continue"):
+    if not simple and _simple_create_layout(page) and not _enter_simple("after_continue"):
         return "simple_create_layout"
 
     def _late_onboarding_modal() -> bool:

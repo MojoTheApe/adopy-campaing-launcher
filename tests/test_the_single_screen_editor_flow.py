@@ -192,3 +192,58 @@ def test_the_classic_wizard_still_creates_more_ads(sim):
     sim["page"].url = EDIT_URL
     sim["run"](additional_ads=[{"ad_name": "Two"}])
     assert sim["created"] == ["Set"]
+
+
+# ── Create открыл новый редактор сразу, без окна цели ───────────────────
+
+def test_create_landing_in_the_new_editor_is_a_press_that_took(monkeypatch):
+    """Прежде такой адрес считался уходом со списка («left_list»): робот
+    возвращался на список и жал Create ещё раз — ещё один черновик."""
+    from unittest.mock import MagicMock
+
+    page = MagicMock()
+    page.url = SIMPLE_URL
+    page.get_by_role.return_value.first.wait_for.side_effect = TimeoutError("no radio")
+    monkeypatch.setattr(dom, "_tab_gone", lambda p: False)
+    monkeypatch.setattr(dom, "_tab_frozen", lambda p: False)
+    monkeypatch.setattr(dom, "_loading_visible", lambda p: False)
+    monkeypatch.setattr(dom, "_sleep_h", lambda *a, **k: None)
+    assert dom._create_took(page, "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1",
+                            timeout_s=1.0) == "ok"
+
+
+def test_the_objective_wait_ends_when_the_new_editor_is_drawn(monkeypatch):
+    from unittest.mock import MagicMock
+
+    page = MagicMock()
+    page.url = SIMPLE_URL
+    page.get_by_role.return_value.first.wait_for.side_effect = TimeoutError("no radio")
+    page.get_by_placeholder.return_value.first.is_visible.return_value = True
+    rows: list = []
+    monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, kw.get("note"))))
+    monkeypatch.setattr(dom, "_tab_gone", lambda p: False)
+    monkeypatch.setattr(dom, "_tab_frozen", lambda p: False)
+    monkeypatch.setattr(dom, "_loading_visible", lambda p: False)
+    out: dict = {}
+    assert dom._wait_objective_dialog(page, first_s=5, loading_max_s=5, poll_s=0.01, out=out) is True
+    assert out["outcome"] == "simple_create"
+    assert ("objective_wait", "simple_create") in rows
+
+
+def test_the_objective_dialog_is_skipped_when_create_opened_the_new_editor(sim, monkeypatch):
+    monkeypatch.setattr(dom, "_simple_create_ready", lambda p: True)
+    monkeypatch.setattr(dom, "_visible_now", lambda loc: False)   # окна цели нет
+    page = sim["page"]
+    pressed: list = []
+    real = page.get_by_role.side_effect
+
+    def by_role(role, name=None, **kw):
+        if name in ("Continue", "Leads"):
+            pressed.append(name)
+        return real(role, name=name, **kw)
+
+    page.get_by_role.side_effect = by_role
+    assert sim["run"]() == ""
+    assert "Continue" not in pressed, "жали Continue окна цели, которого нет"
+    assert ("simple_create", None, "no_objective_dialog") in sim["rows"]
+    assert sim["calls"].count(("objective",)) == 1, "цель в самом редакторе не проверили"
