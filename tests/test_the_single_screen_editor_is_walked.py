@@ -51,7 +51,11 @@ SIMPLE_URL = ("https://adsmanager.facebook.com/adsmanager/manage/simple_create?a
 _META_JS = """
 <script>
 window.clicks = [];
+window.cardClicks = [];
 document.addEventListener('click', (ev) => {
+  const any = ev.target.closest('[role=button][aria-pressed]');
+  if (any) window.cardClicks.push(any.getAttribute('aria-labelledby') + ':' + any.getAttribute('aria-pressed'));
+  if (ev.target.closest('#cover')) window.clicks.push('COVER');
   const btn = ev.target.closest('[role=button][aria-pressed="false"]');
   if (btn && window.cardsOpen !== false) {
     const id = btn.getAttribute('aria-labelledby');
@@ -189,6 +193,55 @@ def test_a_card_is_seen_open_by_its_body_when_the_button_state_lags(page):
     _open(page, EDITOR, SIMPLE_URL)
     page.evaluate("window.pressedStays = true")
     assert sc.open_card(page, "Audience") == "opened"
+
+
+def _card_id(page, title):
+    return page.evaluate("""(t) => { const h = [...document.querySelectorAll('[role=toolbar] [role=heading]')]
+        .find(h => h.textContent.trim() === t); return h.closest('[role=toolbar]').id; }""", title)
+
+
+def test_a_covered_header_never_sends_the_click_to_an_earlier_card(page):
+    """Ревью PR #340 (F1): метка кнопки прежней карточки (Audience) оставалась,
+    и запасной DOM-клик по Placements с перекрытой шапкой уходил в Audience —
+    у Meta это свернуло бы заполненную карточку. Перекрытую шапку не жмём
+    доверенным кликом вовсе (он попал бы в то, что сверху)."""
+    _open(page, EDITOR, SIMPLE_URL)
+    assert sc.open_card(page, "Audience") == "opened"
+    audience, placements = _card_id(page, "Audience"), _card_id(page, "Placements")
+    page.evaluate("""() => { window.cardClicks = []; const c = document.createElement('div'); c.id = 'cover';
+        c.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:99999';
+        document.body.appendChild(c); }""")
+    assert sc.open_card(page, "Placements") == "opened"
+    clicks = page.evaluate("window.cardClicks")
+    assert not [c for c in clicks if c.startswith(audience + ":")], clicks
+    assert placements + ":false" in clicks
+    assert "COVER" not in page.evaluate("window.clicks"), "доверенный клик ушёл в перекрытие"
+
+
+def test_only_the_current_card_carries_the_button_mark(page):
+    """Ревью PR #340 (F1): после второй карточки метки первой не остаётся."""
+    _open(page, EDITOR, SIMPLE_URL)
+    sc.open_card(page, "Audience")
+    page.evaluate("window.cardsOpen = false")          # вторая не раскроется — метка останется
+    sc.open_card(page, "Placements")
+    marks = page.evaluate("[...document.querySelectorAll('[data-acl-card-button]')]"
+                          ".map(e => e.getAttribute('aria-labelledby'))")
+    assert marks == [_card_id(page, "Placements")]
+
+
+def test_the_fallback_click_takes_only_the_button_of_its_own_card(page):
+    """Запасной DOM-клик сверяет метку с шапкой своей карточки: чужая метка
+    (например, оставленная другим путём) не нажимается."""
+    _open(page, EDITOR, SIMPLE_URL)
+    audience, placements = _card_id(page, "Audience"), _card_id(page, "Placements")
+    page.evaluate("""([a, p]) => {
+        const btn = (id) => [...document.querySelectorAll('[role=button][aria-pressed]')]
+          .find(b => b.getAttribute('aria-labelledby') === id);
+        btn(a).setAttribute('data-acl-card-button', a);
+        btn(p).setAttribute('data-acl-card-button', p);
+        window.cardClicks = []; }""", [audience, placements])
+    assert page.evaluate(sc._CARD_DOM_CLICK_JS, placements) is True
+    assert page.evaluate("window.cardClicks") == [placements + ":false"]
 
 
 def test_an_open_card_is_not_clicked_again(page):

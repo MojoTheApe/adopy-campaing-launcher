@@ -167,7 +167,10 @@ def scroll_to_level(page, level: str, *, budget_s: float = 20.0) -> dict:
 _CARD_JS = r"""
   (title) => {
     const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
-    document.querySelectorAll('[data-acl-card-body]').forEach(e => e.removeAttribute('data-acl-card-body'));
+    // Ревью PR #340 (F1): метки прошлой карточки снимаются обе — иначе
+    // запасной клик нашёл бы кнопку прежней (уже раскрытой) карточки.
+    document.querySelectorAll('[data-acl-card-body], [data-acl-card-button]').forEach(e => {
+      e.removeAttribute('data-acl-card-body'); e.removeAttribute('data-acl-card-button'); });
     const heads = [...document.querySelectorAll('[role=toolbar] [role=heading]')]
       .filter(h => norm(h.textContent) === title);
     for (const h of heads) {
@@ -191,8 +194,8 @@ _CARD_JS = r"""
       const r = bar.getBoundingClientRect();
       const x = r.x + Math.min(r.width / 2, 120), y = r.y + r.height / 2;
       const hit = document.elementFromPoint(x, y);
-      btn.setAttribute('data-acl-card-button', '1');
-      return { found: true, pressed: false, x, y, hit: !!hit && btn.contains(hit), body: !!body };
+      btn.setAttribute('data-acl-card-button', bar.id);
+      return { found: true, pressed: false, x, y, hit: !!hit && btn.contains(hit), body: !!body, bar: bar.id };
     }
     return { found: false };
   }
@@ -213,6 +216,20 @@ _CARD_OPEN_JS = r"""
     });
   }
 """
+
+
+_CARD_DOM_CLICK_JS = r"""
+  (bar) => {
+    if (!bar) return false;
+    const b = [...document.querySelectorAll('[data-acl-card-button]')]
+      .find(e => e.getAttribute('data-acl-card-button') === bar
+                 && (e.getAttribute('aria-labelledby') || '').split(/\s+/).includes(bar));
+    if (!b) return false;
+    b.click();
+    return true;
+  }
+"""
+"""DOM-клик по кнопке-сводке карточки с шапкой `bar` — и ни по какой другой."""
 
 
 def _card_open(page, title: str, wait_s: float) -> bool:
@@ -250,9 +267,10 @@ def open_card(page, title: str) -> str:
         if _card_open(page, title, 3.0):
             how = "cdp"
     if not how:
+        # Запасной DOM-клик — только по кнопке этой карточки: метка несёт id
+        # её шапки, и он сверяется с подписью кнопки.
         try:
-            md._eval_bounded(page, "() => { const b = document.querySelector('[data-acl-card-button]');"
-                                   " if (!b) return false; b.click(); return true; }")
+            md._eval_bounded(page, _CARD_DOM_CLICK_JS, state.get("bar") or "")
         except Exception:
             pass
         if _card_open(page, title, 3.0):
