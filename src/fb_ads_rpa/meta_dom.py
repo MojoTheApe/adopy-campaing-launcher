@@ -15,6 +15,7 @@ from playwright.sync_api import Frame, Page
 from src.fb_ads_rpa import page_liveness as _liveness
 from src.fb_ads_rpa import profile_trouble as _trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
+from src.fb_ads_rpa import simple_create as _simple
 
 #: Порог, за которым Playwright отказывается передавать файл.
 #:
@@ -8177,7 +8178,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         at_text = _wizard_past_media(page)
         _close_creative_setup_modal(page)
         _sleep_h(0.5)
-        if "/ads/edit/" in page.url and _verify_ad_media_present(page):
+        if _ad_editor_url(page.url) and _verify_ad_media_present(page):
             right, detail = _verify_ad_media_is_the_file(page, filename)
             ad_thumbs = _ad_media_thumb_ids(page)
             if picked_thumbs and ad_thumbs:
@@ -8230,7 +8231,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Мастер продвинулся, а медиа на объявлении нет. Выбор при этом
         # где-то остался, и снять его отсюда уже нечем: сетки на экране нет.
         _telemetry.record("ad_creative_reuse", False, note="dirty_after_advance",
-                          diag={"picks": log[-3:], "url_is_ad": "/ads/edit/" in (page.url or "")})
+                          diag={"picks": log[-3:], "url_is_ad": _ad_editor_url(page.url or "")})
         return REUSE_DIRTY
     except Exception as exc:
         # Next перерисовал диалог прямо под кликом — частый случай, когда
@@ -9614,14 +9615,14 @@ def upload_ad_creative(
         # Confirm we're still on the ad editor, not bounced back to the ads
         # list by some other in-between click — recover via the saved edit URL
         # rather than guessing a re-open control.
-        if edit_url and "/ads/edit/" not in page.url:
+        if edit_url and not _ad_editor_url(page.url):
             try:
                 page.goto(edit_url)
                 _sleep_h(1.0)
             except Exception:
                 return False
 
-        if "/ads/edit/" not in page.url:
+        if not _ad_editor_url(page.url):
             return False
 
         # Confirmed live (2026-07-29): being on the right URL says nothing about
@@ -12037,18 +12038,25 @@ def _close_onboarding_tour(page: Page, where: str = "") -> str:
 #: Записанный поток его не знает: кампании падали на `campaign_name` и
 #: `next_to_adset` после минут попыток. За всю историю прогонов такой адрес
 #: встречался только в этих отказах.
-_SIMPLE_CREATE_PATH = "/adsmanager/manage/simple_create"
+_SIMPLE_CREATE_PATH = _simple.SIMPLE_CREATE_PATH
+
+
+def _ad_editor_url(url) -> bool:
+    """Страница, на которой редактируется объявление: прежний мастер
+    (`/ads/edit/`) или новый редактор «в один экран» (ACL-1327) — там
+    объявление живёт на той же странице, что кампания и группа."""
+    url = url if isinstance(url, str) else ""
+    return "/ads/edit/" in url or _simple.url_is_simple_create(url)
 
 
 def _simple_create_layout(page: Page) -> bool:
-    """Открыт новый редактор Meta «в один экран» (по адресу, без обращения к вкладке)."""
-    try:
-        url = page.url
-    except Exception:
-        return False
-    if not isinstance(url, str):
-        return False
-    return _SIMPLE_CREATE_PATH in url.split("?", 1)[0]
+    """Открыт новый редактор Meta «в один экран» — по адресу или по разметке.
+
+    ACL-1327: по одному адресу 9e7d67471c6b промахнулся (адрес сменился
+    позже проверки) — теперь и по разделам `/am/editor:*` / футеру Publish
+    нового редактора (`simple_create.is_simple_create`, чтение ограниченное).
+    """
+    return _simple.is_simple_create(page)
 
 
 def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
