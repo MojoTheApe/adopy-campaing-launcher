@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -336,12 +337,24 @@ def _dotenv_line(key: str, value: str) -> str:
     return f"{key}={json.dumps(value, ensure_ascii=False)}"
 
 
+#: Замок чтения-изменения-записи машинного `.env` (ACL-1335, ревью PR #339).
+#: Сама запись атомарна, но два писателя читали один и тот же старый файл, и
+#: второй `replace` стирал изменение первого: поворот refresh-токена слота A из
+#: потока робота терял запись слота B (200 из 200 в повторе). RLock — потому
+#: что `migrate_legacy_env` внутри зовёт `update_machine_env` снова.
+_MACHINE_ENV_LOCK = threading.RLock()
+
+
 def update_machine_env(values: dict[str, str]) -> str:
     """Atomically update machine-local `.env`; never write secrets to checkout."""
     for key in values:
         if not _ENV_KEY.fullmatch(key):
             raise ValueError(f"invalid environment key: {key!r}")
+    with _MACHINE_ENV_LOCK:
+        return _update_machine_env_locked(values)
 
+
+def _update_machine_env_locked(values: dict[str, str]) -> str:
     target = Path(get_machine_env_path())
     if not target.exists():
         migrate_legacy_env(create_from_example=True)
