@@ -8163,18 +8163,36 @@ function amapMlPaint(block) {
   var line = ml.querySelector('.amap-ml-line');
   var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[inst]) || inst;
   var alive = !!(state && state.alive);
+  /* ACL-1335: слот подключён либо входом (продлевается сам), либо токеном
+     автоматизации — строка говорит, каким. Истёкший вход лечится кнопкой
+     Reconnect, и сообщение называет именно её. */
+  var signedIn = !!(state && state.method === 'signin');
+  var expiredSignin = !!(state && state.reason === 'signin_expired');
   line.textContent = 'Multilogin ' + label + ': ';
   line.title = (state && (state.error || state.reason)) || '';
   var mark = document.createElement('b');
   mark.className = alive ? 'amap-ml-ok' : 'amap-ml-off';
   mark.textContent = !state ? 'checking…' : alive ? 'connected' :
+    expiredSignin ? 'sign-in expired — press Reconnect' :
+    signedIn ? 'sign-in could not be renewed' :
     state.reason === 'expired' ? 'token expired' : state.has_token ? 'token could not be verified' : 'not connected';
   line.appendChild(mark);
-  if (alive && state.email) line.appendChild(document.createTextNode(' · ' + state.email));
-  if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
-  ml.querySelector('.amap-ml-open').hidden = !state || alive;
+  if (alive && signedIn) {
+    line.appendChild(document.createTextNode(' · signed in as ' + (state.email || '?')
+      + (state.workspace ? ' · ' + state.workspace : '') + ' · renews automatically'));
+  } else {
+    if (alive && state.method === 'automation') line.appendChild(document.createTextNode(' · automation token'));
+    if (alive && state.email) line.appendChild(document.createTextNode(' · ' + state.email));
+    if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
+  }
+  var canReconnect = alive || expiredSignin || (signedIn && !alive);
+  ml.querySelector('.amap-ml-open').hidden = !state || canReconnect;
+  var again = ml.querySelector('.amap-ml-reconnect');
+  if (again) again.hidden = !state || !canReconnect;
   var signin = ml.querySelector('.amap-ml-signin');
-  if (alive && signin) signin.remove();
+  // Форма переподключения живёт, пока новый вход не удался: старое
+  // подключение при этом продолжает работать.
+  if (alive && signin && !signin.dataset.reconnect) signin.remove();
 }
 function amapMlPaintAll() { document.querySelectorAll('.amap-add').forEach(amapMlPaint); }
 function amapMlRefresh(inst, force) {
@@ -8194,13 +8212,17 @@ function amapMlRefresh(inst, force) {
   AMAP_ML_PENDING[inst] = pending;
   return pending;
 }
-function amapMlOpen(btn) {
+function amapMlOpen(btn, reconnect) {
   var block = amapMlBlock(btn), inst = amapMlInstance(block);
-  if (AMAP_ML_STATE[inst] && AMAP_ML_STATE[inst].alive) return;
+  // Reconnect открывает форму и на подключённом слоте (ACL-1335); обычная
+  // кнопка — только когда подключения нет.
+  if (!reconnect && AMAP_ML_STATE[inst] && AMAP_ML_STATE[inst].alive) return;
   // A pending sign-in owns its form until its response; never detach its inputs.
   if (document.querySelector('.amap-ml-signin[data-busy]')) return;
   document.querySelectorAll('.amap-ml-signin').forEach(function (el) { el.remove(); });
   block.querySelector('.amap-ml').appendChild(document.getElementById('amap-ml-signin-template').content.cloneNode(true));
+  var form = block.querySelector('.amap-ml-signin');
+  if (reconnect) form.dataset.reconnect = '1';
   block.querySelector('.amap-ml-email').focus();
 }
 function amapInstanceChanged(sel) {
@@ -8216,58 +8238,108 @@ function amapMlSay(block, text, bad) {
   msg.textContent = text;
   msg.style.color = bad ? 'var(--danger)' : 'var(--muted)';
 }
-async function amapMlSubmit(btn, paste) {
+/* Метка слота («Inhouse», «KLD») подсказывает, какое рабочее пространство
+   выбрать: совпадение имени целиком, потом вхождение; иначе — первое, где
+   роль позволяет запускать профили (ACL-1335). */
+function amapMlSuggest(list, label) {
+  var want = String(label || '').trim().toLowerCase();
+  var name = function (w) { return String(w.name || '').trim().toLowerCase(); };
+  var hit = want && (list.filter(function (w) { return name(w) === want; })[0]
+    || list.filter(function (w) { var n = name(w); return n && (n.indexOf(want) >= 0 || want.indexOf(n) >= 0); })[0]);
+  hit = hit || list.filter(function (w) { return w.can_launch !== false; })[0] || list[0];
+  return hit ? hit.workspace_id : '';
+}
+function amapMlShowPicker(block, form, inst, j) {
+  var pick = form.querySelector('.amap-ml-pick'), sel = form.querySelector('.amap-ml-ws');
+  var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[inst]) || inst;
+  sel.replaceChildren();
+  (j.workspaces || []).forEach(function (w) {
+    var o = document.createElement('option');
+    o.value = w.workspace_id;
+    o.textContent = (w.name || w.workspace_id) + (w.role ? ' · ' + w.role : '')
+      + (w.can_launch === false ? ' · cannot launch profiles' : '');
+    sel.appendChild(o);
+  });
+  sel.value = amapMlSuggest(j.workspaces || [], label);
+  form.dataset.pending = j.pending || '';
+  pick.hidden = false;
+  amapMlSay(block, 'Several Multilogin workspaces — pick the one for ' + label + '.');
+}
+async function amapMlConnected(block, form, inst, paste) {
+  /* A new workspace token invalidates both cached profiles and in-flight
+     results. Ключ кэша теперь «инстанс + набранное», поэтому чистим ВСЕ
+     записи этого инстанса: удалить одну по старому ключу значило бы
+     оставить на экране результаты, найденные прошлым токеном, — то есть
+     чужого рабочего пространства. */
+  Object.keys(_mlxCache).forEach(function (k) {
+    if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxCache[k];
+  });
+  Object.keys(_mlxLoading).forEach(function (k) {
+    if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxLoading[k];
+  });
+  document.querySelectorAll('.amap-add').forEach(function (b) {
+    if (amapMlInstance(b) !== inst) return;
+    b._amapGeneration = (b._amapGeneration || 0) + 1;
+    var hits = b.querySelector('.amap-hits');
+    if (hits) { hits.replaceChildren(); hits.hidden = true; }
+  });
+  form.querySelector('.amap-ml-token').value = '';
+  // Новое подключение удалось — форма переподключения больше не нужна.
+  delete form.dataset.reconnect;
+  amapMlSay(block, (paste ? 'Token saved' : 'Signed in') + '; checking connection…');
+  var state = await amapMlRefresh(inst, true);
+  if (state && state.alive && form.isConnected) form.remove();
+  amapMlSay(block, state && state.alive ? 'Connected. Reload to search profiles.' :
+    'Saved, but the connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
+}
+async function amapMlSend(btn, url, data, busyText, paste) {
   var block = amapMlBlock(btn), inst = amapMlInstance(block);
   var form = btn.closest('.amap-ml-signin');
   if (form.dataset.busy) return;
-  var pass = form.querySelector('.amap-ml-pass'), token = form.querySelector('.amap-ml-token');
-  var data = paste ? {token: token.value.trim(), instance: inst} : {
-    email: form.querySelector('.amap-ml-email').value.trim(), password: pass.value, save_token: true, instance: inst
-  };
-  if (paste ? !data.token : !data.email || !data.password) {
-    amapMlSay(block, paste ? 'Paste the token first' : 'Email and password, please', true); return;
-  }
+  var pass = form.querySelector('.amap-ml-pass');
   form.dataset.busy = '1';
   var selector = block.querySelector('.amap-inst');
   selector.disabled = true;
   form.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
-  amapMlSay(block, paste ? 'Saving…' : 'Signing in…');
+  amapMlSay(block, busyText);
   try {
-    var response = await fetch(paste ? '/multilogin-save-token' : '/multilogin-signin', {
+    var response = await fetch(url, {
       method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
     });
     var j = await response.json();
     if (!response.ok || !j || !j.ok) throw new Error((j && j.error) || 'Connection failed');
-    if (!paste && !j.token_saved) throw new Error(j.token_error || 'Signed in, but no automation token was saved. Ask the workspace owner for a token.');
-    /* A new workspace token invalidates both cached profiles and in-flight
-       results. Ключ кэша теперь «инстанс + набранное», поэтому чистим ВСЕ
-       записи этого инстанса: удалить одну по старому ключу значило бы
-       оставить на экране результаты, найденные прошлым токеном, — то есть
-       чужого рабочего пространства. */
-    Object.keys(_mlxCache).forEach(function (k) {
-      if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxCache[k];
-    });
-    Object.keys(_mlxLoading).forEach(function (k) {
-      if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxLoading[k];
-    });
-    document.querySelectorAll('.amap-add').forEach(function (b) {
-      if (amapMlInstance(b) !== inst) return;
-      b._amapGeneration = (b._amapGeneration || 0) + 1;
-      var hits = b.querySelector('.amap-hits');
-      if (hits) { hits.replaceChildren(); hits.hidden = true; }
-    });
-    token.value = '';
-    amapMlSay(block, 'Token saved; checking connection…');
-    var state = await amapMlRefresh(inst, true);
-    amapMlSay(block, state && state.alive ? 'Connected. Reload to search profiles.' :
-      'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
+    if (j.needs_workspace) { amapMlShowPicker(block, form, inst, j); return; }
+    if (!paste && !j.token_saved) throw new Error(j.token_error || 'Signed in, but the connection was not saved.');
+    form.querySelector('.amap-ml-pick').hidden = true;
+    delete form.dataset.pending;
+    await amapMlConnected(block, form, inst, paste);
   } catch (e) { amapMlSay(block, String(e.message || e), true); }
   finally {
+    // Пароль не переживает запрос — даже когда дальше выбор пространства.
     pass.value = '';
     delete form.dataset.busy;
     selector.disabled = false;
     form.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
   }
+}
+function amapMlSubmit(btn, paste) {
+  var block = amapMlBlock(btn), inst = amapMlInstance(block);
+  var form = btn.closest('.amap-ml-signin');
+  var pass = form.querySelector('.amap-ml-pass'), token = form.querySelector('.amap-ml-token');
+  var data = paste ? {token: token.value.trim(), instance: inst} : {
+    email: form.querySelector('.amap-ml-email').value.trim(), password: pass.value, save_token: true, instance: inst
+  };
+  if (paste ? !data.token : !data.email || !data.password) {
+    amapMlSay(block, paste ? 'Paste the token first' : 'Email and password, please', true); return Promise.resolve();
+  }
+  return amapMlSend(btn, paste ? '/multilogin-save-token' : '/multilogin-signin', data,
+                    paste ? 'Saving…' : 'Signing in…', paste);
+}
+function amapMlPickWorkspace(btn) {
+  var block = amapMlBlock(btn), inst = amapMlInstance(block);
+  var form = btn.closest('.amap-ml-signin');
+  var data = {pending: form.dataset.pending || '', workspace_id: form.querySelector('.amap-ml-ws').value, instance: inst};
+  return amapMlSend(btn, '/multilogin-signin-workspace', data, 'Opening the workspace…', false);
 }
 function amapMlSignin(btn) { return amapMlSubmit(btn, false); }
 function amapMlSaveToken(btn) { return amapMlSubmit(btn, true); }
@@ -12784,6 +12856,10 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick) {
     <button type="button" class="amap-btn" onclick="amapMlSignin(this)">Connect</button>
     <input type="password" class="amap-ml-token" placeholder="or paste automation token" size="22" autocomplete="off">
     <button type="button" class="amap-btn" onclick="amapMlSaveToken(this)">Save token</button>
+    <span class="amap-ml-pick" hidden>
+      <select class="amap-ml-ws" aria-label="Multilogin workspace"></select>
+      <button type="button" class="amap-btn primary" onclick="amapMlPickWorkspace(this)">Use workspace</button>
+    </span>
   </div>
 </template>
 <dialog id="amap-rpa-help">
