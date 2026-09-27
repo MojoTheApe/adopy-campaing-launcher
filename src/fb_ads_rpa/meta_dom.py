@@ -3725,11 +3725,13 @@ _FURTHER_LIMIT_ROW_JS = r"""
       await tick();
       while (!ready() && performance.now() - t0 < 700) await tick();
     };
-    // Строки-кнопки: разложенные (на странице с размером) и неразложенные —
-    // ACL-1332, 6540 27.09: редактор Meta не раскладывает карточку за
-    // экраном, строка 0×0, и ACL-1324 её просто не видел (`found:0`).
+    // Строки-кнопки по трём корзинам: разложенные (стиль + размер), в потоке
+    // 0×0 и скрытые (display:none / visibility:hidden) — ACL-1332, 6540 27.09:
+    // редактор Meta не раскладывает карточку за экраном, строка 0×0, и ACL-1324
+    // её просто не видел (`found:0`). Ревью PR #334 (F2): скрытая копия фразы
+    // не должна делать из настоящей строки 0×0 «две строки».
     const collect = () => {
-      const laid = [], unlaid = [];
+      const laid = [], flow = [], hidden = [];
       let mixed = 0;
       for (const e of document.querySelectorAll('*')) {
         if (!phrase.test(own(e)) || e.closest('[role=dialog]')) continue;
@@ -3744,31 +3746,32 @@ _FURTHER_LIMIT_ROW_JS = r"""
         }
         const row = ctl || e;
         if (row.disabled || row.getAttribute('aria-disabled') === 'true') continue;
-        const bucket = laidOut(row) ? laid : unlaid;
+        const bucket = !styled(row) ? hidden : sized(row) ? laid : flow;
         if (!bucket.includes(row)) bucket.push(row);
       }
-      return { laid, unlaid, mixed };
+      return { laid, flow, hidden, mixed };
     };
     document.querySelectorAll('[data-acl-further-limit]').forEach(e => e.removeAttribute('data-acl-further-limit'));
     let got = collect();
     let section = false;
-    if (!got.laid.length && !got.unlaid.length) {
+    const none = (g) => !g.laid.length && !g.flow.length && !g.hidden.length;
+    if (none(got)) {
       // Строки нет вовсе — карточка аудитории может быть ещё не смонтирована:
       // её раздел в центр, кадр, и искать заново.
       const sec = document.getElementById('campaignTargetingStaticExtendedPGDSection');
       if (sec && sec.getClientRects().length) {
         sec.scrollIntoView({ block: 'start', behavior: 'instant' });
-        await settle(() => { const g = collect(); return g.laid.length + g.unlaid.length > 0; });
+        await settle(() => !none(collect()));
         got = collect();
         section = true;
       }
     }
-    // Разложенная строка важнее неразложенных; неразложенные — только если
-    // разложенной нет. Две и больше — неизвестно, какая наша (ACL-1250).
-    const pool = got.laid.length ? got.laid : got.unlaid;
+    // Старшая непустая корзина: разложенные, затем 0×0 в потоке, затем
+    // скрытые. Две и больше в ней — неизвестно, какая наша (ACL-1250).
+    const pool = [got.laid, got.flow, got.hidden].find(b => b.length) || [];
     if (pool.length !== 1) return { found: pool.length, mixed: got.mixed, section };
     const row = pool[0];
-    const wasLaid = got.laid.length === 1;
+    const wasLaid = pool === got.laid;
     row.setAttribute('data-acl-further-limit', '1');
     // В центр — сама строка, если у неё есть место на странице (пусть 0×0);
     // иначе (display:none до раскладки) — ближайший предок с размером.
