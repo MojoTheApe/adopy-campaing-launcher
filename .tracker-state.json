@@ -554,6 +554,22 @@
           337
         ],
         "recorded_at": "2026-09-27T11:24:27+00:00"
+      },
+      "334": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "independent subagent (Claude Opus 5.5)",
+        "implementer": "ACL-1332 implementation subagent",
+        "head_sha": "089852a59755bf7582344d97febea75dee845e53",
+        "base_sha": "47152afe0febf85145b04bf9c18f1ec0cf98af8d",
+        "tree_sha": "987002fd26f0ff5c62d0d1d3f943ffd1bed0ac89",
+        "report": "Re-review of 1ffd780..089852a (merge 5841c18 is tree-identical to 1ffd780). F2 fixed: rows are split into laid-out, in-flow 0x0 and hidden (display:none/visibility:hidden) buckets, the pool is the highest non-empty bucket and ambiguity (found>=2) is counted only within it, so a hidden copy no longer turns a real 0x0 row into two; the Save audience guard, mixed gate, dialog exclusion and disabled check are untouched. F1 fixed: 9 new tests (19/19 in the file, suggest-layout 14/14, radio 3/3 green); my own runner killed 12/12 spot-check mutations on the new head, including all branches that survived before (late-dialog no-re-press, text fallback for a never-laid row, bucket merging/ordering, style check in laidOut and bucketing, tall-ancestor start and re-centre, dialog exclusion, disabled, hit gate). No new defects.",
+        "main_sha": "3e816217f9c352f0922522264d6a26f7343ba947",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          332
+        ],
+        "recorded_at": "2026-09-27T11:24:37+00:00"
       }
     },
     "stage": {
