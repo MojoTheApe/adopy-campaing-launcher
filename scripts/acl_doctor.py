@@ -324,6 +324,12 @@ def check_multilogin_token() -> None:
 
     provider = get_browser_provider()
     required = provider in {"multilogin", "multilogin_attach"}
+    # ACL-1335: машина, подключённая входом, токена автоматизации не держит.
+    from src.meta_campaign_agent.mlx_credentials import has_saved_session
+
+    if not (os.environ.get("MULTILOGIN_AUTOMATION_TOKEN_A") or "").strip() and has_saved_session("A"):
+        report(OK, "Multilogin A", "signed in (renews automatically)")
+        return
     check_env_key(
         "MULTILOGIN_AUTOMATION_TOKEN_A",
         required=required,

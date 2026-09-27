@@ -89,8 +89,8 @@ _RULES: list[tuple[str, str, str]] = [
     ),
     (
         "Multilogin token",
-        r"MULTILOGIN_AUTOMATION_TOKEN[_A-Z]*\s*=\s*ey[A-Za-z0-9_-]{10,}",
-        "рабочий токен Multilogin",
+        r"MULTILOGIN_(?:AUTOMATION|REFRESH)_TOKEN[_A-Z]*\s*=\s*[\"']?ey[A-Za-z0-9_-]{10,}",
+        "рабочий токен Multilogin (автоматизации или refresh-токен входа, ACL-1335)",
     ),
 ]
 

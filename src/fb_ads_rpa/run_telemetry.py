@@ -78,6 +78,11 @@ def normalise_step(label: str) -> tuple[str, bool | None]:
 _SCRUB = (
     (re.compile(r"((?:access_token|token|password|authorization|fb_dtsg|lsd)=)[^&\s\"'<>]{1,16384}", re.I), r"\1<hidden>"),
     (re.compile(r"\bBearer [A-Za-z0-9._~+/-]{1,16384}", re.I), "Bearer <hidden>"),
+    # ACL-1335: токены Multilogin (сессия, refresh, автоматизация) — JWT, и
+    # вход теперь сам себя продлевает, так что такие строки ходят по процессу
+    # постоянно. Ловим и голыми (в тексте исключения), и в JSON под *token.
+    (re.compile(r"\beyJ[A-Za-z0-9_-]{6,16384}\.[A-Za-z0-9_-]{6,16384}\.[A-Za-z0-9_-]{6,16384}"), "<jwt>"),
+    (re.compile(r"(\"(?:[a-z_]*token|password|authorization)\"\s*:\s*\")[^\"]{1,16384}", re.I), r"\1<hidden>"),
     (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
     (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<uuid>"),
     (re.compile(r"\b\d{10,}\b"), "<digits>"),
@@ -92,10 +97,17 @@ def scrub(text: str) -> str:
     return out
 
 
+def _secret_key(key) -> bool:
+    """Ключ, значение под которым не уезжает никогда (ACL-1335: и refresh-токен)."""
+    name = str(key).lower()
+    return (name in {"token", "access_token", "password", "authorization", "fb_dtsg", "lsd"}
+            or name.endswith("token") or "password" in name or "refresh_token" in name)
+
+
 def scrub_diag(value):
     """Explicit step diagnostics share the same export boundary as page context."""
     if isinstance(value, dict):
-        return {key: ("<hidden>" if str(key).lower() in {"token", "access_token", "password", "authorization", "fb_dtsg", "lsd"} else scrub_diag(item))
+        return {key: ("<hidden>" if _secret_key(key) else scrub_diag(item))
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [scrub_diag(item) for item in value]

@@ -226,13 +226,18 @@ def running_profiles_from_launcher() -> list[dict]:
     except Exception:
         return []
 
+    from src.meta_campaign_agent import mlx_credentials
+
     for cfg in _launcher_instances():
         try:
+            # ACL-1335: токен — у поставщика слота (живой токен автоматизации
+            # или сохранённый вход), а не прямо из `.env`.
+            token = mlx_credentials.bearer_for(cfg)
             resp = requests.get(
                 f"{cfg.launcher_base_v1}/profile/statuses",
                 headers={
                     "Accept": "application/json",
-                    "Authorization": f"Bearer {cfg.automation_token}",
+                    "Authorization": f"Bearer {token}",
                 },
                 timeout=_LAUNCHER_TIMEOUT,
             )

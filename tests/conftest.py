@@ -79,6 +79,42 @@ def _telemetry_off_the_live_journal(tmp_path_factory, monkeypatch):
     yield
 
 
+# Тесты не входят в настоящий Multilogin (ACL-1335).
+#
+# Слот, подключённый входом, сам продлевает токен запросом к
+# api.multilogin.com. Модули, которые при импорте зовут `load_env()`, кладут в
+# окружение настоящий вход с машины — и любой тест, дошедший до лаунчера,
+# пошёл бы продлевать его по сети. Поэтому сохранённый вход убирается из
+# окружения на каждый тест, а поставщики забывают токены в памяти; тест,
+# которому вход нужен, кладёт свой поддельный сам.
+@pytest.fixture(autouse=True)
+def _no_real_multilogin_signin(monkeypatch):
+    # setenv перед delenv — чтобы monkeypatch запомнил исходное состояние и
+    # после теста вернул его, даже если код под тестом сам писал в окружение
+    # (подключение пишет туда вход и откладывает токен автоматизации).
+    for slot in ("A", "B"):
+        for kind in ("EMAIL", "REFRESH_TOKEN", "WORKSPACE_ID", "WORKSPACE_NAME", "WORKSPACE_ROLE",
+                     "AUTOMATION_TOKEN_PREVIOUS"):
+            name = f"MULTILOGIN_{kind}_{slot}" if kind != "AUTOMATION_TOKEN_PREVIOUS" \
+                else f"MULTILOGIN_AUTOMATION_TOKEN_{slot}_PREVIOUS"
+            monkeypatch.setenv(name, "")
+            monkeypatch.delenv(name)
+        token = f"MULTILOGIN_AUTOMATION_TOKEN_{slot}"
+        if token in os.environ:
+            monkeypatch.setenv(token, os.environ[token])
+        else:
+            monkeypatch.setenv(token, "")
+            monkeypatch.delenv(token)
+    try:
+        from src.meta_campaign_agent import mlx_credentials
+    except Exception:
+        yield
+        return
+    mlx_credentials.reset()
+    yield
+    mlx_credentials.reset()
+
+
 @pytest.fixture
 def enriched_df() -> pd.DataFrame:
     """Return an enriched DataFrame as if compute_metrics + enrich_structure ran.
