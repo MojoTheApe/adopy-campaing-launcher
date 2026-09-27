@@ -43,11 +43,25 @@ def _claims(token: str) -> dict:
         return {}
 
 
+def _slot_connected(slot: str) -> bool:
+    """Слот подключён: токеном автоматизации или сохранённым входом (ACL-1335)."""
+    from src.meta_campaign_agent.mlx_credentials import has_saved_session
+
+    token = (os.environ.get(f"MULTILOGIN_AUTOMATION_TOKEN_{slot}") or "").strip()
+    return bool(token) or has_saved_session(slot)
+
+
 def _slot_line(slot: str) -> str:
+    from src.meta_campaign_agent.mlx_credentials import slot_summary
+
     token = (os.environ.get(f"MULTILOGIN_AUTOMATION_TOKEN_{slot}") or "").strip()
     label = LABELS.get(slot, slot)
+    summary = slot_summary(slot)
+    if summary.startswith("signed in"):
+        # Машина, подключённая входом: токена автоматизации нет и не нужно.
+        return f"  slot {slot} ({label}): {summary}"
     if not token:
-        return f"  slot {slot} ({label}): EMPTY — no token"
+        return f"  slot {slot} ({label}): EMPTY — no token and no saved sign-in"
     claims = _claims(token)
     if not claims:
         return f"  slot {slot} ({label}): a token is set, but it is not readable"
@@ -65,7 +79,7 @@ def _slot_line(slot: str) -> str:
 def main() -> int:
     wanted = (sys.argv[1] if len(sys.argv) > 1 else "").strip().lower()
 
-    print("Tokens on this machine")
+    print("Multilogin connections on this machine")
     for slot in ("A", "B"):
         print(_slot_line(slot))
 
@@ -83,8 +97,7 @@ def main() -> int:
             continue
         slot = (row.get("multilogin_instance") or "").strip().upper() or "A"
         note = "" if (row.get("multilogin_instance") or "").strip() else "  (blank → defaults to A)"
-        token_set = bool((os.environ.get(f"MULTILOGIN_AUTOMATION_TOKEN_{slot}") or "").strip())
-        mark = "ok" if token_set else "NO TOKEN IN THIS SLOT"
+        mark = "ok" if _slot_connected(slot) else "SLOT NOT CONNECTED (no token, no sign-in)"
         print(
             f"  {label:<28} slot {slot} ({LABELS.get(slot, slot)}){note}"
             f"  profile_id={'set' if (row.get('profile_id') or '').strip() else 'MISSING'}"

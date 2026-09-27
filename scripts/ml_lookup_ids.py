@@ -29,10 +29,13 @@ def _token(instance: str) -> str:
     key = instance.strip().upper()
     if key not in ("A", "B"):
         key = "A"
-    token = (os.environ.get(f"MULTILOGIN_AUTOMATION_TOKEN_{key}") or "").strip()
-    if not token:
-        raise SystemExit(f"Set MULTILOGIN_AUTOMATION_TOKEN_{key} in fb_agents/.env")
-    return token
+    # ACL-1335: токен автоматизации или сохранённый вход — у поставщика слота.
+    from src.meta_campaign_agent.mlx_credentials import MlxCredentialError, for_slot
+
+    try:
+        return for_slot(key).bearer()
+    except MlxCredentialError as exc:
+        raise SystemExit(str(exc))
 
 
 def _headers(token: str) -> dict[str, str]:

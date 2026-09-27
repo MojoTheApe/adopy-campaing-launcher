@@ -92,6 +92,15 @@ _RULES: list[tuple[str, str, str]] = [
         r"MULTILOGIN_(?:AUTOMATION|REFRESH)_TOKEN[_A-Z]*\s*=\s*[\"']?ey[A-Za-z0-9_-]{10,}",
         "рабочий токен Multilogin (автоматизации или refresh-токен входа, ACL-1335)",
     ),
+    (
+        # Refresh-токен ловится по имени ключа при любом виде значения: что он
+        # JWT, не подтверждено (ревью PR #339). Значение — только символы
+        # токена, чтобы `{переменная}` в f-строке теста не считалась секретом.
+        "Multilogin refresh token",
+        r"MULTILOGIN_REFRESH_TOKEN[_A-Z]*\s*=\s*[\"']?[A-Za-z0-9._~+/=-]{24,}"
+        r"|[\"']refresh_?token[\"']\s*:\s*[\"'][A-Za-z0-9._~+/=-]{24,}",
+        "refresh-токен входа Multilogin — продлевает вход без пароля",
+    ),
 ]
 
 

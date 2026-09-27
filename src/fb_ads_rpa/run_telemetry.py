@@ -82,7 +82,11 @@ _SCRUB = (
     # вход теперь сам себя продлевает, так что такие строки ходят по процессу
     # постоянно. Ловим и голыми (в тексте исключения), и в JSON под *token.
     (re.compile(r"\beyJ[A-Za-z0-9_-]{6,16384}\.[A-Za-z0-9_-]{6,16384}\.[A-Za-z0-9_-]{6,16384}"), "<jwt>"),
-    (re.compile(r"(\"(?:[a-z_]*token|password|authorization)\"\s*:\s*\")[^\"]{1,16384}", re.I), r"\1<hidden>"),
+    # Ключ решает, а не вид значения: refresh-токен Multilogin может быть и
+    # не JWT (формат не подтверждён) — JSON и repr словаря, в обеих кавычках.
+    (re.compile(r"([\"'](?:[a-z_]*token|password|authorization)[\"']\s*:\s*[\"'])[^\"']{1,16384}", re.I), r"\1<hidden>"),
+    # Строка машинного `.env` в тексте исключения: MULTILOGIN_…TOKEN…=значение.
+    (re.compile(r"(MULTILOGIN_[A-Z_]*TOKEN[A-Z_]*\s*=\s*[\"']?)[^\s\"'&]{1,16384}"), r"\1<hidden>"),
     (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
     (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<uuid>"),
     (re.compile(r"\b\d{10,}\b"), "<digits>"),

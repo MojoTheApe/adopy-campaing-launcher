@@ -17,6 +17,19 @@ except Exception:
     pass
 
 
+def multilogin_a_check() -> tuple[bool, str]:
+    """Подключён ли слот A: токен автоматизации или сохранённый вход (ACL-1335)."""
+    import os
+
+    from src.meta_campaign_agent.mlx_credentials import has_saved_session
+
+    if (os.environ.get("MULTILOGIN_AUTOMATION_TOKEN_A") or "").strip():
+        return True, "automation token set in env/.env"
+    if has_saved_session("A"):
+        return True, "signed in (renews automatically)"
+    return False, "not connected — press Connect Multilogin in Accounts"
+
+
 def main() -> int:
     ok = True
 
@@ -98,11 +111,8 @@ def main() -> int:
         else:
             report("multilogin profile mapping", True, "folder_id + profile_id set")
 
-    # Multilogin token (presence only, not value)
-    import os
-
-    token_a = bool((os.environ.get("MULTILOGIN_AUTOMATION_TOKEN_A") or "").strip())
-    report("MULTILOGIN_AUTOMATION_TOKEN_A", token_a, "set in env/.env" if token_a else "missing")
+    # Multilogin: токен автоматизации или сохранённый вход (только наличие)
+    report("Multilogin A", *multilogin_a_check())
 
     # PoC CLI
     cli = _ROOT / "scripts" / "run_rpa_publish.py"

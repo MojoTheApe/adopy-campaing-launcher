@@ -25,19 +25,24 @@ except Exception:
 import requests
 
 LAUNCHER_BASE = (os.environ.get("MULTILOGIN_LAUNCHER_BASE_A") or "https://launcher.mlx.yt:45001/api/v2").rstrip("/")
-TOKEN = (os.environ.get("MULTILOGIN_AUTOMATION_TOKEN_A") or "").strip()
 
-if not TOKEN:
-    print("ERROR: MULTILOGIN_AUTOMATION_TOKEN_A not set in .env")
-    sys.exit(1)
 
-HEADERS = {"Authorization": f"Bearer {TOKEN}", "Accept": "application/json"}
+def _headers() -> dict[str, str]:
+    """Токен слота A у поставщика: токен автоматизации или вход (ACL-1335)."""
+    from src.meta_campaign_agent.mlx_credentials import MlxCredentialError, for_slot
+
+    try:
+        token = for_slot("A").bearer()
+    except MlxCredentialError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
+    return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
 
 def get_folders() -> list[dict]:
     url = f"{LAUNCHER_BASE}/profile"
     try:
-        r = requests.get(url, headers=HEADERS, timeout=30)
+        r = requests.get(url, headers=_headers(), timeout=30)
     except requests.ConnectionError as e:
         print(f"ERROR: Cannot connect to Multilogin Launcher ({LAUNCHER_BASE})")
         print(f"  Make sure Multilogin is running on this machine.")
@@ -45,7 +50,7 @@ def get_folders() -> list[dict]:
         sys.exit(1)
 
     if r.status_code == 401:
-        print("ERROR: Automation token rejected (401). Check MULTILOGIN_AUTOMATION_TOKEN_A in .env")
+        print("ERROR: Multilogin rejected the token (401). Reconnect Multilogin in Accounts.")
         sys.exit(1)
     if r.status_code >= 400:
         print(f"ERROR: API returned HTTP {r.status_code}: {r.text[:500]}")

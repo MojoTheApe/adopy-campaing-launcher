@@ -4173,7 +4173,9 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
     token = creds.automation_token()
 
     if token:
-        auto = _automation_token_status(token)
+        # Проверка и продление ходят в сеть (и ждут замок слота, если робот
+        # как раз продлевает): не в цикле событий, иначе встанет весь дешборд.
+        auto = await asyncio.to_thread(_automation_token_status, token)
         if auto.get("alive") or session is None:
             auto.pop("rejected", None)
             auto["method"] = "automation"
@@ -4187,7 +4189,7 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
     state = {"ok": True, "has_token": True, "method": "signin", "email": session.email,
              "workspace": session.workspace_name, "role": session.role, "renews": True}
     try:
-        creds.bearer()
+        await asyncio.to_thread(creds.bearer)
     except _cred.MlxSignInExpired as exc:
         return JSONResponse({**state, "alive": False, "reason": "signin_expired", "error": str(exc)})
     except _cred.MlxCredentialError as exc:
@@ -4217,7 +4219,7 @@ async def multilogin_search(request: Request) -> JSONResponse:
 
     creds = _cred.for_slot(instance)
     try:
-        token = creds.bearer()
+        token = await asyncio.to_thread(creds.bearer)
     except _cred.MlxCredentialError as exc:
         return JSONResponse({"ok": False, "error": str(exc)})
 
@@ -4233,7 +4235,7 @@ async def multilogin_search(request: Request) -> JSONResponse:
     profiles, error = _mlx_search_all(_req, H, search_text)
     if error.startswith("HTTP 401"):
         try:
-            fresh = creds.renew_after_401(token)
+            fresh = await asyncio.to_thread(creds.renew_after_401, token)
         except _cred.MlxCredentialError as exc:
             return JSONResponse({"ok": False, "error": str(exc)})
         if fresh and fresh != token:
@@ -4321,6 +4323,12 @@ _MLX_PENDING_LOCK = threading.Lock()
 _MLX_PENDING_TTL = 600.0
 
 
+def _mlx_pending_purge(now: float) -> None:
+    """Брошенные входы не держат refresh-токены в памяти дольше срока."""
+    for key in [k for k, v in _MLX_PENDING.items() if now - v["at"] > _MLX_PENDING_TTL]:
+        _MLX_PENDING.pop(key, None)
+
+
 def _mlx_pending_put(item: dict) -> str:
     import secrets as _secrets
     import time as _time
@@ -4328,8 +4336,7 @@ def _mlx_pending_put(item: dict) -> str:
     nonce = _secrets.token_urlsafe(18)
     with _MLX_PENDING_LOCK:
         now = _time.time()
-        for key in [k for k, v in _MLX_PENDING.items() if now - v["at"] > _MLX_PENDING_TTL]:
-            _MLX_PENDING.pop(key, None)
+        _mlx_pending_purge(now)
         _MLX_PENDING[nonce] = {**item, "at": now}
     return nonce
 
@@ -4338,8 +4345,10 @@ def _mlx_pending_take(nonce: str) -> dict | None:
     import time as _time
 
     with _MLX_PENDING_LOCK:
+        now = _time.time()
         item = _MLX_PENDING.pop(nonce or "", None)
-    if item is None or _time.time() - item["at"] > _MLX_PENDING_TTL:
+        _mlx_pending_purge(now)
+    if item is None or now - item["at"] > _MLX_PENDING_TTL:
         return None
     return item
 

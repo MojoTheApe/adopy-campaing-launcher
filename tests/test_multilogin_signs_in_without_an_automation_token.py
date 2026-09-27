@@ -80,6 +80,15 @@ class FakeMultilogin:
         self.calls: list[tuple[str, str, dict]] = []
         self.start_replies: list[Reply] = []
         self.refresh_pause = 0.0
+        #: Ответ продления вместо обычного (5xx/429 и т. п.).
+        self.refresh_fail: Reply | None = None
+        #: refresh-токены, которые принимаются всегда (второй вход в тесте гонки).
+        self.extra_valid: set[str] = set()
+        #: Вызывается посреди продления — чтобы сменить вход «под ногами».
+        self.on_refresh = None
+        self.refresh_threads: list[str] = []
+        #: Продление отдаёт этот же токен, а не новый.
+        self.reuse_bearer = ""
         self.lock = threading.Lock()
 
     def _bearer(self) -> str:
@@ -99,12 +108,18 @@ class FakeMultilogin:
                 return Reply(401, {"status": {"message": "wrong credentials"}})
             return Reply(200, {"data": {"token": self._bearer(), "refresh_token": self.refresh_valid}})
         if url.endswith("/user/refresh_token"):
+            self.refresh_threads.append(threading.current_thread().name)
+            if self.on_refresh is not None:
+                hook, self.on_refresh = self.on_refresh, None
+                hook()
+            if self.refresh_fail is not None:
+                return self.refresh_fail
             if self.refresh_pause:
                 time.sleep(self.refresh_pause)
             with self.lock:
-                if self.refresh_rejected or json.get("refresh_token") != self.refresh_valid:
+                if self.refresh_rejected or json.get("refresh_token") not in {self.refresh_valid, *self.extra_valid}:
                     return Reply(401, {"status": {"message": "refresh token is invalid"}})
-                data = {"token": self._bearer()}
+                data = {"token": self.reuse_bearer or self._bearer()}
                 if self.rotate:
                     self.refresh_valid = f"r-{self.n}"
                     data["refresh_token"] = self.refresh_valid
@@ -617,3 +632,258 @@ def test_renewal_never_logs_a_token(mlx, monkeypatch, caplog):
         cred.for_slot("A").bearer()
     logged = caplog.text
     assert bearer not in logged and "r-0" not in logged and mlx.refresh_valid not in logged
+
+
+# ── ревью PR #339: сбои Multilogin, гонки, охранники подключения ──────────
+
+@pytest.mark.parametrize("status,dead", [(500, False), (503, False), (429, False),
+                                         (400, True), (401, True), (403, True)])
+def test_only_a_refusal_declares_the_sign_in_dead(status, dead):
+    """5xx и 429 — беда Multilogin: объявить вход мёртвым значило бы заставить
+    всех байеров нажимать Reconnect из-за минутного сбоя их API."""
+    from src.web.multilogin_auth import refresh_session
+
+    class Api:
+        def post(self, url, **kw):
+            return Reply(status, {"status": {"message": "nope"}})
+
+    result = refresh_session("a@b.test", "r", "ws", requests_module=Api())
+    assert result.ok is False and result.rejected is dead
+
+
+def test_a_multilogin_outage_is_not_reported_as_an_expired_sign_in(mlx, monkeypatch):
+    _save_session(monkeypatch)
+    mlx.refresh_fail = Reply(503, {"status": {"message": "Service Unavailable"}})
+    with pytest.raises(cred.MlxCredentialError) as info:
+        cred.for_slot("A").bearer()
+    assert not isinstance(info.value, cred.MlxSignInExpired)
+    assert "503" in str(info.value)
+    assert cred.for_slot("A")._dead_refresh == ""
+
+
+def test_renewal_backs_off_after_a_multilogin_failure(mlx, clock, monkeypatch):
+    """После 5xx/429 — пауза: частые повторы на 429 только продлевают лимит."""
+    _save_session(monkeypatch)
+    mlx.refresh_fail = Reply(429, {"status": {"message": "Too Many Requests"}})
+    for _ in range(3):
+        with pytest.raises(cred.MlxCredentialError, match="429"):
+            cred.for_slot("A").bearer()
+    assert mlx.count("/user/refresh_token") == 1, "повторы в пределах паузы — без сети"
+
+    mlx.refresh_fail = None
+    clock.t += 59
+    with pytest.raises(cred.MlxCredentialError, match="429"):
+        cred.for_slot("A").bearer()
+    clock.t += 2
+    assert cred.for_slot("A").bearer() in mlx.valid_bearers
+    assert mlx.count("/user/refresh_token") == 2
+
+
+def test_a_reconnect_during_renewal_does_not_mix_two_sign_ins(mlx, monkeypatch):
+    """Сценарий ревью (race2): старый вход продлевается, в это время Reconnect
+    сохраняет новый. В `.env` не должно остаться почты нового входа с
+    повёрнутым refresh-токеном старого."""
+    _save_session(monkeypatch)
+    mlx.refresh_pause = 0.3
+    renewing = threading.Thread(target=lambda: cred.for_slot("A").bearer())
+    renewing.start()
+    time.sleep(0.1)
+    cred.save_session("A", email="new@example.test", refresh_token="NEW-refresh",
+                      workspace_id="ws-new", workspace_name="New", bearer="bearer-new")
+    renewing.join()
+
+    assert os.environ["MULTILOGIN_EMAIL_A"] == "new@example.test"
+    assert os.environ["MULTILOGIN_REFRESH_TOKEN_A"] == "NEW-refresh"
+    saved = _machine_env()
+    assert 'MULTILOGIN_REFRESH_TOKEN_A="NEW-refresh"' in saved
+    assert 'MULTILOGIN_WORKSPACE_ID_A="ws-new"' in saved
+    assert cred.for_slot("A")._bearer == "bearer-new"
+
+
+def test_saving_a_sign_in_waits_for_the_slot_lock(mlx):
+    """Reconnect ждёт идущее продление, а не пишет поперёк него."""
+    creds = cred.for_slot("A")
+    done = threading.Event()
+
+    def save():
+        cred.save_session("A", email="new@example.test", refresh_token="NEW-refresh",
+                          workspace_id="ws-new")
+        done.set()
+
+    with creds._lock:
+        worker = threading.Thread(target=save)
+        worker.start()
+        assert not done.wait(0.3), "вход сохранён, пока слот занят продлением"
+        assert "MULTILOGIN_EMAIL_A" not in os.environ
+    worker.join(5)
+    assert done.is_set() and os.environ["MULTILOGIN_REFRESH_TOKEN_A"] == "NEW-refresh"
+
+
+def test_a_renewal_never_writes_over_a_sign_in_changed_meanwhile(mlx, monkeypatch):
+    """Вход сменили в обход `save_session` (правка настройки): ответ для
+    старого входа выбрасывается, продлевается новый."""
+    _save_session(monkeypatch)
+    persisted: list[dict] = []
+    monkeypatch.setattr(cred, "_persist", lambda values: persisted.append(dict(values)))
+
+    def switch():
+        mlx.extra_valid.add("r-other")
+        os.environ["MULTILOGIN_EMAIL_A"] = "other@example.test"
+        os.environ["MULTILOGIN_REFRESH_TOKEN_A"] = "r-other"
+        os.environ["MULTILOGIN_WORKSPACE_ID_A"] = "ws-other"
+
+    mlx.on_refresh = switch
+    bearer = cred.for_slot("A").bearer()
+    asked = [c[2]["json"] for c in mlx.calls if c[1].endswith("/user/refresh_token")]
+    assert [(a["refresh_token"], a["workspace_id"]) for a in asked] == [("r-0", "ws-in"), ("r-other", "ws-other")]
+    rotated_old = "r-1"
+    assert all(v.get("MULTILOGIN_REFRESH_TOKEN_A") != rotated_old for v in persisted)
+    assert os.environ["MULTILOGIN_REFRESH_TOKEN_A"] == mlx.refresh_valid != rotated_old
+    assert cred.for_slot("A")._bearer_workspace == "ws-other" and bearer in mlx.valid_bearers
+
+
+def test_a_failed_workspace_switch_keeps_the_working_connection(mlx, monkeypatch):
+    """Сохраняется только после удачного переключения: иначе Reconnect,
+    не дошедший до конца, затёр бы рабочий вход."""
+    _save_session(monkeypatch, refresh="r-keep")
+    mlx.refresh_rejected = True
+    body = _connect()
+    assert body["ok"] is False and "could not open Inhouse" in body["error"]
+    assert os.environ["MULTILOGIN_REFRESH_TOKEN_A"] == "r-keep"
+    assert "MULTILOGIN_REFRESH_TOKEN_A" not in _machine_env()
+
+
+def _several(mlx):
+    mlx.workspaces = [{"workspace_id": "ws-kld", "name": "KLD", "role": "launcher"},
+                      {"workspace_id": "ws-in", "name": "Inhouse", "role": "owner"}]
+    first = _connect()
+    assert first["needs_workspace"] is True
+    return first
+
+
+def test_an_expired_workspace_choice_asks_to_connect_again(mlx):
+    from src.web import app as web
+
+    first = _several(mlx)
+    web._MLX_PENDING[first["pending"]]["at"] -= web._MLX_PENDING_TTL + 1
+    body = _post("/multilogin-signin-workspace",
+                 {"pending": first["pending"], "workspace_id": "ws-in", "instance": "A"})
+    assert body["ok"] is False and "timed out" in body["error"]
+    assert "MULTILOGIN_WORKSPACE_ID_A" not in _machine_env()
+    assert first["pending"] not in web._MLX_PENDING
+
+
+def test_a_workspace_choice_cannot_land_in_the_other_slot(mlx):
+    """Вход, начатый для Inhouse (A), не сохраняется в KLD (B)."""
+    first = _several(mlx)
+    body = _post("/multilogin-signin-workspace",
+                 {"pending": first["pending"], "workspace_id": "ws-in", "instance": "B"})
+    assert body["ok"] is False and "press Connect again" in body["error"]
+    saved = _machine_env()
+    assert "MULTILOGIN_WORKSPACE_ID_B" not in saved and "MULTILOGIN_WORKSPACE_ID_A" not in saved
+    assert "MULTILOGIN_EMAIL_B" not in os.environ
+
+
+def test_the_role_hint_belongs_to_the_sign_in_only(mlx, monkeypatch):
+    """403 при токене автоматизации — не про роль входа; подсказка только у входа."""
+    token = jwt(950, T0 + 86400)
+    mlx.valid_bearers.add(token)
+    monkeypatch.setenv("MULTILOGIN_AUTOMATION_TOKEN_A", token)
+    mlx.start_replies = [Reply(403, {"status": {"message": "Forbidden"}})]
+    with pytest.raises(MultiloginLauncherError) as info:
+        MultiloginLauncher(get_multilogin_instance("A")).start_profile(FOLDER, PROFILE)
+    assert str(info.value) == "Start profile failed HTTP 403: Forbidden"
+    cfg = MultiloginInstanceConfig("A", "", LAUNCHER)
+    _save_session(monkeypatch, role="member")
+    monkeypatch.setenv("MULTILOGIN_AUTOMATION_TOKEN_A", "")
+    assert "role in Inhouse (member)" in cred.forbidden_hint(cfg)
+
+
+def test_status_renews_off_the_event_loop(mlx, monkeypatch):
+    """Продление (до 15 с, плюс ожидание замка слота) не держит весь дешборд."""
+    _save_session(monkeypatch)
+    state = _get("/multilogin-token-status?instance=A")
+    assert state["alive"] is True
+    assert mlx.refresh_threads and threading.main_thread().name not in mlx.refresh_threads
+
+
+def test_service_scripts_recognise_a_signed_in_machine(mlx, monkeypatch):
+    from scripts import acl_mlx_whoami as whoami
+    from scripts import verify_rpa_setup as verify
+
+    assert "EMPTY" in whoami._slot_line("A")
+    assert verify.multilogin_a_check()[0] is False
+    assert whoami._slot_connected("A") is False
+
+    _save_session(monkeypatch)
+    assert whoami._slot_line("A") == (
+        "  slot A (Inhouse): signed in as buyer@example.test · workspace Inhouse"
+        " · role launcher · renews automatically")
+    assert whoami._slot_connected("A") is True
+    assert verify.multilogin_a_check() == (True, "signed in (renews automatically)")
+    assert mlx.count("/user/") == 0, "сводка — без сети"
+
+
+def test_profile_lookup_scripts_take_the_bearer_from_the_provider(mlx, monkeypatch):
+    from scripts import ml_list_profiles, ml_lookup_ids
+
+    with pytest.raises(SystemExit):
+        ml_lookup_ids._token("A")
+    _save_session(monkeypatch)
+    token = ml_lookup_ids._token("A")
+    assert token in mlx.valid_bearers
+    assert ml_list_profiles._headers()["Authorization"] == f"Bearer {token}"
+
+
+def test_an_opaque_refresh_token_is_caught_by_its_key():
+    """Что refresh-токен — JWT, не подтверждено: ловим по имени ключа."""
+    import re
+
+    from scripts import acl_scan_secrets as scan
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    opaque = "Zq7" + "x" * 30 + "Kp"
+    clean = rt.scrub(f"line MULTILOGIN_REFRESH_TOKEN_A={opaque} and "
+                     f"{{'refresh_token': '{opaque}'}} and MULTILOGIN_AUTOMATION_TOKEN_B=\"{opaque}\"")
+    assert opaque not in clean
+
+    rule = next(p for name, p, _why in scan._RULES if name == "Multilogin refresh token")
+    assert re.search(rule, "MULTILOGIN_REFRESH_TOKEN_A=" + f'"{opaque}"')
+    assert re.search(rule, '{"refresh_token": "' + opaque + '"}')
+    # f-строка теста и короткие поддельные значения — не секрет.
+    assert not re.search(rule, 'MULTILOGIN_REFRESH_TOKEN_A="{mlx.refresh_valid}"')
+    assert not re.search(rule, '{"refresh_token": "sensitive-refresh"}')
+
+
+def test_a_renewal_that_returns_the_same_token_is_not_retried(mlx, monkeypatch):
+    """Повтор с тем же токеном ответил бы тем же отказом — лишний запуск."""
+    _save_session(monkeypatch)
+    token = cred.for_slot("A").bearer()
+    mlx.reuse_bearer = token
+    mlx.start_replies = [Reply(401, {"status": {"message": "Unauthorized"}})]
+    with pytest.raises(MultiloginLauncherError, match="401"):
+        _launcher().start_profile(FOLDER, PROFILE)
+    assert mlx.count("/start") == 1
+
+
+def test_a_second_401_with_an_already_renewed_token_does_not_renew_again(mlx, monkeypatch):
+    """Два запроса получили 401 на одном старом токене: продлевает первый,
+    второй получает его результат, а не второе продление (при повороте
+    refresh-токена оно было бы уже со старым)."""
+    _save_session(monkeypatch)
+    creds = cred.for_slot("A")
+    stale = creds.bearer()
+    fresh = creds.renew_after_401(stale)
+    assert fresh != stale and mlx.count("/user/refresh_token") == 2
+    assert creds.renew_after_401(stale) == fresh
+    assert mlx.count("/user/refresh_token") == 2
+
+
+def test_a_token_of_another_workspace_is_not_reused(mlx, monkeypatch):
+    _save_session(monkeypatch)
+    cred.for_slot("A").bearer()
+    mlx.extra_valid.add(os.environ["MULTILOGIN_REFRESH_TOKEN_A"])
+    monkeypatch.setenv("MULTILOGIN_WORKSPACE_ID_A", "ws-other")
+    cred.for_slot("A").bearer()
+    asked = [c[2]["json"]["workspace_id"] for c in mlx.calls if c[1].endswith("/user/refresh_token")]
+    assert asked == ["ws-in", "ws-other"]

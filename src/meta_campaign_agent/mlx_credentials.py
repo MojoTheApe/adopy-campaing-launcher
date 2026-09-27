@@ -41,6 +41,10 @@ RENEW_MARGIN = 5 * 60
 DEFAULT_LIFETIME = 25 * 60
 #: Токен автоматизации, истекающий в ближайшую минуту, уже не живой.
 AUTOMATION_MARGIN = 60
+#: После сбоя Multilogin (5xx, 429, сеть) продление не повторяем столько
+#: секунд: каждый запуск профиля — это несколько запросов к лаунчеру, и на
+#: 429 частые повторы только продлевают лимит (ревью PR #339).
+RETRY_AFTER_FAILURE = 60
 
 SIGNIN_EXPIRED = "Multilogin sign-in expired — press Reconnect in Accounts."
 
@@ -140,6 +144,9 @@ class SlotCredentials:
         #: refresh-токен, который Multilogin отверг: пока он же лежит в
         #: настройке, в сеть не ходим — ответ известен.
         self._dead_refresh = ""
+        #: Когда и чем кончилось последнее продление, упавшее не по отказу.
+        self._failed_at = 0.0
+        self._failed_error = ""
 
     # ── что есть ─────────────────────────────────────────────────────────
 
@@ -222,6 +229,8 @@ class SlotCredentials:
                 return self._bearer
             if self._dead_refresh and self._dead_refresh == session.refresh_token:
                 raise MlxSignInExpired(SIGNIN_EXPIRED)
+            if self._failed_at and _now() - self._failed_at < RETRY_AFTER_FAILURE:
+                raise MlxCredentialError(self._failed_error)
             return self._renew(session)
 
     def _renew(self, session: SavedSession) -> str:
@@ -235,7 +244,21 @@ class SlotCredentials:
                 self._bearer = ""
                 log.warning("Multilogin %s: the saved sign-in was refused; Reconnect is needed", self.slot)
                 raise MlxSignInExpired(SIGNIN_EXPIRED)
-            raise MlxCredentialError(f"Could not renew the Multilogin sign-in: {result.error}")
+            self._failed_at = _now()
+            self._failed_error = f"Could not renew the Multilogin sign-in: {result.error}"
+            raise MlxCredentialError(self._failed_error)
+        self._failed_at = 0.0
+        current = saved_session(self.slot)
+        if current != session:
+            # Пока шло продление, вход слота сменили (Reconnect или правка
+            # настройки). Ответ относится к старому входу: не пишем его
+            # повёрнутый refresh-токен поверх нового и не берём его токен —
+            # иначе в `.env` осталась бы смесь двух учёток (ревью PR #339).
+            log.info("Multilogin %s: the sign-in changed during renewal; using the new one", self.slot)
+            if current is None:
+                raise MlxNotConnected(
+                    f"Multilogin {self.slot} is no longer connected — open Accounts and press Connect Multilogin.")
+            return self._session_bearer(current)
         if result.refresh_token and result.refresh_token != session.refresh_token:
             key = env_key("REFRESH_TOKEN", self.slot)
             # Старый refresh-токен после поворота может быть уже мёртв: сначала
@@ -259,6 +282,7 @@ class SlotCredentials:
         self._bearer_exp = exp if exp is not None else now + DEFAULT_LIFETIME
         self._bearer_workspace = workspace_id
         self._dead_refresh = ""
+        self._failed_at = 0.0
         if len(self._issued) > 64:
             self._issued.clear()
         self._issued.add(hash(bearer))
@@ -326,6 +350,20 @@ def forbidden_hint(config) -> str:
             "to start profiles — ask the workspace owner for the Launcher role or higher.")
 
 
+def slot_summary(slot: str) -> str:
+    """Чем подключён слот — одной строкой для служебных скриптов. Без сети и секретов."""
+    key = _slot(slot)
+    session = saved_session(key)
+    token = _env(env_key("AUTOMATION_TOKEN", key))
+    method = for_slot(key).method()
+    if method == "signin" and session is not None:
+        return (f"signed in as {session.email} · workspace {session.workspace_name or session.workspace_id}"
+                f"{f' · role {session.role}' if session.role else ''} · renews automatically")
+    if method == "automation":
+        return "automation token" + (" (a saved sign-in is the fallback)" if session else "")
+    return "not connected" if not token else "automation token"
+
+
 def save_session(slot: str, *, email: str, refresh_token: str, workspace_id: str,
                  workspace_name: str = "", role: str = "", bearer: str = "") -> None:
     """Сохранить вход слота в машинный `.env` и принять токен сессии в память.
@@ -342,13 +380,17 @@ def save_session(slot: str, *, email: str, refresh_token: str, workspace_id: str
         env_key("WORKSPACE_NAME", key): workspace_name,
         env_key("WORKSPACE_ROLE", key): role,
     }
-    old = _env(env_key("AUTOMATION_TOKEN", key))
-    if old:
-        values[env_key("AUTOMATION_TOKEN", key) + "_PREVIOUS"] = old
-        values[env_key("AUTOMATION_TOKEN", key)] = ""
-    _persist(values)
-    for name, value in values.items():
-        os.environ[name] = value
     creds = for_slot(key)
-    if bearer:
-        creds.adopt(bearer, workspace_id)
+    # Под замком слота: идущее продление старого входа сначала закончится,
+    # и его повёрнутый refresh-токен не ляжет поверх нового входа.
+    with creds._lock:
+        old = _env(env_key("AUTOMATION_TOKEN", key))
+        if old:
+            values[env_key("AUTOMATION_TOKEN", key) + "_PREVIOUS"] = old
+            values[env_key("AUTOMATION_TOKEN", key)] = ""
+        _persist(values)
+        for name, value in values.items():
+            os.environ[name] = value
+        creds._failed_at = 0.0
+        if bearer:
+            creds.adopt(bearer, workspace_id)
