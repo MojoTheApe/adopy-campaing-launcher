@@ -12,6 +12,15 @@
 Каждый случай ниже проверяется на СТРОКЕ (как приходит из логов и текста
 исключений — `run_telemetry.scrub`) и через `scrub_diag`, которым размечает
 события `acl_sentry._before_send`.
+
+Независимое ревью PR #343 (2026-09-28) воспроизвело ещё два бага в самом
+фиксе выше — оба ниже, в отдельных секциях:
+  * camelCase/PascalCase имена (`refreshToken`, `RefreshToken`,
+    `clientSecret`) не совпадали вовсе — `re.I` снимает регистр букв, но не
+    разницу между `refresh_token` и `refreshToken` (наличие подчёркивания);
+  * экранированная кавычка внутри JSON-значения (`"password":"ab\"cd-..."`)
+    обрывала маскирование на первом символе, совпавшем с закрывающей
+    кавычкой, даже экранированном — хвост секрета утекал рядом с `<hidden>`.
 """
 from __future__ import annotations
 
@@ -23,6 +32,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from src import acl_sentry  # noqa: E402
 from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
 
 
@@ -89,3 +99,84 @@ def test_existing_act_and_bearer_scrubbing_still_works():
         "https://adsmanager.facebook.com/x?act=<hidden>"
     )
     assert rt.scrub("Authorization: Bearer abc.123-456_XYZ") == "Authorization: Bearer <hidden>"
+
+
+# ── PR #343 ревью, баг 1: camelCase/PascalCase имена ключей ───────────────
+
+CAMEL_CASE_CASES = [
+    ('{"refreshToken":"abc123XYZsecretvalue"}', "abc123XYZsecretvalue"),
+    ('{"RefreshToken":"abc123XYZsecretvalue"}', "abc123XYZsecretvalue"),
+    ("clientSecret=s3cr3t-VALUE-999", "s3cr3t-VALUE-999"),
+    ("ClientSecret=s3cr3t-VALUE-999", "s3cr3t-VALUE-999"),
+    ('{"apiKey":"sk-abcdef123456secret"}', "sk-abcdef123456secret"),  # "работал случайно" по ревью — не должен перестать
+    ("proxyPass=hunter2proxysecret", "hunter2proxysecret"),
+]
+
+
+@pytest.mark.parametrize("raw,secret", CAMEL_CASE_CASES)
+def test_camel_and_pascal_case_key_names_are_redacted(raw, secret):
+    cleaned = rt.scrub(raw)
+    assert secret not in cleaned, f"camelCase-имя ключа пережило scrub(): {cleaned!r}"
+    assert "<hidden>" in cleaned
+
+
+def test_camel_case_dict_keys_are_hidden_by_scrub_diag_too():
+    """Не только строка из лога — тот же камень преткновения был у
+    `scrub_diag` на НАСТОЯЩЕМ python-словаре с camelCase-ключом: значение
+    само по себе не содержит имени ключа, так что regex `scrub()` там
+    бессилен в принципе — маскировать обязан сам `scrub_diag` по ключу."""
+    diag = {"refreshToken": "abc123XYZsecretvalue", "clientSecret": "s3cr3t-VALUE-999", "campaign": "ok"}
+    cleaned = rt.scrub_diag(diag)
+    assert cleaned["refreshToken"] == "<hidden>"
+    assert cleaned["clientSecret"] == "<hidden>"
+    assert cleaned["campaign"] == "ok"
+
+
+# ── PR #343 ревью, баг 2: экранированная кавычка внутри JSON-значения ─────
+
+def test_an_escaped_quote_inside_the_value_does_not_truncate_the_redaction():
+    raw = '{"password":"ab\\"cd-secret-tail"}'
+    cleaned = rt.scrub(raw)
+    assert "cd-secret-tail" not in cleaned, f"хвост секрета утёк после экранированной кавычки: {cleaned!r}"
+    assert "ab" not in cleaned.replace("<hidden>", ""), f"начало секрета тоже должно быть скрыто: {cleaned!r}"
+    assert cleaned == '{"password":"<hidden>"}'
+
+
+def test_an_escaped_single_quote_inside_a_repr_value_does_not_truncate_either():
+    raw = "{'password': 'ab\\'cd-secret-tail'}"
+    cleaned = rt.scrub(raw)
+    assert "cd-secret-tail" not in cleaned, f"хвост секрета утёк после экранированной кавычки: {cleaned!r}"
+
+
+# ── оба бага — через настоящий путь отправки в Sentry, не напрямую ────────
+
+def test_both_bugs_are_fixed_through_the_real_acl_sentry_before_send_path():
+    """`acl_sentry._before_send` — то, что реально видит каждое событие
+    перед отправкой (`_scrub_deep` -> `scrub_diag` -> `scrub`). Ревью прямо
+    просило проверить оба бага через этот путь, а не только вызовом
+    `scrub()`/`scrub_diag()` напрямую — регресс мог вернуться в самой
+    цепочке вызовов, а не в паттернах."""
+    event = {
+        "contexts": {
+            "diag": {
+                # баг 1: camelCase-ключ настоящего словаря
+                "refreshToken": "abc123XYZsecretvalue",
+                # баг 1: camelCase внутри вложенной JSON-строки
+                "raw_response": '{"clientSecret":"s3cr3t-VALUE-999"}',
+                # баг 2: экранированная кавычка внутри JSON-строки
+                "raw_body": '{"password":"ab\\"cd-secret-tail"}',
+                "campaign": "SA_sa_All_Image_Mix",
+            }
+        }
+    }
+    safe = acl_sentry._before_send(event, {})
+    diag = safe["contexts"]["diag"]
+
+    assert diag["refreshToken"] == "<hidden>"
+    assert "s3cr3t-VALUE-999" not in diag["raw_response"]
+    assert "<hidden>" in diag["raw_response"]
+    assert "cd-secret-tail" not in diag["raw_body"], f"хвост утёк через реальный sentry-путь: {diag['raw_body']!r}"
+    assert diag["campaign"] == "SA_sa_All_Image_Mix"
+    # исходное событие не мутируется — тот же контракт, что уже проверяет
+    # test_report_delivery_review.py::test_nested_secret_fields_are_removed_at_final_event_boundary
+    assert event["contexts"]["diag"]["refreshToken"] == "abc123XYZsecretvalue"

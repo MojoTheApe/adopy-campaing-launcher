@@ -82,10 +82,22 @@ def normalise_step(label: str) -> tuple[str, bool | None]:
 #: `proxy_pass=` не совпадали (в списке не было ни "secret", ни "key", ни
 #: точного "proxy_pass"), а `"password":"..."` — JSON- и python-repr-форма
 #: с двоеточием вместо `=` — не совпадала вовсе, для любого из имён.
-_SECRET_KEYS = (
-    r"(?:refresh_token|access_token|token|client_secret|api_key|apikey"
-    r"|proxy_pass|passwd|password|authorization|fb_dtsg|lsd)"
+#:
+#: PR #343, ревью: `re.I` снимает регистр букв, но не разницу между
+#: `refresh_token` и `refreshToken` — camelCase-варианты (обычные для
+#: JS-объектов на странице Facebook/сторонних SDK) физически не совпадали
+#: ни с одним паттерном. `_flex_key()` делает подчёркивание между частями
+#: составного имени необязательным — один шаблон ловит snake_case И
+#: camelCase/PascalCase сразу, без отдельного списка вариантов на каждое имя.
+def _flex_key(name: str) -> str:
+    return name.replace("_", "_?")
+
+
+_SECRET_KEY_NAMES = (
+    "refresh_token", "access_token", "token", "client_secret", "api_key",
+    "proxy_pass", "passwd", "password", "authorization", "fb_dtsg", "lsd",
 )
+_SECRET_KEYS = "(?:" + "|".join(_flex_key(k) for k in _SECRET_KEY_NAMES) + ")"
 
 #: Для «голой» формы `key: value` / `key=value` без кавычек "authorization"
 #: исключён: заголовок обычно пишется как "Authorization: Bearer <токен>", и
@@ -93,18 +105,22 @@ _SECRET_KEYS = (
 #: value="Bearer" — отдельное слово "Bearer" вместо всего токена, который сам
 #: по себе прячет паттерн `Bearer` ниже. Через `=` ("authorization=...")
 #: поведение осталось прежним — этот случай ловится отдельно.
-_SECRET_KEYS_BARE = (
-    r"(?:refresh_token|access_token|token|client_secret|api_key|apikey"
-    r"|proxy_pass|passwd|password|fb_dtsg|lsd)"
-)
+_SECRET_KEYS_BARE = "(?:" + "|".join(
+    _flex_key(k) for k in _SECRET_KEY_NAMES if k != "authorization"
+) + ")"
 
 _BARE_VALUE = r'("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|[^\s,;&"\'<>\)\]\}]{1,16384})'
 
 _SCRUB = (
     # JSON / python-repr словарь: "key":"value" или 'key': 'value' — с любыми
     # пробелами вокруг двоеточия, кавычки ключа и значения не обязаны
-    # совпадать друг с другом.
-    (re.compile(rf'(["\'])({_SECRET_KEYS})\1(\s*:\s*)(["\'])(?:(?!\4).)*\4', re.I),
+    # совпадать друг с другом. `\\.` первой альтернативой в значении — та же
+    # правка ревью: без неё `(?:(?!\4).)*` останавливался на ПЕРВОМ символе,
+    # совпавшем с закрывающей кавычкой, даже если она экранирована обратным
+    # слэшем (`\"` внутри значения), и хвост секрета после неё утекал открытым
+    # текстом. `\\.` поглощает экранированную пару целиком, прежде чем дойти
+    # до символа-кандидата на закрытие — стандартный приём для строк с escape.
+    (re.compile(rf'(["\'])({_SECRET_KEYS})\1(\s*:\s*)(["\'])(?:\\.|(?!\4).)*\4', re.I),
      lambda m: f"{m.group(1)}{m.group(2)}{m.group(1)}{m.group(3)}{m.group(4)}<hidden>{m.group(4)}"),
     # key=value / key: value без кавычек вокруг имени, внутри произвольного
     # текста лога — то, что раньше проверял единственный `(...)=` паттерн.
@@ -131,17 +147,29 @@ def scrub(text: str) -> str:
 #: приходит и настоящим словарём (не только строкой из логов), и по ключу
 #: словаря значение не пройдёт через `scrub()` (в самом значении имени ключа
 #: обычно нет, скрести регуляркой там нечего).
+#:
+#: PR #343, ревью: тот же camelCase-разрыв, что и в _SECRET_KEYS, но здесь
+#: ключ — настоящий ключ Python-словаря, а не текст в строке, так что
+#: `_flex_key()`/regex не применить — сравнение сделано побуквенно: обе
+#: стороны (имя из словаря и имя из списка) сравниваются без подчёркиваний,
+#: так что `refreshToken`, `refresh_token` и `REFRESH_TOKEN` бьют в одну и
+#: ту же запись.
 _SECRET_DICT_KEYS = {
     "token", "access_token", "refresh_token", "password", "passwd",
     "client_secret", "api_key", "apikey", "proxy_pass",
     "authorization", "fb_dtsg", "lsd",
 }
+_SECRET_DICT_KEYS_NORM = {k.replace("_", "") for k in _SECRET_DICT_KEYS}
+
+
+def _is_secret_dict_key(key: object) -> bool:
+    return str(key).lower().replace("_", "") in _SECRET_DICT_KEYS_NORM
 
 
 def scrub_diag(value):
     """Explicit step diagnostics share the same export boundary as page context."""
     if isinstance(value, dict):
-        return {key: ("<hidden>" if str(key).lower() in _SECRET_DICT_KEYS else scrub_diag(item))
+        return {key: ("<hidden>" if _is_secret_dict_key(key) else scrub_diag(item))
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [scrub_diag(item) for item in value]
