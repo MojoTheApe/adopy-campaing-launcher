@@ -31,6 +31,7 @@ _PAGE = """
   <input id="login" name="login" placeholder="Email" value="">
   <input id="pw" name="password" type="password" placeholder="Password" value="">
   <input id="otp" name="otp_code" type="text" autocomplete="one-time-code" placeholder="6-digit code" value="">
+  <input id="approvals" name="approvals_code" type="text" placeholder="Enter the code you received" value="">
 </form>
 """
 
@@ -86,6 +87,24 @@ def test_a_one_time_code_field_is_also_masked_by_autocomplete(page):
     dump = str(actions)
     assert "482913" not in dump, "одноразовый код утёк в записанные действия"
     assert changes[0]["value"] == "<hidden>"
+
+
+def test_metas_approvals_code_checkpoint_field_is_masked_by_name_alone(page):
+    """PR #343 ревью: Meta 2FA-чекпоинт называет своё поле `approvals_code` —
+    `type="text"`, без `autocomplete="one-time-code"` (легаси-форма чекпоинта
+    не всегда его проставляет). Ни "otp", ни "verification", ни "security",
+    ни "auth", ни "passcode" в этом имени нет — маскировать обязано только
+    распознавание имени поля."""
+    _fill_and_blur(page, "#approvals", "913482")
+
+    actions = _drain(page)
+    changes = [a for a in actions if a.get("type") == "change"]
+    assert changes, "поле approvals_code не породило записи change"
+
+    dump = str(actions)
+    assert "913482" not in dump, "код чекпоинта Meta (approvals_code) утёк в записанные действия"
+    assert changes[0]["value"] == "<hidden>"
+    assert changes[0].get("secret") is True
 
 
 def test_an_ordinary_text_field_is_still_captured_in_full(page):

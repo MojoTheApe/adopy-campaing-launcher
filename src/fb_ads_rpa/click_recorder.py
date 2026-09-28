@@ -62,6 +62,14 @@ _INJECT_JS = """
   // Признаём поле секретным по type=password, autocomplete=one-time-code
   // и по характерным словам в имени/id/placeholder/aria-label — значение
   // такого поля не читаем вовсе, только фиксируем сам факт ввода.
+  //
+  // PR #343, ревью: имя поля 2FA-чекпоинта Meta — `approvals_code`
+  // (задокументировано публично) — не подходило ни под один из этих слов:
+  // "code" в нём есть, но без нужного префикса (verification/security/
+  // auth/otp/passcode), и такое поле нередко `type="text"` без
+  // `autocomplete="one-time-code"` в легаси-формах чекпоинта. Добавлены
+  // approvals?_code/login_code/confirmation_code и написания без
+  // разделителя/с пробелом или дефисом вместо подчёркивания.
   const isSecretField = (el) => {
     if (!el) return false;
     const type = (el.getAttribute('type') || el.type || '').toLowerCase();
@@ -72,7 +80,7 @@ _INJECT_JS = """
       el.getAttribute('name'), el.getAttribute('id'), el.getAttribute('placeholder'),
       el.getAttribute('aria-label'),
     ].filter(Boolean).join(' ').toLowerCase();
-    return /(otp|one[-_ ]?time|verification[-_ ]?code|security[-_ ]?code|auth(entication)?[-_ ]?code|passcode|2fa|mfa)/.test(hay);
+    return /(otp|one[-_ ]?time|verification[-_ ]?code|security[-_ ]?code|auth(entication)?[-_ ]?code|passcode|2fa|mfa|approvals?[-_ ]?code|login[-_ ]?code|confirmation[-_ ]?code)/.test(hay);
   };
 
   const describe = (el, eventType) => {
