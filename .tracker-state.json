@@ -600,6 +600,23 @@
           327
         ],
         "recorded_at": "2026-09-28T11:07:18+00:00"
+      },
+      "343": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "independent subagent (Claude Sonnet 5)",
+        "implementer": "ACL-1342 implementation subagent",
+        "head_sha": "768df3a00ff378af882e022982a4afeaed9fb9c1",
+        "base_sha": "feae4e8893d9f6496395453b34244c5f2e9db809",
+        "tree_sha": "889bc373823134ea5e379f5aec4994b5c8caf7e2",
+        "report": "Round 3 re-review in a fresh detached worktree (C:/acl-rev343c, removed after review). All 8 PR test files pass one at a time (symlink tests skip x2+2 for lack of privilege): meta_campaign_agent 7+2skip, account-header 2, asset-export 6, click-recorder 5, creative-file 4+2skip, dead-multilogin-panel 6, scrubber-shapes 50, scrubber-never-hangs 16. acl_scan_secrets.py: clean. THE ROUND-2 BLOCKER IS FIXED: the quoted-value pattern is now (?:\\\\.|(?!\\4)[^\\\\\\n])* with an optional closing quote group (\\4)?. Independently fuzzed every regex in run_telemetry.py (scrub/_SCRUB alternatives and scrub_diag/_hides_dict_value) via subprocess-isolated adversarial inputs: unterminated quotes with 28..50000 backslash pairs, truncated JSON-escaped Windows paths, FB-style escaped-slash HTML fragments, 100KB and 4MB (the real MAX_HTML_BYTES ceiling) unterminated payloads, long runs of hyphen/dot/space/camelCase-hump separators (up to 50000 reps), 2000-5000 keys in one blob, and a 100KB random adversarial mix. All completed in well under the test suite's own 0.5s/case ceiling; the 4MB worst case (realistic page_capture.scrub_html ceiling) took 1.8s, linear. Mutation-tested: (a) reintroducing the exact round-2-flagged ambiguous alternation (?:\\\\.|(?!\\4).)* alone did NOT reintroduce the blowup, because the newly-added optional closing-quote group means the overall match can never fail at that position, so the engine never backtracks into the ambiguous alternation regardless of exclusivity -- informational only, not a defect, the shipped pattern keeps both defenses; (b) narrowing _KEY_SEP back to '_?' correctly broke 6 of the round-2 hyphen/dot/space/header tests, confirming that fix is real and covered. S01 dead-panel JS: no remaining raw cid/instance concatenation into onclick/oninput JS text or unescaped id/CSS-selector attributes in that block; the two round-2-flagged spots (oninput filters at old report.html:8548/8681) now pass cid via data-cid+this.dataset, ids go through aclEscHtml, and the two querySelector call sites use CSS.escape(cid); the two getElementById/.id-property sites that still string-concat cid are safe (DOM property/exact-id-lookup, not markup or eval'd JS text). NON-BLOCKING (new, previously unflagged): (1) the round-2 suffix-matching widening of _BARE_KEY_START to treat '_' as a valid boundary (not just non-word chars) means the STRING-based scrub() -- unlike the dict-based scrub_diag/_hides_dict_value, which is deliberately bool/int/None-aware and is tested for this -- has no way to tell a boolean/counter flag from a real secret, so free text like 'has_token: True', 'hasToken: true', 'is_token=False' gets redacted to 'has_token: <hidden>' etc; this reaches Sentry/telemetry whenever such text appears inside a diag string value (verified: scrub_diag({'note': 'has_token: True, alive: False'}) hides the flag). Loses diagnostic value, does not leak a secret. The code's own comment and test only promise this stays visible for actual dict keys. (2) the quoted-key form's prefix is bounded to 40 lazy characters (by design, for linear time); a key whose junk/organization-specific prefix before the recognized secret suffix exceeds ~40-46 chars is NOT redacted at all -- e.g. '{\"' + 'x'*45 + '_refresh_token\":\"SECRET\"}' leaks the value in full. Narrow/contrived in practice (no such key names exist in this codebase today) but a real false negative if it ever occurs; worth a comment noting the tradeoff or raising the bound modestly. Neither blocks: no realistic new secret-leak path was found, the intended threat model (real credential field names in this codebase and common header spellings) is covered, and the P1 ReDoS is conclusively closed. | Coordinator note: head moved bde9473->768df3a by a merge of work/main only; tree unchanged (889bc37), verified with git rev-parse HEAD^{tree} before and after.",
+        "reviewed_head_sha": "bde94739fced5eaf11ea1137b2160b30aca63d6c",
+        "main_sha": "3e816217f9c352f0922522264d6a26f7343ba947",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          342
+        ],
+        "recorded_at": "2026-09-28T20:55:50+00:00"
       }
     },
     "stage": {
