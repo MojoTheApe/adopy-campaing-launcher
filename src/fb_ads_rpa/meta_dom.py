@@ -3729,51 +3729,148 @@ def _reach_dialog_open(page: Page) -> bool:
         return False
 
 
+#: ACL-1332: терпимость «Further limit the reach» — не меньше, чем до
+#: ACL-1324 (08c9364): пять попыток, по 5 с на прокрутку к тексту и на клик.
+#: ACL-1324 урезал их до 3 × 3 с, и классические аккаунты, которым прежде
+#: нужны были 4+ попытки (CL/CR/GT/SA, 1–3 раза на серию), получили бы
+#: жёсткий отказ и повтор всей кампании.
+FURTHER_LIMIT_ATTEMPTS = 5
+FURTHER_LIMIT_TEXT_TIMEOUT_MS = 5000
+#: Сколько ждать окна «Reach your preferred audiences» после нажатия. До
+#: ACL-1324 успехом был сам клик, окно затем ждал выбор варианта (0,6 с +
+#: 1,5 с); ACL-1324 на пути по тексту требовал окно за 2 с. Теперь 3 с на
+#: любом пути, и окно, открывшееся позже, ловится в начале следующей попытки.
+FURTHER_LIMIT_OPEN_WAIT_S = 3.0
+
+
 _FURTHER_LIMIT_ROW_JS = r"""
-  () => {
+  async () => {
     const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
     const phrase = /^further limit the reach of your ads$/i;
-    const shown = (e) => {
+    const styled = (e) => {
       for (let n = e; n; n = n.parentElement) {
         const s = getComputedStyle(n);
         if (s.display === 'none' || s.visibility === 'hidden') return false;
       }
-      const r = e.getBoundingClientRect();
-      return r.width > 0 && r.height > 0;
+      return true;
     };
+    const sized = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const laidOut = (e) => styled(e) && sized(e);
     const own = (e) => norm([...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(' '));
-    document.querySelectorAll('[data-acl-further-limit]').forEach(e => e.removeAttribute('data-acl-further-limit'));
-    const rows = [];
-    let mixed = 0;
-    for (const e of document.querySelectorAll('*')) {
-      if (!phrase.test(own(e)) || e.closest('[role=dialog]') || !shown(e)) continue;
-      // Строка-кнопка целиком — только эта фраза: не «Save audience» рядом,
-      // не раздел аудитории со всеми его кнопками (ACL-1250). Кнопка, где
-      // фраза лежит вместе с «Save audience», — не наша строка, и по тексту
-      // внутри неё тоже не жмём (ревью PR #328, F4).
-      const ctl = e.closest('[role=button], [role=link], a, button');
-      if (ctl && !phrase.test(norm(ctl.textContent))) {
-        if (/save audience/i.test(norm(ctl.textContent))) mixed++;
-        continue;
+    // Кадр — rAF или 60 мс, что раньше: в фоновой вкладке rAF может не прийти.
+    const tick = () => new Promise(res => {
+      let done = false;
+      const f = () => { if (!done) { done = true; res(); } };
+      requestAnimationFrame(f);
+      setTimeout(f, 60);
+    });
+    const settle = async (ready) => {
+      const t0 = performance.now();
+      await tick();
+      while (!ready() && performance.now() - t0 < 700) await tick();
+    };
+    // Строки-кнопки по трём корзинам: разложенные (стиль + размер), в потоке
+    // 0×0 и скрытые (display:none / visibility:hidden) — ACL-1332, 6540 27.09:
+    // редактор Meta не раскладывает карточку за экраном, строка 0×0, и ACL-1324
+    // её просто не видел (`found:0`). Ревью PR #334 (F2): скрытая копия фразы
+    // не должна делать из настоящей строки 0×0 «две строки».
+    const collect = () => {
+      const laid = [], flow = [], hidden = [];
+      let mixed = 0;
+      for (const e of document.querySelectorAll('*')) {
+        if (!phrase.test(own(e)) || e.closest('[role=dialog]')) continue;
+        // Строка-кнопка целиком — только эта фраза: не «Save audience» рядом,
+        // не раздел аудитории со всеми его кнопками (ACL-1250). Кнопка, где
+        // фраза лежит вместе с «Save audience», — не наша строка, и по тексту
+        // внутри неё тоже не жмём (ревью PR #328, F4).
+        const ctl = e.closest('[role=button], [role=link], a, button');
+        if (ctl && !phrase.test(norm(ctl.textContent))) {
+          if (/save audience/i.test(norm(ctl.textContent))) mixed++;
+          continue;
+        }
+        const row = ctl || e;
+        if (row.disabled || row.getAttribute('aria-disabled') === 'true') continue;
+        const bucket = !styled(row) ? hidden : sized(row) ? laid : flow;
+        if (!bucket.includes(row)) bucket.push(row);
       }
-      const row = ctl || e;
-      if (row.disabled || row.getAttribute('aria-disabled') === 'true') continue;
-      if (!rows.includes(row)) rows.push(row);
+      return { laid, flow, hidden, mixed };
+    };
+    document.querySelectorAll('[data-acl-further-limit]').forEach(e => e.removeAttribute('data-acl-further-limit'));
+    let got = collect();
+    let section = false;
+    const none = (g) => !g.laid.length && !g.flow.length && !g.hidden.length;
+    if (none(got)) {
+      // Строки нет вовсе — карточка аудитории может быть ещё не смонтирована:
+      // её раздел в центр, кадр, и искать заново.
+      const sec = document.getElementById('campaignTargetingStaticExtendedPGDSection');
+      if (sec && sec.getClientRects().length) {
+        sec.scrollIntoView({ block: 'start', behavior: 'instant' });
+        await settle(() => !none(collect()));
+        got = collect();
+        section = true;
+      }
     }
-    if (rows.length !== 1) return { found: rows.length, mixed };
-    const row = rows[0];
+    // Старшая непустая корзина: разложенные, затем 0×0 в потоке, затем
+    // скрытые. Две и больше в ней — неизвестно, какая наша (ACL-1250).
+    const pool = [got.laid, got.flow, got.hidden].find(b => b.length) || [];
+    if (pool.length !== 1) return { found: pool.length, mixed: got.mixed, section };
+    const row = pool[0];
+    const wasLaid = pool === got.laid;
     row.setAttribute('data-acl-further-limit', '1');
-    row.scrollIntoView({ block: 'center', behavior: 'instant' });
+    // В центр — сама строка, если у неё есть место на странице (пусть 0×0);
+    // иначе (display:none до раскладки) — ближайший предок с размером.
+    let target = row;
+    if (!row.getClientRects().length) {
+      target = row.parentElement;
+      while (target && !(target.getClientRects().length && sized(target))) target = target.parentElement;
+    }
+    if (target) {
+      const tall = target !== row && target.getBoundingClientRect().height > window.innerHeight;
+      target.scrollIntoView({ block: tall ? 'start' : 'center', behavior: 'instant' });
+      if (target !== row || !wasLaid) {
+        await settle(() => laidOut(row));
+        if (laidOut(row)) row.scrollIntoView({ block: 'center', behavior: 'instant' });
+      }
+    }
+    const info = { found: 1, mixed: got.mixed, section, was_laid: wasLaid,
+                   surface: (row.getAttribute('data-surface') || '').split('/').pop(),
+                   role: row.getAttribute('role') || row.tagName.toLowerCase() };
+    if (!laidOut(row)) return { ...info, laid: false };
     const r = row.getBoundingClientRect();
     const x = r.x + r.width / 2, y = r.y + r.height / 2;
     const hit = document.elementFromPoint(x, y);
-    return { found: 1, x, y, hit: !!hit && row.contains(hit),
-             surface: (row.getAttribute('data-surface') || '').split('/').pop(),
-             role: row.getAttribute('role') || row.tagName.toLowerCase() };
+    return { ...info, laid: true, x, y, hit: !!hit && row.contains(hit) };
   }
 """
 """Строка «Further limit the reach of your ads» (шестерёнка) — ровно одна,
-вне диалога; помечается `data-acl-further-limit`, прокручивается в центр."""
+вне диалога; помечается `data-acl-further-limit`, прокручивается в центр и
+перемеряется (ACL-1332: 0×0 до прокрутки — ещё не повод её не видеть)."""
+
+
+def _further_limit_row(page: Page) -> dict:
+    """Найти, прокрутить в центр и перемерить строку Further limit."""
+    try:
+        row = page.evaluate(_FURTHER_LIMIT_ROW_JS)
+    except Exception as exc:
+        return {"found": 0, "error": str(exc)[:120]}
+    return row if isinstance(row, dict) else {"found": 0}
+
+
+def _wheel_editor_column(page: Page, dy: int = 400) -> None:
+    """Колесо над колонкой редактора. Playwright крутит колесо там, где стоит
+    его мышь; после CDP-кликов она может остаться над правой панелью, и тогда
+    редактор не двигается (ACL-1332, f2272afec9fb). Сначала мышь — в колонку
+    редактора, как в `_wheel_to_placements_card`."""
+    try:
+        vw = page.evaluate("() => [window.innerWidth, window.innerHeight]")
+        x, y = int(vw[0] * 0.45), int(vw[1] * 0.5)
+    except Exception:
+        x, y = 700, 450
+    try:
+        page.mouse.move(x, y)
+        page.mouse.wheel(0, dy)
+    except Exception:
+        pass
 
 
 def _further_limit_opened(page: Page, wait_s: float) -> bool:
@@ -3806,56 +3903,76 @@ def _open_further_limit(page: Page) -> bool:
     Центр строки чем-то накрыт или окно не открылось — DOM-клик по самой
     строке. Строки такой нет (старые раскладки со ссылкой) — прежний путь
     по тексту. Ошибка Playwright и путь — в телеметрию.
+
+    ACL-1332 (6540, 27.09, f2272afec9fb): строка за экраном была 0×0 —
+    редактор её ещё не разложил, — и разметочный путь её не видел ни разу,
+    а урезанный ACL-1324 текстовый путь (3 × 3 с, колесо без мыши над
+    редактором) не дотянул. Теперь строка 0×0 находится, прокручивается в
+    центр и перемеряется; между попытками колесо крутится над колонкой
+    редактора; терпимость — как до ACL-1324 (`FURTHER_LIMIT_ATTEMPTS`,
+    `FURTHER_LIMIT_TEXT_TIMEOUT_MS`), окно ждём `FURTHER_LIMIT_OPEN_WAIT_S`.
     """
     if _further_limit_opened(page, 0):
         return True
     diag: dict = {}
-    try:
-        row = page.evaluate(_FURTHER_LIMIT_ROW_JS) or {}
-    except Exception as exc:
-        row = {"found": 0, "error": str(exc)[:120]}
-    diag["found"] = row.get("found", 0)
-    if row.get("mixed"):
-        diag["mixed"] = row.get("mixed")
-    if row.get("found") == 1:
-        diag.update({"surface": row.get("surface", ""), "role": row.get("role", ""), "hit": bool(row.get("hit"))})
-        if row.get("hit"):
-            _cdp_mouse_click(page, row["x"], row["y"])
-            if _further_limit_opened(page, 3.0):
-                _telemetry.record("further_limit_row", True, note="cdp", diag=diag)
-                return True
-        try:
-            clicked = bool(page.evaluate(
-                "() => { const e = document.querySelector('[data-acl-further-limit]');"
-                " if (!e) return false; e.click(); return true; }"))
-        except Exception:
-            clicked = False
-        if clicked and _further_limit_opened(page, 3.0):
-            _telemetry.record("further_limit_row", True, note="dom", diag=diag)
-            return True
-    # Прежний путь (текст, прокрутка страницы между попытками) — только когда
-    # строки-кнопки нет вовсе. Две такие строки — неизвестно, какая наша:
-    # не жмём ни одну (ACL-1250). Фраза внутри кнопки вместе с «Save
-    # audience» — тоже не жмём: нажатие такой кнопки сохранило бы аудиторию
-    # в кабинете (ревью PR #328, F4).
-    for _ in range(3 if row.get("found") == 0 and not row.get("mixed") else 0):
+
+    def _opened(note: str) -> bool:
+        _telemetry.record("further_limit_row", True, note=note, diag=diag)
+        return True
+
+    for attempt in range(FURTHER_LIMIT_ATTEMPTS):
+        if attempt:
+            _wheel_editor_column(page)
+            _sleep_h(0.6)
+            # Окно от прошлого нажатия пришло позже ожидания — не жать снова.
+            if _further_limit_opened(page, 0):
+                return _opened("late")
+        diag["attempts"] = attempt + 1
+        row = _further_limit_row(page)
+        found = row.get("found", 0)
+        diag["found"] = found
+        if row.get("mixed"):
+            diag["mixed"] = row.get("mixed")
+        if row.get("error"):
+            diag.setdefault("js_error", row.get("error"))
+        if not isinstance(found, int) or found >= 2:
+            # Две такие строки — неизвестно, какая наша: не жмём ни одну (ACL-1250).
+            break
+        if found == 1:
+            diag.update({"surface": row.get("surface", ""), "role": row.get("role", ""),
+                         "hit": bool(row.get("hit")), "laid": bool(row.get("laid"))})
+            if not row.get("was_laid"):
+                diag["unlaid"] = True   # до прокрутки строка была 0×0
+            if row.get("laid"):
+                if row.get("hit"):
+                    _cdp_mouse_click(page, row["x"], row["y"])
+                    if _further_limit_opened(page, FURTHER_LIMIT_OPEN_WAIT_S):
+                        return _opened("cdp")
+                try:
+                    clicked = bool(page.evaluate(
+                        "() => { const e = document.querySelector('[data-acl-further-limit]');"
+                        " if (!e) return false; e.click(); return true; }"))
+                except Exception:
+                    clicked = False
+                if clicked and _further_limit_opened(page, FURTHER_LIMIT_OPEN_WAIT_S):
+                    return _opened("dom")
+                continue
+        # Прежний путь (текст, прокрутка страницы между попытками) — когда
+        # строки-кнопки нет или она так и не разложилась. Фраза внутри
+        # кнопки вместе с «Save audience» — по тексту не жмём: нажатие такой
+        # кнопки сохранило бы аудиторию в кабинете (ревью PR #328, F4).
+        if row.get("mixed"):
+            continue
         try:
             el = page.get_by_text(re.compile(r"further limit the reach of your ads", re.I)).first
-            el.scroll_into_view_if_needed(timeout=3000)
-            el.click(timeout=3000)
-            if _further_limit_opened(page, 2.0):
-                _telemetry.record("further_limit_row", True, note="text", diag=diag)
-                return True
+            el.scroll_into_view_if_needed(timeout=FURTHER_LIMIT_TEXT_TIMEOUT_MS)
+            el.click(timeout=FURTHER_LIMIT_TEXT_TIMEOUT_MS)
+            if _further_limit_opened(page, FURTHER_LIMIT_OPEN_WAIT_S):
+                return _opened("text")
         except Exception as exc:
             diag.setdefault("error", f"{type(exc).__name__}: {str(exc).splitlines()[0][:160] if str(exc) else ''}")
             if _further_limit_opened(page, 0):
-                _telemetry.record("further_limit_row", True, note="text", diag=diag)
-                return True
-        try:
-            page.mouse.wheel(0, 400)
-        except Exception:
-            pass
-        _sleep_h(0.6)
+                return _opened("text")
     _telemetry.record("further_limit_row", None, note="not_opened", diag=diag)
     return False
 
