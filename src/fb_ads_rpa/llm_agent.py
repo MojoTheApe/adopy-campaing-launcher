@@ -171,13 +171,13 @@ class LLMAgentPlayer:
                     f"headline/title={ad.ad_title!r}, primary_text/body={ad.ad_body!r}, "
                     f"link_description={ad.ad_link_description!r}"
                 )
+        # ACL-1359: этот движок не нажимает Publish никогда — ни в черновике,
+        # ни при ACTIVE (охрана `md.press_element_guarded` всё равно откажет).
+        # Публикует человек или recorded flow.
         publish_rule = (
             "You must leave the campaign as a DRAFT. Fill every field, verify it, then call "
-            "finish(success=True, ...) — do NOT click 'Publish' or 'Review and publish', ever, "
-            "in this run."
-            if dry_run or draft.status == "DRAFT"
-            else "The campaign should end ACTIVE — after every field is filled and verified, "
-            "click the 'Publish' button as the very last action."
+            "finish(success=True, ...) — do NOT click or press 'Publish' or 'Review and "
+            "publish', ever: this engine never publishes, and such presses are refused."
         )
         return f"""You control a Playwright browser already open on Facebook Ads Manager's
 campaigns list page for this ad account (the campaign creation wizard is NOT
@@ -295,6 +295,21 @@ tried — don't loop forever on one field."""
             pass
         return None, "not found"
 
+    def _element(self, loc):
+        """Подсказка модели → конкретный элемент (ACL-1359).
+
+        Дальше всё — проверка и нажатие — идёт по этому элементу: локатор
+        по роли и имени может к моменту нажатия найти уже другой узел.
+        """
+        return loc.element_handle(timeout=2500)
+
+    @staticmethod
+    def _refused(role: str, name: str, why: str) -> _ToolOutcome:
+        return _ToolOutcome(
+            f"REFUSED: {role} {name!r} resolves to Meta's Publish control or its editor footer "
+            f"({why}). This engine never presses Publish. Pick a different target."
+        )
+
     def _click(self, role: str, name: str) -> _ToolOutcome:
         reason = wg.forbidden_click_reason(name)
         if reason:
@@ -303,11 +318,22 @@ tried — don't loop forever on one field."""
         if loc is None:
             return _ToolOutcome(f"FAILED to click {role} {name!r}: {note}. Try read_page for the exact current text.")
         try:
-            loc.scroll_into_view_if_needed(timeout=3000)
-            loc.click(timeout=5000)
-            return _ToolOutcome(f"Clicked {role} {name!r} ({note} match).")
+            handle = self._element(loc)
         except Exception as exc:
             return _ToolOutcome(f"FAILED to click {role} {name!r}: {exc}")
+        if handle is None:
+            return _ToolOutcome(f"FAILED to click {role} {name!r}: element is gone. Try read_page again.")
+        # ACL-1359 (аудит S08): прежде здесь был `loc.click` мимо охраны —
+        # имя проверялось, а нажимался любой элемент, найденный по подстроке.
+        try:
+            out = md.press_element_guarded(self.page, handle, source="llm_agent")
+        except Exception as exc:
+            return _ToolOutcome(f"FAILED to click {role} {name!r}: {exc}")
+        if out.refused:
+            return self._refused(role, name, out.why)
+        if not out.pressed:
+            return _ToolOutcome(f"FAILED to click {role} {name!r}: {out.why}")
+        return _ToolOutcome(f"Clicked {role} {name!r} ({note} match).")
 
     def _fill(self, label: str, value: str) -> _ToolOutcome:
         # Strategy 1: JS value-set + verify (fast, works for plain inputs).
@@ -326,16 +352,27 @@ tried — don't loop forever on one field."""
                 combo, note2 = self._resolve("combobox", label)
                 loc = combo
             if loc is not None:
-                loc.click(timeout=2000)
-                loc.fill("")
-                loc.type(value, delay=20)
-                time.sleep(0.4)
-                try:
-                    current = loc.input_value(timeout=800) or ""
-                except Exception:
-                    current = ""
-                if value.strip() in current or current.strip() == value.strip():
-                    return _ToolOutcome(f"Filled {label!r} with {value!r} via keyboard typing and verified.")
+                handle = self._element(loc)
+                if handle is not None:
+                    # ACL-1359: нажатие в поле — через ту же охрану, а печать —
+                    # только если в фокусе не Publish (пробел нажимает кнопку,
+                    # Enter отправляет форму).
+                    out = md.press_element_guarded(self.page, handle, source="llm_agent")
+                    if out.refused:
+                        return self._refused("textbox", label, out.why)
+                    why = md.focused_press_refusal(
+                        handle, enter=("\n" in value or "\r" in value), source="llm_agent")
+                    if why:
+                        return self._refused("textbox", label, why)
+                    handle.fill("")
+                    handle.type(value, delay=20)
+                    time.sleep(0.4)
+                    try:
+                        current = handle.input_value(timeout=800) or ""
+                    except Exception:
+                        current = ""
+                    if value.strip() in current or current.strip() == value.strip():
+                        return _ToolOutcome(f"Filled {label!r} with {value!r} via keyboard typing and verified.")
         except Exception:
             pass
         return _ToolOutcome(
@@ -351,13 +388,21 @@ tried — don't loop forever on one field."""
         loc, note = self._resolve(role, name)
         if loc is None:
             return _ToolOutcome(f"FAILED to press {key!r} on {role} {name!r}: {note}.")
+        if not key:
+            return _ToolOutcome(f"FAILED to press on {role} {name!r}: no key given.")
         try:
-            loc.scroll_into_view_if_needed(timeout=3000)
-            loc.focus(timeout=3000)
-            loc.press(key, timeout=3000)
-            return _ToolOutcome(f"Focused {role} {name!r} ({note} match) and pressed {key!r}.")
+            handle = self._element(loc)
+            if handle is None:
+                return _ToolOutcome(f"FAILED to press {key!r} on {role} {name!r}: element is gone.")
+            # ACL-1359: Enter/Space на кнопке — то же нажатие, что и мышью.
+            out = md.press_element_guarded(self.page, handle, key=key, source="llm_agent")
         except Exception as exc:
             return _ToolOutcome(f"FAILED to press {key!r} on {role} {name!r}: {exc}")
+        if out.refused:
+            return self._refused(role, name, out.why)
+        if not out.pressed:
+            return _ToolOutcome(f"FAILED to press {key!r} on {role} {name!r}: {out.why}")
+        return _ToolOutcome(f"Focused {role} {name!r} ({note} match) and pressed {key!r}.")
 
     def _read_page(self) -> _ToolOutcome:
         try:
@@ -415,6 +460,10 @@ tried — don't loop forever on one field."""
         if draft.errors:
             result.error = "; ".join(draft.errors)
             return result
+
+        if not dry_run and draft.status != "DRAFT":
+            # ACL-1359: движок Publish не нажимает — кампания останется черновиком.
+            result.warnings.append("llm_agent never presses Publish: the campaign is left as a draft")
 
         client = self._get_client()
         system_prompt = self._build_system_prompt(draft, dry_run=dry_run)
