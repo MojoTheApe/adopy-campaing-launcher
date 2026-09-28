@@ -62,6 +62,15 @@
       --bg-subtle: #e8ebf0;
       --border: #dfe3ea;
       --border-strong: #c8ced8;
+      /* Поля ввода (ACL-1361). Своя поверхность, рамка и кольцо фокуса —
+         иначе поле неотличимо от карточки, на которой лежит. Рамка держит
+         3:1 ко всем поверхностям, где стоят поля (фон, карточка, подложка
+         группы, наведённая строка) и к самому полю; подсказка в поле —
+         4.5:1. Считает tests/test_field_contrast.py. */
+      --field-bg: #f9fafc;
+      --field-border: #7d8799;
+      --field-placeholder: #647084;
+      --focus-ring: #2563eb;
       --text: #1a1d23;
       --muted: #647084;
       --accent: #2563eb;
@@ -132,12 +141,20 @@
        изображение ленты Facebook, а не наш интерфейс: перекрасить его значит
        показать байеру то, чего он никогда не увидит у себя. */
     :root[data-theme="dark"] {
+      /* Лестница серых (ACL-1361): фон < карточка/ящик < подложка группы <
+         наведённая строка < поле. Соседние ступени различимы глазом, а не
+         только расчётом: прежде фон, карточка и поле были одним почти
+         чёрным, и ящик билдера сливался со страницей. */
       --bg: #0f1216;
-      --bg-elev: #171b22;
-      --bg-hover: #1e242d;
-      --bg-subtle: #232a35;
-      --border: #2b323d;
+      --bg-elev: #1a1f27;
+      --bg-subtle: #212730;
+      --bg-hover: #252b35;
+      --border: #323a46;
       --border-strong: #5b6779;
+      --field-bg: #2a313c;
+      --field-border: #7b8595;
+      --field-placeholder: #99a4b4;
+      --focus-ring: #7aa9ff;
       --text: #e4e8ef;
       --muted: #99a4b4;
       --accent: #7aa9ff;
@@ -171,6 +188,10 @@
       line-height: 1.55;
       -webkit-font-smoothing: antialiased;
     }
+    /* Подсказка в поле (ACL-1361) читается, а не растворяется: 4.5:1 к полю.
+       Непрозрачность — для Firefox: у него своя полупрозрачность подсказки,
+       и 4.5:1 превратились бы в 2.5:1. */
+    ::placeholder { color: var(--field-placeholder); opacity: 1; }
     .page-top {
       background: var(--bg-elev);
       border-bottom: 1px solid var(--border);
@@ -1062,8 +1083,8 @@
        Language» под соседнее поле — обрезанная метка хуже двухстрочной. */
     .cb-label { color: var(--muted); font-size: 0.75rem; line-height: 1.25; }
     .cb-select, .cb-input {
-      background: var(--bg-elev);
-      border: 1px solid var(--border);
+      background: var(--field-bg);
+      border: 1px solid var(--field-border);
       color: var(--text);
       font-family: inherit;
       font-size: 0.8125rem;
@@ -1074,8 +1095,8 @@
     }
     .cb-select:focus, .cb-input:focus {
       outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+      border-color: var(--focus-ring);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
     }
     .cb-inline { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
     .cb-inline .cb-select, .cb-inline .cb-input { width: auto; }
@@ -1265,8 +1286,8 @@
     .cb-sel-wrap { position: relative; width: 100%; }
     .cb-sel-text {
       width: 100%;
-      background: var(--bg-elev);
-      border: 1px solid var(--border);
+      background: var(--field-bg);
+      border: 1px solid var(--field-border);
       color: var(--text);
       font-family: inherit;
       font-size: 0.8rem;
@@ -1277,8 +1298,8 @@
     }
     .cb-sel-text:focus {
       outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+      border-color: var(--focus-ring);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
     }
     .cb-sel-text::after { content: '▾'; }
     .cb-sel-wrap::after {
@@ -1579,8 +1600,8 @@
     .gform { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.5rem; align-items: center; padding: 0.2rem 0.4rem; }
     .gform label { font-size: 0.74rem; color: var(--muted); }
     .gform input { font: inherit; font-size: 0.78rem; padding: 0.15rem 0.3rem;
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      background: var(--bg); color: var(--text); width: 100%; }
+      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--text); width: 100%; }
     .gform .gform-actions { grid-column: 1 / -1; display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.3rem; }
 
     /* ── Account map (Home) ───────────────────────────────────────────
@@ -1666,8 +1687,8 @@
     .report-hint { margin: 0 0 var(--space-md); font-size: .8rem; color: var(--muted); line-height: 1.45; }
     .report-box textarea {
       width: 100%; box-sizing: border-box; font: inherit; font-size: .85rem;
-      padding: var(--space-sm); border: 1px solid var(--border); border-radius: 6px;
-      background: var(--bg); color: var(--text); resize: vertical;
+      padding: var(--space-sm); border: 1px solid var(--field-border); border-radius: 6px;
+      background: var(--field-bg); color: var(--text); resize: vertical;
     }
     .report-actions { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-md); }
     .report-msg { flex: 1; font-size: .78rem; color: var(--muted); }
@@ -1753,7 +1774,7 @@
        Узкие поля возвращают им место; строка не растёт. */
     .amap table.amap-grid td.amap-status, .amap table.amap-grid td.amap-setup { padding-left: 0.3rem; padding-right: 0.3rem; }
     .amap .amap-x {
-      background: none; border: 1px solid var(--border-strong);
+      background: none; border: 1px solid var(--field-border);
       color: var(--muted); border-radius: var(--radius-sm);
       font: inherit; font-size: 0.7rem; padding: 0.05rem 0.4rem;
       cursor: pointer; line-height: 1.6;
@@ -1925,7 +1946,7 @@
     }
     .amap-ml [hidden] { display: none; }
     .amap-ml-signin input {
-      background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+      background: var(--field-bg); border: 1px solid var(--field-border); border-radius: 4px;
       color: var(--text); padding: 0.2rem 0.4rem; font-size: 0.75rem; font-family: inherit;
     }
     .amap-live-ok { font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -2132,7 +2153,7 @@
       padding-top: 0.4rem; line-height: 1.4;
     }
     .amap-btn {
-      background: none; border: 1px solid var(--border-strong);
+      background: none; border: 1px solid var(--field-border);
       color: var(--muted); border-radius: var(--radius-sm);
       font: inherit; font-size: 0.72rem; padding: 0.1rem 0.45rem;
       cursor: pointer; line-height: 1.5;
@@ -2150,8 +2171,8 @@
     .amap-add { display: flex; gap: 0.4rem; align-items: center; padding: 0.5rem 0.85rem; }
     .amap-add select, .amap-add input {
       font: inherit; font-size: 0.78rem; padding: 0.18rem 0.35rem;
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      background: var(--bg); color: var(--text); max-width: 15rem;
+      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--text); max-width: 15rem;
     }
     .amap-msg { font-size: 0.75rem; color: var(--muted); margin-left: 0.3rem; }
     .amap-msg.bad { color: var(--bad); }
@@ -2397,18 +2418,18 @@
       width: 100%;
       height: 34px;
       padding: 0 var(--space-sm);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--field-border);
       border-radius: var(--radius-sm);
-      background: var(--bg-elev);
+      background: var(--field-bg);
       color: var(--text);
       font: inherit;
       font-size: 0.85rem;
     }
     .acc-field select:focus-visible,
     .acc-field input:focus-visible {
-      outline: 2px solid var(--accent);
+      outline: 2px solid var(--focus-ring);
       outline-offset: 1px;
-      border-color: var(--accent);
+      border-color: var(--focus-ring);
     }
     .acc-form .acc-submit {
       height: 34px;
@@ -2481,8 +2502,8 @@
     .acc-table .acc-meta { font-size: 0.74rem; color: var(--muted); }
     .acc-table input[type="text"], .acc-table select {
       height: 30px; padding: 0 var(--space-sm); font-size: 0.8rem;
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      background: var(--bg-elev); color: var(--text); font-family: inherit;
+      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--text); font-family: inherit;
     }
     .acc-table .col-pick { width: 2rem; }
     .acc-table .col-act  { text-align: right; white-space: nowrap; }
@@ -2657,8 +2678,8 @@
     .cbd-pick.cbd-newc .cbd-new-country {
       flex: 1 1 auto; width: auto; min-width: 6rem; box-sizing: border-box;
       padding: 0.25rem 0.4rem; font: inherit; font-size: 0.74rem;
-      background: var(--bg); color: var(--text);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--text);
+      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
     }
     .cbd-pick.cbd-newc .cbd-add { display: inline-block; width: auto; flex: 0 0 auto; margin-top: 0; }
     .cbd-pick.cbd-newc .cbd-new-msg { flex: 1 1 100%; color: var(--muted); font-size: 0.68rem; }
@@ -2793,8 +2814,19 @@
     .cbd-pick select {
       width: 100%; box-sizing: border-box;
       padding: 0.25rem 0.4rem; font: inherit; font-size: 0.74rem;
-      background: var(--bg); color: var(--text);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--text);
+      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+    }
+    /* Кольцо фокуса для полей, у которых своего не было (ACL-1361): фокус в
+       них показывал только системный контур, на тёмном почти невидимый.
+       Тот же рисунок, что у полей билдера. */
+    .gform input:focus, .report-box textarea:focus, .amap-ml-signin input:focus,
+    .amap-add select:focus, .amap-add input:focus,
+    .acc-table input:focus, .acc-table select:focus,
+    .cbd-pick select:focus, .cbd-pick.cbd-newc .cbd-new-country:focus {
+      outline: none;
+      border-color: var(--focus-ring);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
     }
     .cbd-note { color: var(--muted); font-size: 0.7rem; line-height: 1.5; }
 
