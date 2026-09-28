@@ -5779,14 +5779,36 @@ _SUBITEMS_OFF = (
 _PLACEMENT_REOPENS = 2
 
 
+#: JS-кусок: заголовки карточки Placements — `placementsHeadings()`.
+#:
+#: 28.09, Facebook_6540 (6925f39bdc67, 8058b54f78d0): Meta положила группу
+#: кнопок «Explore placement opportunities» / «More options» ВНУТРЬ заголовка
+#: — `<div role=heading><span>Placements<div>…<div role=group>…`. Лист с
+#: текстом ровно «Placements» остался только в правой панели Campaign score, и
+#: карточку не находили. Поэтому заголовок узнаём по его СОБСТВЕННОЙ подписи:
+#: копия без вложенных кнопок, групп, значков и live-статусов. Прежняя
+#: разметка (`<div role=heading>Placements</div>`) проходит тем же правилом.
+#: Нулевой пробел (U+200B) Meta ставит рядом с иконками, а `\s` в JS его не ловит.
+_PLACEMENTS_HEADING_JS = r"""
+  const phTitle = (h) => {
+    const c = h.cloneNode(true);
+    for (const x of c.querySelectorAll(
+      '[role=group], [role=button], button, a, [role=status], [role=presentation]')) x.remove();
+    return (c.textContent || '').replace(/[\s\u200b]+/g, ' ').trim();
+  };
+  const placementsHeadings = () => [...document.querySelectorAll('[role=heading]')]
+    .filter(h => phTitle(h) === 'Placements');
+"""
+
+
 def _wheel_to_placements_card(page: Page, max_ticks: int = 40) -> int:
     """Прокрутить колонку редактора колесом до карточки Placements.
 
     Возвращает число сделанных прокруток или -1, если карточка так и не
     показалась.
     """
-    probe = r"""() => {
-      const h = [...document.querySelectorAll('[role=heading]')].find(e =>
+    probe = r"""() => {""" + _PLACEMENTS_HEADING_JS + r"""
+      const h = placementsHeadings()[0] || [...document.querySelectorAll('[role=heading]')].find(e =>
         (e.textContent || '').replace(/\s+/g, ' ').trim().startsWith('Placements'));
       if (!h) return 'absent';
       const r = h.getBoundingClientRect();
@@ -6217,6 +6239,55 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         except Exception:
             return None
 
+    def _card_heading_y() -> float | None:
+        """Y заголовка карточки (`role=heading` с подписью «Placements»).
+
+        28.09, Facebook_6540: `_text_y("Placements")` находил только строку
+        правой панели Campaign score — заголовок карточки там не лист, в нём
+        лежат кнопки. Она есть всегда, и прокрутка к ещё не смонтированной
+        карточке ниже из-за неё пропускалась бы. Поэтому ждём сам заголовок.
+        """
+        try:
+            return page.evaluate(
+                "() => {"
+                + _PLACEMENTS_HEADING_JS
+                + """
+                  const h = placementsHeadings().find(e => e.offsetParent !== null);
+                  return h ? h.getBoundingClientRect().y : null;
+                }
+                """
+            )
+        except Exception:
+            return None
+
+    def _headings_seen() -> list[str]:
+        """Какие заголовки шаг видел — для отчёта, когда карточки нет."""
+        try:
+            return page.evaluate(
+                "() => {"
+                + _PLACEMENTS_HEADING_JS
+                + """
+                  const seen = [];
+                  for (const h of document.querySelectorAll('[role=heading]')) {
+                    const t = phTitle(h).slice(0, 60);
+                    if (t && !seen.includes(t)) seen.push(t);
+                  }
+                  return seen.slice(0, 30);
+                }
+                """
+            ) or []
+        except Exception:
+            return []
+
+    def _card_not_found(info: dict) -> bool:
+        info = dict(info or {})
+        info["headings_seen"] = _headings_seen()
+        report["why"] = "placements_card_not_found"
+        report["placements_card"] = info
+        _dbg.append(f"placements_card={info}")
+        _dump_dbg()
+        return False
+
     # Confirmed live 2026-07-27: the "Placements" heading isn't reliably in
     # the DOM at all right after the previous step (Detailed targeting) —
     # this page mounts sections progressively as the main panel scrolls
@@ -6232,7 +6303,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     # more settings» ручной выбор цел: «Placements · Included: 17», пять
     # категорий с живыми галочками.
     _dbg.append(f"wheel_to_card={_wheel_to_placements_card(page)}")
-    placements_y = _text_y("Placements")
+    placements_y = _card_heading_y()
     for frac in (0.5, 0.6, 0.7, 0.8, 0.9, 1.0):
         if placements_y is not None:
             break
@@ -6254,11 +6325,16 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         except Exception:
             pass
         _sleep_h(0.5)
-        placements_y = _text_y("Placements")
-    _dbg.append(f"placements_y={placements_y}")
+        placements_y = _card_heading_y()
+    placements_y_via = "heading"
     if placements_y is None:
-        _dump_dbg()
-        return False
+        # Разметка без `role=heading` — прежний поиск по листу. Строку правой
+        # панели он тоже примет, но отличит её пометка блока ниже.
+        placements_y = _text_y("Placements")
+        placements_y_via = "leaf"
+    _dbg.append(f"placements_y={placements_y} via={placements_y_via}")
+    if placements_y is None:
+        return _card_not_found({"tagged": False, "stage": "scroll"})
 
     # Confirmed live 2026-07-27: Y-coordinate disambiguation between
     # Budget & schedule's "Show more settings" and Placements' own kept
@@ -6269,43 +6345,61 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     # with a marker attribute once, then scope every subsequent search to
     # its subtree — DOM containment instead of screen-space Y, immune to
     # scroll/reflow entirely.
-    tag_info = page.evaluate(
-        """
-        () => {
-          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-          // Every leaf reading "Placements", not the first visible one. The
-          // right-hand "Campaign score" panel has its own "Placements" row;
-          // taking the first by document order + offsetParent picked that
-          // one or skipped the real card depending on which panel is
-          // position:fixed on the account's layout (tag_info tagged:false on
-          // three runs of 2026-09-16). The real card is the one with
-          // "Account controls" among its ancestors — ask that of each.
-          const headings = [...document.querySelectorAll('*')].filter(e =>
-            e.children.length === 0 && norm(e.textContent) === 'Placements');
-          if (!headings.length) return { tagged: false, headings: 0 };
-          for (const heading of headings) {
-            let node = heading;
-            for (let i = 0; i < 10 && node; i++) {
-              const t = norm(node.textContent);
-              if (t.includes('Account controls')) {
-                node.setAttribute('data-rpa-placements-marker', '1');
-                const showMoreCount = [...node.querySelectorAll('*')].filter(e =>
-                  norm(e.textContent).toLowerCase().includes('show more settings')
-                  && e.getBoundingClientRect().width > 0).length;
-                return { tagged: true, depth: i, textLen: t.length, showMoreCount,
-                         headings: headings.length, rect: node.getBoundingClientRect() };
+    try:
+        tag_info = page.evaluate(
+            "() => {"
+            + _PLACEMENTS_HEADING_JS
+            + """
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              // Сначала заголовки карточки (`role=heading` с собственной
+              // подписью «Placements»), потом — как раньше — листы с текстом
+              // ровно «Placements». 28.09 на Facebook_6540 лист остался только
+              // в правой панели Campaign score: кнопки «Explore placement
+              // opportunities» / «More options» Meta положила внутрь
+              // заголовка карточки.
+              //
+              // Every leaf reading "Placements", not the first visible one. The
+              // right-hand "Campaign score" panel has its own "Placements" row;
+              // taking the first by document order + offsetParent picked that
+              // one or skipped the real card depending on which panel is
+              // position:fixed on the account's layout (tag_info tagged:false on
+              // three runs of 2026-09-16). The real card is the one with
+              // "Account controls" among its ancestors — ask that of each.
+              // От строки правой панели до такого предка 31–33 уровня, от
+              // заголовка карточки — 6 (6540) … 9: предел 14 для заголовка
+              // её не впускает, у листа он прежний, 10.
+              const heads = placementsHeadings();
+              const leaves = [...document.querySelectorAll('*')].filter(e =>
+                e.children.length === 0 && norm(e.textContent) === 'Placements');
+              const starts = [
+                ...heads.map(e => ['heading', e, 14]),
+                ...leaves.map(e => ['leaf', e, 10]),
+              ];
+              for (const [via, start, limit] of starts) {
+                let node = start;
+                for (let i = 0; i < limit && node; i++) {
+                  const t = norm(node.textContent);
+                  if (t.includes('Account controls')) {
+                    node.setAttribute('data-rpa-placements-marker', '1');
+                    const showMoreCount = [...node.querySelectorAll('*')].filter(e =>
+                      norm(e.textContent).toLowerCase().includes('show more settings')
+                      && e.getBoundingClientRect().width > 0).length;
+                    return { tagged: true, via, depth: i, textLen: t.length, showMoreCount,
+                             headings: heads.length, leaves: leaves.length,
+                             rect: node.getBoundingClientRect() };
+                  }
+                  node = node.parentElement;
+                }
               }
-              node = node.parentElement;
+              return { tagged: false, headings: heads.length, leaves: leaves.length };
             }
-          }
-          return { tagged: false, headings: headings.length };
-        }
-        """
-    )
+            """
+        )
+    except Exception as exc:
+        tag_info = {"tagged": False, "error": str(exc)[:120]}
     _dbg.append(f"tag_info={tag_info}")
     if not tag_info or not tag_info.get("tagged"):
-        _dump_dbg()
-        return False
+        return _card_not_found({**(tag_info or {}), "stage": "tag"})
 
     def _click_in_placements(text: str, *, exact: bool = True, max_children: int = 0) -> bool:
         # Confirmed live 2026-07-27: querySelectorAll('*') returns ancestors
