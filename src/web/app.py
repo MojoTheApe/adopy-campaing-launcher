@@ -2598,6 +2598,39 @@ async def api_parse_adset(name: str = "") -> JSONResponse:
     return JSONResponse(parse_adset_for_builder(name))
 
 
+def _sniff_creative_media_type(path: Path) -> str | None:
+    """Тип — по первым байтам файла, а не по расширению.
+
+    ACL-1342 S02: расширение подделывается переименованием (`evil.html` ->
+    `evil.jpg`), первые байты — нет. Разрешён только список из спеки аудита:
+    jpg/jpeg/png/gif/webp и mp4/mov/webm; всё остальное — не отдаём вовсе.
+    """
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(64)
+    except OSError:
+        return None
+
+    if head.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if head.startswith(b"GIF87a") or head.startswith(b"GIF89a"):
+        return "image/gif"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "image/webp"
+    if head[4:8] == b"ftyp":
+        # MP4 и большинство современных .mov — общий ISO-BMFF контейнер;
+        # различаются только заявленным брендом в ftyp-атоме.
+        return "video/quicktime" if head[8:12] in (b"qt  ", b"qt\x20\x20") else "video/mp4"
+    if head[4:8] in (b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot"):
+        # Старые QuickTime .mov без ftyp-атома в самом начале файла.
+        return "video/quicktime"
+    if head.startswith(b"\x1a\x45\xdf\xa3"):
+        return "video/webm"
+    return None
+
+
 @app.get("/creative-file")
 async def creative_file(path: str = "") -> Response:
     """Serve creative bytes (image/video) for the Campaign Builder's visual
@@ -2615,7 +2648,14 @@ async def creative_file(path: str = "") -> Response:
         return JSONResponse({"error": "Creative not found"}, status_code=404)
     except AmbiguousCreativeError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
-    return FileResponse(resolved)
+
+    media_type = _sniff_creative_media_type(resolved)
+    if media_type is None:
+        # ACL-1342 S02: не картинка и не видео из разрешённого списка — файл
+        # существует (find_creative_file его нашёл), но отдавать его как есть
+        # нельзя независимо от имени и расширения.
+        return JSONResponse({"error": "Unsupported creative type"}, status_code=415)
+    return FileResponse(resolved, media_type=media_type)
 
 
 @app.post("/api/accounts-hidden")
