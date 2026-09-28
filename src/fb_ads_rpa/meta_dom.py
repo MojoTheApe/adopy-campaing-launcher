@@ -8,7 +8,7 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from playwright.sync_api import Frame, Page
 
@@ -1851,6 +1851,10 @@ def _drop_cdp_input_session(page: Page) -> None:
             pass
 
 
+#: Надписи Publish, на которые робот не нажимает никогда: одна строка на обе
+#: охраны — по точке (`_PRESS_GUARD_JS`) и по элементу (`_ELEMENT_GUARD_JS`).
+_PUBLISH_LABEL_RE_JS = r"/^(publish|review and publish( \(\d+\))?|publicar|revisar y publicar)$/i"
+
 #: Что лежит в точке прямо перед нажатием (ACL-1327). Нажатие отменяется,
 #: если в точке — Publish / «Review and publish» (кнопка или что-то внутри
 #: неё) или футер нового редактора (в нём Publish), в любом редакторе; а в
@@ -1858,7 +1862,7 @@ def _drop_cdp_input_session(page: Page) -> None:
 #: (`data-acl-press-target`), накрыта чем-то другим.
 _PRESS_GUARD_JS = r"""([x, y, token, strict]) => {
   const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
-  const pub = /^(publish|review and publish( \(\d+\))?|publicar|revisar y publicar)$/i;
+  const pub = __PUB__;
   const target = token ? document.querySelector('[data-acl-press-target="' + token + '"]') : null;
   if (target) target.removeAttribute('data-acl-press-target');
   const at = document.elementFromPoint(x, y);
@@ -1881,7 +1885,7 @@ _PRESS_GUARD_JS = r"""([x, y, token, strict]) => {
     return {ok: false, why: 'covered'};
   }
   return {ok: true};
-}"""
+}""".replace("__PUB__", _PUBLISH_LABEL_RE_JS)
 
 
 def _mark_press_target(page: Page, handle) -> str:
@@ -1920,6 +1924,165 @@ def _press_allowed(page: Page, x: float, y: float, token: str) -> bool:
                           diag={"x": round(float(x)), "y": round(float(y)), "simple": strict})
         return False
     return True
+
+
+#: Та же охрана Publish, но для конкретного элемента, а не для точки
+#: (ACL-1359, аудит S08). Движок `llm_agent` сперва находит элемент по
+#: подсказке модели, а жмёт уже по нему — и проверять надо его: сам элемент
+#: (текст, aria-label, aria-labelledby, title, value), его предков-кнопок,
+#: элемент `syd_simple_create_publish`, футер нового редактора и кнопки
+#: Publish внутри него. Режимы: "element" — проверка самого элемента;
+#: "focus" / "focus_enter" — того, что на самом деле в фокусе перед нажатием
+#: клавиши (фокус мог уйти в другое место), а для Enter ещё и кнопки,
+#: которую отправит форма.
+_ELEMENT_GUARD_JS = r"""(el, mode) => {
+  const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+  const pub = __PUB__;
+  const CONTROL = 'button, [role=button], a, [role=link], [role=menuitem], input[type=button], input[type=submit]';
+  const SURFACE = '[data-surface*="syd_simple_create_publish"]';
+  const up = (n) => {
+    if (n.parentElement) return n.parentElement;
+    const root = n.getRootNode ? n.getRootNode() : null;
+    return root && root.host ? root.host : null;
+  };
+  const names = (n) => {
+    const out = [n.textContent, n.getAttribute('aria-label'), n.getAttribute('title')];
+    const ids = (n.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean);
+    if (ids.length) {
+      const root = n.getRootNode ? n.getRootNode() : document;
+      out.push(ids.map((id) => {
+        const r = (root.getElementById && root.getElementById(id)) || document.getElementById(id);
+        return r ? r.textContent : '';
+      }).join(' '));
+    }
+    if (n.tagName === 'INPUT') out.push(n.value);
+    return out.map(norm);
+  };
+  const isPub = (n) => names(n).some((t) => pub.test(t));
+  const check = (target) => {
+    if (!target || target.nodeType !== 1 || !target.isConnected) return 'no_element';
+    for (let n = target, i = 0; n && n.nodeType === 1 && i < 12; n = up(n), i++) {
+      if ((n.getAttribute('data-surface') || '').indexOf('syd_simple_create_publish') !== -1) return 'publish';
+      if ((n === target || n.matches(CONTROL)) && isPub(n)) return 'publish';
+      if (n.querySelector(SURFACE) && norm(n.textContent).length < 400) return 'editor_footer';
+    }
+    for (const d of target.querySelectorAll(CONTROL + ', ' + SURFACE)) {
+      if (d.matches(SURFACE) || isPub(d)) return 'contains_publish';
+    }
+    return '';
+  };
+  if (mode === 'element') {
+    const why = check(el);
+    return {ok: !why, why: why};
+  }
+  const doc = el.ownerDocument;
+  let a = doc.activeElement;
+  while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+  if (!a || a === doc.body || a === doc.documentElement) return {ok: false, why: 'not_focused'};
+  let why = check(a);
+  if (!why && mode === 'focus_enter' && a.form) {
+    const def = a.form.querySelector('button:not([type]), button[type=submit], input[type=submit], input[type=image]');
+    if (def && def !== a && check(def)) why = 'form_submits_publish';
+  }
+  return {ok: !why, why: why};
+}""".replace("__PUB__", _PUBLISH_LABEL_RE_JS)
+
+
+class PressOutcome(NamedTuple):
+    """Итог `press_element_guarded`: нажато ли, отказ ли охраны, причина."""
+
+    pressed: bool
+    refused: bool
+    why: str
+
+
+def _element_guard(handle, mode: str) -> str:
+    """Причина не нажимать на элемент ("" — можно). Не спросилось — не жмём."""
+    try:
+        got = handle.evaluate(_ELEMENT_GUARD_JS, mode)
+    except Exception:
+        return "unreadable"
+    if isinstance(got, dict):
+        if got.get("ok") is True:
+            return ""
+        return str(got.get("why") or "unreadable")
+    return "unreadable"
+
+
+def _refuse_press(why: str, *, source: str, action: str, key: str | None) -> PressOutcome:
+    try:
+        _telemetry.record("click_refused", False, note=why,
+                          diag={"engine": source, "action": action, "key": key or ""})
+    except Exception:
+        pass
+    return PressOutcome(False, True, why)
+
+
+def press_element_guarded(page: Page, handle, *, key: str | None = None,
+                          source: str = "llm_agent") -> PressOutcome:
+    """Нажать на конкретный элемент (мышью или клавишей) через охрану Publish.
+
+    ACL-1359: охрана — по самому элементу, в который превратилась подсказка
+    (`_ELEMENT_GUARD_JS`), а для мыши ещё и по точке прямо перед нажатием
+    (`_cdp_mouse_click` → `_press_allowed`, как у recorded flow). Клавиша
+    нажимается только после того, как проверено, что на самом деле в фокусе.
+    Отказ записывается в телеметрию (`click_refused`) и возвращается с
+    причиной; нажатия при отказе нет.
+    """
+    action = "key" if key else "click"
+    why = _element_guard(handle, "element")
+    if why:
+        return _refuse_press(why, source=source, action=action, key=key)
+    try:
+        handle.evaluate("el => el.scrollIntoView({block: 'center', behavior: 'instant'})")
+    except Exception:
+        pass
+    if key:
+        try:
+            handle.focus()
+        except Exception as exc:
+            return PressOutcome(False, False, f"focus failed: {exc}")
+        mode = "focus_enter" if "enter" in key.lower() else "focus"
+        why = _element_guard(handle, mode)
+        if why:
+            return _refuse_press(why, source=source, action=action, key=key)
+        page.keyboard.press(key)
+        return PressOutcome(True, False, "")
+    _sleep_h(0.2)
+    try:
+        box = handle.bounding_box()
+    except Exception:
+        box = None
+    if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
+        _mark_press_target(page, handle)
+        pressed = _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        if pressed is False:
+            # Отказ записал `_press_allowed`: в точке Publish, футер или цель накрыта.
+            return PressOutcome(False, True, "point_guard")
+        if pressed is None:
+            return PressOutcome(False, False, "tab_frozen")
+        return PressOutcome(True, False, "")
+    # Нет коробки: нулевой размер (DOM-клик — единственный способ) или узел
+    # уже ушёл из документа. Элемент проверен выше.
+    try:
+        if not handle.evaluate("el => el.isConnected"):
+            return PressOutcome(False, False, "detached")
+        handle.evaluate("el => el.click()")
+    except Exception as exc:
+        return PressOutcome(False, False, f"click failed: {exc}")
+    return PressOutcome(True, False, "")
+
+
+def focused_press_refusal(handle, *, enter: bool = True, source: str = "llm_agent") -> str:
+    """Перед вводом с клавиатуры: можно ли печатать в то, что сейчас в фокусе.
+
+    Пробел в кнопке её нажимает, Enter в поле формы отправляет форму — ввод
+    текста та же клавиатура. "" — можно; иначе причина (записана в телеметрию).
+    """
+    why = _element_guard(handle, "focus_enter" if enter else "focus")
+    if why:
+        _refuse_press(why, source=source, action="type", key=None)
+    return why
 
 
 def _cdp_mouse_click(page: Page, x: float, y: float) -> bool | None:
