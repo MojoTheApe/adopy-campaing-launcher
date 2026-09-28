@@ -621,29 +621,18 @@
       "346": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "independent subagent (Claude Sonnet 5), round 2",
+        "reviewer": "independent subagent (Claude Sonnet 5)",
         "implementer": "ACL-1344 implementation subagent",
-        "head_sha": "a2f4b27612c78a6281810e32962066e9a23c64a6",
+        "head_sha": "6d7228abbec60e3419e28d642cd23218e8aefc2a",
         "base_sha": "feae4e8893d9f6496395453b34244c5f2e9db809",
-        "tree_sha": "7c63014e5d9ecc74cb86e480bea434dce03fa491",
-        "prior_review": "review346.json/.md (head 92b5b562, verdict request-changes)",
-        "report": "Approve. All round-1 findings are closed and independently re-verified, not just re-tested by the implementer's own new tests. HIGH (retry after a failed headline reloads the Leads ad editor and drops the ad's text): fixed by (a) adding text 2 only when body_ok and title_ok both hold, so a failed headline no longer leaves two boxes in message_field for the retry to choke on, and (b) _reveal_ad_copy_fields(text_options=True) using first_of_many so the probe accepts several fields when the ad does have a second text. Reran the predecessor's exact offline repro (rev346_repro_test_retry.py) against the new head: 'WITH body2: True None reloads 0 opts 2' and 'WITHOUT body2: True None reloads 0' - both pass, 0 reloads. New test test_write_ad_copy_retry_after_a_failed_headline_does_not_reload uses the REAL _reveal_ad_copy_fields and asserts reloads == [] and a single text-2 add; passed. MEDIUM (4/7 mutations survived): spot-checked 3 of the 4 myself by re-applying each mutation in a fresh detached worktree and rerunning the matching test - all 3 now fail red (mutation killed): M1 (first_of_many for all ads, not just ad_body2+message_field) killed by test_an_ad_without_second_text_still_refuses_two_primary_boxes; M6 (!inZone removed from claim) killed by test_a_new_box_outside_the_field_is_taken_by_position_not_the_generated_one; M3 (bare Add searched page-wide instead of inHost) killed by test_a_bare_add_outside_the_primary_text_block_is_not_ours. M5 (body_ok gate) verified by code read (now `if ad_body2 and ad_body and body_ok and title_ok:`) plus test_a_failed_headline_adds_no_second_option / test_a_failed_primary_text_adds_no_second_option, both passing. LOW items all addressed with tests: claim's position fallback now requires a real lower bound from the headline's visible descendants and refuses (empty pick) when the headline host isn't visible - covered by test_without_a_visible_headline_the_position_fallback_takes_nothing; copy2 without an Ad Title/primary text is no longer dropped silently - enrich_draft.py now warns 'needs an Ad Title with a primary text', and run_recorded_campaign_flow appends a second_text_soft_fail warning (no_creative/no_primary_text) when the copy step is skipped entirely - covered by 3 new tests in test_second_primary_text_reaches_the_robot.py, all passing; builder restores the cb-text2-unmatched red outline after a reload for a partially-typed, unpicked text 2 (report.html cbKeep.writeSlot) - covered by test_an_unpicked_primary_text_2_stays_outlined_after_a_reload; 'Optimize text per person' state is now recorded (never toggled) in ad_copy_second_text telemetry - covered by test_optimize_text_per_person_state_is_recorded_not_changed. No new regressions found in the delta (enrich_draft.py, meta_dom.py, report.html, tests). Safety invariants unchanged: still no Publish click, still no editor reopen for verification (the fix's whole point is fewer reloads, not more), 'Remind me later'/Save audience/Advantage+ recommendations/View terms untouched, ads without a second text take the exact same code paths as before (all new branches are gated by ad_body2/text_options being truthy) - verified both by reading the gates and by the fact test_the_recorded_flow_without_second_texts_is_unchanged still passes. | Coordinator note: head moved 6510b44->a2f4b27 by a merge of work/main only; tree unchanged (7c63014), verified with git rev-parse HEAD^{tree} before and after.",
-        "tests": {
-          "test_second_primary_text_option.py": "23 passed (13 orig + 10 new)",
-          "test_second_primary_text_reaches_the_robot.py": "15 passed (12 orig + 3 new)",
-          "test_builder_second_primary_text.py": "6 passed (5 orig + 1 new)",
-          "rev346_repro_test_retry.py (predecessor's HIGH repro, rerun on new head)": "2 passed, 0 reloads in both branches",
-          "-k \"web or builder or report or draft or publish\"": "457 passed, 3005 deselected, 0 failed",
-          "mutation_kill_spotchecks": "M1, M3, M6 re-applied by hand in a fresh detached worktree, each turns the corresponding new test red; reverted after each check"
-        },
-        "worktree": "C:/acl-rev346b, detached at 6510b44, removed after review",
-        "reviewed_head_sha": "6510b4458780c2d29f4d6e35f149b3ed5e29968c",
+        "tree_sha": "0a2dd53d1af4fa0ba8b6fc8cd3f8519c98ab22e7",
+        "report": "The product change (delta through 6510b44, tree 7c63014e identical to merge commit a2f4b27) was already approved in review346_v2. This review covers only the one-commit, test-only delta a2f4b27..6d7228a (`git diff --stat` shows a single file: tests/test_a_stopped_profile_never_spins_the_robot.py, +8/-1, byte-identical to the same fix applied on PR #340; no production code touched). It fixes a Windows-CI flake in the stopped_profile_page fixture: connect_over_cdp could win the race against Chromium opening its first tab, so `attached.contexts[0].pages[0]` raised IndexError. The new code waits up to 10s for ctx.pages to be populated and falls back to `ctx.new_page()` only if the wait times out; either branch yields a real page in the live attached context, and the fixture still calls page.set_content(...) and asserts md._page_responsive(page, 3.0) is True before closing, so the assertion is unchanged and unweakened. Ran tests/test_a_stopped_profile_never_spins_the_robot.py in the C:\\acl-1344 worktree via C:/fb_agents/.venv/Scripts/python.exe -m pytest: 7 passed cleanly. Worktree left untouched (read-only, no edits or commits).",
         "main_sha": "3e816217f9c352f0922522264d6a26f7343ba947",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
           344
         ],
-        "recorded_at": "2026-09-28T20:56:09+00:00"
+        "recorded_at": "2026-09-28T21:35:51+00:00"
       }
     },
     "stage": {
