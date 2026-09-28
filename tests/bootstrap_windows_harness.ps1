@@ -84,10 +84,43 @@ try {
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-test -m 'unverified release'
     Expect-Failure { Get-AclRelease $git $temp $true } 'no verified annotated'
     & $git -C $temp tag -d acl-release-test | Out-Null
+    & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-test -m 'CI success https://github.com/org/repo/actions/runs/123'
+    & { function Get-AclCiRun { throw 'another repository must not reach the API' }
+        Expect-Failure { Get-AclRelease $git $temp $true } 'links no CI run' }
+    & $git -C $temp tag -d acl-release-test | Out-Null
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-test -m 'CI success https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/123'
-    $release = Get-AclRelease $git $temp $true
-    Assert ($release.Sha -eq $sha) 'Annotated release must select its exact commit'
+
+    # ACL-1357: the tag text is not evidence; a fake GitHub API decides.
+    function New-FakeRun([hashtable]$Change) {
+        $run = @{ id = 123; repository = @{ full_name = 'MojoTheApe/adopy-campaing-launcher' }; path = '.github/workflows/ci.yml'
+                  head_sha = $sha; head_branch = 'main'; event = 'push'; status = 'completed'; conclusion = 'success' }
+        foreach ($key in $Change.Keys) { $run[$key] = $Change[$key] }
+        return [pscustomobject]$run
+    }
+    & { function Get-AclCiRun { throw 'GitHub answered HTTP 404' }
+        Expect-Failure { Get-AclRelease $git $temp $true } 'HTTP 404' }
+    foreach ($case in @(
+            @{ Change = @{ conclusion = 'failure' }; Why = 'did not succeed' },
+            @{ Change = @{ repository = @{ full_name = 'attacker/fork' } }; Why = 'another repository' },
+            @{ Change = @{ head_sha = ('c' * 40) }; Why = 'tagged commit' },
+            @{ Change = @{ path = '.github/workflows/release.yml' }; Why = 'CI workflow' },
+            @{ Change = @{ head_branch = 'stage' }; Why = 'main' },
+            @{ Change = @{ event = 'pull_request' }; Why = 'push/dispatch' })) {
+        & { function Get-AclCiRun { New-FakeRun $case.Change }
+            Expect-Failure { Get-AclRelease $git $temp $true } $case.Why }
+    }
+    & { function Get-AclGitHubToken { '' }
+        function Invoke-RestMethod { throw 'must not call the API without a token' }
+        Expect-Failure { Get-AclRelease $git $temp $true } 'no GitHub credential' }
+    & { function Get-AclGitHubToken { 'test-token' }
+        function Invoke-RestMethod { throw [System.Net.WebException]::new('offline') }
+        Expect-Failure { Get-AclRelease $git $temp $true } 'could not be verified' }
+    & { function Get-AclCiRun { New-FakeRun @{} }
+        $release = Get-AclRelease $git $temp $true
+        Assert ($release.Sha -eq $sha) 'Annotated release must select its exact commit'
+        Assert ($release.Run -eq '123') 'Release must name the verified run' }
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid commit --allow-empty --quiet -m divergence
-    Expect-Failure { Get-AclRelease $git $temp $false } 'Git failed'
+    & { function Get-AclCiRun { New-FakeRun @{} }
+        Expect-Failure { Get-AclRelease $git $temp $false } 'Git failed' }
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force }
 Write-Host 'Bootstrap scenarios passed'

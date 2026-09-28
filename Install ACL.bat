@@ -116,9 +116,64 @@ function Invoke-AclGit([string]$Git, [string]$Target, [string[]]$GitArgs) {
     return ($output -join "`n").Trim()
 }
 
+function Get-AclRepoName { 'MojoTheApe/adopy-campaing-launcher' }
+
+function Get-AclGitHubToken([string]$Git) {
+    # Same sources as scripts/acl_update_gate.py. The stored Git credential is
+    # read without any prompt: a missing one means "not verified", not a login window.
+    if ($env:ACL_UPDATE_GATE_TOKEN) { return $env:ACL_UPDATE_GATE_TOKEN.Trim() }
+    $saved = @{ GIT_TERMINAL_PROMPT = $env:GIT_TERMINAL_PROMPT; GCM_INTERACTIVE = $env:GCM_INTERACTIVE }
+    $oldPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'never'
+        $query = "protocol=https`nhost=github.com`npath=$(Get-AclRepoName).git`n`n"
+        $answer = $query | & $Git credential fill 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            foreach ($line in @($answer)) { if ($line -like 'password=*') { return $line.Substring(9).Trim() } }
+        }
+    } catch {
+    } finally {
+        $ErrorActionPreference = $oldPreference
+        $env:GIT_TERMINAL_PROMPT = $saved.GIT_TERMINAL_PROMPT; $env:GCM_INTERACTIVE = $saved.GCM_INTERACTIVE
+    }
+    foreach ($value in @($env:GH_TOKEN, $env:GITHUB_TOKEN)) { if ($value) { return $value.Trim() } }
+    return ''
+}
+
+function Get-AclCiRun([string]$Git, [string]$RunId) {
+    $token = Get-AclGitHubToken $Git
+    if (!$token) { throw 'no GitHub credential on this machine to verify it' }
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    try {
+        return Invoke-RestMethod -UseBasicParsing -TimeoutSec 20 -Uri "https://api.github.com/repos/$(Get-AclRepoName)/actions/runs/$RunId" -Headers @{
+            Authorization = "Bearer $token"; Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'; 'User-Agent' = 'acl-installer' }
+    } catch {
+        # Only the status: the request itself (and its token) never reaches the message.
+        $code = $null
+        if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+        if ($code) { throw "GitHub answered HTTP $code" } else { throw 'GitHub API is unreachable' }
+    }
+}
+
+function Test-AclCiRun($Run, [string]$RunId, [string]$Sha) {
+    # The API, not the tag text, decides: this repository, ci.yml on main,
+    # the exact tagged commit, completed with success.
+    if (!$Run) { return 'no API answer' }
+    if ([string]$Run.id -cne $RunId) { return 'is not the linked run' }
+    if ([string]$Run.repository.full_name -ne (Get-AclRepoName)) { return 'belongs to another repository' }
+    if ([string]$Run.path -cne '.github/workflows/ci.yml') { return 'is not the CI workflow' }
+    if ([string]$Run.head_sha -cne $Sha) { return 'was not run on the tagged commit' }
+    if ([string]$Run.head_branch -cne 'main') { return 'did not run on main' }
+    if (@('push', 'workflow_dispatch') -notcontains [string]$Run.event) { return 'was not a push/dispatch run' }
+    if ([string]$Run.status -cne 'completed' -or [string]$Run.conclusion -cne 'success') { return 'did not succeed' }
+    return ''
+}
+
 function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
     # Same gate as scripts/acl_update_gate.py: exact promoted main head,
-    # fast-forward, annotated release tag, success + Actions URL in annotation.
+    # fast-forward, annotated release tag whose linked CI run the GitHub API confirms.
     $sha = Invoke-AclGit $Git $Target @('rev-parse', 'origin/main^{commit}')
     if ($sha -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve the production release.' }
     if (!$FreshInstall) {
@@ -126,18 +181,25 @@ function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
         if ($dirty) { throw 'Tracked local changes present. Save/review them before updating ACL.' }
         Invoke-AclGit $Git $Target @('merge-base', '--is-ancestor', 'HEAD', $sha) | Out-Null
     }
+    $problems = @()
+    $runLink = 'https://github\.com/' + [regex]::Escape((Get-AclRepoName)) + '/actions/runs/(\d+)\b'
     $tags = (Invoke-AclGit $Git $Target @('tag', '--points-at', $sha, '--list', 'acl-release-*')) -split "`n"
     foreach ($tag in $tags) {
         if (!$tag) { continue }
         if ((Invoke-AclGit $Git $Target @('cat-file', '-t', $tag)) -ne 'tag') { continue }
         $annotation = Invoke-AclGit $Git $Target @('cat-file', '-p', $tag)
-        if ($annotation -match "(?m)^object $sha`$" -and
-            $annotation -match '(?i)\bsuccess\b' -and
-            $annotation -match 'github\.com/.+/actions/runs/\d+') {
-            return @{ Sha = $sha; Tag = $tag }
+        if ($annotation -notmatch "(?m)^object $sha`$") { continue }
+        $runIds = @([regex]::Matches($annotation, $runLink, 'IgnoreCase') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
+        if (!$runIds.Count) { $problems += "$tag links no CI run of $(Get-AclRepoName)"; continue }
+        foreach ($runId in $runIds) {
+            try { $why = Test-AclCiRun (Get-AclCiRun $Git $runId) $runId $sha } catch { $why = "could not be verified: $($_.Exception.Message)" }
+            if (!$why) { return @{ Sha = $sha; Tag = $tag; Run = $runId } }
+            $problems += "$tag CI run $runId $why"
         }
     }
-    throw 'Production has no verified annotated ACL release tag with a successful CI run URL. Nothing will be installed from an untagged branch.'
+    $detail = ''
+    if ($problems.Count) { $detail = ' (' + ($problems -join '; ') + ')' }
+    throw "Production has no verified annotated ACL release tag with a successful CI run confirmed by GitHub$detail. Nothing will be installed from an unverified commit."
 }
 
 function Install-Acl {

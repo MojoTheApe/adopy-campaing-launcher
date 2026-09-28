@@ -52,6 +52,11 @@ def publish(tag: str, repo: str, directory: Path) -> None:
               directory / (manifest["installer"]["name"] + ".sha256"), directory / "release.json"]
     if not all(p.is_file() for p in assets):
         raise ValueError("Release assets are incomplete")
+    # ACL-1357: подпись издателя едет рядом с release.json, если шаг подписи её
+    # сделал; обязательность решает сам шаг подписи (--require).
+    signature = directory / "release.json.sig"
+    if signature.is_file():
+        assets.append(signature)
     # Upload first to a draft. /releases/latest cannot expose a half upload.
     _gh("release", "create", tag, *(str(p) for p in assets), "--repo", repo, "--draft",
         "--title", f"Adopy Campaign Launcher {manifest['version']}",
