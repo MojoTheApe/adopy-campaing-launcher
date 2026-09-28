@@ -2347,6 +2347,9 @@ class AdsManagerFlow:
                     "creative_path": extra.creative_path or "",
                     "ad_title": extra.ad_title,
                     "ad_body": extra.ad_body,
+                    # ACL-1344: второй вариант основного текста — только если
+                    # задан, чтобы объявления без него шли как прежде.
+                    **({"ad_body2": extra.ad_body2} if extra.ad_body2 else {}),
                 }
                 for extra in ad_set.ads[1:]
             ]
@@ -2392,6 +2395,7 @@ class AdsManagerFlow:
                         additional_ads=additional_ads,
                         soft_fails_out=ad_soft_fails,
                         on_new_page=self._adopt_page,
+                        **({"ad_body2": ad.ad_body2} if ad.ad_body2 else {}),
                     )
                 finally:
                     try:

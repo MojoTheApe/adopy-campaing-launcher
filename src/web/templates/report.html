@@ -2834,6 +2834,8 @@
     .cbd-host .cb-preview-panel, .cbd-host .cbp-diag-slot { display: none !important; }
     .cb-in-drawer .cb-slot[hidden] { display: none !important; }
     .cb-field-error { outline: 2px solid var(--bad); }
+    /* ACL-1344: в «Primary text 2» набрано не название записи — выбора нет. */
+    .cb-text2-unmatched { outline: 2px solid var(--bad); }
     .cb-check-message { color: var(--bad); font-size: .75rem; padding: .3rem; }
     body.cbd-ready .manage-builder { display: none; }
     .cbd-host .cb-fields { grid-template-columns: 1fr; gap: 0.15rem; max-width: none; }
@@ -4578,6 +4580,11 @@ window.cbKeep = (function () {
       if (!hidden || !text) return;
       var f = field(hidden);
       if (f && f in data.shown) text.value = data.shown[f];
+      /* ACL-1344 (ревью PR #346): недонабранный «Primary text 2» — в поле
+         текст, а выбора нет. После перезагрузки красная обводка должна
+         вернуться, иначе видно одно, а на сервер уходит пусто. */
+      if (wrap.classList.contains('cb-text2-sel-wrap'))
+        text.classList.toggle('cb-text2-unmatched', !!text.value.trim() && !hidden.value);
     });
     var hint = slot.querySelector('.cb-targeting-hint');
     if (hint) hint.textContent = data.hint || '';
@@ -9095,7 +9102,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   // Keep in sync with the server-rendered <select> options in report.html's
   // cb-ad-row markup — preview-only, not part of the real publish payload.
-  var CTA_OPTIONS = ['Learn More', 'Sign Up', 'Get Offer', 'Download', 'Shop Now', 'Apply Now', 'Get Quote'];
+  // ACL-1344: выбор CTA (он был только для превью) заменён вторым текстом;
+  // превью показывает одну постоянную кнопку.
+  var CB_PREVIEW_CTA = 'Learn More';
 
   // ── Creatives from folder (loaded once) ──────────────────────────────
   var CREATIVES = [];  // [{filename, rel_path, folder, type}]
@@ -9253,8 +9262,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var copyHidden = row.querySelector('input[type="hidden"][name$="_copy"]');
       var copySearch = row.querySelector('.cb-adtitle-search');
       var copyVal = ((copyHidden && copyHidden.value) || (copySearch && copySearch.value) || '').trim();
-      var ctaSel = row.querySelector('.cb-cta-select');
-      var cta = ctaSel ? ctaSel.value : 'Learn More';
+      // ACL-1344: выбор CTA убран из билдера — превью показывает постоянную.
+      var cta = CB_PREVIEW_CTA;
       var vidRadio = row.querySelector('input[type="radio"][value="Video"]');
       var isVideo = !!(vidRadio && vidRadio.checked);
 
@@ -9395,11 +9404,23 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   window.cbAdTitleSearch = function(input) {
-    var wrap = input.closest('.cb-adtitle-sel-wrap');
+    // ACL-1344: тот же поиск обслуживает и «Primary text 2».
+    var wrap = input.closest('.cb-adtitle-sel-wrap, .cb-text2-sel-wrap');
     if (!wrap) return;
     var dropdown = wrap.querySelector('.cb-sel-dropdown');
     var hidden   = wrap.querySelector('input[type="hidden"]');
     var query    = input.value.trim().toLowerCase();
+    if (wrap.classList.contains('cb-text2-sel-wrap') && hidden) {
+      // Поле необязательное: стёрли — второго текста нет; набрали название
+      // записи целиком — оно и выбрано; иначе выбора нет, пока не щёлкнули
+      // по строке списка. Роботу уходит только то, что видно в поле.
+      var typed = input.value.trim();
+      var exact = typed ? AD_TITLES.filter(function(t) { return t.ad_title === typed; }) : [];
+      hidden.value = exact.length ? exact[0].ad_title : '';
+      input.classList.toggle('cb-text2-unmatched', !!typed && !hidden.value);
+      if (typed && !hidden.value) input.title = 'Pick an ad text from the list, or clear the field';
+      else input.title = 'Optional second primary text: the body of the chosen ad text is added as a second text option';
+    }
 
     var matches = AD_TITLES.filter(function(t) {
       if (!query) return true;
@@ -9431,6 +9452,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         var val = opt.dataset.val || '';
         input.value = val;
         if (hidden) hidden.value = val;
+        input.classList.remove('cb-text2-unmatched');
         dropdown.hidden = true;
       });
     });
@@ -9438,8 +9460,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   // close ad-title dropdown on blur
   document.addEventListener('click', function(e) {
-    document.querySelectorAll('.cb-adtitle-sel-wrap .cb-sel-dropdown').forEach(function(d) {
-      if (!d.closest('.cb-adtitle-sel-wrap').contains(e.target)) d.hidden = true;
+    document.querySelectorAll('.cb-adtitle-sel-wrap .cb-sel-dropdown, .cb-text2-sel-wrap .cb-sel-dropdown').forEach(function(d) {
+      if (!d.closest('.cb-adtitle-sel-wrap, .cb-text2-sel-wrap').contains(e.target)) d.hidden = true;
     });
   });
 
@@ -9447,7 +9469,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // Ad Title box (from Send-to-Builder) should show matches immediately on
   // click, not require re-typing first.
   document.addEventListener('focusin', function(e) {
-    if (e.target.classList && e.target.classList.contains('cb-adtitle-search') && e.target.value) {
+    if (e.target.classList && (e.target.classList.contains('cb-adtitle-search') || e.target.classList.contains('cb-text2-search')) && e.target.value) {
       cbAdTitleSearch(e.target);
     }
   });
@@ -9621,7 +9643,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   function initAllSelects(root) {
     // Skip creative and targeting wrappers — they have their own JS handlers
-    (root || document).querySelectorAll('.cb-sel-wrap:not(.cb-creative-sel-wrap):not(.cb-targeting-wrap):not(.cb-adtitle-sel-wrap)').forEach(initCbSel);
+    (root || document).querySelectorAll('.cb-sel-wrap:not(.cb-creative-sel-wrap):not(.cb-targeting-wrap):not(.cb-adtitle-sel-wrap):not(.cb-text2-sel-wrap)').forEach(initCbSel);
   }
 
   // ── Targeting code picker ─────────────────────────────────────────────
@@ -9798,10 +9820,15 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy" value="">' +
       '</div>' +
-      '<span class="cb-label">CTA <span style="opacity:0.6">(preview only)</span></span>' +
-      '<select class="cb-select cb-cta-select" name="' + pfx + 'cta">' +
-      CTA_OPTIONS.map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') +
-      '</select>' +
+      // ACL-1344: на месте прежнего «CTA (preview only)» — необязательный
+      // второй вариант основного текста. Выбирается так же, как Ad Title, из
+      // той же библиотеки текстов; роботу уходит body выбранной записи.
+      '<span class="cb-label">Primary text 2 <span style="opacity:0.6">(optional)</span></span>' +
+      '<div class="cb-sel-wrap cb-text2-sel-wrap">' +
+      '<input type="text" class="cb-sel-text cb-text2-search" placeholder="— optional: search ad text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Optional second primary text: the body of the chosen ad text is added as a second text option">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'copy2" value="">' +
+      '</div>' +
       '</div></div>';
   }
 
@@ -9865,9 +9892,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var thNew = newTitle.querySelector('input[type=hidden]');
       if (thSrc && thNew) thNew.value = thSrc.value;
     }
-    var srcCta = srcRow.querySelector('.cb-cta-select');
-    var newCta = newRow.querySelector('.cb-cta-select');
-    if (srcCta && newCta) newCta.value = srcCta.value;
+    // ACL-1344: второй вариант основного текста едет в копию вместе с первым.
+    var srcText2 = srcRow.querySelector('.cb-text2-sel-wrap');
+    var newText2 = newRow.querySelector('.cb-text2-sel-wrap');
+    if (srcText2 && newText2) {
+      var t2sSrc = srcText2.querySelector('.cb-text2-search');
+      var t2sNew = newText2.querySelector('.cb-text2-search');
+      if (t2sSrc && t2sNew) t2sNew.value = t2sSrc.value;
+      var t2hSrc = srcText2.querySelector('input[type=hidden]');
+      var t2hNew = newText2.querySelector('input[type=hidden]');
+      if (t2hSrc && t2hNew) t2hNew.value = t2hSrc.value;
+    }
     initAllSelects(newRow);
   }
 
@@ -10518,15 +10553,11 @@ window.cbPreview = function(form, done, onlySlot) {
   panel.innerHTML = '<span style="color:var(--muted)">Loading preview…</span>';
   if (publishBtn) publishBtn.disabled = true;
 
-  // Collect client-only fields the server response doesn't echo back (CTA),
-  // plus which Page name this account's previews should show.
+  // Имя страницы для превью этого аккаунта. ACL-1344: выбора CTA в билдере
+  // больше нет — превью берёт постоянную кнопку по умолчанию.
   var accountLabel = (form.querySelector('[name="account_label"]') || {}).value || '';
   var pageName = (ACCOUNT_PREFLIGHT[accountLabel] && ACCOUNT_PREFLIGHT[accountLabel].page_name) || accountLabel || 'Your Page';
   var ctaMap = {};
-  form.querySelectorAll('.cb-cta-select').forEach(function(sel) {
-    var m = sel.name.match(/^camp_(\d+)_ad_(\d+)_cta$/);
-    if (m) ctaMap[m[1] + '_' + m[2]] = sel.value;
-  });
 
   var fd = cbCollectFormData(form);
   var snapshot = JSON.stringify(Array.from(fd.entries()));
@@ -10737,7 +10768,9 @@ function cbDrawerApplyPlan(form, plan, error) {
       var selectors=[];
       errors.forEach(function(e) {
         if (/creative|file|image|video/i.test(e)) selectors.push('.cb-creative-search');
-        if (/text|copy|headline/i.test(e)) selectors.push('.cb-adtitle-search');
+        // ACL-1344: ошибка второго текста подсвечивает его поле, не Ad Title.
+        if (/primary text 2/i.test(e)) selectors.push('.cb-text2-search');
+        else if (/text|copy|headline/i.test(e)) selectors.push('.cb-adtitle-search');
         if (/budget/i.test(e)) selectors.push('[name$="_budget"]');
         if (/target/i.test(e)) selectors.push('.cb-targeting-search');
       });
