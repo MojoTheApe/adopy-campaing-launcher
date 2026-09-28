@@ -75,8 +75,43 @@ def normalise_step(label: str) -> tuple[str, bool | None]:
 #: Что похоже на номер кабинета, id профиля или иной опознавательный знак.
 #: Контекст отказа уезжает в общую таблицу телеметрии, которую читает вся
 #: компания, — идентификаторы туда не едут.
+#:
+#: ACL-1342 S09: список имён секретов — раньше здесь ловилось только
+#: `key=value` для `access_token`/`token`/`password`/`authorization`/
+#: `fb_dtsg`/`lsd`, и то не для всех: `client_secret=`, `api_key=`,
+#: `proxy_pass=` не совпадали (в списке не было ни "secret", ни "key", ни
+#: точного "proxy_pass"), а `"password":"..."` — JSON- и python-repr-форма
+#: с двоеточием вместо `=` — не совпадала вовсе, для любого из имён.
+_SECRET_KEYS = (
+    r"(?:refresh_token|access_token|token|client_secret|api_key|apikey"
+    r"|proxy_pass|passwd|password|authorization|fb_dtsg|lsd)"
+)
+
+#: Для «голой» формы `key: value` / `key=value` без кавычек "authorization"
+#: исключён: заголовок обычно пишется как "Authorization: Bearer <токен>", и
+#: с двоеточием в общем списке это разобралось бы как key="authorization",
+#: value="Bearer" — отдельное слово "Bearer" вместо всего токена, который сам
+#: по себе прячет паттерн `Bearer` ниже. Через `=` ("authorization=...")
+#: поведение осталось прежним — этот случай ловится отдельно.
+_SECRET_KEYS_BARE = (
+    r"(?:refresh_token|access_token|token|client_secret|api_key|apikey"
+    r"|proxy_pass|passwd|password|fb_dtsg|lsd)"
+)
+
+_BARE_VALUE = r'("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|[^\s,;&"\'<>\)\]\}]{1,16384})'
+
 _SCRUB = (
-    (re.compile(r"((?:access_token|token|password|authorization|fb_dtsg|lsd)=)[^&\s\"'<>]{1,16384}", re.I), r"\1<hidden>"),
+    # JSON / python-repr словарь: "key":"value" или 'key': 'value' — с любыми
+    # пробелами вокруг двоеточия, кавычки ключа и значения не обязаны
+    # совпадать друг с другом.
+    (re.compile(rf'(["\'])({_SECRET_KEYS})\1(\s*:\s*)(["\'])(?:(?!\4).)*\4', re.I),
+     lambda m: f"{m.group(1)}{m.group(2)}{m.group(1)}{m.group(3)}{m.group(4)}<hidden>{m.group(4)}"),
+    # key=value / key: value без кавычек вокруг имени, внутри произвольного
+    # текста лога — то, что раньше проверял единственный `(...)=` паттерн.
+    (re.compile(rf'\b({_SECRET_KEYS_BARE})(\s*[:=]\s*){_BARE_VALUE}', re.I),
+     lambda m: f"{m.group(1)}{m.group(2)}<hidden>"),
+    (re.compile(rf'\b(authorization)(\s*=\s*){_BARE_VALUE}', re.I),
+     lambda m: f"{m.group(1)}{m.group(2)}<hidden>"),
     (re.compile(r"\bBearer [A-Za-z0-9._~+/-]{1,16384}", re.I), "Bearer <hidden>"),
     (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
     (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<uuid>"),
@@ -92,10 +127,21 @@ def scrub(text: str) -> str:
     return out
 
 
+#: ACL-1342 S09: та же расширенная граница, что и в _SECRET_KEYS — диагностика
+#: приходит и настоящим словарём (не только строкой из логов), и по ключу
+#: словаря значение не пройдёт через `scrub()` (в самом значении имени ключа
+#: обычно нет, скрести регуляркой там нечего).
+_SECRET_DICT_KEYS = {
+    "token", "access_token", "refresh_token", "password", "passwd",
+    "client_secret", "api_key", "apikey", "proxy_pass",
+    "authorization", "fb_dtsg", "lsd",
+}
+
+
 def scrub_diag(value):
     """Explicit step diagnostics share the same export boundary as page context."""
     if isinstance(value, dict):
-        return {key: ("<hidden>" if str(key).lower() in {"token", "access_token", "password", "authorization", "fb_dtsg", "lsd"} else scrub_diag(item))
+        return {key: ("<hidden>" if str(key).lower() in _SECRET_DICT_KEYS else scrub_diag(item))
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [scrub_diag(item) for item in value]
