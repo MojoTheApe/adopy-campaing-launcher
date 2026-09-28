@@ -191,10 +191,18 @@ PER_AD_POLICY: dict[str, tuple[str, str]] = {
         "Meta created an extra empty ad in this ad set; delete the empty "
         "\"New Leads ad\" before publishing",
     ),
+    # ACL-1344: второй вариант основного текста не встал. Первый текст
+    # сверен, объявление годно — предупреждение, а не блокировка.
+    "second_text": (
+        WARNING,
+        "the optional second primary text was not added; the ad runs with its "
+        "first primary text only - add the second text option in Ads Manager "
+        "by hand if it is needed",
+    ),
 }
 
 _PER_AD_NAME = re.compile(
-    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination|extra_empty_ad)$"
+    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination|extra_empty_ad|second_text)$"
 )
 
 

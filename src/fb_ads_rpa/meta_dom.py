@@ -4298,6 +4298,7 @@ def run_recorded_campaign_flow(
     additional_ads: list[dict[str, str]] | None = None,
     soft_fails_out: list[str] | None = None,
     on_new_page=None,
+    ad_body2: str = "",
 ) -> str:
     """Create -> Website -> ... -> Ad level, using the exact locators from a
     verified human Playwright codegen recording (2026-07-21) instead of the
@@ -5231,7 +5232,12 @@ def run_recorded_campaign_flow(
                 ok_copy = write_ad_copy(
                     page, ad_title, ad_body,
                     ad_name=copy_ad_name,
-                    destination_url=destination_url, report=copy_report)
+                    destination_url=destination_url, report=copy_report,
+                    **({"body2": ad_body2} if ad_body2 else {}))
+                second_fail = second_text_soft_fail("ad", ad_name or "ad 1", ad_body2, copy_report) \
+                    if ok_copy else None
+                if second_fail:
+                    ad_level_fails.append(second_fail)
                 if not ok_copy:
                     if _stop_if_account_blocked("ad_copy"):
                         return "account_blocked"
@@ -5351,6 +5357,7 @@ def run_recorded_campaign_flow(
 
                 extra_title = extra.get("ad_title") or ""
                 extra_body = extra.get("ad_body") or ""
+                extra_body2 = extra.get("ad_body2") or ""
                 if destination_url:
                     try:
                         if not set_ad_destination_website(page, destination_url):
@@ -5375,7 +5382,12 @@ def run_recorded_campaign_flow(
                         copy_report = {}
                         ok_copy = write_ad_copy(
                             page, extra_title, extra_body, ad_name=extra_copy_name,
-                            destination_url=destination_url, report=copy_report)
+                            destination_url=destination_url, report=copy_report,
+                            **({"body2": extra_body2} if extra_body2 else {}))
+                        second_fail = second_text_soft_fail(
+                            tag, extra_name or tag, extra_body2, copy_report) if ok_copy else None
+                        if second_fail:
+                            ad_level_fails.append(second_fail)
                         if not ok_copy:
                             _shot(f"fail_{tag}_copy", copy_report)
                             ad_level_fails.append(
@@ -10545,8 +10557,14 @@ def mark_ad_copy_field(
     label: str | None,
     mark: str,
     placeholder: str | None = None,
+    first_of_many: bool = False,
 ) -> bool:
     """Пометить поле объявления атрибутом, за который его возьмёт локатор.
+
+    `first_of_many` (ACL-1344): у объявления со вторым вариантом текста в
+    `message_field` два поля — наше основное первое по порядку. Только для
+    таких объявлений неоднозначность решается первым полем; у остальных она
+    по-прежнему отказ.
 
     Написано 2026-09-09 по настоящей разметке (снимок прогона, фикстура
     `tests/fixtures/ads_manager/ad_copy_2026_09_09.html`). Прежний код искал
@@ -10582,7 +10600,7 @@ def mark_ad_copy_field(
         return bool(
             page.evaluate(
                 """
-                ([key, label, mark, placeholder]) => {
+                ([key, label, mark, placeholder, firstOfMany]) => {
                   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
                   const seen = (el) => {
                     const r = el.getBoundingClientRect();
@@ -10620,13 +10638,18 @@ def mark_ad_copy_field(
                     }
                   }
                   candidates = [...new Set(candidates)];
+                  if (firstOfMany && candidates.length > 1) {
+                    candidates.sort((a, b) =>
+                      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+                    candidates = [candidates[0]];
+                  }
                   if (candidates.length !== 1) return false;
                   const el = candidates[0];
                   el.setAttribute('data-rpa-field', mark);
                   return true;
                 }
                 """,
-                [key, label, mark, placeholder],
+                [key, label, mark, placeholder, bool(first_of_many)],
             )
         )
     except Exception:
@@ -10842,6 +10865,264 @@ def disable_text_generation(page: Page) -> bool | None:
     return ok
 
 
+#: ACL-1344: второй вариант основного текста.
+#:
+#: Как выглядит кнопка — известно только по скриншотам прогонов (DOM ни одного
+#: снимка `rpa_pages` её не содержит: снимки сделаны до ввода текста, когда
+#: блок креатива ещё скрыт, и обрезаны на ~3.98 МБ). Скриншоты
+#: `acl-live-0919/output/rpa_screenshots/0a81a6438251/..._after_ad_copy.png`
+#: (22.09) и `08726d544c47/..._fail_ad3_copy.png` (21.09): подпись «Primary
+#: text (1 of 5)», под полем текста — кнопка-рамка «⊕ Add text option», ниже —
+#: «Headline 1 of 5» и «⊕ Add headline option»; раздел Meta «Advantage+
+#: creative text generation» идёт сразу под кнопкой. Разметка кнопки, того,
+#: куда Meta кладёт новое поле, и его подписи — ПРЕДПОЛОЖЕНИЕ (роль button,
+#: текст «Add text option»; новое поле — ещё один редактор рядом с первым).
+#: Поэтому поиск нарочно широкий: по тексту/aria-label кнопки на всей
+#: странице, «Add» — только внутри `message_field`; новое поле — любой
+#: появившийся после нажатия видимый редактор между основным текстом и
+#: заголовком. Всё, что лежит в разделе генерации текста Meta, не считается
+#: ни кнопкой, ни полем: сочинённые Meta варианты — не наш второй текст.
+_TEXT_OPTIONS_JS = r"""
+  ([op, arg]) => {
+    const norm = (s) => (s || '').replace(/[\s​﻿]+/g, ' ').trim();
+    const seen = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'
+        && !el.closest('[aria-hidden="true"], [inert]');
+    };
+    const EDITORS = 'textarea,[contenteditable="true"]';
+    const LABEL = 'Tell people what your ad is about';
+    const hosts = [...document.querySelectorAll('[data-surface$="/message_field"]')];
+    const inHost = (el) => hosts.some(h => h.contains(el));
+    // Наше основное поле: помечено `fill_ad_copy`, иначе — первый редактор
+    // в `message_field`.
+    let body = document.querySelector('[data-rpa-field="body"]');
+    if (!body) {
+      for (const h of hosts) {
+        const e = [...h.querySelectorAll(EDITORS)].find(seen);
+        if (e) { body = e; break; }
+      }
+    }
+    // Разделы Meta со сгенерированным текстом: по разметочному имени и по
+    // заголовку. От заголовка поднимаемся, пока предок не накрыл наше поле.
+    const zones = [...document.querySelectorAll(
+      '[data-surface*="text_enhancements"],[data-surface*="text_generation"],[data-surface*="gen_ai"]')];
+    for (const leaf of document.querySelectorAll('span,div,label,h1,h2,h3,h4,[role=heading]')) {
+      if (leaf.children.length) continue;
+      if (!/creative text generation|text variations|generated text|text suggestions/i.test(norm(leaf.textContent))) continue;
+      let z = leaf;
+      if (body) {
+        while (z.parentElement && z.parentElement !== document.body && !z.parentElement.contains(body)) z = z.parentElement;
+      } else {
+        for (let i = 0; i < 3 && z.parentElement; i++) z = z.parentElement;
+      }
+      zones.push(z);
+    }
+    const inZone = (el) => zones.some(z => z.contains(el) && !(body && z.contains(body)));
+    const byOrder = (a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+    const textOf = (el) => el.value !== undefined ? el.value : (el.innerText || el.textContent || '');
+
+    let boxes = [];
+    for (const h of hosts) boxes.push(...h.querySelectorAll(EDITORS));
+    boxes.push(...[...document.querySelectorAll(EDITORS)].filter(e =>
+      e.getAttribute('aria-label') === LABEL || e.getAttribute('placeholder') === LABEL));
+    boxes.push(...document.querySelectorAll('[data-rpa-opt="ours"]'));
+    if (body) boxes.push(body);
+    boxes = [...new Set(boxes)].filter(e => seen(e) && !inZone(e)
+      && !(e.parentElement && e.parentElement.closest(EDITORS)));
+    boxes.sort(byOrder);
+
+    if (op === 'pre') {
+      // Всё, что уже стоит на странице до нажатия «Add text option».
+      let n = 0;
+      for (const e of document.querySelectorAll(EDITORS)) { e.setAttribute('data-rpa-pre', '1'); n++; }
+      return n;
+    }
+    if (op === 'mark') {
+      for (const old of document.querySelectorAll('[data-rpa-field="body2"]')) old.removeAttribute('data-rpa-field');
+      const el = boxes[arg];
+      if (!el || el === body) return false;
+      el.setAttribute('data-rpa-field', 'body2');
+      return true;
+    }
+    if (op === 'claim') {
+      // Новое поле — видимый редактор без метки «был до нажатия».
+      const fresh = [...document.querySelectorAll(EDITORS)].filter(e =>
+        !e.hasAttribute('data-rpa-pre') && seen(e) && !inZone(e) && e !== body
+        && !(e.parentElement && e.parentElement.closest(EDITORS)));
+      let pick = fresh.filter(e => boxes.includes(e));
+      if (!pick.length && body) {
+        // Запасной ход: поле встало между основным текстом и заголовком.
+        const top = body.getBoundingClientRect().top;
+        const head = document.querySelector('[data-surface$="/headline_field"]');
+        const bottom = head && seen(head) ? head.getBoundingClientRect().top : Infinity;
+        pick = fresh.filter(e => { const r = e.getBoundingClientRect(); return r.top > top && r.top < bottom; });
+      }
+      if (pick.length !== 1) return {ok: false, fresh: fresh.length, picked: pick.length};
+      for (const old of document.querySelectorAll('[data-rpa-field="body2"]')) old.removeAttribute('data-rpa-field');
+      pick[0].setAttribute('data-rpa-opt', 'ours');
+      pick[0].setAttribute('data-rpa-field', 'body2');
+      return {ok: true, fresh: fresh.length, picked: 1};
+    }
+
+    // op === 'scan' | 'add_point'
+    const ADD_RE = /^\+?\s*add (a |another )?(primary )?text( option)?$/i;
+    const BARE_RE = /^\+?\s*add$/i;
+    const said = (e, re) => re.test(norm(e.getAttribute('aria-label'))) || re.test(norm(e.textContent));
+    const clickable = [...document.querySelectorAll('[role=button],button,a')].filter(e =>
+      seen(e) && !inZone(e) && e.getAttribute('aria-disabled') !== 'true' && !e.disabled);
+    let adds = clickable.filter(e => said(e, ADD_RE));
+    let how = 'text';
+    if (!adds.length) {
+      adds = clickable.filter(e => inHost(e) && said(e, BARE_RE));
+      how = 'bare_add_in_field';
+    }
+    adds = adds.filter(e => !adds.some(o => o !== e && e.contains(o)));
+    if (adds.length > 1 && boxes.length) {
+      // Несколько похожих — ближайшая под последним полем текста.
+      const last = boxes[boxes.length - 1].getBoundingClientRect().bottom;
+      const below = adds.map(e => [e, e.getBoundingClientRect().top - last]).filter(p => p[1] >= -2);
+      below.sort((a, b) => a[1] - b[1]);
+      adds = below.length ? [below[0][0]] : adds;
+    }
+    const add = adds.length ? adds[0] : null;
+    const out = {
+      boxes: boxes.map(e => ({text: textOf(e), body: e === body, ours: e.getAttribute('data-rpa-opt') === 'ours'})),
+      add_found: !!add, add_how: add ? how : '', add_count: adds.length, zones: zones.length,
+    };
+    if (op === 'add_point' && add) {
+      add.scrollIntoView({block: 'center'});
+      const r = add.getBoundingClientRect();
+      out.point = {x: r.x + r.width / 2, y: r.y + r.height / 2};
+    }
+    return out;
+  }
+"""
+"""Поля вариантов основного текста и кнопка «Add text option» (ACL-1344)."""
+
+#: Строка мягкого отказа в результате прогона и телеметрии.
+SECOND_TEXT_NOT_ADDED = "second primary text not added"
+
+
+def second_text_soft_fail(tag: str, ad_label: str, body2: str, report: dict) -> str | None:
+    """Строка мягкого отказа второго текста для списка объявления (или None).
+
+    `tag` — «ad» для первого объявления, «ad2», «ad3»… для следующих: имя
+    `<tag>_second_text` классифицирует `failure_policy` (предупреждение, не
+    блокировка — текст 1 на месте).
+    """
+    if not body2:
+        return None
+    state = (report or {}).get("second_text") or {}
+    if state.get("ok"):
+        return None
+    why = state.get("why") or "not_attempted"
+    return f"{tag}_second_text:{ad_label} {SECOND_TEXT_NOT_ADDED} ({why})"
+
+
+def _text_options(page: Page, op: str = "scan", arg=None):
+    try:
+        return page.evaluate(_TEXT_OPTIONS_JS, [op, arg])
+    except Exception as exc:
+        return {"error": str(exc)[:80]}
+
+
+def add_second_primary_text(page: Page, body: str, body2: str, type_and_confirm,
+                            report: dict) -> bool:
+    """Добавить второй вариант основного текста и проверить оба (ACL-1344).
+
+    Зовётся после того, как основной текст набран и сверен. Порядок:
+
+    1. Второй текст уже стоит в одном из наших полей (повтор после сбоя
+       заголовка) — не добавляем третье поле, только сверяем.
+    2. Наше пустое поле с прошлой попытки — печатаем в него.
+    3. Иначе жмём «Add text option» и берём поле, которого до нажатия не было.
+
+    Печатает `type_and_confirm` — тот же путь, что и основной текст:
+    `_type_human` построчно, перенос — нажатием Enter, сверка по экрану.
+    В конце сверяются оба поля. Кнопки и поля раздела генерации текста Meta
+    не трогаются никогда (решение владельца 22.09): их варианты — не наши.
+
+    Неудача не роняет объявление: текст 1 уже стоит. В `report` — причина,
+    вызывающий пишет мягкий отказ `SECOND_TEXT_NOT_ADDED`.
+
+    TODO(ACL-1327): одноэкранный редактор (`simple_create`) — на другой
+    ветке; есть ли там та же кнопка, не проверено. Здесь — классический.
+    """
+    # Каждая попытка пишет свой итог: повтор не наследует причину прошлой.
+    out = report["second_text"] = {"ok": False}
+
+    def _done(ok: bool, why: str = "", **diag) -> bool:
+        out["ok"] = ok
+        if why:
+            out["why"] = why
+        out.update(diag)
+        _telemetry.record("ad_copy_second_text", ok,
+                          note=why or "added_and_verified", diag=diag or None)
+        return ok
+
+    state = _text_options(page)
+    if not isinstance(state, dict) or state.get("error"):
+        return _done(False, "scan_failed", error=(state or {}).get("error", "") if isinstance(state, dict) else "")
+    boxes = state.get("boxes") or []
+    if not boxes:
+        return _done(False, "primary_text_box_not_found")
+
+    idx = next((i for i, b in enumerate(boxes)
+                if not b.get("body") and _copy_matches(b.get("text", ""), body2)), None)
+    if idx is None:
+        idx = next((i for i, b in enumerate(boxes)
+                    if b.get("ours") and not b.get("body") and not (b.get("text") or "").strip()), None)
+    if idx is not None:
+        out["reused_box"] = True
+        claimed = bool(_text_options(page, "mark", idx))
+    else:
+        point_state = _text_options(page, "add_point")
+        point = point_state.get("point") if isinstance(point_state, dict) else None
+        if not point:
+            return _done(False, "add_control_not_found",
+                         boxes=len(boxes), zones=state.get("zones"))
+        out["add_how"] = point_state.get("add_how")
+        _text_options(page, "pre")
+        _cdp_mouse_click(page, point["x"], point["y"])
+        claimed = False
+        claim: dict = {}
+        for _ in range(10):
+            _sleep_h(0.5)
+            claim = _text_options(page, "claim") or {}
+            if isinstance(claim, dict) and claim.get("ok"):
+                claimed = True
+                break
+        if not claimed:
+            return _done(False, "option_box_not_added", claim=claim)
+    if not claimed:
+        return _done(False, "option_box_lost")
+
+    box = page.locator('[data-rpa-field="body2"]').first
+    handle = None
+    try:
+        if box.count():
+            handle = _focus_via_cdp_click(page, box)
+    except Exception:
+        handle = None
+    if handle is None:
+        return _done(False, "option_box_not_focused")
+    if not type_and_confirm(handle, body2):
+        return _done(False, "second_text_mismatch", seen=_handle_text(handle)[:120])
+
+    # Оба поля — каждое своим текстом. Метки могли слететь при перерисовке,
+    # поэтому сверяем по содержимому: одно поле с текстом 1, другое — с 2.
+    after = _text_options(page) or {}
+    texts = [b.get("text", "") for b in (after.get("boxes") or [])]
+    first = next((i for i, t in enumerate(texts) if _copy_matches(t, body)), None)
+    second = next((i for i, t in enumerate(texts)
+                   if i != first and _copy_matches(t, body2)), None)
+    if first is None or second is None:
+        return _done(False, "options_not_verified", boxes=len(texts),
+                     text1_ok=first is not None, text2_ok=second is not None)
+    return _done(True, boxes=len(texts))
+
+
 def _repair_blocked_copy_editor(page: Page, ad_name: str, destination_url: str) -> bool:
     """Снять блокировку редактора креатива. Один раз, без второго круга.
 
@@ -10945,7 +11226,8 @@ def _heal_failed_component(page: Page, ad_name: str, report: dict, where: str) -
 
 
 def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
-                  destination_url: str = "", report: dict | None = None) -> bool:
+                  destination_url: str = "", report: dict | None = None,
+                  body2: str = "") -> bool:
     """Написать текст объявления: лечим блокировку заранее, чиним один раз.
 
     ACL-1281 (решение владельца 22.09). Прежний порядок — «пробуем, ждём поля,
@@ -10953,8 +11235,13 @@ def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
     стоил 6–13 минут на объявление и всё равно часто кончался без текста.
     Теперь блокировка проверяется до первой попытки, лечение одно, а если
     текст всё равно не встал — шаг отказывает сразу и называет объявление.
+
+    `body2` (ACL-1344) — второй вариант основного текста; итог его — в
+    `report["second_text"]`, на ответ шага он не влияет.
     """
     report = report if report is not None else {}
+    # Без второго текста `fill_ad_copy` зовётся ровно как раньше.
+    more = {"ad_body2": body2} if body2 else {}
     # Какое объявление пишем — `fill_ad_copy` сверяет его с открытым.
     report["ad_name"] = ad_name
     # ACL-1313 (5b2237): к тексту окно пришло свёрнутым — проверка окна стоит
@@ -10973,7 +11260,7 @@ def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
         if not _repair_blocked_copy_editor(page, ad_name, destination_url):
             report["why"] = "editor_blocked"
             return False
-    if fill_ad_copy(page, title, body, report):
+    if fill_ad_copy(page, title, body, report, **more):
         return True
     if not _review_errors_visible(page):
         # Не блокировка — обычная осечка ввода: одна честная вторая попытка.
@@ -10984,7 +11271,7 @@ def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
             _back_on_the_ad(page, ad_name, report)
         _await_creative_settled(page)
         report["retry"] = True
-        return fill_ad_copy(page, title, body, report)
+        return fill_ad_copy(page, title, body, report, **more)
     if report.get("blocked_before"):
         # Уже лечили в этом объявлении — второй круг тех же минут не стоит.
         _telemetry.record("ad_copy_blocked", False, note="still_blocked_after_repair")
@@ -10996,7 +11283,7 @@ def write_ad_copy(page: Page, title: str, body: str, *, ad_name: str = "",
         report["why"] = "editor_blocked"
         return False
     report["retry"] = True
-    return fill_ad_copy(page, title, body, report)
+    return fill_ad_copy(page, title, body, report, **more)
 
 
 def _on_the_named_ad(page: Page, ad_name: str) -> bool:
@@ -11017,9 +11304,15 @@ def _on_the_named_ad(page: Page, ad_name: str) -> bool:
 
 
 def fill_ad_copy(
-    page: Page, ad_title: str, ad_body: str, report: dict | None = None
+    page: Page, ad_title: str, ad_body: str, report: dict | None = None,
+    ad_body2: str = "",
 ) -> bool:
     """Заполнить основной текст и заголовок объявления.
+
+    `ad_body2` (ACL-1344) — необязательный второй вариант основного текста.
+    Добавляется после основного (`add_second_primary_text`); его неудача не
+    меняет ответа: объявление с текстом 1 годно, отказ второго текста мягкий
+    и лежит в `report["second_text"]`. Без `ad_body2` всё как прежде.
 
     `page.keyboard.type()` теряет диакритику на этом поле («Regístrese» →
     «Registrese») — проверено живьём 2026-07-26. Поэтому `insert_text()`:
@@ -11173,7 +11466,10 @@ def fill_ad_copy(
 
     def _locate(key: str, mark: str):
         """Локатор поля — по разметочному имени Meta, иначе по подписи."""
-        if mark_ad_copy_field(page, key, _AD_COPY_FIELDS.get(key), mark):
+        # ACL-1344: после «Add text option» в `message_field` два поля; для
+        # таких объявлений основное — первое. Остальным аргумент не передаём.
+        extra = {"first_of_many": True} if (ad_body2 and key == "message_field") else {}
+        if mark_ad_copy_field(page, key, _AD_COPY_FIELDS.get(key), mark, **extra):
             return page.locator(f'[data-rpa-field="{mark}"]').first
         return None
 
@@ -11250,6 +11546,21 @@ def fill_ad_copy(
             _sleep_h(0.5)
             if _wrong_ad():
                 return False
+
+    if ad_body2 and ad_body and body_ok:
+        # ACL-1344: второй вариант — только поверх сверенного первого.
+        try:
+            add_second_primary_text(page, ad_body, ad_body2, _type_and_confirm, report)
+        except Exception as exc:
+            report["second_text"] = {"ok": False, "why": f"exception:{str(exc)[:60]}"}
+            _telemetry.record("ad_copy_second_text", False, note="exception",
+                              diag={"error": str(exc)[:120]})
+        # Добавленное поле не должно включить Meta её варианты текста
+        # (решение владельца 22.09): проверяем выключатели ещё раз.
+        report["variations_off_after_text2"] = disable_text_variations(page)
+        report["generation_off_after_text2"] = disable_text_generation(page)
+    elif ad_body2:
+        report["second_text"] = {"ok": False, "why": "primary_text_not_typed"}
 
     return body_ok and title_ok
 
