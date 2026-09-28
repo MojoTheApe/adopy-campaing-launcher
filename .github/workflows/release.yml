@@ -33,11 +33,10 @@ jobs:
     name: Build, test and publish the installer
     runs-on: windows-latest
     timeout-minutes: 60
-    # ACL-1357: the owner protects this environment (required reviewers,
-    # deployment tags acl-release-*) and keeps ACL_RELEASE_SIGNING_KEY in it,
-    # so the signing key is only reachable from an approved release run.
-    # An environment that does not exist yet is created without rules.
-    environment: release
+    # ACL-1357: after the plan upgrade (environments with protection rules
+    # are not available for a private repository on GitHub Free) add
+    # `environment: release` here and move ACL_RELEASE_SIGNING_KEY into it.
+    # See docs/RELEASE_TRUST.md.
     env:
       ACL_NO_TELEMETRY: "1"
       PYTHONIOENCODING: utf-8

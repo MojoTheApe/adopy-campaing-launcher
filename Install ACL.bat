@@ -118,42 +118,47 @@ function Invoke-AclGit([string]$Git, [string]$Target, [string[]]$GitArgs) {
 
 function Get-AclRepoName { 'MojoTheApe/adopy-campaing-launcher' }
 
-function Get-AclGitHubToken([string]$Git) {
-    # Same sources as scripts/acl_update_gate.py. The stored Git credential is
-    # read without any prompt: a missing one means "not verified", not a login window.
+function Get-AclGitHubToken([string]$Git, [string]$Target) {
+    # Same sources as scripts/acl_update_gate.py. The clone's stored Git
+    # credential is read with every prompt disabled (terminal, GCM window and
+    # askpass programs): a missing one means "nothing to verify with", not a login window.
     if ($env:ACL_UPDATE_GATE_TOKEN) { return $env:ACL_UPDATE_GATE_TOKEN.Trim() }
-    $saved = @{ GIT_TERMINAL_PROMPT = $env:GIT_TERMINAL_PROMPT; GCM_INTERACTIVE = $env:GCM_INTERACTIVE }
+    $names = @('GIT_TERMINAL_PROMPT', 'GCM_INTERACTIVE', 'GIT_ASKPASS', 'SSH_ASKPASS')
+    $saved = @{}
+    foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
     $oldPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
         $env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'never'
+        [Environment]::SetEnvironmentVariable('GIT_ASKPASS', $null, 'Process')
+        [Environment]::SetEnvironmentVariable('SSH_ASKPASS', $null, 'Process')
         $query = "protocol=https`nhost=github.com`npath=$(Get-AclRepoName).git`n`n"
-        $answer = $query | & $Git credential fill 2>$null
+        $answer = $query | & $Git -C $Target -c 'core.askPass=' credential fill 2>$null
         if ($LASTEXITCODE -eq 0) {
             foreach ($line in @($answer)) { if ($line -like 'password=*') { return $line.Substring(9).Trim() } }
         }
     } catch {
     } finally {
         $ErrorActionPreference = $oldPreference
-        $env:GIT_TERMINAL_PROMPT = $saved.GIT_TERMINAL_PROMPT; $env:GCM_INTERACTIVE = $saved.GCM_INTERACTIVE
+        foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
     }
     foreach ($value in @($env:GH_TOKEN, $env:GITHUB_TOKEN)) { if ($value) { return $value.Trim() } }
     return ''
 }
 
-function Get-AclCiRun([string]$Git, [string]$RunId) {
-    $token = Get-AclGitHubToken $Git
-    if (!$token) { throw 'no GitHub credential on this machine to verify it' }
+function Invoke-AclGitHubApi([string]$Token, [string]$Path) {
+    # @{ Code = HTTP status (0 = unreachable); Body = parsed JSON on 200 }.
+    # Only the status leaves this function: never the request or its token.
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     try {
-        return Invoke-RestMethod -UseBasicParsing -TimeoutSec 20 -Uri "https://api.github.com/repos/$(Get-AclRepoName)/actions/runs/$RunId" -Headers @{
-            Authorization = "Bearer $token"; Accept = 'application/vnd.github+json'
+        $body = Invoke-RestMethod -UseBasicParsing -TimeoutSec 20 -Uri "https://api.github.com/repos/$(Get-AclRepoName)$Path" -Headers @{
+            Authorization = "Bearer $Token"; Accept = 'application/vnd.github+json'
             'X-GitHub-Api-Version' = '2022-11-28'; 'User-Agent' = 'acl-installer' }
+        return @{ Code = 200; Body = $body }
     } catch {
-        # Only the status: the request itself (and its token) never reaches the message.
-        $code = $null
+        $code = 0
         if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
-        if ($code) { throw "GitHub answered HTTP $code" } else { throw 'GitHub API is unreachable' }
+        return @{ Code = $code; Body = $null }
     }
 }
 
@@ -171,9 +176,33 @@ function Test-AclCiRun($Run, [string]$RunId, [string]$Sha) {
     return ''
 }
 
+function Get-AclCiVerdict([string]$Git, [string]$Target, [string]$RunId, [string]$Sha) {
+    # verified / rejected (the API says no) / unverified (nothing to check with),
+    # the same three outcomes as scripts/acl_update_gate.py.
+    $token = Get-AclGitHubToken $Git $Target
+    if (!$token) { return @{ Verdict = 'unverified'; Why = 'could not be verified: no GitHub credential on this machine' } }
+    $run = Invoke-AclGitHubApi $token "/actions/runs/$RunId"
+    if ($run.Code -eq 200) {
+        $why = Test-AclCiRun $run.Body $RunId $Sha
+        if ($why) { return @{ Verdict = 'rejected'; Why = $why } }
+        return @{ Verdict = 'verified'; Why = '' }
+    }
+    if ($run.Code -eq 404) {
+        # A missing run is a made-up link only if the same token sees the repository.
+        $repo = Invoke-AclGitHubApi $token ''
+        if ($repo.Code -eq 200 -and [string]$repo.Body.full_name -eq (Get-AclRepoName)) {
+            return @{ Verdict = 'rejected'; Why = 'does not exist in the repository (not a real run)' }
+        }
+    }
+    if ($run.Code) { return @{ Verdict = 'unverified'; Why = "could not be verified: GitHub answered HTTP $($run.Code)" } }
+    return @{ Verdict = 'unverified'; Why = 'could not be verified: GitHub API is unreachable' }
+}
+
 function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
     # Same gate as scripts/acl_update_gate.py: exact promoted main head,
-    # fast-forward, annotated release tag whose linked CI run the GitHub API confirms.
+    # fast-forward, annotated release tag whose linked CI run the GitHub API
+    # confirms. Nothing to verify with (no token, 401/403, offline) falls back
+    # to the tag's own record with a warning, unless ACL_UPDATE_GATE=enforce.
     $sha = Invoke-AclGit $Git $Target @('rev-parse', 'origin/main^{commit}')
     if ($sha -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve the production release.' }
     if (!$FreshInstall) {
@@ -181,6 +210,7 @@ function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
         if ($dirty) { throw 'Tracked local changes present. Save/review them before updating ACL.' }
         Invoke-AclGit $Git $Target @('merge-base', '--is-ancestor', 'HEAD', $sha) | Out-Null
     }
+    $enforce = ([string]$env:ACL_UPDATE_GATE).Trim() -eq 'enforce'
     $problems = @()
     $runLink = 'https://github\.com/' + [regex]::Escape((Get-AclRepoName)) + '/actions/runs/(\d+)\b'
     $tags = (Invoke-AclGit $Git $Target @('tag', '--points-at', $sha, '--list', 'acl-release-*')) -split "`n"
@@ -191,15 +221,22 @@ function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
         if ($annotation -notmatch "(?m)^object $sha`$") { continue }
         $runIds = @([regex]::Matches($annotation, $runLink, 'IgnoreCase') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
         if (!$runIds.Count) { $problems += "$tag links no CI run of $(Get-AclRepoName)"; continue }
+        $rejected = @(); $unverified = @()
         foreach ($runId in $runIds) {
-            try { $why = Test-AclCiRun (Get-AclCiRun $Git $runId) $runId $sha } catch { $why = "could not be verified: $($_.Exception.Message)" }
-            if (!$why) { return @{ Sha = $sha; Tag = $tag; Run = $runId } }
-            $problems += "$tag CI run $runId $why"
+            $result = Get-AclCiVerdict $Git $Target $runId $sha
+            if ($result.Verdict -eq 'verified') { return @{ Sha = $sha; Tag = $tag; Run = $runId; Unverified = '' } }
+            if ($result.Verdict -eq 'rejected') { $rejected += "CI run $runId $($result.Why)" } else { $unverified += "CI run $runId $($result.Why)" }
         }
+        if ($rejected.Count) { $problems += "$tag " + (($rejected + $unverified) -join '; '); continue }
+        $reason = $unverified -join '; '
+        if ($enforce) { $problems += "$tag $reason (enforced)"; continue }
+        if ($annotation -notmatch '(?i)\bsuccess\b') { $problems += "$tag $reason; the tag does not record success either"; continue }
+        Write-Warning "CI not verified for ${tag}: $reason. Installing on the release tag's own record (see docs/RELEASE_TRUST.md)."
+        return @{ Sha = $sha; Tag = $tag; Run = ''; Unverified = $reason }
     }
     $detail = ''
     if ($problems.Count) { $detail = ' (' + ($problems -join '; ') + ')' }
-    throw "Production has no verified annotated ACL release tag with a successful CI run confirmed by GitHub$detail. Nothing will be installed from an unverified commit."
+    throw "Production has no verified annotated ACL release tag with a successful CI run$detail. Nothing will be installed from an unverified commit."
 }
 
 function Install-Acl {

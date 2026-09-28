@@ -29,15 +29,57 @@ the GitHub API must confirm that run:
 | `status` / `conclusion` | `completed` / `success` |
 
 These are the same conditions `scripts/acl_publish_release.py` checks before a
-packaged release. The words in the tag no longer matter: a made-up link, a run
-of another repository, workflow, branch or commit is refused.
+packaged release.
 
-The API call needs a token. The gate uses, in order: `ACL_UPDATE_GATE_TOKEN`,
-the Git credential this clone already uses for github.com (read with prompts
-disabled), then `GH_TOKEN` / `GITHUB_TOKEN`. No token, no network or any API
-error means **not verified**: the update is skipped and the buyer keeps the
-running version. The token needs read access to Actions of the repository
-(`repo` scope for OAuth/GCM credentials, `Actions: read` for fine-grained).
+The gate has three outcomes, staged like the signatures below:
+
+| Outcome | When | warn mode (now) | enforce mode |
+|---|---|---|---|
+| verified | the API confirms the run | update | update |
+| rejected | the run is readable and a field above differs; or the run is 404 while the same token can read the repository (a made-up link); or the tag links no run of this repository | **refuse** | **refuse** |
+| unverified | no token; 401/403; network error; 404 while the repository itself is not visible to the token | update only if the tag text records `success` (the old check); log + Sentry `kind=update_trust`, `gate=unverified`; the dashboard note says why | **refuse** |
+
+An attacker controls neither the buyer's token nor the network, so cannot
+push a real check into the unverified path. Enforcement only tightens:
+`GATE_ENFORCE = True` in `scripts/acl_update_gate.py` or
+`ACL_UPDATE_GATE=enforce` on the machine (the environment or the machine
+`.env`; `Install ACL.bat` reads the environment). Switch it on when Sentry
+shows no `gate=unverified` events for a release.
+
+The API call needs a token. The gate uses, in order:
+`ACL_UPDATE_GATE_TOKEN` (process environment, then the machine `.env` at
+`%LOCALAPPDATA%\ACL\.env`), the Git credential this clone already uses for
+github.com, then `GH_TOKEN` / `GITHUB_TOKEN`. The credential is read with every
+prompt disabled — terminal, Git Credential Manager window and askpass
+programs (`GIT_ASKPASS`, `SSH_ASKPASS`, `core.askPass`) — so a missing one
+never opens a window. The token needs read access to Actions of the
+repository (`repo` scope for OAuth/GCM credentials, `Actions: read` for
+fine-grained tokens).
+
+Machines that end up **unverified**: SSH remotes (`git@github.com:`, no
+HTTPS credential), fine-grained tokens without `Actions: read` (403/404), and
+GCM holding several GitHub accounts (it would ask which one; the gate forbids
+the question).
+
+#### Unsticking a machine
+
+In warn mode such a machine still updates; its dashboard note says "This
+machine could not verify its CI result (…)". To make it verify (and before
+switching to enforce), give it a token:
+
+1. Create a fine-grained token for `MojoTheApe/adopy-campaing-launcher` with
+   `Actions: read` and `Metadata: read`, with an expiry.
+2. Add `ACL_UPDATE_GATE_TOKEN=<token>` to `%LOCALAPPDATA%\ACL\.env` on that
+   machine (never to the checkout's `.env`, never to git).
+3. Or fix the Git credential instead: switch the remote to HTTPS
+   (`git remote set-url origin https://github.com/MojoTheApe/adopy-campaing-launcher.git`)
+   and sign in once with `git fetch`; with several GCM accounts, run
+   `git config --global credential.https://github.com.username <account>`.
+4. Check: `.venv\Scripts\python.exe scripts\acl_update_gate.py` prints
+   `update gate OK: … verified` (or "BLOCKED" with the reason). If a
+   refused update stuck a machine in enforce mode, remove
+   `ACL_UPDATE_GATE=enforce` from its environment only after the reason is
+   understood.
 
 Checked on 2026-09-29 against the live API: the current release
 `acl-release-2026-09-27` (run 36301767639) passes; older tags whose CI ran on a
@@ -85,9 +127,11 @@ code-signing certificate or Azure Trusted Signing).
    `python scripts/acl_sign_release.py keygen --out <path outside the repo>`.
    It prints the line for `PINNED_PUBLIC_KEYS`. Keep an offline backup of the
    private key (password manager / hardware token).
-2. **Store the private key** as the secret `ACL_RELEASE_SIGNING_KEY`
-   (PEM text), preferably as a secret of the `release` environment, then delete
-   the file.
+2. **Store the private key** as the repository secret
+   `ACL_RELEASE_SIGNING_KEY` (PEM text), then delete the file. On GitHub Free
+   a private repository has no environment secrets or protection rules, so
+   the key stays a repository secret until the plan upgrade; then move it to
+   the `release` environment (see the checklist).
 3. **Pin the public key**: a reviewed PR that sets `PINNED_PUBLIC_KEYS` in
    `src/web/release_signing.py`. Never commit the private key.
 4. **Release** normally. The release workflow signs `release.json`
@@ -109,11 +153,15 @@ old key in a later build.
 The audit saw `master.protected=false` and no environments. Check each item
 with the commands at the end.
 
-**Plan**
-- [ ] Branch protection and rulesets for a *private* repository need a paid
-  plan (GitHub Team for an organization, Pro for a personal account). If the
-  settings below are unavailable, upgrade the plan. Do not make the source
-  public to get them.
+**Plan** — do this first
+- [ ] `MojoTheApe` is a personal account on GitHub Free with a private
+  repository: `GET /repos/.../rulesets` answers 403 "Upgrade to GitHub Pro".
+  Branch protection, rulesets and protected environments for a *private*
+  repository need a paid plan (Pro for a personal account, Team for an
+  organization). Upgrade the plan; do not make the source public to get them.
+  Until then every item below except "Actions" and "People and tokens" is
+  unavailable, and anyone with push access can still put a commit on `main`
+  whose CI passes.
 
 **Release branches** (`main`, `master` while it is live, `stage`) — one ruleset
 - [ ] Require a pull request before merging; at least 1 approval by someone
@@ -135,7 +183,10 @@ with the commands at the end.
 - [ ] Enable immutable releases for the repository that hosts the releases,
   if the plan offers it, so assets cannot be replaced after publication.
 
-**Release environment** `release` (used by `release.yml`)
+**Release environment** `release` (after the plan upgrade)
+- [ ] Create it, then add `environment: release` to the `publish` job of
+  `.github/workflows/release.yml` (left out on purpose: on Free it would give
+  no protection, and a release run must not depend on an unverified setting).
 - [ ] Required reviewers (not the person who pushed the tag; enable "prevent
   self-review").
 - [ ] Deployment tags: only `acl-release-*`.
