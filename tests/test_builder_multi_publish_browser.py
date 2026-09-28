@@ -432,3 +432,66 @@ def test_one_account_in_two_countries_publishes_both(browser, two_country_html):
         assert not errors, errors
     finally:
         context.close()
+
+
+def _seeded_two_country_page(browser, html, saved):
+    """Страница, на которой до F5 уже шло задание UL869 (`saved` — как оно
+    запомнено в localStorage), а сервер его всё ещё ведёт."""
+    import json
+    context = browser.new_context()
+    page = context.new_page()
+    errors, dialogs = [], []
+    page.on('pageerror', lambda e: errors.append(str(e)))
+    page.on('dialog', lambda d: (dialogs.append(d.message), d.accept()))
+    state = {'posts': [], 'jobs': {'job-old': {'status': 'running', 'account': 'UL869', 'names': ['X']}},
+             'cancels': [], 'dialogs': dialogs}
+    page.route('**/*', _route_for(html, state))
+    page.add_init_script('localStorage.setItem("acl.builder.jobs", %s)' % json.dumps(json.dumps(
+        {'job-old': dict({'account': 'UL869', 'names': ['X'], 'at': 9e15, 'lost': False}, **saved)})))
+    page.goto('http://acl.test/')
+    page.evaluate('cbDrawer.open()')
+    page.wait_for_function('window.CB_QUEUE && CB_QUEUE.jobIds().length === 1', timeout=8000)
+    return context, page, state, dialogs, errors
+
+
+def _publish_twin(page, state, country):
+    """Кампания в форму UL869 этой страны и Publish; сколько заданий ушло."""
+    import json
+    page.evaluate('''c => { const f=(''' + TWIN_JS + ''')(c);
+      cbAddSlot(f); const s=f.querySelector('.cb-slot:last-child');
+      s.querySelector('[name$="_asset"]').value='Gold';
+      s.querySelector('[name$="_ad_0_creative_file"]').value='offline.png';
+      f.dispatchEvent(new Event('input',{bubbles:true})); }''', country)
+    ready(page)
+    page.evaluate('cbPublish((' + TWIN_JS + ')(%s))' % json.dumps(country))
+    page.wait_for_timeout(300)
+    if page.locator('#sfc-ok').count():
+        page.locator('#sfc-ok').click()
+        page.wait_for_timeout(800)
+    return len(state['posts'])
+
+
+def test_a_job_saved_without_a_country_keeps_every_country_busy_after_reload(browser, two_country_html):
+    """Ревью v2 PR #363: задание, запомненное без страны, после F5 и первого
+    ответа сервера не должно стать заданием «первой формы» (Chile) — оно
+    могло быть перуанским. Пока оно идёт, аккаунт занят во всех странах."""
+    context, page, state, dialogs, errors = _seeded_two_country_page(browser, two_country_html, {})
+    try:
+        assert _publish_twin(page, state, 'Peru') == 0, 'a country-less job was pinned to the first form'
+        assert 'UL869 (Peru) is already being built' in dialogs[-1], dialogs
+        assert _publish_twin(page, state, 'Chile') == 0
+        assert not errors, errors
+    finally:
+        context.close()
+
+
+def test_a_job_saved_with_its_country_keeps_only_that_country_busy(browser, two_country_html):
+    context, page, state, dialogs, errors = _seeded_two_country_page(browser, two_country_html, {'country': 'Peru'})
+    try:
+        assert _publish_twin(page, state, 'Peru') == 0
+        assert 'UL869 (Peru) is already being built' in dialogs[-1]
+        assert _publish_twin(page, state, 'Chile') == 1, 'the other country of the account was blocked'
+        assert state['posts'][0]['country'] == 'Chile'
+        assert not errors, errors
+    finally:
+        context.close()

@@ -347,6 +347,16 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   assert.equal(posts(q), 3);
   assert.equal(q.events.filter((e) => e.startsWith('preview')).pop(), 'preview:UL869@Peru');
 
+  // Сама сборка тоже не берёт идущий аккаунт вторым, даже если вызвать её
+  // мимо кнопок (Publish selected и другие вызывающие): отказ в `skipped`.
+  q = runQueue(['A']);
+  await flush();
+  const again = q.sandbox._runPublishQueue([q.forms[0]], () => {});
+  await flush();
+  assert.deepEqual(again.added, [], 'the run accepted an account that is already building');
+  assert.deepEqual(again.skipped, ['A']);
+  assert.equal(posts(q), 1, 'a duplicate job was submitted');
+
   // Ревью PR #363: оборванная отправка — исход неизвестен. Вкладка встаёт в
   // «статус неизвестен», как при потерянном задании, а не просто пишет ошибку.
   q = runQueue(['A', 'B'], { fail: true });
