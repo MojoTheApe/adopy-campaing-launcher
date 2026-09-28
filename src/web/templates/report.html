@@ -8458,13 +8458,24 @@ function mlTokenFirst(cid) {
           } catch (e) {}
         }
         creds.style.display = 'none';
+        // ACL-1342 S01 (PR #343 ревью, тот же класс бага в мёртвом коде):
+        // cid раньше подставлялся прямо в JS-строку onclick через
+        // конкатенацию — тот же разрыв литерала, что чинили в живом
+        // аккордеоне аккаунтов. Здесь этот путь недостижим (mlTokenFirst
+        // вызывается только из mlTogglePanel/mlSetInstance, а на них нет ни
+        // одного onclick в разметке), но код лежит в файле и его тронут
+        // первым, если панель когда-нибудь переподключат — правим тем же
+        // способом: data-* атрибут (обычное HTML-экранирование через
+        // aclEscHtml) + чтение через this.dataset на клике, без конкатенации
+        // значения в JS-текст.
         banner.innerHTML = '<span style="color:var(--good)">✓ Connected with the saved token'
           + ' (' + mlLabel(instance) + until + ')</span>'
-          + ' <button type="button" class="ml-connect-btn" style="margin-left:0.5rem;font-size:0.72rem;padding:0.2rem 0.6rem"'
-          + ' onclick="mlListProfiles(\'' + cid + '\')">Profiles</button>'
-          + ' <a href="#" style="margin-left:0.5rem;font-size:0.7rem;color:var(--muted)"'
+          + ' <button type="button" class="ml-connect-btn" data-cid="' + aclEscHtml(cid) + '"'
+          + ' style="margin-left:0.5rem;font-size:0.72rem;padding:0.2rem 0.6rem"'
+          + ' onclick="mlListProfiles(this.dataset.cid)">Profiles</button>'
+          + ' <a href="#" data-cid="' + aclEscHtml(cid) + '" style="margin-left:0.5rem;font-size:0.7rem;color:var(--muted)"'
           + ' onclick="event.preventDefault();this.parentNode.style.display=\'none\';'
-          + 'document.getElementById(\'ml-cred-fields-' + cid + '\').style.display=\'block\'">another account</a>';
+          + 'document.getElementById(\'ml-cred-fields-\'+this.dataset.cid).style.display=\'block\'">another account</a>';
         mlListProfiles(cid);  // decision: alive token → straight to profiles
       } else {
         creds.style.display = 'block';
@@ -8523,8 +8534,12 @@ function mlListProfiles(cid) {
       profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">No profiles found.</span>'
         + '<div style="margin-top:0.5rem">'
         + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Search a profile by name…" style="width:100%;font-size:0.75rem">'
-        + '<button type="button" class="ml-connect-btn" style="margin-top:0.35rem;font-size:0.75rem"'
-        + ' onclick="mlSearchByTerm(\'' + cid + '\', \'' + instance + '\')">🔍 Search</button></div>';
+        // ACL-1342 S01 (PR #343 ревью): data-* + this.dataset вместо
+        // конкатенации cid/instance в JS-строку onclick — см. коммент в
+        // mlTokenFirst выше.
+        + '<button type="button" class="ml-connect-btn" data-cid="' + aclEscHtml(cid) + '" data-instance="' + aclEscHtml(instance) + '"'
+        + ' style="margin-top:0.35rem;font-size:0.75rem"'
+        + ' onclick="mlSearchByTerm(this.dataset.cid, this.dataset.instance)">🔍 Search</button></div>';
       return;
     }
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
@@ -8611,8 +8626,11 @@ function mlSignin(cid) {
         + '</span>'
         + '<div style="margin-top:0.5rem">'
         + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Search a profile by name (e.g. FacebookUL869)…" style="width:100%;font-size:0.75rem">'
-        + '<button type="button" class="ml-connect-btn" style="margin-top:0.35rem;font-size:0.75rem" '
-        + 'onclick="mlSearchByTerm(\'' + cid + '\', \'' + instance + '\')">🔍 Search</button>'
+        // ACL-1342 S01 (PR #343 ревью): data-* + this.dataset вместо
+        // конкатенации cid/instance в JS-строку onclick — см. коммент в
+        // mlTokenFirst выше.
+        + '<button type="button" class="ml-connect-btn" data-cid="' + aclEscHtml(cid) + '" data-instance="' + aclEscHtml(instance) + '" style="margin-top:0.35rem;font-size:0.75rem" '
+        + 'onclick="mlSearchByTerm(this.dataset.cid, this.dataset.instance)">🔍 Search</button>'
         + '</div>';
       return;
     }
