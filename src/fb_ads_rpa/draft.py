@@ -37,6 +37,10 @@ class AdDraft:
     ad_title: str = ""
     ad_body: str = ""
     ad_link_description: str = ""
+    # ACL-1344: необязательный второй вариант основного текста — запись
+    # библиотеки текстов (как `copy_name`), из неё берётся только body.
+    copy2_name: str = ""
+    ad_body2: str = ""
 
     def ad_name(self) -> str:
         """Name for the ad in Ads Manager: "<creative> - <text>".
@@ -59,7 +63,7 @@ class AdDraft:
         return text or creative
 
     def to_preview_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "creative_type": self.creative_type,
             "creative_id": self.creative_id,
             "creative_file": self.creative_filename or "—",
@@ -68,6 +72,11 @@ class AdDraft:
             "ad_title": self.ad_title or "—",
             "ad_body": (self.ad_body or "")[:80],
         }
+        if self.copy2_name:
+            # ACL-1344: второй текст — только у объявлений, где он выбран.
+            out["copy2_name"] = self.copy2_name
+            out["ad_body2"] = (self.ad_body2 or "")[:80]
+        return out
 
 
 @dataclass

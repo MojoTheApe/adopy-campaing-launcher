@@ -1731,6 +1731,9 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             creative_type = (form.get(f"camp_{idx}_ad_{a_idx}_creative_type") or "Image").strip()
             creative_file = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file") or "").strip()
             copy          = (form.get(f"camp_{idx}_ad_{a_idx}_copy") or "").strip()
+            # ACL-1344: необязательный второй вариант основного текста —
+            # название записи библиотеки текстов, как у `copy`.
+            copy2         = (form.get(f"camp_{idx}_ad_{a_idx}_copy2") or "").strip()
 
             # Legacy single-ad fallback (forms submitted before multi-ad upgrade)
             if not creative_file and a_idx == 0:
@@ -1738,8 +1741,7 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             if not copy and a_idx == 0:
                 copy = (form.get(f"camp_{idx}_copy") or "").strip()
 
-            slots.append(
-                {
+            slot = {
                     "name": name,
                     "creative_type": creative_type,
                     "creative_id": (form.get(f"camp_{idx}_creative_id") or "").strip(),
@@ -1755,7 +1757,11 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     "language": language,
                     "language_provided": f"camp_{idx}_language" in form,
                 }
-            )
+            # Ключ — только у объявлений со вторым текстом: остальные слоты
+            # (и записанные из них задания) остаются прежними.
+            if copy2:
+                slot["copy2"] = copy2
+            slots.append(slot)
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
     # the GCC/LatAm language rule and the Excel Countries lookup expect
