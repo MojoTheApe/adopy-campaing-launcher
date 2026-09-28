@@ -1893,6 +1893,15 @@ async def export_assets() -> Response:
             row_data = [country, asset.get("offer", ""), leads, deposits, cr, net]
             for col_idx, val in enumerate(row_data, 1):
                 cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                if col_idx in (1, 2):
+                    # ACL-1342 S10: country/offer приходят из отчёта, не от
+                    # нас. Если строка начинается с '=' (например, имя офера
+                    # "=1+1"), openpyxl сам решает, что это формула — ровно
+                    # по этому признаку, — и Excel её посчитает. Явно
+                    # помечаем ячейку текстовой, чтобы значение осталось
+                    # буквальной строкой независимо от того, с чего оно
+                    # начинается. Числовых столбцов (3–6) это не касается.
+                    cell.data_type = "s"
                 if fill:
                     cell.fill = fill
                 if col_idx >= 3:
