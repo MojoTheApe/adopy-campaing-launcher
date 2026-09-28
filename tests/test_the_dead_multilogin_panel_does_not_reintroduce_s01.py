@@ -149,3 +149,120 @@ def test_an_ordinary_cid_still_produces_a_working_button(page):
 
     assert 'data-cid="sa"' in banner_html
     assert not errors, f"страница упала: {errors}"
+
+
+# ── ревью раунд 2: oninput и id в том же мёртвом блоке ────────────────────
+#
+# Раунд 1 закрыл три onclick; в блоке оставалась та же конкатенация cid в
+# JS-текст `oninput` (фильтр списка профилей, `mlFilterProfiles(...)`) и cid
+# без экранирования в `id="…"` — а это уже разрыв самого HTML-атрибута:
+# `"` в cid закрывает id и дописывает новый атрибут/тег.
+
+#: Разрыв HTML-атрибута id: кавычка закрывает id, дальше свой тег с onerror.
+ATTR_BREAKOUT_CID = 'x"><img src=x onerror="window.aclPwned=1">'
+
+
+def _extract_list_profiles() -> str:
+    src = REPORT.read_text(encoding="utf-8")
+    esc_start = src.index("function aclEscHtml(value) {")
+    esc = src[esc_start:src.index("\n    }\n", esc_start) + len("\n    }")]
+    start = src.index("var ACL_MLX_LABELS")
+    fn = src.index("function mlListProfiles(cid) {")
+    end = src.index("\n}\n", fn) + len("\n}")
+    block = src[start:end]
+    assert "function mlProfileRowsHtml" in block and "function mlListProfiles" in block
+    return esc + "\n" + block
+
+
+def _list_profiles_page(browser, profiles: list[dict]):
+    ctx = browser.new_context()
+    errors = []
+    pg = ctx.new_page()
+    pg.on("pageerror", lambda e: errors.append(str(e)))
+    pg.set_content("<div id='root'></div>")
+    payload = {"ok": True, "profiles": profiles, "folders": []}
+    pg.evaluate(
+        "(payload) => { window.fetch = function() { return Promise.resolve({ "
+        "json: function() { return Promise.resolve(payload); } }); }; }",
+        payload,
+    )
+    pg.add_script_tag(content=_extract_list_profiles().replace("{{ mlx | tojson }}", "{}"))
+    return ctx, pg, errors
+
+
+def _run_list_profiles(pg, cid: str) -> None:
+    pg.evaluate(
+        """(cid) => {
+            var d = document.createElement('div');
+            d.id = 'ml-profiles-' + cid;
+            document.getElementById('root').append(d);
+            mlListProfiles(cid);
+        }""",
+        cid,
+    )
+    pg.wait_for_function(
+        "(cid) => { var d = document.getElementById('ml-profiles-' + cid); "
+        "return d && d.innerHTML.length > 0; }",
+        arg=cid,
+    )
+    pg.wait_for_timeout(300)  # дать img/onerror шанс сработать, если разметка сломана
+
+
+@pytest.mark.parametrize("profiles", [
+    [{"name": "FacebookUL1", "profile_id": "p1", "folder_id": "f1"}],  # список + фильтр oninput
+    [],                                                                  # «ничего не нашлось» + поле поиска
+], ids=["profile-list", "no-profiles"])
+def test_a_cid_that_breaks_out_of_an_id_attribute_stays_inert(browser, profiles):
+    ctx, pg, errors = _list_profiles_page(browser, profiles)
+    try:
+        _run_list_profiles(pg, ATTR_BREAKOUT_CID)
+        assert pg.evaluate("document.querySelectorAll('#root img').length") == 0, (
+            "cid вырвался из атрибута id и дописал свой тег"
+        )
+        assert pg.evaluate("window.aclPwned || 0") == 0
+        assert not errors, errors
+    finally:
+        ctx.close()
+
+
+def test_the_profile_filter_still_works_through_data_cid(browser):
+    profiles = [
+        {"name": "FacebookUL1", "profile_id": "p1", "folder_id": "f1"},
+        {"name": "KLD_BFL_S15", "profile_id": "p2", "folder_id": "f1"},
+    ]
+    ctx, pg, errors = _list_profiles_page(browser, profiles)
+    try:
+        _run_list_profiles(pg, "sa")
+        visible = pg.evaluate(
+            """() => {
+                var input = document.querySelector('#ml-profiles-sa input[data-cid]');
+                input.value = 'kld';
+                input.dispatchEvent(new Event('input'));
+                return Array.from(document.querySelectorAll('#ml-profile-list-sa .ml-profile-row'))
+                    .filter(function (r) { return r.style.display !== 'none'; })
+                    .map(function (r) { return r.dataset.pname; });
+            }"""
+        )
+        assert visible == ["kld_bfl_s15"]
+        assert not errors, errors
+    finally:
+        ctx.close()
+
+
+def test_no_raw_cid_is_left_in_markup_built_by_the_dead_panel():
+    """Сторож на весь блок, включая mlSignin/mlTestToken, которые без живого
+    Multilogin не прогнать: cid не склеивается ни в JS-текст атрибутов on*,
+    ни в значение атрибута без aclEscHtml."""
+    src = REPORT.read_text(encoding="utf-8")
+    start = src.index("// ── Multilogin connect")
+    end = src.index("function _mlSaveIds(")
+    block = src[start:end]
+    offenders = [
+        line.strip() for line in block.splitlines()
+        if ("+ cid +" in line or "+ cid)" in line)
+        and ('="' in line or "on" in line and "=" in line)
+        and "aclEscHtml(cid)" not in line
+        and "CSS.escape(cid)" not in line
+        and "getElementById(" not in line
+    ]
+    assert not offenders, "cid склеивается в разметку без экранирования:\n" + "\n".join(offenders)

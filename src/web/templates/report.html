@@ -8533,21 +8533,24 @@ function mlListProfiles(cid) {
     if (!profiles.length) {
       profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">No profiles found.</span>'
         + '<div style="margin-top:0.5rem">'
-        + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Search a profile by name…" style="width:100%;font-size:0.75rem">'
-        // ACL-1342 S01 (PR #343 ревью): data-* + this.dataset вместо
-        // конкатенации cid/instance в JS-строку onclick — см. коммент в
-        // mlTokenFirst выше.
+        // ACL-1342 S01 (PR #343 ревью, раунды 1–2): cid не попадает ни в
+        // JS-текст атрибутов on*, ни в атрибуты без экранирования — id
+        // через aclEscHtml, значение для обработчика через data-* +
+        // this.dataset. См. коммент в mlTokenFirst выше.
+        + '<input id="ml-search-manual-' + aclEscHtml(cid) + '" type="text" class="cb-input" placeholder="Search a profile by name…" style="width:100%;font-size:0.75rem">'
         + '<button type="button" class="ml-connect-btn" data-cid="' + aclEscHtml(cid) + '" data-instance="' + aclEscHtml(instance) + '"'
         + ' style="margin-top:0.35rem;font-size:0.75rem"'
         + ' onclick="mlSearchByTerm(this.dataset.cid, this.dataset.instance)">🔍 Search</button></div>';
       return;
     }
+    // Фильтр ищет свой список по id через getElementById(… + dataset.cid),
+    // а не собирает CSS-селектор из cid внутри JS-текста атрибута.
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' profile(s)</div>'
-      + '<input type="text" class="cb-input" placeholder="filter by name…" style="width:100%;font-size:0.74rem;margin-bottom:0.35rem"'
-      + ' oninput="(function(v){document.querySelectorAll(\'#ml-profile-list-' + cid + ' .ml-profile-row\')'
-      + '.forEach(function(r){r.style.display = r.dataset.pname.indexOf(v.toLowerCase()) >= 0 ? \'\' : \'none\'})})(this.value)">'
-      + '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+      + '<input type="text" class="cb-input" data-cid="' + aclEscHtml(cid) + '" placeholder="filter by name…" style="width:100%;font-size:0.74rem;margin-bottom:0.35rem"'
+      + ' oninput="(function(el){var list=document.getElementById(\'ml-profile-list-\'+el.dataset.cid);if(!list)return;var v=el.value.toLowerCase();'
+      + 'list.querySelectorAll(\'.ml-profile-row\').forEach(function(r){r.style.display = r.dataset.pname.indexOf(v) >= 0 ? \'\' : \'none\'})})(this)">'
+      + '<div id="ml-profile-list-' + aclEscHtml(cid) + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
     html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     profilesDiv.innerHTML = html;
@@ -8565,7 +8568,8 @@ function mlSignin(cid) {
   var save  = saveChk ? saveChk.checked : true;
   var status = document.getElementById('ml-status-' + cid);
   var profilesDiv = document.getElementById('ml-profiles-' + cid);
-  var btn = document.querySelector('#ml-body-' + cid + ' .ml-connect-btn');
+  // CSS.escape: cid идёт в селектор, а не в разметку — экранирование своё.
+  var btn = document.querySelector('#ml-body-' + CSS.escape(cid) + ' .ml-connect-btn');
 
   if (!email || !pass) {
     if (status) status.innerHTML = '<span style="color:var(--bad)">Enter email and password.</span>';
@@ -8625,10 +8629,10 @@ function mlSignin(cid) {
         + '<span style="color:var(--muted);font-size:0.68rem">debug: ' + aclEscHtml(dbg) + '</span>'
         + '</span>'
         + '<div style="margin-top:0.5rem">'
-        + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Search a profile by name (e.g. FacebookUL869)…" style="width:100%;font-size:0.75rem">'
-        // ACL-1342 S01 (PR #343 ревью): data-* + this.dataset вместо
-        // конкатенации cid/instance в JS-строку onclick — см. коммент в
-        // mlTokenFirst выше.
+        // ACL-1342 S01 (PR #343 ревью, раунды 1–2): id через aclEscHtml,
+        // значение для обработчика через data-* + this.dataset — см.
+        // коммент в mlTokenFirst выше.
+        + '<input id="ml-search-manual-' + aclEscHtml(cid) + '" type="text" class="cb-input" placeholder="Search a profile by name (e.g. FacebookUL869)…" style="width:100%;font-size:0.75rem">'
         + '<button type="button" class="ml-connect-btn" data-cid="' + aclEscHtml(cid) + '" data-instance="' + aclEscHtml(instance) + '" style="margin-top:0.35rem;font-size:0.75rem" '
         + 'onclick="mlSearchByTerm(this.dataset.cid, this.dataset.instance)">🔍 Search</button>'
         + '</div>';
@@ -8671,15 +8675,17 @@ function mlSignin(cid) {
     var firstAccTitle = (accTitles[0] || '').split(' ')[0];
     var searchId = 'ml-search-' + cid;
 
+    // ACL-1342 S01 (PR #343 ревью, раунд 2): id через aclEscHtml, cid для
+    // mlFilterProfiles — через data-cid + this.dataset, не JS-текстом.
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' profile(s) from ' + mlLabel(instance)
       + ' — find the one you need and press Use</div>';
-    html += '<input id="' + searchId + '" type="text" placeholder="Filter by profile name…" value="'
+    html += '<input id="' + aclEscHtml(searchId) + '" data-cid="' + aclEscHtml(cid) + '" type="text" placeholder="Filter by profile name…" value="'
       + aclEscHtml(firstAccTitle) + '"'
       + ' style="width:100%;box-sizing:border-box;margin-bottom:0.4rem;padding:0.28rem 0.5rem;'
       + 'background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.75rem"'
-      + ' oninput="mlFilterProfiles(\'' + cid + '\')">';
-    html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+      + ' oninput="mlFilterProfiles(this.dataset.cid)">';
+    html += '<div id="ml-profile-list-' + aclEscHtml(cid) + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
     html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     profilesDiv.innerHTML = html;
@@ -8746,7 +8752,7 @@ function mlManualSave(cid) {
   }
 
   // Multiple accounts — inline picker
-  var btn = document.querySelector('#ml-manual-status-' + cid);
+  var btn = document.querySelector('#ml-manual-status-' + CSS.escape(cid));
   var existing = document.getElementById('ml-manual-acc-picker-' + cid);
   if (existing) { existing.remove(); return; }
 
@@ -8813,7 +8819,8 @@ function mlSearchByTerm(cid, instance) {
     // Render same profile list as main signin
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' result(s) for "' + aclEscHtml(term) + '"</div>';
-    html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+    // ACL-1342 S01 (PR #343 ревью, раунд 2): id через aclEscHtml.
+    html += '<div id="ml-profile-list-' + aclEscHtml(cid) + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
     html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     if (profilesDiv) profilesDiv.innerHTML = html;
@@ -8920,12 +8927,14 @@ function mlTestToken(cid) {
     var firstAccTitle = (((_cpanel && _cpanel.querySelector('.cb-acc-title'))||{}).textContent||'').split(' ')[0];
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' profile(s) — find the one you need and press Use</div>';
+    // ACL-1342 S01 (PR #343 ревью, раунд 2): id через aclEscHtml, cid для
+    // mlFilterProfiles — через data-cid + this.dataset, не JS-текстом.
     html += '<input type="text" placeholder="Filter…" value="' + aclEscHtml(firstAccTitle) + '"'
-      + ' id="ml-search-' + cid + '"'
+      + ' id="ml-search-' + aclEscHtml(cid) + '" data-cid="' + aclEscHtml(cid) + '"'
       + ' style="width:100%;box-sizing:border-box;margin-bottom:0.4rem;padding:0.28rem 0.5rem;'
       + 'background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.75rem"'
-      + ' oninput="mlFilterProfiles(\'' + cid + '\')">';
-    html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+      + ' oninput="mlFilterProfiles(this.dataset.cid)">';
+    html += '<div id="ml-profile-list-' + aclEscHtml(cid) + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
     html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     if (profilesDiv) profilesDiv.innerHTML = html;
