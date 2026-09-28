@@ -177,10 +177,14 @@ def test_a_missing_level_section_is_named(page):
 
 def test_the_audience_card_is_opened_and_the_acl1324_row_is_then_found(page):
     _open(page, EDITOR, SIMPLE_URL)
-    assert page.evaluate(md._FURTHER_LIMIT_ROW_JS)["found"] == 0, "строка видна до раскрытия — вырезка не та"
+    # ACL-1332: строку внутри свёрнутой карточки поиск находит, но как
+    # неразложенную (laid=False) — такую робот не нажимает. Нажать её можно
+    # только после раскрытия карточки.
+    before = page.evaluate(md._FURTHER_LIMIT_ROW_JS)
+    assert not before.get("laid"), "строка разложена до раскрытия — вырезка не та"
     assert sc.open_card(page, "Audience") == "opened"
     row = page.evaluate(md._FURTHER_LIMIT_ROW_JS)
-    assert row["found"] == 1 and row["surface"] == "lib:targeting-individual-setting-toggle-automation-button"
+    assert row["found"] == 1 and row["laid"] and row["surface"] == "lib:targeting-individual-setting-toggle-automation-button"
     # «Save audience» рядом — не наша строка и не нажимается.
     assert "Save audience" not in page.locator("[data-acl-further-limit]").inner_text()
     assert ("simple_card", True) in [(r[0], r[1]) for r in page.rows]
