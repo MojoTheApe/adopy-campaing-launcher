@@ -57,6 +57,24 @@ _INJECT_JS = """
     return parts.join(' > ');
   };
 
+  // ACL-1342 S05: пароль и одноразовый код не должны попадать в JSON
+  // рекордера — recent_actions уезжает наружу через /rpa-record/status.
+  // Признаём поле секретным по type=password, autocomplete=one-time-code
+  // и по характерным словам в имени/id/placeholder/aria-label — значение
+  // такого поля не читаем вовсе, только фиксируем сам факт ввода.
+  const isSecretField = (el) => {
+    if (!el) return false;
+    const type = (el.getAttribute('type') || el.type || '').toLowerCase();
+    if (type === 'password') return true;
+    const autocomplete = (el.getAttribute('autocomplete') || '').toLowerCase();
+    if (autocomplete === 'one-time-code') return true;
+    const hay = [
+      el.getAttribute('name'), el.getAttribute('id'), el.getAttribute('placeholder'),
+      el.getAttribute('aria-label'),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return /(otp|one[-_ ]?time|verification[-_ ]?code|security[-_ ]?code|auth(entication)?[-_ ]?code|passcode|2fa|mfa)/.test(hay);
+  };
+
   const describe = (el, eventType) => {
     if (!el || !el.getBoundingClientRect) return null;
     const r = el.getBoundingClientRect();
@@ -101,7 +119,12 @@ _INJECT_JS = """
       if (!el) return;
       const info = describe(el, 'change');
       if (!info) return;
-      info.value = (el.value || '').slice(0, 200);
+      if (isSecretField(el)) {
+        info.value = '<hidden>';
+        info.secret = true;
+      } else {
+        info.value = (el.value || '').slice(0, 200);
+      }
       window.__rpaInputs.push(info);
       window.__rpaActions.push(info);
     } catch (_) {}
