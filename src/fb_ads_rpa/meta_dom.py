@@ -5506,10 +5506,17 @@ def run_recorded_campaign_flow(
             probe = _simple.capture_more_ads(page, more)
             more_ads_pressed = bool(probe.get("pressed"))
             if probe.get("captures"):
+                probe_pressed = probe.get("pressed") or []
+                seen = ["the ad list"]
+                if any(x.startswith("adset_action_menu") for x in probe_pressed):
+                    seen.append("the ad set's Action menu")
+                if any(x.endswith("create_ad") for x in probe_pressed):
+                    seen.append("what Create ad opened")
                 ad_level_fails.append(
                     f"simple_create_more_ads:{_simple.MORE_ADS_CAPTURED} - {more} more ad(s) not "
-                    "created; the single-screen editor path builds only the first ad. The ad list"
-                    + (" and the Create ad menu were" if more_ads_pressed else " was")
+                    "created; the single-screen editor path builds only the first ad. "
+                    + "T" + (", ".join(seen[:-1]) + " and " + seen[-1] if len(seen) > 1 else seen[0])[1:]
+                    + (" were" if len(seen) > 1 else " was")
                     + " captured on this machine (output/rpa_pages/"
                     + ", ".join(probe["captures"]) + f"; stopped at {probe.get('stop') or '-'})")
             else:
@@ -5659,7 +5666,13 @@ def run_recorded_campaign_flow(
         # fill time, yet the post-run live verification found the
         # lead_gen_form_id error banner on it. Re-visit each ad once the
         # whole campaign is filled and re-fix anything that reverted.
-        if reached_ad_level:
+        if reached_ad_level and more_ads_pressed:
+            # ACL-1353 (ревью PR #365, B1): после «Create ad» зависшая загрузка
+            # вероятна, а восстановление перезагружает страницу — редактор
+            # Leads-объявления открылся бы заново. Шаг снимка не перезагружает
+            # ничего; обхода назначения после нажатия и так нет.
+            _telemetry.record("recover_stuck_page_skipped", None, note="simple_create_more_ads_pressed")
+        elif reached_ad_level:
             # ACL-1233: обход должен пройти и после зависшей страницы.
             recover_stuck_page(page, "destination_sweep", editor=True)
         # 20.09, решение пользователя: обход открывает каждое объявление

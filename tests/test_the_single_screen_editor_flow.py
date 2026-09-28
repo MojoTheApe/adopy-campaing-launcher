@@ -209,11 +209,37 @@ def test_more_ads_are_captured_for_implementation_after_the_first_ad(sim, monkey
     assert len(more) == 1
     assert more[0].startswith("simple_create_more_ads:captured-for-implementation - 1 more ad(s)")
     assert "run1/03_simple_create_more_ads, run1/04_simple_create_more_ads" in more[0]
-    assert "Create ad menu" in more[0] and "create_ad_pressed" in more[0]
+    assert ("The ad list, the ad set's Action menu and what Create ad opened were captured"
+            in more[0]) and "create_ad_pressed" in more[0]
     assert failure_policy.base_name(more[0]) == "simple_create_more_ads"
     assert failure_policy.severity(more[0]) == failure_policy.BLOCKING
     assert ("destination_sweep_skipped", None, "simple_create_more_ads_pressed") in sim["rows"]
     assert sim["created"] == []
+
+
+def test_no_page_recovery_reloads_the_editor_after_create_ad(sim, monkeypatch):
+    """Ревью PR #365, B1: после «Create ad» восстановление зависшей страницы
+    (`recover_stuck_page` → `page.reload()`) не вызывается — перезагрузка
+    открыла бы редактор Leads-объявления заново."""
+    _probe(sim, {"captures": ["run1/03_simple_create_more_ads"],
+                 "pressed": ["adset_action_menu", "menu_create_ad"], "stop": "create_ad_pressed"})
+    recovered: list = []
+    monkeypatch.setattr(dom, "recover_stuck_page", lambda p, where, **kw: recovered.append(where) or True)
+    sim["run"](additional_ads=[{"ad_name": "Two"}], soft_fails_out=[])
+    assert ("more_ads_capture",) in sim["calls"]
+    assert "destination_sweep" not in recovered, recovered
+    assert ("recover_stuck_page_skipped", None, "simple_create_more_ads_pressed") in sim["rows"]
+    assert sim["page"].reload.call_count == 0 and sim["page"].goto.call_count == 0
+
+
+def test_without_a_press_the_page_recovery_still_runs(sim, monkeypatch):
+    _probe(sim, {"captures": ["run1/03_simple_create_more_ads"], "pressed": [], "stop": "press_off"})
+    recovered: list = []
+    monkeypatch.setattr(dom, "recover_stuck_page", lambda p, where, **kw: recovered.append(where) or False)
+    out: list[str] = []
+    sim["run"](additional_ads=[{"ad_name": "Two"}], soft_fails_out=out)
+    assert "destination_sweep" in recovered
+    assert "The ad list was captured" in [f for f in out if f.startswith("simple_create_more_ads:")][0]
 
 
 def test_a_capture_without_presses_keeps_the_destination_recheck(sim, monkeypatch):

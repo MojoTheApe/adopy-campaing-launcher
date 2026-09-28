@@ -564,7 +564,9 @@ _MORE_ADS_MENU_JS = r"""
     const re = new RegExp(createRe, 'i');
     const shown = (e) => e.getClientRects().length > 0;
     const menus = [...document.querySelectorAll('[role=menu]')].filter(shown);
-    const items = [...document.querySelectorAll('[role=menuitem]')].filter(shown);
+    // Пункты открытого меню, а не все видимые пункты документа (ревью PR #365).
+    const items = (menus.length ? menus.flatMap(m => [...m.querySelectorAll('[role=menuitem]')])
+                                : [...document.querySelectorAll('[role=menuitem]')]).filter(shown);
     const own = (b) => norm(b.getAttribute('aria-label')) || norm(b.textContent);
     const labels = items.map(own).filter(l => l && l.length <= 40).slice(0, 20);
     const create = items.filter(i => re.test(own(i)));
@@ -761,6 +763,11 @@ def _capture_more_ads(page, out: dict) -> None:
     if not more_ads_press_enabled():
         out["stop"] = "press_off"
         return
+    # Объявление 1 сохранено до первого нажатия (ревью PR #365).
+    try:
+        md.wait_editor_saved(page)
+    except Exception:
+        pass
     # 2. Кнопка ровно «Create ad» в самом дереве.
     if tree.get("create"):
         got = _press_marked(page, "create")

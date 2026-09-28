@@ -52,6 +52,8 @@ _SCRIPT = """
   .hover-only [data-surface*="action-menu-item"] { position: absolute; right: 10px; top: 8px;
                                                     width: 0; height: 0; overflow: hidden; }
   .hover-only [role=rowheader]:hover [data-surface*="action-menu-item"] { width: 30px; height: 30px; }
+  /* Кнопки без размера и при наведении — остаётся только DOM-клик. */
+  .zero-size [data-surface*="action-menu-item"] { position: absolute; width: 0; height: 0; overflow: hidden; }
 </style>
 <script>
   window.clicks = [];
@@ -128,13 +130,15 @@ def env(browser, monkeypatch, tmp_path):
     ctx = browser.new_context(viewport={"width": 1280, "height": 800})
     page = ctx.new_page()
 
-    def open_page(*, hover_only: bool = False, menu: str = "full", extra: str = "") -> None:
+    def open_page(*, hover_only: bool = False, zero_size: bool = False, menu: str = "full",
+                  extra: str = "") -> None:
         body = FIXTURE.replace("<!-- fragment:", "<!-- f:", 1)
         if extra:
             body = body.replace('<div aria-label="grid" role="grid" tabindex="0">',
                                 extra + '<div aria-label="grid" role="grid" tabindex="0">', 1)
+        cls = " ".join(c for c, on in (("hover-only", hover_only), ("zero-size", zero_size)) if on)
         html = ("<!doctype html><html><head>" + _SCRIPT + "</head><body"
-                + (' class="hover-only"' if hover_only else "") + ">" + body + "</body></html>")
+                + (f' class="{cls}"' if cls else "") + ">" + body + "</body></html>")
         page.route("**/*", lambda route: route.fulfill(status=200, content_type="text/html", body=html)
                    if route.request.url.startswith("https://adsmanager.facebook.com/") else route.abort())
         page.goto(SIMPLE_URL)
@@ -245,6 +249,38 @@ def test_a_hover_only_action_menu_is_opened_after_a_hover(env):
     assert got["pressed"] and got["pressed"][0] in ("adset_action_menu", "adset_action_menu_dom"), got["stop"]
     assert got["stop"] == "create_ad_pressed"
     assert _forbidden(_clicks(env["page"])) == []
+
+
+def test_a_zero_size_action_menu_is_opened_by_its_dom_click(env):
+    """Ревью PR #365, B2: кнопка строки дерева 0×0 и при наведении (так было
+    живьём в прежнем мастере) — меню открывает DOM-клик после охраны."""
+    env["open"](zero_size=True)
+    got = sc.capture_more_ads(env["page"], 1)
+    clicks = _clicks(env["page"])
+    assert got["pressed"] == ["adset_action_menu_dom", "menu_create_ad"], got["stop"]
+    assert got["stop"] == "create_ad_pressed"
+    assert "editor_tree:adset/lib:ads-campaign-structure-action-menu-item" in clicks[0]
+    assert _forbidden(clicks) == [] and len(clicks) == 2, clicks
+
+
+def test_the_dom_click_is_refused_when_publish_covers_the_ad_set_row(env):
+    """Ревью PR #365, B2: футер Publish поверх строки группы — DOM-клика нет."""
+    env["open"](zero_size=True)
+    env["page"].evaluate("""() => {
+      const pub = document.createElement('div');
+      pub.setAttribute('role', 'button');
+      pub.setAttribute('data-surface', '/am/lib:syd_simple_create_publish');
+      pub.style.cssText = 'position:fixed; left:0; right:0; top:0; bottom:0; background:#eee; z-index:9';
+      pub.textContent = 'Publish';
+      document.body.appendChild(pub);
+    }""")
+    got = sc.capture_more_ads(env["page"], 1)
+    assert got["stop"] == "action_menu_refused"
+    assert got["pressed"] == []
+    assert _clicks(env["page"]) == []
+    assert not env["page"].evaluate("!!document.querySelector('[role=menu]')")
+    assert ("click_refused", False) in [(r[0], r[1]) for r in env["rows"]]
+    assert got["reason"] == "captured-for-implementation"
 
 
 def test_the_guard_keeps_create_ad_under_publish_unpressed(env):
