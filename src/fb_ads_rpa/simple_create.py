@@ -420,3 +420,27 @@ def lead_terms_block(page, *, wait_s: float = 4.0) -> str:
         if not text or time.time() >= deadline:
             return text if isinstance(text, str) else ""
         time.sleep(0.5)
+
+
+# ── После перезагрузки ───────────────────────────────────────────────────
+
+def back_to_level(page, level: str, where: str) -> bool:
+    """Вернуться к разделу уровня после перезагрузки страницы нового редактора.
+
+    Прежний мастер после перезагрузки открывается прямо на объявлении
+    (`/ads/edit/…`). Новый редактор — всегда одна страница целиком, сверху, с
+    разделами, которые ещё дорисовываются, и иногда с окном-экскурсией.
+    97314905598e (28.09): загрузка ролика зависла, шаг перезагрузил страницу и
+    сразу искал «Set up creative» — кнопка стояла под футером (клик ушёл в
+    футер), а потом не находилась вовсе, и мастер «не открылся». Здесь —
+    закрыть экскурсию и дойти до раздела так же, как после Continue.
+    """
+    md = _md()
+    try:
+        md._close_onboarding_tour(page, where)
+    except Exception:
+        pass
+    got = scroll_to_level(page, level)
+    md._telemetry.record("simple_reentry", True if got.get("ok") else None,
+                         note=f"{where}:{level}", diag={"why": got.get("why", "")})
+    return bool(got.get("ok"))

@@ -8744,6 +8744,10 @@ def upload_ad_creative_with_retry(
                 return False
             _telemetry.record("creative_upload_stalled", None, note="reload_and_retry")
             _reload_editor(page, edit_url)
+            if _simple.url_is_simple_create(edit_url or page.url):
+                # ACL-1327: новый редактор после перезагрузки стоит в начале
+                # страницы, раздел «Ad» ещё не дорисован — дойти до него.
+                _simple.back_to_level(page, "ad", "creative_reload")
     # Сдались — но убрать за собой обязаны. Незакрытый диалог перехватывает
     # ВСЕ последующие шаги: 15.09 один отказ загрузки превратился в четыре
     # (`ad_destination`, `ad2_name`, ...), у каждого в диагностике `dialogs: 1`,
@@ -9501,9 +9505,13 @@ def _scroll_xpath_into_view(page: Page, xpath: str) -> dict | None:
               if (!best) return null;
               best.scrollIntoView({ block: 'center', behavior: 'instant' });
               const r = best.getBoundingClientRect();
+              // ACL-1327: что лежит в центре кнопки — она сама или то, что её
+              // накрыло (футер нового редактора с Publish, 97314905598e).
+              const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
               return {
                 enabled: best.getAttribute('aria-disabled') !== 'true' && !best.disabled,
                 in_view: r.bottom > 0 && r.top < innerHeight,
+                hit: !!hit && best.contains(hit),
               };
             }
             """,
@@ -9543,6 +9551,10 @@ def _open_creative_wizard(page: Page, trigger_xpath: str, item_xpath: str, *,
     log: list[dict] = []
     remounted = False
     try:
+        simple = _simple.url_is_simple_create(page.url)
+    except Exception:
+        simple = False
+    try:
         wait_editor_saved(page, timeout_s=15)
     except Exception:
         pass
@@ -9560,6 +9572,11 @@ def _open_creative_wizard(page: Page, trigger_xpath: str, item_xpath: str, *,
         if seen is None and not remounted:
             # Прокрутка по долям — дорогая (до ~6 с), поэтому один раз.
             remounted = True
+            if simple:
+                # ACL-1327: в новом редакторе кнопка живёт в разделе «Ad» —
+                # сначала дойти до него (заголовок и поле имени), как после
+                # Next в прежнем мастере; доли прокрутки — уже внутри.
+                note["ad_section"] = bool(_simple.scroll_to_level(page, "ad", budget_s=8.0).get("ok"))
             _scroll_until_mounted(page, _SET_UP_CREATIVE_PRESENT_JS)
             seen = _scroll_xpath_into_view(page, trigger_xpath)
         note["button"] = seen
@@ -9571,6 +9588,16 @@ def _open_creative_wizard(page: Page, trigger_xpath: str, item_xpath: str, *,
                 note["media_on_ad"] = True
                 break
             _sleep_h(0.8)
+            continue
+        if simple and seen.get("hit") is False:
+            # ACL-1327, 97314905598e (28.09, после перезагрузки): кнопка
+            # стояла под футером нового редактора (`click_target_covered`,
+            # y=913), и нажатие ушло в футер — а в футере Publish. Накрытую
+            # кнопку не жмём: ждём, пока страница дорисуется, и в следующей
+            # попытке прокручиваем к ней заново.
+            note["covered"] = True
+            log.append(note)
+            _sleep_h(1.0)
             continue
         _sleep_h(0.3)
         menu = False
