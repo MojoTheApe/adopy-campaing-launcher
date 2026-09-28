@@ -300,7 +300,14 @@ def enrich_campaign_drafts(
                         draft.errors.append(f"Primary text 2 {ad.copy2_name!r}: {exc}")
                         continue
                     ad.ad_body2 = (copy2.get("body") or "").strip()
-                    if not ad.ad_body2:
+                    if ad.ad_body2 and not ad.ad_body:
+                        # Ревью PR #346: без основного текста второй вариант
+                        # некуда добавить — говорим об этом до браузера.
+                        draft.warnings.append(
+                            f"Primary text 2 {ad.copy2_name!r} needs an Ad Title with a primary text — ignored"
+                        )
+                        ad.ad_body2 = ""
+                    elif not ad.ad_body2:
                         draft.warnings.append(
                             f"Primary text 2 {ad.copy2_name!r} has no body — the ad gets one primary text"
                         )

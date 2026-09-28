@@ -158,6 +158,24 @@ def test_primary_text_2_survives_a_reload(ui):
     assert _text2(p, "camp_0_ad_0_copy2") == ["Text7", "Text7"]
 
 
+def test_an_unpicked_primary_text_2_stays_outlined_after_a_reload(ui):
+    """Ревью PR #346: недонабранный текст 2 после перезагрузки виден в поле,
+    а на сервер уходит пусто — обводка «не выбрано» должна вернуться."""
+    p, _ = ui
+    add(p)
+    _show(p)
+    box = p.locator(".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0'] .cb-text2-search")
+    box.click()
+    box.fill("Text1")
+    assert _text2(p, "camp_0_ad_0_copy2") == ["", "Text1"]
+    p.evaluate("() => { cbKeep.save(); location.reload(); }")
+    p.wait_for_load_state("load")
+    p.wait_for_function("document.querySelector('[name=\"camp_0_ad_0_copy2\"]')")
+    assert _text2(p, "camp_0_ad_0_copy2") == ["", "Text1"]
+    restored = p.locator(".cb-text2-search").first
+    expect(restored).to_have_class(re.compile(r"cb-text2-unmatched"))
+
+
 def test_publish_all_sends_primary_text_2_with_the_ad(ui):
     p, state = ui
     add(p)

@@ -4575,6 +4575,11 @@ window.cbKeep = (function () {
       if (!hidden || !text) return;
       var f = field(hidden);
       if (f && f in data.shown) text.value = data.shown[f];
+      /* ACL-1344 (ревью PR #346): недонабранный «Primary text 2» — в поле
+         текст, а выбора нет. После перезагрузки красная обводка должна
+         вернуться, иначе видно одно, а на сервер уходит пусто. */
+      if (wrap.classList.contains('cb-text2-sel-wrap'))
+        text.classList.toggle('cb-text2-unmatched', !!text.value.trim() && !hidden.value);
     });
     var hint = slot.querySelector('.cb-targeting-hint');
     if (hint) hint.textContent = data.hint || '';

@@ -39,6 +39,9 @@ from src.fb_ads_rpa import run_telemetry  # noqa: E402
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ads_manager" / "ad_copy_text_options_2026_09_25.html"
 
+# Настоящее раскрытие полей — до того, как фикстура `page` подменит его.
+REAL_REVEAL = md._reveal_ad_copy_fields
+
 TEXT1 = "Aprende a invertir paso a paso.\nSin experiencia previa."
 TEXT2 = "Segunda opción del texto.\n\nRegístrate hoy — cupos limitados."
 TITLE = "Regístrate ahora"
@@ -137,7 +140,8 @@ def page(browser, monkeypatch, telemetry, typed):
     monkeypatch.setattr(md, "_human_jitter", lambda *a, **k: 0.0)
     monkeypatch.delenv("FB_RPA_HUMAN_TYPING", raising=False)
     monkeypatch.delenv("FB_RPA_TYPING_LEAD", raising=False)
-    monkeypatch.setattr(md, "_reveal_ad_copy_fields", lambda p: True)
+    # Раскрытие полей подменено; путь с настоящим — в тестах ревью PR #346 ниже.
+    monkeypatch.setattr(md, "_reveal_ad_copy_fields", lambda p, **kw: True)
     monkeypatch.setattr(md, "_await_creative_settled", lambda p, **kw: True)
     monkeypatch.setattr(md, "_focus_via_cdp_click", lambda p, loc: (loc.focus(), loc.element_handle())[1])
     monkeypatch.setattr(md, "_cdp_mouse_click", lambda pg, x, y: pg.evaluate(
@@ -318,3 +322,211 @@ def test_second_text_failure_is_a_warning_not_a_block(line):
     assert "unclassified" not in failure_policy.reason(line)
     blocking, warnings = failure_policy.split([line, "ad2_copy:Ad 2 has no text"])
     assert warnings == [line] and blocking == ["ad2_copy:Ad 2 has no text"]
+
+
+# ── ревью PR #346 ─────────────────────────────────────────────────────────
+
+def _real_reveal(page, monkeypatch):
+    """Настоящий `_reveal_ad_copy_fields`; перезагрузка перехвачена и считается."""
+    reloads: list[int] = []
+    monkeypatch.setattr(md, "_reveal_ad_copy_fields", REAL_REVEAL)
+    monkeypatch.setattr(md, "_scroll_until_mounted", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_recover_facebook_error_page", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_review_errors_visible", lambda *a, **k: False)
+    monkeypatch.setattr(md, "_browser_addon_none_checked", lambda *a, **k: None)
+    monkeypatch.setattr(page, "reload", lambda *a, **k: reloads.append(1))
+    monkeypatch.setattr(page, "wait_for_load_state", lambda *a, **k: None)
+    return reloads
+
+
+def _failing(monkeypatch, key, calls_to_fail=10**6):
+    """`mark_ad_copy_field` не находит поле `key` в первых `calls_to_fail` вызовах fill_ad_copy."""
+    real_mark, real_fill = md.mark_ad_copy_field, md.fill_ad_copy
+    calls = {"fill": 0}
+
+    def fill(*a, **k):
+        calls["fill"] += 1
+        return real_fill(*a, **k)
+
+    def mark(pg, k, label, m, *a, **kw):
+        if k == key and m != "probe" and calls["fill"] <= calls_to_fail:
+            return False
+        return real_mark(pg, k, label, m, *a, **kw)
+
+    monkeypatch.setattr(md, "mark_ad_copy_field", mark)
+    monkeypatch.setattr(md, "fill_ad_copy", fill)
+
+
+def test_write_ad_copy_retry_after_a_failed_headline_does_not_reload(page, monkeypatch):
+    """HIGH ревью: заголовок не встал в первом проходе (как 25.09,
+    `click_via_cdp_failed`) — повтор `write_ad_copy` с НАСТОЯЩИМ раскрытием
+    полей проходит без перезагрузки редактора, текст 2 добавлен один раз."""
+    page.evaluate(_ADD_CONTROL_JS)
+    reloads = _real_reveal(page, monkeypatch)
+    monkeypatch.setattr(md, "_heal_failed_component", lambda *a, **k: False)
+    monkeypatch.setattr(md, "_back_on_the_ad", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_on_the_named_ad", lambda *a, **k: True)
+    import src.fb_ads_rpa.browser as br
+    monkeypatch.setattr(br, "ensure_editor_window", lambda *a, **k: True)
+    _failing(monkeypatch, "headline_field", calls_to_fail=1)
+    report: dict = {}
+    assert md.write_ad_copy(page, TITLE, TEXT1, ad_name="x", body2=TEXT2, report=report) is True, report
+    assert reloads == [], "повтор перезагрузил редактор Leads-объявления"
+    assert report.get("retry") is True
+    assert report["second_text"]["ok"] is True, report["second_text"]
+    assert page.evaluate("window.__adds") == 1
+    opts = _options(page)
+    assert len(opts) == 2 and md._copy_matches(opts[0], TEXT1) and md._copy_matches(opts[1], TEXT2), opts
+
+
+def test_a_pass_over_two_existing_options_does_not_reload(page, monkeypatch):
+    """Два поля уже стоят (текст 2 добавлен раньше): настоящее раскрытие
+    принимает их, если у объявления есть второй текст."""
+    page.evaluate(_ADD_CONTROL_JS)
+    reloads = _real_reveal(page, monkeypatch)
+    assert md.fill_ad_copy(page, TITLE, TEXT1, {}, ad_body2=TEXT2) is True
+    report: dict = {}
+    assert md.fill_ad_copy(page, TITLE, TEXT1, report, ad_body2=TEXT2) is True, report
+    assert reloads == []
+    assert report["second_text"]["ok"] is True and report["second_text"].get("reused_box") is True
+    assert md._reveal_ad_copy_fields(page, text_options=True) is True
+    assert reloads == []
+
+
+def test_a_failed_headline_adds_no_second_option(page, monkeypatch):
+    page.evaluate(_ADD_CONTROL_JS)
+    _failing(monkeypatch, "headline_field")
+    report: dict = {}
+    assert md.fill_ad_copy(page, TITLE, TEXT1, report, ad_body2=TEXT2) is False
+    assert page.evaluate("window.__adds") == 0, "текст 2 добавлен при упавшем заголовке"
+    assert report["second_text"] == {"ok": False, "why": "headline_not_typed"}
+    assert len(_options(page)) == 1
+
+
+def test_a_failed_primary_text_adds_no_second_option(page, monkeypatch):
+    page.evaluate(_ADD_CONTROL_JS)
+    _failing(monkeypatch, "message_field")
+    report: dict = {}
+    assert md.fill_ad_copy(page, TITLE, TEXT1, report, ad_body2=TEXT2) is False
+    assert page.evaluate("window.__adds") == 0, "текст 2 добавлен без текста 1"
+    assert report["second_text"] == {"ok": False, "why": "primary_text_not_typed"}
+
+
+def test_an_ad_without_second_text_still_refuses_two_primary_boxes(page):
+    """Без второго текста два поля в `message_field` — неоднозначность,
+    как до ACL-1344: не печатаем ни в одно."""
+    page.evaluate(_ADD_CONTROL_JS)
+    page.click("#add-option")
+    report: dict = {}
+    assert md.fill_ad_copy(page, "", TEXT1, report) is False
+    assert all(not o.strip() for o in _options(page)), _options(page)
+
+
+def test_a_bare_add_outside_the_primary_text_block_is_not_ours(page):
+    """Голое «Add» ищется только в блоке основного текста."""
+    page.evaluate(_STRAY_ADD_JS)
+    report: dict = {}
+    assert md.fill_ad_copy(page, TITLE, TEXT1, report, ad_body2=TEXT2) is True
+    assert report["second_text"]["why"] == "add_control_not_found"
+    assert page.evaluate("window.__stray") == 0
+
+
+def test_a_bare_add_inside_the_primary_text_block_is_used(page):
+    page.evaluate(_ADD_CONTROL_JS)
+    page.evaluate("() => { document.querySelector('#add-option span').textContent = 'Add'; }")
+    report: dict = {}
+    assert md.fill_ad_copy(page, TITLE, TEXT1, report, ad_body2=TEXT2) is True
+    assert report["second_text"]["ok"] is True
+    assert report["second_text"]["add_how"] == "bare_add_in_field"
+
+
+_STRAY_ADD_JS = r"""
+() => {
+  const head = document.querySelector('[data-surface$="/headline_field"]').parentElement;
+  const b = document.createElement('div');
+  b.setAttribute('role', 'button'); b.id = 'stray-add'; b.textContent = 'Add';
+  b.style.cssText = 'display:inline-block;padding:6px';
+  head.appendChild(b);
+  window.__stray = 0; b.addEventListener('click', () => window.__stray++);
+}
+"""
+
+# Кнопка кладёт новое поле ВНЕ `message_field` и без подписи (так Meta тоже
+# может сделать — разметки мы не видели), а раздел генерации между основным
+# текстом и заголовком в тот же момент дорисовывает свой вариант. Поле берётся
+# запасным ходом по положению.
+_OUTSIDE_BOX_JS = r"""
+(withGeneration) => {
+  const host = document.querySelector('[data-surface$="/message_field"]');
+  const wrap = host.parentElement;
+  const btn = document.createElement('div');
+  btn.setAttribute('role', 'button'); btn.id = 'add-option';
+  btn.style.cssText = 'display:inline-block;padding:6px 10px;border:1px solid #999';
+  btn.textContent = 'Add text option';
+  wrap.appendChild(btn);
+  let gen = null;
+  if (withGeneration) {
+    gen = document.createElement('div');
+    gen.innerHTML = '<div><div><span>Advantage+ creative text generation</span></div><div class="slot"></div></div>';
+    wrap.parentElement.insertBefore(gen, wrap.nextSibling);
+  }
+  window.__adds = 0;
+  btn.addEventListener('click', () => {
+    window.__adds++;
+    const box = document.createElement('div');
+    box.innerHTML = '<div contenteditable="true" id="outside-option" style="min-height:40px;border:1px solid"></div>';
+    wrap.parentElement.insertBefore(box, wrap.nextSibling);
+    if (gen) {
+      gen.querySelector('.slot').innerHTML =
+        '<div contenteditable="true" id="gen-option" style="min-height:40px">Texto generado</div>';
+    }
+  });
+}
+"""
+
+
+def test_a_new_box_outside_the_field_is_taken_by_position_not_the_generated_one(page):
+    page.evaluate(_OUTSIDE_BOX_JS, True)
+    report: dict = {}
+    assert md.fill_ad_copy(page, TITLE, TEXT1, report, ad_body2=TEXT2) is True
+    assert report["second_text"]["ok"] is True, report["second_text"]
+    assert md._copy_matches(page.inner_text("#outside-option"), TEXT2)
+    assert page.inner_text("#gen-option") == "Texto generado", "в вариант Meta напечатан наш текст"
+    assert page.get_attribute("#gen-option", "data-rpa-field") is None
+
+
+_HIDDEN_HEADLINE_JS = r"""
+() => {
+  const host = document.querySelector('[data-surface$="/message_field"]');
+  const btn = document.createElement('div');
+  btn.setAttribute('role', 'button'); btn.id = 'add-option';
+  btn.style.cssText = 'display:inline-block;padding:6px';
+  btn.textContent = 'Add text option';
+  host.parentElement.appendChild(btn);
+  document.querySelector('[data-surface$="/headline_field"]').parentElement.style.display = 'none';
+  btn.addEventListener('click', () => {
+    const old = document.querySelector('[data-surface$="/link_description_field"] textarea');
+    const t = document.createElement('textarea'); t.id = 'redrawn-description';
+    old.replaceWith(t);
+  });
+}
+"""
+
+
+def test_without_a_visible_headline_the_position_fallback_takes_nothing(page):
+    """Нижней границы нет (заголовок не виден) — перерисованное описание
+    ниже не должно сойти за вариант 2."""
+    page.evaluate(_HIDDEN_HEADLINE_JS)
+    report: dict = {}
+    assert md.fill_ad_copy(page, "", TEXT1, report, ad_body2=TEXT2) is True
+    assert report["second_text"]["why"] == "option_box_not_added"
+    assert page.input_value("#redrawn-description") == ""
+
+
+def test_optimize_text_per_person_state_is_recorded_not_changed(page, telemetry):
+    page.evaluate(_ADD_CONTROL_JS)
+    before = page.inner_text('[data-surface$="/text_liquidity_toggle_field"]')
+    assert md.fill_ad_copy(page, TITLE, TEXT1, {}, ad_body2=TEXT2) is True
+    row = _rows(telemetry, "ad_copy_second_text")[-1]
+    assert row["diag"]["optimize_text_per_person"] == "Disabled"
+    assert page.inner_text('[data-surface$="/text_liquidity_toggle_field"]') == before

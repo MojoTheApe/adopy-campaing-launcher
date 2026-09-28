@@ -5234,8 +5234,7 @@ def run_recorded_campaign_flow(
                     ad_name=copy_ad_name,
                     destination_url=destination_url, report=copy_report,
                     **({"body2": ad_body2} if ad_body2 else {}))
-                second_fail = second_text_soft_fail("ad", ad_name or "ad 1", ad_body2, copy_report) \
-                    if ok_copy else None
+                second_fail = second_text_soft_fail("ad", ad_name or "ad 1", ad_body2, copy_report)
                 if second_fail:
                     ad_level_fails.append(second_fail)
                 if not ok_copy:
@@ -5255,6 +5254,13 @@ def run_recorded_campaign_flow(
                     return "browser_closed"
                 _shot("fail_ad_copy")
                 ad_level_fails.append(f"ad_copy:{str(exc)[:60]}")
+        elif reached_ad_level and ad_body2:
+            # ACL-1344 (ревью PR #346): шаг текста не запускался (нет медиа
+            # или нет текста 1) — второй текст не теряется молча.
+            ad_level_fails.append(second_text_soft_fail(
+                "ad", ad_name or "ad 1", ad_body2,
+                {"second_text": {"ok": False,
+                                 "why": "no_creative" if not creative_uploaded else "no_primary_text"}}))
 
         # Additional ads (2nd, 3rd, ...) in the same ad set — each one is a
         # fresh "Create ad" (create_additional_ad()) followed by the exact
@@ -5377,6 +5383,15 @@ def run_recorded_campaign_flow(
                     # поля текста вовсе — шаг текста лишь жёг минуты на поиск
                     # полей и прятал настоящую причину. Называем её сразу.
                     ad_level_fails.append(f"{tag}_copy:{extra_name or tag} has no text (no_creative)")
+                    if extra_body2:
+                        # ACL-1344: второй текст не теряется молча.
+                        ad_level_fails.append(second_text_soft_fail(
+                            tag, extra_name or tag, extra_body2,
+                            {"second_text": {"ok": False, "why": "no_creative"}}))
+                elif extra_body2 and not (extra_title or extra_body):
+                    ad_level_fails.append(second_text_soft_fail(
+                        tag, extra_name or tag, extra_body2,
+                        {"second_text": {"ok": False, "why": "no_primary_text"}}))
                 elif extra_title or extra_body:
                     try:
                         copy_report = {}
@@ -5385,7 +5400,7 @@ def run_recorded_campaign_flow(
                             destination_url=destination_url, report=copy_report,
                             **({"body2": extra_body2} if extra_body2 else {}))
                         second_fail = second_text_soft_fail(
-                            tag, extra_name or tag, extra_body2, copy_report) if ok_copy else None
+                            tag, extra_name or tag, extra_body2, copy_report)
                         if second_fail:
                             ad_level_fails.append(second_fail)
                         if not ok_copy:
@@ -10261,8 +10276,14 @@ def _recover_facebook_error_page(page: Page, where: str) -> bool:
     return ok
 
 
-def _reveal_ad_copy_fields(page: Page) -> bool:
+def _reveal_ad_copy_fields(page: Page, *, text_options: bool = False) -> bool:
     """Make the Primary text/Headline inputs visible.
+
+    `text_options` (ACL-1344, ревью PR #346): у объявления со вторым
+    вариантом текста в `message_field` может стоять два поля. Проба «ровно
+    одно поле» отвечала бы «не видно», и дальше шли ожидание, клики по
+    плейсментам и перезагрузка редактора Leads-объявления. С флагом проба
+    берёт первое поле. Без флага — как раньше.
 
     Confirmed live (2026-07-26): these fields exist in the DOM as soon as a
     creative is attached, but their container (`#creativeEditorComponent`)
@@ -10289,7 +10310,8 @@ def _reveal_ad_copy_fields(page: Page) -> bool:
         бывает до семи похожих) решается сама: `data-surface$="/message_field"`
         на странице ровно один.
         """
-        return mark_ad_copy_field(page, "message_field", _AD_COPY_FIELDS["message_field"], "probe")
+        extra = {"first_of_many": True} if text_options else {}
+        return mark_ad_copy_field(page, "message_field", _AD_COPY_FIELDS["message_field"], "probe", **extra)
 
     # 20.09 20:30 (SA_arc, CL_ml, CO_bnc подряд): после ускорения мы доходим
     # до объявления раньше, чем Meta его дорисовывает, и поля текста «ещё не
@@ -10953,10 +10975,16 @@ _TEXT_OPTIONS_JS = r"""
       let pick = fresh.filter(e => boxes.includes(e));
       if (!pick.length && body) {
         // Запасной ход: поле встало между основным текстом и заголовком.
+        // Нижняя граница обязательна (ревью PR #346): без неё перерисованное
+        // поле ниже (описание) сошло бы за вариант 2. Хост заголовка —
+        // `display: contents`, своего прямоугольника у него нет: верх берём
+        // по видимым потомкам. Заголовка не видно — запасного хода нет.
         const top = body.getBoundingClientRect().top;
         const head = document.querySelector('[data-surface$="/headline_field"]');
-        const bottom = head && seen(head) ? head.getBoundingClientRect().top : Infinity;
-        pick = fresh.filter(e => { const r = e.getBoundingClientRect(); return r.top > top && r.top < bottom; });
+        const parts = head ? [...head.querySelectorAll('*')].filter(seen) : [];
+        const bottom = parts.length ? Math.min(...parts.map(e => e.getBoundingClientRect().top)) : null;
+        pick = bottom === null ? []
+          : fresh.filter(e => { const r = e.getBoundingClientRect(); return r.top > top && r.top < bottom; });
       }
       if (pick.length !== 1) return {ok: false, fresh: fresh.length, picked: pick.length};
       for (const old of document.querySelectorAll('[data-rpa-field="body2"]')) old.removeAttribute('data-rpa-field');
@@ -10986,9 +11014,18 @@ _TEXT_OPTIONS_JS = r"""
       adds = below.length ? [below[0][0]] : adds;
     }
     const add = adds.length ? adds[0] : null;
+    // «Optimize text per person» — не трогаем, только записываем, в каком
+    // он состоянии при двух вариантах (для живой проверки ACL-1344).
+    const opt = document.querySelector('[data-surface$="/text_liquidity_toggle_field"]');
+    let optimize = null;
+    if (opt) {
+      const heading = opt.querySelector('[role=heading]');
+      optimize = norm(opt.textContent).replace(norm(heading ? heading.textContent : ''), '').trim().slice(0, 40);
+    }
     const out = {
       boxes: boxes.map(e => ({text: textOf(e), body: e === body, ours: e.getAttribute('data-rpa-opt') === 'ours'})),
       add_found: !!add, add_how: add ? how : '', add_count: adds.length, zones: zones.length,
+      optimize_text_per_person: optimize,
     };
     if (op === 'add_point' && add) {
       add.scrollIntoView({block: 'center'});
@@ -11114,13 +11151,17 @@ def add_second_primary_text(page: Page, body: str, body2: str, type_and_confirm,
     # поэтому сверяем по содержимому: одно поле с текстом 1, другое — с 2.
     after = _text_options(page) or {}
     texts = [b.get("text", "") for b in (after.get("boxes") or [])]
+    # Состояние «Optimize text per person» при двух вариантах — только в
+    # запись: переключатель не трогаем (решения владельца по нему нет).
+    optimize = after.get("optimize_text_per_person")
     first = next((i for i, t in enumerate(texts) if _copy_matches(t, body)), None)
     second = next((i for i, t in enumerate(texts)
                    if i != first and _copy_matches(t, body2)), None)
     if first is None or second is None:
         return _done(False, "options_not_verified", boxes=len(texts),
-                     text1_ok=first is not None, text2_ok=second is not None)
-    return _done(True, boxes=len(texts))
+                     text1_ok=first is not None, text2_ok=second is not None,
+                     optimize_text_per_person=optimize)
+    return _done(True, boxes=len(texts), optimize_text_per_person=optimize)
 
 
 def _repair_blocked_copy_editor(page: Page, ad_name: str, destination_url: str) -> bool:
@@ -11332,7 +11373,10 @@ def fill_ad_copy(
     report = report if report is not None else {}
     report.setdefault("attempts", [])
     ad_name = str(report.get("ad_name") or "")
-    if not _reveal_ad_copy_fields(page):
+    # ACL-1344: при втором тексте в `message_field` бывает два поля — проба
+    # раскрытия должна их принимать. Без второго текста зовём как прежде.
+    reveal_kw = {"text_options": True} if ad_body2 else {}
+    if not _reveal_ad_copy_fields(page, **reveal_kw):
         # 20.09 19:29 (CO_bnc Mix): в предпросмотре объявления текст стоял, а
         # шаг отказал с пустым списком попыток — поля просто не раскрылись.
         report["why"] = "copy_fields_not_revealed"
@@ -11542,13 +11586,17 @@ def fill_ad_copy(
         if body_ok and title_ok:
             break
         if attempt == 0:
-            _reveal_ad_copy_fields(page)
+            _reveal_ad_copy_fields(page, **reveal_kw)
             _sleep_h(0.5)
             if _wrong_ad():
                 return False
 
-    if ad_body2 and ad_body and body_ok:
-        # ACL-1344: второй вариант — только поверх сверенного первого.
+    if ad_body2 and ad_body and body_ok and title_ok:
+        # ACL-1344: второй вариант — только когда и основной текст, и
+        # заголовок сверены. Ревью PR #346: текст 2 при упавшем заголовке
+        # оставлял два поля, и повтор `write_ad_copy` уходил в перезагрузку
+        # редактора. Теперь повтор идёт по-старому, с одним полем, а текст 2
+        # добавляется в том проходе, где встало всё остальное.
         try:
             add_second_primary_text(page, ad_body, ad_body2, _type_and_confirm, report)
         except Exception as exc:
@@ -11560,7 +11608,9 @@ def fill_ad_copy(
         report["variations_off_after_text2"] = disable_text_variations(page)
         report["generation_off_after_text2"] = disable_text_generation(page)
     elif ad_body2:
-        report["second_text"] = {"ok": False, "why": "primary_text_not_typed"}
+        why = ("no_primary_text" if not ad_body
+               else "primary_text_not_typed" if not body_ok else "headline_not_typed")
+        report["second_text"] = {"ok": False, "why": why}
 
     return body_ok and title_ok
 

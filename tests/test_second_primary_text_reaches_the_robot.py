@@ -254,6 +254,7 @@ def recorded(monkeypatch, tmp_path):
         return result, soft
 
     state["run"] = run
+    state["page"] = page
     return state
 
 
@@ -270,6 +271,30 @@ def test_a_second_text_that_did_not_take_is_reported_per_ad(recorded):
     _result, soft = recorded["run"]("b1-second", "b2-second")
     assert "ad2_second_text:Ad 2 second primary text not added (add_control_not_found)" in soft
     assert not any(s.startswith("ad_second_text") for s in soft), soft
+
+
+def test_a_second_text_is_not_lost_silently_when_the_copy_step_is_skipped(recorded, monkeypatch):
+    """Ревью PR #346: нет медиа у объявления 2 — шаг текста не запускался, а
+    выбранный второй текст пропадал молча. Теперь — строка-предупреждение."""
+    monkeypatch.setattr(dom, "upload_ad_creative_with_retry",
+                        lambda p, ctype, path, **kw: path != "b.png")
+    _result, soft = recorded["run"]("", "b2-second")
+    assert "ad2_second_text:Ad 2 second primary text not added (no_creative)" in soft, soft
+
+
+def test_a_second_text_without_a_primary_text_is_reported(recorded):
+    soft: list[str] = []
+    dom.run_recorded_campaign_flow(
+        recorded["page"], campaign_name="Example", budget="10", adset_name="Set", ad_name="Ad 1",
+        creative_path="a.png", ad_title="", ad_body="", ad_body2="b1-second",
+        destination_url="https://example.com", soft_fails_out=soft)
+    assert "ad_second_text:Ad 1 second primary text not added (no_primary_text)" in soft, soft
+
+
+def test_enrich_warns_when_text_2_has_no_ad_title(enrich):
+    d = enrich(AdDraft(copy2_name="Text7"))
+    assert d.ad_sets[0].ads[0].ad_body2 == ""
+    assert any("needs an Ad Title" in w for w in d.warnings), d.warnings
 
 
 def test_the_recorded_flow_without_second_texts_is_unchanged(recorded):
