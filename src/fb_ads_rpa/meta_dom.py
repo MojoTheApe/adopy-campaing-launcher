@@ -14261,10 +14261,35 @@ _AUDIENCE_FIELD_DOM = r"""
 """
 
 _LOCATION_SUMMARY_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
+  const countries = (t) => t.split(':').slice(1).join(':').split(',').map(norm).filter(Boolean);
   const field = summaryField(/^(Locations|Ubicaciones)$/i, /^(Inclusion|Inclusión|Incluir)\s*:/i);
-  if (!field) return null;
-  return norm(field.summary.textContent).split(':').slice(1).join(':')
-    .split(',').map(norm).filter(Boolean);
+  if (field) {
+    // ACL-1327, 28.09 (97314905598e/01_audience_location): сводка —
+    // `<span><strong>Inclusion:</strong> Colombia</span>`. Лист — только
+    // `<strong>Inclusion:</strong>`, страны лежат рядом текстом родителя.
+    // Поднимаемся к родителю (не выходя из поля), пока после двоеточия
+    // ничего нет.
+    let node = field.summary, text = norm(node.textContent);
+    for (let i = 0; i < 3 && !countries(text).length && node.parentElement; i++) {
+      node = node.parentElement;
+      if (!field.boxes.some(b => b.contains(node))) break;
+      text = norm(node.textContent);
+    }
+    return countries(text);
+  }
+  // Новый редактор «в один экран» (ACL-1327, 97314905598e/02): свёрнутая
+  // карточка Audience — сетка «заголовок | значение» внутри кнопки-сводки
+  // (`role=button aria-pressed`): «Locations | Colombia». Значение —
+  // соседний элемент ячейки заголовка.
+  const heads = [...document.querySelectorAll('[role=heading]')]
+    .filter(h => /^(Locations|Ubicaciones)$/i.test(norm(h.textContent)) && visible(h)
+                 && h.closest('[role=button][aria-pressed]'));
+  if (heads.length !== 1) return null;
+  let cell = heads[0];
+  for (let i = 0; i < 4 && cell && !cell.nextElementSibling; i++) cell = cell.parentElement;
+  const value = cell && cell.nextElementSibling;
+  if (!value || value.querySelector('[role=heading]')) return null;
+  return norm(value.textContent).split(',').map(norm).filter(Boolean);
 }
 """
 """Свёрнутая строка «Inclusion: Colombia» поля Locations — страны списком."""
