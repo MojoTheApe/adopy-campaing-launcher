@@ -111,3 +111,25 @@ Coverage limit: no Meta JS; `tests/test_simple_create_location_summary.py` emula
 `editor_footer_simple_create_2026_09_28.html` — 97314905598e/02_ad_creative_upload (capture truncated at 3.98 MB, the block is whole): the footer of the `simple_create` editor — "By clicking **Publish**, you acknowledge…" line, `Close` button and the `Publish` button `data-surface="/am/lib:syd_simple_create_publish"`. Classes, `data-auto-logging-id`, `data-interactable`, links and SVG paths removed. No account or campaign data. UI language: English. Meta build identifier and browser version: not recorded.
 
 Coverage limit: no Meta CSS — `tests/test_no_press_lands_on_publish.py` pins it as a full-width fixed bar over the target, the way the live screenshot shows it.
+
+## ACL-1354 single-screen editor failures (live runs 2026-09-28)
+
+Cut in offline Chromium (JS disabled) from `output/rpa_pages/<run>/<step>/page.html`; captures truncated at ~3.98 MB, the blocks are whole. Scripts, styles, SVG/images removed; every attribute except `role`, `aria-*`, `id`, `data-surface`, `placeholder`, `type`, `value`, `tabindex`, `hidden`, `for`, `checked`, `disabled`, `name`, `href` (set to `#`), `typeaheadcomponentid` removed; Meta render ids (`js_*`) replaced with `syn_N` (numbering restarts in each fragment). No account, campaign, page or creative data in the blocks. UI language: English. Meta build identifier and browser version: not recorded.
+
+`objective_open_2026_09_28.html` — the dialog on the campaigns list while the robot waited for the objective dialog after Create:
+
+| Fragment | Source | Capture state | Coverage limit |
+| --- | --- | --- | --- |
+| table_loading | 9d113c3d6ac3/00_stall_objective_wait (Facebook_9943) | The campaigns table's own progress modal `data-surface="/am/table/lib:ads_progress_dialog_modal_…"`, "Loading..." (also on the screenshot 60 s later) | No list around it; how long Meta keeps it is not in the capture |
+| create_loading | 279b9539df43/00_stall_objective_wait (Facebook_9943) | Create's progress modal `data-surface="/am/lib:ads_progress_dialog_modal_…"`, "Loading creation" | Same |
+| ad_blocker | 279b9539df43/01_objective_leads | Meta's "Turn off ad blocker" modal (heading, Close, OK) over the list at the `objective_leads` failure | Why Meta showed it is not in the capture |
+
+`audience_fields_simple_create_2026_09_28.html` — Audience fields of the single-screen editor:
+
+| Fragment | Source | Capture state | Coverage limit |
+| --- | --- | --- | --- |
+| languages_open_empty | aa1e2fbf45c9/02_languages (Facebook_1443, `simple_create`) | Languages row expanded (`aria-expanded=true`), the tokenizer with an empty `<input role=combobox aria-expanded=false aria-controls=…>`; the listbox it points to does not exist | Captured after the step cleared its input; the suggestion list was never captured — typing and suggestions are emulated/absent in the test |
+| targeting_loading | aa1e2fbf45c9/03_targeting_open (same run) | Detailed targeting row expanded, its `role=region` holds only `role=progressbar aria-busy=true aria-valuetext="Loading..."` | The loaded state of this field in `simple_create` was not captured |
+| targeting_search_loaded | 0749abd7482f/02_placements (classic ad set editor, same day) | The loaded field's `role=search` box with `<input placeholder="Add demographics, interests or behaviors">` (interests list not included) | Used as the loaded state of the field above; classic editor markup |
+
+Coverage limit: no Meta JS. `tests/test_single_screen_editor_failures_are_named.py` emulates the row toggle (a click collapses/expands the row, a collapsed row does not load, a re-expanded one starts loading again) and the moment the field finishes loading.
