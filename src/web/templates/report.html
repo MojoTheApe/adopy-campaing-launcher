@@ -5527,15 +5527,28 @@ window.cbBuild = (function () {
      зависшая сборка стоит, а не ползёт к 99 %. Назад процент не идёт:
      помнится максимум (и в localStorage — переживает F5). Служебный или
      незнакомый шаг — этап последнего знакомого, никогда не 0. */
+  /* Таблица правится руками: любая её поломка (битый JSON, кривой
+     регэксп) отключает только процент — точки сборки работают как до
+     ACL-1347. Кривое правило пропускается, о нём — одна строка в консоли. */
   var MODEL = (function () {
-    var m = null;
-    try { m = JSON.parse((document.getElementById('cb-build-model') || {}).textContent || 'null'); } catch (e) { m = null; }
-    if (!m || !Array.isArray(m.rules) || !Array.isArray(m.stages)) return null;
-    m.re = m.rules.map(function (r) { return [new RegExp(r[0]), r[1]]; });
-    m.secs = {};
-    m.order = m.stages.map(function (s) { m.secs[s[0]] = Math.max(1, +s[1] || 1); return s[0]; });
-    m.steps = m.steps || {};
-    return m;
+    try {
+      var m = JSON.parse((document.getElementById('cb-build-model') || {}).textContent || 'null');
+      if (!m || !Array.isArray(m.rules) || !Array.isArray(m.stages) || !m.stages.length) return null;
+      var bad = [];
+      m.re = [];
+      m.rules.forEach(function (r) {
+        try { m.re.push([new RegExp(r[0]), String(r[1])]); } catch (e) { bad.push(r && r[0]); }
+      });
+      if (bad.length) {
+        try { console.warn('cb-build-model: skipped invalid rules', bad); } catch (e) { /* без консоли — молча */ }
+      }
+      m.secs = {};
+      m.order = m.stages.map(function (s) { m.secs[s[0]] = Math.max(1, +s[1] || 1); return s[0]; });
+      m.steps = m.steps && typeof m.steps === 'object' ? m.steps : {};
+      return m;
+    } catch (e) {
+      return null;
+    }
   })();
   var PCT_GAP = 1;   // сколько процентов не доходит до следующего этапа
 
@@ -5607,7 +5620,9 @@ window.cbBuild = (function () {
     var t = j.track[name] = j.track[name] || { pct: 0, ad: 1 };
     if (c) {
       var idle = typeof p.idle_s === 'number' ? p.idle_s : (typeof c.idle_s === 'number' ? c.idle_s : 0);
-      var v = estimate(t, c, idle, ads);
+      var v = null;
+      try { v = estimate(t, c, idle, ads); } catch (e) { v = null; }   // процент не должен ронять точку
+      if (typeof v !== 'number' || v !== v) v = null;
       if (v !== null && v > t.pct) {
         var grew = Math.floor(v) > Math.floor(t.pct);
         t.pct = Math.round(v * 10) / 10;

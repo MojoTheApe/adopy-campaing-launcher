@@ -63,7 +63,8 @@ def _page(browser, html, **ctx):
     page = context.new_page()
     errors = []
     page.on('pageerror', lambda e: errors.append(str(e)))
-    state = {'posts': 0, 'progress_calls': 0, 'progress': {'status': 'queued', 'campaigns': []}}
+    state = {'posts': 0, 'progress_calls': 0, 'progress': {'status': 'queued', 'campaigns': []}, 'warnings': []}
+    page.on('console', lambda m: m.type == 'warning' and state['warnings'].append(m.text))
     page.route('**/*', _route_for(html, state))
     page.goto('http://acl.test/')
     page.evaluate('cbDrawer.open()')
@@ -400,3 +401,43 @@ def test_the_page_maps_steps_exactly_like_the_script(ui):
     probe = sorted(STEPS_SEEN_IN_TELEMETRY | {'ad3_copy', 'ad12_name', 'brand_new_robot_step', ''})
     got = p.evaluate('names => names.map(n => cbBuild.stageOf(n))', probe)
     assert dict(zip(probe, got)) == {n: stage(n) for n in probe}
+
+
+# ── ревью PR #364: поломанная таблица отключает процент, а не точку ──────
+
+def _broken(html, old, new):
+    assert html.count(old) >= 1, old
+    return html.replace(old, new, 1)
+
+
+@pytest.mark.parametrize('breakage', ['bad_rule', 'bad_json'])
+def test_a_broken_model_table_never_breaks_the_build_dot(browser, html, breakage):
+    """Правила пишутся руками. Кривой регэксп пропускается (остальные
+    правила работают, одна строка в консоли); битый JSON выключает только
+    процент — точка сборки живёт как до ACL-1347."""
+    if breakage == 'bad_rule':
+        page_html = _broken(html, '["^(window_|', '["^((window_|')
+    else:
+        page_html = _broken(html, '"stages": [', '"stages": [[')
+    context, p, state, errors = _page(browser, page_html)
+    warnings = state['warnings']
+    try:
+        assert p.evaluate('typeof window.cbBuild') == 'object'
+        (a,) = publish(p)
+        show(p, state, progress('running', [camp(a, step='ad_copy', idle_s=3)], current=a, idle_s=3))
+        expect(dot(p, a)).to_have_class('cbd-ind cbd-ind-build-run')
+        expect(dot(p, a)).to_have_attribute('title', 'Building: ad copy')
+        if breakage == 'bad_rule':
+            # Остальные правила на месте — процент есть; кривое правило названо.
+            assert pct(p, a) > bounds()['ad'][0] - 1
+            assert p.evaluate('cbBuild.stageOf("window_bounds")') is None
+            assert p.evaluate('cbBuild.stageOf("adset_name")') == 'adset'
+        else:
+            assert dot(p, a).get_attribute('data-pct') is None
+        show(p, state, progress('done', [camp(a, result=OK)]))
+        expect(dot(p, a)).to_have_class('cbd-ind cbd-ind-build-ok')
+        assert not errors, errors
+    finally:
+        context.close()
+    if breakage == 'bad_rule':
+        assert len([w for w in warnings if 'cb-build-model' in w]) == 1, warnings
