@@ -8504,9 +8504,11 @@ def upload_ad_creative_with_retry(
     # от соседнего объявления, и тогда файл вообще никуда не поедет — это
     # единственный работающий путь для объявлений 2 и 3.
     _note_media_refused(None)  # отказ прошлого объявления к этому не относится
-    # Причина и «файл подавали» — только этого объявления (ACL-1348).
+    # Причина, «файл подавали» и снимок мастера — только этого объявления
+    # (ACL-1348): одна обёртка на объявление.
     _set_upload_why(None)
     _upload_why_tls.offered = False
+    _upload_why_tls.wizard_captured = False
     known = upload_already_failed(creative_path) or upload_already_succeeded(creative_path)
     if known:
         # Through the wizard, not straight at the library. The library lives
@@ -8578,6 +8580,9 @@ def upload_ad_creative_with_retry(
         return False
 
     for attempt in range(attempts):
+        # Причина — только последней попытки: не оставлять причину первой,
+        # если вторая упала в другом месте (ревью PR #352).
+        _set_upload_why(None)
         try:
             if upload_ad_creative(page, creative_type, creative_path, edit_url=edit_url):
                 remember_upload_succeeded(creative_path)
@@ -9521,18 +9526,23 @@ _WIZARD_STEP_NAMES = ("Creative setup", "Media", "Trim", "Crop", "Text", "Image 
 #: Шаг Media в строке шагов мастера — где он, можно ли по нему кликнуть и
 #: какой шаг сейчас открыт (ACL-1348).
 #:
-#: Ищется по ПОДПИСИ, а не по роли: у горизонтальной строки шагов нового
-#: мастера (с 24.08) роль у пункта не гарантирована, а в подписях этого
-#: интерфейса бывают невидимые пробелы (`'Open​'`), которых
+#: Настоящая разметка (снимок 956d0d184138/04_library_pick_selected, блок
+#: медиатеки, 25.09): `role=list` > `listitem` > `role=button` с подписью
+#: шага, у текущего — `aria-current="step"`, рядом скрытые «completed /
+#: incomplete / pending status»; у пройденного шага `tabindex="-1"`, у
+#: недоступного — `aria-disabled="true"`. Фикстура —
+#: tests/fixtures/ads_manager/creative_wizard_steps_2026_09_25.html.
+#:
+#: Ищется по ПОДПИСИ, а роль берётся у предка: так же находится и пункт без
+#: роли, и подпись с невидимым пробелом (`'Open​'`), которого
 #: `normalize-space` не убирает. Подпись «Media» принадлежит строке шагов,
 #: если рядом (в ряд — или столбцом, как у старого левого списка) стоят ещё
 #: хотя бы две подписи шагов; так заголовок «Media» в теле шага не путается
 #: с пунктом строки.
 #:
-#: Текущий шаг — пункт с `aria-current`/`aria-selected`, а если разметка их
-#: не ставит (скриншоты 25.09 показывают только цвет и полукруг) — заголовок
-#: тела шага: ближайшая под строкой подпись с именем шага, видимая сверху
-#: (`elementFromPoint`), то есть не страница объявления под модалкой.
+#: Текущий шаг — пункт с `aria-current`/`aria-selected`, а без них —
+#: заголовок тела шага: ближайшая под строкой подпись с именем шага, видимая
+#: сверху (`elementFromPoint`), то есть не страница объявления под модалкой.
 _WIZARD_MEDIA_STEP_JS = r"""
 (names) => {
   const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
@@ -9738,13 +9748,12 @@ def upload_ad_creative(
     # action instead of an unknown number of Nexts — and keep trusted Next
     # clicks as the fallback.
     #
-    # ACL-1348 (25.09 956d0d / 08ca37, 28.09 DAN-LT25): мастер второго
-    # объявления открывается уже ПОСЛЕ Media — «Creative setup ✓ · Media ✓ ·
-    # ◐ Text» или «Media ✓ · ◐ Creative setup · Crop …». Next ведёт только
-    # вперёд, от Media, а прежний клик искал роль tab/button и текст ровно
-    # «Media» — и мимо подписи без роли или с невидимым пробелом. Теперь шаг
-    # ищется по подписи в строке шагов, и если дойти нельзя, отказ называет
-    # что мешает: шаг заперт, перекрыт или клик по нему ничего не меняет.
+    # ACL-1348 (28.09 DAN-LT25, PYTHON-14): байер видел, что по шагу Media
+    # кликнуть нельзя, а отказ уходил без причины. Мастер может стоять и
+    # ПОСЛЕ Media («Creative setup ✓ · Media ✓ · ◐ Text»): Next ведёт только
+    # вперёд, от Media. Шаг ищется по подписи в строке шагов; если дойти
+    # нельзя, Next не жмём, а отказ называет, что мешает: шаг заперт
+    # (aria-disabled), перекрыт или клик по нему ничего не меняет.
     media_state: dict | None = None
     media_clicks = next_clicks = 0
     blocked = ""
@@ -9802,14 +9811,18 @@ def upload_ad_creative(
                 "clicks": {"media": media_clicks, "next": next_clicks}}
         # Снимок — пока мастер открыт: к строке шага объявления его уже
         # закроют, а в странице целиком он съедается обрезкой (ACL-1348).
-        try:
-            from src.fb_ads_rpa import page_capture as _pages
+        # Один на объявление: попыток до трёх, а снимков за прогон — MAX_PER_RUN,
+        # и повторы съели бы место снимкам следующих отказов (ревью PR #352).
+        if not getattr(_upload_why_tls, "wizard_captured", False):
+            _upload_why_tls.wizard_captured = True
+            try:
+                from src.fb_ads_rpa import page_capture as _pages
 
-            saved = _pages.capture(page, step="ad_creative_media_step", diag=diag)
-            if saved:
-                diag["page"] = saved
-        except Exception:
-            pass
+                saved = _pages.capture(page, step="ad_creative_media_step", diag=diag)
+                if saved:
+                    diag["page"] = saved
+            except Exception:
+                pass
         _telemetry.record("ad_creative_upload", False, note=why, diag=diag)
         _set_upload_why(why)
         return False
@@ -9943,6 +9956,10 @@ def upload_ad_creative(
         if decision is not None:
             _diag["reused"] = decision
             _set_last_upload_diag(_diag)
+            if decision is False:
+                # Копия сжатого файла: выбор в медиатеке не снялся (ACL-1348 —
+                # без причины здесь оставалась бы причина прошлой попытки).
+                _set_upload_why("library_pick_left_selection")
             return decision
 
     # Clear the library search box before uploading. The reuse attempt just

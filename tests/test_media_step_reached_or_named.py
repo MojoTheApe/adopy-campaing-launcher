@@ -7,21 +7,26 @@
 Sentry PYTHON-14 — `ad2_creative_upload: silent`. Байер видел, что по шагу
 **Media** мастера нельзя кликнуть, и загрузка не начиналась.
 
-Что видно по снимкам 25.09 (rpa_screenshots/<run>/..._fail_ad2_creative_upload.png):
-мастер открылся НЕ на Media, а дальше — «Creative setup ✓ · Media ✓ · ◐ Text»
-(956d) или «Media ✓ · ◐ Creative setup · Crop · Text …» (08ca). Кнопка «Next»
-ведёт только вперёд, от Media, а клик по подписи шага искал элемент с ролью
-tab/button/listitem/menuitem и текстом ровно «Media» — у строки шагов нового
-мастера (с 24.08 она горизонтальная, с иконкой-галочкой) это не
-гарантировано, а подписи этого интерфейса засорены невидимыми пробелами
-(`'Open\u200b'`). В телеметрии тех прогонов перед отказом нет ни одной строки
-медиатеки: до шага Media робот так и не дошёл, а отказ ушёл без причины.
+Что установлено по снимкам 25.09. На скриншотах отказа мастер стоит ПОСЛЕ
+Media («Creative setup ✓ · Media ✓ · ◐ Text» у 956d, «Media ✓ · ◐ Creative
+setup · Crop …» у 08ca), но это состояние ПОСЛЕ работы робота, а не то, в
+котором мастер открылся. В 956d робот дошёл до Media и выбрал плитку
+(`library_pick_selected`, 06:52:44), а на Text мастер перевёл его же Next —
+это случай ACL-1313 (мастер на Text = медиа выбрано), он уже закрыт. У 08ca
+строки медиатеки нет: до выбора робот не дошёл, и что показывал шаг Media
+(кнопки Upload не нашлось?), снимок не говорит. Что мешало у DAN-LT25 —
+неизвестно: причина не записывалась (`silent`).
 
-Разметка мастера в снимках страниц ОБРЕЗАНА (страница > 3,98 МБ, портал
-мастера — в хвосте), поэтому строка шагов здесь синтетическая, по двум
-скриншотам. Настоящая — только карточка объявления под мастером:
-tests/fixtures/ads_manager/ad_creative_media_step_2026_09_25.html
-(«Set up creative» и «Please specify the media to run with this ad.»).
+Поэтому проверяется не одна догадка, а поведение в каждом положении мастера:
+вернуться к Media, если он позади и доступен; не жать Next, если он позади и
+недоступен; назвать причину отказа; снять мастер отдельным блоком.
+
+Разметка: строка шагов из снимка 956d0d/04 — фикстура
+tests/fixtures/ads_manager/creative_wizard_steps_2026_09_25.html (role=list >
+listitem > role=button, `aria-current="step"`); карточка объявления под
+мастером — ad_creative_media_step_2026_09_25.html. Строки шагов с запертым,
+перекрытым или глухим к клику Media — синтетические: таких состояний в
+снимках нет.
 """
 from __future__ import annotations
 
@@ -139,6 +144,9 @@ def page(browser, monkeypatch, tmp_path):
     # Снимки страниц — во временную папку, не в output/ чекаута.
     monkeypatch.setattr(page_capture, "_root", lambda: tmp_path / "rpa_pages")
     page_capture._taken.clear()
+    # Снимок мастера — один на объявление; флаг сбрасывает обёртка, а здесь
+    # `upload_ad_creative` зовётся напрямую.
+    md._upload_why_tls.wizard_captured = False
     rt.set_current_run("run-1348", "CAMP")
     ctx = browser.new_context(viewport={"width": 1500, "height": 900})
     p = ctx.new_page()
@@ -207,6 +215,67 @@ def test_media_after_the_current_step_is_still_reached_with_next(page, wizard_op
     assert page.evaluate("window.nextClicks") == 1
 
 
+# ── настоящая строка шагов (956d0d, 25.09, 06:52:44) ─────────────────────
+
+STEPS_FIXTURE = ROOT / "tests" / "fixtures" / "ads_manager" / "creative_wizard_steps_2026_09_25.html"
+
+# Без CSS Meta список шагов лёг бы столбцом; на экране он — ряд (скриншоты 25.09).
+_ROW_CSS = "<style>[role=list]{display:flex; gap:18px} [role=listitem]{display:flex; gap:4px}</style>"
+
+
+def _real_wizard() -> str:
+    html = re.sub(r"<!--.*?-->", "", STEPS_FIXTURE.read_text(encoding="utf-8"), flags=re.S)
+    return _ROW_CSS + html
+
+
+def test_the_real_step_row_is_read(page):
+    """Разметка из снимка: role=list > listitem > role=button, aria-current="step"."""
+    from src.fb_ads_rpa import page_capture
+
+    page.set_content(_ad_page() + _real_wizard())
+    step = md._wizard_media_step(page)
+    assert step["found"] is True and step["role"] == "button"
+    assert step["current"] == "Media"
+    assert step["steps"] == ["Creative setup", "Media", "Text", "Creative generation",
+                             "Enhancements", "Translation"]
+    assert step["disabled"] is False and step["covered"] is False
+    assert md._media_step_behind(step) is False
+    role = page.evaluate("(() => { const el = " + page_capture.CREATIVE_WIZARD_BLOCK_JS
+                         + "; return el && el.getAttribute('role'); })()")
+    assert role == "dialog"
+
+
+def test_the_real_row_after_next_goes_back_to_media(page, wizard_opens):
+    """Тот же ряд, но текущий шаг — Text (так мастер стоял на скриншоте отказа
+    956d0d после собственного Next робота): вернуться кликом по Media."""
+    wizard_opens["html"] = _real_wizard() + """
+<div role="button" id="next">Next</div>
+<script>
+  window.nextClicks = 0; window.mediaClicks = 0;
+  const btn = (name) => [...document.querySelectorAll('[role=listitem] [role=button]')]
+    .find(b => b.textContent.trim() === name);
+  const media = btn('Media'), text = btn('Text');
+  const head = document.querySelector('[role=heading][aria-level="3"]');
+  media.removeAttribute('aria-current'); media.setAttribute('tabindex', '-1');
+  text.setAttribute('aria-current', 'step'); head.textContent = 'Text';
+  document.getElementById('next').addEventListener('click', () => window.nextClicks++);
+  media.addEventListener('click', () => {
+    window.mediaClicks++;
+    text.removeAttribute('aria-current'); media.setAttribute('aria-current', 'step');
+    head.textContent = 'Media';
+    if (!document.getElementById('upload')) {
+      const u = document.createElement('div');
+      u.id = 'upload'; u.setAttribute('role', 'button'); u.textContent = '+ Upload';
+      head.parentElement.appendChild(u);
+    }
+  });
+</script>"""
+    assert md.upload_ad_creative(page, "Video", "C:/media/2012.mp4", reuse_only=True) is True
+    assert wizard_opens["reuse"] == [1]
+    assert page.evaluate("window.mediaClicks") == 1
+    assert page.evaluate("window.nextClicks") == 0
+
+
 # ── не дошли — назвать причину ───────────────────────────────────────────
 
 def test_a_locked_media_step_behind_is_named_and_next_is_not_pressed(page, wizard_opens, tmp_path):
@@ -249,11 +318,30 @@ def test_a_media_step_that_ignores_clicks_is_unreachable(page, wizard_opens, tmp
 def test_a_covered_media_step_is_named(page, wizard_opens, tmp_path):
     """Слой поверх строки шагов: клик уйдёт в него — так и пишем."""
     wizard_opens["html"] = _wizard(ORDER_956D, "Text") + (
-        '<div id="veil" style="position:fixed; top:0; left:0; width:1500px; height:50px; z-index:20"></div>')
+        '<div id="veil" style="position:fixed; top:0; left:0; width:1500px; height:50px; z-index:20"></div>'
+        "<script>window.veilClicks = 0; document.getElementById('veil')"
+        ".addEventListener('click', () => window.veilClicks++);</script>")
     assert md.upload_ad_creative(page, "Video", "C:/media/2012.mp4", reuse_only=True) is False
     assert page.evaluate("window.mediaClicks") == 0
+    # Клик по перекрытому пункту ушёл бы в слой — мало ли что под ним живёт.
+    assert page.evaluate("window.veilClicks") == 0, "кликали по перекрытому шагу"
     assert page.evaluate("window.nextClicks") == 0
     assert _rows(tmp_path)[-1]["note"] == "media_step_covered"
+
+
+def test_the_wizard_is_captured_once_per_ad(page, wizard_opens, tmp_path, monkeypatch):
+    """Снимков за прогон — MAX_PER_RUN; повторные попытки одного объявления не
+    должны съедать место снимкам следующих отказов (ревью PR #352)."""
+    from src.fb_ads_rpa import page_capture
+
+    taken: list[str] = []
+    monkeypatch.setattr(page_capture, "capture", lambda p, **kw: taken.append(kw["step"]) or "")
+    wizard_opens["html"] = _wizard(ORDER_956D, "Text", media_attrs='role="button" aria-disabled="true"',
+                                   media_opens=False)
+    for _ in range(2):
+        page.set_content(_ad_page())
+        assert md.upload_ad_creative(page, "Video", "C:/media/2012.mp4", reuse_only=True) is False
+    assert taken == ["ad_creative_media_step"]
 
 
 # ── память прогона: навигация — не приговор файлу ─────────────────────────
@@ -315,6 +403,43 @@ def test_a_file_that_was_offered_and_failed_is_still_remembered(monkeypatch, mem
     assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
     assert md.upload_already_failed(FILE) is True
     assert md.last_upload_why() == "file_not_landed"
+
+
+def test_an_earlier_ads_offered_file_does_not_condemn_the_next_ads_file(monkeypatch, memo):
+    """Объявление 1 подало свой файл и не встало; объявление 2 (другой файл)
+    упало на мастере. «Файл подавали» — про объявление 1, не про 2."""
+    other = r"C:\creatives\2_other.mp4"
+
+    def upload(page, ctype, path, **k):
+        if path == FILE:
+            md._note_file_offered()
+            md._set_upload_why("file_not_landed")
+        else:
+            md._set_upload_why("media_step_unreachable")
+        return False
+
+    monkeypatch.setattr(md, "upload_ad_creative", upload)
+    md.upload_ad_creative_with_retry(object(), "video", FILE)
+    assert md.upload_already_failed(FILE) is True
+    md.upload_ad_creative_with_retry(object(), "video", other)
+    assert md.upload_already_failed(other) is False
+
+
+def test_the_reason_is_the_last_attempts(monkeypatch, memo):
+    """Первая попытка упала на мастере, вторая — где-то без своей метки:
+    причина первой не должна выдаваться за причину второй."""
+    calls = {"n": 0}
+
+    def upload(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            md._set_upload_why("media_step_unreachable")
+        return False
+
+    monkeypatch.setattr(md, "upload_ad_creative", upload)
+    assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
+    assert calls["n"] == 2
+    assert md.last_upload_why() == "upload_failed_unnamed"
 
 
 def test_the_known_file_refusal_says_what_blocked_the_library(monkeypatch, memo):
