@@ -3702,7 +3702,12 @@ async function dashRefresh(ev) {
 
   <div class="cb-acc-row" data-acc-label="{{ acc_label }}">
     {# ── Accordion header ── #}
-    <div class="cb-acc-header" onclick="cbToggleAcc('{{ acc_id }}')">
+    {#- ACL-1342 S01: значение аккаунта не подставляется в JS-строку onclick —
+        от него зависит только HTML-атрибут data-acc-id (тут работает
+        обычное HTML-экранирование Jinja), а обработчик клика вешается
+        через addEventListener (см. cbToggleAcc ниже), так что кавычки и
+        спецсимволы в имени аккаунта не могут вырваться из JS-литерала. -#}
+    <div class="cb-acc-header" data-acc-id="{{ acc_id }}">
       <span class="cb-acc-chevron" id="cb-chev-{{ acc_id }}">▸</span>
       <span class="cb-acc-title">{{ acc_label }}</span>
       <span class="cb-acc-meta">
@@ -5839,6 +5844,17 @@ function copyBrief(btn) {
 }
 
 // ── Campaign Builder account accordion ───────────────────────────────
+// ACL-1342 S01: клик по заголовку аккордеона раньше был инлайновым
+// onclick="cbToggleAcc('{{ acc_id }}')" — Jinja экранирует для HTML, а не
+// для JS-строки внутри атрибута, так что имя аккаунта с кавычкой ломало
+// границу литерала. Теперь id читаем из data-acc-id (обычный HTML-атрибут,
+// безопасен при любом содержимом) через делегирование на document —
+// работает независимо от того, что именно лежит в имени аккаунта.
+document.addEventListener('click', function(e) {
+  var header = e.target.closest('.cb-acc-header');
+  if (header && header.dataset.accId) cbToggleAcc(header.dataset.accId);
+});
+
 function cbToggleAcc(accId) {
   var body = document.getElementById('cb-body-' + accId);
   var chev = document.getElementById('cb-chev-' + accId);
