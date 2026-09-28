@@ -11319,7 +11319,11 @@ function cbNewRun(notify) {
       if (!entries.length) batch.active = false;
       return false;
     }
-    var e = entry(form, key, form ? cbFormTitle(form) : key.slice(key.indexOf('|') + 1), null);
+    // Ключ задания — его собственный, форма только даёт панель и имя.
+    // Задание без страны (запомнено до 29.09) держит ключ «|аккаунт» и по
+    // cbKeyMatches занимает аккаунт во всех странах, а не в первой попавшейся.
+    var bar = key.indexOf('|');
+    var e = entry(form, key, form && bar > 0 ? cbFormTitle(form) : key.slice(bar + 1), null);
     if (!e.panel) e.panel = document.createElement('div');
     e.panel.style.display = 'block';
     track(e, 'publishing');
@@ -11355,7 +11359,7 @@ window.cbRunAdopt = function (jobId, account, country) {
     if (!form && cbKeyMatches(cbFormKey(f), want)) form = f;
   });
   var q = cbPublishRun(window.cbTree ? window.cbTree.showQueue : null);
-  return q ? q.adopt(jobId, form ? cbFormKey(form) : (country || '') + '|' + account, form) : false;
+  return q ? q.adopt(jobId, (country || '') + '|' + account, form) : false;
 };
 
 // ── Диагностика превью: панель поверх дешборда (acl-704) ─────────────

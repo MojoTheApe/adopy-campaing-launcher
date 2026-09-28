@@ -20,7 +20,7 @@ import pytest
 from playwright.sync_api import expect
 from test_builder_multi_publish_browser import (  # noqa: F401 — фикстуры
     browser, html, ui, add, ready, publish_one, finish, camp_name,
-    two_country_html, TWIN_JS, _route_for,
+    two_country_html, TWIN_JS, _route_for, _seeded_two_country_page,
 )
 
 ALL_RE = r'^Publish all → drafts \((\d+)\)$'
@@ -260,6 +260,34 @@ def test_one_account_in_two_countries_is_ticked_and_locked_per_country(browser, 
         assert state['posts'][1]['country'] == 'Peru'
         assert sent_names(state['posts'][1]) == [want]
         assert dialogs == [], dialogs
+        assert not errors, errors
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize('saved, locked', [
+    ({}, {'Chile': True, 'Peru': True}),                  # задание без страны — занят везде
+    ({'country': 'Peru'}, {'Chile': False, 'Peru': True}),
+])
+def test_a_job_restored_after_reload_locks_ticks_by_its_own_country(browser, two_country_html, saved, locked):
+    """Задание, запомненное до F5: без страны оно запирает галочки аккаунта во
+    всех странах, со страной — только в своей (ревью v2 PR #363)."""
+    context, page, state, dialogs, errors = _seeded_two_country_page(browser, two_country_html, saved)
+    try:
+        for c in ('Chile', 'Peru'):
+            page.evaluate('''c => { const f=(''' + TWIN_JS + ''')(c);
+              cbAddSlot(f); const s=f.querySelector('.cb-slot:last-child');
+              s.querySelector('[name$="_asset"]').value='Gold';
+              s.querySelector('[name$="_ad_0_creative_file"]').value='offline.png';
+              f.dispatchEvent(new Event('input',{bubbles:true})); }''', c)
+        for c, want in locked.items():
+            cid = page.evaluate('c => (' + TWIN_JS + ')(c).querySelector(".cb-slot").dataset.cbdId', c)
+            tick = page.locator('.cbd-camp[data-camp="%s"] input[type="checkbox"]' % cid)
+            if want:
+                expect(tick).to_be_disabled(timeout=6000)
+            else:
+                expect(tick).to_be_enabled(timeout=6000)
+        assert state['posts'] == []
         assert not errors, errors
     finally:
         context.close()
