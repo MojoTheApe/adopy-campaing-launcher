@@ -155,11 +155,14 @@ const queueCode = cut('window.cbPublishAll = function', '// ── Диагно�
 // ACL-1355: держат только потерянный статус и тот же аккаунт.
 const busyCode = cut('function cbQueueUncertain() {', '\nwindow.cbPublish = function');
 
-function fakeForm(label) {
+// `country` — необязательна: один аккаунт бывает привязан к двум странам,
+// и тогда у каждой своя форма (ревью PR #363).
+function fakeForm(label, country) {
   return {
-    _label: label,
+    _label: country ? label + '@' + country : label,
     querySelectorAll: () => [{}],                        // одна карточка
-    querySelector: (sel) => (sel === '[name="account_label"]' ? { value: label } : null),
+    querySelector: (sel) => (sel === '[name="account_label"]' ? { value: label }
+      : sel === '[name="country"]' && country ? { value: country } : null),
   };
 }
 
@@ -167,7 +170,7 @@ function runQueue(accounts, opts = {}) {
   const events = [];
   const said = [];
   const pending = [];
-  const forms = accounts.map(fakeForm);
+  const forms = accounts.map((a) => (Array.isArray(a) ? fakeForm(a[0], a[1]) : fakeForm(a)));
   const sandbox = {
     window: {},
     FormData, RegExp, String, parseInt, Object, JSON, Promise,
@@ -184,6 +187,7 @@ function runQueue(accounts, opts = {}) {
     cbPollJob: (jobId, panel, btn, done) => { events.push('poll'); pending.push(done); },
     fetch: (url) => {
       events.push('POST');
+      if (opts.fail) return Promise.reject(new Error('network down'));
       return Promise.resolve({ json: () => Promise.resolve({ job_id: 'j' + pending.length }) });
     },
     alert: (m) => { events.push('alert'); said.push(String(m)); },
@@ -322,6 +326,39 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   assert.ok(!q.sandbox.window.CB_QUEUE.active);
   assert.ok(q.sandbox.window.CB_QUEUE.uncertain);
   assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 3);
+
+  // Ревью PR #363: один аккаунт в двух странах — две формы, два задания.
+  // По одному имени аккаунта вторая страна молча не собиралась.
+  q = runQueue([['UL869', 'Chile'], ['UL869', 'Peru']]);
+  await flush();
+  assert.equal(posts(q), 2, 'the second country of the same account was dropped');
+  assert.equal(q.said.length, 0, q.said.join('; '));
+  assert.deepEqual(q.sandbox.window.CB_QUEUE.progress.live.map((x) => x.account),
+    ['UL869 (Chile)', 'UL869 (Peru)']);
+  // Идут обе — повтор ничего не шлёт и называет обе страны.
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  assert.equal(posts(q), 2);
+  assert.ok(/UL869 \(Chile\), UL869 \(Peru\) are already being built/.test(q.said[0]), q.said[0]);
+  // Кончилась одна страна — докладывается она, другая не дублируется.
+  q.pending[1]({ results: [{ publishable: true }] });
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  assert.equal(posts(q), 3);
+  assert.equal(q.events.filter((e) => e.startsWith('preview')).pop(), 'preview:UL869@Peru');
+
+  // Ревью PR #363: оборванная отправка — исход неизвестен. Вкладка встаёт в
+  // «статус неизвестен», как при потерянном задании, а не просто пишет ошибку.
+  q = runQueue(['A', 'B'], { fail: true });
+  await flush();
+  assert.ok(q.sandbox.window.CB_QUEUE.uncertain, 'a failed submission was treated as a plain error');
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.ok(/Submission outcome unknown/.test(q.sandbox.window.CB_QUEUE.progress.report[0].why));
+  const failedPosts = posts(q);
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  assert.equal(posts(q), failedPosts, 'a new run started after an unknown submission outcome');
+  assert.ok(/Reload the page \(F5\)/.test(q.said.pop()));
 
   // Отказ на вопросе — ни одной работы.
   q = runQueue(['A'], { confirm: false });

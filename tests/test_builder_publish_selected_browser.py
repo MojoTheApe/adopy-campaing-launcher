@@ -20,6 +20,7 @@ import pytest
 from playwright.sync_api import expect
 from test_builder_multi_publish_browser import (  # noqa: F401 — фикстуры
     browser, html, ui, add, ready, publish_one, finish, camp_name,
+    two_country_html, TWIN_JS, _route_for,
 )
 
 ALL_RE = r'^Publish all → drafts \((\d+)\)$'
@@ -198,3 +199,67 @@ def test_selection_storage_failure_never_breaks_the_drawer(ui):
     box(p, 0, 0).click()
     expect(box(p, 0, 0)).to_be_checked()
     expect(publish_button(p)).to_have_text('Publish selected → drafts (1)')
+
+
+def test_one_account_in_two_countries_is_ticked_and_locked_per_country(browser, two_country_html):
+    """Один аккаунт в двух странах — две формы билдера. Отметки, «одно
+    задание на аккаунт» и запрет отмечать идущий — по паре страна+аккаунт."""
+    context = browser.new_context()
+    page = context.new_page()
+    errors, dialogs = [], []
+    page.on('pageerror', lambda e: errors.append(str(e)))
+    page.on('dialog', lambda d: (dialogs.append(d.message), d.accept()))
+    state = {'posts': [], 'jobs': {}, 'cancels': [], 'dialogs': dialogs}
+    page.route('**/*', _route_for(two_country_html, state))
+    page.goto('http://acl.test/')
+
+    def twin_box(country, slot):
+        cid = page.evaluate('([c,i]) => (' + TWIN_JS + ')(c).querySelectorAll(".cb-slot")[i].dataset.cbdId',
+                            [country, slot])
+        return page.locator('.cbd-camp[data-camp="%s"] input[type="checkbox"]' % cid)
+
+    def twin_name(country, slot):
+        return page.evaluate('([c,i]) => (' + TWIN_JS + ')(c).querySelectorAll(".cb-name-hidden")[i].value',
+                             [country, slot])
+
+    try:
+        page.evaluate('cbDrawer.open()')
+        for i, c in enumerate(('Chile', 'Peru')):
+            page.evaluate('''([c,i]) => { const f=(''' + TWIN_JS + ''')(c);
+              for (const a of [['Gold','Crude'],['Silver','Wheat']][i]) {
+                cbAddSlot(f); const s=f.querySelector('.cb-slot:last-child');
+                s.querySelector('[name$="_asset"]').value=a;
+                s.querySelector('[name$="_ad_0_creative_file"]').value='offline.png';
+              }
+              f.dispatchEvent(new Event('input',{bubbles:true})); }''', [c, i])
+        ready(page)
+        expect(page.locator('.cbd-publish-all')).to_have_text('Publish all → drafts (4)')
+
+        twin_box('Chile', 1).click()
+        expect(page.locator('.cbd-publish-all')).to_have_text('Publish selected → drafts (1)')
+        want = twin_name('Chile', 1)
+        page.locator('.cbd-publish-all').click()
+        modal = page.locator('#safe-confirm-modal')
+        expect(modal).to_contain_text('Campaigns: 1')
+        expect(modal).to_contain_text('UL869 (Chile)')
+        expect(modal).not_to_contain_text('UL869 (Peru)')
+        page.locator('#sfc-ok').click()
+        wait_posts(state, 1, page)
+        assert state['posts'][0]['country'] == 'Chile'
+        assert sent_names(state['posts'][0]) == [want]
+
+        # Идёт Chile — заперта только её форма; Peru того же аккаунта свободна.
+        expect(twin_box('Chile', 0)).to_be_disabled(timeout=6000)
+        expect(twin_box('Peru', 0)).to_be_enabled()
+        twin_box('Peru', 0).click()
+        want = twin_name('Peru', 0)
+        expect(page.locator('.cbd-publish-all')).to_have_text('Publish selected → drafts (1)')
+        page.locator('.cbd-publish-all').click()
+        page.locator('#sfc-ok').click()
+        wait_posts(state, 2, page)
+        assert state['posts'][1]['country'] == 'Peru'
+        assert sent_names(state['posts'][1]) == [want]
+        assert dialogs == [], dialogs
+        assert not errors, errors
+    finally:
+        context.close()

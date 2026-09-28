@@ -330,3 +330,105 @@ def test_lost_status_keeps_the_reload_hint(ui):
     expect(p.locator('#sfc-ok')).to_have_count(0)
     assert len(state['posts']) == 1
     assert 'Reload the page (F5)' in state['dialogs'][-1]
+
+
+# ── ревью PR #363 ──────────────────────────────────────────────────────────
+
+def test_f5_before_the_first_progress_answer_still_refuses_a_duplicate(ui):
+    """После F5 сборка подхватывает задание только с первым ответом
+    `/progress`. Пока сервер молчит, дубль держат точки сборки (cbBuild)."""
+    p, state = ui
+    add(p, 0)
+    ready(p)
+    publish_one(p, state, 0)
+    p.route('**/publish-jobs/*/progress', lambda r: r.fulfill(status=503, json={}))
+    p.reload()
+    p.evaluate('cbDrawer.open()')
+    ready(p)
+    assert p.evaluate('!window.CB_QUEUE'), 'the run was restored without a server answer'
+    press_publish(p, 0)
+    p.wait_for_timeout(300)
+    expect(p.locator('#sfc-ok')).to_have_count(0)
+    assert len(state['posts']) == 1
+    assert 'Demo is already being built' in state['dialogs'][-1]
+
+
+def test_a_failed_submission_leaves_the_tab_in_unknown_status(ui):
+    """Запрос на отправку оборвался — дошёл ли он до сервера, неизвестно.
+    Вкладка не делает вид, что ничего не было: новые запуски — только после F5."""
+    p, state = ui
+    add(p, 0)
+    add(p, 1)
+    ready(p)
+    p.route('**/publish-jobs', lambda r: r.abort() if r.request.method == 'POST' else r.fallback())
+    press_publish(p, 0)
+    p.locator('#sfc-ok').click()
+    p.wait_for_function('window.CB_QUEUE && CB_QUEUE.uncertain', timeout=8000)
+    expect(panel(p, 0)).to_contain_text('Request failed')
+    assert 'Submission outcome unknown' in p.evaluate('CB_QUEUE.progress.report[0].why')
+    open_card(p, 1)
+    p.locator('.cb-in-drawer .cb-publish-btn').evaluate('b => cbPublish(b.closest("form"))')
+    p.wait_for_timeout(200)
+    expect(p.locator('#sfc-ok')).to_have_count(0)
+    assert 'Reload the page (F5)' in state['dialogs'][-1]
+    assert state['posts'] == []
+
+
+# Один аккаунт в двух странах (account_links: FacebookUL869 → Chile, Peru):
+# у каждой страны своя форма билдера и свои кампании.
+
+@pytest.fixture(scope='module')
+def two_country_html():
+    from test_web_drill import _MOCK_REPORT, _render_html
+    base = _MOCK_REPORT['countries'][0]
+    countries = [{**base, 'country': c, 'open_recs': {'UL869': []}, 'close_recs': {}} for c in ('Chile', 'Peru')]
+    return _render_html({**_MOCK_REPORT, 'countries': countries})
+
+
+TWIN_JS = ("c => Array.from(document.querySelectorAll('form.open-account-form')).find(f => "
+           "f.querySelector('[name=\"account_label\"]').value === 'UL869' && "
+           "f.querySelector('[name=\"country\"]').value === c)")
+
+
+def test_one_account_in_two_countries_publishes_both(browser, two_country_html):
+    context = browser.new_context()
+    page = context.new_page()
+    errors, dialogs = [], []
+    page.on('pageerror', lambda e: errors.append(str(e)))
+    page.on('dialog', lambda d: (dialogs.append(d.message), d.accept()))
+    state = {'posts': [], 'jobs': {}, 'cancels': [], 'dialogs': dialogs}
+    page.route('**/*', _route_for(two_country_html, state))
+    page.goto('http://acl.test/')
+    try:
+        page.evaluate('cbDrawer.open()')
+        for i, c in enumerate(('Chile', 'Peru')):
+            page.evaluate('''([c,i]) => { const f=(''' + TWIN_JS + ''')(c);
+              cbAddSlot(f); const s=f.querySelector('.cb-slot:last-child');
+              s.querySelector('[name$="_asset"]').value=['Gold','Silver'][i];
+              s.querySelector('[name$="_ad_0_creative_file"]').value='offline.png';
+              f.dispatchEvent(new Event('input',{bubbles:true})); }''', [c, i])
+        ready(page)
+        page.locator('.cbd-publish-all').click()
+        modal = page.locator('#safe-confirm-modal')
+        expect(modal).to_contain_text('UL869 (Chile), UL869 (Peru)')
+        expect(modal).not_to_contain_text('Already being built')
+        page.locator('#sfc-ok').click()
+        for _ in range(50):
+            if len(state['posts']) == 2:
+                break
+            page.wait_for_timeout(100)
+        assert sorted(f['country'] for f in state['posts']) == ['Chile', 'Peru'], \
+            'one country of the account was never built'
+        assert dialogs == [], dialogs
+        box = page.locator('.cbd-queue')
+        expect(box).to_contain_text('UL869 (Chile) — building the draft', timeout=6000)
+        expect(box).to_contain_text('UL869 (Peru) — building the draft')
+        # Та же форма второй раз — отказ с именем страны; дубля нет.
+        page.evaluate('cbPublish((' + TWIN_JS + ')("Peru"))')
+        page.wait_for_timeout(200)
+        expect(page.locator('#sfc-ok')).to_have_count(0)
+        assert len(state['posts']) == 2
+        assert 'UL869 (Peru) is already being built' in dialogs[-1]
+        assert not errors, errors
+    finally:
+        context.close()
