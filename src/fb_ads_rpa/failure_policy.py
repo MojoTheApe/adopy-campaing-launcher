@@ -111,11 +111,15 @@ POLICY: dict[str, tuple[str, str]] = {
         "draft) - set the objective to Leads by hand or delete the draft",
     ),
     # ACL-1327: the single-screen editor path builds the first ad only.
+    # ACL-1353, step 1: the robot may press "Create ad" once to record how
+    # Meta adds an ad there — the draft can then hold one empty new ad.
     "simple_create_more_ads": (
         BLOCKING,
         "Meta's single-screen campaign editor was used, and the robot builds only the first "
         "ad there - the other ads of this campaign were not created; add them by hand in Ads "
-        "Manager or publish the campaign again once the robot supports more ads in this editor",
+        "Manager or publish the campaign again once the robot supports more ads in this editor. "
+        "The robot may have pressed Create ad once to record the editor: if an empty new ad "
+        "is in the draft, fill it in or delete it by hand",
     ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),

@@ -161,17 +161,77 @@ def test_a_missing_section_is_the_layout_stop(sim):
     assert "Ad set / Ad sections" in failure_policy.reason("simple_create_layout")
 
 
+def _probe(sim, result: dict) -> list:
+    """Подменить снимок второго объявления (ACL-1353); вызовы — в список."""
+    seen: list = []
+
+    def fake(page, extra):
+        seen.append(extra)
+        sim["calls"].append(("more_ads_capture",))
+        return {"reason": sc.MORE_ADS_CAPTURED if result.get("captures") else sc.MORE_ADS_NOT_CAPTURED,
+                "stop": "", **result}
+
+    sim["monkeypatch"].setattr(sc, "capture_more_ads", fake)
+    return seen
+
+
 def test_more_ads_are_not_created_and_block(sim):
+    seen = _probe(sim, {"captures": [], "pressed": []})
     out: list[str] = []
     got = sim["run"](additional_ads=[{"ad_name": "Two", "creative_path": "b.png"},
                                      {"ad_name": "Three", "creative_path": "c.png"}],
                      soft_fails_out=out)
     assert got == ""
-    assert sim["created"] == [], "в новом редакторе создавали объявления через дерево"
+    assert seen == [2]
+    assert sim["created"] == [], "в новом редакторе создавали объявления через дерево прежнего мастера"
     more = [f for f in out if f.startswith("simple_create_more_ads:")]
-    assert more and more[0].startswith("simple_create_more_ads:2 more ad(s)")
+    assert more and more[0].startswith("simple_create_more_ads:not-created - 2 more ad(s)")
     assert failure_policy.severity(more[0]) == failure_policy.BLOCKING
     assert "only the first" in failure_policy.reason(more[0])
+
+
+def test_more_ads_are_captured_for_implementation_after_the_first_ad(sim, monkeypatch):
+    """ACL-1353, шаг 1: после объявления 1 — снимок дерева и меню «Create ad»,
+    причина называет снимки; назначение не ставится ещё раз — раздел
+    объявления после «Create ad» мог показывать уже новое объявление."""
+    seen = _probe(sim, {"captures": ["run1/03_simple_create_more_ads", "run1/04_simple_create_more_ads"],
+                        "pressed": ["adset_action_menu", "menu_create_ad"], "stop": "create_ad_pressed"})
+    monkeypatch.setattr(dom, "_browser_addon_none_checked", lambda p: False)   # обход был бы нужен
+    sets: list = []
+    monkeypatch.setattr(dom, "set_ad_destination_website", lambda p, url: sets.append(url) or True)
+    copies: list = []
+    monkeypatch.setattr(dom, "write_ad_copy", lambda *a, **k: copies.append(1) or True)
+    out: list[str] = []
+    assert sim["run"](additional_ads=[{"ad_name": "Two"}], soft_fails_out=out) == ""
+    assert seen == [1]
+    assert len(copies) == 1 and len(sets) == 1, "после «Create ad» что-то заполняли"
+    more = [f for f in out if f.startswith("simple_create_more_ads:")]
+    assert len(more) == 1
+    assert more[0].startswith("simple_create_more_ads:captured-for-implementation - 1 more ad(s)")
+    assert "run1/03_simple_create_more_ads, run1/04_simple_create_more_ads" in more[0]
+    assert "Create ad menu" in more[0] and "create_ad_pressed" in more[0]
+    assert failure_policy.base_name(more[0]) == "simple_create_more_ads"
+    assert failure_policy.severity(more[0]) == failure_policy.BLOCKING
+    assert ("destination_sweep_skipped", None, "simple_create_more_ads_pressed") in sim["rows"]
+    assert sim["created"] == []
+
+
+def test_a_capture_without_presses_keeps_the_destination_recheck(sim, monkeypatch):
+    _probe(sim, {"captures": ["run1/03_simple_create_more_ads"], "pressed": [], "stop": "press_off"})
+    monkeypatch.setattr(dom, "_browser_addon_none_checked", lambda p: False)
+    sets: list = []
+    monkeypatch.setattr(dom, "set_ad_destination_website", lambda p, url: sets.append(url) or True)
+    out: list[str] = []
+    sim["run"](additional_ads=[{"ad_name": "Two"}], soft_fails_out=out)
+    assert len(sets) == 2
+    more = [f for f in out if f.startswith("simple_create_more_ads:")]
+    assert "The ad list was captured" in more[0]
+
+
+def test_single_ad_campaigns_take_no_capture(sim):
+    seen = _probe(sim, {"captures": ["x/y"], "pressed": []})
+    sim["run"]()
+    assert seen == []
 
 
 def test_the_destination_is_rechecked_on_the_page_not_through_the_tree(sim, monkeypatch):

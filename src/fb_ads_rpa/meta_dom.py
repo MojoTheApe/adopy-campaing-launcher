@@ -5375,6 +5375,7 @@ def run_recorded_campaign_flow(
     if creative_path:
         ad_edit_url = ""
         reached_ad_level = False
+        more_ads_pressed = False
         # ACL-1327: и здесь новый редактор мог узнаться только сейчас.
         if not simple and _simple_create_layout(page) and not _enter_simple("next_to_ad"):
             return "simple_create_layout"
@@ -5492,16 +5493,30 @@ def run_recorded_campaign_flow(
         # same per-ad fill sequence used for the first ad above. Confirmed
         # live 2026-07-28 that upload_ad_creative/fill_ad_copy/
         # set_ad_destination_website work unmodified here.
-        # ACL-1327: как новый редактор добавляет второе объявление (дерево,
-        # отдельный раздел, переход на другую страницу) — по снимкам не
-        # установить. Первое объявление собрано; остальные не создаём и
-        # называем это блокирующей причиной, а не плодим пустые заготовки.
+        # ACL-1327: как новый редактор добавляет второе объявление, по снимкам
+        # не установить. Первое объявление собрано; остальные не создаём и
+        # называем это блокирующей причиной.
+        # ACL-1353, шаг 1: вместо молчаливого отказа — снимок дерева и меню
+        # «Create ad» (`simple_create.capture_more_ads`): до любого нажатия,
+        # потом «Create ad» один раз и снимок открывшегося. Ничего не
+        # заполняется; страница после нажатия могла уйти на новое объявление —
+        # обход назначения ниже её не трогает (`more_ads_pressed`).
         if reached_ad_level and additional_ads and simple:
             more = len(additional_ads)
-            _telemetry.record("simple_create_more_ads", False, note=f"not_created:{more}")
-            ad_level_fails.append(
-                f"simple_create_more_ads:{more} more ad(s) not created - the single-screen editor "
-                "path builds only the first ad")
+            probe = _simple.capture_more_ads(page, more)
+            more_ads_pressed = bool(probe.get("pressed"))
+            if probe.get("captures"):
+                ad_level_fails.append(
+                    f"simple_create_more_ads:{_simple.MORE_ADS_CAPTURED} - {more} more ad(s) not "
+                    "created; the single-screen editor path builds only the first ad. The ad list"
+                    + (" and the Create ad menu were" if more_ads_pressed else " was")
+                    + " captured on this machine (output/rpa_pages/"
+                    + ", ".join(probe["captures"]) + f"; stopped at {probe.get('stop') or '-'})")
+            else:
+                ad_level_fails.append(
+                    f"simple_create_more_ads:{_simple.MORE_ADS_NOT_CAPTURED} - {more} more ad(s) not "
+                    "created - the single-screen editor path builds only the first ad (no page "
+                    "capture was saved)")
         if reached_ad_level and additional_ads and not simple:
             for i, extra in enumerate(additional_ads, start=2):
                 tag = f"ad{i}"
@@ -5663,7 +5678,13 @@ def run_recorded_campaign_flow(
         if skip_sweep:
             _telemetry.record("destination_sweep_skipped", None,
                               note="all_destinations_confirmed_in_flow")
-        if reached_ad_level and destination_url and not skip_sweep and simple:
+        if reached_ad_level and destination_url and not skip_sweep and simple and more_ads_pressed:
+            # ACL-1353: после «Create ad» раздел объявления мог уже показывать
+            # новое (пустое) объявление — назначение ставилось бы в него.
+            # Шаг снимка ничего не заполняет; объявление 1 своё назначение
+            # проверило на своём шаге.
+            _telemetry.record("destination_sweep_skipped", None, note="simple_create_more_ads_pressed")
+        elif reached_ad_level and destination_url and not skip_sweep and simple:
             # ACL-1327: в новом редакторе объявление одно и на этой же
             # странице — обход по дереву не нужен: назначение ставится ещё раз
             # на месте, и ранний отказ того же объявления снимается.

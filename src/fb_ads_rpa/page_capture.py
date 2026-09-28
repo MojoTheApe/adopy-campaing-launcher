@@ -364,6 +364,18 @@ def section_titles_for(step: str) -> tuple[str, ...]:
     return ()
 
 
+#: Шаги, у которых раздел для Sentry — дерево редактора и открытое меню, а
+#: не карточка (ACL-1353: список объявлений и меню «Create ad» нового
+#: редактора). Без этого запасной путь брал карточку с фокусом — «Ad
+#: creative» после текста объявления (событие 149854712, 28.09).
+_TREE_STEPS = re.compile(r"more_ads")
+
+
+def section_is_tree(step: str) -> bool:
+    """Раздел шага — дерево редактора и открытое меню."""
+    return bool(_TREE_STEPS.search((step or "").strip().lower()))
+
+
 #: Атрибуты, которые переживают вычистку (плюс все aria-*). Всё остальное
 #: (class, style, href, src, value, data-* кроме data-surface, обработчики)
 #: снимается.
@@ -454,6 +466,19 @@ _SECTION_JS = r"""
     taken.add(card);
     parts.push({name: title, html: strip(card, cfg.maxChars)});
   }
+  if (cfg.tree) {
+    // ACL-1353: дерево редактора (список объявлений) и открытое меню его
+    // строки — раньше карточки с фокусом.
+    const tree = document.getElementById('campaign_structure_tree_root')
+      || document.querySelector('[data-surface="/am/editor_drawer"]');
+    if (tree) { taken.add(tree); parts.push({name: 'editor tree', html: strip(tree, cfg.maxChars)}); }
+    for (const m of document.querySelectorAll('[role=menu]')) {
+      if (taken.has(m) || !shown(m)) continue;
+      taken.add(m);
+      parts.push({name: 'menu', html: strip(m, cfg.maxChars)});
+      break;
+    }
+  }
   let listMode = false;
   if (!parts.length) {
     // Шаг не узнан или его карточки нет: наименьший раздел редактора вокруг
@@ -521,8 +546,9 @@ def _eval_bounded(page, js: str, arg: Any, timeout_s: float = SECTION_EVAL_TIMEO
     return got.get("v") if isinstance(got, dict) else None
 
 
-def _snapshot_take(page, titles: tuple[str, ...]) -> list[dict[str, str]]:
+def _snapshot_take(page, titles: tuple[str, ...], *, tree: bool = False) -> list[dict[str, str]]:
     parts = _eval_bounded(page, _SECTION_JS, {
+        "tree": bool(tree),
         "titles": list(titles),
         "sections": list(SECTION_TITLES),
         "keep": list(_KEEP_ATTRS),
@@ -547,7 +573,7 @@ def remember_section(page, *, step: str, run_id: str = "", campaign: str = "") -
         return False
     try:
         started = time.time()
-        parts = _snapshot_take(page, section_titles_for(step))
+        parts = _snapshot_take(page, section_titles_for(step), tree=section_is_tree(step))
         if not parts:
             return False
         entry = {

@@ -444,3 +444,364 @@ def back_to_level(page, level: str, where: str) -> bool:
     md._telemetry.record("simple_reentry", True if got.get("ok") else None,
                          note=f"{where}:{level}", diag={"why": got.get("why", "")})
     return bool(got.get("ok"))
+
+
+# ── Второе и третье объявления: снимок для реализации (ACL-1353) ─────────
+#
+# Как новый редактор добавляет объявление в ту же группу, не видно ни в
+# одном снимке (27–28.09: 1430c8e10bf0, 5b164b1ba9a4, 961252633112,
+# 97314905598e, 9d3e41a0b373, a71e4fc14aa1, aa1e2fbf45c9, b3bc0d09d4f1,
+# dd9e9c4362c7, e1f97ef423d4). Что в них есть:
+#
+# * дерево слева (`/am/editor_drawer`, `role=grid` → `role=rowheader`
+#   Campaign / Ad set / Ad, по одной строке объявления); у каждой строки две
+#   кнопки, которые рисуются при наведении: быстрое действие с надписью
+#   «default» (в прежнем мастере на этом месте «Duplicate») и «Action menu»
+#   (`editor_tree:<уровень>/lib:ads-campaign-structure-action-menu-item/…`);
+# * кнопок «Create ad» / «+» / «Duplicate» в дереве и у заголовка «Ad» НЕТ;
+#   единственная надпись «Create ad» — вариант радио «Ad setup» внутри
+#   раздела объявления (`/am/editor:ad/ad_existing_post_header_section`,
+#   «Create ad — Create a new ad.»), и это не добавление объявления.
+#
+# В прежнем мастере (живьём с 28.07) «Create ad» — пункт меню «Action menu»
+# строки группы (`/am/editor_drawer/lib:campaign-structure-item-action-menu-create`),
+# и те же кнопки меню стоят в дереве нового редактора. Поэтому шаг —
+# снимок, а не реализация:
+#
+# 1. снимок страницы с блоками дерева и раздела объявления — до любого нажатия;
+# 2. кнопка с собственной надписью ровно «Create ad» / «Crear anuncio» в
+#    дереве — нажать один раз (через охрану `_press_allowed`), подождать,
+#    снять открывшееся;
+# 3. такой кнопки нет — открыть «Action menu» строки группы (оно только
+#    открывает меню), снять меню; пункт с надписью ровно «Create ad» —
+#    нажать один раз, подождать, снять открывшееся.
+#
+# Дальше ничего: ни заполнения, ни закрытия меню/окна, ни Escape, ни
+# перезагрузки. «default», Duplicate, Delete, Discard, Publish и футер не
+# нажимаются никогда. Причина в итоге кампании —
+# `simple_create_more_ads:captured-for-implementation`.
+
+#: Выключатель нажатий этого шага (снимок до нажатий остаётся):
+#: FB_RPA_SIMPLE_MORE_ADS_PRESS=0.
+MORE_ADS_PRESS_SETTING = "FB_RPA_SIMPLE_MORE_ADS_PRESS"
+
+#: Имя шага в телеметрии, в снимках и в итоге кампании.
+MORE_ADS_STEP = "simple_create_more_ads"
+
+#: Причина в итоге кампании, когда снимок есть…
+MORE_ADS_CAPTURED = "captured-for-implementation"
+#: …и когда снять не удалось (лимит снимков прогона, страница не ответила).
+MORE_ADS_NOT_CAPTURED = "not-created"
+
+#: Собственная надпись кнопки добавления объявления — ровно она: «Create ad
+#: set», «Create ad in…» и описание радио «Ad setup» не подходят.
+CREATE_AD_RE = r"^(create ad|crear anuncio)$"
+
+#: «Action menu» строки группы в дереве (хвост surface — тип родителя, по
+#: нему не сверяем; см. `meta_dom.create_additional_ad`).
+_ADSET_MENU_SURFACE = "editor_tree:adset/lib:ads-campaign-structure-action-menu-item"
+
+#: Блоки снимка: имя → JS-выражение, возвращающее элемент (`page_capture`).
+#: Каждый найденный сохраняется целиком (`block_<имя>.html`), даже когда
+#: страница обрезана по потолку.
+MORE_ADS_BLOCKS = {
+    # Дерево — список объявлений и навигация по уровням.
+    "ad_tree": "document.querySelector('[data-surface=\"/am/editor_drawer\"]')",
+    # Раздел объявления: объявление 1 до нажатия и то, что откроет «Create ad».
+    "ad_section": "document.querySelector('[data-surface=\"/am/editor:ad\"]')",
+    # Открытое меню (Action menu строки дерева).
+    "menu": "[...document.querySelectorAll('[role=menu]')].find(e => e.getClientRects().length > 0) || null",
+    # Открытое окно (мастер креатива, подтверждение) — кроме уведомлений.
+    "dialog": ("[...document.querySelectorAll('[role=dialog], [aria-modal=true]')]"
+               ".find(e => e.getClientRects().length > 0"
+               " && !/^notifications/i.test((e.textContent || '').trim())) || null"),
+}
+
+_MORE_ADS_TREE_JS = r"""
+  ([createRe, menuSurface]) => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const re = new RegExp(createRe, 'i');
+    document.querySelectorAll('[data-acl-more-ads]').forEach(e => e.removeAttribute('data-acl-more-ads'));
+    const tree = document.querySelector('[data-surface="/am/editor_drawer"]');
+    if (!tree) return { tree: false };
+    const rows = [...tree.querySelectorAll('[role=rowheader]')];
+    const levels = {};
+    for (const r of rows) {
+      const k = (r.getAttribute('aria-label') || r.getAttribute('data-objecttype') || '?').slice(0, 20);
+      levels[k] = (levels[k] || 0) + 1;
+    }
+    // Имена строк (кампания, группа, объявления) в телеметрию не идут.
+    const names = new Set(rows.map(r => {
+      const n = r.querySelector('[id^="default-button-for-action-menu_"]');
+      return n ? norm(n.textContent) : '';
+    }).filter(Boolean));
+    const own = (b) => norm(b.getAttribute('aria-label')) || norm(b.textContent);
+    // Разделы уровней (`/am/editor:ad` с радио «Create ad») — не дерево.
+    const ctrls = [...tree.querySelectorAll('button, [role=button], [role=menuitem], a, [role=link]')]
+      .filter(b => !b.closest('[data-surface*="/editor:"]'));
+    const labels = {};
+    for (const b of ctrls) {
+      const l = own(b);
+      if (!l || names.has(l) || l.length > 40) continue;
+      labels[l] = (labels[l] || 0) + 1;
+    }
+    let create = ctrls.filter(b => re.test(own(b)));
+    create = create.filter(b => !create.some(o => o !== b && b.contains(o)));
+    if (create[0]) create[0].setAttribute('data-acl-more-ads', 'create');
+    const menu = tree.querySelector('[data-surface*="' + menuSurface + '"]');
+    if (menu) menu.setAttribute('data-acl-more-ads', 'adset_menu');
+    return { tree: true, rows: rows.length, levels, labels, create: create.length,
+             adset_menu: !!menu };
+  }
+"""
+"""Дерево нового редактора: сколько строк какого уровня, надписи кнопок (без
+имён строк), есть ли кнопка ровно «Create ad» и «Action menu» строки группы.
+Найденное помечается `data-acl-more-ads` для нажатия."""
+
+_MORE_ADS_MENU_JS = r"""
+  (createRe) => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const re = new RegExp(createRe, 'i');
+    const shown = (e) => e.getClientRects().length > 0;
+    const menus = [...document.querySelectorAll('[role=menu]')].filter(shown);
+    const items = [...document.querySelectorAll('[role=menuitem]')].filter(shown);
+    const own = (b) => norm(b.getAttribute('aria-label')) || norm(b.textContent);
+    const labels = items.map(own).filter(l => l && l.length <= 40).slice(0, 20);
+    const create = items.filter(i => re.test(own(i)));
+    document.querySelectorAll('[data-acl-more-ads="menu_create"]').forEach(e => e.removeAttribute('data-acl-more-ads'));
+    if (create[0]) create[0].setAttribute('data-acl-more-ads', 'menu_create');
+    const surf = create[0] ? create[0].closest('[data-surface]') : null;
+    return { open: menus.length > 0 || items.length > 0, labels, create: create.length,
+             create_surface: surf ? (surf.getAttribute('data-surface') || '').slice(0, 120) : '' };
+  }
+"""
+"""Открытое меню: есть ли оно, надписи пунктов, пункт ровно «Create ad» (помечается)."""
+
+_MORE_ADS_AFTER_JS = r"""
+  () => {
+    const tree = document.querySelector('[data-surface="/am/editor_drawer"]');
+    const ads = tree ? tree.querySelectorAll('[role=rowheader][aria-label="Ad"]').length : 0;
+    const dialog = [...document.querySelectorAll('[role=dialog], [aria-modal=true]')]
+      .some(e => e.getClientRects().length > 0 && !/^notifications/i.test((e.textContent || '').trim()));
+    return { ads, dialog };
+  }
+"""
+"""После «Create ad»: строк объявлений в дереве и открыто ли окно."""
+
+
+def more_ads_press_enabled() -> bool:
+    """Нажимать ли в шаге второго объявления (по умолчанию — да)."""
+    return os.environ.get(MORE_ADS_PRESS_SETTING, "").strip().lower() not in _OFF_VALUES
+
+
+def _more_ads_capture(page, stage: str, diag: dict) -> str:
+    """Снимок шага с блоками дерева/раздела/меню/окна; «прогон/NN_шаг» или ""."""
+    try:
+        from src.fb_ads_rpa import page_capture as _pc
+
+        saved = _pc.capture(page, step=MORE_ADS_STEP, diag={"stage": stage, **diag},
+                            blocks=MORE_ADS_BLOCKS)
+    except Exception:
+        saved = ""
+    if not saved or not isinstance(saved, str):
+        return ""
+    # Только «прогон/NN_шаг»: полный путь несёт имя пользователя машины.
+    parts = saved.replace("\\", "/").rstrip("/").split("/")
+    return "/".join(parts[-2:])
+
+
+def _box_ok(box) -> bool:
+    return bool(box) and box.get("width", 0) > 0 and box.get("height", 0) > 0
+
+
+def _press_marked(page, mark: str, *, dom_fallback: bool = False) -> str:
+    """Нажать элемент с `data-acl-more-ads=<mark>` один раз.
+
+    "pressed" — доверенное нажатие прошло охрану `_press_allowed`;
+    "dom" — у элемента нет коробки и после наведения на строку (кнопки
+    дерева рисуются при наведении), DOM-клик разрешён вызывающим и охрана в
+    точке строки пустила; "refused" — охрана не пустила; "absent" —
+    элемента нет; "no_box" — коробки нет, DOM-клик не разрешён;
+    "frozen" — вкладка не ответила, нажатия не было.
+    """
+    md = _md()
+    try:
+        handle = page.query_selector(f'[data-acl-more-ads="{mark}"]')
+    except Exception:
+        handle = None
+    if handle is None:
+        return "absent"
+    try:
+        handle.evaluate("el => el.scrollIntoView({block: 'center', behavior: 'instant'})")
+    except Exception:
+        pass
+    try:
+        box = handle.bounding_box()
+    except Exception:
+        box = None
+    if not _box_ok(box):
+        # Навести на строку (движение мыши, не нажатие) и спросить ещё раз.
+        rbox = None
+        try:
+            row = handle.evaluate_handle("el => el.closest('[role=rowheader]') || el.parentElement")
+            el = row.as_element() if row else None
+            rbox = el.bounding_box() if el else None
+        except Exception:
+            rbox = None
+        if _box_ok(rbox):
+            try:
+                page.mouse.move(rbox["x"] + rbox["width"] - 30, rbox["y"] + rbox["height"] / 2)
+            except Exception:
+                pass
+            md._sleep_h(0.4)
+            try:
+                box = handle.bounding_box()
+            except Exception:
+                box = None
+        if not _box_ok(box):
+            if not dom_fallback or not _box_ok(rbox):
+                return "no_box"
+            # DOM-клик достаётся только этому элементу, но охрана всё равно
+            # спрашивается в точке строки: Publish или футер там — не жмём.
+            x, y = rbox["x"] + rbox["width"] / 2, rbox["y"] + rbox["height"] / 2
+            if not md._press_allowed(page, x, y, ""):
+                return "refused"
+            try:
+                done = handle.evaluate("el => { if (!el.isConnected) return false; el.click(); return true; }")
+            except Exception:
+                done = False
+            return "dom" if done else "absent"
+    md._mark_press_target(page, handle)
+    got = md._cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    if got is False:
+        return "refused"
+    if got is None:
+        return "frozen"
+    return "pressed"
+
+
+def _wait_menu(page, wait_s: float) -> dict:
+    md = _md()
+    got: dict = {}
+    deadline = time.time() + wait_s
+    while True:
+        try:
+            got = md._eval_bounded(page, _MORE_ADS_MENU_JS, CREATE_AD_RE) or {}
+        except Exception:
+            got = {}
+        if got.get("open") or time.time() >= deadline:
+            return got
+        time.sleep(0.3)
+
+
+def _wait_after_create(page, ads_before: int, wait_s: float) -> dict:
+    md = _md()
+    got: dict = {}
+    md._sleep_h(1.5)
+    deadline = time.time() + wait_s
+    while True:
+        try:
+            got = md._eval_bounded(page, _MORE_ADS_AFTER_JS) or {}
+        except Exception:
+            got = {}
+        if got.get("dialog") or int(got.get("ads") or 0) > ads_before or time.time() >= deadline:
+            return got
+        time.sleep(0.4)
+
+
+def capture_more_ads(page, extra: int) -> dict:
+    """Снять список объявлений и «Create ad» нового редактора (ACL-1353, шаг 1).
+
+    Второе объявление здесь не создаётся и не заполняется. Робот снимает
+    дерево до любого нажатия; затем (если нажатия не выключены
+    `FB_RPA_SIMPLE_MORE_ADS_PRESS=0`) нажимает «Create ad» — кнопку дерева
+    или пункт «Action menu» строки группы — один раз, снимает открывшееся и
+    останавливает шаг. Строка телеметрии `simple_create_more_ads` (ok=False)
+    называет снимки — по ней же событие Sentry.
+
+    Возвращает {"captures": [...], "pressed": [...], "stop": <где и почему
+    шаг кончился>, "reason": MORE_ADS_CAPTURED | MORE_ADS_NOT_CAPTURED,
+    "tree"/"menu"/"after": что было прочитано}. Никогда не бросает.
+    """
+    md = _md()
+    out: dict = {"captures": [], "pressed": [], "stop": "", "extra": extra}
+    try:
+        _capture_more_ads(page, out)
+    except Exception as exc:
+        out["stop"] = out.get("stop") or "error:" + type(exc).__name__
+    out["reason"] = MORE_ADS_CAPTURED if out["captures"] else MORE_ADS_NOT_CAPTURED
+    try:
+        md._telemetry.record(
+            MORE_ADS_STEP, False, note=out["reason"],
+            diag={"captures": out["captures"], "pressed": out["pressed"], "stop": out["stop"],
+                  "extra_ads": extra, "tree": out.get("tree"), "menu": out.get("menu"),
+                  "after": out.get("after"),
+                  "capture_note": (f"page capture saved on this machine: {', '.join(out['captures'])}"
+                                   if out["captures"] else "no page capture was saved")})
+    except Exception:
+        pass
+    return out
+
+
+def _capture_more_ads(page, out: dict) -> None:
+    md = _md()
+    try:
+        tree = md._eval_bounded(page, _MORE_ADS_TREE_JS, [CREATE_AD_RE, _ADSET_MENU_SURFACE]) or {}
+    except Exception as exc:
+        tree = {"tree": False, "error": type(exc).__name__}
+    out["tree"] = tree
+    ads_before = int((tree.get("levels") or {}).get("Ad") or 0)
+    # 1. До любого нажатия.
+    first = _more_ads_capture(page, "before_click", {"tree": tree})
+    if first:
+        out["captures"].append(first)
+    if not tree.get("tree"):
+        out["stop"] = "no_tree"
+        return
+    if not more_ads_press_enabled():
+        out["stop"] = "press_off"
+        return
+    # 2. Кнопка ровно «Create ad» в самом дереве.
+    if tree.get("create"):
+        got = _press_marked(page, "create")
+        if got != "pressed":
+            out["stop"] = f"create_ad_{got}"
+            return
+        out["pressed"].append("tree_create_ad")
+        _after_create(page, out, ads_before, via="tree")
+        return
+    # 3. «Action menu» строки группы — открыть меню и снять его.
+    if not tree.get("adset_menu"):
+        out["stop"] = "no_create_control"
+        return
+    got = _press_marked(page, "adset_menu", dom_fallback=True)
+    if got not in ("pressed", "dom"):
+        out["stop"] = f"action_menu_{got}"
+        return
+    out["pressed"].append("adset_action_menu" + ("_dom" if got == "dom" else ""))
+    menu = _wait_menu(page, 4.0)
+    out["menu"] = menu
+    shot = _more_ads_capture(page, "action_menu", {"menu": menu})
+    if shot:
+        out["captures"].append(shot)
+    if not menu.get("open"):
+        out["stop"] = "action_menu_not_opened"
+        return
+    if not menu.get("create"):
+        out["stop"] = "no_create_item"
+        return
+    got = _press_marked(page, "menu_create")
+    if got != "pressed":
+        out["stop"] = f"create_ad_{got}"
+        return
+    out["pressed"].append("menu_create_ad")
+    _after_create(page, out, ads_before, via="action_menu")
+
+
+def _after_create(page, out: dict, ads_before: int, *, via: str) -> None:
+    after = _wait_after_create(page, ads_before, 6.0)
+    out["after"] = after
+    shot = _more_ads_capture(page, "after_create_ad", {"after": after, "via": via})
+    if shot:
+        out["captures"].append(shot)
+    out["stop"] = "create_ad_pressed"
