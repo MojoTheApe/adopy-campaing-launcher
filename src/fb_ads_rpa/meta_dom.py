@@ -15,6 +15,7 @@ from playwright.sync_api import Frame, Page
 from src.fb_ads_rpa import page_liveness as _liveness
 from src.fb_ads_rpa import profile_trouble as _trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
+from src.fb_ads_rpa import simple_create as _simple
 
 #: Порог, за которым Playwright отказывается передавать файл.
 #:
@@ -2770,6 +2771,10 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
         if _loading_visible(page):
             return "ok"
         try:
+            # ACL-1327: Create открыл сразу новый редактор «в один экран» —
+            # это не уход со списка, а удачное нажатие.
+            if _simple.url_is_simple_create(page.url):
+                return "ok"
             if base and page.url.split("?", 1)[0] != base:
                 return "left_list"
         except Exception:
@@ -2857,6 +2862,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     frozen_run = 0
     slow_polls = 0
     loading_kinds: dict[str, int] = {}
+    shell_polls = 0
     outcome = "idle"
     found = False
     poll_start = None
@@ -2872,6 +2878,11 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
             pass
         if _tab_gone(page):
             outcome = "gone"
+            break
+        # ACL-1327: Create открыл сразу новый редактор — цель выбирается в
+        # нём самом, окна не будет. Ждём, пока отрисуется поле имени.
+        if _simple_create_ready(page):
+            found, outcome = True, "simple_create"
             break
         frozen = _tab_frozen(page)
         woke = watch.check(frozen=True) if frozen else watch.check()
@@ -2892,6 +2903,19 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
         if now - poll_start > OBJECTIVE_SLOW_POLL_FACTOR * poll_s:
             slow_polls += 1
             last_busy = now
+        # Ревью PR #340 (F2): Create открыл заготовку нового редактора, а она
+        # ещё грузится (полосы `role=progressbar` «Loading...», их
+        # `_loading_visible` не видит). Это не пустой экран: `idle` вернул бы
+        # поток на список и дал второй Create — второй черновик. Ждём до
+        # потолка и отдаём заготовку потоку: зависшую страницу лечит шаг
+        # имени кампании (`recover_stuck_page`).
+        if _simple_create_url(page):
+            shell_polls += 1
+            last_busy = now
+            if now - start >= loading_max_s:
+                found, outcome = True, "simple_create_shell"
+                break
+            continue
         if _loading_visible(page):
             loading_polls += 1
             last_busy = now
@@ -2935,11 +2959,31 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                                 "loading_kinds": loading_kinds,
                                 "frozen_polls": frozen_polls,
                                 "slow_polls": slow_polls,
+                                "simple_create_shell_polls": shell_polls,
                                 "woke": getattr(watch, "fired", ""),
                                 "idle_s": round(time.time() - last_busy, 1)})
     except Exception:
         pass
     return found
+
+
+def _simple_create_url(page: Page) -> bool:
+    """Вкладка на адресе нового редактора (без обращения к разметке)."""
+    try:
+        return _simple.url_is_simple_create(page.url)
+    except Exception:
+        return False
+
+
+def _simple_create_ready(page: Page) -> bool:
+    """Новый редактор «в один экран» открыт (по адресу) и отрисован (видно
+    поле имени кампании). Только адрес — без чтения разметки на каждом опросе."""
+    try:
+        if not _simple.url_is_simple_create(page.url):
+            return False
+        return page.get_by_placeholder(_simple.NAME_FIELDS["campaign"]).first.is_visible()
+    except Exception:
+        return False
 
 
 def _all_edits_saved(page: Page) -> bool:
@@ -4603,45 +4647,89 @@ def run_recorded_campaign_flow(
     if opened == "create":
         return "create"
 
-    # New Meta UI sometimes shows a Guided/Manual choice before the objective
-    # picker enables Campaign name — click Manual if present, best-effort
-    # (the recording's session apparently started already past this choice).
-    # ACL-1313: сюда приходим, когда окно цели уже отрисовано (радио Leads
-    # видно) — есть ли в нём «Manual campaign setup» и заголовок «Leads»,
-    # видно сразу. Прежде клик по отсутствующему элементу ждал 3 с и 5 с на
-    # каждой кампании.
-    manual = page.get_by_text("Manual campaign setup", exact=False)
-    if _visible_now(manual):
-        try:
-            manual.first.click(timeout=3000)
-            _shot("after_manual")
-        except Exception:
-            pass
+    # ACL-1327: новый редактор Meta «в один экран» (кампания, группа и
+    # объявление — разделы одной страницы). Прежде (ACL-1320) здесь была
+    # остановка аккаунта; теперь свой путь: те же обработчики карточек, но до
+    # раздела уровня доходим прокруткой вместо Next, свёрнутые карточки
+    # раскрываем перед обработчиком, цель кампании проверяем на месте.
+    # Узнаём его в любой момент — по адресу или по разметке (`_simple_create_layout`).
+    # Откат к прежней остановке: FB_RPA_SIMPLE_CREATE=0.
+    simple = False
+    objective_checked = False
 
-    leads_heading = page.get_by_role("heading", name="Leads")
-    if _visible_now(leads_heading):
-        try:
-            leads_heading.first.click(timeout=5000)
-        except Exception:
-            pass
-    # ACL-1313: окна нет — одно ограниченное ожидание, а не пять заходов
-    # `_click` по 8+8 с (~83 с) ради того же отказа.
-    leads_radio = page.get_by_role("radio", name="Leads")
-    try:
-        leads_radio.first.wait_for(state="visible", timeout=int(OBJECTIVE_RADIO_LAST_WAIT_S * 1000))
-        radio_there = True
-    except Exception:
-        radio_there = False
-    if not radio_there or not _click(leads_radio, where="objective_leads"):
-        _shot("fail_objective_leads")
-        return "objective_leads"
-    _shot("after_leads")
+    def _enter_simple(where: str) -> bool:
+        """Включить путь нового редактора; False — он выключен (откат)."""
+        nonlocal simple
+        if simple:
+            return True
+        if _simple.disabled():
+            _shot("fail_simple_create_layout", note="simple_create")
+            return False
+        simple = True
+        _telemetry.record("simple_create", None, note=where)
+        _close_onboarding_tour(page, "simple_create")
+        return True
 
-    if not _click(page.get_by_role("button", name="Continue"), where="objective_continue"):
-        _shot("fail_objective_continue")
-        return "objective_continue"
-    _wait_loading()
-    _shot("after_continue")
+    def _simple_objective_failed() -> bool:
+        """Цель кампании в новом редакторе — Leads (один раз на кампанию)."""
+        nonlocal objective_checked
+        if objective_checked:
+            return False
+        objective_checked = True
+        got = _simple.ensure_leads_objective(page)
+        if got == "failed":
+            _shot("fail_objective_inline", note="simple_create_inline")
+            return True
+        _telemetry.record("simple_objective", None, note=got)
+        return False
+
+    # ACL-1327: Create может открыть новый редактор сразу, без окна цели
+    # (`_wait_objective_dialog` → "simple_create" / "simple_create_shell") —
+    # тогда цель выбирается в самом редакторе, а Leads / Continue окна жать
+    # нечего. Окно цели поверх редактора (радио Leads видно) — жмём, как прежде.
+    if _simple_create_url(page) and not _visible_now(page.get_by_role("radio", name="Leads")):
+        if not _enter_simple("no_objective_dialog"):
+            return "simple_create_layout"
+    if not simple:
+        # New Meta UI sometimes shows a Guided/Manual choice before the objective
+        # picker enables Campaign name — click Manual if present, best-effort
+        # (the recording's session apparently started already past this choice).
+        # ACL-1313: сюда приходим, когда окно цели уже отрисовано (радио Leads
+        # видно) — есть ли в нём «Manual campaign setup» и заголовок «Leads»,
+        # видно сразу. Прежде клик по отсутствующему элементу ждал 3 с и 5 с на
+        # каждой кампании.
+        manual = page.get_by_text("Manual campaign setup", exact=False)
+        if _visible_now(manual):
+            try:
+                manual.first.click(timeout=3000)
+                _shot("after_manual")
+            except Exception:
+                pass
+
+        leads_heading = page.get_by_role("heading", name="Leads")
+        if _visible_now(leads_heading):
+            try:
+                leads_heading.first.click(timeout=5000)
+            except Exception:
+                pass
+        # ACL-1313: окна нет — одно ограниченное ожидание, а не пять заходов
+        # `_click` по 8+8 с (~83 с) ради того же отказа.
+        leads_radio = page.get_by_role("radio", name="Leads")
+        try:
+            leads_radio.first.wait_for(state="visible", timeout=int(OBJECTIVE_RADIO_LAST_WAIT_S * 1000))
+            radio_there = True
+        except Exception:
+            radio_there = False
+        if not radio_there or not _click(leads_radio, where="objective_leads"):
+            _shot("fail_objective_leads")
+            return "objective_leads"
+        _shot("after_leads")
+
+        if not _click(page.get_by_role("button", name="Continue"), where="objective_continue"):
+            _shot("fail_objective_continue")
+            return "objective_continue"
+        _wait_loading()
+        _shot("after_continue")
 
     # Live evidence (2026-07-23, first run ever on a fresh account —
     # FacebookDQ204 CR): a one-time onboarding modal ("You no longer need to
@@ -4682,10 +4770,7 @@ def run_recorded_campaign_flow(
     # ACL-1320: окно-экскурсия нового редактора — только своим крестиком.
     _close_onboarding_tour(page, "onboarding_modal")
     _shot("after_onboarding_modal")
-    # ACL-1320: новый редактор Meta «в один экран» записанный поток не знает —
-    # остановка с понятной причиной сейчас, а не отказ где-то дальше.
-    if _simple_create_layout(page):
-        _shot("fail_simple_create_layout", note="simple_create")
+    if not simple and _simple_create_layout(page) and not _enter_simple("after_continue"):
         return "simple_create_layout"
 
     def _late_onboarding_modal() -> bool:
@@ -4700,8 +4785,9 @@ def run_recorded_campaign_flow(
         # редактор не отрисовался — пустой экран с «Loading…», и поля имени
         # на странице нет вовсе. Вводить ещё нечего, поэтому перезагружаем
         # без оглядки на «All edits saved» и пробуем снова.
-        if _simple_create_layout(page):
-            _shot("fail_simple_create_layout", note="simple_create")
+        # ACL-1327: новый редактор, узнанный только сейчас, — тот же путь
+        # (74c3b477e021: разделы ещё грузились, когда его узнали по адресу).
+        if not simple and _simple_create_layout(page) and not _enter_simple("campaign_name"):
             return "simple_create_layout"
         if not (recover_stuck_page(page, "campaign_name", editor=False, force=True)
                 and _fill(page.get_by_placeholder("Enter your campaign name here"), campaign_name, where="campaign_name")):
@@ -4716,7 +4802,15 @@ def run_recorded_campaign_flow(
     # trusting the value and moving on.
     wait_editor_saved(page)
     _shot("after_campaign_name")
+    # ACL-1327: имя вписано — редактор отрисован, список целей на месте.
+    # Ревью PR #340 (F4): черновик уже есть — отказ не повторяется
+    # (`objective_inline`), иначе каждый повтор бросал бы ещё один черновик.
+    if simple and _simple_objective_failed():
+        return "objective_inline"
 
+    # ACL-1327: в новом редакторе карточка бюджета может быть свёрнута.
+    if simple:
+        _simple.open_card(page, "Budget")
     # 17.09 00:05 (S15, 71f6bddbcf7c): Meta открыла черновик с «Ad set
     # budget» по умолчанию — поля бюджета на уровне кампании нет, и шаг
     # 133 с искал его. Бюджет у нас кампанийный: переключить до ввода.
@@ -4754,11 +4848,31 @@ def run_recorded_campaign_flow(
                 wait_editor_saved(page)
                 break
 
-    if not _click(page.get_by_role("button", name="Next"), where="next_to_adset"):
-        _shot("fail_next_to_adset")
-        return "next_to_adset"
-    _wait_loading()
-    _shot("after_next_to_adset")
+    # ACL-1327: Next между уровнями есть только в прежнем мастере. Новый
+    # редактор спрашиваем и здесь (9e7d67471c6b: узнан не был, и 46 с ушли на
+    # поиск Next), и после неудачного Next — прежде это был отказ шага.
+    if not simple and _simple_create_layout(page) and not _enter_simple("next_to_adset"):
+        return "simple_create_layout"
+    if not simple and not _click(page.get_by_role("button", name="Next"), where="next_to_adset"):
+        if not _simple_create_layout(page):
+            _shot("fail_next_to_adset")
+            return "next_to_adset"
+        if not _enter_simple("next_to_adset_missing"):
+            return "simple_create_layout"
+    if simple:
+        if _simple_objective_failed():
+            return "objective_inline"
+        _close_onboarding_tour(page, "simple_adset")
+        level = _simple.scroll_to_level(page, "adset")
+        if not level.get("ok"):
+            # Раздела группы на странице нет — эту разметку робот не знает.
+            _shot("fail_simple_create_layout", {"section": "adset", "why": level.get("why", "")},
+                  note="simple_create:adset_section")
+            return "simple_create_layout"
+        _shot("after_simple_adset_section")
+    else:
+        _wait_loading()
+        _shot("after_next_to_adset")
     if not ensure_editor_window(page, "adset"):
         return "window_too_small"
     _clear_blocking_overlays(page, "adset")
@@ -4833,6 +4947,18 @@ def run_recorded_campaign_flow(
 
     _shot("success_website_selected")
 
+    # ACL-1327: новый редактор открывается с «Instant forms», и под выбором
+    # страницы стоит «Please read and accept Meta's Lead Ads Terms…». После
+    # Website она должна уйти. Не ушла — условия Lead Ads страницы не
+    # приняты: это делает человек в Meta, робот «View terms» / «Accept» не
+    # жмёт никогда. Остановка аккаунта с понятной причиной.
+    if simple:
+        wait_editor_saved(page)
+        terms = _simple.lead_terms_block(page)
+        if terms:
+            _shot("fail_lead_terms_not_accepted", {"text": terms[:160]}, note="page_must_accept_lead_terms")
+            return "lead_terms_not_accepted"
+
     # Next segment past Website: Conversion event = Lead. Reuses the existing
     # select_conversion_event_lead()/is_lead_conversion_event_selected() pair
     # (already used by the older recipe_player delegated-section path).
@@ -4863,6 +4989,11 @@ def run_recorded_campaign_flow(
     # screenshot to decide what (if anything) needs filling in here.
     try:
         scroll_to_section(page, "Audience")
+        # ACL-1327: в новом редакторе карточка Audience свёрнута в сводку
+        # («Locations United States, Age 18 - 65+ …»), строка «Further limit»
+        # лежит в скрытом теле — сперва раскрыть.
+        if simple:
+            _simple.open_card(page, "Audience")
         # ACL-1324: строка ищется по разметке и жмётся CDP-кликом
         # (`_open_further_limit`), успех — только открытое окно.
         opened = _open_further_limit(page)
@@ -5076,14 +5207,23 @@ def run_recorded_campaign_flow(
     # user screenshot) — real checkboxes, so this should be more reliable
     # than the Audience fields above, but still soft-fail per the same
     # "don't stop the test" contract.
+    def _fill_placements(report: dict) -> bool:
+        # ACL-1327: в новом редакторе карточка Placements свёрнута в сводку
+        # («Advantage+ placements») — раскрыть перед заполнением (и после
+        # перезагрузки: она снова свёрнута).
+        if simple:
+            scroll_to_section(page, "Placements")
+            _simple.open_card(page, "Placements")
+        return fill_placements(page, report)
+
     try:
         placements_report: dict = {}
-        ok_placements = fill_placements(page, placements_report)
+        ok_placements = _fill_placements(placements_report)
         if not ok_placements and recover_stuck_page(page, "placements", editor=True):
             # 20.09 00:35 CO_bnc Mix: панель плейсментов не загрузилась, и
             # следом отказал iOS. После перезагрузки шаг делается заново.
             placements_report = {}
-            ok_placements = fill_placements(page, placements_report)
+            ok_placements = _fill_placements(placements_report)
         if not ok_placements:
             # Отчёт кладётся рядом с отказом: пустое «placements ✗» стоило
             # пяти прогонов вслепую — шаг падал, а что именно не нашлось,
@@ -5107,7 +5247,7 @@ def run_recorded_campaign_flow(
                 # 20.09 01:37 CO_bnc Mix: раздел устройств не загрузился и за
                 # 25 с. Перезагрузка (при «All edits saved») и второй заход —
                 # так же, как с панелью плейсментов.
-                fill_placements(page, {})
+                _fill_placements({})
                 ok_ios = select_devices_ios_only(page)
             if not ok_ios:
                 _shot("fail_devices_ios")
@@ -5150,25 +5290,37 @@ def run_recorded_campaign_flow(
     if creative_path:
         ad_edit_url = ""
         reached_ad_level = False
-        try:
-            if not _click(page.get_by_role("button", name="Next"), where="next_to_ad"):
+        # ACL-1327: и здесь новый редактор мог узнаться только сейчас.
+        if not simple and _simple_create_layout(page) and not _enter_simple("next_to_ad"):
+            return "simple_create_layout"
+        if simple:
+            _close_onboarding_tour(page, "simple_ad")
+            level = _simple.scroll_to_level(page, "ad")
+            if not level.get("ok"):
+                _shot("fail_simple_create_layout", {"section": "ad", "why": level.get("why", "")},
+                      note="simple_create:ad_section")
+                return "simple_create_layout"
+            _shot("after_simple_ad_section")
+        else:
+            try:
+                if not _click(page.get_by_role("button", name="Next"), where="next_to_ad"):
+                    _shot("fail_next_to_ad")
+                    # HARD fail, not soft. Confirmed live 2026-07-29 (Test145,
+                    # campaign B): the editor drawer closed mid-audience-setup,
+                    # every later step failed against the bare ad-sets list,
+                    # and this soft-append still let the run report
+                    # success/reached_ad for a campaign with ZERO configured
+                    # ads. Reaching the ad level is the whole point of the
+                    # flow — failing to get there must fail the campaign (and
+                    # lets publish_campaign's whole-campaign retry re-run it).
+                    return "next_to_ad"
+            except Exception:
                 _shot("fail_next_to_ad")
-                # HARD fail, not soft. Confirmed live 2026-07-29 (Test145,
-                # campaign B): the editor drawer closed mid-audience-setup,
-                # every later step failed against the bare ad-sets list,
-                # and this soft-append still let the run report
-                # success/reached_ad for a campaign with ZERO configured
-                # ads. Reaching the ad level is the whole point of the
-                # flow — failing to get there must fail the campaign (and
-                # lets publish_campaign's whole-campaign retry re-run it).
                 return "next_to_ad"
-        except Exception:
-            _shot("fail_next_to_ad")
-            return "next_to_ad"
-        _wait_loading()
+            _wait_loading()
+            _shot("after_next_to_ad")
         ad_edit_url = page.url
         reached_ad_level = True
-        _shot("after_next_to_ad")
         if not ensure_editor_window(page, "ad"):
             return "window_too_small"
         _clear_blocking_overlays(page, "ad")
@@ -5255,7 +5407,17 @@ def run_recorded_campaign_flow(
         # same per-ad fill sequence used for the first ad above. Confirmed
         # live 2026-07-28 that upload_ad_creative/fill_ad_copy/
         # set_ad_destination_website work unmodified here.
-        if reached_ad_level and additional_ads:
+        # ACL-1327: как новый редактор добавляет второе объявление (дерево,
+        # отдельный раздел, переход на другую страницу) — по снимкам не
+        # установить. Первое объявление собрано; остальные не создаём и
+        # называем это блокирующей причиной, а не плодим пустые заготовки.
+        if reached_ad_level and additional_ads and simple:
+            more = len(additional_ads)
+            _telemetry.record("simple_create_more_ads", False, note=f"not_created:{more}")
+            ad_level_fails.append(
+                f"simple_create_more_ads:{more} more ad(s) not created - the single-screen editor "
+                "path builds only the first ad")
+        if reached_ad_level and additional_ads and not simple:
             for i, extra in enumerate(additional_ads, start=2):
                 tag = f"ad{i}"
                 # ACL-1233: зависшая загрузка или страница ошибки Chrome перед
@@ -5416,7 +5578,27 @@ def run_recorded_campaign_flow(
         if skip_sweep:
             _telemetry.record("destination_sweep_skipped", None,
                               note="all_destinations_confirmed_in_flow")
-        if reached_ad_level and destination_url and not skip_sweep:
+        if reached_ad_level and destination_url and not skip_sweep and simple:
+            # ACL-1327: в новом редакторе объявление одно и на этой же
+            # странице — обход по дереву не нужен: назначение ставится ещё раз
+            # на месте, и ранний отказ того же объявления снимается.
+            try:
+                fixed = set_ad_destination_website(page, destination_url)
+            except Exception as exc:
+                if _page_gone(page, exc):
+                    _browser_closed("destination_sweep", exc)
+                    return "browser_closed"
+                fixed = False
+            if fixed:
+                cleared = [f for f in ad_level_fails if f.split(":", 1)[0] == "ad_destination"]
+                if cleared:
+                    ad_level_fails[:] = [f for f in ad_level_fails if f not in cleared]
+                    _telemetry.record("destination_sweep_cleared", None, diag={"cleared": cleared})
+                _shot("after_destination_sweep")
+            else:
+                ad_level_fails.append("destination_sweep:" + (ad_name or f"{campaign_name} Ad"))
+                _shot("fail_destination_sweep")
+        elif reached_ad_level and destination_url and not skip_sweep:
             sweep_names = [ad_name or f"{campaign_name} Ad"]
             for i, extra in enumerate(additional_ads or [], start=2):
                 sweep_names.append(extra.get("ad_name") or f"{campaign_name} Ad {i}")
@@ -5449,6 +5631,18 @@ def run_recorded_campaign_flow(
                     _browser_closed("destination_sweep", exc)
                     return "browser_closed"
                 ad_level_fails.append(f"destination_sweep:{str(exc)[:60]}")
+
+    # ACL-1327: черновик нового редактора сохраняется так же, как прежнего, —
+    # автосохранением Meta («All edits saved»); Publish робот не жмёт никогда.
+    # Дожидаемся сохранения и пишем, подтвердилось ли оно.
+    if simple:
+        wait_editor_saved(page)
+        try:
+            saved = page.get_by_text(re.compile(r"All edits saved", re.I)).first.is_visible()
+        except Exception:
+            saved = False
+        _telemetry.record("simple_create_draft", True if saved is True else None,
+                          note="all_edits_saved" if saved is True else "save_not_confirmed")
 
     # Was written to debug_ad_level_soft_fails.txt, which each run
     # OVERWROTE — so the previous run's evidence was gone before anyone
@@ -8294,7 +8488,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         at_text = _wizard_past_media(page)
         _close_creative_setup_modal(page)
         _sleep_h(0.5)
-        if "/ads/edit/" in page.url and _verify_ad_media_present(page):
+        if _ad_editor_url(page.url) and _verify_ad_media_present(page):
             right, detail = _verify_ad_media_is_the_file(page, filename)
             ad_thumbs = _ad_media_thumb_ids(page)
             if picked_thumbs and ad_thumbs:
@@ -8347,7 +8541,7 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Мастер продвинулся, а медиа на объявлении нет. Выбор при этом
         # где-то остался, и снять его отсюда уже нечем: сетки на экране нет.
         _telemetry.record("ad_creative_reuse", False, note="dirty_after_advance",
-                          diag={"picks": log[-3:], "url_is_ad": "/ads/edit/" in (page.url or "")})
+                          diag={"picks": log[-3:], "url_is_ad": _ad_editor_url(page.url or "")})
         return REUSE_DIRTY
     except Exception as exc:
         # Next перерисовал диалог прямо под кликом — частый случай, когда
@@ -9731,14 +9925,14 @@ def upload_ad_creative(
         # Confirm we're still on the ad editor, not bounced back to the ads
         # list by some other in-between click — recover via the saved edit URL
         # rather than guessing a re-open control.
-        if edit_url and "/ads/edit/" not in page.url:
+        if edit_url and not _ad_editor_url(page.url):
             try:
                 page.goto(edit_url)
                 _sleep_h(1.0)
             except Exception:
                 return False
 
-        if "/ads/edit/" not in page.url:
+        if not _ad_editor_url(page.url):
             return False
 
         # Confirmed live (2026-07-29): being on the right URL says nothing about
@@ -12154,18 +12348,25 @@ def _close_onboarding_tour(page: Page, where: str = "") -> str:
 #: Записанный поток его не знает: кампании падали на `campaign_name` и
 #: `next_to_adset` после минут попыток. За всю историю прогонов такой адрес
 #: встречался только в этих отказах.
-_SIMPLE_CREATE_PATH = "/adsmanager/manage/simple_create"
+_SIMPLE_CREATE_PATH = _simple.SIMPLE_CREATE_PATH
+
+
+def _ad_editor_url(url) -> bool:
+    """Страница, на которой редактируется объявление: прежний мастер
+    (`/ads/edit/`) или новый редактор «в один экран» (ACL-1327) — там
+    объявление живёт на той же странице, что кампания и группа."""
+    url = url if isinstance(url, str) else ""
+    return "/ads/edit/" in url or _simple.url_is_simple_create(url)
 
 
 def _simple_create_layout(page: Page) -> bool:
-    """Открыт новый редактор Meta «в один экран» (по адресу, без обращения к вкладке)."""
-    try:
-        url = page.url
-    except Exception:
-        return False
-    if not isinstance(url, str):
-        return False
-    return _SIMPLE_CREATE_PATH in url.split("?", 1)[0]
+    """Открыт новый редактор Meta «в один экран» — по адресу или по разметке.
+
+    ACL-1327: по одному адресу 9e7d67471c6b промахнулся (адрес сменился
+    позже проверки) — теперь и по разделам `/am/editor:*` / футеру Publish
+    нового редактора (`simple_create.is_simple_create`, чтение ограниченное).
+    """
+    return _simple.is_simple_create(page)
 
 
 def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
