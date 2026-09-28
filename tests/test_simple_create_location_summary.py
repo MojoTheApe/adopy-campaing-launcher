@@ -123,3 +123,83 @@ def test_the_whole_location_check_passes_on_the_live_collapse(page, monkeypatch)
     assert md._pick_country_and_clear_defaults(page, page, "Colombia") is True
     _open_card_collapsing_into(page, FRAG["field_default"])
     assert md._pick_country_and_clear_defaults(page, page, "Colombia") is False
+
+
+# ── Охраны от ложного «да» (ревью PR #340 v4, мутации M1–M4 и `<ul>`) ──────
+
+def _field_with_list(items: str) -> str:
+    """Живое поле 01 с непустым `<ul>` рядом со строкой «Inclusion: Colombia»."""
+    frag = FRAG["field_target"]
+    assert frag.count("<ul></ul>") == 1
+    return frag.replace("<ul></ul>", f"<ul>{items}</ul>")
+
+
+def test_an_extra_country_listed_beside_the_summary_fails(page):
+    page.set_content(_wrap(_field_with_list("<li>United States</li>")))
+    assert md._location_summary_countries(page) == ["Colombia", "United States"]
+    assert md._only_wanted_in_summary(page, "Colombia") is False
+
+
+def test_a_second_inclusion_line_in_the_list_is_never_clean(page):
+    """Вторая строка «Inclusion:» — сводка неоднозначна, чисто не бывает."""
+    page.set_content(_wrap(_field_with_list("<li>Inclusion: Mexico, Peru</li>")))
+    assert md._only_wanted_in_summary(page, "Colombia") is False
+
+
+def test_a_country_list_without_items_is_read_whole(page):
+    page.set_content(_wrap(FRAG["field_target"].replace("<ul></ul>", "<ul>Mexico, Peru</ul>")))
+    assert md._location_summary_countries(page) == ["Colombia", "Mexico", "Peru"]
+
+
+def test_an_exclusion_line_in_the_list_adds_no_market(page):
+    page.set_content(_wrap(_field_with_list("<li>Exclusion: Mexico</li>")))
+    assert md._only_wanted_in_summary(page, "Colombia") is True
+
+
+def test_the_climb_does_not_leave_the_locations_field(page):
+    """M1: подъём от «Inclusion:» не выходит за коробки поля — страна в чужом
+    заголовке рядом не становится значением Locations."""
+    page.set_content(_wrap(
+        "<section><div id='field'><div>Locations</div><div><strong>Inclusion:</strong></div></div>"
+        "<div role='heading'>Colombia</div></section>"))
+    assert md._only_wanted_in_summary(page, "Colombia") is False
+
+
+def _card(value_cells: str, *, bar: str = "Audience", bar_id: str = "syn_1") -> str:
+    return (f"<div id='{bar_id}' role='toolbar'><div role='heading' aria-level='3'>{bar}</div></div>"
+            f"<div aria-labelledby='{bar_id}' aria-pressed='false' role='button'><div "
+            "style='display:grid; grid-template-columns: 180px 1fr;'>"
+            f"{value_cells}</div></div>")
+
+
+_LOC_CELL = "<div style='grid-area: auto;'><div><div role='heading' aria-level='4'>Locations</div></div></div>"
+
+
+def test_a_heading_next_to_locations_is_not_its_value(page):
+    """M2: у Locations нет значения, следом — ячейка-заголовок «Colombia»."""
+    page.set_content(_wrap(_card(
+        _LOC_CELL + "<div style='grid-area: auto;'><div><div role='heading' aria-level='4'>Colombia</div></div></div>"
+        "<span>x</span>")))
+    assert md._location_summary_countries(page) is None
+
+
+def test_two_audience_grids_are_not_read_as_one(page):
+    """M3: два заголовка Locations — какой из них наш, не сказать."""
+    page.set_content(_wrap(
+        _card(_LOC_CELL + "<span>Colombia</span>", bar_id="syn_1")
+        + _card(_LOC_CELL + "<span>United States</span>", bar_id="syn_2")))
+    assert md._location_summary_countries(page) is None
+    assert md._only_wanted_in_summary(page, "Colombia") is False
+
+
+def test_a_locations_grid_outside_the_audience_card_is_ignored(page):
+    """M4 и привязка к карточке: плитка с «Locations» вне кнопки-сводки или
+    под чужой шапкой (сохранённая аудитория) — не сводка карточки Audience."""
+    page.set_content(_wrap(
+        "<div style='display:grid'>" + _LOC_CELL + "<span>Colombia</span></div>"))
+    assert md._location_summary_countries(page) is None
+    page.set_content(_wrap(_card(_LOC_CELL + "<span>Colombia</span>", bar="Saved audience")))
+    assert md._location_summary_countries(page) is None
+    page.set_content(_wrap(
+        "<div aria-pressed='false' role='button'>" + _LOC_CELL + "<span>Colombia</span></div>"))
+    assert md._location_summary_countries(page) is None

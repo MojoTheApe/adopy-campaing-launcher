@@ -14302,15 +14302,40 @@ _LOCATION_SUMMARY_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
       if (!field.boxes.some(b => b.contains(node))) break;
       text = norm(node.textContent);
     }
-    return countries(text);
+    const got = countries(text);
+    // Рядом со строкой Meta держит `<ul>` (во всех снимках пустой). Если в
+    // нём окажется ещё одна включённая страна — она тоже в списке, и
+    // «ровно наша страна» не пройдёт. Строки «Exclusion: …» рынок не
+    // добавляют.
+    const lists = node.parentElement
+      ? [...node.parentElement.children].filter(c => c !== node && (c.tagName === 'UL' || c.getAttribute('role') === 'list'))
+      : [];
+    for (const list of lists) {
+      const items = [...list.querySelectorAll('li, [role=listitem]')];
+      for (const t of (items.length ? items : [list]).map(e => norm(e.textContent)).filter(Boolean)) {
+        if (/^(Exclusion|Exclusión|Excluir)\s*:/i.test(t)) continue;
+        const own = /^(Inclusion|Inclusión|Incluir)\s*:/i.test(t) ? countries(t) : t.split(',').map(norm).filter(Boolean);
+        got.push(...own);
+      }
+    }
+    return got;
   }
   // Новый редактор «в один экран» (ACL-1327, 97314905598e/02): свёрнутая
   // карточка Audience — сетка «заголовок | значение» внутри кнопки-сводки
   // (`role=button aria-pressed`): «Locations | Colombia». Значение —
-  // соседний элемент ячейки заголовка.
+  // соседний элемент ячейки заголовка. Кнопка — именно карточки Audience:
+  // её `aria-labelledby` указывает на шапку `role=toolbar` с заголовком
+  // «Audience» (как в `simple_create._CARD_JS`), а не любая плитка с
+  // заголовком «Locations».
+  const audienceBars = new Set([...document.querySelectorAll('[role=toolbar] [role=heading]')]
+    .filter(h => /^(Audience|Público)$/i.test(norm(h.textContent)))
+    .map(h => h.closest('[role=toolbar]')).filter(b => b && b.id).map(b => b.id));
+  const inAudienceCard = (h) => {
+    const btn = h.closest('[role=button][aria-pressed]');
+    return !!btn && (btn.getAttribute('aria-labelledby') || '').split(/\s+/).some(id => audienceBars.has(id));
+  };
   const heads = [...document.querySelectorAll('[role=heading]')]
-    .filter(h => /^(Locations|Ubicaciones)$/i.test(norm(h.textContent)) && visible(h)
-                 && h.closest('[role=button][aria-pressed]'));
+    .filter(h => /^(Locations|Ubicaciones)$/i.test(norm(h.textContent)) && visible(h) && inAudienceCard(h));
   if (heads.length !== 1) return null;
   let cell = heads[0];
   for (let i = 0; i < 4 && cell && !cell.nextElementSibling; i++) cell = cell.parentElement;
