@@ -24,9 +24,8 @@ from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlencode, urlsplit
 
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 # Make project root importable when invoked via `uvicorn src.web.app:app`
@@ -43,6 +42,14 @@ from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.web.publish_jobs import get_job, start_job, cancel_job
 from src.web.cache import cache_built_at, cache_clear, get_cached_report
+from src.web.request_limits import (
+    BUILDER_FORM,
+    DEFAULT_MAX_BODY,
+    ROUTE_MAX_BODY,
+    RequestBodyLimit,
+    SafeStaticFiles,
+    read_form,
+)
 from src.analysis_agent.money_format import fmt_usd, fmt_currency, fmt_summary_amount
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
 from src.creative_agent.audience_builder import build_audience_profile
@@ -1134,7 +1141,13 @@ _NCOLS_BY_SECTION = {
 }
 
 app = FastAPI(title="Adopy Campaigns Launcher")
-app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+# Предел тела проверяется до чтения (ACL-1356, аудит S04). Прослойка
+# добавлена раньше local_dashboard_boundary, значит, стоит внутри неё:
+# отказ 413 тоже получает защитные заголовки.
+app.add_middleware(RequestBodyLimit, default_max_body=DEFAULT_MAX_BODY, route_max_body=ROUTE_MAX_BODY)
+# SafeStaticFiles не пускает UNC, буквы дисков и абсолютные пути к файловой
+# системе (CVE-2026-48818: исходящий SMB/NTLM на Windows).
+app.mount("/static", SafeStaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 _MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -1486,12 +1499,14 @@ def _render_report(
         report, _df, warnings = get_cached_report()
     except FileNotFoundError as e:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "No data file", "message": str(e)},
             status_code=200,
         )
     except ValueError as e:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "Excel format problem", "message": str(e)},
             status_code=200,
@@ -1506,6 +1521,7 @@ def _render_report(
         report = report_for_period(report, _df, date_from, date_to)
     except PeriodReportError as exc:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "Period calculation failed", "message": str(exc)},
             status_code=503,
@@ -1548,6 +1564,7 @@ def _render_report(
         account_alias_map[cid] = alias_map
 
     return templates.TemplateResponse(
+        request,
         "report.html",
         {
             "request": request,
@@ -1798,6 +1815,7 @@ async def details(request: Request) -> HTMLResponse:
     if section not in _DRILL_ENABLED:
         ncols = 6
         return templates.TemplateResponse(
+            request,
             "_details_fragment.html",
             {
                 "request": request,
@@ -1822,6 +1840,7 @@ async def details(request: Request) -> HTMLResponse:
         # Cache build failed — return a no-op fragment so the table layout
         # stays intact and the user is invited to fix the / page first.
         return templates.TemplateResponse(
+            request,
             "_details_fragment.html",
             {
                 "request": request,
@@ -1835,6 +1854,7 @@ async def details(request: Request) -> HTMLResponse:
 
     rows = get_underlying_rows(df, section=section, country=country, **params)
     return templates.TemplateResponse(
+        request,
         "_details_fragment.html",
         {
             "request": request,
@@ -1998,6 +2018,7 @@ async def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
     creative_name = creative.strip()
     if not creative_name:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "No creative name", "message": "Pass ?creative=<name>"},
         )
@@ -2007,6 +2028,7 @@ async def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
     if found_path is None:
         # File not found — render upload form
         return templates.TemplateResponse(
+            request,
             "brief.html",
             {
                 "request": request,
@@ -2030,6 +2052,7 @@ async def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
         vision = vision_analyze(found_path)
         result = generate_brief(scan, vision, stats, audience)
         return templates.TemplateResponse(
+            request,
             "brief.html",
             {
                 "request": request,
@@ -2044,6 +2067,7 @@ async def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
         )
     except Exception as e:
         return templates.TemplateResponse(
+            request,
             "brief.html",
             {
                 "request": request,
@@ -2845,7 +2869,7 @@ async def account_spend_read(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
@@ -2878,7 +2902,7 @@ async def account_spend_read_countries(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import country_split
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
@@ -2967,7 +2991,7 @@ async def report_problem(request: Request) -> JSONResponse:
     """
     from src import acl_sentry
 
-    form = await request.form()
+    form = await read_form(request)
     text = (form.get("text") or "").strip()
     if not text:
         return JSONResponse(
@@ -3027,7 +3051,7 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     level = (form.get("level") or "").strip()
     object_id = (form.get("object_id") or "").strip()
@@ -3111,7 +3135,7 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
@@ -3133,7 +3157,7 @@ async def mlx_profile_open(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     profile_id = (form.get("profile_id") or "").strip()
     if not profile_id:
         return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
@@ -3157,7 +3181,7 @@ async def account_probe_ad_account(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     profile_id = (form.get("profile_id") or "").strip()
     if not profile_id:
         return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
@@ -3284,6 +3308,7 @@ async def account_map_fragment(
 
     _enrich_country_overview(report)
     return templates.TemplateResponse(
+        request,
         "_account_map.html",
         {
             "request": request,
@@ -3322,6 +3347,7 @@ async def account_map_available_fragment(
             status_code=503,
         )
     return templates.TemplateResponse(
+        request,
         "_account_map_available.html", {"request": request, "amap": view}
     )
 
@@ -3937,7 +3963,7 @@ async def rpa_website_lab_disconnect() -> JSONResponse:
 @app.post("/preview-publish")
 async def preview_publish(request: Request) -> JSONResponse:
     """Dry-run: convert form slots → PublishJob plan, return JSON (no Meta API calls)."""
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
     if not country:
         return JSONResponse({"error": "Country not set — check form."}, status_code=400)
@@ -3965,7 +3991,7 @@ async def preview_publish(request: Request) -> JSONResponse:
 @app.post("/publish-jobs")
 async def publish_jobs_start(request: Request) -> JSONResponse:
     """Launch a background publish job. Returns job_id for polling."""
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
     activate = (form.get("activate") or "0").strip() in ("1", "true", "yes")
@@ -4061,7 +4087,7 @@ async def publish_jobs_progress(job_id: str) -> JSONResponse:
 @app.post("/build-upload")
 async def build_upload(request: Request) -> Response:
     """Build Upload FB xlsx from campaign builder slots for one account."""
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
 
     # The parser returns the country CODE ("MX"), which the RPA needs — without
