@@ -151,17 +151,23 @@ console.log('ok');
 // последнюю в любом порядке. Первый живой «Publish all» на параллельном
 // сервере дал одно задание — второй замок был здесь.
 const queueCode = cut('window.cbPublishAll = function', '// ── Диагностика превью');
-// ACL-1313: занятая очередь теперь объясняет себя — берём настоящую проверку.
-const busyCode = cut('function cbQueueBusy() {', '\nwindow.cbPublish = function');
+// ACL-1313: занятая очередь объясняет себя — берём настоящую проверку.
+// ACL-1355: держат только потерянный статус и тот же аккаунт.
+const busyCode = cut('function cbQueueUncertain() {', '\nwindow.cbPublish = function');
 
-function runQueue(accounts, opts = {}) {
-  const events = [];
-  const pending = [];
-  const forms = accounts.map((label) => ({
+function fakeForm(label) {
+  return {
     _label: label,
     querySelectorAll: () => [{}],                        // одна карточка
     querySelector: (sel) => (sel === '[name="account_label"]' ? { value: label } : null),
-  }));
+  };
+}
+
+function runQueue(accounts, opts = {}) {
+  const events = [];
+  const said = [];
+  const pending = [];
+  const forms = accounts.map(fakeForm);
   const sandbox = {
     window: {},
     FormData, RegExp, String, parseInt, Object, JSON, Promise,
@@ -180,7 +186,7 @@ function runQueue(accounts, opts = {}) {
       events.push('POST');
       return Promise.resolve({ json: () => Promise.resolve({ job_id: 'j' + pending.length }) });
     },
-    alert: (m) => events.push('alert'),
+    alert: (m) => { events.push('alert'); said.push(String(m)); },
   };
   sandbox.window.window = sandbox.window;
   sandbox.window.cbPreview = sandbox.cbPreview;
@@ -189,7 +195,7 @@ function runQueue(accounts, opts = {}) {
     'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + busyCode + '\n' + queueCode,
     sandbox);
   sandbox.window.cbPublishAll(() => {});
-  return { events, pending, sandbox };
+  return { events, said, pending, sandbox, forms };
 }
 
 // Запрос уходит через микрозадачи — без этого проверка смотрит на «ещё
@@ -234,20 +240,29 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   q.sandbox.window.cbPublishAll(() => {});
   assert.equal(posts(q), 2, 'unknown outcome allowed duplicate work');
 
+  // ACL-1355: Stop у A — только задание A; B и C идут дальше. «Publish all»
+  // поверх идущей сборки докладывает в неё A, а идущие B и C второй раз не шлёт.
   q = runQueue(['A', 'B', 'C']);
   await flush();
   q.pending[0]({ status: 'cancelled' });
   assert.ok(q.sandbox.window.CB_QUEUE.active, 'cancelling A released running B and C');
-  const alertsBefore = q.events.filter((e) => e === 'alert').length;
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.report[0].why, 'Stopped by user');
+  const runBefore = q.sandbox.window.CB_QUEUE;
+  const previewsBefore = q.events.filter((e) => e.startsWith('preview')).length;
   q.sandbox.window.cbPublishAll(() => {});
-  assert.equal(posts(q), 3, 'a duplicate batch was submitted');
-  // ACL-1313: занятая вкладка говорит, почему кнопка не сработала, а не молчит.
-  assert.equal(q.events.filter((e) => e === 'alert').length, alertsBefore + 1,
-    'a busy tab ignored Publish all silently');
+  await flush();
+  assert.strictEqual(q.sandbox.window.CB_QUEUE, runBefore, 'a second run replaced the active one');
+  assert.equal(posts(q), 4, 'the stopped account was not queued again, or a running one was duplicated');
+  assert.deepEqual(q.events.filter((e) => e.startsWith('preview')).slice(previewsBefore), ['preview:A'],
+    'a running account went through preview again');
+  assert.equal(q.said.length, 0, 'joining the run was refused with an alert');
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.of, 4);
   q.pending[1]({ results: [{ publishable: true }] });
-  assert.ok(q.sandbox.window.CB_QUEUE.active);
   q.pending[2]({ results: [{ publishable: true }] });
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'the run closed while the re-queued A was still going');
+  q.pending[3]({ results: [{ publishable: true }] });
   assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 4);
   q.sandbox.window.cbPublishAll(() => {});
   await flush();
   const currentBatch = q.sandbox.window.CB_QUEUE;
@@ -256,6 +271,33 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   assert.strictEqual(currentBatch.progress, progress);
   assert.ok(currentBatch.active && !currentBatch.uncertain);
 
+  // Все аккаунты уже собираются: вопроса нет, работы нет, сказано почему.
+  q = runQueue(['A', 'B']);
+  await flush();
+  const asked = q.events.filter((e) => e === 'asked').length;
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  assert.equal(posts(q), 2, 'a duplicate job was submitted');
+  assert.equal(q.events.filter((e) => e === 'asked').length, asked, 'asked to publish accounts that are all running');
+  assert.equal(q.said.length, 1, 'a busy tab ignored Publish all silently');
+  assert.ok(/A, B are already being built/.test(q.said[0]), q.said[0]);
+
+  // Аккаунт, пришедший в идущую сборку, — строкой в ней же; закрывается
+  // сборка с последним из всех.
+  q = runQueue(['A']);
+  await flush();
+  q.forms.push(fakeForm('B'));
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  assert.equal(posts(q), 2);
+  assert.deepEqual(q.events.filter((e) => e.startsWith('preview')), ['preview:A', 'preview:B']);
+  q.pending[0]({ results: [{ publishable: true }] });
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'the run closed while B was still going');
+  q.pending[1]({ results: [{ publishable: true }] });
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.deepEqual(q.sandbox.window.CB_QUEUE.progress.report.map((r) => r.account), ['A', 'B']);
+
+  // Stop у A не отменяет B, чьё превью ещё в полёте.
   let delayedPreview;
   q = runQueue(['A', 'B', 'C'], { preview: (form, done) => {
     if (form._label === 'B') delayedPreview = done;
@@ -265,8 +307,20 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   q.pending[0]({ status: 'cancelled' });
   delayedPreview([{ 'Campaign Name': 'B', errors: [] }], null);
   await flush();
-  assert.equal(posts(q), 1, 'a late preview submitted another job after cancellation');
+  assert.equal(posts(q), 3, 'stopping A cancelled the accounts after it');
+
+  // Потерянный статус — другое дело: превью в полёте после него не шлёт.
+  q = runQueue(['A', 'B', 'C'], { preview: (form, done) => {
+    if (form._label === 'B') delayedPreview = done;
+    else done([{ 'Campaign Name': form._label, errors: [] }], null);
+  }});
+  await flush();
+  q.pending[0]({ status: 'unknown' });
+  delayedPreview([{ 'Campaign Name': 'B', errors: [] }], null);
+  await flush();
+  assert.equal(posts(q), 1, 'a late preview submitted another job after the status was lost');
   assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.ok(q.sandbox.window.CB_QUEUE.uncertain);
   assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 3);
 
   // Отказ на вопросе — ни одной работы.
