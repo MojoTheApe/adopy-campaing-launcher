@@ -5421,7 +5421,7 @@ window.cbBuild = (function () {
     var out = {};
     Object.keys(jobs).forEach(function (id) {
       var j = jobs[id];
-      out[id] = { account: j.account, names: j.names, at: j.at, lost: !!j.lost };
+      out[id] = { account: j.account, country: j.country || '', names: j.names, at: j.at, lost: !!j.lost };
     });
     try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) { /* не помним — не страшно */ }
   }
@@ -5457,7 +5457,7 @@ window.cbBuild = (function () {
         // его в сборку вкладки (строка внизу ящика, Stop, защита от дубля).
         if (j.restored && !j.adopted && isActive(p) && typeof window.cbRunAdopt === 'function') {
           j.adopted = true;
-          try { window.cbRunAdopt(id, j.account); } catch (e) { /* точка всё равно идёт */ }
+          try { window.cbRunAdopt(id, j.account, j.country); } catch (e) { /* точка всё равно идёт */ }
         }
         if (isActive(p)) j.timer = setTimeout(function () { poll(id); }, POLL_MS);
       })
@@ -5469,9 +5469,10 @@ window.cbBuild = (function () {
 
   /* Задание отправлено: следить за ним. `names` — кампании, ушедшие в
      задание по мнению страницы; первый ответ сервера их уточняет. */
-  function watch(id, account, names) {
+  function watch(id, account, names, country) {
     if (!id) return;
-    jobs[id] = { account: String(account || ''), names: (names || []).map(String), at: Date.now(), lost: false, p: null };
+    jobs[id] = { account: String(account || ''), country: String(country || ''),
+                 names: (names || []).map(String), at: Date.now(), lost: false, p: null };
     save();
     repaint();
     poll(id);
@@ -5555,10 +5556,13 @@ window.cbBuild = (function () {
   function dot(slot, name) {
     if (!name) return null;
     var account = accountOf(slot);
+    var form = slot && slot.closest ? slot.closest('form') : null;
+    var country = form ? String((form.querySelector('[name="country"]') || {}).value || '').trim() : '';
     var best = null;
     Object.keys(jobs).forEach(function (id) {
       var j = jobs[id];
       if (j.account !== account || j.names.indexOf(name) === -1) return;
+      if (country && j.country && j.country !== country) return;   // тот же аккаунт другой страны
       if (!best || j.at > best.at) best = j;
     });
     return best ? classify(best, name) : null;
@@ -5571,7 +5575,8 @@ window.cbBuild = (function () {
     Object.keys(raw).forEach(function (id) {
       var s = raw[id];
       if (!s || typeof s !== 'object' || !(now - (s.at || 0) < KEEP_MS)) return;
-      jobs[id] = { account: String(s.account || ''), names: Array.isArray(s.names) ? s.names.map(String) : [],
+      jobs[id] = { account: String(s.account || ''), country: String(s.country || ''),
+                   names: Array.isArray(s.names) ? s.names.map(String) : [],
                    at: s.at, lost: !!s.lost, p: null, restored: true };
     });
     save();
@@ -5586,11 +5591,15 @@ window.cbBuild = (function () {
   /* Идёт ли у аккаунта задание, о котором знает эта вкладка (ACL-1355).
      Ещё не опрошенное — идёт: после F5 первый ответ сервера может прийти
      не сразу, а второе задание на тот же аккаунт было бы дублем.
-     `except` — задания, за которыми уже следит сборка вкладки: там её слово. */
-  function busy(account, except) {
+     `except` — задания, за которыми уже следит сборка вкладки: там её слово.
+     `country` — необязательна: без неё — аккаунт в любой стране. */
+  function busy(account, except, country) {
     return Object.keys(jobs).some(function (id) {
       var j = jobs[id];
       if (j.account !== account || j.lost || (except || []).indexOf(id) !== -1) return false;
+      // Страна своя у формы: тот же аккаунт другой страны не занят. Задание
+      // без страны (запомнено раньше) считается занятым в любой.
+      if (country && j.country && j.country !== country) return false;
       return j.p ? isActive(j.p) : true;
     });
   }
@@ -10844,16 +10853,17 @@ window.cbPublishAll = function (onProgress) {
   if (cbQueueUncertain()) return;
   // ACL-1355: аккаунты, которые уже собираются в этой вкладке, вторым
   // заданием не идут — остальные встают в ту же сборку.
+  // Ключ — страна и аккаунт: один аккаунт бывает привязан к нескольким
+  // странам (account_links), и у каждой страны своя форма и свои кампании.
   var forms = [], running = [];
   document.querySelectorAll('form.open-account-form').forEach(function (form) {
     if (!form.querySelectorAll('.cb-slot').length) return;
-    var label = cbFormAccount(form);
-    if (cbAccountBusy(label)) running.push(label); else forms.push(form);
+    if (cbAccountBusy(cbFormKey(form))) running.push(cbFormTitle(form)); else forms.push(form);
   });
   if (!forms.length && !running.length) { window.alert('Nothing is being assembled yet.'); return; }
   if (!forms.length) { cbSayAlreadyBuilding(running); return; }
 
-  var names = forms.map(cbFormAccount);
+  var names = forms.map(cbFormTitle);
 
   _safeConfirm('Build every campaign as a draft?',
     'Accounts: <strong>' + forms.length + '</strong><br>'
@@ -10898,10 +10908,6 @@ function cbSentCampaignNames(fd) {
   return out;
 }
 
-function cbFormAccount(form) {
-  return ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
-}
-
 /* ACL-1355: одна сборка на вкладку, но в неё можно доложить аккаунт.
  *
  * До 28.09 вкладка держала одну пачку: пока шёл аккаунт A, Publish у B
@@ -10921,7 +10927,7 @@ function cbFormAccount(form) {
  * новые не принимаются, пока страницу не перезагрузят. */
 function cbNewRun(notify) {
   var batch = { active: true, uncertain: false, progress: null };
-  var entries = [];        // {form, label, onlySlot, panel, state, live, jobId}
+  var entries = [];        // {form, key, account, country, label, onlySlot, panel, state, live, jobId}
   var report = [];
   var settled = 0;         // сколько строк дошли до конца (или отпали)
   var previewing = false;  // превью идут по одному, отправки — сразу
@@ -11026,7 +11032,7 @@ function cbNewRun(notify) {
           return;
         }
         if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
-        if (window.cbBuild) window.cbBuild.watch(data.job_id, e.label, sentNames);
+        if (window.cbBuild) window.cbBuild.watch(data.job_id, e.account, sentNames, e.country);
         follow(e, data.job_id, skipped);
       })
       .catch(function (err) {
@@ -11072,8 +11078,12 @@ function cbNewRun(notify) {
     }, e.onlySlot);
   }
 
-  function entry(form, label, onlySlot) {
-    var e = { form: form, label: label, onlySlot: onlySlot || null,
+  // `label` — как строку зовут в списке и итоге (с именем страны, если
+  // аккаунт на странице не один); `key` — страна|аккаунт, по нему дубль.
+  function entry(form, key, label, onlySlot) {
+    var bar = key.indexOf('|');
+    var e = { form: form, key: key, country: key.slice(0, bar), account: key.slice(bar + 1),
+              label: label, onlySlot: onlySlot || null,
               panel: form ? form.querySelector('.cb-status-panel') : null,
               state: 'new', live: null, jobId: null };
     entries.push(e);
@@ -11081,8 +11091,9 @@ function cbNewRun(notify) {
   }
 
   /* Есть ли у аккаунта неоконченная строка в этой сборке. */
-  batch.busy = function (label) {
-    return entries.some(function (e) { return e.state !== 'settled' && e.label === label; });
+  /* `key` — страна|аккаунт; голое имя аккаунта (без «|») — в любой стране. */
+  batch.busy = function (key) {
+    return entries.some(function (e) { return e.state !== 'settled' && cbKeyMatches(e.key, key); });
   };
   batch.jobIds = function () {
     return entries.map(function (e) { return e.jobId; }).filter(Boolean);
@@ -11091,9 +11102,9 @@ function cbNewRun(notify) {
   batch.add = function (forms, onlySlot) {
     var added = [], skipped = [];
     forms.forEach(function (form) {
-      var label = cbFormAccount(form);
-      if (batch.busy(label)) { skipped.push(label); return; }
-      entry(form, label, onlySlot);
+      var key = cbFormKey(form), label = cbFormTitle(form);
+      if (batch.busy(key)) { skipped.push(label); return; }
+      entry(form, key, label, onlySlot);
       added.push(label);
     });
     if (!entries.length) batch.active = false;   // пустая сборка никого не держит
@@ -11102,18 +11113,18 @@ function cbNewRun(notify) {
   };
   /* Весь аккаунт без превью — кнопка Publish на странице страны. */
   batch.direct = function (form, fd) {
-    var label = cbFormAccount(form);
-    if (batch.busy(label)) return { added: [], skipped: [label] };
-    submit(entry(form, label, null), fd, 0);
+    var key = cbFormKey(form), label = cbFormTitle(form);
+    if (batch.busy(key)) return { added: [], skipped: [label] };
+    submit(entry(form, key, label, null), fd, 0);
     return { added: [label], skipped: [] };
   };
   /* Задание, отправленное до перезагрузки страницы: вернуть его строку. */
-  batch.adopt = function (jobId, label, form) {
-    if (batch.jobIds().indexOf(jobId) !== -1 || batch.busy(label)) {
+  batch.adopt = function (jobId, key, form) {
+    if (batch.jobIds().indexOf(jobId) !== -1 || batch.busy(key)) {
       if (!entries.length) batch.active = false;
       return false;
     }
-    var e = entry(form, label, null);
+    var e = entry(form, key, form ? cbFormTitle(form) : key.slice(key.indexOf('|') + 1), null);
     if (!e.panel) e.panel = document.createElement('div');
     e.panel.style.display = 'block';
     track(e, 'publishing');
@@ -11141,13 +11152,15 @@ function _runPublishQueue(forms, onProgress, onlySlot) {
 /* После F5 (ACL-1355): задания, которые сервер ещё ведёт, возвращаются в
  * сборку вкладки — строка внизу ящика, панель аккаунта со Stop и защита от
  * дубля. Зовёт `cbBuild`, когда первый опрос подтвердил, что задание идёт. */
-window.cbRunAdopt = function (jobId, account) {
+window.cbRunAdopt = function (jobId, account, country) {
+  // Страны нет у заданий, запомненных до 29.09, — тогда первая форма аккаунта.
+  var want = country ? country + '|' + account : account;
   var form = null;
   document.querySelectorAll('form.open-account-form').forEach(function (f) {
-    if (!form && cbFormAccount(f) === account) form = f;
+    if (!form && cbKeyMatches(cbFormKey(f), want)) form = f;
   });
   var q = cbPublishRun(window.cbTree ? window.cbTree.showQueue : null);
-  return q ? q.adopt(jobId, account, form) : false;
+  return q ? q.adopt(jobId, form ? cbFormKey(form) : (country || '') + '|' + account, form) : false;
 };
 
 // ── Диагностика превью: панель поверх дешборда (acl-704) ─────────────
@@ -11490,13 +11503,51 @@ function cbQueueUncertain() {
   return true;
 }
 
-/* Собирается ли аккаунт сейчас: строка в сборке вкладки или — пока сборка
- * его ещё не подхватила (первые секунды после F5) — задание в точках сборки. */
-function cbAccountBusy(label) {
+function cbFormAccount(form) {
+  return ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
+}
+
+/* Ключ формы билдера — страна|аккаунт (ACL-1355, ревью PR #363): форма в
+ * билдере одна на пару, а один аккаунт бывает привязан к нескольким странам
+ * (account_links: FacebookUL869 → Chile, Peru). По одному имени аккаунта
+ * «Publish all» отправлял бы первую страну и молча терял вторую. */
+function cbFormKey(form) {
+  var country = ((form.querySelector('[name="country"]') || {}).value || '').trim();
+  return country + '|' + cbFormAccount(form);
+}
+
+/* Совпадает ли ключ строки с тем, о чём спрашивают. Голое имя аккаунта
+ * (без «|») — «в любой стране»; пустая страна у строки (задание, запомненное
+ * до ключа со страной) — тоже любая: лучше лишний раз отказать, чем дубль. */
+function cbKeyMatches(key, want) {
+  var kb = key.indexOf('|'), wb = want.indexOf('|');
+  if (wb === -1) return key.slice(kb + 1) === want;
+  if (key.slice(kb + 1) !== want.slice(wb + 1)) return false;
+  var kc = key.slice(0, kb), wc = want.slice(0, wb);
+  return !kc || !wc || kc === wc;
+}
+
+/* Имя формы для человека: аккаунт, а если он на странице не в одной
+ * стране — с её названием, иначе «UL869, UL869» ничего не объясняет. */
+function cbFormTitle(form) {
+  var label = cbFormAccount(form), key = cbFormKey(form), twin = false;
+  document.querySelectorAll('form.open-account-form').forEach(function (f) {
+    if (f !== form && cbFormAccount(f) === label && cbFormKey(f) !== key) twin = true;
+  });
+  var country = key.slice(0, key.indexOf('|'));
+  return twin && country ? label + ' (' + country + ')' : label;
+}
+
+/* Собирается ли форма сейчас (`key` — cbFormKey; голое имя аккаунта —
+ * в любой стране): строка в сборке вкладки или — пока сборка её ещё не
+ * подхватила (первые секунды после F5) — задание в точках сборки. */
+function cbAccountBusy(key) {
   var q = window.CB_QUEUE;
-  if (q && q.busy && q.busy(label)) return true;
+  if (q && q.busy && q.busy(key)) return true;
   var b = window.cbBuild;
-  return !!(b && b.busy && b.busy(label, Object.keys(window.CB_RUN_JOBS || {})));
+  var bar = key.indexOf('|');
+  return !!(b && b.busy && b.busy(key.slice(bar + 1), Object.keys(window.CB_RUN_JOBS || {}),
+                                  bar === -1 ? undefined : key.slice(0, bar)));
 }
 
 function cbSayAlreadyBuilding(labels) {
@@ -11509,8 +11560,8 @@ window.cbPublish = function(form) {
   if (cbQueueUncertain()) return;
   var onlySlot = form.classList.contains('cb-in-drawer') ? Array.from(form.querySelectorAll('.cb-slot')).find(function(s) { return !s.hidden; }) : null;
   var accLabel  = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
-  // ACL-1355: тот же аккаунт вторым заданием не едет — и об этом говорится.
-  if (cbAccountBusy(accLabel)) { cbSayAlreadyBuilding([accLabel]); return; }
+  // ACL-1355: та же форма (страна+аккаунт) вторым заданием не едет — и об этом говорится.
+  if (cbAccountBusy(cbFormKey(form))) { cbSayAlreadyBuilding([cbFormTitle(form)]); return; }
   var country   = ((form.querySelector('[name="country"]') || {}).value || '?').trim();
   var campCount = onlySlot ? 1 : (parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1);
 
