@@ -86,6 +86,53 @@ _EMAIL = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24
 
 _taken: dict[str, int] = {}
 
+#: Мастер креатива «Set up your creative» — отдельным блоком (ACL-1348).
+#:
+#: Страница редактора весит больше MAX_HTML_BYTES, а портал мастера лежит в
+#: самом хвосте документа: во всех снимках отказа `ad2_creative_upload` 25.09
+#: (956d0d184138, 08ca37a0b941) страница обрезана на 3,98 МБ, и от мастера не
+#: осталось ни строки — почему шаг Media недоступен, по снимку не понять. Блок
+#: сохраняется целиком и вычищается так же, как страница (`scrub_html`).
+#:
+#: Ищем открытый `role=dialog` с тремя и больше подписями шагов, а если мастер
+#: без этой роли (так бывало с 03.08) — предка подписи «Media», в котором есть
+#: три подписи шагов и кнопка Next/Cancel/Done.
+CREATIVE_WIZARD_BLOCK_JS = r"""(() => {
+  const names = ['Creative setup', 'Media', 'Trim', 'Crop', 'Text', 'Image generation',
+                 'Creative generation', 'Enhancements', 'Translation'];
+  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  const hits = (el) => { const t = norm(el.textContent); return names.filter(n => t.includes(n)).length; };
+  const box = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const dialog = [...document.querySelectorAll('[role=dialog]')].find(d => box(d) && hits(d) >= 3);
+  if (dialog) return dialog;
+  const nav = ['Next', 'Cancel', 'Done'];
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let t = w.nextNode(); t; t = w.nextNode()) {
+    if (norm(t.nodeValue) !== 'Media') continue;
+    for (let n = t.parentElement, i = 0; n && n !== document.body && i < 15; n = n.parentElement, i++) {
+      if (hits(n) >= 3 && box(n) && [...n.querySelectorAll('[role=button],button')]
+          .some(b => nav.includes(norm(b.textContent)))) return n;
+    }
+  }
+  return null;
+})()"""
+
+#: Шаг → блоки, которые снимаются при его отказе сами, без участия вызывающего.
+_STEP_BLOCKS: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
+    # `ad_creative_media_step` снимает сам `upload_ad_creative`, пока мастер
+    # ещё открыт: к строке `fail_ad2_creative_upload` его уже закрыли.
+    (re.compile(r"^ad\d*_creative_(?:upload|media_step)$"), {"creative_wizard": CREATIVE_WIZARD_BLOCK_JS}),
+)
+
+
+def blocks_for_step(step: str) -> dict[str, str]:
+    """Блоки, положенные шагу `step` по умолчанию (см. `_STEP_BLOCKS`)."""
+    found: dict[str, str] = {}
+    for pattern, blocks in _STEP_BLOCKS:
+        if pattern.match(step or ""):
+            found.update(blocks)
+    return found
+
 
 def success_captures_enabled() -> bool:
     """Снимать ли страницу и PNG на УДАЧНОМ шаге. По умолчанию — нет.
@@ -217,7 +264,7 @@ def capture(
         (folder / "page.html").write_text(body, encoding="utf-8")
 
         saved_blocks: dict[str, Any] = {}
-        for name, js in (blocks or {}).items():
+        for name, js in {**blocks_for_step(step), **(blocks or {})}.items():
             try:
                 outer = page.evaluate(
                     "(expr) => { const el = (new Function('return (' + expr + ')'))();"

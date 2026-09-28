@@ -205,6 +205,45 @@ def _set_last_upload_diag(diag: dict) -> None:
     global _LAST_UPLOAD_DIAG
     _LAST_UPLOAD_DIAG = diag
     _upload_diag_tls.diag = diag
+
+
+#: Причина последнего отказа креатива в этом потоке — одна машинная метка
+#: (ACL-1348). Её пишет в строку шага объявления сам поток
+#: (`fail_ad2_creative_upload` → note), и Sentry читает её оттуда.
+#:
+#: Раньше причина лежала только в строках помощников (`ad_creative_upload`,
+#: `ad_creative_reuse`), а строка `ad2_creative_upload` была пустой — PYTHON-14
+#: `ad2_creative_upload: silent`, 14 событий с 16.09. Хуже того, отказ
+#: объявления 1 брал причину из той же строки помощника, уже перезаписанной
+#: объявлением 2 (DAN-LT25, 28.09: у `ad_creative_upload` стояло
+#: `same-file-already-failed-this-run` — причина второго объявления, не первого).
+_upload_why_tls = threading.local()
+
+
+def _set_upload_why(why: str | None) -> None:
+    _upload_why_tls.why = why or ""
+
+
+def last_upload_why() -> str:
+    """Машинная метка последнего отказа креатива этого потока ("" — не было)."""
+    return getattr(_upload_why_tls, "why", "") or ""
+
+
+def _note_file_offered() -> None:
+    """Файл дошёл до Meta: робот стал подавать его в окно загрузки."""
+    _upload_why_tls.offered = True
+
+
+def _file_was_offered() -> bool:
+    return bool(getattr(_upload_why_tls, "offered", False))
+
+
+#: Отказы, при которых файл до Meta не доходил: робот не добрался до окна
+#: загрузки. Такой отказ — про мастер, не про файл (ACL-1348).
+_NAVIGATION_WHYS = frozenset({
+    "wizard_not_opened", "upload_button_missing",
+    "media_step_locked", "media_step_unreachable", "media_step_covered",
+})
 from src.fb_ads_rpa.config import get_reuse_library_media
 
 PageLike = Page | Frame
@@ -5194,7 +5233,9 @@ def run_recorded_campaign_flow(
                     # Раньше здесь было пусто, и «не загрузился» ничем не
                     # отличалось от «не нашёл кнопку» — шесть отказов 14.09
                     # не дали ни одной зацепки, и разбор свёлся к догадкам.
-                    _shot("fail_ad_creative_upload", last_upload_diag())
+                    # ACL-1348: причина — в строке ЭТОГО шага, иначе Sentry берёт
+                    # её из строки помощника, которую перепишет объявление 2.
+                    _shot("fail_ad_creative_upload", last_upload_diag(), note=last_upload_why())
                     ad_level_fails.append("ad_creative_upload")
                 else:
                     creative_uploaded = True
@@ -5336,7 +5377,10 @@ def run_recorded_campaign_flow(
                         if not upload_ad_creative_with_retry(
                             page, extra.get("creative_type") or "", extra_creative_path, edit_url=page.url
                         ):
-                            _shot(f"fail_{tag}_creative_upload")
+                            # ACL-1348: без note строка шага была пустой —
+                            # PYTHON-14 `ad2_creative_upload: silent`.
+                            _shot(f"fail_{tag}_creative_upload", last_upload_diag(),
+                                  note=last_upload_why())
                             ad_level_fails.append(f"{tag}_creative_upload")
                             no_creative = True
                         else:
@@ -8460,6 +8504,9 @@ def upload_ad_creative_with_retry(
     # от соседнего объявления, и тогда файл вообще никуда не поедет — это
     # единственный работающий путь для объявлений 2 и 3.
     _note_media_refused(None)  # отказ прошлого объявления к этому не относится
+    # Причина и «файл подавали» — только этого объявления (ACL-1348).
+    _set_upload_why(None)
+    _upload_why_tls.offered = False
     known = upload_already_failed(creative_path) or upload_already_succeeded(creative_path)
     if known:
         # Through the wizard, not straight at the library. The library lives
@@ -8477,12 +8524,17 @@ def upload_ad_creative_with_retry(
             _telemetry.record("ad_creative_upload", False, note="exception:" + type(exc).__name__,
                               diag={"file": Path(creative_path).name, "error": str(exc)[:300],
                                     "path": "known_file_reuse"})
+            _set_upload_why("upload_exception")
             attached = False
         if attached:
             return True
+        # Что не пустило к копии в медиатеке — до того, как проверки ниже
+        # перепишут причину.
+        blocked_by = last_upload_why()
         if media_refused_on_ad():
             # Чужой или битый файл уже на объявлении: «медиа есть» ниже его
             # не оправдывает (порт ACL-1284).
+            _set_upload_why("media_refused_on_ad")
             return False
         # 17.09 04:30 (S15, 3-е объявление): медиа уже стояло — Meta перенесла
         # ролик в новое объявление, мастер не открылся, и шаг объявил
@@ -8515,10 +8567,14 @@ def upload_ad_creative_with_retry(
         why = ("same_file_already_uploaded_this_run"
                if upload_already_succeeded(creative_path)
                else "same_file_already_failed_this_run")
-        _telemetry.record(
-            "ad_creative_upload", False, note=why,
-            diag={"file": Path(creative_path).name},
-        )
+        diag = {"file": Path(creative_path).name}
+        if blocked_by:
+            diag["blocked_by"] = blocked_by
+        _telemetry.record("ad_creative_upload", False, note=why, diag=diag)
+        # В итог шага — то, что на самом деле помешало: до Media не дошли —
+        # это про мастер, а не про правило «второй раз не грузим».
+        _set_upload_why(blocked_by if blocked_by in _NAVIGATION_WHYS
+                        or blocked_by == "upload_exception" else why)
         return False
 
     for attempt in range(attempts):
@@ -8526,13 +8582,18 @@ def upload_ad_creative_with_retry(
             if upload_ad_creative(page, creative_type, creative_path, edit_url=edit_url):
                 remember_upload_succeeded(creative_path)
                 return True
-        except Exception:
-            pass
+        except Exception as exc:
+            # Раньше — молча: отказ выглядел как `silent`.
+            _telemetry.record("ad_creative_upload", False, note="upload_exception",
+                              diag={"file": Path(creative_path).name,
+                                    "error": f"{type(exc).__name__}: {exc}"[:300]})
+            _set_upload_why("upload_exception")
         if media_refused_on_ad():
             # Отказ по самому медиа объявления: ни «медиа есть», ни вторая
             # попытка его не исправят (порт ACL-1284).
             _close_creative_setup_modal(page)
             _remember_upload_failed(creative_path)
+            _set_upload_why("media_refused_on_ad")
             return False
         _close_creative_setup_modal(page)
         _sleep_h(0.8)
@@ -8547,6 +8608,7 @@ def upload_ad_creative_with_retry(
         if attempt + 1 < attempts and _upload_stalled(page):
             if not _upload_retry_can_reload(page, edit_url):
                 _telemetry.record("creative_upload_stalled", False, note="reload_refused_unconfirmed_saved_draft")
+                _set_upload_why("upload_stalled")
                 return False
             _telemetry.record("creative_upload_stalled", None, note="reload_and_retry")
             _reload_editor(page, edit_url)
@@ -8559,7 +8621,20 @@ def upload_ad_creative_with_retry(
         _close_creative_setup_modal(page)
     except Exception:
         pass
-    _remember_upload_failed(creative_path)
+    if not last_upload_why():
+        _set_upload_why("upload_failed_unnamed")
+    # ACL-1348: запоминаем файл, только если его действительно подавали Meta.
+    # DAN-LT25, 28.09: объявление 1 не дошло до шага Media — файл не
+    # предлагали ни разу, — а объявление 2 получило
+    # `same_file_already_failed_this_run` и не попробовало ничего. Приговор
+    # файлу за отказ мастера несправедлив: у следующего объявления свой
+    # мастер, и полная попытка для него законна. Память по-прежнему экономит
+    # то, ради чего заведена, — повторы файла, который Meta не взяла.
+    if _file_was_offered():
+        _remember_upload_failed(creative_path)
+    else:
+        _telemetry.record("ad_creative_upload", None, note="not_remembered_file_never_offered",
+                          diag={"file": Path(creative_path).name, "why": last_upload_why()})
     return False
 
 
@@ -9439,6 +9514,141 @@ def _feed_mounted_file(page: Page, handle, creative_path: str, size_mb: float, d
     return True
 
 
+#: Шаги мастера креатива, как их подписывает строка шагов (ACL-1348).
+_WIZARD_STEP_NAMES = ("Creative setup", "Media", "Trim", "Crop", "Text", "Image generation",
+                      "Creative generation", "Enhancements", "Translation")
+
+#: Шаг Media в строке шагов мастера — где он, можно ли по нему кликнуть и
+#: какой шаг сейчас открыт (ACL-1348).
+#:
+#: Ищется по ПОДПИСИ, а не по роли: у горизонтальной строки шагов нового
+#: мастера (с 24.08) роль у пункта не гарантирована, а в подписях этого
+#: интерфейса бывают невидимые пробелы (`'Open​'`), которых
+#: `normalize-space` не убирает. Подпись «Media» принадлежит строке шагов,
+#: если рядом (в ряд — или столбцом, как у старого левого списка) стоят ещё
+#: хотя бы две подписи шагов; так заголовок «Media» в теле шага не путается
+#: с пунктом строки.
+#:
+#: Текущий шаг — пункт с `aria-current`/`aria-selected`, а если разметка их
+#: не ставит (скриншоты 25.09 показывают только цвет и полукруг) — заголовок
+#: тела шага: ближайшая под строкой подпись с именем шага, видимая сверху
+#: (`elementFromPoint`), то есть не страница объявления под модалкой.
+_WIZARD_MEDIA_STEP_JS = r"""
+(names) => {
+  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  const shown = (e) => {
+    const r = e.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    for (let n = e; n; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.display === 'none' || s.visibility === 'hidden') return false;
+    }
+    return true;
+  };
+  const onTop = (e) => {
+    const r = e.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!hit && (hit === e || e.contains(hit) || hit.contains(e));
+  };
+  const labels = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+    const name = norm(t.nodeValue);
+    if (!names.includes(name)) continue;
+    const el = t.parentElement;
+    if (!el || !shown(el)) continue;
+    labels.push({ el, name, r: el.getBoundingClientRect() });
+  }
+  // Ряд (новый мастер) или столбец (старый левый список) — что длиннее.
+  const lineOf = (l) => {
+    const across = labels.filter(o => o.name !== l.name && Math.abs(o.r.top - l.r.top) < 12);
+    const down = labels.filter(o => o.name !== l.name && Math.abs(o.r.left - l.r.left) < 12);
+    return across.length >= down.length
+      ? { peers: across, horizontal: true } : { peers: down, horizontal: false };
+  };
+  let media = null, row = [], horizontal = true;
+  for (const l of labels) {
+    if (l.name !== 'Media') continue;
+    const line = lineOf(l);
+    if (line.peers.length >= 2 && line.peers.length + 1 > row.length) {
+      media = l; row = [l, ...line.peers]; horizontal = line.horizontal;
+    }
+  }
+  if (!media) return { found: false };
+  row.sort((a, b) => horizontal ? a.r.left - b.r.left : a.r.top - b.r.top);
+  const seen = new Set();
+  row = row.filter(o => !seen.has(o.name) && seen.add(o.name));
+  const others = names.filter(n => n !== 'Media');
+  // Кликабельный пункт — ближайший предок с ролью/tabindex, но не выше
+  // контейнера, в котором уже есть подпись другого шага.
+  const clickable = (e) => {
+    for (let n = e, i = 0; n && n !== document.body && i < 6; n = n.parentElement, i++) {
+      const text = norm(n.textContent);
+      if (others.some(o => text.includes(o))) break;
+      const role = n.getAttribute('role');
+      if (['button', 'tab', 'link', 'listitem', 'menuitem', 'option'].includes(role)
+          || n.tagName === 'BUTTON' || n.tagName === 'A' || n.hasAttribute('tabindex')) return n;
+    }
+    return e;
+  };
+  const target = clickable(media.el);
+  let disabled = false;
+  for (let n = media.el, i = 0; n && n !== document.body && i < 6; n = n.parentElement, i++) {
+    if (others.some(o => norm(n.textContent).includes(o))) break;
+    if (n.getAttribute('aria-disabled') === 'true' || n.disabled === true) { disabled = true; break; }
+  }
+  const currentOf = () => {
+    for (const o of row) {
+      for (let n = o.el, i = 0; n && n !== document.body && i < 6; n = n.parentElement, i++) {
+        const text = norm(n.textContent);
+        if (others.concat(['Media']).some(x => x !== o.name && text.includes(x))) break;
+        const cur = n.getAttribute('aria-current');
+        if ((cur && cur !== 'false') || n.getAttribute('aria-selected') === 'true') return o.name;
+      }
+    }
+    const inRow = new Set(row.map(o => o.el));
+    const bottom = Math.max(...row.map(o => o.r.bottom));
+    const left = Math.min(...row.map(o => o.r.left)) - 60;
+    const right = Math.max(...row.map(o => o.r.right));
+    const heads = labels.filter(o => !inRow.has(o.el) && o.r.top >= bottom - 2
+      && o.r.left >= left && o.r.left <= right && onTop(o.el));
+    heads.sort((a, b) => a.r.top - b.r.top);
+    return heads.length ? heads[0].name : null;
+  };
+  const r = target.getBoundingClientRect();
+  return {
+    found: true,
+    x: r.left + r.width / 2,
+    y: r.top + r.height / 2,
+    role: target.getAttribute('role') || target.tagName.toLowerCase(),
+    disabled,
+    covered: !onTop(target),
+    steps: row.map(o => o.name),
+    current: currentOf(),
+  };
+}
+"""
+
+
+def _wizard_media_step(page: Page) -> dict | None:
+    """Состояние шага Media в строке шагов мастера (см. `_WIZARD_MEDIA_STEP_JS`)."""
+    try:
+        found = page.evaluate(_WIZARD_MEDIA_STEP_JS, list(_WIZARD_STEP_NAMES))
+    except Exception:
+        return None
+    return found if isinstance(found, dict) else None
+
+
+def _media_step_behind(step: dict | None) -> bool:
+    """Media стоит в строке шагов ДО открытого шага — Next к нему не ведёт."""
+    if not step or not step.get("found"):
+        return False
+    steps, current = step.get("steps") or [], step.get("current")
+    if current not in steps or "Media" not in steps:
+        return False
+    return steps.index("Media") < steps.index(current)
+
+
 def upload_ad_creative(
     page: Page, creative_type: str, creative_path: str, *, edit_url: str = "",
     reuse_only: bool = False,
@@ -9511,6 +9721,7 @@ def upload_ad_creative(
         _telemetry.record("ad_creative_upload", False, note="wizard_not_opened",
                           diag={"file": Path(creative_path).name, "tries": tries,
                                 "busy": _editor_is_busy_saving(page)})
+        _set_upload_why("wizard_not_opened")
         return False
     _sleep_h(0.7)
 
@@ -9523,24 +9734,46 @@ def upload_ad_creative(
     # nothing, and fell through to a page-wide Playwright click that the
     # re-rendering panel rejected; the step then failed at the Upload check.
     #
-    # Prefer the wizard's own left-hand step list — clicking "Media"
-    # directly is one action instead of an unknown number of Nexts — and
-    # keep trusted Next clicks as the fallback.
+    # Prefer the wizard's own step list — clicking "Media" directly is one
+    # action instead of an unknown number of Nexts — and keep trusted Next
+    # clicks as the fallback.
+    #
+    # ACL-1348 (25.09 956d0d / 08ca37, 28.09 DAN-LT25): мастер второго
+    # объявления открывается уже ПОСЛЕ Media — «Creative setup ✓ · Media ✓ ·
+    # ◐ Text» или «Media ✓ · ◐ Creative setup · Crop …». Next ведёт только
+    # вперёд, от Media, а прежний клик искал роль tab/button и текст ровно
+    # «Media» — и мимо подписи без роли или с невидимым пробелом. Теперь шаг
+    # ищется по подписи в строке шагов, и если дойти нельзя, отказ называет
+    # что мешает: шаг заперт, перекрыт или клик по нему ничего не меняет.
+    media_state: dict | None = None
+    media_clicks = next_clicks = 0
+    blocked = ""
     for _ in range(6):
         if page.get_by_role("button", name="Upload").count() > 0:
             break
+        step = _wizard_media_step(page)
+        if step:
+            media_state = step
+        behind = _media_step_behind(step)
+        if step and step.get("found"):
+            usable = not step.get("disabled") and not step.get("covered")
+            if usable and media_clicks < 2:
+                _cdp_mouse_click(page, float(step["x"]), float(step["y"]))
+                media_clicks += 1
+                _sleep_h(1.2)
+                continue
+            if behind:
+                # Next отсюда к Media не приведёт — только дальше от него.
+                blocked = ("media_step_locked" if step.get("disabled")
+                           else "media_step_covered" if step.get("covered")
+                           else "media_step_unreachable")
+                break
         if _click_xpath(
-            page,
-            "//*[@role='tab' or @role='button' or @role='listitem' or @role='menuitem']"
-            "[normalize-space(.)='Media']",
-        ):
-            _sleep_h(1.2)
-            continue
-        _click_xpath(
             page,
             "//*[@role='button' or self::button]"
             "[normalize-space(.)='Next' and not(@aria-disabled='true')]",
-        )
+        ):
+            next_clicks += 1
         _sleep_h(1.2)
 
     # The advance loop above polls on a fixed cadence; the wizard's Media
@@ -9549,16 +9782,36 @@ def upload_ad_creative(
     # button was present on the page moments later. Give it a real wait
     # before declaring failure instead of trusting the poll's last tick.
     upload_btn = page.get_by_role("button", name="Upload")
-    if upload_btn.count() < 1:
+    if upload_btn.count() < 1 and not blocked:
         try:
             upload_btn.first.wait_for(state="attached", timeout=8000)
         except Exception:
             pass
     if upload_btn.count() < 1:
         # Мастер открыт, а шага Media с кнопкой Upload нет. Тоже было молча.
-        _telemetry.record("ad_creative_upload", False, note="upload_button_missing",
-                          diag={"file": Path(creative_path).name,
-                                "past_media": _wizard_past_media(page)})
+        if not blocked and media_state and media_state.get("found"):
+            if media_state.get("disabled"):
+                blocked = "media_step_locked"
+            elif _media_step_behind(media_state):
+                blocked = "media_step_unreachable"
+        why = blocked or "upload_button_missing"
+        shown = {k: v for k, v in (media_state or {}).items() if k not in ("x", "y")}
+        diag = {"file": Path(creative_path).name,
+                "past_media": _wizard_past_media(page),
+                "media_step": shown or None,
+                "clicks": {"media": media_clicks, "next": next_clicks}}
+        # Снимок — пока мастер открыт: к строке шага объявления его уже
+        # закроют, а в странице целиком он съедается обрезкой (ACL-1348).
+        try:
+            from src.fb_ads_rpa import page_capture as _pages
+
+            saved = _pages.capture(page, step="ad_creative_media_step", diag=diag)
+            if saved:
+                diag["page"] = saved
+        except Exception:
+            pass
+        _telemetry.record("ad_creative_upload", False, note=why, diag=diag)
+        _set_upload_why(why)
         return False
 
     # Media-reuse: confirmed live (2026-07-29) that the Media step's own
@@ -9577,6 +9830,9 @@ def upload_ad_creative(
     # stem finds nothing.
     verdict = reuse_before_upload(page, creative_path)
     if verdict is not None:
+        if verdict is False:
+            # Выбор в медиатеке не снялся (запись с подробностями — внутри).
+            _set_upload_why("library_pick_left_selection")
         return verdict
     if reuse_only:
         # Память прогона говорит, что файл уже уходил наверх: второй раз Meta
@@ -9585,6 +9841,7 @@ def upload_ad_creative(
         _close_creative_setup_modal(page)
         _telemetry.record("ad_creative_reuse", None, note="library_has_no_copy",
                           diag={"file": Path(creative_path).name})
+        _set_upload_why("library_has_no_copy")
         return False
 
     # Clear the library search box before uploading. The reuse attempt just
@@ -9726,6 +9983,7 @@ def upload_ad_creative(
         _diag["wizard"] = "closed" if _walk_creative_wizard(page) else "left_open"
         _set_last_upload_diag(_diag)
         if _diag["wizard"] != "closed":
+            _set_upload_why("wizard_left_open")
             return False
 
         # Confirm we're still on the ad editor, not bounced back to the ads
@@ -9736,9 +9994,11 @@ def upload_ad_creative(
                 page.goto(edit_url)
                 _sleep_h(1.0)
             except Exception:
+                _set_upload_why("left_the_ad_editor")
                 return False
 
         if "/ads/edit/" not in page.url:
+            _set_upload_why("left_the_ad_editor")
             return False
 
         # Confirmed live (2026-07-29): being on the right URL says nothing about
@@ -9749,8 +10009,14 @@ def upload_ad_creative(
         # name/budget and ad destination. Wait for Meta's own save indicator to
         # clear, then assert the Ad creative section really left the empty
         # state before reporting success.
-        return _verify_ad_media_present(page)
+        if _verify_ad_media_present(page):
+            return True
+        _set_upload_why("media_not_on_ad")
+        return False
 
+    # Отсюда файл идёт в Meta. Отказ после этой строки — про файл, и память
+    # прогона вправе его запомнить; отказ до неё — про мастер (ACL-1348).
+    _note_file_offered()
     _upload_name = Path(creative_path).name
     landed = False
     for _attempt in range(3):
@@ -9867,6 +10133,7 @@ def upload_ad_creative(
         if landed:
             break
     if not landed:
+        _set_upload_why("file_not_landed")
         return False
 
     # Wait for the upload to actually finish (confirmed live 2026-07-27: a

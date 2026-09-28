@@ -79,6 +79,12 @@ Coverage limit: no Meta JS. `tests/test_rpa_placements_category_recollapse.py` b
 
 Coverage limit: no Meta JS. `tests/test_collapsed_age_row_is_opened.py` emulates the row toggle (click on a collapsed row opens it, click on the open field's header collapses it).
 
+## ACL-1348 empty ad creative under the wizard (live run 2026-09-25)
+
+`ad_creative_media_step_2026_09_25.html` — 956d0d184138/05_ad2_creative_upload (CL_ML Video Day, second ad; step `ad2_creative_upload` failed). The whole `data-surface=".../ad_image_video_selector_section"` block of the ad editor: the "Set up creative" menu trigger (`aria-haspopup=menu`) and "Please specify the media to run with this ad." Cut in offline Chromium: scripts, images and SVG replaced by `<i>`, every attribute except `role`, `aria-*`, `data-surface`, `tabindex`, `type` removed. No account, campaign, page or creative data in the block. Capture truncated at ~3.98 MB; the block is whole, but the creative wizard's portal (end of the document) was cut off entirely — so the wizard's step row ("Creative setup ✓ · Media ✓ · ◐ Text", "Media ✓ · ◐ Creative setup · Crop · …", as seen on the run screenshots of 956d0d184138 and 08ca37a0b941) is synthetic in `tests/test_media_step_reached_or_named.py`. Since ACL-1348 the wizard is captured as its own block (`block_creative_wizard.html`, step `ad_creative_media_step`), so a later capture can replace the synthetic row. UI language: English. Meta build identifier and browser version: not recorded.
+
+Coverage limit: no Meta JS; the real step-row markup (roles, `aria-current`, how a completed step is marked) is unknown.
+
 ## ACL-1324 "Suggest an audience" layout (live run 2026-09-26)
 
 `audience_suggest_layout_2026_09_26.html` — six fragments, each the whole Audience card (from the card header with `#advantage-state-audience-section-header` down to its last row), introduced by a `<!-- fragment: <name> | source: <run>/<step> -->` comment. Cut in offline Chromium from `output/rpa_pages/<run>/<step>/page.html`: scripts, images and SVG replaced by `<i>`, every attribute except `role`, `aria-*`, `id`, `data-surface`, `placeholder`, `type`, `value`, `tabindex`, `hidden`, `href` (set to `#`), `for`, `typeaheadcomponentid` removed; Meta render ids (`js_*`) replaced with `syn_N`; detailed-targeting interests replaced with `Sample interest N`. No account, campaign or creative data in the blocks. All captures were truncated at ~3.98 MB; the Audience card is whole in each. UI language: English. Meta build identifier and browser version: not recorded.
