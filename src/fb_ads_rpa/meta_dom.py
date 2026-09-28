@@ -1803,8 +1803,9 @@ def _click_trusted(page: Page, selector_or_handle, *, timeout: float = 3000) -> 
         except Exception:
             box = None
         if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
-            _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-            return True
+            _mark_press_target(page, handle)
+            pressed = _cdp_mouse_click(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            return pressed is not False
         # No box: either a zero-size hover-only control (DOM click is the
         # only option) or a STALE handle whose node left the document — the
         # virtualised editor recycles nodes constantly, and "clicking" a
@@ -1850,7 +1851,78 @@ def _drop_cdp_input_session(page: Page) -> None:
             pass
 
 
-def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
+#: Что лежит в точке прямо перед нажатием (ACL-1327). Нажатие отменяется,
+#: если в точке — Publish / «Review and publish» (кнопка или что-то внутри
+#: неё) или футер нового редактора (в нём Publish), в любом редакторе; а в
+#: новом редакторе ещё и если цель, помеченная вызывающим
+#: (`data-acl-press-target`), накрыта чем-то другим.
+_PRESS_GUARD_JS = r"""([x, y, token, strict]) => {
+  const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
+  const pub = /^(publish|review and publish( \(\d+\))?|publicar|revisar y publicar)$/i;
+  const target = token ? document.querySelector('[data-acl-press-target="' + token + '"]') : null;
+  if (target) target.removeAttribute('data-acl-press-target');
+  const at = document.elementFromPoint(x, y);
+  if (!at) return {ok: true};
+  for (let n = at, i = 0; n && n.nodeType === 1 && i < 12; n = n.parentElement, i++) {
+    const surface = n.getAttribute('data-surface') || '';
+    if (surface.indexOf('syd_simple_create_publish') !== -1) return {ok: false, why: 'publish'};
+    if (n.matches('button, [role=button], a, [role=link], [role=menuitem]')
+        && (pub.test(norm(n.textContent)) || pub.test(norm(n.getAttribute('aria-label'))))) {
+      return {ok: false, why: 'publish'};
+    }
+    // Футер нового редактора: небольшой блок, в котором живёт его Publish
+    // («By clicking Publish…», Close, Publish). Страница целиком тоже его
+    // содержит, но её текст длинный.
+    if (n.querySelector('[data-surface*="syd_simple_create_publish"]') && norm(n.textContent).length < 400) {
+      return {ok: false, why: 'editor_footer'};
+    }
+  }
+  if (strict && target && target.isConnected && !(target.contains(at) || at.contains(target))) {
+    return {ok: false, why: 'covered'};
+  }
+  return {ok: true};
+}"""
+
+
+def _mark_press_target(page: Page, handle) -> str:
+    """Пометить цель нажатия для охраны `_press_allowed`; "" — не вышло."""
+    import uuid
+
+    token = uuid.uuid4().hex[:12]
+    try:
+        handle.evaluate("(el, t) => el.setAttribute('data-acl-press-target', t)", token)
+    except Exception:
+        return ""
+    page._rpa_press_target = token  # type: ignore[attr-defined]
+    return token
+
+
+def _press_allowed(page: Page, x: float, y: float, token: str) -> bool:
+    """Можно ли нажимать в (x, y) прямо сейчас. False — нажатия не будет.
+
+    ACL-1327, 97314905598e (28.09): кнопка креатива стояла под футером нового
+    редактора, `click_target_covered` записался — и нажатие всё равно ушло в
+    футер (x=1606, y=913), где Publish. Проверка — непосредственно перед
+    нажатием, после пути курсора, а не за 0,3 с до него.
+    """
+    try:
+        strict = _simple.url_is_simple_create(page.url)
+    except Exception:
+        strict = False
+    try:
+        got = page.evaluate(_PRESS_GUARD_JS, [x, y, token or "", strict])
+    except Exception:
+        # Спросить не удалось. В новом редакторе (футер с Publish) не жмём
+        # вслепую; в прежнем — как раньше.
+        got = {"ok": not strict, "why": "unreadable"}
+    if isinstance(got, dict) and got.get("ok") is False:
+        _telemetry.record("click_refused", False, note=str(got.get("why") or ""),
+                          diag={"x": round(float(x)), "y": round(float(y)), "simple": strict})
+        return False
+    return True
+
+
+def _cdp_mouse_click(page: Page, x: float, y: float) -> bool | None:
     """Trusted click via Chrome DevTools Protocol Input domain.
 
     Playwright's connect_over_cdp path can drop/reorder mouse events
@@ -1864,13 +1936,20 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     отвечает — нажатия нет вовсе: для вызывающего это тот же промах, что и
     клик мимо, а проверки после клика и сторож ожидания уже есть.
     """
+    # Цель, помеченная вызывающим (`_mark_press_target`), — только для этого
+    # нажатия: метку снимаем сразу, чтобы она не досталась следующему.
+    token = getattr(page, "_rpa_press_target", "") or ""
+    try:
+        page._rpa_press_target = ""  # type: ignore[attr-defined]
+    except Exception:
+        pass
     if _tab_frozen(page):
         try:
             _telemetry.record("tab_frozen", None, note="cdp_click",
                               diag={"x": round(float(x)), "y": round(float(y))})
         except Exception:
             pass
-        return
+        return None
     for attempt in range(2):
         sent = {"any": False}
         try:
@@ -1907,6 +1986,9 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
                 _sleep_h(0.08)
                 _telemetry.record("click_target_covered", not _hit_changed(page, x, y),
                                   diag={"x": round(x), "y": round(y)})
+            # ACL-1327: последнее слово перед нажатием — что в точке сейчас.
+            if not _press_allowed(page, x, y, token):
+                return False
             for typ, extra in (
                 ("mousePressed", {"button": "left", "buttons": 1, "clickCount": 1}),
                 ("mouseReleased", {"button": "left", "buttons": 0, "clickCount": 1}),
@@ -1914,7 +1996,7 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
                 params = {"type": typ, "x": float(x), "y": float(y), **extra}
                 _send(params)
                 time.sleep(_human_jitter(0.06, 0.4))
-            return
+            return True
         except Exception:
             # Сессия из кэша могла умереть (вкладка закрыта, профиль
             # переподключён). Ничего ещё не отправлено — одна попытка со
@@ -1926,9 +2008,12 @@ def _cdp_mouse_click(page: Page, x: float, y: float) -> None:
     # Fallback: Playwright mouse API
     page.mouse.move(x, y)
     _sleep_h(0.06)
+    if not _press_allowed(page, x, y, token):
+        return False
     page.mouse.down()
     _sleep_h(0.07)
     page.mouse.up()
+    return True
 
 
 #: Что лежит в точке клика до того, как курсор к ней пошёл. Сравнение —
@@ -8744,6 +8829,10 @@ def upload_ad_creative_with_retry(
                 return False
             _telemetry.record("creative_upload_stalled", None, note="reload_and_retry")
             _reload_editor(page, edit_url)
+            if _simple.url_is_simple_create(edit_url or page.url):
+                # ACL-1327: новый редактор после перезагрузки стоит в начале
+                # страницы, раздел «Ad» ещё не дорисован — дойти до него.
+                _simple.back_to_level(page, "ad", "creative_reload")
     # Сдались — но убрать за собой обязаны. Незакрытый диалог перехватывает
     # ВСЕ последующие шаги: 15.09 один отказ загрузки превратился в четыре
     # (`ad_destination`, `ad2_name`, ...), у каждого в диагностике `dialogs: 1`,
@@ -8964,7 +9053,7 @@ def _click_xpath(page: Page, xpath: str, *, scroll: bool = True) -> bool:
     """
     js = """
     (args) => {
-      const [xp, doScroll] = args;
+      const [xp, doScroll, token] = args;
       const it = document.evaluate(xp, document, null,
         XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
       // Visibility by computed style, not by `offsetParent`: an element
@@ -8994,18 +9083,27 @@ def _click_xpath(page: Page, xpath: str, *, scroll: bool = True) -> bool:
       const r = best.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return null;
       if (r.bottom < 0 || r.top > innerHeight) return null;
+      // ACL-1327: метка цели — охрана перед нажатием сверит, что в точке
+      // именно она, а не то, что её накрыло.
+      best.setAttribute('data-acl-press-target', token);
       return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
     }
     """
+    import uuid
+
+    token = uuid.uuid4().hex[:12]
     try:
-        pt = page.evaluate(js, [xpath, scroll])
+        pt = page.evaluate(js, [xpath, scroll, token])
     except Exception:
         return False
     if not pt:
         return False
     try:
-        _cdp_mouse_click(page, pt["x"], pt["y"])
-        return True
+        page._rpa_press_target = token  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    try:
+        return _cdp_mouse_click(page, pt["x"], pt["y"]) is not False
     except Exception:
         return False
 
@@ -9501,9 +9599,13 @@ def _scroll_xpath_into_view(page: Page, xpath: str) -> dict | None:
               if (!best) return null;
               best.scrollIntoView({ block: 'center', behavior: 'instant' });
               const r = best.getBoundingClientRect();
+              // ACL-1327: что лежит в центре кнопки — она сама или то, что её
+              // накрыло (футер нового редактора с Publish, 97314905598e).
+              const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
               return {
                 enabled: best.getAttribute('aria-disabled') !== 'true' && !best.disabled,
                 in_view: r.bottom > 0 && r.top < innerHeight,
+                hit: !!hit && best.contains(hit),
               };
             }
             """,
@@ -9543,6 +9645,10 @@ def _open_creative_wizard(page: Page, trigger_xpath: str, item_xpath: str, *,
     log: list[dict] = []
     remounted = False
     try:
+        simple = _simple.url_is_simple_create(page.url)
+    except Exception:
+        simple = False
+    try:
         wait_editor_saved(page, timeout_s=15)
     except Exception:
         pass
@@ -9560,6 +9666,11 @@ def _open_creative_wizard(page: Page, trigger_xpath: str, item_xpath: str, *,
         if seen is None and not remounted:
             # Прокрутка по долям — дорогая (до ~6 с), поэтому один раз.
             remounted = True
+            if simple:
+                # ACL-1327: в новом редакторе кнопка живёт в разделе «Ad» —
+                # сначала дойти до него (заголовок и поле имени), как после
+                # Next в прежнем мастере; доли прокрутки — уже внутри.
+                note["ad_section"] = bool(_simple.scroll_to_level(page, "ad", budget_s=8.0).get("ok"))
             _scroll_until_mounted(page, _SET_UP_CREATIVE_PRESENT_JS)
             seen = _scroll_xpath_into_view(page, trigger_xpath)
         note["button"] = seen
@@ -9571,6 +9682,16 @@ def _open_creative_wizard(page: Page, trigger_xpath: str, item_xpath: str, *,
                 note["media_on_ad"] = True
                 break
             _sleep_h(0.8)
+            continue
+        if simple and seen.get("hit") is False:
+            # ACL-1327, 97314905598e (28.09, после перезагрузки): кнопка
+            # стояла под футером нового редактора (`click_target_covered`,
+            # y=913), и нажатие ушло в футер — а в футере Publish. Накрытую
+            # кнопку не жмём: ждём, пока страница дорисуется, и в следующей
+            # попытке прокручиваем к ней заново.
+            note["covered"] = True
+            log.append(note)
+            _sleep_h(1.0)
             continue
         _sleep_h(0.3)
         menu = False
@@ -14261,10 +14382,60 @@ _AUDIENCE_FIELD_DOM = r"""
 """
 
 _LOCATION_SUMMARY_JS = "() => {" + _AUDIENCE_FIELD_DOM + r"""
+  const countries = (t) => t.split(':').slice(1).join(':').split(',').map(norm).filter(Boolean);
   const field = summaryField(/^(Locations|Ubicaciones)$/i, /^(Inclusion|Inclusión|Incluir)\s*:/i);
-  if (!field) return null;
-  return norm(field.summary.textContent).split(':').slice(1).join(':')
-    .split(',').map(norm).filter(Boolean);
+  if (field) {
+    // ACL-1327, 28.09 (97314905598e/01_audience_location): сводка —
+    // `<span><strong>Inclusion:</strong> Colombia</span>`. Лист — только
+    // `<strong>Inclusion:</strong>`, страны лежат рядом текстом родителя.
+    // Поднимаемся к родителю (не выходя из поля), пока после двоеточия
+    // ничего нет.
+    let node = field.summary, text = norm(node.textContent);
+    for (let i = 0; i < 3 && !countries(text).length && node.parentElement; i++) {
+      node = node.parentElement;
+      if (!field.boxes.some(b => b.contains(node))) break;
+      text = norm(node.textContent);
+    }
+    const got = countries(text);
+    // Рядом со строкой Meta держит `<ul>` (во всех снимках пустой). Если в
+    // нём окажется ещё одна включённая страна — она тоже в списке, и
+    // «ровно наша страна» не пройдёт. Строки «Exclusion: …» рынок не
+    // добавляют.
+    const lists = node.parentElement
+      ? [...node.parentElement.children].filter(c => c !== node && (c.tagName === 'UL' || c.getAttribute('role') === 'list'))
+      : [];
+    for (const list of lists) {
+      const items = [...list.querySelectorAll('li, [role=listitem]')];
+      for (const t of (items.length ? items : [list]).map(e => norm(e.textContent)).filter(Boolean)) {
+        if (/^(Exclusion|Exclusión|Excluir)\s*:/i.test(t)) continue;
+        const own = /^(Inclusion|Inclusión|Incluir)\s*:/i.test(t) ? countries(t) : t.split(',').map(norm).filter(Boolean);
+        got.push(...own);
+      }
+    }
+    return got;
+  }
+  // Новый редактор «в один экран» (ACL-1327, 97314905598e/02): свёрнутая
+  // карточка Audience — сетка «заголовок | значение» внутри кнопки-сводки
+  // (`role=button aria-pressed`): «Locations | Colombia». Значение —
+  // соседний элемент ячейки заголовка. Кнопка — именно карточки Audience:
+  // её `aria-labelledby` указывает на шапку `role=toolbar` с заголовком
+  // «Audience» (как в `simple_create._CARD_JS`), а не любая плитка с
+  // заголовком «Locations».
+  const audienceBars = new Set([...document.querySelectorAll('[role=toolbar] [role=heading]')]
+    .filter(h => /^(Audience|Público)$/i.test(norm(h.textContent)))
+    .map(h => h.closest('[role=toolbar]')).filter(b => b && b.id).map(b => b.id));
+  const inAudienceCard = (h) => {
+    const btn = h.closest('[role=button][aria-pressed]');
+    return !!btn && (btn.getAttribute('aria-labelledby') || '').split(/\s+/).some(id => audienceBars.has(id));
+  };
+  const heads = [...document.querySelectorAll('[role=heading]')]
+    .filter(h => /^(Locations|Ubicaciones)$/i.test(norm(h.textContent)) && visible(h) && inAudienceCard(h));
+  if (heads.length !== 1) return null;
+  let cell = heads[0];
+  for (let i = 0; i < 4 && cell && !cell.nextElementSibling; i++) cell = cell.parentElement;
+  const value = cell && cell.nextElementSibling;
+  if (!value || value.querySelector('[role=heading]')) return null;
+  return norm(value.textContent).split(',').map(norm).filter(Boolean);
 }
 """
 """Свёрнутая строка «Inclusion: Colombia» поля Locations — страны списком."""

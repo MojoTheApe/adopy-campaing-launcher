@@ -99,3 +99,15 @@ Coverage limit: no Meta JS. `tests/test_collapsed_age_row_is_opened.py` emulates
 State: objective Leads (chosen in the dialog before the editor), Conversion location "Instant forms" with the Page selector and the card "Please read and accept Meta's Lead Ads Terms" / "Terms of Service Not Accepted"; collapsed summary cards (`role=button aria-pressed=false` + `<div hidden>` body): Campaign details (objective radio list inside), Budget & schedule, Audience ("Suggest an audience" layout with "Further limit the reach of your ads" + "Save audience" in the hidden body), Placements, Identity; Budget, Ad setup and Destination expanded.
 
 Coverage limit: no Meta JS — card expansion and the objective choice are emulated by `tests/test_the_single_screen_editor_is_walked.py`. The Conversion location option list, the ad-level state after Website, the creative wizard and adding a second ad were never captured in this editor. The loading shell of the same editor (c98a1c094dfc/00_simple_create_layout: footer Publish + `role=progressbar` "Loading...") is inlined in the test.
+
+## ACL-1327 single-screen editor Locations (live run 2026-09-28)
+
+`locations_simple_create_2026_09_28.html` — run 97314905598e (Facebook_1443, CO_bnc_All_Video_FX, `simple_create` editor), captures truncated at 3.98 MB but the blocks are whole. Three fragments: `field_target` (01_audience_location — the Locations field collapsed back into its summary `<span><strong>Inclusion:</strong> Colombia</span>` after the robot removed the default country; row `role=button aria-expanded=false`), `field_default` (00_advantage_plus_still_on — the same field before the step, `Inclusion: United States`), `card_summary` (02_ad_creative_upload — the Audience card's `role=toolbar` header (heading "Audience", badge "Advantage+ off") and the card collapsed into its `role=button aria-pressed=false` summary grid "Locations | Colombia", labelled by that toolbar). Classes, `data-auto-logging-id`, links and SVG paths removed; the toolbar id and the card's `aria-labelledby` render id replaced with `syn_1`; an empty `id` dropped. No account or campaign data in the blocks. UI language: English. Meta build identifier and browser version: not recorded.
+
+Coverage limit: no Meta JS; `tests/test_simple_create_location_summary.py` emulates the collapse of the open field into the captured summary after the X of the extra country.
+
+## ACL-1327 single-screen editor footer (live run 2026-09-28)
+
+`editor_footer_simple_create_2026_09_28.html` — 97314905598e/02_ad_creative_upload (capture truncated at 3.98 MB, the block is whole): the footer of the `simple_create` editor — "By clicking **Publish**, you acknowledge…" line, `Close` button and the `Publish` button `data-surface="/am/lib:syd_simple_create_publish"`. Classes, `data-auto-logging-id`, `data-interactable`, links and SVG paths removed. No account or campaign data. UI language: English. Meta build identifier and browser version: not recorded.
+
+Coverage limit: no Meta CSS — `tests/test_no_press_lands_on_publish.py` pins it as a full-width fixed bar over the target, the way the live screenshot shows it.
