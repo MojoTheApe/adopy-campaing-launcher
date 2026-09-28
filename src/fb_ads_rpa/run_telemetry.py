@@ -89,13 +89,23 @@ def normalise_step(label: str) -> tuple[str, bool | None]:
 #: ни с одним паттерном. `_flex_key()` делает подчёркивание между частями
 #: составного имени необязательным — один шаблон ловит snake_case И
 #: camelCase/PascalCase сразу, без отдельного списка вариантов на каждое имя.
+#:
+#: PR #343, ревью раунд 2: необязательным было только `_`, и целиком утекали
+#: имена через дефис, точку и пробел (`REFRESH-TOKEN`, `refresh.token`,
+#: `refresh token`) — а это как раз имена HTTP-заголовков: `x-api-key`,
+#: `X-Api-Key`, `X-Refresh-Token`. Разделитель между частями теперь любой из
+#: `[-_. ]` или никакой.
+_KEY_SEP = r"[-_. ]?"
+
+
 def _flex_key(name: str) -> str:
-    return name.replace("_", "_?")
+    return name.replace("_", _KEY_SEP)
 
 
 _SECRET_KEY_NAMES = (
     "refresh_token", "access_token", "token", "client_secret", "api_key",
-    "proxy_pass", "passwd", "password", "authorization", "fb_dtsg", "lsd",
+    "proxy_password", "proxy_pass", "passwd", "password", "authorization",
+    "fb_dtsg", "lsd",
 )
 _SECRET_KEYS = "(?:" + "|".join(_flex_key(k) for k in _SECRET_KEY_NAMES) + ")"
 
@@ -108,6 +118,22 @@ _SECRET_KEYS = "(?:" + "|".join(_flex_key(k) for k in _SECRET_KEY_NAMES) + ")"
 _SECRET_KEYS_BARE = "(?:" + "|".join(
     _flex_key(k) for k in _SECRET_KEY_NAMES if k != "authorization"
 ) + ")"
+
+#: Секретное имя сверяется по ОКОНЧАНИЮ ключа: `x-api-key`, `X_Refresh_Token`,
+#: `xApiKey`, `csrf_token` — префикс может быть любым.
+#:
+#: В кавычках (`"x-api-key": …`) ключ целиком стоит между кавычками, поэтому
+#: префикс — ограниченная (≤ 40) ленивая серия символов имени перед секретным
+#: окончанием: на каждой кавычке не больше 41 попытки, без вложенных
+#: квантификаторов — линейно.
+_QUOTED_KEY_PREFIX = r"[A-Za-z0-9_.\- ]{0,40}?"
+#: Без кавычек префикс не захватывается, а начало имени требуется на границе:
+#: либо перед ним не буква/цифра (`X-Api-Key`, `x_api_key` — `_` здесь тоже
+#: граница, в отличие от `\b`), либо это «горб» camelCase (`xApiKey`,
+#: `csrfToken`: строчная/цифра, затем заглавная; сверяется с учётом регистра
+#: через `(?-i:…)`, иначе `re.I` превратил бы проверку в «любые две буквы» и
+#: `monkeyapikey` резалось бы посередине).
+_BARE_KEY_START = r"(?:(?<![A-Za-z0-9])|(?-i:(?<=[a-z0-9])(?=[A-Z])))"
 
 #: Значение в кавычках после «голого» ключа. Закрывающая кавычка
 #: необязательна и перевод строки внутрь не входит — см. `_QUOTED_VALUE`.
@@ -140,13 +166,13 @@ _SCRUB = (
     # пробелами вокруг двоеточия, кавычки ключа и значения не обязаны
     # совпадать друг с другом. Экранированная кавычка (`\"`) внутри значения
     # поглощается парой `\\.` и не закрывает его раньше времени.
-    (re.compile(rf'(["\'])({_SECRET_KEYS})\1(\s*:\s*)(["\']){_QUOTED_VALUE}', re.I),
+    (re.compile(rf'(["\'])({_QUOTED_KEY_PREFIX}{_SECRET_KEYS})\1(\s*:\s*)(["\']){_QUOTED_VALUE}', re.I),
      lambda m: f"{m.group(1)}{m.group(2)}{m.group(1)}{m.group(3)}{m.group(4)}<hidden>{m.group(6) or ''}"),
     # key=value / key: value без кавычек вокруг имени, внутри произвольного
     # текста лога — то, что раньше проверял единственный `(...)=` паттерн.
-    (re.compile(rf'\b({_SECRET_KEYS_BARE})(\s*[:=]\s*){_BARE_VALUE}', re.I),
+    (re.compile(rf'{_BARE_KEY_START}({_SECRET_KEYS_BARE})(\s*[:=]\s*){_BARE_VALUE}', re.I),
      lambda m: f"{m.group(1)}{m.group(2)}<hidden>"),
-    (re.compile(rf'\b(authorization)(\s*=\s*){_BARE_VALUE}', re.I),
+    (re.compile(rf'{_BARE_KEY_START}(authorization)(\s*=\s*){_BARE_VALUE}', re.I),
      lambda m: f"{m.group(1)}{m.group(2)}<hidden>"),
     (re.compile(r"\bBearer [A-Za-z0-9._~+/-]{1,16384}", re.I), "Bearer <hidden>"),
     (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
@@ -174,22 +200,39 @@ def scrub(text: str) -> str:
 #: стороны (имя из словаря и имя из списка) сравниваются без подчёркиваний,
 #: так что `refreshToken`, `refresh_token` и `REFRESH_TOKEN` бьют в одну и
 #: ту же запись.
+#:
+#: PR #343, ревью раунд 2: разделителями бывают и `-`, `.`, пробел
+#: (`X-Api-Key`, `refresh-token`, `refresh.token`), а у заголовков — префикс
+#: (`x-api-key`). Имя нормализуется без `[-_. ]`, и секретом считается и
+#: точное совпадение, и совпадение по окончанию. Для совпадения только по
+#: окончанию значение прячется, если это не флаг/число/None: `has_token: True`
+#: — диагностика («есть ли токен»), а не сам токен, и в Sentry должен остаться.
 _SECRET_DICT_KEYS = {
     "token", "access_token", "refresh_token", "password", "passwd",
-    "client_secret", "api_key", "apikey", "proxy_pass",
+    "client_secret", "api_key", "apikey", "proxy_pass", "proxy_password",
     "authorization", "fb_dtsg", "lsd",
 }
-_SECRET_DICT_KEYS_NORM = {k.replace("_", "") for k in _SECRET_DICT_KEYS}
+_KEY_NORM_DROP = re.compile(r"[-_. ]")
+_SECRET_DICT_KEYS_NORM = {_KEY_NORM_DROP.sub("", k) for k in _SECRET_DICT_KEYS}
 
 
-def _is_secret_dict_key(key: object) -> bool:
-    return str(key).lower().replace("_", "") in _SECRET_DICT_KEYS_NORM
+def _norm_key(key: object) -> str:
+    return _KEY_NORM_DROP.sub("", str(key).lower())
+
+
+def _hides_dict_value(key: object, item: object) -> bool:
+    norm = _norm_key(key)
+    if norm in _SECRET_DICT_KEYS_NORM:
+        return True
+    if isinstance(item, (bool, int, float)) or item is None:
+        return False
+    return any(norm.endswith(name) for name in _SECRET_DICT_KEYS_NORM)
 
 
 def scrub_diag(value):
     """Explicit step diagnostics share the same export boundary as page context."""
     if isinstance(value, dict):
-        return {key: ("<hidden>" if _is_secret_dict_key(key) else scrub_diag(item))
+        return {key: ("<hidden>" if _hides_dict_value(key, item) else scrub_diag(item))
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [scrub_diag(item) for item in value]

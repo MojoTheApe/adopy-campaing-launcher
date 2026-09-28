@@ -95,6 +95,25 @@ def _scrub_in_child(text: str, secret: str) -> dict:
     return json.loads(r.stdout.strip().splitlines()[-1])
 
 
+#: Раунд 2, второй пункт: префикс перед секретным окончанием ключа
+#: (`x-api-key`) и граница camelCase. Префикс ограничен 40 символами и ленив,
+#: вложенных квантификаторов нет — эти входы проверяют, что так и осталось.
+KEY_PREFIX_CASES = {
+    "many_long_quoted_non_secret_keys": ('"' + "a-" * 20 + '":"v",') * 2_300,
+    "unclosed_quoted_key_run": '"' + "a-b." * 25_000,
+    "hyphen_run": "a-" * 50_000,
+    "dot_run": "x." * 50_000,
+    "camel_hump_run": "aB" * 50_000,
+    "separator_colon_run": "token:" * 16_000,
+}
+
+
+@pytest.mark.parametrize("name", list(KEY_PREFIX_CASES))
+def test_key_prefix_matching_stays_linear(name):
+    got = _scrub_in_child(KEY_PREFIX_CASES[name], "\x00never-present\x00")
+    assert got["dt"] < LIMIT_S, f"{name}: scrub() занял {got['dt']:.3f} с (потолок {LIMIT_S} с)"
+
+
 @pytest.mark.parametrize("name", list(CASES))
 def test_a_cut_secret_is_scrubbed_fast(name):
     text, secret = CASES[name]

@@ -180,3 +180,97 @@ def test_both_bugs_are_fixed_through_the_real_acl_sentry_before_send_path():
     # исходное событие не мутируется — тот же контракт, что уже проверяет
     # test_report_delivery_review.py::test_nested_secret_fields_are_removed_at_final_event_boundary
     assert event["contexts"]["diag"]["refreshToken"] == "abc123XYZsecretvalue"
+
+
+# ── PR #343 ревью раунд 2: дефис, точка, пробел и префикс заголовка ───────
+
+SECRET = "s3cr3tVALUE-777"
+
+SEPARATOR_AND_PREFIX_CASES = [
+    # JSON
+    '{"x-api-key":"' + SECRET + '"}',
+    '{"api-key":"' + SECRET + '"}',
+    '{"REFRESH-TOKEN":"' + SECRET + '"}',
+    '{"refresh.token":"' + SECRET + '"}',
+    '{"refresh token":"' + SECRET + '"}',
+    '{"X-Client-Secret":"' + SECRET + '"}',
+    '{"xApiKey":"' + SECRET + '"}',
+    '{"proxy-password":"' + SECRET + '"}',
+    # python-repr
+    "{'X-Refresh-Token': '" + SECRET + "'}",
+    "{'x.api.key': '" + SECRET + "'}",
+    # «голая» форма, в т.ч. заголовки HTTP
+    "X-Api-Key: " + SECRET,
+    "x-refresh-token=" + SECRET,
+    "REFRESH-TOKEN=" + SECRET,
+    "refresh.token=" + SECRET,
+    "refresh token: " + SECRET,
+    "x_api_key=" + SECRET,
+    "xApiKey=" + SECRET,
+    "Proxy-Password: " + SECRET,
+]
+
+
+@pytest.mark.parametrize("raw", SEPARATOR_AND_PREFIX_CASES)
+def test_hyphen_dot_space_and_header_prefix_spellings_are_redacted(raw):
+    cleaned = rt.scrub(raw)
+    assert SECRET not in cleaned, f"написание ключа пережило scrub(): {cleaned!r}"
+    assert "<hidden>" in cleaned
+
+
+def test_the_key_name_itself_stays_visible():
+    """Форма данных должна остаться читаемой — прячется значение, не имя."""
+    assert rt.scrub('{"X-Api-Key":"' + SECRET + '"}') == '{"X-Api-Key":"<hidden>"}'
+    assert rt.scrub("X-Refresh-Token: " + SECRET) == "X-Refresh-Token: <hidden>"
+
+
+def test_authorization_bearer_is_still_handled_by_the_bearer_pattern():
+    """Регрессия, которую уже раз ловили: заголовок с двоеточием не должен
+    разбираться как key/value и отрезать слово "Bearer" вместо токена."""
+    assert rt.scrub("Authorization: Bearer abc.123-456_XYZ") == "Authorization: Bearer <hidden>"
+    assert rt.scrub("X-Authorization: Bearer abc.123-456_XYZ") == "X-Authorization: Bearer <hidden>"
+
+
+@pytest.mark.parametrize("raw", [
+    "tokenized_count=5 rows processed",
+    "max_tokens=100",
+    "monkeyapikey=banana",  # сплошная строчная каша — не camelCase-граница
+    '{"campaign":"SA_sa_All_Image_Mix"}',
+])
+def test_names_that_only_look_similar_are_left_alone(raw):
+    assert rt.scrub(raw) == raw
+
+
+def test_scrub_diag_matches_separator_and_prefix_spellings_in_real_dicts():
+    diag = {
+        "X-Api-Key": SECRET,
+        "refresh-token": SECRET,
+        "refresh.token": SECRET,
+        "x_client_secret": SECRET,
+        "csrfToken": SECRET,
+        "campaign": "ok",
+    }
+    cleaned = rt.scrub_diag(diag)
+    for key in ("X-Api-Key", "refresh-token", "refresh.token", "x_client_secret", "csrfToken"):
+        assert cleaned[key] == "<hidden>", f"{key} не скрыт: {cleaned[key]!r}"
+    assert cleaned["campaign"] == "ok"
+
+
+def test_scrub_diag_keeps_flags_and_counters_whose_name_only_ends_in_a_secret_word():
+    """`has_token: True` — это «есть ли токен», а не токен. Совпадение только
+    по окончанию имени прячет строки, но не флаги и числа; точное имя
+    (`token`) прячется всегда, как и раньше."""
+    cleaned = rt.scrub_diag({"has_token": True, "tokens_left": 3, "token": True})
+    assert cleaned["has_token"] is True
+    assert cleaned["tokens_left"] == 3
+    assert cleaned["token"] == "<hidden>"
+
+
+def test_separator_spellings_are_hidden_through_the_real_acl_sentry_path():
+    event = {"contexts": {"diag": {
+        "X-Api-Key": SECRET,
+        "raw_headers": "X-Refresh-Token: " + SECRET,
+        "raw_json": '{"refresh.token":"' + SECRET + '"}',
+    }}}
+    safe = acl_sentry._before_send(event, {})
+    assert SECRET not in str(safe), f"секрет доехал до Sentry: {safe!r}"
