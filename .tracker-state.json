@@ -580,16 +580,16 @@
         "verdict": "approved",
         "reviewer": "independent subagent (Claude Opus 5.5)",
         "implementer": "ACL-1327 implementation subagent",
-        "head_sha": "4469377522b7c33f164582dbcddd6963e7f49af9",
-        "base_sha": "47152afe0febf85145b04bf9c18f1ec0cf98af8d",
-        "tree_sha": "1c89a2257fd15375614a89e26211eaa3626ece46",
-        "report": "Re-review of c9b276b..4469377: the only change is the LEAD_TERMS message string in src/fb_ads_rpa/profile_trouble.py, which now contains both 'Lead Generation terms' (what the dashboard progress test expects) and 'Lead Ads Terms'; no logic or policy changes. In a fresh detached worktree, tests/test_campaign_build_progress.py (20), test_the_single_screen_editor_flow.py (17), test_the_single_screen_editor_is_walked.py (28) and test_failure_policy.py (9) all pass. The v2 approval (F1-F5 resolved, 8/8 mutations caught) carries over.",
+        "head_sha": "ff0e32e67cc255ad945ed721779a3a889c1ea4f9",
+        "base_sha": "feae4e8893d9f6496395453b34244c5f2e9db809",
+        "tree_sha": "f145ad204e23a1c99389ac71d08d6755711282ae",
+        "report": "Prior chain: review340_v3 approved PR #340 at 4469377 and review340_v4 approved it at ae7ccfb. This review covers the delta ae7ccfb..ff0e32e. Commit 5aca824 changes the Locations summary: countries in the sibling <ul> are now counted, Exclusion lines are skipped, a second Inclusion line is treated as ambiguous, and the grid is anchored to the Audience toolbar through aria-labelledby. Commit ff0e32e adds _press_allowed, which checks elementFromPoint right before every press in both the CDP and Playwright branches of _cdp_mouse_click. It refuses Publish, Review and publish, the simple_create publish surface and the simple_create footer in both editors. In simple_create only, it also refuses a marked target that something else covers. Classic flow: I found no false refusals. The Publish text rule compares the element's own label for exact equality, and the only containment check (the footer rule) needs the simple_create publish surface plus under 400 characters of text. A scan of every control in 20 classic fixtures, the simple_create fixture and the three live 97314905598e captures refused only the footer's Publish, Close and Terms link. The nearest footer-containing ancestor of any other control holds 8983 to 10404 characters. The robot never presses Publish by design: rpa_publisher forces DRAFT, and the LLM agent's ACTIVE path uses locator.click, which this guard does not touch. The guard covers the single _cdp_mouse_click funnel, which includes all _click_xpath and _click_trusted calls. It does not cover 18 force=True locator clicks or raw page.mouse.click at meta_dom.py 1073, 2299 and 7737 (1073 clicks blind offsets). Focus-checked Enter/Space presses and DOM el.click() calls also bypass it, but none of these targets Publish. The location check still rejects wrong and extra countries, and on the full live captures it returns False for 00 (United States) and True for 01 and 02 (Colombia). All 149 robot test files pass (2093 tests). Ten of eleven mutations were killed. The one survivor removes the 400-character footer threshold, which no test pins. Non-blocking follow-ups: add a test that a normal control on a simple_create page with the footer present is pressed; route force and raw coordinate clicks (especially 1073) through _press_allowed; the Publish label rule knows only English and Spanish. Verdict: approved.",
         "main_sha": "3e816217f9c352f0922522264d6a26f7343ba947",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
           327
         ],
-        "recorded_at": "2026-09-27T12:33:29+00:00"
+        "recorded_at": "2026-09-28T11:07:18+00:00"
       }
     },
     "stage": {
