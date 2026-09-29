@@ -11,6 +11,7 @@ form fields and violated the product's manual-final-publish boundary.
 """
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import threading
 import uuid
@@ -128,12 +129,34 @@ def cancel_job(job_id: str) -> dict[str, Any]:
     _slots.wake()
 
     if publisher is not None:
+        _cancel_publisher(publisher)
+
+    return {"ok": True, "job_id": job_id}
+
+
+def _cancel_publisher(publisher: Any) -> None:
+    """Отменить публикатор, не трогая поток с работающим циклом asyncio.
+
+    `publisher.cancel()` закрывает sync Playwright задания, а закрытие
+    (`BrowserConnection.close` → `_reset_asyncio_running_loop`) стирает метку
+    «текущий цикл» того потока, где выполняется. Вызванная из цикла uvicorn,
+    отмена оставляла сервер без цикла: 29.09 12:55 — «loop … is not the
+    running loop», «There is no current event loop in thread 'MainThread'»,
+    дешборд перестал отвечать (ACL-1380). Маршрут отмены уже зовёт нас в
+    потоке; это страховка для любого другого вызова из async-кода.
+    """
+    def _cancel() -> None:
         try:
             publisher.cancel()
         except Exception:
             pass
 
-    return {"ok": True, "job_id": job_id}
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        _cancel()  # обычный поток — отменяем здесь же
+        return
+    threading.Thread(target=_cancel, daemon=True, name="acl-job-cancel").start()
 
 
 def slots_snapshot() -> dict[str, Any]:

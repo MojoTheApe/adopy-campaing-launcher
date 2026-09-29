@@ -1,7 +1,10 @@
 """Загрузка правил чтения данных для analyze_fb_stats (редактируйте analysis_reading_rules.json)."""
 import json
+import os
+import stat
+import threading
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 _CONFIG_DIR = Path(__file__).resolve().parent
 _RULES_PATH = _CONFIG_DIR / "analysis_reading_rules.json"
@@ -13,14 +16,41 @@ _DEFAULT_TEXT_SEGMENTS: Dict[str, List[str]] = {
 }
 
 
+# Разобранный файл правил, ключ — (путь, mtime_ns, размер). Без кэша сборка
+# отчёта открывала и разбирала этот JSON на каждую строку книги: 58 тыс.
+# чтений, ~53 с из 108 холодного открытия (ACL-1380). Правка файла меняет
+# mtime/размер — и следующий вызов читает его заново, перезапуск не нужен.
+_raw_cache: Optional[Tuple[Tuple[str, int, int], Dict[str, Any]]] = None
+_raw_lock = threading.Lock()
+
+
 def _load_raw() -> Dict[str, Any]:
-    if not _RULES_PATH.is_file():
-        return {}
+    """Содержимое analysis_reading_rules.json. Результат только для чтения."""
+    global _raw_cache
+    path = _RULES_PATH
     try:
-        with open(_RULES_PATH, encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
+        st = os.stat(path)
+    except OSError:
         return {}
+    if not stat.S_ISREG(st.st_mode):
+        return {}
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    cached = _raw_cache
+    if cached is not None and cached[0] == key:
+        return cached[1]
+    with _raw_lock:
+        cached = _raw_cache
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        _raw_cache = (key, data)
+        return data
 
 
 def get_text_segment_dictionary() -> Dict[str, List[str]]:

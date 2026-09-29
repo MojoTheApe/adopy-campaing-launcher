@@ -37,6 +37,7 @@ from src.analysis_agent.section_filters import (
     NA_SENTINEL,
     interest_bucket_display,
     interest_bucket_key,
+    interest_bucket_keys,
 )
 from src.knowledge_agent.knowledge_base import format_target_context_line, get_all_targets
 from config.benchmarks import compute_country_medians, get_benchmark
@@ -661,7 +662,7 @@ def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, 
     if df_c.empty or "Interest" not in df_c.columns:
         return []
 
-    df_c["_interest_bucket"] = df_c["Interest"].map(interest_bucket_key)
+    df_c["_interest_bucket"] = interest_bucket_keys(df_c["Interest"])
 
     grouped = (
         df_c.groupby("_interest_bucket", dropna=False)

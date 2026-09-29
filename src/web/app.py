@@ -12,6 +12,7 @@ from __future__ import annotations
 from src.analysis_agent.country_names import COUNTRY_CODES as _COUNTRY_CODES
 
 import asyncio
+import functools
 import ipaddress
 import json
 import math
@@ -20,6 +21,8 @@ import re as _re
 import re
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlencode, urlsplit
@@ -343,6 +346,9 @@ def resolve_period(df, date_from: str, date_to: str, span: str) -> tuple[str, st
 #: около секунды, и без кэша она случалась бы на каждом переключении вкладки.
 _PERIOD_CACHE: dict[tuple, dict] = {}
 _PERIOD_CACHE_MAX = 8
+# Отчёт за период считается в рабочих потоках (страница, фрагменты, прогрев):
+# один расчёт за раз, второй с тем же ключом берёт готовое (ACL-1380).
+_PERIOD_LOCK = threading.Lock()
 
 
 class PeriodReportError(RuntimeError):
@@ -375,25 +381,30 @@ def report_for_period(report: dict, df, date_from: str, date_to: str) -> dict:
     if hit is not None:
         return hit
 
-    rows = _filter_by_period(df, date_from, date_to)
-    try:
-        from src.analysis_agent.morning_service import load_morning_report
+    with _PERIOD_LOCK:
+        hit = _PERIOD_CACHE.get(key) if cacheable else None
+        if hit is not None:
+            return hit
 
-        scoped, _df, _warnings = load_morning_report(
-            excel_path=report.get("source_excel"),
-            my_cm=report.get("my_cm") or get_selected_cm(),
-            enriched_df=rows, account_rows_cached=report.get("_account_rows")
-        )
-    except Exception as exc:
-        raise PeriodReportError("Could not calculate the selected period. Refresh and try again.") from exc
+        rows = _filter_by_period(df, date_from, date_to)
+        try:
+            from src.analysis_agent.morning_service import load_morning_report
 
-    scoped["period_from"] = date_from
-    scoped["period_to"] = date_to
-    if cacheable:
-        if len(_PERIOD_CACHE) >= _PERIOD_CACHE_MAX:
-            _PERIOD_CACHE.pop(next(iter(_PERIOD_CACHE)))
-        _PERIOD_CACHE[key] = scoped
-    return scoped
+            scoped, _df, _warnings = load_morning_report(
+                excel_path=report.get("source_excel"),
+                my_cm=report.get("my_cm") or get_selected_cm(),
+                enriched_df=rows, account_rows_cached=report.get("_account_rows")
+            )
+        except Exception as exc:
+            raise PeriodReportError("Could not calculate the selected period. Refresh and try again.") from exc
+
+        scoped["period_from"] = date_from
+        scoped["period_to"] = date_to
+        if cacheable:
+            if len(_PERIOD_CACHE) >= _PERIOD_CACHE_MAX:
+                _PERIOD_CACHE.pop(next(iter(_PERIOD_CACHE)))
+            _PERIOD_CACHE[key] = scoped
+        return scoped
 
 
 def _filter_by_period(df, date_from: str, date_to: str):
@@ -933,10 +944,67 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     return result
 
 
+def background_work_enabled() -> bool:
+    """Фоновые потоки дешборда (прогрев отчёта, обновление библиотеки таргетов).
+
+    Включает serve.py. Тесты и разовые импорты app их не запускают: поток,
+    который сам читает книгу или ходит в сеть, ломал бы их изоляцию.
+    """
+    return (os.environ.get("ACL_DASHBOARD_BACKGROUND") or "").strip() == "1"
+
+
+_targets_refresh_lock = threading.Lock()
+_targets_refresh_running = False
+_targets_refresh_started = -1e9
+# Не чаще, чем team_library сама считает копию свежей.
+_TARGETS_REFRESH_EVERY_S = 15.0
+
+
+def refresh_team_targets_in_background() -> bool:
+    """Обновить копию библиотеки таргетов в своём потоке. True — поток запущен.
+
+    Раньше страница звала `pull(force=True)` прямо при сборке: HTTPS-запрос к
+    GitHub с таймаутом 15 с почти на каждой перезагрузке (ACL-1380). Теперь
+    страница берёт то, что уже лежит на машине, а свежая копия приходит к
+    следующему открытию. Одновременно идёт не больше одного обновления.
+    """
+    global _targets_refresh_running, _targets_refresh_started
+    if not background_work_enabled():
+        return False
+    with _targets_refresh_lock:
+        now = time.monotonic()
+        if _targets_refresh_running or now - _targets_refresh_started < _TARGETS_REFRESH_EVERY_S:
+            return False
+        _targets_refresh_running = True
+        _targets_refresh_started = now
+
+    def _pull() -> None:
+        global _targets_refresh_running
+        try:
+            from src.analysis_agent import targeting_registry as tr
+            tr.pull(force=True)
+        except Exception as exc:  # noqa: BLE001 — ошибка связи уже в статусе библиотеки
+            print(f"[targets] background refresh failed: {exc}", file=sys.stderr)
+        finally:
+            with _targets_refresh_lock:
+                _targets_refresh_running = False
+
+    try:
+        threading.Thread(target=_pull, daemon=True, name="acl-targets-refresh").start()
+    except Exception:
+        with _targets_refresh_lock:
+            _targets_refresh_running = False
+        return False
+    return True
+
+
 def _load_sheet_targets() -> list[dict]:
-    """The team targeting library (read copy refreshed from the repository)."""
+    """The team targeting library (the read copy already on this machine).
+
+    Сеть здесь не трогается: обновление копии уходит в фон (ACL-1380).
+    """
     from src.analysis_agent import targeting_registry as tr
-    tr.pull(force=True)
+    refresh_team_targets_in_background()
     return [{"code": t.name, "label": t.name, "fb_interest": t.rpa_interests()}
             for t in tr.all_targets()]
 
@@ -1134,6 +1202,22 @@ _NCOLS_BY_SECTION = {
 }
 
 app = FastAPI(title="Adopy Campaigns Launcher")
+
+
+def _in_worker_thread(fn):
+    """Обработчик остаётся `async`, а его тело работает в рабочем потоке.
+
+    Сборка отчёта — это секунды (холодная — десятки секунд) синхронного
+    pandas. Пока она шла прямо в `async def`, цикл uvicorn стоял целиком:
+    не отвечали другие вкладки, статус идущих заданий, кнопки (ACL-1380).
+    Сигнатура та же (FastAPI читает её через `__wrapped__`), и вызов
+    `asyncio.run(handler(...))` в тестах работает как раньше.
+    """
+    @functools.wraps(fn)
+    async def handler(*args, **kwargs):
+        return await asyncio.to_thread(fn, *args, **kwargs)
+
+    return handler
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 _MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -1772,15 +1856,43 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
     return country_val or country, account_label, slots
 
 
+def _warm_default_report() -> None:
+    """Прогрев (ACL-1380): то, что иначе считал бы первый GET /.
+
+    Отчёт по книге, отчёт за период по умолчанию (страница без параметров
+    показывает именно его) и справочники билдера. Тот же код и те же кэши,
+    что у страницы, — прогрев ничего не считает по-своему.
+    """
+    report, df, _warnings = get_cached_report()
+    date_from, date_to = resolve_period(df, "", "", "")
+    report_for_period(report, df, date_from, date_to)
+    _load_ref_options()
+
+
+def _start_background_work() -> None:
+    """Старт сервера: прогрев отчёта и копии библиотеки таргетов в фоне."""
+    if not background_work_enabled():
+        return
+    from src.web import report_warmup
+
+    refresh_team_targets_in_background()
+    report_warmup.start(_warm_default_report)
+
+
+app.router.on_startup.append(_start_background_work)
+
+
 @app.get("/", response_class=HTMLResponse)
-async def index(
+@_in_worker_thread
+def index(
     request: Request, date_from: str = "", date_to: str = "", span: str = ""
 ) -> HTMLResponse:
     return _render_report(request, date_from=date_from, date_to=date_to, span=span)
 
 
 @app.get("/details", response_class=HTMLResponse)
-async def details(request: Request) -> HTMLResponse:
+@_in_worker_thread
+def details(request: Request) -> HTMLResponse:
     """Return a single <tr><td colspan> fragment of underlying rows.
 
     HTMX swaps it as `afterend` of the clicked <tr>, so the response MUST
@@ -1854,7 +1966,8 @@ async def details(request: Request) -> HTMLResponse:
 
 
 @app.get("/export/assets")
-async def export_assets() -> Response:
+@_in_worker_thread
+def export_assets() -> Response:
     """Download an Excel file with asset summary (offer × country) for all countries."""
     import io
     import openpyxl
@@ -2004,7 +2117,8 @@ async def refresh(request: Request) -> Response:
 
 
 @app.get("/brief", response_class=HTMLResponse)
-async def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
+@_in_worker_thread
+def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
     """Analyze a creative by name — search recursively in FB_CREATIVES_ROOT.
 
     If found: run full analysis and render brief.
@@ -2072,7 +2186,8 @@ async def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
 
 
 @app.get("/api/ref-data")
-async def api_ref_data() -> JSONResponse:
+@_in_worker_thread
+def api_ref_data() -> JSONResponse:
     """Return ad copies, creatives, targetings from Upload FB.xlsx for campaign builder JS."""
     return JSONResponse(_load_ref_options())
 
@@ -2186,7 +2301,8 @@ def normalise_ad_account_id(raw: str) -> str:
 
 
 @app.get("/api/buyers")
-async def api_buyers() -> JSONResponse:
+@_in_worker_thread
+def api_buyers() -> JSONResponse:
     """The campaign managers present in the stats, and who is selected here.
 
     The list comes from the workbook's own CM column, so a new buyer shows up
@@ -2223,14 +2339,16 @@ async def api_select_buyer(request: Request) -> JSONResponse:
 
     selected = set_selected_cm(data.get("name") or "")
     try:
-        get_cached_report(my_cm=selected)
+        # Отчёт другого байера собирается секунды — в потоке (ACL-1380).
+        await asyncio.to_thread(get_cached_report, my_cm=selected)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc), "selected": selected}, status_code=200)
     return JSONResponse({"ok": True, "selected": selected})
 
 
 @app.get("/api/accounts-overview")
-async def api_accounts_overview() -> JSONResponse:
+@_in_worker_thread
+def api_accounts_overview() -> JSONResponse:
     """Every account this buyer has, and whether this machine can reach it.
 
     Two halves that were never shown together: the shared sheet says which
@@ -2956,7 +3074,8 @@ async def account_spend_read_countries(request: Request) -> JSONResponse:
 
 
 @app.get("/account-spend/countries")
-async def account_spend_countries(
+@_in_worker_thread
+def account_spend_countries(
     date_from: str = "", date_to: str = "", span: str = ""
 ) -> JSONResponse:
     """Сколько потрачено на каждую страну — по прочитанным аккаунтам.
@@ -3323,7 +3442,8 @@ def account_attribution(
 
 
 @app.get("/account-map")
-async def account_map_fragment(
+@_in_worker_thread
+def account_map_fragment(
     request: Request, date_from: str = "", date_to: str = "", span: str = ""
 ) -> Response:
     """The account map alone, recomputed for a period.
@@ -3351,7 +3471,8 @@ async def account_map_fragment(
 
 
 @app.get("/account-map/available")
-async def account_map_available_fragment(
+@_in_worker_thread
+def account_map_available_fragment(
     request: Request, date_from: str = "", date_to: str = "", span: str = ""
 ) -> Response:
     """Только блок Available accounts — после Remove/Restore (ACL-1319).
@@ -3538,8 +3659,10 @@ async def account_links_edit(request: Request) -> JSONResponse:
             return JSONResponse({"ok": True, "changed": added})
 
         if action in ("unlink", "close"):
-            spending = _accounts_spending_today(
-                [account] if action == "unlink" else account_links.accounts_for(kind, value)
+            # Отчёт может ещё собираться — ждём его в потоке, не в цикле сервера.
+            spending = await asyncio.to_thread(
+                _accounts_spending_today,
+                [account] if action == "unlink" else account_links.accounts_for(kind, value),
             )
             if spending and not confirm:
                 names = ", ".join(spending[:4]) + ("…" if len(spending) > 4 else "")
@@ -4082,7 +4205,13 @@ async def publish_jobs_slots() -> JSONResponse:
 @app.post("/publish-jobs/{job_id}/cancel")
 async def publish_jobs_cancel(job_id: str) -> JSONResponse:
     """Stop a running publish/RPA job; Multilogin window stays open."""
-    result = cancel_job(job_id)
+    # Только в потоке. Отмена отключает sync Playwright задания, а его
+    # закрытие (`BrowserConnection.close` → `_reset_asyncio_running_loop`)
+    # стирает «текущий цикл» того потока, где выполняется. Здесь это был
+    # главный поток uvicorn: 29.09 в 12:55 после отмены сервер перестал
+    # отвечать с «loop … is not the running loop» и «There is no current
+    # event loop in thread 'MainThread'» (ACL-1380).
+    result = await asyncio.to_thread(cancel_job, job_id)
     if not result.get("ok"):
         return JSONResponse(result, status_code=404 if result.get("error") == "Job not found" else 400)
     return JSONResponse(result)
@@ -4117,6 +4246,11 @@ async def publish_jobs_progress(job_id: str) -> JSONResponse:
 async def build_upload(request: Request) -> Response:
     """Build Upload FB xlsx from campaign builder slots for one account."""
     form = await request.form()
+    # Сборка файла и страница с ошибками — синхронная работа, в потоке (ACL-1380).
+    return await asyncio.to_thread(_build_upload_from_form, request, form)
+
+
+def _build_upload_from_form(request: Request, form) -> Response:
     country, account_label, slots = _parse_build_upload_form(form)
 
     # The parser returns the country CODE ("MX"), which the RPA needs — without

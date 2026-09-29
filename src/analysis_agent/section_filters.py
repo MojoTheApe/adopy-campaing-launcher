@@ -48,6 +48,29 @@ def interest_bucket_key(raw: Any) -> str:
     return s.lower()
 
 
+def interest_bucket_keys(values: pd.Series) -> pd.Series:
+    """`values.map(interest_bucket_key)`, но ключ считается раз на значение.
+
+    Разбор таргета идёт через словарь KB и стоил ~6 с холодного открытия,
+    потому что звался на каждую строку каждой страны (ACL-1380). Результат
+    тот же: map остаётся map, меняется только число вызовов. Ключ памяти
+    включает тип — 1 и "1" дают разные ведра и не должны склеиться.
+    """
+    memo: dict = {}
+
+    def once(raw: Any) -> str:
+        try:
+            key = (type(raw), raw)
+            hit = memo.get(key)
+        except TypeError:  # нехэшируемое значение — просто посчитать
+            return interest_bucket_key(raw)
+        if hit is None:
+            hit = memo[key] = interest_bucket_key(raw)
+        return hit
+
+    return values.map(once)
+
+
 def interest_bucket_display(bucket_key: str) -> str:
     """Compact human label for a merged targeting bucket."""
     if bucket_key == NA_SENTINEL:
@@ -127,7 +150,7 @@ def filter_targeting_rows(df: pd.DataFrame, country: str, bucket: str) -> pd.Dat
     """Rows aggregated by `build_targeting_breakdown` (merged interest buckets)."""
     if "Interest" not in df.columns:
         return df.iloc[0:0]
-    keys = df["Interest"].map(interest_bucket_key)
+    keys = interest_bucket_keys(df["Interest"])
     mask = (df["Country Final"] == country) & (keys == bucket)
     return df[mask]
 

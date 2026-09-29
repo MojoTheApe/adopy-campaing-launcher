@@ -36,17 +36,26 @@ USE_LATEST_DATE_ONLY = False
 _get_excel_path = get_excel_path
 
 
-def normalize_text_segment(ad_title) -> str:
-    """Классификация текста объявления: правила в config/analysis_reading_rules.json (ключ text_segments)."""
+def normalize_text_segment(ad_title, segments=None, fallback=None) -> str:
+    """Классификация текста объявления: правила в config/analysis_reading_rules.json (ключ text_segments).
+
+    `segments`/`fallback` — словарь и запасной сегмент, прочитанные один раз
+    на всю таблицу (enrich_structure). Без них правила читаются здесь же:
+    так зовут одиночные места вроде creative_scanner.
+    """
+    if fallback is None:
+        fallback = get_text_segment_fallback()
     # FIX A: guard against float/None input (NaN in Ad Title column)
     if ad_title is None or (isinstance(ad_title, float) and pd.isna(ad_title)):
-        return get_text_segment_fallback()
+        return fallback
+    if segments is None:
+        segments = get_text_segment_dictionary()
     text = str(ad_title).lower()
-    for segment, variants in get_text_segment_dictionary().items():
+    for segment, variants in segments.items():
         for v in variants:
             if v in text:
                 return segment.upper()
-    return get_text_segment_fallback()
+    return fallback
 
 
 def normalize_account_alias(alias) -> str:
@@ -75,7 +84,12 @@ def normalize_account_alias(alias) -> str:
 def alias_matches(series, alias):
     """Boolean mask: rows of `series` whose alias matches `alias`, suffix-blind."""
     target = normalize_account_alias(alias)
-    return series.fillna("").astype(str).map(normalize_account_alias) == target
+    text = series.fillna("").astype(str)
+    # Нормализуются только различные значения (их сотни), а не каждая строка
+    # книги: поштучный map звался ~3 млн раз за холодное открытие (ACL-1380).
+    # Маска та же: строка совпадает, если совпадает её значение.
+    hits = [value for value in text.unique() if normalize_account_alias(value) == target]
+    return text.isin(hits)
 
 
 # A creative is identified by a 3-4 digit number; everything else in the
@@ -325,7 +339,12 @@ def enrich_structure(df: pd.DataFrame) -> pd.DataFrame:
     # Creative = full Ad Title as-is (includes creative identifier + ad copy text)
     df["Creative"] = df["Ad Title"].fillna("").astype(str).str.strip()
 
-    df["TextSegment"] = df["Ad Title"].apply(normalize_text_segment)
+    # Правила сегментов — тоже один раз на таблицу, а не на строку (ACL-1380).
+    text_segments = get_text_segment_dictionary()
+    text_fallback = get_text_segment_fallback()
+    df["TextSegment"] = df["Ad Title"].apply(
+        lambda x: normalize_text_segment(x, text_segments, text_fallback)
+    )
 
     # Ad Title carries creative id + text name in one cell — expose both
     # halves so the dashboard can show (and group by) them separately.
@@ -361,12 +380,15 @@ def _log_unknown_interests(df: pd.DataFrame) -> None:
     unique_interests = (
         df["Interest"].dropna().astype(str).str.strip().unique()
     )
+    # Столбец приводится к строкам один раз, а не на каждый неизвестный
+    # таргет: 137 повторов стоили ~5 с холодного открытия (ACL-1380).
+    interest_text = df["Interest"].astype(str).str.strip()
     for interest in unique_interests:
         if interest.lower() in skip_values:
             continue
         if resolve_targeting_text(interest) is None:
             # Find an example adset name for context
-            example_rows = df[df["Interest"].astype(str).str.strip() == interest]["Adset Name"]
+            example_rows = df[interest_text == interest]["Adset Name"]
             source = str(example_rows.iloc[0]) if not example_rows.empty else ""
             log_unknown_target(interest, source=source)
 

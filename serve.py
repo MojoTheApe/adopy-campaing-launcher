@@ -184,6 +184,11 @@ def main() -> None:
     if not args.no_browser:
         _schedule_browser_open(url)
 
+    # Фон сервера (ACL-1380): отчёт собирается сразу при старте и при смене
+    # книги, копия библиотеки таргетов обновляется не на пути страницы.
+    # Флаг ставит только этот запуск — тесты и разовые импорты app без фона.
+    os.environ.setdefault("ACL_DASHBOARD_BACKGROUND", "1")
+
     uvicorn.run(
         "src.web.app:app",
         host=args.host,
