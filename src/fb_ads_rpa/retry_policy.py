@@ -80,10 +80,30 @@ CAMPAIGN_RETRY_STEPS = frozenset(
 # person has to log in or fix the proxy.
 # simple_create_layout (ACL-1320): Meta opened its new single-screen campaign
 # editor (/adsmanager/manage/simple_create); the recorded flow does not know
-# it, and every replay would leave one more partial draft.
+# it, and every replay would leave one more partial draft.  ACL-1327: the flow
+# walks this editor now; the stop is left for a layout without the Ad set / Ad
+# sections and for FB_RPA_SIMPLE_CREATE=0.
+# lead_terms_not_accepted (ACL-1327): the Page has not accepted Meta's Lead Ads
+# Terms; only a person can accept them, a replay hits the same card.
+# objective_inline (ACL-1327, review of PR #340 F4): the single-screen editor
+# already holds the draft when its objective is checked; a replay would leave
+# it behind and create another one, and a deterministic refusal (e.g. Meta asks
+# to confirm the change) would leave three.
 NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "browser_closed",
                                       "profile_logged_out", "profile_network",
-                                      "simple_create_layout"})
+                                      "simple_create_layout", "lead_terms_not_accepted",
+                                      "objective_inline"})
+
+# tab_frozen_budget_exceeded / campaign_budget_exceeded / step_budget_exceeded
+# (ACL-1354, runs 37e397574548 and a71e4fc14aa1 of 2026-09-28): the campaign
+# ran out of its time budget or its tab kept not answering; the draft is
+# partial, and a replay on the same profile would duplicate it and hang again.
+# They come from the flow's budget wrapper (meta_dom._under_flow_budget), not
+# from a `return` in its body, so they are not in NON_RETRYABLE_FLOW_STEPS
+# (see tests/test_recorded_retry_contract.py); like every step outside
+# CAMPAIGN_RETRY_STEPS they block and are never replayed.
+FLOW_BUDGET_STOPS = frozenset({"tab_frozen_budget_exceeded", "campaign_budget_exceeded",
+                               "step_budget_exceeded"})
 
 
 # Stops and field failures that block publication and need review.
@@ -101,6 +121,13 @@ BLOCKING_REVIEW_STEPS = frozenset(
         # account's job before any campaign instead of closing the window.
         "profile_open_by_hand",
         "simple_create_layout",
+        "lead_terms_not_accepted",
+        "objective_inline",
+        "simple_create_more_ads",
+        # ACL-1354: time budgets of the recorded flow.
+        "tab_frozen_budget_exceeded",
+        "campaign_budget_exceeded",
+        "step_budget_exceeded",
         "conversion_event",
         "audience_age",
         "audience_location",

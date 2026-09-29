@@ -92,10 +92,10 @@ def test_the_reason_reaches_the_telemetry_and_not_only_a_file():
     всегда — значит причина должна быть там."""
     text = SRC.read_text(encoding="utf-8")
     # С acl-1210 запись своя у каждого потока — читается через
-    # `last_upload_diag()`, а не из модульной переменной.
-    assert '_shot("fail_ad_creative_upload", last_upload_diag())' in text, (
-        "отказ снова уходит в телеметрию пустым"
-    )
+    # `last_upload_diag()`, а не из модульной переменной. С ACL-1348 туда же
+    # едет и машинная причина (`note`) — её читает Sentry.
+    assert ('_shot("fail_ad_creative_upload", last_upload_diag(), note=last_upload_why())'
+            in text), "отказ снова уходит в телеметрию пустым"
 
 
 def test_nothing_about_the_behaviour_changed():

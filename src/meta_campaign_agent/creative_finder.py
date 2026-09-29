@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -9,6 +10,16 @@ class CreativeNotFoundError(FileNotFoundError):
 
 class AmbiguousCreativeError(ValueError):
     pass
+
+
+def _is_within(root_real: str, target_real: str) -> bool:
+    """`target_real` совпадает с `root_real` или лежит под ним — оба уже
+    реальные пути (`os.path.realpath`), сравнение по тексту, без
+    `os.path.commonpath`: на Windows он падает `ValueError`, если пути
+    оказались на разных дисках (ровно то, что здесь и нужно отвергнуть)."""
+    root_norm = os.path.normcase(root_real.rstrip(os.sep))
+    target_norm = os.path.normcase(target_real.rstrip(os.sep))
+    return target_norm == root_norm or target_norm.startswith(root_norm + os.sep)
 
 
 def find_creative_file(root: str | Path, filename: str) -> Path:
@@ -35,6 +46,9 @@ def find_creative_file(root: str | Path, filename: str) -> Path:
     target_basename = Path(name).name.lower()
     matches: list[Path] = []
 
+    # ACL-1342 S02: реальный путь корня — один раз, не на каждой итерации.
+    root_real = os.path.realpath(root_path)
+
     for path in root_path.rglob("*"):
         if not path.is_file():
             continue
@@ -43,10 +57,18 @@ def find_creative_file(root: str | Path, filename: str) -> Path:
         if has_path:
             # Path-suffix match: the relative path must end with the provided subpath
             rel = path.relative_to(root_path).as_posix().lower()
-            if rel.endswith(name_norm.lower()):
-                matches.append(path)
-        else:
-            matches.append(path)
+            if not rel.endswith(name_norm.lower()):
+                continue
+        # ACL-1342 S02: `is_file()` идёт по символической ссылке молча — сама
+        # ссылка может лежать внутри корня, а указывать наружу (например, на
+        # системный файл). Сверяем реальную цель, а не путь ссылки.
+        try:
+            target_real = os.path.realpath(path)
+        except OSError:
+            continue
+        if not _is_within(root_real, target_real):
+            continue
+        matches.append(path)
 
     if not matches:
         raise CreativeNotFoundError(f"Creative not found under {root_path}: {name}")
