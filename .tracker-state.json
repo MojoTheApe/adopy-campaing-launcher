@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "active": null,
   "run": {
     "id": "6dfd73e647a9483eb2f6264828251971",
@@ -1743,6 +1743,30 @@
         },
         "verified_at": "2026-09-29T21:41:01+00:00"
       }
+    }
+  },
+  "execution": {
+    "claims": {},
+    "tasks": {},
+    "actors": {},
+    "completed": {},
+    "review_queue": [],
+    "review": null,
+    "history": [
+      {
+        "event": "policy-adopted",
+        "at": "2026-09-29T21:44:38+00:00",
+        "policy": {
+          "schema_version": 1,
+          "implementation_limit": 5,
+          "review_limit": 1
+        }
+      }
+    ],
+    "policy": {
+      "schema_version": 1,
+      "implementation_limit": 5,
+      "review_limit": 1
     }
   }
 }
