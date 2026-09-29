@@ -1812,7 +1812,7 @@
             "session": "worker_acl1382_20260929"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-W4H8",
         "coordinator": "Coordinator-C6N2",
         "handoff": {
@@ -1844,20 +1844,34 @@
         "role": "Reviewer"
       }
     },
-    "completed": {},
-    "review_queue": [],
-    "review": {
-      "id": "0b662acf83b2429cbc970087c482c15c",
-      "pr": 386,
-      "issues": [
-        382
-      ],
-      "actor": "Reviewer-Q7V9",
-      "session": "review_acl1382_20260929",
-      "coordinator": "Coordinator-C6N2",
-      "started_at": "2026-09-29T21:48:44+00:00",
-      "state": "reviewing"
+    "completed": {
+      "386": {
+        "id": "0b662acf83b2429cbc970087c482c15c",
+        "pr": 386,
+        "issues": [
+          382
+        ],
+        "actor": "Reviewer-Q7V9",
+        "session": "review_acl1382_20260929",
+        "coordinator": "Coordinator-C6N2",
+        "started_at": "2026-09-29T21:48:44+00:00",
+        "state": "reviewing"
+      },
+      "387": {
+        "id": "0b662acf83b2429cbc970087c482c15c",
+        "pr": 386,
+        "issues": [
+          382
+        ],
+        "actor": "Reviewer-Q7V9",
+        "session": "review_acl1382_20260929",
+        "coordinator": "Coordinator-C6N2",
+        "started_at": "2026-09-29T21:48:44+00:00",
+        "state": "reviewing"
+      }
     },
+    "review_queue": [],
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -1888,6 +1902,25 @@
         "pr": 386,
         "lane": "0b662acf83b2429cbc970087c482c15c",
         "actor": "Reviewer-Q7V9"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-09-29T22:30:29+00:00",
+        "review": {
+          "id": "0b662acf83b2429cbc970087c482c15c",
+          "pr": 386,
+          "issues": [
+            382
+          ],
+          "actor": "Reviewer-Q7V9",
+          "session": "review_acl1382_20260929",
+          "coordinator": "Coordinator-C6N2",
+          "started_at": "2026-09-29T21:48:44+00:00",
+          "state": "reviewing"
+        },
+        "prs": [
+          387
+        ]
       }
     ],
     "policy": {
