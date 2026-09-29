@@ -155,3 +155,18 @@ Cut in offline Chromium (JS disabled) from `output/rpa_pages/<run>/<step>/page.h
 | targeting_search_loaded | 0749abd7482f/02_placements (classic ad set editor, same day) | The loaded field's `role=search` box with `<input placeholder="Add demographics, interests or behaviors">` (interests list not included) | Used as the loaded state of the field above; classic editor markup |
 
 Coverage limit: no Meta JS. `tests/test_single_screen_editor_failures_are_named.py` emulates the row toggle (a click collapses/expands the row, a collapsed row does not load, a re-expanded one starts loading again) and the moment the field finishes loading.
+
+## ACL-1371 ad destination and ad name (live runs 2026-09-28)
+
+Cut with BeautifulSoup from `output/rpa_pages/<run>/<step>/page.html` (classic editor, captures truncated at ~3.98 MB, the blocks are whole): the element `#adgroupAdDestinationGeneric` or `#adgroupNameEditorComponent`. Scripts, styles, SVG/images, comments removed; every attribute except `role`, `aria-*` (without `aria-activedescendant`), `id`, `data-surface`, `placeholder`, `type`, `value`, `tabindex`, `hidden`, `for`, `checked`, `disabled`, `name`, `href` (set to `#`) removed — also the robot's own `data-rpa-field` mark and its `display: block !important`; Meta render ids (`js_*`) replaced with `syn_N` (numbering restarts in each fragment); the ad name value replaced with `Example Ad`. No account, campaign, page, form or creative data in the blocks. UI language: English. Meta build identifier and browser version: not recorded.
+
+`checked` is the attribute of the first render; `aria-checked` is the live state. Where they differ, the choice changed after the section was drawn.
+
+`ad_destination_types_2026_09_28.html`:
+
+| Fragment | Source | Capture state | Coverage limit |
+| --- | --- | --- | --- |
+| instant_experience | a90d704c892a/01_ad_destination (Facebook_6540, CO_bnc Trading, `ad_destination` failed after 8.3 s) | Destination type radios: Website `aria-checked=false` (`checked` attribute still on it), Instant Experience `aria-checked=true` with its "Select Instant Experience" combobox and "Create new"; no Website URL field, no Browser add-ons | What switched the type is not in the capture; the test emulates Meta redrawing the section as Website after a click on Website |
+| website_instant_form | 7e5f7abec777/02_ad_destination (same account, CO_bnc FX_Y, failed after 4.1 s) | Website `aria-checked=true`, Instant form opt-in switch off, empty Website URL field, Browser add-ons "Instant form (suggested)" `aria-checked=true` (`checked` attribute on None), Lead Ads Terms card and forms list (form names not in the block) | No Meta JS: the None radio does not react; which exit of the step fired is not recorded (the step was silent) |
+
+`ad_name_section_2026_09_28.html` — ad_name_section: a90d704c892a/01_ad_destination, the "Ad name" section with its `role=combobox` input `placeholder="Enter your ad name here..."`. The buyer's `ad_name` failures (Sentry PYTHON-1W, DAN-LT25) were never captured; the duplicated / hidden / disabled / covered / renamed variants in `tests/test_destination_and_ad_name_say_why.py` are made from this real section by the test.
