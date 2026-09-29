@@ -74,7 +74,7 @@ def run(browser, monkeypatch, tmp_path):
     contexts = []
     table = FIXTURE.read_text(encoding="utf-8")
 
-    def execute(name="Campaign 1", mode=""):
+    def execute(name="Campaign 1", mode="", prep=None, before_click=None, html_fix=None):
         ctx = browser.new_context()
         contexts.append(ctx)
         ctx.route("**/*", lambda r: r.fulfill(content_type="text/html", body=""))
@@ -96,7 +96,7 @@ def run(browser, monkeypatch, tmp_path):
                 self.clicks = self.clicks + got
                 for c in got:
                     if c["sw"] and mode != "reverted":
-                        states[c["row"]] = "false" if states[c["row"]] == "true" else "true"
+                        states[c["row"]] = "false" if states.get(c["row"], "true") == "true" else "true"
 
             def goto(self, url, **kwargs):
                 if self.visits:
@@ -104,6 +104,8 @@ def run(browser, monkeypatch, tmp_path):
                 self.visits += 1
                 pg.goto(url)
                 html = table
+                if html_fix:
+                    html = html_fix(html)
                 if mode == "partial":
                     html = html.replace("Results from 5 campaigns", "Results from 7 campaigns")
                 if mode == "with-ids":
@@ -116,6 +118,8 @@ def run(browser, monkeypatch, tmp_path):
                              '{"campaign_structure_tree":{"campaign_id":"2","name":"Campaign 1",'
                              '"children":[]}}]}</script>')
                 pg.set_content(PERIOD + html + extra + TRACK)
+                for js, arg in (prep or []):
+                    pg.evaluate(js, arg)
                 pg.evaluate(SET_STATE, states)
                 if mode == "duplicate":
                     pg.evaluate(RENAME, ["Campaign 2", "Campaign 1"])
@@ -127,6 +131,8 @@ def run(browser, monkeypatch, tmp_path):
 
             def evaluate(self, js, arg=None):
                 if js == sp._BY_NAME_ACTION_JS:
+                    if before_click:
+                        pg.evaluate(before_click)
                     if mode == "rename-before-click":
                         pg.evaluate(RENAME, ["Campaign 1", "Campaign 1 (copy)"])
                     if mode == "swap-before-click":
@@ -167,7 +173,7 @@ def run(browser, monkeypatch, tmp_path):
         monkeypatch.setattr(sp, "TURN_OFF_TRIES", 3)
         result = sp._turn_off("FacebookDoc19", "campaign", "", expected_name=name,
                               date_from="2026-09-01", match="name")
-        assert page.closed
+        assert page.closed or not page.visits  # refused before the browser: nothing opened
         return result, page
 
     yield execute
@@ -301,3 +307,99 @@ def test_a_shared_saved_name_is_not_marked(store):
     sp._save_all({"FacebookDoc19|2026-09-01|2026-09-01": {"objects": objects}})
     assert sp._mark_object_off_by_name("FacebookDoc19", "campaign", "Campaign 1") == 0
     assert [o["switch"] for o in sp._load_all()["FacebookDoc19|2026-09-01|2026-09-01"]["objects"]] == ["on", "on"]
+
+
+# ── review B1..N3: one normalisation, hidden characters, counter, same switch ──
+
+@pytest.mark.parametrize("ch", ["\x85", "\x1c", "\x1f"])
+def test_python_only_whitespace_never_retargets_another_row(run, ch):
+    """Row 2 is really "Campaign<ch>1"; row 1 is "Campaign 1". Python's
+    str.split() would fold both to "Campaign 1" and press row 1 — the wrong one."""
+    other = "Campaign" + ch + "1"
+    result, page = run(other, prep=[(RENAME, ["Campaign 2", other])])
+    assert page.clicks == [], "pressed another campaign"
+    assert result.state == "failed" and "control characters" in result.error, result
+
+
+def test_a_format_character_in_the_name_is_refused(run):
+    result, page = run("Campaign 1\u200b", prep=[(RENAME, ["Campaign 2", "Campaign 1\u200b"])])
+    assert page.clicks == [] and "U+200B" in result.error
+
+
+def test_a_page_space_twin_is_a_duplicate(run):
+    """The page folds U+FEFF into a space: "Campaign\ufeff1" is "Campaign 1" there."""
+    result, page = run("Campaign 1", prep=[(RENAME, ["Campaign 2", "Campaign\ufeff1"])])
+    assert page.clicks == [] and "have this exact name" in result.error, result
+
+
+def test_a_page_space_character_is_matched_as_the_page_reads_it(run):
+    """U+FEFF is whitespace to the page: the request is normalised the same way
+    on both sides, so the one row the page calls "Campaign 1" is found."""
+    result, page = run("Campaign" + chr(0xFEFF) + "1",
+                       prep=[(RENAME, ["Campaign 1", "Renamed"]),
+                             (RENAME, ["Campaign 2", "Campaign" + chr(0xFEFF) + "1"])])
+    assert result.state == "off", result
+    assert result.name == "Campaign 1"
+    assert page.clicks == [{"row": "Campaign" + chr(0xFEFF) + "1", "sw": True}]
+
+
+def test_python_normalisation_is_the_pages_own(browser):
+    r"""`_page_name` and the page's `replace(/\s+/g, ' ').trim()` agree on every BMP character."""
+    p = browser.new_page()
+    chars = [chr(c) for c in range(0x10000) if not 0xD800 <= c <= 0xDFFF]
+    probes = ["a" + ch + ch + "b" + ch for ch in chars]
+    page_side = p.evaluate(r"xs => xs.map(s => s.replace(/\s+/g, ' ').trim())", probes)
+    p.close()
+    assert [sp._page_name(x) for x in probes] == page_side
+
+
+SWAP_SWITCHES = r"""() => {
+  const rows = [...document.querySelectorAll('[data-tooltip-content]')].filter(t => t.querySelector('a'))
+    .map(t => t.closest('[role=presentation]'));
+  const a = rows[0].querySelector('[role=switch]'), b = rows[1].querySelector('[role=switch]');
+  const pa = a.parentNode, na = a.nextSibling;
+  b.parentNode.replaceChild(a, b); pa.insertBefore(b, na);
+}"""
+
+
+def test_switches_swapped_between_rows_before_the_click_is_refused(run):
+    result, page = run("Campaign 1", before_click=SWAP_SWITCHES)
+    assert page.clicks == [] and "the row changed before action" in result.error, result
+
+
+@pytest.mark.parametrize("text", ["Results from 1.235 campaigns", "Results from 1 235 campaigns",
+                                  "Results from 12,345 campaigns"])
+def test_a_counter_is_never_misread_as_its_tail(run, text):
+    result, page = run(html_fix=lambda h: h.replace("Results from 5 campaigns", text))
+    assert page.clicks == [] and result.state == "failed", result
+    assert "how many campaigns" in result.error or "of 12345 campaigns" in result.error
+
+
+HIDE_ROW5_ADD_STRAY = r"""() => {
+  const t5 = [...document.querySelectorAll('[data-tooltip-content]')]
+    .find(t => t.getAttribute('data-tooltip-content') === 'Campaign 5');
+  t5.closest('[role=presentation]').remove();
+  const t = document.querySelector('[role=table],[role=grid]');
+  const d = document.createElement('div'); d.setAttribute('role', 'presentation');
+  d.innerHTML = '<span data-tooltip-content="Learn more"><a href="#">i</a></span>';
+  t.appendChild(d);
+}"""
+
+
+def test_a_switchless_linked_tooltip_does_not_fill_the_count(run):
+    result, page = run(prep=[(HIDE_ROW5_ADD_STRAY, None)])
+    assert page.clicks == [] and "only 4 of 5 campaigns" in result.error, result
+
+
+def test_the_switch_label_comes_from_aria_labelledby(browser):
+    p = browser.new_page()
+    p.route("**/*", lambda r: r.abort())
+    p.set_content(PERIOD + FIXTURE.read_text(encoding="utf-8").replace('aria-label="On/off" ', ""))
+    p.evaluate("""() => { for (const s of document.querySelectorAll('[role=switch]')) {
+        const l = document.createElement('span'); l.id = s.getAttribute('aria-labelledby');
+        l.textContent = 'Publish'; document.body.appendChild(l); } }""")
+    found = p.evaluate(sp._FIND_BY_NAME_JS, {"name": "Campaign 1", "kind": "CAMPAIGN_GROUP"})
+    p.close()
+    assert found["label"] == "Publish"
+    from src.fb_ads_rpa import wizard_guard as wg
+    assert wg.forbidden_click_reason(found["label"])

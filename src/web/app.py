@@ -3967,7 +3967,12 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     level = (form.get("level") or "").strip()
     object_id = (form.get("object_id") or "").strip()
-    name = (form.get("name") or "").strip()
+    # Сырое имя — для пути по имени: Python `strip()` снимает и `\x1c-\x1f`,
+    # `\x85`, которых страница пробелами не считает, — и имя «с хвостом»
+    # совпало бы с соседней кампанией (ревью B1). Чистит его `turn_off` той же
+    # нормализацией, что у страницы.
+    raw_name = str(form.get("name") or "")
+    name = raw_name.strip()
     # Без id — только явно «по имени» и только кампания (ACL-1379): пропавший
     # id не должен молча превращаться в поиск по имени.
     match = (form.get("match") or "").strip()
@@ -4014,7 +4019,7 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
             account_spend.turn_off,
             account, level, object_id,
             parent_id=(form.get("parent_id") or "").strip(),
-            expected_name=name,
+            expected_name=raw_name if by_name else name,
             date_from=date_from, date_to=date_to,
             # Кто нажал. Берём ту же подпись, которой дешборд всюду называет
             # хозяина машины; пустая — честнее выдуманной.

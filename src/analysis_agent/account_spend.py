@@ -3221,14 +3221,14 @@ def _mark_object_off_by_name(account: str, level: str, name: str, delivery: str 
     по имени. Имя, которое в чтении встретилось дважды, не трогаем вовсе:
     выключили одну из них, и какую — по сохранённому чтению не сказать.
     """
-    want = _name_key(name)
+    want = _page_name(name)
     if not want:
         return 0
 
     def _fix(objects: list) -> int:
         same = [o for o in (objects or []) if isinstance(o, dict)
                 and o.get("level") == level and not str(o.get("id") or "")
-                and _name_key(o.get("name")) == want]
+                and _page_name(o.get("name")) == want]
         if len(same) != 1:
             return 0
         same[0]["switch"] = "off"
@@ -3427,6 +3427,33 @@ _SWITCH_ACTION_JS = """args => {
 }"""
 
 
+#: Пробелы ровно в том наборе, что `\s` и `trim()` в JS страницы (ACL-1379,
+#: ревью B1). `_name_key` (`str.split`) считает пробелами ещё `\x1c-\x1f` и
+#: `\x85`, а `\ufeff` — нет: «Campaign\x851» превращалось в «Campaign 1»,
+#: страница находила единственную строку «Campaign 1» — ЧУЖУЮ кампанию — и
+#: нажимала её. Для выключения по имени — одна нормализация, как у страницы.
+_PAGE_SPACES = "\t\n\v\f\r \xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+_PAGE_SPACE_RUN = re.compile("[" + _PAGE_SPACES + "]+")
+
+
+def _page_name(name: Any) -> str:
+    """Имя так, как его нормализует страница: `s.replace(/\\s+/g, ' ').trim()`."""
+    return _PAGE_SPACE_RUN.sub(" ", str(name or "")).strip(" ")
+
+
+def _unsafe_name_chars(name: str) -> list[str]:
+    """Управляющие и форматные символы (Cc/Cf) вне набора пробелов страницы.
+
+    Они не видны или выглядят как соседние имена, а разные части системы
+    обходятся с ними по-разному. Выключать по такому имени не берёмся.
+    """
+    import unicodedata
+
+    return sorted({f"U+{ord(ch):04X}" for ch in name
+                   if unicodedata.category(ch) in ("Cc", "Cf")
+                   and not _PAGE_SPACE_RUN.fullmatch(ch)})
+
+
 #: Метка строки, найденной по имени. Тумблер метится `SEL_MARKED_SWITCH`, а
 #: строка — отдельно: перед нажатием проверяется, что это та же самая строка
 #: (тот же узел), а не перерисованная на её месте соседка.
@@ -3502,12 +3529,17 @@ _FIND_BY_NAME_JS = r"""
     rows.push({row, el: n, name: norm(n.getAttribute('data-tooltip-content'))});
   }
 
-  // Полнота: таблица сама пишет, сколько в ней кампаний.
+  // Полнота: таблица сама пишет, сколько в ней кампаний. Строкой кампании
+  // считается только строка со своим единственным тумблером: посторонняя
+  // подсказка-ссылка не должна «дополнить» счёт до N за недорисованную строку.
+  // Число — целиком после «from»: «1.234» и «1 234» не читаются как 234,
+  // а не читаются вовсе (и тогда отказ).
+  const counted = rows.filter(r => [...r.row.querySelectorAll('[role="switch"]')].filter(visible).length === 1);
   const counts = [...document.querySelectorAll('[data-surface$="/total_count"]')].filter(visible)
-    .map(e => norm(e.innerText).match(/\b(\d[\d,]*)\s+campaigns?\b/i)).filter(Boolean)
+    .map(e => norm(e.innerText).match(/\bfrom\s+(\d{1,3}(?:,\d{3})+|\d+)\s+campaigns?\b/i)).filter(Boolean)
     .map(m => parseInt(m[1].replace(/,/g, ''), 10));
   if (new Set(counts).size !== 1) return fail('the table does not say how many campaigns it has, so the name cannot be confirmed unique');
-  if (counts[0] !== rows.length) return fail(`only ${rows.length} of ${counts[0]} campaigns are on screen, so the name cannot be confirmed unique`);
+  if (counts[0] !== counted.length) return fail(`only ${counted.length} of ${counts[0]} campaigns are on screen, so the name cannot be confirmed unique`);
 
   // Перед нажатием: помеченная при поиске строка на месте и с тем же именем.
   if (args.click) {
@@ -3526,7 +3558,10 @@ _FIND_BY_NAME_JS = r"""
   const aria = sw.getAttribute('aria-checked');
   const state = aria === 'true' ? 'on' : aria === 'false' ? 'off' :
     aria === null && sw.matches('input[type="checkbox"]') && !sw.indeterminate ? (sw.checked ? 'on' : 'off') : 'unknown';
-  const label = norm(sw.getAttribute('aria-label'));
+  // Подпись тумблера: aria-label, а у живой разметки Doc19 — текст по
+  // aria-labelledby (aria-label там нет, и запрет на подписи проверял бы пустоту).
+  const label = norm(sw.getAttribute('aria-label')) || norm((sw.getAttribute('aria-labelledby') || '')
+    .split(/\s+/).map(id => { const e = id && document.getElementById(id); return e ? e.textContent : ''; }).join(' '));
   // Доставка — справа от имени, в порядке заголовков (как у чтения).
   const heads = [...t.querySelectorAll('[data-surface*="table_column_header:"]')].filter(visible)
     .map(h => (h.getAttribute('data-surface') || '').split(':').pop());
@@ -3923,8 +3958,17 @@ def _turn_off_by_name(out: "TurnOffResult", account: str, expected_name: str, *,
 
     out.matched_by = "name"
     out.object_id = ""
-    name = _name_key(expected_name)
+    odd = _unsafe_name_chars(str(expected_name or ""))
+    if odd:
+        out.error = ("the campaign name contains invisible or control characters ("
+                     + ", ".join(odd) + "); turn it off in Ads Manager — nothing was touched")
+        return out
+    # Одна нормализация на обе стороны — та же, что у страницы.
+    name = _page_name(expected_name)
     out.name = name
+    if not name:
+        out.error = "row name is required — read the account again"
+        return out
     entry = _entry_for(account)
     if entry is None:
         out.error = f"{account} is not in the account map"
@@ -3983,8 +4027,10 @@ def _turn_off_by_name(out: "TurnOffResult", account: str, expected_name: str, *,
             return out
         # Данные, которые Meta вшивает в страницу: если там у этого имени два
         # id, таблица могла показать не всё — не нажимаем.
-        hit = _campaigns_from_page_data(page).get(name)
-        if hit is not None and not hit.get("id"):
+        # Ключи там чищены `_name_key`; сравниваем той же нормализацией, что
+        # у страницы, и любое второе совпадение — отказ.
+        same = [v for k, v in _campaigns_from_page_data(page).items() if _page_name(k) == name]
+        if len(same) > 1 or any(not v.get("id") for v in same):
             out.error = ("more than one campaign has this exact name; without ids they "
                          "cannot be told apart — nothing was touched")
             return out
@@ -4015,9 +4061,14 @@ def _turn_off_by_name(out: "TurnOffResult", account: str, expected_name: str, *,
             return out
         acted = None
         for _attempt in range(3):
-            acted = page.evaluate(_BY_NAME_ACTION_JS, dict(
-                args, click=True, url=approved_url, label=found.get("label"), period=period,
-                period_args=[list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE]))
+            try:
+                acted = page.evaluate(_BY_NAME_ACTION_JS, dict(
+                    args, click=True, url=approved_url, label=found.get("label"), period=period,
+                    period_args=[list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE]))
+            except Exception:
+                # Обрыв внутри задачи, которая могла уже нажать: «не знаем».
+                clicked = True
+                raise
             if not (isinstance(acted, dict) and acted.get("why") == "switch is covered"):
                 break
             try:
