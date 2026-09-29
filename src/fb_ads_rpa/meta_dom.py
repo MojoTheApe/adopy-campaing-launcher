@@ -12140,23 +12140,61 @@ _TEXT_OPTIONS_JS = r"""
         if (e) { body = e; break; }
       }
     }
-    // Кнопка «Add text option» нашего поля: разметочное имя Meta
-    // (живой Doc19 29.09 — `div[role=button]` в `message_field`).
+    // Раздел генерации текста Meta: листья-заголовки и зоны по разметочному имени.
+    const GEN_RE = /creative text generation|text variations|generated text|text suggestions/i;
+    const genLeaves = [...document.querySelectorAll('span,div,label,h1,h2,h3,h4,[role=heading]')]
+      .filter(l => !l.children.length && GEN_RE.test(norm(l.textContent)));
+    const surfaceZones = [...document.querySelectorAll(
+      '[data-surface*="text_enhancements"],[data-surface*="text_generation"],[data-surface*="gen_ai"]')];
+    const hostOf = (el) => hosts.find(h => h.contains(el)) || null;
+    const isOwnBox = (e) => e === body || e.getAttribute('data-rpa-opt') === 'ours'
+      || e.getAttribute('data-rpa-field') === 'body2';
+    // Контейнер генерации внутри нашего поля: предок ниже хоста с ролью
+    // списка/региона, где есть заголовок генерации, но нет основного текста.
+    // Живой Doc19 29.09: раздел — `role=list` > `listitem` > `region` с
+    // вариантами, и лежит он внутри `message_field`.
+    const GEN_ROLES = ['list', 'listitem', 'region', 'group', 'dialog'];
+    const inGenBox = (el) => {
+      const h = hostOf(el);
+      if (!h) return false;
+      for (let a = el.parentElement; a && a !== h; a = a.parentElement) {
+        if (GEN_ROLES.includes(a.getAttribute('role')) && genLeaves.some(l => a.contains(l))
+            && !(body && a.contains(body))) return true;
+      }
+      return false;
+    };
+    // Ветка кандидата под общим с заголовком генерации предком: в ней нет ни
+    // заголовка, ни чужих полей текста (вариантов Meta).
+    const branchClean = (el) => genLeaves.every(l => {
+      let a = el;
+      while (a.parentElement && !a.parentElement.contains(l)) a = a.parentElement;
+      if (a.contains(l)) return false;
+      const eds = a.matches(EDITORS) ? [a, ...a.querySelectorAll(EDITORS)] : [...a.querySelectorAll(EDITORS)];
+      return eds.every(isOwnBox);
+    });
+    // Кнопка «Add text option» нашего поля: разметочное имя Meta (живой
+    // Doc19 29.09 — `div[role=button]` в `message_field`). Имя само по себе
+    // не доказательство (ревью cf086fa): кнопки раздела генерации тоже носят
+    // `/message_field/lib:*`. Наша — только та, что в хосте поля, вне зон по
+    // имени, вне контейнера генерации и в чистой ветке; есть слот Meta
+    // `#add-bodies-option-button` — берём кнопку из него.
     const OUR_ADD = '[data-surface$="/message_field/lib:dco-add-asset-button"]';
-    // Наши элементы поля: основной текст, кнопка добавления, наши варианты.
-    const ours = [body, ...document.querySelectorAll(OUR_ADD),
+    const trusted = [...document.querySelectorAll(OUR_ADD)].filter(c =>
+      hostOf(c) && !surfaceZones.some(z => z.contains(c)) && !inGenBox(c) && branchClean(c));
+    const slotted = trusted.filter(c => c.closest('#add-bodies-option-button'));
+    const ourAdds = slotted.length ? slotted : trusted;
+    // Наши элементы поля: основной текст, проверенная кнопка, наши варианты.
+    const ours = [body, ...ourAdds,
       ...document.querySelectorAll('[data-rpa-opt="ours"],[data-rpa-field="body2"]')].filter(Boolean);
     const coversOurs = (el) => ours.some(o => el.contains(o));
-    // Разделы Meta со сгенерированным текстом: по разметочному имени и по
-    // заголовку. От заголовка поднимаемся, пока предок не накрыл наше поле
-    // или нашу кнопку: 29.09 (Doc19) раздел генерации и «Add text option»
-    // оказались под одним общим предком, зона накрыла кнопку, и она
-    // отфильтровалась как чужая (`add_control_not_found`, zones 7).
-    const zones = [...document.querySelectorAll(
-      '[data-surface*="text_enhancements"],[data-surface*="text_generation"],[data-surface*="gen_ai"]')];
-    for (const leaf of document.querySelectorAll('span,div,label,h1,h2,h3,h4,[role=heading]')) {
-      if (leaf.children.length) continue;
-      if (!/creative text generation|text variations|generated text|text suggestions/i.test(norm(leaf.textContent))) continue;
+    // Зоны генерации: по разметочному имени и по заголовку. От заголовка
+    // поднимаемся, пока предок не накрыл наше поле или нашу кнопку: 29.09
+    // (Doc19) раздел генерации и «Add text option» оказались под одним общим
+    // предком, зона накрыла кнопку, и она отфильтровалась как чужая
+    // (`add_control_not_found`, zones 7). Зону сужает только проверенная
+    // кнопка — кнопка из самого раздела её не сужает.
+    const zones = [...surfaceZones];
+    for (const leaf of genLeaves) {
       let z = leaf;
       if (body) {
         while (z.parentElement && z.parentElement !== document.body && !coversOurs(z.parentElement)) z = z.parentElement;
@@ -12165,7 +12203,7 @@ _TEXT_OPTIONS_JS = r"""
       }
       zones.push(z);
     }
-    const inZone = (el) => zones.some(z => z.contains(el) && !(body && z.contains(body)));
+    const inZone = (el) => inGenBox(el) || zones.some(z => z.contains(el) && !(body && z.contains(body)));
     const byOrder = (a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
     const textOf = (el) => el.value !== undefined ? el.value : (el.innerText || el.textContent || '');
 
@@ -12225,14 +12263,20 @@ _TEXT_OPTIONS_JS = r"""
     const usable = (e) => seen(e) && !inZone(e) && e.getAttribute('aria-disabled') !== 'true' && !e.disabled;
     const clickable = [...document.querySelectorAll('[role=button],button,a')].filter(usable);
     // Сначала — по разметочному имени кнопки нашего поля; текст — запасной ход.
-    let adds = [...document.querySelectorAll(OUR_ADD)].filter(usable);
+    let adds = ourAdds.filter(usable);
     let how = 'surface';
+    // Запасной ход по тексту — не в чужом поле (заголовок, описание) и не
+    // кнопка с нашим разметочным именем, не прошедшая проверку выше.
+    const otherField = (e) => {
+      const f = e.closest('[data-surface$="_field"]');
+      return !!f && !/\/message_field$/.test(f.getAttribute('data-surface'));
+    };
     if (!adds.length) {
-      adds = clickable.filter(e => said(e, ADD_RE));
+      adds = clickable.filter(e => said(e, ADD_RE) && !otherField(e) && !e.closest(OUR_ADD));
       how = 'text';
     }
     if (!adds.length) {
-      adds = clickable.filter(e => inHost(e) && said(e, BARE_RE));
+      adds = clickable.filter(e => inHost(e) && said(e, BARE_RE) && !e.closest(OUR_ADD));
       how = 'bare_add_in_field';
     }
     adds = adds.filter(e => !adds.some(o => o !== e && e.contains(o)));

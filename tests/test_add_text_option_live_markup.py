@@ -149,7 +149,7 @@ def test_second_text_goes_through_our_button_and_nothing_in_generation_is_presse
     assert page.evaluate("window.__trap") == 0, page.evaluate("window.__clicked")
     assert md._copy_matches(page.input_value("#option-2"), TEXT2)
     # Варианты Meta не тронуты.
-    gen = page.evaluate("() => [...document.querySelectorAll('[role=region] textarea')].map(t => t.value)")
+    gen = page.evaluate("() => [...document.querySelectorAll('textarea[aria-labelledby]')].map(t => t.value)")
     assert gen == [f"Generated variation placeholder {i}." for i in range(1, 6)], gen
     assert captures == []
 
@@ -202,3 +202,177 @@ def test_our_surface_button_inside_a_generation_surface_is_not_pressed(page, cap
     assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is False
     assert report["second_text"]["why"] == "add_control_not_found"
     assert page.evaluate("window.__adds") == 0
+
+
+# ── ревью cf086fa: кнопки раздела генерации с нашим разметочным именем ────
+#
+# Кнопки раздела генерации на живой странице тоже носят `/message_field/lib:*`
+# (feedback-кнопки). Кнопка с именем нашей «Add text option» внутри раздела
+# не должна ни сужать зону генерации, ни нажиматься.
+
+def _gen_button(page, where: str, text: str = "Add text option") -> None:
+    page.evaluate("""([where, text, surface]) => {
+      const gen = [...document.querySelectorAll('[role=list]')]
+        .find(l => /creative text generation/i.test(l.textContent));
+      const b = document.createElement('div');
+      b.setAttribute('role', 'button'); b.tabIndex = 0; b.id = 'gen-own';
+      b.setAttribute('data-surface', surface);
+      b.style.cssText = 'display:inline-block;padding:6px';
+      b.textContent = text;
+      const reg = gen.querySelector('[role=region]');
+      if (where === 'end') reg.appendChild(b);
+      else if (where === 'row') reg.querySelector('textarea').parentElement.appendChild(b);
+      else gen.insertBefore(b, gen.firstChild);
+    }""", [where, text, "/am/editor_drawer/editor:ad/ad_creative_section/message_field/lib:dco-add-asset-button"])
+
+
+def _generated(page) -> list[str]:
+    return page.evaluate("() => [...document.querySelectorAll('textarea[aria-labelledby]')].map(t => t.value)")
+
+
+@pytest.mark.parametrize("where", ["end", "row", "top"])
+def test_a_generation_button_with_our_surface_is_not_pressed_when_ours_is_gone(page, where):
+    page.evaluate(_META_REACTION_JS)
+    _gen_button(page, where)
+    page.evaluate("() => document.getElementById('add-bodies-option-button').remove()")
+    report: dict = {}
+    assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is False
+    assert report["second_text"]["why"] == "add_control_not_found"
+    assert page.evaluate("window.__trap") == 0, page.evaluate("window.__clicked")
+
+
+@pytest.mark.parametrize("where", ["end", "row", "top"])
+def test_generation_between_the_text_and_our_button_does_not_win_the_pick(page, where):
+    """Раздел генерации встал между полем текста и нашей кнопкой, в нём
+    кнопка с нашим именем: «ближайшая под полем» — не она."""
+    page.evaluate(_META_REACTION_JS)
+    _gen_button(page, where, "Add")
+    page.evaluate("""() => {
+      const gen = [...document.querySelectorAll('[role=list]')]
+        .find(l => /creative text generation/i.test(l.textContent));
+      const shared = gen.parentElement.parentElement;
+      shared.insertBefore(gen.parentElement, shared.firstChild);
+    }""")
+    report: dict = {}
+    assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is True, report
+    assert page.evaluate("window.__adds") == 1
+    assert page.evaluate("window.__trap") == 0, page.evaluate("window.__clicked")
+
+
+@pytest.mark.parametrize("where", ["end", "row", "top"])
+def test_generation_right_above_our_button_is_never_pressed(page, where):
+    """Раздел генерации вплотную над нашей кнопкой, в нём кнопка с нашим
+    именем выше нашей: ничего внутри раздела не нажимается (наша кнопка
+    теперь делит ветку с вариантами Meta — мягкий отказ допустим)."""
+    page.evaluate(_META_REACTION_JS)
+    _gen_button(page, where, "Add")
+    page.evaluate("""() => {
+      const gen = [...document.querySelectorAll('[role=list]')]
+        .find(l => /creative text generation/i.test(l.textContent));
+      const real = document.getElementById('add-bodies-option-button');
+      real.parentElement.insertBefore(gen, real);
+    }""")
+    report: dict = {}
+    md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report)
+    assert page.evaluate("window.__trap") == 0, (report, page.evaluate("window.__clicked"))
+    assert _generated(page) == [f"Generated variation placeholder {i}." for i in range(1, 6)]
+
+
+@pytest.mark.parametrize("where", ["end", "row", "top"])
+def test_a_generation_button_with_our_surface_does_not_let_meta_variations_in(page, where):
+    _gen_button(page, where)
+    state = md._text_options(page, "scan")
+    assert [b["body"] for b in state["boxes"]] == [True], state["boxes"]
+    page.evaluate(_META_REACTION_JS)
+    report: dict = {}
+    assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is True, report
+    assert page.evaluate("window.__trap") == 0, page.evaluate("window.__clicked")
+    assert _generated(page) == [f"Generated variation placeholder {i}." for i in range(1, 6)]
+
+
+def test_a_headline_add_is_never_taken_for_ours(page):
+    """Кнопка заголовка, даже подписанная «Add text option», — не наша."""
+    page.evaluate("() => document.getElementById('add-bodies-option-button').remove()")
+    page.evaluate("""() => {
+      const h = document.querySelector('[data-surface$="/headline_field/lib:dco-add-asset-button"]');
+      h.setAttribute('aria-label', 'Add text option');
+      window.__head = 0; h.addEventListener('click', () => window.__head++);
+    }""")
+    report: dict = {}
+    assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is False
+    assert report["second_text"]["why"] == "add_control_not_found"
+    assert page.evaluate("window.__head") == 0
+
+
+# ── каждая проверка кнопки нужна сама по себе (мутационная проверка) ──────
+
+_GEN = "[...document.querySelectorAll('[role=list]')].find(l => /creative text generation/i.test(l.textContent))"
+
+
+def test_without_roles_a_surface_button_in_a_variation_row_is_not_ours(page):
+    """Раздел генерации без ролей списка: спасает только проверка ветки —
+    в ветке кнопки лежат варианты Meta."""
+    page.evaluate(_META_REACTION_JS)
+    _gen_button(page, "row")
+    page.evaluate("() => document.getElementById('add-bodies-option-button').remove()")
+    page.evaluate(f"() => {{ const g = {_GEN};"
+                  " for (const e of [g, ...g.querySelectorAll('[role=listitem],[role=region]')])"
+                  " e.removeAttribute('role'); }")
+    report: dict = {}
+    assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is False
+    assert page.evaluate("window.__trap") == 0, page.evaluate("window.__clicked")
+    assert _generated(page) == [f"Generated variation placeholder {i}." for i in range(1, 6)]
+
+
+def test_a_surface_button_on_top_of_the_generation_list_does_not_shrink_its_zone(page):
+    """Варианты Meta вынесены из списка раздела, кнопка с нашим именем — в
+    самом списке: ветка у неё чистая, отсекает её только роль списка. Иначе
+    зона сжимается и варианты Meta попадают в наши поля."""
+    _gen_button(page, "top")
+    page.evaluate(f"() => {{ const g = {_GEN}; const r = g.querySelector('[role=region]');"
+                  " g.parentElement.insertBefore(r, g.nextSibling); }")
+    state = md._text_options(page, "scan")
+    assert [b["body"] for b in state["boxes"]] == [True], state["boxes"]
+
+
+def test_a_stale_our_mark_on_a_meta_variation_does_not_open_the_section(page):
+    """Метка «наше поле» на варианте Meta (перерисовка) не делает раздел
+    генерации нашим: его поля не попадают в список."""
+    page.evaluate(f"() => {{ const g = {_GEN};"
+                  " g.querySelector('[role=region] textarea').setAttribute('data-rpa-opt', 'ours'); }")
+    state = md._text_options(page, "scan")
+    assert [b["body"] for b in state["boxes"]] == [True], state["boxes"]
+
+
+def test_the_button_in_metas_slot_wins_over_another_surface_button(page):
+    page.evaluate(_META_REACTION_JS)
+    page.evaluate("""() => {
+      const body = document.querySelector('[data-rpa-field="body"]');
+      const d = document.createElement('div');
+      d.setAttribute('role', 'button'); d.tabIndex = 0; d.id = 'decoy';
+      d.setAttribute('data-surface', '/am/editor_drawer/editor:ad/ad_creative_section/message_field/lib:dco-add-asset-button');
+      d.style.cssText = 'display:inline-block;padding:6px'; d.textContent = 'Add text option';
+      body.parentElement.appendChild(d);
+      window.__decoy = 0; d.addEventListener('click', () => window.__decoy++);
+    }""")
+    report: dict = {}
+    assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is True, report
+    assert page.evaluate("window.__adds") == 1
+    assert page.evaluate("window.__decoy") == 0
+
+
+def test_a_surface_button_outside_the_field_is_pressed_neither_by_surface_nor_by_text(page):
+    page.evaluate("() => document.getElementById('add-bodies-option-button').remove()")
+    page.evaluate("""() => {
+      const host = document.querySelector('[data-surface$="/message_field"]');
+      const d = document.createElement('div');
+      d.setAttribute('role', 'button'); d.tabIndex = 0; d.id = 'outside';
+      d.setAttribute('data-surface', '/am/editor_drawer/editor:ad/ad_creative_section/message_field/lib:dco-add-asset-button');
+      d.style.cssText = 'display:inline-block;padding:6px'; d.textContent = 'Add text option';
+      host.parentElement.appendChild(d);
+      window.__outside = 0; d.addEventListener('click', () => window.__outside++);
+    }""")
+    report: dict = {}
+    assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is False
+    assert report["second_text"]["why"] == "add_control_not_found"
+    assert page.evaluate("window.__outside") == 0
