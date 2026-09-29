@@ -2308,6 +2308,8 @@
     button.amap-tree-sw:hover { border-color: var(--danger); color: var(--danger); }
     .amap-tree-sw.arming { flex-basis: 5rem; border-color: var(--danger); color: var(--danger); }
     .amap-tree-sw.failed { border-style: dashed; }
+    .amap-tree-said { display: block; font-size: 0.7rem; color: var(--muted); }
+    .amap-tree-said.bad { color: var(--danger); }
     button.amap-tree-sw:disabled { opacity: 0.6; cursor: default; }
     /* Журнал изменений — под деревом и свёрнут. Он отвечает на вопрос,
        который возникает реже, чем «что там сейчас», и не должен отбирать
@@ -8960,7 +8962,7 @@ function amapApplyReading(account, s, split, waiting) {
    встретилось «тумблер on, доставка Campaign off» — включено, а не крутится,
    потому что выключена кампания сверху. Сведи это в один значок, и человек
    увидит работающим то, что не тратит ничего. */
-function amapTreeLine(o, adCount) {
+function amapTreeLine(o, adCount, nameCounts) {
   var line = document.createElement('div');
   line.className = 'amap-tree-line' + (o.level === 'ad' ? ' ad' : '');
   /* Первая колонка — кто это: стрелка, уровень, тумблер, имя. Остальные
@@ -9001,12 +9003,18 @@ function amapTreeLine(o, adCount) {
      `adset`, а у объявлений в родителях — id ad set'а. Выключение такую
      строку не примет, и кнопка на ней обещала бы работу, которой не будет.
      Перечитать аккаунт — и всё встанет на место. */
-  /* Без id (новая таблица Ads Manager, Doc19 18.09) выключать нечем: turn_off
-     откажет. Кнопку не рисуем, а в подсказке говорим почему. */
+  /* Без id (новая таблица Ads Manager, Doc19 18.09) кампанию выключаем по
+     точному имени (ACL-1379) — если в дереве она с таким именем одна; робот
+     ещё раз сверит это по самой таблице Meta. Две с одним именем по имени не
+     различить: кнопки нет. Объявления без id не выключаем: их кампанию по
+     строке не проверить. */
   /* ACL-1504: строки прежнего удачного чтения (`_stale`) — только для
      показа: тумблер с тех пор мог смениться. */
-  var canAct = o.switch === 'on' && !!o.id && !o._stale
-    && (o.level === 'campaign' || (o.level === 'ad' && o.parent_id));
+  var byName = !o.id && o.level === 'campaign' && !!amapTreeName(o.name);
+  var nameShared = byName && !!nameCounts && (nameCounts[amapTreeName(o.name)] || 0) > 1;
+  var canAct = o.switch === 'on' && !o._stale && (o.id
+    ? (o.level === 'campaign' || (o.level === 'ad' && o.parent_id))
+    : byName && !nameShared);
   var live = canAct;
   var sw = document.createElement(live ? 'button' : 'span');
   var state = o.switch === 'on' ? 'on' : o.switch === 'off' ? 'off' : 'dim';
@@ -9016,8 +9024,12 @@ function amapTreeLine(o, adCount) {
      остановленным то, что тратит деньги. */
   sw.title = o.switch === 'unknown'
     ? 'No switch found in this row — not the same as switched off'
-    : !o.id && o.switch === 'on'
-      ? 'Read by name: this account’s Ads Manager table shows no ids, so it cannot be turned off from here yet.'
+    : nameShared && o.switch === 'on'
+      ? 'Another campaign has the same name, and this account’s Ads Manager table shows no ids, so they cannot be told apart. Turn it off in Ads Manager.'
+    : !o.id && o.switch === 'on' && !live
+      ? 'Read by name: ads on an account without ids cannot be turned off from here — turn off the campaign, or the ad in Ads Manager.'
+    : live && byName
+      ? 'Turn off by exact name (this account’s Ads Manager table shows no ids). Only the one campaign with this name is switched off. It cannot be turned back on from here — that is done in Ads Manager.'
     : live
       ? 'Turn off. It cannot be turned back on from here — that is done in Ads Manager.'
       : (o.switch_label || 'On/off');
@@ -9027,6 +9039,7 @@ function amapTreeLine(o, adCount) {
     sw.dataset.objectId = o.id || '';
     sw.dataset.parentId = o.parent_id || '';
     sw.dataset.name = amapTreeName(o.name);
+    if (byName) sw.dataset.match = 'name';
   }
 
   var name = document.createElement('span');
@@ -9546,6 +9559,14 @@ function amapPaintTree(row, s) {
      этим строкам решают, что останавливать. */
   var sets = objects.filter(function (o) { return o.level !== 'ad'; });  // кампании
   var ads = objects.filter(function (o) { return o.level === 'ad'; });
+  /* Сколько кампаний без id носят каждое имя: выключение по имени — только
+     для единственной (ACL-1379). */
+  var nameCounts = Object.create(null);
+  sets.forEach(function (o) {
+    if (o.id) return;
+    var k = amapTreeName(o.name);
+    if (k) nameCounts[k] = (nameCounts[k] || 0) + 1;
+  });
 
   /* Объявления свёрнуты под своей кампанией. У DQ438 их 99 на десять
      кампаний: раскрытые разом, они уезжали на километр и прятали всё, что ниже
@@ -9561,7 +9582,7 @@ function amapPaintTree(row, s) {
   sets.forEach(function (s) {
     var sKey = s.id || s.data_id || '';
     var mine = ads.filter(function (a) { return a.parent_id && a.parent_id === sKey; });
-    var line = amapTreeLine(s, mine.length);
+    var line = amapTreeLine(s, mine.length, nameCounts);
     box.appendChild(line);
     if (!mine.length) return;
 
@@ -9860,6 +9881,7 @@ function amapTurnOffDo(btn) {
   var body = new URLSearchParams({
     account: account, level: btn.dataset.level || '', object_id: btn.dataset.objectId || '',
     parent_id: btn.dataset.parentId || '', name: btn.dataset.name || '',
+    match: btn.dataset.match || '',
     date_from: per.from, date_to: per.to, span: per.span || '',
   });
   fetch('/account-spend/turn-off', {
@@ -9867,12 +9889,18 @@ function amapTurnOffDo(btn) {
   })
     .then(function (r) { return r.json(); })
     .then(function (j) {
-      if (!j || !j.ok) throw new Error((j && j.error) || 'no answer');
-      var res = j.result || {};
-      if (res.state === 'off' || res.state === 'already_off') {
-        amapTurnOffSaid(btn, res.state, res.how || '');
+      /* Робот строит кампании в этом профиле — ничего не тронуто, кнопка
+         остаётся: нажать можно, когда сборка закончится (ACL-1379). */
+      var res = (j && j.result) || {};
+      if (j && j.busy) {
+        amapTurnOffSaid(btn, 'busy', j.error || res.error || '');
       } else {
-        amapTurnOffSaid(btn, 'failed', res.error || 'did not turn off');
+        if (!j || !j.ok) throw new Error((j && j.error) || 'no answer');
+        if (res.state === 'off' || res.state === 'already_off') {
+          amapTurnOffSaid(btn, res.state, res.how || '');
+        } else {
+          amapTurnOffSaid(btn, 'failed', res.error || 'did not turn off');
+        }
       }
       amapLogRefresh(row, account);
     })
@@ -9888,6 +9916,25 @@ function amapTurnOffDo(btn) {
 
 function amapTurnOffSaid(btn, state, words) {
   btn.disabled = false;
+  /* Что вышло — ещё и словами под именем, а не только в подсказке: отказ по
+     имени («два с таким именем», «строка перерисовалась») человек должен
+     увидеть, не наводя мышь (ACL-1379). */
+  var line = btn.closest('.amap-tree-line');
+  var box = line && line.querySelector('.amap-tree-namebox');
+  if (box) {
+    var said = box.querySelector('.amap-tree-said');
+    if (!said) { said = document.createElement('small'); said.className = 'amap-tree-said'; box.appendChild(said); }
+    said.textContent = state === 'off' ? 'Turned off. ' + (words || '')
+      : state === 'already_off' ? 'It was already off. ' + (words || '')
+      : state === 'busy' ? (words || 'The robot is building campaigns in this profile — wait for it to finish.')
+      : 'Not turned off: ' + (words || 'state unconfirmed');
+    said.classList.toggle('bad', state !== 'off' && state !== 'already_off');
+  }
+  if (state === 'busy') {
+    btn.textContent = btn.dataset.was || 'On';
+    btn.title = (words || '') + ' Nothing was touched.';
+    return;
+  }
   if (state === 'off' || state === 'already_off') {
     /* Кнопка становится надписью: включить отсюда нельзя, и оставлять
        нажимаемым то, что больше ничего не делает, — обман. */

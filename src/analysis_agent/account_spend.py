@@ -3214,6 +3214,45 @@ def _mark_object_off(account: str, object_id: str, delivery: str = "") -> int:
     return touched
 
 
+def _mark_object_off_by_name(account: str, level: str, name: str, delivery: str = "") -> int:
+    """То же, что `_mark_object_off`, для строки без id: по уровню и точному имени.
+
+    Трогаем только объекты **без id** этого уровня — те самые, что прочитаны
+    по имени. Имя, которое в чтении встретилось дважды, не трогаем вовсе:
+    выключили одну из них, и какую — по сохранённому чтению не сказать.
+    """
+    want = _name_key(name)
+    if not want:
+        return 0
+
+    def _fix(objects: list) -> int:
+        same = [o for o in (objects or []) if isinstance(o, dict)
+                and o.get("level") == level and not str(o.get("id") or "")
+                and _name_key(o.get("name")) == want]
+        if len(same) != 1:
+            return 0
+        same[0]["switch"] = "off"
+        if delivery:
+            same[0]["delivery"] = delivery
+        return 1
+
+    touched = 0
+    with _STORE_LOCK:
+        data = _load_all()
+        prefix = account + "|"
+        saved = 0
+        for key, raw in data.items():
+            if key.startswith(prefix) and isinstance(raw, dict):
+                saved += _fix(raw.get("objects") or [])
+        if saved:
+            _save_all(data)
+        touched += saved
+        for key, reading in list(_UNSAVED.items()):
+            if key.startswith(prefix):
+                touched += _fix(reading.objects or [])
+    return touched
+
+
 def _same_account(a: str, b: str) -> bool:
     """Одна и та же подпись аккаунта, записанная по-разному.
 
@@ -3289,6 +3328,10 @@ class TurnOffResult:
     #: по умолчанию оно остаётся намеренно: если однажды появится второй путь
     #: и забудет представиться, журнал промолчит, а не соврёт, что это был RPA.
     route: str = ""
+    #: Как найдена строка: пусто — по id (как всегда было), `name` — по точному
+    #: имени в таблице без id (ACL-1379). В журнале без этого не отличить
+    #: «выключили объект 123» от «выключили единственную строку с таким именем».
+    matched_by: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -3384,10 +3427,172 @@ _SWITCH_ACTION_JS = """args => {
 }"""
 
 
+#: Метка строки, найденной по имени. Тумблер метится `SEL_MARKED_SWITCH`, а
+#: строка — отдельно: перед нажатием проверяется, что это та же самая строка
+#: (тот же узел), а не перерисованная на её месте соседка.
+SEL_MARKED_ROW = '[data-acl-row="1"]'
+
+#: Найти кампанию по точному имени в таблице без id (Doc19/Doc20/Doc21, с
+#: 18.09) и рассказать про её тумблер. С `click` — ещё раз всё сверить и нажать
+#: в той же задаче браузера (ACL-1379).
+#:
+#: Разбор строк — тот же, что у чтения (`_READ_TREE_JS`, ветка by-name): имя —
+#: подсказка у ссылки, строка — ближайший `role=presentation`. Отличия — только
+#: в строгости: здесь мы не читаем, а собираемся нажать.
+#:
+#: - Имя должно встретиться ровно один раз. Одинаковые имена по имени не
+#:   различить — и выключить не ту кампанию хуже, чем не выключить никакую.
+#: - Строк на экране должно быть столько, сколько таблица насчитала сама
+#:   («Results from 5 campaigns»). Иначе часть списка не отрисована, и
+#:   двойник мог остаться за краем: «одна на экране» ещё не «одна в таблице».
+#: - Уровень подтверждён самой страницей (метки level= или заголовок
+#:   «Campaign»), а меток table_row нет вовсе: таблица с id выключается по id.
+#: - Нажимается только единственный `role=switch` этой строки. Ни шапка, ни
+#:   массовые действия, ни меню строки сюда не попадают.
+_FIND_BY_NAME_JS = r"""
+(args) => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  const hasBox = e => e.getClientRects().length > 0 || (getComputedStyle(e).display === 'contents' && [...e.children].some(hasBox));
+  const visible = e => hasBox(e) && !e.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(e).visibility !== 'hidden';
+  const fail = (why, extra) => Object.assign({found: false, why}, extra || {});
+  const want = norm(args.name);
+  if (!want) return fail('no campaign name was given');
+  // Метки прошлого поиска: при нажатии сверяем именно их.
+  const markedRow = args.click ? document.querySelector('[data-acl-row="1"]') : null;
+  const markedSwitch = args.click ? document.querySelector('[data-acl-switch="1"]') : null;
+  if (!args.click) {
+    document.querySelectorAll('[data-acl-row]').forEach(e => e.removeAttribute('data-acl-row'));
+    document.querySelectorAll('[data-acl-switch]').forEach(e => e.removeAttribute('data-acl-switch'));
+  }
+  const tables = [...document.querySelectorAll('[role="table"],[role="grid"]')]
+    .filter(visible).filter(e => !e.parentElement.closest('[role="table"],[role="grid"]'));
+  if (tables.length !== 1) return fail('expected one visible table');
+  const t = tables[0];
+  if (t.closest('[aria-busy="true"]') || [...t.querySelectorAll('[role="progressbar"],[aria-busy="true"]')].some(visible)) return fail('table is still loading');
+  if (t.querySelector('[data-surface*="table_row:"]')) return fail('this table shows row ids; read the account again');
+
+  // Уровень — как у чтения: метки подсказок Meta, иначе слово в заголовке имени.
+  const lk = new Set();
+  [...t.querySelectorAll('[data-surface*="level="]')].filter(visible).forEach(e => {
+    const m = (e.getAttribute('data-surface') || '').match(/level=([A-Z_]+)/);
+    if (m) lk.add(m[1]);
+  });
+  if (!lk.size) {
+    const head = t.querySelector('[data-surface*="table_column_header:name"]');
+    const word = head ? norm(head.textContent) : '';
+    const byWord = {'Campaign': 'CAMPAIGN_GROUP', 'Ad set': 'CAMPAIGN', 'Ad': 'ADGROUP'};
+    if (byWord[word]) lk.add(byWord[word]);
+  }
+  if (lk.size !== 1 || !lk.has(args.kind)) return fail('the page did not confirm that these rows are campaigns');
+
+  const tips = [...t.querySelectorAll('[data-tooltip-content]')].filter(e => visible(e) && norm(e.getAttribute('data-tooltip-content')));
+  let nameEls = tips.filter(e => e.querySelector('a'));
+  if (!nameEls.length) {
+    nameEls = tips.filter(e => {
+      const row = e.closest('[role="presentation"]');
+      return row && t.contains(row) && row.querySelector('[role="switch"]');
+    });
+  }
+  if (!nameEls.length) return fail('no campaign rows on screen');
+  const rows = [];
+  for (const n of nameEls) {
+    const row = n.closest('[role="presentation"]');
+    if (!row || !t.contains(row) || nameEls.filter(e => row.contains(e)).length !== 1)
+      return fail('a row could not be told apart from its neighbours');
+    rows.push({row, el: n, name: norm(n.getAttribute('data-tooltip-content'))});
+  }
+
+  // Полнота: таблица сама пишет, сколько в ней кампаний.
+  const counts = [...document.querySelectorAll('[data-surface$="/total_count"]')].filter(visible)
+    .map(e => norm(e.innerText).match(/\b(\d[\d,]*)\s+campaigns?\b/i)).filter(Boolean)
+    .map(m => parseInt(m[1].replace(/,/g, ''), 10));
+  if (new Set(counts).size !== 1) return fail('the table does not say how many campaigns it has, so the name cannot be confirmed unique');
+  if (counts[0] !== rows.length) return fail(`only ${rows.length} of ${counts[0]} campaigns are on screen, so the name cannot be confirmed unique`);
+
+  // Перед нажатием: помеченная при поиске строка на месте и с тем же именем.
+  if (args.click) {
+    const mine = rows.find(r => r.row === markedRow);
+    if (!mine || mine.name !== want) return fail('the row changed before action');
+  }
+  const hits = rows.filter(r => r.name === want);
+  if (!hits.length) return fail('no campaign with this exact name is in the table', {matches: 0});
+  if (hits.length > 1) return fail(`${hits.length} campaigns in the table have this exact name; without ids they cannot be told apart`, {matches: hits.length});
+  const hit = hits[0], row = hit.row;
+
+  const switches = [...row.querySelectorAll('[role="switch"]')].filter(visible);
+  if (switches.length !== 1) return fail('the row does not have exactly one on/off switch');
+  const sw = switches[0];
+  if (sw.disabled || sw.closest('[aria-disabled="true"]') || sw.getAttribute('aria-disabled') === 'true') return fail('switch is disabled');
+  const aria = sw.getAttribute('aria-checked');
+  const state = aria === 'true' ? 'on' : aria === 'false' ? 'off' :
+    aria === null && sw.matches('input[type="checkbox"]') && !sw.indeterminate ? (sw.checked ? 'on' : 'off') : 'unknown';
+  const label = norm(sw.getAttribute('aria-label'));
+  // Доставка — справа от имени, в порядке заголовков (как у чтения).
+  const heads = [...t.querySelectorAll('[data-surface*="table_column_header:"]')].filter(visible)
+    .map(h => (h.getAttribute('data-surface') || '').split(':').pop());
+  const dataCols = heads.filter(c => c !== 'toggle' && c !== 'name');
+  let wide = row; const q = [row];
+  while (q.length) { const x = q.shift(); if (x.children.length > wide.children.length) wide = x; q.push(...x.children); }
+  const cells = [...wide.children], di = dataCols.indexOf('delivery');
+  let delivery = '';
+  if (di >= 0 && di < cells.length) {
+    const leaf = [...cells[di].querySelectorAll('*')].find(e => visible(e) && !e.children.length && norm(e.textContent));
+    delivery = leaf ? norm(leaf.textContent) : norm(cells[di].innerText);
+  }
+  const result = {found: true, name: hit.name, rows: rows.length, delivery, on: state === 'on', off: state === 'off', label};
+
+  if (args.click) {
+    // Та же строка, что при поиске, — тот же узел, с тем же именем и тем же
+    // тумблером. Перерисовка (новый узел), переименование, соседка на месте
+    // строки — всё это отказ, а не «найдём заново и нажмём».
+    if (!markedRow || markedRow !== row || !markedSwitch || markedSwitch !== sw)
+      return fail('the row changed before action');
+    if (location.href !== args.url || label !== args.label || state === 'unknown')
+      return fail('context or switch changed before action');
+    if (state === 'on') {
+      const r = sw.getBoundingClientRect(), at = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      // Свой тумблер: сам input или то, что лежит в его обёртке, где кроме
+      // него никаких других элементов управления нет (нарисованная дорожка).
+      const CONTROL = 'button,a,input,select,textarea,[role="button"],[role="link"],[role="switch"],[role="checkbox"],[role="menuitem"],[contenteditable="true"]';
+      let wrap = sw;
+      while (wrap.parentElement && wrap.parentElement !== row && row.contains(wrap.parentElement) &&
+             [...wrap.parentElement.querySelectorAll(CONTROL)].every(c => c === sw)) wrap = wrap.parentElement;
+      const overlay = at && at.closest('[role="dialog"],[role="alertdialog"],[aria-modal="true"],[role="menu"],[role="tooltip"]');
+      const control = at && at.closest(CONTROL);
+      const own = at && !overlay && (at === sw || sw.contains(at) ||
+        (wrap.contains(at) && (!control || control === sw || control.contains(sw))));
+      if (!own) {
+        const d = at ? (at.tagName + (at.getAttribute('role') ? '[' + at.getAttribute('role') + ']' : '') + ' ' + norm(at.innerText || '').slice(0, 40)) : 'nothing';
+        return {found: false, why: 'switch is covered', covered_by: d};
+      }
+      sw.click();
+      result.clicked = true;
+    }
+    return result;
+  }
+  row.setAttribute('data-acl-row', '1');
+  sw.setAttribute('data-acl-switch', '1');
+  return result;
+}
+"""
+
+# Период сверяется в той же задаче браузера, что и нажатие, — как у `_SWITCH_ACTION_JS`.
+_BY_NAME_ACTION_JS = """args => {
+  const period = (""" + _FIND_PERIOD_JS + """)(args.period_args);
+  if (!period || period !== args.period) return {found:false, why:'period changed before action'};
+  return (""" + _FIND_BY_NAME_JS + """)(args);
+}"""
+
+#: Отказ, пока в этом же профиле идёт сборка кампаний (ACL-1379). Выключение
+#: посреди публикации делило бы с роботом один браузер.
+PROFILE_BUSY_ERROR = "The robot is building campaigns in this profile — wait for it to finish."
+
+
 @serialized_browser(key=_profile_key)
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
              expected_name: str = "", date_from: str = "", date_to: str = "",
-             requester: str = "") -> "TurnOffResult":
+             requester: str = "", match: str = "",
+             profile_busy: Callable[[str], bool] | None = None) -> "TurnOffResult":
     """Выключить и записать, что вышло.
 
     Запись стоит здесь, а не внутри: у `_turn_off` двадцать путей выхода, и
@@ -3414,16 +3619,33 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
     которой потом делают вывод «значит, оно ещё крутится».
     """
     who = (requester or "").strip()
-    try:
-        out = _turn_off(account, level, object_id, parent_id=parent_id,
-                        expected_name=expected_name, date_from=date_from, date_to=date_to)
-    except Exception as exc:
-        _record_turn_off(TurnOffResult(
-            account=account, level=level, object_id=object_id, name=expected_name,
-            state="unconfirmed", error=f"{type(exc).__name__}: {exc}"[:300],
-            at=_now(), requester=who, route="rpa",
-        ))
-        raise
+    # Сборка кампаний в этом профиле — отказ, а не очередь (ACL-1379).
+    # Спрашиваем уже под замком профиля: публикация, поставленная в очередь
+    # после проверки маршрута, сюда не проскочит — а та, что успела пройти и
+    # закончиться, пока мы ждали замок, тоже видна (`profile_busy` помнит её).
+    # Не смогли спросить — считаем занятым: нажимать вслепую незачем.
+    busy = False
+    if profile_busy is not None:
+        try:
+            busy = bool(profile_busy(_profile_key(account)))
+        except Exception:
+            busy = True
+    if busy:
+        out = TurnOffResult(account=account, level=level, object_id=str(object_id),
+                            name=expected_name, error=PROFILE_BUSY_ERROR, at=_now())
+    else:
+        try:
+            out = _turn_off(account, level, object_id, parent_id=parent_id,
+                            expected_name=expected_name, date_from=date_from, date_to=date_to,
+                            match=match)
+        except Exception as exc:
+            _record_turn_off(TurnOffResult(
+                account=account, level=level, object_id=object_id, name=expected_name,
+                state="unconfirmed", error=f"{type(exc).__name__}: {exc}"[:300],
+                at=_now(), requester=who, route="rpa",
+                matched_by="name" if (match == "name" and not str(object_id).strip()) else "",
+            ))
+            raise
     out.requester = who
     out.route = "rpa"
     if out.state in ("off", "already_off"):
@@ -3431,15 +3653,35 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         # исходы, и сохранённое дерево обязано их отражать — иначе оно врёт
         # ровно про то, что человек только что сделал.
         try:
-            _mark_object_off(out.account, out.object_id, out.delivery)
+            if out.object_id:
+                _mark_object_off(out.account, out.object_id, out.delivery)
+            elif out.matched_by == "name":
+                # Пустой id совпал бы со всеми строками без id — только по имени.
+                _mark_object_off_by_name(out.account, out.level, out.name, out.delivery)
         except Exception:
             pass
     _record_turn_off(out)
     return out
 
 
+def refuse_turn_off(account: str, level: str, object_id: str, *, name: str = "",
+                    error: str, requester: str = "", matched_by: str = "") -> "TurnOffResult":
+    """Отказ, при котором браузер не трогали, — тоже запись в журнале.
+
+    Маршрут отказывает сам, не дожидаясь замка профиля (робот строит кампании
+    в этом профиле, ACL-1379). Нажатие человека было — след должен остаться,
+    как у любого другого исхода `turn_off`.
+    """
+    out = TurnOffResult(account=account, level=level, object_id=str(object_id or ""),
+                        name=name, error=error, at=_now(), requester=(requester or "").strip(),
+                        route="rpa", matched_by=matched_by)
+    _record_turn_off(out)
+    return out
+
+
 def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
-              expected_name: str = "", date_from: str = "", date_to: str = "") -> "TurnOffResult":
+              expected_name: str = "", date_from: str = "", date_to: str = "",
+              match: str = "") -> "TurnOffResult":
     """Выключить одну кампанию или одно объявление. Включить отсюда нельзя.
 
     Период нужен не ради чисел, а ради сверки: на экране должен стоять тот же
@@ -3457,8 +3699,22 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         out.error = "row name is required — read the account again"
         return out
     if not str(object_id).strip():
+        if level == "ad":
+            # Объявления по имени не выключаем (ACL-1379). Список объявлений
+            # сужается фильтром по кампании, а в строке таблицы без id ни
+            # кампании, ни id нет: применила ли Meta фильтр, по строке не
+            # проверить (19.09 Doc20 фильтр однажды проигнорирован), а у
+            # клонов имена объявлений одинаковы во всех кампаниях. «Имя
+            # единственное» тогда могло бы значить «единственное в чужом списке».
+            out.error = ("Ads on an account without ids cannot be turned off from here: "
+                         "their campaign cannot be confirmed from the row. Turn off the "
+                         "campaign, or turn the ad off in Ads Manager.")
+            return out
+        if match == "name":
+            return _turn_off_by_name(out, account, expected_name,
+                                     date_from=date_from, date_to=date_to)
         out.error = ("This account shows the new Ads Manager table without campaign ids. "
-                     "Turning off by name is not available yet; turn it off in Ads Manager.")
+                     "Read the account again and turn it off by its exact name.")
         return out
     if not str(object_id).isdigit():
         out.error = "object id must contain only digits"
@@ -3632,6 +3888,201 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         out.error = "after reload the toggle is on again; Meta did not accept it"
         return out
     except Exception as exc:                      # noqa: BLE001
+        out.error = f"failed: {exc}"
+        return out
+    finally:
+        if conn is not None:
+            try:
+                conn.page.close()
+            except Exception:
+                pass
+            try:
+                conn.close(keep_browser_open=True)
+            except Exception:
+                pass
+
+
+def _turn_off_by_name(out: "TurnOffResult", account: str, expected_name: str, *,
+                      date_from: str = "", date_to: str = "") -> "TurnOffResult":
+    """Выключить кампанию по точному имени в таблице без id (ACL-1379).
+
+    Только для кампаний и только когда имя в таблице ровно одно. Порядок тот же,
+    что у выключения по id, и каждая сверка оттуда осталась: кабинет, уровень,
+    период, запрет на опасные подписи, «уже выключено — не нажимаем»,
+    подтверждение после перезагрузки. Добавлено то, что заменяет id:
+
+    - строк на экране столько, сколько насчитала сама таблица, и имя среди них
+      одно; в данных страницы (`campaign_structure_tree`) оно тоже не двоится;
+    - перед нажатием — в той же задаче браузера — та же строка (тот же узел) с
+      тем же именем и тем же тумблером; перерисовка между поиском и нажатием —
+      отказ;
+    - после нажатия — единственная строка с этим именем выключена, и так же
+      после перезагрузки.
+    """
+    from src.fb_ads_rpa import wizard_guard as wg
+
+    out.matched_by = "name"
+    out.object_id = ""
+    name = _name_key(expected_name)
+    out.name = name
+    entry = _entry_for(account)
+    if entry is None:
+        out.error = f"{account} is not in the account map"
+        return out
+    act = (entry.ad_account_id or "").strip()
+    if not act:
+        out.error = f"{account} has no ad_account_id in the account map"
+        return out
+    date_from = date_from or yesterday()
+    date_to = date_to or date_from
+    url = _tree_url(act, "campaign", date_from, date_to)
+    args = {"name": name, "kind": _LEVEL_KIND["campaign"]}
+
+    conn = None
+    clicked = False
+    try:
+        try:
+            conn = _attach_only(entry, account)
+        except ProfileNotAttachable as exc:
+            out.error = str(exc)
+            return out
+        page = conn.page
+        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        if not _wait_for_grid(page):
+            out.error = "Ads Manager did not finish loading in time"
+            return out
+
+        from urllib.parse import urlsplit
+        expected_act = act if act.startswith("act_") else "act_" + act
+        approved_url = page.url
+
+        def context_matches() -> bool:
+            return (page.url == approved_url and wg.is_ads_manager_url(page.url)
+                    and urlsplit(page.url).path == urlsplit(ADS_MANAGER_LEVELS["campaign"]).path
+                    and _act_from_url(page, tries=1) == expected_act
+                    and _period_matches(_shown_period(page), date_from, date_to))
+
+        def find() -> dict:
+            got = None
+            for _attempt in range(TABLE_BUSY_TRIES):
+                got = page.evaluate(_FIND_BY_NAME_JS, args)
+                if not (isinstance(got, dict) and got.get("why") == "table is still loading"):
+                    break
+                page.wait_for_timeout(1000)
+            return got if isinstance(got, dict) else {}
+
+        if not context_matches():
+            out.error = "account, period or level changed — nothing touched"
+            return out
+        found = find()
+        if not found.get("found"):
+            out.error = f"{found.get('why') or 'row not found'}; nothing was touched"
+            return out
+        if not context_matches():
+            out.error = "context changed during lookup — nothing touched"
+            return out
+        # Данные, которые Meta вшивает в страницу: если там у этого имени два
+        # id, таблица могла показать не всё — не нажимаем.
+        hit = _campaigns_from_page_data(page).get(name)
+        if hit is not None and not hit.get("id"):
+            out.error = ("more than one campaign has this exact name; without ids they "
+                         "cannot be told apart — nothing was touched")
+            return out
+        if str(found.get("name") or "") != name:
+            out.error = "the row name did not match; nothing was touched"
+            return out
+
+        why = wg.forbidden_click_reason(found.get("label"))
+        if why:
+            out.error = f"this cannot be clicked: {why}"
+            return out
+        if found.get("off"):
+            out.delivery = str(found.get("delivery") or "")
+            out.state = "already_off"
+            out.how = "found by exact name; the toggle is already off, nothing was clicked"
+            return out
+        if not found.get("on"):
+            out.error = "the toggle state is unclear; nothing was touched"
+            return out
+
+        page.locator(SEL_MARKED_SWITCH).scroll_into_view_if_needed(timeout=15_000)
+        if not context_matches():
+            out.error = "context changed before action — nothing touched"
+            return out
+        period = _period_once(page)
+        if not _period_matches(period, date_from, date_to):
+            out.error = "period could not be confirmed before action"
+            return out
+        acted = None
+        for _attempt in range(3):
+            acted = page.evaluate(_BY_NAME_ACTION_JS, dict(
+                args, click=True, url=approved_url, label=found.get("label"), period=period,
+                period_args=[list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE]))
+            if not (isinstance(acted, dict) and acted.get("why") == "switch is covered"):
+                break
+            try:
+                page.evaluate(
+                    "sel => { const e = document.querySelector(sel); if (e) e.scrollIntoView({block: 'center', behavior: 'instant'}); }",
+                    SEL_MARKED_SWITCH,
+                )
+            except Exception:
+                pass
+            page.wait_for_timeout(1000)
+        if not isinstance(acted, dict) or not acted.get("found"):
+            why = (acted.get("why") if isinstance(acted, dict) else "") or "action refused"
+            if isinstance(acted, dict) and acted.get("covered_by"):
+                why = f"{why} by {acted['covered_by']}"
+            out.error = f"{why}; nothing was touched"
+            return out
+        if not acted.get("clicked"):
+            out.state = "already_off"
+            out.delivery = str(acted.get("delivery") or "")
+            out.how = "already off at the final check; no click"
+            return out
+        clicked = True
+
+        # Единственная строка с этим именем должна стать выключенной.
+        for _ in range(TURN_OFF_TRIES):
+            now = find()
+            if now.get("found") and now.get("off") and now.get("name") == name:
+                break
+            page.wait_for_timeout(int(TURN_OFF_PAUSE_S * 1000))
+        else:
+            out.state = "unconfirmed"
+            out.error = "clicked but off was not confirmed; read the account again"
+            return out
+
+        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        if not _wait_for_grid(page):
+            out.state = "unconfirmed"
+            out.error = "confirmation table did not load; state unknown"
+            return out
+        again: dict = {}
+        for attempt in range(TURN_OFF_TRIES):
+            if attempt:
+                page.wait_for_timeout(int(TURN_OFF_PAUSE_S * 1000))
+            if not context_matches():
+                out.state = "unconfirmed"
+                out.error = "confirmation context changed; state unknown"
+                return out
+            again = find()
+            if (again.get("found") and again.get("off") and again.get("name") == name
+                    and context_matches()):
+                out.delivery = str(again.get("delivery") or "")
+                out.state = "off"
+                out.how = f"found by exact name; confirmed off after reload (observation {attempt + 1})"
+                return out
+        if not again.get("found"):
+            out.state = "unconfirmed"
+            out.error = ("after reload the row could not be confirmed "
+                         f"({again.get('why') or 'not found'}); state unknown")
+            return out
+        out.error = "after reload the toggle is on again; Meta did not accept it"
+        return out
+    except Exception as exc:                      # noqa: BLE001
+        # После нажатия обрыв — не «не выключилось», а «не знаем».
+        if clicked:
+            out.state = "unconfirmed"
         out.error = f"failed: {exc}"
         return out
     finally:
