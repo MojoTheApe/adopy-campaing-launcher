@@ -1598,6 +1598,39 @@ def _account_tail(name: str) -> str:
     return core[-3:].upper() if len(core) >= 3 else ""
 
 
+#: Хвост из id рекламного аккаунта в имени: `Facebook_6540_12345678901234`.
+#: Десять цифр и больше — номер Meta, а не часть имени (ACL-1377).
+_AD_ACCOUNT_ID_SUFFIX = re.compile(r"_\d{10,}$")
+
+
+def _account_key(name: str) -> str:
+    """Ключ имени без id аккаунта, разделителей и регистра (ACL-1377).
+
+    Дешборд знает аккаунт как `Facebook_6540_12345678901234`, книга — как
+    `Facebook6540`. Первый токен их не сводит (пробелов нет), хвост тоже:
+    у первого он из id (`234`), у второго — из имени (`540`). Общее у них —
+    имя целиком, если снять id в конце, подчёркивания и регистр.
+    """
+    core = _AD_ACCOUNT_ID_SUFFIX.sub("", (name or "").strip())
+    return re.sub(r"[^A-Za-z0-9]", "", core).lower()
+
+
+def _alias_by_key(label: str, known) -> str:
+    """Имя из книги с тем же ключом (`_account_key`) — или пусто.
+
+    Как и хвост, принимается только единственное совпадение: два имени книги
+    с одним ключом (`Facebook6540` и `Facebook_6540`) — это уже не «то же
+    имя», и подставленное наугад число проверить будет нечем. Само имя из
+    кандидатов исключено — совпадение с собой ничего не объясняет.
+    """
+    key = _account_key(label)
+    if not key:
+        return ""
+    own = (label or "").strip().casefold()
+    hits = [a for a in known if _account_key(a) == key and str(a).strip().casefold() != own]
+    return hits[0] if len(hits) == 1 else ""
+
+
 def _alias_by_tail(label: str, known: dict) -> str:
     """Имя из книги для подключённого аккаунта — или пусто.
 
@@ -1624,6 +1657,10 @@ def workbook_alias_for(df, country: str, label: str) -> str:
     Подключённый носит имя из Multilogin (`KLD_BFL_X01`), книга — своё
     (`FacebookMKTOBFLX01`). Общего у них только хвост.
 
+    Порядок: точное имя (первый токен) → то же имя без id аккаунта и
+    разделителей (`_alias_by_key`, ACL-1377) → хвост (`_alias_by_tail`).
+    Все шаги — в пределах страны и только при единственном совпадении.
+
     Одно место на обе надобности — числа в карте и раскрытие объявлений под
     строкой. Пока перевод имени жил только в карте, числа находились, а
     раскрытие приходило пустым: строка показывала $1,795 и говорила, что
@@ -1643,7 +1680,10 @@ def workbook_alias_for(df, country: str, label: str) -> str:
         names = sorted(
             {str(a).strip() for a in sub["Account Alias"].dropna() if str(a).strip()}
         )
-        return _alias_by_tail(label, names) or label
+        # ACL-1377: то же имя, записанное без id и подчёркиваний
+        # (`Facebook_6540_12345678901234` ↔ `Facebook6540`), — раньше хвоста:
+        # это совпадение имени, а не догадка по трём знакам.
+        return _alias_by_key(label, names) or _alias_by_tail(label, names) or label
     except Exception:  # pragma: no cover - перевод имени не должен ронять страницу
         return label
 

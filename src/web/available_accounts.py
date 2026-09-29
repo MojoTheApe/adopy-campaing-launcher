@@ -25,8 +25,10 @@
 спрятать всё из-за непрочитанного файла хуже, чем показать лишнее.
 
 Имя аккаунта с книгой сводится так же, как везде на странице: первый токен
-подписи (`normalize_account_alias`), а для имени из Multilogin
-(`KLD_BFL_X84`) — по хвосту, только при единственном совпадении.
+подписи (`normalize_account_alias`), затем то же имя без id аккаунта и
+разделителей (`Facebook_6540_12345678901234` ↔ `Facebook6540`, ACL-1377), а
+для имени из Multilogin (`KLD_BFL_X84`) — по хвосту. Каждый шаг — только при
+единственном совпадении.
 """
 from __future__ import annotations
 
@@ -144,11 +146,18 @@ def workbook_key(label: str, activity: Activity, *, by_tail: bool = False) -> st
         return ""
     if key in activity.ever or key in activity.name_set:
         return key
+    # ACL-1377: то же имя без id аккаунта и разделителей
+    # (`Facebook_6540_12345678901234` ↔ `facebook6540`) — тот же шаг, что и в
+    # `workbook_alias_for` карты. Это совпадение имени, а не догадка, поэтому
+    # оно и для подписей отчёта; единственное — как везде.
+    from src.web.app import _alias_by_key, _alias_by_tail
+
+    by_key = _alias_by_key(label, activity.names)
+    if by_key:
+        return by_key.casefold()
     if not by_tail:
         return ""
     # Догадка — поэтому только единственное совпадение, как и в карте.
-    from src.web.app import _alias_by_tail
-
     return _alias_by_tail(label, activity.names).casefold()
 
 
