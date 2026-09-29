@@ -94,6 +94,17 @@ NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "br
                                       "simple_create_layout", "lead_terms_not_accepted",
                                       "objective_inline"})
 
+# tab_frozen_budget_exceeded / campaign_budget_exceeded / step_budget_exceeded
+# (ACL-1354, runs 37e397574548 and a71e4fc14aa1 of 2026-09-28): the campaign
+# ran out of its time budget or its tab kept not answering; the draft is
+# partial, and a replay on the same profile would duplicate it and hang again.
+# They come from the flow's budget wrapper (meta_dom._under_flow_budget), not
+# from a `return` in its body, so they are not in NON_RETRYABLE_FLOW_STEPS
+# (see tests/test_recorded_retry_contract.py); like every step outside
+# CAMPAIGN_RETRY_STEPS they block and are never replayed.
+FLOW_BUDGET_STOPS = frozenset({"tab_frozen_budget_exceeded", "campaign_budget_exceeded",
+                               "step_budget_exceeded"})
+
 
 # Stops and field failures that block publication and need review.
 BLOCKING_REVIEW_STEPS = frozenset(
@@ -113,6 +124,10 @@ BLOCKING_REVIEW_STEPS = frozenset(
         "lead_terms_not_accepted",
         "objective_inline",
         "simple_create_more_ads",
+        # ACL-1354: time budgets of the recorded flow.
+        "tab_frozen_budget_exceeded",
+        "campaign_budget_exceeded",
+        "step_budget_exceeded",
         "conversion_event",
         "audience_age",
         "audience_location",

@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from playwright.sync_api import Error as _PlaywrightError
 from playwright.sync_api import Frame, Page
 
 from src.fb_ads_rpa import page_liveness as _liveness
@@ -197,9 +198,75 @@ def media_refused_on_ad() -> str | None:
 
 
 def last_upload_diag() -> dict:
-    """The upload diagnostic of THIS thread's last creative, or the global one."""
+    """The upload diagnostic of THIS thread's last creative, or the global one.
+
+    ACL-1354: плюс названная причина отказа шага (`why`) и его фазы с
+    длительностями (`phases`) — прогон a71e4fc14aa1 провёл в шаге креатива
+    почти два часа, и по телеметрии нельзя было сказать, где.
+    """
     own = getattr(_upload_diag_tls, "diag", None)
-    return dict(own if own is not None else _LAST_UPLOAD_DIAG)
+    out = dict(own if own is not None else _LAST_UPLOAD_DIAG)
+    why = getattr(_creative_tls, "why", "")
+    if why:
+        out["why"] = why
+    phases = getattr(_creative_tls, "phases", None)
+    if phases:
+        out["phases"] = list(phases)[-12:]
+    return out
+
+
+#: ACL-1354: состояние шага креатива этого потока — срок (`deadline`),
+#: названная причина отказа (`why`) и фазы (`phases`).
+_creative_tls = threading.local()
+
+#: ACL-1354: потолок шага креатива целиком (все попытки, проверки медиа,
+#: ожидание загрузки). Прогон a71e4fc14aa1 (28.09, 1443 Trading) шёл
+#: 14:26–16:25 UTC: у каждого ожидания был свой потолок (`_UPLOAD_MAX_S` —
+#: 20 мин), а у шага — нет, и потолки складывались. Одна загрузка тяжёлого
+#: видео (20 мин) в него помещается.
+CREATIVE_STEP_BUDGET_S = 25 * 60
+
+#: Не начинать повтор загрузки, если от срока шага осталось меньше.
+CREATIVE_RETRY_MIN_S = 120.0
+
+#: ACL-1354: столько подряд непрочитанных опросов блока Media (~10 с) —
+#: и проверка медиа кончается: вкладка не читается, ждать нечего.
+MEDIA_CHECK_UNREADABLE_POLLS = 20
+
+
+def _creative_deadline(own: float) -> float:
+    """Срок ожидания внутри шага креатива: свой, но не позже срока шага."""
+    step = getattr(_creative_tls, "deadline", None)
+    return own if step is None else min(own, step)
+
+
+def _creative_left() -> float:
+    """Сколько секунд осталось от срока шага креатива (∞ — вне шага)."""
+    step = getattr(_creative_tls, "deadline", None)
+    return float("inf") if step is None else step - time.time()
+
+
+_PAGE_WHY = ("page_closed", "page_unreadable")
+
+
+def _creative_why(why: str) -> None:
+    """Назвать причину отказа шага креатива (первая названная остаётся;
+    закрытая / нечитаемая вкладка — причина всех прочих и перекрывает их)."""
+    if not getattr(_creative_tls, "why", "") or (why in _PAGE_WHY
+                                                  and _creative_tls.why not in _PAGE_WHY):
+        _creative_tls.why = why
+    # Слияние ACL-1348 + ACL-1354 на живой ветке: поток пишет в строку шага
+    # объявления `last_upload_why()` — пусть и причины ACL-1354 туда попадают.
+    if not getattr(_upload_why_tls, "why", "") or why in _PAGE_WHY:
+        _upload_why_tls.why = why
+
+
+def _creative_phase(name: str, started: float, **extra) -> None:
+    """Записать фазу шага креатива и сколько она длилась."""
+    phases = getattr(_creative_tls, "phases", None)
+    if phases is None:
+        phases = _creative_tls.phases = []
+    phases.append({"phase": name, "s": round(time.time() - started, 1), **extra})
 
 
 def _set_last_upload_diag(diag: dict) -> None:
@@ -1658,8 +1725,125 @@ def _human_jitter(base: float, spread: float = 0.3) -> float:
 
 
 def _sleep_h(base: float, spread: float = 0.3) -> None:
-    """Jittered sleep — drop-in for time.sleep() on interaction pauses."""
+    """Jittered sleep — drop-in for time.sleep() on interaction pauses.
+
+    ACL-1354: заодно — точка проверки сроков кампании (`_flow_budget_check`):
+    паузы стоят во всех циклах ожидания, и зависшая вкладка не может тянуть
+    шаг дольше срока, пока цикл хоть раз засыпает.
+    """
     time.sleep(_human_jitter(base, spread))
+    _flow_budget_check()
+
+
+# ── ACL-1354: сроки записанного потока кампании ─────────────────────────────
+#
+# Живые прогоны 28.09: a71e4fc14aa1 (1443, новый редактор) — 119 мин на одну
+# кампанию; 37e397574548 (6540, прежний мастер) — 72 мин и дальше: вкладка
+# раз за разом не отвечала на проверку живости (`tab_frozen` на 5,8 / 6,2 /
+# 9,2 / 12,8 / 25 / 26,7 мин кампании), `ad_creative_upload` — 610 с,
+# `ad_copy` — 2281 с (паузы между записями 530 и 773 с), `ad2_create` — 578 с.
+# Обычная кампания 28.09 — 4–13 мин, самый долгий шаг — 5,5 мин. Сроков не
+# было ни у шага, ни у кампании; теперь они есть, и выход по ним назван.
+
+#: Срок записанного потока одной кампании — от открытия (после Create) до конца.
+CAMPAIGN_FLOW_BUDGET_S = 45 * 60
+
+#: Срок одного шага (между двумя записями `_shot`). Шаг креатива — под своим
+#: сроком `CREATIVE_STEP_BUDGET_S` (загрузка тяжёлого видео).
+STEP_BUDGET_S = 10 * 60
+
+#: Непройденные проверки живости (`_tab_frozen`) ближе друг к другу, чем
+#: столько секунд, — один эпизод застоя. `_tab_frozen` зовут на каждом нажатии,
+#: вводе и ожидании загрузки: один застой даёт пачку проб, и считать надо
+#: застои, а не пробы (ревью PR #368, B1).
+TAB_FROZEN_EPISODE_GAP_S = 90.0
+
+#: На каком эпизоде застоя кампания останавливается. Подобрано по телеметрии
+#: (эпизоды — по строкам `tab_frozen` / `responsive:false` / `tab_frozen:true`;
+#: в телеметрию попадает только часть проб, поэтому запас):
+#: * 7cfdc772376d (26.09, здоровая, 16,4 мин, 2 объявления): пробы на 244, 252,
+#:   381, 402 с после открытия — 2 эпизода (244–252, 381–402);
+#: * 37e397574548 (28.09, 6540, больше часа): 334, 358 | 539 | 755 | 931 |
+#:   1486 | 1588 | 3079 | … с — 5-й эпизод на 1486 с (24,8 мин), дальше ещё 7.
+#: Из 36 открытых кампаний в телеметрии 26–28.09 заморозку видели три, и ни у
+#: одной здоровой не было больше двух эпизодов.
+TAB_FROZEN_STOP_EPISODES = 5
+
+
+class FlowBudgetExceeded(BaseException):
+    """Срок кампании / шага или зависшая вкладка — остановка потока.
+
+    От `BaseException`, а не `Exception`: мягкие отказы шагов ловят
+    `except Exception` и пошли бы дальше по зависшей вкладке.
+    """
+
+    def __init__(self, reason: str, detail: dict):
+        super().__init__(reason)
+        self.reason = reason
+        self.detail = detail
+
+
+_flow_budget = threading.local()
+
+
+def _flow_budget_arm() -> None:
+    """Включить сроки для потока этой кампании (после открытия кампании)."""
+    now = time.time()
+    _flow_budget.armed = True
+    _flow_budget.fired = False
+    _flow_budget.start = now
+    _flow_budget.step_start = now
+    _flow_budget.step = ""
+    _flow_budget.frozen = []      # начала эпизодов застоя
+    _flow_budget.frozen_last = None
+
+
+def _flow_budget_disarm() -> None:
+    _flow_budget.armed = False
+
+
+def _flow_budget_step(step: str) -> None:
+    """Граница шага: срок следующего шага считается отсюда."""
+    if getattr(_flow_budget, "armed", False):
+        _flow_budget.step_start = time.time()
+        _flow_budget.step = step
+
+
+def _flow_budget_note_frozen() -> None:
+    """Вкладка не ответила: новый эпизод застоя — или продолжение текущего."""
+    if not getattr(_flow_budget, "armed", False):
+        return
+    now = time.time()
+    last = getattr(_flow_budget, "frozen_last", None)
+    if last is None or now - last > TAB_FROZEN_EPISODE_GAP_S:
+        _flow_budget.frozen.append(now)
+    _flow_budget.frozen_last = now
+
+
+def _flow_budget_check() -> None:
+    """Бросить `FlowBudgetExceeded`, если срок вышел (один раз на кампанию)."""
+    if not getattr(_flow_budget, "armed", False) or getattr(_flow_budget, "fired", False):
+        return
+    now = time.time()
+    frozen = _flow_budget.frozen
+    detail = {"after_step": _flow_budget.step, "campaign_s": round(now - _flow_budget.start, 1),
+              "step_s": round(now - _flow_budget.step_start, 1), "frozen_episodes": len(frozen)}
+    step_limit = STEP_BUDGET_S
+    if getattr(_creative_tls, "deadline", None) is not None:
+        step_limit = max(STEP_BUDGET_S, CREATIVE_STEP_BUDGET_S + 60.0)
+    if len(frozen) >= TAB_FROZEN_STOP_EPISODES:
+        reason = "tab_frozen_budget_exceeded"
+        detail["episodes_at_s"] = [round(t - _flow_budget.start, 1) for t in frozen[-8:]]
+    elif now - _flow_budget.start > CAMPAIGN_FLOW_BUDGET_S:
+        reason = "campaign_budget_exceeded"
+        detail["budget_s"] = CAMPAIGN_FLOW_BUDGET_S
+    elif now - _flow_budget.step_start > step_limit:
+        reason = "step_budget_exceeded"
+        detail["budget_s"] = step_limit
+    else:
+        return
+    _flow_budget.fired = True
+    raise FlowBudgetExceeded(reason, detail)
 
 
 _UPLOADING_TEXT = re.compile(r"^Uploading (video|image)\b", re.I)
@@ -2834,7 +3018,8 @@ def _loading_kind(page: Page) -> str:
         overlay = page.get_by_text(_LOADING_TEXT).first
         if overlay.is_visible():
             text = re.sub(r"\s+", " ", overlay.inner_text(timeout=300) or "").strip()
-            return "text:" + text[:40]
+            # ACL-1354: модалка таблицы списка — не загрузка окна Create.
+            return ("table:" if _table_loading(page) else "text:") + text[:40]
     except Exception:
         return "unknown"
     try:
@@ -2865,10 +3050,76 @@ def _network_trouble(page: Page) -> bool:
         return False
 
 
+_TABLE_LOADING_JS = r"""
+  () => {
+    const shown = [...document.querySelectorAll('[role=dialog]')].filter(d => {
+      const r = d.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+    const progress = (d, table) => [...d.querySelectorAll('[data-surface]')].some(s => {
+      const v = s.getAttribute('data-surface') || '';
+      return /progress_dialog/.test(v) && v.startsWith('/am/table/') === table;
+    });
+    // Ревью PR #368: видна и модалка Create — значит, нажатие взялось.
+    return shown.some(d => progress(d, true)) && !shown.some(d => progress(d, false));
+  }
+"""
+"""Модалка «Loading...» самой таблицы списка кампаний, а не окна Create.
+
+ACL-1354, прогоны 9d113c3d6ac3 и 0149090ef2c7 (9943, 28.09): после Create на
+экране 60+ с стояла модалка «Loading...» с `data-surface=
+"/am/table/lib:ads_progress_dialog_modal_…"`. Модалка Create — другая:
+`/am/lib:ads_progress_dialog_modal_…` с «Loading creation» (279b9539df43).
+Ожидание окна цели считало обе «загрузкой после Create» и досиживало до
+потолка 120 с; окно цели не пришло ни разу — нажатие Create не взялось.
+Вырезка: tests/fixtures/ads_manager/objective_open_2026_09_28.html."""
+
+
+def _table_loading(page: Page) -> bool:
+    """На экране модалка загрузки таблицы списка (не окна Create)."""
+    try:
+        return _eval_bounded(page, _TABLE_LOADING_JS, timeout_s=2.0) is True
+    except Exception:
+        return False
+
+
+def _wait_table_loading_gone(page: Page, until: float) -> bool:
+    """Дождаться, пока уйдёт модалка таблицы (не дольше `until`). True — ушла."""
+    while time.time() < until:
+        if _tab_gone(page) or not _table_loading(page):
+            return True
+        _sleep_h(0.5, 0.2)
+    return not _table_loading(page)
+
+
+#: ACL-1354: чем кончилось последнее открытие кампании этого потока
+#: (`_open_campaign`) — для названной причины `objective_leads`.
+_LAST_OPEN = threading.local()
+
+
+def _objective_missing_reason(page: Page) -> str:
+    """Почему окна цели нет — метка отказа `objective_leads` (ACL-1354).
+
+    Прежде отказ писался без причины («objective_leads: silent»), хотя снимки
+    её показывали: 279b9539df43 — «Turn off ad blocker» Meta (сеть профиля
+    режет её запросы), 9d113c3d6ac3 / 0149090ef2c7 — модалка загрузки
+    таблицы, а не окна Create.
+    """
+    if _network_trouble(page):
+        return "network_trouble"
+    if _table_loading(page):
+        return "table_loading"
+    last = getattr(_LAST_OPEN, "outcome", "") or ""
+    if last == "table_loading":
+        return "table_loading"
+    return "no_objective_dialog:" + (last or "unknown")
+
+
 def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
     """Отозвалась ли страница на Create: "ok" / "left_list" / "nothing" /
     "frozen" (вкладка не ответила на проверку живости, ACL-1320) / "gone"
-    (вкладки больше нет).
+    (вкладки больше нет) / "table_loading" (видна только модалка загрузки
+    таблицы списка, ACL-1354 — нажатие не взялось).
 
     ACL-1313: с 20.09 первый Create после загрузки открывал окно цели в 42%
     случаев, остальные ждали 75–180 с и перезагрузку. На снимках 25.09 у
@@ -2878,6 +3129,7 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
     base = (list_url or "").split("?", 1)[0]
     # Ревью PR #323 (F9): не дольше, чем осталось от бюджета открытия.
     deadline = time.time() + max(0.5, min(timeout_s, _open_left()))
+    table = False
     while time.time() < deadline:
         # ACL-1320: вкладки больше нет — "gone" сразу, не восемь секунд
         # падающих за миллисекунды вызовов.
@@ -2893,7 +3145,11 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
         except Exception:
             pass
         if _loading_visible(page):
-            return "ok"
+            # ACL-1354 (9d113c3d6ac3): «Loading...» модалки самой таблицы
+            # списка — не след нажатия Create; окно цели за ней не пришло.
+            if not _table_loading(page):
+                return "ok"
+            table = True
         try:
             # ACL-1327: Create открыл сразу новый редактор «в один экран» —
             # это не уход со списка, а удачное нажатие.
@@ -2904,7 +3160,7 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
         except Exception:
             pass
         _sleep_h(0.5, 0.2)
-    return "nothing"
+    return "table_loading" if table else "nothing"
 
 
 #: ACL-1313: сколько ждать окно цели, когда на экране НЕТ ни радио Leads, ни
@@ -2987,6 +3243,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
     slow_polls = 0
     loading_kinds: dict[str, int] = {}
     shell_polls = 0
+    table_polls = 0
     outcome = "idle"
     found = False
     poll_start = None
@@ -3041,10 +3298,21 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                 break
             continue
         if _loading_visible(page):
-            loading_polls += 1
-            last_busy = now
             kind = _loading_kind(page) or "gone"
             loading_kinds[kind] = loading_kinds.get(kind, 0) + 1
+            if kind.startswith("table:"):
+                # ACL-1354 (9d113c3d6ac3, 0149090ef2c7): «Loading...» модалки
+                # таблицы списка — не загрузка окна Create. Прежде она
+                # держала ожидание до потолка (120 с), и окно цели так и не
+                # пришло. Считаем её пустым экраном: раунд кончается через
+                # `idle_s`, и следующий жмёт Create на свежем списке.
+                table_polls += 1
+                if now - last_busy >= idle_s or now - start >= loading_max_s:
+                    outcome = "table_loading"
+                    break
+                continue
+            loading_polls += 1
+            last_busy = now
             if _network_trouble(page):
                 outcome = "network_trouble"
                 break
@@ -3084,6 +3352,7 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                                 "frozen_polls": frozen_polls,
                                 "slow_polls": slow_polls,
                                 "simple_create_shell_polls": shell_polls,
+                                "table_polls": table_polls,
                                 "woke": getattr(watch, "fired", ""),
                                 "idle_s": round(time.time() - last_busy, 1)})
     except Exception:
@@ -3232,8 +3501,49 @@ def _tab_frozen(page: Page) -> bool:
 
     None от `_page_responsive` (спросить не удалось: закрыта, подставная
     страница без `wait_for_function`) — не «зависла»: решать за неё нечего.
+
+    ACL-1354 (37e397574548): вкладка раз за разом не отвечает — на
+    TAB_FROZEN_STOP_EPISODES-м эпизоде застоя кампания останавливается
+    (внутри `_shot` — после записи строки шага, `_flow_budget.defer`).
     """
-    return _page_responsive(page, LIVENESS_PROBE_S) is False
+    frozen = _page_responsive(page, LIVENESS_PROBE_S) is False
+    if frozen:
+        _flow_budget_note_frozen()
+        if not getattr(_flow_budget, "defer", False):
+            _flow_budget_check()
+    return frozen
+
+
+def _page_read_trouble(page: Page, timeout_s: float = 2.0) -> str:
+    """Читается ли вкладка: "" — да; "closed" (закрыта, браузер отсоединён);
+    "crashed" (рендерер упал); "frozen" (не ответила за `timeout_s`);
+    "error:<Тип>" — вызов падает иначе.
+
+    ACL-1354: 9d3e41a0b373 (9943) — вкладку закрыли посреди аудитории, и
+    шесть шагов подряд отказали молча, последним — «simple_create_layout:
+    ad-section» (`error:TargetClosedError`). a71e4fc14aa1 (1443) в ту же
+    минуту: охрана нажатия не смогла прочитать страницу (`click_refused
+    unreadable`), и дальше ни одно чтение не дало ни заголовка, ни снимка.
+    """
+    if _tab_gone(page):
+        return "closed"
+    try:
+        _eval_bounded(page, "() => 1", timeout_s=timeout_s)
+        return ""
+    except Exception as exc:
+        text = str(exc)
+        if _liveness.is_gone_error(exc):
+            _liveness.mark_gone(page)
+            return "closed"
+        if "crash" in text.lower():
+            return "crashed"
+        if "timeout" in type(exc).__name__.lower() or "Timeout" in text:
+            return "frozen"
+        # Только ошибка самого Playwright — про вкладку; прочее (подставная
+        # страница без `wait_for_function` и т. п.) ничего о ней не говорит.
+        if isinstance(exc, _PlaywrightError):
+            return "error:" + type(exc).__name__
+        return ""
 
 
 def _eval_bounded(page: Page, js: str, arg=None, timeout_s: float = LIVENESS_PROBE_S):
@@ -4232,6 +4542,7 @@ def _open_campaign(page: Page, list_url: str, *, press, shot, on_new_page=None) 
     """См. `_open_campaign_rounds`. Ревью PR #323 (F9): на время открытия
     ставится срок потока (`_OPEN_BUDGET`) — его соблюдают и шаги внутри."""
     _OPEN_BUDGET.deadline = time.time() + CAMPAIGN_OPEN_BUDGET_S
+    _LAST_OPEN.outcome = ""
     try:
         return _open_campaign_rounds(page, list_url, press=press, shot=shot, on_new_page=on_new_page)
     finally:
@@ -4360,6 +4671,10 @@ def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page
             outcome = "budget"
             break
         _clear_blocking_overlays(page, "create" if rounds == 1 else "create_retry", editor=False)
+        # ACL-1354 (9d113c3d6ac3): модалка загрузки таблицы накрывает список —
+        # нажатие Create под ней не берётся. Сперва дождаться её (в пределах раунда).
+        if _table_loading(page):
+            _wait_table_loading_gone(page, round_end)
         where = "create" if rounds == 1 else "create_retry"
         if not press(page, where):
             outcome = "press_failed"
@@ -4386,6 +4701,10 @@ def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page
             quick_left -= 1
             if took == "left_list":
                 _back_to_list(page, list_url)
+            if took == "table_loading":
+                # ACL-1354: нажатие ушло под модалку загрузки таблицы — жать
+                # снова имеет смысл только после неё (в пределах раунда).
+                _wait_table_loading_gone(page, round_end)
             try:
                 page.get_by_role("button", name="Create", exact=True).first.wait_for(
                     state="visible", timeout=max(int(min(30.0, round_end - time.time()) * 1000), 1000))
@@ -4434,6 +4753,7 @@ def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page
     if result == "profile_unresponsive":
         # Перед перезапуском профиля — диагноз: не вход ли это и не сеть ли.
         result = _profile_trouble(page) or result
+    _LAST_OPEN.outcome = outcome
     try:
         _telemetry.record("campaign_open_budget", not result, note=result or "opened",
                           duration_s=time.time() - start,
@@ -4445,6 +4765,36 @@ def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page
     return result
 
 
+def _under_flow_budget(flow):
+    """Поток кампании под сроками кампании (ACL-1354).
+
+    Срок вышел или вкладка раз за разом не отвечает — поток прерывается
+    (`FlowBudgetExceeded`), и кампания останавливается с названной причиной:
+    `tab_frozen_budget_exceeded`, `campaign_budget_exceeded` или
+    `step_budget_exceeded`. Черновик при этом частичный — повтор кампании его
+    бы продублировал: они в retry_policy.FLOW_BUDGET_STOPS и не в
+    CAMPAIGN_RETRY_STEPS, то есть блокируют без повтора.
+    """
+    import functools
+
+    @functools.wraps(flow)
+    def run(*args, **kwargs):
+        try:
+            return flow(*args, **kwargs)
+        except FlowBudgetExceeded as stop:
+            try:
+                _telemetry.record(stop.reason, False, note=str(stop.detail.get("after_step", "")),
+                                  diag=stop.detail)
+            except Exception:
+                pass
+            return stop.reason
+        finally:
+            _flow_budget_disarm()
+
+    return run
+
+
+@_under_flow_budget
 def run_recorded_campaign_flow(
     page: Page,
     *,
@@ -4608,6 +4958,22 @@ def run_recorded_campaign_flow(
     # которые пишут в телеметрию напрямую, мимо `_shot`.
     _telemetry.set_current_run(run_id, campaign_name)
     _shot_clock = {"t": time.time()}
+    # ACL-1354: отказ шага пришёлся на закрытую вкладку (`_shot` это видит).
+    page_state = {"closed": False}
+
+    def _closed_stop(where: str, fails: list[str] | None = None) -> bool:
+        """Вкладки больше нет — остановка `browser_closed`, а не шаги вслепую.
+
+        9d3e41a0b373 (28.09, 9943): вкладку закрыли на шаге Locations; ещё
+        минуту шли языки, интересы, Advantage+, плейсменты — каждый отказ
+        молча, — а кампания встала с `simple_create_layout: ad-section`.
+        """
+        if not (page_state["closed"] or _page_read_trouble(page) == "closed"):
+            return False
+        _telemetry.record("browser_closed", False, note="page_closed", diag={"where": where})
+        if soft_fails_out is not None and fails:
+            soft_fails_out.extend(fails)
+        return True
 
     def _shot(label: str, diag: dict | None = None, note: str | None = None) -> None:
         now = time.time()
@@ -4618,9 +4984,25 @@ def run_recorded_campaign_flow(
         # Спрашиваем один раз, ограниченно, и тогда пишем только строку.
         frozen = None
         if ok is False or _shot_worth_a_picture(label):
-            frozen = _tab_frozen(page)
+            # Ревью PR #368: срок проверяется после записи строки шага, иначе
+            # остановка съедала сам отказ.
+            _flow_budget.defer = True
+            try:
+                frozen = _tab_frozen(page)
+            finally:
+                _flow_budget.defer = False
             if frozen:
                 diag = {**(diag or {}), "tab_frozen": True}
+        # ACL-1354: отказ без названной причины («silent») — сперва причина из
+        # собственного diag шага, иначе — закрытая вкладка (9d3e41a0b373: шесть
+        # отказов подряд на закрытой вкладке, ни у одного — причины).
+        if ok is False and not note:
+            if isinstance(diag, dict) and isinstance(diag.get("why"), str) and diag["why"]:
+                note = diag["why"][:80]
+            elif _tab_gone(page):
+                note = "page_closed"
+        if ok is False and _tab_gone(page):
+            page_state["closed"] = True
         # Причина отказа собирается здесь, в единственной точке, а не в сорока
         # трёх местах вызова. Ни один из них её не передавал: у всех отказов
         # 9 сентября `diag` был пуст, и сказать про них было нечего — ни
@@ -4653,6 +5035,9 @@ def run_recorded_campaign_flow(
             note=note or "",
         )
         _shot_clock["t"] = now
+        _flow_budget_step(step)
+        if frozen:
+            _flow_budget_check()
         if ok is not False and not _shot_worth_a_picture(label):
             return
         if frozen:
@@ -4771,6 +5156,8 @@ def run_recorded_campaign_flow(
         return "profile_network"
     if opened == "create":
         return "create"
+    # ACL-1354: кампания открыта — дальше сроки кампании, шага и зависшей вкладки.
+    _flow_budget_arm()
 
     # ACL-1327: новый редактор Meta «в один экран» (кампания, группа и
     # объявление — разделы одной страницы). Прежде (ACL-1320) здесь была
@@ -4846,7 +5233,10 @@ def run_recorded_campaign_flow(
         except Exception:
             radio_there = False
         if not radio_there or not _click(leads_radio, where="objective_leads"):
-            _shot("fail_objective_leads")
+            # ACL-1354: причина — по экрану и по тому, чем кончилось открытие
+            # (прежде «objective_leads: silent» у трёх прогонов 9943).
+            why = _objective_missing_reason(page) if not radio_there else "radio_not_pressed"
+            _shot("fail_objective_leads", {"open": getattr(_LAST_OPEN, "outcome", "")}, note=why)
             return "objective_leads"
         _shot("after_leads")
 
@@ -4989,6 +5379,12 @@ def run_recorded_campaign_flow(
             return "objective_inline"
         _close_onboarding_tour(page, "simple_adset")
         level = _simple.scroll_to_level(page, "adset")
+        if not level.get("ok"):
+            # ACL-1354: раздела нет, потому что нет вкладки, — не разметка.
+            if level.get("why") == "page_closed":
+                page_state["closed"] = True
+            if _closed_stop("simple_adset"):
+                return "browser_closed"
         if not level.get("ok"):
             # Раздела группы на странице нет — эту разметку робот не знает.
             _shot("fail_simple_create_layout", {"section": "adset", "why": level.get("why", "")},
@@ -5246,6 +5642,8 @@ def run_recorded_campaign_flow(
         except Exception as exc:
             _shot("fail_audience_location")
             soft_fails.append(f"audience_location:{str(exc)[:60]}")
+        if page_state["closed"] and _closed_stop("audience_location", soft_fails):
+            return "browser_closed"
 
     # Languages — wired to the real per-country language from the Upload
     # FB.xlsx "Countries" sheet (see enrich_draft.py's lookup_country()),
@@ -5253,22 +5651,28 @@ def run_recorded_campaign_flow(
     # itself works; only the "what value to type" plumbing was missing before.
     if language_names:
         try:
-            if not fill_audience_languages(page, language_names):
-                _shot("fail_languages")
+            lang_report: dict = {}
+            if not fill_audience_languages(page, language_names, report=lang_report):
+                # ACL-1354: причина названа (прежде «languages: silent»).
+                _shot("fail_languages", note=lang_report.get("why", ""))
                 soft_fails.append("languages")
             else:
                 _shot("after_languages")
         except Exception as exc:
             _shot("fail_languages")
             soft_fails.append(f"languages:{str(exc)[:60]}")
+        if page_state["closed"] and _closed_stop("languages", soft_fails):
+            return "browser_closed"
 
     # Detailed targeting: paste each comma-separated interest term and pick
     # the first autocomplete suggestion — same pattern the old recipe_player
     # path used for this exact field.
     if targeting_label:
         try:
-            if not open_detailed_targeting_field(page):
-                _shot("fail_targeting_open")
+            tgt_report: dict = {}
+            if not open_detailed_targeting_field(page, report=tgt_report):
+                _shot("fail_targeting_open", {"row": tgt_report.get("row")},
+                      note=tgt_report.get("why", ""))
                 soft_fails.append("targeting_open")
             else:
                 any_added = paste_targeting_groups(page, targeting_label)
@@ -5307,6 +5711,8 @@ def run_recorded_campaign_flow(
         except Exception as exc:
             _shot("fail_targeting")
             soft_fails.append(f"targeting:{str(exc)[:60]}")
+        if page_state["closed"] and _closed_stop("targeting", soft_fails):
+            return "browser_closed"
     else:
         # Пропуск тоже событие. Раньше пустой список интересов не оставлял в
         # телеметрии ни строки: шага в потоке просто не существовало. 9 сентября
@@ -5360,6 +5766,8 @@ def run_recorded_campaign_flow(
     except Exception as exc:
         _shot("fail_placements", {"error": str(exc)[:200]})
         soft_fails.append(f"placements:{str(exc)[:60]}")
+    if page_state["closed"] and _closed_stop("placements", soft_fails):
+        return "browser_closed"
 
     # Devices and operating systems: lives inside the same Placements /
     # Account controls panel just expanded above (confirmed live
@@ -5422,6 +5830,13 @@ def run_recorded_campaign_flow(
             _close_onboarding_tour(page, "simple_ad")
             level = _simple.scroll_to_level(page, "ad")
             if not level.get("ok"):
+                # ACL-1354 (9d3e41a0b373): раздел «Ad» «не найден», потому что
+                # вкладки уже нет (`error:TargetClosedError`) — это не разметка.
+                if level.get("why") == "page_closed":
+                    page_state["closed"] = True
+                if _closed_stop("simple_ad", soft_fails):
+                    return "browser_closed"
+            if not level.get("ok"):
                 _shot("fail_simple_create_layout", {"section": "ad", "why": level.get("why", "")},
                       note="simple_create:ad_section")
                 return "simple_create_layout"
@@ -5475,6 +5890,12 @@ def run_recorded_campaign_flow(
                     # её из строки помощника, которую перепишет объявление 2.
                     _shot("fail_ad_creative_upload", last_upload_diag(), note=last_upload_why())
                     ad_level_fails.append("ad_creative_upload")
+                    # ACL-1354 (a71e4fc14aa1): после отказа креатива на
+                    # закрытой вкладке назначение, текст и обход назначений
+                    # отказывали по очереди, каждый молча.
+                    if page_state["closed"] and _closed_stop("ad_creative_upload",
+                                                             soft_fails + ad_level_fails):
+                        return "browser_closed"
                 else:
                     creative_uploaded = True
                     _shot("after_ad_creative_upload")
@@ -8880,6 +9301,31 @@ def reuse_before_upload(page: Page, creative_path: str) -> bool | None:
 def upload_ad_creative_with_retry(
     page: Page, creative_type: str, creative_path: str, *, edit_url: str = "", attempts: int = 2
 ) -> bool:
+    """`_upload_ad_creative_with_retry` под сроком шага `CREATIVE_STEP_BUDGET_S`.
+
+    ACL-1354 (a71e4fc14aa1, 28.09): шаг креатива шёл почти два часа — у
+    каждого ожидания внутри был свой потолок, а у шага целиком не было.
+    Причина отказа и фазы шага — в `last_upload_diag()` (`why`, `phases`).
+    """
+    owner = getattr(_creative_tls, "deadline", None) is None
+    if owner:
+        _creative_tls.deadline = time.time() + CREATIVE_STEP_BUDGET_S
+        _creative_tls.why = ""
+        _creative_tls.phases = []
+    try:
+        return _upload_ad_creative_with_retry(page, creative_type, creative_path,
+                                              edit_url=edit_url, attempts=attempts)
+    finally:
+        if owner:
+            _creative_tls.deadline = None
+            # Ревью PR #368: срок шага после креатива считается с его конца,
+            # а не с начала (креатив живёт под своим сроком, до 25 мин).
+            _flow_budget_step("ad_creative")
+
+
+def _upload_ad_creative_with_retry(
+    page: Page, creative_type: str, creative_path: str, *, edit_url: str = "", attempts: int = 2
+) -> bool:
     """upload_ad_creative plus one clean retry.
 
     Confirmed live 2026-07-29 (Test145): the step can fail on a
@@ -8993,6 +9439,20 @@ def upload_ad_creative_with_retry(
                               diag={"file": Path(creative_path).name,
                                     "error": f"{type(exc).__name__}: {exc}"[:300]})
             _set_upload_why("upload_exception")
+        # ACL-1354 (a71e4fc14aa1): вкладка закрыта или не читается — ни
+        # проверка медиа, ни второй заход на ней ничего не дадут (прежде
+        # каждая из них сидела до своего 20-минутного потолка).
+        trouble = _page_read_trouble(page, LIVENESS_PROBE_S)
+        if trouble and trouble != "frozen":
+            why = "page_closed" if trouble == "closed" else "page_unreadable"
+            _creative_why(why)
+            _set_upload_why(why)
+            _telemetry.record("ad_creative_upload", False, note=why,
+                              diag={"trouble": trouble, "attempt": attempt + 1,
+                                    "file": Path(creative_path).name})
+            if _file_was_offered():
+                _remember_upload_failed(creative_path)
+            return False
         if media_refused_on_ad():
             # Отказ по самому медиа объявления: ни «медиа есть», ни вторая
             # попытка его не исправят (порт ACL-1284).
@@ -9002,9 +9462,21 @@ def upload_ad_creative_with_retry(
             return False
         _close_creative_setup_modal(page)
         _sleep_h(0.8)
-        if _verify_ad_media_present(page):
+        phase_t = time.time()
+        media_ok = _verify_ad_media_present(page)
+        _creative_phase("media_check", phase_t, ok=media_ok, attempt=attempt + 1)
+        if media_ok:
             remember_upload_succeeded(creative_path)
             return True
+        if getattr(_creative_tls, "why", "") in _PAGE_WHY:
+            break
+        if attempt + 1 < attempts and _creative_left() < CREATIVE_RETRY_MIN_S:
+            # ACL-1354: срок шага на исходе — второй заход не начинаем.
+            _creative_why("creative_budget")
+            _telemetry.record("ad_creative_upload", False, note="creative_budget",
+                              diag={"attempt": attempt + 1, "left_s": round(_creative_left(), 1),
+                                    "budget_s": CREATIVE_STEP_BUDGET_S})
+            break
         # Застрявшая загрузка — отдельная беда, и повтор на той же странице
         # её не лечит: состояние висит в этой же вкладке. Перезагружаем
         # редактор и пробуем заново. Объявление при этом не теряется — Meta
@@ -10159,8 +10631,11 @@ def upload_ad_creative(
         f"[contains(normalize-space(.), '{option_label}')]"
     )
 
+    phase_t = time.time()
     opened, tries = _open_creative_wizard(page, trigger_xpath, item_xpath)
+    _creative_phase("wizard_open", phase_t, ok=bool(opened))
     if not opened:
+        _creative_why("wizard_not_opened")
         # Раньше — молчаливое `return False`: 25.09 GT FX (5b223701b271, ad3)
         # четыре попытки за 15 с, и в телеметрии ни слова, почему. Теперь
         # видно, была ли кнопка, чем по ней били и не висел ли автосейв.
@@ -10261,6 +10736,7 @@ def upload_ad_creative(
                 pass
         _telemetry.record("ad_creative_upload", False, note=why, diag=diag)
         _set_upload_why(why)
+        _creative_why(why)
         return False
 
     # Media-reuse: confirmed live (2026-07-29) that the Media step's own
@@ -10277,7 +10753,11 @@ def upload_ad_creative(
     # Note the `.name`, not `.stem`: the library captions each tile with the
     # full filename including extension ("2046_2.mp4"), so matching on the
     # stem finds nothing.
+    phase_t = time.time()
     verdict = reuse_before_upload(page, creative_path)
+    _creative_phase("reuse", phase_t, verdict=verdict)
+    if verdict is False:
+        _creative_why("reuse_left_selection")
     if verdict is not None:
         if verdict is False:
             # Выбор в медиатеке не снялся (запись с подробностями — внутри).
@@ -10644,7 +11124,8 @@ def upload_ad_creative(
     idle = 0
     frozen = 0
     last_progress = _upload_progress(page)
-    deadline = time.time() + _UPLOAD_MAX_S
+    # ACL-1354: не позже срока шага креатива.
+    deadline = _creative_deadline(time.time() + _UPLOAD_MAX_S)
     while idle < 60 and frozen < _UPLOAD_FROZEN_S and time.time() < deadline:
         if not post_media_before and _creative_post_media_step(page):
             _diag["state"] = "wizard_after_upload"
@@ -10876,8 +11357,11 @@ def _verify_ad_media_present(page: Page) -> bool:
     grace = 0
     idle = 0
     frozen = 0
+    unread = 0
+    started = time.time()
     last_progress = _upload_progress(page)
-    deadline = time.time() + _UPLOAD_MAX_S
+    # ACL-1354: не позже срока шага креатива.
+    deadline = _creative_deadline(time.time() + _UPLOAD_MAX_S)
     while idle < 150 and frozen < _UPLOAD_FROZEN_S and time.time() < deadline:
         try:
             state = page.evaluate(
@@ -10899,9 +11383,25 @@ def _verify_ad_media_present(page: Page) -> bool:
                 }
                 """
             )
-        except Exception:
+        except Exception as exc:
+            # ACL-1354 (a71e4fc14aa1): страница не читалась, а ветка шла на
+            # следующий круг, ничего не считая, — до потолка `_UPLOAD_MAX_S`
+            # (20 мин), и так трижды за шаг. Закрытая вкладка — сразу;
+            # иначе — после MEDIA_CHECK_UNREADABLE_POLLS отказов подряд.
+            unread += 1
+            gone = _liveness.is_gone_error(exc) or _tab_gone(page)
+            if gone or unread >= MEDIA_CHECK_UNREADABLE_POLLS:
+                trouble = "closed" if gone else (_page_read_trouble(page) or "error:" + type(exc).__name__)
+                why = "page_closed" if trouble == "closed" else "page_unreadable"
+                _creative_why(why)
+                _creative_phase("media_check", started, why=why)
+                _telemetry.record("ad_media_check", False, note=why,
+                                  diag={"trouble": trouble, "polls": unread,
+                                        "error": f"{type(exc).__name__}: {exc}"[:160]})
+                return False
             _sleep_h(0.5)
             continue
+        unread = 0
         if state.get("filled") and not state.get("empty"):
             return True
         if state.get("uploading"):
@@ -14095,8 +14595,49 @@ def select_conversion_event_lead(page: Page) -> bool:
     return is_lead_conversion_event_selected(page)
 
 
-def open_detailed_targeting_field(page: Page) -> bool:
-    """Scroll to Audience and focus the Detailed targeting interests input."""
+#: ACL-1354: сколько ждать, пока раскрытое поле Detailed targeting догрузится
+#: (в нём `role=progressbar aria-busy=true` «Loading...» вместо поиска).
+TARGETING_FIELD_LOAD_S = 20.0
+
+_TARGETING_ROW_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const label = [...document.querySelectorAll('span')].find(s =>
+      /^(Detailed targeting|Segmentación detallada)$/i.test(norm(s.textContent))
+      && s.closest('[role=button][aria-expanded]'));
+    if (!label) return { row: false };
+    const row = label.closest('[role=button][aria-expanded]');
+    let box = row.parentElement;
+    for (let i = 0; i < 4 && box && !box.querySelector('[role=region]'); i++) box = box.parentElement;
+    const region = box && box.querySelector('[role=region]');
+    const busy = !!region && [...region.querySelectorAll('[role=progressbar]')]
+      .some(p => p.getAttribute('aria-busy') === 'true');
+    return { row: true, expanded: row.getAttribute('aria-expanded') === 'true', loading: busy };
+  }
+"""
+"""Строка Detailed targeting: раскрыта ли и не грузится ли её поле.
+
+ACL-1354, aa1e2fbf45c9/03_targeting_open (новый редактор, 28.09): строка
+раскрыта (`aria-expanded=true`), а в её `role=region` вместо поиска —
+`role=progressbar aria-busy=true aria-valuetext="Loading..."`. Шаг ждал поле
+3 с на заход и следующим заходом жал строку снова — то есть сворачивал её."""
+
+
+def _targeting_row_state(page: Page) -> dict:
+    try:
+        got = _eval_bounded(page, _TARGETING_ROW_JS)
+    except Exception:
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def open_detailed_targeting_field(page: Page, report: dict | None = None) -> bool:
+    """Scroll to Audience and focus the Detailed targeting interests input.
+
+    `report` (если передан) получает `why` — названную причину отказа
+    (ACL-1354): `field_loading` (поле раскрыто и всё ещё грузится),
+    `row_not_found`, `input_not_found`.
+    """
     # Same reasoning as fill_audience_location/fill_audience_age: skip the
     # scroll_to_section("Audience", ...) pre-scroll — "Audience" as the FIRST
     # label tried is exactly the fallback confirmed live 2026-07-24 to jump
@@ -14160,7 +14701,10 @@ def open_detailed_targeting_field(page: Page) -> bool:
     # «Detailed targeting» осталась свёрнутой, и шаг сдался через 3 с.
     for _attempt in range(3):
         # Строка уже раскрылась, просто поздно — второй клик её свернул бы.
-        for root in ([] if _attempt and targeting_input_count(page) else _roots(page)):
+        # ACL-1354: раскрытая строка (поле в ней грузится) — тоже не жать.
+        skip_click = bool(_attempt and targeting_input_count(page)) \
+            or _targeting_row_state(page).get("expanded") is True
+        for root in ([] if skip_click else _roots(page)):
             try:
                 heading = root.get_by_text(re.compile(r"^Detailed targeting$|^Segmentación detallada$", re.I)).first
                 heading.wait_for(state="visible", timeout=2000)
@@ -14179,7 +14723,18 @@ def open_detailed_targeting_field(page: Page) -> bool:
             except Exception:
                 continue
 
-        for _ in range(15):
+        polls = 15
+        load_polls = int(TARGETING_FIELD_LOAD_S / 0.2)
+        i = 0
+        while True:
+            if i >= polls:
+                # ACL-1354: поле раскрыто и грузится — ждём его (до
+                # TARGETING_FIELD_LOAD_S), а не жмём строку снова: второй
+                # клик сворачивал её (aa1e2fbf45c9/03_targeting_open).
+                row = _targeting_row_state(page)
+                if not (row.get("expanded") and row.get("loading")) or i >= polls + load_polls:
+                    break
+            i += 1
             _sleep_h(0.2)
             for root in _roots(page):
                 for ph in targeting_placeholders:
@@ -14191,6 +14746,12 @@ def open_detailed_targeting_field(page: Page) -> bool:
                             return True
                     except Exception:
                         continue
+    if report is not None:
+        row = _targeting_row_state(page)
+        report["why"] = ("row_not_found" if not row.get("row")
+                         else "field_loading" if row.get("expanded") and row.get("loading")
+                         else "input_not_found")
+        report["row"] = row
     return False
 
 
@@ -17247,8 +17808,12 @@ def _click_languages_edit(page: Page) -> bool:
     return True
 
 
-def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
+def fill_audience_languages(page: Page, language_names: list[str],
+                            report: dict | None = None) -> bool:
     """Type language(s) into Audience → Languages and pick suggestions.
+
+    `report` (если передан) получает `why` — названную причину отказа
+    (ACL-1354): `field_not_found`, `no_suggestion:<язык>`.
 
     New (2026-07-25), modeled directly on fill_audience_location's proven
     pattern from the same session rather than starting from scratch blind:
@@ -17334,6 +17899,8 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
                 break
 
     if inp is None:
+        if report is not None:
+            report["why"] = "field_not_found"
         return False
 
     # 25.09 (SA, 20/20 прогонов): Meta сама ставит язык страны — «Arabic» без
@@ -17363,15 +17930,38 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
             # ACL-1324 (7cfdc772376d, 26.09): вкладка тормозила (tab_frozen
             # минутой раньше), подсказки не успели за 1.2 с, и шаг отказал с
             # пустым полем. Подсказки ждём до LANGUAGE_OPTIONS_WAIT_S.
-            picked = _click_language_option(page, name)
-            for _ in range(int(LANGUAGE_OPTIONS_WAIT_S / 0.4)):
-                if picked:
-                    break
-                _sleep_h(0.4)
-                picked = _click_language_option(page, name)
+            picked = _await_language_option(page, name)
+            if not picked and not _language_suggestions_state(inp).get("listbox"):
+                # ACL-1354 (aa1e2fbf45c9, новый редактор): после ввода список
+                # подсказок не появился вовсе — комбобокс `aria-expanded=false`,
+                # его `aria-controls` не указывает ни на что. Один повторный
+                # ввод (стереть, щёлкнуть, набрать) — не больше.
+                try:
+                    inp.fill("", timeout=2000)
+                    inp.click(timeout=3000)
+                    page.keyboard.type(name, delay=40)
+                    _sleep_h(1.2)
+                    picked = _await_language_option(page, name)
+                except Exception:
+                    pass
             if picked:
                 ok_any = True
             else:
+                # Причина и разметка — ДО очистки поля: после неё след простыл
+                # (снимок aa1e2fbf45c9/02_languages показывает уже пустое поле).
+                seen = _language_suggestions_state(inp)
+                seen["language"] = name
+                if report is not None:
+                    report["why"] = "no_suggestion:" + name
+                try:
+                    from src.fb_ads_rpa import page_capture as _pages
+
+                    saved = _pages.capture(page, step="languages_no_suggestion", diag=seen)
+                    if saved:
+                        seen["page"] = saved
+                except Exception:
+                    pass
+                _telemetry.record("languages_pick", False, note="no_suggestion", diag=seen)
                 # Набранный текст не оставляем в поиске: открытая выпадашка
                 # перекрывает соседние поля. Escape нельзя — закрывает редактор.
                 try:
@@ -17398,6 +17988,46 @@ def fill_audience_languages(page: Page, language_names: list[str]) -> bool:
 
 #: Сколько ждать подсказок языка после ввода (сверх первых 1.2 с).
 LANGUAGE_OPTIONS_WAIT_S = 5.0
+
+
+def _await_language_option(page: Page, name: str) -> bool:
+    """Кликнуть подсказку языка, дождавшись её до `LANGUAGE_OPTIONS_WAIT_S`."""
+    picked = _click_language_option(page, name)
+    for _ in range(int(LANGUAGE_OPTIONS_WAIT_S / 0.4)):
+        if picked:
+            break
+        _sleep_h(0.4)
+        picked = _click_language_option(page, name)
+    return picked
+
+
+_LANGUAGE_SUGGESTIONS_JS = r"""
+  (inp) => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const id = inp.getAttribute('aria-controls') || '';
+    const box = id ? document.getElementById(id) : null;
+    const opts = [...document.querySelectorAll('[role=option]')]
+      .filter(o => o.getBoundingClientRect().width > 0);
+    return {
+      typed: (inp.value || '').slice(0, 40),
+      expanded: inp.getAttribute('aria-expanded'),
+      focused: document.activeElement === inp,
+      listbox: !!box,
+      options: opts.slice(0, 8).map(o => norm(o.textContent).slice(0, 40)),
+      option_count: opts.length,
+    };
+  }
+"""
+"""Что видно у поля языков после ввода: дошёл ли текст, раскрылся ли список."""
+
+
+def _language_suggestions_state(inp) -> dict:
+    """Состояние подсказок поля языков ({} — прочитать не удалось)."""
+    try:
+        got = inp.evaluate(_LANGUAGE_SUGGESTIONS_JS)
+    except Exception as exc:
+        return {"error": type(exc).__name__}
+    return got if isinstance(got, dict) else {}
 
 
 def _language_key(text: str) -> str:

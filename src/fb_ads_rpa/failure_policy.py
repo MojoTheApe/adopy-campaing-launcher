@@ -117,6 +117,26 @@ POLICY: dict[str, tuple[str, str]] = {
         "ad there - the other ads of this campaign were not created; add them by hand in Ads "
         "Manager or publish the campaign again once the robot supports more ads in this editor",
     ),
+    # ACL-1354 (runs 37e397574548 and a71e4fc14aa1, 2026-09-28): time budgets of
+    # the recorded flow; the draft is partial and a replay would duplicate it.
+    "tab_frozen_budget_exceeded": (
+        BLOCKING,
+        "the profile's browser tab kept not answering while the campaign was being built, "
+        "so the robot stopped it instead of waiting for an hour; the draft is incomplete and "
+        "was not retried - check it in Ads Manager, then close and reopen the profile",
+    ),
+    "campaign_budget_exceeded": (
+        BLOCKING,
+        "building this campaign took longer than the robot's time limit, so it was stopped; "
+        "the draft is incomplete and was not retried - check it in Ads Manager and finish or "
+        "delete it",
+    ),
+    "step_budget_exceeded": (
+        BLOCKING,
+        "one step of this campaign took longer than the robot's time limit, so the campaign "
+        "was stopped; the draft is incomplete and was not retried - check it in Ads Manager "
+        "and finish or delete it",
+    ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),
     # ── Ad level ────────────────────────────────────────────────────────────
