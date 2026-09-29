@@ -479,5 +479,10 @@
         "issue_sha256": "430ad30bb76e6d1b548da791c7af3d4a25914afa8c6d3c515d68169ac382399c"
       }
     }
+  },
+  "execution_policy": {
+    "schema_version": 1,
+    "implementation_limit": 5,
+    "review_limit": 1
   }
 }
