@@ -4892,16 +4892,21 @@ window.cbTree = (function () {
     return cbAccountBusy(cbFormKey(a.form));
   }
 
-  function tickTitle(locked) {
+  function tickTitle(locked, on) {
+    if (locked && on) return 'This account is being built — this ticked campaign is not sent now; untick it or wait for the run to finish';
     return locked
       ? 'This account is being built — wait for its run to finish before selecting its campaigns'
       : 'Select this campaign to publish only the selected ones';
   }
 
+  /* Заперта только постановка галочки: уже отмеченную карточку идущей формы
+     снять можно (ревью PR #369) — иначе она висела бы серой и отмеченной. */
+  function tickDisabled(slot, locked) { return locked && !picked(slot); }
+
   /* Что отмечено и что вообще можно отметить. `every` — отмечено всё,
      что можно: тогда это снова «Publish all». */
   function ticks(tree) {
-    var all = [], open = [], on = [], where = Object.create(null);
+    var all = [], open = [], on = [], send = [], where = Object.create(null);
     (tree || realTree()).forEach(function (g) {
       g.accounts.forEach(function (a) {
         var locked = a.campaigns.length ? tickLocked(a) : false;
@@ -4910,16 +4915,21 @@ window.cbTree = (function () {
           where[c.id] = { slot: c.slot, locked: locked };
           if (!locked) open.push(c.slot);
           if (picked(c.slot)) on.push(c.slot);
+          if (picked(c.slot) && !locked) send.push(c.slot);   // уйдёт сейчас
         });
       });
     });
-    var every = on.length > 0 && open.length > 0 && open.every(picked);
-    return { total: all.length, all: all, open: open, on: on, where: where,
+    // Отмеченная карточка идущей формы — это выбор, а не «всё»: такая
+    // сборка остаётся «Publish selected» и её не отправит.
+    var every = on.length > 0 && open.length > 0 && open.every(picked) && send.length === on.length;
+    return { total: all.length, all: all, open: open, on: on, send: send, where: where,
              every: every, some: on.length > 0 && !every };
   }
 
   function publishLabel(t) {
-    return t.some ? 'Publish selected → drafts (' + t.on.length + ')'
+    // K — сколько кампаний уйдёт сейчас: отмеченные у идущей формы не едут
+    // (их пропустит и подтверждение), и считать их было бы неправдой.
+    return t.some ? 'Publish selected → drafts (' + t.send.length + ')'
                   : 'Publish all → drafts (' + t.total + ')';
   }
 
@@ -4932,8 +4942,8 @@ window.cbTree = (function () {
       var input = card.querySelector('.cbd-tick-box');
       if (!hit || !input) return;
       input.checked = picked(hit.slot);
-      input.disabled = hit.locked;
-      input.title = input.parentNode.title = tickTitle(hit.locked);
+      input.disabled = tickDisabled(hit.slot, hit.locked);
+      input.title = input.parentNode.title = tickTitle(hit.locked, picked(hit.slot));
     });
     var bar = body.querySelector('.cbd-ticks');
     if (bar) {
@@ -4975,12 +4985,13 @@ window.cbTree = (function () {
     var r = readiness(c);
     var open = c.id === openId;
     var locked = tickLocked(a);
+    var tip = aclEscHtml(tickTitle(locked, picked(c.slot)));
     return '<div class="cbd-camp" data-camp="' + aclEscHtml(c.id) + '" data-open="' + (open ? '1' : '0') + '">'
       + '<div class="cbd-camp-head">'
-      + '<label class="cbd-tick" title="' + aclEscHtml(tickTitle(locked)) + '">'
-      + '<input type="checkbox" class="cbd-tick-box" title="' + aclEscHtml(tickTitle(locked)) + '"'
+      + '<label class="cbd-tick" title="' + tip + '">'
+      + '<input type="checkbox" class="cbd-tick-box" title="' + tip + '"'
       + ' aria-label="' + aclEscHtml('Select ' + (c.name || 'untitled campaign') + ' to publish') + '"'
-      + (picked(c.slot) ? ' checked' : '') + (locked ? ' disabled' : '') + '>'
+      + (picked(c.slot) ? ' checked' : '') + (tickDisabled(c.slot, locked) ? ' disabled' : '') + '>'
       + '</label>'
       + '<button type="button" class="cbd-camp-row" data-act="toggle"'
       + ' aria-expanded="' + (open ? 'true' : 'false') + '">'
@@ -11018,7 +11029,7 @@ window.cbPublishAll = function (onProgress, picked) {
   // Ключ — страна и аккаунт: один аккаунт бывает привязан к нескольким
   // странам (account_links), и у каждой страны своя форма и свои кампании;
   // отметки — тоже у формы, не у имени аккаунта.
-  var forms = [], running = [], campaigns = 0;
+  var forms = [], running = [], campaigns = 0, listed = [];
   document.querySelectorAll('form.open-account-form').forEach(function (form) {
     var slots = form.querySelectorAll('.cb-slot');
     if (!slots.length) return;
@@ -11027,6 +11038,9 @@ window.cbPublishAll = function (onProgress, picked) {
     if (cbAccountBusy(cbFormKey(form))) { running.push(cbFormTitle(form)); return; }
     forms.push(form);
     campaigns += mine ? mine.length : slots.length;
+    // Живые аккаунты: какие именно кампании уйдут, видно до нажатия.
+    if (mine) listed.push('<strong>' + aclEscHtml(cbFormTitle(form)) + '</strong>: '
+      + aclEscHtml(mine.map(cbSlotTitle).join(', ')));
   });
   if (!forms.length && !running.length) { window.alert('Nothing is being assembled yet.'); return; }
   if (!forms.length) { cbSayAlreadyBuilding(running); return; }
@@ -11036,7 +11050,9 @@ window.cbPublishAll = function (onProgress, picked) {
   _safeConfirm(only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?',
     (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
     + 'Accounts: <strong>' + forms.length + '</strong><br>'
-    + '<span style="color:var(--muted);font-size:0.85rem">' + aclEscHtml(names.join(', ')) + '</span><br>'
+    + (only
+      ? '<div class="cb-selected-list" style="font-size:0.85rem;line-height:1.5">' + listed.join('<br>') + '</div>'
+      : '<span style="color:var(--muted);font-size:0.85rem">' + aclEscHtml(names.join(', ')) + '</span><br>')
     + (running.length
       ? '<span style="color:var(--muted);font-size:0.85rem">Already being built, skipped: '
         + aclEscHtml(running.join(', ')) + '</span><br>'
@@ -11057,6 +11073,11 @@ window.cbPublishAll = function (onProgress, picked) {
     },
     { confirmLabel: only ? 'Publish selected → drafts' : 'Publish all → drafts' });
 };
+
+/* Имя карточки для подтверждения. */
+function cbSlotTitle(slot) {
+  return ((slot.querySelector('.cb-name-hidden') || {}).value || '').trim() || 'Untitled campaign';
+}
 
 /* Отмеченные карточки этой формы — в её порядке (ACL-1360). */
 function cbPickedIn(form, picked) {
@@ -11763,11 +11784,23 @@ window.cbPublish = function(form) {
   if (cbAccountBusy(cbFormKey(form))) { cbSayAlreadyBuilding([cbFormTitle(form)]); return; }
   var country   = ((form.querySelector('[name="country"]') || {}).value || '?').trim();
   var campCount = onlySlot ? 1 : (parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1);
+  // ACL-1360: у формы отмечена часть кампаний — Publish аккаунта везёт только
+  // их (через превью, как «Publish selected»); отмечено всё или ничего — всю форму.
+  var allSlots = Array.from(form.querySelectorAll('.cb-slot'));
+  var ticked = onlySlot ? [] : allSlots.filter(function(s) { return !!s._cbdPick; });
+  if (ticked.length === allSlots.length) ticked = [];
+  if (ticked.length) campCount = ticked.length;
 
   var bodyHtml =
     'Account: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br>'
     + 'Country: <strong>' + aclEscHtml(country) + '</strong><br>'
-    + 'Campaigns: <strong>' + campCount + '</strong><br><br>'
+    + 'Campaigns: <strong>' + campCount + '</strong>'
+    + (ticked.length
+      ? ' <span style="color:var(--muted)">(only the selected ones, ' + ticked.length + ' of ' + allSlots.length + ')</span><br>'
+        + '<div class="cb-selected-list" style="font-size:0.85rem;line-height:1.5">'
+        + aclEscHtml(ticked.map(cbSlotTitle).join(', ')) + '</div>'
+      : '<br>')
+    + '<br>'
     + '<span style="color:var(--muted);font-size:0.85rem">The RPA attaches to the Multilogin profile through MLX automation '
     + '(no need to open the profile first; if it is open by hand, close its window first — '
     + 'the robot will not close it for you).</span><br>'
@@ -11814,9 +11847,9 @@ window.cbPublish = function(form) {
       + bodyHtml;
   }
 
-  _safeConfirm('Build this campaign as a draft?', bodyHtml, function() {
-    if (onlySlot) {
-      var got = _runPublishQueue([form], window.cbTree.showQueue, onlySlot);
+  _safeConfirm(ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?', bodyHtml, function() {
+    if (onlySlot || ticked.length) {
+      var got = _runPublishQueue([form], window.cbTree.showQueue, onlySlot || ticked);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     }
     else _doCbPublish(form);

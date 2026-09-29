@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pytest
 from playwright.sync_api import expect
 from test_builder_multi_publish_browser import (  # noqa: F401 — фикстуры
-    browser, html, ui, add, ready, publish_one, finish, camp_name,
+    browser, html, ui, add, ready, publish_one, finish, camp_name, FORM_JS,
     two_country_html, TWIN_JS, _route_for, _seeded_two_country_page,
 )
 
@@ -27,10 +27,11 @@ ALL_RE = r'^Publish all → drafts \((\d+)\)$'
 
 
 def box(page, account, slot=0):
-    """Чекбокс строки кампании в ящике — по имени кампании, не по номеру."""
-    name = camp_name(page, account, slot)
-    return page.locator('.cbd-camp').filter(
-        has=page.locator('.cbd-camp-name', has_text=name)).locator('input[type="checkbox"]')
+    """Чекбокс строки кампании в ящике — по карточке, а не по имени: имена
+    у кампаний разных аккаунтов бывают одинаковыми."""
+    cid = page.evaluate('([a,i]) => (' + FORM_JS + ')(a).querySelectorAll(".cb-slot")[i].dataset.cbdId',
+                        [['Demo', 'Other'][account], slot])
+    return page.locator('.cbd-camp[data-camp="%s"] input[type="checkbox"]' % cid)
 
 
 def publish_button(page):
@@ -79,8 +80,11 @@ def test_ticked_campaigns_only_are_sent_one_job_per_account(ui):
     publish_button(p).click()
     modal = p.locator('#safe-confirm-modal')
     expect(modal).to_contain_text('Campaigns: 2')
-    expect(modal).to_contain_text('Demo')
-    expect(modal).to_contain_text('Other')
+    # Живые аккаунты: в подтверждении — какие именно кампании уйдут.
+    listed = modal.locator('.cb-selected-list')
+    expect(listed).to_contain_text('Demo: ' + demo_b)
+    expect(listed).to_contain_text('Other: ' + other_a)
+    expect(listed).not_to_contain_text(camp_name(p, 0, 0))
     p.locator('#sfc-ok').click()
     wait_posts(state, 2, p)
 
@@ -291,3 +295,137 @@ def test_a_job_restored_after_reload_locks_ticks_by_its_own_country(browser, two
         assert not errors, errors
     finally:
         context.close()
+
+
+# ── ревью PR #369 ──────────────────────────────────────────────────────────
+
+def picks(page, account):
+    return page.evaluate('a => Array.from((' + FORM_JS + ')(a).querySelectorAll(".cb-slot")).map(s => !!s._cbdPick)',
+                         ['Demo', 'Other'][account])
+
+
+def test_the_count_is_what_goes_and_a_ticked_card_of_a_running_form_can_be_unticked(ui):
+    p, state = ui
+    add(p, 0, count=2)
+    add(p, 1, count=1)
+    ready(p)
+    box(p, 0, 1).click()
+    box(p, 1, 0).click()
+    expect(publish_button(p)).to_have_text('Publish selected → drafts (2)')
+
+    publish_one(p, state, 0, slot=0)          # Demo собирается; её отмеченная карточка 1 — нет
+    expect(box(p, 0, 0)).to_be_disabled(timeout=6000)
+    # K — только то, что уйдёт: отмеченная карточка идущей Demo не считается.
+    expect(publish_button(p)).to_have_text('Publish selected → drafts (1)')
+    expect(box(p, 0, 1)).to_be_checked()
+    expect(box(p, 0, 1)).to_be_enabled()      # снять можно, серой-отмеченной не висит
+    assert 'untick' in box(p, 0, 1).evaluate('b => b.closest("label").title')
+
+    publish_button(p).click()
+    modal = p.locator('#safe-confirm-modal')
+    expect(modal).to_contain_text('Campaigns: 1')
+    expect(modal.locator('.cb-selected-list')).to_contain_text('Other: ' + camp_name(p, 1, 0))
+    expect(modal.locator('.cb-selected-list')).not_to_contain_text('Demo')
+    expect(modal).to_contain_text('Already being built, skipped: Demo')
+    p.locator('#sfc-ok').click()
+    wait_posts(state, 2, p)
+    assert state['posts'][1]['account_label'] == 'Other'
+    assert sent_names(state['posts'][1]) == [camp_name(p, 1, 0)]
+
+    box(p, 0, 1).click()                      # снять отметку у идущей формы
+    expect(box(p, 0, 1)).not_to_be_checked()
+    expect(box(p, 0, 1)).to_be_disabled()     # а поставить снова — нет
+    assert picks(p, 0) == [False, False]
+
+
+def test_account_publish_on_the_country_page_sends_only_its_ticked(ui):
+    p, state = ui
+    add(p, 0, count=3)
+    add(p, 1, count=2)
+    ready(p)
+    names = [camp_name(p, 0, i) for i in range(3)]
+    box(p, 0, 0).click()
+    box(p, 0, 2).click()
+    p.evaluate('cbTree.close()')
+    p.evaluate('cbPublish((' + FORM_JS + ')("Demo"))')
+    modal = p.locator('#safe-confirm-modal')
+    expect(modal).to_contain_text('only the selected ones, 2 of 3')
+    expect(modal.locator('.cb-selected-list')).to_contain_text(names[0] + ', ' + names[2])
+    p.locator('#sfc-ok').click()
+    wait_posts(state, 1, p)
+    assert state['posts'][0]['account_label'] == 'Demo'
+    assert sent_names(state['posts'][0]) == [names[0], names[2]]
+
+    # Без отметок — вся форма, как раньше.
+    p.evaluate('cbPublish((' + FORM_JS + ')("Other"))')
+    expect(modal).not_to_contain_text('only the selected ones')
+    p.locator('#sfc-ok').click()
+    wait_posts(state, 2, p)
+    assert state['posts'][1]['camp_count'] == '2'
+
+
+def test_deleting_a_neighbour_keeps_the_tick_on_its_card(ui):
+    p, state = ui
+    add(p, 0, count=3)
+    ready(p)
+    want = camp_name(p, 0, 2)
+    box(p, 0, 2).click()
+    p.evaluate("""() => { const f=(""" + FORM_JS + """)('Demo');
+      cbRemoveSlot(f.querySelectorAll('.cb-slot')[0]); cbTree.paint(); }""")
+    expect(p.locator('.cbd-camp')).to_have_count(2)
+    ready(p)
+    assert camp_name(p, 0, 1) == want
+    expect(box(p, 0, 1)).to_be_checked()
+    expect(box(p, 0, 0)).not_to_be_checked()
+    expect(publish_button(p)).to_have_text('Publish selected → drafts (1)')
+    publish_button(p).click()
+    p.locator('#sfc-ok').click()
+    wait_posts(state, 1, p)
+    assert sent_names(state['posts'][0]) == [want]
+
+
+def test_duplicates_are_unticked_and_the_tick_survives_reload(ui):
+    p, state = ui
+    add(p, 0, count=2)
+    ready(p)
+    want = camp_name(p, 0, 1)
+    box(p, 0, 1).click()
+    p.evaluate("""() => { const f=(""" + FORM_JS + """)('Demo');
+      cbDuplicateSlot(f.querySelectorAll('.cb-slot')[1].querySelector('.cb-dup-slot-btn'));
+      cbDuplicateSlot(f.querySelectorAll('.cb-slot')[0].querySelector('.cb-dup-slot-btn'));
+      cbTree.paint(); }""")
+    p.wait_for_function("document.querySelectorAll('.cbd-camp').length === 4")
+    assert picks(p, 0) == [False, False, True, False]
+    p.evaluate('cbKeep.save()')
+    p.reload()
+    p.evaluate('cbDrawer.open()')
+    p.wait_for_function("document.querySelectorAll('.cbd-camp').length === 4")
+    assert picks(p, 0) == [False, False, True, False]
+    ready(p)
+    expect(publish_button(p)).to_have_text('Publish selected → drafts (1)')
+    publish_button(p).click()
+    p.locator('#sfc-ok').click()
+    wait_posts(state, 1, p)
+    post = state['posts'][0]
+    assert post['camp_count'] == '1'
+    assert sent_names(post) == [want]
+    assert post['camp_0_ad_0_creative_file'] == 'offline-1.png', post
+
+
+def test_of_two_cards_with_one_name_only_the_ticked_goes(ui):
+    p, state = ui
+    add(p, 0, count=2)
+    p.evaluate("""() => { const f=(""" + FORM_JS + """)('Demo'); const s=f.querySelectorAll('.cb-slot');
+      s[1].querySelector('[name$="_asset"]').value = s[0].querySelector('[name$="_asset"]').value;
+      f.dispatchEvent(new Event('input',{bubbles:true})); }""")
+    p.wait_for_function("""() => { const n=(""" + FORM_JS + """)('Demo').querySelectorAll('.cb-name-hidden');
+      return n[0].value === n[1].value; }""")
+    p.wait_for_function("Array.from(document.querySelectorAll('.cb-slot')).every(s => s._drawerResult && s._drawerResult.state !== 'wait')")
+    p.locator('.cbd-camp input[type=checkbox]').nth(1).click()
+    expect(publish_button(p)).to_have_text('Publish selected → drafts (1)')
+    publish_button(p).click()
+    p.locator('#sfc-ok').click()
+    wait_posts(state, 1, p)
+    post = state['posts'][0]
+    assert post['camp_count'] == '1', post
+    assert post['camp_0_ad_0_creative_file'] == 'offline-1.png', post
