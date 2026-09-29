@@ -6,6 +6,62 @@ The parent retains all acceptance, including actual state migration and fresh
 live-board verification. The child is bounded to reviewed source integration;
 source merge does not claim activation, stable package delivery or employee updates.
 
+## Actual activation — 2026-09-29
+
+The source child completed its reviewed stage/main route: [source PR 384](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/384)
+and [promotion PR 385](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/385).
+Actual main `d55754146e439150fb0cddbdd83d1b0258b6a419` preserves reviewed stage
+`479d5329ccea4ac2d4d5e19bfc0bbcc151e25e24`, tree
+`2b57c95611bbfca6f62b29e455d86b616e119ff8`. Full Windows Python 3.11/3.13 and
+installer checks passed on both source and actual stage/promotion. The
+[exact-stage report](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/385#issuecomment-5899500363)
+includes actual isolated packaged update/restart/recovery and preserved synthetic
+data. The old client released the child claim after promotion and recorded its
+normal Merged handoff; the stage receipt is promoted. Package delivery is pending.
+
+With no legacy owner, a cancelled batch, no unarchived In Progress/Review/Stage
+Issues and no pending stage candidate, the merged new client previewed and applied
+the supported idle migration. Access-controlled before/after snapshots were
+compared before any new claim. Schema changed from 1 to 2; execution policy is
+five implementations and one review. Every non-execution state field, including
+delivery receipts and queue history, remained exactly equal. No state was cleared
+or hand-edited to satisfy the migration gate.
+
+At 21:45:21 UTC the live server snapshot (synced 21:44:49 UTC) had five free
+implementation slots, an empty review queue and a free review lane. Its verified
+digest covered 227 task identities, including all 74 historical completions.
+All eleven paused unfinished tasks remained To Do; ACL-1309/1311 retained their
+blocked flags. Seven unmerged PRs and all preserved working branches remain for
+fresh claimed resumption. The eleven superseded PRs listed below were closed
+with audited integration evidence and their original branches preserved.
+
+The maintained Tracker fallback companion [TT-70 / PR 71](https://github.com/MojoTheApe/task-tracker/pull/71)
+also carries the exact ACL policy. Its deployment at
+`0a8ad5d298165b601b6b0dc7b86bec4a99b7cabc` was independently verified under
+[TT-72](https://github.com/MojoTheApe/task-tracker/issues/72#issuecomment-5898874052):
+all seven boards, existing authentication, signed event updates and single-writer
+service were preserved. ACL still pins the unchanged compatible engine `a4ea3cf`;
+the registry-only deployment requires no new engine or Master pin.
+
+ACL-1382 then acquired a real new-policy implementation claim: Worker-W4H8,
+coordinated by Coordinator-C6N2, in its own branch/worktree. The pre-claim free-slot
+proof above is a timestamped observation, not a claim that capacity stays unused
+during this report's review. A separate non-implementing Reviewer receives the
+single lane; the report follows normal independent review, stage/main and Merged
+handoff. Ordinary admissions remain paused until that parent handoff completes.
+The parent Issue records its PRs and final live-board check, avoiding a claim of
+future completion in this report.
+
+The isolated synthetic exercise already verified five distinct claims, rejection
+of a sixth and duplicate task, handoff freeing capacity, denial of a concurrent
+review and availability of the next lane after integration. It does not claim
+five actual Workers ran here: this host has four total agent slots including the
+Coordinator. Browser interaction was excluded by the owner; live-board evidence
+is server-side snapshot/digest verification. GitHub's private-plan branch-rule
+restriction remains; agent admission is not server-enforced branch protection.
+No stable package, employee rollout, live advertising or n8n operation occurred.
+System/runtime behavior and the descriptor's draft/package boundaries are unchanged.
+
 ## Reviewed source and preserved boundaries
 
 The owner selected immediate ACL adoption with five parallel tasks and confirmed
