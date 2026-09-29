@@ -99,3 +99,12 @@ def test_incomplete_name_requests_are_rejected(monkeypatch, fields):
     monkeypatch.setattr(sp, "turn_off", lambda *a, **k: pytest.fail("the browser was touched"))
     status, body = _post(fields)
     assert status == 400 and body["ok"] is False
+
+
+def test_the_name_reaches_turn_off_unstripped(monkeypatch):
+    """Python strip() eats \x85 and \x1c-\x1f; the page does not (review B1)."""
+    seen = {}
+    monkeypatch.setattr(sp, "turn_off", lambda *a, **kw: seen.update(kw) or sp.TurnOffResult(
+        account="FacebookDoc19", level="campaign", object_id="", state="failed"))
+    _post(dict(BY_NAME, name="Campaign 1\x85"))
+    assert seen["expected_name"] == "Campaign 1\x85"
