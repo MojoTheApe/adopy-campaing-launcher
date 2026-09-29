@@ -665,57 +665,26 @@
       }
     },
     "stage": {
-      "pr": 334,
+      "pr": 376,
       "issues": [
-        337,
-        332
+        327,
+        350,
+        348,
+        342,
+        344,
+        347,
+        361,
+        355,
+        360,
+        354,
+        371
       ],
-      "tree_sha": "916e0d41cb01e81c43e0da603e0ef16573da94d0",
-      "source_sha": "feae4e8893d9f6496395453b34244c5f2e9db809",
-      "main_tree": "2e0100ce34d348542e59777d2450f5229d01e4cf",
+      "tree_sha": "0e0b77a78ab35b6a66948f5e1475793964579d07",
+      "source_sha": "3c1ddb975909c201c25478d05b0da3c918d2aca3",
+      "main_tree": "916e0d41cb01e81c43e0da603e0ef16573da94d0",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-09-29T06:32:05+00:00",
-      "manual_receipt": {
-        "recorded_by": "owner (Evgeni), 2026-09-29",
-        "reason": "PR #334 (ACL-1332) was merged into stage on top of #338 (ACL-1337) without a tracker stage record; stage holds both approved changes (tree 916e0d41, all stage checks green). Combined stage tree independently reviewed and approved.",
-        "previous_stage_row": {
-          "pr": 338,
-          "issues": [
-            337
-          ],
-          "tree_sha": "f4d92c5361dcf21dbc9b2c4fc18cb32fe508360e",
-          "source_sha": "310918f2a9d43407a81afe29950a5d3a4615d9d9",
-          "main_tree": "2e0100ce34d348542e59777d2450f5229d01e4cf",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "state": "testing",
-          "recorded_at": "2026-09-27T11:40:01+00:00"
-        }
-      },
-      "verification": {
-        "kind": "stage-verification",
-        "pr": 334,
-        "tree_sha": "916e0d41cb01e81c43e0da603e0ef16573da94d0",
-        "source_sha": "feae4e8893d9f6496395453b34244c5f2e9db809",
-        "environment": "GitHub Actions on the stage branch, head feae4e8; the owner's live dashboard (C:/acl-live-0928, port 9090) whose build contains stage feae4e8",
-        "report": "Stage verification of ACL-1337 (PR #338) and ACL-1332 (PR #334) on stage head feae4e8 (tree 916e0d41). All stage checks finished successfully on feae4e8: descriptor, Classify and check project tooling, test (3.11), test (3.13), ACL verification, Classify installer changes, Verify build inputs, Build, install, repair, and uninstall, Installer verification. The combined stage tree was independently reviewed and approved (it is exactly the two approved diffs). Live on the owner's machine 2026-09-28 on a build containing this stage content: robot-opened Multilogin profiles were recognised (ACL-1337) and the Further limit the reach step passed on 1443/6540/9943 runs (ACL-1332). The stage receipt for this two-task set was recorded by the owner on 2026-09-29 because #334 had been merged without a tracker stage record.",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "checks": [
-          "descriptor: success",
-          "CI / Classify and check project tooling: success",
-          "CI / test (3.11): success",
-          "CI / test (3.13): success",
-          "CI / ACL verification: success",
-          "Windows installer / Classify installer changes: success",
-          "Windows installer / Verify build inputs: success",
-          "Windows installer / Build, install, repair, and uninstall: success",
-          "Windows installer / Installer verification: success",
-          "Independent review of the combined stage tree 916e0d41: approved",
-          "Owner live runs 2026-09-28 on a build containing this stage content: profile ownership recognised, Further limit the reach steps ok"
-        ]
-      },
-      "verified_at": "2026-09-29T06:35:03+00:00"
+      "state": "testing",
+      "recorded_at": "2026-09-29T09:07:00+00:00"
     },
     "tasks": {
       "248": {
