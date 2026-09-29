@@ -635,6 +635,32 @@
           344
         ],
         "recorded_at": "2026-09-28T21:35:51+00:00"
+      },
+      "376": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "independent subagent (Claude Opus 5.5)",
+        "implementer": "coordinator session (integration of approved PRs)",
+        "head_sha": "642fd680f88f9907907daf600519eee060a2ac68",
+        "base_sha": "feae4e8893d9f6496395453b34244c5f2e9db809",
+        "tree_sha": "0e0b77a78ab35b6a66948f5e1475793964579d07",
+        "report": "Integration verified. Every first-parent merge's second parent is an approved head or its ancestor: #340 merged three times (4469377, aefd1d1, ff0e32e - all ancestors of approved 8e6a85b; the only missing commit 8e6a85b is a test fix whose content arrives via 6d7228a/#346, test file identical to 8e6a85b); #351 merged at 2c25e8d and #352 at 4ec8f5a (dd4ba41/4c58637 differ only by content-neutral merges of main); #343/#346/#364/#362/#369/#368/#372 merged at exactly the approved heads; #363 bf3bde9 enters via #369 54c0fc7 (ancestor). No unapproved commits (approved..merged empty for all). Final work/main merge 9b6df3f is content-neutral (tree diff f036583..642fd68 empty; feae4e8..9b6df3f tree diff empty). Independent recreation from feae4e8 (merging the eleven approved heads in order, conflicts committed with markers) differs from 642fd68 only in: meta_dom.py (_creative_why also sets _upload_why_tls.why; upload retry keeps ACL-1348 exception telemetry + ACL-1354 page-trouble block with both reasons set and remember-only-if-offered; upload-button-missing keeps ACL-1348 detailed reason and adds _creative_why(why); _ad_editor_url + left_the_ad_editor), report.html (save and restore keep country, track and restored), fixtures README (all sections kept), two model-rule lines. Resolutions are correct; no behaviour lost from either side; thread-local semantics sane (upload why reset per attempt, first-named wins except page_closed/page_unreadable, _set_upload_why still last-wins). Full suite on 642fd68: 3805 passed, 6 skipped, 0 failed (36 min). Non-blocking: the upload-button-missing resolution feeds the ACL-1348 detailed reason into _creative_why instead of 'upload_button_missing' - intended, not listed verbatim in the PR body.",
+        "main_sha": "9b6df3f88019ada72c54004d4e4f055080fe34dc",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          327,
+          350,
+          348,
+          342,
+          344,
+          347,
+          361,
+          355,
+          360,
+          354,
+          371
+        ],
+        "recorded_at": "2026-09-29T08:17:09+00:00"
       }
     },
     "stage": {
