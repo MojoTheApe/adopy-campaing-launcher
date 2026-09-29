@@ -683,8 +683,32 @@
       "source_sha": "3c1ddb975909c201c25478d05b0da3c918d2aca3",
       "main_tree": "916e0d41cb01e81c43e0da603e0ef16573da94d0",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-09-29T09:07:00+00:00"
+      "state": "passed",
+      "recorded_at": "2026-09-29T09:07:00+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "pr": 376,
+        "tree_sha": "0e0b77a78ab35b6a66948f5e1475793964579d07",
+        "source_sha": "3c1ddb975909c201c25478d05b0da3c918d2aca3",
+        "environment": "GitHub Actions on the stage branch, head 3c1ddb9; the owner's live dashboard (C:/acl-live-0928, port 9090) running this same content since the night of 28-29.09",
+        "report": "Stage verification of the release set ACL-1327, ACL-1350, ACL-1348, ACL-1342, ACL-1344, ACL-1347, ACL-1361, ACL-1355, ACL-1360, ACL-1354, ACL-1371 (PR #376, squash-merged into stage as 3c1ddb9, tree identical to the reviewed head 642fd68). All stage checks green on 3c1ddb9: descriptor, Classify and check project tooling, test (3.11), test (3.13), ACL verification, Classify installer changes, Verify build inputs, Build, install, repair, and uninstall (re-run after a runner hang), Installer verification. Each change independently reviewed and approved in its own PR; the integration independently reviewed (full suite 3805 passed, 0 failed). Live on the owner's dashboard 2026-09-29 on this content: placements set on 6540 (ACL-1350), runs on 6540/Doc19 built drafts; second primary text not added on Doc19 (Add text option detection, soft warning; follow-up fix in progress on ACL-1344).",
+        "result": "passed",
+        "target": "ACL isolated Windows stage installation",
+        "checks": [
+          "descriptor: success",
+          "CI / Classify and check project tooling: success",
+          "CI / test (3.11): success",
+          "CI / test (3.13): success",
+          "CI / ACL verification: success",
+          "Windows installer / Classify installer changes: success",
+          "Windows installer / Verify build inputs: success",
+          "Windows installer / Build, install, repair, and uninstall: success",
+          "Windows installer / Installer verification: success",
+          "Independent integration review of the stage content: approved, full suite 3805 passed",
+          "Owner live runs 2026-09-28/29 on this content: drafts built; placements ok on 6540; second primary text soft warning (follow-up)"
+        ]
+      },
+      "verified_at": "2026-09-29T10:26:37+00:00"
     },
     "tasks": {
       "248": {
