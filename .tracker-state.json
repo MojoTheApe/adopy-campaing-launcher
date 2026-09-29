@@ -1746,22 +1746,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "382": {
-        "actor": "Worker-W4H8",
-        "session": "worker_acl1382_20260929",
-        "coordinator": "Coordinator-C6N2",
-        "branch": "codex/acl-1382-activation-report",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/ACL/worktrees/acl-five-activation-20260929",
-        "id": "300b187f0beb439fa104ebe85f965e13",
-        "issue": 382,
-        "state": "handoff",
-        "started_at": "2026-09-29T21:45:46+00:00",
-        "from_status": "status:backlog",
-        "pr": 386,
-        "report": "ACL-1382 actual activation report PR386. Worker-W4H8 implemented only docs/repository/PARALLEL_EXECUTION.md and CHANGELOG.md in codex/acl-1382-activation-report, starting at main d55754146e439150fb0cddbdd83d1b0258b6a419; stage baseline479d5329ccea4ac2d4d5e19bfc0bbcc151e25e24. Both have tree2b57c95611bbfca6f62b29e455d86b616e119ff8. Scanner, diff check and pinned descriptor validation passed. The report records actual idle migration with all nonexecution state/receipts identical and five free slots/one free lane at21:45:21UTC before this real claim. 227IDs/74historical, elevenunfinishedToDo andblockers, sevenunmergedPRs preserved. Read full parent originalscope, sourcechild384/385 and actual private migration-comparison.json/live-after-migration.json. Remaining: independent review of exact source/base, required admission, genuine new stage verification, main promotion, normal merged handoff and final free-slot snapshot. Package remains pending; no product/runtime changes or release. Current host capacity is fourtotalagents, not five actual workers."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -1770,9 +1755,25 @@
             "session": "worker_acl1382_20260929"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W4H8",
-        "coordinator": "Coordinator-C6N2"
+        "coordinator": "Coordinator-C6N2",
+        "handoff": {
+          "actor": "Worker-W4H8",
+          "session": "worker_acl1382_20260929",
+          "coordinator": "Coordinator-C6N2",
+          "branch": "codex/acl-1382-activation-report",
+          "worktree": "/Users/dmitry.o/Documents/ChatGPT/ACL/worktrees/acl-five-activation-20260929",
+          "id": "300b187f0beb439fa104ebe85f965e13",
+          "issue": 382,
+          "state": "handoff",
+          "started_at": "2026-09-29T21:45:46+00:00",
+          "from_status": "status:backlog",
+          "pr": 386,
+          "report": "ACL-1382 actual activation report PR386. Worker-W4H8 implemented only docs/repository/PARALLEL_EXECUTION.md and CHANGELOG.md in codex/acl-1382-activation-report, starting at main d55754146e439150fb0cddbdd83d1b0258b6a419; stage baseline479d5329ccea4ac2d4d5e19bfc0bbcc151e25e24. Both have tree2b57c95611bbfca6f62b29e455d86b616e119ff8. Scanner, diff check and pinned descriptor validation passed. The report records actual idle migration with all nonexecution state/receipts identical and five free slots/one free lane at21:45:21UTC before this real claim. 227IDs/74historical, elevenunfinishedToDo andblockers, sevenunmergedPRs preserved. Read full parent originalscope, sourcechild384/385 and actual private migration-comparison.json/live-after-migration.json. Remaining: independent review of exact source/base, required admission, genuine new stage verification, main promotion, normal merged handoff and final free-slot snapshot. Package remains pending; no product/runtime changes or release. Current host capacity is fourtotalagents, not five actual workers."
+        },
+        "pr": 386,
+        "queued_at": "2026-09-29T21:48:18+00:00"
       }
     },
     "actors": {
@@ -1782,7 +1783,9 @@
       }
     },
     "completed": {},
-    "review_queue": [],
+    "review_queue": [
+      382
+    ],
     "review": null,
     "history": [
       {
@@ -1799,6 +1802,13 @@
         "at": "2026-09-29T21:45:46+00:00",
         "issue": 382,
         "claim": "300b187f0beb439fa104ebe85f965e13",
+        "actor": "Worker-W4H8"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-09-29T21:48:18+00:00",
+        "issue": 382,
+        "pr": 386,
         "actor": "Worker-W4H8"
       }
     ],
