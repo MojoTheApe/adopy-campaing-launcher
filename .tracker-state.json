@@ -1746,9 +1746,39 @@
     }
   },
   "execution": {
-    "claims": {},
-    "tasks": {},
-    "actors": {},
+    "claims": {
+      "382": {
+        "actor": "Worker-W4H8",
+        "session": "worker_acl1382_20260929",
+        "coordinator": "Coordinator-C6N2",
+        "branch": "codex/acl-1382-activation-report",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/ACL/worktrees/acl-five-activation-20260929",
+        "id": "300b187f0beb439fa104ebe85f965e13",
+        "issue": 382,
+        "state": "implementing",
+        "started_at": "2026-09-29T21:45:46+00:00",
+        "from_status": "status:backlog"
+      }
+    },
+    "tasks": {
+      "382": {
+        "implementers": [
+          {
+            "actor": "Worker-W4H8",
+            "session": "worker_acl1382_20260929"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W4H8",
+        "coordinator": "Coordinator-C6N2"
+      }
+    },
+    "actors": {
+      "Worker-W4H8": {
+        "session": "worker_acl1382_20260929",
+        "role": "Worker"
+      }
+    },
     "completed": {},
     "review_queue": [],
     "review": null,
@@ -1761,6 +1791,13 @@
           "implementation_limit": 5,
           "review_limit": 1
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-29T21:45:46+00:00",
+        "issue": 382,
+        "claim": "300b187f0beb439fa104ebe85f965e13",
+        "actor": "Worker-W4H8"
       }
     ],
     "policy": {
