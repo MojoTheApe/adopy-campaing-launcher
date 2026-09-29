@@ -4882,24 +4882,33 @@ def run_recorded_campaign_flow(
                 _sleep_h(0.6)
         return False
 
-    def _fill(loc, value: str, *, where: str, attempts: int = 5) -> bool:
+    def _fill(loc, value: str, *, where: str, attempts: int = 5, info: dict | None = None) -> bool:
+        # ACL-1371: `info` — что было за попытки (для причины отказа шага):
+        # дошли ли до поля, сколько раз вкладка не ответила, чем кончилась
+        # последняя попытка (метка, без текста исключения).
+        info = info if info is not None else {}
+        info.update(tries=0, frozen=0)
+        info.pop("error", None)
         watch = _watch(where)
         for _ in range(attempts):
             if _tab_gone(page):
                 return False
             if _tab_frozen(page):
+                info["frozen"] += 1
                 watch.check(frozen=True)
                 _sleep_h(0.6)
                 continue
             watch.check()
             _wait_loading()
             watch.check()
+            info["tries"] += 1
             try:
                 loc.wait_for(state="visible", timeout=8000)
                 loc.click(timeout=3000)
                 loc.fill(value, timeout=4000)
                 return True
-            except Exception:
+            except Exception as exc:
+                info["error"] = _fill_error_kind(exc)
                 _sleep_h(0.6)
         return False
 
@@ -5827,8 +5836,12 @@ def run_recorded_campaign_flow(
         copy_ad_name = ad_name or f"{campaign_name} Ad"
         if reached_ad_level:
             final_ad_name = ad_name or f"{campaign_name} Ad"
-            if not _fill(page.get_by_placeholder("Enter your ad name here..."), final_ad_name, where="ad_name"):
-                _shot("fail_ad_name")
+            name_try: dict = {}
+            if not _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), final_ad_name, where="ad_name",
+                         info=name_try):
+                # ACL-1371: отказ имени — с названной причиной (PYTHON-1W «silent»).
+                name_diag = ad_name_failure(page, name_try)
+                _shot("fail_ad_name", name_diag, note=name_diag.get("why"))
                 ad_level_fails.append("ad_name")
                 copy_ad_name = _name_in_the_field(page, final_ad_name)
             else:
@@ -5868,7 +5881,9 @@ def run_recorded_campaign_flow(
         if reached_ad_level and destination_url:
             try:
                 if not set_ad_destination_website(page, destination_url):
-                    _shot("fail_ad_destination")
+                    # ACL-1371: причина — в note строки (a90d704c892a: «silent»).
+                    _shot("fail_ad_destination", last_destination_diag(),
+                          note=last_destination_why() or "destination_not_set")
                     ad_level_fails.append("ad_destination")
                 else:
                     _shot("after_ad_destination")
@@ -5876,7 +5891,8 @@ def run_recorded_campaign_flow(
                 if _page_gone(page, exc):
                     _browser_closed("ad_destination", exc)
                     return "browser_closed"
-                _shot("fail_ad_destination")
+                _shot("fail_ad_destination", {"error": type(exc).__name__},
+                      note="destination_exception")
                 ad_level_fails.append(f"ad_destination:{str(exc)[:60]}")
 
         if reached_ad_level and creative_uploaded and (ad_title or ad_body):
@@ -5980,14 +5996,17 @@ def run_recorded_campaign_flow(
                 # перезагрузки открываем её снова, не вышло — это объявление
                 # пропускаем с отказом шага имени, чужое не трогаем.
                 if "reopened_ad:failed" in (_clear_blocking_overlays(page, tag, ad_name="New Leads Ad") or []):
-                    _shot(f"fail_{tag}_name")
+                    _shot(f"fail_{tag}_name", note="not_the_new_ad_after_reload")
                     ad_level_fails.append(f"{tag}_name:not_the_new_ad_after_reload")
                     continue
 
                 extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
                 extra_copy_name = extra_name
-                if not _fill(page.get_by_placeholder("Enter your ad name here..."), extra_name, where=f"{tag}_name"):
-                    _shot(f"fail_{tag}_name")
+                name_try = {}
+                if not _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), extra_name, where=f"{tag}_name",
+                             info=name_try):
+                    name_diag = ad_name_failure(page, name_try)
+                    _shot(f"fail_{tag}_name", name_diag, note=name_diag.get("why"))
                     ad_level_fails.append(f"{tag}_name")
                     extra_copy_name = _name_in_the_field(page, extra_name)
                 else:
@@ -6018,7 +6037,8 @@ def run_recorded_campaign_flow(
                 if destination_url:
                     try:
                         if not set_ad_destination_website(page, destination_url):
-                            _shot(f"fail_{tag}_destination")
+                            _shot(f"fail_{tag}_destination", last_destination_diag(),
+                                  note=last_destination_why() or "destination_not_set")
                             ad_level_fails.append(f"{tag}_destination")
                         else:
                             _shot(f"after_{tag}_destination")
@@ -6026,7 +6046,8 @@ def run_recorded_campaign_flow(
                         if _page_gone(page, exc):
                             _browser_closed(f"{tag}_destination", exc)
                             return "browser_closed"
-                        _shot(f"fail_{tag}_destination")
+                        _shot(f"fail_{tag}_destination", {"error": type(exc).__name__},
+                              note="destination_exception")
                         ad_level_fails.append(f"{tag}_destination:{str(exc)[:60]}")
 
                 if (extra_title or extra_body) and no_creative:
@@ -6099,7 +6120,8 @@ def run_recorded_campaign_flow(
                 _shot("after_destination_sweep")
             else:
                 ad_level_fails.append("destination_sweep:" + (ad_name or f"{campaign_name} Ad"))
-                _shot("fail_destination_sweep")
+                _shot("fail_destination_sweep", last_destination_diag(),
+                      note=last_destination_why() or "destination_not_set")
         elif reached_ad_level and destination_url and not skip_sweep:
             sweep_names = [ad_name or f"{campaign_name} Ad"]
             for i, extra in enumerate(additional_ads or [], start=2):
@@ -12254,6 +12276,199 @@ def destination_url_box(page: Page):
     return box if box.count() else None
 
 
+# ── ACL-1371: тип назначения и причина отказа шага ─────────────────────────
+#
+# a90d704c892a (28.09, 6540, CO_bnc Trading): `ad_destination` упал за 8 с без
+# причины. В снимке (01_ad_destination) у раздела Destination радио «Website»
+# (`value="external"`) — `aria-checked="false"`, а «Instant Experience» —
+# `aria-checked="true"`; атрибут `checked` при этом остался на Website (так
+# было при отрисовке, выбор сменился позже). При Instant Experience Meta не
+# рисует ни поля «Website URL», ни Browser add-ons — робот искал поле, не
+# нашёл и вернул False, ничего не сказав. Обход в конце то же объявление
+# починил: после переоткрытия тип снова был Website.
+# 7e5f7abec777 (28.09, 02_ad_destination): Website выбран, поле найдено
+# (`data-rpa-field="dest"`), но пусто, а Browser add-ons — снова «Instant form
+# (suggested)» с ошибкой Lead Gen; в каком месте шаг сдался, по строке не
+# сказать. Теперь каждый выход шага называет себя (`last_destination_why`), и
+# строка `fail_ad_destination` несёт это имя в note.
+
+_last_destination: dict = {"why": "", "diag": {}}
+
+#: Причины, которые говорят о поле/переключателях внутри Website. Если тип
+#: назначения при этом не Website или раздела нет вовсе — причина в этом.
+_DESTINATION_FIELD_WHYS = frozenset({
+    "url_field_missing", "url_field_not_focused", "url_insert_error",
+    "addon_none_not_set", "url_not_kept", "addon_not_none",
+})
+
+#: Состояние раздела Destination. URL в ответ не попадает (это ссылка
+#: трекинга кабинета) — только «пусто / совпадает / другое».
+_DESTINATION_STATE_JS = r"""([want, full]) => {
+  const sec = document.getElementById('adgroupAdDestinationGeneric')
+    || document.querySelector('[data-surface$="/ad_destination_generic_section"]');
+  if (!sec) return {section: false};
+  const on = (r) => {
+    const v = r.getAttribute('aria-checked');
+    return v === null ? !!r.checked : v === 'true';
+  };
+  const inAddons = (r) => !!r.closest('[data-surface*="/pce_website_extension_field"]');
+  const radios = [...sec.querySelectorAll('input[type=radio], [role=radio]')];
+  const types = radios.filter(r => !inAddons(r));
+  const addons = radios.filter(inAddons);
+  const typeOn = types.find(on);
+  const addonOn = addons.find(on);
+  const seen = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+  };
+  const fields = [];
+  for (const host of sec.querySelectorAll('[data-surface$="/pce_website_url_field"]')) {
+    fields.push(...[...host.querySelectorAll('input, textarea')].filter(seen));
+  }
+  let url = 'no_field';
+  if (fields.length === 1) {
+    const v = (fields[0].value || '').trim();
+    url = !v ? 'empty' : (v === (want || '').trim() ? 'match' : 'other');
+  }
+  const out = {
+    section: true,
+    section_shown: seen(sec),
+    dest_type: typeOn ? (typeOn.getAttribute('value') || 'unnamed') : '',
+    addon: addonOn ? (addonOn.getAttribute('value') || 'unnamed') : '',
+    url_fields: fields.length,
+    url: url,
+  };
+  if (full) {
+    const text = (document.body && document.body.innerText) || '';
+    out.lead_gen_error = /must be a valid Lead Gen/i.test(text);
+    out.lead_terms = /Lead Ads Terms|Terms of Service Not Accepted/i.test(text);
+  }
+  return out;
+}"""
+
+#: Радио «Website» раздела Destination (не Browser add-ons): пометить,
+#: прокрутить к нему и отдать точку для нажатия.
+_MARK_WEBSITE_OPTION_JS = r"""() => {
+  const sec = document.getElementById('adgroupAdDestinationGeneric')
+    || document.querySelector('[data-surface$="/ad_destination_generic_section"]');
+  if (!sec) return null;
+  const radio = [...sec.querySelectorAll('input[type=radio][value="external"]')]
+    .find(r => !r.closest('[data-surface*="/pce_website_extension_field"]'));
+  if (!radio) return null;
+  for (const old of document.querySelectorAll('[data-rpa-field="dest_website"]')) {
+    old.removeAttribute('data-rpa-field');
+  }
+  radio.setAttribute('data-rpa-field', 'dest_website');
+  radio.scrollIntoView({block: 'center', behavior: 'instant'});
+  let r = radio.getBoundingClientRect();
+  if (!(r.width > 0 && r.height > 0)) {
+    const label = radio.closest('label');
+    if (!label) return null;
+    r = label.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return null;
+  }
+  return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+}"""
+
+
+def last_destination_why() -> str:
+    """Причина последнего отказа `set_ad_destination_website` ("" — не было)."""
+    return str(_last_destination.get("why") or "")
+
+
+def last_destination_diag() -> dict:
+    """Diag последнего отказа назначения вместе с `why` — для строки шага."""
+    diag = dict(_last_destination.get("diag") or {})
+    if _last_destination.get("why"):
+        diag["why"] = _last_destination["why"]
+    return diag
+
+
+def destination_state(page: Page, destination_url: str = "", *, full: bool = False) -> dict:
+    """Что сейчас в разделе Destination: тип, Browser add-ons, поле URL.
+
+    Чтение ограничено по времени (`_eval_bounded`): на зависшей вкладке —
+    `{"state": "unreadable"}`, а не вечное ожидание.
+    """
+    try:
+        got = _eval_bounded(page, _DESTINATION_STATE_JS, [destination_url or "", bool(full)])
+    except Exception as exc:
+        return {"state": "unreadable", "error": type(exc).__name__}
+    return dict(got) if isinstance(got, dict) else {"state": "unreadable"}
+
+
+def _destination_failed(page: Page, why: str, destination_url: str = "", **extra) -> bool:
+    """Записать причину отказа назначения и вернуть False.
+
+    Причина уточняется по разделу: не тот тип назначения, раздела нет,
+    вкладки нет — это и есть причина, а не «поле не найдено».
+    """
+    state: dict = {}
+    if _tab_gone(page):
+        why = "page_closed"
+    else:
+        state = destination_state(page, destination_url, full=True)
+        if state.get("state") == "unreadable" and "Timeout" in str(state.get("error", "")):
+            why = "tab_frozen"
+        elif why in _DESTINATION_FIELD_WHYS:
+            kind = str(state.get("dest_type") or "")
+            if state.get("section") is False:
+                why = "destination_section_missing"
+            elif kind and kind != "external":
+                why = "destination_not_website"
+            elif why == "url_field_missing" and int(state.get("url_fields") or 0) > 1:
+                why = "url_field_duplicated"
+            elif why == "url_field_missing" and state.get("section_shown") is False:
+                why = "destination_section_hidden"
+    diag = {**state, **extra}
+    _last_destination.update(why=why, diag=diag)
+    return False
+
+
+def _ensure_destination_website(page: Page) -> str:
+    """Тип назначения — Website; "" — стоит (или прочитать нельзя), иначе причина.
+
+    ACL-1371 (a90d704c892a): тип сменился на «Instant Experience», и поля
+    «Website URL» на странице не стало. Радио Website — в самом разделе
+    Destination объявления: не Publish, не футер и не рекомендация Advantage+;
+    нажатие идёт через охрану `_press_allowed` (`_cdp_mouse_click`).
+    Редактор не перезагружается и не переоткрывается.
+    """
+    state = destination_state(page)
+    kind = str(state.get("dest_type") or "")
+    if not kind or kind == "external":
+        return ""
+    for how in ("click", "space"):
+        try:
+            point = _eval_bounded(page, _MARK_WEBSITE_OPTION_JS)
+        except Exception:
+            point = None
+        if not isinstance(point, dict):
+            _telemetry.record("destination_website_selected", False, note="website_option_missing",
+                              diag={"was": kind})
+            return "website_option_missing"
+        try:
+            radio = page.locator('[data-rpa-field="dest_website"]').first
+            if how == "click":
+                handle = radio.element_handle(timeout=2000)
+                if handle is not None:
+                    _mark_press_target(page, handle)
+                _cdp_mouse_click(page, point["x"], point["y"])
+            else:
+                radio.focus(timeout=2000)
+                page.keyboard.press("Space")
+        except Exception:
+            pass
+        _sleep_h(0.8)
+        if str(destination_state(page).get("dest_type") or "") == "external":
+            _telemetry.record("destination_website_selected", True, note="switched_to_website",
+                              diag={"was": kind, "via": how})
+            return ""
+    _telemetry.record("destination_website_selected", False, note="destination_not_website",
+                      diag={"was": kind})
+    return "destination_not_website"
+
+
 def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     """Set the ad's destination to Website + Browser add-ons: None, with the
     real account tracking link — instead of the Instant Form Meta suggests
@@ -12272,6 +12487,7 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     page's Destination section underneath. Close it first if still open
     via the shared `_close_creative_setup_modal()` helper.
     """
+    _last_destination.update(why="", diag={})
     _close_creative_setup_modal(page)
 
     # Confirmed live (2026-07-27): the Destination section's container
@@ -12286,6 +12502,12 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
         )
     except Exception:
         pass
+
+    # ACL-1371: при типе «Instant Experience» поля URL и Browser add-ons нет —
+    # сначала вернуть тип Website.
+    website_why = _ensure_destination_website(page)
+    if website_why:
+        return _destination_failed(page, website_why, destination_url)
 
     # ORDER MATTERS — URL first, "None" LAST. Confirmed live 2026-07-30
     # after a day of chasing "the radio keeps reverting": editing the
@@ -12313,12 +12535,15 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
             "dest",
             placeholder="Enter the URL people visit after your ad",
         ):
-            return False
+            return _destination_failed(page, "url_field_missing", destination_url)
         url_box = page.locator('[data-rpa-field="dest"]').first
         if not url_box.count():
-            return False
-        if _focus_via_cdp_click(page, url_box) is None:
-            return False
+            return _destination_failed(page, "url_field_missing", destination_url)
+        url_handle = _focus_via_cdp_click(page, url_box)
+        if url_handle is None or not _holds_focus(url_handle):
+            # ACL-1371: без фокуса `insert_text` ушёл бы в то, что в фокусе
+            # сейчас, — в чужое поле; назначение осталось бы пустым (7e5f7abec777).
+            return _destination_failed(page, "url_field_not_focused", destination_url)
         # Select-all BEFORE inserting: insert_text APPENDS at the caret, it
         # does not replace. Confirmed live 2026-07-30: every destination
         # retry and every sweep re-fix appended another copy of the URL, so
@@ -12336,11 +12561,11 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
         # person would actually write.
         page.keyboard.insert_text(destination_url)
         _sleep_h(0.4)
-    except Exception:
-        return False
+    except Exception as exc:
+        return _destination_failed(page, "url_insert_error", destination_url, error=type(exc).__name__)
 
     if not _select_browser_addon_none(page):
-        return False
+        return _destination_failed(page, "addon_none_not_set", destination_url)
 
     # Confirmed live (2026-07-28): the same async-save-race class as the
     # campaign name/budget fields — Meta's debounced autosave can silently
@@ -12386,7 +12611,25 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
             if _both_ok():
                 break
 
-    return _both_ok()
+    if _both_ok():
+        return True
+    # ACL-1371: какая из двух половин не удержалась — это и есть причина.
+    return _destination_failed(page, "addon_not_none" if _url_matches() else "url_not_kept",
+                               destination_url)
+
+
+def _holds_focus(handle) -> bool:
+    """Фокус у этого элемента; если нет — одна попытка отдать его через DOM.
+
+    Прочитать нельзя — считаем, что фокус есть: так было до ACL-1371, и
+    проверка после ввода всё равно поймает пустое поле.
+    """
+    try:
+        if handle.evaluate("el => document.activeElement === el"):
+            return True
+        return bool(handle.evaluate("el => { el.focus(); return document.activeElement === el; }"))
+    except Exception:
+        return True
 
 
 def _audience_already_manual(page: Page) -> bool:
@@ -12808,6 +13051,121 @@ def _open_ad_name(page: Page) -> str | None:
 
 #: Имя свежей заготовки объявления Meta (поле имени до нашего ввода).
 _FRESH_AD_NAME = "New Leads Ad"
+
+
+# ── ACL-1371: почему не вписалось имя объявления ───────────────────────────
+#
+# Sentry PYTHON-1W: `ad_name` / `ad2_name: silent` — у байера (DAN-LT25,
+# 5844A, 28.09) в обеих кампаниях прогонов cf1cb2c3e8f0 / f8fe9cf36d08, у нас
+# — 37e397574548 (6540, вкладка не отвечала). Снимка у байера нет, а строка
+# шага не несла ничего: `_fill` глотает исключения. Теперь отказ имени
+# называет, что было с полем: его нет, их два, оно скрыто, выключено, накрыто,
+# открыт диалог, редактор не на уровне объявления, подсказка переписана,
+# вкладка не отвечает — или, если поле в порядке, чем кончилась попытка.
+
+_AD_NAME_PLACEHOLDER = "Enter your ad name here..."
+
+#: Поле имени и то, что вокруг него. Значение поля в ответ не попадает
+#: (это имя объявления) — только признаки.
+_AD_NAME_STATE_JS = r"""(ph) => {
+  const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+  const seen = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'
+      && !el.closest('[aria-hidden="true"], [inert]');
+  };
+  const byPh = [...document.querySelectorAll('input, textarea')]
+    .filter(e => e.getAttribute('placeholder') === ph);
+  const shown = byPh.filter(seen);
+  const sections = [...document.querySelectorAll('[data-surface$="/ad_name_section"]')];
+  const inSection = [];
+  for (const s of sections) inSection.push(...s.querySelectorAll('input, textarea'));
+  const levels = [...new Set([...document.querySelectorAll('[data-surface]')]
+    .map(e => ((e.getAttribute('data-surface') || '').match(/\/editor:([a-z_]+)$/) || [])[1])
+    .filter(Boolean))].slice(0, 6);
+  const dialogs = [...document.querySelectorAll('[role=dialog]')].filter(seen);
+  const out = {fields: byPh.length, shown: shown.length, sections: sections.length,
+               levels: levels, dialogs: dialogs.length};
+  if (shown.length > 1) return {...out, why: 'name_field_duplicated'};
+  if (shown.length === 1) {
+    const el = shown[0];
+    if (el.disabled || el.readOnly || el.getAttribute('aria-disabled') === 'true') {
+      return {...out, why: 'name_field_disabled'};
+    }
+    const r = el.getBoundingClientRect();
+    const x = r.x + r.width / 2, y = r.y + r.height / 2;
+    if (x >= 0 && y >= 0 && x < innerWidth && y < innerHeight) {
+      const hit = document.elementFromPoint(x, y);
+      if (hit && !el.contains(hit)) {
+        const host = hit.closest('[data-surface]');
+        return {...out, why: 'name_field_covered', cover: {
+          tag: hit.tagName.toLowerCase(), role: hit.getAttribute('role') || '',
+          surface: host ? (host.getAttribute('data-surface') || '').slice(0, 120) : '',
+          dialog: !!hit.closest('[role=dialog]')}};
+      }
+    }
+    return {...out, why: 'name_field_ready'};
+  }
+  if (byPh.length) return {...out, why: 'name_field_hidden'};
+  if (inSection.length) {
+    return {...out, why: 'name_placeholder_changed',
+            placeholder: norm(inSection[0].getAttribute('placeholder')).slice(0, 60)};
+  }
+  if (sections.length) return {...out, why: 'name_field_missing'};
+  if (dialogs.length) {
+    const h = dialogs[0].querySelector('[role=heading], h1, h2, h3');
+    return {...out, why: 'dialog_open', dialog: h ? norm(h.textContent).slice(0, 60) : ''};
+  }
+  if (!levels.includes('ad')) return {...out, why: 'not_on_ad_level'};
+  return {...out, why: 'name_section_missing'};
+}"""
+
+
+def _fill_error_kind(exc: BaseException) -> str:
+    """Чем кончилась попытка вписать — меткой, без текста исключения.
+
+    Текст Playwright несёт разметку элемента, а в ней — имя объявления.
+    """
+    text = str(exc).lower()
+    if "strict mode violation" in text:
+        return "strict_mode"
+    if "intercepts pointer events" in text:
+        return "intercepted"
+    if "not editable" in text or "readonly" in text or "disabled" in text:
+        return "not_editable"
+    if "not attached" in text or "detached" in text:
+        return "detached"
+    if "timeout" in type(exc).__name__.lower() or "timeout" in text:
+        return "timeout"
+    return "error"
+
+
+def ad_name_failure(page: Page, fill_info: dict | None = None) -> dict:
+    """Diag отказа шага имени (`ad_name`, `adN_name`) с названной причиной `why`.
+
+    `fill_info` — что заметил `_fill` за свои попытки: `tries` (сколько раз
+    дошёл до поля), `frozen` (сколько раз вкладка не ответила), `error`
+    (метка последнего исключения, `_fill_error_kind`).
+    """
+    info = dict(fill_info or {})
+    extra = {k: info[k] for k in ("tries", "frozen", "error") if k in info}
+    trouble = _page_read_trouble(page)
+    if trouble == "closed":
+        return {**extra, "why": "page_closed"}
+    if trouble == "frozen" or (info.get("frozen") and not info.get("tries")):
+        return {**extra, "why": "tab_frozen"}
+    if trouble:
+        return {**extra, "why": "page_unreadable", "trouble": trouble}
+    try:
+        state = _eval_bounded(page, _AD_NAME_STATE_JS, _AD_NAME_PLACEHOLDER)
+    except Exception as exc:
+        return {**extra, "why": "page_unreadable", "error_type": type(exc).__name__}
+    state = dict(state) if isinstance(state, dict) else {}
+    why = str(state.pop("why", "") or "")
+    if why in ("", "name_field_ready"):
+        # Поле на месте и доступно — сдалась сама попытка ввода.
+        why = "name_fill_" + str(info.get("error") or "failed")
+    return {**state, **extra, "why": why}
 
 
 def _name_in_the_field(page: Page, intended: str) -> str:
