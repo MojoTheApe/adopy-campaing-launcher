@@ -712,31 +712,16 @@
       }
     },
     "stage": {
-      "pr": 384,
+      "pr": 386,
       "issues": [
-        383
+        382
       ],
-      "tree_sha": "2b57c95611bbfca6f62b29e455d86b616e119ff8",
-      "source_sha": "479d5329ccea4ac2d4d5e19bfc0bbcc151e25e24",
-      "main_tree": "0e0b77a78ab35b6a66948f5e1475793964579d07",
+      "tree_sha": "d94fb90b734d211e41fb41a5060b6798cc486e81",
+      "source_sha": "6a11a8f0e76f252fecec06a4c1925d8aaa23ab16",
+      "main_tree": "2b57c95611bbfca6f62b29e455d86b616e119ff8",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-09-29T21:13:42+00:00",
-      "verification": {
-        "kind": "stage-verification",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "source_sha": "479d5329ccea4ac2d4d5e19bfc0bbcc151e25e24",
-        "tree_sha": "2b57c95611bbfca6f62b29e455d86b616e119ff8",
-        "checks": [
-          "Full Windows Python 3.11 and 3.13 suites on actual stage passed (36631685273)",
-          "Actual stage build/install/repair/uninstall and packaged update/restart/recovery with preserved synthetic data passed (36631685382)",
-          "Downloaded ACL-update-recovery-429 report passed with exact stage source and tree",
-          "Promotion full matrix, installer, descriptor and linkage passed"
-        ],
-        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/385#issuecomment-5899500363"
-      },
-      "verified_at": "2026-09-29T21:41:01+00:00"
+      "state": "testing",
+      "recorded_at": "2026-09-29T21:59:23+00:00"
     },
     "tasks": {
       "248": {
