@@ -376,3 +376,76 @@ def test_a_surface_button_outside_the_field_is_pressed_neither_by_surface_nor_by
     assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is False
     assert report["second_text"]["why"] == "add_control_not_found"
     assert page.evaluate("window.__outside") == 0
+
+
+# ── ревью 8d96212: заголовки генерации считаются только в нашем поле ──────
+
+@pytest.mark.parametrize("where", ["body_start", "body_end", "headline_field", "liquidity_field"])
+def test_a_generation_phrase_elsewhere_does_not_make_our_button_foreign(page, where):
+    """Фраза «Text variations» вне поля основного текста (живой Doc19 дал
+    zones 7 против 5 в блоке — совпадения вне блока есть): наша кнопка
+    остаётся нашей, ветка у неё — только внутри поля."""
+    page.evaluate(_META_REACTION_JS)
+    page.evaluate("""(w) => {
+      const d = document.createElement('div'); d.textContent = 'Text variations';
+      if (w === 'body_end') document.body.appendChild(d);
+      else if (w === 'body_start') document.body.insertBefore(d, document.body.firstChild);
+      else if (w === 'headline_field') document.querySelector('[data-surface$="/headline_field"]').parentElement.appendChild(d);
+      else document.querySelector('[data-surface$="/text_liquidity_toggle_field"]').parentElement.appendChild(d);
+    }""", where)
+    report: dict = {}
+    assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is True, report
+    assert report["second_text"]["add_how"] == "surface"
+    assert page.evaluate("window.__adds") == 1
+    assert page.evaluate("window.__trap") == 0
+
+
+@pytest.mark.parametrize("roles", [True, False])
+def test_generation_in_a_portal_keeps_our_button_and_its_own_button_untouched(page, roles):
+    """Раздел генерации вынесен порталом в конец страницы, в нём кнопка с
+    нашим именем: она вне поля — не наша; наша кнопка в поле — нажимается."""
+    _gen_button(page, "end")
+    page.evaluate(_META_REACTION_JS)
+    page.evaluate(f"""(roles) => {{ const g = {_GEN};
+      if (!roles) for (const e of [g, ...g.querySelectorAll('[role]')])
+        if (['list', 'listitem', 'region'].includes(e.getAttribute('role'))) e.removeAttribute('role');
+      const p = document.createElement('div'); p.id = 'portal'; p.appendChild(g); document.body.appendChild(p); }}""", roles)
+    report: dict = {}
+    assert md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report) is True, report
+    assert page.evaluate("window.__adds") == 1
+    assert page.evaluate("window.__trap") == 0, page.evaluate("window.__clicked")
+
+
+_SPLIT_HEADINGS_JS = r"""
+() => {
+  const RE = /creative text generation|text variations|generated text|text suggestions/i;
+  for (const l of [...document.querySelectorAll('span,div,label')]) {
+    if (l.children.length || !RE.test(l.textContent)) continue;
+    const t = l.textContent, i = t.search(/text/i);
+    l.textContent = '';
+    l.append(t.slice(0, i));
+    const b = document.createElement('b'); b.textContent = t.slice(i, i + 4); l.append(b);
+    l.append(t.slice(i + 4));
+  }
+}
+"""
+
+
+@pytest.mark.parametrize("real", [True, False])
+def test_a_generation_heading_split_by_tags_is_still_recognised(page, real):
+    """Фраза заголовка разбита тегом («creative <b>text</b> generation»):
+    раздел всё равно узнаётся, его кнопка с нашим именем не нажимается."""
+    _gen_button(page, "top")
+    page.evaluate(_META_REACTION_JS)          # ловушка — по разделу, пока роли на месте
+    page.evaluate(f"() => {{ const g = {_GEN}; for (const e of [g, ...g.querySelectorAll('[role]')])"
+                  " if (['list', 'listitem', 'region'].includes(e.getAttribute('role'))) e.removeAttribute('role'); }")
+    page.evaluate(_SPLIT_HEADINGS_JS)
+    assert page.evaluate("window.__gen") is True
+    if not real:
+        page.evaluate("() => document.getElementById('add-bodies-option-button').remove()")
+    state = md._text_options(page, "scan")
+    assert [b["body"] for b in state["boxes"]] == [True], state["boxes"]
+    report: dict = {}
+    ok = md.add_second_primary_text(page, _body_text(page), TEXT2, _typed, report)
+    assert page.evaluate("window.__trap") == 0, page.evaluate("window.__clicked")
+    assert ok is real, report

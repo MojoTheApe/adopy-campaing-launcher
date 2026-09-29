@@ -12142,8 +12142,31 @@ _TEXT_OPTIONS_JS = r"""
     }
     // Раздел генерации текста Meta: листья-заголовки и зоны по разметочному имени.
     const GEN_RE = /creative text generation|text variations|generated text|text suggestions/i;
-    const genLeaves = [...document.querySelectorAll('span,div,label,h1,h2,h3,h4,[role=heading]')]
-      .filter(l => !l.children.length && GEN_RE.test(norm(l.textContent)));
+    // Заголовок — самый глубокий элемент, чей текст целиком даёт фразу:
+    // фраза бывает разбита вложенными тегами («creative <b>text</b>
+    // generation»), поэтому идём от текстовых узлов со вторым словом фразы
+    // вверх, не дальше пяти уровней и 200 знаков. Текст в полях ввода
+    // (наш и сгенерированный) заголовком не бывает.
+    const GEN_WORD = /generation|variations|generated|suggestions/i;
+    const genLeaves = [];
+    const genHeadOf = (t) => {
+      let el = t.parentElement;
+      if (!el || el.closest(EDITORS)) return null;
+      for (let i = 0; el && el !== document.body && i < 5; i++, el = el.parentElement) {
+        const s = norm(el.textContent);
+        if (s.length > 200) return null;
+        if (GEN_RE.test(s)) return el;
+      }
+      return null;
+    };
+    if (document.body) {
+      const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let t = walk.nextNode(); t; t = walk.nextNode()) {
+        if (!GEN_WORD.test(t.nodeValue)) continue;
+        const el = genHeadOf(t);
+        if (el && !genLeaves.includes(el)) genLeaves.push(el);
+      }
+    }
     const surfaceZones = [...document.querySelectorAll(
       '[data-surface*="text_enhancements"],[data-surface*="text_generation"],[data-surface*="gen_ai"]')];
     const hostOf = (el) => hosts.find(h => h.contains(el)) || null;
@@ -12154,18 +12177,23 @@ _TEXT_OPTIONS_JS = r"""
     // Живой Doc19 29.09: раздел — `role=list` > `listitem` > `region` с
     // вариантами, и лежит он внутри `message_field`.
     const GEN_ROLES = ['list', 'listitem', 'region', 'group', 'dialog'];
+    // Считаются только заголовки генерации в том же хосте, что и элемент
+    // (ревью 8d96212): фраза где-то ещё на странице (у заголовка объявления,
+    // в «Optimize text per person») не делает нашу кнопку чужой.
+    const leavesIn = (h) => h ? genLeaves.filter(l => h.contains(l)) : [];
     const inGenBox = (el) => {
       const h = hostOf(el);
       if (!h) return false;
+      const hl = leavesIn(h);
       for (let a = el.parentElement; a && a !== h; a = a.parentElement) {
-        if (GEN_ROLES.includes(a.getAttribute('role')) && genLeaves.some(l => a.contains(l))
+        if (GEN_ROLES.includes(a.getAttribute('role')) && hl.some(l => a.contains(l))
             && !(body && a.contains(body))) return true;
       }
       return false;
     };
     // Ветка кандидата под общим с заголовком генерации предком: в ней нет ни
     // заголовка, ни чужих полей текста (вариантов Meta).
-    const branchClean = (el) => genLeaves.every(l => {
+    const branchClean = (el) => leavesIn(hostOf(el)).every(l => {
       let a = el;
       while (a.parentElement && !a.parentElement.contains(l)) a = a.parentElement;
       if (a.contains(l)) return false;
