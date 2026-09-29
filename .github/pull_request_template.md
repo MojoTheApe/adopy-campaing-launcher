@@ -1,14 +1,16 @@
-Tracker issues: ACL-1248
+Tracker issues: ACL-1234
 
 ## Result
 
-Describe the problem and resulting behavior. Title: `[ACL-1248] Summary` (list all
-related IDs for a shared task set). Link this PR back from each Issue.
+Describe the problem and resulting behavior. Replace the example ID with the
+actual task. Title: `[ACL-1234] Summary`. Exactly one task per source PR; link this
+PR back from that Issue. A promotion keeps the same task.
 
 ## Verification
 
-Self-checks and results. Independent reviewer/report and exact reviewed version.
-For stage promotion: source PR, same task set, verified tree and environment proof.
+Self-checks and results. Implementation claim, handoff, independent Reviewer/report
+and exact reviewed version. For stage promotion: source PR, same task, verified
+tree and environment proof. Follow the bounded legacy route only for ACL-1383.
 
 ## Documentation and related processes
 
