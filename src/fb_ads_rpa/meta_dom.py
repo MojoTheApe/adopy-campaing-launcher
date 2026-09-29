@@ -1709,14 +1709,22 @@ CAMPAIGN_FLOW_BUDGET_S = 45 * 60
 #: сроком `CREATIVE_STEP_BUDGET_S` (загрузка тяжёлого видео).
 STEP_BUDGET_S = 10 * 60
 
-#: Сколько раз вкладка может не ответить на проверку живости (`_tab_frozen`)
-#: за кампанию, прежде чем кампания остановится...
-TAB_FROZEN_STOP_AFTER = 3
+#: Непройденные проверки живости (`_tab_frozen`) ближе друг к другу, чем
+#: столько секунд, — один эпизод застоя. `_tab_frozen` зовут на каждом нажатии,
+#: вводе и ожидании загрузки: один застой даёт пачку проб, и считать надо
+#: застои, а не пробы (ревью PR #368, B1).
+TAB_FROZEN_EPISODE_GAP_S = 90.0
 
-#: ...и за какой минимум времени между первым и последним таким ответом: один
-#: долгий застой (несколько проверок подряд, которые сторож лечит пробуждением)
-#: кампанию не останавливает.
-TAB_FROZEN_MIN_SPAN_S = 120.0
+#: На каком эпизоде застоя кампания останавливается. Подобрано по телеметрии
+#: (эпизоды — по строкам `tab_frozen` / `responsive:false` / `tab_frozen:true`;
+#: в телеметрию попадает только часть проб, поэтому запас):
+#: * 7cfdc772376d (26.09, здоровая, 16,4 мин, 2 объявления): пробы на 244, 252,
+#:   381, 402 с после открытия — 2 эпизода (244–252, 381–402);
+#: * 37e397574548 (28.09, 6540, больше часа): 334, 358 | 539 | 755 | 931 |
+#:   1486 | 1588 | 3079 | … с — 5-й эпизод на 1486 с (24,8 мин), дальше ещё 7.
+#: Из 36 открытых кампаний в телеметрии 26–28.09 заморозку видели три, и ни у
+#: одной здоровой не было больше двух эпизодов.
+TAB_FROZEN_STOP_EPISODES = 5
 
 
 class FlowBudgetExceeded(BaseException):
@@ -1743,7 +1751,8 @@ def _flow_budget_arm() -> None:
     _flow_budget.start = now
     _flow_budget.step_start = now
     _flow_budget.step = ""
-    _flow_budget.frozen = []
+    _flow_budget.frozen = []      # начала эпизодов застоя
+    _flow_budget.frozen_last = None
 
 
 def _flow_budget_disarm() -> None:
@@ -1758,8 +1767,14 @@ def _flow_budget_step(step: str) -> None:
 
 
 def _flow_budget_note_frozen() -> None:
-    if getattr(_flow_budget, "armed", False):
-        _flow_budget.frozen.append(time.time())
+    """Вкладка не ответила: новый эпизод застоя — или продолжение текущего."""
+    if not getattr(_flow_budget, "armed", False):
+        return
+    now = time.time()
+    last = getattr(_flow_budget, "frozen_last", None)
+    if last is None or now - last > TAB_FROZEN_EPISODE_GAP_S:
+        _flow_budget.frozen.append(now)
+    _flow_budget.frozen_last = now
 
 
 def _flow_budget_check() -> None:
@@ -1769,13 +1784,13 @@ def _flow_budget_check() -> None:
     now = time.time()
     frozen = _flow_budget.frozen
     detail = {"after_step": _flow_budget.step, "campaign_s": round(now - _flow_budget.start, 1),
-              "step_s": round(now - _flow_budget.step_start, 1), "tab_frozen": len(frozen)}
+              "step_s": round(now - _flow_budget.step_start, 1), "frozen_episodes": len(frozen)}
     step_limit = STEP_BUDGET_S
     if getattr(_creative_tls, "deadline", None) is not None:
         step_limit = max(STEP_BUDGET_S, CREATIVE_STEP_BUDGET_S + 60.0)
-    if len(frozen) >= TAB_FROZEN_STOP_AFTER and frozen[-1] - frozen[0] >= TAB_FROZEN_MIN_SPAN_S:
+    if len(frozen) >= TAB_FROZEN_STOP_EPISODES:
         reason = "tab_frozen_budget_exceeded"
-        detail["frozen_at_s"] = [round(t - _flow_budget.start, 1) for t in frozen[-6:]]
+        detail["episodes_at_s"] = [round(t - _flow_budget.start, 1) for t in frozen[-8:]]
     elif now - _flow_budget.start > CAMPAIGN_FLOW_BUDGET_S:
         reason = "campaign_budget_exceeded"
         detail["budget_s"] = CAMPAIGN_FLOW_BUDGET_S
@@ -2993,13 +3008,18 @@ def _network_trouble(page: Page) -> bool:
 
 
 _TABLE_LOADING_JS = r"""
-  () => [...document.querySelectorAll('[role=dialog]')].some(d => {
-    const r = d.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) return false;
-    return [...d.querySelectorAll('[data-surface]')].some(s =>
-      (s.getAttribute('data-surface') || '').startsWith('/am/table/')
-      && /progress_dialog/.test(s.getAttribute('data-surface') || ''));
-  })
+  () => {
+    const shown = [...document.querySelectorAll('[role=dialog]')].filter(d => {
+      const r = d.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+    const progress = (d, table) => [...d.querySelectorAll('[data-surface]')].some(s => {
+      const v = s.getAttribute('data-surface') || '';
+      return /progress_dialog/.test(v) && v.startsWith('/am/table/') === table;
+    });
+    // Ревью PR #368: видна и модалка Create — значит, нажатие взялось.
+    return shown.some(d => progress(d, true)) && !shown.some(d => progress(d, false));
+  }
 """
 """Модалка «Loading...» самой таблицы списка кампаний, а не окна Create.
 
@@ -3438,13 +3458,16 @@ def _tab_frozen(page: Page) -> bool:
 
     None от `_page_responsive` (спросить не удалось: закрыта, подставная
     страница без `wait_for_function`) — не «зависла»: решать за неё нечего.
+
+    ACL-1354 (37e397574548): вкладка раз за разом не отвечает — на
+    TAB_FROZEN_STOP_EPISODES-м эпизоде застоя кампания останавливается
+    (внутри `_shot` — после записи строки шага, `_flow_budget.defer`).
     """
     frozen = _page_responsive(page, LIVENESS_PROBE_S) is False
     if frozen:
-        # ACL-1354 (37e397574548): вкладка раз за разом не отвечает — после
-        # TAB_FROZEN_STOP_AFTER таких ответов кампания останавливается.
         _flow_budget_note_frozen()
-        _flow_budget_check()
+        if not getattr(_flow_budget, "defer", False):
+            _flow_budget_check()
     return frozen
 
 
@@ -4706,7 +4729,8 @@ def _under_flow_budget(flow):
     (`FlowBudgetExceeded`), и кампания останавливается с названной причиной:
     `tab_frozen_budget_exceeded`, `campaign_budget_exceeded` или
     `step_budget_exceeded`. Черновик при этом частичный — повтор кампании его
-    бы продублировал (retry_policy.NON_RETRYABLE_FLOW_STEPS).
+    бы продублировал: они в retry_policy.FLOW_BUDGET_STOPS и не в
+    CAMPAIGN_RETRY_STEPS, то есть блокируют без повтора.
     """
     import functools
 
@@ -4916,7 +4940,13 @@ def run_recorded_campaign_flow(
         # Спрашиваем один раз, ограниченно, и тогда пишем только строку.
         frozen = None
         if ok is False or _shot_worth_a_picture(label):
-            frozen = _tab_frozen(page)
+            # Ревью PR #368: срок проверяется после записи строки шага, иначе
+            # остановка съедала сам отказ.
+            _flow_budget.defer = True
+            try:
+                frozen = _tab_frozen(page)
+            finally:
+                _flow_budget.defer = False
             if frozen:
                 diag = {**(diag or {}), "tab_frozen": True}
         # ACL-1354: отказ без названной причины («silent») — сперва причина из
@@ -4962,6 +4992,8 @@ def run_recorded_campaign_flow(
         )
         _shot_clock["t"] = now
         _flow_budget_step(step)
+        if frozen:
+            _flow_budget_check()
         if ok is not False and not _shot_worth_a_picture(label):
             return
         if frozen:
@@ -9117,6 +9149,9 @@ def upload_ad_creative_with_retry(
     finally:
         if owner:
             _creative_tls.deadline = None
+            # Ревью PR #368: срок шага после креатива считается с его конца,
+            # а не с начала (креатив живёт под своим сроком, до 25 мин).
+            _flow_budget_step("ad_creative")
 
 
 def _upload_ad_creative_with_retry(
