@@ -12140,8 +12140,18 @@ _TEXT_OPTIONS_JS = r"""
         if (e) { body = e; break; }
       }
     }
+    // Кнопка «Add text option» нашего поля: разметочное имя Meta
+    // (живой Doc19 29.09 — `div[role=button]` в `message_field`).
+    const OUR_ADD = '[data-surface$="/message_field/lib:dco-add-asset-button"]';
+    // Наши элементы поля: основной текст, кнопка добавления, наши варианты.
+    const ours = [body, ...document.querySelectorAll(OUR_ADD),
+      ...document.querySelectorAll('[data-rpa-opt="ours"],[data-rpa-field="body2"]')].filter(Boolean);
+    const coversOurs = (el) => ours.some(o => el.contains(o));
     // Разделы Meta со сгенерированным текстом: по разметочному имени и по
-    // заголовку. От заголовка поднимаемся, пока предок не накрыл наше поле.
+    // заголовку. От заголовка поднимаемся, пока предок не накрыл наше поле
+    // или нашу кнопку: 29.09 (Doc19) раздел генерации и «Add text option»
+    // оказались под одним общим предком, зона накрыла кнопку, и она
+    // отфильтровалась как чужая (`add_control_not_found`, zones 7).
     const zones = [...document.querySelectorAll(
       '[data-surface*="text_enhancements"],[data-surface*="text_generation"],[data-surface*="gen_ai"]')];
     for (const leaf of document.querySelectorAll('span,div,label,h1,h2,h3,h4,[role=heading]')) {
@@ -12149,9 +12159,9 @@ _TEXT_OPTIONS_JS = r"""
       if (!/creative text generation|text variations|generated text|text suggestions/i.test(norm(leaf.textContent))) continue;
       let z = leaf;
       if (body) {
-        while (z.parentElement && z.parentElement !== document.body && !z.parentElement.contains(body)) z = z.parentElement;
+        while (z.parentElement && z.parentElement !== document.body && !coversOurs(z.parentElement)) z = z.parentElement;
       } else {
-        for (let i = 0; i < 3 && z.parentElement; i++) z = z.parentElement;
+        for (let i = 0; i < 3 && z.parentElement && !coversOurs(z.parentElement); i++) z = z.parentElement;
       }
       zones.push(z);
     }
@@ -12212,10 +12222,15 @@ _TEXT_OPTIONS_JS = r"""
     const ADD_RE = /^\+?\s*add (a |another )?(primary )?text( option)?$/i;
     const BARE_RE = /^\+?\s*add$/i;
     const said = (e, re) => re.test(norm(e.getAttribute('aria-label'))) || re.test(norm(e.textContent));
-    const clickable = [...document.querySelectorAll('[role=button],button,a')].filter(e =>
-      seen(e) && !inZone(e) && e.getAttribute('aria-disabled') !== 'true' && !e.disabled);
-    let adds = clickable.filter(e => said(e, ADD_RE));
-    let how = 'text';
+    const usable = (e) => seen(e) && !inZone(e) && e.getAttribute('aria-disabled') !== 'true' && !e.disabled;
+    const clickable = [...document.querySelectorAll('[role=button],button,a')].filter(usable);
+    // Сначала — по разметочному имени кнопки нашего поля; текст — запасной ход.
+    let adds = [...document.querySelectorAll(OUR_ADD)].filter(usable);
+    let how = 'surface';
+    if (!adds.length) {
+      adds = clickable.filter(e => said(e, ADD_RE));
+      how = 'text';
+    }
     if (!adds.length) {
       adds = clickable.filter(e => inHost(e) && said(e, BARE_RE));
       how = 'bare_add_in_field';
@@ -12270,6 +12285,32 @@ def second_text_soft_fail(tag: str, ad_label: str, body2: str, report: dict) -> 
         return None
     why = state.get("why") or "not_attempted"
     return f"{tag}_second_text:{ad_label} {SECOND_TEXT_NOT_ADDED} ({why})"
+
+
+#: Блок креатива для снимка отказа «Add text option» (ACL-1344).
+AD_CREATIVE_SECTION_BLOCK_JS = """document.querySelector('[data-surface$="/ad_creative_section"]')"""
+
+
+def _capture_creative_section_once(page: Page, report: dict, **diag) -> None:
+    """Снять блок креатива, когда кнопки «Add text option» не нашлось.
+
+    29.09 (Doc19) отказ пришёл без разметки, и причину — зону генерации,
+    накрывшую кнопку, — пришлось разбирать на живой странице. Теперь отказ
+    сам приносит блок `ad_creative_section` (вычищенный `page_capture`).
+    Один раз на объявление: `report` у каждого объявления свой, а повтор
+    `fill_ad_copy` внутри него второй снимок не делает.
+    """
+    if report.get("second_text_capture") is not None:
+        return
+    report["second_text_capture"] = ""
+    try:
+        from src.fb_ads_rpa import page_capture as _pc
+
+        report["second_text_capture"] = _pc.capture(
+            page, step="ad_second_text_add_not_found", diag=diag,
+            blocks={"ad_creative_section": AD_CREATIVE_SECTION_BLOCK_JS}) or ""
+    except Exception:
+        pass
 
 
 def _text_options(page: Page, op: str = "scan", arg=None):
@@ -12332,6 +12373,7 @@ def add_second_primary_text(page: Page, body: str, body2: str, type_and_confirm,
         point_state = _text_options(page, "add_point")
         point = point_state.get("point") if isinstance(point_state, dict) else None
         if not point:
+            _capture_creative_section_once(page, report, boxes=len(boxes), zones=state.get("zones"))
             return _done(False, "add_control_not_found",
                          boxes=len(boxes), zones=state.get("zones"))
         out["add_how"] = point_state.get("add_how")
