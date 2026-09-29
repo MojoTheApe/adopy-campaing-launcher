@@ -171,8 +171,99 @@ def test_the_website_click_goes_through_the_publish_guard(page, rows, monkeypatc
 
 def test_a_website_destination_is_not_touched(page, rows):
     _open(page, _website_after_switch())
-    assert md._ensure_destination_website(page) == ""
+    assert md._ensure_destination_website(page) == ("", {})
     assert not [r for r in rows if r[0] == "destination_website_selected"]
+
+
+_KEYS_SEEN = """<script>
+  window.keys = [];
+  document.addEventListener('keydown', (e) => window.keys.push(e.key), true);
+</script>"""
+
+
+def test_a_dialog_opened_by_the_website_click_stops_the_step(page, rows):
+    """Ревью PR #372 (B1): после нажатия открылся диалог Meta — больше ничего
+    не жмём, Space не нажимается, диалог остаётся как был."""
+    _open(page, DEST["instant_experience"], _KEYS_SEEN)
+    page.evaluate("""() => document.addEventListener('click', (e) => {
+        if (!(e.target.closest && e.target.closest('input[value="external"]'))) return;
+        e.preventDefault();
+        const d = document.createElement('div');
+        d.setAttribute('role', 'dialog');
+        d.innerHTML = '<p>Switch destination?</p><button id="ok">OK</button>';
+        document.body.appendChild(d);
+        d.querySelector('#ok').focus();
+      }, true)""")
+    assert md.set_ad_destination_website(page, URL) is False
+    diag = md.last_destination_diag()
+    assert diag["why"] == "dialog_open", diag
+    assert diag["dialogs_before"] == 0 and diag["dialogs_after"] == 1
+    assert page.evaluate("window.keys") == [], "в открытый диалог нажимали клавиши"
+    assert page.locator('[role=dialog]').count() == 1
+    assert [(r[1], r[2]["note"]) for r in rows if r[0] == "destination_website_selected"] == [
+        (False, "dialog_open")]
+
+
+def test_space_is_not_pressed_when_the_website_radio_has_no_focus(page, rows):
+    """Ревью PR #372 (B1): фокус уходит в поле имени — пробел туда не печатается."""
+    _open(page, NAME["ad_name_section"] + DEST["instant_experience"], _KEYS_SEEN)
+    page.evaluate("""() => {
+        const name = document.querySelector('input[placeholder="Enter your ad name here..."]');
+        const web = document.querySelector('input[value="external"]');
+        web.addEventListener('click', (e) => e.preventDefault());
+        web.addEventListener('focus', () => name.focus());
+      }""")
+    assert md.set_ad_destination_website(page, URL) is False
+    assert md.last_destination_why() == "website_radio_not_focused"
+    assert page.locator('input[placeholder="Enter your ad name here..."]').input_value() == "Example Ad"
+    assert " " not in page.evaluate("window.keys")
+
+
+def test_space_goes_to_the_website_radio_when_the_click_did_not_take(page, rows):
+    """Нажатие мимо, Space на радио в фокусе — тип Website."""
+    _open(page, DEST["instant_experience"])
+    page.evaluate("""(html) => {
+        // Живое состояние, как у Meta: отмечено Instant Experience (атрибут
+        // `checked` на Website — только от первой отрисовки).
+        document.querySelector('input[value="instant_experience"]').checked = true;
+        document.querySelector('input[value="external"]').checked = false;
+        document.addEventListener('click', (e) => {
+          if (!(e.target.closest && e.target.closest('input[value="external"]'))) return;
+          if (e.detail !== 0) { e.preventDefault(); return; }   // мышь — мимо
+          document.getElementById('adgroupAdDestinationGeneric').outerHTML = html;
+        }, true);
+      }""", _website_after_switch())
+    assert md.set_ad_destination_website(page, URL) is True
+    switched = [r for r in rows if r[0] == "destination_website_selected"]
+    assert switched[-1][1] is True and switched[-1][2]["diag"]["via"] == "space"
+
+
+def test_the_sweep_names_why_an_ad_was_not_fixed(monkeypatch):
+    """Ревью PR #372: обход прежнего редактора тоже называет причину."""
+    monkeypatch.setattr(md, "_open_tree_ad", lambda p, name: True)
+    monkeypatch.setattr(md, "_ad_destination_persisted", lambda p, url: False)
+    monkeypatch.setattr(md.time, "sleep", lambda s: None)
+
+    def destination(p, url):
+        md._last_destination.update(why="destination_not_website", diag={})
+        return False
+
+    monkeypatch.setattr(md, "set_ad_destination_website", destination)
+    failed = md.verify_and_fix_ad_destinations(MagicMock(), ["Ad 1", "Ad 2"], URL)
+    assert failed[:2] == ["Ad 1:destination_not_website", "Ad 2:destination_not_website"]
+    assert acl_sentry.failure_reason("destination_sweep:" + failed[0]) == "destination-not-website"
+
+
+def test_a_sweep_that_raised_is_named(monkeypatch):
+    monkeypatch.setattr(md, "_open_tree_ad", lambda p, name: True)
+    monkeypatch.setattr(md, "_ad_destination_persisted", lambda p, url: False)
+    monkeypatch.setattr(md.time, "sleep", lambda s: None)
+
+    def boom(p, url):
+        raise RuntimeError("x")
+
+    monkeypatch.setattr(md, "set_ad_destination_website", boom)
+    assert md.verify_and_fix_ad_destinations(MagicMock(), ["Ad 1"], URL)[0] == "Ad 1:destination_exception"
 
 
 # ── Снимок 7e5f: Website, а Browser add-ons — Instant form ──────────────────
@@ -291,7 +382,8 @@ def test_an_open_dialog_without_the_name_section_is_named(page):
     _open(page, '<div role="dialog"><h2>Set up your creative</h2></div>')
     got = _why(page)
     assert got["why"] == "dialog_open"
-    assert got["dialog"] == "Set up your creative"
+    assert got["dialogs"] == 1
+    assert "Set up your creative" not in json.dumps(got), "текст диалога ушёл в diag"
 
 
 def test_an_editor_on_the_ad_set_level_is_named(page):
@@ -334,7 +426,7 @@ _REASONS = [
     "name_placeholder_changed", "name_field_missing", "dialog_open", "not_on_ad_level",
     "name_section_missing", "page_unreadable", "name_fill_timeout", "name_fill_strict_mode",
     "name_fill_intercepted", "name_fill_not_editable", "name_fill_detached", "name_fill_error",
-    "name_fill_failed", "not_the_new_ad_after_reload",
+    "name_fill_failed", "not_the_new_ad_after_reload", "website_radio_not_focused",
 ]
 
 

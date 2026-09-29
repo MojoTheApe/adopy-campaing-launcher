@@ -12425,48 +12425,90 @@ def _destination_failed(page: Page, why: str, destination_url: str = "", **extra
     return False
 
 
-def _ensure_destination_website(page: Page) -> str:
-    """Тип назначения — Website; "" — стоит (или прочитать нельзя), иначе причина.
+#: Сколько видимых диалогов на странице (-1 — прочитать нельзя).
+_VISIBLE_DIALOGS_JS = r"""() => [...document.querySelectorAll('[role=dialog], [role=alertdialog]')]
+  .filter(d => { const r = d.getBoundingClientRect();
+                 return r.width > 0 && r.height > 0 && getComputedStyle(d).visibility !== 'hidden'; })
+  .length"""
+
+#: Отдать фокус помеченному радио Website и сказать, у него ли фокус теперь.
+_FOCUS_WEBSITE_OPTION_JS = r"""() => {
+  const el = document.querySelector('[data-rpa-field="dest_website"]');
+  if (!el) return false;
+  el.focus();
+  return document.activeElement === el;
+}"""
+
+
+def _visible_dialogs(page: Page) -> int:
+    try:
+        return int(_eval_bounded(page, _VISIBLE_DIALOGS_JS))
+    except Exception:
+        return -1
+
+
+def _ensure_destination_website(page: Page) -> tuple[str, dict]:
+    """Тип назначения — Website; ("", {}) — стоит (или прочитать нельзя),
+    иначе (причина, diag).
 
     ACL-1371 (a90d704c892a): тип сменился на «Instant Experience», и поля
     «Website URL» на странице не стало. Радио Website — в самом разделе
     Destination объявления: не Publish, не футер и не рекомендация Advantage+;
     нажатие идёт через охрану `_press_allowed` (`_cdp_mouse_click`).
     Редактор не перезагружается и не переоткрывается.
+
+    Ревью PR #372 (B1): после нажатия мог открыться диалог Meta — тогда
+    больше ничего не жмём (`dialog_open`); Space — только если фокус
+    действительно у радио Website, иначе пробел ушёл бы в кнопку диалога
+    или в последнее поле с фокусом (имя объявления) — `website_radio_not_focused`.
     """
     state = destination_state(page)
     kind = str(state.get("dest_type") or "")
     if not kind or kind == "external":
-        return ""
+        return "", {}
+    dialogs_before = _visible_dialogs(page)
+
+    def _stop(why: str, **diag) -> tuple[str, dict]:
+        diag = {"was": kind, **diag}
+        _telemetry.record("destination_website_selected", False, note=why, diag=diag)
+        return why, diag
+
     for how in ("click", "space"):
         try:
             point = _eval_bounded(page, _MARK_WEBSITE_OPTION_JS)
         except Exception:
             point = None
         if not isinstance(point, dict):
-            _telemetry.record("destination_website_selected", False, note="website_option_missing",
-                              diag={"was": kind})
-            return "website_option_missing"
-        try:
-            radio = page.locator('[data-rpa-field="dest_website"]').first
-            if how == "click":
-                handle = radio.element_handle(timeout=2000)
+            return _stop("website_option_missing")
+        if how == "click":
+            try:
+                handle = page.locator('[data-rpa-field="dest_website"]').first.element_handle(timeout=2000)
                 if handle is not None:
                     _mark_press_target(page, handle)
                 _cdp_mouse_click(page, point["x"], point["y"])
-            else:
-                radio.focus(timeout=2000)
+            except Exception:
+                pass
+        else:
+            try:
+                focused = bool(_eval_bounded(page, _FOCUS_WEBSITE_OPTION_JS))
+            except Exception:
+                focused = False
+            if not focused:
+                return _stop("website_radio_not_focused")
+            try:
                 page.keyboard.press("Space")
-        except Exception:
-            pass
+            except Exception:
+                pass
         _sleep_h(0.8)
+        dialogs_after = _visible_dialogs(page)
+        if dialogs_before >= 0 and dialogs_after > dialogs_before:
+            # Нажатие открыло диалог: дальше вслепую не жмём и его не трогаем.
+            return _stop("dialog_open", via=how, dialogs_before=dialogs_before, dialogs_after=dialogs_after)
         if str(destination_state(page).get("dest_type") or "") == "external":
             _telemetry.record("destination_website_selected", True, note="switched_to_website",
                               diag={"was": kind, "via": how})
-            return ""
-    _telemetry.record("destination_website_selected", False, note="destination_not_website",
-                      diag={"was": kind})
-    return "destination_not_website"
+            return "", {}
+    return _stop("destination_not_website")
 
 
 def set_ad_destination_website(page: Page, destination_url: str) -> bool:
@@ -12505,9 +12547,9 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
 
     # ACL-1371: при типе «Instant Experience» поля URL и Browser add-ons нет —
     # сначала вернуть тип Website.
-    website_why = _ensure_destination_website(page)
+    website_why, website_diag = _ensure_destination_website(page)
     if website_why:
-        return _destination_failed(page, website_why, destination_url)
+        return _destination_failed(page, website_why, destination_url, **website_diag)
 
     # ORDER MATTERS — URL first, "None" LAST. Confirmed live 2026-07-30
     # after a day of chasing "the radio keeps reverting": editing the
@@ -12771,13 +12813,18 @@ def verify_and_fix_ad_destinations(
             failed.append(f"{name}:row_not_found")
             continue
         ok = _ad_destination_persisted(page, destination_url)
+        why = ""
         if not ok:
             try:
                 ok = set_ad_destination_website(page, destination_url)
+                why = "" if ok else (last_destination_why() or "destination_not_set")
             except Exception:
                 ok = False
+                why = "destination_exception"
         if not ok:
-            failed.append(name)
+            # ACL-1371 (ревью PR #372): и у обхода — названная причина, как у
+            # `row_not_found`: «имя:метка».
+            failed.append(f"{name}:{why or 'destination_not_set'}")
 
     # Tail stability watch. Confirmed live twice (Test143 AND Test144,
     # 2026-07-29): the ad left open when the flow ends — always the LAST
@@ -13112,10 +13159,8 @@ _AD_NAME_STATE_JS = r"""(ph) => {
             placeholder: norm(inSection[0].getAttribute('placeholder')).slice(0, 60)};
   }
   if (sections.length) return {...out, why: 'name_field_missing'};
-  if (dialogs.length) {
-    const h = dialogs[0].querySelector('[role=heading], h1, h2, h3');
-    return {...out, why: 'dialog_open', dialog: h ? norm(h.textContent).slice(0, 60) : ''};
-  }
+  // Ревью PR #372: текст заголовка диалога в diag не кладём — только счёт.
+  if (dialogs.length) return {...out, why: 'dialog_open'};
   if (!levels.includes('ad')) return {...out, why: 'not_on_ad_level'};
   return {...out, why: 'name_section_missing'};
 }"""
