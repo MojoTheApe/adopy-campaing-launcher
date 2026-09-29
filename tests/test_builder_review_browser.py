@@ -107,3 +107,31 @@ def test_mouse_selected_targeting_reaches_the_server_library(page, monkeypatch, 
     data = page.evaluate('Object.fromEntries(cbCollectFormData(document.querySelector("form")))')
     assert data['camp_0_targeting'] == 'FX'
     assert tr.resolve_interests(data['camp_0_targeting']) == 'Foreign exchange'
+
+
+def test_ad_row_upper_field_reads_primary_text_and_explains_the_headline(page):
+    """ACL-1381: the upper ad-text field must read as primary text, not a title.
+
+    Both fields feed the same ad-text library, so the upper one needs to say
+    where the headline comes from — otherwise it looks like a different kind
+    of text from "Primary text 2".
+    """
+    wrap = page.locator('.cb-adtitle-sel-wrap').first
+    label = wrap.locator('xpath=preceding-sibling::span[1]')
+    assert label.inner_text() == 'Primary text'
+    search = wrap.locator('.cb-adtitle-search')
+    assert search.get_attribute('placeholder') == '— type to search ad text —'
+    assert search.get_attribute('title') == (
+        'The chosen ad text gives the primary text; its headline goes into the Headline field'
+    )
+    # The lower field is a different, optional field and keeps its own label.
+    text2_wrap = page.locator('.cb-text2-sel-wrap').first
+    text2_label = text2_wrap.locator('xpath=preceding-sibling::span[1]')
+    assert text2_label.inner_text() == 'Primary text 2 (optional)'
+
+
+def test_ad_row_dropdown_reports_missing_ad_texts_not_missing_titles(page):
+    search = page.locator('.cb-adtitle-search').first
+    search.fill('no-such-ad-text-zzz')
+    dropdown = page.locator('.cb-adtitle-sel-wrap').first.locator('.cb-sel-dropdown')
+    assert 'No ad texts found' in dropdown.inner_text()
