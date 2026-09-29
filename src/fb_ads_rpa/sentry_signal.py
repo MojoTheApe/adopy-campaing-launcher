@@ -56,6 +56,11 @@ _RELATED: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
     (re.compile(r"^conversion_website$"), ("conversion_website_pick",)),
     (re.compile(r"^further_limit_reach_radio$"), ("pick_further_limit_radio",)),
     (re.compile(r"^ad\d*_create$"), ("create_additional_ad",)),
+    # ACL-1348 (PYTHON-14 `ad2_creative_upload: silent`): причину пишут
+    # помощники. Запасной путь — для строк шага без своей причины (прогоны
+    # старых версий); с ACL-1348 поток пишет причину в строку шага сам, и
+    # она выигрывает: строка помощника общая для всех объявлений кампании.
+    (re.compile(r"^ad\d*_creative_upload$"), ("ad_creative_upload", "ad_creative_reuse")),
 )
 
 

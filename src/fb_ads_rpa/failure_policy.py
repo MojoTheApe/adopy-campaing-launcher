@@ -86,11 +86,56 @@ POLICY: dict[str, tuple[str, str]] = {
         + _profile.MESSAGES[_profile.RESTART_FAILED],
     ),
     # ACL-1320: Meta's new single-screen editor (URL .../simple_create).
+    # ACL-1327: the robot walks this editor; the stop is left for a layout it
+    # does not recognise (no Ad set / Ad section) and for FB_RPA_SIMPLE_CREATE=0.
     "simple_create_layout": (
         BLOCKING,
-        "Meta opened its new single-screen campaign editor for this account; the robot "
-        "does not support it yet - the campaign was stopped and not retried; a partial "
+        "Meta opened its new single-screen campaign editor for this account, and the robot "
+        "could not find its Ad set / Ad sections (or this editor is switched off with "
+        "FB_RPA_SIMPLE_CREATE=0) - the campaign was stopped and not retried; a partial "
         "draft may be left in Ads Manager - check it and delete or finish it by hand",
+    ),
+    # ACL-1327: "Please read and accept Meta's Lead Ads Terms" stayed after Website.
+    _profile.LEAD_TERMS: (
+        BLOCKING,
+        "the Facebook Page has not accepted Meta's Lead Ads Terms; only a person can accept "
+        "them in Meta, so the campaign was stopped and not retried - a partial draft is left "
+        "in Ads Manager - " + _profile.MESSAGES[_profile.LEAD_TERMS],
+    ),
+    # ACL-1327 (review of PR #340, F4): the draft already exists when the
+    # objective is checked inside the single-screen editor.
+    "objective_inline": (
+        BLOCKING,
+        "Meta's single-screen campaign editor did not switch the campaign objective to Leads; "
+        "the draft was left in Ads Manager and not retried (a retry would leave another "
+        "draft) - set the objective to Leads by hand or delete the draft",
+    ),
+    # ACL-1327: the single-screen editor path builds the first ad only.
+    "simple_create_more_ads": (
+        BLOCKING,
+        "Meta's single-screen campaign editor was used, and the robot builds only the first "
+        "ad there - the other ads of this campaign were not created; add them by hand in Ads "
+        "Manager or publish the campaign again once the robot supports more ads in this editor",
+    ),
+    # ACL-1354 (runs 37e397574548 and a71e4fc14aa1, 2026-09-28): time budgets of
+    # the recorded flow; the draft is partial and a replay would duplicate it.
+    "tab_frozen_budget_exceeded": (
+        BLOCKING,
+        "the profile's browser tab kept not answering while the campaign was being built, "
+        "so the robot stopped it instead of waiting for an hour; the draft is incomplete and "
+        "was not retried - check it in Ads Manager, then close and reopen the profile",
+    ),
+    "campaign_budget_exceeded": (
+        BLOCKING,
+        "building this campaign took longer than the robot's time limit, so it was stopped; "
+        "the draft is incomplete and was not retried - check it in Ads Manager and finish or "
+        "delete it",
+    ),
+    "step_budget_exceeded": (
+        BLOCKING,
+        "one step of this campaign took longer than the robot's time limit, so the campaign "
+        "was stopped; the draft is incomplete and was not retried - check it in Ads Manager "
+        "and finish or delete it",
     ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),
@@ -191,10 +236,18 @@ PER_AD_POLICY: dict[str, tuple[str, str]] = {
         "Meta created an extra empty ad in this ad set; delete the empty "
         "\"New Leads ad\" before publishing",
     ),
+    # ACL-1344: второй вариант основного текста не встал. Первый текст
+    # сверен, объявление годно — предупреждение, а не блокировка.
+    "second_text": (
+        WARNING,
+        "the optional second primary text was not added; the ad runs with its "
+        "first primary text only - add the second text option in Ads Manager "
+        "by hand if it is needed",
+    ),
 }
 
 _PER_AD_NAME = re.compile(
-    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination|extra_empty_ad)$"
+    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination|extra_empty_ad|second_text)$"
 )
 
 

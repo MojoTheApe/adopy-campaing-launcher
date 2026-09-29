@@ -115,7 +115,14 @@ def stopped_profile_page():
                     if time.time() > deadline:
                         raise
                     time.sleep(0.2)
-            page = attached.contexts[0].pages[0]
+            # CI 28.09: на Windows-раннере подключение успевает раньше, чем
+            # Chromium откроет свою первую вкладку, и pages[0] падал IndexError.
+            # Ждём вкладку до 10 с, иначе открываем свою.
+            ctx = attached.contexts[0]
+            wait_until = time.time() + 10
+            while not ctx.pages and time.time() < wait_until:
+                time.sleep(0.1)
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
             page.set_content("<p>campaigns</p>")
             assert md._page_responsive(page, 3.0) is True
             attached.close()

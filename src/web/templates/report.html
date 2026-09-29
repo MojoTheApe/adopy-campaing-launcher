@@ -62,6 +62,15 @@
       --bg-subtle: #e8ebf0;
       --border: #dfe3ea;
       --border-strong: #c8ced8;
+      /* Поля ввода (ACL-1361). Своя поверхность, рамка и кольцо фокуса —
+         иначе поле неотличимо от карточки, на которой лежит. Рамка держит
+         3:1 ко всем поверхностям, где стоят поля (фон, карточка, подложка
+         группы, наведённая строка) и к самому полю; подсказка в поле —
+         4.5:1. Считает tests/test_field_contrast.py. */
+      --field-bg: #f9fafc;
+      --field-border: #7d8799;
+      --field-placeholder: #647084;
+      --focus-ring: #2563eb;
       --text: #1a1d23;
       --muted: #647084;
       --accent: #2563eb;
@@ -132,12 +141,20 @@
        изображение ленты Facebook, а не наш интерфейс: перекрасить его значит
        показать байеру то, чего он никогда не увидит у себя. */
     :root[data-theme="dark"] {
+      /* Лестница серых (ACL-1361): фон < карточка/ящик < подложка группы <
+         наведённая строка < поле. Соседние ступени различимы глазом, а не
+         только расчётом: прежде фон, карточка и поле были одним почти
+         чёрным, и ящик билдера сливался со страницей. */
       --bg: #0f1216;
-      --bg-elev: #171b22;
-      --bg-hover: #1e242d;
-      --bg-subtle: #232a35;
-      --border: #2b323d;
+      --bg-elev: #1a1f27;
+      --bg-subtle: #212730;
+      --bg-hover: #252b35;
+      --border: #323a46;
       --border-strong: #5b6779;
+      --field-bg: #2a313c;
+      --field-border: #7b8595;
+      --field-placeholder: #99a4b4;
+      --focus-ring: #7aa9ff;
       --text: #e4e8ef;
       --muted: #99a4b4;
       --accent: #7aa9ff;
@@ -171,6 +188,10 @@
       line-height: 1.55;
       -webkit-font-smoothing: antialiased;
     }
+    /* Подсказка в поле (ACL-1361) читается, а не растворяется: 4.5:1 к полю.
+       Непрозрачность — для Firefox: у него своя полупрозрачность подсказки,
+       и 4.5:1 превратились бы в 2.5:1. */
+    ::placeholder { color: var(--field-placeholder); opacity: 1; }
     .page-top {
       background: var(--bg-elev);
       border-bottom: 1px solid var(--border);
@@ -1062,8 +1083,8 @@
        Language» под соседнее поле — обрезанная метка хуже двухстрочной. */
     .cb-label { color: var(--muted); font-size: 0.75rem; line-height: 1.25; }
     .cb-select, .cb-input {
-      background: var(--bg-elev);
-      border: 1px solid var(--border);
+      background: var(--field-bg);
+      border: 1px solid var(--field-border);
       color: var(--text);
       font-family: inherit;
       font-size: 0.8125rem;
@@ -1074,8 +1095,8 @@
     }
     .cb-select:focus, .cb-input:focus {
       outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+      border-color: var(--focus-ring);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
     }
     .cb-inline { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
     .cb-inline .cb-select, .cb-inline .cb-input { width: auto; }
@@ -1265,8 +1286,8 @@
     .cb-sel-wrap { position: relative; width: 100%; }
     .cb-sel-text {
       width: 100%;
-      background: var(--bg-elev);
-      border: 1px solid var(--border);
+      background: var(--field-bg);
+      border: 1px solid var(--field-border);
       color: var(--text);
       font-family: inherit;
       font-size: 0.8rem;
@@ -1277,8 +1298,8 @@
     }
     .cb-sel-text:focus {
       outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+      border-color: var(--focus-ring);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
     }
     .cb-sel-text::after { content: '▾'; }
     .cb-sel-wrap::after {
@@ -1579,8 +1600,8 @@
     .gform { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.5rem; align-items: center; padding: 0.2rem 0.4rem; }
     .gform label { font-size: 0.74rem; color: var(--muted); }
     .gform input { font: inherit; font-size: 0.78rem; padding: 0.15rem 0.3rem;
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      background: var(--bg); color: var(--text); width: 100%; }
+      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--text); width: 100%; }
     .gform .gform-actions { grid-column: 1 / -1; display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.3rem; }
 
     /* ── Account map (Home) ───────────────────────────────────────────
@@ -1666,8 +1687,8 @@
     .report-hint { margin: 0 0 var(--space-md); font-size: .8rem; color: var(--muted); line-height: 1.45; }
     .report-box textarea {
       width: 100%; box-sizing: border-box; font: inherit; font-size: .85rem;
-      padding: var(--space-sm); border: 1px solid var(--border); border-radius: 6px;
-      background: var(--bg); color: var(--text); resize: vertical;
+      padding: var(--space-sm); border: 1px solid var(--field-border); border-radius: 6px;
+      background: var(--field-bg); color: var(--text); resize: vertical;
     }
     .report-actions { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-md); }
     .report-msg { flex: 1; font-size: .78rem; color: var(--muted); }
@@ -1753,7 +1774,7 @@
        Узкие поля возвращают им место; строка не растёт. */
     .amap table.amap-grid td.amap-status, .amap table.amap-grid td.amap-setup { padding-left: 0.3rem; padding-right: 0.3rem; }
     .amap .amap-x {
-      background: none; border: 1px solid var(--border-strong);
+      background: none; border: 1px solid var(--field-border);
       color: var(--muted); border-radius: var(--radius-sm);
       font: inherit; font-size: 0.7rem; padding: 0.05rem 0.4rem;
       cursor: pointer; line-height: 1.6;
@@ -1925,7 +1946,7 @@
     }
     .amap-ml [hidden] { display: none; }
     .amap-ml-signin input {
-      background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+      background: var(--field-bg); border: 1px solid var(--field-border); border-radius: 4px;
       color: var(--text); padding: 0.2rem 0.4rem; font-size: 0.75rem; font-family: inherit;
     }
     .amap-live-ok { font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -2132,7 +2153,7 @@
       padding-top: 0.4rem; line-height: 1.4;
     }
     .amap-btn {
-      background: none; border: 1px solid var(--border-strong);
+      background: none; border: 1px solid var(--field-border);
       color: var(--muted); border-radius: var(--radius-sm);
       font: inherit; font-size: 0.72rem; padding: 0.1rem 0.45rem;
       cursor: pointer; line-height: 1.5;
@@ -2150,8 +2171,8 @@
     .amap-add { display: flex; gap: 0.4rem; align-items: center; padding: 0.5rem 0.85rem; }
     .amap-add select, .amap-add input {
       font: inherit; font-size: 0.78rem; padding: 0.18rem 0.35rem;
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      background: var(--bg); color: var(--text); max-width: 15rem;
+      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--text); max-width: 15rem;
     }
     .amap-msg { font-size: 0.75rem; color: var(--muted); margin-left: 0.3rem; }
     .amap-msg.bad { color: var(--bad); }
@@ -2397,18 +2418,18 @@
       width: 100%;
       height: 34px;
       padding: 0 var(--space-sm);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--field-border);
       border-radius: var(--radius-sm);
-      background: var(--bg-elev);
+      background: var(--field-bg);
       color: var(--text);
       font: inherit;
       font-size: 0.85rem;
     }
     .acc-field select:focus-visible,
     .acc-field input:focus-visible {
-      outline: 2px solid var(--accent);
+      outline: 2px solid var(--focus-ring);
       outline-offset: 1px;
-      border-color: var(--accent);
+      border-color: var(--focus-ring);
     }
     .acc-form .acc-submit {
       height: 34px;
@@ -2481,8 +2502,8 @@
     .acc-table .acc-meta { font-size: 0.74rem; color: var(--muted); }
     .acc-table input[type="text"], .acc-table select {
       height: 30px; padding: 0 var(--space-sm); font-size: 0.8rem;
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      background: var(--bg-elev); color: var(--text); font-family: inherit;
+      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--text); font-family: inherit;
     }
     .acc-table .col-pick { width: 2rem; }
     .acc-table .col-act  { text-align: right; white-space: nowrap; }
@@ -2657,8 +2678,8 @@
     .cbd-pick.cbd-newc .cbd-new-country {
       flex: 1 1 auto; width: auto; min-width: 6rem; box-sizing: border-box;
       padding: 0.25rem 0.4rem; font: inherit; font-size: 0.74rem;
-      background: var(--bg); color: var(--text);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--text);
+      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
     }
     .cbd-pick.cbd-newc .cbd-add { display: inline-block; width: auto; flex: 0 0 auto; margin-top: 0; }
     .cbd-pick.cbd-newc .cbd-new-msg { flex: 1 1 100%; color: var(--muted); font-size: 0.68rem; }
@@ -2682,6 +2703,30 @@
       background: none; border: none; color: inherit; font: inherit;
       text-align: left; cursor: pointer;
     }
+    /* Галочка «собрать эту» (ACL-1360): настоящий чекбокс, подпись — в
+       aria-label, щелчок по ней кампанию не раскрывает. */
+    .cbd-tick {
+      flex-shrink: 0; display: flex; align-items: center;
+      padding: 0.4rem 0 0.4rem 0.5rem; cursor: pointer;
+    }
+    .cbd-tick input { margin: 0; cursor: pointer; accent-color: var(--accent); }
+    .cbd-tick input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .cbd-tick input[disabled] { cursor: not-allowed; }
+    .cbd-tick:has(input[disabled]) { cursor: not-allowed; opacity: 0.55; }
+    .cbd-tick + .cbd-camp-row { padding-left: 0.4rem; }
+    .cbd-ticks {
+      display: flex; align-items: center; gap: var(--space-xs);
+      margin-bottom: var(--space-sm);
+    }
+    .cbd-tick-all, .cbd-tick-none {
+      background: none; border: 1px solid var(--border-strong);
+      border-radius: 3px; padding: 0.1rem 0.45rem;
+      color: var(--muted); font: inherit; font-size: 0.68rem; font-weight: 600;
+      cursor: pointer;
+    }
+    .cbd-tick-all:hover, .cbd-tick-none:hover { color: var(--accent); border-color: var(--accent); }
+    .cbd-tick-all:focus-visible, .cbd-tick-none:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .cbd-tick-count { color: var(--muted); font-size: 0.66rem; margin-left: auto; }
     .cbd-camp-row:hover { background: var(--bg-hover); }
     .cbd-camp-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .cbd-caret {
@@ -2773,6 +2818,14 @@
         box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px currentColor;
       }
     }
+    /* Процент сборки (ACL-1347) — справа от точки, цветом точки. Цифра не
+       дышит и не анимируется: пульс остаётся только у самой точки. */
+    .cbd-ind[data-pct] { width: auto; min-width: 1rem; gap: 0.3rem; padding-left: 0.22rem; }
+    .cbd-ind[data-pct]::after {
+      content: attr(data-pct);
+      font-size: 0.66rem; font-weight: 600; font-variant-numeric: tabular-nums;
+      animation: none; transition: none;
+    }
 
     .cbd-add {
       display: block; width: 100%; box-sizing: border-box;
@@ -2793,8 +2846,19 @@
     .cbd-pick select {
       width: 100%; box-sizing: border-box;
       padding: 0.25rem 0.4rem; font: inherit; font-size: 0.74rem;
-      background: var(--bg); color: var(--text);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--text);
+      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+    }
+    /* Кольцо фокуса для полей, у которых своего не было (ACL-1361): фокус в
+       них показывал только системный контур, на тёмном почти невидимый.
+       Тот же рисунок, что у полей билдера. */
+    .gform input:focus, .report-box textarea:focus, .amap-ml-signin input:focus,
+    .amap-add select:focus, .amap-add input:focus,
+    .acc-table input:focus, .acc-table select:focus,
+    .cbd-pick select:focus, .cbd-pick.cbd-newc .cbd-new-country:focus {
+      outline: none;
+      border-color: var(--focus-ring);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
     }
     .cbd-note { color: var(--muted); font-size: 0.7rem; line-height: 1.5; }
 
@@ -2834,6 +2898,8 @@
     .cbd-host .cb-preview-panel, .cbd-host .cbp-diag-slot { display: none !important; }
     .cb-in-drawer .cb-slot[hidden] { display: none !important; }
     .cb-field-error { outline: 2px solid var(--bad); }
+    /* ACL-1344: в «Primary text 2» набрано не название записи — выбора нет. */
+    .cb-text2-unmatched { outline: 2px solid var(--bad); }
     .cb-check-message { color: var(--bad); font-size: .75rem; padding: .3rem; }
     body.cbd-ready .manage-builder { display: none; }
     .cbd-host .cb-fields { grid-template-columns: 1fr; gap: 0.15rem; max-width: none; }
@@ -3702,7 +3768,12 @@ async function dashRefresh(ev) {
 
   <div class="cb-acc-row" data-acc-label="{{ acc_label }}">
     {# ── Accordion header ── #}
-    <div class="cb-acc-header" onclick="cbToggleAcc('{{ acc_id }}')">
+    {#- ACL-1342 S01: значение аккаунта не подставляется в JS-строку onclick —
+        от него зависит только HTML-атрибут data-acc-id (тут работает
+        обычное HTML-экранирование Jinja), а обработчик клика вешается
+        через addEventListener (см. cbToggleAcc ниже), так что кавычки и
+        спецсимволы в имени аккаунта не могут вырваться из JS-литерала. -#}
+    <div class="cb-acc-header" data-acc-id="{{ acc_id }}">
       <span class="cb-acc-chevron" id="cb-chev-{{ acc_id }}">▸</span>
       <span class="cb-acc-title">{{ acc_label }}</span>
       <span class="cb-acc-meta">
@@ -4548,12 +4619,16 @@ window.cbKeep = (function () {
       if (f) shown[f] = text.value;
     });
     var hint = slot.querySelector('.cb-targeting-hint');
-    return {
+    var out = {
       fields: fields,
       shown: shown,
       hint: hint ? hint.textContent : '',
       ads: slot.querySelectorAll('.cb-ad-row').length
     };
+    // Галочка «собрать эту» (ACL-1360) едет вместе с карточкой: номер
+    // карточки меняется, а отметка должна остаться на ней.
+    if (slot._cbdPick) out.picked = true;
+    return out;
   }
 
   function writeSlot(slot, data) {
@@ -4573,9 +4648,15 @@ window.cbKeep = (function () {
       if (!hidden || !text) return;
       var f = field(hidden);
       if (f && f in data.shown) text.value = data.shown[f];
+      /* ACL-1344 (ревью PR #346): недонабранный «Primary text 2» — в поле
+         текст, а выбора нет. После перезагрузки красная обводка должна
+         вернуться, иначе видно одно, а на сервер уходит пусто. */
+      if (wrap.classList.contains('cb-text2-sel-wrap'))
+        text.classList.toggle('cb-text2-unmatched', !!text.value.trim() && !hidden.value);
     });
     var hint = slot.querySelector('.cb-targeting-hint');
     if (hint) hint.textContent = data.hint || '';
+    slot._cbdPick = data.picked === true;
     if (window.cbUpdateName) window.cbUpdateName(slot);
   }
 
@@ -4844,17 +4925,131 @@ window.cbTree = (function () {
     return r;
   }
 
+  /* ── галочки «собрать эту» (ACL-1360) ───────────────────────────────
+     Владелец выбирает, что собирать, а не собирает всё. Отметка живёт на
+     самой карточке (`slot._cbdPick`), а не в списке рядом: карточки
+     удаляют, копируют и перенумеровывают, и список по номерам разъехался
+     бы с ними. Переживает F5 вместе с карточкой — её пишет `cbKeep`.
+
+     Ничего не отмечено или отмечено всё, что можно, — нижняя кнопка
+     прежняя «Publish all»; отмечена часть — «Publish selected» и уходят
+     только отмеченные. Кампании аккаунта, который сейчас собирается, не
+     отметить: второе задание на него было бы дублем (см. cbAccountBusy). */
+  function picked(slot) { return !!(slot && slot._cbdPick); }
+
+  /* Заперт ли аккаунт — по его форме, то есть по паре страна+аккаунт:
+     один аккаунт бывает в двух странах, и это две разные формы билдера. */
+  function tickLocked(a) {
+    if (!a || !a.form || typeof cbAccountBusy !== 'function' || typeof cbFormKey !== 'function') return false;
+    return cbAccountBusy(cbFormKey(a.form));
+  }
+
+  function tickTitle(locked, on) {
+    if (locked && on) return 'This account is being built — this ticked campaign is not sent now; untick it or wait for the run to finish';
+    return locked
+      ? 'This account is being built — wait for its run to finish before selecting its campaigns'
+      : 'Select this campaign to publish only the selected ones';
+  }
+
+  /* Заперта только постановка галочки: уже отмеченную карточку идущей формы
+     снять можно (ревью PR #369) — иначе она висела бы серой и отмеченной. */
+  function tickDisabled(slot, locked) { return locked && !picked(slot); }
+
+  /* Что отмечено и что вообще можно отметить. `every` — отмечено всё,
+     что можно: тогда это снова «Publish all». */
+  function ticks(tree) {
+    var all = [], open = [], on = [], send = [], where = Object.create(null);
+    (tree || realTree()).forEach(function (g) {
+      g.accounts.forEach(function (a) {
+        var locked = a.campaigns.length ? tickLocked(a) : false;
+        a.campaigns.forEach(function (c) {
+          all.push(c.slot);
+          where[c.id] = { slot: c.slot, locked: locked };
+          if (!locked) open.push(c.slot);
+          if (picked(c.slot)) on.push(c.slot);
+          if (picked(c.slot) && !locked) send.push(c.slot);   // уйдёт сейчас
+        });
+      });
+    });
+    // Отмеченная карточка идущей формы — это выбор, а не «всё»: такая
+    // сборка остаётся «Publish selected» и её не отправит.
+    var every = on.length > 0 && open.length > 0 && open.every(picked) && send.length === on.length;
+    return { total: all.length, all: all, open: open, on: on, send: send, where: where,
+             every: every, some: on.length > 0 && !every };
+  }
+
+  function publishLabel(t) {
+    // K — сколько кампаний уйдёт сейчас: отмеченные у идущей формы не едут
+    // (их пропустит и подтверждение), и считать их было бы неправдой.
+    return t.some ? 'Publish selected → drafts (' + t.send.length + ')'
+                  : 'Publish all → drafts (' + t.total + ')';
+  }
+
+  /* Отметки, кнопка и «Select all» — на месте, без перерисовки дерева:
+     перерисовка сняла бы фокус с чекбокса, по которому ходят Tab/Space. */
+  function refreshTicks() {
+    var t = ticks();
+    body.querySelectorAll('.cbd-camp[data-camp]').forEach(function (card) {
+      var hit = t.where[card.dataset.camp];
+      var input = card.querySelector('.cbd-tick-box');
+      if (!hit || !input) return;
+      input.checked = picked(hit.slot);
+      input.disabled = tickDisabled(hit.slot, hit.locked);
+      input.title = input.parentNode.title = tickTitle(hit.locked, picked(hit.slot));
+    });
+    var bar = body.querySelector('.cbd-ticks');
+    if (bar) {
+      if (!bar.firstChild) {
+        bar.innerHTML = '<button type="button" class="cbd-tick-all" data-act="tick-all"></button>'
+          + '<button type="button" class="cbd-tick-none" data-act="tick-none" hidden>Clear selection</button>'
+          + '<span class="cbd-tick-count" aria-live="polite"></span>';
+      }
+      var allBtn = bar.querySelector('.cbd-tick-all');
+      allBtn.textContent = t.every ? 'Clear selection' : 'Select all';
+      allBtn.disabled = !t.every && !t.open.length;
+      bar.querySelector('.cbd-tick-none').hidden = !t.some;
+      bar.querySelector('.cbd-tick-count').textContent = t.on.length ? t.on.length + ' of ' + t.total + ' selected' : '';
+    }
+    var btn = foot.querySelector('.cbd-publish-all');
+    if (btn) btn.textContent = publishLabel(t);
+  }
+
+  function keepTicks() {
+    try { if (window.cbKeep) window.cbKeep.save(); } catch (e) { /* не помним — отметки живут до F5 */ }
+    refreshTicks();
+  }
+
+  function setTicks(slots, on) {
+    (slots || []).forEach(function (slot) { if (slot) slot._cbdPick = !!on; });
+    keepTicks();
+  }
+
+  /* Для нижней кнопки: отмеченные карточки, если отмечена часть; иначе
+     null — прежний «Publish all». */
+  function selectedForPublish() {
+    var t = ticks();
+    return t.some ? t.on.slice() : null;
+  }
+
   /* ── отрисовка ────────────────────────────────────────────────────── */
 
-  function campaignHtml(c) {
+  function campaignHtml(c, a) {
     var r = readiness(c);
     var open = c.id === openId;
+    var locked = tickLocked(a);
+    var tip = aclEscHtml(tickTitle(locked, picked(c.slot)));
     return '<div class="cbd-camp" data-camp="' + aclEscHtml(c.id) + '" data-open="' + (open ? '1' : '0') + '">'
       + '<div class="cbd-camp-head">'
+      + '<label class="cbd-tick" title="' + tip + '">'
+      + '<input type="checkbox" class="cbd-tick-box" title="' + tip + '"'
+      + ' aria-label="' + aclEscHtml('Select ' + (c.name || 'untitled campaign') + ' to publish') + '"'
+      + (picked(c.slot) ? ' checked' : '') + (tickDisabled(c.slot, locked) ? ' disabled' : '') + '>'
+      + '</label>'
       + '<button type="button" class="cbd-camp-row" data-act="toggle"'
       + ' aria-expanded="' + (open ? 'true' : 'false') + '">'
       + '<span class="cbd-caret" aria-hidden="true">▸</span>'
-      + '<span class="cbd-ind cbd-ind-' + r.state + '" title="' + aclEscHtml(r.why) + '">'
+      + '<span class="cbd-ind cbd-ind-' + r.state + '" title="' + aclEscHtml(r.why) + '"'
+      + (r.pct != null ? ' data-pct="' + Math.floor(r.pct) + '%"' : '') + '>'
       + '<span>' + r.sign + '</span></span>'
       + (c.name
           ? '<span class="cbd-camp-name">' + aclEscHtml(c.name) + '</span>'
@@ -4904,7 +5099,7 @@ window.cbTree = (function () {
     if (!busy.length) {
       body.innerHTML = '<p class="cbd-empty">Nothing is being assembled yet.</p>';
     } else {
-      body.innerHTML = busy.map(function (g) {
+      body.innerHTML = (countTotal(tree) ? '<div class="cbd-ticks"></div>' : '') + busy.map(function (g) {
         return '<div class="cbd-country">' + aclEscHtml(g.countryName || g.country)
           + '<button type="button" class="cbd-country-add" data-act="connect"'
           + ' data-country="' + aclEscHtml(g.country) + '"'
@@ -4918,7 +5113,7 @@ window.cbTree = (function () {
           + (g.country === openConnect ? '<div class="cbd-connect-slot"></div>' : '')
           + g.accounts.map(function (a) {
               return '<div class="cbd-account">' + aclEscHtml(a.account) + '</div>'
-                + a.campaigns.map(campaignHtml).join('')
+                + a.campaigns.map(function (c) { return campaignHtml(c, a); }).join('')
                 + '<button type="button" class="cbd-add" data-act="add-here"'
                 + ' data-country="' + aclEscHtml(g.country) + '"'
                 + ' data-account="' + aclEscHtml(a.account) + '">+ Campaign</button>';
@@ -4951,10 +5146,10 @@ window.cbTree = (function () {
     foot.hidden = false;
     var chosen = foot.querySelector('.cbd-pick-country');
     var keep = (chosen && chosen.value) || currentCountry();
-    var busy = countTotal(realTree());
-    foot.innerHTML = (busy || (window.CB_QUEUE && window.CB_QUEUE.progress)
+    var t = ticks();
+    foot.innerHTML = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
         ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
-          + 'Publish all → drafts (' + busy + ')</button>'
+          + aclEscHtml(publishLabel(t)) + '</button>'
           + '<div class="cbd-queue" hidden></div>'
         : '')
       + '<div class="cbd-pick">'
@@ -4976,6 +5171,7 @@ window.cbTree = (function () {
       + '</div>';
     paintAccounts();
     if (window.CB_QUEUE && window.CB_QUEUE.progress) showQueue(window.CB_QUEUE.progress);
+    refreshTicks();
   }
 
   function paintAccounts() {
@@ -5100,7 +5296,11 @@ window.cbTree = (function () {
   function showQueue(p) {
     var box = foot.querySelector('.cbd-queue');
     var btn = foot.querySelector('.cbd-publish-all');
-    if (!box) return;
+    if (!box) {
+      // Сборка вернулась после F5 раньше, чем в ящике появилось, что собирать.
+      if (window.CB_QUEUE && window.CB_QUEUE.progress === p) paintFoot();
+      return;
+    }
     box.hidden = false;
 
     var lines = (p.report || []).map(function (r) {
@@ -5110,11 +5310,12 @@ window.cbTree = (function () {
         + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '') + '</div>';
     });
 
-    if (btn) btn.disabled = !!(window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain));
+    // ACL-1355: идущая сборка кнопку не держит — остальные аккаунты
+    // докладываются в неё; держит только потерянный статус.
+    if (btn) btn.disabled = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
     if (p.done) {
       var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
       lines.unshift('<div class="cbd-q-head">Done — ' + ok + ' of ' + p.of + ' accounts</div>');
-      if (btn) btn.disabled = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
     } else if (p.live && p.live.length) {
       // Каждый неоконченный аккаунт своей строкой (ACL-1321): кто
       // проверяется, кто собирается, кто ждёт места в очереди профилей.
@@ -5139,6 +5340,8 @@ window.cbTree = (function () {
         + ' <span class="cbd-q-why">' + p.at + ' of ' + p.of + '</span></div>');
     }
     box.innerHTML = lines.join('');
+    // Аккаунт начал или кончил собираться — его галочки заперты или свободны.
+    refreshTicks();
   }
 
   /* ── что делают руками ────────────────────────────────────────────── */
@@ -5237,7 +5440,13 @@ window.cbTree = (function () {
          переживёт. */
       window.amapSend({ action: 'add', kind: 'country', value: name }, msg);
     } else if (act === 'publish-all') {
-      window.cbPublishAll(showQueue);
+      window.cbPublishAll(showQueue, selectedForPublish());
+    } else if (act === 'tick-all') {
+      var t = ticks();
+      // Всё отмечено — тот же переключатель снимает; иначе отмечает всё, что можно.
+      if (t.every) setTicks(t.all, false); else setTicks(t.open, true);
+    } else if (act === 'tick-none') {
+      setTicks(ticks().all, false);
     } else if (act === 'add-picked') {
       var countrySel = foot.querySelector('.cbd-pick-country');
       var accountSel = foot.querySelector('.cbd-pick-account');
@@ -5251,6 +5460,16 @@ window.cbTree = (function () {
 
   foot.addEventListener('change', function (e) {
     if (e.target.classList.contains('cbd-pick-country')) paintAccounts();
+  });
+
+  body.addEventListener('change', function (e) {
+    if (!e.target.classList || !e.target.classList.contains('cbd-tick-box')) return;
+    var card = e.target.closest('.cbd-camp');
+    var hit = card ? ticks().where[card.dataset.camp] : null;
+    if (!hit) return;
+    // Заперт, пока аккаунт собирается: disabled мог отстать на опрос.
+    if (hit.locked && e.target.checked) { e.target.checked = false; refreshTicks(); return; }
+    setTicks([hit.slot], e.target.checked);
   });
 
   /* Перешёл на другую страну — «+ Campaign» внизу едет за ним. */
@@ -5334,6 +5553,7 @@ window.cbTree = (function () {
       var r = readiness(c);
       ind.className = 'cbd-ind cbd-ind-' + r.state;
       ind.title = r.why;
+      if (r.pct != null) ind.setAttribute('data-pct', Math.floor(r.pct) + '%'); else ind.removeAttribute('data-pct');
       var sign = ind.querySelector('span');
       if (sign) sign.textContent = r.sign;
     }
@@ -5380,11 +5600,100 @@ window.cbTree = (function () {
     readiness: readiness,
     refresh: refreshOpenRow,
     showQueue: showQueue,
+    refreshTicks: refreshTicks,
+    // Кампании, ушедшие роботу, больше не отмечены (ACL-1360).
+    untick: function (slots) { setTicks(slots, false); },
     open: openCampaign,
     close: closeCampaign,
     borrowed: function () { return BORROWED; }
   };
 })();
+</script>
+
+<script type="application/json" id="cb-build-model">
+{
+  "about": "ACL-1347: build percent model. rules = step -> stage (hand-written); stages/steps = medians from rpa_telemetry.jsonl via scripts/acl_build_progress_model.py --write",
+  "derived": {"rows": 951, "attempts": 19, "until": "2026-09-28"},
+  "stages": [["profile", 18], ["campaign", 57], ["adset", 178], ["ad", 175], ["final", 6]],
+  "rules": [
+    ["^(window_|overlays_cleared$|stall_|tab_frozen$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
+    ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error)", "profile"],
+    ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
+    ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad$|simple_ad_section$)", "adset"],
+    ["^(ad_level_summary$|destination_sweep|simple_create_draft$)", "final"],
+    ["^(ad\\d*_|creative_|text_variations_off$|text_generation_off$|simple_create_more_ads$|simple_reentry$|loading_modal_reload$|destination_website_selected$)", "ad"]
+  ],
+  "steps": {
+    "ad_copy": [1.0, 6],
+    "ad_copy_blocked": [0.56, 74],
+    "ad_create": [0.12, 3],
+    "ad_creative_reuse": [0.34, 26],
+    "ad_creative_upload": [0.6, 24],
+    "ad_destination": [0.79, 14],
+    "ad_level_summary": [1.0, 1],
+    "ad_name": [0.04, 35],
+    "adset_name": [0.04, 5],
+    "advantage_plus_audience": [0.77, 3],
+    "advantage_plus_off": [0.46, 10],
+    "age_suggestion_off": [0.6, 1],
+    "audience_age": [0.54, 1],
+    "audience_age_row_opened": [0.86, 6],
+    "audience_location": [0.64, 11],
+    "before_audience_location": [0.54, 15],
+    "browser_error": [0.0, 16],
+    "browser_error_recovered": [1.0, 5],
+    "browser_window": [0.02, 3],
+    "campaign_fields": [0.98, 2],
+    "campaign_name": [0.94, 1],
+    "campaign_open_budget": [0.5, 3],
+    "campaigns_list_ready": [1.0, 1],
+    "continue": [0.59, 7],
+    "conversion_event": [0.35, 2],
+    "conversion_menu_open": [0.07, 20],
+    "conversion_website_pick": [0.19, 1],
+    "create": [0.28, 1],
+    "create_retry": [0.64, 4],
+    "create_took": [0.32, 5],
+    "creative_upload_stalled": [0.6, 27],
+    "destination_sweep": [0.94, 1],
+    "destination_sweep_cleared": [0.98, 1],
+    "destination_sweep_skipped": [0.71, 1],
+    "drafts_pending": [0.09, 1],
+    "fresh_tab": [0.33, 63],
+    "further_limit_continue": [0.41, 6],
+    "further_limit_reach": [0.37, 1],
+    "further_limit_row": [0.37, 1],
+    "job_phase:browser_attach": [0.49, 6],
+    "job_phase:open_campaigns": [0.5, 6],
+    "job_phase:profile_queue": [0.24, 6],
+    "job_phase:slot_queue": [0.0, 7],
+    "languages": [0.71, 8],
+    "leads": [0.55, 1],
+    "listbox_left_open": [0.48, 6],
+    "loading_modal_reload": [1.0, 3],
+    "next_to_ad": [1.0, 5],
+    "next_to_adset": [1.0, 7],
+    "objective_wait": [0.5, 1],
+    "onboarding_modal": [0.75, 1],
+    "pick_further_limit_radio": [0.38, 7],
+    "placements": [0.98, 2],
+    "simple_ad_section": [1.0, 3],
+    "simple_adset_section": [1.0, 6],
+    "simple_card": [0.52, 2],
+    "simple_create": [0.74, 14],
+    "simple_create_draft": [1.0, 1],
+    "simple_create_more_ads": [1.0, 2],
+    "simple_objective": [0.95, 3],
+    "simple_reentry": [0.66, 14],
+    "tab_woken": [0.12, 8],
+    "targeting": [0.76, 1],
+    "targeting_open": [0.79, 1],
+    "text_generation_off": [0.9, 17],
+    "text_variations_off": [0.9, 1],
+    "website_click": [0.2, 1],
+    "website_selected": [0.2, 27]
+  }
+}
 </script>
 
 <script>
@@ -5408,15 +5717,140 @@ window.cbBuild = (function () {
   var KEEP_MS = 12 * 3600 * 1000;   // вчерашние задания не держим
   var POLL_MS = 3000;
   var ACTIVE = { pending: 1, queued: 1, running: 1, cancelling: 1 };
-  var jobs = Object.create(null);   // id → {account, names, at, lost, p}
+  var jobs = Object.create(null);   // id → {account, names, at, lost, p, track}
 
   function isActive(p) { return !!(p && ACTIVE[p.status]); }
+
+  /* ── Процент сборки (ACL-1347) ──────────────────────────────────────────
+     Примерный процент у дышащей точки кампании, которую робот собирает
+     сейчас. Считается здесь, из того же ответа опроса (шаг, `idle_s`), —
+     ни одного лишнего запроса. Таблица шагов — блок `cb-build-model` выше;
+     пересчёт по телеметрии — scripts/acl_build_progress_model.py.
+
+     Полоса делится по типичному времени этапов: профиль, кампания, группа
+     объявлений, объявления (типичное время одного × число объявлений),
+     финальная проверка. Предложение задачи (8/12/35/40/5 %) по телеметрии
+     28.09 почти совпало для одного объявления (4/13/41/40/1 %), но у трёх
+     объявлений этап объявлений — две трети времени, а не 40 %: доли по
+     времени честнее, и таблица одна для любого числа объявлений.
+
+     Шаг ставит процент в своё типичное место этапа; пока следующий шаг не
+     записан, процент подрастает к месту следующего (типичная пауза `next`,
+     1 − e^(−t/next)) и не доходит до начала следующего этапа (объявления) —
+     зависшая сборка стоит, а не ползёт к 99 %. Назад процент не идёт:
+     помнится максимум (и в localStorage — переживает F5). Служебный или
+     незнакомый шаг — этап последнего знакомого, никогда не 0. */
+  /* Таблица правится руками: любая её поломка (битый JSON, кривой
+     регэксп) отключает только процент — точки сборки работают как до
+     ACL-1347. Кривое правило пропускается, о нём — одна строка в консоли. */
+  var MODEL = (function () {
+    try {
+      var m = JSON.parse((document.getElementById('cb-build-model') || {}).textContent || 'null');
+      if (!m || !Array.isArray(m.rules) || !Array.isArray(m.stages) || !m.stages.length) return null;
+      var bad = [];
+      m.re = [];
+      m.rules.forEach(function (r) {
+        try { m.re.push([new RegExp(r[0]), String(r[1])]); } catch (e) { bad.push(r && r[0]); }
+      });
+      if (bad.length) {
+        try { console.warn('cb-build-model: skipped invalid rules', bad); } catch (e) { /* без консоли — молча */ }
+      }
+      m.secs = {};
+      m.order = m.stages.map(function (s) { m.secs[s[0]] = Math.max(1, +s[1] || 1); return s[0]; });
+      m.steps = m.steps && typeof m.steps === 'object' ? m.steps : {};
+      return m;
+    } catch (e) {
+      return null;
+    }
+  })();
+  var PCT_GAP = 1;   // сколько процентов не доходит до следующего этапа
+
+  function baseStep(step) { return String(step || '').split(':')[0].trim(); }
+
+  /* Этап шага: 'profile' … 'final', 'hold' — служебный, null — незнакомый. */
+  function stageOf(step) {
+    if (!MODEL) return null;
+    var base = baseStep(step);
+    for (var i = 0; i < MODEL.re.length; i++) if (MODEL.re[i][0].test(base)) return MODEL.re[i][1];
+    return null;
+  }
+
+  function keyOf(step, note) {
+    var base = baseStep(step);
+    return base === 'job_phase' ? 'job_phase:' + String(note || '') : base.replace(/^ad\d+_/, 'ad_');
+  }
+
+  /* Номер объявления из имени шага; null — шаг его не несёт (ad_creative_reuse
+     второго объявления пишется без номера) и наследует последний. */
+  function adIndex(step) {
+    var base = baseStep(step), m = /^ad(\d+)_/.exec(base);
+    return m ? parseInt(m[1], 10) : (base === 'ad_name' ? 1 : null);
+  }
+
+  /* Процент для последнего шага кампании или null — держать достигнутое.
+     `t` — что страница помнит о кампании: процент, номер объявления и
+     последний настоящий шаг. */
+  function estimate(t, c, idle, ads) {
+    var step = baseStep(c.step), note = c.note;
+    var stage = step ? stageOf(step) : 'profile';
+    var at = 0, next = 0;
+    if (!stage || stage === 'hold') {
+      // Служебный (window_bounds сразу за переходом) или незнакомый шаг:
+      // этап — последнего настоящего, рост — от него. Тишина считается от
+      // служебной строки, то есть рост скорее занижен, чем завышен.
+      if (!t.step) return null;
+      step = t.step; note = t.note; stage = stageOf(step);
+      if (!stage || stage === 'hold') return null;
+    } else if (step) {
+      t.step = step; t.note = String(note || '').slice(0, 40);
+    }
+    var n = adIndex(step);
+    if (stage === 'ad') t.ad = n || t.ad || 1;
+    ads = Math.max(1, ads || 1, t.ad || 1);
+    var lo = 0, total = 0;
+    MODEL.order.forEach(function (s) { total += MODEL.secs[s] * (s === 'ad' ? ads : 1); });
+    for (var i = 0; i < MODEL.order.length && MODEL.order[i] !== stage; i++) {
+      lo += MODEL.secs[MODEL.order[i]] * (MODEL.order[i] === 'ad' ? ads : 1);
+    }
+    var secs = MODEL.secs[stage];
+    if (stage === 'ad') lo += secs * (t.ad - 1);
+    if (step) {
+      var row = MODEL.steps[keyOf(step, note)];
+      if (row) { at = +row[0] || 0; next = +row[1] || 0; }
+    } else {
+      next = secs;   // шагов ещё нет: открывается профиль
+    }
+    var span = 100 * secs / total, start = 100 * lo / total;
+    var v = start + at * span;
+    if (next > 0 && idle > 0) v += span * Math.min(1, next / secs) * (1 - Math.exp(-idle / next));
+    return Math.max(0, Math.min(v, start + span - PCT_GAP, 99));
+  }
+
+  /* Достигнутый процент кампании: обновить по ответу и вернуть целым. */
+  function percent(j, name, c, p, ads) {
+    if (!MODEL) return null;
+    j.track = j.track || {};
+    var t = j.track[name] = j.track[name] || { pct: 0, ad: 1 };
+    if (c) {
+      var idle = typeof p.idle_s === 'number' ? p.idle_s : (typeof c.idle_s === 'number' ? c.idle_s : 0);
+      var v = null;
+      try { v = estimate(t, c, idle, ads); } catch (e) { v = null; }   // процент не должен ронять точку
+      if (typeof v !== 'number' || v !== v) v = null;
+      if (v !== null && v > t.pct) {
+        var grew = Math.floor(v) > Math.floor(t.pct);
+        t.pct = Math.round(v * 10) / 10;
+        if (grew) save();
+      }
+    }
+    return Math.floor(t.pct);
+  }
 
   function save() {
     var out = {};
     Object.keys(jobs).forEach(function (id) {
       var j = jobs[id];
-      out[id] = { account: j.account, names: j.names, at: j.at, lost: !!j.lost };
+      out[id] = { account: j.account, country: j.country || '', names: j.names, at: j.at, lost: !!j.lost,
+                  track: j.track || {} };
     });
     try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) { /* не помним — не страшно */ }
   }
@@ -5448,6 +5882,12 @@ window.cbBuild = (function () {
         }
         save();
         repaint();
+        // ACL-1355: задание, отправленное до F5, сервер ещё ведёт — вернуть
+        // его в сборку вкладки (строка внизу ящика, Stop, защита от дубля).
+        if (j.restored && !j.adopted && isActive(p) && typeof window.cbRunAdopt === 'function') {
+          j.adopted = true;
+          try { window.cbRunAdopt(id, j.account, j.country); } catch (e) { /* точка всё равно идёт */ }
+        }
         if (isActive(p)) j.timer = setTimeout(function () { poll(id); }, POLL_MS);
       })
       .catch(function () {
@@ -5458,9 +5898,10 @@ window.cbBuild = (function () {
 
   /* Задание отправлено: следить за ним. `names` — кампании, ушедшие в
      задание по мнению страницы; первый ответ сервера их уточняет. */
-  function watch(id, account, names) {
+  function watch(id, account, names, country) {
     if (!id) return;
-    jobs[id] = { account: String(account || ''), names: (names || []).map(String), at: Date.now(), lost: false, p: null };
+    jobs[id] = { account: String(account || ''), country: String(country || ''),
+                 names: (names || []).map(String), at: Date.now(), lost: false, p: null };
     save();
     repaint();
     poll(id);
@@ -5491,13 +5932,17 @@ window.cbBuild = (function () {
   }
 
   /* Состояние точки для одной кампании задания. */
-  function classify(j, name) {
+  function classify(j, name, ads) {
     if (j.lost) {
       return { state: 'build-lost', sign: '',
                why: 'Build status unknown: the dashboard restarted during the run. Check this draft in Ads Manager.' };
     }
     var p = j.p;
-    if (!p) return { state: 'build-run', sign: '', why: 'Sent to the robot — starting' };
+    if (!p) {
+      // После F5, до первого ответа: достигнутый процент из localStorage.
+      var kept = j.track && j.track[name] && MODEL ? Math.floor(j.track[name].pct) : null;
+      return { state: 'build-run', sign: '', why: 'Sent to the robot — starting', pct: kept };
+    }
     var c = null;
     (p.campaigns || []).forEach(function (x) { if (x && x.name === name) c = x; });
     var active = isActive(p);
@@ -5523,13 +5968,15 @@ window.cbBuild = (function () {
     }
     if (p.status === 'running' && c.name === p.current) {
       var limit = p.stall_after_s || 180;
+      // Встала — процент стоит на достигнутом (рост упирается в этап).
+      var pct = percent(j, name, c, p, ads);
       if (typeof p.idle_s === 'number' && p.idle_s >= limit) {
-        return { state: 'build-attn', sign: '',
+        return { state: 'build-attn', sign: '', pct: pct,
                  why: 'No new step for ' + minutes(p.idle_s)
                    + (c.step ? ' (last: ' + stepText(c.step) + ')' : '')
                    + ' — check the Multilogin window' };
       }
-      return { state: 'build-run', sign: '',
+      return { state: 'build-run', sign: '', pct: pct,
                why: c.step ? 'Building: ' + stepText(c.step) + (c.ok === false ? ' — failed, retrying' : '')
                            : 'Building: starting' };
     }
@@ -5544,13 +5991,18 @@ window.cbBuild = (function () {
   function dot(slot, name) {
     if (!name) return null;
     var account = accountOf(slot);
+    var form = slot && slot.closest ? slot.closest('form') : null;
+    var country = form ? String((form.querySelector('[name="country"]') || {}).value || '').trim() : '';
     var best = null;
     Object.keys(jobs).forEach(function (id) {
       var j = jobs[id];
       if (j.account !== account || j.names.indexOf(name) === -1) return;
+      if (country && j.country && j.country !== country) return;   // тот же аккаунт другой страны
       if (!best || j.at > best.at) best = j;
     });
-    return best ? classify(best, name) : null;
+    // Число объявлений карточки делит этап объявлений (ACL-1347).
+    var ads = slot && slot.querySelectorAll ? slot.querySelectorAll('.cb-ad-row').length : 0;
+    return best ? classify(best, name, ads) : null;
   }
 
   (function restore() {
@@ -5560,8 +6012,17 @@ window.cbBuild = (function () {
     Object.keys(raw).forEach(function (id) {
       var s = raw[id];
       if (!s || typeof s !== 'object' || !(now - (s.at || 0) < KEEP_MS)) return;
-      jobs[id] = { account: String(s.account || ''), names: Array.isArray(s.names) ? s.names.map(String) : [],
-                   at: s.at, lost: !!s.lost, p: null };
+      var track = {};
+      if (s.track && typeof s.track === 'object') {
+        Object.keys(s.track).forEach(function (n) {
+          var t = s.track[n] || {};
+          track[n] = { pct: Math.max(0, Math.min(99, +t.pct || 0)), ad: Math.max(1, parseInt(t.ad, 10) || 1),
+                       step: String(t.step || ''), note: String(t.note || '') };
+        });
+      }
+      jobs[id] = { account: String(s.account || ''), country: String(s.country || ''),
+                   names: Array.isArray(s.names) ? s.names.map(String) : [],
+                   at: s.at, lost: !!s.lost, p: null, restored: true, track: track };
     });
     save();
     function start() {
@@ -5572,10 +6033,28 @@ window.cbBuild = (function () {
     else start();
   })();
 
+  /* Идёт ли у аккаунта задание, о котором знает эта вкладка (ACL-1355).
+     Ещё не опрошенное — идёт: после F5 первый ответ сервера может прийти
+     не сразу, а второе задание на тот же аккаунт было бы дублем.
+     `except` — задания, за которыми уже следит сборка вкладки: там её слово.
+     `country` — необязательна: без неё — аккаунт в любой стране. */
+  function busy(account, except, country) {
+    return Object.keys(jobs).some(function (id) {
+      var j = jobs[id];
+      if (j.account !== account || j.lost || (except || []).indexOf(id) !== -1) return false;
+      // Страна своя у формы: тот же аккаунт другой страны не занят. Задание
+      // без страны (запомнено раньше) считается занятым в любой.
+      if (country && j.country && j.country !== country) return false;
+      return j.p ? isActive(j.p) : true;
+    });
+  }
+
   return {
     watch: watch,
     dot: dot,
+    busy: busy,
     classify: classify,
+    stageOf: stageOf,
     refresh: function () { Object.keys(jobs).forEach(poll); },   // не ждать очередного опроса
     jobs: function () { return jobs; }
   };
@@ -5839,6 +6318,17 @@ function copyBrief(btn) {
 }
 
 // ── Campaign Builder account accordion ───────────────────────────────
+// ACL-1342 S01: клик по заголовку аккордеона раньше был инлайновым
+// onclick="cbToggleAcc('{{ acc_id }}')" — Jinja экранирует для HTML, а не
+// для JS-строки внутри атрибута, так что имя аккаунта с кавычкой ломало
+// границу литерала. Теперь id читаем из data-acc-id (обычный HTML-атрибут,
+// безопасен при любом содержимом) через делегирование на document —
+// работает независимо от того, что именно лежит в имени аккаунта.
+document.addEventListener('click', function(e) {
+  var header = e.target.closest('.cb-acc-header');
+  if (header && header.dataset.accId) cbToggleAcc(header.dataset.accId);
+});
+
 function cbToggleAcc(accId) {
   var body = document.getElementById('cb-body-' + accId);
   var chev = document.getElementById('cb-chev-' + accId);
@@ -8442,13 +8932,24 @@ function mlTokenFirst(cid) {
           } catch (e) {}
         }
         creds.style.display = 'none';
+        // ACL-1342 S01 (PR #343 ревью, тот же класс бага в мёртвом коде):
+        // cid раньше подставлялся прямо в JS-строку onclick через
+        // конкатенацию — тот же разрыв литерала, что чинили в живом
+        // аккордеоне аккаунтов. Здесь этот путь недостижим (mlTokenFirst
+        // вызывается только из mlTogglePanel/mlSetInstance, а на них нет ни
+        // одного onclick в разметке), но код лежит в файле и его тронут
+        // первым, если панель когда-нибудь переподключат — правим тем же
+        // способом: data-* атрибут (обычное HTML-экранирование через
+        // aclEscHtml) + чтение через this.dataset на клике, без конкатенации
+        // значения в JS-текст.
         banner.innerHTML = '<span style="color:var(--good)">✓ Connected with the saved token'
           + ' (' + mlLabel(instance) + until + ')</span>'
-          + ' <button type="button" class="ml-connect-btn" style="margin-left:0.5rem;font-size:0.72rem;padding:0.2rem 0.6rem"'
-          + ' onclick="mlListProfiles(\'' + cid + '\')">Profiles</button>'
-          + ' <a href="#" style="margin-left:0.5rem;font-size:0.7rem;color:var(--muted)"'
+          + ' <button type="button" class="ml-connect-btn" data-cid="' + aclEscHtml(cid) + '"'
+          + ' style="margin-left:0.5rem;font-size:0.72rem;padding:0.2rem 0.6rem"'
+          + ' onclick="mlListProfiles(this.dataset.cid)">Profiles</button>'
+          + ' <a href="#" data-cid="' + aclEscHtml(cid) + '" style="margin-left:0.5rem;font-size:0.7rem;color:var(--muted)"'
           + ' onclick="event.preventDefault();this.parentNode.style.display=\'none\';'
-          + 'document.getElementById(\'ml-cred-fields-' + cid + '\').style.display=\'block\'">another account</a>';
+          + 'document.getElementById(\'ml-cred-fields-\'+this.dataset.cid).style.display=\'block\'">another account</a>';
         mlListProfiles(cid);  // decision: alive token → straight to profiles
       } else {
         creds.style.display = 'block';
@@ -8506,17 +9007,24 @@ function mlListProfiles(cid) {
     if (!profiles.length) {
       profilesDiv.innerHTML = '<span style="color:var(--muted);font-size:0.73rem">No profiles found.</span>'
         + '<div style="margin-top:0.5rem">'
-        + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Search a profile by name…" style="width:100%;font-size:0.75rem">'
-        + '<button type="button" class="ml-connect-btn" style="margin-top:0.35rem;font-size:0.75rem"'
-        + ' onclick="mlSearchByTerm(\'' + cid + '\', \'' + instance + '\')">🔍 Search</button></div>';
+        // ACL-1342 S01 (PR #343 ревью, раунды 1–2): cid не попадает ни в
+        // JS-текст атрибутов on*, ни в атрибуты без экранирования — id
+        // через aclEscHtml, значение для обработчика через data-* +
+        // this.dataset. См. коммент в mlTokenFirst выше.
+        + '<input id="ml-search-manual-' + aclEscHtml(cid) + '" type="text" class="cb-input" placeholder="Search a profile by name…" style="width:100%;font-size:0.75rem">'
+        + '<button type="button" class="ml-connect-btn" data-cid="' + aclEscHtml(cid) + '" data-instance="' + aclEscHtml(instance) + '"'
+        + ' style="margin-top:0.35rem;font-size:0.75rem"'
+        + ' onclick="mlSearchByTerm(this.dataset.cid, this.dataset.instance)">🔍 Search</button></div>';
       return;
     }
+    // Фильтр ищет свой список по id через getElementById(… + dataset.cid),
+    // а не собирает CSS-селектор из cid внутри JS-текста атрибута.
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' profile(s)</div>'
-      + '<input type="text" class="cb-input" placeholder="filter by name…" style="width:100%;font-size:0.74rem;margin-bottom:0.35rem"'
-      + ' oninput="(function(v){document.querySelectorAll(\'#ml-profile-list-' + cid + ' .ml-profile-row\')'
-      + '.forEach(function(r){r.style.display = r.dataset.pname.indexOf(v.toLowerCase()) >= 0 ? \'\' : \'none\'})})(this.value)">'
-      + '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+      + '<input type="text" class="cb-input" data-cid="' + aclEscHtml(cid) + '" placeholder="filter by name…" style="width:100%;font-size:0.74rem;margin-bottom:0.35rem"'
+      + ' oninput="(function(el){var list=document.getElementById(\'ml-profile-list-\'+el.dataset.cid);if(!list)return;var v=el.value.toLowerCase();'
+      + 'list.querySelectorAll(\'.ml-profile-row\').forEach(function(r){r.style.display = r.dataset.pname.indexOf(v) >= 0 ? \'\' : \'none\'})})(this)">'
+      + '<div id="ml-profile-list-' + aclEscHtml(cid) + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
     html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     profilesDiv.innerHTML = html;
@@ -8534,7 +9042,8 @@ function mlSignin(cid) {
   var save  = saveChk ? saveChk.checked : true;
   var status = document.getElementById('ml-status-' + cid);
   var profilesDiv = document.getElementById('ml-profiles-' + cid);
-  var btn = document.querySelector('#ml-body-' + cid + ' .ml-connect-btn');
+  // CSS.escape: cid идёт в селектор, а не в разметку — экранирование своё.
+  var btn = document.querySelector('#ml-body-' + CSS.escape(cid) + ' .ml-connect-btn');
 
   if (!email || !pass) {
     if (status) status.innerHTML = '<span style="color:var(--bad)">Enter email and password.</span>';
@@ -8594,9 +9103,12 @@ function mlSignin(cid) {
         + '<span style="color:var(--muted);font-size:0.68rem">debug: ' + aclEscHtml(dbg) + '</span>'
         + '</span>'
         + '<div style="margin-top:0.5rem">'
-        + '<input id="ml-search-manual-' + cid + '" type="text" class="cb-input" placeholder="Search a profile by name (e.g. FacebookUL869)…" style="width:100%;font-size:0.75rem">'
-        + '<button type="button" class="ml-connect-btn" style="margin-top:0.35rem;font-size:0.75rem" '
-        + 'onclick="mlSearchByTerm(\'' + cid + '\', \'' + instance + '\')">🔍 Search</button>'
+        // ACL-1342 S01 (PR #343 ревью, раунды 1–2): id через aclEscHtml,
+        // значение для обработчика через data-* + this.dataset — см.
+        // коммент в mlTokenFirst выше.
+        + '<input id="ml-search-manual-' + aclEscHtml(cid) + '" type="text" class="cb-input" placeholder="Search a profile by name (e.g. FacebookUL869)…" style="width:100%;font-size:0.75rem">'
+        + '<button type="button" class="ml-connect-btn" data-cid="' + aclEscHtml(cid) + '" data-instance="' + aclEscHtml(instance) + '" style="margin-top:0.35rem;font-size:0.75rem" '
+        + 'onclick="mlSearchByTerm(this.dataset.cid, this.dataset.instance)">🔍 Search</button>'
         + '</div>';
       return;
     }
@@ -8637,15 +9149,17 @@ function mlSignin(cid) {
     var firstAccTitle = (accTitles[0] || '').split(' ')[0];
     var searchId = 'ml-search-' + cid;
 
+    // ACL-1342 S01 (PR #343 ревью, раунд 2): id через aclEscHtml, cid для
+    // mlFilterProfiles — через data-cid + this.dataset, не JS-текстом.
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' profile(s) from ' + mlLabel(instance)
       + ' — find the one you need and press Use</div>';
-    html += '<input id="' + searchId + '" type="text" placeholder="Filter by profile name…" value="'
+    html += '<input id="' + aclEscHtml(searchId) + '" data-cid="' + aclEscHtml(cid) + '" type="text" placeholder="Filter by profile name…" value="'
       + aclEscHtml(firstAccTitle) + '"'
       + ' style="width:100%;box-sizing:border-box;margin-bottom:0.4rem;padding:0.28rem 0.5rem;'
       + 'background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.75rem"'
-      + ' oninput="mlFilterProfiles(\'' + cid + '\')">';
-    html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+      + ' oninput="mlFilterProfiles(this.dataset.cid)">';
+    html += '<div id="ml-profile-list-' + aclEscHtml(cid) + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
     html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     profilesDiv.innerHTML = html;
@@ -8712,7 +9226,7 @@ function mlManualSave(cid) {
   }
 
   // Multiple accounts — inline picker
-  var btn = document.querySelector('#ml-manual-status-' + cid);
+  var btn = document.querySelector('#ml-manual-status-' + CSS.escape(cid));
   var existing = document.getElementById('ml-manual-acc-picker-' + cid);
   if (existing) { existing.remove(); return; }
 
@@ -8779,7 +9293,8 @@ function mlSearchByTerm(cid, instance) {
     // Render same profile list as main signin
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' result(s) for "' + aclEscHtml(term) + '"</div>';
-    html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+    // ACL-1342 S01 (PR #343 ревью, раунд 2): id через aclEscHtml.
+    html += '<div id="ml-profile-list-' + aclEscHtml(cid) + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
     html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     if (profilesDiv) profilesDiv.innerHTML = html;
@@ -8886,12 +9401,14 @@ function mlTestToken(cid) {
     var firstAccTitle = (((_cpanel && _cpanel.querySelector('.cb-acc-title'))||{}).textContent||'').split(' ')[0];
     var html = '<div style="font-size:0.73rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem">'
       + profiles.length + ' profile(s) — find the one you need and press Use</div>';
+    // ACL-1342 S01 (PR #343 ревью, раунд 2): id через aclEscHtml, cid для
+    // mlFilterProfiles — через data-cid + this.dataset, не JS-текстом.
     html += '<input type="text" placeholder="Filter…" value="' + aclEscHtml(firstAccTitle) + '"'
-      + ' id="ml-search-' + cid + '"'
+      + ' id="ml-search-' + aclEscHtml(cid) + '" data-cid="' + aclEscHtml(cid) + '"'
       + ' style="width:100%;box-sizing:border-box;margin-bottom:0.4rem;padding:0.28rem 0.5rem;'
       + 'background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.75rem"'
-      + ' oninput="mlFilterProfiles(\'' + cid + '\')">';
-    html += '<div id="ml-profile-list-' + cid + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
+      + ' oninput="mlFilterProfiles(this.dataset.cid)">';
+    html += '<div id="ml-profile-list-' + aclEscHtml(cid) + '" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">';
     html += mlProfileRowsHtml(profiles, folderMap, instance);
     html += '</div>';
     if (profilesDiv) profilesDiv.innerHTML = html;
@@ -9052,7 +9569,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   // Keep in sync with the server-rendered <select> options in report.html's
   // cb-ad-row markup — preview-only, not part of the real publish payload.
-  var CTA_OPTIONS = ['Learn More', 'Sign Up', 'Get Offer', 'Download', 'Shop Now', 'Apply Now', 'Get Quote'];
+  // ACL-1344: выбор CTA (он был только для превью) заменён вторым текстом;
+  // превью показывает одну постоянную кнопку.
+  var CB_PREVIEW_CTA = 'Learn More';
 
   // ── Creatives from folder (loaded once) ──────────────────────────────
   var CREATIVES = [];  // [{filename, rel_path, folder, type}]
@@ -9210,8 +9729,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var copyHidden = row.querySelector('input[type="hidden"][name$="_copy"]');
       var copySearch = row.querySelector('.cb-adtitle-search');
       var copyVal = ((copyHidden && copyHidden.value) || (copySearch && copySearch.value) || '').trim();
-      var ctaSel = row.querySelector('.cb-cta-select');
-      var cta = ctaSel ? ctaSel.value : 'Learn More';
+      // ACL-1344: выбор CTA убран из билдера — превью показывает постоянную.
+      var cta = CB_PREVIEW_CTA;
       var vidRadio = row.querySelector('input[type="radio"][value="Video"]');
       var isVideo = !!(vidRadio && vidRadio.checked);
 
@@ -9352,11 +9871,23 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   window.cbAdTitleSearch = function(input) {
-    var wrap = input.closest('.cb-adtitle-sel-wrap');
+    // ACL-1344: тот же поиск обслуживает и «Primary text 2».
+    var wrap = input.closest('.cb-adtitle-sel-wrap, .cb-text2-sel-wrap');
     if (!wrap) return;
     var dropdown = wrap.querySelector('.cb-sel-dropdown');
     var hidden   = wrap.querySelector('input[type="hidden"]');
     var query    = input.value.trim().toLowerCase();
+    if (wrap.classList.contains('cb-text2-sel-wrap') && hidden) {
+      // Поле необязательное: стёрли — второго текста нет; набрали название
+      // записи целиком — оно и выбрано; иначе выбора нет, пока не щёлкнули
+      // по строке списка. Роботу уходит только то, что видно в поле.
+      var typed = input.value.trim();
+      var exact = typed ? AD_TITLES.filter(function(t) { return t.ad_title === typed; }) : [];
+      hidden.value = exact.length ? exact[0].ad_title : '';
+      input.classList.toggle('cb-text2-unmatched', !!typed && !hidden.value);
+      if (typed && !hidden.value) input.title = 'Pick an ad text from the list, or clear the field';
+      else input.title = 'Optional second primary text: the body of the chosen ad text is added as a second text option';
+    }
 
     var matches = AD_TITLES.filter(function(t) {
       if (!query) return true;
@@ -9388,6 +9919,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         var val = opt.dataset.val || '';
         input.value = val;
         if (hidden) hidden.value = val;
+        input.classList.remove('cb-text2-unmatched');
         dropdown.hidden = true;
       });
     });
@@ -9395,8 +9927,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   // close ad-title dropdown on blur
   document.addEventListener('click', function(e) {
-    document.querySelectorAll('.cb-adtitle-sel-wrap .cb-sel-dropdown').forEach(function(d) {
-      if (!d.closest('.cb-adtitle-sel-wrap').contains(e.target)) d.hidden = true;
+    document.querySelectorAll('.cb-adtitle-sel-wrap .cb-sel-dropdown, .cb-text2-sel-wrap .cb-sel-dropdown').forEach(function(d) {
+      if (!d.closest('.cb-adtitle-sel-wrap, .cb-text2-sel-wrap').contains(e.target)) d.hidden = true;
     });
   });
 
@@ -9404,7 +9936,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // Ad Title box (from Send-to-Builder) should show matches immediately on
   // click, not require re-typing first.
   document.addEventListener('focusin', function(e) {
-    if (e.target.classList && e.target.classList.contains('cb-adtitle-search') && e.target.value) {
+    if (e.target.classList && (e.target.classList.contains('cb-adtitle-search') || e.target.classList.contains('cb-text2-search')) && e.target.value) {
       cbAdTitleSearch(e.target);
     }
   });
@@ -9578,7 +10110,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   function initAllSelects(root) {
     // Skip creative and targeting wrappers — they have their own JS handlers
-    (root || document).querySelectorAll('.cb-sel-wrap:not(.cb-creative-sel-wrap):not(.cb-targeting-wrap):not(.cb-adtitle-sel-wrap)').forEach(initCbSel);
+    (root || document).querySelectorAll('.cb-sel-wrap:not(.cb-creative-sel-wrap):not(.cb-targeting-wrap):not(.cb-adtitle-sel-wrap):not(.cb-text2-sel-wrap)').forEach(initCbSel);
   }
 
   // ── Targeting code picker ─────────────────────────────────────────────
@@ -9755,10 +10287,15 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy" value="">' +
       '</div>' +
-      '<span class="cb-label">CTA <span style="opacity:0.6">(preview only)</span></span>' +
-      '<select class="cb-select cb-cta-select" name="' + pfx + 'cta">' +
-      CTA_OPTIONS.map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') +
-      '</select>' +
+      // ACL-1344: на месте прежнего «CTA (preview only)» — необязательный
+      // второй вариант основного текста. Выбирается так же, как Ad Title, из
+      // той же библиотеки текстов; роботу уходит body выбранной записи.
+      '<span class="cb-label">Primary text 2 <span style="opacity:0.6">(optional)</span></span>' +
+      '<div class="cb-sel-wrap cb-text2-sel-wrap">' +
+      '<input type="text" class="cb-sel-text cb-text2-search" placeholder="— optional: search ad text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Optional second primary text: the body of the chosen ad text is added as a second text option">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'copy2" value="">' +
+      '</div>' +
       '</div></div>';
   }
 
@@ -9822,9 +10359,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var thNew = newTitle.querySelector('input[type=hidden]');
       if (thSrc && thNew) thNew.value = thSrc.value;
     }
-    var srcCta = srcRow.querySelector('.cb-cta-select');
-    var newCta = newRow.querySelector('.cb-cta-select');
-    if (srcCta && newCta) newCta.value = srcCta.value;
+    // ACL-1344: второй вариант основного текста едет в копию вместе с первым.
+    var srcText2 = srcRow.querySelector('.cb-text2-sel-wrap');
+    var newText2 = newRow.querySelector('.cb-text2-sel-wrap');
+    if (srcText2 && newText2) {
+      var t2sSrc = srcText2.querySelector('.cb-text2-search');
+      var t2sNew = newText2.querySelector('.cb-text2-search');
+      if (t2sSrc && t2sNew) t2sNew.value = t2sSrc.value;
+      var t2hSrc = srcText2.querySelector('input[type=hidden]');
+      var t2hNew = newText2.querySelector('input[type=hidden]');
+      if (t2hSrc && t2hNew) t2hNew.value = t2hSrc.value;
+    }
     initAllSelects(newRow);
   }
 
@@ -10475,15 +11020,11 @@ window.cbPreview = function(form, done, onlySlot) {
   panel.innerHTML = '<span style="color:var(--muted)">Loading preview…</span>';
   if (publishBtn) publishBtn.disabled = true;
 
-  // Collect client-only fields the server response doesn't echo back (CTA),
-  // plus which Page name this account's previews should show.
+  // Имя страницы для превью этого аккаунта. ACL-1344: выбора CTA в билдере
+  // больше нет — превью берёт постоянную кнопку по умолчанию.
   var accountLabel = (form.querySelector('[name="account_label"]') || {}).value || '';
   var pageName = (ACCOUNT_PREFLIGHT[accountLabel] && ACCOUNT_PREFLIGHT[accountLabel].page_name) || accountLabel || 'Your Page';
   var ctaMap = {};
-  form.querySelectorAll('.cb-cta-select').forEach(function(sel) {
-    var m = sel.name.match(/^camp_(\d+)_ad_(\d+)_cta$/);
-    if (m) ctaMap[m[1] + '_' + m[2]] = sel.value;
-  });
 
   var fd = cbCollectFormData(form);
   var snapshot = JSON.stringify(Array.from(fd.entries()));
@@ -10492,8 +11033,10 @@ window.cbPreview = function(form, done, onlySlot) {
       && JSON.stringify(Array.from(new FormData(form).entries())) === snapshot;
   }
   var requestData = fd;
-  if (onlySlot) {
-    var omit = {}; form.querySelectorAll('.cb-slot').forEach(function(slot,i) { if(slot !== onlySlot) omit[i]=true; });
+  // Одна карточка (Publish у неё) или отмеченные (Publish selected, ACL-1360).
+  var keep = onlySlot ? [].concat(onlySlot) : null;
+  if (keep) {
+    var omit = {}; form.querySelectorAll('.cb-slot').forEach(function(slot,i) { if(keep.indexOf(slot) === -1) omit[i]=true; });
     requestData = cbFormDataSkipping(form, omit, fd).body;
   }
   fetch('/preview-publish', { method: 'POST', body: requestData })
@@ -10525,7 +11068,9 @@ window.cbPreview = function(form, done, onlySlot) {
          стояла пустота. Кампания с ошибкой открыта сразу — провал
          валидации не должен прятаться за кликом. Свежий прогон превью
          стирает диагностику прошлого: слоты могли добавиться или уйти. */
-      var slotEls = form.querySelectorAll('.cb-slot');
+      // План — только по отправленным на проверку карточкам: плашка i-й
+      // строки плана ложится в i-ю из них, а не в i-ю карточку формы.
+      var slotEls = Array.from(form.querySelectorAll('.cb-slot')).filter(function(s) { return !keep || keep.indexOf(s) !== -1; });
       form.querySelectorAll('.cbp-diag-slot').forEach(function(b) { b.remove(); });
 
       plan.forEach(function(p, i) {
@@ -10668,7 +11213,11 @@ function cbDrawerRefreshIndicators() {
     var result = cbTree.readiness({slot:slot,name:name,twin:twin,ads:slot.querySelectorAll('.cb-ad-row').length});
     var indicator = card.querySelector('.cbd-ind');
     if (indicator) { indicator.className = 'cbd-ind cbd-ind-' + result.state; indicator.title = result.why; indicator.querySelector('span').textContent = result.sign; }
+    // ACL-1347: процент сборки рядом с точкой.
+    if (indicator) { if (result.pct != null) indicator.setAttribute('data-pct', Math.floor(result.pct) + '%'); else indicator.removeAttribute('data-pct'); }
   });
+  // Опрос задания сказал, что аккаунт кончил собираться, — галочки свободны (ACL-1360).
+  if (cbTree.refreshTicks) cbTree.refreshTicks();
 }
 function cbDrawerClearFields(form) {
   form.querySelectorAll('.cb-field-error').forEach(function(el) { el.classList.remove('cb-field-error'); el.removeAttribute('aria-invalid'); });
@@ -10694,7 +11243,9 @@ function cbDrawerApplyPlan(form, plan, error) {
       var selectors=[];
       errors.forEach(function(e) {
         if (/creative|file|image|video/i.test(e)) selectors.push('.cb-creative-search');
-        if (/text|copy|headline/i.test(e)) selectors.push('.cb-adtitle-search');
+        // ACL-1344: ошибка второго текста подсвечивает его поле, не Ad Title.
+        if (/primary text 2/i.test(e)) selectors.push('.cb-text2-search');
+        else if (/text|copy|headline/i.test(e)) selectors.push('.cb-adtitle-search');
         if (/budget/i.test(e)) selectors.push('[name$="_budget"]');
         if (/target/i.test(e)) selectors.push('.cb-targeting-search');
       });
@@ -10704,7 +11255,7 @@ function cbDrawerApplyPlan(form, plan, error) {
   var publish = form.querySelector('.cb-publish-btn');
   if (publish && form.classList.contains('cb-in-drawer')) {
     var visible = Array.from(form.querySelectorAll('.cb-slot')).find(function(slot) { return !slot.hidden; });
-    publish.disabled = !visible || !visible._drawerResult || !/^(ok|warn)$/.test(visible._drawerResult.state) || !!(window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain));
+    publish.disabled = !visible || !visible._drawerResult || !/^(ok|warn)$/.test(visible._drawerResult.state) || !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
   }
   cbDrawerRefreshIndicators();
 }
@@ -10816,21 +11367,45 @@ function cbFormDataSkipping(form, skip, snapshot) {
   return { body: out, kept: kept };
 }
 
-window.cbPublishAll = function (onProgress) {
-  if (cbQueueBusy()) return;
-  var forms = [];
+window.cbPublishAll = function (onProgress, picked) {
+  if (cbQueueUncertain()) return;
+  // ACL-1360: отмечена часть кампаний — едут только они, по заданию на
+  // аккаунт. `picked` — отмеченные карточки; пусто — прежний «Publish all».
+  var only = picked && picked.length ? picked : null;
+  // ACL-1355: аккаунты, которые уже собираются в этой вкладке, вторым
+  // заданием не идут — остальные встают в ту же сборку.
+  // Ключ — страна и аккаунт: один аккаунт бывает привязан к нескольким
+  // странам (account_links), и у каждой страны своя форма и свои кампании;
+  // отметки — тоже у формы, не у имени аккаунта.
+  var forms = [], running = [], campaigns = 0, listed = [];
   document.querySelectorAll('form.open-account-form').forEach(function (form) {
-    if (form.querySelectorAll('.cb-slot').length) forms.push(form);
+    var slots = form.querySelectorAll('.cb-slot');
+    if (!slots.length) return;
+    var mine = only ? cbPickedIn(form, only) : null;
+    if (mine && !mine.length) return;
+    if (cbAccountBusy(cbFormKey(form))) { running.push(cbFormTitle(form)); return; }
+    forms.push(form);
+    campaigns += mine ? mine.length : slots.length;
+    // Живые аккаунты: какие именно кампании уйдут, видно до нажатия.
+    if (mine) listed.push('<strong>' + aclEscHtml(cbFormTitle(form)) + '</strong>: '
+      + aclEscHtml(mine.map(cbSlotTitle).join(', ')));
   });
-  if (!forms.length) { window.alert('Nothing is being assembled yet.'); return; }
+  if (!forms.length && !running.length) { window.alert('Nothing is being assembled yet.'); return; }
+  if (!forms.length) { cbSayAlreadyBuilding(running); return; }
 
-  var names = forms.map(function (f) {
-    return ((f.querySelector('[name="account_label"]') || {}).value || '?').trim();
-  });
+  var names = forms.map(cbFormTitle);
 
-  _safeConfirm('Build every campaign as a draft?',
-    'Accounts: <strong>' + forms.length + '</strong><br>'
-    + '<span style="color:var(--muted);font-size:0.85rem">' + aclEscHtml(names.join(', ')) + '</span><br><br>'
+  _safeConfirm(only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?',
+    (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
+    + 'Accounts: <strong>' + forms.length + '</strong><br>'
+    + (only
+      ? '<div class="cb-selected-list" style="font-size:0.85rem;line-height:1.5">' + listed.join('<br>') + '</div>'
+      : '<span style="color:var(--muted);font-size:0.85rem">' + aclEscHtml(names.join(', ')) + '</span><br>')
+    + (running.length
+      ? '<span style="color:var(--muted);font-size:0.85rem">Already being built, skipped: '
+        + aclEscHtml(running.join(', ')) + '</span><br>'
+      : '')
+    + '<br>'
     + '<span style="color:var(--muted);font-size:0.85rem">Accounts run at the same time, each in its own Multilogin profile — '
     + 'as many at once as this computer has memory for; the rest wait as queued and start on their own. '
     + 'Two jobs on one profile queue. '
@@ -10839,9 +11414,25 @@ window.cbPublishAll = function (onProgress) {
     + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook</span>',
-    function () { _runPublishQueue(forms, onProgress || function () {}); },
-    { confirmLabel: 'Publish all → drafts' });
+    function () {
+      var got = _runPublishQueue(forms, onProgress || function () {},
+        only ? function (form) { return cbPickedIn(form, only); } : null);
+      if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
+    },
+    { confirmLabel: only ? 'Publish selected → drafts' : 'Publish all → drafts' });
 };
+
+/* Имя карточки для подтверждения. */
+function cbSlotTitle(slot) {
+  return ((slot.querySelector('.cb-name-hidden') || {}).value || '').trim() || 'Untitled campaign';
+}
+
+/* Отмеченные карточки этой формы — в её порядке (ACL-1360). */
+function cbPickedIn(form, picked) {
+  return Array.prototype.filter.call(form.querySelectorAll('.cb-slot'), function (slot) {
+    return picked.indexOf(slot) !== -1;
+  });
+}
 
 /* Все аккаунты уходят на сервер СРАЗУ (acl-1210), а не один за другим.
  * До 16.09 очередь ждала конца каждого задания перед следующим — потому
@@ -10863,144 +11454,282 @@ function cbSentCampaignNames(fd) {
   return out;
 }
 
-function _runPublishQueue(forms, onProgress, onlySlot) {
-  // Вызывающие уже сказали человеку, почему занято (cbQueueBusy).
-  if (window.CB_QUEUE && (window.CB_QUEUE.active || window.CB_QUEUE.uncertain)) return;
-  var batch = window.CB_QUEUE = { active:true, uncertain:false, progress:null };
-  var notify = onProgress;
-  onProgress = function(p) { if (window.CB_QUEUE === batch) { batch.progress = p; notify(p); } };
+/* ACL-1355: одна сборка на вкладку, но в неё можно доложить аккаунт.
+ *
+ * До 28.09 вкладка держала одну пачку: пока шёл аккаунт A, Publish у B
+ * отвечал «откройте вторую вкладку». Сервер при этом сам ставит задания в
+ * очередь (память машины, один профиль — по очереди) и разные профили
+ * ведёт разом — второй замок был здесь. Теперь Publish / Publish all
+ * поверх идущей сборки докладывают аккаунт в неё же: у каждого аккаунта
+ * своя строка — своё превью, своё задание, свой опрос, свой Stop и своя
+ * строка итога; сборка закрывается, когда закончился последний.
+ *
+ * Аккаунт, у которого в сборке есть неоконченная строка, второй раз не
+ * едет: `add` его пропускает и возвращает в `skipped`, а кнопки говорят
+ * человеку, почему ничего не произошло.
+ *
+ * Stop — только своё задание. Потерянный статус (дешборд перезапущен)
+ * по-прежнему останавливает всю вкладку: неотправленные аккаунты не едут,
+ * новые не принимаются, пока страницу не перезагрузят. */
+function cbNewRun(notify) {
+  var batch = { active: true, uncertain: false, progress: null };
+  var entries = [];        // {form, key, account, country, label, only, sent, panel, state, live, jobId}
   var report = [];
-  var states = forms.map(function() { return "new"; });
-  var settled = 0;     // сколько заданий дошли до конца (или отпали)
-  var stopped = false;
-  // ACL-1321: что сейчас с каждым неоконченным аккаунтом — список внизу
-  // ящика показывает все, а не последний отправленный: сервер пускает
-  // разом столько профилей, сколько тянет память, остальные «queued».
-  var live = forms.map(function() { return null; });
-  onProgress = (function (send) {
-    return function (p) {
-      p.live = live.filter(Boolean).map(function (x) {
-        return { account: x.account, stage: x.stage, queue: x.queue || null };
-      });
-      send(p);
-    };
-  })(onProgress);
-  function track(i, account, stage, queue) {
-    live[i] = { account: account, stage: stage, queue: queue || null };
+  var settled = 0;         // сколько строк дошли до конца (или отпали)
+  var previewing = false;  // превью идут по одному, отправки — сразу
+
+  function send(p) {
+    if (window.CB_QUEUE !== batch) return;
+    // ACL-1321: что сейчас с каждым неоконченным аккаунтом — список внизу
+    // ящика показывает все, а не последний отправленный.
+    p.of = entries.length;
+    p.report = report;
+    p.live = entries.filter(function (e) { return e.live; }).map(function (e) {
+      return { account: e.label, stage: e.live.stage, queue: e.live.queue || null };
+    });
+    batch.progress = p;
+    notify(p);
   }
 
-  function settle(i, entry) {
-    if (window.CB_QUEUE !== batch || states[i] === "settled") return;
-    states[i] = "settled";
-    live[i] = null;
+  function track(e, stage, queue) {
+    e.live = { stage: stage, queue: queue || null };
+    send({ at: entries.indexOf(e) + 1, account: e.label, stage: stage });
+  }
+
+  function settle(e, entry) {
+    if (window.CB_QUEUE !== batch || e.state === 'settled') return;
+    e.state = 'settled';
+    e.live = null;
     report.push(entry);
     settled += 1;
-    onProgress({ at: settled, of: forms.length, account: entry.account, stage: 'settled', report: report });
-    if (settled >= forms.length) {
+    send({ at: settled, account: entry.account, stage: 'settled' });
+    if (settled >= entries.length) {
       batch.active = false;
-      onProgress({ done: true, at: forms.length, of: forms.length, report: report });
+      send({ done: true, at: entries.length });
     }
   }
 
-  function halt(i, entry) {
-    stopped = true;
-    settle(i, entry);
-    // Already submitted jobs keep the batch occupied. A pending preview
-    // may still return, but it must never submit after cancellation.
-    forms.forEach(function(form, index) {
-      if (states[index] !== "new" && states[index] !== "preview") return;
-      var name = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
-      settle(index, {account:name, state:'bad', why:'Not submitted because the batch stopped'});
+  function halt(e, entry) {
+    batch.uncertain = true;
+    settle(e, entry);
+    // Уже отправленные задания держат сборку открытой. Превью в полёте
+    // может ещё вернуться, но отправить после этого не должно.
+    entries.forEach(function (x) {
+      if (x.state !== 'new' && x.state !== 'preview') return;
+      settle(x, { account: x.label, state: 'bad', why: 'Not submitted: the status of another run in this tab is unknown' });
     });
   }
 
-  function submit(i) {
-    if (i >= forms.length || stopped || window.CB_QUEUE !== batch) return;
-    states[i] = "preview";
-    var form = forms[i];
-    var label = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
-    track(i, label, 'checking');
-    onProgress({ at: i + 1, of: forms.length, account: label, stage: 'checking', report: report });
-
-    window.cbPreview(form, function (plan, error, snapshot) {
-      if (stopped || window.CB_QUEUE !== batch || states[i] !== "preview") return;
-      if (error) { settle(i, { account: label, state: 'bad', why: error }); submit(i + 1); return; }
-
-      var verdict = cbSkipByName(form, plan);
-      var skipped = verdict.broken + verdict.unchecked;
-
-      if (onlySlot) form.querySelectorAll('.cb-slot').forEach(function(slot, index) { if (slot !== onlySlot) verdict.skip[index] = true; });
-      var payload = cbFormDataSkipping(form, verdict.skip, snapshot);
-      if (!payload.kept) {
-        settle(i, { account: label, state: 'bad', skipped: skipped,
-                 why: verdict.unchecked && !verdict.broken
-                   ? 'the check covered no campaign here'
-                   : 'every campaign has errors — see the diagnostics' });
-        submit(i + 1);
+  // Следить за отправленным заданием: его панель, его Stop, его итог.
+  function follow(e, jobId, skipped, quiet) {
+    e.jobId = jobId;
+    e.state = 'submitted';
+    // За этим заданием следит сборка: её слово о нём главнее точек сборки,
+    // которые опрашивают реже (см. cbAccountBusy) — и после конца сборки тоже.
+    (window.CB_RUN_JOBS = window.CB_RUN_JOBS || {})[jobId] = true;
+    cbPollJob(jobId, e.panel, e.form && e.form.querySelector('.cb-publish-btn'), function (job) {
+      if (window.CB_QUEUE !== batch || e.state === 'settled') return;
+      if (job.status === 'unknown') {
+        halt(e, { account: e.label, state: 'bad', why: 'Job status lost; verify the account before starting another run' });
         return;
       }
-
-      track(i, label, 'publishing');
-      onProgress({ at: i + 1, of: forms.length, account: label, stage: 'publishing',
-                   skipped: skipped, report: report });
-
-      var statusPanel = form.querySelector('.cb-status-panel');
-      if (statusPanel) {
-        statusPanel.style.display = 'block';
-        statusPanel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
+      if (job.status === 'cancelled') {
+        settle(e, { account: e.label, state: 'bad', why: 'Stopped by user' });
+        return;
       }
-      var fd = payload.body;
-      fd.set('via_multilogin', '1');
-      fd.set('activate', '0');
-      fd.set('dry_run', '0');
-      fd.set('hand_off', '1');
-      fd.set('user_confirmed', '1');
-
-      // Кампании, ушедшие в задание: у их строк в ящике встанет точка сборки.
-      var sentNames = cbSentCampaignNames(fd);
-
-      states[i] = 'submitted';
-      fetch('/publish-jobs', { method: 'POST', body: fd })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (window.CB_QUEUE !== batch || states[i] === "settled") return;
-          if (data.error) { settle(i, { account: label, state: 'bad', why: data.error, skipped: skipped }); return; }
-          if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
-          if (window.cbBuild) window.cbBuild.watch(data.job_id, label, sentNames);
-          cbPollJob(data.job_id, statusPanel, form.querySelector('.cb-publish-btn'), function (job) {
-            if (window.CB_QUEUE !== batch || states[i] === "settled") return;
-            if (job.status === 'unknown' || job.status === 'cancelled') {
-              if (job.status === 'unknown') batch.uncertain = true;
-              halt(i, {account:label, state:'bad', why:job.status === 'unknown' ? 'Job status lost; verify the account before starting another run' : 'Queue stopped by user'});
-              return;
-            }
-            var ok = !(job.errors || []).length && (job.results || []).length
-              && (job.results || []).every(function (r) { return r.publishable === true; });
-            settle(i, { account: label, state: ok ? 'ok' : 'bad', skipped: skipped,
-                     why: ok ? '' : 'draft blocked — see the account panel' });
-          }, function (job) {
-            // Каждый опрос: ждёт ли аккаунт место или уже собирается.
-            if (window.CB_QUEUE !== batch || states[i] === "settled") return;
-            var stage = job.status === 'queued' ? 'queued' : 'publishing';
-            var was = live[i] || {};
-            var q = job.queue || null;
-            if (was.stage === stage && JSON.stringify(was.queue || null) === JSON.stringify(q)) return;
-            track(i, label, stage, q);
-            onProgress({ at: i + 1, of: forms.length, account: label, stage: stage, report: report });
-          });
-        })
-        .catch(function (e) {
-          if (window.CB_QUEUE !== batch || states[i] === 'settled') return;
-          batch.uncertain = true;
-          halt(i, {account:label,state:'bad',why:'Submission outcome unknown: '+e.message});
-        });
-      // Следующий аккаунт — сразу после отправки этого, не после его конца.
-      submit(i + 1);
-    }, onlySlot);
+      var ok = !(job.errors || []).length && (job.results || []).length
+        && (job.results || []).every(function (r) { return r.publishable === true; });
+      settle(e, { account: e.label, state: ok ? 'ok' : 'bad', skipped: skipped,
+                  why: ok ? '' : 'draft blocked — see the account panel' });
+    }, function (job) {
+      // Каждый опрос: ждёт ли аккаунт место или уже собирается.
+      if (window.CB_QUEUE !== batch || e.state === 'settled') return;
+      var stage = job.status === 'queued' ? 'queued' : 'publishing';
+      var was = e.live || {};
+      var q = job.queue || null;
+      if (was.stage === stage && JSON.stringify(was.queue || null) === JSON.stringify(q)) return;
+      track(e, stage, q);
+    }, quiet);
   }
 
-  submit(0);
+  function submit(e, fd, skipped) {
+    fd.set('via_multilogin', '1');
+    fd.set('activate', '0');
+    fd.set('dry_run', '0');
+    // hand_off: заполнить, оставить черновиком, окно не закрывать — Publish в Meta не нажимать
+    fd.set('hand_off', '1');
+    fd.set('user_confirmed', '1');
+    // Кампании, ушедшие в задание: у их строк в ящике встанет точка сборки.
+    var sentNames = cbSentCampaignNames(fd);
+
+    e.state = 'submitted';
+    track(e, 'publishing');
+    if (e.panel) {
+      e.panel.style.display = 'block';
+      e.panel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
+    }
+    fetch('/publish-jobs', { method: 'POST', body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (window.CB_QUEUE !== batch || e.state === 'settled') return;
+        if (data.error) {
+          if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
+          settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped });
+          return;
+        }
+        if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
+        if (window.cbBuild) window.cbBuild.watch(data.job_id, e.account, sentNames, e.country);
+        // ACL-1360: ушедшие роботу кампании больше не отмечены.
+        if (window.cbTree && window.cbTree.untick) {
+          try { window.cbTree.untick(e.sent || (e.form ? Array.from(e.form.querySelectorAll('.cb-slot')) : [])); }
+          catch (err) { /* отметка — удобство, задание уже ушло */ }
+        }
+        follow(e, data.job_id, skipped);
+      })
+      .catch(function (err) {
+        if (window.CB_QUEUE !== batch || e.state === 'settled') return;
+        if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Request failed: ' + aclEscHtml(err.message) + '</span>';
+        halt(e, { account: e.label, state: 'bad', why: 'Submission outcome unknown: ' + err.message });
+      });
+  }
+
+  // Превью — по одному аккаунту за раз (оно быстрое); следующий аккаунт
+  // проверяется сразу после отправки этого, не после его конца.
+  function pump() {
+    if (previewing || batch.uncertain || window.CB_QUEUE !== batch) return;   // статус потерян — больше ничего не шлём
+    var e = null;
+    for (var k = 0; k < entries.length && !e; k += 1) if (entries[k].state === 'new') e = entries[k];
+    if (!e) return;
+    previewing = true;
+    e.state = 'preview';
+    track(e, 'checking');
+
+    window.cbPreview(e.form, function (plan, error, snapshot) {
+      if (e.state !== 'preview') return;   // сборку остановили — строка уже закрыта
+      previewing = false;
+      if (batch.uncertain || window.CB_QUEUE !== batch) return;
+      if (error) { settle(e, { account: e.label, state: 'bad', why: error }); pump(); return; }
+
+      var verdict = cbSkipByName(e.form, plan);
+      var skipped = verdict.broken + verdict.unchecked;
+      var slots = e.form.querySelectorAll('.cb-slot');
+      if (e.only) {
+        // Не выбранные не едут и «пропущенными» не считаются — пропущено
+        // только выбранное, но сломанное или непроверенное.
+        skipped = 0;
+        slots.forEach(function (slot, index) {
+          if (e.only.indexOf(slot) === -1) verdict.skip[index] = true;
+          else if (verdict.skip[index]) skipped += 1;
+        });
+      }
+      e.sent = [];
+      slots.forEach(function (slot, index) { if (!verdict.skip[index]) e.sent.push(slot); });
+      var payload = cbFormDataSkipping(e.form, verdict.skip, snapshot);
+      if (!payload.kept) {
+        settle(e, { account: e.label, state: 'bad', skipped: skipped,
+                    why: verdict.unchecked && !verdict.broken
+                      ? 'the check covered no campaign here'
+                      : 'every campaign has errors — see the diagnostics' });
+        pump();
+        return;
+      }
+      submit(e, payload.body, skipped);
+      pump();
+    }, e.only);
+  }
+
+  // `label` — как строку зовут в списке и итоге (с именем страны, если
+  // аккаунт на странице не один); `key` — страна|аккаунт, по нему дубль;
+  // `only` — какие карточки формы везти (null — все).
+  function entry(form, key, label, only) {
+    var bar = key.indexOf('|');
+    var e = { form: form, key: key, country: key.slice(0, bar), account: key.slice(bar + 1),
+              label: label, only: only || null, sent: null,
+              panel: form ? form.querySelector('.cb-status-panel') : null,
+              state: 'new', live: null, jobId: null };
+    entries.push(e);
+    return e;
+  }
+
+  /* Есть ли у аккаунта неоконченная строка в этой сборке. */
+  /* `key` — страна|аккаунт; голое имя аккаунта (без «|») — в любой стране. */
+  batch.busy = function (key) {
+    return entries.some(function (e) { return e.state !== 'settled' && cbKeyMatches(e.key, key); });
+  };
+  batch.jobIds = function () {
+    return entries.map(function (e) { return e.jobId; }).filter(Boolean);
+  };
+  /* Доложить аккаунты: каждый пройдёт превью и уйдёт своим заданием.
+     `only` — какие карточки везти: одна (Publish у карточки), функция
+     формы → её отмеченные (Publish selected, ACL-1360) или null — все. */
+  batch.add = function (forms, only) {
+    var added = [], skipped = [];
+    forms.forEach(function (form) {
+      var key = cbFormKey(form), label = cbFormTitle(form);
+      if (batch.busy(key)) { skipped.push(label); return; }
+      var slots = typeof only === 'function' ? only(form) : only;
+      entry(form, key, label, slots ? [].concat(slots) : null);
+      added.push(label);
+    });
+    if (!entries.length) batch.active = false;   // пустая сборка никого не держит
+    pump();
+    return { added: added, skipped: skipped };
+  };
+  /* Весь аккаунт без превью — кнопка Publish на странице страны. */
+  batch.direct = function (form, fd) {
+    var key = cbFormKey(form), label = cbFormTitle(form);
+    if (batch.busy(key)) return { added: [], skipped: [label] };
+    submit(entry(form, key, label, null), fd, 0);
+    return { added: [label], skipped: [] };
+  };
+  /* Задание, отправленное до перезагрузки страницы: вернуть его строку. */
+  batch.adopt = function (jobId, key, form) {
+    if (batch.jobIds().indexOf(jobId) !== -1 || batch.busy(key)) {
+      if (!entries.length) batch.active = false;
+      return false;
+    }
+    // Ключ задания — его собственный, форма только даёт панель и имя.
+    // Задание без страны (запомнено до 29.09) держит ключ «|аккаунт» и по
+    // cbKeyMatches занимает аккаунт во всех странах, а не в первой попавшейся.
+    var bar = key.indexOf('|');
+    var e = entry(form, key, form && bar > 0 ? cbFormTitle(form) : key.slice(bar + 1), null);
+    if (!e.panel) e.panel = document.createElement('div');
+    e.panel.style.display = 'block';
+    track(e, 'publishing');
+    follow(e, jobId, 0, true);
+    return true;
+  };
+  return batch;
 }
+
+/* Сборка вкладки, в которую можно доложить аккаунт: идущая — она же, иначе
+ * новая. После потерянного статуса — никакой (вызывающие уже сказали
+ * человеку про F5, см. cbQueueUncertain). */
+function cbPublishRun(onProgress) {
+  var q = window.CB_QUEUE;
+  if (q && q.uncertain) return null;
+  if (!q || !q.active || !q.add) q = window.CB_QUEUE = cbNewRun(onProgress || function () {});
+  return q;
+}
+
+function _runPublishQueue(forms, onProgress, only) {
+  var q = cbPublishRun(onProgress);
+  return q ? q.add(forms, only) : null;
+}
+
+/* После F5 (ACL-1355): задания, которые сервер ещё ведёт, возвращаются в
+ * сборку вкладки — строка внизу ящика, панель аккаунта со Stop и защита от
+ * дубля. Зовёт `cbBuild`, когда первый опрос подтвердил, что задание идёт. */
+window.cbRunAdopt = function (jobId, account, country) {
+  // Страны нет у заданий, запомненных до 29.09, — тогда первая форма аккаунта.
+  var want = country ? country + '|' + account : account;
+  var form = null;
+  document.querySelectorAll('form.open-account-form').forEach(function (f) {
+    if (!form && cbKeyMatches(cbFormKey(f), want)) form = f;
+  });
+  var q = cbPublishRun(window.cbTree ? window.cbTree.showQueue : null);
+  return q ? q.adopt(jobId, (country || '') + '|' + account, form) : false;
+};
 
 // ── Диагностика превью: панель поверх дешборда (acl-704) ─────────────
 // Плашка у слота — одна строка; полная таблица выезжает справа ПОВЕРХ
@@ -11331,29 +12060,95 @@ window.cbHighlightField = function(field) {
 
 /* ACL-1313, 25.09: пока в этой вкладке шла публикация одного аккаунта,
  * Publish у другого молча ничего не делал — владелец решил, что кнопка
- * сломалась. Очередь на вкладку одна (прогресс и отчёт живут в ней), а
- * сервер разные профили ведёт параллельно — поэтому говорим, как быть. */
-function cbQueueBusy() {
+ * сломалась. ACL-1355, 28.09: другой аккаунт теперь просто докладывается в
+ * идущую сборку (см. cbNewRun). Держат только две вещи, и обе говорят о себе:
+ * потерянный статус прошлого запуска (дешборд перезапущен — сначала F5) и
+ * тот же аккаунт, который ещё собирается (второе задание было бы дублем). */
+function cbQueueUncertain() {
   var q = window.CB_QUEUE;
-  if (!q || !(q.active || q.uncertain)) return false;
-  var who = (q.progress && q.progress.account) ? ' (' + q.progress.account + ')' : '';
-  alert(q.uncertain
-    ? 'The status of the previous run in this tab is unknown (the dashboard may have restarted). Reload the page (F5) and press Publish again.'
-    : 'A run is already in progress in this tab' + who + '. To publish another account at the same time, open the dashboard in a second browser tab and press Publish there.');
+  if (!q || !q.uncertain) return false;
+  alert('The status of the previous run in this tab is unknown (the dashboard may have restarted). Reload the page (F5) and press Publish again.');
   return true;
 }
 
+function cbFormAccount(form) {
+  return ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
+}
+
+/* Ключ формы билдера — страна|аккаунт (ACL-1355, ревью PR #363): форма в
+ * билдере одна на пару, а один аккаунт бывает привязан к нескольким странам
+ * (account_links: FacebookUL869 → Chile, Peru). По одному имени аккаунта
+ * «Publish all» отправлял бы первую страну и молча терял вторую. */
+function cbFormKey(form) {
+  var country = ((form.querySelector('[name="country"]') || {}).value || '').trim();
+  return country + '|' + cbFormAccount(form);
+}
+
+/* Совпадает ли ключ строки с тем, о чём спрашивают. Голое имя аккаунта
+ * (без «|») — «в любой стране»; пустая страна у строки (задание, запомненное
+ * до ключа со страной) — тоже любая: лучше лишний раз отказать, чем дубль. */
+function cbKeyMatches(key, want) {
+  var kb = key.indexOf('|'), wb = want.indexOf('|');
+  if (wb === -1) return key.slice(kb + 1) === want;
+  if (key.slice(kb + 1) !== want.slice(wb + 1)) return false;
+  var kc = key.slice(0, kb), wc = want.slice(0, wb);
+  return !kc || !wc || kc === wc;
+}
+
+/* Имя формы для человека: аккаунт, а если он на странице не в одной
+ * стране — с её названием, иначе «UL869, UL869» ничего не объясняет. */
+function cbFormTitle(form) {
+  var label = cbFormAccount(form), key = cbFormKey(form), twin = false;
+  document.querySelectorAll('form.open-account-form').forEach(function (f) {
+    if (f !== form && cbFormAccount(f) === label && cbFormKey(f) !== key) twin = true;
+  });
+  var country = key.slice(0, key.indexOf('|'));
+  return twin && country ? label + ' (' + country + ')' : label;
+}
+
+/* Собирается ли форма сейчас (`key` — cbFormKey; голое имя аккаунта —
+ * в любой стране): строка в сборке вкладки или — пока сборка её ещё не
+ * подхватила (первые секунды после F5) — задание в точках сборки. */
+function cbAccountBusy(key) {
+  var q = window.CB_QUEUE;
+  if (q && q.busy && q.busy(key)) return true;
+  var b = window.cbBuild;
+  var bar = key.indexOf('|');
+  return !!(b && b.busy && b.busy(key.slice(bar + 1), Object.keys(window.CB_RUN_JOBS || {}),
+                                  bar === -1 ? undefined : key.slice(0, bar)));
+}
+
+function cbSayAlreadyBuilding(labels) {
+  alert(labels.join(', ') + (labels.length > 1 ? ' are' : ' is') + ' already being built in this tab. '
+    + 'Wait for that run to finish (or press Stop on it) before publishing '
+    + (labels.length > 1 ? 'these accounts' : 'this account') + ' again.');
+}
+
 window.cbPublish = function(form) {
-  if (cbQueueBusy()) return;
+  if (cbQueueUncertain()) return;
   var onlySlot = form.classList.contains('cb-in-drawer') ? Array.from(form.querySelectorAll('.cb-slot')).find(function(s) { return !s.hidden; }) : null;
   var accLabel  = ((form.querySelector('[name="account_label"]') || {}).value || '?').trim();
+  // ACL-1355: та же форма (страна+аккаунт) вторым заданием не едет — и об этом говорится.
+  if (cbAccountBusy(cbFormKey(form))) { cbSayAlreadyBuilding([cbFormTitle(form)]); return; }
   var country   = ((form.querySelector('[name="country"]') || {}).value || '?').trim();
   var campCount = onlySlot ? 1 : (parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '1'), 10) || 1);
+  // ACL-1360: у формы отмечена часть кампаний — Publish аккаунта везёт только
+  // их (через превью, как «Publish selected»); отмечено всё или ничего — всю форму.
+  var allSlots = Array.from(form.querySelectorAll('.cb-slot'));
+  var ticked = onlySlot ? [] : allSlots.filter(function(s) { return !!s._cbdPick; });
+  if (ticked.length === allSlots.length) ticked = [];
+  if (ticked.length) campCount = ticked.length;
 
   var bodyHtml =
     'Account: <strong style="color:var(--accent)">' + aclEscHtml(accLabel) + '</strong><br>'
     + 'Country: <strong>' + aclEscHtml(country) + '</strong><br>'
-    + 'Campaigns: <strong>' + campCount + '</strong><br><br>'
+    + 'Campaigns: <strong>' + campCount + '</strong>'
+    + (ticked.length
+      ? ' <span style="color:var(--muted)">(only the selected ones, ' + ticked.length + ' of ' + allSlots.length + ')</span><br>'
+        + '<div class="cb-selected-list" style="font-size:0.85rem;line-height:1.5">'
+        + aclEscHtml(ticked.map(cbSlotTitle).join(', ')) + '</div>'
+      : '<br>')
+    + '<br>'
     + '<span style="color:var(--muted);font-size:0.85rem">The RPA attaches to the Multilogin profile through MLX automation '
     + '(no need to open the profile first; if it is open by hand, close its window first — '
     + 'the robot will not close it for you).</span><br>'
@@ -11400,53 +12195,32 @@ window.cbPublish = function(form) {
       + bodyHtml;
   }
 
-  _safeConfirm('Build this campaign as a draft?', bodyHtml, function() {
-    if (onlySlot) _runPublishQueue([form], window.cbTree.showQueue, onlySlot);
+  _safeConfirm(ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?', bodyHtml, function() {
+    if (onlySlot || ticked.length) {
+      var got = _runPublishQueue([form], window.cbTree.showQueue, onlySlot || ticked);
+      if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
+    }
     else _doCbPublish(form);
   }, { confirmLabel: (warn || lostTargeting.length) ? 'Собрать с предупреждением' : 'Publish → draft' });
 };
 
+// Весь аккаунт без превью — кнопка Publish на странице страны. Идёт через
+// сборку вкладки (ACL-1355): его строка внизу ящика, защита от дубля и Stop
+// те же, что у «Publish all».
 function _doCbPublish(form) {
-  var statusPanel = form.querySelector('.cb-status-panel');
-  var publishBtn  = form.querySelector('.cb-publish-btn');
-  if (!statusPanel) return;
-
-  statusPanel.style.display = 'block';
-  statusPanel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
-  if (publishBtn) publishBtn.disabled = true;
-
-  var fd = cbCollectFormData(form);
-  fd.set('via_multilogin', '1');
-  fd.set('activate', '0');
-  fd.set('dry_run', '0');
-  // hand_off: fill form, leave as draft, keep browser open — do NOT click Meta Publish
-  fd.set('hand_off', '1');
-  fd.set('user_confirmed', '1');
-
-  fetch('/publish-jobs', { method: 'POST', body: fd })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (data.error) {
-        statusPanel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
-        if (publishBtn) publishBtn.disabled = false;
-        return;
-      }
-      if (window.cbBuild && data.job_id) {
-        window.cbBuild.watch(data.job_id,
-          ((form.querySelector('[name="account_label"]') || {}).value || '').trim(), cbSentCampaignNames(fd));
-      }
-      cbPollJob(data.job_id, statusPanel, publishBtn);
-    })
-    .catch(function(e) {
-      statusPanel.innerHTML = '<span class="cb-status-fatal">Request failed: ' + aclEscHtml(e.message) + '</span>';
-      if (publishBtn) publishBtn.disabled = false;
-    });
+  if (!form.querySelector('.cb-status-panel')) return;
+  var run = cbPublishRun(window.cbTree ? window.cbTree.showQueue : null);
+  if (!run) return;
+  var got = run.direct(form, cbCollectFormData(form));
+  if (got.skipped.length) cbSayAlreadyBuilding(got.skipped);
 }
 
 // `done` — необязательный: зовётся один раз, когда работа кончилась любым
 // образом. Нужен очереди «Publish all»: профиль в Multilogin один, и
 // следующий аккаунт начинается только после того, как закончился прошлый.
-function cbPollJob(jobId, statusPanel, publishBtn, done, onTick) {
+// `quiet` — не прокручивать к панели: задания, возвращённые после F5, не
+// должны дёргать страницу к себе.
+function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   var stopBtnId = 'cb-stop-' + jobId.replace(/-/g, '').slice(0, 12);
 
   function renderStatus(job) {
@@ -11625,7 +12399,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick) {
   // every tick (previous behaviour) yanked the page back to the pause
   // button every 2 seconds for the entire run, making the dashboard
   // unusable while a campaign was publishing (user report, 2026-07-31).
-  var scrolledToStatus = false;
+  var scrolledToStatus = !!quiet;
   function poll() {
     fetch('/publish-jobs/' + jobId)
       .then(function(r) {
