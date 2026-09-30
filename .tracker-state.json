@@ -1807,20 +1807,6 @@
   },
   "execution": {
     "claims": {
-      "353": {
-        "actor": "Worker-S1353B",
-        "session": "run_s1353b_0930",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1353-sc-more-ads",
-        "worktree": "C:\\acl-1353-sc-more-ads",
-        "id": "a0e93687aab74cd890ff56004487e57b",
-        "issue": 353,
-        "state": "handoff",
-        "started_at": "2026-09-30T07:11:40+00:00",
-        "from_status": "status:todo",
-        "pr": 365,
-        "report": "# ACL-1353 handoff (Worker-S1353B, run_s1353b_0930)\n\nPR #365 is ready for review. Branch `codex/acl-1353-sc-more-ads`, head 0ebfbd4, `work/stage` merged in (d4f0293). ACL-1327 code was taken from stage and the step-1 capture changes were re-applied on top.\n\n## What the capture showed\nRuns f9b9fc8d7bb3, 8ce1b9985046 and b3a333ff43ab, Facebook_1443, simple_create:\n- The ad set row's Action menu (\"Actions for this ad set\") contains **Create ad** (`/am/editor_drawer/lib:campaign-structure-item-action-menu-create`).\n- About 7.5 s after the press, a dialog was on screen (not notifications) and there was still one Ad row. By about 13 s the dialog had closed by itself, a second Ad row \"New Leads Ad\" was in the tree, and the ad section showed that new empty ad (name \"New Leads Ad\", \"Set up creative\", empty Website URL).\n- The dialog's text was never captured. It was most likely Meta's creation progress modal. It is now recorded in `diag.dialog`.\n\n## Implemented\n- `simple_create.create_next_ad`:\n  - Presses Action menu \u2192 Create ad. Presses are guarded; never Duplicate/Delete/default/Publish/footer, never Escape.\n  - Waits up to 30 s for three things: a new Ad row, the ad section showing an ad whose name is not already built, and the dialog closing.\n  - Failure reasons are named. A page capture is taken only on failure. Menu labels are logged without object ids (step 1 had leaked an ad set id into telemetry labels).\n- In the flow, ads 2+ in simple_create use the same per-ad fill as the classic path. After that, `simple_create.ad_listed` checks the name in the ad list; the editor is never reopened.\n- While ads 2+ are filled, `_reloads_blocked` refuses every reload path: `recover_stuck_page`, `_reload_editor`, the copy-reveal reload, the upload stalled retry (`reload=False`) and the overlays (`may_reload=False`). Each refusal is logged as `loading_modal_reload` with ok=False and note `refused:simple_create_new_ad`.\n- After a failed create, the remaining ads get `adN_create:not_tried`. The final destination recheck applies only to the open ad.\n- `simple_create_more_ads` now only means switched off (`FB_RPA_SIMPLE_MORE_ADS_PRESS=0`).\n\n## Tests\n- `tests/test_simple_create_more_ads.py`: 12 tests on the new fixture. They replace `test_simple_create_more_ads_capture.py`.\n- `tests/test_the_single_screen_editor_flow.py`: 27 tests.\n- Full suite on 0536474: 3827 passed, 6 skipped, 1 failed. The failure was the progress-model test reacting to new step names; it is fixed in 0ebfbd4. After the fix, the affected files (83 tests) and the related subset (275 tests) passed.\n\n## Risks and next steps\n- The dialog is uncaptured. The name-in-list check assumes the tree updates within 8 s.\n- If ad N's name failed, the next new ad is not recognised. This is safe because it blocks.\n- Needed: an independent review, then a live run on 1443 with 2\u20133 ads. That run should check `diag.dialog` and `adN_listed`."
-      },
       "390": {
         "actor": "Worker-G1390C",
         "session": "run_g1390c_0930",
@@ -1907,9 +1893,25 @@
             "session": "run_s1353b_0930"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1353B",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1353B",
+          "session": "run_s1353b_0930",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1353-sc-more-ads",
+          "worktree": "C:\\acl-1353-sc-more-ads",
+          "id": "a0e93687aab74cd890ff56004487e57b",
+          "issue": 353,
+          "state": "handoff",
+          "started_at": "2026-09-30T07:11:40+00:00",
+          "from_status": "status:todo",
+          "pr": 365,
+          "report": "# ACL-1353 handoff (Worker-S1353B, run_s1353b_0930)\n\nPR #365 is ready for review. Branch `codex/acl-1353-sc-more-ads`, head 0ebfbd4, `work/stage` merged in (d4f0293). ACL-1327 code was taken from stage and the step-1 capture changes were re-applied on top.\n\n## What the capture showed\nRuns f9b9fc8d7bb3, 8ce1b9985046 and b3a333ff43ab, Facebook_1443, simple_create:\n- The ad set row's Action menu (\"Actions for this ad set\") contains **Create ad** (`/am/editor_drawer/lib:campaign-structure-item-action-menu-create`).\n- About 7.5 s after the press, a dialog was on screen (not notifications) and there was still one Ad row. By about 13 s the dialog had closed by itself, a second Ad row \"New Leads Ad\" was in the tree, and the ad section showed that new empty ad (name \"New Leads Ad\", \"Set up creative\", empty Website URL).\n- The dialog's text was never captured. It was most likely Meta's creation progress modal. It is now recorded in `diag.dialog`.\n\n## Implemented\n- `simple_create.create_next_ad`:\n  - Presses Action menu \u2192 Create ad. Presses are guarded; never Duplicate/Delete/default/Publish/footer, never Escape.\n  - Waits up to 30 s for three things: a new Ad row, the ad section showing an ad whose name is not already built, and the dialog closing.\n  - Failure reasons are named. A page capture is taken only on failure. Menu labels are logged without object ids (step 1 had leaked an ad set id into telemetry labels).\n- In the flow, ads 2+ in simple_create use the same per-ad fill as the classic path. After that, `simple_create.ad_listed` checks the name in the ad list; the editor is never reopened.\n- While ads 2+ are filled, `_reloads_blocked` refuses every reload path: `recover_stuck_page`, `_reload_editor`, the copy-reveal reload, the upload stalled retry (`reload=False`) and the overlays (`may_reload=False`). Each refusal is logged as `loading_modal_reload` with ok=False and note `refused:simple_create_new_ad`.\n- After a failed create, the remaining ads get `adN_create:not_tried`. The final destination recheck applies only to the open ad.\n- `simple_create_more_ads` now only means switched off (`FB_RPA_SIMPLE_MORE_ADS_PRESS=0`).\n\n## Tests\n- `tests/test_simple_create_more_ads.py`: 12 tests on the new fixture. They replace `test_simple_create_more_ads_capture.py`.\n- `tests/test_the_single_screen_editor_flow.py`: 27 tests.\n- Full suite on 0536474: 3827 passed, 6 skipped, 1 failed. The failure was the progress-model test reacting to new step names; it is fixed in 0ebfbd4. After the fix, the affected files (83 tests) and the related subset (275 tests) passed.\n\n## Risks and next steps\n- The dialog is uncaptured. The name-in-list check assumes the tree updates within 8 s.\n- If ad N's name failed, the next new ad is not recognised. This is safe because it blocks.\n- Needed: an independent review, then a live run on 1443 with 2\u20133 ads. That run should check `diag.dialog` and `adN_listed`."
+        },
+        "pr": 365,
+        "queued_at": "2026-09-30T08:55:46+00:00"
       },
       "390": {
         "implementers": [
@@ -2007,7 +2009,8 @@
       }
     },
     "review_queue": [
-      391
+      391,
+      353
     ],
     "review": {
       "id": "52c006fa46fc4643b2a00f6375a232fc",
@@ -2185,6 +2188,13 @@
         "issue": 391,
         "pr": 392,
         "actor": "Worker-D1391K"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-09-30T08:55:46+00:00",
+        "issue": 353,
+        "pr": 365,
+        "actor": "Worker-S1353B"
       }
     ],
     "policy": {
