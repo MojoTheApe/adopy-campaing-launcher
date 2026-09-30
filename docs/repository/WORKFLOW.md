@@ -87,6 +87,34 @@ dependencies, packaging and CI changes. Record success, skip, infrastructure fai
 and unrun manual checks separately. Do not rerun a successful unchanged candidate
 without a new failure, change or unresolved concern.
 
+### Running the test suite
+
+The full suite runs in parallel with pytest-xdist (`requirements-dev.txt`):
+
+    python -m pytest tests/ -q -n auto --dist loadfile
+
+CI (`.github/workflows/ci.yml`) runs exactly this on both Python versions.
+`--dist loadfile` keeps every test file on one worker: more than 80 files start
+their own Chromium in a module fixture, and spreading one file over all workers
+starts that browser once per worker (on the owner's laptop the test-by-test
+split took 41 min, `loadfile` 20 min; serial was 82 min on the same machine).
+On a machine other sessions are also using, pass a fixed count instead of `auto`
+(for example `-n 6`) so the others keep some CPU; a single file or a few tests
+are faster without `-n`.
+
+Run with `ACL_LIBRARY_REPO`, `ACL_LIBRARY_TOKEN` and `ACL_LIBRARY_BRANCH` empty;
+`tests/conftest.py` also sets them to empty strings in every worker process, so
+no test reaches the live team library even when the machine `.env` configures it.
+Each test gets its own `tmp_path`, machine config folder (`ACL_CONFIG_DIR`) and
+telemetry journal from the conftest fixtures.
+
+Serial-only tests: none. A test that genuinely cannot run next to others must be
+listed here with the reason and run in its own step; none needed it so far.
+Several real-Chromium tests check the robot's own time budgets (a tab that does
+not answer in 2-5 s counts as frozen); on a CPU-starved machine they can fail in
+any mode, serial included. If one fails, rerun that file alone before suspecting
+the code, and lower `-n`.
+
 Required admission names: `descriptor`, `tracker-link`, `ACL verification`,
 `Installer verification`. Aggregates require all applicable underlying jobs; a
 metadata-only PR may skip Windows only through the existing closed classification.

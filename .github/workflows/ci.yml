@@ -101,8 +101,14 @@ jobs:
       - name: Install Chromium for isolated DOM tests
         run: python -m playwright install chromium
 
+      # Parallel since ACL-1397: one pytest-xdist worker per runner CPU.
+      # `loadfile` keeps each test file on one worker: 80+ files launch their
+      # own Chromium in a module fixture, and spreading a file's tests over
+      # every worker launched that browser once per worker (measured locally:
+      # 41 min with test-by-test `load` vs 20 min with `loadfile`). See
+      # docs/repository/WORKFLOW.md ("Running the test suite").
       - name: Tests
-        run: python -m pytest tests/ -q
+        run: python -m pytest tests/ -q -n auto --dist loadfile
 
   admission:
     name: ACL verification
