@@ -784,8 +784,9 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float) -> dict
             # пересобирает редактор, и одна проверка (3 с) может не дождаться
             # ответа. Ждём дальше; `tab_frozen` — только если вкладка молчит
             # до конца ожидания.
+            # Закрытая вкладка не оживёт — ждать весь срок незачем (ревью).
             read_errors += 1
-            if now - start >= wait_s:
+            if now - start >= wait_s or md._tab_gone(page):
                 break
             time.sleep(0.5)
             continue

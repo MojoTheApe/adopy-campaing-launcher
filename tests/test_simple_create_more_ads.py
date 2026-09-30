@@ -379,7 +379,7 @@ def test_one_unanswered_read_after_creating_is_not_a_frozen_tab(monkeypatch):
     monkeypatch.setattr(sc, "_read_ads", lambda page: dict(next(reads)))
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     monkeypatch.setattr(sc.time, "sleep", lambda s: None)
-    got = sc._wait_new_ad(None, 1, ["Sample Ad 01"], wait_s=30)
+    got = sc._wait_new_ad(object(), 1, ["Sample Ad 01"], wait_s=30)
     assert not got.get("error"), got
     assert got["ads"] == 2 and got["name_stable"] is True
     assert got["read_errors"] == 1
@@ -389,8 +389,28 @@ def test_a_tab_that_never_answers_is_still_frozen(monkeypatch):
     """Вкладка не отвечает до конца ожидания — это по-прежнему `tab_frozen`."""
     monkeypatch.setattr(sc, "_read_ads", lambda page: {"error": "TimeoutError"})
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
-    got = sc._wait_new_ad(None, 1, ["Sample Ad 01"], wait_s=0.3)
+    got = sc._wait_new_ad(object(), 1, ["Sample Ad 01"], wait_s=0.3)
     assert got.get("error") == "TimeoutError" and got["read_errors"] >= 1
+
+
+def test_a_new_ad_then_a_silent_tab_is_frozen(monkeypatch):
+    """Ревью: новое объявление мелькнуло, а потом вкладка молчит до конца —
+    итог `tab_frozen`, счётчик сбоев — в телеметрию шага."""
+    reads = iter([{"ads": 2, "name_value": "New Leads Ad", "dialog": {"text": "Creating..."}}])
+    monkeypatch.setattr(sc, "_read_ads",
+                        lambda page: dict(next(reads, {"error": "TimeoutError"})))
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    got = sc._wait_new_ad(object(), 1, ["Sample Ad 01"], wait_s=0.3)
+    assert got.get("error") == "TimeoutError" and got["read_errors"] >= 1
+
+
+def test_a_closed_tab_stops_the_wait_at_once(monkeypatch):
+    """Ревью: закрытая вкладка — выход сразу, а не через `NEW_AD_WAIT_S`."""
+    monkeypatch.setattr(sc, "_read_ads", lambda page: {"error": "TargetClosedError"})
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_tab_gone", lambda page: True)
+    got = sc._wait_new_ad(object(), 1, ["Sample Ad 01"], wait_s=30)
+    assert got.get("error") and got["read_errors"] == 1 and got["waited_s"] < 5
 
 
 def test_the_wait_lasts_until_the_dialog_closes(env):
