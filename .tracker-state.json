@@ -1803,7 +1803,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "327": {
+        "actor": "Worker-L1443A",
+        "session": "run_l1443a_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "work/acl-1327-live-report",
+        "worktree": "C:\\acl-1327-live",
+        "id": "a24656aa3284492d82766f2199ed24ff",
+        "issue": 327,
+        "state": "implementing",
+        "started_at": "2026-09-30T07:10:58+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -1832,6 +1845,17 @@
         "pr": 386,
         "queued_at": "2026-09-29T21:48:18+00:00",
         "reviewer": "Reviewer-Q7V9"
+      },
+      "327": {
+        "implementers": [
+          {
+            "actor": "Worker-L1443A",
+            "session": "run_l1443a_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-L1443A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -1842,6 +1866,10 @@
       "Reviewer-Q7V9": {
         "session": "review_acl1382_20260929",
         "role": "Reviewer"
+      },
+      "Worker-L1443A": {
+        "session": "run_l1443a_0930",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -1921,6 +1949,13 @@
         "prs": [
           387
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T07:10:58+00:00",
+        "issue": 327,
+        "claim": "a24656aa3284492d82766f2199ed24ff",
+        "actor": "Worker-L1443A"
       }
     ],
     "policy": {
