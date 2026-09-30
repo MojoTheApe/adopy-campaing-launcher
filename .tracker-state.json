@@ -1845,6 +1845,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T08:00:03+00:00",
         "from_status": "status:backlog"
+      },
+      "391": {
+        "actor": "Worker-D1391K",
+        "session": "run_d1391_0930",
+        "coordinator": "Coordinator-D0930K",
+        "branch": "codex/acl-1391-disabled-status",
+        "worktree": "C:\\acl-1391-disabled-status",
+        "id": "dd92e4fe113c4000aaf1a82d54dc15d1",
+        "issue": 391,
+        "state": "implementing",
+        "started_at": "2026-09-30T08:32:08+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -1934,6 +1946,17 @@
         "state": "implementing",
         "worker": "Worker-G1390C",
         "coordinator": "Coordinator-C0930A"
+      },
+      "391": {
+        "implementers": [
+          {
+            "actor": "Worker-D1391K",
+            "session": "run_d1391_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-D1391K",
+        "coordinator": "Coordinator-D0930K"
       }
     },
     "actors": {
@@ -1959,6 +1982,10 @@
       },
       "Worker-G1390C": {
         "session": "run_g1390c_0930",
+        "role": "Worker"
+      },
+      "Worker-D1391K": {
+        "session": "run_d1391_0930",
         "role": "Worker"
       }
     },
@@ -2151,6 +2178,13 @@
         "issue": 327,
         "pr": 389,
         "actor": "Worker-L1443A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T08:32:08+00:00",
+        "issue": 391,
+        "claim": "dd92e4fe113c4000aaf1a82d54dc15d1",
+        "actor": "Worker-D1391K"
       }
     ],
     "policy": {
