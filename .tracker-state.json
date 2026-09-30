@@ -748,16 +748,16 @@
       }
     },
     "stage": {
-      "pr": 365,
+      "pr": 405,
       "issues": [
         353
       ],
-      "tree_sha": "afd754089b9aaa5f2c680658fe12f399849a202a",
-      "source_sha": "8e5823cae7655745271aa18742c5af5688301154",
+      "tree_sha": "fdf1a2d0025dc7e40da31ddde37b6a0482d5f03c",
+      "source_sha": "59423bcdaba2d25f4de1b46553679ba9390c65ba",
       "main_tree": "6c4d1f1661069b4a08b65a08dca418f6f330fa03",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
       "state": "testing",
-      "recorded_at": "2026-09-30T11:47:02+00:00"
+      "recorded_at": "2026-09-30T13:58:13+00:00"
     },
     "tasks": {
       "248": {
