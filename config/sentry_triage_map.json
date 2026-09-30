@@ -1,6 +1,8 @@
 {
   "_comment": "Known ACL failure kinds -> tracker tasks, for scripts/sentry_triage.py (ACL-1325). step/reason are fnmatch patterns over the Sentry tags 'step' (ad2_/ad3_ folded to ad_) and 'reason'. First match wins. A group with no match is reported as a NEW KIND. Add a row when a task is filed for a new kind; remove it when the task is closed and the kind should alert again.",
   "known": [
+    {"step": "ad_create", "reason": "tab-frozen", "task": "ACL-1353", "note": "single-screen editor: one unanswered probe right after 'Creating...' (PYTHON-4D)"},
+    {"step": "ad_create", "reason": "other", "task": "ACL-1353", "note": "adN_create:not_tried after an earlier ad failed (PYTHON-4C)"},
     {"step": "further_limit_reach_radio", "reason": "*", "task": "ACL-1324", "note": "'Suggest an audience' layout of the Audience card"},
     {"step": "pick_further_limit_radio", "reason": "*", "task": "ACL-1324", "note": "'Suggest an audience' layout of the Audience card"},
     {"step": "simple_create_layout", "reason": "*", "task": "ACL-1320", "note": "Meta's single-screen campaign editor (simple_create) - not supported yet"},

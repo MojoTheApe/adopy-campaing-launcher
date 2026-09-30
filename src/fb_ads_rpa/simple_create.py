@@ -775,9 +775,20 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float) -> dict
     dialog = None
     dialog_s = 0.0
     last_name = None
+    read_errors = 0
     while True:
         got = _read_ads(page)
         now = time.time()
+        if got.get("error"):
+            # Sentry PYTHON-4D (30.09): сразу после «Creating...» Meta
+            # пересобирает редактор, и одна проверка (3 с) может не дождаться
+            # ответа. Ждём дальше; `tab_frozen` — только если вкладка молчит
+            # до конца ожидания.
+            read_errors += 1
+            if now - start >= wait_s:
+                break
+            time.sleep(0.5)
+            continue
         if got.get("dialog"):
             if dialog is None:
                 dialog = dict(got["dialog"], seen_at_s=round(now - start, 1))
@@ -789,9 +800,10 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float) -> dict
         last_name = name
         got["name_stable"] = stable
         ready = (int(got.get("ads") or 0) > ads_before and stable and not got.get("dialog"))
-        if ready or got.get("error") or now - start >= wait_s:
+        if ready or now - start >= wait_s:
             break
         time.sleep(0.5)
+    got["read_errors"] = read_errors
     got["dialog_first"] = dialog
     got["dialog_until_s"] = dialog_s if dialog else None
     got["waited_s"] = round(time.time() - start, 1)
@@ -834,7 +846,8 @@ def create_next_ad(page, *, tag: str, known_names: list[str],
             MORE_ADS_STEP, True if out["ok"] else False,
             note="created" if out["ok"] else out["why"],
             diag={k: out.get(k) for k in ("tag", "pressed", "ads_before", "ads_after",
-                                          "extra_shells", "dialog", "waited_s", "tree", "menu",
+                                          "extra_shells", "dialog", "waited_s", "read_errors",
+                                          "tree", "menu",
                                           "capture", "text")})
     except Exception:
         pass
@@ -895,6 +908,7 @@ def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
         out["dialog"]["until_s"] = after.get("dialog_until_s")
         out["dialog"]["still_open"] = bool(after.get("dialog"))
     out["waited_s"] = after.get("waited_s")
+    out["read_errors"] = after.get("read_errors")
     out["name_is_new"] = bool(after.get("name_stable"))
     if after.get("error"):
         out["why"] = "tab_frozen"

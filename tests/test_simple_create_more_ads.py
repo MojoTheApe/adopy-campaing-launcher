@@ -365,6 +365,34 @@ def test_the_new_name_must_hold_for_two_reads(monkeypatch):
     assert got["name_stable"] is True and len(seen) == 4
 
 
+def test_one_unanswered_read_after_creating_is_not_a_frozen_tab(monkeypatch):
+    """Sentry PYTHON-4D (30.09, 1443, v96+6): «Creating...» ушло за 2,1 с, Meta
+    пересобирала редактор, одна проверка (3 с) не дождалась ответа — и шаг
+    упал `tab_frozen`, хотя снимок показал вторую строку «New Leads Ad».
+    Одиночный сбой чтения — не повод бросать ожидание."""
+    reads = iter([
+        {"ads": 1, "name_value": "Sample Ad 01", "dialog": {"text": "Creating..."}},
+        {"error": "TimeoutError"},
+        {"ads": 2, "name_value": "New Leads Ad", "dialog": None},
+        {"ads": 2, "name_value": "New Leads Ad", "dialog": None},
+    ])
+    monkeypatch.setattr(sc, "_read_ads", lambda page: dict(next(reads)))
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(sc.time, "sleep", lambda s: None)
+    got = sc._wait_new_ad(None, 1, ["Sample Ad 01"], wait_s=30)
+    assert not got.get("error"), got
+    assert got["ads"] == 2 and got["name_stable"] is True
+    assert got["read_errors"] == 1
+
+
+def test_a_tab_that_never_answers_is_still_frozen(monkeypatch):
+    """Вкладка не отвечает до конца ожидания — это по-прежнему `tab_frozen`."""
+    monkeypatch.setattr(sc, "_read_ads", lambda page: {"error": "TimeoutError"})
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    got = sc._wait_new_ad(None, 1, ["Sample Ad 01"], wait_s=0.3)
+    assert got.get("error") == "TimeoutError" and got["read_errors"] >= 1
+
+
 def test_the_wait_lasts_until_the_dialog_closes(env):
     """F1: строка и имя появились раньше, чем ушло окно, — ждём окно, а не
     берём объявление под ним."""
