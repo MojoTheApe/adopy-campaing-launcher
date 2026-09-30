@@ -1884,6 +1884,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T09:59:05+00:00",
         "from_status": "status:todo"
+      },
+      "395": {
+        "actor": "Worker-T1395E",
+        "session": "run_t1395e_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1395-ad-tree-workbook",
+        "worktree": "C:\\acl-1395-ad-tree",
+        "id": "75f18579a89949fabb15ac76756b5199",
+        "issue": 395,
+        "state": "implementing",
+        "started_at": "2026-09-30T10:31:30+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2048,6 +2060,17 @@
         "state": "implementing",
         "worker": "Worker-H1388D",
         "coordinator": "Coordinator-C0930A"
+      },
+      "395": {
+        "implementers": [
+          {
+            "actor": "Worker-T1395E",
+            "session": "run_t1395e_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-T1395E",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2085,6 +2108,10 @@
       },
       "Worker-H1388D": {
         "session": "run_h1388d_0930",
+        "role": "Worker"
+      },
+      "Worker-T1395E": {
+        "session": "run_t1395e_0930",
         "role": "Worker"
       }
     },
@@ -2396,6 +2423,13 @@
         "issue": 353,
         "claim": "450c9ad19867456f968f240c82cc2a74",
         "actor": "Worker-S1353B"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T10:31:30+00:00",
+        "issue": 395,
+        "claim": "75f18579a89949fabb15ac76756b5199",
+        "actor": "Worker-T1395E"
       }
     ],
     "policy": {
