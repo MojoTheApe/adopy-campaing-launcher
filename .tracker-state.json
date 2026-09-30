@@ -1929,20 +1929,6 @@
         "state": "implementing",
         "started_at": "2026-09-30T12:43:13+00:00",
         "from_status": "status:backlog"
-      },
-      "414": {
-        "actor": "Worker-F1414Q",
-        "session": "run_f1414q_0930",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1414-flaky-menu-test",
-        "worktree": "C:\\acl-ACL-1414-flaky",
-        "id": "bcc34a5f194c44b6a0ef430d057cb3bb",
-        "issue": 414,
-        "state": "handoff",
-        "started_at": "2026-09-30T19:23:33+00:00",
-        "from_status": "status:backlog",
-        "pr": 415,
-        "report": "# ACL-1414 handoff (Worker-F1414Q, run_f1414q_0930)\n\n- PR #415 into stage, branch codex/acl-1414-flaky-menu-test, head bd1bd27 (base work/main 8a87697).\n- Cause: the test greyed out \"Create ad\" via setTimeout(0) after the menu click, so the robot could read the menu before the timer fired and press the enabled item (new_ad_not_open, ads_after 2).\n- Fix: the item is disabled synchronously in a capture click listener, added after the page's own menu listener, so it runs right after it. Assertion unchanged. Test file only, no product code, no CHANGELOG entry (tests only).\n- Other setTimeouts in the file are the page's simulation of Meta's delayed progress dialog and new row, and the tests wait on them by design, so none is this race.\n- Verification (headless, ACL_LIBRARY_* empty): target test 30/30 in a row, whole file 23 passed. -n 4 was not run locally (pytest-xdist missing in the venv), so CI covers it.\n- Overlap: PR #413 (ACL-1412) has the identical hunk. Whichever lands second resolves it.\n- Remaining: CI green on both Python versions, then review."
       }
     },
     "tasks": {
@@ -2356,9 +2342,25 @@
             "session": "run_f1414q_0930"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-F1414Q",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-F1414Q",
+          "session": "run_f1414q_0930",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1414-flaky-menu-test",
+          "worktree": "C:\\acl-ACL-1414-flaky",
+          "id": "bcc34a5f194c44b6a0ef430d057cb3bb",
+          "issue": 414,
+          "state": "handoff",
+          "started_at": "2026-09-30T19:23:33+00:00",
+          "from_status": "status:backlog",
+          "pr": 415,
+          "report": "# ACL-1414 handoff (Worker-F1414Q, run_f1414q_0930)\n\n- PR #415 into stage, branch codex/acl-1414-flaky-menu-test, head bd1bd27 (base work/main 8a87697).\n- Cause: the test greyed out \"Create ad\" via setTimeout(0) after the menu click, so the robot could read the menu before the timer fired and press the enabled item (new_ad_not_open, ads_after 2).\n- Fix: the item is disabled synchronously in a capture click listener, added after the page's own menu listener, so it runs right after it. Assertion unchanged. Test file only, no product code, no CHANGELOG entry (tests only).\n- Other setTimeouts in the file are the page's simulation of Meta's delayed progress dialog and new row, and the tests wait on them by design, so none is this race.\n- Verification (headless, ACL_LIBRARY_* empty): target test 30/30 in a row, whole file 23 passed. -n 4 was not run locally (pytest-xdist missing in the venv), so CI covers it.\n- Overlap: PR #413 (ACL-1412) has the identical hunk. Whichever lands second resolves it.\n- Remaining: CI green on both Python versions, then review."
+        },
+        "pr": 415,
+        "queued_at": "2026-09-30T19:30:52+00:00"
       }
     },
     "actors": {
@@ -2542,7 +2544,8 @@
       412,
       390,
       399,
-      397
+      397,
+      414
     ],
     "review": null,
     "history": [
@@ -3109,6 +3112,13 @@
         "issue": 397,
         "pr": 409,
         "actor": "Worker-P1397F"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-09-30T19:30:52+00:00",
+        "issue": 414,
+        "pr": 415,
+        "actor": "Worker-F1414Q"
       }
     ],
     "policy": {
