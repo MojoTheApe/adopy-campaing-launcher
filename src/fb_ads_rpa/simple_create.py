@@ -527,6 +527,8 @@ _WHY_TEXT = {
     "new_ad_not_open": ("Create ad added an ad, but the editor did not open it; the new empty ad "
                         "is left in the draft - fill it in or delete it by hand"),
     "tab_frozen": "the browser tab stopped answering while the ad was being created",
+    "dialog_open": ("a Meta dialog stayed open for {wait} s after Create ad, so the robot did not "
+                    "fill the new ad; check the dialog and the new ad in the draft by hand"),
 }
 
 
@@ -535,6 +537,8 @@ def why_text(why: str) -> str:
     why = why or ""
     if why in _WHY_TEXT:
         return _WHY_TEXT[why].format(wait=int(NEW_AD_WAIT_S))
+    if why.startswith("dialog_open"):
+        return _WHY_TEXT["dialog_open"].format(wait=int(NEW_AD_WAIT_S))
     if why.startswith("action_menu_"):
         return "the ad set's Action menu could not be pressed (" + why[len("action_menu_"):] + ")"
     if why.startswith("create_ad_"):
@@ -752,8 +756,9 @@ def _read_ads(page) -> dict:
 
 
 def _fresh(name_value, known: list[str]) -> bool:
-    """В поле имени — не одно из уже собранных объявлений (новое открыто)."""
-    if name_value is None:
+    """В поле имени — непустое имя, и не одно из уже собранных объявлений
+    (новое открыто). Пустое поле — раздел ещё не дорисован (ревью PR #365, F3)."""
+    if name_value is None or not name_value.strip():
         return False
     seen = {(n or "").strip().lower() for n in known}
     return name_value.strip().lower() not in seen
@@ -769,6 +774,7 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float) -> dict
     got: dict = {}
     dialog = None
     dialog_s = 0.0
+    last_name = None
     while True:
         got = _read_ads(page)
         now = time.time()
@@ -776,8 +782,13 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float) -> dict
             if dialog is None:
                 dialog = dict(got["dialog"], seen_at_s=round(now - start, 1))
             dialog_s = round(now - start, 1)
-        ready = (int(got.get("ads") or 0) > ads_before and _fresh(got.get("name_value"), known)
-                 and not got.get("dialog"))
+        # Имя нового объявления — одно и то же два опроса подряд (F3): раздел
+        # мог ещё дорисовываться.
+        name = got.get("name_value")
+        stable = _fresh(name, known) and name == last_name
+        last_name = name
+        got["name_stable"] = stable
+        ready = (int(got.get("ads") or 0) > ads_before and stable and not got.get("dialog"))
         if ready or got.get("error") or now - start >= wait_s:
             break
         time.sleep(0.5)
@@ -811,6 +822,9 @@ def create_next_ad(page, *, tag: str, known_names: list[str],
     if not out["ok"] and not out["why"]:
         out["why"] = "unknown"
     out["text"] = "" if out["ok"] else why_text(out["why"])
+    if out["why"] == "dialog_open" and (out.get("dialog") or {}).get("text"):
+        # Текст окна (без номеров) — в причину: по нему человек его найдёт.
+        out["text"] += f' (dialog: "{out["dialog"]["text"][:80]}")'
     if not out["ok"]:
         out["capture"] = _more_ads_capture(page, out["why"], {
             k: out.get(k) for k in ("tag", "pressed", "ads_before", "ads_after", "dialog",
@@ -881,9 +895,14 @@ def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
         out["dialog"]["until_s"] = after.get("dialog_until_s")
         out["dialog"]["still_open"] = bool(after.get("dialog"))
     out["waited_s"] = after.get("waited_s")
-    out["name_is_new"] = _fresh(after.get("name_value"), known)
+    out["name_is_new"] = bool(after.get("name_stable"))
     if after.get("error"):
         out["why"] = "tab_frozen"
+        return
+    if after.get("dialog"):
+        # Ревью PR #365, F1: окно после «Create ad» так и не ушло — что оно
+        # ждёт, неизвестно; под ним ничего не заполняем.
+        out["why"] = "dialog_open"
         return
     ads_after = int(after.get("ads") or 0)
     if ads_after <= ads_before:

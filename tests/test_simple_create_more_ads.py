@@ -85,7 +85,8 @@ _SCRIPT = """
       document.body.appendChild(dlg);
       window.creates = (window.creates || 0) + 1;
       setTimeout(() => {
-        dlg.remove();
+        if (window.mode === 'late_close') setTimeout(() => dlg.remove(), 2000);
+        else if (window.mode !== 'stuck_dialog') dlg.remove();
         if (window.mode === 'no_row') return;
         const tree = document.getElementById('tree');
         const rows = [...tree.querySelectorAll('[role=row]')];
@@ -96,7 +97,8 @@ _SCRIPT = """
         const copies = window.mode === 'two_rows' ? 2 : 1;
         for (let i = 0; i < copies; i++) rows[rows.length - 1].parentElement.appendChild(fresh.cloneNode(true));
         if (window.mode !== 'not_open') {
-          swap('name-host', FR.new_ad_name);
+          swap('name-host', window.mode === 'empty_name'
+               ? FR.new_ad_name.replace('value="New Leads Ad"', 'value=""') : FR.new_ad_name);
           swap('media-host', FR.new_ad_media);
         }
       }, 1000);
@@ -314,3 +316,59 @@ def test_the_sentry_section_is_the_tree_and_the_open_menu(env):
                               tree=pc.section_is_tree("simple_create_more_ads"))
     assert [p["name"] for p in parts][:2] == ["editor tree", "menu"]
     assert "editor_tree:adset" in parts[0]["html"] and "Create ad" in parts[1]["html"]
+
+
+def test_a_dialog_that_never_closes_is_named_and_the_ad_is_not_filled(env):
+    """Ревью PR #365, F1: строка и новое имя есть, но окно после «Create ad»
+    не ушло — неизвестно, чего оно ждёт; объявление не считается готовым."""
+    env["mode"]("stuck_dialog")
+    got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"], wait_s=3)
+    assert not got["ok"] and got["why"] == "dialog_open", got
+    assert got["ads_after"] == 2
+    assert got["dialog"]["text"] == "Loading creation" and got["dialog"]["still_open"] is True
+    assert got["text"].startswith("a Meta dialog stayed open for")
+    assert got["text"].endswith('(dialog: "Loading creation")')
+    assert got["capture"], "снимок окна не сохранён"
+    assert len(_clicks(env["page"])) == 2, "после окна что-то нажимали"
+    row = [r for r in env["rows"] if r[0] == "simple_create_more_ads"][0]
+    assert row[1] is False and row[2] == "dialog_open"
+
+
+def test_an_empty_ad_name_is_not_the_new_ad(env):
+    """Ревью PR #365, F3: пустое поле имени — раздел не дорисован, а не новое
+    объявление."""
+    env["mode"]("empty_name")
+    got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"], wait_s=2.5)
+    assert not got["ok"] and got["why"] == "new_ad_not_open"
+
+
+def test_the_new_name_must_hold_for_two_reads(monkeypatch):
+    """Ревью PR #365, F3: имя принимается, только когда оно одинаково два
+    опроса подряд."""
+    reads = iter([
+        {"ads": 2, "name_value": "New Leads Ad", "dialog": None},
+        {"ads": 2, "name_value": "Sample Ad 01", "dialog": None},
+        {"ads": 2, "name_value": "New Leads Ad", "dialog": None},
+        {"ads": 2, "name_value": "New Leads Ad", "dialog": None},
+    ])
+    seen: list = []
+
+    def read(page):
+        got = next(reads)
+        seen.append(got["name_value"])
+        return dict(got)
+
+    monkeypatch.setattr(sc, "_read_ads", read)
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(sc.time, "sleep", lambda s: None)
+    got = sc._wait_new_ad(None, 1, ["Sample Ad 01"], wait_s=30)
+    assert got["name_stable"] is True and len(seen) == 4
+
+
+def test_the_wait_lasts_until_the_dialog_closes(env):
+    """F1: строка и имя появились раньше, чем ушло окно, — ждём окно, а не
+    берём объявление под ним."""
+    env["mode"]("late_close")
+    got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"], wait_s=10)
+    assert got["ok"], got
+    assert got["dialog"]["still_open"] is False and got["dialog"]["until_s"] >= 1.5

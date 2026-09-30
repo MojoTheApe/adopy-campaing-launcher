@@ -3724,6 +3724,9 @@ def _reload_awake(page: Page, where: str) -> bool:
     с таймаутом, проверка живости (ограниченная), и только живой странице —
     троттлинг по CDP (его вызовы таймаута не имеют).
     """
+    if _reload_refused(page, where):
+        # ACL-1353 (ревью PR #365, F4): под `_reloads_blocked` — и здесь нет.
+        return False
     note = "unresponsive"
     ok = False
     try:
@@ -9813,15 +9816,23 @@ def _recover_from_browser_error(page: Page, *, attempts: int = 2) -> bool:
 
 #: ACL-1353: пока заполняются объявления 2+ нового редактора, страницу не
 #: перезагружает никто — ни восстановление зависшей страницы, ни шаги текста
-#: и креатива. Адрес `simple_create` держит объявление 1: перезагрузка открыла
-#: бы его редактор заново (это портит Leads-объявление), а поля объявления N
-#: легли бы не туда. Значение — причина (пусто — перезагрузки разрешены).
+#: и креатива — и никто не открывает другое объявление через дерево (ревью
+#: PR #365, F2). Адрес `simple_create` держит объявление 1: перезагрузка
+#: открыла бы его редактор заново (это портит Leads-объявление), а поля
+#: объявления N легли бы не туда; щелчок по строке дерева — то же повторное
+#: открытие. Значение — причина (пусто — всё разрешено).
 _reload_block = threading.local()
 
 
 class _reloads_blocked:
-    """`with _reloads_blocked("simple_create_new_ad"):` — перезагрузок нет.
-    Пустая причина — ничего не меняет (прежний мастер)."""
+    """`with _reloads_blocked("simple_create_new_ad"):` — ни перезагрузок, ни
+    открытия объявлений через дерево. Пустая причина — ничего не меняет
+    (прежний мастер). Вложенный вход сохраняет внешнюю причину.
+
+    Публичное имя — `hold_open_ad`: им пользуются шаги, которые идут после
+    объявлений 2+ с открытым объявлением N (напр. второй проход Locations
+    ACL-1390): `with hold_open_ad("simple_create_open_ad_n"):`.
+    """
 
     def __init__(self, why: str) -> None:
         self.why = why or ""
@@ -9836,6 +9847,26 @@ class _reloads_blocked:
     def __exit__(self, *exc) -> bool:
         _reload_block.why = self.prev
         return False
+
+
+#: Публичное имя охраны (ACL-1353 → ACL-1390).
+hold_open_ad = _reloads_blocked
+
+
+def reloads_held() -> str:
+    """Причина, по которой сейчас нельзя перезагружать и открывать объявления
+    через дерево (пусто — можно)."""
+    return getattr(_reload_block, "why", "") or ""
+
+
+def _tree_open_refused(where: str, ad_name: str = "") -> bool:
+    """Открыть объявление в дереве сейчас запрещено? Да — строка телеметрии."""
+    why = reloads_held()
+    if not why:
+        return False
+    _telemetry.record("ad_tree_open_refused", False, note=why,
+                      diag={"where": where, "ad": (ad_name or "")[:60]})
+    return True
 
 
 def _reload_refused(page: Page, where: str) -> bool:
@@ -12556,7 +12587,20 @@ def _repair_blocked_copy_editor(page: Page, ad_name: str, destination_url: str) 
             checked = _browser_addon_none_checked(page)
         _telemetry.record("browser_addon_repair", bool(fixed) and checked is True,
                           diag={"none_checked": checked})
-        if ad_name:
+        if ad_name and reloads_held():
+            # ACL-1353 (ревью PR #365, F2): объявление N нового редактора —
+            # перезагрузки не было, объявление открыто; назначение чиним на
+            # нём, без обхода по дереву (он открыл бы объявление заново).
+            if destination_url:
+                try:
+                    fixed_here = set_ad_destination_website(page, destination_url)
+                except Exception as exc:
+                    fixed_here = False
+                    _telemetry.record("ad_copy_blocked", False,
+                                      note=f"destination_on_open_ad:{type(exc).__name__}")
+                _telemetry.record("browser_addon_repair", bool(fixed_here),
+                                  note="open_ad_only", diag={"why": reloads_held()})
+        elif ad_name:
             # После перезагрузки мы стоим на уровне ad set'а, а объявление
             # закрыто: открываем его тем же обходом, что чинит назначения.
             try:
@@ -12697,6 +12741,10 @@ def _on_the_named_ad(page: Page, ad_name: str) -> bool:
     got = _open_ad_name(page)
     if got is None or got.strip().lower() == ad_name.strip().lower():
         return True
+    if _tree_open_refused("on_the_named_ad", ad_name):
+        # ACL-1353 (ревью PR #365, F2): не то объявление — текст не пишем,
+        # другое не открываем (`wrong_ad_open`).
+        return False
     return _reopen_ad_after_reload(page, ad_name)
 
 
@@ -13604,6 +13652,10 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
     in the top breadcrumb, so among all matches the LEFTMOST one is taken:
     the tree panel hugs the left edge, the breadcrumb does not.
     """
+    if _tree_open_refused("open_tree_ad", ad_name):
+        # ACL-1353 (ревью PR #365, F2): объявления 2+ нового редактора —
+        # щелчок по строке дерева заново открыл бы (и портил) объявление.
+        return False
     point = page.evaluate(
         """(adName) => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();

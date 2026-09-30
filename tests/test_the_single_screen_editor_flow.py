@@ -31,6 +31,9 @@ from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
 from src.fb_ads_rpa import simple_create as sc  # noqa: E402
 from tests.test_create_quick_retry_returns_to_list import flow  # noqa: E402,F401
 
+#: Настоящий шаг текста — до того, как `flow` подменит его заглушкой.
+_REAL_WRITE_AD_COPY = dom.write_ad_copy
+
 SIMPLE_URL = ("https://adsmanager.facebook.com/adsmanager/manage/simple_create?act=1"
               "&selected_campaign_ids=2&selected_adset_ids=3&selected_ad_ids=4&sc_1nn=true")
 EDIT_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns/edit/standalone?act=1"
@@ -284,6 +287,54 @@ def test_the_classic_wizard_fills_more_ads_without_the_guard(sim, monkeypatch):
                         lambda p, t, b, **kw: during.append(getattr(dom._reload_block, "why", "")) or True)
     sim["run"](additional_ads=[{"ad_name": "Two", "ad_title": "T2", "ad_body": "B2"}])
     assert during == ["", ""]
+
+
+def test_a_lead_form_error_on_ad_2_is_repaired_without_opening_ads_in_the_tree(sim, monkeypatch):
+    """Ревью PR #365, F2: ошибка Lead-формы на объявлении 2 — лечение ставит
+    «None» и назначение на открытом объявлении; обхода по дереву и повторного
+    открытия нет. Объявление 1 лечится как прежде (обход по дереву)."""
+    _creates(sim)
+    state = {"ad": "", "repaired": set()}
+
+    def copy(p, title, body, **kw):
+        state["ad"] = kw.get("ad_name")
+        return _REAL_WRITE_AD_COPY(p, title, body, **kw)
+
+    monkeypatch.setattr(dom, "write_ad_copy", copy)
+    monkeypatch.setattr(dom, "_review_errors_visible",
+                        lambda p: state["ad"] in ("Example Ad", "Two") and state["ad"] not in state["repaired"])
+    monkeypatch.setattr(dom, "_heal_failed_component", lambda *a, **k: False)
+    monkeypatch.setattr(dom, "_lead_terms_not_accepted", lambda p: False)
+    monkeypatch.setattr(dom, "_select_browser_addon_none", lambda p: True)
+    monkeypatch.setattr(dom, "_browser_addon_none_checked", lambda p: True)
+    fills: list = []
+    monkeypatch.setattr(dom, "fill_ad_copy", lambda p, t, b, report=None, **kw: fills.append(state["ad"]) or True)
+    swept: list = []
+
+    def sweep(p, names, url):
+        swept.append((state["ad"], list(names)))
+        state["repaired"].add(state["ad"])
+        return []
+
+    monkeypatch.setattr(dom, "verify_and_fix_ad_destinations", sweep)
+    sets: list = []
+
+    def dest(p, url):
+        sets.append(state["ad"])
+        state["repaired"].add(state["ad"])
+        return True
+
+    monkeypatch.setattr(dom, "set_ad_destination_website", dest)
+    tree_opens: list = []
+    monkeypatch.setattr(dom, "_reopen_ad_after_reload", lambda p, name: tree_opens.append(name) or True)
+    out: list[str] = []
+    sim["run"](additional_ads=_THREE[:1], soft_fails_out=out)
+    assert fills == ["Example Ad", "Two"]
+    assert swept == [("Example Ad", ["Example Ad"])], "объявление 2 чинили обходом по дереву"
+    assert "Two" in sets, "назначение объявления 2 не поставили на месте"
+    assert tree_opens == []
+    assert ("browser_addon_repair", True, "open_ad_only") in sim["rows"]
+    assert not [f for f in out if f.startswith("ad2_")], out
 
 
 def test_a_failed_create_is_named_and_the_rest_are_not_pressed(sim, monkeypatch):
