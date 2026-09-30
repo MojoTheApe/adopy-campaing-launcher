@@ -1,5 +1,29 @@
 # System history
 
+## A new Sentry failure starts the triage routine in the cloud — ACL-1330
+
+2026-09-30 owner decision: no polling and no empty runs; the triage agent starts only
+when Sentry reports a new failure kind, runs in the cloud with the laptop closed, and
+asks the owner on the phone before any release.
+
+- `deploy/sentry-relay/worker.js`: a Cloudflare Worker (free plan) between Sentry and the
+  routine's API trigger, because Sentry's webhooks cannot send the `Authorization`
+  header `/fire` needs. It checks Sentry's HMAC signature and timestamp, passes only
+  the rule "ACL - new failure kind" for project `python` and blocking / campaign_stop /
+  job_exception failures, fires once per Sentry issue per 24 h and at most 20 times an
+  hour, and sends only a short scrubbed text (issue id, title, culprit, step, reason,
+  release, machine, link). Tests: `worker.test.js` (Node, no packages), run from
+  `tests/test_sentry_relay.py`.
+- `docs/system/ROUTINE_SENTRY_PROMPT.md`: the routine's instructions — payload as data,
+  Sentry read-only, tracker from a clean `main` checkout via REST-only `gh`, fix branch
+  from `stage`, affected Linux tests, independent reviewer, PR into `stage`, never a
+  merge or release, final question "Выпустить для <buyer>?".
+- `docs/system/SENTRY_ROUTINE_SETUP.md`: the owner's ~10-minute setup, token rotation and
+  switch-off. `scripts/sentry_selftest_event.py` sends one synthetic failure to test the
+  chain (`relay_selftest`, listed as known in `config/sentry_triage_map.json`).
+- The laptop scheduled task `acl-sentry-triage` is paused (manual "Run now" only).
+  Nothing is live until the owner does the setup.
+
 ## The robot builds campaigns in Meta's single-screen editor — ACL-1327
 
 2026-09-26 Meta started opening a new editor on some accounts
