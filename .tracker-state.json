@@ -745,6 +745,24 @@
           353
         ],
         "recorded_at": "2026-09-30T13:56:10+00:00"
+      },
+      "415": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1414F",
+        "review_session": "review_r1414f_0930",
+        "execution_lane": "d5fee92ad5594caaab390378014fa9df",
+        "implementer": "Worker-F1414Q",
+        "head_sha": "bd1bd27d726880657dfdc6ae00c0f108a567caf4",
+        "base_sha": "59423bcdaba2d25f4de1b46553679ba9390c65ba",
+        "tree_sha": "582bb15776539d488b7769a6a0146161bb669530",
+        "report": "C:\\Users\\EVGENI~1\\AppData\\Local\\Temp\\claude\\C--fb-agents\\de606466-2798-4722-b592-13bc7766bb85\\scratchpad\\review_415.md: approved. Test-only fix (+6/-2): the synchronous capture listener runs right after the page's menu listener in the same click dispatch. The assertion is unchanged, the never-disable mutation fails the test, local runs passed 10/10 and 23/23, and all 11 CI checks are green (test 3.11 and 3.13).",
+        "main_sha": "8a876977f581a3db08b0aa7f01d6ef5753101174",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          414
+        ],
+        "recorded_at": "2026-09-30T20:00:59+00:00"
       }
     },
     "stage": {
