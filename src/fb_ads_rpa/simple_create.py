@@ -30,6 +30,7 @@ audience», Placements, имя объявления, креатив, Destination
 from __future__ import annotations
 
 import os
+import re
 import time
 
 #: Адрес нового редактора (в пути, не в параметрах).
@@ -493,6 +494,18 @@ MORE_ADS_SWITCHED_OFF = "switched-off"
 #: Сколько ждать новое объявление после «Create ad» (живьём — ~13 с).
 NEW_AD_WAIT_S = 30.0
 
+#: Сколько ждать, пока Meta занята созданием объявления (окно «Creating...»,
+#: `/am/lib:ads_progress_dialog_modal_*`): вкладка в это время может не
+#: отвечать на пробу живости. Живьём 30.09 (d66a22d0fa30, fba2c3f5, 1443):
+#: проба не ответила через ~2 с после появления окна, шаг назвал вкладку
+#: зависшей, а Meta дособрала объявление позже. Отсчёт — от первого
+#: неответа; за это время страница должна ответить И окно — уйти.
+META_BUSY_WAIT_S = 120.0
+
+#: Окно прогресса Meta: surface или собственный текст.
+_PROGRESS_SURFACE = "ads_progress_dialog"
+_PROGRESS_TEXT = re.compile(r"^(creating|creando|loading creation)\b", re.I)
+
 #: Собственная надпись кнопки добавления объявления — ровно она: «Create ad
 #: set», «Create multiple ads» и описание радио «Ad setup» не подходят.
 CREATE_AD_RE = r"^(create ad|crear anuncio)$"
@@ -764,20 +777,57 @@ def _fresh(name_value, known: list[str]) -> bool:
     return name_value.strip().lower() not in seen
 
 
-def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float) -> dict:
+def is_progress_dialog(dialog) -> bool:
+    """Окно — прогресс Meta («Creating...», `ads_progress_dialog_modal_*`)."""
+    if not dialog:
+        return False
+    return (_PROGRESS_SURFACE in (dialog.get("surface") or "")
+            or bool(_PROGRESS_TEXT.match((dialog.get("text") or "").strip())))
+
+
+def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
+                 busy_wait_s: float | None = None) -> dict:
     """Ждать после «Create ad»: новая строка «Ad», раздел объявления показывает
     новое объявление, окна нет. Первое увиденное окно и сколько оно висело —
-    в итог (в снимках шага 1 его уже не было)."""
+    в итог (в снимках шага 1 его уже не было).
+
+    Вкладка не ответила, а последним увиденным было окно прогресса Meta
+    («Creating...») — это «Meta занята», а не зависание (живьём 30.09): ждём
+    дальше, не нажимая и не перезагружая ничего, до `busy_wait_s` от первого
+    неответа — пока страница не ответит и окно не уйдёт. `busy_s` — сколько
+    страница не отвечала. Закрытая вкладка ожиданием не лечится."""
     md = _md()
+    if busy_wait_s is None:
+        busy_wait_s = META_BUSY_WAIT_S
     md._sleep_h(1.0)
     start = time.time()
     got: dict = {}
     dialog = None
     dialog_s = 0.0
     last_name = None
+    last_seen_dialog = None      # окно в последнем ответившем чтении
+    busy_since = None            # первый неответ при окне прогресса
+    busy_s = 0.0                 # сколько всего страница не отвечала
+    unanswered_at = None
     while True:
         got = _read_ads(page)
         now = time.time()
+        if got.get("error"):
+            closed = "closed" in str(got["error"]).lower()
+            if unanswered_at is None:
+                unanswered_at = now
+            if not closed and (busy_since is not None or is_progress_dialog(last_seen_dialog)):
+                if busy_since is None:
+                    busy_since = now
+                if now - busy_since < busy_wait_s:
+                    time.sleep(1.0)
+                    continue
+            busy_s += now - unanswered_at
+            break
+        if unanswered_at is not None:
+            busy_s += now - unanswered_at
+            unanswered_at = None
+        last_seen_dialog = got.get("dialog")
         if got.get("dialog"):
             if dialog is None:
                 dialog = dict(got["dialog"], seen_at_s=round(now - start, 1))
@@ -789,12 +839,18 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float) -> dict
         last_name = name
         got["name_stable"] = stable
         ready = (int(got.get("ads") or 0) > ads_before and stable and not got.get("dialog"))
-        if ready or got.get("error") or now - start >= wait_s:
+        # Пока Meta занята, срок — от первого неответа (`busy_wait_s`), а не
+        # только обычный `wait_s`.
+        deadline = start + wait_s
+        if busy_since is not None:
+            deadline = max(deadline, busy_since + busy_wait_s)
+        if ready or now >= deadline:
             break
         time.sleep(0.5)
     got["dialog_first"] = dialog
     got["dialog_until_s"] = dialog_s if dialog else None
     got["waited_s"] = round(time.time() - start, 1)
+    got["busy_s"] = round(busy_s, 1) if (busy_since is not None or busy_s) else None
     return got
 
 
@@ -822,6 +878,12 @@ def create_next_ad(page, *, tag: str, known_names: list[str],
     if not out["ok"] and not out["why"]:
         out["why"] = "unknown"
     out["text"] = "" if out["ok"] else why_text(out["why"])
+    if out["why"] == "tab_frozen" and out.get("busy_s"):
+        # Живьём 30.09: Meta показывала «Creating...», и страница не отвечала.
+        out["text"] += (f" (Meta showed its progress dialog and the page did not answer for "
+                        f"{out['busy_s']:.0f} s, longer than the robot waits: "
+                        f"{META_BUSY_WAIT_S:.0f} s; the new ad may still appear in the draft empty - "
+                        "fill it in or delete it by hand)")
     if out["why"] == "dialog_open" and (out.get("dialog") or {}).get("text"):
         # Текст окна (без номеров) — в причину: по нему человек его найдёт.
         out["text"] += f' (dialog: "{out["dialog"]["text"][:80]}")'
@@ -834,7 +896,7 @@ def create_next_ad(page, *, tag: str, known_names: list[str],
             MORE_ADS_STEP, True if out["ok"] else False,
             note="created" if out["ok"] else out["why"],
             diag={k: out.get(k) for k in ("tag", "pressed", "ads_before", "ads_after",
-                                          "extra_shells", "dialog", "waited_s", "tree", "menu",
+                                          "extra_shells", "dialog", "waited_s", "busy_s", "tree", "menu",
                                           "capture", "text")})
     except Exception:
         pass
@@ -895,6 +957,7 @@ def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
         out["dialog"]["until_s"] = after.get("dialog_until_s")
         out["dialog"]["still_open"] = bool(after.get("dialog"))
     out["waited_s"] = after.get("waited_s")
+    out["busy_s"] = after.get("busy_s")
     out["name_is_new"] = bool(after.get("name_stable"))
     if after.get("error"):
         out["why"] = "tab_frozen"
