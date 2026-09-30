@@ -1,5 +1,35 @@
 # System history
 
+## The robot builds campaigns in Meta's single-screen editor — ACL-1327
+
+2026-09-26 Meta started opening a new editor on some accounts
+(`/adsmanager/manage/simple_create`: campaign, ad set and ad on one screen). The
+robot knew only the step-by-step editor, so those accounts stopped. Owner decision:
+support the new editor rather than look for a way back to the old one.
+
+- `src/fb_ads_rpa/simple_create.py` recognises the editor by URL or markup at any
+  step, scrolls to the Ad set / Ad sections instead of pressing Next, opens the
+  collapsed cards and sets the Leads objective inline. The existing card handlers
+  (name, budget, conversion, audience, age, locations, languages, interests,
+  placements, identity, creative, destination, copy) run inside the one page; the
+  draft is kept by Meta's autosave (telemetry `simple_create_draft`). Publish is
+  never pressed.
+- Named stops: `lead_terms_not_accepted` (a person accepts the Lead Ads Terms),
+  `simple_create_layout` (unknown variation, or `FB_RPA_SIMPLE_CREATE=0`),
+  `objective_inline` (the Leads objective could not be set on the page), and
+  `simple_create_more_ads` — only the first ad is built; ads 2–3 are ACL-1353.
+- Shipped in `acl-release-2026-09-29b` (the content of PR #340 through PR #376 and
+  PR #378).
+- Live check, Facebook_1443, 2026-09-29/30: four campaigns built end to end
+  (campaign, ad set, ad 1, draft saved) in 5–21 minutes; the owner confirmed the
+  campaign and ad set setup in Ads Manager on 2026-09-30. Because ads 2–3 are
+  missing, the robot itself marks each of these drafts "do not publish as is"
+  (`simple_create_more_ads` is blocking); the owner accepted closing this task
+  on the one-ad result, with ads 2–3 in ACL-1353. On Facebook_9943 no 29.09 run
+  got past the campaign name (an SSL error on reload, network trouble before the
+  objective, a profile that failed to start); one affected account is what this
+  task asked for.
+
 ## Sentry events carry the failing page section; a read-only triage digest — ACL-1325
 
 2026-09-26 a new "Suggest an audience" Audience layout on one account broke "Further
