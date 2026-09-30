@@ -1881,6 +1881,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T12:43:13+00:00",
         "from_status": "status:backlog"
+      },
+      "406": {
+        "actor": "Worker-S406P",
+        "session": "S406P",
+        "coordinator": "Coordinator-C930E",
+        "branch": "codex/acl-1353-new-ad-probe",
+        "worktree": "C:\\acl-1353-new-ad-probe",
+        "id": "d308b58612964c24b277354262c7cf82",
+        "issue": 406,
+        "state": "implementing",
+        "started_at": "2026-09-30T13:32:10+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2126,6 +2138,17 @@
         "state": "implementing",
         "worker": "Worker-V1402H",
         "coordinator": "Coordinator-C0930A"
+      },
+      "406": {
+        "implementers": [
+          {
+            "actor": "Worker-S406P",
+            "session": "S406P"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S406P",
+        "coordinator": "Coordinator-C930E"
       }
     },
     "actors": {
@@ -2179,6 +2202,10 @@
       },
       "Worker-V1402H": {
         "session": "run_v1402h_0930",
+        "role": "Worker"
+      },
+      "Worker-S406P": {
+        "session": "S406P",
         "role": "Worker"
       }
     },
@@ -2573,6 +2600,13 @@
         "issue": 353,
         "pr": 405,
         "actor": "Worker-S1353B"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T13:32:10+00:00",
+        "issue": 406,
+        "claim": "d308b58612964c24b277354262c7cf82",
+        "actor": "Worker-S406P"
       }
     ],
     "policy": {
