@@ -110,12 +110,14 @@ POLICY: dict[str, tuple[str, str]] = {
         "the draft was left in Ads Manager and not retried (a retry would leave another "
         "draft) - set the objective to Leads by hand or delete the draft",
     ),
-    # ACL-1327: the single-screen editor path builds the first ad only.
+    # ACL-1353: ads 2+ of Meta's single-screen editor are created by the
+    # robot; this step is left only when that is switched off on the machine
+    # (FB_RPA_SIMPLE_MORE_ADS_PRESS=0). A failed ad is its own adN_* step.
     "simple_create_more_ads": (
         BLOCKING,
-        "Meta's single-screen campaign editor was used, and the robot builds only the first "
-        "ad there - the other ads of this campaign were not created; add them by hand in Ads "
-        "Manager or publish the campaign again once the robot supports more ads in this editor",
+        "Meta's single-screen campaign editor was used, and creating more than one ad there is "
+        "switched off on this machine - only the first ad was built; add the other ads by hand "
+        "in Ads Manager or publish the campaign again with the setting back on",
     ),
     # ACL-1354 (runs 37e397574548 and a71e4fc14aa1, 2026-09-28): time budgets of
     # the recorded flow; the draft is partial and a replay would duplicate it.
