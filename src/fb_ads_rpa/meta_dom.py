@@ -3784,7 +3784,7 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = Fa
       «All edits saved», иначе потеряются несохранённые поля; на списке
       кампаний (`editor=False`, шаг выбора цели) сохранять нечего.
     * Под `_reloads_blocked` (ACL-1353, объявления 2+ нового редактора) —
-      никогда: False и строка `page_reload_refused`.
+      никогда: False и строка `loading_modal_reload` (note `refused:<причина>`).
     """
     if _reload_refused(page, where):
         return False
@@ -6232,7 +6232,8 @@ def run_recorded_campaign_flow(
             # ACL-1353 (ревью PR #365, B1): после «Create ad» в новом редакторе
             # восстановление зависшей страницы не зовём — перезагрузка открыла
             # бы редактор Leads-объявления заново (адрес держит объявление 1).
-            _telemetry.record("recover_stuck_page_skipped", None, note="simple_create_more_ads")
+            _telemetry.record("loading_modal_reload", False, note="skipped:simple_create_more_ads",
+                              diag={"where": "destination_sweep"})
         elif reached_ad_level:
             # ACL-1233: обход должен пройти и после зависшей страницы.
             recover_stuck_page(page, "destination_sweep", editor=True)
@@ -9842,7 +9843,9 @@ def _reload_refused(page: Page, where: str) -> bool:
     why = getattr(_reload_block, "why", "")
     if not why:
         return False
-    _telemetry.record("page_reload_refused", None, note=why, diag={"where": where})
+    # Имя шага — прежнее `loading_modal_reload` (False = перезагрузку не
+    # делали), чтобы модель прогресса дешборда знала его.
+    _telemetry.record("loading_modal_reload", False, note="refused:" + why, diag={"where": where})
     return True
 
 

@@ -234,7 +234,7 @@ def test_no_page_recovery_reloads_the_editor_around_the_new_ads(sim, monkeypatch
                         lambda p, where, **kw: overlays.append((where, kw)) or [])
     sim["run"](additional_ads=_THREE, soft_fails_out=[])
     assert not [w for w in recovered if w.startswith(("ad2", "ad3")) or w == "destination_sweep"], recovered
-    assert ("recover_stuck_page_skipped", None, "simple_create_more_ads") in sim["rows"]
+    assert ("loading_modal_reload", False, "skipped:simple_create_more_ads") in sim["rows"]
     assert ("ad2", {"may_reload": False}) in overlays and ("ad3", {"may_reload": False}) in overlays
     assert sim["page"].reload.call_count == 0 and sim["page"].goto.call_count == 0
 
@@ -268,7 +268,7 @@ def test_the_reload_guard_refuses_every_reload_path(monkeypatch):
         assert dom.recover_stuck_page(page, "ad2_before", editor=True) is False
         dom._reload_editor(page, "https://adsmanager.facebook.com/x")
     assert page.reload.call_count == 0 and page.goto.call_count == 0
-    assert ("page_reload_refused", None, "simple_create_new_ad") in rows
+    assert ("loading_modal_reload", False, "refused:simple_create_new_ad") in rows
     # Вне охраны — прежнее поведение: страница ошибки Chrome перезагружается.
     monkeypatch.setattr(dom, "_sleep_h", lambda *a, **k: None)
     monkeypatch.setattr("src.fb_ads_rpa.browser.wake_page", lambda p: {}, raising=False)
