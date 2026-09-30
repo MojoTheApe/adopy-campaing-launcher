@@ -2060,6 +2060,13 @@
       flex: 0 0 4.6rem; color: var(--muted); font-size: 0.7rem;
       text-transform: uppercase; letter-spacing: 0.04em;
     }
+    /* ACL-1395: у объявлений с одним именем числа книги общие. Тихая пометка
+       в строке уровня, как «not in the workbook» у аккаунта; объяснение — в
+       подсказке. */
+    .amap-tree-shared {
+      margin-left: 0.35rem; color: var(--muted); text-transform: none;
+      letter-spacing: 0; cursor: help; border-bottom: 1px dotted var(--border);
+    }
     /* Стрелка кампании. Пустое место вместо неё держит ту же ширину, иначе
        строки без объявлений разъезжаются относительно остальных. */
     .amap-tree-caret, .amap-tree-caret-off {
@@ -7083,7 +7090,7 @@ function amapTreeLine(o, adCount) {
     caret.type = 'button';
     caret.className = 'amap-tree-caret';
     caret.textContent = '▸';
-    caret.setAttribute('aria-label', adCount + ' ads in ' + (o.name || 'this campaign'));
+    caret.setAttribute('aria-label', adCount + ' ads in ' + (amapTreeName(o.name) || 'this campaign'));
     who.appendChild(caret);
   } else {
     var gap = document.createElement('span');
@@ -7130,13 +7137,15 @@ function amapTreeLine(o, adCount) {
     sw.dataset.level = o.level;
     sw.dataset.objectId = o.id || '';
     sw.dataset.parentId = o.parent_id || '';
-    sw.dataset.name = o.name || '';
+    sw.dataset.name = amapTreeName(o.name);
   }
 
   var name = document.createElement('span');
   name.className = 'amap-tree-name';
-  name.textContent = o.name || '(no name)';
-  name.title = (o.name || '') + (o.id ? '  ·  ' + o.id : '');
+  /* Имя — без надписей Meta, как его сопоставляет книга (ACL-1395). */
+  var shownName = amapTreeName(o.name);
+  name.textContent = shownName || '(no name)';
+  name.title = shownName + (o.id ? '  ·  ' + o.id : '');
 
   var del = document.createElement('span');
   var stopped = /off|review|reject|not deliver|error/i.test(o.delivery || '');
@@ -7219,11 +7228,35 @@ function amapAttrCell(field) {
    «Adset Name» книги, объявление — «Ad Title» под ним. Считает сервер той
    же формулой и форматирует тем же `fmt_usd`, что и строку аккаунта.
 
-   Совпадение — по имени, и только однозначное. Две кампании с одним именем
-   (или два объявления с одним именем в кампании) по имени не различить:
-   такие строки получают прочерк с объяснением, а не угаданные числа. Нет
-   строк в книге — прочерк, а не ноль: «не нашли» и «ноль» — разные ответы. */
-function amapTreeName(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+   Совпадение — по имени. Две кампании с одним именем по имени не различить:
+   такие строки получают прочерк с объяснением, а не угаданные числа.
+   Несколько объявлений с одним именем в одной кампании (ACL-1395, решение
+   владельца 30.09) получают каждое итог книги по этому имени — один раз, не
+   умноженный — и пометку «shared by N ads»: делить итог между ними нечем.
+   Нет строк в книге — прочерк, а не ноль: «не нашли» и «ноль» — разные ответы. */
+
+/* Надписи Meta из ячейки имени (ACL-1395): «1741 - Pro Bancolombia Unpublished
+   edits Unpublished edits». Чтение их теперь снимает само; здесь — для
+   чтений, сохранённых раньше. Копия `META_NAME_LABELS` из
+   `src/analysis_agent/account_spend.py`, тест держит их равными. Снимаются
+   только с конца имени и только если перед ними есть имя. */
+var AMAP_META_NAME_LABELS = ['Unpublished edits', 'In draft', 'In review', 'Draft'];
+
+function amapTreeName(s) {
+  var text = String(s || '').replace(/\s+/g, ' ').trim();
+  for (;;) {
+    var hit = null;
+    for (var i = 0; i < AMAP_META_NAME_LABELS.length; i++) {
+      var l = ' ' + AMAP_META_NAME_LABELS[i];
+      if (text.length > l.length && text.slice(-l.length) === l) { hit = l; break; }
+    }
+    if (!hit) return text;
+    text = text.slice(0, -hit.length).trim();
+  }
+}
+
+var AMAP_SHARED_TIP = 'The workbook cannot tell ads with the same name apart; '
+                    + 'these are the totals for all of them';
 
 function amapOwn(obj, key) {
   return obj && Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null;
@@ -7252,7 +7285,11 @@ function amapFillAttribution(box, objects, data) {
   lines.forEach(function (line, i) {
     var o = line._amapObject;
     if (!o) return;
-    var got = null, why = '';
+    var got = null, why = '', shared = 0;
+    /* Ответ может прийти второй раз (перечитали период) — прежняя пометка
+       снимается, новая ставится по новому ответу. */
+    var oldMark = line.querySelector('.amap-tree-shared');
+    if (oldMark) oldMark.remove();
     if (!data || !data.ok) {
       why = (data && data.error) || 'Workbook numbers are not available';
     } else if (o.level === 'ad') {
@@ -7260,8 +7297,10 @@ function amapFillAttribution(box, objects, data) {
       var n = amapTreeName(o.name);
       if (!camp) why = 'The campaign of this ad is not known';
       else if (keys.campCount[camp] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
-      else if (keys.adCount[camp + '\u0001' + n] > 1) why = 'Several ads in this campaign share this name — the workbook cannot tell them apart';
-      else got = amapOwn(amapOwn(data.ads, camp), n);
+      else {
+        got = amapOwn(amapOwn(data.ads, camp), n);
+        shared = keys.adCount[camp + '\u0001' + n] || 0;
+      }
       if (!got && !why) why = 'No rows for this ad in the stats workbook for these dates';
     } else {
       var cn = amapTreeName(o.name);
@@ -7277,8 +7316,21 @@ function amapFillAttribution(box, objects, data) {
       var has = text !== '';
       cell.textContent = has ? text : '—';
       cell.classList.toggle('nodata', !has);
-      cell.title = got ? 'From the stats workbook' : why;
+      cell.title = got ? (shared > 1 ? AMAP_SHARED_TIP : 'From the stats workbook') : why;
     });
+    /* Пометка — только над числами: над прочерком «общие числа» ничего не
+       значат. Стоит в мелкой строке уровня над именем («ad»), чтобы не
+       отнимать ширину у самого имени. */
+    if (got && shared > 1) {
+      var kind = line.querySelector('.amap-tree-kind');
+      if (kind) {
+        var mark = document.createElement('span');
+        mark.className = 'amap-tree-shared';
+        mark.textContent = 'shared by ' + shared + ' ads';
+        mark.title = AMAP_SHARED_TIP;
+        kind.appendChild(mark);
+      }
+    }
   });
   /* Прочерки в узкой раскладке спрятаны, и «книга не прочиталась» выглядело
      бы там ровно как «в книге нет строк» — то есть никак. Поломку говорим
