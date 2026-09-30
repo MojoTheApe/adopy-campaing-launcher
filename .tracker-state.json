@@ -2089,7 +2089,7 @@
             "session": "run_g1390c_0930"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-G1390C",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2107,7 +2107,8 @@
           "report": "# ACL-1390 handoff \u2014 Worker-G1390C\n\nPR #393 `[ACL-1390] Retry the country in place and once more at the end of the campaign` into `stage`; branch `codex/acl-1390-location-retry`, head `0d79518`, base `6a11a8f`.\n\n## What changed\n- `src/fb_ads_rpa/meta_dom.py`: `_LOCATION_ATTEMPTS` ladder (4 attempts: typed text/6 s; click back+clear+120 ms/key/8 s; prefix/120 ms/10 s; full/160 ms/15 s) in `_pick_country_suggestion`; `_click_country_option` picks only \"<country> (Country)\" or the bare name (region/city never; old first-option fallback removed; Enter kept only when list is open without role=option rows); telemetry `audience_location_attempt`; field emptied on give-up. Second pass: `retry_location_at_end` \u2192 `_location_second_pass` (classic `_open_tree_adset` by `editor_tree:adset` wrapper; single-screen `scroll_to_level(\"adset\")` + `open_card(\"Audience\")`), read Locations (`_locations_read_back`), rerun `fill_audience_location`, read back; wired into `run_recorded_campaign_flow` after the destination sweep, before the final save wait.\n- `src/fb_ads_rpa/failure_policy.py`: WARNING `audience_location_second_pass`.\n- Tests: new `tests/test_location_retry_and_second_pass.py` (17), stub signature in `tests/test_default_location_is_really_removed.py`. `docs/system/CHANGELOG.md` entry.\n\n## Checks\n- Test-first (red: missing ladder), then 17/17 green.\n- Full suite at 9821be5: 3821 passed, 6 skipped, 1 failed (progress-model step name) \u2192 fixed in 0d79518; affected tests (location, progress model, sentry) 135 passed. Secret scanner clean. No live runs.\n\n## Risks / open\n- Meta's exact country-option text is not in any fixture; unmatched text fails safe (second pass \u2192 existing stop).\n- Worst case ~3 min extra when search stays dead; normal path unchanged.\n- Live-run acceptance criterion still open.\n- Overlaps `meta_dom.py` with ACL-1353 (small insertion near end of `run_recorded_campaign_flow`)."
         },
         "pr": 393,
-        "queued_at": "2026-09-30T09:13:36+00:00"
+        "queued_at": "2026-09-30T09:13:36+00:00",
+        "reviewer": "Reviewer-R1390D"
       },
       "391": {
         "implementers": [
@@ -2401,6 +2402,10 @@
       "Worker-T1357N": {
         "session": "run_t1357n_0930",
         "role": "Worker"
+      },
+      "Reviewer-R1390D": {
+        "session": "review_r1390d_0930",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -2487,13 +2492,23 @@
     },
     "review_queue": [
       391,
-      390,
       388,
       395,
       406,
       330
     ],
-    "review": null,
+    "review": {
+      "id": "6b7b03e0361a4282a2d57ca2f8a38197",
+      "pr": 393,
+      "issues": [
+        390
+      ],
+      "actor": "Reviewer-R1390D",
+      "session": "review_r1390d_0930",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-09-30T17:10:50+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -2927,6 +2942,13 @@
         "issue": 357,
         "claim": "1f19420f56604baea1300559b9e87583",
         "actor": "Worker-T1357N"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-09-30T17:10:50+00:00",
+        "pr": 393,
+        "lane": "6b7b03e0361a4282a2d57ca2f8a38197",
+        "actor": "Reviewer-R1390D"
       }
     ],
     "policy": {
