@@ -6239,7 +6239,7 @@ def run_recorded_campaign_flow(
         retry_location_at_end(page, soft_fails, country=country, simple=simple,
                               adset_name=adset_name)
         still = any(f.split(":", 1)[0] == "audience_location" for f in soft_fails)
-        _shot("fail_locations_second_pass" if still else "after_locations_second_pass")
+        _shot("fail_audience_location_second_pass" if still else "after_audience_location_second_pass")
 
     # ACL-1327: черновик нового редактора сохраняется так же, как прежнего, —
     # автосохранением Meta («All edits saved»); Publish робот не жмёт никогда.
@@ -17023,7 +17023,7 @@ def _open_tree_adset(page: Page, adset_name: str) -> bool:
     except Exception as exc:
         pt = {"why": "error:" + type(exc).__name__}
     if "x" not in pt:
-        _telemetry.record("locations_second_pass_open", False, note=str(pt.get("why") or "not_found"))
+        _telemetry.record("audience_location_second_pass_open", False, note=str(pt.get("why") or "not_found"))
         return False
     _cdp_mouse_click(page, pt["x"], pt["y"])
     _sleep_h(1.5)
@@ -17032,7 +17032,7 @@ def _open_tree_adset(page: Page, adset_name: str) -> bool:
         page.get_by_placeholder(_simple.NAME_FIELDS["adset"]).first.wait_for(state="visible", timeout=8000)
         return True
     except Exception:
-        _telemetry.record("locations_second_pass_open", False, note="adset_name_field_hidden")
+        _telemetry.record("audience_location_second_pass_open", False, note="adset_name_field_hidden")
         return False
 
 
