@@ -2342,7 +2342,7 @@
             "session": "run_f1414q_0930"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-F1414Q",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2360,7 +2360,8 @@
           "report": "# ACL-1414 handoff (Worker-F1414Q, run_f1414q_0930)\n\n- PR #415 into stage, branch codex/acl-1414-flaky-menu-test, head bd1bd27 (base work/main 8a87697).\n- Cause: the test greyed out \"Create ad\" via setTimeout(0) after the menu click, so the robot could read the menu before the timer fired and press the enabled item (new_ad_not_open, ads_after 2).\n- Fix: the item is disabled synchronously in a capture click listener, added after the page's own menu listener, so it runs right after it. Assertion unchanged. Test file only, no product code, no CHANGELOG entry (tests only).\n- Other setTimeouts in the file are the page's simulation of Meta's delayed progress dialog and new row, and the tests wait on them by design, so none is this race.\n- Verification (headless, ACL_LIBRARY_* empty): target test 30/30 in a row, whole file 23 passed. -n 4 was not run locally (pytest-xdist missing in the venv), so CI covers it.\n- Overlap: PR #413 (ACL-1412) has the identical hunk. Whichever lands second resolves it.\n- Remaining: CI green on both Python versions, then review."
         },
         "pr": 415,
-        "queued_at": "2026-09-30T19:30:52+00:00"
+        "queued_at": "2026-09-30T19:30:52+00:00",
+        "reviewer": "Reviewer-R1414F"
       }
     },
     "actors": {
@@ -2451,6 +2452,10 @@
       "Worker-F1414Q": {
         "session": "run_f1414q_0930",
         "role": "Worker"
+      },
+      "Reviewer-R1414F": {
+        "session": "review_r1414f_0930",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -2544,10 +2549,20 @@
       412,
       390,
       399,
-      397,
-      414
+      397
     ],
-    "review": null,
+    "review": {
+      "id": "d5fee92ad5594caaab390378014fa9df",
+      "pr": 415,
+      "issues": [
+        414
+      ],
+      "actor": "Reviewer-R1414F",
+      "session": "review_r1414f_0930",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-09-30T19:31:29+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -3119,6 +3134,13 @@
         "issue": 414,
         "pr": 415,
         "actor": "Worker-F1414Q"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-09-30T19:31:29+00:00",
+        "pr": 415,
+        "lane": "d5fee92ad5594caaab390378014fa9df",
+        "actor": "Reviewer-R1414F"
       }
     ],
     "policy": {
