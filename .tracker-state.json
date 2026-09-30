@@ -1872,6 +1872,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T10:31:30+00:00",
         "from_status": "status:backlog"
+      },
+      "397": {
+        "actor": "Worker-P1397F",
+        "session": "run_p1397f_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1397-parallel-tests",
+        "worktree": "C:\\acl-1397-xdist",
+        "id": "21dee6d9f488444b882433b94a89a7a5",
+        "issue": 397,
+        "state": "implementing",
+        "started_at": "2026-09-30T11:27:14+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2064,6 +2076,17 @@
         "state": "implementing",
         "worker": "Worker-T1395E",
         "coordinator": "Coordinator-C0930A"
+      },
+      "397": {
+        "implementers": [
+          {
+            "actor": "Worker-P1397F",
+            "session": "run_p1397f_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-P1397F",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2105,6 +2128,10 @@
       },
       "Worker-T1395E": {
         "session": "run_t1395e_0930",
+        "role": "Worker"
+      },
+      "Worker-P1397F": {
+        "session": "run_p1397f_0930",
         "role": "Worker"
       }
     },
@@ -2438,6 +2465,13 @@
         "issue": 353,
         "pr": 365,
         "actor": "Worker-S1353B"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T11:27:14+00:00",
+        "issue": 397,
+        "claim": "21dee6d9f488444b882433b94a89a7a5",
+        "actor": "Worker-P1397F"
       }
     ],
     "policy": {
