@@ -1853,7 +1853,7 @@
             "session": "run_l1443a_0930"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-L1443A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -1871,7 +1871,8 @@
           "report": "# ACL-1327 \u2014 live verification report (handoff)\n\nScope: the last open acceptance criterion of ACL-1327 \u2014 \"A live run on an affected\naccount builds a publishable draft\" \u2014 plus the missing system-history entry.\nNo source change: the single-screen editor code was integrated in PR 378\n(main 140fc31, release acl-release-2026-09-29b). This PR changes only\n`docs/system/CHANGELOG.md`.\n\n## Evidence\n\nAccount Facebook_1443 \u2014 Meta opens the single-screen `simple_create` editor there.\nLive dashboard build 354d610 (live branch = release 29b + ACL-1353 capture step).\n\n| Run | UTC | Campaign | Result |\n|---|---|---|---|\n| f1a27a7ddcae | 09-29 10:55\u201311:08 | CO_bnc_All_Video_FX_35_29.09 | built end to end, `simple_create_draft: all_edits_saved` |\n| b3a333ff43ab | 09-29 20:26\u201320:47 | CO_bnc_All_Video_Trading_35_29.09 | same |\n| f9b9fc8d7bb3 | 09-30 06:46\u201306:52 | CO_bnc_All_Video_FX_35_30.09 | same, 6 minutes |\n| 8ce1b9985046 | 09-30 06:52\u201307:05 | CO_bnc_All_Video_Trading_35_30.09 | same |\n\nOwner check in Ads Manager, 2026-09-30: campaign and ad set setup correct; one ad\nin the draft (ads 2\u20133 are ACL-1353). The 28.09 defects did not recur: no false\n`audience_location` alarm on the collapsed \"Included: Colombia\" row, no\n`ad_creative_upload: wizard_not_opened`.\n\n## Limits\n\n- Each draft holds ad 1 of 3; the dashboard marks it DO NOT PUBLISH AS IS until\n  ACL-1353. The owner accepted closing ACL-1327 on this basis (2026-09-30).\n- Facebook_9943 did not reach the editor in any 29.09 run (campaign_name /\n  objective / frozen tab before the editor); the criterion needs one affected account.\n- Nothing was published. Package delivery of 29b to buyers is tracked separately.\n\n## Checks\n\nDocumentation only; no code or tests changed. Telemetry:\nC:/acl-live-0928/output/rpa_telemetry.jsonl (runs above)."
         },
         "pr": 389,
-        "queued_at": "2026-09-30T07:16:01+00:00"
+        "queued_at": "2026-09-30T07:16:01+00:00",
+        "reviewer": "Reviewer-R1327A"
       },
       "353": {
         "implementers": [
@@ -1901,6 +1902,10 @@
       "Worker-S1353B": {
         "session": "run_s1353b_0930",
         "role": "Worker"
+      },
+      "Reviewer-R1327A": {
+        "session": "review_r1327a_0930",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -1929,10 +1934,19 @@
         "state": "reviewing"
       }
     },
-    "review_queue": [
-      327
-    ],
-    "review": null,
+    "review_queue": [],
+    "review": {
+      "id": "52c006fa46fc4643b2a00f6375a232fc",
+      "pr": 389,
+      "issues": [
+        327
+      ],
+      "actor": "Reviewer-R1327A",
+      "session": "review_r1327a_0930",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-09-30T07:51:22+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -2003,6 +2017,13 @@
         "issue": 327,
         "pr": 389,
         "actor": "Worker-L1443A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-09-30T07:51:22+00:00",
+        "pr": 389,
+        "lane": "52c006fa46fc4643b2a00f6375a232fc",
+        "actor": "Reviewer-R1327A"
       }
     ],
     "policy": {
