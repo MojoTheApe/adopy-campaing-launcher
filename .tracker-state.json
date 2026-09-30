@@ -1905,7 +1905,7 @@
             "session": "run_l1443a_0930"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-L1443A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2063,6 +2063,34 @@
         "coordinator": "Coordinator-C6N2",
         "started_at": "2026-09-29T21:48:44+00:00",
         "state": "reviewing"
+      },
+      "394": {
+        "id": "52c006fa46fc4643b2a00f6375a232fc",
+        "pr": 389,
+        "issues": [
+          327
+        ],
+        "actor": "Reviewer-R1327A",
+        "session": "review_r1327a_0930",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-09-30T07:51:22+00:00",
+        "state": "reviewing",
+        "report": "Review 389 v2 approved the content (review_389_v2.md), but the head does not contain current main 8b78bb3 (promotion merge of PR #387), so the evidence cannot be recorded. Returned only to merge work/main into the branch; no content change expected (main and stage trees are equal).",
+        "keep_lane": true
+      },
+      "389": {
+        "id": "52c006fa46fc4643b2a00f6375a232fc",
+        "pr": 389,
+        "issues": [
+          327
+        ],
+        "actor": "Reviewer-R1327A",
+        "session": "review_r1327a_0930",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-09-30T07:51:22+00:00",
+        "state": "reviewing",
+        "report": "Review 389 v2 approved the content (review_389_v2.md), but the head does not contain current main 8b78bb3 (promotion merge of PR #387), so the evidence cannot be recorded. Returned only to merge work/main into the branch; no content change expected (main and stage trees are equal).",
+        "keep_lane": true
       }
     },
     "review_queue": [
@@ -2070,20 +2098,7 @@
       353,
       390
     ],
-    "review": {
-      "id": "52c006fa46fc4643b2a00f6375a232fc",
-      "pr": 389,
-      "issues": [
-        327
-      ],
-      "actor": "Reviewer-R1327A",
-      "session": "review_r1327a_0930",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-09-30T07:51:22+00:00",
-      "state": "reviewing",
-      "report": "Review 389 v2 approved the content (review_389_v2.md), but the head does not contain current main 8b78bb3 (promotion merge of PR #387), so the evidence cannot be recorded. Returned only to merge work/main into the branch; no content change expected (main and stage trees are equal).",
-      "keep_lane": true
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -2260,6 +2275,27 @@
         "issue": 390,
         "pr": 393,
         "actor": "Worker-G1390C"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-09-30T09:18:57+00:00",
+        "review": {
+          "id": "52c006fa46fc4643b2a00f6375a232fc",
+          "pr": 389,
+          "issues": [
+            327
+          ],
+          "actor": "Reviewer-R1327A",
+          "session": "review_r1327a_0930",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-09-30T07:51:22+00:00",
+          "state": "reviewing",
+          "report": "Review 389 v2 approved the content (review_389_v2.md), but the head does not contain current main 8b78bb3 (promotion merge of PR #387), so the evidence cannot be recorded. Returned only to merge work/main into the branch; no content change expected (main and stage trees are equal).",
+          "keep_lane": true
+        },
+        "prs": [
+          394
+        ]
       }
     ],
     "policy": {
