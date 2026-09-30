@@ -336,15 +336,43 @@ def get_status(account: str) -> dict[str, str]:
 
     Пусто и `clear` — разное. Первое значит «не смотрели», второе — «смотрели,
     предупреждений не было». Экран обязан их различать.
+
+    И ещё одно различие (ACL-1391): состояние, которое с тех пор не удалось
+    перечитать. 30.09 карта показывала у Doc20 «no warning» от 22.09, хотя
+    все чтения после этого упали, а сам кабинет уже был отключён. Старый ответ
+    выглядел как сегодняшний. `stale` говорит, что после этого состояния была
+    попытка чтения, и она ничего о состоянии не узнала.
     """
-    raw = _load_all().get(_STATUS_PREFIX + account)
+    data = _load_all()
+    raw = data.get(_STATUS_PREFIX + account)
     if not isinstance(raw, dict):
         return {}
-    return {
+    at = str(raw.get("at") or "")
+    out = {
         "status": str(raw.get("status") or ""),
         "status_text": str(raw.get("status_text") or ""),
-        "at": str(raw.get("at") or ""),
+        "at": at,
+        "at_short": f"{at[8:10]}.{at[5:7]}" if len(at) >= 10 else "",
+        "stale": "",
+        "tried_at": "",
+        "tried_error": "",
     }
+    last_at, last = "", None
+    for key, rec in data.items():
+        if key.startswith(_STATUS_PREFIX) or not isinstance(rec, dict):
+            continue
+        if rec.get("account") != account:
+            continue
+        finished = str(rec.get("finished_at") or "")
+        if finished > last_at:
+            last_at, last = finished, rec
+    # Чтение, которое прочитало состояние, само его и записало с тем же
+    # временем, поэтому «позже» здесь значит только неудачу до состояния.
+    if last is not None and at and last_at > at and not last.get("status"):
+        out["stale"] = "1"
+        out["tried_at"] = last_at
+        out["tried_error"] = str(last.get("error") or "")[:200]
+    return out
 
 
 # ─────────────────────────── очередь ───────────────────────────
@@ -1058,6 +1086,41 @@ def _read_status(page, tries: int = STATUS_TRIES) -> tuple[str, str]:
     return answer
 
 
+#: Вид блокировки, который узнаёт RPA (`meta_dom._ACCOUNT_BLOCKED_PATTERNS`), —
+#: словом колонки состояния. Неизвестный вид становится `blocked`, не `clear`.
+_BLOCKED_KIND_STATUS: dict[str, str] = {
+    "account_disabled": "disabled",
+    "verification_required": "restricted",
+    "start_authentication": "blocked",
+    "authentication_error": "blocked",
+}
+
+#: Кто весомее, если на странице несколько признаков сразу.
+_STATUS_RANK = {"disabled": 0, "restricted": 1, "review": 2, "blocked": 3}
+
+
+def _blocked_on_page(page) -> tuple[str, str] | None:
+    """Блокировка, которую видит RPA перед публикацией, — по отдельным ячейкам.
+
+    Баннера у отключённого кабинета может не быть вовсе: у Doc20 30.09 было
+    только «Account disabled» в колонке Delivery, и чтение отвечало «no
+    warning». Признаки берутся у RPA, а не копируются: две копии одного списка
+    уже разошлись, и ошиблась та, что показывает статус на экране (ACL-1391).
+    Совпадение — весь текст ячейки, а не подстрока страницы: справка «Why is
+    my ad account disabled?» есть и у здорового кабинета.
+    """
+    try:
+        from src.fb_ads_rpa import meta_dom
+
+        text = meta_dom._account_blocked_text(page)
+        if not text:
+            return None
+        kind = meta_dom._account_blocked_match(text)
+    except Exception:
+        return None
+    return _BLOCKED_KIND_STATUS.get(kind or "", "blocked"), text
+
+
 def _status_once(page) -> tuple[str, str]:
     """Один взгляд на страницу. Ожиданием заведует `_read_status`."""
     try:
@@ -1068,12 +1131,19 @@ def _status_once(page) -> tuple[str, str]:
     if not flat:
         return "unknown", ""
     low = flat.lower()
+    found: list[tuple[str, str]] = []
     for state, phrases in _STATUS_SIGNS:
-        for phrase in phrases:
-            at = low.find(phrase)
-            if at != -1:
-                start = max(0, at - 60)
-                return state, flat[start : at + len(phrase) + 140].strip()
+        hit = next((p for p in phrases if p in low), None)
+        if hit:
+            at = low.find(hit)
+            start = max(0, at - 60)
+            found.append((state, flat[start : at + len(hit) + 140].strip()))
+            break
+    cell = _blocked_on_page(page)
+    if cell:
+        found.append(cell)
+    if found:
+        return min(found, key=lambda f: _STATUS_RANK.get(f[0], len(_STATUS_RANK)))
 
     # Банер есть, а какой — не опознали. Говорим это вслух её же словами.
     #
