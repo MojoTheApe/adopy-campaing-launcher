@@ -6231,6 +6231,16 @@ def run_recorded_campaign_flow(
                     return "browser_closed"
                 ad_level_fails.append(f"destination_sweep:{str(exc)[:60]}")
 
+    # ACL-1390: страна не встала на своём шаге (поиск Meta не показал
+    # подсказок) — кампания доделана, теперь второй проход по Locations той же
+    # группы, в том же черновике. Не встала и так — прежняя остановка.
+    if country and not page_state["closed"] and any(
+            f.split(":", 1)[0] == "audience_location" for f in soft_fails):
+        retry_location_at_end(page, soft_fails, country=country, simple=simple,
+                              adset_name=adset_name)
+        still = any(f.split(":", 1)[0] == "audience_location" for f in soft_fails)
+        _shot("fail_locations_second_pass" if still else "after_locations_second_pass")
+
     # ACL-1327: черновик нового редактора сохраняется так же, как прежнего, —
     # автосохранением Meta («All edits saved»); Publish робот не жмёт никогда.
     # Дожидаемся сохранения и пишем, подтвердилось ли оно.
@@ -15786,61 +15796,127 @@ def _wait_location_options(root, timeout_s: float = 6.0) -> bool:
         time.sleep(0.3)
 
 
+#: Лестница попыток поиска страны (ACL-1390): (что набрать, задержка между
+#: клавишами в мс, сколько ждать список в с). 30.09 07:36 (Doc19, SA_arc PF,
+#: 64cc3d5510b2): «Saudi Arabia» дважды без подсказок — поиск Meta подвис, за
+#: 25 минут до того та же страна ставилась нормально. Первая попытка — то,
+#: что уже набрал вызывающий, с прежним ожиданием: когда подсказки есть сразу,
+#: путь не медленнее прежнего. Дальше — клик обратно в поле, очистка и набор
+#: медленнее; короткий префикс; самое долгое ожидание.
+_LOCATION_ATTEMPTS: tuple[tuple[str, int, float], ...] = (
+    ("full", 0, 6.0),
+    ("full", 120, 8.0),
+    ("prefix", 120, 10.0),
+    ("full", 160, 15.0),
+)
+
+#: Поле поиска локаций — у Meta это бывает и `<span placeholder=…>`.
+_LOCATION_INPUT_SEL = "[placeholder*='location' i]:visible, [placeholder*='ubicaci' i]:visible"
+
+
+def _location_prefix(search_term: str) -> str:
+    """Короче, чем страна: первое слово или начало единственного (≥ 4 букв)."""
+    term = (search_term or "").strip()
+    first = term.split()[0] if term.split() else term
+    if first != term and len(first) >= 4:
+        return first
+    return term[: max(4, len(term) // 2 + 1)]
+
+
+def _retype_location_search(root, page: Page, text: str, delay_ms: int) -> None:
+    """Вернуться в поле поиска, очистить его и набрать `text` заново."""
+    try:
+        box = root.locator(_LOCATION_INPUT_SEL).first
+        if box.count():
+            box.click(timeout=2000)
+    except Exception:
+        pass
+    try:
+        page.keyboard.press("ControlOrMeta+A")
+        page.keyboard.press("Backspace")
+        _sleep_h(0.5)
+        if text:
+            page.keyboard.type(text, delay=delay_ms)
+    except Exception:
+        pass
+
+
+def _country_option_res(search_term: str) -> tuple[re.Pattern, re.Pattern]:
+    """Вариант «<страна> (Country)» и вариант, где стоит одно имя страны."""
+    name = re.escape(search_term.strip())
+    tagged = re.compile(rf"^\s*{name}\s*[(\-–·,]?\s*(country|país|pais)\b", re.I)
+    bare = re.compile(rf"^\s*{name}\s*$", re.I)
+    return tagged, bare
+
+
+def _click_country_option(root, page: Page, search_term: str) -> tuple[str, list[str]]:
+    """Выбрать в открытом списке именно страну.
+
+    Ответ: ("picked" | "entered" | "no_country_option", тексты вариантов).
+    Регион или город с тем же именем не берётся никогда (ACL-1390): такой
+    выбор молча сузил бы таргетинг до части страны. Если вариантов с
+    role=option не видно, а список открыт (aria-expanded), — Enter, как
+    раньше (17.09 19:45); что добавилось, проверяют строки карточки.
+    """
+    tagged, bare = _country_option_res(search_term)
+    options = root.locator("[role=option]:visible")
+    try:
+        texts = [t.strip() for t in options.all_inner_texts()[:8]]
+    except Exception:
+        texts = []
+    if texts:
+        for rx in (tagged, bare):
+            try:
+                opt = options.filter(has_text=rx).first
+                if opt.count() and opt.is_visible():
+                    opt.click(timeout=4000)
+                    _sleep_h(0.6)
+                    return "picked", texts
+            except Exception:
+                continue
+        return "no_country_option", texts
+    page.keyboard.press("Enter")
+    _sleep_h(0.5)
+    return "entered", texts
+
+
 def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
-    """Pick the country-level suggestion from an open location autocomplete.
+    """Pick the country-level suggestion from the location autocomplete.
 
     Facebook's location search often lists several granularities for the
     same typed text (e.g. a "Costa Rica (Country)" entry alongside a city or
     region that happens to share the name) — per live user guidance
-    (2026-07-24), prefer the option explicitly tagged "(Country)" over a
-    blind first-match, since picking the wrong granularity would silently
-    narrow targeting instead of the whole country. Falls back to the first
-    visible option, then a bare Enter, if no country-tagged option shows up.
+    (2026-07-24) only the option tagged "(Country)" (or the bare country
+    name) is taken; a region or city of the same name never is (ACL-1390).
+
+    When no suggestions appear, the search is retried in place up to
+    `_LOCATION_ATTEMPTS` times, escalating: click back into the field, clear
+    it and type slower; a shorter prefix; the longest wait. Each attempt after
+    a failed first one is a telemetry row `audience_location_attempt`.
     """
-    country_re = re.compile(rf"^{re.escape(search_term)}\s*\(country\)", re.I)
-    if not _wait_location_options(root):
-        # 17.09 (CO_bnc FX, два прогона подряд): «Colombia» в поле, а список
-        # подсказок так и не открылся (aria-expanded=false) — Enter ничего не
-        # добавлял, осталась United States. Набираем заново, чтобы поиск
-        # запустился ещё раз.
-        try:
-            page.keyboard.press("ControlOrMeta+A")
-            page.keyboard.press("Backspace")
-            _sleep_h(0.5)
-            page.keyboard.type(search_term, delay=60)
-        except Exception:
-            pass
-        if not _wait_location_options(root):
-            _telemetry.record("audience_location", None, note="no_location_suggestions",
-                              diag={"typed": search_term})
-            return False
-    for sel in ("[role=option]:visible", "li[role=option]"):
-        try:
-            opt = root.locator(sel).filter(has_text=country_re).first
-            if opt.count() and opt.is_visible():
-                opt.click(timeout=4000)
-                _sleep_h(0.6)
-                return True
-        except Exception:
-            continue
-    for sel in (
-        "[role=option]:visible",
-        "[role=listbox] [role=option]:first-child",
-        "li[role=option]:first-child",
-        "ul[role=listbox] li:first-child",
-        "li[role=option]",
-    ):
-        try:
-            sug = root.locator(sel).first
-            if sug.count() and sug.is_visible():
-                sug.click(timeout=4000)
-                _sleep_h(0.6)
-                return True
-        except Exception:
-            continue
-    page.keyboard.press("Enter")
-    _sleep_h(0.5)
-    return True
+    for n, (what, delay_ms, wait_s) in enumerate(_LOCATION_ATTEMPTS, start=1):
+        typed = _location_prefix(search_term) if what == "prefix" else search_term
+        if n > 1:
+            # 17.09 (CO_bnc FX): «Colombia» в поле, а список не открылся
+            # (aria-expanded=false) — Enter ничего не добавлял. Набираем заново.
+            _retype_location_search(root, page, typed, delay_ms)
+        outcome, texts = "no_suggestions", []
+        if _wait_location_options(root, timeout_s=wait_s):
+            outcome, texts = _click_country_option(root, page, search_term)
+        if outcome in ("picked", "entered"):
+            if n > 1:
+                _telemetry.record("audience_location_attempt", True, note=outcome,
+                                  diag={"attempt": n, "typed": typed, "options": texts,
+                                        "outcome": outcome})
+            return True
+        _telemetry.record("audience_location_attempt", False, note=outcome,
+                          diag={"attempt": n, "typed": typed, "options": texts,
+                                "outcome": outcome})
+    # Поле оставляем пустым: второй проход (ACL-1390) наберёт страну начисто.
+    _retype_location_search(root, page, "", 0)
+    _telemetry.record("audience_location", None, note="no_location_suggestions",
+                      diag={"typed": search_term, "attempts": len(_LOCATION_ATTEMPTS)})
+    return False
 
 
 def _remove_stale_default_locations(page: Page, keep_text: str) -> None:
@@ -16910,6 +16986,135 @@ def fill_audience_location(page: Page, country_code: str) -> bool:
         except Exception:
             pass
     return False
+
+
+# ── Второй проход по стране (ACL-1390) ───────────────────────────────────
+
+_TREE_ADSET_JS = r"""
+  (name) => {
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    // Строка группы в дереве слева узнаётся по своей обёртке, а не по имени:
+    // у кампании и группы в этом потоке одно и то же имя (create_additional_ad).
+    const rows = [...document.querySelectorAll('[data-surface$="editor_tree:adset"] [role=rowheader]')];
+    if (!rows.length) return {why: 'not_found'};
+    const row = rows.find(r => name && norm(r.textContent).includes(name))
+      || (rows.length === 1 ? rows[0] : null);
+    if (!row) return {why: 'ambiguous', rows: rows.length};
+    row.scrollIntoView({block: 'center'});
+    const label = row.querySelector('[id^="default-button-for-action-menu"]') || row;
+    const r = label.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return {why: 'hidden'};
+    const x = r.x + Math.min(r.width / 2, 80), y = r.y + r.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    if (!hit || !row.contains(hit)) return {why: 'covered'};
+    return {x, y};
+  }
+"""
+"""Точка клика по строке группы объявлений в дереве прежнего редактора."""
+
+
+def _open_tree_adset(page: Page, adset_name: str) -> bool:
+    """Открыть группу объявлений кликом по её строке в дереве слева.
+
+    Успех — видимое поле имени группы: редактор действительно на ней.
+    """
+    try:
+        pt = page.evaluate(_TREE_ADSET_JS, adset_name or "") or {}
+    except Exception as exc:
+        pt = {"why": "error:" + type(exc).__name__}
+    if "x" not in pt:
+        _telemetry.record("locations_second_pass_open", False, note=str(pt.get("why") or "not_found"))
+        return False
+    _cdp_mouse_click(page, pt["x"], pt["y"])
+    _sleep_h(1.5)
+    wait_editor_saved(page)
+    try:
+        page.get_by_placeholder(_simple.NAME_FIELDS["adset"]).first.wait_for(state="visible", timeout=8000)
+        return True
+    except Exception:
+        _telemetry.record("locations_second_pass_open", False, note="adset_name_field_hidden")
+        return False
+
+
+def _locations_read_back(page: Page, search_term: str) -> tuple[bool, list[str] | None]:
+    """Что стоит в Locations сейчас: (только наша страна?, прочитанные имена).
+
+    Строки раскрытой карточки, а если она свёрнута — сводка «Inclusion: …».
+    Ничего не прочитано — не успех.
+    """
+    keep = (search_term or "").strip().lower()
+    rows = _location_rows_settled(page)
+    if rows:
+        names = list(dict.fromkeys(r["name"] for r in rows))
+        return bool(keep) and all(keep in n.lower() for n in names), names
+    summary = _location_summary_countries(page)
+    if summary:
+        return _only_wanted_in_summary(page, search_term), summary
+    return False, None
+
+
+def _location_second_pass(page: Page, country: str, *, simple: bool, adset_name: str) -> bool:
+    """Вернуться к Locations группы объявлений и поставить страну ещё раз.
+
+    Тот же черновик: не повтор кампании и не второй черновик. Сначала
+    читаем, что стоит; стоит одна наша страна — только подтверждаем. Иначе
+    шаг локаций целиком (лестница попыток, снятие страны Meta по умолчанию)
+    и проверка перечитыванием карточки.
+    """
+    term = _country_search_term(country)
+    if simple:
+        reached = bool(_simple.scroll_to_level(page, "adset").get("ok"))
+        if reached:
+            _simple.open_card(page, "Audience")
+    else:
+        reached = _open_tree_adset(page, adset_name)
+    if not reached:
+        _telemetry.record("audience_location_second_pass", False, note="adset_not_reached",
+                          diag={"keep": term, "simple": simple})
+        return False
+    _close_open_listboxes(page, "before_audience_location_second_pass")
+    ok_before, before = _locations_read_back(page, term)
+    after = before
+    ok = ok_before
+    if not ok_before:
+        try:
+            filled = bool(fill_audience_location(page, country))
+        except Exception:
+            filled = False
+        ok_after, after = _locations_read_back(page, term)
+        ok = filled and ok_after
+    wait_editor_saved(page)
+    note = "already_listed" if ok_before else ("fixed" if ok else "not_set")
+    _telemetry.record("audience_location_second_pass", ok, note=note,
+                      diag={"keep": term, "simple": simple,
+                            "listed_before": before, "listed_after": after})
+    return ok
+
+
+def retry_location_at_end(page: Page, soft_fails: list[str], *, country: str,
+                          simple: bool, adset_name: str) -> None:
+    """Если страна не встала на своём шаге — второй проход в конце кампании.
+
+    Вызывается, когда остальная кампания уже собрана. Встала — отказ
+    `audience_location` снимается и вместо него остаётся предупреждение
+    `audience_location_second_pass` (его видно в панели задания). Не встала —
+    прежняя остановка `audience_location`, больше ничего не меняется.
+    """
+    failed = [f for f in soft_fails if f.split(":", 1)[0].strip() == "audience_location"]
+    if not country or not failed:
+        return
+    try:
+        fixed = _location_second_pass(page, country, simple=simple, adset_name=adset_name)
+    except Exception as exc:
+        _telemetry.record("audience_location_second_pass", False,
+                          note="error:" + type(exc).__name__, diag={"error": str(exc)[:160]})
+        return
+    if not fixed:
+        return
+    soft_fails[:] = [f for f in soft_fails if f not in failed]
+    soft_fails.append(
+        f"audience_location_second_pass:{_country_search_term(country)} was set on the second "
+        "pass and read back from Locations")
 
 
 def _advantage_plus_audience_on(page: Page) -> bool | None:

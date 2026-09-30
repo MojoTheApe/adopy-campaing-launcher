@@ -1,5 +1,31 @@
 # System history
 
+## The country is retried in place and once more at the end of the campaign — ACL-1390
+
+2026-09-30 07:36 UTC (FacebookDoc19, SA_arc_All_Image_PF_35_30.09, run 64cc3d5510b2):
+Meta's location search showed no suggestions for "Saudi Arabia" twice, the campaign
+ended "the country was not set", although the same account had set Saudi Arabia 25
+minutes earlier. Owner decision 2026-09-30: retry in place and once more at the end.
+
+- In place: up to 4 attempts. The first is the text already typed with the old 6 s
+  wait (no slowdown when suggestions appear at once); then click back into the field,
+  clear it and type slower (8 s); the first word / a shorter prefix (10 s); the full
+  name typed slowest with the longest wait (15 s). Only the "<country> (Country)"
+  option or the bare country name is picked — a region or city of the same name never
+  is (the old "first option" fallback is gone; with no `role=option` rows but an open
+  list, Enter stays as before and the rows check decides). Every attempt after a failed
+  first one is a telemetry row `audience_location_attempt` (attempt, typed, options,
+  outcome). On give-up the search field is left empty.
+- Second pass: if `audience_location` still failed, after the rest of the campaign
+  (ads and the destination sweep) the robot returns to the same ad set — the ad-set row
+  of the left tree in the classic editor, the ad-set section and Audience card in the
+  single-screen editor — reads Locations, and runs the location step once more (same
+  default-country removal), then reads Locations back. Fixed → the blocking
+  `audience_location` is replaced by the warning `audience_location_second_pass`
+  shown on the job card; not fixed → the same `audience_location` stop as before.
+  Telemetry `audience_location_second_pass` (listed_before / listed_after). No campaign
+  replay, no second draft, no Publish.
+
 ## Sentry events carry the failing page section; a read-only triage digest — ACL-1325
 
 2026-09-26 a new "Suggest an audience" Audience layout on one account broke "Further

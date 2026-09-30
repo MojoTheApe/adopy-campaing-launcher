@@ -135,7 +135,7 @@ def test_no_suggestions_after_retry_fails_without_blind_enter(page, monkeypatch)
     page.set_content("<input placeholder='Search locations' id='country'>")
     page.locator('#country').fill('Colombia')
     page.locator('#country').focus()
-    monkeypatch.setattr(md, '_wait_location_options', lambda root: False)
+    monkeypatch.setattr(md, '_wait_location_options', lambda root, **k: False)
     monkeypatch.setattr(md._telemetry, 'record', lambda *a, **k: None)
     page.evaluate("window.entered=false; document.addEventListener('keydown', e => {if(e.key==='Enter') window.entered=true;})")
     assert md._pick_country_suggestion(page, page, 'Colombia') is False
