@@ -1815,6 +1815,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T07:11:40+00:00",
         "from_status": "status:todo"
+      },
+      "390": {
+        "actor": "Worker-G1390C",
+        "session": "run_g1390c_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1390-location-retry",
+        "worktree": "C:\\acl-1390-location",
+        "id": "55ff13b79979496594f60958ae39e344",
+        "issue": 390,
+        "state": "implementing",
+        "started_at": "2026-09-30T08:00:03+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -1884,6 +1896,17 @@
         "state": "implementing",
         "worker": "Worker-S1353B",
         "coordinator": "Coordinator-C0930A"
+      },
+      "390": {
+        "implementers": [
+          {
+            "actor": "Worker-G1390C",
+            "session": "run_g1390c_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-G1390C",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -1906,6 +1929,10 @@
       "Reviewer-R1327A": {
         "session": "review_r1327a_0930",
         "role": "Reviewer"
+      },
+      "Worker-G1390C": {
+        "session": "run_g1390c_0930",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -2024,6 +2051,13 @@
         "pr": 389,
         "lane": "52c006fa46fc4643b2a00f6375a232fc",
         "actor": "Reviewer-R1327A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T08:00:03+00:00",
+        "issue": 390,
+        "claim": "55ff13b79979496594f60958ae39e344",
+        "actor": "Worker-G1390C"
       }
     ],
     "policy": {
