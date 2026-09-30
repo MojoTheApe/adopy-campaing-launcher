@@ -1887,20 +1887,6 @@
         "state": "implementing",
         "started_at": "2026-09-30T12:43:13+00:00",
         "from_status": "status:backlog"
-      },
-      "330": {
-        "actor": "Worker-S1330J",
-        "session": "run_s1330j_0930",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1330-sentry-trigger",
-        "worktree": "C:\\acl-1330-sentry-trigger",
-        "id": "58a5a35d1a4b4683ac4230bc7ce4ad5a",
-        "issue": 330,
-        "state": "handoff",
-        "started_at": "2026-09-30T14:22:58+00:00",
-        "from_status": "status:backlog",
-        "pr": 410,
-        "report": "# ACL-1330 handoff \u2014 Worker-S1330J\n\nPR #410 into stage, branch codex/acl-1330-sentry-trigger, head 1a8ab92 (work/main and work/stage merged).\n\nRelay decision: Sentry webhooks cannot add an Authorization header, which the routine's /fire needs, so a relay is required. Chosen host: Cloudflare Worker (free plan, dashboard paste, secrets, KV for dedupe, waitUntil for Sentry's 1 s limit). GitHub Actions repository_dispatch has the same header problem; anonymous Apps Script web apps are blocked by the Adopy Workspace policy.\n\nDelivered: deploy/sentry-relay/worker.js (+ worker.test.js, package.json, sample_event_alert.json), docs/system/ROUTINE_SENTRY_PROMPT.md, docs/system/SENTRY_ROUTINE_SETUP.md, scripts/sentry_selftest_event.py, tests/test_sentry_relay.py, config/sentry_triage_map.json (relay_selftest row), docs/system/SENTRY_TRIAGE.md, docs/system/CHANGELOG.md.\n\nChecks: node --test deploy/sentry-relay/worker.test.js \u2014 16 passed; pytest tests/test_sentry_relay.py tests/test_sentry_triage.py \u2014 22 passed; scripts/acl_scan_secrets.py clean. Full suite runs in CI.\n\nRemaining: owner setup by the guide, then the acceptance checks (self-test run within 1 minute with the laptop closed, phone push verified or fallback e-mail, duplicate alert does not fire). Risks: research-preview API; push for routine runs undocumented; the routine must have MojoTheApe/task-tracker attached; KV eventual consistency."
       }
     },
     "tasks": {
@@ -2201,9 +2187,25 @@
             "session": "run_s1330j_0930"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1330J",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1330J",
+          "session": "run_s1330j_0930",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1330-sentry-trigger",
+          "worktree": "C:\\acl-1330-sentry-trigger",
+          "id": "58a5a35d1a4b4683ac4230bc7ce4ad5a",
+          "issue": 330,
+          "state": "handoff",
+          "started_at": "2026-09-30T14:22:58+00:00",
+          "from_status": "status:backlog",
+          "pr": 410,
+          "report": "# ACL-1330 handoff \u2014 Worker-S1330J\n\nPR #410 into stage, branch codex/acl-1330-sentry-trigger, head 1a8ab92 (work/main and work/stage merged).\n\nRelay decision: Sentry webhooks cannot add an Authorization header, which the routine's /fire needs, so a relay is required. Chosen host: Cloudflare Worker (free plan, dashboard paste, secrets, KV for dedupe, waitUntil for Sentry's 1 s limit). GitHub Actions repository_dispatch has the same header problem; anonymous Apps Script web apps are blocked by the Adopy Workspace policy.\n\nDelivered: deploy/sentry-relay/worker.js (+ worker.test.js, package.json, sample_event_alert.json), docs/system/ROUTINE_SENTRY_PROMPT.md, docs/system/SENTRY_ROUTINE_SETUP.md, scripts/sentry_selftest_event.py, tests/test_sentry_relay.py, config/sentry_triage_map.json (relay_selftest row), docs/system/SENTRY_TRIAGE.md, docs/system/CHANGELOG.md.\n\nChecks: node --test deploy/sentry-relay/worker.test.js \u2014 16 passed; pytest tests/test_sentry_relay.py tests/test_sentry_triage.py \u2014 22 passed; scripts/acl_scan_secrets.py clean. Full suite runs in CI.\n\nRemaining: owner setup by the guide, then the acceptance checks (self-test run within 1 minute with the laptop closed, phone push verified or fallback e-mail, duplicate alert does not fire). Risks: research-preview API; push for routine runs undocumented; the routine must have MojoTheApe/task-tracker attached; KV eventual consistency."
+        },
+        "pr": 410,
+        "queued_at": "2026-09-30T14:50:08+00:00"
       }
     },
     "actors": {
@@ -2332,7 +2334,8 @@
       388,
       395,
       406,
-      399
+      399,
+      330
     ],
     "review": {
       "id": "8cbf19e07bf74e0f8f1b8515e7c4763c",
@@ -2706,6 +2709,13 @@
         "at": "2026-09-30T14:22:58+00:00",
         "issue": 330,
         "claim": "58a5a35d1a4b4683ac4230bc7ce4ad5a",
+        "actor": "Worker-S1330J"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-09-30T14:50:08+00:00",
+        "issue": 330,
+        "pr": 410,
         "actor": "Worker-S1330J"
       }
     ],
