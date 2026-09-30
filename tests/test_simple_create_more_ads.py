@@ -8,9 +8,10 @@ menu» строки группы, дерево после «Create ad» (вто�
 Ad»), раздел имени объявления 1 и нового объявления, Media нового.
 
 Синтетическое здесь только поведение Meta между снимками: нажатие «Action
-menu» показывает снятое меню, нажатие «Create ad» — окно на ~1 с (живьём оно
-было на экране через ~7 с и исчезло к ~13 с, текста в снимках нет), затем
-дерево и раздел имени сменяются снятыми «после».
+menu» показывает снятое меню, нажатие «Create ad» — окно прогресса Meta
+«Creating...» на ~1 с (`/am/lib:ads_progress_dialog_modal_8e9c`, живьём 30.09,
+d66a22d0fa30), затем дерево и раздел имени сменяются снятыми «после».
+Молчание вкладки, пока Meta занята, — подменой `_read_ads` (fix round 2).
 """
 from __future__ import annotations
 
@@ -79,9 +80,10 @@ _SCRIPT = """
     }
     if (e.target.closest('[data-surface="%CREATE%"]')) {
       swap('menu-host', '');
-      const dlg = document.createElement('div');
-      dlg.setAttribute('role', 'dialog');
-      dlg.textContent = 'Loading creation';
+      // Как живьём 30.09 (d66a22d0fa30): окно прогресса Meta «Creating...».
+      const dlg = document.createElement('span');
+      dlg.setAttribute('data-surface', '/am/lib:ads_progress_dialog_modal_8e9c');
+      dlg.innerHTML = '<div role="dialog">Creating...</div>';
       document.body.appendChild(dlg);
       window.creates = (window.creates || 0) + 1;
       setTimeout(() => {
@@ -205,7 +207,7 @@ def test_create_ad_from_the_ad_set_menu_opens_the_new_ad(env):
     assert _forbidden(clicks) == []
     assert page.evaluate("window.creates") == 1
     # Окно после «Create ad» названо, ждали, пока уйдёт.
-    assert got["dialog"]["text"] == "Loading creation" and got["dialog"]["still_open"] is False
+    assert got["dialog"]["text"] == "Creating..." and got["dialog"]["still_open"] is False
     # Меню без номера объекта в телеметрии.
     assert "ID: # Copy" in got["menu"]["labels"] or "ID:" in " ".join(got["menu"]["labels"])
     assert not any(re.search(r"\d{5,}", lab) for lab in got["menu"]["labels"])
@@ -325,9 +327,9 @@ def test_a_dialog_that_never_closes_is_named_and_the_ad_is_not_filled(env):
     got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"], wait_s=3)
     assert not got["ok"] and got["why"] == "dialog_open", got
     assert got["ads_after"] == 2
-    assert got["dialog"]["text"] == "Loading creation" and got["dialog"]["still_open"] is True
+    assert got["dialog"]["text"] == "Creating..." and got["dialog"]["still_open"] is True
     assert got["text"].startswith("a Meta dialog stayed open for")
-    assert got["text"].endswith('(dialog: "Loading creation")')
+    assert got["text"].endswith('(dialog: "Creating...")')
     assert got["capture"], "снимок окна не сохранён"
     assert len(_clicks(env["page"])) == 2, "после окна что-то нажимали"
     row = [r for r in env["rows"] if r[0] == "simple_create_more_ads"][0]
@@ -372,3 +374,120 @@ def test_the_wait_lasts_until_the_dialog_closes(env):
     got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"], wait_s=10)
     assert got["ok"], got
     assert got["dialog"]["still_open"] is False and got["dialog"]["until_s"] >= 1.5
+
+
+# ── Fix round 2 (живьём 30.09): Meta занята «Creating...», вкладка молчит ─
+
+def _silence_after_dialog(monkeypatch, silent_s: float) -> dict:
+    """После первого чтения с окном прогресса `_read_ads` не отвечает
+    `silent_s` секунд (как `_eval_bounded` на занятой вкладке)."""
+    real = sc._read_ads
+    state: dict = {"since": None, "errors": 0}
+
+    def read(page):
+        if state["since"] is not None and time.time() - state["since"] < silent_s:
+            state["errors"] += 1
+            time.sleep(0.2)
+            return {"error": "TimeoutError"}
+        got = real(page)
+        if state["since"] is None and sc.is_progress_dialog(got.get("dialog")):
+            state["since"] = time.time()
+        return got
+
+    monkeypatch.setattr(sc, "_read_ads", read)
+    return state
+
+
+def test_the_live_progress_dialog_is_recognised():
+    assert sc.is_progress_dialog({"text": "Creating...", "surface": "/am/lib:ads_progress_dialog_modal_8e9c"})
+    assert sc.is_progress_dialog({"text": "Creating...", "surface": ""})
+    assert sc.is_progress_dialog({"text": "", "surface": "/am/lib:ads_progress_dialog_modal_#"})
+    assert not sc.is_progress_dialog({"text": "Turn off ad blocker", "surface": "/am/lib:x"})
+    assert not sc.is_progress_dialog({"text": "Create ad", "surface": ""})
+    assert not sc.is_progress_dialog(None)
+
+
+def test_a_busy_creating_dialog_is_waited_out(env, monkeypatch):
+    """Страница не отвечала 2 с при «Creating...» — это «Meta занята»: ждём,
+    объявление создано и открыто, время занятости — в итоге шага."""
+    monkeypatch.setattr(sc, "META_BUSY_WAIT_S", 8.0)
+    state = _silence_after_dialog(monkeypatch, 2.0)
+    got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"], wait_s=1.0)
+    assert got["ok"], got
+    assert state["errors"] > 0, "страница не замолкала — тест ничего не проверил"
+    assert got["busy_s"] is not None and 1.5 <= got["busy_s"] < 8
+    assert len(_clicks(env["page"])) == 2, "во время ожидания что-то нажимали"
+    row = [r for r in env["rows"] if r[0] == "simple_create_more_ads"][0]
+    assert row[1] is True and row[2] == "created" and row[3]["busy_s"] == got["busy_s"]
+
+
+def test_meta_busy_longer_than_the_limit_is_tab_frozen(env, monkeypatch):
+    monkeypatch.setattr(sc, "META_BUSY_WAIT_S", 2.0)
+    _silence_after_dialog(monkeypatch, 60.0)
+    t0 = time.time()
+    got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"], wait_s=1.0)
+    assert not got["ok"] and got["why"] == "tab_frozen"
+    assert time.time() - t0 < 20, "ждали дольше предела"
+    assert got["busy_s"] >= 2.0
+    assert "progress dialog" in got["text"] and "did not answer" in got["text"]
+    assert len(_clicks(env["page"])) == 2
+
+
+def _fake_clock(monkeypatch, script: list) -> dict:
+    clock = {"t": 1000.0}
+    reads = iter(script)
+    monkeypatch.setattr(sc, "_read_ads", lambda p: dict(next(reads)))
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(sc.time, "time", lambda: clock["t"])
+    monkeypatch.setattr(sc.time, "sleep", lambda s: clock.__setitem__("t", clock["t"] + s))
+    return clock
+
+
+CREATING = {"text": "Creating...", "surface": "/am/lib:ads_progress_dialog_modal_8e9c"}
+
+
+def test_silence_without_the_progress_dialog_is_still_tab_frozen(monkeypatch):
+    """Вкладка молчит, а окна прогресса не было — ждать нечего (как прежде)."""
+    clock = _fake_clock(monkeypatch, [{"ads": 1, "name_value": "Sample Ad 01", "dialog": None}]
+                        + [{"error": "TimeoutError"}] * 200)
+    got = sc._wait_new_ad(None, 1, ["Sample Ad 01"], wait_s=30, busy_wait_s=120)
+    assert got.get("error") and clock["t"] - 1000.0 < 2.0
+
+
+def test_a_closed_tab_is_not_waited_for(monkeypatch):
+    clock = _fake_clock(monkeypatch, [{"ads": 1, "name_value": "Sample Ad 01", "dialog": CREATING}]
+                        + [{"error": "TargetClosedError"}] * 200)
+    got = sc._wait_new_ad(None, 1, ["Sample Ad 01"], wait_s=30, busy_wait_s=120)
+    assert got["error"] == "TargetClosedError" and clock["t"] - 1000.0 < 2.0
+
+
+def test_busy_just_under_and_over_the_limit(monkeypatch):
+    """Предел — от первого неответа: 110 с молчания — ждём и продолжаем,
+    130 с — сдаёмся на 120 с."""
+    ok_script = ([{"ads": 1, "name_value": "Sample Ad 01", "dialog": CREATING}]
+                 + [{"error": "TimeoutError"}] * 110
+                 + [{"ads": 2, "name_value": "New Leads Ad", "dialog": None}] * 3)
+    clock = _fake_clock(monkeypatch, ok_script)
+    got = sc._wait_new_ad(None, 1, ["Sample Ad 01"], wait_s=30, busy_wait_s=120)
+    assert got["name_stable"] and got["ads"] == 2 and got["busy_s"] == 110.0
+    bad_script = ([{"ads": 1, "name_value": "Sample Ad 01", "dialog": CREATING}]
+                  + [{"error": "TimeoutError"}] * 130
+                  + [{"ads": 2, "name_value": "New Leads Ad", "dialog": None}] * 3)
+    clock = _fake_clock(monkeypatch, bad_script)
+    got = sc._wait_new_ad(None, 1, ["Sample Ad 01"], wait_s=30, busy_wait_s=120)
+    assert got.get("error") and got["busy_s"] == 120.0
+    assert clock["t"] - 1000.0 <= 121.0
+
+
+def test_the_busy_wait_needs_the_dialog_gone_too(monkeypatch):
+    """Страница снова ответила, но «Creating...» ещё на экране — ждём дальше
+    обычного срока, пока окно не уйдёт (в пределах предела занятости)."""
+    script = ([{"ads": 1, "name_value": "Sample Ad 01", "dialog": CREATING}]
+              + [{"error": "TimeoutError"}] * 5
+              + [{"ads": 2, "name_value": "New Leads Ad", "dialog": CREATING}] * 40
+              + [{"ads": 2, "name_value": "New Leads Ad", "dialog": None}] * 3)
+    _fake_clock(monkeypatch, script)
+    got = sc._wait_new_ad(None, 1, ["Sample Ad 01"], wait_s=10, busy_wait_s=120)
+    assert got["name_stable"] and not got.get("dialog") and got["ads"] == 2
+    assert got["busy_s"] == 5.0
+    assert got["waited_s"] > 10, "обычный срок не продлён"
