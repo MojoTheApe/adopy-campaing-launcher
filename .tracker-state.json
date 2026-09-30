@@ -1836,9 +1836,11 @@
         "worktree": "C:\\acl-1327-live",
         "id": "7ab6086447814a138961ad8e498a8dab",
         "issue": 327,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-09-30T08:01:52+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 389,
+        "report": "# ACL-1327 \u2014 live verification report (handoff)\n\nScope: the last open acceptance criterion of ACL-1327 \u2014 \"A live run on an affected\naccount builds a publishable draft\" \u2014 plus the missing system-history entry.\nNo source change: the single-screen editor code was integrated in PR 378\n(main 140fc31, release acl-release-2026-09-29b). This PR changes only\n`docs/system/CHANGELOG.md`.\n\n## Evidence\n\nAccount Facebook_1443 \u2014 Meta opens the single-screen `simple_create` editor there.\nLive dashboard build 354d610 (live branch = release 29b + ACL-1353 capture step).\n\n| Run | UTC | Campaign | Result |\n|---|---|---|---|\n| f1a27a7ddcae | 09-29 10:55\u201311:08 | CO_bnc_All_Video_FX_35_29.09 | built end to end, `simple_create_draft: all_edits_saved` |\n| b3a333ff43ab | 09-29 20:26\u201320:47 | CO_bnc_All_Video_Trading_35_29.09 | same |\n| f9b9fc8d7bb3 | 09-30 06:46\u201306:52 | CO_bnc_All_Video_FX_35_30.09 | same, 6 minutes |\n| 8ce1b9985046 | 09-30 06:52\u201307:05 | CO_bnc_All_Video_Trading_35_30.09 | same |\n\nOwner check in Ads Manager, 2026-09-30: campaign and ad set setup correct; one ad\nin the draft (ads 2\u20133 are ACL-1353). The 28.09 defects did not recur: no false\n`audience_location` alarm on the collapsed \"Included: Colombia\" row, no\n`ad_creative_upload: wizard_not_opened`.\n\n## Limits\n\n- Each draft holds ad 1 of 3; the dashboard marks it DO NOT PUBLISH AS IS until\n  ACL-1353. The owner accepted closing ACL-1327 on this basis (2026-09-30).\n- Facebook_9943 did not reach the editor in any 29.09 run (campaign_name /\n  objective / frozen tab before the editor); the criterion needs one affected account.\n- Nothing was published. Package delivery of 29b to buyers is tracked separately.\n\n## Checks\n\nDocumentation only; no code or tests changed. Telemetry:\nC:/acl-live-0928/output/rpa_telemetry.jsonl (runs above).\n\n## Fix round 1 (review_389.md, request-changes)\nHead d01cdad. F1 `objective_inline` named instead of `objective_leads`; F2 9943 facts corrected (no run got past the campaign name: SSL on reload, network trouble, profile start failure); F3 run times 5\u201321 min; F4 the entry states that the robot marks the drafts \"do not publish as is\" and that the owner accepted closing on the one-ad result; F5 `PR #` style. PR body updated to match."
       }
     },
     "tasks": {
