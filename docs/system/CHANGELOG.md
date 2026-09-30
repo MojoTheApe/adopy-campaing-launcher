@@ -10,6 +10,14 @@ docs/repository/WORKFLOW.md). Locally on the same laptop: 20 min with 8 workers.
 
 - `--dist loadfile`: each test file stays on one worker, so the 80+ files that
   start their own Chromium start it once, not once per worker.
+- CI: the hosted Windows runner (private repository) has 2 CPUs, and xdist
+  alone left CI at 23–31 min. The suite is now also split into 3 jobs per
+  Python version by `scripts/acl_test_shard.py` (every test file in exactly one
+  shard, checked by `tests/test_acl_test_shard.py`).
+- `test_a_stopped_profile_never_spins_the_robot` reserved a "free" port and
+  released it before Chromium took it; under parallel runs another worker got
+  it first (ECONNREFUSED, CI 3.13). Chromium now picks the port itself
+  (`--remote-debugging-port=0`) and the test reads it from `DevToolsActivePort`.
 - `tests/conftest.py` sets `ACL_LIBRARY_REPO/TOKEN/BRANCH` to empty strings in
   every worker, so a machine `.env` with the live team library can never be
   picked up by a test run.

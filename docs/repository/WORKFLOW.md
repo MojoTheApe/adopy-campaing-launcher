@@ -93,7 +93,11 @@ The full suite runs in parallel with pytest-xdist (`requirements-dev.txt`):
 
     python -m pytest tests/ -q -n auto --dist loadfile
 
-CI (`.github/workflows/ci.yml`) runs exactly this on both Python versions.
+CI (`.github/workflows/ci.yml`) runs the same command on both Python versions,
+split into three jobs per version: `python scripts/acl_test_shard.py <k> 3` prints
+the test files of shard k (together the shards are exactly `tests/test_*.py`,
+checked by `tests/test_acl_test_shard.py`). The hosted Windows runner of this
+private repository has two CPUs, so xdist alone did not shorten CI.
 `--dist loadfile` keeps every test file on one worker: more than 80 files start
 their own Chromium in a module fixture, and spreading one file over all workers
 starts that browser once per worker (on the owner's laptop the test-by-test
