@@ -41,6 +41,9 @@ def _fragments(raw: str) -> dict[str, str]:
 
 
 FRAG = _fragments(_RAW)
+# ACL-1412: окно выбора медиа после «Create ad» (d1755a59e139, ad3).
+_PICKER = _fragments((ROOT / "tests" / "fixtures" / "ads_manager"
+                      / "simple_create_new_ad_media_2026_09_30.html").read_text(encoding="utf-8"))["media_picker"]
 
 SIMPLE_URL = ("https://adsmanager.facebook.com/adsmanager/manage/simple_create"
               "?act=1&selected_campaign_ids=2&selected_adset_ids=3&selected_ad_ids=4")
@@ -52,7 +55,9 @@ ADSET_MENU = "editor_tree:adset/lib:ads-campaign-structure-action-menu-item"
 # нажатия; window.mode — сценарий «Create ad».
 _SCRIPT = """
 <style>body { margin: 0; } #tree { width: 300px; } #menu-host [role=menu] { position: fixed;
-  left: 320px; top: 120px; width: 260px; background: #fff; z-index: 5; }</style>
+  left: 320px; top: 120px; width: 260px; background: #fff; z-index: 5; }
+  #picker-host > [role=dialog] { position: absolute; left: 40px; top: 40px; width: 900px;
+  background: #fff; z-index: 6; }</style>
 <script>
   window.clicks = [];
   window.mode = 'ok';
@@ -84,11 +89,21 @@ _SCRIPT = """
       const dlg = document.createElement('span');
       dlg.setAttribute('data-surface', '/am/lib:ads_progress_dialog_modal_8e9c');
       dlg.innerHTML = '<div role="dialog">Creating...</div>';
+      if (window.mode === 'other_dialog') {
+        // ACL-1412: окно — не прогресс Meta.
+        dlg.removeAttribute('data-surface');
+        dlg.innerHTML = '<div role="dialog">Something went wrong</div>';
+      }
       document.body.appendChild(dlg);
       window.creates = (window.creates || 0) + 1;
       setTimeout(() => {
         if (window.mode === 'late_close') setTimeout(() => dlg.remove(), 2000);
-        else if (window.mode !== 'stuck_dialog') dlg.remove();
+        else if (window.mode === 'picker' || window.mode === 'picker_discard') {
+          // ACL-1412 (d1755a59e139, ad3): вместо «Creating...» — окно выбора медиа.
+          dlg.remove();
+          swap('picker-host', FR.media_picker);
+        }
+        else if (window.mode !== 'stuck_dialog' && window.mode !== 'other_dialog') dlg.remove();
         if (window.mode === 'no_row') return;
         const tree = document.getElementById('tree');
         const rows = [...tree.querySelectorAll('[role=row]')];
@@ -106,6 +121,13 @@ _SCRIPT = """
       }, 1000);
     }
   }, true);
+  // Cancel окна выбора медиа закрывает его (или, в 'picker_discard', спрашивает).
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('#picker-host [role=button]');
+    if (!b || norm(b.textContent) !== 'Cancel') return;
+    swap('picker-host', window.mode === 'picker_discard'
+         ? '<div role="dialog">Discard changes? <div role="button">Discard</div></div>' : '');
+  }, true);
   // Имя, набранное в поле открытого объявления, Meta переносит в его строку дерева.
   document.addEventListener('input', (e) => {
     if (!e.target.matches('input[placeholder="Enter your ad name here..."]')) return;
@@ -120,11 +142,11 @@ _SCRIPT = """
 def _html() -> str:
     import json
 
-    script = (_SCRIPT.replace("%FRAGS%", json.dumps(FRAG)).replace("%CREATE%", CREATE_SURFACE)
+    script = (_SCRIPT.replace("%FRAGS%", json.dumps({**FRAG, "media_picker": _PICKER})).replace("%CREATE%", CREATE_SURFACE)
               .replace("%ADSET%", ADSET_MENU))
     body = ('<div id="tree">' + FRAG["tree_before"] + '</div>'
             '<span data-surface="/am/editor:ad"><div id="name-host">' + FRAG["ad1_name"] + '</div>'
-            '<div id="media-host"></div></span><div id="menu-host"></div>')
+            '<div id="media-host"></div></span><div id="menu-host"></div><div id="picker-host"></div>')
     return "<!doctype html><html><head>" + script + "</head><body>" + body + "</body></html>"
 
 
@@ -160,7 +182,7 @@ def env(browser, monkeypatch, tmp_path):
         page.evaluate("(m) => { window.mode = m; }", m)
 
     try:
-        yield {"page": page, "rows": rows, "dir": tmp_path, "mode": mode}
+        yield {"page": page, "rows": rows, "dir": tmp_path, "mode": mode, "monkeypatch": monkeypatch}
     finally:
         pc.forget_sections()
         ctx.close()
@@ -292,11 +314,15 @@ def test_a_disabled_menu_item_is_not_create_ad(env):
     """«Create multiple ads» (disabled) и «Create rule» — не «Create ad»."""
     page = env["page"]
     page.evaluate("""(s) => { window.FRX = s; }""", CREATE_SURFACE)
+    # Пункт гасится в том же обработчике нажатия, что показал меню (этот
+    # слушатель добавлен позже слушателя страницы и срабатывает сразу после
+    # него), — не таймером: `setTimeout(0)` мог сработать уже после чтения
+    # меню, и «Create ad» нажимался (CI main, run 36733347515, ads_after 2).
     page.evaluate("""() => {
-      document.addEventListener('click', () => setTimeout(() => {
+      document.addEventListener('click', () => {
         const it = document.querySelector('[data-surface="' + window.FRX + '"]');
         if (it) it.setAttribute('aria-disabled', 'true');
-      }, 0), true);
+      }, true);
     }""")
     got = sc.create_next_ad(page, tag="ad2", known_names=["Sample Ad 01"], wait_s=1)
     assert got["why"] == "no_create_item", got
@@ -324,11 +350,16 @@ def test_a_dialog_that_never_closes_is_named_and_the_ad_is_not_filled(env):
     """Ревью PR #365, F1: строка и новое имя есть, но окно после «Create ad»
     не ушло — неизвестно, чего оно ждёт; объявление не считается готовым."""
     env["mode"]("stuck_dialog")
-    got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"], wait_s=3)
+    # ACL-1412: окно прогресса ждём `META_BUSY_WAIT_S` (здесь — 4 с).
+    env["monkeypatch"].setattr(sc, "META_BUSY_WAIT_S", 4.0)
+    t0 = time.time()
+    got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"], wait_s=2)
     assert not got["ok"] and got["why"] == "dialog_open", got
+    assert time.time() - t0 >= 4.0, "окно прогресса не ждали до предела"
     assert got["ads_after"] == 2
     assert got["dialog"]["text"] == "Creating..." and got["dialog"]["still_open"] is True
-    assert got["text"].startswith("a Meta dialog stayed open for")
+    assert got["dialog_kind"] == "progress" and got["progress_s"] >= 3.0
+    assert got["text"].startswith("Meta's progress dialog stayed open for 4 s")
     assert got["text"].endswith('(dialog: "Creating...")')
     assert got["capture"], "снимок окна не сохранён"
     assert len(_clicks(env["page"])) == 2, "после окна что-то нажимали"
@@ -491,3 +522,81 @@ def test_the_busy_wait_needs_the_dialog_gone_too(monkeypatch):
     assert got["name_stable"] and not got.get("dialog") and got["ads"] == 2
     assert got["busy_s"] == 5.0
     assert got["waited_s"] > 10, "обычный срок не продлён"
+
+
+# ── ACL-1412: окно после «Create ad» (живьём 30.09, d1755a59e139) ─────────
+
+def test_a_progress_dialog_open_60_s_while_the_page_answers_is_waited_out(monkeypatch):
+    """d1755a59e139, ad3: «Creating...» висело дольше 30 с при живой странице.
+    Теперь ждём до `META_BUSY_WAIT_S` и от окна прогресса, а не только от
+    неответа; окно ушло — объявление готово."""
+    script = ([{"ads": 2, "name_value": "Sample Ad 02", "dialog": CREATING}] * 120      # 60 с
+              + [{"ads": 3, "name_value": "New Leads Ad", "dialog": None}] * 3)
+    clock = _fake_clock(monkeypatch, script)
+    got = sc._wait_new_ad(None, 2, ["Sample Ad 01", "Sample Ad 02"], wait_s=30, busy_wait_s=120)
+    assert got["name_stable"] and got["ads"] == 3 and not got.get("dialog")
+    assert got["busy_s"] is None, "страница отвечала — это не неответ"
+    assert 59.0 <= got["progress_s"] <= 60.5
+    assert 60.0 <= clock["t"] - 1000.0 < 62.0
+
+
+def test_a_progress_dialog_longer_than_the_limit_is_dialog_open(monkeypatch):
+    clock = _fake_clock(monkeypatch, [{"ads": 3, "name_value": "New Leads Ad", "dialog": CREATING}] * 400)
+    got = sc._wait_new_ad(None, 2, ["Sample Ad 01", "Sample Ad 02"], wait_s=30, busy_wait_s=120)
+    assert got["dialog"] == CREATING
+    assert 119.5 <= clock["t"] - 1000.0 <= 121.0, "ждали не до предела занятости"
+
+
+def test_the_new_ad_is_taken_right_after_a_late_progress_dialog(monkeypatch):
+    """Окно ушло после обычного срока — ещё `PROGRESS_SETTLE_S` на строку и имя."""
+    script = ([{"ads": 2, "name_value": "Sample Ad 02", "dialog": CREATING}] * 80       # 40 с
+              + [{"ads": 2, "name_value": "Sample Ad 02", "dialog": None}] * 4
+              + [{"ads": 3, "name_value": "New Leads Ad", "dialog": None}] * 3)
+    _fake_clock(monkeypatch, script)
+    got = sc._wait_new_ad(None, 2, ["Sample Ad 01", "Sample Ad 02"], wait_s=30, busy_wait_s=120)
+    assert got["name_stable"] and got["ads"] == 3
+
+
+def test_a_dialog_that_is_not_meta_progress_is_dialog_open_at_once(env):
+    """Не прогресс Meta и не выбор медиа — ждать нечего: `dialog_open` сразу,
+    не через 30 и не через 120 с; после окна ничего не нажимали."""
+    env["mode"]("other_dialog")
+    t0 = time.time()
+    got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"], wait_s=30)
+    assert not got["ok"] and got["why"] == "dialog_open", got
+    assert time.time() - t0 < 10, "чужое окно ждали"
+    assert got["dialog_kind"] == "other"
+    assert got["text"].startswith("a Meta dialog that is not its progress dialog")
+    assert got["text"].endswith('(dialog: "Something went wrong")')
+    assert len(_clicks(env["page"])) == 2
+    row = [r for r in env["rows"] if r[0] == "simple_create_more_ads"][0]
+    assert row[1] is False and row[3]["dialog_kind"] == "other"
+
+
+def test_the_media_picker_left_over_the_new_ad_is_closed_with_its_cancel(env):
+    """d1755a59e139, ad3: после «Create ad» поверх нового объявления — окно
+    выбора медиа («1 selected»). Его Cancel (охраняемое нажатие) — и новое
+    объявление готово к заполнению; «Next» не жмём (чужой выбор)."""
+    env["mode"]("picker")
+    t0 = time.time()
+    got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"])
+    clicks = _clicks(env["page"])
+    assert got["ok"], got
+    assert time.time() - t0 < 15, "окно выбора медиа ждали, как чужое окно"
+    assert got["media_picker"] == {"closed": True, "why": "", "selected": "1 selected"}
+    assert len(clicks) == 3 and clicks[2].endswith("|Cancel"), clicks
+    assert not [c for c in clicks if c.endswith("|Next")]
+    assert _forbidden(clicks) == []
+    assert env["page"].evaluate("document.querySelector('#picker-host [role=dialog]')") is None
+    row = [r for r in env["rows"] if r[0] == "simple_create_more_ads"][0]
+    assert row[1] is True and row[3]["media_picker"]["closed"] is True
+    assert row[3]["dialog"]["open_s"] is not None
+
+
+def test_a_picker_that_answers_cancel_with_another_dialog_is_named(env):
+    env["mode"]("picker_discard")
+    got = sc.create_next_ad(env["page"], tag="ad2", known_names=["Sample Ad 01"])
+    clicks = _clicks(env["page"])
+    assert not got["ok"] and got["why"] == "dialog_open" and got["dialog_kind"] == "other", got
+    assert got["text"].endswith('(dialog: "Discard changes? Discard")')
+    assert not [c for c in clicks if c.endswith("|Discard")], "в чужом окне нажимали"
