@@ -403,7 +403,8 @@ def test_error_text_is_scrubbed_before_it_is_cut(world):
     from src.meta_campaign_agent.multilogin_launcher import MultiloginLauncherError
 
     world.stop_fails = True
-    padding = "x" * 100
+    # uuid (с 101-го символа) пересекает обрезку на 120: без вычистки начало uuid осталось бы в тексте.
+    padding = "x" * 80
     exc = MultiloginLauncherError(f"Stop profile failed {padding} {PROFILE} busy")
     text = br._exc_text(exc)
     assert PROFILE[:8] not in text and len(text) <= len("MultiloginLauncherError: ") + 120
