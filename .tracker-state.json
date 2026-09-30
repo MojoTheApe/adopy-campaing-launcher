@@ -1860,7 +1860,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "388": {
+        "actor": "Worker-H1388D",
+        "session": "run_h1388d_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1388-hand-opened-profile",
+        "worktree": "C:\\acl-1388-hand-opened",
+        "id": "edbe6a5fa4d9442fb2cfae0491e33176",
+        "issue": 388,
+        "state": "implementing",
+        "started_at": "2026-09-30T09:48:40+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -2008,6 +2021,17 @@
         },
         "pr": 392,
         "queued_at": "2026-09-30T08:52:44+00:00"
+      },
+      "388": {
+        "implementers": [
+          {
+            "actor": "Worker-H1388D",
+            "session": "run_h1388d_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-H1388D",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2042,6 +2066,10 @@
       "Reviewer-R1353A": {
         "session": "review_r1353a_0930",
         "role": "Reviewer"
+      },
+      "Worker-H1388D": {
+        "session": "run_h1388d_0930",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -2318,6 +2346,13 @@
         "pr": 365,
         "lane": "8cbf19e07bf74e0f8f1b8515e7c4763c",
         "actor": "Reviewer-R1353A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T09:48:40+00:00",
+        "issue": 388,
+        "claim": "edbe6a5fa4d9442fb2cfae0491e33176",
+        "actor": "Worker-H1388D"
       }
     ],
     "policy": {
