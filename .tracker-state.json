@@ -1887,6 +1887,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T12:23:01+00:00",
         "from_status": "status:backlog"
+      },
+      "402": {
+        "actor": "Worker-V1402H",
+        "session": "run_v1402h_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1402-covered-window",
+        "worktree": "C:\\acl-1402-covered-window",
+        "id": "e3a507627e0e4e06a109e5d97439001a",
+        "issue": 402,
+        "state": "implementing",
+        "started_at": "2026-09-30T12:43:13+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2117,6 +2129,17 @@
         "state": "implementing",
         "worker": "Worker-R1399G",
         "coordinator": "Coordinator-C0930A"
+      },
+      "402": {
+        "implementers": [
+          {
+            "actor": "Worker-V1402H",
+            "session": "run_v1402h_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-V1402H",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2166,6 +2189,10 @@
       },
       "Worker-R1399G": {
         "session": "run_r1399g_0930",
+        "role": "Worker"
+      },
+      "Worker-V1402H": {
+        "session": "run_v1402h_0930",
         "role": "Worker"
       }
     },
@@ -2521,6 +2548,13 @@
         "issue": 399,
         "claim": "277b5eef48cd4f58a47291e7ddbe16e3",
         "actor": "Worker-R1399G"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T12:43:13+00:00",
+        "issue": 402,
+        "claim": "e3a507627e0e4e06a109e5d97439001a",
+        "actor": "Worker-V1402H"
       }
     ],
     "policy": {
