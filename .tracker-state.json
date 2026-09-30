@@ -1984,6 +1984,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T12:43:13+00:00",
         "from_status": "status:backlog"
+      },
+      "388": {
+        "actor": "Worker-H1388D",
+        "session": "run_h1388d_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1388-hand-opened-profile",
+        "worktree": "C:\\acl-1388-hand-opened",
+        "id": "35e96ea4027b4e84866a4a0dd2e8c5f1",
+        "issue": 388,
+        "state": "implementing",
+        "started_at": "2026-09-30T21:45:37+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -2157,9 +2169,13 @@
           {
             "actor": "Worker-H1388D",
             "session": "run_h1388d_0930"
+          },
+          {
+            "actor": "Worker-H1388D",
+            "session": "run_h1388d_0930"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-H1388D",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2178,8 +2194,7 @@
         },
         "pr": 396,
         "queued_at": "2026-09-30T18:15:32+00:00",
-        "review_report": "PR #396 (ACL-1388) code approved in round 2 at head 8146136 (review_396_v2.md). Returned without --keep-lane only to free the single review lane for ACL-1414 (flaky test in main that turns every PR's CI red), by the owner's decision 2026-09-30. No content change requested except the optional F5 test padding. After ACL-1414 lands: merge work/main into the branch, re-handoff; the reviewer re-checks the delta (merge only) and records evidence once CI is green.",
-        "reviewer": "Reviewer-R1388E"
+        "review_report": "PR #396 (ACL-1388) code approved in round 2 at head 8146136 (review_396_v2.md). Returned without --keep-lane only to free the single review lane for ACL-1414 (flaky test in main that turns every PR's CI red), by the owner's decision 2026-09-30. No content change requested except the optional F5 test padding. After ACL-1414 lands: merge work/main into the branch, re-handoff; the reviewer re-checks the delta (merge only) and records evidence once CI is green."
       },
       "395": {
         "implementers": [
@@ -3228,6 +3243,13 @@
         "prs": [
           416
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T21:45:37+00:00",
+        "issue": 388,
+        "claim": "35e96ea4027b4e84866a4a0dd2e8c5f1",
+        "actor": "Worker-H1388D"
       }
     ],
     "policy": {
