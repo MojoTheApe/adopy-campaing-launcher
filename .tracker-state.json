@@ -774,7 +774,7 @@
       "source_sha": "49ae003fdfac102a15bf3999483bca56b90ec527",
       "main_tree": "fdf1a2d0025dc7e40da31ddde37b6a0482d5f03c",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-09-30T20:01:55+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -1211,6 +1211,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-09-30T17:05:02+00:00"
+      },
+      "414": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 416,
+            "merge_sha": "708f5e1043f40e102bf1db3329476605360f4a92",
+            "tree_sha": "582bb15776539d488b7769a6a0146161bb669530"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-30T21:44:51+00:00"
       }
     },
     "promotions": {
@@ -1930,6 +1942,32 @@
           "report": "ACL-1353 stage verification: Git checks green on the actual stage; live run confirms ads 2-3 are created in Meta's single-screen editor safely; remaining media-upload and long Creating dialog cases moved to a follow-up task by the owner. Telemetry: C:/acl-live-0930/output/rpa_telemetry.jsonl job e85b76d8."
         },
         "verified_at": "2026-09-30T14:50:53+00:00"
+      },
+      "416": {
+        "pr": 415,
+        "issues": [
+          414
+        ],
+        "tree_sha": "582bb15776539d488b7769a6a0146161bb669530",
+        "source_sha": "49ae003fdfac102a15bf3999483bca56b90ec527",
+        "main_tree": "fdf1a2d0025dc7e40da31ddde37b6a0482d5f03c",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-09-30T20:01:55+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "49ae003fdfac102a15bf3999483bca56b90ec527",
+          "tree_sha": "582bb15776539d488b7769a6a0146161bb669530",
+          "checks": [
+            "Git checks on actual stage 49ae003: CI run 36769723424 success after a rerun of failed jobs (first attempt: 3 timing tests timed out on a slow runner, 31 min job; unrelated to this test-only change)",
+            "Git checks on actual stage 49ae003: Windows installer run 36769723277 success",
+            "Change is tests/test_simple_create_more_ads.py only (test determinism); no runtime installation behaviour changed"
+          ],
+          "report": "ACL-1414 stage verification: repository-only (test) change; Git checks green on the actual stage. Review: scratchpad/review_415.md."
+        },
+        "verified_at": "2026-09-30T21:05:39+00:00"
       }
     }
   },
