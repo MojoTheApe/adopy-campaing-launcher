@@ -1806,6 +1806,22 @@ class MultiloginDirectCDPProvider:
         self._profile_id_cache = None
 
 
+def _exc_text(exc: BaseException, limit: int = 120) -> str:
+    """Текст ошибки для телеметрии и Sentry: сначала вычистить, потом резать.
+
+    Ревью PR #396 (F1), как PR #323 (F11): вычиститель узнаёт только полный
+    uuid профиля, а обрезка до него оставила бы начало uuid в строке.
+    """
+    text = str(exc)
+    try:
+        from src.fb_ads_rpa.run_telemetry import scrub
+
+        text = scrub(text)
+    except Exception:
+        text = ""
+    return f"{type(exc).__name__}: {text[:limit]}"
+
+
 def _record_profile_restart(entry: AccountMapEntry, profile_id: str, *, ok: bool, where: str,
                             error: str = "") -> None:
     """Строка телеметрии `profile_restarted_unresponsive` (ACL-1320)."""
@@ -2185,7 +2201,7 @@ class MultiloginAttachOnlyProvider:
         except profile_trouble.ProfileStop:
             raise
         except Exception as exc:
-            detail = f"{type(exc).__name__}: {str(exc)[:120]}"
+            detail = _exc_text(exc)
             _record_profile_restart(entry, profile_id, ok=False, where="attach", error=detail)
             raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
         _record_profile_restart(entry, profile_id, ok=True, where="attach")
@@ -2243,7 +2259,7 @@ class MultiloginAttachOnlyProvider:
         except Exception as exc:
             # Не закрылось через API — окно человека остаётся как было.
             _record_hand_window(entry, ok=False, where=where, note="mlx_stop_failed", verdict=verdict,
-                                error=f"{type(exc).__name__}: {str(exc)[:120]}")
+                                error=_exc_text(exc))
             raise _open_by_hand(profile_id, account_label, where, verdict) from exc
         if not _hand_window_gone(udd, profile_id, pids):
             _record_hand_window(entry, ok=False, where=where, note="still_running", verdict=verdict)
@@ -2254,7 +2270,7 @@ class MultiloginAttachOnlyProvider:
             started = self._start_via_mlx_api(entry, account_label, profile_id, udd, allow_kill=False)
             conn = self._connect_started(started, profile_id)
         except Exception as exc:
-            detail = f"{type(exc).__name__}: {str(exc)[:120]}"
+            detail = _exc_text(exc)
             _record_hand_window(entry, ok=False, where=where, note="restart_failed", verdict=verdict,
                                 error=detail)
             raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
@@ -2316,7 +2332,7 @@ class MultiloginAttachOnlyProvider:
             conn = self._connect_started(started, profile_id)
         except Exception as exc:
             _record_profile_restart(entry, profile_id, ok=False, where="campaign_open",
-                                    error=f"{type(exc).__name__}: {str(exc)[:120]}")
+                                    error=_exc_text(exc))
             raise
         _record_profile_restart(entry, profile_id, ok=True, where="campaign_open")
         return conn

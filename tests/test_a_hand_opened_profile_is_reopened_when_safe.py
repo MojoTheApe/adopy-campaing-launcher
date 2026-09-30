@@ -147,7 +147,8 @@ def test_no_process_or_not_windows_is_not_safe(machine):
 
 
 def test_the_real_win32_layer_answers_or_fails_closed(monkeypatch):
-    """Настоящий ctypes-слой на этой машине: число или исключение — не падение теста."""
+    """Настоящий ctypes-слой на этой машине отвечает числом. Сбой Win32 здесь —
+    падение теста; в работе его ловит `assess` и считает «не безопасно»."""
     if sys.platform != "win32":
         pytest.skip("Windows only")
     assert hw._idle_seconds() >= 0
@@ -395,3 +396,17 @@ def test_a_reopened_profile_that_is_logged_out_stops_with_profile_logged_out(wor
     for got in results:
         assert got.success is False
         assert pt.LOGGED_OUT in got.blocking_failures
+
+
+def test_error_text_is_scrubbed_before_it_is_cut(world):
+    """Ревью PR #396 (F1): uuid профиля у места обрезки не оставляет своё начало."""
+    from src.meta_campaign_agent.multilogin_launcher import MultiloginLauncherError
+
+    world.stop_fails = True
+    padding = "x" * 100
+    exc = MultiloginLauncherError(f"Stop profile failed {padding} {PROFILE} busy")
+    text = br._exc_text(exc)
+    assert PROFILE[:8] not in text and len(text) <= len("MultiloginLauncherError: ") + 120
+    with pytest.raises(pt.ProfileStop):
+        _open(world)
+    assert PROFILE[:8] not in repr(world.rows) + repr(world.crumbs)
