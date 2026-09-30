@@ -1890,9 +1890,11 @@
         "worktree": "C:\\acl-1353-new-ad-probe",
         "id": "bd5bd9a799ca4110b0f586a6f62ebfec",
         "issue": 406,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-09-30T13:48:02+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 407,
+        "report": "Handoff ACL-406 (PR #404, branch codex/acl-1353-new-ad-probe, head 20a6e4a, base work/stage 8e5823c).\n- Implemented: `_wait_new_ad` tolerates failed reads until the deadline. A closed tab ends the wait at once. `read_errors` is in the telemetry. Sentry map rows for ad_create tab-frozen/other.\n- Checks: `tests/test_simple_create_more_ads.py` and `tests/test_the_single_screen_editor_flow.py`, 48 passed. `acl_scan_secrets.py` is clean. The new tests failed on the old code.\n- Independent review (separate agent): approve. The low finding (closed tab waited 30 s) is fixed in 20a6e4a.\n- Remaining: CI on PR #404, then stage/main. Live confirmation of ads 2\u20133 on 1443 happens together with #353."
       }
     },
     "tasks": {
