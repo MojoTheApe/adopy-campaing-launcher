@@ -1887,6 +1887,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T12:43:13+00:00",
         "from_status": "status:backlog"
+      },
+      "330": {
+        "actor": "Worker-S1330J",
+        "session": "run_s1330j_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1330-sentry-trigger",
+        "worktree": "C:\\acl-1330-sentry-trigger",
+        "id": "58a5a35d1a4b4683ac4230bc7ce4ad5a",
+        "issue": 330,
+        "state": "implementing",
+        "started_at": "2026-09-30T14:22:58+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2179,6 +2191,17 @@
         },
         "pr": 407,
         "queued_at": "2026-09-30T13:49:01+00:00"
+      },
+      "330": {
+        "implementers": [
+          {
+            "actor": "Worker-S1330J",
+            "session": "run_s1330j_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1330J",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2240,6 +2263,10 @@
       },
       "Worker-S406R": {
         "session": "S406R",
+        "role": "Worker"
+      },
+      "Worker-S1330J": {
+        "session": "run_s1330j_0930",
         "role": "Worker"
       }
     },
@@ -2671,6 +2698,13 @@
         "issue": 399,
         "pr": 408,
         "actor": "Worker-R1399G"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T14:22:58+00:00",
+        "issue": 330,
+        "claim": "58a5a35d1a4b4683ac4230bc7ce4ad5a",
+        "actor": "Worker-S1330J"
       }
     ],
     "policy": {
