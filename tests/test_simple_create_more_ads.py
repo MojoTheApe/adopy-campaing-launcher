@@ -292,11 +292,15 @@ def test_a_disabled_menu_item_is_not_create_ad(env):
     """«Create multiple ads» (disabled) и «Create rule» — не «Create ad»."""
     page = env["page"]
     page.evaluate("""(s) => { window.FRX = s; }""", CREATE_SURFACE)
+    # Пункт гасится в том же обработчике нажатия, что показал меню (этот
+    # слушатель добавлен позже слушателя страницы и срабатывает сразу после
+    # него), — не таймером: `setTimeout(0)` мог сработать уже после чтения
+    # меню, и «Create ad» нажимался (CI main, run 36733347515, ads_after 2).
     page.evaluate("""() => {
-      document.addEventListener('click', () => setTimeout(() => {
+      document.addEventListener('click', () => {
         const it = document.querySelector('[data-surface="' + window.FRX + '"]');
         if (it) it.setAttribute('aria-disabled', 'true');
-      }, 0), true);
+      }, true);
     }""")
     got = sc.create_next_ad(page, tag="ad2", known_names=["Sample Ad 01"], wait_s=1)
     assert got["why"] == "no_create_item", got
