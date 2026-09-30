@@ -727,6 +727,24 @@
           327
         ],
         "recorded_at": "2026-09-30T08:11:27+00:00"
+      },
+      "405": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1353A",
+        "review_session": "review_r1353a_0930",
+        "execution_lane": "8cbf19e07bf74e0f8f1b8515e7c4763c",
+        "implementer": "Worker-S1353B",
+        "head_sha": "fe70b62455da55961bc071c731e941692034cf3c",
+        "base_sha": "8e5823cae7655745271aa18742c5af5688301154",
+        "tree_sha": "fdf1a2d0025dc7e40da31ddde37b6a0482d5f03c",
+        "report": "C:\\Users\\EVGENI~1\\AppData\\Local\\Temp\\claude\\C--fb-agents\\de606466-2798-4722-b592-13bc7766bb85\\scratchpad\\review_405.md - round 3 (PR #405, fe70b62): bounded read-only busy-wait on Meta's Creating... dialog inside hold_open_ad, closed tab/no-dialog silence still stop at once, F1-F5 mutations still caught, 87 affected tests + CI 3852 passed on 3.11/3.13; approved (low notes: any-dialog gate untested, closed-tab by exception name; tracker-link check needs #353 in Review)",
+        "main_sha": "ef174b9348898cb73bf81f24645f59317f1064d3",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          353
+        ],
+        "recorded_at": "2026-09-30T13:56:10+00:00"
       }
     },
     "stage": {
