@@ -1965,6 +1965,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T17:07:13+00:00",
         "from_status": "status:todo"
+      },
+      "357": {
+        "actor": "Worker-T1357N",
+        "session": "run_t1357n_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1357-trusted-updates",
+        "worktree": "C:\\acl-1357-trusted-updates",
+        "id": "1f19420f56604baea1300559b9e87583",
+        "issue": 357,
+        "state": "implementing",
+        "started_at": "2026-09-30T17:09:13+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -2300,6 +2312,17 @@
         "state": "implementing",
         "worker": "Worker-M1412L",
         "coordinator": "Coordinator-C0930A"
+      },
+      "357": {
+        "implementers": [
+          {
+            "actor": "Worker-T1357N",
+            "session": "run_t1357n_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-T1357N",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2374,6 +2397,10 @@
       "Reviewer-R1399B": {
         "session": "review_r1399b_0930",
         "role": "Reviewer"
+      },
+      "Worker-T1357N": {
+        "session": "run_t1357n_0930",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -2893,6 +2920,13 @@
         "issue": 399,
         "claim": "a6d442e6735d4bff83d56128981a5d0d",
         "actor": "Worker-R1399G"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T17:09:13+00:00",
+        "issue": 357,
+        "claim": "1f19420f56604baea1300559b9e87583",
+        "actor": "Worker-T1357N"
       }
     ],
     "policy": {
