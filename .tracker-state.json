@@ -1941,6 +1941,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T12:43:13+00:00",
         "from_status": "status:backlog"
+      },
+      "414": {
+        "actor": "Worker-F1414Q",
+        "session": "run_f1414q_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1414-flaky-menu-test",
+        "worktree": "C:\\acl-ACL-1414-flaky",
+        "id": "bcc34a5f194c44b6a0ef430d057cb3bb",
+        "issue": 414,
+        "state": "implementing",
+        "started_at": "2026-09-30T19:23:33+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2330,6 +2342,17 @@
         },
         "pr": 370,
         "queued_at": "2026-09-30T17:25:04+00:00"
+      },
+      "414": {
+        "implementers": [
+          {
+            "actor": "Worker-F1414Q",
+            "session": "run_f1414q_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-F1414Q",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2416,6 +2439,10 @@
       "Reviewer-R1388E": {
         "session": "review_r1388e_0930",
         "role": "Reviewer"
+      },
+      "Worker-F1414Q": {
+        "session": "run_f1414q_0930",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -3056,6 +3083,13 @@
         "issue": 399,
         "pr": 408,
         "actor": "Worker-R1399G"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T19:23:33+00:00",
+        "issue": 414,
+        "claim": "bcc34a5f194c44b6a0ef430d057cb3bb",
+        "actor": "Worker-F1414Q"
       }
     ],
     "policy": {
