@@ -1,5 +1,39 @@
 # Repository process history
 
+## Activate five implementation slots — 2026-09-29 / ACL-1382
+
+After reviewed source PR 384 and promotion 385, drain the old child claim and
+apply the supported idle execution migration. Verify all non-execution state and
+delivery receipts unchanged, and a fresh real ACL snapshot with five free slots,
+one free review lane, 227 identities and 74 historical completions before the
+parent's new claim. Retain eleven unfinished tasks, blocked flags and seven
+unmerged PRs. The shared registry publication is TT-70/72; Master/engine/skill
+implementation is MR-11/TT-67 and needs no further change for this report.
+
+The parent uses a real Worker claim and an independent Reviewer lane to integrate
+this activation report. Its final handoff remains required before ordinary intake
+resumes. See [actual evidence and limitations](PARALLEL_EXECUTION.md#actual-activation--2026-09-29)
+and [ACL-1382](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/382).
+This is repository-process activation; application/runtime behavior, stable package
+publication and employee installation are unchanged.
+
+## Prepare five implementation slots — 2026-09-29 / ACL-1383
+
+Upgrade compatible Master/Tracker/Action pins and the exported admission helper.
+Explicitly select five parallel implementation claims and one review/integration
+lane. Preserve ACL-specific identity/history, guarded client, draft standard and
+package delivery. Resolve the three template conflicts using the pristine baseline;
+system/runtime behavior has no change. The shared companions are MR-11 / PR 12 and
+TT-67 / PR 68, deployed under TT-69; no new shared engine change is required.
+
+The owner stopped other agents and approved the individually audited legacy queue
+handoff. Preserve unfinished Issues and paused PRs. The source child
+[ACL-1383](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/383) prepares
+the normal old-policy stage/main handoff; parent
+[ACL-1382](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/382) retains
+actual migration and live verification. See PARALLEL_EXECUTION.md. This entry
+records prepared source; it does not claim live activation or a stable package.
+
 ## Prepared adoption — 2026-09-21 / ACL-1248
 
 Adopt Master Repo's separated repository/system/runtime documents and pinned shared

@@ -1,3 +1,4 @@
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -6,7 +7,7 @@ import pytest
 
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry, load_ad_account_map, resolve_account_entry
 from src.meta_campaign_agent.campaign_builder import PublishJob, build_publish_job
-from src.meta_campaign_agent.creative_finder import AmbiguousCreativeError, find_creative_file
+from src.meta_campaign_agent.creative_finder import AmbiguousCreativeError, CreativeNotFoundError, find_creative_file
 from src.meta_campaign_agent.excel_reader import UploadRow
 from src.meta_campaign_agent.meta_publisher import MetaPublisher
 from src.meta_campaign_agent.profile_proxy import ProfileProxy
@@ -48,6 +49,72 @@ def test_find_creative_ambiguous():
         (root / "b" / "dup.mp4").write_bytes(b"2")
         with pytest.raises(AmbiguousCreativeError):
             find_creative_file(root, "dup.mp4")
+
+
+def test_find_creative_file_rejects_a_symlink_that_escapes_the_root():
+    """ACL-1342 S02: `is_file()` идёт по ссылке молча — ссылка может лежать
+    внутри корня и указывать на файл снаружи (например, системный файл)."""
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d) / "creatives"
+        outside = Path(d) / "outside"
+        root.mkdir()
+        outside.mkdir()
+        secret = outside / "secret.txt"
+        secret.write_text("not a creative", encoding="utf-8")
+
+        link = root / "escape.jpg"
+        try:
+            os.symlink(secret, link)
+        except (OSError, NotImplementedError):
+            pytest.skip("нет прав на создание symlink в этом окружении")
+
+        with pytest.raises(CreativeNotFoundError):
+            find_creative_file(root, "escape.jpg")
+
+
+def test_find_creative_file_still_finds_a_symlink_that_stays_inside_the_root():
+    """Фикс не должен отказывать ссылкам, которые целят внутрь того же
+    корня — только тем, что указывают наружу."""
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        real = root / "sub" / "real.jpg"
+        real.parent.mkdir()
+        real.write_bytes(b"x")
+
+        link = root / "alias.jpg"
+        try:
+            os.symlink(real, link)
+        except (OSError, NotImplementedError):
+            pytest.skip("нет прав на создание symlink в этом окружении")
+
+        found = find_creative_file(root, "alias.jpg")
+        assert found == link
+
+
+def test_the_realpath_escape_check_itself_does_not_need_symlink_privilege(monkeypatch):
+    """`os.symlink` требует привилегию, которой это окружение может не
+    выдавать (уже видно по скипам выше) — сама проверка эскейпа устроена
+    так, что её можно проверить и без реальной ссылки: достаточно
+    подменить `os.path.realpath`, ровно то, что функция и вызывает для
+    каждого совпадения."""
+    from src.meta_campaign_agent import creative_finder as cf
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "escape.jpg").write_bytes(b"x")
+        outside_real = str(Path(d).parent / "somewhere_outside" / "secret.jpg")
+
+        real_realpath = os.path.realpath
+
+        def fake_realpath(p):
+            if os.fspath(p).endswith("escape.jpg"):
+                return outside_real
+            return real_realpath(p)
+
+        monkeypatch.setattr(cf.os.path, "realpath", fake_realpath)
+
+        with pytest.raises(CreativeNotFoundError):
+            find_creative_file(root, "escape.jpg")
 
 
 def test_profile_proxy_to_requests():

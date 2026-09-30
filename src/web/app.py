@@ -1731,6 +1731,9 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             creative_type = (form.get(f"camp_{idx}_ad_{a_idx}_creative_type") or "Image").strip()
             creative_file = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file") or "").strip()
             copy          = (form.get(f"camp_{idx}_ad_{a_idx}_copy") or "").strip()
+            # ACL-1344: необязательный второй вариант основного текста —
+            # название записи библиотеки текстов, как у `copy`.
+            copy2         = (form.get(f"camp_{idx}_ad_{a_idx}_copy2") or "").strip()
 
             # Legacy single-ad fallback (forms submitted before multi-ad upgrade)
             if not creative_file and a_idx == 0:
@@ -1738,8 +1741,7 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             if not copy and a_idx == 0:
                 copy = (form.get(f"camp_{idx}_copy") or "").strip()
 
-            slots.append(
-                {
+            slot = {
                     "name": name,
                     "creative_type": creative_type,
                     "creative_id": (form.get(f"camp_{idx}_creative_id") or "").strip(),
@@ -1755,7 +1757,11 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     "language": language,
                     "language_provided": f"camp_{idx}_language" in form,
                 }
-            )
+            # Ключ — только у объявлений со вторым текстом: остальные слоты
+            # (и записанные из них задания) остаются прежними.
+            if copy2:
+                slot["copy2"] = copy2
+            slots.append(slot)
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
     # the GCC/LatAm language rule and the Excel Countries lookup expect
@@ -1893,6 +1899,15 @@ async def export_assets() -> Response:
             row_data = [country, asset.get("offer", ""), leads, deposits, cr, net]
             for col_idx, val in enumerate(row_data, 1):
                 cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                if col_idx in (1, 2):
+                    # ACL-1342 S10: country/offer приходят из отчёта, не от
+                    # нас. Если строка начинается с '=' (например, имя офера
+                    # "=1+1"), openpyxl сам решает, что это формула — ровно
+                    # по этому признаку, — и Excel её посчитает. Явно
+                    # помечаем ячейку текстовой, чтобы значение осталось
+                    # буквальной строкой независимо от того, с чего оно
+                    # начинается. Числовых столбцов (3–6) это не касается.
+                    cell.data_type = "s"
                 if fill:
                     cell.fill = fill
                 if col_idx >= 3:
@@ -2589,6 +2604,39 @@ async def api_parse_adset(name: str = "") -> JSONResponse:
     return JSONResponse(parse_adset_for_builder(name))
 
 
+def _sniff_creative_media_type(path: Path) -> str | None:
+    """Тип — по первым байтам файла, а не по расширению.
+
+    ACL-1342 S02: расширение подделывается переименованием (`evil.html` ->
+    `evil.jpg`), первые байты — нет. Разрешён только список из спеки аудита:
+    jpg/jpeg/png/gif/webp и mp4/mov/webm; всё остальное — не отдаём вовсе.
+    """
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(64)
+    except OSError:
+        return None
+
+    if head.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if head.startswith(b"GIF87a") or head.startswith(b"GIF89a"):
+        return "image/gif"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "image/webp"
+    if head[4:8] == b"ftyp":
+        # MP4 и большинство современных .mov — общий ISO-BMFF контейнер;
+        # различаются только заявленным брендом в ftyp-атоме.
+        return "video/quicktime" if head[8:12] in (b"qt  ", b"qt\x20\x20") else "video/mp4"
+    if head[4:8] in (b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot"):
+        # Старые QuickTime .mov без ftyp-атома в самом начале файла.
+        return "video/quicktime"
+    if head.startswith(b"\x1a\x45\xdf\xa3"):
+        return "video/webm"
+    return None
+
+
 @app.get("/creative-file")
 async def creative_file(path: str = "") -> Response:
     """Serve creative bytes (image/video) for the Campaign Builder's visual
@@ -2606,7 +2654,14 @@ async def creative_file(path: str = "") -> Response:
         return JSONResponse({"error": "Creative not found"}, status_code=404)
     except AmbiguousCreativeError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
-    return FileResponse(resolved)
+
+    media_type = _sniff_creative_media_type(resolved)
+    if media_type is None:
+        # ACL-1342 S02: не картинка и не видео из разрешённого списка — файл
+        # существует (find_creative_file его нашёл), но отдавать его как есть
+        # нельзя независимо от имени и расширения.
+        return JSONResponse({"error": "Unsupported creative type"}, status_code=415)
+    return FileResponse(resolved, media_type=media_type)
 
 
 @app.post("/api/accounts-hidden")

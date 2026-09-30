@@ -14,6 +14,10 @@ main promotion and normal `merged` handoff have actually completed.
 - Machine-readable settings: `delivery.json`, `tracker/config.json`, `.workflow/adoption.json`.
 
 Preserve employee data, existing installers and draft-only advertising controls.
-Implementation requires a real Issue and the project's execution slot. Use a
-separate non-implementing agent for final review. The full shared skill is installed
+Implementation requires a real Issue and a durable Worker claim. After the
+[parallel cutover](docs/repository/PARALLEL_EXECUTION.md), ACL permits five
+implementation tasks and one review/integration lane across all agent platforms.
+Use only available real sessions in isolated worktrees; capacity is not a promise
+that a particular host can spawn five Workers. Use a separate non-implementing
+agent for final review. The full shared skill is installed
 once per agent environment from Master Repo; do not replace ACL's product skills.

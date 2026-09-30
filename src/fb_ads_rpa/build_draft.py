@@ -69,6 +69,7 @@ def slots_to_campaign_drafts(
                 # creative_file: direct filename from folder scan (bypasses Excel lookup)
                 creative_filename=(s.get("creative_file") or "").strip(),
                 copy_name=(s.get("copy") or "").strip(),
+                copy2_name=(s.get("copy2") or "").strip(),
             )
             for s in group
         ]
