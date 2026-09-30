@@ -211,4 +211,7 @@ def test_a_missing_button_is_looked_for_in_the_ad_section_first(page, monkeypatc
     monkeypatch.setattr(md, "_scroll_until_mounted", mounted)
     opened, tries = md._open_creative_wizard(page, TRIGGER, ITEM)
     assert opened is True, tries
-    assert order == [("level", "ad"), "mounted"]
+    # ACL-1412: до кнопки — блок Media (`show_media_block`: раздел «Ad», затем
+    # доли прокрутки), и так перед первым заходом и в повторе; раздел — всегда первым.
+    assert order[0] == ("level", "ad") and order[-1] == "mounted", order
+    assert order.count(("level", "ad")) == 2, order
