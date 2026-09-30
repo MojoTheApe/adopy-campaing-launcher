@@ -231,8 +231,13 @@ def test_repaint_does_not_refresh_an_untouched_accounts_expiry(ui):
     p, _ = ui
     add(p)
     add(p, account=1)
+    # Сначала обе карточки проверены сервером (ACL-1397): ответ проверки
+    # дописывает поля карточки, и если он приходил после снимка `before`
+    # (занятая машина, параллельный прогон), «Other» честно обновлял
+    # `touched` — тест ловил свою же гонку, а не перерисовку.
+    ready(p)
     p.evaluate('cbKeep.save()')
-    before = p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2')).forms")
+    before =p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2')).forms")
     p.wait_for_timeout(20)
     p.evaluate('''() => {document.querySelector('[name="camp_0_budget"]').value='81';cbKeep.save();}''')
     after = p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2')).forms")
