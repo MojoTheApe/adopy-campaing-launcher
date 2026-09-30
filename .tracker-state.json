@@ -2163,7 +2163,7 @@
             "session": "run_h1388d_0930"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-H1388D",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2182,7 +2182,8 @@
         },
         "pr": 396,
         "queued_at": "2026-09-30T21:48:09+00:00",
-        "review_report": "PR #396 (ACL-1388) code approved in round 2 at head 8146136 (review_396_v2.md). Returned without --keep-lane only to free the single review lane for ACL-1414 (flaky test in main that turns every PR's CI red), by the owner's decision 2026-09-30. No content change requested except the optional F5 test padding. After ACL-1414 lands: merge work/main into the branch, re-handoff; the reviewer re-checks the delta (merge only) and records evidence once CI is green."
+        "review_report": "PR #396 (ACL-1388) code approved in round 2 at head 8146136 (review_396_v2.md). Returned without --keep-lane only to free the single review lane for ACL-1414 (flaky test in main that turns every PR's CI red), by the owner's decision 2026-09-30. No content change requested except the optional F5 test padding. After ACL-1414 lands: merge work/main into the branch, re-handoff; the reviewer re-checks the delta (merge only) and records evidence once CI is green.",
+        "reviewer": "Reviewer-R1388E"
       },
       "395": {
         "implementers": [
@@ -2631,10 +2632,20 @@
       412,
       390,
       399,
-      397,
-      388
+      397
     ],
-    "review": null,
+    "review": {
+      "id": "0fcb3d9f256b4f809e49171f5ad41c79",
+      "pr": 396,
+      "issues": [
+        388
+      ],
+      "actor": "Reviewer-R1388E",
+      "session": "review_r1388e_0930",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-09-30T21:49:33+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -3246,6 +3257,13 @@
         "issue": 388,
         "pr": 396,
         "actor": "Worker-H1388D"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-09-30T21:49:33+00:00",
+        "pr": 396,
+        "lane": "0fcb3d9f256b4f809e49171f5ad41c79",
+        "actor": "Reviewer-R1388E"
       }
     ],
     "policy": {
