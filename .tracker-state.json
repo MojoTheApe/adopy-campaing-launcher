@@ -2397,7 +2397,7 @@
             "session": "run_f1414q_0930"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-F1414Q",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2593,6 +2593,30 @@
         "state": "reviewing",
         "report": "# ACL-1353 returned after stage: live run on Facebook_1443 (2026-09-30)\n\nStage 8e5823c (PR #365) on the live dashboard (b49f81b). Two live runs of CO_bnc_All_Video_FX_35_30.09 on Facebook_1443:\n- job fba2c3f5 (12:17\u201312:44 UTC, profile window covered): after \"Create ad\" the dialog \"Creating...\" (surface /am/lib:ads_progress_dialog_modal_8e9c) appeared; `simple_create_more_ads: tab_frozen`, `ad2_create: tab_frozen`, ad3 not tried. When the owner brought the window forward, Meta finished creating ad 2 (\"New Leads Ad\", empty) after the robot had stopped.\n- job 3b30e23d (12:52\u201313:00 UTC, window in front): same \u2014 dialog seen at 2.0 s, `tab_frozen` at ~25 s (12:59:46), `ad2_create:tab_frozen` 12:59:51. Capture: C:\\acl-live-0930\\output\\rpa_pages\\d66a22d0fa30\\02_simple_create_more_ads.\n\nConclusion: while Meta shows \"Creating...\", the page stops answering the robot's liveness probe for longer than the robot tolerates; Meta completes the ad later. Not a covered-window problem (second run had the window in front).\n\nRequired fix (owner, 2026-09-30): while the \"Creating...\" progress dialog is/was the last thing seen after pressing Create ad, an unresponsive tab counts as \"Meta busy\", not frozen: wait up to 120 s (named constant) for the page to answer again and the dialog to close, then continue with the new ad; only after that give up with the current blocking reason. No reload, no tree click during the wait (keep hold_open_ad). Telemetry records how long Meta was busy.\nAlso seen (not this task): ad 1 `ad_destination: url_field_not_focused`.",
         "keep_lane": true
+      },
+      "416": {
+        "id": "d5fee92ad5594caaab390378014fa9df",
+        "pr": 415,
+        "issues": [
+          414
+        ],
+        "actor": "Reviewer-R1414F",
+        "session": "review_r1414f_0930",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-09-30T19:31:29+00:00",
+        "state": "reviewing"
+      },
+      "415": {
+        "id": "d5fee92ad5594caaab390378014fa9df",
+        "pr": 415,
+        "issues": [
+          414
+        ],
+        "actor": "Reviewer-R1414F",
+        "session": "review_r1414f_0930",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-09-30T19:31:29+00:00",
+        "state": "reviewing"
       }
     },
     "review_queue": [
@@ -2606,18 +2630,7 @@
       399,
       397
     ],
-    "review": {
-      "id": "d5fee92ad5594caaab390378014fa9df",
-      "pr": 415,
-      "issues": [
-        414
-      ],
-      "actor": "Reviewer-R1414F",
-      "session": "review_r1414f_0930",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-09-30T19:31:29+00:00",
-      "state": "reviewing"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -3196,6 +3209,25 @@
         "pr": 415,
         "lane": "d5fee92ad5594caaab390378014fa9df",
         "actor": "Reviewer-R1414F"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-09-30T21:44:59+00:00",
+        "review": {
+          "id": "d5fee92ad5594caaab390378014fa9df",
+          "pr": 415,
+          "issues": [
+            414
+          ],
+          "actor": "Reviewer-R1414F",
+          "session": "review_r1414f_0930",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-09-30T19:31:29+00:00",
+          "state": "reviewing"
+        },
+        "prs": [
+          416
+        ]
       }
     ],
     "policy": {
