@@ -1,5 +1,30 @@
 # System history
 
+## The robot builds campaigns in Meta's single-screen editor — ACL-1327
+
+2026-09-26 Meta started opening a new editor on some accounts
+(`/adsmanager/manage/simple_create`: campaign, ad set and ad on one screen). The
+robot knew only the step-by-step editor, so those accounts stopped. Owner decision:
+support the new editor rather than look for a way back to the old one.
+
+- `src/fb_ads_rpa/simple_create.py` recognises the editor by URL or markup at any
+  step, scrolls to the Ad set / Ad sections instead of pressing Next, opens the
+  collapsed cards and sets the Leads objective inline. The existing card handlers
+  (name, budget, conversion, audience, age, locations, languages, interests,
+  placements, identity, creative, destination, copy) run inside the one page; the
+  draft is kept by Meta's autosave (telemetry `simple_create_draft`). Publish is
+  never pressed.
+- Named stops: `lead_terms_not_accepted` (a person accepts the Lead Ads Terms),
+  `simple_create_layout` (unknown variation, or `FB_RPA_SIMPLE_CREATE=0`),
+  `objective_leads`, and `simple_create_more_ads` — only the first ad is built;
+  ads 2–3 are ACL-1353.
+- Shipped in `acl-release-2026-09-29b` (PR 340's content through PRs 376/378).
+- Live check, Facebook_1443, 2026-09-29/30: four campaigns built end to end
+  (campaign, ad set, ad 1, draft saved), the latest in 6 minutes; the owner
+  confirmed the campaign and ad set setup in Ads Manager on 2026-09-30. Each draft
+  has one ad of three until ACL-1353. Facebook_9943 did not reach the editor in
+  these runs (Meta was slow to open the campaign); it is not needed for this task.
+
 ## Sentry events carry the failing page section; a read-only triage digest — ACL-1325
 
 2026-09-26 a new "Suggest an audience" Audience layout on one account broke "Further
