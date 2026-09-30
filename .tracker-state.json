@@ -756,8 +756,23 @@
       "source_sha": "59423bcdaba2d25f4de1b46553679ba9390c65ba",
       "main_tree": "6c4d1f1661069b4a08b65a08dca418f6f330fa03",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-09-30T13:58:13+00:00"
+      "state": "passed",
+      "recorded_at": "2026-09-30T13:58:13+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "result": "passed",
+        "target": "ACL isolated Windows stage installation",
+        "source_sha": "59423bcdaba2d25f4de1b46553679ba9390c65ba",
+        "tree_sha": "fdf1a2d0025dc7e40da31ddde37b6a0482d5f03c",
+        "checks": [
+          "Git checks on actual stage 59423bc: CI run 36725420437 success (test 3.11, test 3.13, ACL verification)",
+          "Git checks on actual stage 59423bc: Windows installer run 36725420462 success; Delivery setup run 36725420342 success",
+          "Live run on the owner's machine with the stage content (live build d3a67e7 = stage 59423bc + ACL-1391): Facebook_1443, job e85b76d8 2026-09-30 14:31-14:45 UTC, CO_bnc_All_Video_FX_35_30.09 \u2014 ad 1 complete; ad 2 created through Create ad after waiting out Meta's Creating dialog (ads 1->2) and named, listed; ad 3 created (ads 2->3); no reload, no tree click, no extra ad",
+          "Known open (owner decision 2026-09-30: follow-up task, not a stage failure): ad 2 media upload wizard_not_opened -> destination/copy not filled; ad 3 Creating dialog open >30 s while the page answered -> dialog_open stop. Both block publication with named reasons"
+        ],
+        "report": "ACL-1353 stage verification: Git checks green on the actual stage; live run confirms ads 2-3 are created in Meta's single-screen editor safely; remaining media-upload and long Creating dialog cases moved to a follow-up task by the owner. Telemetry: C:/acl-live-0930/output/rpa_telemetry.jsonl job e85b76d8."
+      },
+      "verified_at": "2026-09-30T14:50:53+00:00"
     },
     "tasks": {
       "248": {
