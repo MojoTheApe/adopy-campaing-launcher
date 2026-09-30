@@ -1827,6 +1827,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T08:00:03+00:00",
         "from_status": "status:backlog"
+      },
+      "327": {
+        "actor": "Worker-L1443A",
+        "session": "run_l1443a_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "work/acl-1327-live-report",
+        "worktree": "C:\\acl-1327-live",
+        "id": "13f915a652024ef1b7f70cdbbf002943",
+        "issue": 327,
+        "state": "implementing",
+        "started_at": "2026-09-30T08:07:24+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -1867,9 +1879,13 @@
           {
             "actor": "Worker-L1443A",
             "session": "run_l1443a_0930"
+          },
+          {
+            "actor": "Worker-L1443A",
+            "session": "run_l1443a_0930"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-L1443A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -1888,8 +1904,7 @@
         },
         "pr": 389,
         "queued_at": "2026-09-30T08:03:39+00:00",
-        "review_report": "Review 389 v2 approved the content (review_389_v2.md), but the head does not contain current main 8b78bb3 (promotion merge of PR #387), so the evidence cannot be recorded. Returned only to merge work/main into the branch; no content change expected (main and stage trees are equal).",
-        "reviewer": "Reviewer-R1327A"
+        "review_report": "Review 389 v2 approved the content (review_389_v2.md), but the head does not contain current main 8b78bb3 (promotion merge of PR #387), so the evidence cannot be recorded. Returned only to merge work/main into the branch; no content change expected (main and stage trees are equal)."
       },
       "353": {
         "implementers": [
@@ -2115,6 +2130,13 @@
           "report": "Review 389 v2 approved the content (review_389_v2.md), but the head does not contain current main 8b78bb3 (promotion merge of PR #387), so the evidence cannot be recorded. Returned only to merge work/main into the branch; no content change expected (main and stage trees are equal).",
           "keep_lane": true
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T08:07:24+00:00",
+        "issue": 327,
+        "claim": "13f915a652024ef1b7f70cdbbf002943",
+        "actor": "Worker-L1443A"
       }
     ],
     "policy": {
