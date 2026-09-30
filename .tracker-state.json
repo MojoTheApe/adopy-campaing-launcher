@@ -1902,6 +1902,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T12:43:13+00:00",
         "from_status": "status:backlog"
+      },
+      "412": {
+        "actor": "Worker-M1412L",
+        "session": "run_m1412l_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1412-ads23-media",
+        "worktree": "C:\\acl-1412-ads23-media",
+        "id": "abf071c1ac86463fb982196fd3f4efec",
+        "issue": 412,
+        "state": "implementing",
+        "started_at": "2026-09-30T14:56:00+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2221,6 +2233,17 @@
         },
         "pr": 410,
         "queued_at": "2026-09-30T14:50:08+00:00"
+      },
+      "412": {
+        "implementers": [
+          {
+            "actor": "Worker-M1412L",
+            "session": "run_m1412l_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-M1412L",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2286,6 +2309,10 @@
       },
       "Worker-S1330J": {
         "session": "run_s1330j_0930",
+        "role": "Worker"
+      },
+      "Worker-M1412L": {
+        "session": "run_m1412l_0930",
         "role": "Worker"
       }
     },
@@ -2732,6 +2759,13 @@
         "issue": 330,
         "pr": 410,
         "actor": "Worker-S1330J"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T14:56:00+00:00",
+        "issue": 412,
+        "claim": "abf071c1ac86463fb982196fd3f4efec",
+        "actor": "Worker-M1412L"
       }
     ],
     "policy": {
