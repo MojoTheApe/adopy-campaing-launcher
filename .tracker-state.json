@@ -763,6 +763,24 @@
           414
         ],
         "recorded_at": "2026-09-30T20:00:59+00:00"
+      },
+      "396": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1388E",
+        "review_session": "review_r1388e_0930",
+        "execution_lane": "0fcb3d9f256b4f809e49171f5ad41c79",
+        "implementer": "Worker-H1388D",
+        "head_sha": "f071aaff21a6bb50835fc6abdde89c1187e708e8",
+        "base_sha": "49ae003fdfac102a15bf3999483bca56b90ec527",
+        "tree_sha": "081287edf11cb42f76e2a90cdce9338d64352bce",
+        "report": "C:\\Users\\EVGENI~1\\AppData\\Local\\Temp\\claude\\C--fb-agents\\de606466-2798-4722-b592-13bc7766bb85\\scratchpad\\review_396_v3.md - rounds 1-3: hand-opened window reopen gates fail closed, MLX API stop only (no kill), publish only; F1 scrub-before-cut, F3 recorder allow_kill=False, F4 docstring, F5 boundary test all fixed; head contains main 708f5e1 and stage 49ae003; all 11 CI checks green",
+        "main_sha": "708f5e1043f40e102bf1db3329476605360f4a92",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          388
+        ],
+        "recorded_at": "2026-09-30T22:17:25+00:00"
       }
     },
     "stage": {
