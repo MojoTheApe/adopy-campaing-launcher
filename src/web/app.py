@@ -12,6 +12,8 @@ from __future__ import annotations
 from src.analysis_agent.country_names import COUNTRY_CODES as _COUNTRY_CODES
 
 import asyncio
+import contextvars
+import functools
 import ipaddress
 import json
 import math
@@ -20,6 +22,8 @@ import re as _re
 import re
 import sys
 import tempfile
+import threading
+import weakref
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlencode, urlsplit
@@ -42,7 +46,16 @@ from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.web.publish_jobs import get_job, start_job, cancel_job
-from src.web.cache import cache_built_at, cache_clear, get_cached_report
+from src.web.cache import (
+    background_build_state,
+    cache_built_at,
+    cache_clear,
+    forget_background_error,
+    get_cached_report,
+    peek_cached_report,
+    start_background_build,
+)
+from concurrent.futures import ThreadPoolExecutor
 from src.analysis_agent.money_format import fmt_usd, fmt_currency, fmt_summary_amount
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
 from src.creative_agent.audience_builder import build_audience_profile
@@ -294,10 +307,23 @@ def _workbook_dates(df) -> list[str]:
 
         if df is None or "Date" not in getattr(df, "columns", []):
             return []
+        # ACL-1399: спрашивается из цикла событий на каждый опрос «готово ли»;
+        # книга в кэше не меняется, а разбор дат — ~0.2 с. Помним последнюю.
+        memo = _DATES_MEMO[0]
+        if memo is not None and memo[0]() is df:
+            return list(memo[1])
         days = pd.to_datetime(df["Date"], errors="coerce").dt.date.dropna()
-        return sorted({d.isoformat() for d in days})
+        dates = sorted({d.isoformat() for d in days})
+        try:
+            _DATES_MEMO[0] = (weakref.ref(df), tuple(dates))
+        except TypeError:
+            pass
+        return dates
     except Exception:
         return []
+
+
+_DATES_MEMO: list = [None]
 
 
 def _month_to_date(dates: list[str]) -> tuple[str, str]:
@@ -343,6 +369,7 @@ def resolve_period(df, date_from: str, date_to: str, span: str) -> tuple[str, st
 #: около секунды, и без кэша она случалась бы на каждом переключении вкладки.
 _PERIOD_CACHE: dict[tuple, dict] = {}
 _PERIOD_CACHE_MAX = 8
+_PERIOD_LOCK = threading.Lock()
 
 
 class PeriodReportError(RuntimeError):
@@ -361,13 +388,7 @@ def report_for_period(report: dict, df, date_from: str, date_to: str) -> dict:
 
     from src.web.buyer import get_selected_cm
 
-    key = (
-        report.get("source_excel"),
-        report.get("_cache_revision"),
-        (report.get("my_cm") or get_selected_cm() or ""),
-        date_from,
-        date_to,
-    )
+    key = _period_key(report, date_from, date_to)
     # Callers outside the main cache may supply a standalone report. Without
     # a source revision it is safer to recalculate than to retain stale values.
     cacheable = report.get("_cache_revision") is not None
@@ -390,10 +411,29 @@ def report_for_period(report: dict, df, date_from: str, date_to: str) -> dict:
     scoped["period_from"] = date_from
     scoped["period_to"] = date_to
     if cacheable:
-        if len(_PERIOD_CACHE) >= _PERIOD_CACHE_MAX:
-            _PERIOD_CACHE.pop(next(iter(_PERIOD_CACHE)))
-        _PERIOD_CACHE[key] = scoped
+        # Период теперь считают и фоновая сборка, и пул запросов (ACL-1399).
+        with _PERIOD_LOCK:
+            while len(_PERIOD_CACHE) >= _PERIOD_CACHE_MAX:
+                _PERIOD_CACHE.pop(next(iter(_PERIOD_CACHE)))
+            _PERIOD_CACHE[key] = scoped
     return scoped
+
+
+def _period_key(report: dict, date_from: str, date_to: str) -> tuple:
+    from src.web.buyer import get_selected_cm
+
+    return (
+        report.get("source_excel"),
+        report.get("_cache_revision"),
+        (report.get("my_cm") or get_selected_cm() or ""),
+        date_from,
+        date_to,
+    )
+
+
+def _period_cached(report: dict, date_from: str, date_to: str) -> bool:
+    return (report.get("_cache_revision") is not None
+            and _period_key(report, date_from, date_to) in _PERIOD_CACHE)
 
 
 def _filter_by_period(df, date_from: str, date_to: str):
@@ -1136,6 +1176,38 @@ _NCOLS_BY_SECTION = {
 app = FastAPI(title="Adopy Campaigns Launcher")
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
+
+# ── Отчёт — не в цикле событий (ACL-1399) ───────────────────────────────
+#
+# Сервер однопоточный по циклу событий: всё, что обработчик `async def`
+# делает синхронно, держит ВСЕ запросы. Холодная сборка отчёта шла прямо в
+# GET / — минуту после перезапуска не отвечали ни /health, ни очередь
+# публикаций, и Publish со страницы падал «Failed to fetch» (30.09).
+#
+# Всё, что читает отчёт, уходит в свой пул потоков. Свой, а не общий
+# `asyncio.to_thread`: десяток запросов страницы, ждущих одну холодную сборку,
+# не должен занять потоки, нужные отмене и запуску публикации.
+_REPORT_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="acl-report")
+
+
+async def _in_report_pool(fn, /, *args, **kwargs):
+    loop = asyncio.get_running_loop()
+    ctx = contextvars.copy_context()
+    return await loop.run_in_executor(_REPORT_POOL, functools.partial(ctx.run, fn, *args, **kwargs))
+
+
+def _off_loop(fn):
+    """Синхронный обработчик → async, исполняемый в пуле отчёта.
+
+    Подпись остаётся прежней (FastAPI читает её через __wrapped__), а сам
+    обработчик по-прежнему можно вызвать как корутину.
+    """
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        return await _in_report_pool(fn, *args, **kwargs)
+
+    return wrapper
+
 _MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -1351,7 +1423,47 @@ async def health() -> JSONResponse:
 
     `version` lets the update helper tell the new release from the old one.
     """
-    return JSONResponse({"app": "ACL", "ok": True, "version": _installed_release().get("tag", "")})
+    # ACL-1399: первый вопрос о версии — это git (~3 с на загруженной
+    # машине). /health — то, чем лаунчер проверяет, жив ли сервер: ждём
+    # версию не дольше доли секунды, а дальше отвечаем без неё — чтение
+    # доходит в фоне, и следующий ответ её уже знает. Не в цикле событий.
+    try:
+        release = await asyncio.wait_for(
+            asyncio.shield(asyncio.to_thread(_installed_release)), timeout=0.3
+        )
+    except asyncio.TimeoutError:
+        release = {"tag": ""}
+    return JSONResponse({"app": "ACL", "ok": True, "version": release.get("tag", "")})
+
+
+def _warm_installed_release() -> None:
+    """Прочитать версию в фоне (git), чтобы первый /health её уже знал."""
+    threading.Thread(target=_installed_release, name="acl-installed-release", daemon=True).start()
+
+
+def _warm_control_paths() -> None:
+    """Первые вызовы управляющих ответов — до первого запроса, в фоне.
+
+    Первый снимок очереди профилей импортирует psutil, первая версия — git.
+    Под холодной сборкой отчёта (GIL занят разбором книги) это секунды на
+    ровном месте — ровно тогда, когда страница впервые спрашивает очередь.
+    """
+    _warm_installed_release()
+
+    def slots() -> None:
+        try:
+            from src.web.publish_jobs import slots_snapshot
+
+            slots_snapshot()
+        except Exception:  # noqa: BLE001 — прогрев необязателен
+            pass
+
+    threading.Thread(target=slots, name="acl-warm-slots", daemon=True).start()
+
+
+@app.on_event("startup")
+async def _warm_on_startup() -> None:
+    _warm_control_paths()
 
 
 @app.get("/acl/update/check")
@@ -1371,7 +1483,8 @@ async def acl_update_check(request: Request) -> JSONResponse:
             from src.web import release_updates
             force = (request.query_params.get("force") or "").strip().lower() in {"1", "true", "yes"}
             return JSONResponse(await run_in_threadpool(release_updates.check, force=force))
-        return JSONResponse(acl_update.check(fetch=not skip_fetch))
+        # `git fetch` ждёт сеть до двух минут — не в цикле событий (ACL-1399).
+        return JSONResponse(await run_in_threadpool(acl_update.check, fetch=not skip_fetch))
     except Exception as exc:  # pragma: no cover - defensive
         return JSONResponse(
             {"ok": False, "available": False, "note": f"Update check failed: {exc}"}
@@ -1772,15 +1885,78 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
     return country_val or country, account_label, slots
 
 
+def _page_ready(date_from: str, date_to: str, span: str) -> bool:
+    """Готова ли страница без ожидания: отчёт и отчёт за её период в памяти.
+
+    Только дешёвые проверки (stat книги, словари) — вызывается из цикла.
+    """
+    try:
+        warm = peek_cached_report()
+        if warm is None:
+            return False
+        report, df, _warnings = warm
+        date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
+        if not (date_from or date_to) or df is None:
+            return True
+        return _period_cached(report, date_from, date_to)
+    except Exception:
+        return False
+
+
+def _warm_page(date_from: str, date_to: str, span: str) -> None:
+    """Фоновая сборка ровно того, что нужно странице: отчёт и её период."""
+    report, df, _warnings = get_cached_report()
+    date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
+    report_for_period(report, df, date_from, date_to)
+
+
+def _start_warm(date_from: str, date_to: str, span: str) -> None:
+    start_background_build(
+        functools.partial(_warm_page, date_from, date_to, span),
+        token=(date_from, date_to, span),
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(
     request: Request, date_from: str = "", date_to: str = "", span: str = ""
 ) -> HTMLResponse:
-    return _render_report(request, date_from=date_from, date_to=date_to, span=span)
+    # ACL-1399: холодный отчёт — не держать страницу (и весь сервер) минуту,
+    # а сразу ответить «цифры загружаются» и собрать его в фоне.
+    if not _page_ready(date_from, date_to, span):
+        if forget_background_error() is None:
+            _start_warm(date_from, date_to, span)
+            return templates.TemplateResponse("loading.html", {"request": request})
+        # Фоновая сборка упала — рисуем страницу обычным путём: он покажет
+        # ту же ошибку по-человечески (нет файла, не тот формат).
+    return await _in_report_pool(
+        _render_report, request, date_from=date_from, date_to=date_to, span=span
+    )
+
+
+@app.get("/report/status", include_in_schema=False)
+async def report_status(date_from: str = "", date_to: str = "", span: str = "") -> JSONResponse:
+    """Для экрана «цифры загружаются»: готово ли, идёт ли, чем кончилось.
+
+    Отвечает сразу — ничего не собирает и не ждёт. Если ни готово, ни идёт
+    (например, сборку начал другой период), запускает фоновую сборку сам.
+    """
+    ready = _page_ready(date_from, date_to, span)
+    state = background_build_state()
+    if not ready and not state["building"] and not state["error"]:
+        _start_warm(date_from, date_to, span)
+        state = background_build_state()
+    return JSONResponse({
+        "ready": ready,
+        "building": state["building"],
+        "error": state["error"],
+        "built_at": cache_built_at(),
+    })
 
 
 @app.get("/details", response_class=HTMLResponse)
-async def details(request: Request) -> HTMLResponse:
+@_off_loop
+def details(request: Request) -> HTMLResponse:
     """Return a single <tr><td colspan> fragment of underlying rows.
 
     HTMX swaps it as `afterend` of the clicked <tr>, so the response MUST
@@ -1854,7 +2030,8 @@ async def details(request: Request) -> HTMLResponse:
 
 
 @app.get("/export/assets")
-async def export_assets() -> Response:
+@_off_loop
+def export_assets() -> Response:
     """Download an Excel file with asset summary (offer × country) for all countries."""
     import io
     import openpyxl
@@ -2004,7 +2181,8 @@ async def refresh(request: Request) -> Response:
 
 
 @app.get("/brief", response_class=HTMLResponse)
-async def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
+@_off_loop
+def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
     """Analyze a creative by name — search recursively in FB_CREATIVES_ROOT.
 
     If found: run full analysis and render brief.
@@ -2082,7 +2260,8 @@ _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
 
 @app.get("/api/creatives")
-async def api_creatives() -> JSONResponse:
+@_off_loop
+def api_creatives() -> JSONResponse:
     """Scan FB_CREATIVES_ROOT recursively and return all creative files.
 
     Returns [{filename, rel_path, folder, type}] sorted by filename.
@@ -2186,7 +2365,8 @@ def normalise_ad_account_id(raw: str) -> str:
 
 
 @app.get("/api/buyers")
-async def api_buyers() -> JSONResponse:
+@_off_loop
+def api_buyers() -> JSONResponse:
     """The campaign managers present in the stats, and who is selected here.
 
     The list comes from the workbook's own CM column, so a new buyer shows up
@@ -2223,14 +2403,15 @@ async def api_select_buyer(request: Request) -> JSONResponse:
 
     selected = set_selected_cm(data.get("name") or "")
     try:
-        get_cached_report(my_cm=selected)
+        await _in_report_pool(get_cached_report, my_cm=selected)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc), "selected": selected}, status_code=200)
     return JSONResponse({"ok": True, "selected": selected})
 
 
 @app.get("/api/accounts-overview")
-async def api_accounts_overview() -> JSONResponse:
+@_off_loop
+def api_accounts_overview() -> JSONResponse:
     """Every account this buyer has, and whether this machine can reach it.
 
     Two halves that were never shown together: the shared sheet says which
@@ -2956,7 +3137,8 @@ async def account_spend_read_countries(request: Request) -> JSONResponse:
 
 
 @app.get("/account-spend/countries")
-async def account_spend_countries(
+@_off_loop
+def account_spend_countries(
     date_from: str = "", date_to: str = "", span: str = ""
 ) -> JSONResponse:
     """Сколько потрачено на каждую страну — по прочитанным аккаунтам.
@@ -3323,7 +3505,8 @@ def account_attribution(
 
 
 @app.get("/account-map")
-async def account_map_fragment(
+@_off_loop
+def account_map_fragment(
     request: Request, date_from: str = "", date_to: str = "", span: str = ""
 ) -> Response:
     """The account map alone, recomputed for a period.
@@ -3351,7 +3534,8 @@ async def account_map_fragment(
 
 
 @app.get("/account-map/available")
-async def account_map_available_fragment(
+@_off_loop
+def account_map_available_fragment(
     request: Request, date_from: str = "", date_to: str = "", span: str = ""
 ) -> Response:
     """Только блок Available accounts — после Remove/Restore (ACL-1319).
@@ -3538,8 +3722,9 @@ async def account_links_edit(request: Request) -> JSONResponse:
             return JSONResponse({"ok": True, "changed": added})
 
         if action in ("unlink", "close"):
-            spending = _accounts_spending_today(
-                [account] if action == "unlink" else account_links.accounts_for(kind, value)
+            spending = await _in_report_pool(
+                _accounts_spending_today,
+                [account] if action == "unlink" else account_links.accounts_for(kind, value),
             )
             if spending and not confirm:
                 names = ", ".join(spending[:4]) + ("…" if len(spending) > 4 else "")
@@ -4000,7 +4185,7 @@ async def preview_publish(request: Request) -> JSONResponse:
         return JSONResponse({"error": "Account label not set — check form."}, status_code=400)
     if not slots:
         return JSONResponse({"error": "No campaign slots found. Make sure the form has at least one campaign."}, status_code=400)
-    try:
+    def plan_for() -> list:
         if use_rpa_publish():
             pub = RpaPublisher(dry_run=True)
             drafts = pub.build_drafts(
@@ -4009,9 +4194,12 @@ async def preview_publish(request: Request) -> JSONResponse:
                 country=country,
                 preview_mode=True,
             )
-            plan = preview_campaign_drafts(drafts)
-        else:
-            plan = preview_jobs(slots, account_label=account_label, country=country)
+            return preview_campaign_drafts(drafts)
+        return preview_jobs(slots, account_label=account_label, country=country)
+
+    try:
+        # ACL-1399: превью тянет библиотеки и книгу — в потоке, не в цикле.
+        plan = await asyncio.to_thread(plan_for)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"plan": plan, "account": account_label, "country": country})
@@ -4019,13 +4207,18 @@ async def preview_publish(request: Request) -> JSONResponse:
 
 @app.post("/publish-jobs")
 async def publish_jobs_start(request: Request) -> JSONResponse:
-    """Launch a background publish job. Returns job_id for polling."""
+    """Launch a background publish job. Returns job_id for polling.
+
+    `request_id` (ACL-1399): ключ отправки со страницы. Повтор с тем же
+    ключом — после «сервер не ответил» — возвращает то же задание.
+    """
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
     activate = (form.get("activate") or "0").strip() in ("1", "true", "yes")
     dry_run = (form.get("dry_run") or "0").strip() in ("1", "true", "yes")
     user_confirmed = (form.get("user_confirmed") or "0").strip() in ("1", "true", "yes")
+    request_id = (form.get("request_id") or "").strip()
     if activate:
         return JSONResponse(
             {"error": "Live activation is disabled: ACL creates draft-only campaigns."},
@@ -4038,7 +4231,10 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
         )
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
-    try:
+
+    def launch() -> tuple[str, int]:
+        # Черновики собираются из библиотек и книги — не в цикле событий:
+        # иначе запуск публикации ждал бы (и держал бы) весь сервер.
         job_id = start_job(
             account_label,
             country,
@@ -4048,22 +4244,27 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
             dry_run=dry_run,
             # The server owns this safety decision; a client cannot opt out.
             hand_off=True,
+            request_id=request_id,
         )
+        if use_rpa_publish():
+            from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+
+            total = len(
+                slots_to_campaign_drafts(
+                    slots,
+                    account_label=account_label,
+                    country=country,
+                    activate=False,
+                )
+            )
+        else:
+            total = len(slots)
+        return job_id, total
+
+    try:
+        job_id, total = await asyncio.to_thread(launch)
     except (RuntimeError, ValueError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
-    if use_rpa_publish():
-        from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
-
-        total = len(
-            slots_to_campaign_drafts(
-                slots,
-                account_label=account_label,
-                country=country,
-                activate=False,
-            )
-        )
-    else:
-        total = len(slots)
     return JSONResponse({"job_id": job_id, "total": total})
 
 
@@ -4128,13 +4329,13 @@ async def build_upload(request: Request) -> Response:
     err_key = (form.get("country") or "").strip() or country
 
     if not country or not account_label:
-        return _render_report(
-            request,
+        return await _in_report_pool(
+            _render_report, request,
             upload_errors={"": {"": ["Missing country or account."]}},
         )
     if not slots:
-        return _render_report(
-            request,
+        return await _in_report_pool(
+            _render_report, request,
             upload_errors={err_key: {account_label: ["Add at least one campaign slot."]}},
         )
 
@@ -4144,8 +4345,8 @@ async def build_upload(request: Request) -> Response:
         slots=slots,
     )
     if errors:
-        return _render_report(
-            request,
+        return await _in_report_pool(
+            _render_report, request,
             upload_errors={err_key: {account_label: errors}},
         )
 
