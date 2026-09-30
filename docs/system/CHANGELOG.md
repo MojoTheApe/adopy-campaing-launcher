@@ -25,6 +25,11 @@ minutes earlier. Owner decision 2026-09-30: retry in place and once more at the 
   shown on the job card; not fixed → the same `audience_location` stop as before.
   Telemetry `audience_location_second_pass` (listed_before / listed_after). No campaign
   replay, no second draft, no Publish.
+- Review of PR #393: in the single-screen editor after ads 2+ the second pass runs under
+  ACL-1353's `hold_open_ad("simple_create_open_ad_n")` (no reload, no tree open); an
+  empty search field is retyped on attempt 1 and the attempt row records what was
+  really in the field; keys are sent only when the location search has focus; the
+  read-back requires row names equal to the country ("Riyadh, Saudi Arabia" is not).
 
 ## The robot builds campaigns in Meta's single-screen editor — ACL-1327
 

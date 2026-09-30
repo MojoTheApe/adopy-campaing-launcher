@@ -5836,6 +5836,8 @@ def run_recorded_campaign_flow(
             soft_fails_out.extend(soft_fails)
             soft_fails_out.extend(ad_level_fails)
 
+    # ACL-1390: нужен и после блока объявлений (охрана второго прохода).
+    simple_extra_tried = False
     if creative_path:
         ad_edit_url = ""
         reached_ad_level = False
@@ -6323,8 +6325,11 @@ def run_recorded_campaign_flow(
     # группы, в том же черновике. Не встала и так — прежняя остановка.
     if country and not page_state["closed"] and any(
             f.split(":", 1)[0] == "audience_location" for f in soft_fails):
+        # Ревью PR #393 (F2): после объявлений 2+ нового редактора — под той
+        # же охраной ACL-1353, что и сами объявления.
         retry_location_at_end(page, soft_fails, country=country, simple=simple,
-                              adset_name=adset_name)
+                              adset_name=adset_name,
+                              hold="simple_create_open_ad_n" if simple and simple_extra_tried else "")
         still = any(f.split(":", 1)[0] == "audience_location" for f in soft_fails)
         _shot("fail_audience_location_second_pass" if still else "after_audience_location_second_pass")
 
@@ -16021,8 +16026,44 @@ def _location_prefix(search_term: str) -> str:
     return term[: max(4, len(term) // 2 + 1)]
 
 
-def _retype_location_search(root, page: Page, text: str, delay_ms: int) -> None:
-    """Вернуться в поле поиска, очистить его и набрать `text` заново."""
+#: Фокус в поле поиска локаций (или внутри/вокруг него) — `el` любой узел.
+_LOCATION_FOCUS_JS = r"""
+  () => {
+    const sel = "[placeholder*='location' i], [placeholder*='ubicaci' i]";
+    const a = document.activeElement;
+    if (!a || a === document.body) return false;
+    return !!(a.matches(sel) || a.closest(sel) || a.querySelector(sel));
+  }
+"""
+
+#: Что сейчас стоит в поле поиска локаций; null — поля нет.
+_LOCATION_TEXT_JS = r"""
+  () => {
+    const sel = "[placeholder*='location' i], [placeholder*='ubicaci' i]";
+    const box = [...document.querySelectorAll(sel)].find(e => {
+      const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+    if (!box) return null;
+    return (('value' in box ? box.value : box.textContent) || '').trim();
+  }
+"""
+
+
+def _location_search_text(root) -> str | None:
+    """Текст в поле поиска локаций сейчас (None — поле не прочитать)."""
+    try:
+        got = root.evaluate(_LOCATION_TEXT_JS)
+    except Exception:
+        return None
+    return got if isinstance(got, str) else None
+
+
+def _retype_location_search(root, page: Page, text: str, delay_ms: int) -> bool:
+    """Вернуться в поле поиска, очистить его и набрать `text` заново.
+
+    Клавиши уходят только в поле поиска локаций: если фокус не там (клик не
+    прошёл, фокус ушёл в имя группы), ничего не нажимаем — Ctrl+A/Backspace
+    стёрли бы чужое поле (ревью PR #393, F4). False — ничего не набрано.
+    """
     try:
         box = root.locator(_LOCATION_INPUT_SEL).first
         if box.count():
@@ -16030,13 +16071,20 @@ def _retype_location_search(root, page: Page, text: str, delay_ms: int) -> None:
     except Exception:
         pass
     try:
+        focused = bool(root.evaluate(_LOCATION_FOCUS_JS))
+    except Exception:
+        focused = False
+    if not focused:
+        return False
+    try:
         page.keyboard.press("ControlOrMeta+A")
         page.keyboard.press("Backspace")
         _sleep_h(0.5)
         if text:
             page.keyboard.type(text, delay=delay_ms)
     except Exception:
-        pass
+        return False
+    return True
 
 
 def _country_option_res(search_term: str) -> tuple[re.Pattern, re.Pattern]:
@@ -16097,7 +16145,17 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
         if n > 1:
             # 17.09 (CO_bnc FX): «Colombia» в поле, а список не открылся
             # (aria-expanded=false) — Enter ничего не добавлял. Набираем заново.
-            _retype_location_search(root, page, typed, delay_ms)
+            if not _retype_location_search(root, page, typed, delay_ms):
+                typed = _location_search_text(root)
+        else:
+            # Ревью PR #393 (F3): путь «раскрыть карточку заново» зовёт нас с
+            # пустым полем (прошлая лестница его очистила) — ждать подсказок
+            # к пустому полю незачем. Пишем, что в поле на самом деле.
+            now = _location_search_text(root)
+            if now == "":
+                typed = search_term if _retype_location_search(root, page, search_term, 40) else ""
+            elif now is not None:
+                typed = now
         outcome, texts = "no_suggestions", []
         if _wait_location_options(root, timeout_s=wait_s):
             outcome, texts = _click_country_option(root, page, search_term)
@@ -17244,7 +17302,10 @@ def _locations_read_back(page: Page, search_term: str) -> tuple[bool, list[str] 
     rows = _location_rows_settled(page)
     if rows:
         names = list(dict.fromkeys(r["name"] for r in rows))
-        return bool(keep) and all(keep in n.lower() for n in names), names
+        # Ревью PR #393 (F5): страна целиком — имя строки равно стране (с
+        # пометкой «Country» или без); «Riyadh, Saudi Arabia» — это регион.
+        tag = re.compile(r"\s*[(\-–·,]?\s*(country|país|pais)\)?\s*$", re.I)
+        return bool(keep) and all(tag.sub("", n).strip().lower() == keep for n in names), names
     summary = _location_summary_countries(page)
     if summary:
         return _only_wanted_in_summary(page, search_term), summary
@@ -17290,19 +17351,24 @@ def _location_second_pass(page: Page, country: str, *, simple: bool, adset_name:
 
 
 def retry_location_at_end(page: Page, soft_fails: list[str], *, country: str,
-                          simple: bool, adset_name: str) -> None:
+                          simple: bool, adset_name: str, hold: str = "") -> None:
     """Если страна не встала на своём шаге — второй проход в конце кампании.
 
     Вызывается, когда остальная кампания уже собрана. Встала — отказ
     `audience_location` снимается и вместо него остаётся предупреждение
     `audience_location_second_pass` (его видно в панели задания). Не встала —
     прежняя остановка `audience_location`, больше ничего не меняется.
+
+    `hold` — причина охраны ACL-1353 (`hold_open_ad`): в новом редакторе после
+    объявлений 2+ открыто объявление N, а адрес держит объявление 1 — весь
+    второй проход идёт без перезагрузок и без открытия объявлений через дерево.
     """
     failed = [f for f in soft_fails if f.split(":", 1)[0].strip() == "audience_location"]
     if not country or not failed:
         return
     try:
-        fixed = _location_second_pass(page, country, simple=simple, adset_name=adset_name)
+        with hold_open_ad(hold):
+            fixed = _location_second_pass(page, country, simple=simple, adset_name=adset_name)
     except Exception as exc:
         _telemetry.record("audience_location_second_pass", False,
                           note="error:" + type(exc).__name__, diag={"error": str(exc)[:160]})

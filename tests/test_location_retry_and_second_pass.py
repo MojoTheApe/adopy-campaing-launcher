@@ -372,3 +372,77 @@ def test_the_flow_runs_the_second_pass_after_the_rest_of_the_campaign():
     assert at < src.rindex("soft_fails_out.extend(soft_fails)")
     assert "Publish" not in inspect.getsource(md.retry_location_at_end)
     assert "Publish" not in inspect.getsource(md._location_second_pass)
+
+
+# ── Ревью PR #393, круг 1 ─────────────────────────────────────────────────
+
+def test_the_second_pass_after_more_ads_runs_under_the_open_ad_guard(page, rec, monkeypatch):
+    """F2: новый редактор, объявления 2+ — открыто объявление N, адрес держит
+    объявление 1. Весь второй проход — под охраной ACL-1353: ни перезагрузки,
+    ни открытия объявления или группы через дерево."""
+    held: list[str] = []
+    for name in ("_reload_editor", "recover_stuck_page", "_open_tree_ad", "_open_tree_adset"):
+        monkeypatch.setattr(md, name, lambda *a, _n=name, **k: pytest.fail(f"{_n} during the second pass"))
+    monkeypatch.setattr(md._simple, "scroll_to_level",
+                        lambda pg, level, **k: held.append(md.reloads_held()) or {"ok": True})
+    monkeypatch.setattr(md._simple, "open_card", lambda pg, title: "opened")
+
+    def _fill(pg, country):
+        held.append(md.reloads_held())
+        pg.click("#q")
+        pg.keyboard.type("Saudi Arabia")
+        return md._pick_country_and_clear_defaults(pg, pg, "Saudi Arabia")
+
+    monkeypatch.setattr(md, "fill_audience_location", _fill)
+    page.set_content(_editor_page(show=0, tree=False))
+    soft_fails = ["audience_location"]
+    md.retry_location_at_end(page, soft_fails, country="SA", simple=True, adset_name="Campaign_A",
+                             hold="simple_create_open_ad_n")
+    assert held == ["simple_create_open_ad_n", "simple_create_open_ad_n"]
+    assert md.reloads_held() == ""                        # охрана снята после прохода
+    assert [failure_policy.base_name(f) for f in soft_fails] == ["audience_location_second_pass"]
+
+
+def test_the_flow_holds_the_open_ad_after_more_ads_in_the_single_screen_editor():
+    src = inspect.getsource(md.run_recorded_campaign_flow)
+    call = src[src.index("retry_location_at_end("):]
+    call = call[: call.index(")\n") + 1]
+    assert 'hold="simple_create_open_ad_n" if simple and simple_extra_tried else ""' in call
+    # Переменная задана до блока объявлений: кампания без креатива её тоже знает.
+    assert src.index("simple_extra_tried = False") < src.index("    if creative_path:")
+
+
+def test_an_empty_field_is_typed_again_on_the_first_attempt(page, rec):
+    """F3: путь «раскрыть заново» зовёт лестницу с пустым полем."""
+    page.set_content(_search_page(show=1))
+    page.click("#q")                                      # поле пустое, фокус в нём
+    assert md._pick_country_suggestion(page, page, "Saudi Arabia") is True
+    assert page.evaluate("window.picked") == "Saudi Arabia (Country)"
+    assert _attempts(rec) == []                           # хватило первой попытки
+
+
+def test_the_attempt_row_says_what_was_really_in_the_field(page, rec):
+    page.set_content(_search_page(show=2))
+    page.click("#q")
+    page.keyboard.type("Saudi Ara")                       # набор оборвался
+    assert md._pick_country_suggestion(page, page, "Saudi Arabia") is True
+    assert _attempts(rec)[0]["typed"] == "Saudi Ara"
+
+
+def test_no_keys_are_sent_when_focus_left_the_location_search(page, rec):
+    """F4: Ctrl+A/Backspace не должны стереть имя группы."""
+    page.set_content("<input id='name' value='Adset name'>"
+                     "<input id='q' placeholder='Search locations' style='display:none'>")
+    page.focus("#name")
+    assert md._retype_location_search(page, page, "Saudi Arabia", 0) is False
+    assert page.input_value("#name") == "Adset name"
+
+
+def test_a_region_row_does_not_read_back_as_the_country(page):
+    """F5: «Riyadh, Saudi Arabia» — регион, не страна целиком."""
+    region = _US.replace("United States", "Riyadh, Saudi Arabia")
+    page.set_content(_editor_page(show=99, rows=region))
+    ok, names = md._locations_read_back(page, "Saudi Arabia")
+    assert ok is False and names == ["Riyadh, Saudi Arabia"]
+    page.set_content(_editor_page(show=99, rows=_US.replace("United States", "Saudi Arabia")))
+    assert md._locations_read_back(page, "Saudi Arabia")[0] is True
