@@ -79,6 +79,14 @@ Coverage limit: no Meta JS. `tests/test_rpa_placements_category_recollapse.py` b
 
 Coverage limit: no Meta JS. `tests/test_collapsed_age_row_is_opened.py` emulates the row toggle (click on a collapsed row opens it, click on the open field's header collapses it).
 
+## ACL-1348 empty ad creative and the wizard step row (live run 2026-09-25)
+
+`ad_creative_media_step_2026_09_25.html` — 956d0d184138/05_ad2_creative_upload (CL_ML Video Day, second ad; step `ad2_creative_upload` failed). The whole `data-surface=".../ad_image_video_selector_section"` block of the ad editor: the "Set up creative" menu trigger (`aria-haspopup=menu`) and "Please specify the media to run with this ad." Cut in offline Chromium: scripts, images and SVG replaced by `<i>`, every attribute except `role`, `aria-*`, `data-surface`, `tabindex`, `type` removed. No account, campaign, page or creative data in the block. Capture truncated at ~3.98 MB; the block is whole, but the creative wizard's portal (end of the document) was cut off entirely in this page. UI language: English. Meta build identifier and browser version: not recorded.
+
+`creative_wizard_steps_2026_09_25.html` — the real wizard step row, from `956d0d184138/04_library_pick_selected/block_library.html` (the same ad, 06:52:44: the robot on the Media step with the library tile picked; the block is whole, not truncated). Kept: the `role=dialog` shell, the step row `role=list` > `listitem` > `role=button` (label, `aria-current="step"` on the current step, `tabindex=-1` on the completed "Creative setup", `aria-disabled="true"` on "Translation", hidden "completed / incomplete / pending status" labels), the wizard's Close button and the Media step heading. The library grid (file names, thumbnails) was dropped; attributes other than `role`, `aria-current`, `aria-disabled`, `aria-labelledby`, `aria-level`, `tabindex`, `id` removed; Meta render ids (`js_*`) replaced with `syn_N`. No account, campaign or creative data. UI language: English. Meta build identifier and browser version: not recorded.
+
+Coverage limit: no Meta JS or CSS (the test lays the list out as a row, like the screenshots). Only the state "current step = Media" was captured; "current step = Text" is derived in the test by moving `aria-current`. Locked, covered or click-deaf Media steps were never captured — those rows in `tests/test_media_step_reached_or_named.py` stay synthetic. Since ACL-1348 a failure on the way to Media captures the wizard as its own block (`block_creative_wizard.html`, step `ad_creative_media_step`, once per ad).
+
 ## ACL-1324 "Suggest an audience" layout (live run 2026-09-26)
 
 `audience_suggest_layout_2026_09_26.html` — six fragments, each the whole Audience card (from the card header with `#advantage-state-audience-section-header` down to its last row), introduced by a `<!-- fragment: <name> | source: <run>/<step> -->` comment. Cut in offline Chromium from `output/rpa_pages/<run>/<step>/page.html`: scripts, images and SVG replaced by `<i>`, every attribute except `role`, `aria-*`, `id`, `data-surface`, `placeholder`, `type`, `value`, `tabindex`, `hidden`, `href` (set to `#`), `for`, `typeaheadcomponentid` removed; Meta render ids (`js_*`) replaced with `syn_N`; detailed-targeting interests replaced with `Sample interest N`. No account, campaign or creative data in the blocks. All captures were truncated at ~3.98 MB; the Audience card is whole in each. UI language: English. Meta build identifier and browser version: not recorded.
@@ -111,6 +119,57 @@ Coverage limit: no Meta JS; `tests/test_simple_create_location_summary.py` emula
 `editor_footer_simple_create_2026_09_28.html` — 97314905598e/02_ad_creative_upload (capture truncated at 3.98 MB, the block is whole): the footer of the `simple_create` editor — "By clicking **Publish**, you acknowledge…" line, `Close` button and the `Publish` button `data-surface="/am/lib:syd_simple_create_publish"`. Classes, `data-auto-logging-id`, `data-interactable`, links and SVG paths removed. No account or campaign data. UI language: English. Meta build identifier and browser version: not recorded.
 
 Coverage limit: no Meta CSS — `tests/test_no_press_lands_on_publish.py` pins it as a full-width fixed bar over the target, the way the live screenshot shows it.
+
+## Placements heading with a button group (live run 2026-09-28)
+
+`placements_heading_group_2026_09_28.html` — 6925f39bdc67/01_placements (Facebook_6540, classic ad set editor; step `placements` failed in ~1 s with `tag_info={'tagged': False, 'headings': 1}`; the second campaign's capture 8058b54f78d0/01_placements has the same card). Capture truncated at 3.98 MB; the card is whole. Two fragments, each introduced by a `<!-- fragment: ... -->` comment: `card` — the whole Placements card, whose `role=heading` holds "Placements" plus the "Explore placement opportunities" / "More options" button group, then "Advantage+ on", "About placements", the "WhatsApp Status included" notice with its Close button, "Placement value rules", "Account controls · Excluded placements: None" and "Show more settings" (collapsed: no categories in the capture); `campaign_score_row` — the right-hand Campaign score row "Placements · You're including all available placements for all ad sets.", wrapped in 29 plain `<div>`s standing in for the real 33-level chain to the first ancestor that also holds "Account controls". Cut in offline Chromium: scripts, images and SVG replaced by `<i>`, every attribute except `role`, `aria-*`, `id`, `tabindex`, `href` (set to `#`), `for` removed; Meta render ids replaced with `syn_N`. No account, campaign or creative data in the blocks. UI language: English. Meta build identifier and browser version: not recorded.
+
+Coverage limit: no Meta JS — "Show more settings" does not open anything, so `tests/test_rpa_placements_heading_with_buttons.py` checks which block gets marked and what is clicked, not the category checkboxes.
+
+## ACL-1344 ad creative section and "Add text option" (live run 2026-09-25)
+
+`ad_copy_text_options_2026_09_25.html` — the whole `data-surface=".../ad_creative_section"` block from 36a1bbf663c9/02_ad_media_ready (capture truncated at 3.98 MB, the block is whole): Primary text (Draft.js `contenteditable role=combobox`, empty), Headline, Description, "Optimize text per person", the empty `text_enhancements_inline_adoption_field`, Call to action. Classes, `data-auto-logging-id`, SVG and help links removed; Meta render ids `js_*` replaced with `syn_N`. No account, campaign or creative data in the block. UI language: English. Meta build identifier and browser version: not recorded.
+
+Coverage limit: **the "Add text option" control is not in any capture** in `C:\acl-live-0928`, `C:\acl-stage` or `C:\acl-live-0919` `output\rpa_pages` (all ad-copy captures were taken before typing, with the creative block still hidden). Its look is known only from screenshots (`rpa_screenshots/0a81a6438251/20260922_170433_recorded_after_ad_copy.png`, `08726d544c47/20260921_205735_recorded_fail_ad3_copy.png`): label "Primary text (1 of 5)", under the box an outlined button "⊕ Add text option", then "Headline 1 of 5" / "⊕ Add headline option"; the "Advantage+ creative text generation" section sits right under the button. `tests/test_second_primary_text_option.py` injects that button and Meta's reaction (a new empty option box, a copy of the first) synthetically, plus a synthetic generation section with its own "Add text option" as a trap.
+
+A live capture that replaces the synthetic part must show, after Primary text 1 is typed: (1) the "Add text option" element — tag, `role`, `aria-label`, where it sits relative to `data-surface$="/message_field"`; (2) the same block after one click — where the second box lives (inside the same `message_field` surface or not), its `aria-label`/placeholder, its remove (X) control, and the label text ("Primary text (2 of 5)"?); (3) the "Advantage+ creative text generation" section expanded, with any generated text options, to confirm they are outside our option boxes; (4) the "Optimize text per person" state once there are two options — the robot does not change it, it only records it (`ad_copy_second_text` → `diag.optimize_text_per_person`).
+
+## ACL-1354 single-screen editor failures (live runs 2026-09-28)
+
+Cut in offline Chromium (JS disabled) from `output/rpa_pages/<run>/<step>/page.html`; captures truncated at ~3.98 MB, the blocks are whole. Scripts, styles, SVG/images removed; every attribute except `role`, `aria-*`, `id`, `data-surface`, `placeholder`, `type`, `value`, `tabindex`, `hidden`, `for`, `checked`, `disabled`, `name`, `href` (set to `#`), `typeaheadcomponentid` removed; Meta render ids (`js_*`) replaced with `syn_N` (numbering restarts in each fragment). No account, campaign, page or creative data in the blocks. UI language: English. Meta build identifier and browser version: not recorded.
+
+`objective_open_2026_09_28.html` — the dialog on the campaigns list while the robot waited for the objective dialog after Create:
+
+| Fragment | Source | Capture state | Coverage limit |
+| --- | --- | --- | --- |
+| table_loading | 9d113c3d6ac3/00_stall_objective_wait (Facebook_9943) | The campaigns table's own progress modal `data-surface="/am/table/lib:ads_progress_dialog_modal_…"`, "Loading..." (also on the screenshot 60 s later) | No list around it; how long Meta keeps it is not in the capture |
+| create_loading | 279b9539df43/00_stall_objective_wait (Facebook_9943) | Create's progress modal `data-surface="/am/lib:ads_progress_dialog_modal_…"`, "Loading creation" | Same |
+| ad_blocker | 279b9539df43/01_objective_leads | Meta's "Turn off ad blocker" modal (heading, Close, OK) over the list at the `objective_leads` failure | Why Meta showed it is not in the capture |
+
+`audience_fields_simple_create_2026_09_28.html` — Audience fields of the single-screen editor:
+
+| Fragment | Source | Capture state | Coverage limit |
+| --- | --- | --- | --- |
+| languages_open_empty | aa1e2fbf45c9/02_languages (Facebook_1443, `simple_create`) | Languages row expanded (`aria-expanded=true`), the tokenizer with an empty `<input role=combobox aria-expanded=false aria-controls=…>`; the listbox it points to does not exist | Captured after the step cleared its input; the suggestion list was never captured — typing and suggestions are emulated/absent in the test |
+| targeting_loading | aa1e2fbf45c9/03_targeting_open (same run) | Detailed targeting row expanded, its `role=region` holds only `role=progressbar aria-busy=true aria-valuetext="Loading..."` | The loaded state of this field in `simple_create` was not captured |
+| targeting_search_loaded | 0749abd7482f/02_placements (classic ad set editor, same day) | The loaded field's `role=search` box with `<input placeholder="Add demographics, interests or behaviors">` (interests list not included) | Used as the loaded state of the field above; classic editor markup |
+
+Coverage limit: no Meta JS. `tests/test_single_screen_editor_failures_are_named.py` emulates the row toggle (a click collapses/expands the row, a collapsed row does not load, a re-expanded one starts loading again) and the moment the field finishes loading.
+
+## ACL-1371 ad destination and ad name (live runs 2026-09-28)
+
+Cut with BeautifulSoup from `output/rpa_pages/<run>/<step>/page.html` (classic editor, captures truncated at ~3.98 MB, the blocks are whole): the element `#adgroupAdDestinationGeneric` or `#adgroupNameEditorComponent`. Scripts, styles, SVG/images, comments removed; every attribute except `role`, `aria-*` (without `aria-activedescendant`), `id`, `data-surface`, `placeholder`, `type`, `value`, `tabindex`, `hidden`, `for`, `checked`, `disabled`, `name`, `href` (set to `#`) removed — also the robot's own `data-rpa-field` mark and its `display: block !important`; Meta render ids (`js_*`) replaced with `syn_N` (numbering restarts in each fragment); the ad name value replaced with `Example Ad`. No account, campaign, page, form or creative data in the blocks. UI language: English. Meta build identifier and browser version: not recorded.
+
+`checked` is the attribute of the first render; `aria-checked` is the live state. Where they differ, the choice changed after the section was drawn.
+
+`ad_destination_types_2026_09_28.html`:
+
+| Fragment | Source | Capture state | Coverage limit |
+| --- | --- | --- | --- |
+| instant_experience | a90d704c892a/01_ad_destination (Facebook_6540, CO_bnc Trading, `ad_destination` failed after 8.3 s) | Destination type radios: Website `aria-checked=false` (`checked` attribute still on it), Instant Experience `aria-checked=true` with its "Select Instant Experience" combobox and "Create new"; no Website URL field, no Browser add-ons | What switched the type is not in the capture; the test emulates Meta redrawing the section as Website after a click on Website |
+| website_instant_form | 7e5f7abec777/02_ad_destination (same account, CO_bnc FX_Y, failed after 4.1 s) | Website `aria-checked=true`, Instant form opt-in switch off, empty Website URL field, Browser add-ons "Instant form (suggested)" `aria-checked=true` (`checked` attribute on None), Lead Ads Terms card and forms list (form names not in the block) | No Meta JS: the None radio does not react; which exit of the step fired is not recorded (the step was silent) |
+
+`ad_name_section_2026_09_28.html` — ad_name_section: a90d704c892a/01_ad_destination, the "Ad name" section with its `role=combobox` input `placeholder="Enter your ad name here..."`. The buyer's `ad_name` failures (Sentry PYTHON-1W, DAN-LT25) were never captured; the duplicated / hidden / disabled / covered / renamed variants in `tests/test_destination_and_ad_name_say_why.py` are made from this real section by the test.
 
 ## ACL-1353 single-screen editor: adding an ad (no capture yet)
 

@@ -15,12 +15,18 @@ Idea -> Backlog -> To Do are planning steps under the owner's direction. An
 explicit development request starts In Progress and a ticket branch. The author
 implements, self-checks and creates the linked PR, then sets Review. A separate
 subagent reviews; fixes stay on the same branch and require fresh approval.
+Opted-in execution v1 uses exactly one task per source PR and the single
+review/integration lane. Use explicit handoff and review claims from the pinned
+guide; follow the [workflow](WORKFLOW.md) for author claims before post-handoff edits.
 
 With staging enabled: working branch -> permanent stage, record Stage, test the
-configured target, then stage -> main with the same ticket set and content. Use
+configured target, then stage -> main with the same task and content. Use
 merge or squash with an unchanged tree and reviewed first parent. Keep one active
-task set on stage. Reconcile with current main before the next set. If main changes
-during testing, update the working branch, re-review and stage a fresh candidate.
+task on stage; a related task set is permitted only under legacy execution.
+Reconcile with current main before the next task. If main changes during testing,
+opted-in execution requires `execution review-return --keep-lane`, a fresh author
+implementation claim, branch updates/checks and handoff before resuming independent
+review and staging a fresh candidate. Legacy execution follows its adopted slot rules.
 Do not add fixes to the promotion PR or delete the working branch prematurely.
 
 Without staging: working branch -> main after review and checks. No Stage column.

@@ -4,19 +4,28 @@ Issues remain in MojoTheApe/adopy-campaing-launcher; the existing board identity
 at https://tracker.team7.cloud/projects/acl/. Keep the six established modules,
 71 historical aliases and +1000 numbering. Never renumber Issues or start a second board.
 
-The candidate pins Task Tracker 5f211d3095a392a16c2c01a65eb02ff8719a7243. Run
+The candidate pins Task Tracker a4ea3cfb0c1be1760ae0923c8232779532c25a7b. Run
 `python scripts/task_tracker.py guide` for that guide; helpers live in .workflow/tools
 and existing scripts paths remain wrappers. The active client uses that exact
 clean shared engine. `.workflow/legacy` retains the original configs for audit and
 bootstrap PR history; it is not another live tracker or a second Issue store.
-Do not return to the retired master client. While activation is being promoted,
-only ACL-1248 evidence/acceptance commands may use the bounded BOOTSTRAP route.
+Do not return to the retired master client. ACL-1248's original adoption is recorded
+in ADOPTION.md. The bounded ACL-1383 old-policy source handoff and ACL-1382 live
+execution migration are described in PARALLEL_EXECUTION.md.
 
-Follow WORKFLOW.md and the pinned command guide: work -> Review ->
-record-review -> check-merge -> stage -> verify-stage -> promotion -> merged -> verified
-package delivery. Keep one execution slot, explicit Release membership and Archive
+Follow WORKFLOW.md and the pinned command guide: claimed work -> handoff ->
+review-acquire -> independent review -> record-review -> check-merge -> stage ->
+verify-stage -> promotion -> merged -> verified package delivery. Keep five
+implementation slots and one review/integration lane, explicit Release membership and Archive
 semantics. Description explains the human outcome; Specifications retains full verified
 context, criteria, references, checks, decisions and current handoff. Read both.
+
+The board's Worker is the actual implementation owner, with Coordinator and
+Reviewer recorded separately. Use platform-neutral opaque actor/session identities,
+not synthetic GitHub accounts. Shared claims arbitrate across conversations;
+labels and per-chat counters cannot reserve capacity. A stopped session requires
+an explicit inspected handoff/transfer; elapsed time alone never authorizes takeover.
+See the pinned engine's `docs/PARALLEL_EXECUTION.md` for command arguments.
 
 For new work, a Merged label means source integration; the delivery receipt decides
 package completion. Partial scope, failed delivery and missing evidence remain unfinished.

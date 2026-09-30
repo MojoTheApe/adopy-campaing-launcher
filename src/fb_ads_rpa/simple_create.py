@@ -149,6 +149,10 @@ def scroll_to_level(page, level: str, *, budget_s: float = 20.0) -> dict:
         try:
             last = md._eval_bounded(page, _LEVEL_JS, [surface, title]) or {}
         except Exception as exc:
+            # ACL-1354 (9d3e41a0b373): вкладки больше нет — раздела не будет,
+            # ждать весь `budget_s` незачем, и это не разметка редактора.
+            if md._liveness.is_gone_error(exc) or md._tab_gone(page):
+                return {"ok": False, "why": "page_closed"}
             last = {"found": False, "why": "error:" + type(exc).__name__}
         if last.get("found"):
             try:

@@ -46,15 +46,57 @@ def policy(config):
 
 
 def fingerprint(config):
+    # Capacity is enforced by execution-state equality and unique lane ownership;
+    # changing it must not revoke already verified delivery or adoption history.
     return hashlib.sha256(json.dumps(policy(config), sort_keys=True).encode()).hexdigest()
 
 
-def read_state(request, repo):
+def execution_policy(config):
+    value = config.get('execution_policy')
+    if 'execution_policy' not in config:
+        return None
+    if (not isinstance(value, dict) or set(value) != {'schema_version', 'implementation_limit', 'review_limit'}
+            or type(value['schema_version']) is not int or value['schema_version'] != 1
+            or type(value['implementation_limit']) is not int or not 1 <= value['implementation_limit'] <= 16
+            or type(value['review_limit']) is not int or value['review_limit'] != 1):
+        raise ValueError('Execution policy needs schema_version 1, implementation_limit 1..16 and review_limit 1')
+    if not policy(config):
+        raise ValueError('Parallel execution requires the independent-review delivery policy')
+    return value
+
+
+def execution_state(state, config):
+    value = execution_policy(config)
+    if not value:
+        if state.get('schema_version') == 2:
+            raise ValueError('Shared execution state requires the adopted execution policy; restore the pinned config')
+        return None
+    section = state.get('execution')
+    if (state.get('schema_version') != 2 or not isinstance(section, dict)
+            or section.get('policy') != value):
+        raise ValueError('Run execution migrate while the repository is idle to adopt this execution policy')
+    for key in ('claims', 'tasks', 'actors', 'completed'):
+        if not isinstance(section.get(key), dict):
+            raise ValueError('Invalid execution state: ' + key)
+    if not isinstance(section.get('review_queue'), list) or not isinstance(section.get('history'), list):
+        raise ValueError('Invalid execution queue/history')
+    if section.get('review') is not None and not isinstance(section['review'], dict):
+        raise ValueError('Invalid review lane')
+    if state.get('active') or len(section['claims']) > value['implementation_limit']:
+        raise ValueError('Conflicting execution owners; inspect shared state')
+    return section
+
+
+def read_full_state(request, repo):
     row = request('repos/' + repo + '/contents/.tracker-state.json?ref=tracker-state')
     state = json.loads(base64.b64decode(row['content'], validate=False))
-    if state.get('schema_version') != 1:
+    if state.get('schema_version') not in (1, 2):
         raise ValueError('Invalid tracker state')
-    return state.get('delivery_workflow', {})
+    return state
+
+
+def read_state(request, repo):
+    return read_full_state(request, repo).get('delivery_workflow', {})
 
 
 def tree(request, root, sha):
@@ -103,9 +145,10 @@ def naming(config, pr, numbers):
     title = re.match(r'^\[([^]]+)\]\s+\S', pr.get('title', ''))
     if not title or set(x.strip() for x in title[1].split(',')) != set(ids):
         raise ValueError('PR title must start with all linked IDs: [ID, ID] Summary')
+    prefix = '(?:work|codex)/' if execution_policy(config) else 'codex/'
     if route(config, pr) != 'promotion' and not any(
-            re.fullmatch('codex/' + re.escape(i.lower()) + r'-[a-z0-9]+(?:-[a-z0-9]+)*', pr['head']['ref']) for i in ids):
-        raise ValueError('Working branch must be codex/<ticket-id>-<short-name>')
+            re.fullmatch(prefix + re.escape(i.lower()) + r'-[a-z0-9]+(?:-[a-z0-9]+)*', pr['head']['ref']) for i in ids):
+        raise ValueError('Working branch must use the configured ticket naming convention')
     reject_closing(pr.get('body', '') + '\n' + pr.get('title', ''))
 
 
@@ -173,8 +216,27 @@ def admit(request, config, pr, numbers):
         raise ValueError('A draft or abandoned PR cannot be admitted')
     root = 'repos/' + config['project']['repository']
     content = pr_tree(request, root, pr)
-    state = read_state(request, config['project']['repository'])
+    shared = read_full_state(request, config['project']['repository'])
+    execution = execution_state(shared, config)
+    state = shared.get('delivery_workflow', {})
     direction = route(config, pr)
+    if execution is not None:
+        lane = execution.get('review')
+        if pr.get('merged'):
+            completed = execution['completed'].get(str(pr['number']))
+            if completed:
+                if any(execution['tasks'].get(str(n), {}).get('state') != 'merged'
+                       or execution['tasks'][str(n)].get('pr') != completed['pr'] for n in completed['issues']):
+                    raise ValueError('This task has a newer execution; old merge evidence cannot complete its new scope')
+                lane = completed
+        if not lane or lane.get('state') != 'reviewing' or set(lane.get('issues', [])) != set(numbers):
+            raise ValueError('This task set does not own the sequential review/integration lane')
+        if direction != 'promotion' and lane.get('pr') != pr['number']:
+            raise ValueError('Another PR owns the review/integration lane')
+        reviewed = state.get('reviews', {}).get(str(lane['pr']), {})
+        if (reviewed.get('execution_lane') != lane.get('id') or reviewed.get('reviewer') != lane.get('actor')
+                or reviewed.get('review_session') != lane.get('session')):
+            raise ValueError('Review must be recorded by the current independent lane owner')
     if direction == 'promotion':
         receipt = state.get('promotions', {}).get(str(pr['number']), {}) if pr.get('merged') else {}
         receipt = receipt or state.get('stage', {})

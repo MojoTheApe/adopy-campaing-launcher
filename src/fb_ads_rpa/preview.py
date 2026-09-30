@@ -64,13 +64,20 @@ def preview_campaign_drafts(drafts: list[CampaignDraft]) -> list[dict[str, Any]]
             row[f"{prefix} — Body"] = (ad.ad_body or "")[:80] + (
                 "…" if len(ad.ad_body or "") > 80 else ""
             )
-            ads_raw.append({
+            if ad.ad_body2:
+                # ACL-1344: второй вариант основного текста — строка только
+                # у объявлений, где он выбран.
+                row[f"{prefix} — Body 2"] = ad.ad_body2[:80] + ("…" if len(ad.ad_body2) > 80 else "")
+            raw = {
                 "creative_type": ad.creative_type,
                 "creative_rel_path": _creative_rel_path(ad.creative_path),
                 "ad_title": ad.ad_title or "",
                 "ad_body": ad.ad_body or "",
                 "ad_link_description": ad.ad_link_description or "",
-            })
+            }
+            if ad.ad_body2:
+                raw["ad_body2"] = ad.ad_body2
+            ads_raw.append(raw)
         # Untruncated per-ad fields for the visual Feed/Reels preview — additive,
         # the flat "Ad N — ..." keys above stay unchanged for the diagnostic table.
         row["_ads_raw"] = ads_raw

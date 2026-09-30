@@ -71,13 +71,15 @@ def test_duplicate_copies_actual_slot_and_ad_fields_and_keeps_the_next_slot(page
       slot.querySelector('.cb-creative-search').value='example.mp4';
       slot.querySelector('[name="camp_0_ad_0_copy"]').value='Example title';
       slot.querySelector('.cb-adtitle-search').value='Example title';
-      slot.querySelector('[name="camp_0_ad_0_cta"]').value='Sign Up';
+      // ACL-1344: «Primary text 2» заменил выбор CTA в карточке объявления.
+      slot.querySelector('[name="camp_0_ad_0_copy2"]').value='Second title';
+      slot.querySelector('.cb-text2-search').value='Second title';
       slot.querySelector('[name="camp_0_ad_0_creative_type"][value="Video"]').checked=true;
       f.querySelector('[name="camp_1_budget"]').value='99';
       cbDuplicateSlot(slot.querySelector('.cb-dup-slot-btn'));
     }''')
     data = page.evaluate('Object.fromEntries(cbCollectFormData(document.querySelector("form")))')
-    for field in ('age','budget','asset','language','os','targeting','ad_count','ad_0_creative_file','ad_0_copy','ad_0_cta','ad_0_creative_type'):
+    for field in ('age','budget','asset','language','os','targeting','ad_count','ad_0_creative_file','ad_0_copy','ad_0_copy2','ad_0_creative_type'):
         assert data['camp_1_'+field] == data['camp_0_'+field], field
     assert data['camp_2_budget'] == '99'
     assert data['camp_count'] == '3'

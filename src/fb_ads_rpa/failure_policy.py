@@ -121,6 +121,26 @@ POLICY: dict[str, tuple[str, str]] = {
         "The robot may have pressed Create ad once to record the editor: if an empty new ad "
         "is in the draft, fill it in or delete it by hand",
     ),
+    # ACL-1354 (runs 37e397574548 and a71e4fc14aa1, 2026-09-28): time budgets of
+    # the recorded flow; the draft is partial and a replay would duplicate it.
+    "tab_frozen_budget_exceeded": (
+        BLOCKING,
+        "the profile's browser tab kept not answering while the campaign was being built, "
+        "so the robot stopped it instead of waiting for an hour; the draft is incomplete and "
+        "was not retried - check it in Ads Manager, then close and reopen the profile",
+    ),
+    "campaign_budget_exceeded": (
+        BLOCKING,
+        "building this campaign took longer than the robot's time limit, so it was stopped; "
+        "the draft is incomplete and was not retried - check it in Ads Manager and finish or "
+        "delete it",
+    ),
+    "step_budget_exceeded": (
+        BLOCKING,
+        "one step of this campaign took longer than the robot's time limit, so the campaign "
+        "was stopped; the draft is incomplete and was not retried - check it in Ads Manager "
+        "and finish or delete it",
+    ),
     "window_too_small": (BLOCKING, "the editor viewport is too narrow or unreadable after window recovery; "
                          "restore a desktop-sized window before continuing the draft"),
     # ── Ad level ────────────────────────────────────────────────────────────
@@ -220,10 +240,18 @@ PER_AD_POLICY: dict[str, tuple[str, str]] = {
         "Meta created an extra empty ad in this ad set; delete the empty "
         "\"New Leads ad\" before publishing",
     ),
+    # ACL-1344: второй вариант основного текста не встал. Первый текст
+    # сверен, объявление годно — предупреждение, а не блокировка.
+    "second_text": (
+        WARNING,
+        "the optional second primary text was not added; the ad runs with its "
+        "first primary text only - add the second text option in Ads Manager "
+        "by hand if it is needed",
+    ),
 }
 
 _PER_AD_NAME = re.compile(
-    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination|extra_empty_ad)$"
+    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination|extra_empty_ad|second_text)$"
 )
 
 
