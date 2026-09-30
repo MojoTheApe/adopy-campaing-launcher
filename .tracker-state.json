@@ -1815,6 +1815,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T07:10:58+00:00",
         "from_status": "status:todo"
+      },
+      "353": {
+        "actor": "Worker-S1353B",
+        "session": "run_s1353b_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1353-sc-more-ads",
+        "worktree": "C:\\acl-1353-sc-more-ads",
+        "id": "a0e93687aab74cd890ff56004487e57b",
+        "issue": 353,
+        "state": "implementing",
+        "started_at": "2026-09-30T07:11:40+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -1856,6 +1868,17 @@
         "state": "implementing",
         "worker": "Worker-L1443A",
         "coordinator": "Coordinator-C0930A"
+      },
+      "353": {
+        "implementers": [
+          {
+            "actor": "Worker-S1353B",
+            "session": "run_s1353b_0930"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1353B",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -1869,6 +1892,10 @@
       },
       "Worker-L1443A": {
         "session": "run_l1443a_0930",
+        "role": "Worker"
+      },
+      "Worker-S1353B": {
+        "session": "run_s1353b_0930",
         "role": "Worker"
       }
     },
@@ -1956,6 +1983,13 @@
         "issue": 327,
         "claim": "a24656aa3284492d82766f2199ed24ff",
         "actor": "Worker-L1443A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-09-30T07:11:40+00:00",
+        "issue": 353,
+        "claim": "a0e93687aab74cd890ff56004487e57b",
+        "actor": "Worker-S1353B"
       }
     ],
     "policy": {
