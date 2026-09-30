@@ -1965,20 +1965,6 @@
         "state": "implementing",
         "started_at": "2026-09-30T17:07:13+00:00",
         "from_status": "status:todo"
-      },
-      "357": {
-        "actor": "Worker-T1357N",
-        "session": "run_t1357n_0930",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1357-trusted-updates",
-        "worktree": "C:\\acl-1357-trusted-updates",
-        "id": "1f19420f56604baea1300559b9e87583",
-        "issue": 357,
-        "state": "handoff",
-        "started_at": "2026-09-30T17:09:13+00:00",
-        "from_status": "status:todo",
-        "pr": 370,
-        "report": "# ACL-1357 handoff \u2014 Worker-T1357N\n\nPR #370 into stage, branch codex/acl-1357-trusted-updates, head b9c3d39 (work/main 8a87697 merged, no conflicts).\n- PR #370 into stage, branch `codex/acl-1357-trusted-updates`, head b9c3d39: `work/main` (8a87697) merged without conflicts; main did not touch the update path, which still routes through the new checks (git gate in `acl_update_gate.py` / `Install ACL.bat` / `start_dashboard.bat`; signed `release.json` in `release_updates.fetch_latest` \u2192 `download`). Only change on top of the approved v2: the missing `docs/system/CHANGELOG.md` entry.\n- Tests (affected only): update gate, release signing, web update, release updates/manifest/publish, installer recovery, packaged runtime, packager updater \u2014 162 passed. Full suite in CI.\n- For ACL-1331 (urgent auto-updates): verify with `src.web.release_signing.verify_manifest(manifest_bytes, signature_bytes_or_None) -> Verdict` (pure; `Verdict.valid` only for a good signature from a pinned key; failures `unsigned`, `no_pinned_key`, `unknown_key`, `bad_signature`, `malformed`, `crypto_unavailable`). `decide()` is the warn-mode policy of the manual button and must NOT gate automatic installs; gate them on `release[\"_acl_signature\"][\"status\"] == \"valid\"` from `release_updates.fetch_latest`.\n- Owner checklist (GitHub settings, not code; full list and verify commands in `docs/RELEASE_TRUST.md`):\n  1. Plan first: MojoTheApe is GitHub Free with a private repo (`/rulesets` \u2192 403 \"Upgrade to GitHub Pro\"); rulesets, branch protection and protected environments need Pro/Team. Do not make the repo public instead.\n  2. Ruleset on `main`, `master`, `stage`: PR required, 1 approval by someone other than the author, stale approvals dismissed, CODEOWNERS review for workflows/update/release files, required checks (`ci.yml`, `delivery-check.yml`), no force-push/deletion, empty bypass (owner only, PRs only, if needed).\n  3. Tag ruleset `acl-release-*`: create only by release managers, no update/delete; immutable releases if offered.\n  4. Environment `release`: required reviewers with prevent-self-review, deployment tags `acl-release-*`, secrets `ACL_RELEASE_SIGNING_KEY`/`ACL_RELEASES_TOKEN`/`ACL_UPDATE_TOKEN` moved there; then add `environment: release` to the publish job. Signing rollout: `acl_sign_release.py keygen` outside the repo \u2192 secret \u2192 pin in `PINNED_PUBLIC_KEYS` \u2192 one signed release \u2192 enforce.\n  5. Actions: `GITHUB_TOKEN` read-only by default, Actions may not create/approve PRs, only verified or SHA-pinned actions, approval for outside workflows.\n  6. People/tokens: 2FA for all writers, passkeys/hardware keys for publishers, prune writers, `ACL_UPDATE_TOKEN` fine-grained, releases-repo only, `Contents: read`, with expiry.\n  7. Authenticode signing needs a certificate \u2014 separate task.\n- Next: independent review of the resumed PR, then stage."
       }
     },
     "tasks": {
@@ -2323,9 +2309,25 @@
             "session": "run_t1357n_0930"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-T1357N",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-T1357N",
+          "session": "run_t1357n_0930",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1357-trusted-updates",
+          "worktree": "C:\\acl-1357-trusted-updates",
+          "id": "1f19420f56604baea1300559b9e87583",
+          "issue": 357,
+          "state": "handoff",
+          "started_at": "2026-09-30T17:09:13+00:00",
+          "from_status": "status:todo",
+          "pr": 370,
+          "report": "# ACL-1357 handoff \u2014 Worker-T1357N\n\nPR #370 into stage, branch codex/acl-1357-trusted-updates, head b9c3d39 (work/main 8a87697 merged, no conflicts).\n- PR #370 into stage, branch `codex/acl-1357-trusted-updates`, head b9c3d39: `work/main` (8a87697) merged without conflicts; main did not touch the update path, which still routes through the new checks (git gate in `acl_update_gate.py` / `Install ACL.bat` / `start_dashboard.bat`; signed `release.json` in `release_updates.fetch_latest` \u2192 `download`). Only change on top of the approved v2: the missing `docs/system/CHANGELOG.md` entry.\n- Tests (affected only): update gate, release signing, web update, release updates/manifest/publish, installer recovery, packaged runtime, packager updater \u2014 162 passed. Full suite in CI.\n- For ACL-1331 (urgent auto-updates): verify with `src.web.release_signing.verify_manifest(manifest_bytes, signature_bytes_or_None) -> Verdict` (pure; `Verdict.valid` only for a good signature from a pinned key; failures `unsigned`, `no_pinned_key`, `unknown_key`, `bad_signature`, `malformed`, `crypto_unavailable`). `decide()` is the warn-mode policy of the manual button and must NOT gate automatic installs; gate them on `release[\"_acl_signature\"][\"status\"] == \"valid\"` from `release_updates.fetch_latest`.\n- Owner checklist (GitHub settings, not code; full list and verify commands in `docs/RELEASE_TRUST.md`):\n  1. Plan first: MojoTheApe is GitHub Free with a private repo (`/rulesets` \u2192 403 \"Upgrade to GitHub Pro\"); rulesets, branch protection and protected environments need Pro/Team. Do not make the repo public instead.\n  2. Ruleset on `main`, `master`, `stage`: PR required, 1 approval by someone other than the author, stale approvals dismissed, CODEOWNERS review for workflows/update/release files, required checks (`ci.yml`, `delivery-check.yml`), no force-push/deletion, empty bypass (owner only, PRs only, if needed).\n  3. Tag ruleset `acl-release-*`: create only by release managers, no update/delete; immutable releases if offered.\n  4. Environment `release`: required reviewers with prevent-self-review, deployment tags `acl-release-*`, secrets `ACL_RELEASE_SIGNING_KEY`/`ACL_RELEASES_TOKEN`/`ACL_UPDATE_TOKEN` moved there; then add `environment: release` to the publish job. Signing rollout: `acl_sign_release.py keygen` outside the repo \u2192 secret \u2192 pin in `PINNED_PUBLIC_KEYS` \u2192 one signed release \u2192 enforce.\n  5. Actions: `GITHUB_TOKEN` read-only by default, Actions may not create/approve PRs, only verified or SHA-pinned actions, approval for outside workflows.\n  6. People/tokens: 2FA for all writers, passkeys/hardware keys for publishers, prune writers, `ACL_UPDATE_TOKEN` fine-grained, releases-repo only, `Contents: read`, with expiry.\n  7. Authenticode signing needs a certificate \u2014 separate task.\n- Next: independent review of the resumed PR, then stage."
+        },
+        "pr": 370,
+        "queued_at": "2026-09-30T17:25:04+00:00"
       }
     },
     "actors": {
@@ -2497,7 +2499,8 @@
       388,
       395,
       406,
-      330
+      330,
+      357
     ],
     "review": {
       "id": "6b7b03e0361a4282a2d57ca2f8a38197",
@@ -2951,6 +2954,13 @@
         "pr": 393,
         "lane": "6b7b03e0361a4282a2d57ca2f8a38197",
         "actor": "Reviewer-R1390D"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-09-30T17:25:04+00:00",
+        "issue": 357,
+        "pr": 370,
+        "actor": "Worker-T1357N"
       }
     ],
     "policy": {
