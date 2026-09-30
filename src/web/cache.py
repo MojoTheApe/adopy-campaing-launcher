@@ -41,6 +41,8 @@ _CACHE: Dict[str, Any] = {
     "built_at": None,       # ISO datetime string
     "excel_key": None,      # (excel_path, mtime) for reused DF
     "excel_df": None,       # pd.DataFrame — survives report-only refresh
+    # (key, {cm: report}, df, warnings) — то, что видят читатели (ACL-1399)
+    "entry": None,
 }
 
 
@@ -66,13 +68,17 @@ def _cm_key(my_cm: Optional[str]) -> str:
 
 
 def _warm_hit(expected_key, cm_key: str):
-    if (
-        _CACHE["key"] is not None
-        and _CACHE["key"] == expected_key
-        and cm_key in _CACHE["reports"]
-    ):
-        return _CACHE["reports"][cm_key], _CACHE["df"], _CACHE["warnings"]
-    return None
+    # Один снимок, прочитанный одной операцией (ревью PR #408, R6): ключ,
+    # отчёты, книга и предупреждения всегда из одной сборки — чтение по
+    # полям могло взять новый df к старому отчёту или словарь, который
+    # сборка другой книги успела заменить между проверкой и индексом.
+    entry = _CACHE["entry"]
+    if entry is None or expected_key is None or entry[0] != expected_key:
+        return None
+    report = entry[1].get(cm_key)
+    if report is None:
+        return None
+    return report, entry[2], entry[3]
 
 
 def peek_cached_report(my_cm: Optional[str] = None):
@@ -148,11 +154,9 @@ def _build_locked(expected_key, cm_key: str):
     report["_cache_revision"] = next(_REVISIONS)
 
     # A new workbook invalidates every buyer's report, not just this one.
-    # ACL-1399: читатели берут тёплый отчёт без замка (из цикла и из пула),
-    # поэтому ключ ставится последним — полусобранную запись не увидит никто.
+    # ACL-1399: читатели берут тёплый отчёт без замка (из цикла и из пула) —
+    # только через снимок `entry` ниже, который ставится последним.
     new_book = _CACHE["key"] != expected_key
-    if new_book:
-        _CACHE["key"] = None
     reports = {} if new_book else dict(_CACHE["reports"])
     reports[cm_key] = report
     _CACHE["df"] = df
@@ -163,6 +167,8 @@ def _build_locked(expected_key, cm_key: str):
     from datetime import datetime
     _CACHE["built_at"] = datetime.now().isoformat(timespec="seconds")
     _CACHE["key"] = expected_key
+    # Читатели без замка видят только этот кортеж — он заменяется целиком.
+    _CACHE["entry"] = (expected_key, reports, df, warnings)
     return report, df, warnings
 
 
@@ -231,6 +237,7 @@ def cache_clear(*, keep_excel_df: bool = False) -> None:
     """Evict report cache. Optionally keep enriched Excel DF for a fast rebuild."""
     excel_key = _CACHE.get("excel_key") if keep_excel_df else None
     excel_df = _CACHE.get("excel_df") if keep_excel_df else None
+    _CACHE["entry"] = None
     _CACHE["key"] = None
     _CACHE["reports"] = {}
     _CACHE["df"] = None

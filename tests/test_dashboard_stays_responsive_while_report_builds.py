@@ -224,8 +224,25 @@ def test_cancel_never_runs_the_rpa_teardown_on_the_event_loop(monkeypatch):
         assert asyncio.get_running_loop() is not None
         return result, took
 
+    # Ревью PR #408, R5: регресс (отмена снова в цикле) вешает asyncio.run
+    # навсегда — сценарий идёт в своём потоке, и тест падает по таймауту, а
+    # не зависает.
+    box: dict = {}
+
+    def run() -> None:
+        try:
+            box["value"] = asyncio.run(scenario())
+        except BaseException as exc:  # noqa: BLE001
+            box["error"] = exc
+
     try:
-        result, took = asyncio.run(scenario())
+        runner = threading.Thread(target=run, daemon=True)
+        runner.start()
+        runner.join(10)
+        assert not runner.is_alive(), "the event loop hung: cancel ran the RPA teardown on it"
+        if "error" in box:
+            raise box["error"]
+        result, took = box["value"]
         assert result["ok"] is True
         assert took < 0.5, f"cancel_job blocked its caller for {took:.1f}s"
         assert done.wait(5), "the publisher was never told to stop"
@@ -270,3 +287,112 @@ def test_a_retried_publish_gets_the_same_job(monkeypatch):
         with pj._jobs_lock:
             for j in ("job-1", "job-2", "job-3"):
                 pj._jobs.pop(j, None)
+
+
+def test_refresh_during_a_slow_build_does_not_reuse_the_older_build(tmp_path, monkeypatch):
+    """Ревью PR #408, R3. Refresh, нажатый, пока идёт сборка, не получает её
+    результат: та сборка начата ДО нажатия и может не знать свежих данных.
+    Он ждёт её и собирает заново."""
+    from src.web import cache
+
+    book = tmp_path / "stats.xlsx"
+    book.write_bytes(b"stub")
+    first_started, release_first = threading.Event(), threading.Event()
+    builds = []
+
+    def build(*, enriched_df=None, my_cm=None, **_kw):
+        n = len(builds) + 1
+        builds.append(n)
+        if n == 1:
+            first_started.set()
+            assert release_first.wait(10)
+        return {"countries": [], "build": n}, None, []
+
+    monkeypatch.setattr(cache, "_resolve_excel_path", lambda _p=None: str(book))
+    monkeypatch.setattr(cache, "load_morning_report", build)
+    monkeypatch.setattr("src.web.buyer.get_selected_cm", lambda: "Tester")
+    cache.cache_clear()
+    out = {}
+    try:
+        plain = threading.Thread(target=lambda: out.update(plain=cache.get_cached_report()[0]["build"]))
+        plain.start()
+        assert first_started.wait(5)
+        refresh = threading.Thread(
+            target=lambda: out.update(refresh=cache.get_cached_report(force_rebuild=True)[0]["build"]))
+        refresh.start()
+        time.sleep(0.2)
+        # И обычный запрос во время сборки не начинает свою — он её ждёт.
+        waiter = threading.Thread(target=lambda: out.update(waiter=cache.get_cached_report()[0]["build"]))
+        waiter.start()
+        time.sleep(0.2)
+        release_first.set()
+        for t in (plain, refresh, waiter):
+            t.join(10)
+        assert out["plain"] == 1
+        assert out["refresh"] == 2, "Refresh returned the build that started before it was pressed"
+        assert out["waiter"] in (1, 2)
+        assert builds == [1, 2], builds
+    finally:
+        release_first.set()
+        cache.cache_clear()
+
+
+def test_the_status_poll_builds_another_period_itself(tmp_path, monkeypatch):
+    """Ревью PR #408, R4. Экран «загружается» для периода B, когда фоновая
+    сборка шла (или уже кончилась) для периода A: /report/status сам
+    запускает сборку B — иначе экран опрашивал бы вечно."""
+    import httpx
+    import pandas as pd
+
+    from src.web import app as web_app
+    from src.web import cache
+
+    book = tmp_path / "stats.xlsx"
+    book.write_bytes(b"stub")
+    frame = pd.DataFrame({"Date": ["2026-09-01", "2026-09-02"]})
+    periods = []
+
+    def base(*, enriched_df=None, my_cm=None, **_kw):
+        return {"countries": [], "my_cm": my_cm or "", "source_excel": str(book)}, frame, []
+
+    def period(*, enriched_df=None, my_cm=None, **_kw):
+        periods.append(list(enriched_df["Date"]))
+        time.sleep(0.2)
+        return {"countries": []}, enriched_df, []
+
+    monkeypatch.setattr(cache, "_resolve_excel_path", lambda _p=None: str(book))
+    monkeypatch.setattr(cache, "load_morning_report", base)
+    monkeypatch.setattr("src.analysis_agent.morning_service.load_morning_report", period)
+    monkeypatch.setattr("src.web.buyer.get_selected_cm", lambda: "Tester")
+    cache.cache_clear()
+    web_app._PERIOD_CACHE.clear()
+
+    def get(path):
+        async def go():
+            transport = httpx.ASGITransport(app=web_app.app, raise_app_exceptions=False)
+            async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as c:
+                return await c.get(path)
+        return asyncio.run(go())
+
+    def wait_ready(query):
+        for _ in range(100):
+            if get("/report/status" + query).json()["ready"]:
+                return True
+            time.sleep(0.05)
+        return False
+
+    try:
+        a, b = "?date_from=2026-09-01&date_to=2026-09-01", "?date_from=2026-09-02&date_to=2026-09-02"
+        assert 'id="report-loading"' in get("/" + a).text
+        assert wait_ready(a)
+        assert periods == [["2026-09-01"]]
+        # Период B: его никто не начинал — начинает сам опрос.
+        assert wait_ready(b), "the loading page for another period would poll forever"
+        assert periods == [["2026-09-01"], ["2026-09-02"]]
+    finally:
+        for _ in range(50):
+            if not cache.background_build_state()["building"]:
+                break
+            time.sleep(0.05)
+        cache.cache_clear()
+        web_app._PERIOD_CACHE.clear()

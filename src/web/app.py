@@ -1424,21 +1424,42 @@ async def health() -> JSONResponse:
     `version` lets the update helper tell the new release from the old one.
     """
     # ACL-1399: первый вопрос о версии — это git (~3 с на загруженной
-    # машине). /health — то, чем лаунчер проверяет, жив ли сервер: ждём
-    # версию не дольше доли секунды, а дальше отвечаем без неё — чтение
-    # доходит в фоне, и следующий ответ её уже знает. Не в цикле событий.
-    try:
-        release = await asyncio.wait_for(
-            asyncio.shield(asyncio.to_thread(_installed_release)), timeout=0.3
-        )
-    except asyncio.TimeoutError:
-        release = {"tag": ""}
-    return JSONResponse({"app": "ACL", "ok": True, "version": release.get("tag", "")})
+    # машине). /health — то, чем лаунчер проверяет, жив ли сервер: версию
+    # читает один фоновый поток, а ответ ждёт её не дольше доли секунды и
+    # дальше уходит без неё — следующий ответ её уже знает.
+    known = _installed_release_event()
+    if not known.is_set():
+        await asyncio.to_thread(known.wait, 0.3)
+    # Прочитана — повторный вызов берёт её из кэша acl_update мгновенно.
+    release = _installed_release() if known.is_set() else {"tag": ""}
+    return JSONResponse({"app": "ACL", "ok": True, "version": (release or {}).get("tag", "")})
+
+
+_INSTALLED: dict = {"event": None}
+_INSTALLED_LOCK = threading.Lock()
+
+
+def _installed_release_event() -> threading.Event:
+    """Событие «версия прочитана»; первый вызов запускает чтение — одно."""
+    with _INSTALLED_LOCK:
+        event = _INSTALLED["event"]
+        if event is not None:
+            return event
+        event = _INSTALLED["event"] = threading.Event()
+
+    def run() -> None:
+        try:
+            _installed_release()
+        finally:
+            event.set()
+
+    threading.Thread(target=run, name="acl-installed-release", daemon=True).start()
+    return event
 
 
 def _warm_installed_release() -> None:
     """Прочитать версию в фоне (git), чтобы первый /health её уже знал."""
-    threading.Thread(target=_installed_release, name="acl-installed-release", daemon=True).start()
+    _installed_release_event()
 
 
 def _warm_control_paths() -> None:
@@ -4246,20 +4267,10 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
             hand_off=True,
             request_id=request_id,
         )
-        if use_rpa_publish():
-            from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
-
-            total = len(
-                slots_to_campaign_drafts(
-                    slots,
-                    account_label=account_label,
-                    country=country,
-                    activate=False,
-                )
-            )
-        else:
-            total = len(slots)
-        return job_id, total
+        # Сколько кампаний — из самого задания: start_job уже собрал черновики
+        # (ревью PR #408, R8 — второй сборки не нужно).
+        job = get_job(job_id) or {}
+        return job_id, int(job.get("total") or len(slots))
 
     try:
         job_id, total = await asyncio.to_thread(launch)

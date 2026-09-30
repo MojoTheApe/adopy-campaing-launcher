@@ -22,6 +22,9 @@ and the owner's Publish on Facebook_1443 failed with "Failed to fetch".
 - Publish that gets no answer (busy server, lost response) no longer freezes the
   tab: the account shows "the server is busy — Retry", and Retry resends with the
   same `request_id`, for which the server returns the job it already created.
+  Dismiss frees the account instead; its next Publish reuses that same
+  `request_id`, so a submission that did reach the server is not doubled.
+  Other accounts may keep publishing while one waits for Retry.
 
 ## The robot builds campaigns in Meta's single-screen editor — ACL-1327
 

@@ -664,22 +664,29 @@ def start_job(
     # «Publish all» шлёт аккаунты разом, и они не должны ждать друг друга.
     with _request_lock:
         key_lock = _request_locks.setdefault(request_id, threading.Lock())
-    with key_lock:
+    try:
+        with key_lock:
+            with _request_lock:
+                known = _request_jobs.get(request_id)
+            if known is not None:
+                with _jobs_lock:
+                    if known in _jobs:
+                        return known
+            job_id = _start_job(account_label, country, slots, via_multilogin=via_multilogin,
+                                activate=activate, dry_run=dry_run, hand_off=hand_off)
+            with _request_lock:
+                while len(_request_jobs) >= _REQUEST_KEYS_MAX:
+                    _request_jobs.pop(next(iter(_request_jobs)))
+                _request_jobs[request_id] = job_id
+            return job_id
+    finally:
+        # Замок ключа нужен только на время запуска (ревью PR #408, R7): и
+        # после удачи, и после отказа он больше не держится. Повтор, пришедший
+        # позже, найдёт задание в _request_jobs; ждущий этот же замок держит
+        # на него ссылку и дождётся.
         with _request_lock:
-            known = _request_jobs.get(request_id)
-        if known is not None:
-            with _jobs_lock:
-                if known in _jobs:
-                    return known
-        job_id = _start_job(account_label, country, slots, via_multilogin=via_multilogin,
-                            activate=activate, dry_run=dry_run, hand_off=hand_off)
-        with _request_lock:
-            while len(_request_jobs) >= _REQUEST_KEYS_MAX:
-                old = next(iter(_request_jobs))
-                _request_jobs.pop(old)
-                _request_locks.pop(old, None)
-            _request_jobs[request_id] = job_id
-        return job_id
+            if _request_locks.get(request_id) is key_lock and not key_lock.locked():
+                _request_locks.pop(request_id, None)
 
 
 def _start_job(

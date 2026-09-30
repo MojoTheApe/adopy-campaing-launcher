@@ -396,6 +396,20 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   assert.ok(!q.sandbox.window.CB_QUEUE.active);
   assert.deepEqual(q.sandbox.window.CB_QUEUE.progress.report.map((r) => r.state), ['ok', 'ok']);
 
+  // Ревью PR #408, R9: Dismiss освобождает аккаунт, не дожидаясь повтора, —
+  // а следующая его отправка идёт с ТЕМ ЖЕ ключом: если первая всё же дошла,
+  // сервер вернёт её задание, второго не будет.
+  q = runQueue(['A', 'B'], { fail: 2 });
+  await flush();
+  assert.equal(q.sandbox.window.CB_QUEUE.dismiss('|B'), true);
+  assert.equal(q.sandbox.window.CB_QUEUE.dismiss('|B'), false, 'dismissed twice');
+  assert.ok(/dismissed/.test(q.sandbox.window.CB_QUEUE.progress.report[0].why));
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'A still waits for its retry');
+  q.sandbox.window.cbPublishAll(() => {});          // B свободен и уходит снова; A ждёт повтора
+  await flush();
+  assert.equal(posts(q), 3, 'the dismissed account could not be published again');
+  assert.equal(q.keys[2], q.keys[1], 'a dismissed account came back with a new key: possible double job');
+
   // Отказ на вопросе — ни одной работы.
   q = runQueue(['A'], { confirm: false });
   await flush();

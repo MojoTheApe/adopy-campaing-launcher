@@ -2888,6 +2888,9 @@
       color: var(--text, inherit); background: transparent; border: 1px solid var(--warn); border-radius: 4px;
     }
     .cb-retry-btn { font-size: 0.78rem; padding: 0.3rem 0.9rem; margin-left: 0; }
+    .cbd-q-retry + .cbd-q-retry { margin-left: 0; }
+    .cb-dismiss-btn { font: inherit; font-size: 0.78rem; padding: 0.3rem 0.9rem; cursor: pointer;
+      color: var(--muted); background: transparent; border: 1px solid var(--line, var(--muted)); border-radius: 4px; }
     .cbd-q-retry:hover, .cb-retry-btn:hover { background: color-mix(in srgb, var(--warn) 18%, transparent); }
     .cb-status-busy .cb-status-title { color: var(--warn); }
 
@@ -5334,7 +5337,8 @@ window.cbTree = (function () {
         if (x.stage === 'busy') {
           lines.push('<div class="cbd-q-line cbd-q-busy"><span class="cbd-q-run">⚠</span> '
             + aclEscHtml(x.account) + ' — the server is busy and did not answer; not sent twice '
-            + '<button type="button" class="cbd-q-retry" data-cb-retry="' + aclEscHtml(x.key || '') + '">Retry</button></div>');
+            + '<button type="button" class="cbd-q-retry" data-cb-retry="' + aclEscHtml(x.key || '') + '">Retry</button>'
+            + '<button type="button" class="cbd-q-retry" data-cb-dismiss="' + aclEscHtml(x.key || '') + '">Dismiss</button></div>');
           return;
         }
         var what = x.stage === 'checking' ? 'checking'
@@ -5359,6 +5363,11 @@ window.cbTree = (function () {
     box.querySelectorAll('[data-cb-retry]').forEach(function (b) {
       b.addEventListener('click', function () {
         if (window.CB_QUEUE && window.CB_QUEUE.retry) window.CB_QUEUE.retry(b.getAttribute('data-cb-retry'));
+      });
+    });
+    box.querySelectorAll('[data-cb-dismiss]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (window.CB_QUEUE && window.CB_QUEUE.dismiss) window.CB_QUEUE.dismiss(b.getAttribute('data-cb-dismiss'));
       });
     });
     // Аккаунт начал или кончил собираться — его галочки заперты или свободны.
@@ -11616,7 +11625,13 @@ function cbNewRun(notify) {
     fd.set('user_confirmed', '1');
     // ACL-1399: ключ отправки. Повтор после «сервер не ответил» идёт с тем
     // же ключом, и сервер вернёт уже созданное задание, а не второе.
-    if (!fd.get('request_id')) fd.set('request_id', cbRequestId());
+    // Отложенная (Dismiss) отправка этой формы — тот же ключ: если первая
+    // всё же дошла до сервера, он вернёт её задание, а не заведёт второе.
+    if (!fd.get('request_id')) {
+      var held = window.CB_PENDING_KEYS && window.CB_PENDING_KEYS[e.key];
+      if (held) delete window.CB_PENDING_KEYS[e.key];
+      fd.set('request_id', held || cbRequestId());
+    }
     // Кампании, ушедшие в задание: у их строк в ящике встанет точка сборки.
     var sentNames = cbSentCampaignNames(fd);
     post(e, fd, skipped, sentNames);
@@ -11667,6 +11682,15 @@ function cbNewRun(notify) {
       post(e, fd, skipped, sentNames);
       return true;
     };
+    e.dismiss = function () {
+      if (window.CB_QUEUE !== batch || e.state !== 'retry') return false;
+      (window.CB_PENDING_KEYS = window.CB_PENDING_KEYS || {})[e.key] = fd.get('request_id');
+      if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Not confirmed by the server — dismissed. '
+        + 'Publishing this account again reuses the same request, so no second job is created.</span>';
+      settle(e, { account: e.label, state: 'bad', skipped: skipped,
+                  why: 'Not confirmed by the server — dismissed; publishing again reuses the same request' });
+      return true;
+    };
     track(e, 'busy');
     if (!e.panel) return;
     e.panel.style.display = 'block';
@@ -11674,9 +11698,12 @@ function cbNewRun(notify) {
       + '<div class="cb-status-title">The dashboard server is busy and did not answer — nothing was sent twice.</div>'
       + '<div style="font-size:0.78rem;color:var(--muted);margin:0.25rem 0 0.4rem">'
       + 'Press Retry in a few seconds. If the first attempt did reach the server, Retry picks up that same job.</div>'
-      + '<button type="button" class="cb-retry-btn">Retry</button></div>';
+      + '<button type="button" class="cb-retry-btn">Retry</button> '
+      + '<button type="button" class="cb-dismiss-btn">Dismiss</button></div>';
     var btn = e.panel.querySelector('.cb-retry-btn');
     if (btn) btn.addEventListener('click', function () { e.resend(); });
+    var off = e.panel.querySelector('.cb-dismiss-btn');
+    if (off) off.addEventListener('click', function () { e.dismiss(); });
   }
 
   // Превью — по одному аккаунту за раз (оно быстрое); следующий аккаунт
@@ -11749,6 +11776,12 @@ function cbNewRun(notify) {
   batch.retry = function (key) {
     var e = entries.filter(function (x) { return x.state === 'retry' && x.key === key; })[0];
     return e ? e.resend() : false;
+  };
+  /* Не ждать повтора: аккаунт свободен, а следующая его отправка пойдёт с
+     тем же ключом (ревью PR #408, R9). */
+  batch.dismiss = function (key) {
+    var e = entries.filter(function (x) { return x.state === 'retry' && x.key === key; })[0];
+    return e ? e.dismiss() : false;
   };
   /* Доложить аккаунты: каждый пройдёт превью и уйдёт своим заданием.
      `only` — какие карточки везти: одна (Publish у карточки), функция
