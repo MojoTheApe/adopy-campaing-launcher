@@ -738,7 +738,7 @@
       "source_sha": "712fa0c7494d0ada422ba91ae523ed06acf8c386",
       "main_tree": "d94fb90b734d211e41fb41a5060b6798cc486e81",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-09-30T08:33:36+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -1152,6 +1152,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-09-29T22:30:21+00:00"
+      },
+      "327": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 394,
+            "merge_sha": "ef174b9348898cb73bf81f24645f59317f1064d3",
+            "tree_sha": "6c4d1f1661069b4a08b65a08dca418f6f330fa03"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-09-30T09:18:51+00:00"
       }
     },
     "promotions": {
@@ -1817,6 +1829,33 @@
           "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/387#issuecomment-5900285229"
         },
         "verified_at": "2026-09-29T22:27:47+00:00"
+      },
+      "394": {
+        "pr": 389,
+        "issues": [
+          327
+        ],
+        "tree_sha": "6c4d1f1661069b4a08b65a08dca418f6f330fa03",
+        "source_sha": "712fa0c7494d0ada422ba91ae523ed06acf8c386",
+        "main_tree": "d94fb90b734d211e41fb41a5060b6798cc486e81",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-09-30T08:33:36+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "712fa0c7494d0ada422ba91ae523ed06acf8c386",
+          "tree_sha": "6c4d1f1661069b4a08b65a08dca418f6f330fa03",
+          "checks": [
+            "Git checks on actual stage 712fa0c: CI run 36689171020 success (test 3.11 after a rerun of one flaky browser test, test 3.13, ACL verification, project tooling)",
+            "Git checks on actual stage 712fa0c: Windows installer run 36689171177 success",
+            "Git checks on actual stage 712fa0c: Delivery setup run 36689171253 success",
+            "Stage tree 6c4d1f1 equals the independently reviewed PR #389 tree; the change is docs/system/CHANGELOG.md only, so no runtime installation behaviour changed"
+          ],
+          "report": "Repository-only (documentation) change for ACL-1327: stage evidence is Git checks per docs/repository/DELIVERY.md. First CI attempt failed one flaky test (tests/test_campaign_build_percent_browser.py::test_the_percent_sits_next_to_the_dot_and_keeps_the_tooltip, bounding_box None on 3.11); rerun of failed jobs passed. https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/36689171020"
+        },
+        "verified_at": "2026-09-30T09:16:44+00:00"
       }
     }
   },
