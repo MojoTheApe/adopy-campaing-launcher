@@ -882,7 +882,7 @@
       "source_sha": "38351e63001fc41bd95ff26348aefa3455fe471f",
       "main_tree": "1307a32b2847cc8980c0685c0703a485e2a11fdd",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-01T13:07:46+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -1390,6 +1390,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-01T12:26:41+00:00"
+      },
+      "444": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 461,
+            "merge_sha": "42b8bc176bfd43e3066e636ce82486bef47ca6d6",
+            "tree_sha": "3f0eea66757d004f633922cfd20412c103c594a1"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-01T14:01:05+00:00"
       }
     },
     "promotions": {
@@ -2265,6 +2277,31 @@
           "report": "ACL-1441 stage verification: Git and installer checks green on the actual stage 3a629ca. Independent review: scratchpad/review_442_evidence.json (Reviewer-R1441V, approved). The in-dashboard Connect flow itself is not yet exercised live; it reaches buyers only with the next release, which needs the owner's yes."
         },
         "verified_at": "2026-10-01T12:05:48+00:00"
+      },
+      "461": {
+        "pr": 446,
+        "issues": [
+          444
+        ],
+        "tree_sha": "3f0eea66757d004f633922cfd20412c103c594a1",
+        "source_sha": "38351e63001fc41bd95ff26348aefa3455fe471f",
+        "main_tree": "1307a32b2847cc8980c0685c0703a485e2a11fdd",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-01T13:07:46+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "38351e63001fc41bd95ff26348aefa3455fe471f",
+          "tree_sha": "3f0eea66757d004f633922cfd20412c103c594a1",
+          "checks": [
+            "Git checks on actual stage 38351e6: CI run 36866406952 success (sharded, Python 3.11/3.13)",
+            "Windows installer run 36866407012 success (build, install, repair, uninstall); Delivery setup 36866406922 success"
+          ],
+          "report": "ACL-1444 stage verification: Git and installer checks green on the actual stage 38351e6. Independent review: scratchpad/review_446.md (Reviewer-R1444C, approved round 2). Live 'Publish all' acceptance (clean accounts close their windows, queued accounts start) is pending the owner's run."
+        },
+        "verified_at": "2026-10-01T13:21:49+00:00"
       }
     }
   },
