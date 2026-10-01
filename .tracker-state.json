@@ -2096,6 +2096,18 @@
         "state": "implementing",
         "started_at": "2026-10-01T07:27:36+00:00",
         "from_status": "status:backlog"
+      },
+      "433": {
+        "actor": "Worker-B1433T",
+        "session": "run_b1433t_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1433-bench",
+        "worktree": "C:\\acl-1433-bench",
+        "id": "be4785ed37244c2b8c47fc02624a3b3c",
+        "issue": 433,
+        "state": "implementing",
+        "started_at": "2026-10-01T08:39:49+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2680,6 +2692,17 @@
         },
         "pr": 431,
         "queued_at": "2026-10-01T08:07:54+00:00"
+      },
+      "433": {
+        "implementers": [
+          {
+            "actor": "Worker-B1433T",
+            "session": "run_b1433t_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-B1433T",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2806,6 +2829,10 @@
       "Reviewer-R1397J": {
         "session": "review_r1397j_1001",
         "role": "Reviewer"
+      },
+      "Worker-B1433T": {
+        "session": "run_b1433t_1001",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -3800,6 +3827,13 @@
         "issue": 397,
         "pr": 409,
         "actor": "Worker-P1397F"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T08:39:49+00:00",
+        "issue": 433,
+        "claim": "be4785ed37244c2b8c47fc02624a3b3c",
+        "actor": "Worker-B1433T"
       }
     ],
     "policy": {
