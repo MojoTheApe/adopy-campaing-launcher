@@ -1,5 +1,21 @@
 # System history
 
+## Saving a target waits out a briefly held registry file — ACL-1419
+
+`test_multiple_processes_do_not_lose_writes` failed intermittently on Windows CI.
+Two causes. Product: `targeting_registry._save_raw` replaced `targeting_registry.json`
+with a bare `os.replace`, which Windows refuses (`PermissionError [WinError 5]`)
+while the file is open for a moment elsewhere (Defender, the indexer, the previous
+writer's handle); the add/edit/remove then failed with that error. Reproduced locally
+3 of 18 runs under parallel load. It now uses `config.paths._replace_when_free`, the
+same short wait the other machine files already have. Test: each `spawn` worker
+imported the test module and with it `src.web.app` (~3 s quiet, much more on a
+loaded runner), and the test read `exitcode` right after `terminate()` without
+joining, so a slow worker showed up as `assert None == 0`. The worker now lives in
+`tests/targeting_worker.py` (registry import only), all workers share one 120 s
+deadline and are joined before exit codes are checked; the assertion is unchanged
+(three clean exits, 24 targets). `test_save_waits_out_a_briefly_held_registry` pins the wait.
+
 ## The robot closes and reopens a hand-opened profile window when it is safe — ACL-1388
 
 2026-09-30 06:49 UTC a "Publish all" run stopped Facebook_6540 at the start with
