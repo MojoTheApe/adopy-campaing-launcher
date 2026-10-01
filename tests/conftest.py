@@ -107,6 +107,18 @@ def _hand_window_reopen_off(monkeypatch):
     yield
 
 
+# Тесты не закрывают профили Multilogin в конце задания (ACL-1444).
+#
+# Чистое задание закрывает профиль через MLX API. Тест, который доходит до
+# конца задания с настоящим провайдером без своих заглушек, мог бы позвать
+# MLX живой машины. Выключатель — штатный (`FB_RPA_KEEP_PROFILES_OPEN=1`,
+# прежнее поведение); тесты ACL-1444 снимают его сами.
+@pytest.fixture(autouse=True)
+def _finished_profiles_stay_open(monkeypatch):
+    monkeypatch.setenv("FB_RPA_KEEP_PROFILES_OPEN", "1")
+    yield
+
+
 @pytest.fixture
 def enriched_df() -> pd.DataFrame:
     """Return an enriched DataFrame as if compute_metrics + enrich_structure ran.
