@@ -846,8 +846,22 @@
       "source_sha": "942f641e25cae9f32c439baf81707c9fdc88bf17",
       "main_tree": "22919f34db1a63c2c94c656546b3207206a3431c",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-10-01T10:39:18+00:00"
+      "state": "passed",
+      "recorded_at": "2026-10-01T10:39:18+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "result": "passed",
+        "target": "ACL isolated Windows stage installation",
+        "source_sha": "942f641e25cae9f32c439baf81707c9fdc88bf17",
+        "tree_sha": "fd095b692c707356b7fa93346fa4085b9663e3d9",
+        "checks": [
+          "Git checks on actual stage 942f641: CI run 36850452994 success (sharded)",
+          "Windows installer run 36850452984 success; Delivery setup 36850453026 success",
+          "The same content runs on the owner's live dashboard since 2026-10-01 (live build includes PR #398)"
+        ],
+        "report": "ACL-1395 stage verification: Git checks green on the actual stage. Review: scratchpad/review_398.md. Live acceptance (6540 account tree) pending the owner's re-read."
+      },
+      "verified_at": "2026-10-01T10:54:06+00:00"
     },
     "tasks": {
       "248": {
