@@ -2105,9 +2105,11 @@
         "worktree": "C:\\acl-1397-xdist",
         "id": "3a250c09b82f4555938e71f18829a489",
         "issue": 397,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T08:21:37+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 409,
+        "report": "Base update: merged work/main 49915f7 (ACL-1391) into the branch; only CHANGELOG union if any."
       }
     },
     "tasks": {
