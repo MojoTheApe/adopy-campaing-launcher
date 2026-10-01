@@ -2390,7 +2390,7 @@
             "session": "run_t1395e_0930"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-T1395E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2409,7 +2409,8 @@
         },
         "pr": 398,
         "queued_at": "2026-09-30T12:01:34+00:00",
-        "reviewer": "Reviewer-R1395G"
+        "reviewer": "Reviewer-R1395G",
+        "review_report": "Pre-review approved (prereview_398.md); returned only to merge current main (4af90b6) into the branch; lane kept. Optional F1: add a test that the tooltip name wins over the cell text."
       },
       "397": {
         "implementers": [
@@ -3164,7 +3165,7 @@
       "session": "review_r1395g_1001",
       "coordinator": "Coordinator-C0930A",
       "started_at": "2026-10-01T09:19:08+00:00",
-      "state": "returning",
+      "state": "fixing",
       "report": "Pre-review approved (prereview_398.md); returned only to merge current main (4af90b6) into the branch; lane kept. Optional F1: add a test that the tooltip name wins over the cell text.",
       "keep_lane": true
     },
@@ -4030,6 +4031,24 @@
         "pr": 398,
         "lane": "6457401d2fcb4698814f3b9664cc4d70",
         "actor": "Reviewer-R1395G"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-01T09:19:23+00:00",
+        "review": {
+          "id": "6457401d2fcb4698814f3b9664cc4d70",
+          "pr": 398,
+          "issues": [
+            395
+          ],
+          "actor": "Reviewer-R1395G",
+          "session": "review_r1395g_1001",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-01T09:19:08+00:00",
+          "state": "returning",
+          "report": "Pre-review approved (prereview_398.md); returned only to merge current main (4af90b6) into the branch; lane kept. Optional F1: add a test that the tooltip name wins over the cell text.",
+          "keep_lane": true
+        }
       }
     ],
     "policy": {
