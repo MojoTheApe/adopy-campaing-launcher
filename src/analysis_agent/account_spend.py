@@ -239,7 +239,10 @@ def _save_all(data: dict[str, dict]) -> None:
             json.dump(data, handle, ensure_ascii=False, indent=2)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp, p)
+        # Windows на миг держит файл (прошлая подмена, Defender, индексатор) и
+        # отвечает WinError 5 — показание Read терялось (ACL-1466). Ждём, как
+        # файл связей (ACL-1216); упорный отказ по-прежнему бросает.
+        paths._replace_when_free(tmp, p)
     finally:
         if tmp is not None:
             tmp.unlink(missing_ok=True)

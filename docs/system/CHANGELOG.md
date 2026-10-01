@@ -1,5 +1,14 @@
 # System history
 
+## A brief file hold on Windows no longer loses a spend reading — ACL-1466
+
+The spend and status store (`account_spend.json`) was replaced with a bare `os.replace`.
+Windows briefly holds a file after the previous replace or while Defender or the indexer
+looks at it, and answered `WinError 5`; the Read result was lost. The concurrent-writes
+test caught it ten times since 2026-09-15. The store now replaces through
+`config.paths._replace_when_free`, as the account-links file does since ACL-1216; a hold
+that does not end still raises.
+
 ## Finished clean profiles close themselves; a Close profile button for the rest — ACL-1444
 
 2026-10-01. With "Publish all", every finished account left its Multilogin
