@@ -34,7 +34,7 @@ def test_primary_text_field_is_found_and_headline_is_not(offline_page):
 def test_the_real_add_text_option_is_found(offline_page):
     offline_page.set_content(fragment(FIXTURE, "creative"))
     got = md._text_options(offline_page, "scan")
-    assert got["add_found"] is True and got["add_how"] == "text" and got["add_count"] == 1
+    assert got["add_found"] is True and got["add_how"] == "surface" and got["add_count"] == 1
     assert [b["body"] for b in got["boxes"]] == [True]
     assert got["boxes"][0]["text"].startswith("Sample primary text line 1")
 

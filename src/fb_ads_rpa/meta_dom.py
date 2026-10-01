@@ -12583,8 +12583,12 @@ def add_second_primary_text(page: Page, body: str, body2: str, type_and_confirm,
     Неудача не роняет объявление: текст 1 уже стоит. В `report` — причина,
     вызывающий пишет мягкий отказ `SECOND_TEXT_NOT_ADDED`.
 
-    TODO(ACL-1327): одноэкранный редактор (`simple_create`) — на другой
-    ветке; есть ли там та же кнопка, не проверено. Здесь — классический.
+    Классический и одноэкранный (`simple_create`) редакторы рисуют блок
+    одинаково: живые снимки 01.10 (cc8fcfa17ae9, классический) и 30.09
+    (3100d06ad51e, одноэкранный) — та же кнопка `#add-bodies-option-button`
+    > `role=button` `…/message_field/lib:dco-add-asset-button`, разметочный
+    префикс `/am/editor_drawer/editor:ad/` против `/am/editor:ad/`
+    (тесты `test_bench_add_text_option.py`).
     """
     # Каждая попытка пишет свой итог: повтор не наследует причину прошлой.
     out = report["second_text"] = {"ok": False}
@@ -12636,15 +12640,45 @@ def add_second_primary_text(page: Page, body: str, body2: str, type_and_confirm,
     if not claimed:
         return _done(False, "option_box_lost")
 
-    box = page.locator('[data-rpa-field="body2"]').first
+    def _reclaim() -> bool:
+        # Поле с меткой исчезло: Meta перерисовала новый вариант после
+        # нажатия, метка `body2` осталась на снятом узле. Живые 29.09–30.09:
+        # `option_box_not_focused` без единого признака — поле было
+        # найдено и помечено, а к фокусу его уже не было. Берём поле
+        # заново тем же способом, каким брали в первый раз.
+        if idx is None:
+            again = _text_options(page, "claim") or {}
+            return isinstance(again, dict) and bool(again.get("ok"))
+        scan = _text_options(page) or {}
+        found = next((i for i, b in enumerate(scan.get("boxes") or [])
+                      if not b.get("body") and not (b.get("text") or "").strip()), None)
+        return found is not None and bool(_text_options(page, "mark", found))
+
     handle = None
-    try:
-        if box.count():
-            handle = _focus_via_cdp_click(page, box)
-    except Exception:
-        handle = None
+    reclaims = 0
+    for attempt in range(3):
+        box = page.locator('[data-rpa-field="body2"]').first
+        try:
+            if box.count():
+                handle = _focus_via_cdp_click(page, box)
+            if handle is not None and not handle.evaluate("e => e.isConnected"):
+                handle = None
+        except Exception:
+            handle = None
+        if handle is not None or attempt == 2:
+            break
+        _sleep_h(0.5)
+        reclaims += 1
+        if not _reclaim():
+            break
+    if reclaims:
+        out["reclaims"] = reclaims
     if handle is None:
-        return _done(False, "option_box_not_focused")
+        try:
+            marks = page.locator('[data-rpa-field="body2"]').count()
+        except Exception:
+            marks = -1
+        return _done(False, "option_box_not_focused", reclaims=reclaims, marks=marks)
     if not type_and_confirm(handle, body2):
         return _done(False, "second_text_mismatch", seen=_handle_text(handle)[:120])
 

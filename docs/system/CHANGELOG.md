@@ -1,5 +1,32 @@
 # System history
 
+## The robot finds Meta's "Add text option" next to the text generation section — ACL-1344
+
+28.09–01.10 the second primary text was not added on most video ads
+(`ad_copy_second_text: add_control_not_found`, Doc21 four runs in a row, the
+tester's machine 01.10 twice). Every live capture of the block has the control:
+`#add-bodies-option-button` > `div[role=button]` with `data-surface`
+`.../message_field/lib:dco-add-asset-button`, text "Add text option" — the
+same in the classic and the single-screen editor (bench captures
+cc8fcfa17ae9 01.10 and 3100d06ad51e 30.09). The old finder looked for it by
+text only and dropped anything inside a "text generation zone"; when Meta
+draws "Advantage+ creative text generation" in the same `message_field`, the
+zone grew from that heading up to the parent it shares with the button and
+swallowed it. Every failure on 01.10 had `zones 3–7` and the generation
+section on the page; every success had no section.
+
+- The button is taken by its `data-surface` (in Meta's slot), and a
+  generation zone stops below anything that holds our field's controls.
+  Nothing inside Meta's generation section is pressed or counted as ours.
+- If Meta redraws the new option box right after the robot marks it, the box
+  is taken again instead of failing with `option_box_not_focused` (29.09–30.09
+  live, up to two retries; `reclaims` in telemetry).
+- Not found still means a warning, not a blocked ad (owner decision); the ad
+  creative block is captured once per ad for the next diagnosis.
+- Tests: `tests/test_bench_add_text_option.py` on both real pages, as captured
+  and with the real 29.09 generation section in place — find, press, type
+  text 2, read both texts back. Meta's new box itself is still emulated.
+
 ## Ads in the account tree get their workbook numbers — ACL-1395
 
 2026-09-30 on Facebook_6540 (CO_bnc_All_Video_FX_Y_35_28.09) the campaign row had

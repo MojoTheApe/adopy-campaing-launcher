@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**20 robot steps × 72 layouts, 40 fixtures, 2 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**20 robot steps × 75 layouts, 42 fixtures, 2 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -27,7 +27,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 3 | 3 | 0 | 0 |
 | creative_wizard | 6 | 6 | 0 | 0 |
-| ad_copy | 4 | 4 | 0 | 0 |
+| ad_copy | 7 | 7 | 0 | 0 |
 | ad_destination / destination_sweep | 9 | 8 | 0 | 1 |
 | ads 2-3 (single-screen editor) | 1 | 1 | 0 | 0 |
 | editor gone under the robot | 1 | 1 | 0 | 0 |
@@ -207,7 +207,10 @@ Robot: write_ad_copy (mark_ad_copy_field, _text_options, Draft.js typing)
 | Copy section visible, destination hidden (bare textareas) | 2026-09-09 capture | `ad_copy_2026_09_09.html` | `tests/test_ads_manager_bench.py` | headline and primary text found | pass |
 | Draft.js leaf split into orphan paragraphs after a multi-line insert | 7364047ef03c/04_ad_copy | `ad_copy_draft_split_2026_09_24.html` | `tests/test_draft_editor_text_is_typed_once.py` | text typed once | pass |
 | ad_creative_section with Primary text / Headline / Description, empty | 36a1bbf663c9/02_ad_media_ready | `ad_copy_text_options_2026_09_25.html` · ad_creative_section | `tests/test_second_primary_text_option.py` | second primary text added (button synthetic there) | pass |
-| ad_creative_section without headline_field; real 'Add text option' button | cc8fcfa17ae9/08_ad_copy | `ad_copy_headline_missing_2026_10_01.html` · creative | `tests/test_bench_ad_copy.py` | body field marked, headline not found (as live); real Add text option found and pointed at | pass |
+| ad_creative_section without headline_field; real 'Add text option' button | cc8fcfa17ae9/08_ad_copy | `ad_copy_headline_missing_2026_10_01.html` · creative | `tests/test_bench_ad_copy.py` | body field marked, headline not found (as live); real Add text option found by its surface and pointed at | pass |
+| Classic editor (Doc19), text 1 typed (textarea), Add text option beside the expanded 'Advantage+ creative text generation' section | Doc19 2026-09-29 (read off the live page) | `ad_copy_add_text_option_2026_09_29.html` | `tests/test_add_text_option_live_markup.py` | button found by surface, not swallowed by the generation zone; nothing in the section pressed; Meta's variations never ours | pass |
+| Classic editor, text 1 typed, real 'Add text option'; also with the real 29.09 generation section beside it | cc8fcfa17ae9/08_ad_copy, Doc19 2026-09-29 (generation section) | `ad_copy_headline_missing_2026_10_01.html` · creative | `tests/test_bench_add_text_option.py` | Add text option found by surface, pressed, text 2 typed and read back; generation untouched (Meta's new box emulated) | pass |
+| Single-screen editor (simple_create), text 1 typed, real 'Add text option' and 'Add headline option' | 3100d06ad51e/04_destination_sweep | `ad_copy_single_screen_2026_09_30.html` · creative | `tests/test_bench_add_text_option.py` | same as classic, with and without the generation section; Optimize text per person recorded (Disabled) | pass |
 
 ## ad_destination / destination_sweep
 
