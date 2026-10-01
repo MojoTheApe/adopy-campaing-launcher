@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """Every success return of the creative step checks the Crop outcome first (ACL-1426, review PR #440 H1).
 
-Before the fix a Crop failure stored by the retry loop's close-walk, or a
-post/story pair whose wizard never showed Crop, was erased by
-`crop_step.set_plan(None)` while the step reported success on "media is on
-the ad". Both review probe scenarios are here and must fail the step with a
-named reason. No browser: the page helpers are stubbed.
+Before the fix a Crop failure stored by the retry loop's close-walk was erased
+by `crop_step.set_plan(None)` while the step reported success on "media is on
+the ad"; it must fail the step with a named reason. ACL-1476 (owner,
+2026-10-01): a post/story pair whose wizard never showed Crop is no longer a
+refusal - the ad keeps the post file and the step succeeds with the warning
+`story_not_placed:no_crop_step`. No browser: the page helpers are stubbed.
 """
 from __future__ import annotations
 
@@ -90,15 +91,19 @@ def test_a_crop_failure_in_the_retry_close_walk_fails_the_step(monkeypatch, fold
     assert (row["ok"], row["note"], row["diag"]["where"]) == (False, EXPAND_ON, "retry_close_walk")
 
 
-def test_a_pair_whose_wizard_never_showed_crop_fails_after_the_media_check(monkeypatch, folder):
-    """Review probe 2: pair on disk, the wizard never on Crop, media on the ad."""
+def test_a_pair_whose_wizard_never_showed_crop_succeeds_with_a_warning_after_the_media_check(
+        monkeypatch, folder):
+    """Review probe 2, ACL-1476: pair on disk, the wizard never on Crop, media on the ad."""
     monkeypatch.setattr(md, "upload_ad_creative", lambda *a, **k: False)
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
     monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: True)
     ok = md.upload_ad_creative_with_retry(object(), "video", folder["pair"])
-    assert ok is False
-    assert md.last_upload_why() == "crop_step_not_shown"
-    assert _rows(folder["tmp"], "ad_creative_upload")[-1]["diag"]["where"] == "retry_media_check"
+    assert ok is True
+    assert md.last_upload_why() == ""
+    assert md.last_crop_warning() == crop_step.NO_CROP_STEP
+    assert [(r["ok"], r["note"]) for r in _rows(folder["tmp"], "ad_creative_crop")] \
+        == [(None, "story_not_placed:no_crop_step")]
+    assert not [r for r in _rows(folder["tmp"], "ad_creative_upload") if r["ok"] is False]
 
 
 def test_a_single_file_whose_crop_was_not_shown_still_succeeds_with_a_warning(monkeypatch, folder):
@@ -110,11 +115,15 @@ def test_a_single_file_whose_crop_was_not_shown_still_succeeds_with_a_warning(mo
         == [(None, "crop_step_not_shown")]
 
 
-def test_a_successful_upload_of_a_pair_without_crop_is_not_a_success(monkeypatch, folder):
-    # Defensive: even if `upload_ad_creative` itself said True.
-    monkeypatch.setattr(md, "upload_ad_creative", lambda *a, **k: True)
-    assert md.upload_ad_creative_with_retry(object(), "video", folder["pair"]) is False
-    assert md.last_upload_why() == "crop_step_not_shown"
+def test_a_successful_upload_of_a_pair_without_crop_is_a_success_with_a_warning(monkeypatch, folder):
+    # ACL-1476: the post file stays on the ad; the warning is named.
+    uploaded = []
+    monkeypatch.setattr(md, "upload_ad_creative",
+                        lambda page, kind, path, **k: uploaded.append(path) or True)
+    assert md.upload_ad_creative_with_retry(object(), "video", folder["pair"]) is True
+    assert [Path(p).name for p in uploaded] == ["4_es_2403_post.mp4"]
+    assert md.last_upload_why() == ""
+    assert md.last_crop_warning() == crop_step.NO_CROP_STEP
 
 
 def test_a_successful_upload_whose_crop_was_done_stays_a_success(monkeypatch, folder):
@@ -125,6 +134,7 @@ def test_a_successful_upload_whose_crop_was_done_stays_a_success(monkeypatch, fo
     monkeypatch.setattr(md, "upload_ad_creative", upload)
     assert md.upload_ad_creative_with_retry(object(), "video", folder["pair"]) is True
     assert md.last_upload_why() == ""
+    assert md.last_crop_warning() == ""
 
 
 def test_a_crop_failure_in_the_give_up_close_is_named_not_erased(monkeypatch, folder):
@@ -156,11 +166,11 @@ def known(monkeypatch, folder):
     return folder
 
 
-def test_known_file_media_already_on_ad_of_a_pair_fails(monkeypatch, known):
+def test_known_file_media_already_on_ad_of_a_pair_succeeds_with_a_warning(monkeypatch, known):
     monkeypatch.setattr(md, "_media_block_filled_now", lambda page: True)
-    assert md.upload_ad_creative_with_retry(object(), "video", known["pair"]) is False
-    assert md.last_upload_why() == "crop_step_not_shown"
-    assert _rows(known["tmp"], "ad_creative_upload")[-1]["diag"]["where"] == "media_already_on_ad"
+    assert md.upload_ad_creative_with_retry(object(), "video", known["pair"]) is True
+    assert md.last_upload_why() == ""
+    assert md.last_crop_warning() == crop_step.NO_CROP_STEP
 
 
 def test_known_file_media_already_on_ad_of_a_single_file_succeeds(monkeypatch, known):
@@ -193,10 +203,10 @@ def test_known_file_after_wizard_closed_with_a_crop_failure_fails(monkeypatch, k
         == "media_already_on_ad_after_wizard_closed"
 
 
-def test_known_file_reuse_of_a_pair_without_crop_fails(monkeypatch, known):
+def test_known_file_reuse_of_a_pair_without_crop_succeeds_with_a_warning(monkeypatch, known):
     monkeypatch.setattr(md, "upload_ad_creative", lambda *a, **k: True)
-    assert md.upload_ad_creative_with_retry(object(), "video", known["pair"]) is False
-    assert md.last_upload_why() == "crop_step_not_shown"
+    assert md.upload_ad_creative_with_retry(object(), "video", known["pair"]) is True
+    assert md.last_crop_warning() == crop_step.NO_CROP_STEP
 
 
 # ── L4: the user's sentence ───────────────────────────────────────────────

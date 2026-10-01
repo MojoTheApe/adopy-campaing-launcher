@@ -1,5 +1,29 @@
 # System history
 
+## Video pairs keep the post file with a warning when the story cannot be placed — ACL-1476
+
+Owner decision 2026-10-01 (Issue #476) after ACL-1426 went live: two post/story pair
+cases no longer hold the campaign as "do not publish".
+
+- `crop_step` — a pair whose wizard showed no Crop step (the single-screen editor walks
+  Media → Text → Creative generation → Enhancements; runs e4fd79d26e63, bd7b2f…) and a
+  pair whose `_story` file is not in Meta's library (runs a88e3789f7ab, 362762a797c3)
+  are warnings `story_not_placed:no_crop_step` / `story_not_placed:not_in_library`
+  (`crop_step.warning()`, telemetry `ad_creative_crop` ok=None). The ad keeps the post
+  file. In the not-in-library case Original on both cards and Meta AI expansion off are
+  still applied and read back; only Replace is skipped.
+- Meta's "Replace media for Stories, Status, Reels" opens inside the wizard dialog (step
+  row, Close, Save; no Cancel). The way back to Crop is the step row's "Crop", not the
+  wizard's Close (which closed the wizard in a88e3789f7ab). If Crop does not come back,
+  the step blocks with `crop_replace_picker_not_closed`.
+- `meta_dom` — a successful creative step with such a warning adds the ad's warning row
+  `<ad>_story_not_placed:<reason> - <ad>: <English line>` (`simple_create.creative_why_text`:
+  "Story placement uses the post file: …"); `failure_policy` classifies
+  `story_not_placed` as WARNING, so the campaign stays publishable.
+- Still blocking: Meta AI expansion left on, `crop_unknown_toggle_on`,
+  `crop_vertical_not_story`, `crop_square_changed`, `crop_replace_picker_unscoped`,
+  Original not set, `crop_replace_off`.
+
 ## Post and Story get the right file in the Crop step — ACL-1426
 
 Owner rules 2026-10-01 (Issue #426): the creative number pairs `_post`/`_square` with
