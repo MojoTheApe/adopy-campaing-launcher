@@ -152,6 +152,11 @@
               {%- else -%}<span class="amap-st bad" title="{{ st.status_text or st.status }} — read {{ st.at }}.{{ stale_note }}">{{ st.status }}</span>
               {%- endif -%}
               {%- if st.at_short %}<small class="amap-st-at{{ ' stale' if st.stale }}">{{ st.at_short }}{% if st.stale %} · not refreshed{% endif %}</small>{% endif -%}
+              {#- Сообщение поставщику аккаунтов (acl-132): одна строка «имя -
+                  статус», вставляется в группу WhatsApp вместе со снимком.
+                  Имя — до « - », как его называют вслух. -#}
+              {%- set st_word = {'disabled': 'Account Disabled', 'restricted': 'Account Restricted', 'blocked': 'Account Blocked', 'review': 'Account Under Review'}.get(st.status) -%}
+              {%- if st_word %}<div class="amap-st-report"><button type="button" class="amap-btn amap-copy-text" data-copy="{{ r.account.split(' - ')[0] }} - {{ st_word }}" title="Copies: {{ r.account.split(' - ')[0] }} - {{ st_word }}" onclick="amapCopyText(this)">Copy text</button><small class="amap-st-hint">Copy screenshot and account number to send in the group</small></div>{% endif -%}
               {%- endif -%}
             </td>
             {#- Не готов — пишем чем именно. `to_do` для неготового аккаунта и
