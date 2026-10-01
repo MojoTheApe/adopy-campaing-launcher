@@ -1,5 +1,30 @@
 # System history
 
+## Parallel profiles start at 3.5 GB each and adapt to measured use — ACL-1424
+
+2026-10-01 four Multilogin profiles used 13.6 GB (about 3.4 GB each) and the laptop
+was at 87 % memory, while the "Publish all" queue (ACL-1321) assumed 1.5 GB per
+profile. Owner decision: start from 3.5 GB and adapt to the free memory.
+
+- `src/web/profile_slots.py`: the per-profile estimate is 3.5 GB
+  (`ACL_PROFILE_MEMORY_GB`). Once a running profile has warmed up
+  (`ACL_PROFILE_WARMUP_S`, 90 s), the queue measures its Mimic process tree (root
+  `chrome.exe` under the Mimic folder with `--client-session-id=<profile id>`, plus
+  all its children; the person's own Chrome is never counted) and uses the average
+  of the measured profiles instead of the estimate, never below
+  `ACL_PROFILE_MEMORY_FLOOR_GB` (1.5). Free memory is read fresh at every decision,
+  so opening something heavy holds the next profile and closing it lets it start.
+  Ceiling (4) and floor (1) are unchanged; `ACL_MAX_PARALLEL_PROFILES` still skips
+  all of this.
+- The measurement runs in its own thread (`ProfileUsage`, read-only psutil); a
+  decision never waits for it. A probe that fails, hangs past 5 s, or does not find
+  the profile falls back to the 3.5 GB estimate.
+- Visible: the waiting campaign dot says e.g. "Waiting: 2.1 GB free, a profile uses
+  ~3.4 GB". Telemetry: every hold is a `job_phase` row with note `slot_decision`
+  (free memory, estimate or measured average, per-profile readings, decision); the
+  start keeps the existing `slot_queue` row. `GET /publish-jobs/slots` shows the same
+  fields under `next`.
+
 ## The robot closes and reopens a hand-opened profile window when it is safe — ACL-1388
 
 2026-09-30 06:49 UTC a "Publish all" run stopped Facebook_6540 at the start with

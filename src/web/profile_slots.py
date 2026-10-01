@@ -34,6 +34,22 @@
 Настройки читаются из `os.environ` при каждом решении: машинный `.env`
 загружает `config.paths.load_env` при старте дешборда, а
 `update_machine_env` меняет окружение сразу, без перезапуска.
+
+ACL-1424 (01.10): четыре профиля заняли 13,6 ГБ — по ≈3,4 ГБ, не 1,5. Решение
+владельца: «начинать с 3,5 и подстраиваться под свободное место».
+
+* Оценка на старте прогона — 3,5 ГБ на профиль (`ACL_PROFILE_MEMORY_GB`).
+* Как только хоть один идущий профиль прогрелся (`ACL_PROFILE_WARMUP_S`),
+  меряем память его дерева процессов Mimic (`measure_profiles`: корневой
+  `chrome.exe` из папки Mimic с `--client-session-id=<id профиля>` и все
+  его потомки; чужой Chrome не считается) и берём среднее по прогретым
+  профилям вместо оценки — но не ниже пола `ACL_PROFILE_MEMORY_FLOOR_GB`
+  (1,5): профиль, ещё не открывший кампании, весит мало и пустил бы лишних.
+* Замер идёт в своём потоке (`ProfileUsage`), решение берёт последний
+  готовый ответ и никогда его не ждёт; замер дольше `MEASURE_TIMEOUT_S`,
+  сбой или профиль, которого не нашли, — снова оценка 3,5 ГБ.
+* Свободную память читаем каждый раз заново: человек открыл тяжёлое —
+  следующий профиль ждёт, закрыл — стартует. Потолок и пол — как были.
 """
 from __future__ import annotations
 
@@ -43,7 +59,7 @@ import sys
 import threading
 import time
 from collections import OrderedDict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any, Callable
 
 log = logging.getLogger(__name__)
@@ -55,9 +71,17 @@ TICK_S = 2.0
 FALLBACK_LIMIT = 2
 
 DEFAULT_CEILING = 4
-DEFAULT_PROFILE_MEMORY_GB = 1.5
+DEFAULT_PROFILE_MEMORY_GB = 3.5
+DEFAULT_PROFILE_FLOOR_GB = 1.5
 DEFAULT_RESERVE_GB = 1.5
 DEFAULT_WARMUP_S = 90.0
+
+#: Замер памяти профилей: свежим ответ считается столько секунд, дальше —
+#: перечитать; старше `MEASURE_MAX_AGE_S` — не верить и брать оценку.
+MEASURE_TTL_S = 5.0
+MEASURE_MAX_AGE_S = 30.0
+#: Замер, не вернувшийся за это время, считается сбоем (решение — по оценке).
+MEASURE_TIMEOUT_S = 5.0
 
 
 @dataclass(frozen=True)
@@ -67,6 +91,7 @@ class SlotSettings:
     override: int | None = None
     ceiling: int = DEFAULT_CEILING
     profile_mb: int = int(DEFAULT_PROFILE_MEMORY_GB * 1024)
+    profile_floor_mb: int = int(DEFAULT_PROFILE_FLOOR_GB * 1024)
     reserve_mb: int = int(DEFAULT_RESERVE_GB * 1024)
     warmup_s: float = DEFAULT_WARMUP_S
 
@@ -106,6 +131,8 @@ def load_settings(env: dict[str, str] | Any = None) -> SlotSettings:
         override=override,
         ceiling=int(_env_number(env, "ACL_MAX_PARALLEL_CEILING", DEFAULT_CEILING, minimum=1)),
         profile_mb=int(_env_number(env, "ACL_PROFILE_MEMORY_GB", DEFAULT_PROFILE_MEMORY_GB, minimum=0.1) * 1024),
+        profile_floor_mb=int(_env_number(env, "ACL_PROFILE_MEMORY_FLOOR_GB", DEFAULT_PROFILE_FLOOR_GB,
+                                         minimum=0.1) * 1024),
         reserve_mb=int(_env_number(env, "ACL_MEMORY_RESERVE_GB", DEFAULT_RESERVE_GB, minimum=0) * 1024),
         warmup_s=_env_number(env, "ACL_PROFILE_WARMUP_S", DEFAULT_WARMUP_S, minimum=0),
     )
@@ -152,17 +179,169 @@ def read_memory() -> MemoryReading | None:
         return None
 
 
+def _mimic_processes() -> list[Any]:
+    """Корневые и дочерние `chrome.exe` с нужными полями — через psutil."""
+    import psutil
+
+    return [p for p in psutil.process_iter(["name", "exe", "cmdline"])
+            if str(p.info.get("name") or "").lower() == "chrome.exe"]
+
+
+def measure_profiles(profiles: Any, *, processes: Callable[[], list[Any]] = _mimic_processes) -> dict[str, int]:
+    """Память (МБ) дерева процессов Mimic каждого из `profiles`. Только чтение.
+
+    Профиль узнаём по корневому `chrome.exe` из папки Mimic (Multilogin
+    кладёт его в `mlx/deps/mimic_*`) с `--client-session-id=<id профиля>`
+    (замер 01.10: это id профиля из карты аккаунтов) или с последней частью
+    `--user-data-dir`, равной id. Свой Chrome человека не в папке Mimic — не
+    считается. Память дерева — сумма рабочих наборов корня и всех потомков
+    (общие страницы считаются дважды: оценка с запасом, а не в обрез).
+    Профиля не нашли — его нет в ответе. Сбой чтения — исключение наверх.
+    """
+    wanted = {str(p).strip().lower(): str(p) for p in profiles if str(p or "").strip()}
+    out: dict[str, int] = {}
+    if not wanted:
+        return out
+    for proc in processes():
+        info = getattr(proc, "info", {}) or {}
+        if "mimic" not in str(info.get("exe") or "").lower():
+            continue
+        args = [str(a) for a in (info.get("cmdline") or [])]
+        if any(a.startswith("--type=") for a in args):
+            continue   # дочерний процесс; его посчитаем в дереве корня
+        found = None
+        for a in args:
+            key, _, value = a.partition("=")
+            value = value.strip().strip('"').lower()
+            if key == "--client-session-id" and value in wanted:
+                found = wanted[value]
+            elif key == "--user-data-dir":
+                tail = value.replace("/", "\\").rstrip("\\").rsplit("\\", 1)[-1]
+                if tail in wanted:
+                    found = wanted[tail]
+            if found:
+                break
+        if not found:
+            continue
+        total = 0
+        for member in [proc, *_children(proc)]:
+            try:
+                total += int(member.memory_info().rss)
+            except Exception:
+                continue   # процесс ушёл или закрыт для чтения — без него
+        out[found] = out.get(found, 0) + total // 2**20
+    return out
+
+
+def _children(proc: Any) -> list[Any]:
+    try:
+        return list(proc.children(recursive=True))
+    except Exception:
+        return []
+
+
+class ProfileUsage:
+    """Замер памяти идущих профилей — в своём потоке, решение его не ждёт.
+
+    `read(profiles)` отдаёт последний готовый замер этих профилей и, если он
+    устарел (`ttl_s`), запускает новый в фоне. Ответ `status`:
+    `ok` (есть `per_profile`), `pending` (первый замер ещё идёт), `timeout`
+    (замер висит дольше `timeout_s`; второй поверх не запускаем), `failed`
+    (замер упал), `stale` (последний ответ старше `max_age_s`). Кроме `ok`
+    решает оценка. Готовый фоновый замер зовёт `on_ready` — очередь
+    перепроверяет решение сразу, не дожидаясь таймера.
+
+    `background=False` — мерить прямо в вызывающем потоке (тесты с
+    подставным замером).
+    """
+
+    def __init__(
+        self,
+        measure: Callable[[list[str]], dict[str, int]] = measure_profiles,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        ttl_s: float = MEASURE_TTL_S,
+        max_age_s: float = MEASURE_MAX_AGE_S,
+        timeout_s: float = MEASURE_TIMEOUT_S,
+        background: bool = True,
+        on_ready: Callable[[], None] | None = None,
+    ) -> None:
+        self._measure = measure
+        self._clock = clock
+        self._ttl_s = ttl_s
+        self._max_age_s = max_age_s
+        self._timeout_s = timeout_s
+        self._background = background
+        self.on_ready = on_ready
+        self._lock = threading.Lock()
+        # Последний ответ: когда, каких профилей, что (None — сбой).
+        self._at: float | None = None
+        self._for: frozenset[str] = frozenset()
+        self._value: dict[str, int] | None = None
+        self._error = ""
+        self._inflight_since: float | None = None
+
+    def _run(self, profiles: list[str]) -> None:
+        try:
+            value, error = dict(self._measure(profiles)), ""
+        except Exception as exc:   # нечем прочитать, нет прав — решит оценка
+            value, error = None, type(exc).__name__
+            log.info("profile memory probe failed: %s", exc)
+        with self._lock:
+            self._at, self._for, self._value, self._error = self._clock(), frozenset(profiles), value, error
+            self._inflight_since = None
+        if self._background and self.on_ready is not None:
+            try:
+                self.on_ready()
+            except Exception:
+                pass
+
+    def read(self, profiles: list[str]) -> dict[str, Any]:
+        wanted = frozenset(profiles)
+        now = self._clock()
+        with self._lock:
+            fresh = self._at is not None and self._for == wanted and now - self._at < self._ttl_s
+            start = not fresh and self._inflight_since is None
+            if start:
+                self._inflight_since = now
+        if start:
+            if self._background:
+                threading.Thread(target=self._run, args=(sorted(wanted),), daemon=True,
+                                 name="acl-profile-memory").start()
+            else:
+                self._run(sorted(wanted))
+        with self._lock:
+            if self._at is not None and self._for == wanted and now - self._at < self._max_age_s:
+                if self._value is None:
+                    return {"status": "failed", "error": self._error}
+                return {"status": "ok", "per_profile": dict(self._value), "age_s": round(now - self._at, 1)}
+            if self._inflight_since is not None and now - self._inflight_since > self._timeout_s:
+                return {"status": "timeout"}
+            if self._inflight_since is not None:
+                return {"status": "pending"}
+            return {"status": "stale"}
+
+
 def decide(running: int, warming: int, memory: MemoryReading | None,
-           settings: SlotSettings) -> dict[str, Any]:
+           settings: SlotSettings, measured_mb: int | None = None) -> dict[str, Any]:
     """Можно ли стартовать ещё один профиль. Чистая функция — всё на входе.
 
     `running` — сколько профилей идёт, `warming` — сколько из них стартовали
-    недавно и память ещё не заняли. Ответ — факты для телеметрии: `allow`,
-    `reason`, `limit` (сколько разом сейчас выходит), память.
+    недавно и память ещё не заняли, `measured_mb` — средняя замеренная
+    память прогретого профиля (None — замера нет, решает оценка). Ответ —
+    факты для телеметрии: `allow`, `reason`, `limit` (сколько разом сейчас
+    выходит), память, `profile_mb` (по чём считали профиль) и его источник.
     """
     out: dict[str, Any] = {"running": running, "warming": warming}
     if memory is not None:
         out.update(total_mb=memory.total_mb, available_mb=memory.available_mb)
+    if settings.override is None:
+        if measured_mb is not None:
+            settings = replace(settings, profile_mb=max(int(measured_mb), settings.profile_floor_mb))
+            out.update(measured_mb=int(measured_mb), profile_mb_source="measured")
+        else:
+            out["profile_mb_source"] = "estimate"
+        out["profile_mb"] = settings.profile_mb
     if settings.override is not None:
         limit = settings.override
         out.update(limit=limit, allow=running < limit,
@@ -213,8 +392,13 @@ class ProfileSlots:
         settings: Callable[[], SlotSettings] = load_settings,
         clock: Callable[[], float] = time.monotonic,
         tick_s: float = TICK_S,
+        usage: ProfileUsage | None = None,
     ) -> None:
         self._memory = memory
+        # Замер идущих профилей (ACL-1424): готовый ответ будит ожидающих.
+        self._usage = usage if usage is not None else ProfileUsage()
+        if self._usage.on_ready is None:
+            self._usage.on_ready = self.wake
         self._settings = settings
         self._clock = clock
         self._tick_s = tick_s
@@ -247,8 +431,31 @@ class ProfileSlots:
             return {"allow": False, "reason": "profile", "ahead": ahead}
         if self._head() != job_id:
             return {"allow": False, "reason": "order", "ahead": ahead}
-        decision = decide(len(self._running), self._warming(), self._memory(), self._settings())
+        decision = self._decide_now()
         decision["ahead"] = ahead
+        return decision
+
+    def _decide_now(self) -> dict[str, Any]:
+        """`decide` с замером прогретых профилей вместо оценки, если он есть."""
+        settings = self._settings()
+        running = len(self._running)
+        measured_mb: int | None = None
+        probe: dict[str, Any] = {}
+        # Мерим, только когда это что-то решает: авто, кто-то идёт, потолок не взят.
+        if settings.override is None and 0 < running < settings.ceiling:
+            now = self._clock()
+            settled = sorted({r["profile"] for r in self._running.values()
+                              if now - r["started"] >= settings.warmup_s})
+            if settled:
+                probe = self._usage.read(settled)
+                per = probe.get("per_profile") or {}
+                if probe.get("status") == "ok" and per:
+                    measured_mb = int(sum(per.values()) / len(per))
+        decision = decide(running, self._warming(), self._memory(), settings, measured_mb)
+        if probe:
+            decision["measure"] = probe.get("status")
+            if probe.get("per_profile"):
+                decision["per_profile_mb"] = dict(probe["per_profile"])
         return decision
 
     # ── для заданий ────────────────────────────────────────────────────
@@ -285,7 +492,12 @@ class ProfileSlots:
                                 "decision": verdict, "first_hold": first_hold}
                     if first_hold is None:
                         first_hold = verdict
-                    note = (verdict.get("reason"), verdict.get("ahead"))
+                    note: tuple = (verdict.get("reason"), verdict.get("ahead"))
+                    if verdict.get("reason") == "memory_low":
+                        # Причина на экране — «свободно X ГБ, профиль ~Y ГБ»:
+                        # заметная перемена цифр тоже новость (шаг 0,5 / 0,25 ГБ).
+                        note += (int(verdict.get("available_mb") or 0) // 512,
+                                 int(verdict.get("profile_mb") or 0) // 256)
                     if on_wait is not None and note != last_note:
                         last_note = note
                         try:
@@ -313,12 +525,10 @@ class ProfileSlots:
         """Что идёт, что ждёт и что решилось бы для следующего — для дешборда."""
         with self._cond:
             settings = self._settings()
-            memory = self._memory()
-            running = len(self._running)
             return {
                 "settings": asdict(settings),
                 "mode": "override" if settings.override is not None else "auto",
                 "running": [{"job_id": j, "profile": r["profile"]} for j, r in self._running.items()],
                 "waiting": [{"job_id": j, "profile": w["profile"]} for j, w in self._waiting.items()],
-                "next": decide(running, self._warming(), memory, settings),
+                "next": self._decide_now(),
             }
