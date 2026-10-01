@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**20 robot steps × 75 layouts, 42 fixtures, 2 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**20 robot steps × 76 layouts, 43 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -22,7 +22,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | audience_age | 4 | 4 | 0 | 0 |
 | languages | 5 | 5 | 0 | 0 |
 | detailed_targeting (interests) | 2 | 2 | 0 | 0 |
-| placements | 7 | 5 | 2 | 0 |
+| placements | 8 | 8 | 0 | 0 |
 | next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 3 | 3 | 0 | 0 |
@@ -32,11 +32,6 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | ads 2-3 (single-screen editor) | 1 | 1 | 0 | 0 |
 | editor gone under the robot | 1 | 1 | 0 | 0 |
 | banners and blocks (any step) | 2 | 2 | 0 | 0 |
-
-## Known live bugs (strict xfail — fix in the RPA track)
-
-- **placements** — Doc19: an OFF placement Meta does not offer (`placements_doc19_2026_10_01.html`, `tests/test_bench_placements.py`): subitems_missing ['Messenger Stories'] fails the step; needs a rule telling 'not offered' from 'row not rendered yet'
-- **placements** — Single-screen editor Placements card: card found (`placements_simple_create_2026_09_30.html`, `tests/test_bench_placements.py`): card anchored on 'Account controls', which this card does not render; how Meta reveals the manual controls here was not captured
 
 ## objective
 
@@ -151,10 +146,11 @@ Robot: fill_placements
 | Classic, categories visible, subcategories collapsed (5 categories) | 2026-09-09 capture | `placements_2026_09_09.html` | `tests/test_ads_manager_bench.py` | five categories end in the target configuration | pass |
 | 'Placements' node with In-stream expanded; category recollapses after a save | 10402d9c2daf/01_placements | `placements_node_2026_09_25.html` | `tests/test_rpa_placements_category_recollapse.py` | category reopened, every subitem set | pass |
 | Heading with 'Explore placement opportunities' button group (6540) | 6925f39bdc67/01_placements, 8058b54f78d0/01_placements | `placements_heading_group_2026_09_28.html` · card | `tests/test_rpa_placements_heading_with_buttons.py` | the card, not the Campaign score row, is marked | pass |
-| Doc19: six categories (+ 'Marketing messages'), no 'Messenger Stories' | 5edc0e7cca0a/01_placements | `placements_doc19_2026_10_01.html` · card | `tests/test_bench_placements.py` | every offered placement set; only miss 'Messenger Stories' (as live) | pass |
-| Doc19: an OFF placement Meta does not offer | 5edc0e7cca0a/01_placements | `placements_doc19_2026_10_01.html` · card | `tests/test_bench_placements.py` | step succeeds (an absent placement cannot be delivered to) | xfail |
-| Single-screen editor: Placements card open, only 'Advantage+ on' + 'About placements' | cb854b07857b/02_placements | `placements_simple_create_2026_09_30.html` · card | `tests/test_bench_placements.py` | placements_card_not_found, stage tag (as live) | pass |
-| Single-screen editor Placements card: card found | cb854b07857b/02_placements | `placements_simple_create_2026_09_30.html` · card | `tests/test_bench_placements.py` | the card is found and the manual controls reached | xfail |
+| Doc19: six categories (+ 'Marketing messages'), no 'Messenger Stories' | 5edc0e7cca0a/01_placements | `placements_doc19_2026_10_01.html` · card | `tests/test_bench_placements.py` | every offered placement set and read back; 'Messenger Stories' named not offered | pass |
+| Doc19: an OFF placement Meta does not offer | 5edc0e7cca0a/01_placements | `placements_doc19_2026_10_01.html` · card | `tests/test_bench_placements.py` | step succeeds: category open, scrolled to a proven end and settled, item never seen = not offered (ACL-1445); late rows and a tail mounting on scroll are set; a tail that never mounts or an item seen elsewhere still fails | pass |
+| Single-screen editor: Placements card open, only 'Advantage+ on' + 'About placements' | cb854b07857b/02_placements | `placements_simple_create_2026_09_30.html` · card | `tests/test_bench_placements.py` | card found by its data-surface anchor; a body that never leaves Loading is named placements_card_loading (ACL-1445) | pass |
+| Single-screen editor Placements card: card found | cb854b07857b/02_placements | `placements_simple_create_2026_09_30.html` · card | `tests/test_bench_placements.py` | the card is found; once its body loads, manual placements are set and read back there (ACL-1445) | pass |
+| Single-screen editor: placements set, list collapsed to 'Included: 7, Allowed with limited spend: 0, Excluded: 13' (no capture, screenshot text) | SA_ARC_All_Video_IPO_35_01.10 (tester, 01.10) | `placements_simple_create_summary_2026_10_01.html` · card | `tests/test_bench_placements.py` | counts are not proof: the summary is opened and its rows set and read back; a summary that does not open, or right counts over a wrong set, fails (review of PR #449) | pass |
 
 ## next_to_ad / additional ad (classic)
 
