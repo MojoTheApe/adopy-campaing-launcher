@@ -2264,20 +2264,6 @@
         "state": "implementing",
         "started_at": "2026-10-01T12:28:26+00:00",
         "from_status": "status:todo"
-      },
-      "455": {
-        "actor": "Worker-B1455C",
-        "session": "run_b1455c_1001",
-        "coordinator": "Coordinator-D0930K",
-        "branch": "codex/acl-1455-buttons-link-style",
-        "worktree": "C:\\acl-btn-style",
-        "id": "c68328fedde54e9b9471439e85e08446",
-        "issue": 455,
-        "state": "handoff",
-        "started_at": "2026-10-01T12:29:14+00:00",
-        "from_status": "status:backlog",
-        "pr": 456,
-        "report": "# ACL-1455 \u2014 implementation handoff\n\n- PR #456 (`codex/acl-1455-buttons-link-style` \u2192 `stage`), head 44afca1, base work/stage 3a629ca.\n- Worker-B1455C, session run_b1455c_1001, coordinator Coordinator-D0930K, worktree `C:\\acl-btn-style`.\n\nDone: link-style secondary buttons (option C) for `.amap-btn` (not primary), `.amap .amap-x`, `.acc-btn`; danger/failed red; disabled muted; focus ring; fields and filled buttons untouched; both themes. One CSS block, no markup changes.\n\nChecks: new Chromium computed-style test (4 cases, all fail on unfixed stage) + JS/page guards + map columns: 13 passed. Full suite: CI. Screenshots shown to the owner.\n\nFor the reviewer: the block uses `:is(...)` so its specificity (0,2,0 + pseudo-classes) beats the earlier per-class rules; check that no state the owner relies on (busy \"reading\u2026\", calendar presets) lost its look. Not done: owner's visual check on the live build."
       }
     },
     "tasks": {
@@ -3141,9 +3127,25 @@
             "session": "run_b1455c_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-B1455C",
-        "coordinator": "Coordinator-D0930K"
+        "coordinator": "Coordinator-D0930K",
+        "handoff": {
+          "actor": "Worker-B1455C",
+          "session": "run_b1455c_1001",
+          "coordinator": "Coordinator-D0930K",
+          "branch": "codex/acl-1455-buttons-link-style",
+          "worktree": "C:\\acl-btn-style",
+          "id": "c68328fedde54e9b9471439e85e08446",
+          "issue": 455,
+          "state": "handoff",
+          "started_at": "2026-10-01T12:29:14+00:00",
+          "from_status": "status:backlog",
+          "pr": 456,
+          "report": "# ACL-1455 \u2014 implementation handoff\n\n- PR #456 (`codex/acl-1455-buttons-link-style` \u2192 `stage`), head 44afca1, base work/stage 3a629ca.\n- Worker-B1455C, session run_b1455c_1001, coordinator Coordinator-D0930K, worktree `C:\\acl-btn-style`.\n\nDone: link-style secondary buttons (option C) for `.amap-btn` (not primary), `.amap .amap-x`, `.acc-btn`; danger/failed red; disabled muted; focus ring; fields and filled buttons untouched; both themes. One CSS block, no markup changes.\n\nChecks: new Chromium computed-style test (4 cases, all fail on unfixed stage) + JS/page guards + map columns: 13 passed. Full suite: CI. Screenshots shown to the owner.\n\nFor the reviewer: the block uses `:is(...)` so its specificity (0,2,0 + pseudo-classes) beats the earlier per-class rules; check that no state the owner relies on (busy \"reading\u2026\", calendar presets) lost its look. Not done: owner's visual check on the live build."
+        },
+        "pr": 456,
+        "queued_at": "2026-10-01T12:32:57+00:00"
       }
     },
     "actors": {
@@ -3581,7 +3583,8 @@
       344,
       445,
       447,
-      452
+      452,
+      455
     ],
     "review": null,
     "history": [
@@ -4668,6 +4671,13 @@
         "at": "2026-10-01T12:29:14+00:00",
         "issue": 455,
         "claim": "c68328fedde54e9b9471439e85e08446",
+        "actor": "Worker-B1455C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-01T12:32:57+00:00",
+        "issue": 455,
+        "pr": 456,
         "actor": "Worker-B1455C"
       }
     ],
