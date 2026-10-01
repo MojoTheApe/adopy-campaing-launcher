@@ -2337,7 +2337,7 @@
             "session": "run_p1397f_0930"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-P1397F",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2356,7 +2356,8 @@
         },
         "pr": 409,
         "queued_at": "2026-09-30T19:26:27+00:00",
-        "reviewer": "Reviewer-R1397J"
+        "reviewer": "Reviewer-R1397J",
+        "review_report": "Pre-review approved (prereview_409.md); returned only to merge current main (49915f7) into the branch; lane kept."
       },
       "399": {
         "implementers": [
@@ -2985,7 +2986,7 @@
       "session": "review_r1397j_1001",
       "coordinator": "Coordinator-C0930A",
       "started_at": "2026-10-01T08:21:05+00:00",
-      "state": "returning",
+      "state": "fixing",
       "report": "Pre-review approved (prereview_409.md); returned only to merge current main (49915f7) into the branch; lane kept.",
       "keep_lane": true
     },
@@ -3763,6 +3764,24 @@
         "pr": 409,
         "lane": "b9d5b5efbfd24414ba2621b27aa6b30a",
         "actor": "Reviewer-R1397J"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-01T08:21:23+00:00",
+        "review": {
+          "id": "b9d5b5efbfd24414ba2621b27aa6b30a",
+          "pr": 409,
+          "issues": [
+            397
+          ],
+          "actor": "Reviewer-R1397J",
+          "session": "review_r1397j_1001",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-01T08:21:05+00:00",
+          "state": "returning",
+          "report": "Pre-review approved (prereview_409.md); returned only to merge current main (49915f7) into the branch; lane kept.",
+          "keep_lane": true
+        }
       }
     ],
     "policy": {
