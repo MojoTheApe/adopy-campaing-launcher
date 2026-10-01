@@ -781,6 +781,24 @@
           388
         ],
         "recorded_at": "2026-09-30T22:17:25+00:00"
+      },
+      "392": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1391L",
+        "review_session": "review_r1391l_1001",
+        "execution_lane": "4c25161719304735bd6c5fbce6884d19",
+        "implementer": "Worker-D1391M",
+        "head_sha": "cc1ef88bb07ca153df0d5223509a68daa89bb490",
+        "base_sha": "9216c5e41498e498aac42ac8c22543064ac88800",
+        "tree_sha": "2717ad7a98b14d6d7c5d579784748e8d37fdf849",
+        "report": "C:\\Users\\EVGENI~1\\AppData\\Local\\Temp\\claude\\C--fb-agents\\de606466-2798-4722-b592-13bc7766bb85\\scratchpad\\review_392_v2.md \u2014 head contains main 91e7049 and stage 9216c5e; merge is automatic except the CHANGELOG union; F1/F6/N1 fixed and the F1 mutation is killed; affected tests pass; all 11 CI checks green; F2-F5 are follow-ups",
+        "main_sha": "91e7049a0dbe24e34ece87a0cfdd23cd776e4931",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          391
+        ],
+        "recorded_at": "2026-10-01T07:15:21+00:00"
       }
     },
     "stage": {
