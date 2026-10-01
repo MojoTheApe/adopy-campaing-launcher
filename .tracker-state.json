@@ -2053,9 +2053,11 @@
         "worktree": "C:\\acl-1427-idle-wait",
         "id": "18306264951346d4bdfd076aae43c267",
         "issue": 427,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T07:37:51+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 428,
+        "report": "# ACL-1427 handoff \u2014 Worker-I1427Q\n\nPR #428 `codex/acl-1427-idle-wait` -> stage, head 2b470ea (base work/main 91e7049).\n\n## Design\n- `src/fb_ads_rpa/hand_window.py`: `wait_until_safe(pids, on_wait=)` -> `Wait(verdict, waited_s, outcome)`. Only RECENT_INPUT failing -> wait up to `IDLE_WAIT_S`=120 s (`FB_RPA_HAND_WINDOW_IDLE_WAIT_S`; 0 = old immediate stop), re-running full `assess` every `IDLE_POLL_S`=3 s; outcomes no_wait / idle / timeout / gate_failed / cancelled. Other gates never waited for.\n- Cancel: ContextVar `watch_cancel(check)`; `RpaPublisher._ensure_browser` wraps `provider.open` with `lambda: self._cancelled` (set by `publish_jobs.cancel_job` -> `publisher.cancel()` from the web thread). Checked every 0.5 s.\n- `src/fb_ads_rpa/browser.py` `_reopen_hand_opened`: uses the wait; job-panel notice `HAND_WINDOW_WAIT_NOTICE` via existing `report_notice`; `profile_hand_window` telemetry/Sentry diag gains `waited_s`, `wait_outcome`; note `cancelled` on Stop. ACL-1388 guarantees unchanged (publish only, graceful MLX stop, no kill).\n- Job keeps its profile slot while waiting (no slot code touched).\n\n## Tests\n- New `tests/test_a_hand_opened_window_waits_for_idle.py` (13, fake clock/sleep, stubbed Win32/MLX): 30 s input -> reopen; 120 s input -> stop; foreground -> immediate stop; gate flips mid-wait; Stop through publisher -> <=0.5 s; env override.\n- `tests/test_a_hand_opened_profile_is_reopened_when_safe.py`: RECENT_INPUT removed from immediate-stop parametrization (behaviour changed by spec).\n- Affected files: 282 passed (headless, ACL_LIBRARY_* empty).\n\n## Open\n- Acceptance \"ACL-1418 live check\" not run (no live profiles touched)."
       }
     },
     "tasks": {
