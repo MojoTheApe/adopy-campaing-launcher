@@ -828,7 +828,7 @@
       "source_sha": "380c0d70bbf28e3a4bfcfbd921b259125898a317",
       "main_tree": "2717ad7a98b14d6d7c5d579784748e8d37fdf849",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-01T08:43:42+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -1301,6 +1301,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-01T08:20:29+00:00"
+      },
+      "397": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 436,
+            "merge_sha": "4af90b60f79631f400d992c78a2d938beac68376",
+            "tree_sha": "22919f34db1a63c2c94c656546b3207206a3431c"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-01T09:17:52+00:00"
       }
     },
     "promotions": {
@@ -2098,6 +2110,32 @@
           "report": "ACL-1391 stage verification: Git checks green on the actual stage; live Doc20 read confirmed by the owner. Review: scratchpad/review_392_v2.md."
         },
         "verified_at": "2026-10-01T07:46:03+00:00"
+      },
+      "436": {
+        "pr": 409,
+        "issues": [
+          397
+        ],
+        "tree_sha": "22919f34db1a63c2c94c656546b3207206a3431c",
+        "source_sha": "380c0d70bbf28e3a4bfcfbd921b259125898a317",
+        "main_tree": "2717ad7a98b14d6d7c5d579784748e8d37fdf849",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-01T08:43:42+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "380c0d70bbf28e3a4bfcfbd921b259125898a317",
+          "tree_sha": "22919f34db1a63c2c94c656546b3207206a3431c",
+          "checks": [
+            "Git checks on actual stage 380c0d7: CI run 36838106042 success (sharded test jobs, first attempt)",
+            "Windows installer run 36838106045 success; Delivery setup 36838106048 success",
+            "Test-infrastructure change (pytest-xdist, CI shards, flake fixes); no runtime installation behaviour changed"
+          ],
+          "report": "ACL-1397 stage verification: Git checks green on the actual stage with the new sharded CI. Review: scratchpad/review_409.md."
+        },
+        "verified_at": "2026-10-01T08:58:32+00:00"
       }
     }
   },
