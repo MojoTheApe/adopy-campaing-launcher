@@ -17,6 +17,7 @@ from src.fb_ads_rpa import page_liveness as _liveness
 from src.fb_ads_rpa import profile_trouble as _trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
 from src.fb_ads_rpa import simple_create as _simple
+from src.fb_ads_rpa import wizard_capture as _wizard_capture
 
 #: Порог, за которым Playwright отказывается передавать файл.
 #:
@@ -9273,7 +9274,8 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Next после нашего выбора перевёл мастер на Text — значит, Meta
         # приняла медиа: без него шаг Text не открывается.
         at_text = _wizard_past_media(page)
-        _close_creative_setup_modal(page)
+        with _wizard_capture.origin("library_pick", filename):
+            _close_creative_setup_modal(page)
         _sleep_h(0.5)
         if _ad_editor_url(page.url) and _verify_ad_media_present(page):
             right, detail = _verify_ad_media_is_the_file(page, filename)
@@ -9348,7 +9350,8 @@ def _attached_at_text(page: Page, filename: str, log: list[dict], how: str) -> s
     шага при медиа, стоящем в объявлении.
     """
     try:
-        _close_creative_setup_modal(page)
+        with _wizard_capture.origin("library_pick", filename):
+            _close_creative_setup_modal(page)
     except Exception:
         pass
     _telemetry.record("ad_creative_reuse", True, note="wizard_at_text_after_pick",
@@ -10218,11 +10221,26 @@ def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
     still had Next a moment later — so a miss is counted, not acted on, and
     only four in a row end the walk.
     """
+    # ACL-1426: дневник шагов — только чтение (снимок шага до нажатия и одна
+    # строка телеметрии в конце); на нажатия он не влияет.
+    trail = _wizard_capture.Trail()
+    closed = False
+    try:
+        closed = _walk_creative_wizard_rounds(page, rounds, trail)
+        return closed
+    finally:
+        trail.finish(closed)
+
+
+def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
     misses = 0
     for _ in range(rounds):
         if not _creative_wizard_open(page):
             return True
-        if _press_wizard_forward(page) is None:
+        trail.see(page)
+        pressed = _press_wizard_forward(page)
+        trail.pressed(pressed)
+        if pressed is None:
             misses += 1
             if misses >= 4:
                 break
@@ -11126,7 +11144,8 @@ def upload_ad_creative(
         # the diagnostic either way: a wizard left open is what breaks every
         # step after this one, and until 2026-09-16 the only trace of it was
         # `dialogs: 1` on the NEXT step's failure.
-        _diag["wizard"] = "closed" if _walk_creative_wizard(page) else "left_open"
+        with _wizard_capture.origin("upload", Path(creative_path).name):
+            _diag["wizard"] = "closed" if _walk_creative_wizard(page) else "left_open"
         _set_last_upload_diag(_diag)
         if _diag["wizard"] != "closed":
             _set_upload_why("wizard_left_open")

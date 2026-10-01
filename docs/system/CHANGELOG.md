@@ -1,5 +1,27 @@
 # System history
 
+## Every step of the creative wizard is captured, read-only — ACL-1426 (phase A)
+
+Live runs 04c8c214d2ba and 0bd520418dbe (Facebook_1443, 2026-10-01): after a
+library pick the robot walks the Trim → Crop → Text → Image generation →
+Enhancements → Translation wizard with its forward button, so the Crop step keeps
+Meta's defaults (Vertical 9:16 with "Crop and expand (Meta AI)"), and no capture of
+any step after Media existed (the editor page is cut at 4 MB before the wizard).
+
+- While `_walk_creative_wizard` sees the wizard after a library pick or an upload
+  (both editors, all ads), each new step is captured before the forward press:
+  the scrubbed wizard block in `output/rpa_pages/<run>/NN_wizard_<step>`
+  (`wizard_trim`, `wizard_crop`, `wizard_text`, `wizard_image_generation`, …), the
+  read step state (step row, current step, headings, buttons, checkbox/radio
+  states) in `context.json`. At most 18 per run, on their own quota — the
+  failure-capture limit is untouched; no Sentry section is remembered for them.
+- One telemetry row per walk, `ad_creative_wizard` (note `<origin>:closed|left_open`,
+  diag `sequence`, per-step `at_s`/`s`/`pressed`).
+- Read-only: no presses, scrolls or waits added; the press sequence is the same with
+  capture on and off, and capture failures never reach the walk
+  (`src/fb_ads_rpa/wizard_capture.py`). Machine switch `FB_RPA_WIZARD_CAPTURE=0`
+  turns the captures off (the telemetry row stays).
+
 ## The robot closes and reopens a hand-opened profile window when it is safe — ACL-1388
 
 2026-09-30 06:49 UTC a "Publish all" run stopped Facebook_6540 at the start with
