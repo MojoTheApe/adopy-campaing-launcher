@@ -2037,9 +2037,11 @@
         "worktree": "C:\\acl-1391-disabled-status",
         "id": "76980d83a84f463897ab51009e0877be",
         "issue": 391,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T06:32:29+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 392,
+        "report": "# ACL-1391 \u2014 review round 1 handoff\n\nWorker-D1391M, session run_d1391m_1001, claim 76980d83a84f463897ab51009e0877be.\nPR #392, branch codex/acl-1391-disabled-status, head cc1ef88 (was a28ca2d).\n\n## Findings\n- B1: merged work/main 91e7049 into the branch (62ca553). Only conflict docs/system/CHANGELOG.md; both top entries kept.\n- F1: `_blocked_on_page` runs `meta_dom._ACCOUNT_BLOCKED_JS` in every frame (`meta_dom._roots`), classifies every hit with `_account_blocked_match`, returns all; `_STATUS_RANK` picks. Verification banner + Delivery \"Account disabled\" -> `disabled`. Multi-line Meta text taken through innerText (space-joined) via a local copy of the script string with an extra push at the `out.push(t);` anchor; meta_dom.py not edited.\n- F6: failed import of the RPA detector names logs one warning per process.\n- N1: date under the status is dd.mm.yy.\n- F2/F3/F5: pre-existing, listed as follow-ups in Issue #391 Handoff.\n- F4: noted in Issue #391 that the live Doc20 read stands in for the scrubbed-capture criterion; owner to confirm.\n\n## Tests (headless, ACL_LIBRARY_* empty, one file at a time)\ntest_disabled_account_status 17 (4 new), test_account_status_read 16, test_account_blocked_stops_the_campaign 14, test_account_map_columns 6, test_account_spend 63, test_review_spend_regressions 26, test_account_map_view 8, test_gsheet_account_status 12 \u2014 all passed. Mutation \"first hit only\" fails the new banner + cell test.\n\n## Not done here\nFull suite: CI on the new head. No live reads (owner running live campaigns)."
       },
       "424": {
         "actor": "Worker-A1424N",
