@@ -1,5 +1,36 @@
 # System history
 
+## Finished clean profiles close themselves; a Close profile button for the rest — ACL-1444
+
+2026-10-01. With "Publish all", every finished account left its Multilogin
+window open ("Browser left open for manual review"), 0.6–1.5 GB each; on a
+tester's laptop 4 of 6 windows were idle, memory 92 %, and waiting accounts
+could not start.
+
+- End of a job (`publish_jobs._let_go_of_profile` → `RpaPublisher.finish_job`):
+  when every campaign is publishable, the job has no errors, it was not
+  stopped, and the draft is saved (on the editor: Meta's autosave settles and
+  "All edits saved" shows; off the editor nothing is pending), the robot stops
+  the profile gracefully through the MLX API — `allow_kill=False`, this
+  profile only. Only a profile the robot started or attached to over its
+  automation port and that still runs the same process (ACL-1320/1388
+  markers); a hand-opened window is never closed. Any problem keeps the window
+  open as before. The job panel says "Closed the profile — all campaigns are
+  ready"; telemetry `profile_closed_after_job` (ok True = closed, False = the
+  MLX stop failed, None = kept on purpose; note = why: `kept_problem`,
+  `kept_switch`, `kept_unsaved`, `hand_opened`, …).
+- Per-machine switch `FB_RPA_KEEP_PROFILES_OPEN=1` keeps every window open
+  (old behaviour).
+- Dashboard: "Close profile" on a finished job's panel →
+  `POST /publish-jobs/{job_id}/close-profile`, the same graceful MLX stop.
+  Refused (409) while any job of that profile is pending/queued/running or a
+  read holds the profile lock; the lock is held during the stop.
+- Profile queue: slots count jobs, released when the job ends (unchanged); the
+  memory decision now sees the freed memory, and the queue is woken right
+  after a close so a waiting account rechecks at once.
+- Tests: `tests/test_a_finished_clean_profile_closes_itself.py` (38);
+  `tests/conftest.py` sets `FB_RPA_KEEP_PROFILES_OPEN=1` for all other tests.
+
 ## The test suite runs in parallel — ACL-1397
 
 2026-09-30. The full suite (3800+ tests) ran one test at a time: 82 min on the

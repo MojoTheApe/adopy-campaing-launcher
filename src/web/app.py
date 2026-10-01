@@ -4088,6 +4088,25 @@ async def publish_jobs_cancel(job_id: str) -> JSONResponse:
     return JSONResponse(result)
 
 
+@app.post("/publish-jobs/{job_id}/close-profile")
+async def publish_jobs_close_profile(job_id: str) -> JSONResponse:
+    """«Close profile» on a finished job's panel (ACL-1444).
+
+    Graceful MLX API stop of that account's profile (never kill); refused
+    with 409 while a run or a read is using the profile. Runs off the event
+    loop: the stop waits for Multilogin.
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    from src.web.publish_jobs import close_profile
+
+    result = await run_in_threadpool(close_profile, job_id)
+    if result.get("ok"):
+        return JSONResponse(result)
+    status = {"not_found": 404, "busy": 409}.get(str(result.get("code")), 502)
+    return JSONResponse(result, status_code=status)
+
+
 @app.get("/publish-jobs/{job_id}")
 async def publish_jobs_status(job_id: str) -> JSONResponse:
     """Poll publish job progress. Returns status + results so far."""
