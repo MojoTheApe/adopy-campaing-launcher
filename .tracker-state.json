@@ -2067,9 +2067,11 @@
         "worktree": "C:\\acl-1430-shot",
         "id": "3565e940e0094687a7c0dcdd669339ca",
         "issue": 430,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T07:51:09+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 431,
+        "report": "# ACL-1430 handoff \u2014 Worker-K1430S (run_k1430s_1001)\n\nPR: MojoTheApe/adopy-campaing-launcher#431 \u2192 stage. Head c5e48aa. Branch codex/acl-1430-status-screenshot (work/main 91e7049 + work/stage 45a82bd merged, i.e. on top of ACL-1391).\n\n## Design\n- account_spend.read_via_rpa: after each _read_status (normal path + \"grid did not load\" path) `_shoot_status` takes a viewport screenshot (full_page=False) of the same Ads Manager tab inside the Multilogin profile, only when status != clear. No new page/visit; nothing outside Multilogin.\n- Files: %LOCALAPPDATA%\\ACL\\spend_shots\\status_<account>__<YYYYmmdd-HHMMSS>.png (paths.get_local_config_dir), STATUS_SHOTS_KEEP=5 per account, prune by exact time tail.\n- SpendReading.status_shot/status_shot_at \u2192 status|<account> entry shot_id/shot_at \u2192 get_status (only if not clear and file exists). Clear read removes the button. Screenshot failure is logged, never fails the read.\n- status_shot_path(id): strict status_[A-Za-z0-9_-]{1,160}, resolved parent must be the shots folder.\n- app.py: GET /account-spend/status-shot/{id} (image/png or 404), /view fallback page with \"Right-click \u2192 Copy image\"; loopback middleware applies.\n- _account_map_country.html button \"Copy screenshot\" (tooltip \"Screenshot taken <time>\"); report.html amapCopyShot (ClipboardItem with fetch promise; fallback window.open(/view, _blank)); amapApplyReading adds the button after a live Read; CSS .amap-shot. CHANGELOG entry.\n\n## Tests\n- tests/test_status_screenshot.py: 32 passed (capture/no capture, prune, traversal ids, endpoint 200/404/400, fallback page, template, browser clipboard stub + 2 fallbacks).\n- Affected: test_disabled_account_status, test_account_spend, test_review_spend_regressions, test_account_map_columns, test_account_map_view, test_account_map_period, test_country_live_totals, test_read_the_account_tree, test_ads_manager_url, test_browser_boundary_contract: 247 passed; test_report_scripts_parse: 3 passed. Full suite: CI.\n\n## Open\n- Live acceptance (Doc20 disabled, 6540 restricted: button visible, copied image shows banner/status) needs an owner-started Read on the live build. No live account touched.\n- Overlap with PR #408 / #398 kept small (see PR body); expect trivial conflicts at most in report.html/account_spend.py."
       }
     },
     "tasks": {
