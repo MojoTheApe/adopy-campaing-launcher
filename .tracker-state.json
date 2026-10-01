@@ -2927,7 +2927,7 @@
             "session": "run_w1441x_1001"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1441X",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2945,7 +2945,8 @@
           "report": "# ACL-1441 handoff \u2014 Worker-W1441X\n\n- PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/442 (into stage), branch `codex/acl-1441-connect-workspace`, head 4cd3fdc5d732851ef2244570706f978c667747de (base work/main 4af90b6).\n- Issue: MojoTheApe/adopy-campaing-launcher#441 (Handoff section updated).\n\n## Change\n- `src/web/multilogin_auth.py`: `sign_in(email, password, *, workspace_id=\"\", remembered_workspace=\"\")` \u2014 `POST /user/signin` (MD5) \u2192 `GET /user/workspaces` \u2192 choose \u2192 `POST /user/refresh_token {email, refresh_token, workspace_id}` \u2192 `GET /workspace/automation_token?expiration_period=1mo` in that workspace. Choice order: explicit id \u2192 slot's remembered (id or name) \u2192 only one \u2192 only one with `automation_available` (`GET /workspace/restrictions`); else `needs_choice` with the list, no token minted. 403 split into plan vs role via restrictions. Browser User-Agent on every call. No list \u2192 old default-workspace behaviour. `SignIn` gains workspace_id/name/role, workspaces, needs_choice; never holds password or refresh_token.\n- `src/web/app.py` `/multilogin-signin`: accepts `workspace_id`, reads remembered `MULTILOGIN_WORKSPACE_ID_<slot>`/`MULTILOGIN_WORKSPACE_<slot>`, returns `choose_workspace` + `workspaces` (nothing saved), saves token + workspace name/id on success; `/multilogin-token-status` returns `workspace`.\n- `src/web/templates/report.html`: Accounts connect form shows a picker (name \u2014 role, \"no automation\" marked) + Continue; password kept in the field only until the choice; connection line shows the workspace.\n- `docs/system/CHANGELOG.md` entry.\n\n## API fields (verified, Multilogin X Postman collection 28533318/2s946h9Cv9)\n- signin \u2192 data.token, data.refresh_token\n- /user/workspaces \u2192 data.total_count, data.workspaces[] {name, role, workspace_id}\n- /user/refresh_token body {email, refresh_token, workspace_id} \u2192 data.token, data.refresh_token\n- /workspace/restrictions \u2192 data.automation_available, data.plan_name, \u2026\n- /workspace/automation_token \u2192 data.token\n\n## Tests\nNew `tests/test_multilogin_connect_chooses_workspace.py` (15) + picker test in `tests/test_connecting_an_account_is_one_place.py`; affected suites 130 passed, headless, stubbed API, ACL_LIBRARY_* empty.\n\n## Not done / risks\n- Live acceptance: buyer connects KLD with ndays6443 on their own machine.\n- Whether `/user/refresh_token` needs the bearer header is not stated in the docs; the call sends none (as the reference script). If live returns 401 there, add `Authorization`.\n- Probing several workspaces costs one switch + one restrictions call each (only when there is no choice/remembered/single workspace).\n- The dead legacy `mlSignin` panel was not changed."
         },
         "pr": 442,
-        "queued_at": "2026-10-01T10:26:22+00:00"
+        "queued_at": "2026-10-01T10:26:22+00:00",
+        "reviewer": "Reviewer-R1441V"
       },
       "444": {
         "implementers": [
@@ -3137,6 +3138,10 @@
       "Worker-X1344Z": {
         "session": "run_x1344z_1001",
         "role": "Worker"
+      },
+      "Reviewer-R1441V": {
+        "session": "rev_r1441v_1001",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -3368,10 +3373,20 @@
       434,
       437,
       433,
-      426,
-      441
+      426
     ],
-    "review": null,
+    "review": {
+      "id": "1c4fcda135c741c0b36ba400d76ae3b8",
+      "pr": 442,
+      "issues": [
+        441
+      ],
+      "actor": "Reviewer-R1441V",
+      "session": "rev_r1441v_1001",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-01T11:22:42+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -4343,6 +4358,13 @@
         "issue": 344,
         "claim": "3e606347d33641229e9cb7f9be317402",
         "actor": "Worker-X1344Z"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-01T11:22:42+00:00",
+        "pr": 442,
+        "lane": "1c4fcda135c741c0b36ba400d76ae3b8",
+        "actor": "Reviewer-R1441V"
       }
     ],
     "policy": {
