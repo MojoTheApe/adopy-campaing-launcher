@@ -2171,7 +2171,7 @@
             "session": "run_d1391_0930"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-D1391K",
         "coordinator": "Coordinator-D0930K",
         "handoff": {
@@ -2189,7 +2189,8 @@
           "report": "# ACL-1391 \u2014 implementation handoff\n\n- PR: #392 (`codex/acl-1391-disabled-status` \u2192 `stage`), head `a28ca2d60dcc0335fd4cce6f091d4e13541296f5`, base `work/stage` 712fa0c.\n- Worker: Worker-D1391K, session run_d1391_0930, coordinator Coordinator-D0930K, claim dd92e4fe113c4000aaf1a82d54dc15d1, worktree `C:\\acl-1391-disabled-status`.\n\n## Scope delivered (all acceptance criteria)\n\n1. Delivery-column \"Account disabled\" \u2192 `disabled` (via the RPA detector, whole-element match).\n2. \"Verification required to advertise\" \u2192 `restricted`.\n3. Help text \"Why is my ad account disabled?\" alone \u2192 `clear`.\n4. One list of signs: the status read calls `meta_dom._account_blocked_text` / `_account_blocked_match`; `test_every_kind_the_rpa_knows_has_a_status` fails on a new unmapped kind.\n5. Read date shown under the status on the map.\n6. A status followed by a failed read is grey and marked \"not refreshed\", failed attempt in the tooltip.\n7. Tests against local Chromium with synthetic markup modelled on the owner's 2026-09-30 screenshot. **Deviation:** the criterion asked for a saved, scrubbed Ads Manager page; none exists for this shape (the ecce52f330b8 capture was rotated out, and a live account is not opened just to capture). Recorded in the test docstring.\n\n## Checks\n\n- New file `tests/test_disabled_account_status.py`: 13 checks; **10 fail on unfixed `stage`**, 3 are false-alarm guards that pass both ways.\n- Related suites (status read, blocked account, map columns, new file): 49 passed.\n- Full suite, isolated `ACL_CONFIG_DIR`, `ACL_LIBRARY_*` empty: still running at handoff time (16% after ~25 min, no failures so far with `-x`); the final result will be added to the PR before review starts\n\n## Files\n\n`src/analysis_agent/account_spend.py`, `src/web/templates/_account_map_country.html`, `src/web/templates/report.html`, `tests/test_disabled_account_status.py`, `docs/system/CHANGELOG.md`. `meta_dom.py` (RPA track) is imported, not edited.\n\n## Not done / for later\n\n- Live confirmation: one Read of FacebookDoc20 once its profile is opened by automation should show `disabled` on the map.\n- WhatsApp report to the provider: acl-132 (#31), depends on this task."
         },
         "pr": 392,
-        "queued_at": "2026-09-30T08:52:44+00:00"
+        "queued_at": "2026-09-30T08:52:44+00:00",
+        "reviewer": "Reviewer-R1391L"
       },
       "388": {
         "implementers": [
@@ -2605,6 +2606,10 @@
       "Worker-T1419R": {
         "session": "run_t1419r_1001",
         "role": "Worker"
+      },
+      "Reviewer-R1391L": {
+        "session": "review_r1391l_1001",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -2738,7 +2743,6 @@
       }
     },
     "review_queue": [
-      391,
       395,
       406,
       330,
@@ -2750,7 +2754,18 @@
       402,
       419
     ],
-    "review": null,
+    "review": {
+      "id": "4c25161719304735bd6c5fbce6884d19",
+      "pr": 392,
+      "issues": [
+        391
+      ],
+      "actor": "Reviewer-R1391L",
+      "session": "review_r1391l_1001",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-01T06:20:54+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -3409,6 +3424,13 @@
         "issue": 419,
         "pr": 421,
         "actor": "Worker-T1419R"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-01T06:20:54+00:00",
+        "pr": 392,
+        "lane": "4c25161719304735bd6c5fbce6884d19",
+        "actor": "Reviewer-R1391L"
       }
     ],
     "policy": {
