@@ -3164,7 +3164,9 @@
       "session": "review_r1395g_1001",
       "coordinator": "Coordinator-C0930A",
       "started_at": "2026-10-01T09:19:08+00:00",
-      "state": "reviewing"
+      "state": "returning",
+      "report": "Pre-review approved (prereview_398.md); returned only to merge current main (4af90b6) into the branch; lane kept. Optional F1: add a test that the tooltip name wins over the cell text.",
+      "keep_lane": true
     },
     "history": [
       {
