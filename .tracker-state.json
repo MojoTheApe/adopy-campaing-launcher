@@ -2269,7 +2269,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "466": {
+        "actor": "Worker-S1466W",
+        "session": "run_s1466w_1001",
+        "coordinator": "Coordinator-D0930K",
+        "branch": "codex/acl-1466-spend-store-replace",
+        "worktree": "C:\\acl-1466-spend-replace",
+        "id": "425d1585db594a6b8c17a06fe968cf9d",
+        "issue": 466,
+        "state": "implementing",
+        "started_at": "2026-10-01T13:57:11+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -3259,6 +3272,17 @@
         },
         "pr": 465,
         "queued_at": "2026-10-01T13:47:20+00:00"
+      },
+      "466": {
+        "implementers": [
+          {
+            "actor": "Worker-S1466W",
+            "session": "run_s1466w_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1466W",
+        "coordinator": "Coordinator-D0930K"
       }
     },
     "actors": {
@@ -3452,6 +3476,10 @@
       },
       "Worker-W132T": {
         "session": "run_w132t_1001",
+        "role": "Worker"
+      },
+      "Worker-S1466W": {
+        "session": "run_s1466w_1001",
         "role": "Worker"
       }
     },
@@ -4893,6 +4921,13 @@
         "issue": 31,
         "pr": 465,
         "actor": "Worker-W132T"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T13:57:11+00:00",
+        "issue": 466,
+        "claim": "425d1585db594a6b8c17a06fe968cf9d",
+        "actor": "Worker-S1466W"
       }
     ],
     "policy": {
