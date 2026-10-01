@@ -6164,6 +6164,13 @@ def run_recorded_campaign_flow(
                     extra_body = extra.get("ad_body") or ""
                     extra_body2 = extra.get("ad_body2") or ""
                     if destination_url:
+                        if simple:
+                            # ACL-1412 (d1755a59e139, ad2): после мастера медиа
+                            # раздел объявления бывал размонтирован —
+                            # `destination_section_missing`. Destination стоит
+                            # сразу под блоком Media: вернуть его на экран
+                            # (только прокрутка, без перезагрузки).
+                            _simple.show_media_block(page)
                         try:
                             if not set_ad_destination_website(page, destination_url):
                                 _shot(f"fail_{tag}_destination", last_destination_diag(),
@@ -10852,6 +10859,21 @@ def _open_creative_wizard(page: Page, trigger_xpath: str, item_xpath: str, *,
         wait_editor_saved(page, timeout_s=15)
     except Exception:
         pass
+    if simple:
+        # ACL-1412 (d1755a59e139, ad2): блок Media объявления мог быть
+        # размонтирован — страница стоит на кампании и группе. Сначала вернуть
+        # его на экран; какой вход в медиа нашёлся — в фазы шага и телеметрию.
+        phase_t = time.time()
+        shown = _simple.show_media_block(page)
+        entry = ("picker_open" if _creative_wizard_open(page)
+                 else "media_on_ad" if shown.get("state") == "filled"
+                 else "set_up_creative" if shown.get("set_up_creative")
+                 else "media_block_" + (shown.get("state") or "missing") if shown.get("mounted")
+                 else "media_block_missing")
+        _creative_phase("media_entry", phase_t, entry=entry, via=shown.get("via") or "")
+        _telemetry.record("ad_creative_upload", None, note="media_entry:" + entry,
+                          diag={k: shown.get(k) for k in ("via", "state", "set_up_creative", "picker",
+                                                          "ad_section", "error") if k in shown})
     for attempt in range(attempts):
         if _creative_wizard_open(page):
             return True, log
@@ -10870,7 +10892,8 @@ def _open_creative_wizard(page: Page, trigger_xpath: str, item_xpath: str, *,
                 # ACL-1327: в новом редакторе кнопка живёт в разделе «Ad» —
                 # сначала дойти до него (заголовок и поле имени), как после
                 # Next в прежнем мастере; доли прокрутки — уже внутри.
-                note["ad_section"] = bool(_simple.scroll_to_level(page, "ad", budget_s=8.0).get("ok"))
+                # ACL-1412: до самого блока Media, а не только до раздела.
+                note["ad_section"] = bool(_simple.show_media_block(page, budget_s=16.0).get("mounted"))
             _scroll_until_mounted(page, _SET_UP_CREATIVE_PRESENT_JS)
             seen = _scroll_xpath_into_view(page, trigger_xpath)
         note["button"] = seen
@@ -11724,8 +11747,25 @@ def upload_ad_creative(
     return _finish_upload()
 
 
+def _simple_page(page: Page) -> bool:
+    """Открыт новый редактор «в один экран» — по адресу (без чтения страницы)."""
+    try:
+        url = page.url
+    except Exception:
+        return False
+    return isinstance(url, str) and _simple.url_is_simple_create(url)
+
+
 def _media_block_filled_now(page: Page) -> bool:
-    """Мгновенно: показывает ли блок Media прикреплённое медиа (без ожиданий)."""
+    """Мгновенно: показывает ли блок Media прикреплённое медиа (без ожиданий).
+
+    ACL-1412: в новом редакторе блок сначала возвращается на экран — иначе
+    размонтированный блок читался как «медиа нет» (d1755a59e139, ad2).
+    """
+    if _simple_page(page):
+        shown = _simple.show_media_block(page, budget_s=6.0)
+        if shown.get("mounted") and shown.get("state") in ("filled", "empty"):
+            return shown["state"] == "filled"
     try:
         return bool(page.evaluate(
             r"""() => {
@@ -11887,6 +11927,11 @@ def _verify_ad_media_present(page: Page) -> bool:
     unread = 0
     started = time.time()
     last_progress = _upload_progress(page)
+    # ACL-1412 (d1755a59e139, ad2): в новом редакторе блок Media бывает
+    # размонтирован — 85 с на странице без «Please specify» и без «Edit
+    # media». Такие проходы возвращают блок на экран (только прокрутка).
+    simple = _simple_page(page)
+    unseen = 0
     # ACL-1354: не позже срока шага креатива.
     deadline = _creative_deadline(time.time() + _UPLOAD_MAX_S)
     while idle < 150 and frozen < _UPLOAD_FROZEN_S and time.time() < deadline:
@@ -11931,6 +11976,11 @@ def _verify_ad_media_present(page: Page) -> bool:
         unread = 0
         if state.get("filled") and not state.get("empty"):
             return True
+        if simple and not (state.get("filled") or state.get("empty") or state.get("uploading")):
+            unseen += 1
+            if unseen in (1, 10) or unseen % 30 == 0:
+                _simple.show_media_block(page, budget_s=8.0)
+                continue
         if state.get("uploading"):
             grace = 0
             # Неподвижная полоса — застой, и ждать до потолка незачем: тот же

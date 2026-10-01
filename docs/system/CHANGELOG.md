@@ -1,5 +1,21 @@
 # System history
 
+## Ads 2-3 in the single-screen editor: media found, Creating... waited out — ACL-1412
+
+Live run d1755a59e139 (Facebook_1443, 2026-09-30) left ad 2 without media, link
+and text and stopped ad 3 at `dialog_open`.
+
+- Before opening the creative, checking the media or setting the destination of
+  ads 2+, the robot scrolls the new ad's Media block back on screen (the editor had
+  unmounted the ad form, so "Set up creative", the attached media and Destination
+  were not in the page). Only scrolling: no presses, no reloads, still inside
+  `hold_open_ad`. The media entry used is logged: `ad_creative_upload` note
+  `media_entry:<set_up_creative|picker_open|media_on_ad|media_block_*>`.
+- Meta's "Creating..." dialog after Create ad is waited out for up to 120 s
+  (`META_BUSY_WAIT_S`) whether or not the page answers; any other dialog stops the
+  ad at once (`adN_create:dialog_open`). Meta's media picker left over the new ad
+  is closed with its own Cancel. `simple_create_more_ads` telemetry gains
+  `progress_s`, `dialog.open_s`, `dialog_kind` and `media_picker`.
 ## Placements pass when Meta no longer offers a placement, and in the single-screen editor — ACL-1445
 
 2026-10-01 campaigns ended "do not publish: placements" on Doc19 and on the tester's
