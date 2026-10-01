@@ -2040,6 +2040,18 @@
         "state": "implementing",
         "started_at": "2026-10-01T06:32:29+00:00",
         "from_status": "status:todo"
+      },
+      "424": {
+        "actor": "Worker-A1424N",
+        "session": "run_a1424n_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1424-adaptive-memory",
+        "worktree": "C:\\acl-1424-memory",
+        "id": "bc1205da308a402f8421cea84da76bf4",
+        "issue": 424,
+        "state": "implementing",
+        "started_at": "2026-10-01T06:42:17+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2525,6 +2537,17 @@
         },
         "pr": 421,
         "queued_at": "2026-10-01T05:25:33+00:00"
+      },
+      "424": {
+        "implementers": [
+          {
+            "actor": "Worker-A1424N",
+            "session": "run_a1424n_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-A1424N",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2630,6 +2653,10 @@
       },
       "Worker-D1391M": {
         "session": "run_d1391m_1001",
+        "role": "Worker"
+      },
+      "Worker-A1424N": {
+        "session": "run_a1424n_1001",
         "role": "Worker"
       }
     },
@@ -3479,6 +3506,13 @@
         "issue": 391,
         "claim": "76980d83a84f463897ab51009e0877be",
         "actor": "Worker-D1391M"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T06:42:17+00:00",
+        "issue": 424,
+        "claim": "bc1205da308a402f8421cea84da76bf4",
+        "actor": "Worker-A1424N"
       }
     ],
     "policy": {
