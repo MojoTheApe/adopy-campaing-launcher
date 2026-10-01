@@ -2209,9 +2209,11 @@
         "worktree": "C:\\acl-1447-summary",
         "id": "aab39b470085452bb6f325490bfeeb32",
         "issue": 447,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T11:38:24+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 450,
+        "report": "# ACL-1447 handoff \u2014 Worker-S1447N\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/450 (codex/acl-1447-run-summary \u2192 stage), head bfa3107.\n\n## Done\n- `src/fb_ads_rpa/run_summary.py`: one Sentry event per finished campaign (clean / warnings / do-not-publish / stopped, incl. stop while connecting the profile). Daemon thread, errors swallowed, `ACL_SENTRY_RUN_SUMMARY=0` switch.\n- `src/acl_sentry.py`: `report_run_summary` (message `Run summary: <result>`, level info|warning, fingerprint `[\"acl-run-summary\", result]`, tags kind/result/editor/account/campaign, context `run_summary`); `manager` tag on every event in `before_send` (ACL_MACHINE_LABEL \u2192 MY_CM_NAME \u2192 unset). Docstring records owner decision 2026-10-01 on names.\n- `run_telemetry.run_steps` \u2014 bounded in-memory per-run step buffer.\n- Names sent (account short label, campaign); ids, profile ids, Ads Manager URLs, tokens, e-mails scrubbed. Page-section placeholders in sentry_signal unchanged.\n- Manager label: setup wizard writes ACL_MACHINE_LABEL; dashboard Accounts \u2192 This computer \u2192 \"Your name\" (`/api/machine-paths` manager_name).\n- `scripts/run_summaries.py --from-sentry` (robot_health.py from ACL-1434 not on main \u2192 separate script, `machines_from_sentry()` reusable).\n- docs/system/CHANGELOG.md entry.\n\n## Tests\nFake sentry transport, real sentry_sdk: tests/test_run_summary_reaches_sentry.py (14), tests/test_run_summaries_from_sentry.py (3), tests/test_machine_paths.py (+2), packaging test_machine_config (+1 assertion); tests/test_sentry_gets_only_campaign_failures.py updated for the manager tag. conftest sets ACL_SENTRY_RUN_SUMMARY=0 by default. Affected suites: 1060 passed locally.\n\n## Open\n- Live acceptance: one run on owner's machine + one on a tester's machine show summaries with the manager label; `scripts/run_summaries.py --from-sentry` lists both (needs SENTRY_AUTH_TOKEN with event:read).\n- When ACL-1434 lands, wire `robot_health.py --from-sentry` to `scripts.run_summaries.machines_from_sentry()`."
       }
     },
     "tasks": {
