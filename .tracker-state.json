@@ -3074,7 +3074,7 @@
             "session": "run_c1426p_1001"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-C1426P",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -4120,6 +4120,34 @@
         "state": "reviewing",
         "report": "# PR #413 (ACL-1412) returned before review \u2014 coordinator, 2026-10-01\n\nAfter merging work/stage (which now carries the ACL-1433 bench) and work/main into the branch (head d35c3a8), `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: `simple_create_new_ad_media_2026_09_30.html` is not in `tests/bench/catalogue.json`.\n\nNeeded: add catalogue rows for its fragments (media_filled, media_picker) with test `tests/test_simple_create_new_ad_media.py`, regenerate `tests/bench/CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). The earlier pre-review (prereview_413.md, approve) stands otherwise.",
         "keep_lane": true
+      },
+      "440": {
+        "id": "42d0763a24214c90a76483afd8668cd6",
+        "pr": 440,
+        "issues": [
+          426
+        ],
+        "actor": "Reviewer-R1426F",
+        "session": "rev_r1426f_1001",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-01T19:22:21+00:00",
+        "state": "reviewing",
+        "report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise.",
+        "keep_lane": true
+      },
+      "474": {
+        "id": "42d0763a24214c90a76483afd8668cd6",
+        "pr": 440,
+        "issues": [
+          426
+        ],
+        "actor": "Reviewer-R1426F",
+        "session": "rev_r1426f_1001",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-01T19:22:21+00:00",
+        "state": "reviewing",
+        "report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise.",
+        "keep_lane": true
       }
     },
     "review_queue": [
@@ -4145,20 +4173,7 @@
       31,
       466
     ],
-    "review": {
-      "id": "42d0763a24214c90a76483afd8668cd6",
-      "pr": 440,
-      "issues": [
-        426
-      ],
-      "actor": "Reviewer-R1426F",
-      "session": "rev_r1426f_1001",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-10-01T19:22:21+00:00",
-      "state": "reviewing",
-      "report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise.",
-      "keep_lane": true
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -5583,6 +5598,27 @@
         "issue": 426,
         "pr": 440,
         "actor": "Worker-C1426P"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-01T20:33:22+00:00",
+        "review": {
+          "id": "42d0763a24214c90a76483afd8668cd6",
+          "pr": 440,
+          "issues": [
+            426
+          ],
+          "actor": "Reviewer-R1426F",
+          "session": "rev_r1426f_1001",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-01T19:22:21+00:00",
+          "state": "reviewing",
+          "report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise.",
+          "keep_lane": true
+        },
+        "prs": [
+          474
+        ]
       }
     ],
     "policy": {
