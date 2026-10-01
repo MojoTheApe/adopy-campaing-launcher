@@ -2269,22 +2269,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "466": {
-        "actor": "Worker-S1466W",
-        "session": "run_s1466w_1001",
-        "coordinator": "Coordinator-D0930K",
-        "branch": "codex/acl-1466-spend-store-replace",
-        "worktree": "C:\\acl-1466-spend-replace",
-        "id": "425d1585db594a6b8c17a06fe968cf9d",
-        "issue": 466,
-        "state": "handoff",
-        "started_at": "2026-10-01T13:57:11+00:00",
-        "from_status": "status:backlog",
-        "pr": 467,
-        "report": "# ACL-1466 \u2014 implementation handoff\n- Branch `codex/acl-1466-spend-store-replace` \u2192 `stage`, head 9dc8129, base 38351e6. Worker-S1466W, run_s1466w_1001, Coordinator-D0930K, `C:\\acl-1466-spend-replace`.\n- Done: `_save_all` uses `paths._replace_when_free`; one line plus comment.\n- Checks: new test (fails on unfixed stage) + spend suites 108 passed; flaky 12-thread test 20/20. Full suite: CI.\n- Reviewer: diff limited to `_save_all`; ACL-1430 (#431) touches other parts of account_spend.py \u2014 no overlap."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -3282,9 +3267,25 @@
             "session": "run_s1466w_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1466W",
-        "coordinator": "Coordinator-D0930K"
+        "coordinator": "Coordinator-D0930K",
+        "handoff": {
+          "actor": "Worker-S1466W",
+          "session": "run_s1466w_1001",
+          "coordinator": "Coordinator-D0930K",
+          "branch": "codex/acl-1466-spend-store-replace",
+          "worktree": "C:\\acl-1466-spend-replace",
+          "id": "425d1585db594a6b8c17a06fe968cf9d",
+          "issue": 466,
+          "state": "handoff",
+          "started_at": "2026-10-01T13:57:11+00:00",
+          "from_status": "status:backlog",
+          "pr": 467,
+          "report": "# ACL-1466 \u2014 implementation handoff\n- Branch `codex/acl-1466-spend-store-replace` \u2192 `stage`, head 9dc8129, base 38351e6. Worker-S1466W, run_s1466w_1001, Coordinator-D0930K, `C:\\acl-1466-spend-replace`.\n- Done: `_save_all` uses `paths._replace_when_free`; one line plus comment.\n- Checks: new test (fails on unfixed stage) + spend suites 108 passed; flaky 12-thread test 20/20. Full suite: CI.\n- Reviewer: diff limited to `_save_all`; ACL-1430 (#431) touches other parts of account_spend.py \u2014 no overlap."
+        },
+        "pr": 467,
+        "queued_at": "2026-10-01T14:00:18+00:00"
       }
     },
     "actors": {
@@ -3747,7 +3748,8 @@
       457,
       459,
       462,
-      31
+      31,
+      466
     ],
     "review": {
       "id": "afc86d4be7054b90b0bf87c81be9ebc1",
@@ -4929,6 +4931,13 @@
         "at": "2026-10-01T13:57:11+00:00",
         "issue": 466,
         "claim": "425d1585db594a6b8c17a06fe968cf9d",
+        "actor": "Worker-S1466W"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-01T14:00:18+00:00",
+        "issue": 466,
+        "pr": 467,
         "actor": "Worker-S1466W"
       }
     ],
