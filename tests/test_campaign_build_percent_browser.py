@@ -121,6 +121,42 @@ def after(page, name, prop='content'):
     return got
 
 
+def _settled_boxes(page, name):
+    """Прямоугольники точки и имени кампании — из одного кадра, после того
+    как раскладка устоялась (ACL-1397).
+
+    Раньше два `bounding_box()` читались по очереди, сразу после смены
+    процента: ящик ещё перерисовывался (repaintSoon) и доезжал, и точка
+    с именем мерились в разных кадрах — тест изредка падал под нагрузкой
+    (параллельный прогон, занятая машина). Здесь оба прямоугольника берутся
+    одним вызовом в одном кадре, и только когда два кадра подряд дали
+    одинаковую картину; проверка расположения остаётся прежней."""
+    expect(dot(page, name)).to_be_visible()
+    got = page.evaluate('''async name => {
+      const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+      const read = () => {
+        const row = Array.from(document.querySelectorAll('.cbd-camp')).find(
+          r => (r.querySelector('.cbd-camp-name') || {}).textContent?.includes(name));
+        if (!row) return null;
+        const ind = row.querySelector('.cbd-ind'), label = row.querySelector('.cbd-camp-name');
+        if (!ind || !label) return null;
+        const a = ind.getBoundingClientRect(), b = label.getBoundingClientRect();
+        if (!a.width || !b.width) return null;
+        return [{x: a.x, width: a.width}, {x: b.x, width: b.width}];
+      };
+      let last = null;
+      for (let i = 0; i < 120; i++) {
+        await frame();
+        const now = read();
+        if (now && last && JSON.stringify(now) === JSON.stringify(last)) return now;
+        last = now;
+      }
+      return last;
+    }''', name)
+    assert got, f'no laid-out row for {name}'
+    return got
+
+
 def pct(page, name):
     value = dot(page, name).get_attribute('data-pct')
     assert value and value.endswith('%'), value
@@ -215,8 +251,7 @@ def test_the_percent_sits_next_to_the_dot_and_keeps_the_tooltip(ui):
     expect(ind).to_have_attribute('title', 'Building: ad copy')
     assert after(p, a) == f'"{got}%"'
     # Процент — справа от точки, в той же строке, не поверх имени.
-    box = ind.bounding_box()
-    name_box = p.locator('.cbd-camp-name', has_text=a).bounding_box()
+    box, name_box = _settled_boxes(p, a)
     assert box['x'] + box['width'] <= name_box['x'] + 1
     expect(ind.locator('span')).to_have_css('animation-name', 'cbd-build-pulse')
 
