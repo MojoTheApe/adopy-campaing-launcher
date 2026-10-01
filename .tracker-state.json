@@ -2037,9 +2037,11 @@
         "worktree": "C:\\acl-1419-targeting-flaky",
         "id": "49856938bf3945579458470320254eae",
         "issue": 419,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T05:00:45+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 421,
+        "report": "# ACL-1419 handoff \u2014 Worker-T1419R\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/421 (into stage), branch codex/acl-1419-targeting-flaky, head 25414ba (from work/main 91e7049).\n\n## Root cause (both)\n- Product, Windows only: `targeting_registry._save_raw` used a bare `os.replace`; Windows refuses it with `PermissionError [WinError 5]` while targeting_registry.json is briefly open elsewhere (Defender, indexer, previous writer). Reproduced locally 3/18 with 6 parallel copies (worker exit 1, that traceback).\n- Test: each spawn worker imported the test module and with it `src.web.app` (~3.3 s quiet, far more on a loaded runner); `exitcode` was read after `terminate()` without `join`, so a slow worker gave `assert None == 0` (stage run 36784728290 attempt 1, 3.13).\n\n## Fix\n- `src/analysis_agent/targeting_registry.py`: `_save_raw` -> `config.paths._replace_when_free`.\n- `tests/targeting_worker.py` (new): worker body, registry import only.\n- `tests/test_targeting_integration.py`: shared 120 s deadline, join all before exit codes, hang named; assertion unchanged (3 x exit 0, 24 targets); new `test_save_waits_out_a_briefly_held_registry`.\n- `docs/system/CHANGELOG.md` entry.\n\n## Verification (local Windows)\n- 30/30 sequential (xdist venv); 20/20 file under `-n 4`; 30/30 with 6 parallel copies (before: 3/18 fail); file once with C:/fb_agents/.venv: 11 passed; test_targeting_registry + test_targeting_rpa: 34 passed. CI on PR pending at handoff.\n\n## Notes\n- Not changed: Windows `msvcrt.LK_LOCK` retries every 1 s and gives up after 10 s (also in ad_text_registry, team_library, hidden_accounts, acl_log) \u2014 possible follow-up.\n- Found, not touched: the real team library (MojoTheApe/acl-lib targets) holds 24 test targets `0-0`..`2-7` (\"Interest N M\", added 2026-09-24 by \"Evgeni Sedin\") \u2014 leftovers of this test from before the conftest ACL_CONFIG_DIR guard; the spawn child loads the machine .env via src.web.app -> gsheet_accounts.load_env(). The new worker module no longer imports that chain. Cleanup needs owner decision."
       }
     },
     "tasks": {
