@@ -2425,9 +2425,11 @@
         "worktree": "C:\\acl-1412-ads23-media",
         "id": "626d4e49591d4ab7969fe97ff8452cdb",
         "issue": 412,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T18:24:59+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 413,
+        "report": "# ACL-1412 handoff r2 \u2014 bench catalogue (Worker-M1412L)\n\nReturned before review: after the work/stage merge (ACL-1433 bench), `test_every_fixture_in_the_bench_is_catalogued` failed for `simple_create_new_ad_media_2026_09_30.html`.\n\nFix (commit 53bc57d, tests only, no product code):\n- `tests/bench/catalogue.json`, step \"ad_creative (media)\": two rows \u2014 `media_filled` (seen 8ce1b9985046/02, d1755a59e139/01-02; expected: unmounted block brought back without clicks and read as filled, media on the ad named as entry `media_on_ad`) and `media_picker` (seen d1755a59e139/03; expected: entered via the new ad's own Set up creative -> Video ad, wizard open, entry `media_entry:set_up_creative`); test `tests/test_simple_create_new_ad_media.py`, status pass.\n- `tests/bench/CATALOGUE.md` regenerated (`scripts/bench_catalogue.py --write`; `--check` clean).\n\nTests (headless, ACL_LIBRARY_* empty): test_bench_catalogue, test_simple_create_new_ad_media, test_simple_create_more_ads, test_simple_create_creative_after_reload, test_the_single_screen_editor_flow \u2014 77 passed."
       }
     },
     "tasks": {
