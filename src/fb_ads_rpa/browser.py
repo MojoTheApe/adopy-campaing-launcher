@@ -16,7 +16,7 @@ from typing import Any, Protocol
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
-from src.fb_ads_rpa import profile_trouble
+from src.fb_ads_rpa import hand_window, profile_trouble
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 
 log = logging.getLogger(__name__)
@@ -1806,6 +1806,22 @@ class MultiloginDirectCDPProvider:
         self._profile_id_cache = None
 
 
+def _exc_text(exc: BaseException, limit: int = 120) -> str:
+    """Текст ошибки для телеметрии и Sentry: сначала вычистить, потом резать.
+
+    Ревью PR #396 (F1), как PR #323 (F11): вычиститель узнаёт только полный
+    uuid профиля, а обрезка до него оставила бы начало uuid в строке.
+    """
+    text = str(exc)
+    try:
+        from src.fb_ads_rpa.run_telemetry import scrub
+
+        text = scrub(text)
+    except Exception:
+        text = ""
+    return f"{type(exc).__name__}: {text[:limit]}"
+
+
 def _record_profile_restart(entry: AccountMapEntry, profile_id: str, *, ok: bool, where: str,
                             error: str = "") -> None:
     """Строка телеметрии `profile_restarted_unresponsive` (ACL-1320)."""
@@ -1882,12 +1898,75 @@ def _robot_profile(profile_id: str, user_data_dir: str = "") -> bool:
     return not now or bool(now & known)
 
 
-def _open_by_hand(profile_id: str, account_label: str, where: str) -> profile_trouble.ProfileStop:
-    """Профиль открыт руками — не останавливаем, говорим человеку (ACL-1320)."""
+def _open_by_hand(profile_id: str, account_label: str, where: str,
+                  verdict: "hand_window.Verdict | None" = None) -> profile_trouble.ProfileStop:
+    """Профиль открыт руками — не останавливаем, говорим человеку (ACL-1320).
+
+    ACL-1388: сюда же — когда закрыть окно самому было небезопасно
+    (`verdict` — почему); текст остановки для человека прежний.
+    """
+    why = f" ({verdict.reason})" if verdict is not None else ""
     log.warning(
-        "%s: profile %s is open by hand (no automation port) - not stopping it; "
-        "the job stops with %s (%s)", account_label, profile_id, profile_trouble.OPEN_BY_HAND, where)
+        "%s: profile %s is open by hand (no automation port) - not stopping it%s; "
+        "the job stops with %s (%s)", account_label, profile_id, why, profile_trouble.OPEN_BY_HAND, where)
     return profile_trouble.ProfileStop(profile_trouble.OPEN_BY_HAND, where)
+
+
+#: ACL-1388: сколько секунд ждать, пока браузер окна, остановленного через
+#: MLX API, действительно закроется, прежде чем поднимать профиль заново.
+HAND_WINDOW_EXIT_WAIT_S = 20
+
+#: Строка для человека в панели задания, когда робот сам закрыл окно.
+HAND_WINDOW_NOTICE = "Closed the hand-opened window of {account} and reopened it for the robot"
+
+
+def _record_hand_window(entry: AccountMapEntry, *, ok: bool, where: str, note: str,
+                        verdict: "hand_window.Verdict", error: str = "") -> None:
+    """Строка телеметрии `profile_hand_window` и крошка Sentry (ACL-1388).
+
+    `note` — чем кончилось (`reopened`, причина отказа, `mlx_stop_failed`…),
+    в `diag` — где и что намерили (возраст окна, тишина ввода). Без id
+    профиля, как у `_record_profile_restart`.
+    """
+    diag = {"where": where, "workspace": (getattr(entry, "multilogin_instance", "") or "A"),
+            **verdict.diag()}
+    if error:
+        diag["error"] = error[:160]
+    try:
+        from src.fb_ads_rpa import run_telemetry as rt
+
+        rt.record("profile_hand_window", ok, note=note, diag=diag)
+    except Exception:
+        pass
+    try:
+        import sentry_sdk  # type: ignore
+
+        # Без поднятого клиента крошка ничего не делает; с ним — ляжет в
+        # следующее событие (остановку аккаунта или отказ кампании).
+        sentry_sdk.add_breadcrumb(category="profile", level="info" if ok else "warning",
+                                  message=f"hand_window:{note}", data={"ok": ok, **diag})
+    except Exception:
+        pass
+
+
+def _tell_job(text: str) -> None:
+    """Строка в панели задания публикации (та же, что у сжатия креативов)."""
+    try:
+        from src.fb_ads_rpa.creative_compress import report_notice
+
+        report_notice(text)
+    except Exception:
+        pass
+
+
+def _hand_window_gone(udd: str, profile_id: str, pids: frozenset[int]) -> bool:
+    """Процессы окна, открытого руками, закрылись после остановки (ACL-1388)."""
+    for attempt in range(HAND_WINDOW_EXIT_WAIT_S + 1):
+        if not (_profile_pids(udd, profile_id) & pids):
+            return True
+        if attempt < HAND_WINDOW_EXIT_WAIT_S:
+            time.sleep(1)
+    return False
 
 
 class MultiloginAttachOnlyProvider:
@@ -1904,6 +1983,11 @@ class MultiloginAttachOnlyProvider:
     Only a profile the robot itself started (or attached to over its
     automation port) in this process is stopped and restarted through the
     MLX API when it has no debug port.
+
+    ACL-1388: when publishing, a hand-opened window IS closed (graceful MLX
+    API stop of that profile only) and reopened with automation - but only
+    when `hand_window.assess` finds it safe (running >= 15 min, not in the
+    foreground, no input on the machine for 60 s). Otherwise the stop above.
     """
 
     def __init__(self) -> None:
@@ -2053,6 +2137,11 @@ class MultiloginAttachOnlyProvider:
         # (старый DevToolsActivePort, общий 19222). Профилем робота считаем
         # его только если порт слушает процесс именно этого профиля.
         owned = self._owns_port(udd)
+        # ACL-1388: окно, открытое руками, робот закрывает и поднимает заново
+        # сам, когда это безопасно (`hand_window.assess`), — но только при
+        # публикации. Чтение спенда (`allow_kill=False`) окно человека не
+        # закрывает никогда и останавливается, как раньше.
+        reopen_by_hand = allow_restart and allow_kill
         if reused is not None:
             log.info("Attached to already-open Multilogin profile %s", profile_id)
             if owned:
@@ -2061,7 +2150,10 @@ class MultiloginAttachOnlyProvider:
         if unresponsive:
             if not owned:
                 # Порт не доказан как порт этого профиля — окно могло быть
-                # открыто руками; останавливать его не вправе.
+                # открыто руками; останавливать его вправе только когда
+                # безопасно (ACL-1388).
+                if reopen_by_hand:
+                    return self._reopen_hand_opened(entry, account_label, profile_id, udd, "unowned_port")
                 raise _open_by_hand(profile_id, account_label, "unowned_port")
             # У него есть свой порт автоматизации — это профиль робота.
             _mark_robot_profile(profile_id, udd)
@@ -2077,6 +2169,9 @@ class MultiloginAttachOnlyProvider:
             if not allow_restart:
                 raise RuntimeError(f"{account_label}: profile is already running; no restart was performed")
             if not _robot_profile(profile_id, udd):
+                if reopen_by_hand:
+                    return self._reopen_hand_opened(entry, account_label, profile_id, udd,
+                                                    "no_automation_port")
                 raise _open_by_hand(profile_id, account_label, "no_automation_port")
             log.info(
                 "Profile %s (started by the robot earlier) has no CDP port. Will restart it via "
@@ -2085,8 +2180,15 @@ class MultiloginAttachOnlyProvider:
             )
 
         if not unresponsive:
-            started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
-                                              allow_restart=allow_restart, allow_kill=allow_kill)
+            try:
+                started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
+                                                  allow_restart=allow_restart, allow_kill=allow_kill)
+            except profile_trouble.ProfileStop as stop:
+                # Процесса не видно, а MLX держит профиль — тоже окно руками.
+                if (reopen_by_hand and stop.code == profile_trouble.OPEN_BY_HAND
+                        and stop.detail == "mlx_lock"):
+                    return self._reopen_hand_opened(entry, account_label, profile_id, udd, "mlx_lock")
+                raise
             return self._connect_started(started, profile_id)
         # Ревью PR #323 (F7): робот сам остановил не отвечавший профиль — не
         # поднялся он, значит профиль мог остаться закрытым. Это та же
@@ -2099,7 +2201,7 @@ class MultiloginAttachOnlyProvider:
         except profile_trouble.ProfileStop:
             raise
         except Exception as exc:
-            detail = f"{type(exc).__name__}: {str(exc)[:120]}"
+            detail = _exc_text(exc)
             _record_profile_restart(entry, profile_id, ok=False, where="attach", error=detail)
             raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
         _record_profile_restart(entry, profile_id, ok=True, where="attach")
@@ -2131,7 +2233,53 @@ class MultiloginAttachOnlyProvider:
             ws_endpoint=started.ws_endpoint,
         )
 
-    def _stop_profile(self, entry: AccountMapEntry, account_label: str, profile_id: str, udd: str) -> None:
+    def _reopen_hand_opened(self, entry: AccountMapEntry, account_label: str, profile_id: str,
+                            udd: str, where: str) -> BrowserConnection:
+        """Закрыть окно, открытое руками, и поднять профиль для робота (ACL-1388).
+
+        Только когда безопасно (`hand_window.assess`: окну не меньше 15 минут,
+        оно не на переднем плане, минуту не было ввода); иначе — прежняя
+        остановка `profile_open_by_hand`. Закрытие — только мягкая остановка
+        этого профиля через MLX API: не убиваем процесс, не трогаем другие
+        профили, простой браузер не открываем. Вход в Facebook проверяет
+        обычный путь к списку кампаний: разлогинен — `profile_logged_out`,
+        без повторов.
+        """
+        pids = _profile_pids(udd, profile_id)
+        verdict = hand_window.assess(pids)
+        if not verdict.safe:
+            _record_hand_window(entry, ok=False, where=where, note=verdict.reason, verdict=verdict)
+            raise _open_by_hand(profile_id, account_label, where, verdict)
+        log.warning(
+            "%s: profile %s is open by hand, but its window is %.0f s old and the machine has been "
+            "idle for %.0f s - closing it through the MLX API and reopening it for the robot",
+            account_label, profile_id, verdict.age_s or 0.0, verdict.idle_s or 0.0)
+        try:
+            self._stop_profile(entry, account_label, profile_id, udd, allow_kill=False)
+        except Exception as exc:
+            # Не закрылось через API — окно человека остаётся как было.
+            _record_hand_window(entry, ok=False, where=where, note="mlx_stop_failed", verdict=verdict,
+                                error=_exc_text(exc))
+            raise _open_by_hand(profile_id, account_label, where, verdict) from exc
+        if not _hand_window_gone(udd, profile_id, pids):
+            _record_hand_window(entry, ok=False, where=where, note="still_running", verdict=verdict)
+            raise _open_by_hand(profile_id, account_label, where, verdict)
+        # Окно уже закрыто: не поднялось — это отказ перезапуска, профиль
+        # может остаться закрытым (как у `restart_unresponsive`).
+        try:
+            started = self._start_via_mlx_api(entry, account_label, profile_id, udd, allow_kill=False)
+            conn = self._connect_started(started, profile_id)
+        except Exception as exc:
+            detail = _exc_text(exc)
+            _record_hand_window(entry, ok=False, where=where, note="restart_failed", verdict=verdict,
+                                error=detail)
+            raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
+        _record_hand_window(entry, ok=True, where=where, note="reopened", verdict=verdict)
+        _tell_job(HAND_WINDOW_NOTICE.format(account=account_label))
+        return conn
+
+    def _stop_profile(self, entry: AccountMapEntry, account_label: str, profile_id: str, udd: str,
+                      *, allow_kill: bool = True) -> None:
         """Остановить профиль через MLX API его рабочего пространства (ACL-1320).
 
         Токен — по `entry.multilogin_instance` (A = Inhouse, B = KLD), как у
@@ -2139,6 +2287,8 @@ class MultiloginAttachOnlyProvider:
         возвращает его старый порт — то есть тот же зависший браузер, —
         поэтому сначала явная остановка. Не остановился через API — как и в
         пути «открыт руками в MLX»: закрыть Mimic только этого профиля.
+        ACL-1388: `allow_kill=False` (окно, открытое руками) — не закрывать
+        ничего сверх API, а отдать ошибку API наверх.
         """
         from src.meta_campaign_agent.multilogin_config import get_multilogin_instance
         from src.meta_campaign_agent.multilogin_launcher import (
@@ -2150,8 +2300,11 @@ class MultiloginAttachOnlyProvider:
         launcher = MultiloginLauncher(get_multilogin_instance(entry.multilogin_instance))
         try:
             launcher.stop_profile(profile_id, folder_id=folder_id)
-            log.info("%s: unresponsive profile %s stopped through the MLX API", account_label, profile_id)
+            log.info("%s: profile %s stopped through the MLX API", account_label, profile_id)
         except MultiloginLauncherError as exc:
+            if not allow_kill:
+                log.warning("%s: MLX stop failed (%s); nothing was closed", account_label, exc)
+                raise
             log.warning("%s: MLX stop failed (%s); closing Mimic of this profile only", account_label, exc)
             if udd:
                 _kill_chrome_for_user_data_dir(udd, profile_id, mlx_only=True)
@@ -2179,15 +2332,67 @@ class MultiloginAttachOnlyProvider:
             conn = self._connect_started(started, profile_id)
         except Exception as exc:
             _record_profile_restart(entry, profile_id, ok=False, where="campaign_open",
-                                    error=f"{type(exc).__name__}: {str(exc)[:120]}")
+                                    error=_exc_text(exc))
             raise
         _record_profile_restart(entry, profile_id, ok=True, where="campaign_open")
         return conn
+
+    def close_finished_profile(self, entry: AccountMapEntry, account_label: str) -> str:
+        """Закрыть профиль, чьи кампании собрались чисто (ACL-1444).
+
+        Решение «чисто ли и сохранён ли черновик» принимает публикатор; здесь —
+        только «вправе ли робот закрыть это окно»: профиль, который робот сам
+        поднял или к которому цеплялся по порту автоматизации, и работает
+        всё тот же процесс (`_robot_profile`, как у ACL-1320/1388). Окно,
+        открытое руками, не трогаем. Закрытие — мягкая остановка ЭТОГО
+        профиля через MLX API, `allow_kill=False`: не остановился через API —
+        окно остаётся, ничего не убиваем.
+
+        Возвращает `closed` / `hand_opened` / `stop_failed` / `no_profile`.
+        """
+        profile_id = (entry.profile_id or "").strip()
+        if not profile_id:
+            return "no_profile"
+        user_data_dir = _find_mlx_profile_dir(profile_id)
+        udd = str(user_data_dir) if user_data_dir is not None else ""
+        if not _robot_profile(profile_id, udd):
+            log.info("%s: profile %s was not started by the robot - leaving its window open",
+                     account_label, profile_id)
+            return "hand_opened"
+        try:
+            self._stop_profile(entry, account_label, profile_id, udd, allow_kill=False)
+        except Exception as exc:
+            log.warning("%s: could not close the finished profile through the MLX API (%s); "
+                        "the window stays open", account_label, _exc_text(exc))
+            return "stop_failed"
+        _ROBOT_PROFILES.pop(profile_id, None)
+        self._launcher = None
+        self._api_started = False
+        return "closed"
 
     def close(self, entry: AccountMapEntry, *, keep_browser_open: bool = False) -> None:
         # Never stop the Multilogin profile — user keeps their window.
         self._launcher = None
         self._api_started = False
+
+
+def stop_profile_on_request(entry: AccountMapEntry, account_label: str) -> str:
+    """Кнопка «Close profile» на дешборде (ACL-1444): закрыть профиль аккаунта.
+
+    Человек сам просит закрыть окно, поэтому здесь не важно, кто его открыл.
+    Способ тот же, что у робота: мягкая остановка только этого профиля
+    через MLX API его рабочего пространства, без kill (`allow_kill=False`);
+    ошибка API уходит наверх, и окно остаётся как было. «Уже остановлен»
+    MLX считает успехом. Работает ли на профиле задание, проверяет вызывающий.
+    """
+    profile_id = (entry.profile_id or "").strip()
+    if not profile_id:
+        raise RuntimeError(f"{account_label}: profile_id is required")
+    user_data_dir = _find_mlx_profile_dir(profile_id)
+    udd = str(user_data_dir) if user_data_dir is not None else ""
+    MultiloginAttachOnlyProvider()._stop_profile(entry, account_label, profile_id, udd, allow_kill=False)
+    _ROBOT_PROFILES.pop(profile_id, None)
+    return "closed"
 
 
 class PlaywrightProfileProvider:

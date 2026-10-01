@@ -182,7 +182,11 @@ def test_running_account_cannot_be_ticked_and_selection_survives_reload(ui):
     expect(publish_button(p)).to_have_text('Publish selected → drafts (1)')
 
     finish(p, state, 'Demo')
-    expect(box(p, 0, 0)).to_be_enabled(timeout=8000)
+    # Страница узнаёт о конце сборки из опроса: раз в POLL_MS (3 с), после
+    # сбоя опроса — через 6 с. 8 с не хватало на занятой машине
+    # (параллельный прогон, ACL-1397); ждём два полных цикла со сбоем.
+    # Проверка та же: после конца сборки галочка снова доступна.
+    expect(box(p, 0, 0)).to_be_enabled(timeout=15000)
 
     # После F5 «Publish selected» шлёт только отмеченное.
     ready(p)

@@ -38,6 +38,20 @@ if str(_PROJ_ROOT) not in sys.path:
 # фикстура успела бы сработать позже первого `init()`.
 os.environ["ACL_SENTRY_DSN"] = ""
 
+# Тесты не пишут в живую командную библиотеку (ACL-1397).
+#
+# `team_library` включается, когда заданы ACL_LIBRARY_REPO и ACL_LIBRARY_TOKEN,
+# а машинный `%LOCALAPPDATA%\ACL\.env` на рабочей машине их содержит: любой
+# `load_env()` во время прогона подтянул бы живую библиотеку. Раньше защита
+# держалась только на том, что прогон запускали с пустыми переменными руками.
+# При параллельном прогоне (pytest-xdist) этот файл заново исполняет каждый
+# процесс-воркер, так что пустые значения есть в каждом из них. Пустая строка,
+# а не удаление: `load_dotenv` не перезаписывает уже заданную переменную.
+# Тест, которому нужна настроенная библиотека, ставит синтетику через
+# monkeypatch — позже, и действует его значение.
+for _name in ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH"):
+    os.environ[_name] = ""
+
 
 # Тесты не пишут в живую машинную папку ACL (ревью v3 PR #314).
 #
@@ -76,6 +90,32 @@ def _telemetry_off_the_live_journal(tmp_path_factory, monkeypatch):
         return
     monkeypatch.setattr(run_telemetry, "TELEMETRY_PATH",
                         tmp_path_factory.mktemp("telemetry") / "rpa_telemetry.jsonl")
+    yield
+
+
+# Тесты не читают окна и ввод этой машины (ACL-1388).
+#
+# Окно профиля, открытое руками, робот закрывает сам, если ему больше 15
+# минут, оно не на переднем плане и минуту не было ввода — это читается из
+# процессов и Win32 API живой машины. Тест, который доходит до этой ветки
+# без своих заглушек, зависел бы от того, что открыто на компьютере
+# разработчика. Выключатель — штатный (`FB_RPA_REOPEN_HAND_WINDOW=0`,
+# прежнее поведение: всегда стоп); тесты ACL-1388 включают его сами.
+@pytest.fixture(autouse=True)
+def _hand_window_reopen_off(monkeypatch):
+    monkeypatch.setenv("FB_RPA_REOPEN_HAND_WINDOW", "0")
+    yield
+
+
+# Тесты не закрывают профили Multilogin в конце задания (ACL-1444).
+#
+# Чистое задание закрывает профиль через MLX API. Тест, который доходит до
+# конца задания с настоящим провайдером без своих заглушек, мог бы позвать
+# MLX живой машины. Выключатель — штатный (`FB_RPA_KEEP_PROFILES_OPEN=1`,
+# прежнее поведение); тесты ACL-1444 снимают его сами.
+@pytest.fixture(autouse=True)
+def _finished_profiles_stay_open(monkeypatch):
+    monkeypatch.setenv("FB_RPA_KEEP_PROFILES_OPEN", "1")
     yield
 
 

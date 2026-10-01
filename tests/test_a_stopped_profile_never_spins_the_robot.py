@@ -24,7 +24,6 @@
 from __future__ import annotations
 
 import os
-import socket
 import subprocess
 import sys
 import tempfile
@@ -79,12 +78,27 @@ class _Counter:
         return (self.n - n0) / (time.perf_counter() - t0)
 
 
-def _free_port() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+def _devtools_port(udd: Path, proc, timeout_s: float = 60.0) -> int:
+    """Порт отладки, который Chromium выбрал сам (`--remote-debugging-port=0`).
+
+    ACL-1397: прежде порт брали заранее (bind на 0, закрыть, отдать браузеру).
+    При параллельном прогоне между закрытием и запуском браузера этот порт
+    успевал занять соседний воркер, и подключение падало с ECONNREFUSED (CI
+    3.13, 30.09). Chromium пишет выбранный порт первой строкой файла
+    `DevToolsActivePort` в своей папке профиля — гонки нет."""
+    marker = udd / "DevToolsActivePort"
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            first = marker.read_text(encoding="utf-8").splitlines()[0].strip()
+            if first.isdigit():
+                return int(first)
+        except (OSError, IndexError):
+            pass
+        if proc.poll() is not None:
+            raise RuntimeError(f"Chromium exited with {proc.returncode} before opening DevTools")
+        time.sleep(0.1)
+    raise TimeoutError(f"no DevToolsActivePort in {udd} after {timeout_s:.0f} s")
 
 
 @pytest.fixture
@@ -99,13 +113,14 @@ def stopped_profile_page():
     до того проба честно отвечает таймаутом (это «не отвечает», не спин).
     """
     with sync_playwright() as pw:
-        port = _free_port()
         exe = os.environ.get("ACL_BROWSER_EXECUTABLE") or pw.chromium.executable_path
+        udd = Path(tempfile.mkdtemp(prefix='acl1320_'))
         proc = subprocess.Popen(
-            [exe, "--headless=new", f"--remote-debugging-port={port}",
-             f"--user-data-dir={tempfile.mkdtemp(prefix='acl1320_')}", "about:blank"],
+            [exe, "--headless=new", "--remote-debugging-port=0",
+             f"--user-data-dir={udd}", "about:blank"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
+            port = _devtools_port(udd, proc)
             attached = None
             deadline = time.time() + 20
             while attached is None:
