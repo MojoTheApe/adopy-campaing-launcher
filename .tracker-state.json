@@ -2264,6 +2264,18 @@
         "state": "implementing",
         "started_at": "2026-10-01T12:28:26+00:00",
         "from_status": "status:todo"
+      },
+      "455": {
+        "actor": "Worker-B1455C",
+        "session": "run_b1455c_1001",
+        "coordinator": "Coordinator-D0930K",
+        "branch": "codex/acl-1455-buttons-link-style",
+        "worktree": "C:\\acl-btn-style",
+        "id": "c68328fedde54e9b9471439e85e08446",
+        "issue": 455,
+        "state": "implementing",
+        "started_at": "2026-10-01T12:29:14+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -3119,6 +3131,17 @@
         },
         "pr": 453,
         "queued_at": "2026-10-01T12:19:11+00:00"
+      },
+      "455": {
+        "implementers": [
+          {
+            "actor": "Worker-B1455C",
+            "session": "run_b1455c_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-B1455C",
+        "coordinator": "Coordinator-D0930K"
       }
     },
     "actors": {
@@ -3293,6 +3316,10 @@
       "Reviewer-R1444C": {
         "session": "rev_r1444c_1001",
         "role": "Reviewer"
+      },
+      "Worker-B1455C": {
+        "session": "run_b1455c_1001",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -4633,6 +4660,13 @@
         "issue": 444,
         "claim": "065b9d6fac224b9fa34caf72408de1d2",
         "actor": "Worker-Z1444Y"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T12:29:14+00:00",
+        "issue": 455,
+        "claim": "c68328fedde54e9b9471439e85e08446",
+        "actor": "Worker-B1455C"
       }
     ],
     "policy": {
