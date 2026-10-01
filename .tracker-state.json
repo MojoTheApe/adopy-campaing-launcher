@@ -2208,6 +2208,18 @@
         "state": "implementing",
         "started_at": "2026-10-01T11:09:34+00:00",
         "from_status": "status:backlog"
+      },
+      "445": {
+        "actor": "Worker-L1445P",
+        "session": "run_l1445p_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1445-placements",
+        "worktree": "C:\\acl-1445-placements",
+        "id": "e862f7b70fba46d6847c704b8db6220b",
+        "issue": 445,
+        "state": "implementing",
+        "started_at": "2026-10-01T11:16:22+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2933,6 +2945,17 @@
         "state": "implementing",
         "worker": "Worker-Z1444Y",
         "coordinator": "Coordinator-C0930A"
+      },
+      "445": {
+        "implementers": [
+          {
+            "actor": "Worker-L1445P",
+            "session": "run_l1445p_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-L1445P",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -3082,6 +3105,10 @@
       },
       "Worker-Z1444Y": {
         "session": "run_z1444y_1001",
+        "role": "Worker"
+      },
+      "Worker-L1445P": {
+        "session": "run_l1445p_1001",
         "role": "Worker"
       }
     },
@@ -4275,6 +4302,13 @@
         "prs": [
           443
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T11:16:22+00:00",
+        "issue": 445,
+        "claim": "e862f7b70fba46d6847c704b8db6220b",
+        "actor": "Worker-L1445P"
       }
     ],
     "policy": {
