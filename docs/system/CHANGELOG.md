@@ -1,5 +1,132 @@
 # System history
 
+## Ads in the account tree get their workbook numbers — ACL-1395
+
+2026-09-30 on Facebook_6540 (CO_bnc_All_Video_FX_Y_35_28.09) the campaign row had
+its workbook numbers and both ads under it showed only dashes. Two causes.
+
+- The account read took the name cell's whole text, so Meta's label came with the
+  name: "1741 - Pro Bancolombia Unpublished edits Unpublished edits". Nothing in the
+  workbook matched it. The read now takes the name from the cell's own tooltip
+  (`data-tooltip-content`, present on every row in the captured Ads Manager pages)
+  and strips trailing labels by one list, `META_NAME_LABELS` in
+  `src/analysis_agent/account_spend.py`: "Unpublished edits", "In draft", "In
+  review", "Draft" — only at the end of a name, whole and exact, never leaving it
+  empty. The turn-off lookup compares names the same way. The tree applies the same
+  list to readings saved before the fix (`amapTreeName`, a copy kept equal by test).
+- Several ads with one name in one campaign used to get a dash. Owner decision
+  2026-09-30: each shows the workbook totals for that name once (not multiplied),
+  with a quiet "shared by N ads" mark and the tooltip "The workbook cannot tell ads
+  with the same name apart; these are the totals for all of them". Campaign rows are
+  unchanged; two campaigns with one name keep the dash.
+
+## The test suite runs in parallel — ACL-1397
+
+2026-09-30. The full suite (3800+ tests) ran one test at a time: 82 min on the
+owner's laptop while other sessions shared it, 22–23 min for the test step in CI
+per Python version. It now runs with pytest-xdist:
+`python -m pytest tests/ -q -n auto --dist loadfile` (CI and
+docs/repository/WORKFLOW.md). Locally on the same laptop: 20 min with 8 workers.
+
+- `--dist loadfile`: each test file stays on one worker, so the 80+ files that
+  start their own Chromium start it once, not once per worker.
+- CI: the hosted Windows runner (private repository) has 2 CPUs, and xdist
+  alone left CI at 23–31 min. The suite is now also split into 3 jobs per
+  Python version by `scripts/acl_test_shard.py` (every test file in exactly one
+  shard, checked by `tests/test_acl_test_shard.py`).
+- `test_a_stopped_profile_never_spins_the_robot` reserved a "free" port and
+  released it before Chromium took it; under parallel runs another worker got
+  it first (ECONNREFUSED, CI 3.13). Chromium now picks the port itself
+  (`--remote-debugging-port=0`) and the test reads it from `DevToolsActivePort`.
+- `tests/conftest.py` sets `ACL_LIBRARY_REPO/TOKEN/BRANCH` to empty strings in
+  every worker, so a machine `.env` with the live team library can never be
+  picked up by a test run.
+- Fixed waits replaced with waits for the event itself: the build-percent
+  layout check (`test_campaign_build_percent_browser`, a known flake) reads both
+  boxes in one settled frame; the drawer tests wait for the intercepted preview
+  request instead of sleeping 100–500 ms; a publish log in
+  `test_meta_campaign_agent` goes to `tmp_path`, not the repository `output/`.
+- No product code changed; no test is serial-only.
+## A disabled ad account no longer shows as "no warning" — ACL-1391
+
+2026-09-30 the account map showed "no warning" for FacebookDoc20 while Ads Manager
+wrote "Account disabled" in the Delivery column of its campaign. Two causes:
+
+- The status read looked only for banner sentences. A disabled account can have no
+  banner at all, only the Delivery cell. The robot already recognised that shape
+  before publishing (ACL-1313) with its own list of signs, and the two lists had
+  drifted apart. The status read now also asks the robot's detector: "Account
+  disabled" as a whole Delivery cell reads as `disabled`, "Verification required
+  to advertise" as `restricted`. A test fails if the robot learns a kind of block
+  the status column has no word for. The help link "Why is my ad account
+  disabled?" still reads as nothing. Every sign in every frame is weighed, not
+  the first one on the page: a verification banner above an "Account disabled"
+  cell reads as `disabled`. Meta's lines come out space-joined, and a broken
+  link to the robot's detector is logged once instead of passing silently.
+- The last successful status stayed on screen after later reads failed: Doc20's
+  "no warning" was from 22.09, and every read after it had failed. The map now
+  prints the read date (dd.mm.yy) under the status, and a status followed by a failed read
+  is greyed out and marked "not refreshed", with the failed attempt in its tooltip.
+
+No new visits to accounts: the fix applies on the next Read a person asks for.
+
+## The robot closes and reopens a hand-opened profile window when it is safe — ACL-1388
+
+2026-09-30 06:49 UTC a "Publish all" run stopped Facebook_6540 at the start with
+`profile_open_by_hand`: its Multilogin window had been opened by hand, and since
+ACL-1320 the robot never stops such a window (stopping one once lost a Facebook
+session Multilogin had not saved yet). Owner decision: close it automatically, but
+only when it is safe.
+
+- `src/fb_ads_rpa/hand_window.py` decides. All must hold: the profile's browser has
+  been running at least 15 minutes (`MIN_AGE_S`, the youngest main process decides),
+  the profile window is not the foreground window, and there was no keyboard/mouse
+  input on the machine for 60 seconds (`MIN_IDLE_S`, `GetLastInputInfo`). Any failed
+  read, no process, or not Windows means "not safe". Per-machine overrides:
+  `FB_RPA_HAND_WINDOW_MIN_AGE_S`, `FB_RPA_HAND_WINDOW_MIN_IDLE_S`;
+  `FB_RPA_REOPEN_HAND_WINDOW=0` restores the old always-stop behaviour.
+- `browser.py` applies it at all three hand-opened places (`no_automation_port`,
+  `unowned_port`, `mlx_lock`), only when publishing (spend reading keeps the stop).
+  Safe: graceful MLX API stop of only this profile (no kill — a failed API stop keeps
+  the old stop and closes nothing), wait for its processes to exit, start with
+  automation. A start that fails after the close is `profile_restart_failed`. The
+  existing login check on the way to the campaigns list stops a logged-out profile
+  with `profile_logged_out`, without retries. Not safe: the same
+  `profile_open_by_hand` stop and message as before.
+- Visible: job panel line "Closed the hand-opened window of <account> and reopened
+  it for the robot", telemetry `profile_hand_window` (note = outcome or refusal
+  reason, diag = where, age_s, idle_s) and a Sentry breadcrumb with the same data.
+
+## The robot builds campaigns in Meta's single-screen editor — ACL-1327
+
+2026-09-26 Meta started opening a new editor on some accounts
+(`/adsmanager/manage/simple_create`: campaign, ad set and ad on one screen). The
+robot knew only the step-by-step editor, so those accounts stopped. Owner decision:
+support the new editor rather than look for a way back to the old one.
+
+- `src/fb_ads_rpa/simple_create.py` recognises the editor by URL or markup at any
+  step, scrolls to the Ad set / Ad sections instead of pressing Next, opens the
+  collapsed cards and sets the Leads objective inline. The existing card handlers
+  (name, budget, conversion, audience, age, locations, languages, interests,
+  placements, identity, creative, destination, copy) run inside the one page; the
+  draft is kept by Meta's autosave (telemetry `simple_create_draft`). Publish is
+  never pressed.
+- Named stops: `lead_terms_not_accepted` (a person accepts the Lead Ads Terms),
+  `simple_create_layout` (unknown variation, or `FB_RPA_SIMPLE_CREATE=0`),
+  `objective_inline` (the Leads objective could not be set on the page), and
+  `simple_create_more_ads` — only the first ad is built; ads 2–3 are ACL-1353.
+- Shipped in `acl-release-2026-09-29b` (the content of PR #340 through PR #376 and
+  PR #378).
+- Live check, Facebook_1443, 2026-09-29/30: four campaigns built end to end
+  (campaign, ad set, ad 1, draft saved) in 5–21 minutes; the owner confirmed the
+  campaign and ad set setup in Ads Manager on 2026-09-30. Because ads 2–3 are
+  missing, the robot itself marks each of these drafts "do not publish as is"
+  (`simple_create_more_ads` is blocking); the owner accepted closing this task
+  on the one-ad result, with ads 2–3 in ACL-1353. On Facebook_9943 no 29.09 run
+  got past the campaign name (an SSL error on reload, network trouble before the
+  objective, a profile that failed to start); one affected account is what this
+  task asked for.
+
 ## Sentry events carry the failing page section; a read-only triage digest — ACL-1325
 
 2026-09-26 a new "Suggest an audience" Audience layout on one account broke "Further
