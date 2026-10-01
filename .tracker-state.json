@@ -2269,22 +2269,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "462": {
-        "actor": "Worker-E1462R",
-        "session": "run_e1462r_1001",
-        "coordinator": "Coordinator-D0930K",
-        "branch": "codex/acl-1462-english-ui",
-        "worktree": "C:\\acl-english",
-        "id": "603078fdf6d3404fa6b9c7859ac7e666",
-        "issue": 462,
-        "state": "handoff",
-        "started_at": "2026-10-01T13:24:39+00:00",
-        "from_status": "status:backlog",
-        "pr": 463,
-        "report": "# ACL-1462 \u2014 implementation handoff\n- Branch `codex/acl-1462-english-ui` \u2192 `stage`, head a039aa9, base 38351e6. Worker-E1462R, run_e1462r_1001, Coordinator-D0930K, `C:\\acl-english`.\n- Done: all user-facing Russian found by the scan translated (templates, publish_jobs, targeting_registry, country_split); guard test added; pinned tests updated.\n- Checks: affected suites + JS guard 134 passed. Full suite: CI.\n- Reviewer: report.html is also touched by ACL-1455 (#456), ACL-1457 (#458), ACL-1459 (#460) \u2014 different lines; expect only textual merge of CHANGELOG. Translations avoid apostrophes inside single-quoted JS strings."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -3228,9 +3213,25 @@
             "session": "run_e1462r_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-E1462R",
-        "coordinator": "Coordinator-D0930K"
+        "coordinator": "Coordinator-D0930K",
+        "handoff": {
+          "actor": "Worker-E1462R",
+          "session": "run_e1462r_1001",
+          "coordinator": "Coordinator-D0930K",
+          "branch": "codex/acl-1462-english-ui",
+          "worktree": "C:\\acl-english",
+          "id": "603078fdf6d3404fa6b9c7859ac7e666",
+          "issue": 462,
+          "state": "handoff",
+          "started_at": "2026-10-01T13:24:39+00:00",
+          "from_status": "status:backlog",
+          "pr": 463,
+          "report": "# ACL-1462 \u2014 implementation handoff\n- Branch `codex/acl-1462-english-ui` \u2192 `stage`, head a039aa9, base 38351e6. Worker-E1462R, run_e1462r_1001, Coordinator-D0930K, `C:\\acl-english`.\n- Done: all user-facing Russian found by the scan translated (templates, publish_jobs, targeting_registry, country_split); guard test added; pinned tests updated.\n- Checks: affected suites + JS guard 134 passed. Full suite: CI.\n- Reviewer: report.html is also touched by ACL-1455 (#456), ACL-1457 (#458), ACL-1459 (#460) \u2014 different lines; expect only textual merge of CHANGELOG. Translations avoid apostrophes inside single-quoted JS strings."
+        },
+        "pr": 463,
+        "queued_at": "2026-10-01T13:29:10+00:00"
       }
     },
     "actors": {
@@ -3683,7 +3684,8 @@
       452,
       455,
       457,
-      459
+      459,
+      462
     ],
     "review": {
       "id": "afc86d4be7054b90b0bf87c81be9ebc1",
@@ -4837,6 +4839,13 @@
         "at": "2026-10-01T13:24:39+00:00",
         "issue": 462,
         "claim": "603078fdf6d3404fa6b9c7859ac7e666",
+        "actor": "Worker-E1462R"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-01T13:29:10+00:00",
+        "issue": 462,
+        "pr": 463,
         "actor": "Worker-E1462R"
       }
     ],
