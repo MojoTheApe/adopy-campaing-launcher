@@ -1,5 +1,16 @@
 # System history
 
+## One Connect button opens the found profile and connects it — ACL-1457
+
+Each profile found in Multilogin had two buttons, Open and Connect, and they had to be
+pressed in that order: only a profile opened by automation can tell the dashboard its
+ad account number. The owner asked for one button (2026-10-01). Connect now opens the
+profile through the same `/mlx-profile-open` path (attaching if it already runs with
+automation; a window opened by hand is still never restarted), reads the number, and
+connects. If opening fails, connecting continues and the prompt says to close a
+hand-opened window and press Connect again, or to type the number, or to leave it for
+later. The "open profile" button on already connected accounts is unchanged.
+
 ## Connect Multilogin issues the token in the right workspace — ACL-1441
 
 2026-10-01. "Connect Multilogin" (Accounts → Connect) asked for the automation

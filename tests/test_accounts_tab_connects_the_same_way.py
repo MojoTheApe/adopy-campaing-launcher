@@ -70,11 +70,13 @@ def test_finding_and_opening_are_offered_where_connecting_happens():
     out = _render("")
     assert "amap-find" in out, "поиска профиля нет"
     assert "amap-hits" in out, "находкам негде появиться"
-    # Open и Connect рисует общий обработчик — проверяем, что он тот самый.
+    # Кнопку рисует общий обработчик — проверяем, что он тот самый. С ACL-1457
+    # она одна: Connect сам открывает профиль и подключает.
     page = REPORT.read_text(encoding="utf-8")
     hits = page[page.index("function amapRenderHits"):]
     hits = hits[: hits.index("\n/* Открыть найденный профиль")]
-    assert "'Open'" in hits and "'Connect'" in hits
+    assert "'Connect'" in hits and "amapOpenAndConnect" in hits
+    assert "'Open'" not in hits, "отдельная кнопка Open вернулась"
 
 
 def test_the_manual_path_keeps_its_own_button():
