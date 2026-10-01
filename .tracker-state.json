@@ -2152,20 +2152,6 @@
         "state": "implementing",
         "started_at": "2026-10-01T07:27:36+00:00",
         "from_status": "status:backlog"
-      },
-      "433": {
-        "actor": "Worker-B1433T",
-        "session": "run_b1433t_1001",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1433-bench",
-        "worktree": "C:\\acl-1433-bench",
-        "id": "be4785ed37244c2b8c47fc02624a3b3c",
-        "issue": 433,
-        "state": "handoff",
-        "started_at": "2026-10-01T08:39:49+00:00",
-        "from_status": "status:backlog",
-        "pr": 439,
-        "report": "# ACL-1433 handoff \u2014 Worker-B1433T (run_b1433t_1001)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/439 (base stage)\nBranch: codex/acl-1433-bench, head b7ab40f, from work/main 49915f7. Worktree C:\\acl-1433-bench.\n\n## Delivered\n1. Catalogue tests/bench/CATALOGUE.md from tests/bench/catalogue.json (scripts/bench_catalogue.py --write/--check): 20 robot steps x 72 layouts, 41 fixtures, every step has >= 1 fixture; captures seen but not cut listed with reasons. tests/test_bench_catalogue.py checks integrity.\n2. scripts/capture_to_fixture.py (capture folder -> scrubbed trimmed fixture + optional test stub; secret-scanner rules gate the write); README section in tests/fixtures/ads_manager/README.md; tests/test_capture_to_fixture.py.\n3. Harvest of C:\\acl-live-1001/0930/0928 (29.09-01.10): 10 fixtures, bench modules tests/test_bench_{creative_wizard_steps,placements,ad_destination,list_without_editor,languages,ad_copy,conversion_event,locations,audience_simple_create}.py running the robot's real steps/readers.\n4. Rule \"every robot fix adds its live capture to the bench\": .github/pull_request_template.md + docs/system/AGENT_CONTEXT.md. CHANGELOG entry.\n\n## Verification\nWindows 11, venv python, headless Chromium, ACL_LIBRARY_* empty: tests/test_bench_*.py + tests/test_capture_to_fixture.py -> 124 passed, 2 xfailed. acl_scan_secrets clean after staging; acl_smoke OK; catalogue --check OK. Full suite: CI. No RPA source changed; C:\\acl-live-* read only; raw captures not committed.\n\n## Live bugs (strict xfail, RPA track)\n- Doc19 placements: Meta no longer offers \"Messenger Stories\" -> subitems_missing fails the step (5edc0e7cca0a).\n- Single-screen Placements card not found: anchored on \"Account controls\", card shows only \"Advantage+ on\" (cb854b07857b).\n\n## Observed (owner decision / more capture needed)\n- Ad copy: no Headline field in ad_creative_section (cc8fcfa17ae9) -> ad_copy fails on headline.\n- Single-screen ads 2-3: ad form not in DOM -> destination_section_missing (5 runs 01.10).\n- Editor closed under the robot 01.10 06:28 in three campaigns; placements then read table cells as subitems.\n- 5465ca61895f: Meta account authentication block (#3858385)."
       }
     },
     "tasks": {
@@ -2764,9 +2750,25 @@
             "session": "run_b1433t_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-B1433T",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-B1433T",
+          "session": "run_b1433t_1001",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1433-bench",
+          "worktree": "C:\\acl-1433-bench",
+          "id": "be4785ed37244c2b8c47fc02624a3b3c",
+          "issue": 433,
+          "state": "handoff",
+          "started_at": "2026-10-01T08:39:49+00:00",
+          "from_status": "status:backlog",
+          "pr": 439,
+          "report": "# ACL-1433 handoff \u2014 Worker-B1433T (run_b1433t_1001)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/439 (base stage)\nBranch: codex/acl-1433-bench, head b7ab40f, from work/main 49915f7. Worktree C:\\acl-1433-bench.\n\n## Delivered\n1. Catalogue tests/bench/CATALOGUE.md from tests/bench/catalogue.json (scripts/bench_catalogue.py --write/--check): 20 robot steps x 72 layouts, 41 fixtures, every step has >= 1 fixture; captures seen but not cut listed with reasons. tests/test_bench_catalogue.py checks integrity.\n2. scripts/capture_to_fixture.py (capture folder -> scrubbed trimmed fixture + optional test stub; secret-scanner rules gate the write); README section in tests/fixtures/ads_manager/README.md; tests/test_capture_to_fixture.py.\n3. Harvest of C:\\acl-live-1001/0930/0928 (29.09-01.10): 10 fixtures, bench modules tests/test_bench_{creative_wizard_steps,placements,ad_destination,list_without_editor,languages,ad_copy,conversion_event,locations,audience_simple_create}.py running the robot's real steps/readers.\n4. Rule \"every robot fix adds its live capture to the bench\": .github/pull_request_template.md + docs/system/AGENT_CONTEXT.md. CHANGELOG entry.\n\n## Verification\nWindows 11, venv python, headless Chromium, ACL_LIBRARY_* empty: tests/test_bench_*.py + tests/test_capture_to_fixture.py -> 124 passed, 2 xfailed. acl_scan_secrets clean after staging; acl_smoke OK; catalogue --check OK. Full suite: CI. No RPA source changed; C:\\acl-live-* read only; raw captures not committed.\n\n## Live bugs (strict xfail, RPA track)\n- Doc19 placements: Meta no longer offers \"Messenger Stories\" -> subitems_missing fails the step (5edc0e7cca0a).\n- Single-screen Placements card not found: anchored on \"Account controls\", card shows only \"Advantage+ on\" (cb854b07857b).\n\n## Observed (owner decision / more capture needed)\n- Ad copy: no Headline field in ad_creative_section (cc8fcfa17ae9) -> ad_copy fails on headline.\n- Single-screen ads 2-3: ad form not in DOM -> destination_section_missing (5 runs 01.10).\n- Editor closed under the robot 01.10 06:28 in three campaigns; placements then read table cells as subitems.\n- 5465ca61895f: Meta account authentication block (#3858385)."
+        },
+        "pr": 439,
+        "queued_at": "2026-10-01T09:32:26+00:00"
       },
       "434": {
         "implementers": [
@@ -3164,7 +3166,8 @@
       427,
       430,
       434,
-      437
+      437,
+      433
     ],
     "review": {
       "id": "6457401d2fcb4698814f3b9664cc4d70",
@@ -4081,6 +4084,13 @@
         "issue": 395,
         "pr": 398,
         "actor": "Worker-T1395E"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-01T09:32:26+00:00",
+        "issue": 433,
+        "pr": 439,
+        "actor": "Worker-B1433T"
       }
     ],
     "policy": {
