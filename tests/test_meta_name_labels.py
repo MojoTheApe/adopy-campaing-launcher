@@ -144,6 +144,16 @@ def test_the_name_is_read_without_the_label_beside_it(page):
     assert r.name == "1741 - Pro Bancolombia"
 
 
+def test_the_tooltip_name_wins_over_an_unlisted_label(page):
+    """Ревью F1: надпись, которой нет в списке, правило не снимет — имя
+    должно прийти из подсказки ячейки, а не из её текста."""
+    page.set_content(_grid("120250000000000006", "ADGROUP", "1741 - Pro Bancolombia",
+                           "<div>Pending edits</div>"))
+    (r,), _, err = sp.read_level(page, "ad")
+    assert not err, err
+    assert r.name == "1741 - Pro Bancolombia"
+
+
 def test_without_a_tooltip_the_text_rule_still_cleans_it(page):
     page.set_content(_grid("120250000000000002", "CAMPAIGN_GROUP", "CL_ML_All_Trading_35_15.07",
                            LABELS, tooltip=False))
