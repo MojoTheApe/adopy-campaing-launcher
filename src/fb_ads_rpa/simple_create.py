@@ -785,6 +785,12 @@ def is_progress_dialog(dialog) -> bool:
             or bool(_PROGRESS_TEXT.match((dialog.get("text") or "").strip())))
 
 
+def _wv():
+    from src.fb_ads_rpa import window_visibility
+
+    return window_visibility
+
+
 def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
                  busy_wait_s: float | None = None) -> dict:
     """Ждать после «Create ad»: новая строка «Ad», раздел объявления показывает
@@ -820,9 +826,15 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
                 if busy_since is None:
                     busy_since = now
                 if now - busy_since < busy_wait_s:
+                    if now - busy_since >= _wv().WAKE_AFTER_S:
+                        # ACL-1402: долго не отвечает — не скрыто ли окно.
+                        _wv().wake_if_hidden(page, where="create_next_ad",
+                                             waited_s=now - start, answered=False)
                     time.sleep(1.0)
                     continue
             busy_s += now - unanswered_at
+            if not closed and _wv().woken_recently(page):
+                _wv().wake_did_not_help(page)
             break
         if unanswered_at is not None:
             busy_s += now - unanswered_at
@@ -846,6 +858,10 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
             deadline = max(deadline, busy_since + busy_wait_s)
         if ready or now >= deadline:
             break
+        if now - start >= _wv().WAKE_AFTER_S:
+            # ACL-1402: страница отвечает, а объявления всё нет — окно может
+            # быть закрыто другими окнами (Chrome придерживает кадры).
+            _wv().wake_if_hidden(page, where="create_next_ad", waited_s=now - start)
         time.sleep(0.5)
     got["dialog_first"] = dialog
     got["dialog_until_s"] = dialog_s if dialog else None

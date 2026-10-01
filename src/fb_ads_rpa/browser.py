@@ -399,6 +399,12 @@ def _front_page(context):
     return None
 
 
+#: ACL-1402: id(page) → удался ли `_disable_background_throttling` в последний
+#: раз ({"focus", "lifecycle", "at"}). Читает `window_visibility.visibility_diag`
+#: — в телеметрию раздела и долгих ожиданий.
+THROTTLE_STATUS: dict[int, dict] = {}
+
+
 def _disable_background_throttling(context, page) -> None:
     """Stop Chrome throttling the page when its window is minimised or behind
     another one.
@@ -416,18 +422,23 @@ def _disable_background_throttling(context, page) -> None:
     `--disable-renderer-backgrounding` launch flags — but these two CDP
     commands achieve the same thing on a live target.
     """
+    status = {"focus": False, "lifecycle": False, "at": round(time.time(), 1)}
+    THROTTLE_STATUS[id(page)] = status
     try:
         session = context.new_cdp_session(page)
-    except Exception:
+    except Exception as exc:
+        status["error"] = type(exc).__name__
         return
     # Report the page as focused/active regardless of real window state.
     try:
         session.send("Emulation.setFocusEmulationEnabled", {"enabled": True})
+        status["focus"] = True
     except Exception:
         pass
     # Keep the page out of the frozen/discarded lifecycle states.
     try:
         session.send("Page.setWebLifecycleState", {"state": "active"})
+        status["lifecycle"] = True
     except Exception:
         pass
 
@@ -436,6 +447,8 @@ def _disable_background_throttling(context, page) -> None:
 # is garbage-collected python-side, its event handlers (screencast acks)
 # die with it and Chrome may pause the cast.
 _KEEPALIVE_SESSIONS: list = []
+#: ACL-1402: id(page) вкладок, на которых скринкаст уже запущен.
+_KEEPALIVE_PAGES: set[int] = set()
 
 
 def _keep_renderer_active(context, page) -> None:
@@ -489,8 +502,21 @@ def _keep_renderer_active(context, page) -> None:
              "everyNthFrame": 2},
         )
         _KEEPALIVE_SESSIONS.append(session)
+        _KEEPALIVE_PAGES.add(id(page))
     except Exception as exc:
         log.debug("keep_renderer_active skipped: %s", exc)
+
+
+def ensure_renderer_kept_active(context, page) -> bool:
+    """Скринкаст на вкладке, если его ещё нет (ACL-1402). True — запустили сейчас.
+
+    Свежая вкладка (`fresh_tab`, перезагрузка) получала только снятие
+    троттлинга, а скринкаст — лишь вкладка, к которой подключились.
+    """
+    if id(page) in _KEEPALIVE_PAGES:
+        return False
+    _keep_renderer_active(context, page)
+    return id(page) in _KEEPALIVE_PAGES
 
 
 def _patch_window_geometry(session, page) -> None:
@@ -934,7 +960,20 @@ def page_answers(page, timeout_s: float = 5.0) -> bool | None:
     """
     from src.fb_ads_rpa.page_liveness import answers
 
-    return answers(page, timeout_s)
+    got = answers(page, timeout_s)
+    if got is False:
+        # ACL-1402: прежде чем назвать вкладку зависшей — не скрыто ли её
+        # окно (закрыто другими окнами, свёрнуто). Скрыто — будим без
+        # переднего плана и спрашиваем ещё раз.
+        try:
+            from src.fb_ads_rpa import window_visibility
+
+            woke = window_visibility.wake_if_hidden(page, where="page_answers", answered=False)
+        except Exception:
+            woke = {}
+        if woke.get("woke"):
+            got = answers(page, timeout_s)
+    return got
 
 
 def _open_tab_via_browser(context, timeout_s: float = 10.0, *, like_url: str = ""):
@@ -1121,6 +1160,16 @@ def wake_page_quietly(page) -> dict:
     return out
 
 
+def _visibility(page) -> dict:
+    """Видимость вкладки и окна профиля для строки раздела (ACL-1402). Не бросает."""
+    try:
+        from src.fb_ads_rpa import window_visibility
+
+        return window_visibility.visibility_diag(page)
+    except Exception as exc:
+        return {"error": str(exc)[:80]}
+
+
 def ensure_editor_window(page, section: str) -> bool:
     """Check at section boundaries; recover once, then stop without replaying drafts."""
     from src.fb_ads_rpa import run_telemetry as rt
@@ -1156,7 +1205,7 @@ def ensure_editor_window(page, section: str) -> bool:
         after = rt.window_state(page)
     ok = readable(after)
     diag = {"section": section, "minimum_width": MIN_EDITOR_WIDTH,
-            "before": before, "after": after}
+            "before": before, "after": after, "visibility": _visibility(page)}
     rt.record("window_bounds", ok, diag=diag)
     if not ok:
         rt.record("window_too_small", False, diag=diag)
@@ -1268,10 +1317,17 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
         if restored:
             # В конце кампании `put_window_back` вернёт окно на место и свернёт.
             _OFFSCREEN[id(context)] = {"window_id": restored[0]["window"], **restored[0]["was"]}
+        try:
+            from src.fb_ads_rpa import window_visibility
+
+            window_visibility.remember_cdp_url(context, cdp_url)
+        except Exception:
+            pass
         _disable_background_throttling(context, page)
         _ensure_wide_window(context, page)
         from src.fb_ads_rpa import run_telemetry as rt
-        rt.record("window_bounds", None, diag={"section": "attach", "after": rt.window_state(page)})
+        rt.record("window_bounds", None, diag={"section": "attach", "after": rt.window_state(page),
+                                               "visibility": _visibility(page)})
         _keep_renderer_active(context, page)
         # Новая вкладка в Chrome сразу становится активной, и окно человека на
         # минуты уезжает на нашу страницу. Возвращаем то, на что он смотрел:

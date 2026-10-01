@@ -3508,6 +3508,18 @@ def _tab_frozen(page: Page) -> bool:
     """
     frozen = _page_responsive(page, LIVENESS_PROBE_S) is False
     if frozen:
+        # ACL-1402: окно профиля могло быть закрыто другими окнами — тогда
+        # Chrome придерживает вкладку. Прежде чем назвать её зависшей —
+        # разбудить без переднего плана и спросить ещё раз.
+        try:
+            from src.fb_ads_rpa import window_visibility
+
+            woke = window_visibility.wake_if_hidden(page, where="tab_frozen", answered=False)
+        except Exception:
+            woke = {}
+        if woke.get("woke") and _page_responsive(page, LIVENESS_PROBE_S) is True:
+            return False
+    if frozen:
         _flow_budget_note_frozen()
         if not getattr(_flow_budget, "defer", False):
             _flow_budget_check()
@@ -3614,6 +3626,19 @@ def _unstick(page: Page, where: str, *, editor: bool, waited_s: float = 0.0,
     _stall_evidence(page, where, responsive=responsive, outcome="stall")
     if responsive is False:
         woke = {"skipped": "unresponsive"}
+        # ACL-1402: не отвечает, а окно скрыто — будим без переднего плана
+        # (сессией браузера; сессию на самой вкладке — только если ответит).
+        try:
+            from src.fb_ads_rpa import window_visibility
+
+            hidden = window_visibility.wake_if_hidden(page, where=where, waited_s=waited_s,
+                                                      answered=False)
+            if hidden.get("hidden"):
+                woke["hidden_wake"] = {"woke": hidden.get("woke"), "actions": hidden.get("actions")}
+                if hidden.get("woke"):
+                    responsive = _page_responsive(page)
+        except Exception:
+            pass
     else:
         try:
             from src.fb_ads_rpa.browser import wake_page
@@ -3637,9 +3662,17 @@ def _unstick(page: Page, where: str, *, editor: bool, waited_s: float = 0.0,
                 how = "reloaded" if _reload_awake(page, where) else "reload_failed"
         else:
             how = "reloaded" if recover_stuck_page(page, where, editor=editor) else "reload_refused"
+    # ACL-1402: долгое ожидание — видимость вкладки и окна профиля в строку.
+    try:
+        from src.fb_ads_rpa import window_visibility
+
+        visibility = window_visibility.visibility_diag(page, answered=responsive)
+    except Exception:
+        visibility = None
     _telemetry.record("stall_unstuck", None, note=how,
                       diag={"where": where[:80], "waited_s": round(waited_s, 1), "editor": editor,
-                            "responsive": responsive, "loading": loading, "woke": woke})
+                            "responsive": responsive, "loading": loading, "woke": woke,
+                            "visibility": visibility})
     return how
 
 

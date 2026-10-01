@@ -1,5 +1,32 @@
 # System history
 
+## A covered profile window is recorded and woken without the foreground — ACL-1402
+
+2026-09-30, Facebook_1443 (fba2c3f5): `website_selected` → `conversion_event` took
+5 minutes, and the build continued the moment the owner opened the account window,
+which was covered by other windows (not minimised). Telemetry had no visibility data
+after attach.
+
+- `src/fb_ads_rpa/window_visibility.py`: `visibility_diag` — `document.visibilityState`
+  and `document.hasFocus()` (bounded probe), the profile window as Windows sees it
+  (read-only Win32: `IsIconic`, `IsWindowVisible`, foreground, share on screen and not
+  covered by windows above it in z-order; the browser process is found by its CDP
+  port), and whether `_disable_background_throttling` succeeded on the tab
+  (`browser.THROTTLE_STATUS`). Recorded in every `window_bounds` row (attach and each
+  section) and in `stall_unstuck`.
+- `wake_if_hidden`: when a wait runs long and the page or its window is hidden, the
+  CDP helper is re-applied, a keep-alive screencast is started if the tab has none,
+  and a minimised window goes back to normal off-screen — never `bring_to_front` or
+  any foreground call. A tab that does not answer gets no CDP session on itself
+  (ACL-1320); only browser-level commands. At most once per 30 s per tab.
+  Telemetry `window_hidden_woken`; job panel: "The profile window was hidden behind
+  other windows — the robot woke it" or "… — bring it to the front".
+- Hooked before every "tab is frozen" decision: `meta_dom._tab_frozen`,
+  `browser.page_answers`, the unresponsive branch of `_unstick`, and
+  `simple_create._wait_new_ad` (after 20 s; the 120 s Meta-busy limit is unchanged).
+- Not done yet: the live experiment with real covered windows (which mechanism
+  actually unfreezes an occluded Chrome window) — planned in PR ACL-1402.
+
 ## The robot closes and reopens a hand-opened profile window when it is safe — ACL-1388
 
 2026-09-30 06:49 UTC a "Publish all" run stopped Facebook_6540 at the start with
