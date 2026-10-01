@@ -2337,7 +2337,7 @@
             "session": "run_p1397f_0930"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-P1397F",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2355,7 +2355,8 @@
           "report": "# ACL-1397 handoff \u2014 the test suite runs in parallel locally and in CI\n\n- PR: #409 (MojoTheApe/adopy-campaing-launcher, into stage), branch `codex/acl-1397-parallel-tests`, head `6ffb465` (work/main 8a87697 merged in).\n- Actor Worker-P1397F, session run_p1397f_0930, claim 21dee6d9f488444b882433b94a89a7a5.\n\n## Acceptance \u2014 owner decision 2026-09-30 (option B)\nThe criterion \"3 clean local `-n auto` runs in a row\" is replaced: the goal is a parallel, green CI; workers and reviewers run only affected tests locally. Local guidance (docs/repository/WORKFLOW.md): on a shared machine `-n 4` or less; rerun a budget/timing test alone before suspecting code.\n\n## Changes\n- requirements-dev.txt: pytest-xdist==3.8.0.\n- .github/workflows/ci.yml: matrix python [3.11, 3.13] x shard [1, 2, 3]; each job runs `python -m pytest <files of shard k> -q -n auto --dist loadfile` (`scripts/acl_test_shard.py k 3`). The private repo's hosted Windows runner has 2 CPUs (printed by the step), so xdist alone did not shorten CI.\n- scripts/acl_test_shard.py + tests/test_acl_test_shard.py: deterministic split; shards together are exactly tests/test_*.py.\n- tests/conftest.py: ACL_LIBRARY_REPO/TOKEN/BRANCH set to \"\" at import in every worker (machine .env configures the live library; load_dotenv fills only unset variables).\n- Test fixes (assertions unchanged): build-percent layout flake (both boxes in one settled frame); CDP port race in test_a_stopped_profile_never_spins_the_robot (--remote-debugging-port=0 + DevToolsActivePort); drawer tests wait for the intercepted request / server checks instead of fixed sleeps; publish-selected end-of-build wait 8 -> 15 s (3 s poll, 6 s after a failed poll); test_meta_campaign_agent log -> tmp_path.\n- Docs: WORKFLOW.md \"Running the test suite\"; CHANGELOG entry.\n- No product code changed. Serial-only tests: none.\n\n## Timings\n| | before | after |\n|---|---|---|\n| CI Tests step | 22m35s / 22m26s per version (run 36689171020) | shards 1-2: 8m49s-9m53s, shard 3: 4m43s-4m49s |\n| CI whole run | ~54 min (jobs 24m22s each, sequential) | ~12.5 min (jobs 6m38s-12m01s); runs 36749016245, 36754191007 green |\n| Local (shared laptop, 14 logical CPUs) | serial 82m04s | -n 8 --dist loadfile: 19m52s, 22m52s, 36m07s, 23m14s; -n auto test-by-test: 41m22s |\n\n## Risks / notes\n- Budget-sensitive real-Chromium tests fail on a CPU-starved local machine in any mode: test_a_stopped_profile_never_spins_the_robot (throughput), test_a_frozen_tab_is_replaced_by_a_fresh_one, test_sentry_page_snapshot, test_create_click_avoids_left_menu, test_campaign_build_dot_browser, test_simple_create_more_ads (ACL-1412, not touched; loadfile keeps it on one worker, only CPU load adds pressure). All pass alone and in CI.\n- More billed Windows minutes (6 jobs x ~2.5 min setup).\n- Not requested now: 4 shards (~7-8 min Tests step); a per-worker shared Chromium fixture.\n- Incident: early in the session a relative-path write briefly modified C:\\fb_agents\\tests\\test_meta_campaign_agent.py in the main checkout; restored by hand (no git commands), clean."
         },
         "pr": 409,
-        "queued_at": "2026-09-30T19:26:27+00:00"
+        "queued_at": "2026-09-30T19:26:27+00:00",
+        "reviewer": "Reviewer-R1397J"
       },
       "399": {
         "implementers": [
@@ -2796,6 +2797,10 @@
       "Worker-K1430S": {
         "session": "run_k1430s_1001",
         "role": "Worker"
+      },
+      "Reviewer-R1397J": {
+        "session": "review_r1397j_1001",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -2964,14 +2969,24 @@
       412,
       390,
       399,
-      397,
       402,
       419,
       424,
       427,
       430
     ],
-    "review": null,
+    "review": {
+      "id": "b9d5b5efbfd24414ba2621b27aa6b30a",
+      "pr": 409,
+      "issues": [
+        397
+      ],
+      "actor": "Reviewer-R1397J",
+      "session": "review_r1397j_1001",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-01T08:21:05+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -3739,6 +3754,13 @@
         "prs": [
           429
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-01T08:21:05+00:00",
+        "pr": 409,
+        "lane": "b9d5b5efbfd24414ba2621b27aa6b30a",
+        "actor": "Reviewer-R1397J"
       }
     ],
     "policy": {
