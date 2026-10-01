@@ -2158,7 +2158,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "444": {
+        "actor": "Worker-Z1444Y",
+        "session": "run_z1444y_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1444-close-finished",
+        "worktree": "C:\\acl-1444-close",
+        "id": "a256e497549449ddb4ef82934a493c2e",
+        "issue": 444,
+        "state": "implementing",
+        "started_at": "2026-10-01T11:09:34+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -2871,6 +2884,17 @@
         },
         "pr": 442,
         "queued_at": "2026-10-01T10:26:22+00:00"
+      },
+      "444": {
+        "implementers": [
+          {
+            "actor": "Worker-Z1444Y",
+            "session": "run_z1444y_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-Z1444Y",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -3016,6 +3040,10 @@
       },
       "Worker-W1441X": {
         "session": "run_w1441x_1001",
+        "role": "Worker"
+      },
+      "Worker-Z1444Y": {
+        "session": "run_z1444y_1001",
         "role": "Worker"
       }
     },
@@ -4166,6 +4194,13 @@
         "issue": 441,
         "pr": 442,
         "actor": "Worker-W1441X"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T11:09:34+00:00",
+        "issue": 444,
+        "claim": "a256e497549449ddb4ef82934a493c2e",
+        "actor": "Worker-Z1444Y"
       }
     ],
     "policy": {
