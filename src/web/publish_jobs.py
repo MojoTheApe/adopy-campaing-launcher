@@ -637,16 +637,17 @@ def _let_go_of_profile(job_id: str, publisher: Any, account_label: str, *, clean
     """Отпустить браузер в конце задания; чистое — закрывает профиль (ACL-1444).
 
     Решает `RpaPublisher.finish_job` (выключатель, сохранён ли черновик,
-    профиль ли это робота). Закрыл — строка в панели задания, отметка
-    `profile_closed` (кнопка «Close profile» прячется) и побудка очереди
-    профилей: память освободилась, ждущий аккаунт может стартовать.
+    профиль ли это робота). Закрыл — строка в панели задания и отметка
+    `profile_closed` (кнопка «Close profile» прячется). Другое задание уже
+    ждёт этот профиль — не закрываем (`other_job_waits`).
     Публикатор без `finish_job` или его сбой — как раньше: только `close`.
     """
     finish = getattr(publisher, "finish_job", None)
     outcome = ""
     if callable(finish):
         try:
-            outcome = finish(account_label, clean=clean)
+            outcome = finish(account_label, clean=clean,
+                             other_job_waits=clean and _profile_has_other_job(job_id, account_label))
         except Exception:
             outcome = ""
             publisher.close(force=False)
@@ -658,7 +659,20 @@ def _let_go_of_profile(job_id: str, publisher: Any, account_label: str, *, clean
         with _jobs_lock:
             _jobs[job_id]["profile_closed"] = True
         _append_creative_notice(job_id, PROFILE_CLOSED_NOTICE)
-        _slots.wake()
+        # Очередь будит `_slots.release` в `_run_job` сразу после этого.
+
+
+def _profile_has_other_job(job_id: str, account_label: str) -> bool:
+    """На профиль этого задания уже стоит другое активное задание (ревью PR #446, F6)."""
+    with _jobs_lock:
+        others = [(str(j.get("account_label") or ""), j.get("status"))
+                  for jid, j in _jobs.items() if jid != job_id]
+    try:
+        profile = profile_key_for(account_label)
+        return any(status in _ACTIVE_STATUSES and profile_key_for(label) == profile
+                   for label, status in others)
+    except Exception:
+        return True
 
 
 _ACTIVE_STATUSES = frozenset({"pending", "queued", "running", "cancelling"})

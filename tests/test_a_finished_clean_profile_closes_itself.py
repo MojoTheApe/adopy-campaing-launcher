@@ -170,6 +170,38 @@ def test_a_failed_stop_is_a_failed_row(monkeypatch):
     assert _rows("profile_closed_after_job")[-1]["ok"] is False
 
 
+def test_a_stop_pressed_while_waiting_for_autosave_keeps_the_window(monkeypatch):
+    """Ревью F2: Stop во время ожидания «All edits saved»."""
+    pub = _publisher(monkeypatch)
+
+    def saved_but_stopped(page):
+        pub._cancelled = True
+        return True
+
+    monkeypatch.setattr(rp.RpaPublisher, "_draft_saved", staticmethod(saved_but_stopped))
+    assert pub.finish_job(ACCOUNT, clean=True) == "kept_cancelled"
+    assert pub._provider.calls == []
+
+
+def test_another_job_waiting_for_the_profile_keeps_it_open(monkeypatch):
+    """Ревью F6: следующее задание на тот же профиль поднимет его сразу."""
+    pub = _publisher(monkeypatch)
+    assert pub.finish_job(ACCOUNT, clean=True, other_job_waits=True) == "kept_next_job"
+    assert pub._provider.calls == []
+
+
+def test_the_failed_close_log_is_scrubbed(monkeypatch, caplog):
+    """Ревью F3: id профиля из ошибки MLX в лог не попадает."""
+    class _Raises(_Provider):
+        def close_finished_profile(self, entry, account_label):
+            raise RuntimeError(f"HTTP 500 for profile {PROFILE}")
+
+    pub = _publisher(monkeypatch, provider=_Raises())
+    with caplog.at_level("WARNING", logger=rp.log.name):
+        assert pub.finish_job(ACCOUNT, clean=True) == "stop_failed"
+    assert "HTTP 500" in caplog.text and PROFILE not in caplog.text
+
+
 @pytest.mark.parametrize("value", ["1", "true", "yes", "on"])
 def test_the_switch_values(monkeypatch, value):
     monkeypatch.setenv(rp.ENV_KEEP_PROFILES_OPEN, value)
@@ -189,9 +221,21 @@ def test_the_editor_must_say_all_edits_saved(monkeypatch):
     assert rp.RpaPublisher._draft_saved(editor)
     monkeypatch.setattr(md, "_all_edits_saved", lambda page: False)
     assert not rp.RpaPublisher._draft_saved(editor)
-    # Не в редакторе (список кампаний) — несохранённого нет.
+    # Новый редактор «в один экран» (ACL-1327) — тоже редактор (ревью F1).
+    simple = SimpleNamespace(url="https://adsmanager.facebook.com/adsmanager/manage/simple_create?act=1")
+    assert not rp.RpaPublisher._draft_saved(simple)
+    # Любая другая страница — закрыто по умолчанию.
+    assert not rp.RpaPublisher._draft_saved(SimpleNamespace(url="https://www.facebook.com/checkpoint/"))
+    assert not rp.RpaPublisher._draft_saved(SimpleNamespace(url=""))
+    monkeypatch.setattr(md, "_all_edits_saved", lambda page: True)
+    assert rp.RpaPublisher._draft_saved(simple)
+    monkeypatch.setattr(md, "_all_edits_saved", lambda page: False)
+    # Список кампаний — несохранённого нет.
     listing = SimpleNamespace(url="https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1")
     assert rp.RpaPublisher._draft_saved(listing)
+    # `next=simple_create` в параметрах списка — всё ещё список.
+    nxt = SimpleNamespace(url="https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1&next=simple_create")
+    assert rp.RpaPublisher._draft_saved(nxt)
 
 
 # ── Задание: вердикт и строка в панели ───────────────────────────────────
@@ -220,16 +264,22 @@ class _JobPublisher:
     def publish_draft(self, draft):
         return next(r for r in self.results if r.campaign_name == draft.name)
 
-    def finish_job(self, account_label, *, clean):
+    def finish_job(self, account_label, *, clean, other_job_waits=False):
         self.finished.append(clean)
+        self.waits = other_job_waits
+        if clean and other_job_waits:
+            return "kept_next_job"
         return "closed" if clean else "kept_problem"
 
     def close(self, **kw):
         self.closed += 1
 
 
-def _run(monkeypatch, results, publisher_cls=None):
+def _run(monkeypatch, results, publisher_cls=None, *, extra_jobs=None):
     made: list = []
+    for jid, job in (extra_jobs or {}).items():
+        monkeypatch.setitem(pj._jobs, jid, job)
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: "P-" + label.split()[0])
 
     def factory(**kw):
         pub = (publisher_cls or _JobPublisher)(results)
@@ -255,8 +305,7 @@ def test_a_clean_job_closes_its_profile_and_says_so(monkeypatch):
     assert job["profile_closed"] is True
     assert rp.PROFILE_CLOSED_NOTICE in job["creative_notices"]
     assert rp.PROFILE_CLOSED_NOTICE == "Closed the profile — all campaigns are ready"
-    # Память освободилась — ждущие задания перепроверяют место сразу.
-    assert woke
+    assert pub.waits is False
     assert job["status"] == "done"
 
 
@@ -265,6 +314,57 @@ def test_a_job_with_a_problem_keeps_its_window(monkeypatch):
     assert pub.finished == [False]
     assert not job.get("profile_closed")
     assert rp.PROFILE_CLOSED_NOTICE not in job["creative_notices"]
+
+
+def test_a_job_cancelled_mid_run_keeps_its_window(monkeypatch):
+    """Ревью F8: Stop посреди задания — `clean=False`."""
+    class _StopAfterFirst(_JobPublisher):
+        def publish_draft(self, draft):
+            pj._jobs["job-1444"]["cancel_requested"] = True
+            return super().publish_draft(draft)
+
+    job, pub, _ = _run(monkeypatch, [_ok("C1"), _ok("C2")], _StopAfterFirst)
+    assert pub.finished == [False]
+    assert not job.get("profile_closed") and job["status"] == "cancelled"
+
+
+def test_a_partial_job_keeps_its_window(monkeypatch):
+    """Ревью F8: задание оборвалось на второй кампании — итог один из двух."""
+    class _DiesOnSecond(_JobPublisher):
+        def publish_draft(self, draft):
+            if draft.name == "C2":
+                raise RuntimeError("browser gone")
+            return super().publish_draft(draft)
+
+    monkeypatch.setattr("src.acl_sentry.report_job_exception", lambda *a, **k: None)
+    job, pub, _ = _run(monkeypatch, [_ok("C1"), _ok("C2")], _DiesOnSecond)
+    assert len(job["results"]) == 1 and job["total"] == 2
+    assert pub.finished == [False] and not job.get("profile_closed")
+
+
+def test_the_job_verdict_counts_results(monkeypatch):
+    def verdict(results, total, errors=()):
+        monkeypatch.setitem(pj._jobs, "v", {"results": [r.to_job_dict() for r in results],
+                                            "errors": list(errors), "total": total})
+        return pj._job_is_clean("v")
+
+    assert verdict([_ok("C1"), _ok("C2")], 2)
+    assert not verdict([_ok("C1")], 2)
+    assert not verdict([], 0)
+    assert not verdict([_ok("C1")], 1, errors=["RPA error: x"])
+    assert not verdict([_ok("C1"), _blocked("C2")], 2)
+
+
+def test_another_job_on_the_profile_is_passed_to_the_publisher(monkeypatch):
+    other = {"j-next": {"status": "queued", "account_label": "FacebookDQ204 - Second label"}}
+    job, pub, _ = _run(monkeypatch, [_ok("C1")], extra_jobs=other)
+    assert pub.waits is True and not job.get("profile_closed")
+
+
+def test_a_finished_job_on_the_profile_does_not_count(monkeypatch):
+    other = {"j-old": {"status": "done", "account_label": ACCOUNT}}
+    job, pub, _ = _run(monkeypatch, [_ok("C1")], extra_jobs=other)
+    assert pub.waits is False and job["profile_closed"] is True
 
 
 def test_a_publisher_without_finish_job_is_just_closed(monkeypatch):
@@ -277,7 +377,7 @@ def test_a_publisher_without_finish_job_is_just_closed(monkeypatch):
 
 def test_a_failing_finish_still_lets_go_of_the_browser(monkeypatch):
     class _Boom(_JobPublisher):
-        def finish_job(self, account_label, *, clean):
+        def finish_job(self, account_label, *, clean, other_job_waits=False):
             raise RuntimeError("x")
 
     job, pub, _ = _run(monkeypatch, [_ok("C1")], _Boom)
@@ -360,13 +460,20 @@ def test_the_button_waits_for_nobody_holding_the_profile(button):
     assert button.stops == []
 
 
-def test_a_failed_button_stop_is_reported(button):
+def test_a_failed_button_stop_is_reported(button, caplog):
     button.job("j1", "done")
-    button.fail = RuntimeError("HTTP 500 for 550e8400-e29b-41d4-a716-446655440000")
-    got = pj.close_profile("j1")
+    button.fail = RuntimeError(f"HTTP 500 for {PROFILE}")
+    with caplog.at_level("WARNING", logger=pj.__name__):
+        got = pj.close_profile("j1")
     assert got["ok"] is False and got["code"] == "failed"
-    assert PROFILE not in got["error"]
+    assert got["error"] == "Multilogin could not close the profile. Close its window in Multilogin."
     assert not pj._jobs["j1"].get("profile_closed")
+    assert button.woke == []
+    # Причина — в логе, без id профиля.
+    assert "HTTP 500" in caplog.text and PROFILE not in caplog.text
+    # Замок профиля отпущен: следующая попытка не «busy».
+    button.fail = None
+    assert pj.close_profile("j1")["ok"] is True
 
 
 def test_the_button_on_an_unknown_job(button):

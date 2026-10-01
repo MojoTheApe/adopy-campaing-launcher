@@ -9,8 +9,10 @@ could not start.
 
 - End of a job (`publish_jobs._let_go_of_profile` → `RpaPublisher.finish_job`):
   when every campaign is publishable, the job has no errors, it was not
-  stopped, and the draft is saved (on the editor: Meta's autosave settles and
-  "All edits saved" shows; off the editor nothing is pending), the robot stops
+  stopped, no other job is waiting for the same profile, and the draft is
+  saved (fail closed: anywhere but the campaign list — classic `/edit`,
+  single-screen `simple_create`, any other page — Meta's autosave settles and
+  "All edits saved" must show), the robot stops
   the profile gracefully through the MLX API — `allow_kill=False`, this
   profile only. Only a profile the robot started or attached to over its
   automation port and that still runs the same process (ACL-1320/1388
@@ -26,9 +28,8 @@ could not start.
   Refused (409) while any job of that profile is pending/queued/running or a
   read holds the profile lock; the lock is held during the stop.
 - Profile queue: slots count jobs, released when the job ends (unchanged); the
-  memory decision now sees the freed memory, and the queue is woken right
-  after a close so a waiting account rechecks at once.
-- Tests: `tests/test_a_finished_clean_profile_closes_itself.py` (38);
+  memory decision now sees the freed memory once the job releases its slot.
+- Tests: `tests/test_a_finished_clean_profile_closes_itself.py` (46);
   `tests/conftest.py` sets `FB_RPA_KEEP_PROFILES_OPEN=1` for all other tests.
 
 ## Connect Multilogin issues the token in the right workspace — ACL-1441

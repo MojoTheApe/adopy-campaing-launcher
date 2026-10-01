@@ -57,6 +57,15 @@ def keep_profiles_open() -> bool:
         "1", "true", "yes", "on")
 
 
+def _on_campaign_list(url: str) -> bool:
+    """Список кампаний Ads Manager — не редактор (ни `/edit`, ни `simple_create`)."""
+    from src.fb_ads_rpa.simple_create import url_is_simple_create
+
+    path = (url or "").split("?", 1)[0]
+    return ("/adsmanager/manage/campaigns" in path and "/edit" not in path
+            and not url_is_simple_create(url))
+
+
 def _resolve_account(account_label: str):
     try:
         return resolve_account_entry(load_ad_account_map(get_ad_account_map_path()), account_label)
@@ -361,7 +370,7 @@ class RpaPublisher:
                 pass
             self._entry = None
 
-    def finish_job(self, account_label: str, *, clean: bool) -> str:
+    def finish_job(self, account_label: str, *, clean: bool, other_job_waits: bool = False) -> str:
         """Конец задания: отпустить браузер и, если всё чисто, закрыть профиль (ACL-1444).
 
         `clean` — вердикт задания (все кампании годны к публикации, ошибок
@@ -370,6 +379,9 @@ class RpaPublisher:
         черновик сохранён (`_draft_saved`), а провайдер умеет и вправе закрыть
         этот профиль (`close_finished_profile`: только профиль робота, мягкая
         остановка через MLX API). Иначе окно остаётся, как раньше.
+
+        `other_job_waits` — на этот же профиль уже стоит другое задание:
+        закрывать незачем, оно поднимет профиль сразу (ревью PR #446, F6).
 
         CDP отпускается всегда (`close`), до остановки профиля. Строка
         телеметрии `profile_closed_after_job`: ok True — закрыт, False — MLX
@@ -396,11 +408,17 @@ class RpaPublisher:
             if not saved:
                 outcome = "kept_unsaved"
         self.close()
+        if not outcome and self._cancelled:
+            # Stop нажали, пока ждали автосохранения (ревью PR #446, F2).
+            outcome = "kept_cancelled"
+        if not outcome and other_job_waits:
+            outcome = "kept_next_job"
         if not outcome:
             try:
                 outcome = str(provider.close_finished_profile(entry, account_label) or "stop_failed")
             except Exception as exc:
-                log.warning("%s: closing the finished profile failed: %s", account_label, exc)
+                log.warning("%s: closing the finished profile failed: %s", account_label,
+                            _telemetry.scrub(str(exc))[:200])
                 outcome = "stop_failed"
         ok = True if outcome == "closed" else (False if outcome == "stop_failed" else None)
         _telemetry.record("profile_closed_after_job", ok, note=outcome,
@@ -411,11 +429,18 @@ class RpaPublisher:
 
     @staticmethod
     def _draft_saved(page: Any) -> bool:
-        """Черновик сохранён (ACL-1444): в редакторе — дождаться автосохранения
-        Meta и увидеть «All edits saved»; вне редактора несохранённого нет."""
+        """Черновик сохранён (ACL-1444). Закрыто по умолчанию: «нечего
+        сохранять» — только на списке кампаний; любая другая страница
+        (прежний редактор `/edit`, новый «в один экран» `simple_create`,
+        чужая или непрочитанная) — дождаться автосохранения Meta и увидеть
+        «All edits saved» (ревью PR #446, F1)."""
         from src.fb_ads_rpa import meta_dom
 
-        if not meta_dom._on_editor(page):
+        try:
+            url = str(page.url or "")
+        except Exception:
+            url = ""
+        if _on_campaign_list(url):
             return True
         try:
             meta_dom.wait_editor_saved(page, timeout_s=15)
