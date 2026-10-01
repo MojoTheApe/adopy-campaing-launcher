@@ -1478,6 +1478,28 @@
       border-radius: var(--radius-sm);
       color: var(--text); font-size: 0.78rem; line-height: 1.45;
     }
+    /* ACL-1437: проблемы кампании — коротким списком, а не абзацем.
+       Красный — блокирует, жёлтый — предупреждение (публиковать можно). */
+    .cb-problems {
+      margin: 0.35rem 0 0.2rem; padding: 0.5rem 0.65rem;
+      border: 1px solid var(--bad); border-left-width: 3px;
+      border-radius: var(--radius-sm); background: var(--bad-soft);
+      color: var(--text); line-height: 1.4;
+    }
+    .cb-problems--warning { border-color: var(--warn); background: var(--warn-soft); }
+    .cb-problems-head { font-weight: 600; color: var(--bad); word-break: break-word; }
+    .cb-problems--warning .cb-problems-head { color: var(--warn); }
+    .cb-problems-sub { color: var(--muted); font-size: 0.72rem; margin: 0.1rem 0 0.35rem 1.4rem; }
+    .cb-problems ol { margin: 0 0 0 1.4rem; padding: 0 0 0 1.1rem; }
+    .cb-problem { margin: 0 0 0.4rem; padding-left: 0.4rem; border-left: 2px solid var(--bad); }
+    .cb-problem--warning { border-left-color: var(--warn); }
+    .cb-problem-title { font-weight: 600; word-break: break-word; }
+    .cb-problem-impact { font-size: 0.74rem; }
+    .cb-problem-action { font-size: 0.74rem; color: var(--accent); }
+    .cb-problems-tech { margin: 0.2rem 0 0 1.4rem; font-size: 0.7rem; color: var(--muted); }
+    .cb-problems-tech > summary { cursor: pointer; }
+    .cb-problems-tech-body { font-family: monospace; word-break: break-all; margin-top: 0.2rem; }
+    .cb-problems-tech-body div { margin: 0.1rem 0; }
 
     /* ── §6 Creative Brief ── */
     .brief-details { margin-top: 1.5rem; }
@@ -12217,6 +12239,59 @@ function _doCbPublish(form) {
   if (got.skipped.length) cbSayAlreadyBuilding(got.skipped);
 }
 
+// ACL-1437: проблемы кампании — заголовок с вердиктом, число, пронумерованный
+// список (что сломалось, чем грозит, «→ что делать») и свёрнутые технические
+// подробности. Данные — `r.problems` от робота (failure_policy.problems);
+// дешборд их только рисует. '' — старая запись без списка или чистый итог:
+// тогда работает прежний текстовый вывод.
+function cbProblemsHtml(r) {
+  var items = r && Array.isArray(r.problems) ? r.problems : null;
+  if (!items || !items.length) return '';
+  var nBlock = items.filter(function(p) { return p.severity !== 'warning'; }).length;
+  var nWarn = items.length - nBlock;
+  var built = r.success === true;
+  var verdict = !built ? ['❌', 'not built', 'blocking']
+    : (nBlock ? ['⛔', 'do not publish as is', 'blocking']
+      : ['⚠️', 'ready to publish (with warnings)', 'warning']);
+  var plural = function(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); };
+  var counts = [];
+  if (nBlock) counts.push(plural(nBlock, 'problem'));
+  if (nWarn) counts.push(plural(nWarn, 'warning'));
+  counts.push(built ? 'draft saved, browser left open' : 'no complete draft, check Ads Manager');
+  var h = '<div class="cb-problems cb-problems--' + verdict[2] + '">'
+    + '<div class="cb-problems-head">' + verdict[0] + ' '
+    + aclEscHtml(r.campaign_name || '?') + ' — ' + verdict[1] + '</div>'
+    + '<div class="cb-problems-sub">' + counts.join(' · ') + '</div><ol>';
+  items.forEach(function(p) {
+    var sev = p.severity === 'warning' ? 'warning' : 'blocking';
+    var title = String(p.title || p.step || '?');
+    if (p.ad_index) {
+      title += ' — ad ' + p.ad_index + (p.ad_name ? ' "' + p.ad_name + '"' : '');
+    }
+    h += '<li class="cb-problem cb-problem--' + sev + '">'
+      + '<div class="cb-problem-title">' + aclEscHtml(title) + '</div>'
+      + (p.impact ? '<div class="cb-problem-impact">' + aclEscHtml(p.impact) + '</div>' : '')
+      + (p.action ? '<div class="cb-problem-action">→ ' + aclEscHtml(p.action) + '</div>' : '')
+      + '</li>';
+  });
+  h += '</ol>';
+  var tech = items.map(function(p) {
+    return '<div>' + aclEscHtml(p.raw || p.step || '') + '</div>';
+  });
+  if (r.run_id) tech.push('<div>run id: ' + aclEscHtml(r.run_id) + '</div>');
+  if (r.campaign_id) tech.push('<div>campaign_id: ' + aclEscHtml(r.campaign_id) + '</div>');
+  (r.screenshots || []).forEach(function(s) {
+    tech.push('<div>capture: ' + aclEscHtml(s) + '</div>');
+  });
+  if (r.steps_completed && r.steps_completed.length) {
+    tech.push('<div>steps: ' + r.steps_completed.map(aclEscHtml).join(' → ') + '</div>');
+  }
+  h += '<details class="cb-problems-tech"><summary>Technical details '
+    + '<span>(step codes, run id)</span></summary>'
+    + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
+  return h + '</div>';
+}
+
 // `done` — необязательный: зовётся один раз, когда работа кончилась любым
 // образом. Нужен очереди «Publish all»: профиль в Multilogin один, и
 // следующий аккаунт начинается только после того, как закончился прошлый.
@@ -12271,6 +12346,10 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       html += '<div class="cb-status-cause">' + aclEscHtml(note) + '</div>';
     });
     (job.results || []).forEach(function(r) {
+      // ACL-1437: a result with a structured problem list renders as one
+      // block; older records (no `problems`) keep the text rendering below.
+      var structured = cbProblemsHtml(r);
+      if (structured) { html += structured; return; }
       // Three states, not two. `success` only says the automation reached the
       // end and a draft exists; `publishable` says a human may send it out.
       // This used to pick the checkmark from `success` alone and then render

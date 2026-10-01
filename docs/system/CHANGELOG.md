@@ -1,5 +1,27 @@
 # System history
 
+## Campaign problems are shown as a short readable list — ACL-1437
+
+2026-10-01 the builder card of CO_bnc_All_Video_FX_Y_35_01.10 showed its most
+important message as one long paragraph ("DO NOT PUBLISH AS IS — these steps
+failed: conversion_event — optimising for the wrong event … Do not publish:
+conversion_event, ad_copy:…"), with the failed steps listed twice.
+
+- `failure_policy.py` now gives every step a short English title, one sentence of
+  impact and one "what to do" line (`GUIDE`, `PER_AD_GUIDE`); a test fails if a
+  step of `POLICY` / `PER_AD_POLICY` has none. Text only: severities and the robot's
+  behaviour are unchanged.
+- The job result carries `problems` (step, ad number and name for per-ad steps,
+  severity, title, impact, action, technical note, raw code; blocking first) and
+  the campaign's `run_id`. The old plain text in `error` stays for older readers
+  and Sentry.
+- The job panel renders one block: the verdict headline (do not publish as is /
+  ready to publish with warnings / not built), the count with "draft saved,
+  browser left open", numbered items with a "→" action line, red for blocking and
+  amber for warnings, and step codes, notes, run id, campaign id, capture paths
+  and the step trail collapsed under "Technical details". Job records without
+  `problems` render as before.
+
 ## A disabled ad account no longer shows as "no warning" — ACL-1391
 
 2026-09-30 the account map showed "no warning" for FacebookDoc20 while Ads Manager

@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.fb_ads_rpa import failure_policy as _failure_policy
+
 # Dimensions, not creative numbers: "1080x1080", "1080x1920", and the same
 # with a Cyrillic "х" — which really occurs in the folder
 # ("text5_img2_1080х1920.png"), so both letters have to be stripped.
@@ -167,6 +169,9 @@ class RpaPublishResult:
     # merely imperfect. Separate from `warnings` because the operator needs to
     # know which of the two they are looking at without reading the text.
     blocking_failures: list[str] = field(default_factory=list)
+    # Telemetry run id of this campaign (ACL-1437): shown under "Technical
+    # details" so a card can be matched to rpa_telemetry.jsonl.
+    run_id: str | None = None
 
     @property
     def publishable(self) -> bool:
@@ -189,6 +194,12 @@ class RpaPublishResult:
             "publishable": self.publishable,
             "warnings": self.warnings,
             "blocking_failures": self.blocking_failures,
+            # ACL-1437: the same failures as a short readable list (title,
+            # impact, action per step). `error` keeps the old plain text for
+            # older readers and Sentry.
+            "problems": _failure_policy.problems(
+                list(self.blocking_failures) + list(self.warnings)),
+            "run_id": self.run_id,
             "campaign_id": self.campaign_id,
             "adset_id": self.adset_id,
             "creative_id": None,
