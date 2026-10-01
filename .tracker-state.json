@@ -900,8 +900,21 @@
       "source_sha": "ada04c21a3d09d8ebb876fe9df38235d1c8501aa",
       "main_tree": "3f0eea66757d004f633922cfd20412c103c594a1",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-10-01T14:24:39+00:00"
+      "state": "passed",
+      "recorded_at": "2026-10-01T14:24:39+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "result": "passed",
+        "target": "ACL isolated Windows stage installation",
+        "source_sha": "ada04c21a3d09d8ebb876fe9df38235d1c8501aa",
+        "tree_sha": "6b432700764c749ff4dae5d42631f7439d328130",
+        "checks": [
+          "Git checks on actual stage ada04c2: CI run 36876060870 success (sharded, Python 3.11/3.13)",
+          "Windows installer run 36876060684 success; Delivery setup 36876060772 success"
+        ],
+        "report": "ACL-1344 stage verification: Git and installer checks green on the actual stage ada04c2 (also carries the ACL-1433 bench). Independent review: scratchpad/review_448.md (Reviewer-R1344E, approved). Live acceptance (a video ad where Meta shows the text-generation section) pending the owner's run."
+      },
+      "verified_at": "2026-10-01T14:39:06+00:00"
     },
     "tasks": {
       "248": {
