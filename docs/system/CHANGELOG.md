@@ -64,6 +64,7 @@ any step after Media existed (the editor page is cut at 4 MB before the wizard).
   capture on and off, and capture failures never reach the walk
   (`src/fb_ads_rpa/wizard_capture.py`). Machine switch `FB_RPA_WIZARD_CAPTURE=0`
   turns the captures off (the telemetry row stays).
+
 ## The robot finds Meta's "Add text option" next to the text generation section — ACL-1344
 
 28.09–01.10 the second primary text was not added on most video ads
