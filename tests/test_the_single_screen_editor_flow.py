@@ -8,7 +8,8 @@
 карточки (бюджет, Audience, Placements) раскрываются перед прежними
 обработчиками; цель Leads проверяется на месте; карточка условий Lead Ads,
 оставшаяся после Website, — остановка аккаунта; второе и третье объявления
-не создаются (блокирующая причина). Прежний мастер не меняется.
+создаются «Create ad» из меню группы и заполняются как первое (ACL-1353).
+Прежний мастер не меняется.
 
 Поток гоняется целиком на подставной странице (`flow` из
 test_create_quick_retry_returns_to_list.py); функции модуля
@@ -29,6 +30,9 @@ from src.fb_ads_rpa import meta_dom as dom  # noqa: E402
 from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
 from src.fb_ads_rpa import simple_create as sc  # noqa: E402
 from tests.test_create_quick_retry_returns_to_list import flow  # noqa: E402,F401
+
+#: Настоящий шаг текста — до того, как `flow` подменит его заглушкой.
+_REAL_WRITE_AD_COPY = dom.write_ad_copy
 
 SIMPLE_URL = ("https://adsmanager.facebook.com/adsmanager/manage/simple_create?act=1"
               "&selected_campaign_ids=2&selected_adset_ids=3&selected_ad_ids=4&sc_1nn=true")
@@ -161,17 +165,255 @@ def test_a_missing_section_is_the_layout_stop(sim):
     assert "Ad set / Ad sections" in failure_policy.reason("simple_create_layout")
 
 
-def test_more_ads_are_not_created_and_block(sim):
+def _creates(sim, results: list[dict] | None = None, listed: bool = True) -> list:
+    """Подменить создание объявления N (ACL-1353); вызовы — в список."""
+    seen: list = []
+    queue = list(results or [])
+
+    def fake(page, *, tag, known_names, **kw):
+        seen.append((tag, list(known_names)))
+        sim["calls"].append(("create_next_ad", tag))
+        got = queue.pop(0) if queue else {}
+        return {"ok": True, "why": "", "text": "", "pressed": ["adset_action_menu", "menu_create_ad"],
+                "ads_before": len(seen), "ads_after": len(seen) + 1, "extra_shells": 0,
+                "dialog": None, "capture": "", **got}
+
+    sim["monkeypatch"].setattr(sc, "create_next_ad", fake)
+    sim["monkeypatch"].setattr(sc, "ad_listed", lambda p, name, **kw: {"listed": listed, "ads": 2, "error": None})
+    return seen
+
+
+_THREE = [{"ad_name": "Two", "creative_path": "b.png", "ad_title": "T2", "ad_body": "B2"},
+          {"ad_name": "Three", "creative_path": "c.png", "ad_title": "T3", "ad_body": "B3",
+           "ad_body2": "B3 second"}]
+
+
+def test_more_ads_are_created_and_filled_like_the_first(sim, monkeypatch):
+    """ACL-1353: объявления 2 и 3 создаются в новом редакторе и заполняются
+    теми же шагами, что объявление 1: имя, креатив, назначение, тексты."""
+    seen = _creates(sim)
+    uploads: list = []
+    monkeypatch.setattr(dom, "upload_ad_creative_with_retry",
+                        lambda p, ctype, path, **kw: uploads.append((path, kw)) or True)
+    copies: list = []
+
+    def copy(p, title, body, **kw):
+        copies.append((title, body, kw.get("ad_name"), kw.get("body2")))
+        if kw.get("body2"):
+            kw["report"]["second_text"] = {"ok": True}
+        return True
+
+    monkeypatch.setattr(dom, "write_ad_copy", copy)
+    sets: list = []
+    monkeypatch.setattr(dom, "set_ad_destination_website", lambda p, url: sets.append(url) or True)
+    monkeypatch.setattr(dom, "_browser_addon_none_checked", lambda p: True)   # перепроверка не нужна
+    monkeypatch.setattr(dom, "_review_errors_visible", lambda p: False)
     out: list[str] = []
-    got = sim["run"](additional_ads=[{"ad_name": "Two", "creative_path": "b.png"},
-                                     {"ad_name": "Three", "creative_path": "c.png"}],
-                     soft_fails_out=out)
-    assert got == ""
-    assert sim["created"] == [], "в новом редакторе создавали объявления через дерево"
+    assert sim["run"](additional_ads=_THREE, soft_fails_out=out) == ""
+    assert [s[0] for s in seen] == ["ad2", "ad3"]
+    # Новое объявление узнаётся по имени, которого нет среди собранных.
+    assert seen[0][1] == ["Example Ad"] and seen[1][1] == ["Example Ad", "Two"]
+    typed = [c.args[0] for c in sim["page"].get_by_placeholder.return_value.fill.call_args_list]
+    assert "Two" in typed and "Three" in typed
+    assert [u[0] for u in uploads] == ["a.png", "b.png", "c.png"]
+    # Объявления 2+ — без возврата по адресу и без перезагрузки: адрес держит объявление 1.
+    assert uploads[1][1] == {"edit_url": "", "reload": False} == uploads[2][1]
+    assert [c[:3] for c in copies] == [("t", "b", "Example Ad"), ("T2", "B2", "Two"), ("T3", "B3", "Three")]
+    assert copies[2][3] == "B3 second"
+    assert len(sets) == 3
+    assert not [f for f in out if f.split(":", 1)[0].startswith(("ad2", "ad3", "simple_create_more_ads"))], out
+    assert sim["created"] == [], "в новом редакторе жали создание прежнего мастера"
+    assert sim["page"].reload.call_count == 0
+
+
+def test_no_page_recovery_reloads_the_editor_around_the_new_ads(sim, monkeypatch):
+    """Ревью PR #365, B1: ни восстановление зависшей страницы, ни закрытие окон
+    не перезагружают новый редактор после «Create ad»."""
+    _creates(sim)
+    recovered: list = []
+    monkeypatch.setattr(dom, "recover_stuck_page", lambda p, where, **kw: recovered.append(where) or True)
+    overlays: list = []
+    monkeypatch.setattr(dom, "_clear_blocking_overlays",
+                        lambda p, where, **kw: overlays.append((where, kw)) or [])
+    sim["run"](additional_ads=_THREE, soft_fails_out=[])
+    assert not [w for w in recovered if w.startswith(("ad2", "ad3")) or w == "destination_sweep"], recovered
+    assert ("loading_modal_reload", False, "skipped:simple_create_more_ads") in sim["rows"]
+    assert ("ad2", {"may_reload": False}) in overlays and ("ad3", {"may_reload": False}) in overlays
+    assert sim["page"].reload.call_count == 0 and sim["page"].goto.call_count == 0
+
+
+def test_no_step_of_ads_2_and_3_may_reload_the_editor(sim, monkeypatch):
+    """ACL-1353: пока заполняются объявления 2+ нового редактора, перезагрузки
+    запрещены всем шагам (текст, креатив, восстановление) — адрес держит
+    объявление 1. Для объявления 1 и после — как прежде."""
+    _creates(sim)
+    during: list = []
+
+    def copy(p, title, body, **kw):
+        during.append((kw.get("ad_name"), getattr(dom._reload_block, "why", "")))
+        return True
+
+    monkeypatch.setattr(dom, "write_ad_copy", copy)
+    sim["run"](additional_ads=_THREE, soft_fails_out=[])
+    assert during == [("Example Ad", ""), ("Two", "simple_create_new_ad"),
+                      ("Three", "simple_create_new_ad")]
+    assert getattr(dom._reload_block, "why", "") == ""
+
+
+def test_the_reload_guard_refuses_every_reload_path(monkeypatch):
+    from unittest.mock import MagicMock
+
+    rows: list = []
+    monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, ok, kw.get("note", ""))))
+    monkeypatch.setattr(dom, "_chrome_error_page", lambda p: "ERR_SSL_PROTOCOL_ERROR")
+    page = MagicMock()
+    with dom._reloads_blocked("simple_create_new_ad"):
+        assert dom.recover_stuck_page(page, "ad2_before", editor=True) is False
+        dom._reload_editor(page, "https://adsmanager.facebook.com/x")
+    assert page.reload.call_count == 0 and page.goto.call_count == 0
+    assert ("loading_modal_reload", False, "refused:simple_create_new_ad") in rows
+    # Вне охраны — прежнее поведение: страница ошибки Chrome перезагружается.
+    monkeypatch.setattr(dom, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr("src.fb_ads_rpa.browser.wake_page", lambda p: {}, raising=False)
+    dom.recover_stuck_page(page, "x", editor=True)
+    assert page.reload.call_count == 1
+
+
+def test_the_classic_wizard_fills_more_ads_without_the_guard(sim, monkeypatch):
+    sim["state"]["simple"] = False
+    sim["page"].url = EDIT_URL
+    during: list = []
+    monkeypatch.setattr(dom, "write_ad_copy",
+                        lambda p, t, b, **kw: during.append(getattr(dom._reload_block, "why", "")) or True)
+    sim["run"](additional_ads=[{"ad_name": "Two", "ad_title": "T2", "ad_body": "B2"}])
+    assert during == ["", ""]
+
+
+def test_a_lead_form_error_on_ad_2_is_repaired_without_opening_ads_in_the_tree(sim, monkeypatch):
+    """Ревью PR #365, F2: ошибка Lead-формы на объявлении 2 — лечение ставит
+    «None» и назначение на открытом объявлении; обхода по дереву и повторного
+    открытия нет. Объявление 1 лечится как прежде (обход по дереву)."""
+    _creates(sim)
+    state = {"ad": "", "repaired": set()}
+
+    def copy(p, title, body, **kw):
+        state["ad"] = kw.get("ad_name")
+        return _REAL_WRITE_AD_COPY(p, title, body, **kw)
+
+    monkeypatch.setattr(dom, "write_ad_copy", copy)
+    monkeypatch.setattr(dom, "_review_errors_visible",
+                        lambda p: state["ad"] in ("Example Ad", "Two") and state["ad"] not in state["repaired"])
+    monkeypatch.setattr(dom, "_heal_failed_component", lambda *a, **k: False)
+    monkeypatch.setattr(dom, "_lead_terms_not_accepted", lambda p: False)
+    monkeypatch.setattr(dom, "_select_browser_addon_none", lambda p: True)
+    monkeypatch.setattr(dom, "_browser_addon_none_checked", lambda p: True)
+    fills: list = []
+    monkeypatch.setattr(dom, "fill_ad_copy", lambda p, t, b, report=None, **kw: fills.append(state["ad"]) or True)
+    swept: list = []
+
+    def sweep(p, names, url):
+        swept.append((state["ad"], list(names)))
+        state["repaired"].add(state["ad"])
+        return []
+
+    monkeypatch.setattr(dom, "verify_and_fix_ad_destinations", sweep)
+    sets: list = []
+
+    def dest(p, url):
+        sets.append(state["ad"])
+        state["repaired"].add(state["ad"])
+        return True
+
+    monkeypatch.setattr(dom, "set_ad_destination_website", dest)
+    tree_opens: list = []
+    monkeypatch.setattr(dom, "_reopen_ad_after_reload", lambda p, name: tree_opens.append(name) or True)
+    out: list[str] = []
+    sim["run"](additional_ads=_THREE[:1], soft_fails_out=out)
+    assert fills == ["Example Ad", "Two"]
+    assert swept == [("Example Ad", ["Example Ad"])], "объявление 2 чинили обходом по дереву"
+    assert "Two" in sets, "назначение объявления 2 не поставили на месте"
+    assert tree_opens == []
+    assert ("browser_addon_repair", True, "open_ad_only") in sim["rows"]
+    assert not [f for f in out if f.startswith("ad2_")], out
+
+
+def test_a_failed_create_is_named_and_the_rest_are_not_pressed(sim, monkeypatch):
+    seen = _creates(sim, [{"ok": False, "why": "no_new_ad_row",
+                           "text": "Create ad did not add an ad to the ad set within 30 s",
+                           "capture": "run1/05_simple_create_more_ads"}])
+    monkeypatch.setattr(dom, "_browser_addon_none_checked", lambda p: False)   # обход был бы нужен
+    sets: list = []
+    monkeypatch.setattr(dom, "set_ad_destination_website", lambda p, url: sets.append(url) or True)
+    out: list[str] = []
+    sim["run"](additional_ads=_THREE, soft_fails_out=out)
+    assert [s[0] for s in seen] == ["ad2"], "после отказа жали Create ad ещё раз"
+    ad2 = [f for f in out if f.startswith("ad2_create:")]
+    assert ad2 == ["ad2_create:no_new_ad_row - Create ad did not add an ad to the ad set within 30 s "
+                   "(page capture: output/rpa_pages/run1/05_simple_create_more_ads)"]
+    ad3 = [f for f in out if f.startswith("ad3_create:")]
+    assert len(ad3) == 1 and ad3[0].startswith("ad3_create:not_tried - ")
+    for f in ad2 + ad3:
+        assert failure_policy.severity(f) == failure_policy.BLOCKING
+        assert "ad shell was not created" in failure_policy.reason(f)
+        assert retry_policy.disposition(f).action == retry_policy.BLOCK_AND_REVIEW
+    # Что открыто — неизвестно: назначение на месте не ставится.
+    assert len(sets) == 1
+    assert ("destination_sweep_skipped", None, "simple_create_open_ad_unknown") in sim["rows"]
+
+
+def test_an_extra_empty_ad_from_one_create_is_named(sim):
+    _creates(sim, [{"extra_shells": 1}])
+    out: list[str] = []
+    sim["run"](additional_ads=_THREE[:1], soft_fails_out=out)
+    assert "ad2_extra_empty_ad" in out
+    assert "New Leads ad" in failure_policy.reason("ad2_extra_empty_ad")
+
+
+def test_a_name_missing_from_the_ad_list_is_named(sim, monkeypatch):
+    _creates(sim, listed=False)
+    out: list[str] = []
+    sim["run"](additional_ads=_THREE[:1], soft_fails_out=out)
+    bad = [f for f in out if f.startswith("ad2_name:")]
+    assert bad and bad[0].startswith("ad2_name:not_in_ad_list - ")
+    assert failure_policy.severity(bad[0]) == failure_policy.BLOCKING
+    assert ("ad2_listed", False, "not_in_ad_list") in sim["rows"]
+
+
+def test_the_open_ad_destination_is_rechecked_and_only_its_failure_cleared(sim, monkeypatch):
+    """Перепроверка назначения — у открытого (последнего) объявления, без
+    дерева; снимается отказ именно его, отказ объявления 2 остаётся."""
+    _creates(sim)
+    monkeypatch.setattr(dom, "_browser_addon_none_checked", lambda p: False)
+    answers = iter([True, False, False, True])      # ad1, ad2 ✗, ad3 ✗, перепроверка ad3 ✓
+    monkeypatch.setattr(dom, "set_ad_destination_website", lambda p, url: next(answers))
+    swept: list = []
+    monkeypatch.setattr(dom, "verify_and_fix_ad_destinations", lambda p, names, url: swept.append(names) or [])
+    out: list[str] = []
+    sim["run"](additional_ads=_THREE, soft_fails_out=out)
+    assert swept == [], "обход по дереву в новом редакторе"
+    assert "ad2_destination" in out
+    assert "ad3_destination" not in out
+    assert ("destination_sweep_cleared", None, "") in sim["rows"]
+
+
+def test_the_switch_leaves_more_ads_uncreated_and_blocking(sim, monkeypatch):
+    seen = _creates(sim)
+    monkeypatch.setenv(sc.MORE_ADS_PRESS_SETTING, "0")
+    out: list[str] = []
+    sim["run"](additional_ads=_THREE, soft_fails_out=out)
+    assert seen == []
     more = [f for f in out if f.startswith("simple_create_more_ads:")]
-    assert more and more[0].startswith("simple_create_more_ads:2 more ad(s)")
+    assert more == ["simple_create_more_ads:switched-off - 2 more ad(s) not created: creating more ads "
+                    "in Meta's single-screen editor is switched off on this machine "
+                    "(FB_RPA_SIMPLE_MORE_ADS_PRESS=0)"]
     assert failure_policy.severity(more[0]) == failure_policy.BLOCKING
-    assert "only the first" in failure_policy.reason(more[0])
+    assert "switched off" in failure_policy.reason(more[0])
+
+
+def test_single_ad_campaigns_create_nothing(sim):
+    seen = _creates(sim)
+    sim["run"]()
+    assert seen == []
 
 
 def test_the_destination_is_rechecked_on_the_page_not_through_the_tree(sim, monkeypatch):

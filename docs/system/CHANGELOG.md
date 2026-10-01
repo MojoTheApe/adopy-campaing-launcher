@@ -20,6 +20,33 @@ wrote "Account disabled" in the Delivery column of its campaign. Two causes:
 
 No new visits to accounts: the fix applies on the next Read a person asks for.
 
+## The robot closes and reopens a hand-opened profile window when it is safe — ACL-1388
+
+2026-09-30 06:49 UTC a "Publish all" run stopped Facebook_6540 at the start with
+`profile_open_by_hand`: its Multilogin window had been opened by hand, and since
+ACL-1320 the robot never stops such a window (stopping one once lost a Facebook
+session Multilogin had not saved yet). Owner decision: close it automatically, but
+only when it is safe.
+
+- `src/fb_ads_rpa/hand_window.py` decides. All must hold: the profile's browser has
+  been running at least 15 minutes (`MIN_AGE_S`, the youngest main process decides),
+  the profile window is not the foreground window, and there was no keyboard/mouse
+  input on the machine for 60 seconds (`MIN_IDLE_S`, `GetLastInputInfo`). Any failed
+  read, no process, or not Windows means "not safe". Per-machine overrides:
+  `FB_RPA_HAND_WINDOW_MIN_AGE_S`, `FB_RPA_HAND_WINDOW_MIN_IDLE_S`;
+  `FB_RPA_REOPEN_HAND_WINDOW=0` restores the old always-stop behaviour.
+- `browser.py` applies it at all three hand-opened places (`no_automation_port`,
+  `unowned_port`, `mlx_lock`), only when publishing (spend reading keeps the stop).
+  Safe: graceful MLX API stop of only this profile (no kill — a failed API stop keeps
+  the old stop and closes nothing), wait for its processes to exit, start with
+  automation. A start that fails after the close is `profile_restart_failed`. The
+  existing login check on the way to the campaigns list stops a logged-out profile
+  with `profile_logged_out`, without retries. Not safe: the same
+  `profile_open_by_hand` stop and message as before.
+- Visible: job panel line "Closed the hand-opened window of <account> and reopened
+  it for the robot", telemetry `profile_hand_window` (note = outcome or refusal
+  reason, diag = where, age_s, idle_s) and a Sentry breadcrumb with the same data.
+
 ## The robot builds campaigns in Meta's single-screen editor — ACL-1327
 
 2026-09-26 Meta started opening a new editor on some accounts
