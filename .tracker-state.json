@@ -835,6 +835,24 @@
           395
         ],
         "recorded_at": "2026-10-01T10:38:47+00:00"
+      },
+      "442": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1441V",
+        "review_session": "rev_r1441v_1001",
+        "execution_lane": "1c4fcda135c741c0b36ba400d76ae3b8",
+        "implementer": "Worker-W1441X",
+        "head_sha": "b6b66917284034bc61361178acb2b3b62da60e7e",
+        "base_sha": "942f641e25cae9f32c439baf81707c9fdc88bf17",
+        "tree_sha": "1307a32b2847cc8980c0685c0703a485e2a11fdd",
+        "report": "APPROVE. 36/36 passed (test_connecting_an_account_is_one_place, test_multilogin_connect_chooses_workspace, test_multilogin_is_connected_in_the_dashboard), ACL_LIBRARY_* empty, headless, stub only.\nVerified: sign_in -> /user/workspaces -> /user/refresh_token {email, refresh_token, workspace_id} (no Authorization, rotating refresh kept) -> automation_token in chosen ws. Choice order explicit > remembered (id or name, unique) > only one > only one with automation_available. Otherwise needs_choice and no automation token is issued (probe only switches sessions and reads /workspace/restrictions); the test checks this. A stale explicit id goes back to choose. Endpoint saves nothing on choose_workspace; on success it saves token + MULTILOGIN_WORKSPACE_<slot> + _ID_<slot>; update_machine_env sets os.environ, so reconnecting does not ask again. 403 with a known workspace: restrictions False -> plan text, otherwise role text (Issue wording). Password is hashed and cleared, never in SignIn/response/env (tested incl. md5); refresh_token is never returned; no new logging of tokens. User-facing text is English. Picker: name - role (- no automation), defaults to the first with automation, keeps the password only until the choice, Continue resends with workspace_id; Playwright test covers it. Tests are real (a stateful stub that tracks which ws a bearer belongs to and rejects a stale refresh_token).\nFindings (none blocking):\n1. Low, src/web/app.py:4385-4388: the fallback path (no workspace list) and /multilogin-save-token (paste, app.py:4292) do not clear MULTILOGIN_WORKSPACE_<slot>/_ID_. The status line (app.py:4217) can then show an old workspace name next to a token from another workspace.\n2. Low, src/web/multilogin_auth.py (_issue, 403 branch): when /workspace/restrictions cannot be read (automation None), the 403 is reported as the role error. 'Unknown' is shown as 'role'.\n3. Low/spec note: Issue says auto-pick 'exactly one with automation and profiles'. The code checks automation only, not profiles. Acceptable; the person can still choose.\n4. Nit, report.html amapMlWorkspacePicker: the picker stays in the form if the person changes slot or login before Continue. The stale workspace_id is then caught by the server ('no longer in this login's list').\n5. Nit, docs/system/CHANGELOG.md: no blank line before the next '## Ads in the account tree' heading (union-merge artifact).\nLive acceptance (buyer connects KLD with ndays6443) is still open in the Issue.",
+        "main_sha": "3757771678d69bd056650ee02f72f15c8828008f",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          441
+        ],
+        "recorded_at": "2026-10-01T11:29:40+00:00"
       }
     },
     "stage": {
