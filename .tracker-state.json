@@ -2278,9 +2278,11 @@
         "worktree": "C:\\acl-english",
         "id": "603078fdf6d3404fa6b9c7859ac7e666",
         "issue": 462,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T13:24:39+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 463,
+        "report": "# ACL-1462 \u2014 implementation handoff\n- Branch `codex/acl-1462-english-ui` \u2192 `stage`, head a039aa9, base 38351e6. Worker-E1462R, run_e1462r_1001, Coordinator-D0930K, `C:\\acl-english`.\n- Done: all user-facing Russian found by the scan translated (templates, publish_jobs, targeting_registry, country_split); guard test added; pinned tests updated.\n- Checks: affected suites + JS guard 134 passed. Full suite: CI.\n- Reviewer: report.html is also touched by ACL-1455 (#456), ACL-1457 (#458), ACL-1459 (#460) \u2014 different lines; expect only textual merge of CHANGELOG. Translations avoid apostrophes inside single-quoted JS strings."
       }
     },
     "tasks": {
