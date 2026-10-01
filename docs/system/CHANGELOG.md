@@ -22,6 +22,33 @@ conversion_event, ad_copy:…"), with the failed steps listed twice.
   and the step trail collapsed under "Technical details". Job records without
   `problems` render as before.
 
+## The test suite runs in parallel — ACL-1397
+
+2026-09-30. The full suite (3800+ tests) ran one test at a time: 82 min on the
+owner's laptop while other sessions shared it, 22–23 min for the test step in CI
+per Python version. It now runs with pytest-xdist:
+`python -m pytest tests/ -q -n auto --dist loadfile` (CI and
+docs/repository/WORKFLOW.md). Locally on the same laptop: 20 min with 8 workers.
+
+- `--dist loadfile`: each test file stays on one worker, so the 80+ files that
+  start their own Chromium start it once, not once per worker.
+- CI: the hosted Windows runner (private repository) has 2 CPUs, and xdist
+  alone left CI at 23–31 min. The suite is now also split into 3 jobs per
+  Python version by `scripts/acl_test_shard.py` (every test file in exactly one
+  shard, checked by `tests/test_acl_test_shard.py`).
+- `test_a_stopped_profile_never_spins_the_robot` reserved a "free" port and
+  released it before Chromium took it; under parallel runs another worker got
+  it first (ECONNREFUSED, CI 3.13). Chromium now picks the port itself
+  (`--remote-debugging-port=0`) and the test reads it from `DevToolsActivePort`.
+- `tests/conftest.py` sets `ACL_LIBRARY_REPO/TOKEN/BRANCH` to empty strings in
+  every worker, so a machine `.env` with the live team library can never be
+  picked up by a test run.
+- Fixed waits replaced with waits for the event itself: the build-percent
+  layout check (`test_campaign_build_percent_browser`, a known flake) reads both
+  boxes in one settled frame; the drawer tests wait for the intercepted preview
+  request instead of sleeping 100–500 ms; a publish log in
+  `test_meta_campaign_agent` goes to `tmp_path`, not the repository `output/`.
+- No product code changed; no test is serial-only.
 ## A disabled ad account no longer shows as "no warning" — ACL-1391
 
 2026-09-30 the account map showed "no warning" for FacebookDoc20 while Ads Manager
