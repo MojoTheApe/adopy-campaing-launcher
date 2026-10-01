@@ -974,30 +974,16 @@
       }
     },
     "stage": {
-      "pr": 440,
+      "pr": 478,
       "issues": [
-        426
+        476
       ],
-      "tree_sha": "148ef6ef5aadf84d63e7e46d7e3d2b9476554d10",
-      "source_sha": "fe39254c990f37a534dd48948ed8f7f49e519c51",
-      "main_tree": "cb6da3e644fc733070bf0ff2b7263232a467ddb4",
+      "tree_sha": "d713955361e774328e784bac5e69e7d1ba867ece",
+      "source_sha": "8322a6af0f9098114182cf327320bd87dd239a70",
+      "main_tree": "148ef6ef5aadf84d63e7e46d7e3d2b9476554d10",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-01T19:46:53+00:00",
-      "verification": {
-        "kind": "stage-verification",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "source_sha": "fe39254c990f37a534dd48948ed8f7f49e519c51",
-        "tree_sha": "148ef6ef5aadf84d63e7e46d7e3d2b9476554d10",
-        "checks": [
-          "Git checks on actual stage fe39254: CI run 36916730809 success (sharded, Python 3.11/3.13)",
-          "Windows installer run 36916730744 success; Delivery setup 36916730753 success",
-          "The same stage content runs on the owner's live dashboard since 2026-10-01 ~20:30 local (v96+15@9481387 = stage fe39254 + open approved PRs)"
-        ],
-        "report": "ACL-1426 stage verification: Git and installer checks green on the actual stage fe39254. Independent review: scratchpad/review_440.md (Reviewer-R1426F, approved round 2, re-checked after merges). Live acceptance (post/story pair and single-file campaigns) pending the owner's run."
-      },
-      "verified_at": "2026-10-01T20:02:13+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-01T21:18:04+00:00"
     },
     "tasks": {
       "248": {
