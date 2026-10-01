@@ -2528,7 +2528,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "476": {
+        "actor": "Worker-F1476K",
+        "session": "run_f1476k_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1476-crop-fallback",
+        "worktree": "C:\\acl-1476-crop-fallback",
+        "id": "e7fc4c5bc0834dc8a40f94fbcc8aab9d",
+        "issue": 476,
+        "state": "implementing",
+        "started_at": "2026-10-01T20:46:51+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -3568,6 +3581,17 @@
         },
         "pr": 467,
         "queued_at": "2026-10-01T14:00:18+00:00"
+      },
+      "476": {
+        "implementers": [
+          {
+            "actor": "Worker-F1476K",
+            "session": "run_f1476k_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-F1476K",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -3782,6 +3806,10 @@
       "Reviewer-R1412G": {
         "session": "rev_r1412g_1001",
         "role": "Reviewer"
+      },
+      "Worker-F1476K": {
+        "session": "run_f1476k_1001",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -5619,6 +5647,13 @@
         "prs": [
           474
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T20:46:51+00:00",
+        "issue": 476,
+        "claim": "e7fc4c5bc0834dc8a40f94fbcc8aab9d",
+        "actor": "Worker-F1476K"
       }
     ],
     "policy": {
