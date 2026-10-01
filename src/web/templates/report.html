@@ -8715,6 +8715,7 @@ function amapMlPaint(block) {
     state.reason === 'expired' ? 'token expired' : state.has_token ? 'token could not be verified' : 'not connected';
   line.appendChild(mark);
   if (alive && state.email) line.appendChild(document.createTextNode(' · ' + state.email));
+  if (alive && state.workspace) line.appendChild(document.createTextNode(' · workspace ' + state.workspace));
   if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
   ml.querySelector('.amap-ml-open').hidden = !state || alive;
   var signin = ml.querySelector('.amap-ml-signin');
@@ -8768,6 +8769,10 @@ async function amapMlSubmit(btn, paste) {
   var data = paste ? {token: token.value.trim(), instance: inst} : {
     email: form.querySelector('.amap-ml-email').value.trim(), password: pass.value, save_token: true, instance: inst
   };
+  /* ACL-1441: выбор рабочего пространства из пикера — тем же запросом. */
+  var picker = form.querySelector('.amap-ml-ws');
+  if (!paste && picker) data.workspace_id = picker.querySelector('select').value;
+  var keepPass = false;
   if (paste ? !data.token : !data.email || !data.password) {
     amapMlSay(block, paste ? 'Paste the token first' : 'Email and password, please', true); return;
   }
@@ -8782,6 +8787,16 @@ async function amapMlSubmit(btn, paste) {
     });
     var j = await response.json();
     if (!response.ok || !j || !j.ok) throw new Error((j && j.error) || 'Connection failed');
+    /* ACL-1441: у логина несколько пространств, и какое с профилями — знает
+       человек. Пароль остаётся в поле до выбора (на сервере он не хранится),
+       Continue шлёт тот же вход с workspace_id. С выбранным не вышло — пикер
+       остаётся с причиной, чтобы выбрать другое. */
+    if (!paste && !j.token_saved && j.workspaces && j.workspaces.length > 1) {
+      amapMlWorkspacePicker(form, j.workspaces, data.workspace_id);
+      keepPass = true;
+      amapMlSay(block, j.token_error || 'This login has several Multilogin workspaces — choose the one with your profiles.', !!j.token_error);
+      return;
+    }
     if (!paste && !j.token_saved) throw new Error(j.token_error || 'Signed in, but no automation token was saved. Ask the workspace owner for a token.');
     /* A new workspace token invalidates both cached profiles and in-flight
        results. Ключ кэша теперь «инстанс + набранное», поэтому чистим ВСЕ
@@ -8803,17 +8818,44 @@ async function amapMlSubmit(btn, paste) {
     token.value = '';
     amapMlSay(block, 'Token saved; checking connection…');
     var state = await amapMlRefresh(inst, true);
-    amapMlSay(block, state && state.alive ? 'Connected. Reload to search profiles.' :
+    amapMlSay(block, state && state.alive ? 'Connected' + (j.workspace ? ' to workspace ' + j.workspace : '') + '. Reload to search profiles.' :
       'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
   } catch (e) { amapMlSay(block, String(e.message || e), true); }
   finally {
-    pass.value = '';
+    if (!keepPass) pass.value = '';
     delete form.dataset.busy;
     selector.disabled = false;
     form.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
   }
 }
 function amapMlSignin(btn) { return amapMlSubmit(btn, false); }
+/* ACL-1441: пикер пространства — имя и роль; без автоматизации видно сразу. */
+function amapMlWorkspacePicker(form, workspaces, chosen) {
+  var box = form.querySelector('.amap-ml-ws');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'amap-ml-ws';
+    var label = document.createElement('span');
+    label.textContent = 'Workspace: ';
+    var sel = document.createElement('select');
+    var go = document.createElement('button');
+    go.type = 'button'; go.className = 'amap-btn'; go.textContent = 'Continue';
+    go.onclick = function () { amapMlSubmit(go, false); };
+    box.append(label, sel, go);
+    form.appendChild(box);
+  }
+  var select = box.querySelector('select');
+  select.replaceChildren();
+  workspaces.forEach(function (w) {
+    var o = document.createElement('option');
+    o.value = w.workspace_id;
+    o.textContent = w.name + ' \u2014 ' + (w.role || 'member') + (w.automation === false ? ' \u00b7 no automation' : '');
+    select.appendChild(o);
+  });
+  var pick = chosen && workspaces.some(function (w) { return w.workspace_id === chosen && w.automation !== false; })
+    ? chosen : ((workspaces.filter(function (w) { return w.automation !== false; })[0] || workspaces[0]).workspace_id);
+  select.value = pick;
+}
 function amapMlSaveToken(btn) { return amapMlSubmit(btn, true); }
 function amapMlBoot() {
   var wanted = {};
