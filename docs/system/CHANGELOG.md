@@ -65,6 +65,60 @@ any step after Media existed (the editor page is cut at 4 MB before the wizard).
   (`src/fb_ads_rpa/wizard_capture.py`). Machine switch `FB_RPA_WIZARD_CAPTURE=0`
   turns the captures off (the telemetry row stays).
 
+## Ads 2-3 in the single-screen editor: media found, Creating... waited out — ACL-1412
+
+Live run d1755a59e139 (Facebook_1443, 2026-09-30) left ad 2 without media, link
+and text and stopped ad 3 at `dialog_open`.
+
+- Before opening the creative, checking the media or setting the destination of
+  ads 2+, the robot scrolls the new ad's Media block back on screen (the editor had
+  unmounted the ad form, so "Set up creative", the attached media and Destination
+  were not in the page). Only scrolling: no presses, no reloads, still inside
+  `hold_open_ad`. The media entry used is logged: `ad_creative_upload` note
+  `media_entry:<set_up_creative|picker_open|media_on_ad|media_block_*>`.
+- Meta's "Creating..." dialog after Create ad is waited out for up to 120 s
+  (`META_BUSY_WAIT_S`) whether or not the page answers; any other dialog stops the
+  ad at once (`adN_create:dialog_open`). Meta's media picker left over the new ad
+  is closed with its own Cancel. `simple_create_more_ads` telemetry gains
+  `progress_s`, `dialog.open_s`, `dialog_kind` and `media_picker`.
+## Placements pass when Meta no longer offers a placement, and in the single-screen editor — ACL-1445
+
+2026-10-01 campaigns ended "do not publish: placements" on Doc19 and on the tester's
+machine although the placements were right. Three causes, each now a bench test
+(`tests/test_bench_placements.py`).
+
+- Meta stopped offering "Messenger Stories" on some accounts during the day. The robot
+  has to switch it off, and it treated the placement's absence as a failure. Rule
+  (`fill_placements`, `_settle_category`, `_CATEGORY_END_JS`): a placement to switch OFF
+  that is absent counts as "not offered" only when all of these hold:
+  - all five categories are present;
+  - its own category (`_SUBITEMS_BY_CATEGORY`) is open;
+  - the category's list is scrolled to a proven end: the last row is shown, no row of
+    the category is hidden, the inner scroll is at the bottom, nothing is loading, and
+    the next category is shown;
+  - the list and that proof have not changed for 1.5 s (polled for up to 6 s while
+    the end is unproven; rows that appear meanwhile are set at once);
+  - every placement to switch ON in that category was rendered;
+  - the placement never appeared anywhere in the step (`subitems_seen`).
+
+  Otherwise the absence stays a failure, as before. A tail that never mounted is never
+  judged; 8e9acb2 / ACL-1220 recorded "Threads feed" and "Facebook Notifications"
+  mounting only after scrolling. A placement to switch ON is never "not offered". The
+  step's telemetry line names the not-offered placements (`subitems_not_offered`, note
+  "not offered: …"). Read-back still checks every offered placement.
+- Single-screen editor (cb854b07857b, 30.09): the open Placements card showed only a
+  "Loading..." progressbar, with no "Account controls" to anchor on, and the step
+  reported `placements_card_not_found`. The card is now found by its own anchor
+  (`data-surface` ending in `adset_placement_static_pgd_section`). Its body is waited
+  for (20 s), the card is tagged again once it has loaded, and placements are then set
+  and read back there as in the classic editor. A body that never loads is reported as
+  `placements_card_loading`.
+- Single-screen editor (SA_ARC_All_Video_IPO_35_01.10, tester): the placements list was
+  collapsed to "Placements · Included: 7 · Allowed with limited spend: 0 · Excluded:
+  13". The counts are not proof of which placements are included, so the summary is not
+  accepted. The step opens it and reads the rows back; if it cannot open it, the step
+  fails and reports the counts (`placements_summary`). The fixture was rebuilt from the
+  screenshot text, as there is no capture.
 ## The robot finds Meta's "Add text option" next to the text generation section — ACL-1344
 
 28.09–01.10 the second primary text was not added on most video ads
@@ -154,6 +208,7 @@ profiles (seen live: ndays6443 → own Free workspace; KLD profiles in
   User-Agent (Cloudflare answers 1010 to the python-requests one).
 - If the workspace list is unavailable, the old behaviour stays: token in the
   default workspace.
+
 ## Ads in the account tree get their workbook numbers — ACL-1395
 
 2026-09-30 on Facebook_6540 (CO_bnc_All_Video_FX_Y_35_28.09) the campaign row had
