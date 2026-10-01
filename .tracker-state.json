@@ -2044,6 +2044,18 @@
         "state": "implementing",
         "started_at": "2026-10-01T07:27:36+00:00",
         "from_status": "status:backlog"
+      },
+      "427": {
+        "actor": "Worker-I1427Q",
+        "session": "run_i1427q_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1427-idle-wait",
+        "worktree": "C:\\acl-1427-idle-wait",
+        "id": "18306264951346d4bdfd076aae43c267",
+        "issue": 427,
+        "state": "implementing",
+        "started_at": "2026-10-01T07:37:51+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2568,6 +2580,17 @@
         "state": "implementing",
         "worker": "Worker-C1426P",
         "coordinator": "Coordinator-C0930A"
+      },
+      "427": {
+        "implementers": [
+          {
+            "actor": "Worker-I1427Q",
+            "session": "run_i1427q_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-I1427Q",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2681,6 +2704,10 @@
       },
       "Worker-C1426P": {
         "session": "run_c1426p_1001",
+        "role": "Worker"
+      },
+      "Worker-I1427Q": {
+        "session": "run_i1427q_1001",
         "role": "Worker"
       }
     },
@@ -3559,6 +3586,13 @@
         "issue": 426,
         "claim": "144071218c8a407c8873429c9705fd8c",
         "actor": "Worker-C1426P"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T07:37:51+00:00",
+        "issue": 427,
+        "claim": "18306264951346d4bdfd076aae43c267",
+        "actor": "Worker-I1427Q"
       }
     ],
     "policy": {
