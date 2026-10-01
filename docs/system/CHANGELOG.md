@@ -1,5 +1,16 @@
 # System history
 
+## Builder: visible Duplicate on ads and campaigns, no repeated buttons — ACL-1459
+
+2026-10-01 the owner sent a screenshot of the builder drawer: duplicating an ad was a
+faint icon in the card's corner, duplicating a campaign was a separate button at the
+bottom of the drawer, and "+ Add Campaign" stood next to "+ Campaign" for the same
+account. Now each ad card has a visible "Duplicate"; "+ Add ad" reads "+ Ad"; "⧉
+Duplicate campaign" sits inside the campaign card under its ads and, in the drawer,
+opens the copy for editing, as the old bottom button did. Removed: the slot-header
+icon, the bottom-of-drawer button and, inside the drawer only, the form's "+ Add
+Campaign" (the country page keeps it). Duplication logic is unchanged.
+
 ## Connect Multilogin issues the token in the right workspace — ACL-1441
 
 2026-10-01. "Connect Multilogin" (Accounts → Connect) asked for the automation
