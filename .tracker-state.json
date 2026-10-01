@@ -2416,7 +2416,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "412": {
+        "actor": "Worker-M1412L",
+        "session": "run_m1412l_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1412-ads23-media",
+        "worktree": "C:\\acl-1412-ads23-media",
+        "id": "626d4e49591d4ab7969fe97ff8452cdb",
+        "issue": 412,
+        "state": "implementing",
+        "started_at": "2026-10-01T18:24:59+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -2810,9 +2823,13 @@
           {
             "actor": "Worker-M1412L",
             "session": "run_m1412l_0930"
+          },
+          {
+            "actor": "Worker-M1412L",
+            "session": "run_m1412l_0930"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-M1412L",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2831,7 +2848,6 @@
         },
         "pr": 413,
         "queued_at": "2026-09-30T17:46:40+00:00",
-        "reviewer": "Reviewer-R1412G",
         "review_report": "# PR #413 (ACL-1412) returned before review \u2014 coordinator, 2026-10-01\n\nAfter merging work/stage (which now carries the ACL-1433 bench) and work/main into the branch (head d35c3a8), `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: `simple_create_new_ad_media_2026_09_30.html` is not in `tests/bench/catalogue.json`.\n\nNeeded: add catalogue rows for its fragments (media_filled, media_picker) with test `tests/test_simple_create_new_ad_media.py`, regenerate `tests/bench/CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). The earlier pre-review (prereview_413.md, approve) stands otherwise."
       },
       "357": {
@@ -5361,6 +5377,13 @@
           "report": "# PR #413 (ACL-1412) returned before review \u2014 coordinator, 2026-10-01\n\nAfter merging work/stage (which now carries the ACL-1433 bench) and work/main into the branch (head d35c3a8), `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: `simple_create_new_ad_media_2026_09_30.html` is not in `tests/bench/catalogue.json`.\n\nNeeded: add catalogue rows for its fragments (media_filled, media_picker) with test `tests/test_simple_create_new_ad_media.py`, regenerate `tests/bench/CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). The earlier pre-review (prereview_413.md, approve) stands otherwise.",
           "keep_lane": true
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T18:24:59+00:00",
+        "issue": 412,
+        "claim": "626d4e49591d4ab7969fe97ff8452cdb",
+        "actor": "Worker-M1412L"
       }
     ],
     "policy": {
