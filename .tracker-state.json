@@ -2032,7 +2032,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "426": {
+        "actor": "Worker-C1426P",
+        "session": "run_c1426p_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1426-crop-post-story",
+        "worktree": "C:\\acl-1426-crop",
+        "id": "144071218c8a407c8873429c9705fd8c",
+        "issue": 426,
+        "state": "implementing",
+        "started_at": "2026-10-01T07:27:36+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -2544,6 +2557,17 @@
         },
         "pr": 425,
         "queued_at": "2026-10-01T06:54:58+00:00"
+      },
+      "426": {
+        "implementers": [
+          {
+            "actor": "Worker-C1426P",
+            "session": "run_c1426p_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-C1426P",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2653,6 +2677,10 @@
       },
       "Worker-A1424N": {
         "session": "run_a1424n_1001",
+        "role": "Worker"
+      },
+      "Worker-C1426P": {
+        "session": "run_c1426p_1001",
         "role": "Worker"
       }
     },
@@ -3524,6 +3552,13 @@
         "issue": 424,
         "pr": 425,
         "actor": "Worker-A1424N"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T07:27:36+00:00",
+        "issue": 426,
+        "claim": "144071218c8a407c8873429c9705fd8c",
+        "actor": "Worker-C1426P"
       }
     ],
     "policy": {
