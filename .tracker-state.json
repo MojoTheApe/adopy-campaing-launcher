@@ -2165,20 +2165,6 @@
         "started_at": "2026-10-01T08:39:49+00:00",
         "from_status": "status:backlog"
       },
-      "437": {
-        "actor": "Worker-E1437V",
-        "session": "run_e1437v_1001",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1437-readable-errors",
-        "worktree": "C:\\acl-1437-errors",
-        "id": "d61ac56ba0f3459d8c09b005a8b56ecf",
-        "issue": 437,
-        "state": "handoff",
-        "started_at": "2026-10-01T09:02:49+00:00",
-        "from_status": "status:backlog",
-        "pr": 438,
-        "report": "# ACL-1437 handoff \u2014 Worker-E1437V (run_e1437v_1001)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/438 (into `stage`)\nBranch: `codex/acl-1437-readable-errors` (from work/main 49915f7), head 245b99a\n\n## Done\n- `src/fb_ads_rpa/failure_policy.py`: `GUIDE` / `PER_AD_GUIDE` give every POLICY / PER_AD_POLICY step a title, one-sentence impact and one action (text only, no verdict change). `problem()` / `problems()` build the items: step, ad_index/ad_name for per-ad steps (name parsed from \"<name> has no text\" / \"<name> second primary text not added\"), severity, title, impact, action, note, raw. Blocking items come first and exact repeats are listed once. Unknown steps are listed as blocking with a generic text.\n- `src/fb_ads_rpa/draft.py`: `RpaPublishResult.run_id`, and `to_job_dict()` adds `problems` and `run_id`. `error` keeps the old plain text for old readers and Sentry.\n- `src/fb_ads_rpa/rpa_publisher.py`: fills `run_id` from telemetry after the flow returns.\n- `src/web/templates/report.html`: a self-contained `cbProblemsHtml(r)` plus a `.cb-problems*` CSS block, hooked in one place at the top of the per-result loop of `cbPollJob`. It renders the verdict headline, the count + \"draft saved, browser left open\", numbered items with \"\u2192\", red/amber, and collapsed \"Technical details\" (codes, notes, run id, campaign id, captures, step trail). Results without `problems` (old records) or with an empty list use the old rendering.\n- CHANGELOG: `docs/system/CHANGELOG.md`.\n\n## Tests\n- New: `tests/test_readable_problems.py` (8 tests: completeness, payload), `tests/test_readable_problems_browser.py` (5 tests, headless: mock-up 2 blocking + 1 warning, colours, collapsed details, no duplicates, warnings-only, not built, old-record fallback).\n- Affected tests run: 334 passed + 239 passed (failure_policy, flow/publisher, publish jobs/progress, screen-warning browser, Sentry, single-screen editor, etc.). Full suite: CI.\n\n## Not done / notes\n- The build-dot tooltip in the queue drawer (`classify`, \"Do not publish: <codes>\") still shows raw codes. It was left alone to keep the report.html diff tight next to PRs #408/#398/#431/#435. A possible follow-up is to use `problems[].title` there (it would need `problems` in `publish_progress._result_view`).\n- Acceptance criterion 3 (the owner checks a real card after a run) is open. It needs a `serve.py` restart on the live machine after merge."
-      },
       "395": {
         "actor": "Worker-T1395E",
         "session": "run_t1395e_0930",
@@ -2825,9 +2811,25 @@
             "session": "run_e1437v_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-E1437V",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-E1437V",
+          "session": "run_e1437v_1001",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1437-readable-errors",
+          "worktree": "C:\\acl-1437-errors",
+          "id": "d61ac56ba0f3459d8c09b005a8b56ecf",
+          "issue": 437,
+          "state": "handoff",
+          "started_at": "2026-10-01T09:02:49+00:00",
+          "from_status": "status:backlog",
+          "pr": 438,
+          "report": "# ACL-1437 handoff \u2014 Worker-E1437V (run_e1437v_1001)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/438 (into `stage`)\nBranch: `codex/acl-1437-readable-errors` (from work/main 49915f7), head 245b99a\n\n## Done\n- `src/fb_ads_rpa/failure_policy.py`: `GUIDE` / `PER_AD_GUIDE` give every POLICY / PER_AD_POLICY step a title, one-sentence impact and one action (text only, no verdict change). `problem()` / `problems()` build the items: step, ad_index/ad_name for per-ad steps (name parsed from \"<name> has no text\" / \"<name> second primary text not added\"), severity, title, impact, action, note, raw. Blocking items come first and exact repeats are listed once. Unknown steps are listed as blocking with a generic text.\n- `src/fb_ads_rpa/draft.py`: `RpaPublishResult.run_id`, and `to_job_dict()` adds `problems` and `run_id`. `error` keeps the old plain text for old readers and Sentry.\n- `src/fb_ads_rpa/rpa_publisher.py`: fills `run_id` from telemetry after the flow returns.\n- `src/web/templates/report.html`: a self-contained `cbProblemsHtml(r)` plus a `.cb-problems*` CSS block, hooked in one place at the top of the per-result loop of `cbPollJob`. It renders the verdict headline, the count + \"draft saved, browser left open\", numbered items with \"\u2192\", red/amber, and collapsed \"Technical details\" (codes, notes, run id, campaign id, captures, step trail). Results without `problems` (old records) or with an empty list use the old rendering.\n- CHANGELOG: `docs/system/CHANGELOG.md`.\n\n## Tests\n- New: `tests/test_readable_problems.py` (8 tests: completeness, payload), `tests/test_readable_problems_browser.py` (5 tests, headless: mock-up 2 blocking + 1 warning, colours, collapsed details, no duplicates, warnings-only, not built, old-record fallback).\n- Affected tests run: 334 passed + 239 passed (failure_policy, flow/publisher, publish jobs/progress, screen-warning browser, Sentry, single-screen editor, etc.). Full suite: CI.\n\n## Not done / notes\n- The build-dot tooltip in the queue drawer (`classify`, \"Do not publish: <codes>\") still shows raw codes. It was left alone to keep the report.html diff tight next to PRs #408/#398/#431/#435. A possible follow-up is to use `problems[].title` there (it would need `problems` in `publish_progress._result_view`).\n- Acceptance criterion 3 (the owner checks a real card after a run) is open. It needs a `serve.py` restart on the live machine after merge."
+        },
+        "pr": 438,
+        "queued_at": "2026-10-01T09:20:04+00:00"
       }
     },
     "actors": {
@@ -3170,7 +3172,8 @@
       424,
       427,
       430,
-      434
+      434,
+      437
     ],
     "review": {
       "id": "6457401d2fcb4698814f3b9664cc4d70",
@@ -4073,6 +4076,13 @@
         "issue": 395,
         "claim": "4de70250e0fb425ba8ae939ab3ca2cb3",
         "actor": "Worker-T1395E"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-01T09:20:04+00:00",
+        "issue": 437,
+        "pr": 438,
+        "actor": "Worker-E1437V"
       }
     ],
     "policy": {
