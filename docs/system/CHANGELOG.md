@@ -22,6 +22,26 @@ a pair, the same file; Original on both cards; "Crop and expand (Meta AI)" off.
   retry loop neither checks again nor opens a second wizard (was ~3 + 3 + 2 min per ad).
 - Builder: `/api/creatives` carries `story_label` ("Story: <file>" / "Story: same file,
   Original"), printed under "Ad N" on the preview card. `serve.py` restart needed.
+- Review of PR #440 (round 2):
+  - H1: every success return of the creative step (`upload` True, the retry loop's
+    media check, the three known-file "media already on ad" returns, the known-file
+    reuse) first asks `crop_step.outcome()` through `meta_dom._crop_gate`. A Crop
+    failure stored by the retry or give-up close-walk, or a pair whose wizard never
+    showed Crop (`crop_step_not_shown`), fails the step with that reason (telemetry
+    `ad_creative_upload` with `where`) instead of being erased by `set_plan(None)`.
+  - M1: the walk recognises the Crop step by its heading "Select media crop for
+    placements" as well as by the step row; a single file whose Crop step was never
+    handled gets one warning row `ad_creative_crop` / `crop_step_not_shown`.
+  - M2: Meta AI expansion fails closed — "AI expansion"/"generative" labels count as
+    expansion, a box outside the cards is switched off (`shared:expand_off`), and any
+    other checked box or switch on the step blocks with `crop_unknown_toggle_on`.
+  - M3: Replace is proven by the picked tile's thumbnail ids on the Vertical card
+    (mismatch → `crop_vertical_not_story`; no ids on either side → warning row
+    `as_planned_thumb_unconfirmed`, as on the library-pick path).
+  - L1: the picker's Done/Select/... is pressed only inside the picker's own dialog;
+    without one (or inside the wizard's) → `crop_replace_picker_unscoped`.
+  - L4: `ad_form_gone_after_media` and `crop_*` reasons carry an English sentence
+    (`simple_create.creative_why_text`) in the step diag `text`.
 
 ## Every step of the creative wizard is captured, read-only — ACL-1426 (phase A)
 

@@ -137,18 +137,22 @@ _PAGE = """<!doctype html><html><body>
 <div role="dialog" id="wiz">
   <div role="heading" aria-level="3">Select media crop for placements</div>
   %(cards)s
+  %(extra)s
   <button>Cancel</button><button id="next" onclick="window.pressed.push('Next')">Next</button>
 </div>
 <script>
   window.pressed = [];
+  const THUMBS = %(thumbs)s;
   function openPicker() {
     const d = document.createElement('div');
-    d.setAttribute('role', 'dialog'); d.id = 'picker';
+    if (%(picker_dialog)s) d.setAttribute('role', 'dialog');
+    d.id = 'picker';
     d.innerHTML = '<input placeholder="Search media">'
       + '<div id="count">0 selected</div>'
       + %(tiles)s.map(n => '<div role="button" class="tile" style="width:90px;height:90px" '
           + 'onclick="this.setAttribute(\\'aria-pressed\\', \\'true\\');'
           + 'document.getElementById(\\'count\\').textContent=\\'1 selected\\'">'
+          + (THUMBS[n] ? '<img src="https://x.invalid/' + THUMBS[n] + '.jpg" style="width:20px;height:20px">' : '')
           + '<div><div>' + n + '</div></div></div>').join('')
       + '<button onclick="document.getElementById(\\'picker\\').remove()">Cancel</button>'
       + '<button onclick="done()">Done</button>';
@@ -156,7 +160,9 @@ _PAGE = """<!doctype html><html><body>
   }
   function done() {
     const t = [...document.querySelectorAll('#picker .tile')].find(x => x.getAttribute('aria-pressed') === 'true');
-    if (t) document.getElementById('img_Vertical').src = 'https://x.invalid/' + t.textContent;
+    const img = t && t.querySelector('img');
+    if (t) document.getElementById('img_Vertical').src = window.forceSrc
+      || (img ? img.getAttribute('src') : 'https://x.invalid/' + t.textContent);
     document.getElementById('picker').remove();
   }
 </script>
@@ -164,7 +170,7 @@ _PAGE = """<!doctype html><html><body>
 
 
 def _synthetic(page, *, expand=("", ""), vertical_ratio_checked=True, tiles=("4_es_2403_story.mp4",),
-               original_disabled=False):
+               original_disabled=False, extra="", picker_dialog=True, thumbs=None, expand_label=None):
     cards = []
     for name, exp in zip(("Square", "Vertical"), expand):
         nine = name == "Vertical" and vertical_ratio_checked
@@ -174,7 +180,12 @@ def _synthetic(page, *, expand=("", ""), vertical_ratio_checked=True, tiles=("4_
             "ratio_label": "9:16 (recommended)" if name == "Vertical" else "1:1 (recommended)",
             "expand": exp,
         }).replace("disabled_orig", "disabled" if original_disabled and name == "Vertical" else ""))
-    page.set_content(_PAGE % {"cards": "".join(cards), "tiles": json.dumps(list(tiles))})
+    html = "".join(cards)
+    if expand_label:
+        html = html.replace("Crop and expand (Meta AI)", expand_label)
+    page.set_content(_PAGE % {"cards": html, "tiles": json.dumps(list(tiles)), "extra": extra,
+                              "picker_dialog": "true" if picker_dialog else "false",
+                              "thumbs": json.dumps(thumbs or {})})
 
 
 def test_meta_ai_expansion_is_switched_off_on_both_cards(page):
@@ -224,6 +235,75 @@ def test_original_that_cannot_be_chosen_is_a_blocking_reason(page):
     assert crop_step.apply(page, SINGLE) == "crop_vertical_not_original"
 
 
+# ── review PR #440: M2 (expansion fails closed), M3 (story identity), L1 ──
+
+STORY_THUMB = "111111_2222222222_3333333333_n"
+POST_THUMB = "444444_5555555555_6666666666_n"
+
+
+def test_an_expansion_box_shared_by_both_cards_is_switched_off(page, tmp_path):
+    _synthetic(page, extra='<label><input type="checkbox" id="exp_shared" checked> AI expansion</label>')
+    state = crop_step.read(page)
+    assert state["shared"] == [{"label": "AI expansion", "checked": True, "expand": True}]
+    assert crop_step.apply(page, SINGLE) == ""
+    assert page.evaluate("document.getElementById('exp_shared').checked") is False
+    assert "shared:expand_off" in _rows(tmp_path, "ad_creative_crop")[-1]["diag"]["clicks"]
+
+
+def test_an_expansion_box_under_another_label_in_a_card_is_recognised(page):
+    _synthetic(page, expand=("", "checked"), expand_label="AI expansion")
+    assert crop_step.read(page)["cards"]["Vertical"]["expand"][0]["checked"] is True
+    assert crop_step.apply(page, SINGLE) == ""
+    assert page.evaluate("document.getElementById('exp_Vertical').checked") is False
+
+
+def test_an_unknown_checked_toggle_on_the_step_blocks(page):
+    _synthetic(page, extra='<div role="switch" aria-checked="true" aria-label="Optimise for placements" '
+                           'style="width:20px;height:20px"></div>')
+    assert crop_step.apply(page, SINGLE) == "crop_unknown_toggle_on"
+    # ... and in a card as well (a localized expansion label is unknown, so it blocks).
+    _synthetic(page, expand=("checked", ""), expand_label="Recortar y ampliar")
+    assert crop_step.apply(page, SINGLE) == "crop_unknown_toggle_on"
+
+
+def test_unchecked_unknown_toggles_do_not_block(page):
+    _synthetic(page, extra='<label><input type="checkbox"> Something else</label>')
+    assert crop_step.apply(page, SINGLE) == ""
+
+
+def test_replace_is_proven_by_the_picked_tiles_thumbnail(page, tmp_path):
+    _synthetic(page, thumbs={"4_es_2403_story.mp4": STORY_THUMB})
+    assert crop_step.apply(page, PAIR) == ""
+    row = _rows(tmp_path, "ad_creative_crop")[-1]
+    assert row["ok"] is True and row["note"] == "as_planned"
+    assert row["diag"]["thumb"] == "match"
+    assert row["diag"]["picked_thumbs"] == [STORY_THUMB]
+
+
+def test_a_vertical_card_showing_another_file_than_the_picked_tile_blocks(page, tmp_path):
+    _synthetic(page, thumbs={"4_es_2403_story.mp4": STORY_THUMB})
+    # Meta put another tile (the post) on Vertical: the src changed, but not
+    # to the story.
+    page.evaluate(f"window.forceSrc = 'https://x.invalid/{POST_THUMB}.jpg'")
+    assert crop_step.apply(page, PAIR) == "crop_vertical_not_story"
+    assert _rows(tmp_path, "ad_creative_crop")[-1]["diag"]["thumb"] == "mismatch"
+
+
+def test_a_replace_without_thumbnails_is_a_warning_not_a_silent_success(page, tmp_path):
+    _synthetic(page)
+    assert crop_step.apply(page, PAIR) == ""
+    row = _rows(tmp_path, "ad_creative_crop")[-1]
+    assert row["ok"] is None and row["note"] == "as_planned_thumb_unconfirmed"
+    assert row["diag"]["thumb"] == "unconfirmed"
+
+
+def test_a_picker_without_its_own_dialog_is_refused_and_the_wizard_next_untouched(page):
+    _synthetic(page, picker_dialog=False)
+    assert crop_step.apply(page, PAIR) == "crop_replace_picker_unscoped"
+    assert page.evaluate("window.pressed") == []
+    assert crop_step._picker(page, "confirm").get("point") is None
+
+
 # ── inside the wizard walk ────────────────────────────────────────────────
 
 _WALK = """<!doctype html><html><body>
@@ -238,7 +318,7 @@ _WALK = """<!doctype html><html><body>
   const crop = %(crop)s;
   function paint() {
     document.getElementById('row').innerHTML = steps.map((s, i) => '<div role="listitem"><div role="button" '
-      + (i === at ? 'aria-current="step"' : '') + '><div>' + s + '</div></div></div>').join('');
+      + (i === at && %(row)s ? 'aria-current="step"' : '') + '><div>' + s + '</div></div></div>').join('');
     document.getElementById('body').innerHTML = steps[at] === 'Crop' ? crop : '<div role="heading">' + steps[at] + '</div>';
     document.getElementById('fwd').textContent = steps[at] === 'Enhancements' ? 'Done' : 'Next';
   }
@@ -252,7 +332,7 @@ _WALK = """<!doctype html><html><body>
 </script></body></html>"""
 
 
-def _walk_page(page, *, original_disabled=False):
+def _walk_page(page, *, original_disabled=False, row=True):
     cards = "".join((_CARD % {
         "name": n, "src": "a.mp4", "orig": "" if n == "Vertical" else "checked",
         "ratio": "checked" if n == "Vertical" else "",
@@ -261,7 +341,7 @@ def _walk_page(page, *, original_disabled=False):
     }).replace("disabled_orig", "disabled" if original_disabled and n == "Vertical" else "")
         for n in ("Square", "Vertical"))
     crop_html = '<div role="heading" aria-level="3">Select media crop for placements</div>' + cards
-    page.set_content(_WALK % {"crop": json.dumps(crop_html)})
+    page.set_content(_WALK % {"crop": json.dumps(crop_html), "row": "true" if row else "false"})
 
 
 def test_the_walk_sets_original_on_crop_before_next(page, monkeypatch):
@@ -299,6 +379,42 @@ def test_without_a_plan_the_walk_is_unchanged(page, monkeypatch):
     assert page.evaluate("window.clicks") == ["Trim:Next", "Crop:Next", "Text:Next", "Enhancements:Done", "close"]
     # Vertical stays on 9:16: nothing was touched.
     assert crop_step.outcome() == ""
+
+
+def test_the_walk_finds_crop_by_its_heading_when_the_step_row_is_not_read(page, monkeypatch):
+    monkeypatch.setattr(md, "_WIZARD_STEP_SETTLE_S", 0.3)
+    _walk_page(page, row=False)
+    crop_step.set_plan(SINGLE)
+    seen = {}
+    real = crop_step.apply
+
+    def spy(p, plan):
+        why = real(p, plan)
+        seen["vertical"] = crop_step.read(p)["cards"]["Vertical"]["original"]
+        return why
+
+    monkeypatch.setattr(crop_step, "apply", spy)
+    assert md._walk_creative_wizard(page) is True
+    assert seen == {"vertical": True}
+    assert crop_step.outcome() == ""
+
+
+def test_a_single_file_whose_crop_was_not_handled_is_said_in_telemetry(tmp_path, monkeypatch):
+    monkeypatch.setattr(rt, "TELEMETRY_PATH", tmp_path / "telemetry.jsonl")
+    crop_step.set_plan(SINGLE)
+    try:
+        assert crop_step.outcome() == ""            # not blocking: a single file
+        assert crop_step.outcome() == ""            # said once per attempt
+    finally:
+        crop_step.set_plan(None)
+    rows = _rows(tmp_path, "ad_creative_crop")
+    assert [(r["ok"], r["note"]) for r in rows] == [(None, "crop_step_not_shown")]
+
+
+def test_step_names_that_mean_crop():
+    assert crop_step.step_is_crop("Crop")
+    assert crop_step.step_is_crop("Select media crop  for placements")
+    assert not crop_step.step_is_crop("Text")
 
 
 def test_a_pair_whose_wizard_never_showed_crop_is_named():

@@ -555,6 +555,25 @@ _WHY_TEXT = {
 }
 
 
+#: Причины отказа шага креатива — для человека (итог кампании, English).
+#: ACL-1426, ревью PR #440 (L4): у `ad_form_gone_after_media` была только метка.
+_CREATIVE_WHY_TEXT = {
+    "ad_form_gone_after_media": ("After the media step Meta stopped showing this ad's form "
+                                 "('Verifying your changes'); the ad is left in the draft for review."),
+}
+
+
+def creative_why_text(why: str) -> str:
+    """Причина отказа шага креатива одной фразой; "" — фразы для неё нет."""
+    why = why or ""
+    if why in _CREATIVE_WHY_TEXT:
+        return _CREATIVE_WHY_TEXT[why]
+    if why.startswith("crop_"):
+        return ("The Crop step could not be set as planned (" + why + "); the ad is left in the "
+                "draft for review.")
+    return ""
+
+
 def why_text(why: str) -> str:
     """Причина отказа создания объявления — одной фразой для человека."""
     why = why or ""
