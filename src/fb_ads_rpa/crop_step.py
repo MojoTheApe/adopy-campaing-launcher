@@ -33,6 +33,18 @@ The step is recognised by the step row's "Crop" or by its heading.
 Any mismatch is a named blocking reason (`crop_*`); the caller fails the creative
 step with it, so the ad is held for review instead of published with the wrong
 crop. Never presses Publish, Next or anything outside the wizard/picker.
+
+ACL-1476 (owner, 2026-10-01): two pair cases are WARNINGS, not blocks - the ad
+keeps the post file and the story placement is left to Meta:
+
+* `story_not_placed:no_crop_step` - the wizard never showed Crop (the
+  single-screen editor walks Media -> Text -> Creative generation ->
+  Enhancements, runs e4fd79d26e63 and bd7b2f...);
+* `story_not_placed:not_in_library` - Crop was shown, but the `_story` file is
+  not in Meta's library (runs a88e3789f7ab, 362762a797c3). Original and Meta AI
+  expansion off are still applied and read back; only Replace is skipped.
+
+`warning()` names it; `meta_dom` turns it into the ad's warning row.
 """
 from __future__ import annotations
 
@@ -53,6 +65,11 @@ STEP_SETTING = "FB_RPA_CROP_STEP"
 REPLACE_SETTING = "FB_RPA_CROP_REPLACE"
 
 CARDS = ("Square", "Vertical")
+
+#: ACL-1476: a pair whose story could not be placed - warnings, not blocks.
+NO_CROP_STEP = "story_not_placed:no_crop_step"
+NOT_IN_LIBRARY = "story_not_placed:not_in_library"
+WARNINGS = (NO_CROP_STEP, NOT_IN_LIBRARY)
 
 #: Library picker's confirm labels, in order. Publish is never among them.
 _CONFIRM_LABELS = ("Done", "Select", "Confirm", "Next", "Save", "Continue")
@@ -227,9 +244,17 @@ PICKER_JS = r"""
     }
     return null;
   };
+  // ACL-1476 (a88e3789f7ab): Meta's "Replace media for Stories, Status,
+  // Reels" opens INSIDE the wizard dialog - its buttons are the wizard's step
+  // row and the wizard's Close/Save, no Cancel. Close there closes the whole
+  // wizard; the way back is the step row's own "Crop".
+  const labels = new Set(buttons.map(b => b.label));
+  const inWizard = ['Media', 'Text', 'Crop'].every(l => labels.has(l));
+  out.in_wizard = inWizard;
   const target = !scoped ? null
                : args.want === 'confirm' ? pick(args.confirm)
-               : args.want === 'cancel' ? pick(['Cancel', 'Close']) : null;
+               : args.want === 'cancel' ? pick(inWizard ? ['Cancel', 'Crop'] : ['Cancel', 'Close'])
+               : args.want === 'close' ? pick(['Close']) : null;
   if (target) {
     target.el.scrollIntoView({ block: 'center', behavior: 'instant' });
     const r = target.el.getBoundingClientRect();
@@ -257,10 +282,16 @@ def set_plan(plan) -> None:
     _tls.failure = None
     _tls.done = False
     _tls.unseen_said = False
+    _tls.warning = ""
 
 
 def current_plan():
     return getattr(_tls, "plan", None)
+
+
+def warning() -> str:
+    """ACL-1476: the pair's story was not placed - `NO_CROP_STEP` / `NOT_IN_LIBRARY`, or ""."""
+    return getattr(_tls, "warning", "") or ""
 
 
 def take_failure() -> str | None:
@@ -377,6 +408,35 @@ def _cancel_picker(page) -> None:
         time.sleep(0.8)
 
 
+def _back_to_crop(page, log: dict) -> bool:
+    """ACL-1476: leave the picker for the Crop step without closing the wizard.
+
+    Cancel, or inside the wizard its step row's "Crop" (never the wizard's
+    Close first). True = the picker is gone and the Crop step reads again.
+    """
+    got = _picker(page, "cancel")
+    pt = got.get("point")
+    log["picker_back"] = pt.get("label") if pt else None
+    if pt:
+        _md()._cdp_mouse_click(page, float(pt["x"]), float(pt["y"]))
+    deadline = time.time() + 6.0
+    while True:
+        if not _picker(page).get("open") and read(page).get("found"):
+            return True
+        if time.time() >= deadline:
+            break
+        time.sleep(0.4)
+    if got.get("in_wizard"):
+        # Still on the picker: the old way out (the wizard's Close), and the
+        # step is blocked - the Crop cards can no longer be read back.
+        closing = _picker(page, "close").get("point")
+        if closing:
+            log["picker_back"] = "Close"
+            _md()._cdp_mouse_click(page, float(closing["x"]), float(closing["y"]))
+            time.sleep(0.8)
+    return False
+
+
 def _capture(page, step: str, diag: dict) -> None:
     try:
         from src.fb_ads_rpa import page_capture as _pages
@@ -426,7 +486,8 @@ def _replace_vertical(page, filename: str, log: dict) -> str:
         tiles = md._library_tiles(page, filename)
     log["tiles"] = available
     if not available:
-        _cancel_picker(page)
+        # ACL-1476: not a block - `apply` goes back to Crop and reads back
+        # Original / no expansion; the post file stays on Vertical.
         return "crop_story_not_in_library"
     before = md._library_selected_count(page)
     log["selected_before"] = before
@@ -512,7 +573,16 @@ def apply(page, plan) -> str:
                     why = "crop_replace_off"
                 else:
                     why = _replace_vertical(page, plan.vertical_file, log)
-                    if not why:
+                    if why == "crop_story_not_in_library":
+                        # ACL-1476: the story is not in Meta's library - back
+                        # to Crop, Replace skipped, the rest read back below.
+                        if _back_to_crop(page, log):
+                            _tls.warning = NOT_IN_LIBRARY
+                            why = ""
+                            state = read(page)
+                        else:
+                            why = "crop_replace_picker_not_closed"
+                    elif not why:
                         log["clicks"].append("Vertical:replace")
                         state = _wait(page, lambda s: _card(s, "Vertical").get("media")
                                       != _card(before, "Vertical").get("media"), 6.0)
@@ -521,7 +591,11 @@ def apply(page, plan) -> str:
                             log["clicks"].append("Vertical:original_after_replace")
                             state = _wait(page, lambda s: _card(s, "Vertical").get("original") is True)
             if not why:
-                why = readback(state, plan, before if getattr(plan, "replace_vertical", False) else None,
+                # Replace skipped (story not in library): Original and no
+                # expansion are read back as for a single file.
+                skipped = warning() == NOT_IN_LIBRARY
+                replaced = getattr(plan, "replace_vertical", False) and not skipped
+                why = readback(state, None if skipped else plan, before if replaced else None,
                                log.get("picked_thumbs"))
             if getattr(plan, "replace_vertical", False) and "picked_thumbs" in log:
                 log["thumb"] = thumb_match(state, log.get("picked_thumbs"))
@@ -533,13 +607,16 @@ def apply(page, plan) -> str:
     _tls.done = True
     if why:
         _tls.failure = why
+        _tls.warning = ""
     try:
         # A Replace whose identity could not be read (no thumbnail ids on
         # either side) is not blocked - as on the library-pick path - but
-        # said: a warning row, not a silent "as planned".
+        # said: a warning row, not a silent "as planned". ACL-1476: so is a
+        # story that is not in the library.
         unconfirmed = not why and log.get("thumb") == "unconfirmed"
-        _telemetry.record("ad_creative_crop", False if why else (None if unconfirmed else True),
-                          note=why or ("as_planned_thumb_unconfirmed" if unconfirmed else "as_planned"),
+        warned = "" if why else warning()
+        _telemetry.record("ad_creative_crop", False if why else (None if unconfirmed or warned else True),
+                          note=why or warned or ("as_planned_thumb_unconfirmed" if unconfirmed else "as_planned"),
                           duration_s=time.time() - started,
                           diag={**log, "square": getattr(plan, "square_file", ""),
                                 "vertical": getattr(plan, "vertical_file", ""),
@@ -572,6 +649,7 @@ def reset_attempt() -> None:
     _tls.failure = None
     _tls.done = False
     _tls.unseen_said = False
+    _tls.warning = ""
 
 
 def failure_pending() -> bool:
@@ -585,16 +663,18 @@ def outcome() -> str:
     if why:
         return why
     plan = current_plan()
-    if plan is not None and getattr(plan, "replace_vertical", False) and not applied():
-        # A pair needs the Crop step; the wizard never showed it.
-        return "crop_step_not_shown"
+    pair = plan is not None and getattr(plan, "replace_vertical", False)
     if plan is not None and not applied() and not getattr(_tls, "unseen_said", False):
-        # A single file: Meta's defaults (Vertical 9:16, an expansion box)
-        # stayed as they were. Not blocking (the owner's rule blocks pairs
-        # only), but said once per attempt instead of a silent "" (review M1).
+        # Meta's defaults (Vertical 9:16, an expansion box) stayed as they
+        # were. Not blocking, but said once per attempt instead of a silent ""
+        # (review M1). ACL-1476: a pair too - the single-screen editor's wizard
+        # (Media, Text, Creative generation, Enhancements) has no Crop step;
+        # the ad keeps the post file and the warning `NO_CROP_STEP` is named.
         _tls.unseen_said = True
+        if pair:
+            _tls.warning = NO_CROP_STEP
         try:
-            _telemetry.record("ad_creative_crop", None, note="crop_step_not_shown",
+            _telemetry.record("ad_creative_crop", None, note=NO_CROP_STEP if pair else "crop_step_not_shown",
                               diag={"rule": getattr(plan, "rule", ""),
                                     "square": getattr(plan, "square_file", ""),
                                     "vertical": getattr(plan, "vertical_file", "")})
