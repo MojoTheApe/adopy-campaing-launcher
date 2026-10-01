@@ -864,8 +864,22 @@
       "source_sha": "3a629ca36796243ef04d90dcd9c120bf101de17a",
       "main_tree": "fd095b692c707356b7fa93346fa4085b9663e3d9",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-10-01T11:49:20+00:00"
+      "state": "passed",
+      "recorded_at": "2026-10-01T11:49:20+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "result": "passed",
+        "target": "ACL isolated Windows stage installation",
+        "source_sha": "3a629ca36796243ef04d90dcd9c120bf101de17a",
+        "tree_sha": "1307a32b2847cc8980c0685c0703a485e2a11fdd",
+        "checks": [
+          "Git checks on actual stage 3a629ca: CI run 36857735634 success (sharded, Python 3.11/3.13)",
+          "Windows installer run 36857735717 success (build, install, repair, uninstall); Delivery setup 36857735684 success",
+          "The Multilogin API sequence the change uses (signin -> /user/workspaces -> refresh_token with workspace_id -> automation_token) was confirmed live on 2026-10-01 on the tester's machine via the helper script (KLD workspace token issued, profile opened)"
+        ],
+        "report": "ACL-1441 stage verification: Git and installer checks green on the actual stage 3a629ca. Independent review: scratchpad/review_442_evidence.json (Reviewer-R1441V, approved). The in-dashboard Connect flow itself is not yet exercised live; it reaches buyers only with the next release, which needs the owner's yes."
+      },
+      "verified_at": "2026-10-01T12:05:48+00:00"
     },
     "tasks": {
       "248": {
