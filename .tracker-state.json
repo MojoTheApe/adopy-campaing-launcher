@@ -2269,7 +2269,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "462": {
+        "actor": "Worker-E1462R",
+        "session": "run_e1462r_1001",
+        "coordinator": "Coordinator-D0930K",
+        "branch": "codex/acl-1462-english-ui",
+        "worktree": "C:\\acl-english",
+        "id": "603078fdf6d3404fa6b9c7859ac7e666",
+        "issue": 462,
+        "state": "implementing",
+        "started_at": "2026-10-01T13:24:39+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -3205,6 +3218,17 @@
         },
         "pr": 460,
         "queued_at": "2026-10-01T13:17:00+00:00"
+      },
+      "462": {
+        "implementers": [
+          {
+            "actor": "Worker-E1462R",
+            "session": "run_e1462r_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-E1462R",
+        "coordinator": "Coordinator-D0930K"
       }
     },
     "actors": {
@@ -3390,6 +3414,10 @@
       },
       "Worker-D1459B": {
         "session": "run_d1459b_1001",
+        "role": "Worker"
+      },
+      "Worker-E1462R": {
+        "session": "run_e1462r_1001",
         "role": "Worker"
       }
     },
@@ -4801,6 +4829,13 @@
         "issue": 459,
         "pr": 460,
         "actor": "Worker-D1459B"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T13:24:39+00:00",
+        "issue": 462,
+        "claim": "603078fdf6d3404fa6b9c7859ac7e666",
+        "actor": "Worker-E1462R"
       }
     ],
     "policy": {
