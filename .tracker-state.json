@@ -2126,6 +2126,18 @@
         "state": "implementing",
         "started_at": "2026-10-01T08:39:49+00:00",
         "from_status": "status:backlog"
+      },
+      "437": {
+        "actor": "Worker-E1437V",
+        "session": "run_e1437v_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1437-readable-errors",
+        "worktree": "C:\\acl-1437-errors",
+        "id": "d61ac56ba0f3459d8c09b005a8b56ecf",
+        "issue": 437,
+        "state": "implementing",
+        "started_at": "2026-10-01T09:02:49+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2748,6 +2760,17 @@
         },
         "pr": 435,
         "queued_at": "2026-10-01T08:54:22+00:00"
+      },
+      "437": {
+        "implementers": [
+          {
+            "actor": "Worker-E1437V",
+            "session": "run_e1437v_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-E1437V",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2881,6 +2904,10 @@
       },
       "Worker-H1434U": {
         "session": "run_h1434u_1001",
+        "role": "Worker"
+      },
+      "Worker-E1437V": {
+        "session": "run_e1437v_1001",
         "role": "Worker"
       }
     },
@@ -3898,6 +3925,13 @@
         "issue": 434,
         "pr": 435,
         "actor": "Worker-H1434U"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T09:02:49+00:00",
+        "issue": 437,
+        "claim": "d61ac56ba0f3459d8c09b005a8b56ecf",
+        "actor": "Worker-E1437V"
       }
     ],
     "policy": {
