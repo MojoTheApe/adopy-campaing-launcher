@@ -3561,7 +3561,7 @@ async function dashRefresh(ev) {
       </label>
     </div>
     <label style="display:block;margin-top:0.6rem">
-      <div style="font-size:0.75rem;color:var(--muted)">Body — переносы строк сохраняются как есть</div>
+      <div style="font-size:0.75rem;color:var(--muted)">Body — line breaks are kept as typed</div>
       <textarea id="at-body" rows="5" style="width:100%;font-family:inherit;line-height:1.45"></textarea>
     </label>
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-top:0.6rem">
@@ -8172,7 +8172,7 @@ function amapSpendFailed(btn, cell, why, shot, how) {
     if (split) cell.appendChild(split);
     var bad = cell.firstChild;
     bad.textContent = why.length > 40 ? why.slice(0, 39) + '…' : why;
-    bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'снимок: ' + shot : '');
+    bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'screenshot: ' + shot : '');
   }
   /* Если прицепиться не к чему, «retry» ничего не изменит: сначала нужно
      поднять профиль автоматизацией. Кнопка появляется ровно в этом случае. */
@@ -11516,8 +11516,8 @@ window.cbPublishAll = function (onProgress, picked) {
     + 'as many at once as this computer has memory for; the rest wait as queued and start on their own. '
     + 'Two jobs on one profile queue. '
     + 'A campaign whose preview shows an error is skipped; the rest of its account still go.</span><br>'
-    + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
-    + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
+    + '<span style="color:var(--warn);font-size:0.85rem">Do not lock the screen while the build runs — '
+    + 'creative uploads stall on a locked screen.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook</span>',
     function () {
@@ -12136,16 +12136,16 @@ window.cbTrackingWarning = function(form) {
   var pf = (typeof ACCOUNT_PREFLIGHT !== 'undefined' && ACCOUNT_PREFLIGHT[acc]) || {};
   var saved = (pf.link || '').trim();
 
-  if (!typed) return { field: input, text: 'Трекинговой ссылки нет. Кампания соберётся, но клики считать будет нечем.' };
+  if (!typed) return { field: input, text: 'No tracking link. The campaign will build, but clicks will not be counted.' };
   if (typed !== saved) {
-    return { field: input, text: 'Ссылка не сохранена для следующих сборок — нажмите Save. В этой сборке будет использована: '
+    return { field: input, text: 'The link is not saved for future builds — press Save. This build will use: '
       + typed + '.' };
   }
   if (pf.link_status === 'jira') {
-    return { field: input, text: 'В поле адрес задачи Jira, а не трекер. Клики по нему не считаются.' };
+    return { field: input, text: 'This is a Jira task link, not a tracker. Clicks on it are not counted.' };
   }
   if (pf.link_status !== 'tracking') {
-    return { field: input, text: 'Ссылка не похожа на трекинговую. Проверьте её перед сборкой.' };
+    return { field: input, text: 'This does not look like a tracking link. Check it before building.' };
   }
   return null;
 };
@@ -12263,8 +12263,8 @@ window.cbPublish = function(form) {
     // загрузка встаёт. 10 сентября так вышло 42 минуты на файл, который
     // соседнее объявление приняло за 74 секунды. Снять блокировку мы не
     // можем — это настройка машины; сказать о ней вовремя можем.
-    + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
-    + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
+    + '<span style="color:var(--warn);font-size:0.85rem">Do not lock the screen while the build runs — '
+    + 'creative uploads stall on a locked screen.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
 
@@ -12289,15 +12289,15 @@ window.cbPublish = function(form) {
   if (warn) {
     window.cbHighlightField(warn.field);
     bodyHtml = '<div class="cb-warn-block">⚠ ' + aclEscHtml(warn.text)
-      + '<br><span style="opacity:.75">Собрать всё равно можно — ссылку добавляют и позже.</span></div>'
+      + '<br><span style="opacity:.75">You can still build — the link can be added later.</span></div>'
       + bodyHtml;
   }
 
   if (lostTargeting.length) {
     var names = lostTargeting.map(aclEscHtml).join(', ');
-    bodyHtml = '<div class="cb-warn-block">⚠ Таргетинг не выбран: <b>' + names + '</b>'
-      + '<br><span style="opacity:.75">Набранное не совпало ни с одним кодом. Кампания уйдёт '
-      + 'без детального таргетинга, а имя всё равно будет с этим словом — выберите строку из списка.</span></div>'
+    bodyHtml = '<div class="cb-warn-block">⚠ Targeting not selected: <b>' + names + '</b>'
+      + '<br><span style="opacity:.75">What you typed matches no code. The campaign will go '
+      + 'without detailed targeting, yet its name will still carry this word — pick a row from the list.</span></div>'
       + bodyHtml;
   }
 
@@ -12307,7 +12307,7 @@ window.cbPublish = function(form) {
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     }
     else _doCbPublish(form);
-  }, { confirmLabel: (warn || lostTargeting.length) ? 'Собрать с предупреждением' : 'Publish → draft' });
+  }, { confirmLabel: (warn || lostTargeting.length) ? 'Build anyway' : 'Publish → draft' });
 };
 
 // Весь аккаунт без превью — кнопка Publish на странице страны. Идёт через
@@ -12405,9 +12405,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';
     // An observed lock is context, not proof that it caused every failure.
     if (job.screen_was_locked === true && !jobPublishable && job.status === 'done') {
-      html += '<div class="cb-status-cause">🔒 Во время сборки экран был заблокирован. '
-        + 'Это могло замедлить или остановить загрузку. Проверьте ошибки ниже '
-        + 'и состояние черновика в Ads Manager перед повтором.</div>';
+      html += '<div class="cb-status-cause">🔒 The screen was locked during the build. '
+        + 'This may have slowed or stopped the uploads. Check the errors below '
+        + 'and the draft in Ads Manager before retrying.</div>';
     }
     if (isRunning && !isCancelling) {
       html += '<div style="margin:0.5rem 0">'

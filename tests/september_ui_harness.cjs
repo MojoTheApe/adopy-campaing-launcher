@@ -66,7 +66,7 @@ async function tracking() {
   vm.runInContext(between('window.cbTrackingWarning =', 'function _doCbPublish'),context);
   vm.runInContext(between('  window.cbSaveTrackingLink =', '  // ── Save individual account map field'),context);
   context.cbPublish(form);
-  assert(confirmation.body.includes('Трекинговой ссылки нет'));
+  assert(confirmation.body.includes('No tracking link'));
   confirmation.run();
   assert.equal(builds,1,'A warning blocked the draft confirmation');
   assert(!classes.has('cb-preflight-collapsed'));
@@ -76,7 +76,7 @@ async function tracking() {
   context.cbPublish(form);
   assert(confirmation.body.includes('x=1&amp;y=2'));
   assert(confirmation.body.includes('/new?'));
-  assert(confirmation.body.includes('В этой сборке будет использована'));
+  assert(confirmation.body.includes('This build will use'));
   assert(!confirmation.body.includes('&amp;amp;'));
   const badge={};
   const row={querySelector:selector=>selector.includes('tracking_link') ? input : badge};

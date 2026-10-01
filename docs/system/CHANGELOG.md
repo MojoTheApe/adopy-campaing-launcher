@@ -1,5 +1,17 @@
 # System history
 
+## On-screen messages are English — ACL-1462
+
+2026-10-01 the owner saw Russian text in the confirmation shown before Publish. Translated
+everything the dashboard shows that was still Russian: the Publish confirmation (locked-
+screen warning, tracking-link and targeting warnings, the "Build anyway" button), the
+locked-screen notice after a run, the ad-text library's Body hint, the read-failure
+tooltip's "screenshot:" label, "Stopped by the user", the targeting-library read error
+and the reasons in the "countries failed" tooltip. Code comments, Obsidian note
+generators and page-matching keywords stay Russian. A new test fails on any Cyrillic in
+the templates outside comments, except the two checks that recognise older stored
+errors.
+
 ## Finished clean profiles close themselves; a Close profile button for the rest — ACL-1444
 
 2026-10-01. With "Publish all", every finished account left its Multilogin

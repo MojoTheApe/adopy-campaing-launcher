@@ -899,7 +899,7 @@ def _set_section_checkbox(page, section: str, label: str, wanted: bool) -> tuple
     Состояние перечитывается после клика: у переключателя нажатие и
     результат — разные вещи, и на этом мы уже обжигались дважды за сутки.
     """
-    why = "не пробовали"
+    why = "not tried"
     for _ in range(6):
         try:
             res = page.evaluate(
@@ -911,7 +911,7 @@ def _set_section_checkbox(page, section: str, label: str, wanted: bool) -> tuple
             res, why = {}, str(exc)[:80]
         if res.get("ok"):
             if res.get("was") == wanted:
-                return True, "уже стояла как надо"
+                return True, "already set"
             _sleep(1)
             try:
                 again = page.evaluate(
@@ -922,8 +922,8 @@ def _set_section_checkbox(page, section: str, label: str, wanted: bool) -> tuple
             except Exception:
                 again = {}
             if again.get("ok") and again.get("was") == wanted:
-                return True, "переключили"
-            why = "клик не удержался"
+                return True, "switched"
+            why = "the click did not stick"
         else:
             why = str(res.get("why") or why)
         _sleep(1)
@@ -1009,7 +1009,7 @@ def _set_period(page, date_from: str, date_to: str) -> tuple[bool, str]:
     except Exception as exc:
         return False, f"не удалось найти кнопку периода ({str(exc)[:60]})"
     if not control:
-        return False, "кнопка периода не найдена"
+        return False, "period button not found"
     if not _click_label(page, control, tries=6, allow_many=True):
         return False, f"кнопка периода «{control}» не нажалась"
     _sleep(2)
@@ -1063,7 +1063,7 @@ def _set_period(page, date_from: str, date_to: str) -> tuple[bool, str]:
                        f"а вводили {[_typed_date(date_from), _typed_date(date_to)]}")
 
     if not _click_label(page, "Update", tries=6):
-        return False, "«Update» не нажалась"
+        return False, "«Update» did not respond"
     _sleep(3)
     return True, f"{_meta_date(date_from)} — {_meta_date(date_to)}"
 
@@ -1120,22 +1120,22 @@ def _leave_open_report(page) -> tuple[bool, str]:
     знать, откуда мы пришли, важнее, чем кажется.
     """
     if "/reporting/view" not in _page_url(page):
-        return True, "сразу на списке отчётов"
+        return True, "already on the reports list"
     if not _click_label(page, "All reports", tries=6):
-        return False, "«All reports» не нашлась — из отчёта не выйти"
+        return False, "«All reports» not found — cannot leave the report"
     _sleep(2)
     try:
         asked = bool(page.evaluate(_UNSAVED_DIALOG_JS))
     except Exception:
         asked = False
     if asked and not _click_label(page, "Don't save", tries=6):
-        return False, "запрос о несохранённых изменениях не закрылся"
+        return False, "the unsaved-changes prompt did not close"
     for _ in range(12):
         if "/reporting/manage" in _page_url(page):
-            return True, "вышли из открытого отчёта" + (
-                ", изменения не сохраняли" if asked else "")
+            return True, "left the open report" + (
+                ", changes not saved" if asked else "")
         _sleep(1)
-    return False, "из отчёта выйти не удалось"
+    return False, "could not leave the report"
 
 
 def _click_label(page, label: str, tries: int = 10, *, allow_many: bool = False) -> bool:
@@ -1255,7 +1255,7 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
         if not pick.get("ok"):
             raise ValueError(
                 "could not open fresh report: Pivot table — "
-                + str(pick.get("why") or "диалог не ответил")
+                + str(pick.get("why") or "the dialog did not answer")
             )
         _sleep(1)
         if not _click_label(page, "Continue", tries=8):
@@ -1294,7 +1294,7 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
                 controls = page.evaluate(_DATE_CONTROLS_JS) or []
             except Exception:
                 controls = []
-            shown = _shown_period_text(page) or "(период не распознан)"
+            shown = _shown_period_text(page) or "(period not recognised)"
             raise ValueError(
                 "Displayed report period does not match the requested dates: "
                 f"на экране {shown!r}; чем задаётся период: {controls}"
