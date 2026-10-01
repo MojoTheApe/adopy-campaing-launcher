@@ -2037,9 +2037,11 @@
         "worktree": "C:\\acl-1424-memory",
         "id": "bc1205da308a402f8421cea84da76bf4",
         "issue": 424,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T06:42:17+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 425,
+        "report": "# ACL-1424 handoff \u2014 Worker-A1424N\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/425 (into stage), branch `codex/acl-1424-adaptive-memory`, head df895f0 (from work/main 91e7049).\n\n## Design\n- `src/web/profile_slots.py`: default per-profile estimate 3.5 GB (`ACL_PROFILE_MEMORY_GB`); new floor `ACL_PROFILE_MEMORY_FLOOR_GB` 1.5.\n- `measure_profiles(ids)`: read-only psutil; root `chrome.exe` whose exe path contains \"mimic\" and no `--type=`, matched by `--client-session-id=<profile id>` (verified live: equals the account-map profile_id) or `--user-data-dir` tail; sums RSS of root + all children. Own Chrome never counted.\n- `ProfileUsage`: background daemon-thread probe with 5 s cache, 30 s max age, 5 s hang bound (no second probe on top of a hung one); finished probe wakes the queue. Statuses ok/pending/timeout/failed/stale; anything but ok \u2192 estimate.\n- `ProfileSlots._decide_now`: in auto mode with 0 < running < ceiling, measures profiles running >= warmup (90 s); average replaces estimate via `decide(..., measured_mb)` (max with floor). Free memory read at every decision. Ceiling/floor/override unchanged; override never measures.\n- `publish_jobs`: `_queue_view` adds `hold`, `profile_mb`, `profile_mb_source`; `_record_slot_decision` writes `job_phase` / `slot_decision` telemetry for every hold change (memory_low notes also change on 0.5 GB free / 0.25 GB profile steps).\n- `report.html` `waiting()`: \"Waiting: X GB free, a profile uses ~Y GB\" for memory_low.\n- `.env.example`, `docs/system/CHANGELOG.md` updated.\n\n## Tests (headless, ACL_LIBRARY_* empty)\n- tests/test_profile_slots_adaptive_memory.py 16 new; test_publish_profile_slots.py pinned to 1.5 GB arithmetic + stub probe; test_three_accounts_publish_at_once.py: 57 passed.\n- publish_jobs-adjacent (sentry, locked screen, build progress, safety contract, screen guard, screen idle, live folder): 116 passed.\n- test_campaign_build_dot_browser.py: 10 passed (incl. new memory-reason case).\n- Live read-only probe: 5 running profiles found, 2.6\u20134.0 GB each, 0.62 s.\n\n## Open\n- Acceptance: one live \"Publish all\" with 5 accounts (owner)."
       }
     },
     "tasks": {
