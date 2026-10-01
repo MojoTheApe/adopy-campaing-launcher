@@ -6,27 +6,38 @@
 machine although the placements were right. Three causes, each now a bench test
 (`tests/test_bench_placements.py`).
 
-- Meta stopped offering "Messenger Stories" on some accounts during the day; the robot
-  must switch it off and treated its absence as a failure. Rule (`fill_placements`,
-  `_settle_category`): a placement to switch OFF that is absent is "not offered" only
-  when all five categories are present, its own category (`_SUBITEMS_BY_CATEGORY`) is
-  open, the category's list has not changed for 1.5 s (polled up to 6 s; rows that
-  appear meanwhile are set at once), and every placement to switch ON in that category
-  was rendered. Otherwise it stays a failure as before. A placement to switch ON is
-  never "not offered". The step's telemetry line names them (`subitems_not_offered`,
-  note "not offered: …"); read-back still checks every offered placement.
+- Meta stopped offering "Messenger Stories" on some accounts during the day. The robot
+  has to switch it off, and it treated the placement's absence as a failure. Rule
+  (`fill_placements`, `_settle_category`, `_CATEGORY_END_JS`): a placement to switch OFF
+  that is absent counts as "not offered" only when all of these hold:
+  - all five categories are present;
+  - its own category (`_SUBITEMS_BY_CATEGORY`) is open;
+  - the category's list is scrolled to a proven end: the last row is shown, no row of
+    the category is hidden, the inner scroll is at the bottom, nothing is loading, and
+    the next category is shown;
+  - the list and that proof have not changed for 1.5 s (polled for up to 6 s while
+    the end is unproven; rows that appear meanwhile are set at once);
+  - every placement to switch ON in that category was rendered;
+  - the placement never appeared anywhere in the step (`subitems_seen`).
+
+  Otherwise the absence stays a failure, as before. A tail that never mounted is never
+  judged; 8e9acb2 / ACL-1220 recorded "Threads feed" and "Facebook Notifications"
+  mounting only after scrolling. A placement to switch ON is never "not offered". The
+  step's telemetry line names the not-offered placements (`subitems_not_offered`, note
+  "not offered: …"). Read-back still checks every offered placement.
 - Single-screen editor (cb854b07857b, 30.09): the open Placements card showed only a
-  "Loading..." progressbar, no "Account controls" to anchor on, and the step reported
-  `placements_card_not_found`. The card is now found by its own anchor
-  (`data-surface` ending `adset_placement_static_pgd_section`), its body is waited for
-  (20 s), then placements are set and read back there as in the classic editor; a body
-  that never loads is named `placements_card_loading`.
-- Single-screen editor (SA_ARC_All_Video_IPO_35_01.10, tester): the placements were set
-  but the list was collapsed to "Placements · Included: 7 · Allowed with limited spend:
-  0 · Excluded: 13". When the categories cannot be reached, that summary is read back:
-  exactly the seven placements we include, none with limited spend, the rest excluded
-  = set (`verified_by: summary`); any other count still fails. Fixture rebuilt from the
-  screenshot text (no capture).
+  "Loading..." progressbar, with no "Account controls" to anchor on, and the step
+  reported `placements_card_not_found`. The card is now found by its own anchor
+  (`data-surface` ending in `adset_placement_static_pgd_section`). Its body is waited
+  for (20 s), the card is tagged again once it has loaded, and placements are then set
+  and read back there as in the classic editor. A body that never loads is reported as
+  `placements_card_loading`.
+- Single-screen editor (SA_ARC_All_Video_IPO_35_01.10, tester): the placements list was
+  collapsed to "Placements · Included: 7 · Allowed with limited spend: 0 · Excluded:
+  13". The counts are not proof of which placements are included, so the summary is not
+  accepted. The step opens it and reads the rows back; if it cannot open it, the step
+  fails and reports the counts (`placements_summary`). The fixture was rebuilt from the
+  screenshot text, as there is no capture.
 
 ## Finished clean profiles close themselves; a Close profile button for the rest — ACL-1444
 

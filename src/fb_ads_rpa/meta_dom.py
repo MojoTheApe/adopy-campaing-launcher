@@ -5778,16 +5778,14 @@ def run_recorded_campaign_flow(
             _shot("fail_placements", placements_report)
             soft_fails.append("placements")
         else:
-            # ACL-1445: какие выключаемые площадки Meta не предложила и чем
-            # подтверждён итог — в строку шага, а не только в отладочный файл.
-            notes = []
-            extra = {k: placements_report[k] for k in ("subitems_not_offered", "verified_by")
-                     if placements_report.get(k)}
-            if extra.get("subitems_not_offered"):
-                notes.append("not offered: " + ", ".join(extra["subitems_not_offered"]))
-            if extra.get("verified_by"):
-                notes.append(f"verified by {extra['verified_by']}")
-            _shot("after_placements", extra or None, note="; ".join(notes) or None)
+            # ACL-1445: какие выключаемые площадки Meta не предложила — в
+            # строку шага, а не только в отладочный файл.
+            not_offered = placements_report.get("subitems_not_offered") or []
+            if not_offered:
+                _shot("after_placements", {"subitems_not_offered": not_offered},
+                      note="not offered: " + ", ".join(not_offered))
+            else:
+                _shot("after_placements")
     except Exception as exc:
         _shot("fail_placements", {"error": str(exc)[:200]})
         soft_fails.append(f"placements:{str(exc)[:60]}")
@@ -6709,6 +6707,55 @@ _PLACEMENTS_SECTION_JS = r"""
   };
 """
 
+#: Доказательство, что раскрытый раздел площадок отрисован до конца
+#: (ACL-1445, ревью PR #449): прокручивает список раздела к его последней
+#: строке (и внутреннюю прокрутку — ко дну), затем отвечает `end: true`,
+#: только если последняя строка видна, ни одна строка раздела не спрятана,
+#: внутренняя прокрутка у дна, загрузки нет и следующая за разделом
+#: категория видна. Иначе — `end: false` и причины.
+_CATEGORY_END_JS = (
+    "(name) => {"
+    + PLACEMENTS_ROW_JS
+    + r"""
+      const root = document.querySelector('[data-rpa-placements-marker]') || document;
+      const hit = rowFor(root, name);
+      if (!hit) return { end: false, why: 'category row not found' };
+      let btn = hit.row;
+      for (let i = 0; i < 12 && btn; i++) {
+        if (btn.getAttribute('role') === 'list') { btn = null; break; }
+        if (btn.getAttribute('role') === 'button' && btn.hasAttribute('aria-expanded')) break;
+        btn = btn.parentElement;
+      }
+      if (!btn) return { end: false, why: 'no expander' };
+      if (btn.getAttribute('aria-expanded') !== 'true') return { end: false, why: 'collapsed' };
+      const ctl = btn.getAttribute('aria-controls');
+      let region = ctl ? document.getElementById(ctl) : null;
+      if (!region && btn.parentElement)
+        region = btn.parentElement.querySelector(':scope > [role=region]');
+      if (!region) return { end: false, why: 'no region' };
+      const shown = (e) => !!e && e.getClientRects().length > 0;
+      const rowOf = (cb) => cb.closest('[role=listitem], li, label') || cb.parentElement;
+      const cbs = [...region.querySelectorAll('input[type=checkbox], [role=checkbox]')];
+      if (!cbs.length) return { end: false, why: 'no rows', rows: 0 };
+      // Внутренняя прокрутка списка — ко дну: виртуальный хвост монтируется так.
+      const scrollers = [region, ...region.querySelectorAll('*')].filter(e =>
+        e.scrollHeight > e.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(e).overflowY));
+      for (const s of scrollers) s.scrollTop = s.scrollHeight;
+      const lastRow = rowOf(cbs[cbs.length - 1]);
+      if (shown(lastRow)) lastRow.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+      const hidden = cbs.filter(cb => !shown(rowOf(cb))).length;
+      const atBottom = scrollers.every(s => s.scrollTop + s.clientHeight >= s.scrollHeight - 2);
+      const busy = [...region.querySelectorAll('[role=progressbar]')].some(shown);
+      const item = btn.closest('[role=listitem], li');
+      const next = item ? item.nextElementSibling : null;
+      const out = { rows: cbs.length, hidden, last_shown: shown(lastRow), at_bottom: atBottom,
+                    busy, next: next ? shown(next) : null };
+      out.end = out.last_shown && hidden === 0 && atBottom && !busy && out.next !== false;
+      return out;
+    }
+    """
+)
+
 #: Сколько раз за категорию её можно раскрыть заново, если Meta свернула её
 #: посреди простановки подпунктов (перерисовка после сохранения правки,
 #: ACL-1313 25.09). Дважды: одна перерисовка на заход — то, что видно в
@@ -6803,7 +6850,8 @@ def _placements_summary(page: Page) -> dict | None:
     ACL-1445, 01.10 (SA_ARC_All_Video_IPO_35_01.10, новый редактор у
     тестировщицы): площадки были выставлены — «Included: 7, Allowed with
     limited spend: 0, Excluded: 13», — а шаг отчитался отказом, потому что
-    списка галочек за сводкой не увидел.
+    списка галочек за сводкой не увидел. Только для отчёта: числа не говорят,
+    КАКИЕ площадки включены, и успехом шага сводка не считается (ревью #449).
     """
     try:
         return page.evaluate(
@@ -7474,6 +7522,14 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                 )
                 _dump_dbg()
                 return False
+            # Ревью PR #449 (L1): после загрузки React мог перемонтировать
+            # раздел — метку ставим заново, иначе чтения ушли бы в `document`.
+            again = _tag_placements_section(page)
+            _dbg.append(f"section_retag={again}")
+            if not again.get("tagged"):
+                return _card_not_found({**section, "stage": "retag"})
+            section = {**section, "retagged": True, "loading": again.get("loading")}
+            report["placements_card"] = section
         tag_info = section
 
     def _click_in_placements(text: str, *, exact: bool = True, max_children: int = 0) -> bool:
@@ -8068,29 +8124,17 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         report["category_rows"] = rows
         _dbg.append("rows=" + json.dumps(rows, ensure_ascii=False)[:4000])
         report["why"] = f"видно {seen} категорий из {len(_PLACEMENT_CATEGORIES)}"
-        # ACL-1445, 01.10 (новый редактор): список галочек свёрнут в сводку
-        # «Placements · Included: 7 · Allowed with limited spend: 0 ·
-        # Excluded: 13», и раскрыть её шаг не смог. Сводка — тоже обратное
-        # чтение: включено ровно столько площадок, сколько мы включаем
-        # (`_SUBITEMS_ON`), ни одной «с ограниченным бюджетом», остальные
-        # исключены. Ни Advantage+ (≈21 включённая), ни ручной режим по
-        # умолчанию («Include all») так не выглядят. Только чтение: такой
-        # итог принимается, если до галочек не дотянуться, но не заменяет их
-        # простановку.
+        # ACL-1445, 01.10 (новый редактор у тестировщицы): список галочек
+        # свёрнут в сводку «Placements · Included: 7 · Allowed with limited
+        # spend: 0 · Excluded: 13». Числа НЕ доказывают, какие именно площадки
+        # включены (ревью PR #449, B3): сводку раскрывает `_expand_node`
+        # выше, и строки читаются обратно обычным путём. Не раскрылась — отказ;
+        # сводка идёт в отчёт только для разбора.
         summary = _placements_summary(page)
-        report["placements_summary"] = summary
+        if summary:
+            report["placements_summary"] = summary
+            report["why"] = "placements_list_collapsed"
         _dbg.append(f"summary={summary}")
-        if (
-            summary
-            and summary.get("included") == len(_SUBITEMS_ON)
-            and summary.get("limited") == 0
-            and (summary.get("excluded") or 0) > 0
-        ):
-            report.pop("why", None)
-            report["verified_by"] = "summary"
-            report["limited_spending"] = _uncheck_limited_spending()
-            _dump_dbg()
-            return True
         # 16.09, 17:26–18:53: карточка без единого контрола — «Advantage+ on»,
         # «Placement value rules», «Account controls · Excluded placements:
         # None» и объявление Meta «Excluding placements or platforms will no
@@ -8221,22 +8265,26 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     not_offered: list[str] = []
 
     def _settle_category(name: str, here: list[str]) -> dict:
-        """Устоялся ли список раздела `name` и отрисован ли он целиком (ACL-1445).
+        """Устоялся ли список раздела `name` и отрисован ли он ДО КОНЦА (ACL-1445).
 
         Правило «Meta этот пункт не предлагает» (Doc19, 01.10: «Messenger
         Stories» исчезла из «Stories, Status, Reels» посреди дня) нельзя
-        путать с «строка ещё не отрисована». Поэтому вывод — только когда:
+        путать с «строка ещё не отрисована». 8e9acb2 / ACL-1220 (17.09):
+        «Threads feed» и «Facebook Notifications» — хвост «Feeds» — появлялись
+        в DOM только после прокрутки списка. Поэтому вывод — только когда:
 
         - все пять категорий на месте (до этого места шаг иначе не доходит);
-        - подписи раскрытого раздела не менялись `_SUBITEMS_SETTLE_QUIET_S`
-          подряд (опрос до `_SUBITEMS_SETTLE_MAX_S`); появившиеся за это время
-          строки тут же проставляются;
-        - каждый ВКЛЮЧАЕМЫЙ пункт раздела отрисовался в этом заходе, и
-          последнее чтение всё ещё показывает строки этого раздела (раздел
-          открыт, список не пуст).
+        - раздел раскрыт, и его список прокручен до конца с доказательством
+          конца (`_CATEGORY_END_JS`): последняя строка раздела видна, ни одна
+          его строка не спрятана, внутренняя прокрутка списка — у дна, нет
+          индикатора загрузки, и следующая за разделом категория видна;
+        - подписи и это доказательство не менялись `_SUBITEMS_SETTLE_QUIET_S`
+          подряд (опрос до `_SUBITEMS_SETTLE_MAX_S`, пока конец не доказан —
+          ждём дальше); появившиеся строки тут же проставляются;
+        - каждый ВКЛЮЧАЕМЫЙ пункт раздела отрисовался в этом заходе.
 
         Иначе — `complete: False`, и отсутствующий пункт остаётся отказом,
-        как прежде.
+        как прежде. Хвост, который так и не смонтировался, не судим никогда.
         """
         own = _SUBITEMS_BY_CATEGORY.get(name, ())
         t0 = time.monotonic()
@@ -8244,8 +8292,13 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         quiet_from = t0
         reads = 0
         labels: list[str] = []
+        end: dict = {}
         stable = False
         while True:
+            try:
+                end = page.evaluate(_CATEGORY_END_JS, name) or {}
+            except Exception as exc:
+                end = {"error": str(exc)[:80]}
             labels = _subitem_labels()
             reads += 1
             fresh = [x for x in labels if not _label_on_page(x, here)]
@@ -8255,11 +8308,11 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                     x for x in fresh if not _label_on_page(x, report["subitems_seen"]))
                 _pass(fresh)
                 _settle_visible(fresh)
-            key = tuple(labels)
+            key = (tuple(labels), bool(end.get("end")), end.get("rows"), end.get("hidden"))
             now = time.monotonic()
             if key != last:
                 last, quiet_from = key, now
-            elif now - quiet_from >= _SUBITEMS_SETTLE_QUIET_S:
+            elif now - quiet_from >= _SUBITEMS_SETTLE_QUIET_S and end.get("end"):
                 stable = True
                 break
             if now - t0 >= _SUBITEMS_SETTLE_MAX_S:
@@ -8273,7 +8326,8 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             "waited_s": round(time.monotonic() - t0, 1),
             "on_unseen": on_unseen,
             "open": open_now,
-            "complete": stable and open_now and not on_unseen,
+            "end": end,
+            "complete": stable and open_now and not on_unseen and bool(end.get("end")),
         }
 
 
@@ -8374,9 +8428,15 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
 
     # «Не предлагается» — не отказ: на площадку, которой нет, показа не будет.
     # Включаемые сюда не попадают никогда — их отсутствие остаётся отказом.
+    # Ревью PR #449 (B2): итог сверяется заново — пункт, который хоть где-то
+    # попался на глаза (`subitems_seen`, в том числе в другом разделе после
+    # проверки своего), «не предлагаемым» не считается: раз он есть и не
+    # выключен — это отказ.
+    not_offered = [x for x in not_offered
+                   if x in remaining_off and not _label_on_page(x, report["subitems_seen"])]
     offered_off = [x for x in remaining_off if x not in not_offered]
     if not_offered:
-        report["subitems_not_offered"] = [x for x in not_offered if x in remaining_off]
+        report["subitems_not_offered"] = not_offered
     report["subitems_missing"] = remaining_on + offered_off
     _dbg.append(f"subitems_seen={report['subitems_seen']}")
     if report["subitems_missing"]:

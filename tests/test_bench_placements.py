@@ -34,7 +34,8 @@ Bench (ACL-1433).
 ACL-1445 fixed (1) and (2): an OFF placement Meta does not offer is "not
 offered" once its category is open and its list settled (`_settle_category`
 in `fill_placements`); the card is found by its own `data-surface` anchor and
-its body waited for. (3) is read back from the summary.
+its body waited for. (3) is not trusted by its counts: the summary is opened and its rows read
+back, or the step fails (review of PR #449).
 """
 from __future__ import annotations
 
@@ -165,6 +166,7 @@ def test_doc19_a_placement_meta_does_not_offer_is_not_a_failure(page):
     assert md.fill_placements(page, report) is True, report.get("subitems_missing")
     check = report["not_offered_check"]["Stories, Status, Reels"]
     assert check["complete"] and check["stable"] and check["absent"] == ["Messenger Stories"]
+    assert check["end"]["end"] is True and check["end"]["hidden"] == 0, check["end"]
 
 
 def test_a_row_rendered_late_is_waited_for_not_called_not_offered(page):
@@ -195,6 +197,94 @@ def test_an_unrendered_list_is_not_a_false_not_offered(page):
     assert "subitems_not_offered" not in report
     assert {"Messenger Stories", "WhatsApp Status", "Instagram Stories"} <= set(report["subitems_missing"])
     assert report["not_offered_check"]["Stories, Status, Reels"]["complete"] is False
+
+
+def test_a_row_arriving_after_the_quiet_window_is_still_set(page):
+    """M1 (review #449): the row appears 3 s after its category opened, later
+    than the 1.5 s quiet window. While a row of the open category is not shown
+    the end is not proven, so the step keeps waiting and switches it off."""
+    rows = {k: list(v) for k, v in DOC19_ROWS.items()}
+    rows["Stories, Status, Reels"] = rows["Stories, Status, Reels"] + [("Messenger Stories", True, False)]
+    page.set_content("<html><body style='margin:0;padding-top:120px'>"
+                     f"{fragment(DOC19, 'card')}</body></html>")
+    page.evaluate(_LATE_ROWS_JS, [["Messenger Stories"], 3000])
+    page.evaluate(_SIM_JS, _sim_cfg(rows))
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, report
+    assert _state(page)["Messenger Stories"] is False
+    assert "subitems_not_offered" not in report
+
+
+#: The open category's list becomes an inner scroller, and the rows of
+#: `labels` mount only once it is scrolled to its bottom — 8e9acb2 / ACL-1220
+#: (17.09): "Threads feed" and "Facebook Notifications" appeared only after
+#: scrolling.
+_TAIL_ON_SCROLL_JS = r"""
+([labels]) => {
+  const apply = (region) => {
+    region.style.maxHeight = '60px';
+    region.style.overflowY = 'auto';
+    const rows = [...region.querySelectorAll('input[type=checkbox]')]
+      .filter(cb => labels.includes(cb.dataset.simLabel))
+      .map(cb => cb.closest('[id^="sim-row-"]'));
+    if (!rows.length) return;
+    for (const r of rows) r.style.display = 'none';
+    region.addEventListener('scroll', () => {
+      if (region.scrollTop + region.clientHeight >= region.scrollHeight - 2)
+        for (const r of rows) r.style.display = '';
+    });
+  };
+  new MutationObserver((ms) => {
+    for (const m of ms) for (const n of m.addedNodes)
+      if (n.nodeType === 1 && n.matches('[role=region]')) apply(n);
+  }).observe(document.body, { childList: true, subtree: true });
+}
+"""
+
+FEEDS_TAIL = ["Threads feed", "Facebook Notifications"]
+
+
+def test_a_tail_that_mounts_after_scrolling_is_switched_off(page):
+    """B1 (review #449): the Feeds tail mounts only when its list is scrolled
+    to the end — the step scrolls there and switches both rows off."""
+    page.set_content("<html><body style='margin:0;padding-top:120px'>"
+                     f"{fragment(DOC19, 'card')}</body></html>")
+    page.evaluate(_TAIL_ON_SCROLL_JS, [FEEDS_TAIL])
+    page.evaluate(_SIM_JS, _sim_cfg())
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, report
+    state = _state(page)
+    assert state["Threads feed"] is False and state["Facebook Notifications"] is False
+    assert report.get("subitems_not_offered") == ["Messenger Stories"]
+
+
+def test_a_tail_that_never_mounts_fails_and_is_not_called_not_offered(page):
+    """B1 (review #449, probe): the Feeds tail is never shown. The end of the
+    list is not proven, so nothing in Feeds is 'not offered' and the step fails."""
+    page.set_content("<html><body style='margin:0;padding-top:120px'>"
+                     f"{fragment(DOC19, 'card')}</body></html>")
+    page.evaluate(_LATE_ROWS_JS, [FEEDS_TAIL, -1])
+    page.evaluate(_SIM_JS, _sim_cfg())
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert set(FEEDS_TAIL) <= set(report["subitems_missing"])
+    assert not set(FEEDS_TAIL) & set(report.get("subitems_not_offered") or [])
+    check = report["not_offered_check"]["Feeds"]
+    assert check["complete"] is False and check["end"]["end"] is False
+    assert _state(page)["Threads feed"] is True
+
+
+def test_an_item_seen_in_another_category_and_still_on_fails(page):
+    """B2 (review #449, probe): 'Messenger Stories' is absent from Stories but
+    shows up in In-stream, locked ON. Seen and not switched off = a failure."""
+    rows = {k: list(v) for k, v in DOC19_ROWS.items()}
+    rows["In-stream ads for reels"] = rows["In-stream ads for reels"] + [("Messenger Stories", True, True)]
+    _load_doc19(page, rows)
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert "Messenger Stories" in report["subitems_missing"]
+    assert "Messenger Stories" not in (report.get("subitems_not_offered") or [])
+    assert _state(page)["Messenger Stories"] is True
 
 
 def test_every_wanted_subitem_has_its_category():
@@ -255,27 +345,66 @@ def test_simple_create_card_sets_manual_placements_once_loaded(page):
     assert report["subitems_not_offered"] == ["Messenger Stories"]
 
 
-def _load_summary(page, included: int = 7) -> None:
-    html = fragment(SUMMARY, "card").replace("Included: 7", f"Included: {included}")
-    page.set_content(f"<html><body style='margin:0;padding-top:120px'>{html}</body></html>")
+def _load_summary(page) -> None:
+    page.set_content("<html><body style='margin:0;padding-top:120px'>"
+                     f"{fragment(SUMMARY, 'card')}</body></html>")
 
 
-def test_a_set_card_collapsed_to_its_summary_is_read_back_as_set(page):
-    """01.10, tester, single-screen editor: placements were set ('Included: 7,
-    Allowed with limited spend: 0, Excluded: 13') — not a failure."""
+#: The collapsed "Placements · Included: 7 · …" node expands on click into the
+#: list of categories (the Doc19 card, under the accordion emulation).
+_SUMMARY_EXPANDS_JS = r"""
+([html, sim, cfg]) => {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const btn = [...document.querySelectorAll('[role=button][aria-expanded]')]
+    .find(b => /^Placements\s*Included:/.test(norm(b.textContent)));
+  btn.addEventListener('click', () => {
+    if (btn.getAttribute('aria-expanded') === 'true') return;
+    btn.setAttribute('aria-expanded', 'true');
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    btn.parentElement.appendChild(box);
+    (new Function('return (' + sim + ')'))()(cfg);
+  });
+}
+"""
+
+
+def test_a_summary_alone_is_not_proof(page):
+    """B3 (review #449): 'Included: 7, Allowed with limited spend: 0,
+    Excluded: 13' cannot say WHICH seven are included. A summary that does not
+    open is a failure, kept in the report for diagnosis."""
     _load_summary(page)
     report: dict = {}
-    assert md.fill_placements(page, report) is True, report
-    assert report["verified_by"] == "summary"
+    assert md.fill_placements(page, report) is False
     assert report["placements_summary"]["included"] == 7
     assert report["placements_summary"]["excluded"] == 13
+    assert report["why"] in ("placements_list_collapsed", "placement_categories_not_reached")
 
 
-def test_a_summary_that_is_not_our_configuration_still_fails(page):
-    _load_summary(page, included=21)
+def test_a_collapsed_summary_is_opened_and_its_rows_read_back(page):
+    """01.10, tester, single-screen editor: the list behind the summary is
+    opened and every row set and read back — then the step passes."""
+    _load_summary(page)
+    page.evaluate(_SUMMARY_EXPANDS_JS, [fragment(DOC19, "card"), _SIM_JS, _sim_cfg()])
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, report
+    state = _state(page)
+    assert all(state[x] is True for x in md._SUBITEMS_ON if x in state)
+    assert all(state[x] is False for x in md._SUBITEMS_OFF if x in state)
+
+
+def test_right_counts_hiding_a_wrong_set_fail(page):
+    """B3 (review #449): the summary still says 'Included: 7', but behind it
+    'Instagram feed' (wanted ON) is locked off. The rows are read back and the
+    step fails."""
+    rows = {k: list(v) for k, v in DOC19_ROWS.items()}
+    rows["Feeds"] = [("Instagram feed", False, True) if r[0] == "Instagram feed" else r
+                     for r in rows["Feeds"]]
+    _load_summary(page)
+    page.evaluate(_SUMMARY_EXPANDS_JS, [fragment(DOC19, "card"), _SIM_JS, _sim_cfg(rows)])
     report: dict = {}
     assert md.fill_placements(page, report) is False
-    assert "verified_by" not in report
+    assert "Instagram feed" in report["subitems_missing"]
 
 
 def test_debug_file_is_written_to_the_temp_dir(page):
