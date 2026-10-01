@@ -2096,6 +2096,18 @@
         "state": "implementing",
         "started_at": "2026-10-01T07:27:36+00:00",
         "from_status": "status:backlog"
+      },
+      "397": {
+        "actor": "Worker-P1397F",
+        "session": "run_p1397f_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1397-parallel-tests",
+        "worktree": "C:\\acl-1397-xdist",
+        "id": "3a250c09b82f4555938e71f18829a489",
+        "issue": 397,
+        "state": "implementing",
+        "started_at": "2026-10-01T08:21:37+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -2335,9 +2347,13 @@
           {
             "actor": "Worker-P1397F",
             "session": "run_p1397f_0930"
+          },
+          {
+            "actor": "Worker-P1397F",
+            "session": "run_p1397f_0930"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-P1397F",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2356,7 +2372,6 @@
         },
         "pr": 409,
         "queued_at": "2026-09-30T19:26:27+00:00",
-        "reviewer": "Reviewer-R1397J",
         "review_report": "Pre-review approved (prereview_409.md); returned only to merge current main (49915f7) into the branch; lane kept."
       },
       "399": {
@@ -3782,6 +3797,13 @@
           "report": "Pre-review approved (prereview_409.md); returned only to merge current main (49915f7) into the branch; lane kept.",
           "keep_lane": true
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T08:21:37+00:00",
+        "issue": 397,
+        "claim": "3a250c09b82f4555938e71f18829a489",
+        "actor": "Worker-P1397F"
       }
     ],
     "policy": {
