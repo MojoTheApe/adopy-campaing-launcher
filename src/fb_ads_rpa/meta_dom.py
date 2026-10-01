@@ -3724,6 +3724,9 @@ def _reload_awake(page: Page, where: str) -> bool:
     с таймаутом, проверка живости (ограниченная), и только живой странице —
     троттлинг по CDP (его вызовы таймаута не имеют).
     """
+    if _reload_refused(page, where):
+        # ACL-1353 (ревью PR #365, F4): под `_reloads_blocked` — и здесь нет.
+        return False
     note = "unresponsive"
     ok = False
     try:
@@ -3783,7 +3786,11 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = Fa
     * «Loading…», висящий дольше LOADING_STUCK_S: в редакторе — только при
       «All edits saved», иначе потеряются несохранённые поля; на списке
       кампаний (`editor=False`, шаг выбора цели) сохранять нечего.
+    * Под `_reloads_blocked` (ACL-1353, объявления 2+ нового редактора) —
+      никогда: False и строка `loading_modal_reload` (note `refused:<причина>`).
     """
+    if _reload_refused(page, where):
+        return False
     err = _chrome_error_page(page)
     reason = ""
     if err:
@@ -5982,173 +5989,240 @@ def run_recorded_campaign_flow(
         # same per-ad fill sequence used for the first ad above. Confirmed
         # live 2026-07-28 that upload_ad_creative/fill_ad_copy/
         # set_ad_destination_website work unmodified here.
-        # ACL-1327: как новый редактор добавляет второе объявление (дерево,
-        # отдельный раздел, переход на другую страницу) — по снимкам не
-        # установить. Первое объявление собрано; остальные не создаём и
-        # называем это блокирующей причиной, а не плодим пустые заготовки.
-        if reached_ad_level and additional_ads and simple:
-            more = len(additional_ads)
-            _telemetry.record("simple_create_more_ads", False, note=f"not_created:{more}")
+        # ACL-1353: в новом редакторе объявление N создаётся «Action menu»
+        # строки группы → «Create ad» (`simple_create.create_next_ad`, снимки
+        # 30.09) и заполняется теми же шагами. Отличия нового редактора:
+        # никаких перезагрузок (адрес держит объявление 1 — перезагрузка
+        # открыла бы его редактор заново, это портит Leads-объявление), нет
+        # «усыновления» заготовки через дерево, после заполнения — сверка
+        # имени в списке объявлений (без повторного открытия).
+        simple_extra_tried = False
+        # Какое объявление открыто в новом редакторе (для перепроверки
+        # назначения на месте); None — неизвестно (новое не открылось).
+        simple_open_ad: tuple[str, str] | None = ("ad", copy_ad_name)
+        if reached_ad_level and additional_ads and simple and not _simple.more_ads_enabled():
             ad_level_fails.append(
-                f"simple_create_more_ads:{more} more ad(s) not created - the single-screen editor "
-                "path builds only the first ad")
-        if reached_ad_level and additional_ads and not simple:
-            for i, extra in enumerate(additional_ads, start=2):
-                tag = f"ad{i}"
-                # ACL-1233: зависшая загрузка или страница ошибки Chrome перед
-                # объявлением — перезагрузить (в редакторе — только при «All
-                # edits saved»), иначе все следующие объявления падают подряд.
-                recover_stuck_page(page, f"{tag}_before", editor=True)
-                if _stop_if_account_blocked(f"{tag}_before"):
-                    return "account_blocked"
-                shells_before = _tree_new_ad_shells(page)
-                try:
-                    created = create_additional_ad(page, adset_name)
-                    if not created and recover_stuck_page(page, f"{tag}_create", editor=True):
-                        created = create_additional_ad(page, adset_name)
-                    if not created:
-                        # A reported failure does not mean no ad was born:
-                        # Meta names every fresh ad "New Leads Ad", so if
-                        # that row now exists in the tree the create DID
-                        # land and only the post-create bookkeeping flaked
-                        # — adopt the shell (select it, close any wizard)
-                        # and let the normal naming step rename it. Only
-                        # when no shell exists is a clean retry safe
-                        # (otherwise a second create would duplicate ads).
-                        # Confirmed need live 2026-07-29 (Test146, B ad2):
-                        # create failed once, leaving the ad missing
-                        # entirely — the only fill step with no retry path.
-                        if _open_tree_ad(page, "New Leads Ad"):
-                            _close_creative_setup_modal(page)
-                            created = True
-                        else:
-                            created = create_additional_ad(page, adset_name)
-                    if not created:
-                        _shot(f"fail_{tag}_create")
-                        ad_level_fails.append(f"{tag}_create")
+                f"simple_create_more_ads:{_simple.MORE_ADS_SWITCHED_OFF} - {len(additional_ads)} more "
+                "ad(s) not created: creating more ads in Meta's single-screen editor is switched off "
+                f"on this machine ({_simple.MORE_ADS_PRESS_SETTING}=0)")
+        elif reached_ad_level and additional_ads:
+            # Имена уже собранных объявлений: новое в новом редакторе узнаётся
+            # по имени в поле, которого среди них нет.
+            known_names = [copy_ad_name]
+            # ACL-1353: объявления 2+ нового редактора — без единой перезагрузки
+            # (`_reloads_blocked`: восстановление, текст, креатив).
+            with _reloads_blocked("simple_create_new_ad" if simple else ""):
+                for i, extra in enumerate(additional_ads, start=2):
+                    tag = f"ad{i}"
+                    if simple and simple_open_ad is None:
+                        # Прошлое «Create ad» не дошло до нового объявления —
+                        # дальше не жмём: каждое нажатие может оставить пустую
+                        # заготовку, а открыто неизвестно что.
+                        ad_level_fails.append(
+                            f"{tag}_create:not_tried - not created because an earlier ad of this "
+                            "campaign could not be created in Meta's single-screen editor")
                         continue
-                    _shot(f"after_{tag}_create")
-                    # 17.09 00:02 (Doc20, cbe566db70b2): один «Create ad» дал
-                    # ДВА «New Leads ad» — лишнее осталось пустым в кампании.
-                    # Удалять сами не берёмся; отказ шага с именем причины,
-                    # чтобы черновик не ушёл в публикацию с пустым объявлением.
-                    shells_after = _tree_new_ad_shells(page)
-                    if shells_before >= 0 and shells_after - shells_before > 1:
-                        _telemetry.record(f"{tag}_create", False, note="extra_ad_shell",
-                                          diag={"before": shells_before, "after": shells_after})
-                        ad_level_fails.append(f"{tag}_extra_empty_ad")
-                except Exception as exc:
-                    if _page_gone(page, exc):
-                        _browser_closed(f"{tag}_create", exc)
-                        return "browser_closed"
-                    _shot(f"fail_{tag}_create")
-                    ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
-                    continue
+                    # ACL-1233: зависшая загрузка или страница ошибки Chrome перед
+                    # объявлением — перезагрузить (в редакторе — только при «All
+                    # edits saved»), иначе все следующие объявления падают подряд.
+                    if not simple:
+                        recover_stuck_page(page, f"{tag}_before", editor=True)
+                    if _stop_if_account_blocked(f"{tag}_before"):
+                        return "account_blocked"
+                    if simple:
+                        simple_extra_tried = True
+                        made = _simple.create_next_ad(page, tag=tag, known_names=known_names)
+                        if not made.get("ok"):
+                            why = made.get("why") or "unknown"
+                            _shot(f"fail_{tag}_create", {k: made.get(k) for k in (
+                                "pressed", "ads_before", "ads_after", "dialog", "capture")}, note=why)
+                            ad_level_fails.append(f"{tag}_create:{why} - {made.get('text') or why}"
+                                                  + (f" (page capture: output/rpa_pages/{made['capture']})"
+                                                     if made.get("capture") else ""))
+                            if why == "tab_frozen" and _closed_stop(f"{tag}_create",
+                                                                    soft_fails + ad_level_fails):
+                                return "browser_closed"
+                            simple_open_ad = None
+                            continue
+                        _shot(f"after_{tag}_create")
+                        if made.get("extra_shells"):
+                            _telemetry.record(f"{tag}_create", False, note="extra_ad_shell",
+                                              diag={"before": made.get("ads_before"),
+                                                    "after": made.get("ads_after")})
+                            ad_level_fails.append(f"{tag}_extra_empty_ad")
+                        simple_open_ad = (tag, "")
+                    else:
+                        shells_before = _tree_new_ad_shells(page)
+                        try:
+                            created = create_additional_ad(page, adset_name)
+                            if not created and recover_stuck_page(page, f"{tag}_create", editor=True):
+                                created = create_additional_ad(page, adset_name)
+                            if not created:
+                                # A reported failure does not mean no ad was born:
+                                # Meta names every fresh ad "New Leads Ad", so if
+                                # that row now exists in the tree the create DID
+                                # land and only the post-create bookkeeping flaked
+                                # — adopt the shell (select it, close any wizard)
+                                # and let the normal naming step rename it. Only
+                                # when no shell exists is a clean retry safe
+                                # (otherwise a second create would duplicate ads).
+                                # Confirmed need live 2026-07-29 (Test146, B ad2):
+                                # create failed once, leaving the ad missing
+                                # entirely — the only fill step with no retry path.
+                                if _open_tree_ad(page, "New Leads Ad"):
+                                    _close_creative_setup_modal(page)
+                                    created = True
+                                else:
+                                    created = create_additional_ad(page, adset_name)
+                            if not created:
+                                _shot(f"fail_{tag}_create")
+                                ad_level_fails.append(f"{tag}_create")
+                                continue
+                            _shot(f"after_{tag}_create")
+                            # 17.09 00:02 (Doc20, cbe566db70b2): один «Create ad» дал
+                            # ДВА «New Leads ad» — лишнее осталось пустым в кампании.
+                            # Удалять сами не берёмся; отказ шага с именем причины,
+                            # чтобы черновик не ушёл в публикацию с пустым объявлением.
+                            shells_after = _tree_new_ad_shells(page)
+                            if shells_before >= 0 and shells_after - shells_before > 1:
+                                _telemetry.record(f"{tag}_create", False, note="extra_ad_shell",
+                                                  diag={"before": shells_before, "after": shells_after})
+                                ad_level_fails.append(f"{tag}_extra_empty_ad")
+                        except Exception as exc:
+                            if _page_gone(page, exc):
+                                _browser_closed(f"{tag}_create", exc)
+                                return "browser_closed"
+                            _shot(f"fail_{tag}_create")
+                            ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
+                            continue
 
-                if not ensure_editor_window(page, tag):
-                    return "window_too_small"
-                # PR #314, ревью: перезагрузка здесь (окно ad blocker) может
-                # открыть первое объявление — и имя второго легло бы в него.
-                # Свежая заготовка ещё зовётся «New Leads Ad»: после
-                # перезагрузки открываем её снова, не вышло — это объявление
-                # пропускаем с отказом шага имени, чужое не трогаем.
-                if "reopened_ad:failed" in (_clear_blocking_overlays(page, tag, ad_name="New Leads Ad") or []):
-                    _shot(f"fail_{tag}_name", note="not_the_new_ad_after_reload")
-                    ad_level_fails.append(f"{tag}_name:not_the_new_ad_after_reload")
-                    continue
+                    if not ensure_editor_window(page, tag):
+                        return "window_too_small"
+                    # PR #314, ревью: перезагрузка здесь (окно ad blocker) может
+                    # открыть первое объявление — и имя второго легло бы в него.
+                    # Свежая заготовка ещё зовётся «New Leads Ad»: после
+                    # перезагрузки открываем её снова, не вышло — это объявление
+                    # пропускаем с отказом шага имени, чужое не трогаем.
+                    # ACL-1353: в новом редакторе не перезагружаем вовсе.
+                    overlays = (_clear_blocking_overlays(page, tag, may_reload=False) if simple
+                                else _clear_blocking_overlays(page, tag, ad_name="New Leads Ad"))
+                    if "reopened_ad:failed" in (overlays or []):
+                        _shot(f"fail_{tag}_name", note="not_the_new_ad_after_reload")
+                        ad_level_fails.append(f"{tag}_name:not_the_new_ad_after_reload")
+                        continue
 
-                extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
-                extra_copy_name = extra_name
-                name_try = {}
-                if not _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), extra_name, where=f"{tag}_name",
-                             info=name_try):
-                    name_diag = ad_name_failure(page, name_try)
-                    _shot(f"fail_{tag}_name", name_diag, note=name_diag.get("why"))
-                    ad_level_fails.append(f"{tag}_name")
-                    extra_copy_name = _name_in_the_field(page, extra_name)
-                else:
-                    _shot(f"after_{tag}_name")
+                    extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
+                    extra_copy_name = extra_name
+                    name_try = {}
+                    name_ok = _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), extra_name,
+                                    where=f"{tag}_name", info=name_try)
+                    if not name_ok:
+                        name_diag = ad_name_failure(page, name_try)
+                        _shot(f"fail_{tag}_name", name_diag, note=name_diag.get("why"))
+                        ad_level_fails.append(f"{tag}_name")
+                        extra_copy_name = _name_in_the_field(page, extra_name)
+                    else:
+                        _shot(f"after_{tag}_name")
+                    if simple:
+                        known_names.append(extra_copy_name)
+                        simple_open_ad = (tag, extra_copy_name)
 
-                extra_creative_path = extra.get("creative_path") or ""
-                no_creative = False
-                if extra_creative_path:
-                    try:
-                        if not upload_ad_creative_with_retry(
-                            page, extra.get("creative_type") or "", extra_creative_path, edit_url=page.url
-                        ):
-                            # ACL-1348: без note строка шага была пустой —
-                            # PYTHON-14 `ad2_creative_upload: silent`.
-                            _shot(f"fail_{tag}_creative_upload", last_upload_diag(),
-                                  note=last_upload_why())
-                            ad_level_fails.append(f"{tag}_creative_upload")
+                    extra_creative_path = extra.get("creative_path") or ""
+                    no_creative = False
+                    if extra_creative_path:
+                        try:
+                            # ACL-1353: в новом редакторе ни возврата по адресу, ни
+                            # перезагрузки — адрес держит объявление 1.
+                            if not upload_ad_creative_with_retry(
+                                page, extra.get("creative_type") or "", extra_creative_path,
+                                **({"edit_url": "", "reload": False} if simple else {"edit_url": page.url})
+                            ):
+                                # ACL-1348: без note строка шага была пустой —
+                                # PYTHON-14 `ad2_creative_upload: silent`.
+                                _shot(f"fail_{tag}_creative_upload", last_upload_diag(),
+                                      note=last_upload_why())
+                                ad_level_fails.append(f"{tag}_creative_upload")
+                                no_creative = True
+                            else:
+                                _shot(f"after_{tag}_creative_upload")
+                        except Exception as exc:
+                            if _page_gone(page, exc):
+                                _browser_closed(f"{tag}_creative_upload", exc)
+                                return "browser_closed"
+                            _shot(f"fail_{tag}_creative_upload")
+                            ad_level_fails.append(f"{tag}_creative_upload:{str(exc)[:60]}")
                             no_creative = True
-                        else:
-                            _shot(f"after_{tag}_creative_upload")
-                    except Exception as exc:
-                        if _page_gone(page, exc):
-                            _browser_closed(f"{tag}_creative_upload", exc)
-                            return "browser_closed"
-                        _shot(f"fail_{tag}_creative_upload")
-                        ad_level_fails.append(f"{tag}_creative_upload:{str(exc)[:60]}")
-                        no_creative = True
 
-                extra_title = extra.get("ad_title") or ""
-                extra_body = extra.get("ad_body") or ""
-                extra_body2 = extra.get("ad_body2") or ""
-                if destination_url:
-                    try:
-                        if not set_ad_destination_website(page, destination_url):
-                            _shot(f"fail_{tag}_destination", last_destination_diag(),
-                                  note=last_destination_why() or "destination_not_set")
-                            ad_level_fails.append(f"{tag}_destination")
-                        else:
-                            _shot(f"after_{tag}_destination")
-                    except Exception as exc:
-                        if _page_gone(page, exc):
-                            _browser_closed(f"{tag}_destination", exc)
-                            return "browser_closed"
-                        _shot(f"fail_{tag}_destination", {"error": type(exc).__name__},
-                              note="destination_exception")
-                        ad_level_fails.append(f"{tag}_destination:{str(exc)[:60]}")
+                    extra_title = extra.get("ad_title") or ""
+                    extra_body = extra.get("ad_body") or ""
+                    extra_body2 = extra.get("ad_body2") or ""
+                    if destination_url:
+                        try:
+                            if not set_ad_destination_website(page, destination_url):
+                                _shot(f"fail_{tag}_destination", last_destination_diag(),
+                                      note=last_destination_why() or "destination_not_set")
+                                ad_level_fails.append(f"{tag}_destination")
+                            else:
+                                _shot(f"after_{tag}_destination")
+                        except Exception as exc:
+                            if _page_gone(page, exc):
+                                _browser_closed(f"{tag}_destination", exc)
+                                return "browser_closed"
+                            _shot(f"fail_{tag}_destination", {"error": type(exc).__name__},
+                                  note="destination_exception")
+                            ad_level_fails.append(f"{tag}_destination:{str(exc)[:60]}")
 
-                if (extra_title or extra_body) and no_creative:
-                    # ACL-1313 (SA Mix, da86e97cbf8b): без медиа Meta не рисует
-                    # поля текста вовсе — шаг текста лишь жёг минуты на поиск
-                    # полей и прятал настоящую причину. Называем её сразу.
-                    ad_level_fails.append(f"{tag}_copy:{extra_name or tag} has no text (no_creative)")
-                    if extra_body2:
-                        # ACL-1344: второй текст не теряется молча.
+                    if (extra_title or extra_body) and no_creative:
+                        # ACL-1313 (SA Mix, da86e97cbf8b): без медиа Meta не рисует
+                        # поля текста вовсе — шаг текста лишь жёг минуты на поиск
+                        # полей и прятал настоящую причину. Называем её сразу.
+                        ad_level_fails.append(f"{tag}_copy:{extra_name or tag} has no text (no_creative)")
+                        if extra_body2:
+                            # ACL-1344: второй текст не теряется молча.
+                            ad_level_fails.append(second_text_soft_fail(
+                                tag, extra_name or tag, extra_body2,
+                                {"second_text": {"ok": False, "why": "no_creative"}}))
+                    elif extra_body2 and not (extra_title or extra_body):
                         ad_level_fails.append(second_text_soft_fail(
                             tag, extra_name or tag, extra_body2,
-                            {"second_text": {"ok": False, "why": "no_creative"}}))
-                elif extra_body2 and not (extra_title or extra_body):
-                    ad_level_fails.append(second_text_soft_fail(
-                        tag, extra_name or tag, extra_body2,
-                        {"second_text": {"ok": False, "why": "no_primary_text"}}))
-                elif extra_title or extra_body:
-                    try:
-                        copy_report = {}
-                        ok_copy = write_ad_copy(
-                            page, extra_title, extra_body, ad_name=extra_copy_name,
-                            destination_url=destination_url, report=copy_report,
-                            **({"body2": extra_body2} if extra_body2 else {}))
-                        second_fail = second_text_soft_fail(
-                            tag, extra_name or tag, extra_body2, copy_report)
-                        if second_fail:
-                            ad_level_fails.append(second_fail)
-                        if not ok_copy:
-                            _shot(f"fail_{tag}_copy", copy_report)
+                            {"second_text": {"ok": False, "why": "no_primary_text"}}))
+                    elif extra_title or extra_body:
+                        try:
+                            copy_report = {}
+                            ok_copy = write_ad_copy(
+                                page, extra_title, extra_body, ad_name=extra_copy_name,
+                                destination_url=destination_url, report=copy_report,
+                                **({"body2": extra_body2} if extra_body2 else {}))
+                            second_fail = second_text_soft_fail(
+                                tag, extra_name or tag, extra_body2, copy_report)
+                            if second_fail:
+                                ad_level_fails.append(second_fail)
+                            if not ok_copy:
+                                _shot(f"fail_{tag}_copy", copy_report)
+                                ad_level_fails.append(
+                                    f"{tag}_copy:{extra_name or tag} has no text"
+                                    + (f" ({copy_report['why']})" if copy_report.get("why") else ""))
+                            else:
+                                _shot(f"after_{tag}_copy")
+                        except Exception as exc:
+                            if _page_gone(page, exc):
+                                _browser_closed(f"{tag}_copy", exc)
+                                return "browser_closed"
+                            _shot(f"fail_{tag}_copy")
+                            ad_level_fails.append(f"{tag}_copy:{str(exc)[:60]}")
+
+                    if simple and name_ok:
+                        # ACL-1353: сверка объявления N — его имя в списке
+                        # объявлений (дерево обновляет имя вслед за полем), без
+                        # повторного открытия редактора.
+                        listed = _simple.ad_listed(page, extra_name)
+                        _telemetry.record(f"{tag}_listed", bool(listed.get("listed")),
+                                          note="listed" if listed.get("listed") else "not_in_ad_list",
+                                          diag={"ads": listed.get("ads"), "error": listed.get("error")})
+                        if not listed.get("listed"):
                             ad_level_fails.append(
-                                f"{tag}_copy:{extra_name or tag} has no text"
-                                + (f" ({copy_report['why']})" if copy_report.get("why") else ""))
-                        else:
-                            _shot(f"after_{tag}_copy")
-                    except Exception as exc:
-                        if _page_gone(page, exc):
-                            _browser_closed(f"{tag}_copy", exc)
-                            return "browser_closed"
-                        _shot(f"fail_{tag}_copy")
-                        ad_level_fails.append(f"{tag}_copy:{str(exc)[:60]}")
+                                f"{tag}_name:not_in_ad_list - the ad name was typed, but the ad list of "
+                                "the single-screen editor does not show an ad with this name")
 
         # Final destination sweep over every ad of this campaign.
         # Confirmed live 2026-07-29 (Test143): an ad's Browser add-ons
@@ -6157,7 +6231,13 @@ def run_recorded_campaign_flow(
         # fill time, yet the post-run live verification found the
         # lead_gen_form_id error banner on it. Re-visit each ad once the
         # whole campaign is filled and re-fix anything that reverted.
-        if reached_ad_level:
+        if reached_ad_level and simple_extra_tried:
+            # ACL-1353 (ревью PR #365, B1): после «Create ad» в новом редакторе
+            # восстановление зависшей страницы не зовём — перезагрузка открыла
+            # бы редактор Leads-объявления заново (адрес держит объявление 1).
+            _telemetry.record("loading_modal_reload", False, note="skipped:simple_create_more_ads",
+                              diag={"where": "destination_sweep"})
+        elif reached_ad_level:
             # ACL-1233: обход должен пройти и после зависшей страницы.
             recover_stuck_page(page, "destination_sweep", editor=True)
         # 20.09, решение пользователя: обход открывает каждое объявление
@@ -6176,10 +6256,17 @@ def run_recorded_campaign_flow(
         if skip_sweep:
             _telemetry.record("destination_sweep_skipped", None,
                               note="all_destinations_confirmed_in_flow")
-        if reached_ad_level and destination_url and not skip_sweep and simple:
-            # ACL-1327: в новом редакторе объявление одно и на этой же
-            # странице — обход по дереву не нужен: назначение ставится ещё раз
-            # на месте, и ранний отказ того же объявления снимается.
+        if reached_ad_level and destination_url and not skip_sweep and simple and simple_open_ad is None:
+            # ACL-1353: «Create ad» не дошло до нового объявления — что открыто
+            # в разделе объявления, неизвестно; назначение туда не ставим.
+            _telemetry.record("destination_sweep_skipped", None, note="simple_create_open_ad_unknown")
+        elif reached_ad_level and destination_url and not skip_sweep and simple:
+            # ACL-1327: в новом редакторе обход по дереву не нужен (и
+            # запрещён: повторное открытие портит Leads-объявление) —
+            # назначение ставится ещё раз на месте, у открытого объявления, и
+            # снимается ранний отказ ИМЕННО его (ACL-1353: после объявлений
+            # 2+ открыто последнее собранное; отказы остальных остаются).
+            open_tag, open_name = simple_open_ad or ("ad", copy_ad_name)
             try:
                 fixed = set_ad_destination_website(page, destination_url)
             except Exception as exc:
@@ -6188,13 +6275,13 @@ def run_recorded_campaign_flow(
                     return "browser_closed"
                 fixed = False
             if fixed:
-                cleared = [f for f in ad_level_fails if f.split(":", 1)[0] == "ad_destination"]
+                cleared = [f for f in ad_level_fails if f.split(":", 1)[0] == f"{open_tag}_destination"]
                 if cleared:
                     ad_level_fails[:] = [f for f in ad_level_fails if f not in cleared]
                     _telemetry.record("destination_sweep_cleared", None, diag={"cleared": cleared})
                 _shot("after_destination_sweep")
             else:
-                ad_level_fails.append("destination_sweep:" + (ad_name or f"{campaign_name} Ad"))
+                ad_level_fails.append("destination_sweep:" + (open_name or ad_name or f"{campaign_name} Ad"))
                 _shot("fail_destination_sweep", last_destination_diag(),
                       note=last_destination_why() or "destination_not_set")
         elif reached_ad_level and destination_url and not skip_sweep:
@@ -9321,9 +9408,13 @@ def reuse_before_upload(page: Page, creative_path: str) -> bool | None:
 
 
 def upload_ad_creative_with_retry(
-    page: Page, creative_type: str, creative_path: str, *, edit_url: str = "", attempts: int = 2
+    page: Page, creative_type: str, creative_path: str, *, edit_url: str = "", attempts: int = 2,
+    reload: bool = True,
 ) -> bool:
     """`_upload_ad_creative_with_retry` под сроком шага `CREATIVE_STEP_BUDGET_S`.
+
+    `reload=False` — застрявшую загрузку не лечить перезагрузкой (ACL-1353:
+    объявления 2+ нового редактора — перезагрузка открыла бы объявление 1).
 
     ACL-1354 (a71e4fc14aa1, 28.09): шаг креатива шёл почти два часа — у
     каждого ожидания внутри был свой потолок, а у шага целиком не было.
@@ -9336,7 +9427,7 @@ def upload_ad_creative_with_retry(
         _creative_tls.phases = []
     try:
         return _upload_ad_creative_with_retry(page, creative_type, creative_path,
-                                              edit_url=edit_url, attempts=attempts)
+                                              edit_url=edit_url, attempts=attempts, reload=reload)
     finally:
         if owner:
             _creative_tls.deadline = None
@@ -9346,7 +9437,8 @@ def upload_ad_creative_with_retry(
 
 
 def _upload_ad_creative_with_retry(
-    page: Page, creative_type: str, creative_path: str, *, edit_url: str = "", attempts: int = 2
+    page: Page, creative_type: str, creative_path: str, *, edit_url: str = "", attempts: int = 2,
+    reload: bool = True,
 ) -> bool:
     """upload_ad_creative plus one clean retry.
 
@@ -9505,6 +9597,13 @@ def _upload_ad_creative_with_retry(
         # хранит черновик у себя (в снимке отказа 10 сентября видно «All
         # edits saved», имя объявления в поле и в дереве, статус «In draft»).
         if attempt + 1 < attempts and _upload_stalled(page):
+            if not reload:
+                # ACL-1353: адрес нового редактора держит объявление 1 —
+                # перезагрузка открыла бы его редактор заново (это портит
+                # Leads-объявление), а креатив лёг бы не туда.
+                _telemetry.record("creative_upload_stalled", False, note="reload_refused_new_ad_single_screen")
+                _set_upload_why("upload_stalled")
+                return False
             if not _upload_retry_can_reload(page, edit_url):
                 _telemetry.record("creative_upload_stalled", False, note="reload_refused_unconfirmed_saved_draft")
                 _set_upload_why("upload_stalled")
@@ -9715,12 +9814,81 @@ def _recover_from_browser_error(page: Page, *, attempts: int = 2) -> bool:
     return recovered
 
 
+#: ACL-1353: пока заполняются объявления 2+ нового редактора, страницу не
+#: перезагружает никто — ни восстановление зависшей страницы, ни шаги текста
+#: и креатива — и никто не открывает другое объявление через дерево (ревью
+#: PR #365, F2). Адрес `simple_create` держит объявление 1: перезагрузка
+#: открыла бы его редактор заново (это портит Leads-объявление), а поля
+#: объявления N легли бы не туда; щелчок по строке дерева — то же повторное
+#: открытие. Значение — причина (пусто — всё разрешено).
+_reload_block = threading.local()
+
+
+class _reloads_blocked:
+    """`with _reloads_blocked("simple_create_new_ad"):` — ни перезагрузок, ни
+    открытия объявлений через дерево. Пустая причина — ничего не меняет
+    (прежний мастер). Вложенный вход сохраняет внешнюю причину.
+
+    Публичное имя — `hold_open_ad`: им пользуются шаги, которые идут после
+    объявлений 2+ с открытым объявлением N (напр. второй проход Locations
+    ACL-1390): `with hold_open_ad("simple_create_open_ad_n"):`.
+    """
+
+    def __init__(self, why: str) -> None:
+        self.why = why or ""
+        self.prev = ""
+
+    def __enter__(self):
+        self.prev = getattr(_reload_block, "why", "")
+        if self.why:
+            _reload_block.why = self.why
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        _reload_block.why = self.prev
+        return False
+
+
+#: Публичное имя охраны (ACL-1353 → ACL-1390).
+hold_open_ad = _reloads_blocked
+
+
+def reloads_held() -> str:
+    """Причина, по которой сейчас нельзя перезагружать и открывать объявления
+    через дерево (пусто — можно)."""
+    return getattr(_reload_block, "why", "") or ""
+
+
+def _tree_open_refused(where: str, ad_name: str = "") -> bool:
+    """Открыть объявление в дереве сейчас запрещено? Да — строка телеметрии."""
+    why = reloads_held()
+    if not why:
+        return False
+    _telemetry.record("ad_tree_open_refused", False, note=why,
+                      diag={"where": where, "ad": (ad_name or "")[:60]})
+    return True
+
+
+def _reload_refused(page: Page, where: str) -> bool:
+    """Перезагрузка сейчас запрещена? Да — строка телеметрии с причиной."""
+    why = getattr(_reload_block, "why", "")
+    if not why:
+        return False
+    # Имя шага — прежнее `loading_modal_reload` (False = перезагрузку не
+    # делали), чтобы модель прогресса дешборда знала его.
+    _telemetry.record("loading_modal_reload", False, note="refused:" + why, diag={"where": where})
+    return True
+
+
 def _reload_editor(page: Page, edit_url: str = "") -> None:
     """Перезагрузить редактор объявления, сбросив зависшее состояние вкладки.
 
     Это перезагрузка страницы внутри того же профиля, а не перезапуск
-    браузера: сессия, профиль и прокси остаются на месте.
+    браузера: сессия, профиль и прокси остаются на месте. Под
+    `_reloads_blocked` не перезагружает ничего (ACL-1353).
     """
+    if _reload_refused(page, "reload_editor"):
+        return
     try:
         if edit_url:
             page.goto(edit_url, wait_until="domcontentloaded", timeout=60000)
@@ -11621,6 +11789,10 @@ def _reveal_ad_copy_fields(page: Page, *, text_options: bool = False) -> bool:
     # ran against the same still-loading page. Poll for the sidebar nav
     # (a stable early marker) plus extra settle time instead of guessing
     # a fixed duration.
+    if _reload_refused(page, "ad_copy_reveal_reload"):
+        # ACL-1353: объявление N нового редактора — без перезагрузки; поля
+        # не раскрылись — отказ шага текста со своей причиной.
+        return _primary_text_visible()
     try:
         page.reload(wait_until="domcontentloaded", timeout=20000)
         page.wait_for_load_state("networkidle", timeout=15000)
@@ -12415,7 +12587,20 @@ def _repair_blocked_copy_editor(page: Page, ad_name: str, destination_url: str) 
             checked = _browser_addon_none_checked(page)
         _telemetry.record("browser_addon_repair", bool(fixed) and checked is True,
                           diag={"none_checked": checked})
-        if ad_name:
+        if ad_name and reloads_held():
+            # ACL-1353 (ревью PR #365, F2): объявление N нового редактора —
+            # перезагрузки не было, объявление открыто; назначение чиним на
+            # нём, без обхода по дереву (он открыл бы объявление заново).
+            if destination_url:
+                try:
+                    fixed_here = set_ad_destination_website(page, destination_url)
+                except Exception as exc:
+                    fixed_here = False
+                    _telemetry.record("ad_copy_blocked", False,
+                                      note=f"destination_on_open_ad:{type(exc).__name__}")
+                _telemetry.record("browser_addon_repair", bool(fixed_here),
+                                  note="open_ad_only", diag={"why": reloads_held()})
+        elif ad_name:
             # После перезагрузки мы стоим на уровне ad set'а, а объявление
             # закрыто: открываем его тем же обходом, что чинит назначения.
             try:
@@ -12556,6 +12741,10 @@ def _on_the_named_ad(page: Page, ad_name: str) -> bool:
     got = _open_ad_name(page)
     if got is None or got.strip().lower() == ad_name.strip().lower():
         return True
+    if _tree_open_refused("on_the_named_ad", ad_name):
+        # ACL-1353 (ревью PR #365, F2): не то объявление — текст не пишем,
+        # другое не открываем (`wrong_ad_open`).
+        return False
     return _reopen_ad_after_reload(page, ad_name)
 
 
@@ -13463,6 +13652,10 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
     in the top breadcrumb, so among all matches the LEFTMOST one is taken:
     the tree panel hugs the left edge, the breadcrumb does not.
     """
+    if _tree_open_refused("open_tree_ad", ad_name):
+        # ACL-1353 (ревью PR #365, F2): объявления 2+ нового редактора —
+        # щелчок по строке дерева заново открыл бы (и портил) объявление.
+        return False
     point = page.evaluate(
         """(adName) => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
@@ -14133,7 +14326,7 @@ def _simple_create_layout(page: Page) -> bool:
 
 
 def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
-                             ad_name: str = "") -> list[str]:
+                             ad_name: str = "", may_reload: bool = True) -> list[str]:
     """Убрать всё, что перекрывает клики: окно ad blocker, тост сети, баннеры.
 
     Зовётся в начале каждого раздела (кампания, ad set, объявления) и перед
@@ -14148,6 +14341,9 @@ def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
     `ad_name` — какое объявление должно быть открыто (второе и дальше): после
     перезагрузки его открываем снова (`_reopen_ad_after_reload`), итог —
     `reopened_ad:ok` / `reopened_ad:failed` в возвращаемом списке.
+
+    `may_reload=False` — не перезагружать вовсе (ACL-1353: объявления 2+
+    нового редактора; итог `network_trouble:not_reloaded_new_ad`).
     """
     # ACL-1320: на зависшей вкладке каждый из поисков ниже висел без
     # таймаута. Не отвечает — ничего не закрываем, так и говорим.
@@ -14171,7 +14367,9 @@ def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
         reloaded = False
         why = ""
         if how or not editor:
-            if editor and not _all_edits_saved(page):
+            if not may_reload:
+                why = "not_reloaded_new_ad"
+            elif editor and not _all_edits_saved(page):
                 why = "unsaved_edits"
             else:
                 _reload_editor(page)

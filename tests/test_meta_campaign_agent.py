@@ -130,7 +130,7 @@ def test_profile_proxy_to_requests():
     assert proxies["https"] == "http://u:p@1.2.3.4:8080"
 
 
-def test_meta_publisher_success_chain():
+def test_meta_publisher_success_chain(tmp_path: Path):
     client = MagicMock()
     client.create_campaign.return_value = "camp_1"
     client.create_ad_set.return_value = "adset_1"
@@ -164,7 +164,7 @@ def test_meta_publisher_success_chain():
     )
     assert not job.errors
 
-    pub = MetaPublisher(client, uploader, log_path="output/test_publish_log.jsonl")
+    pub = MetaPublisher(client, uploader, log_path=str(tmp_path / "test_publish_log.jsonl"))
     result = pub.publish_job(job)
     assert result.success
     assert result.campaign_id == "camp_1"
