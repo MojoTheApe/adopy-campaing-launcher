@@ -1,5 +1,27 @@
 # System history
 
+## A problem status on the account map comes with a screenshot and a Copy screenshot button — ACL-1430
+
+2026-10-01 the owner asked for proof to send to support when the map shows a problem
+status (FacebookDoc20 disabled, Facebook_6540 restricted). Until now a page screenshot
+was kept only when a spend read failed, as a file path in a tooltip.
+
+- When a read finds any status other than `clear`, it saves a viewport screenshot of
+  the same Ads Manager page it just read the status from — the tab inside the
+  account's Multilogin profile; there is no capture outside Multilogin. Files go to
+  `%LOCALAPPDATA%\ACL\spend_shots\status_<account>__<time>.png`, the last 5 per
+  account are kept. The shot id and time are stored in the account's status entry.
+  A clear read takes no screenshot and removes the button; a failed screenshot never
+  fails the read.
+- `GET /account-spend/status-shot/<id>` serves a screenshot only by its id (strict
+  name, only from that folder, local dashboard only); anything else is 404.
+  `/account-spend/status-shot/<id>/view` is the fallback page with the image and
+  "Right-click → Copy image".
+- On the account map a small "Copy screenshot" button sits next to a problem status;
+  its tooltip says when the screenshot was taken. It copies an `image/png` to the
+  clipboard; when the browser refuses, it opens the fallback page in a new tab. No
+  screenshot, no button.
+
 ## A disabled ad account no longer shows as "no warning" — ACL-1391
 
 2026-09-30 the account map showed "no warning" for FacebookDoc20 while Ads Manager
