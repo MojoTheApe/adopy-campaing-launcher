@@ -142,9 +142,16 @@
             <td class="amap-status">
               {%- set st = r.status or {} -%}
               {%- if not st.status -%}<span class="nodata" title="Nobody has read this account yet">—</span>
-              {%- elif st.status == 'clear' -%}<span class="amap-st ok" title="No warning on the account page when it was read {{ st.at }}. Not the same as a verified &quot;active&quot;.">no warning</span>
-              {%- elif st.status == 'unknown' -%}<span class="amap-st dim" title="The page gave nothing to read at {{ st.at }}">unreadable</span>
-              {%- else -%}<span class="amap-st bad" title="{{ st.status_text or st.status }} — read {{ st.at }}">{{ st.status }}</span>
+              {%- else -%}
+              {#- Старое состояние, которое с тех пор не перечитали, не выдаётся
+                  за сегодняшнее: у Doc20 «no warning» от 22.09 стояло, когда
+                  кабинет уже был отключён (ACL-1391). -#}
+              {%- set stale_note = (' Not refreshed: the latest read on ' ~ st.tried_at ~ ' failed' ~ ((' — ' ~ st.tried_error) if st.tried_error else '') ~ '.') if st.stale else '' -%}
+              {%- if st.status == 'clear' -%}<span class="amap-st {{ 'dim' if st.stale else 'ok' }}" title="No warning on the account page when it was read {{ st.at }}. Not the same as a verified &quot;active&quot;.{{ stale_note }}">no warning</span>
+              {%- elif st.status == 'unknown' -%}<span class="amap-st dim" title="The page gave nothing to read at {{ st.at }}.{{ stale_note }}">unreadable</span>
+              {%- else -%}<span class="amap-st bad" title="{{ st.status_text or st.status }} — read {{ st.at }}.{{ stale_note }}">{{ st.status }}</span>
+              {%- endif -%}
+              {%- if st.at_short %}<small class="amap-st-at{{ ' stale' if st.stale }}">{{ st.at_short }}{% if st.stale %} · not refreshed{% endif %}</small>{% endif -%}
               {%- endif -%}
             </td>
             {#- Не готов — пишем чем именно. `to_do` для неготового аккаунта и
