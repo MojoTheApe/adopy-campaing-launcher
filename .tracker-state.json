@@ -2946,7 +2946,7 @@
             "session": "run_w1441x_1001"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-W1441X",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3485,6 +3485,30 @@
         "state": "reviewing",
         "report": "Pre-review approved (prereview_398.md); returned only to merge current main (4af90b6) into the branch; lane kept. Optional F1: add a test that the tooltip name wins over the cell text.",
         "keep_lane": true
+      },
+      "442": {
+        "id": "1c4fcda135c741c0b36ba400d76ae3b8",
+        "pr": 442,
+        "issues": [
+          441
+        ],
+        "actor": "Reviewer-R1441V",
+        "session": "rev_r1441v_1001",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-01T11:22:42+00:00",
+        "state": "reviewing"
+      },
+      "451": {
+        "id": "1c4fcda135c741c0b36ba400d76ae3b8",
+        "pr": 442,
+        "issues": [
+          441
+        ],
+        "actor": "Reviewer-R1441V",
+        "session": "rev_r1441v_1001",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-01T11:22:42+00:00",
+        "state": "reviewing"
       }
     },
     "review_queue": [
@@ -3509,18 +3533,7 @@
       447,
       452
     ],
-    "review": {
-      "id": "1c4fcda135c741c0b36ba400d76ae3b8",
-      "pr": 442,
-      "issues": [
-        441
-      ],
-      "actor": "Reviewer-R1441V",
-      "session": "rev_r1441v_1001",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-10-01T11:22:42+00:00",
-      "state": "reviewing"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -4548,6 +4561,25 @@
         "issue": 452,
         "pr": 453,
         "actor": "Worker-G1452D"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-01T12:26:49+00:00",
+        "review": {
+          "id": "1c4fcda135c741c0b36ba400d76ae3b8",
+          "pr": 442,
+          "issues": [
+            441
+          ],
+          "actor": "Reviewer-R1441V",
+          "session": "rev_r1441v_1001",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-01T11:22:42+00:00",
+          "state": "reviewing"
+        },
+        "prs": [
+          451
+        ]
       }
     ],
     "policy": {
