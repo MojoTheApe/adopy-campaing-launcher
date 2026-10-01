@@ -12649,22 +12649,98 @@ _TEXT_OPTIONS_JS = r"""
         if (e) { body = e; break; }
       }
     }
-    // Разделы Meta со сгенерированным текстом: по разметочному имени и по
-    // заголовку. От заголовка поднимаемся, пока предок не накрыл наше поле.
-    const zones = [...document.querySelectorAll(
+    // Раздел генерации текста Meta: листья-заголовки и зоны по разметочному имени.
+    const GEN_RE = /creative text generation|text variations|generated text|text suggestions/i;
+    // Заголовок — самый глубокий элемент, чей текст целиком даёт фразу:
+    // фраза бывает разбита вложенными тегами («creative <b>text</b>
+    // generation»), поэтому идём от текстовых узлов со вторым словом фразы
+    // вверх, не дальше пяти уровней и 200 знаков. Текст в полях ввода
+    // (наш и сгенерированный) заголовком не бывает.
+    const GEN_WORD = /generation|variations|generated|suggestions/i;
+    const genLeaves = [];
+    const genHeadOf = (t) => {
+      let el = t.parentElement;
+      if (!el || el.closest(EDITORS)) return null;
+      for (let i = 0; el && el !== document.body && i < 5; i++, el = el.parentElement) {
+        const s = norm(el.textContent);
+        if (s.length > 200) return null;
+        if (GEN_RE.test(s)) return el;
+      }
+      return null;
+    };
+    if (document.body) {
+      const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let t = walk.nextNode(); t; t = walk.nextNode()) {
+        if (!GEN_WORD.test(t.nodeValue)) continue;
+        const el = genHeadOf(t);
+        if (el && !genLeaves.includes(el)) genLeaves.push(el);
+      }
+    }
+    const surfaceZones = [...document.querySelectorAll(
       '[data-surface*="text_enhancements"],[data-surface*="text_generation"],[data-surface*="gen_ai"]')];
-    for (const leaf of document.querySelectorAll('span,div,label,h1,h2,h3,h4,[role=heading]')) {
-      if (leaf.children.length) continue;
-      if (!/creative text generation|text variations|generated text|text suggestions/i.test(norm(leaf.textContent))) continue;
+    const hostOf = (el) => hosts.find(h => h.contains(el)) || null;
+    const isOwnBox = (e) => e === body || e.getAttribute('data-rpa-opt') === 'ours'
+      || e.getAttribute('data-rpa-field') === 'body2';
+    // Контейнер генерации внутри нашего поля: предок ниже хоста с ролью
+    // списка/региона, где есть заголовок генерации, но нет основного текста.
+    // Живой Doc19 29.09: раздел — `role=list` > `listitem` > `region` с
+    // вариантами, и лежит он внутри `message_field`.
+    const GEN_ROLES = ['list', 'listitem', 'region', 'group', 'dialog'];
+    // Считаются только заголовки генерации в том же хосте, что и элемент
+    // (ревью 8d96212): фраза где-то ещё на странице (у заголовка объявления,
+    // в «Optimize text per person») не делает нашу кнопку чужой.
+    const leavesIn = (h) => h ? genLeaves.filter(l => h.contains(l)) : [];
+    const inGenBox = (el) => {
+      const h = hostOf(el);
+      if (!h) return false;
+      const hl = leavesIn(h);
+      for (let a = el.parentElement; a && a !== h; a = a.parentElement) {
+        if (GEN_ROLES.includes(a.getAttribute('role')) && hl.some(l => a.contains(l))
+            && !(body && a.contains(body))) return true;
+      }
+      return false;
+    };
+    // Ветка кандидата под общим с заголовком генерации предком: в ней нет ни
+    // заголовка, ни чужих полей текста (вариантов Meta).
+    const branchClean = (el) => leavesIn(hostOf(el)).every(l => {
+      let a = el;
+      while (a.parentElement && !a.parentElement.contains(l)) a = a.parentElement;
+      if (a.contains(l)) return false;
+      const eds = a.matches(EDITORS) ? [a, ...a.querySelectorAll(EDITORS)] : [...a.querySelectorAll(EDITORS)];
+      return eds.every(isOwnBox);
+    });
+    // Кнопка «Add text option» нашего поля: разметочное имя Meta (живой
+    // Doc19 29.09 — `div[role=button]` в `message_field`). Имя само по себе
+    // не доказательство (ревью cf086fa): кнопки раздела генерации тоже носят
+    // `/message_field/lib:*`. Наша — только та, что в хосте поля, вне зон по
+    // имени, вне контейнера генерации и в чистой ветке; есть слот Meta
+    // `#add-bodies-option-button` — берём кнопку из него.
+    const OUR_ADD = '[data-surface$="/message_field/lib:dco-add-asset-button"]';
+    const trusted = [...document.querySelectorAll(OUR_ADD)].filter(c =>
+      hostOf(c) && !surfaceZones.some(z => z.contains(c)) && !inGenBox(c) && branchClean(c));
+    const slotted = trusted.filter(c => c.closest('#add-bodies-option-button'));
+    const ourAdds = slotted.length ? slotted : trusted;
+    // Наши элементы поля: основной текст, проверенная кнопка, наши варианты.
+    const ours = [body, ...ourAdds,
+      ...document.querySelectorAll('[data-rpa-opt="ours"],[data-rpa-field="body2"]')].filter(Boolean);
+    const coversOurs = (el) => ours.some(o => el.contains(o));
+    // Зоны генерации: по разметочному имени и по заголовку. От заголовка
+    // поднимаемся, пока предок не накрыл наше поле или нашу кнопку: 29.09
+    // (Doc19) раздел генерации и «Add text option» оказались под одним общим
+    // предком, зона накрыла кнопку, и она отфильтровалась как чужая
+    // (`add_control_not_found`, zones 7). Зону сужает только проверенная
+    // кнопка — кнопка из самого раздела её не сужает.
+    const zones = [...surfaceZones];
+    for (const leaf of genLeaves) {
       let z = leaf;
       if (body) {
-        while (z.parentElement && z.parentElement !== document.body && !z.parentElement.contains(body)) z = z.parentElement;
+        while (z.parentElement && z.parentElement !== document.body && !coversOurs(z.parentElement)) z = z.parentElement;
       } else {
-        for (let i = 0; i < 3 && z.parentElement; i++) z = z.parentElement;
+        for (let i = 0; i < 3 && z.parentElement && !coversOurs(z.parentElement); i++) z = z.parentElement;
       }
       zones.push(z);
     }
-    const inZone = (el) => zones.some(z => z.contains(el) && !(body && z.contains(body)));
+    const inZone = (el) => inGenBox(el) || zones.some(z => z.contains(el) && !(body && z.contains(body)));
     const byOrder = (a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
     const textOf = (el) => el.value !== undefined ? el.value : (el.innerText || el.textContent || '');
 
@@ -12721,12 +12797,23 @@ _TEXT_OPTIONS_JS = r"""
     const ADD_RE = /^\+?\s*add (a |another )?(primary )?text( option)?$/i;
     const BARE_RE = /^\+?\s*add$/i;
     const said = (e, re) => re.test(norm(e.getAttribute('aria-label'))) || re.test(norm(e.textContent));
-    const clickable = [...document.querySelectorAll('[role=button],button,a')].filter(e =>
-      seen(e) && !inZone(e) && e.getAttribute('aria-disabled') !== 'true' && !e.disabled);
-    let adds = clickable.filter(e => said(e, ADD_RE));
-    let how = 'text';
+    const usable = (e) => seen(e) && !inZone(e) && e.getAttribute('aria-disabled') !== 'true' && !e.disabled;
+    const clickable = [...document.querySelectorAll('[role=button],button,a')].filter(usable);
+    // Сначала — по разметочному имени кнопки нашего поля; текст — запасной ход.
+    let adds = ourAdds.filter(usable);
+    let how = 'surface';
+    // Запасной ход по тексту — не в чужом поле (заголовок, описание) и не
+    // кнопка с нашим разметочным именем, не прошедшая проверку выше.
+    const otherField = (e) => {
+      const f = e.closest('[data-surface$="_field"]');
+      return !!f && !/\/message_field$/.test(f.getAttribute('data-surface'));
+    };
     if (!adds.length) {
-      adds = clickable.filter(e => inHost(e) && said(e, BARE_RE));
+      adds = clickable.filter(e => said(e, ADD_RE) && !otherField(e) && !e.closest(OUR_ADD));
+      how = 'text';
+    }
+    if (!adds.length) {
+      adds = clickable.filter(e => inHost(e) && said(e, BARE_RE) && !e.closest(OUR_ADD));
       how = 'bare_add_in_field';
     }
     adds = adds.filter(e => !adds.some(o => o !== e && e.contains(o)));
@@ -12781,6 +12868,32 @@ def second_text_soft_fail(tag: str, ad_label: str, body2: str, report: dict) -> 
     return f"{tag}_second_text:{ad_label} {SECOND_TEXT_NOT_ADDED} ({why})"
 
 
+#: Блок креатива для снимка отказа «Add text option» (ACL-1344).
+AD_CREATIVE_SECTION_BLOCK_JS = """document.querySelector('[data-surface$="/ad_creative_section"]')"""
+
+
+def _capture_creative_section_once(page: Page, report: dict, **diag) -> None:
+    """Снять блок креатива, когда кнопки «Add text option» не нашлось.
+
+    29.09 (Doc19) отказ пришёл без разметки, и причину — зону генерации,
+    накрывшую кнопку, — пришлось разбирать на живой странице. Теперь отказ
+    сам приносит блок `ad_creative_section` (вычищенный `page_capture`).
+    Один раз на объявление: `report` у каждого объявления свой, а повтор
+    `fill_ad_copy` внутри него второй снимок не делает.
+    """
+    if report.get("second_text_capture") is not None:
+        return
+    report["second_text_capture"] = ""
+    try:
+        from src.fb_ads_rpa import page_capture as _pc
+
+        report["second_text_capture"] = _pc.capture(
+            page, step="ad_second_text_add_not_found", diag=diag,
+            blocks={"ad_creative_section": AD_CREATIVE_SECTION_BLOCK_JS}) or ""
+    except Exception:
+        pass
+
+
 def _text_options(page: Page, op: str = "scan", arg=None):
     try:
         return page.evaluate(_TEXT_OPTIONS_JS, [op, arg])
@@ -12807,8 +12920,12 @@ def add_second_primary_text(page: Page, body: str, body2: str, type_and_confirm,
     Неудача не роняет объявление: текст 1 уже стоит. В `report` — причина,
     вызывающий пишет мягкий отказ `SECOND_TEXT_NOT_ADDED`.
 
-    TODO(ACL-1327): одноэкранный редактор (`simple_create`) — на другой
-    ветке; есть ли там та же кнопка, не проверено. Здесь — классический.
+    Классический и одноэкранный (`simple_create`) редакторы рисуют блок
+    одинаково: живые снимки 01.10 (cc8fcfa17ae9, классический) и 30.09
+    (3100d06ad51e, одноэкранный) — та же кнопка `#add-bodies-option-button`
+    > `role=button` `…/message_field/lib:dco-add-asset-button`, разметочный
+    префикс `/am/editor_drawer/editor:ad/` против `/am/editor:ad/`
+    (тесты `test_bench_add_text_option.py`).
     """
     # Каждая попытка пишет свой итог: повтор не наследует причину прошлой.
     out = report["second_text"] = {"ok": False}
@@ -12841,6 +12958,7 @@ def add_second_primary_text(page: Page, body: str, body2: str, type_and_confirm,
         point_state = _text_options(page, "add_point")
         point = point_state.get("point") if isinstance(point_state, dict) else None
         if not point:
+            _capture_creative_section_once(page, report, boxes=len(boxes), zones=state.get("zones"))
             return _done(False, "add_control_not_found",
                          boxes=len(boxes), zones=state.get("zones"))
         out["add_how"] = point_state.get("add_how")
@@ -12859,15 +12977,45 @@ def add_second_primary_text(page: Page, body: str, body2: str, type_and_confirm,
     if not claimed:
         return _done(False, "option_box_lost")
 
-    box = page.locator('[data-rpa-field="body2"]').first
+    def _reclaim() -> bool:
+        # Поле с меткой исчезло: Meta перерисовала новый вариант после
+        # нажатия, метка `body2` осталась на снятом узле. Живые 29.09–30.09:
+        # `option_box_not_focused` без единого признака — поле было
+        # найдено и помечено, а к фокусу его уже не было. Берём поле
+        # заново тем же способом, каким брали в первый раз.
+        if idx is None:
+            again = _text_options(page, "claim") or {}
+            return isinstance(again, dict) and bool(again.get("ok"))
+        scan = _text_options(page) or {}
+        found = next((i for i, b in enumerate(scan.get("boxes") or [])
+                      if not b.get("body") and not (b.get("text") or "").strip()), None)
+        return found is not None and bool(_text_options(page, "mark", found))
+
     handle = None
-    try:
-        if box.count():
-            handle = _focus_via_cdp_click(page, box)
-    except Exception:
-        handle = None
+    reclaims = 0
+    for attempt in range(3):
+        box = page.locator('[data-rpa-field="body2"]').first
+        try:
+            if box.count():
+                handle = _focus_via_cdp_click(page, box)
+            if handle is not None and not handle.evaluate("e => e.isConnected"):
+                handle = None
+        except Exception:
+            handle = None
+        if handle is not None or attempt == 2:
+            break
+        _sleep_h(0.5)
+        reclaims += 1
+        if not _reclaim():
+            break
+    if reclaims:
+        out["reclaims"] = reclaims
     if handle is None:
-        return _done(False, "option_box_not_focused")
+        try:
+            marks = page.locator('[data-rpa-field="body2"]').count()
+        except Exception:
+            marks = -1
+        return _done(False, "option_box_not_focused", reclaims=reclaims, marks=marks)
     if not type_and_confirm(handle, body2):
         return _done(False, "second_text_mismatch", seen=_handle_text(handle)[:120])
 
