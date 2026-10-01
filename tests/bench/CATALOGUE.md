@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**20 robot steps × 76 layouts, 43 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**20 robot steps × 78 layouts, 44 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -25,7 +25,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | placements | 8 | 8 | 0 | 0 |
 | next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
-| ad_creative (media) | 3 | 3 | 0 | 0 |
+| ad_creative (media) | 5 | 5 | 0 | 0 |
 | creative_wizard | 6 | 6 | 0 | 0 |
 | ad_copy | 7 | 7 | 0 | 0 |
 | ad_destination / destination_sweep | 9 | 8 | 0 | 1 |
@@ -180,6 +180,8 @@ Robot: upload_ad_creative / library reuse (_wizard_media_step, library tile clic
 | Empty ad creative: 'Set up creative' menu trigger | 956d0d184138/05_ad2_creative_upload | `ad_creative_media_step_2026_09_25.html` · ad_creative_empty | `tests/test_media_step_reached_or_named.py` | Media step reached or named | pass |
 | One media-library tile | da86e97cbf8b telemetry tile_shape | `library_tile_2026_09_24.html` | `tests/test_library_tile_click_fallback.py` | steady tile clicked; moving tile via CDP; covered tile named | pass |
 | Single-screen editor new ad: 'Set up creative', Required, no media | f9b9fc8d7bb3/03_simple_create_more_ads, d7b470f4c983/10_ad2_creative_upload, 0bd520418dbe/01_ad2_creative_upload, 04c8c214d2ba/01_ad2_creative_upload, 4121938e6dc3/11_ad2_creative_upload, 0c8b122daab0/02_ad2_creative_upload, d1755a59e139/01_ad2_creative_upload | `simple_create_more_ads_2026_09_30.html` · new_ad_media | `tests/test_simple_create_more_ads.py` | the new ad's media block is the one filled | pass |
+| Single-screen editor new ad, media attached: 'Edit media', 'Remove media', two placement groups; block unmounted while the page stands at campaign/ad set | 8ce1b9985046/02_simple_create_more_ads, d1755a59e139/01_ad2_creative_upload, d1755a59e139/02_ad2_destination | `simple_create_new_ad_media_2026_09_30.html` · media_filled | `tests/test_simple_create_new_ad_media.py` | unmounted block brought back (no clicks) and read as filled; media on the ad named as entry media_on_ad | pass |
+| Media picker dialog after the new ad's Set up creative: Media . Trim . Crop . Text . Creative generation . Enhancements . Translation, Account library, '1 selected', Cancel / Next | d1755a59e139/03_simple_create_more_ads | `simple_create_new_ad_media_2026_09_30.html` · media_picker | `tests/test_simple_create_new_ad_media.py` | entered through the new ad's own Set up creative -> Video ad; wizard open; entry media_entry:set_up_creative | pass |
 
 ## creative_wizard
 
