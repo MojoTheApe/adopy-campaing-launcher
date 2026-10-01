@@ -2223,9 +2223,11 @@
         "worktree": "C:\\acl-1452-goals",
         "id": "0c22b3e4f72e43038f632ddd573def01",
         "issue": 452,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T12:15:19+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 453,
+        "report": "# ACL-1452 \u2014 implementation handoff\n\n- PR #453 (`codex/acl-1452-goals-defaults` \u2192 `stage`), head 147a497, base work/stage 3a629ca.\n- Worker-G1452D, session run_g1452d_1001, coordinator Coordinator-D0930K, worktree `C:\\acl-1452-goals`.\n\nAll acceptance criteria are implemented: title from the CM on screen; no saved goals + countries \u2192 one row per country at 10 FTD, other targets empty; no countries \u2192 empty; saved goals unchanged; reading writes nothing; tests for the three seeding cases and the title.\n\nChecks: test_goals + test_workbook_review + test_review_period_regressions 34 passed; JS guards 24 passed. Full suite: CI only (owner rule).\n\nRisk for the reviewer: `_my_goal_countries` decides \"this person's countries\" from `my_totals` (spend/leads/deposits > 0) plus map links with accounts; a country where the person has accounts but no numbers and no link would be missing from the start \u2014 they can add it with \"+ country\".\n\nNot done: live check on the live build with a CM name that has no saved goals."
       }
     },
     "tasks": {
