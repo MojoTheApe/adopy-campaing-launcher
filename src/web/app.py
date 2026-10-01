@@ -3811,6 +3811,54 @@ async def rpa_takeover(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True, "status": "resumed"})
 
 
+# ── ACL-1434: здоровье робота ───────────────────────────────────────────────
+# Только чтение локальной телеметрии и лога дешборда; к аккаунтам не ходит.
+from datetime import datetime as _rh_datetime, timezone as _rh_timezone  # noqa: E402
+
+_ROBOT_HEALTH_STARTED = _rh_datetime.now(_rh_timezone.utc).isoformat()
+
+
+def _robot_health_output_dir() -> Path:
+    from config.paths import get_runtime_workspace
+    return get_runtime_workspace() / "output"
+
+
+def _robot_health_current_build() -> tuple[str, str] | None:
+    """Сборка этого процесса — для прогонов, которых лог ещё не назвал."""
+    try:
+        from src.fb_ads_rpa import telemetry_sync
+        return telemetry_sync.flow_version(), _ROBOT_HEALTH_STARTED
+    except Exception:
+        return None
+
+
+@app.get("/robot-health", response_class=HTMLResponse)
+async def robot_health_page(n: int = 10) -> HTMLResponse:
+    from src.web import robot_health
+    ctx = robot_health.page_context(_robot_health_output_dir(), n,
+                                    _robot_health_current_build())
+    return HTMLResponse(templates.get_template("robot_health.html").render(**ctx))
+
+
+@app.get("/robot-health/run/{run_id}", response_class=HTMLResponse)
+async def robot_health_run(run_id: str, n: int = 10) -> HTMLResponse:
+    from src.web import robot_health
+    ctx = robot_health.run_context(_robot_health_output_dir(), run_id, n,
+                                   _robot_health_current_build())
+    status = 404 if ctx["error"] else 200
+    return HTMLResponse(templates.get_template("robot_health.html").render(**ctx),
+                        status_code=status)
+
+
+@app.get("/robot-health/capture/{run_id}/{name}")
+async def robot_health_capture(run_id: str, name: str) -> Response:
+    from src.web import robot_health
+    path = robot_health.capture_file(_robot_health_output_dir(), run_id, name)
+    if path is None:
+        return Response(status_code=404)
+    return FileResponse(str(path))
+
+
 @app.get("/rpa-takeover")
 async def rpa_takeover_status() -> JSONResponse:
     from src.fb_ads_rpa.pacing import is_takeover_active, get_teach_state
