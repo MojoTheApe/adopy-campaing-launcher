@@ -2270,7 +2270,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "459": {
+        "actor": "Worker-D1459B",
+        "session": "run_d1459b_1001",
+        "coordinator": "Coordinator-D0930K",
+        "branch": "codex/acl-1459-dup-buttons",
+        "worktree": "C:\\acl-dup-buttons",
+        "id": "ac553172452a441785a6644001c1d775",
+        "issue": 459,
+        "state": "implementing",
+        "started_at": "2026-10-01T13:07:02+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -3179,6 +3192,17 @@
         },
         "pr": 458,
         "queued_at": "2026-10-01T12:41:31+00:00"
+      },
+      "459": {
+        "implementers": [
+          {
+            "actor": "Worker-D1459B",
+            "session": "run_d1459b_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-D1459B",
+        "coordinator": "Coordinator-D0930K"
       }
     },
     "actors": {
@@ -3360,6 +3384,10 @@
       },
       "Worker-C1457O": {
         "session": "run_c1457o_1001",
+        "role": "Worker"
+      },
+      "Worker-D1459B": {
+        "session": "run_d1459b_1001",
         "role": "Worker"
       }
     },
@@ -4756,6 +4784,13 @@
         "issue": 457,
         "pr": 458,
         "actor": "Worker-C1457O"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T13:07:02+00:00",
+        "issue": 459,
+        "claim": "ac553172452a441785a6644001c1d775",
+        "actor": "Worker-D1459B"
       }
     ],
     "policy": {
