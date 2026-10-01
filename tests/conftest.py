@@ -93,6 +93,20 @@ def _telemetry_off_the_live_journal(tmp_path_factory, monkeypatch):
     yield
 
 
+# Тесты не читают окна и ввод этой машины (ACL-1388).
+#
+# Окно профиля, открытое руками, робот закрывает сам, если ему больше 15
+# минут, оно не на переднем плане и минуту не было ввода — это читается из
+# процессов и Win32 API живой машины. Тест, который доходит до этой ветки
+# без своих заглушек, зависел бы от того, что открыто на компьютере
+# разработчика. Выключатель — штатный (`FB_RPA_REOPEN_HAND_WINDOW=0`,
+# прежнее поведение: всегда стоп); тесты ACL-1388 включают его сами.
+@pytest.fixture(autouse=True)
+def _hand_window_reopen_off(monkeypatch):
+    monkeypatch.setenv("FB_RPA_REOPEN_HAND_WINDOW", "0")
+    yield
+
+
 @pytest.fixture
 def enriched_df() -> pd.DataFrame:
     """Return an enriched DataFrame as if compute_metrics + enrich_structure ran.
