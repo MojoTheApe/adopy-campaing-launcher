@@ -2471,7 +2471,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "426": {
+        "actor": "Worker-C1426P",
+        "session": "run_c1426p_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1426-crop-post-story",
+        "worktree": "C:\\acl-1426-crop",
+        "id": "dbb150bfacca441ba990ac04c32e4bac",
+        "issue": 426,
+        "state": "implementing",
+        "started_at": "2026-10-01T19:23:08+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -3011,9 +3024,13 @@
           {
             "actor": "Worker-C1426P",
             "session": "run_c1426p_1001"
+          },
+          {
+            "actor": "Worker-C1426P",
+            "session": "run_c1426p_1001"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-C1426P",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3032,8 +3049,7 @@
         },
         "pr": 440,
         "queued_at": "2026-10-01T14:27:38+00:00",
-        "review_report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise.",
-        "reviewer": "Reviewer-R1426F"
+        "review_report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise."
       },
       "427": {
         "implementers": [
@@ -5508,6 +5524,13 @@
           "report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise.",
           "keep_lane": true
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T19:23:08+00:00",
+        "issue": 426,
+        "claim": "dbb150bfacca441ba990ac04c32e4bac",
+        "actor": "Worker-C1426P"
       }
     ],
     "policy": {
