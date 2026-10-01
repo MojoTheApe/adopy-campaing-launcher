@@ -2226,6 +2226,18 @@
         "state": "implementing",
         "started_at": "2026-10-01T11:16:22+00:00",
         "from_status": "status:backlog"
+      },
+      "447": {
+        "actor": "Worker-S1447N",
+        "session": "run_s1447n_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1447-run-summary",
+        "worktree": "C:\\acl-1447-summary",
+        "id": "aab39b470085452bb6f325490bfeeb32",
+        "issue": 447,
+        "state": "implementing",
+        "started_at": "2026-10-01T11:38:24+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -3006,6 +3018,17 @@
         },
         "pr": 448,
         "queued_at": "2026-10-01T11:36:07+00:00"
+      },
+      "447": {
+        "implementers": [
+          {
+            "actor": "Worker-S1447N",
+            "session": "run_s1447n_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1447N",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -3168,6 +3191,10 @@
       "Reviewer-R1441V": {
         "session": "rev_r1441v_1001",
         "role": "Reviewer"
+      },
+      "Worker-S1447N": {
+        "session": "run_s1447n_1001",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -4407,6 +4434,13 @@
         "issue": 344,
         "pr": 448,
         "actor": "Worker-X1344Z"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T11:38:24+00:00",
+        "issue": 447,
+        "claim": "aab39b470085452bb6f325490bfeeb32",
+        "actor": "Worker-S1447N"
       }
     ],
     "policy": {
