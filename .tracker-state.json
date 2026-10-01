@@ -2985,7 +2985,9 @@
       "session": "review_r1397j_1001",
       "coordinator": "Coordinator-C0930A",
       "started_at": "2026-10-01T08:21:05+00:00",
-      "state": "reviewing"
+      "state": "returning",
+      "report": "Pre-review approved (prereview_409.md); returned only to merge current main (49915f7) into the branch; lane kept.",
+      "keep_lane": true
     },
     "history": [
       {
