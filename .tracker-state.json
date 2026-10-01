@@ -2256,22 +2256,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "459": {
-        "actor": "Worker-D1459B",
-        "session": "run_d1459b_1001",
-        "coordinator": "Coordinator-D0930K",
-        "branch": "codex/acl-1459-dup-buttons",
-        "worktree": "C:\\acl-dup-buttons",
-        "id": "ac553172452a441785a6644001c1d775",
-        "issue": 459,
-        "state": "handoff",
-        "started_at": "2026-10-01T13:07:02+00:00",
-        "from_status": "status:backlog",
-        "pr": 460,
-        "report": "# ACL-1459 \u2014 implementation handoff\n- Branch `codex/acl-1459-dup-buttons` \u2192 `stage`, head b944538, base 3a629ca. Worker-D1459B, run_d1459b_1001, Coordinator-D0930K, `C:\\acl-dup-buttons`.\n- Done per owner-approved mockup: ad \"Duplicate\" visible; \"+ Ad\"; \"\u29c9 Duplicate campaign\" in the card under ads (drawer: copy + open copy via cbdDuplicateOpen); removed header icon, bottom-of-drawer button, drawer-only \"+ Add Campaign\".\n- Checks: new drawer click test (4) + builder/drawer browser suites + JS guard: 49 passed. Full suite: CI.\n- Reviewer: `cbdDuplicateOpen` is defined inside the drawer IIFE and uses its `openCampaign`/`slotId`/`paint`; `.cb-dup-slot-btn` class kept on the new button on purpose (tests and click handlers at ~9926/11079 key on it). Overlaps report.html with ACL-1455 (#456) only in different CSS blocks.\n- Not done: owner's visual check on the live build."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -3188,9 +3173,25 @@
             "session": "run_d1459b_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-D1459B",
-        "coordinator": "Coordinator-D0930K"
+        "coordinator": "Coordinator-D0930K",
+        "handoff": {
+          "actor": "Worker-D1459B",
+          "session": "run_d1459b_1001",
+          "coordinator": "Coordinator-D0930K",
+          "branch": "codex/acl-1459-dup-buttons",
+          "worktree": "C:\\acl-dup-buttons",
+          "id": "ac553172452a441785a6644001c1d775",
+          "issue": 459,
+          "state": "handoff",
+          "started_at": "2026-10-01T13:07:02+00:00",
+          "from_status": "status:backlog",
+          "pr": 460,
+          "report": "# ACL-1459 \u2014 implementation handoff\n- Branch `codex/acl-1459-dup-buttons` \u2192 `stage`, head b944538, base 3a629ca. Worker-D1459B, run_d1459b_1001, Coordinator-D0930K, `C:\\acl-dup-buttons`.\n- Done per owner-approved mockup: ad \"Duplicate\" visible; \"+ Ad\"; \"\u29c9 Duplicate campaign\" in the card under ads (drawer: copy + open copy via cbdDuplicateOpen); removed header icon, bottom-of-drawer button, drawer-only \"+ Add Campaign\".\n- Checks: new drawer click test (4) + builder/drawer browser suites + JS guard: 49 passed. Full suite: CI.\n- Reviewer: `cbdDuplicateOpen` is defined inside the drawer IIFE and uses its `openCampaign`/`slotId`/`paint`; `.cb-dup-slot-btn` class kept on the new button on purpose (tests and click handlers at ~9926/11079 key on it). Overlaps report.html with ACL-1455 (#456) only in different CSS blocks.\n- Not done: owner's visual check on the live build."
+        },
+        "pr": 460,
+        "queued_at": "2026-10-01T13:17:00+00:00"
       }
     },
     "actors": {
@@ -3638,7 +3639,8 @@
       447,
       452,
       455,
-      457
+      457,
+      459
     ],
     "review": {
       "id": "afc86d4be7054b90b0bf87c81be9ebc1",
@@ -4778,6 +4780,13 @@
         "at": "2026-10-01T13:07:02+00:00",
         "issue": 459,
         "claim": "ac553172452a441785a6644001c1d775",
+        "actor": "Worker-D1459B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-01T13:17:00+00:00",
+        "issue": 459,
+        "pr": 460,
         "actor": "Worker-D1459B"
       }
     ],
