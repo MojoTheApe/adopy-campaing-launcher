@@ -2176,6 +2176,18 @@
         "state": "implementing",
         "started_at": "2026-10-01T09:02:49+00:00",
         "from_status": "status:backlog"
+      },
+      "395": {
+        "actor": "Worker-T1395E",
+        "session": "run_t1395e_0930",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1395-ad-tree-workbook",
+        "worktree": "C:\\acl-1395-ad-tree",
+        "id": "4de70250e0fb425ba8ae939ab3ca2cb3",
+        "issue": 395,
+        "state": "implementing",
+        "started_at": "2026-10-01T09:19:37+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -2388,9 +2400,13 @@
           {
             "actor": "Worker-T1395E",
             "session": "run_t1395e_0930"
+          },
+          {
+            "actor": "Worker-T1395E",
+            "session": "run_t1395e_0930"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-T1395E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2409,7 +2425,6 @@
         },
         "pr": 398,
         "queued_at": "2026-09-30T12:01:34+00:00",
-        "reviewer": "Reviewer-R1395G",
         "review_report": "Pre-review approved (prereview_398.md); returned only to merge current main (4af90b6) into the branch; lane kept. Optional F1: add a test that the tooltip name wins over the cell text."
       },
       "397": {
@@ -4049,6 +4064,13 @@
           "report": "Pre-review approved (prereview_398.md); returned only to merge current main (4af90b6) into the branch; lane kept. Optional F1: add a test that the tooltip name wins over the cell text.",
           "keep_lane": true
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T09:19:37+00:00",
+        "issue": 395,
+        "claim": "4de70250e0fb425ba8ae939ab3ca2cb3",
+        "actor": "Worker-T1395E"
       }
     ],
     "policy": {
