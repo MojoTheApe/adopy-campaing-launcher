@@ -1,5 +1,33 @@
 # System history
 
+## Placements pass when Meta no longer offers a placement, and in the single-screen editor — ACL-1445
+
+2026-10-01 campaigns ended "do not publish: placements" on Doc19 and on the tester's
+machine although the placements were right. Three causes, each now a bench test
+(`tests/test_bench_placements.py`).
+
+- Meta stopped offering "Messenger Stories" on some accounts during the day; the robot
+  must switch it off and treated its absence as a failure. Rule (`fill_placements`,
+  `_settle_category`): a placement to switch OFF that is absent is "not offered" only
+  when all five categories are present, its own category (`_SUBITEMS_BY_CATEGORY`) is
+  open, the category's list has not changed for 1.5 s (polled up to 6 s; rows that
+  appear meanwhile are set at once), and every placement to switch ON in that category
+  was rendered. Otherwise it stays a failure as before. A placement to switch ON is
+  never "not offered". The step's telemetry line names them (`subitems_not_offered`,
+  note "not offered: …"); read-back still checks every offered placement.
+- Single-screen editor (cb854b07857b, 30.09): the open Placements card showed only a
+  "Loading..." progressbar, no "Account controls" to anchor on, and the step reported
+  `placements_card_not_found`. The card is now found by its own anchor
+  (`data-surface` ending `adset_placement_static_pgd_section`), its body is waited for
+  (20 s), then placements are set and read back there as in the classic editor; a body
+  that never loads is named `placements_card_loading`.
+- Single-screen editor (SA_ARC_All_Video_IPO_35_01.10, tester): the placements were set
+  but the list was collapsed to "Placements · Included: 7 · Allowed with limited spend:
+  0 · Excluded: 13". When the categories cannot be reached, that summary is read back:
+  exactly the seven placements we include, none with limited spend, the rest excluded
+  = set (`verified_by: summary`); any other count still fails. Fixture rebuilt from the
+  screenshot text (no capture).
+
 ## Ads in the account tree get their workbook numbers — ACL-1395
 
 2026-09-30 on Facebook_6540 (CO_bnc_All_Video_FX_Y_35_28.09) the campaign row had
@@ -19,6 +47,7 @@ its workbook numbers and both ads under it showed only dashes. Two causes.
   with a quiet "shared by N ads" mark and the tooltip "The workbook cannot tell ads
   with the same name apart; these are the totals for all of them". Campaign rows are
   unchanged; two campaigns with one name keep the dash.
+
 ## Every Meta layout the robot has met is an offline test — ACL-1433
 
 2026-10-01 Doc19 placements failed on code that passed the same morning: a Meta

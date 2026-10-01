@@ -21,6 +21,20 @@ Bench (ACL-1433).
    Placements card, open (`aria-pressed=true`), shows only "Advantage+ on" and
    "About placements" — no categories, no "Account controls", no "Show more
    settings". The step failed with `placements_card_not_found`, stage `tag`.
+   The capture shows why: the card body is only a "Loading..." progressbar
+   (the same card collapsed, 01_advantage_plus_still_on, had "Account
+   controls" in its summary).
+
+3. `placements_simple_create_summary_2026_10_01.html` — no capture: rebuilt
+   from the owner's screenshot text after SA_ARC_All_Video_IPO_35_01.10
+   (tester, 01.10, single-screen editor). Placements were set ("Included: 7,
+   Allowed with limited spend: 0, Excluded: 13"), the list behind the summary
+   collapsed, and the step reported a failure.
+
+ACL-1445 fixed (1) and (2): an OFF placement Meta does not offer is "not
+offered" once its category is open and its list settled (`_settle_category`
+in `fill_placements`); the card is found by its own `data-surface` anchor and
+its body waited for. (3) is read back from the summary.
 """
 from __future__ import annotations
 
@@ -35,6 +49,7 @@ from tests.test_rpa_placements_category_recollapse import _SIM_JS
 
 DOC19 = FIXTURES / "placements_doc19_2026_10_01.html"
 SIMPLE = FIXTURES / "placements_simple_create_2026_09_30.html"
+SUMMARY = FIXTURES / "placements_simple_create_summary_2026_10_01.html"
 
 #: `diag.subitems_seen` of 5edc0e7cca0a/01_placements, by category. No
 #: "Messenger Stories" anywhere on the page (one match in the whole 4 MB
@@ -70,6 +85,7 @@ DOC19_ROWS = {
 def page(browser, monkeypatch, tmp_path):
     monkeypatch.setattr(md, "_sleep_h", lambda base, spread=0.3: time.sleep(min(base, 0.05)))
     monkeypatch.setattr(md, "ensure_account_placement_exclusions", lambda pg, report=None: False)
+    monkeypatch.setattr(md, "_PLACEMENTS_CARD_LOAD_WAIT_S", 1.5)
     monkeypatch.chdir(tmp_path)          # output/debug_placements_fill.txt stays out of the repo
     (tmp_path / "output").mkdir()
     ctx = browser.new_context(viewport={"width": 1000, "height": 800})
@@ -81,11 +97,35 @@ def page(browser, monkeypatch, tmp_path):
         ctx.close()
 
 
-def _load_doc19(page) -> None:
+def _sim_cfg(rows: dict | None = None) -> dict:
+    rows = DOC19_ROWS if rows is None else rows
+    return {"rows": {k: [list(r) for r in v] for k, v in rows.items()}, "collapse": "never"}
+
+
+def _load_doc19(page, rows: dict | None = None) -> None:
     page.set_content("<html><body style='margin:0;padding-top:120px'>"
                      f"{fragment(DOC19, 'card')}</body></html>")
-    page.evaluate(_SIM_JS, {"rows": {k: [list(r) for r in v] for k, v in DOC19_ROWS.items()},
-                            "collapse": "never"})
+    page.evaluate(_SIM_JS, _sim_cfg(rows))
+
+
+#: Hide the rows of the given labels each time the emulation renders them and
+#: show them again after `delay` ms (never when `delay` < 0) — a list that is
+#: not fully rendered yet.
+_LATE_ROWS_JS = r"""
+([labels, delay]) => {
+  const hide = (row) => {
+    row.style.display = 'none';
+    if (delay >= 0) setTimeout(() => { row.style.display = ''; }, delay);
+  };
+  const scan = (root) => {
+    for (const cb of root.querySelectorAll('input[type=checkbox]'))
+      if (labels.includes(cb.dataset.simLabel)) hide(cb.closest('[id^="sim-row-"]'));
+  };
+  new MutationObserver((ms) => {
+    for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) scan(n);
+  }).observe(document.body, { childList: true, subtree: true });
+}
+"""
 
 
 def _state(page) -> dict[str, bool]:
@@ -101,8 +141,8 @@ def test_doc19_layout_is_the_failing_one(page):
 
 
 def test_doc19_every_offered_placement_is_set(page):
-    """Everything Meta offers on Doc19 ends in the wanted state; the only miss
-    is the placement Meta does not offer — the live report, reproduced."""
+    """Everything Meta offers on Doc19 ends in the wanted state (read back);
+    the placement Meta does not offer is named as such, not as missing."""
     _load_doc19(page)
     report: dict = {}
     md.fill_placements(page, report)
@@ -113,18 +153,53 @@ def test_doc19_every_offered_placement_is_set(page):
     for label in md._SUBITEMS_OFF:
         if label in state:
             assert state[label] is False, label
-    assert report["subitems_missing"] == ["Messenger Stories"]
+    assert report["subitems_missing"] == []
+    assert report["subitems_not_offered"] == ["Messenger Stories"]
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Live bug 2026-10-01 (Doc19, 5edc0e7cca0a): Meta no longer offers 'Messenger Stories' on "
-    "this account; it is in _SUBITEMS_OFF, so its absence fails the step although an absent "
-    "placement cannot be delivered to. Fixing needs a rule that tells 'not offered' from "
-    "'row not rendered yet' (virtualised lists) — RPA track."))
 def test_doc19_a_placement_meta_does_not_offer_is_not_a_failure(page):
+    """Live 2026-10-01 (Doc19, 5edc0e7cca0a): 'Messenger Stories' is no longer
+    offered; its category is open and settled, so it is 'not offered'."""
     _load_doc19(page)
     report: dict = {}
     assert md.fill_placements(page, report) is True, report.get("subitems_missing")
+    check = report["not_offered_check"]["Stories, Status, Reels"]
+    assert check["complete"] and check["stable"] and check["absent"] == ["Messenger Stories"]
+
+
+def test_a_row_rendered_late_is_waited_for_not_called_not_offered(page):
+    """The row shows up a second after its category opened: the step waits for
+    the list to settle and switches it off — no false 'not offered'."""
+    rows = {k: list(v) for k, v in DOC19_ROWS.items()}
+    rows["Stories, Status, Reels"] = rows["Stories, Status, Reels"] + [("Messenger Stories", True, False)]
+    page.set_content("<html><body style='margin:0;padding-top:120px'>"
+                     f"{fragment(DOC19, 'card')}</body></html>")
+    page.evaluate(_LATE_ROWS_JS, [["Messenger Stories"], 1000])
+    page.evaluate(_SIM_JS, _sim_cfg(rows))
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, report
+    assert _state(page)["Messenger Stories"] is False
+    assert "subitems_not_offered" not in report
+
+
+def test_an_unrendered_list_is_not_a_false_not_offered(page):
+    """The Stories list never renders its rows: the step fails as before and
+    names nothing 'not offered' — absence proves nothing until the list is there."""
+    hidden = [label for label, _, _ in DOC19_ROWS["Stories, Status, Reels"]]
+    page.set_content("<html><body style='margin:0;padding-top:120px'>"
+                     f"{fragment(DOC19, 'card')}</body></html>")
+    page.evaluate(_LATE_ROWS_JS, [hidden, -1])
+    page.evaluate(_SIM_JS, _sim_cfg())
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert "subitems_not_offered" not in report
+    assert {"Messenger Stories", "WhatsApp Status", "Instagram Stories"} <= set(report["subitems_missing"])
+    assert report["not_offered_check"]["Stories, Status, Reels"]["complete"] is False
+
+
+def test_every_wanted_subitem_has_its_category():
+    assert set(md._SUBITEM_CATEGORY) == set(md._SUBITEMS_ON) | set(md._SUBITEMS_OFF)
+    assert set(md._SUBITEMS_BY_CATEGORY) == {k for k, v in md._PLACEMENT_CATEGORIES.items() if v}
 
 
 def _load_simple(page) -> None:
@@ -133,26 +208,74 @@ def _load_simple(page) -> None:
 
 
 def test_simple_create_card_failure_is_named(page):
-    """What the robot reports today on the single-screen Placements card."""
+    """The live capture: the card is found by its own anchor, its body never
+    leaves 'Loading...' — named as such, not as a missing card."""
     _load_simple(page)
     report: dict = {}
     assert md.fill_placements(page, report) is False
-    assert report["why"] == "placements_card_not_found"
+    assert report["why"] == "placements_card_loading"
     card = report["placements_card"]
-    assert card["stage"] == "tag" and card["tagged"] is False and card["headings"] == 1
-    assert "Placements" in card["headings_seen"]
+    assert card["via"] == "section" and card["tagged"] is True and card["loading"] is True
+    assert card["pressed"] == "true"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Live bug 2026-09-30 (cb854b07857b, simple_create): the Placements card is on screen and "
-    "open, but the robot anchors the card on 'Account controls', which this card does not "
-    "render (only 'Advantage+ on' + 'About placements'), so it never reaches the manual "
-    "controls. How Meta reveals them here was not captured — RPA track."))
 def test_simple_create_card_is_found(page):
     _load_simple(page)
     report: dict = {}
     md.fill_placements(page, report)
     assert report.get("why") != "placements_card_not_found", report.get("placements_card")
+    assert page.evaluate("() => !!document.querySelector("
+                         "'[data-rpa-placements-marker][data-surface$=adset_placement_static_pgd_section]')")
+
+
+#: When the single-screen card finishes loading, its body is the classic one
+#: (d66a22d0fa30/01_ad_destination, 30.09): put the Doc19 card there and run
+#: the accordion emulation on it.
+_LOAD_LATER_JS = r"""
+([html, sim, cfg, delay]) => { setTimeout(() => {
+  const bar = document.querySelector('[data-surface$="adset_placement_static_pgd_section"] [role=progressbar]');
+  bar.parentElement.innerHTML = html;
+  (new Function('return (' + sim + ')'))()(cfg);
+}, delay); }
+"""
+
+
+def test_simple_create_card_sets_manual_placements_once_loaded(page):
+    """The single-screen card's body loads after the step began: it waits, then
+    sets and reads back the manual placements inside that card."""
+    _load_simple(page)
+    page.evaluate(_LOAD_LATER_JS, [fragment(DOC19, "card"), _SIM_JS, _sim_cfg(), 600])
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, report
+    assert report["placements_card"]["via"] == "section"
+    assert report["placements_card"]["loading"] is False
+    state = _state(page)
+    assert all(state[x] is True for x in md._SUBITEMS_ON if x in state)
+    assert all(state[x] is False for x in md._SUBITEMS_OFF if x in state)
+    assert report["subitems_not_offered"] == ["Messenger Stories"]
+
+
+def _load_summary(page, included: int = 7) -> None:
+    html = fragment(SUMMARY, "card").replace("Included: 7", f"Included: {included}")
+    page.set_content(f"<html><body style='margin:0;padding-top:120px'>{html}</body></html>")
+
+
+def test_a_set_card_collapsed_to_its_summary_is_read_back_as_set(page):
+    """01.10, tester, single-screen editor: placements were set ('Included: 7,
+    Allowed with limited spend: 0, Excluded: 13') — not a failure."""
+    _load_summary(page)
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, report
+    assert report["verified_by"] == "summary"
+    assert report["placements_summary"]["included"] == 7
+    assert report["placements_summary"]["excluded"] == 13
+
+
+def test_a_summary_that_is_not_our_configuration_still_fails(page):
+    _load_summary(page, included=21)
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert "verified_by" not in report
 
 
 def test_debug_file_is_written_to_the_temp_dir(page):
