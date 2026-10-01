@@ -1,5 +1,32 @@
 # System history
 
+## The robot finds Meta's "Add text option" next to the text generation section — ACL-1344
+
+28.09–01.10 the second primary text was not added on most video ads
+(`ad_copy_second_text: add_control_not_found`, Doc21 four runs in a row, the
+tester's machine 01.10 twice). Every live capture of the block has the control:
+`#add-bodies-option-button` > `div[role=button]` with `data-surface`
+`.../message_field/lib:dco-add-asset-button`, text "Add text option" — the
+same in the classic and the single-screen editor (bench captures
+cc8fcfa17ae9 01.10 and 3100d06ad51e 30.09). The old finder looked for it by
+text only and dropped anything inside a "text generation zone"; when Meta
+draws "Advantage+ creative text generation" in the same `message_field`, the
+zone grew from that heading up to the parent it shares with the button and
+swallowed it. Every failure on 01.10 had `zones 3–7` and the generation
+section on the page; every success had no section.
+
+- The button is taken by its `data-surface` (in Meta's slot), and a
+  generation zone stops below anything that holds our field's controls.
+  Nothing inside Meta's generation section is pressed or counted as ours.
+- If Meta redraws the new option box right after the robot marks it, the box
+  is taken again instead of failing with `option_box_not_focused` (29.09–30.09
+  live, up to two retries; `reclaims` in telemetry).
+- Not found still means a warning, not a blocked ad (owner decision); the ad
+  creative block is captured once per ad for the next diagnosis.
+- Tests: `tests/test_bench_add_text_option.py` on both real pages, as captured
+  and with the real 29.09 generation section in place — find, press, type
+  text 2, read both texts back. Meta's new box itself is still emulated.
+
 ## Finished clean profiles close themselves; a Close profile button for the rest — ACL-1444
 
 2026-10-01. With "Publish all", every finished account left its Multilogin
@@ -81,6 +108,38 @@ its workbook numbers and both ads under it showed only dashes. Two causes.
   with a quiet "shared by N ads" mark and the tooltip "The workbook cannot tell ads
   with the same name apart; these are the totals for all of them". Campaign rows are
   unchanged; two campaigns with one name keep the dash.
+
+## Every Meta layout the robot has met is an offline test — ACL-1433
+
+2026-10-01 Doc19 placements failed on code that passed the same morning: a Meta
+variation, learned only on the next live run. The bench now holds every layout
+the robot has met, so a robot change is checked against all of them before merge.
+
+- `tests/bench/CATALOGUE.md` (from `tests/bench/catalogue.json`,
+  `scripts/bench_catalogue.py --write`): per robot step every layout seen live,
+  with its fixture, test, expected result and status; captures seen but not cut
+  are listed with the reason. `tests/test_bench_catalogue.py` fails when a
+  fixture is not catalogued, a named fixture/fragment/test is missing or the
+  Markdown is stale.
+- `scripts/capture_to_fixture.py`: a live capture folder (`page.html`, possibly
+  truncated at 4 MB, or `block_*.html`, plus `context.json`) becomes a scrubbed,
+  trimmed fixture (named blocks only; ids, `act=`, URLs, e-mails, phones,
+  tokens, media file names, campaign and profile names replaced; render ids to
+  `syn_N`) checked with the secret scanner's rules, plus an optional test stub.
+  Documented in `tests/fixtures/ads_manager/README.md`.
+- Harvest of 29.09–01.10 captures: 10 new fixtures (wizard steps of five step
+  rows incl. Trim/Crop, Doc19 and single-screen placements, five destination
+  layouts and the ad error block, editor gone under the robot, languages chips,
+  ad copy without Headline with the first real "Add text option", conversion
+  card with a heading button group, default-only Locations, single-screen
+  Audience Advantage+ on). Each test runs the robot's own step or reader.
+- Live bugs found, kept as strict xfail for the RPA track: Doc19 fails
+  placements because Meta no longer offers "Messenger Stories"; the
+  single-screen Placements card is not found (anchored on "Account controls").
+- Review checklist (`.github/pull_request_template.md`,
+  `docs/system/AGENT_CONTEXT.md`): every robot fix adds its live capture to the bench.
+
+No robot code changed.
 
 ## The test suite runs in parallel — ACL-1397
 
