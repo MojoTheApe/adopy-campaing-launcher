@@ -2812,7 +2812,7 @@
             "session": "run_m1412l_0930"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-M1412L",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2830,7 +2830,8 @@
           "report": "ACL-1412 handoff (Worker-M1412L, 2026-09-30). Branch codex/acl-1412-ads23-media, head 930ed5b. work/main (8a87697) and work/stage (59423bc) are merged in. PR into stage: see --pr.\n\nFindings from run d1755a59e139 (Facebook_1443):\n- Ad 2: attempt 1 opened the wizard and uploaded the file; the file is in the library in a later capture. After that, the ad form (Media, Destination) was unmounted: the page stood at the campaign and ad set. Both media checks idled 85 s, attempt 2 found no \"Set up creative\", and the destination step reported destination_section_missing.\n- The media entry point of a new ad is its own \"Set up creative\" in #imageVideoSelectorEditorComponent, the same as ad 1.\n- Ad 3: the dialog left open at the dialog_open capture was Meta's media picker (\"1 selected\", Cancel/Next), not \"Creating...\".\n\nChange:\n- The Media block is scrolled back into the DOM (show_media_block) before the wizard is opened, before media checks and before the destination of ads 2+. Scrolling only, inside hold_open_ad. The entry is logged as ad_creative_upload media_entry:<entry>.\n- \"Creating...\" is waited out up to META_BUSY_WAIT_S (120 s) whether or not the page answers. Any other dialog gives dialog_open at once. The media picker is closed with its own guarded Cancel.\n- New telemetry: progress_s, dialog.open_s, dialog_kind, media_picker.\n- test_a_disabled_menu_item_is_not_create_ad is made deterministic: the setTimeout(0) race is removed.\n\nTests (affected only):\n- more_ads: 29 passed\n- new_ad_media: 7 passed\n- flow, reload-guard and progress-model: 65 passed\n- 13 creative-path files: 171 passed plus 1 order assertion updated; that file then passed 5 of 5\n- 7 mutations: all caught\n\nNext: review, then a live 3-ad run on Facebook_1443 whose ad 2 video is not in the library (acceptance criterion 3). Watch the `media_entry`, `progress_s` and `media_picker` values.\n\nRisks:\n- The root cause of ad 2's media loss (unmounted form) is inferred, not proven.\n- Pressing Cancel in the picker is new.\n- The picker's origin (auto-opened by Meta, or re-rendered from ad 2) is not known."
         },
         "pr": 413,
-        "queued_at": "2026-09-30T17:46:40+00:00"
+        "queued_at": "2026-09-30T17:46:40+00:00",
+        "reviewer": "Reviewer-R1412G"
       },
       "357": {
         "implementers": [
@@ -3655,6 +3656,10 @@
       "Reviewer-R1344E": {
         "session": "rev_r1344e_1001",
         "role": "Reviewer"
+      },
+      "Reviewer-R1412G": {
+        "session": "rev_r1412g_1001",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -3971,7 +3976,6 @@
       406,
       330,
       357,
-      412,
       390,
       399,
       402,
@@ -3992,7 +3996,18 @@
       466,
       426
     ],
-    "review": null,
+    "review": {
+      "id": "fd8f6d51dd2343de9bb710f086e3f8f2",
+      "pr": 413,
+      "issues": [
+        412
+      ],
+      "actor": "Reviewer-R1412G",
+      "session": "rev_r1412g_1001",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-01T18:22:00+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -5318,6 +5333,13 @@
         "prs": [
           470
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-01T18:22:00+00:00",
+        "pr": 413,
+        "lane": "fd8f6d51dd2343de9bb710f086e3f8f2",
+        "actor": "Reviewer-R1412G"
       }
     ],
     "policy": {
