@@ -2480,9 +2480,11 @@
         "worktree": "C:\\acl-1426-crop",
         "id": "dbb150bfacca441ba990ac04c32e4bac",
         "issue": 426,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T19:23:08+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 440,
+        "report": "# ACL-1426 handoff r3 (Worker-C1426P, run_c1426p_1001): return_440\n\nPR #440 head is **c4fdf7d**. It is built on the coordinator's merge 5585aea, which brought in work/stage (ACL-1412 squashed, the full ACL-1433 bench) and work/main.\n\n- `tests/bench/catalogue.json` has three new rows for the ACL-1426 fixtures that were missing from the bench:\n  - `creative_wizard`, crop_step_video_simple_create_2026_10_01.html: Original already set on both cards, no clicks.\n  - `creative_wizard`, crop_step_image_classic_2026_10_01.html: Vertical moved from 9:16 to Original.\n  - `ads 2-3 (single-screen editor)`, ad_form_gone_verifying_2026_10_01.html: named `ad_form_gone_after_media` after 30 s.\n- Each row has its fragment, its test and status pass. No other fixture was uncatalogued.\n- `scripts/bench_catalogue.py --write` regenerated `tests/bench/CATALOGUE.md`, and `--check` is clean.\n- No product code changed.\n\nTests (headless, `ACL_LIBRARY_*` empty) passed: **133 passed.** The files run were:\n- test_bench_catalogue\n- test_crop_step_original_and_story\n- test_creative_pairing\n- test_crop_gate_on_every_success\n- test_bench_creative_wizard_steps\n- test_simple_create_new_ad_media\n- test_ad_form_gone_after_media\n\nThe round-2 fixes (H1, M1\u2013M3, L1, L4) are unchanged and already approved in review_440."
       }
     },
     "tasks": {
