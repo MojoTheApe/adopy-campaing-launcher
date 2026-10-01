@@ -2040,6 +2040,18 @@
         "state": "implementing",
         "started_at": "2026-09-30T12:43:13+00:00",
         "from_status": "status:backlog"
+      },
+      "419": {
+        "actor": "Worker-T1419R",
+        "session": "run_t1419r_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1419-targeting-flaky",
+        "worktree": "C:\\acl-1419-targeting-flaky",
+        "id": "49856938bf3945579458470320254eae",
+        "issue": 419,
+        "state": "implementing",
+        "started_at": "2026-10-01T05:00:45+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -2477,6 +2489,17 @@
         "pr": 415,
         "queued_at": "2026-09-30T19:30:52+00:00",
         "reviewer": "Reviewer-R1414F"
+      },
+      "419": {
+        "implementers": [
+          {
+            "actor": "Worker-T1419R",
+            "session": "run_t1419r_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-T1419R",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2571,6 +2594,10 @@
       "Reviewer-R1414F": {
         "session": "review_r1414f_0930",
         "role": "Reviewer"
+      },
+      "Worker-T1419R": {
+        "session": "run_t1419r_1001",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -3352,6 +3379,13 @@
         "prs": [
           417
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T05:00:45+00:00",
+        "issue": 419,
+        "claim": "49856938bf3945579458470320254eae",
+        "actor": "Worker-T1419R"
       }
     ],
     "policy": {
