@@ -2270,22 +2270,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "457": {
-        "actor": "Worker-C1457O",
-        "session": "run_c1457o_1001",
-        "coordinator": "Coordinator-D0930K",
-        "branch": "codex/acl-1457-one-connect",
-        "worktree": "C:\\acl-1457-connect",
-        "id": "745d237cfa3647a0b58210d66b52d672",
-        "issue": 457,
-        "state": "handoff",
-        "started_at": "2026-10-01T12:37:13+00:00",
-        "from_status": "status:backlog",
-        "pr": 458,
-        "report": "# ACL-1457 \u2014 implementation handoff\n- Branch `codex/acl-1457-one-connect` \u2192 `stage`, head e3ec729, base 3a629ca. Worker-C1457O, run_c1457o_1001, Coordinator-D0930K, `C:\\acl-1457-connect`.\n- Done: one Connect (opens via /mlx-profile-open, then existing connect flow); failed open does not cancel; prompt text updated; no server change.\n- Checks: new offline-Chromium behaviour test (4) + updated old checks + connect-form browser tests + JS guard: 38 passed. Full suite: CI.\n- For the reviewer: `amapOpenFoundProfile` re-enables the button at its end; `amapOpenAndConnect` disables it again before `amapConnect` and re-enables in `finally`. Check no double-open on fast double click.\n- Not done: owner's live check (connect a never-opened profile; the number must fill in without typing)."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -3175,9 +3160,25 @@
             "session": "run_c1457o_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-C1457O",
-        "coordinator": "Coordinator-D0930K"
+        "coordinator": "Coordinator-D0930K",
+        "handoff": {
+          "actor": "Worker-C1457O",
+          "session": "run_c1457o_1001",
+          "coordinator": "Coordinator-D0930K",
+          "branch": "codex/acl-1457-one-connect",
+          "worktree": "C:\\acl-1457-connect",
+          "id": "745d237cfa3647a0b58210d66b52d672",
+          "issue": 457,
+          "state": "handoff",
+          "started_at": "2026-10-01T12:37:13+00:00",
+          "from_status": "status:backlog",
+          "pr": 458,
+          "report": "# ACL-1457 \u2014 implementation handoff\n- Branch `codex/acl-1457-one-connect` \u2192 `stage`, head e3ec729, base 3a629ca. Worker-C1457O, run_c1457o_1001, Coordinator-D0930K, `C:\\acl-1457-connect`.\n- Done: one Connect (opens via /mlx-profile-open, then existing connect flow); failed open does not cancel; prompt text updated; no server change.\n- Checks: new offline-Chromium behaviour test (4) + updated old checks + connect-form browser tests + JS guard: 38 passed. Full suite: CI.\n- For the reviewer: `amapOpenFoundProfile` re-enables the button at its end; `amapOpenAndConnect` disables it again before `amapConnect` and re-enables in `finally`. Check no double-open on fast double click.\n- Not done: owner's live check (connect a never-opened profile; the number must fill in without typing)."
+        },
+        "pr": 458,
+        "queued_at": "2026-10-01T12:41:31+00:00"
       }
     },
     "actors": {
@@ -3620,7 +3621,8 @@
       445,
       447,
       452,
-      455
+      455,
+      457
     ],
     "review": {
       "id": "afc86d4be7054b90b0bf87c81be9ebc1",
@@ -4747,6 +4749,13 @@
         "pr": 446,
         "lane": "afc86d4be7054b90b0bf87c81be9ebc1",
         "actor": "Reviewer-R1444C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-01T12:41:31+00:00",
+        "issue": 457,
+        "pr": 458,
+        "actor": "Worker-C1457O"
       }
     ],
     "policy": {
