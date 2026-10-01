@@ -853,6 +853,24 @@
           441
         ],
         "recorded_at": "2026-10-01T11:29:40+00:00"
+      },
+      "446": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1444C",
+        "review_session": "rev_r1444c_1001",
+        "execution_lane": "afc86d4be7054b90b0bf87c81be9ebc1",
+        "implementer": "Worker-Z1444Y",
+        "head_sha": "08b5c19d7509f13893b3a04870e3c147fa71e9ff",
+        "base_sha": "3a629ca36796243ef04d90dcd9c120bf101de17a",
+        "tree_sha": "3f0eea66757d004f633922cfd20412c103c594a1",
+        "report": "# Review of PR #446 [ACL-1444], round 2: auto-close clean profiles, \"Close profile\" button\n\n- Reviewer: Reviewer-R1444C (rev_r1444c_1001). Implementer: Worker-Z1444Y\n- Head 5e4c1406a14c0afa291c468f931e204220c676b0 (one fix commit on 39f40e0), base work/stage 3a629ca36796243ef04d90dcd9c120bf101de17a, tree 3f0eea66757d004f633922cfd20412c103c594a1\n- **Verdict: approved**\n\n## Round-1 findings, re-checked on 5e4c140\n\n- **F1 (High): fixed.** `rpa_publisher._draft_saved` now fails closed. Only the Ads Manager campaign list counts as \"nothing pending\": the path contains `/adsmanager/manage/campaigns`, has no `/edit`, and is not simple_create (`_on_campaign_list`). Every other page has to show \"All edits saved\" after `wait_editor_saved`: the `/edit` editor, the simple_create editor, unknown pages and unreadable URLs. A `next=simple_create` query on the list is still treated as the list. Tests cover simple_create, a checkpoint page, an empty URL and the next= case.\n- **F2 (Low): fixed.** `_cancelled` is re-checked after `close()` and right before `close_finished_profile`, which gives `kept_cancelled`. There is a test that sets the cancel during the autosave wait.\n- **F3 (Low): fixed.** The close error is logged through `_telemetry.scrub(...)[:200]`. A caplog test checks that no profile uuid appears.\n- **F4 (Low): fixed.** The redundant `_slots.wake()` is gone from the auto-close path. `_slots.release` in `_run_job`'s finally wakes the queue. The button path still wakes.\n- **F6 (Low): fixed.** `_profile_has_other_job` checks for another job on the same `profile_key_for` with status pending, queued, running or cancelling. If the lookup fails, it answers True, which keeps the window open (the safe side). In that case `finish_job(..., other_job_waits=True)` returns `kept_next_job`. Tests cover a queued second label on the same profile (kept) and a done job (not counted).\n- **F7 (Info): addressed.** The button hint now says it also closes a window opened by hand. Server-side refusal stays the guard for \"disabled while running\".\n- **F8 (Low): fixed.** There are now job-level tests for a mid-run cancel (status cancelled, `clean=False`) and a partial job (1 of 2 results after an exception, `clean=False`). A table test covers the `_job_is_clean` verdict: count, empty, errors, blocked. The failed-button test now checks the exact fixed message, the scrubbed log, no wake, and that the lock is released (a retry succeeds).\n\n## Remaining (non-blocking)\n\n- F5 (inherited ACL-1320 semantics: robot markers last for the process lifetime, with a same-pid guard) is unchanged and acceptable.\n- Because the save check now fails closed, a job that ends on an editor where \"All edits saved\" is not visible keeps its window. That is safe by design. The live \"Publish all\" acceptance criterion is still open.\n\n## Safety checklist (unchanged, verified)\n\n- Graceful stop with `allow_kill=False` on both paths.\n- Hand-opened windows are never auto-closed.\n- Problem, cancelled or partial jobs keep their window.\n- The button refuses while any job on the profile is active, and holds the profile lock non-blocking for the whole stop.\n- Auto-close runs inside the job's lease.\n- User-facing text is English.\n- conftest `FB_RPA_KEEP_PROFILES_OPEN=1` hides nothing, and the new tests delete it.\n\n## Tests\n\nAffected set (the new file, test_report_scripts_parse and 28 files importing rpa_publisher/publish_jobs/profile_slots): **539 passed**, headless, `ACL_LIBRARY_*` empty.\n",
+        "main_sha": "3469c2352e86e7eae7911f1a39efb690133cd22f",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          444
+        ],
+        "recorded_at": "2026-10-01T12:39:19+00:00"
       }
     },
     "stage": {
