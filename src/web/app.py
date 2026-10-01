@@ -1967,11 +1967,13 @@ async def api_save_machine_paths(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
     if not isinstance(data, dict) or any(
-            k in data and not isinstance(data[k], str) for k in ("stats_workbook", "creatives_folder")):
-        return JSONResponse({"ok": False, "error": "Expected text paths"}, status_code=400)
+            k in data and not isinstance(data[k], str)
+            for k in ("stats_workbook", "creatives_folder", "manager_name")):
+        return JSONResponse({"ok": False, "error": "Expected text values"}, status_code=400)
     try:
         from starlette.concurrency import run_in_threadpool
-        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"), data.get("creatives_folder"))
+        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"),
+                                         data.get("creatives_folder"), data.get("manager_name"))
     except machine_paths.MachinePathError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if result["stats_changed"]:

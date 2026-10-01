@@ -390,6 +390,14 @@ class RpaPublisher:
                                                attach_section=False)
         except Exception:
             pass
+        try:
+            # ACL-1447: и итог кампании — остановлена до первого шага.
+            from src.fb_ads_rpa import run_summary
+
+            run_summary.report_finished(campaign=campaign_name, account=account or "",
+                                        stopped_at=stop.code, steps=[])
+        except Exception:
+            pass
 
     @staticmethod
     def _begin_campaign_context() -> None:

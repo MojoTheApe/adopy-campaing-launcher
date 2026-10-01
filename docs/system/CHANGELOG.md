@@ -1,5 +1,36 @@
 # System history
 
+## Every campaign sends a run summary to Sentry, labelled with the manager — ACL-1447
+
+2026-10-01. Until now only blocking failures reached Sentry; how a run went on a
+buyer's machine (warnings, slow steps, what passed) stayed in the local
+`rpa_telemetry.jsonl`, and most events named only the computer (`LAPTOP-UA006`).
+
+- When a campaign finishes — clean, with warnings, do-not-publish, or stopped
+  (including a stop while connecting the profile) — `src/fb_ads_rpa/run_summary.py`
+  sends one event "Run summary: <result>" at info level (clean, warnings) or warning
+  level (do-not-publish, stopped), never error. Fingerprint
+  `acl-run-summary` + result: four issues for the whole fleet, not one per campaign.
+  Context `run_summary`: result, account, campaign, editor (classic / single-screen),
+  steps (step, ok, duration, reason), blocking failures, warnings, total duration,
+  number of ads, attempts, run id. Release and machine come from the existing tags.
+- Owner decision 2026-10-01: the account display name (short label, e.g.
+  FacebookDoc19) and the campaign name are sent, in the summary and as tags `account`
+  and `campaign`. Ad account ids, profile ids, Ads Manager URLs, tokens and e-mails
+  are still scrubbed (`run_telemetry.scrub` plus URL / e-mail / `act_` rules in the
+  summary). The page section attached to failures keeps its placeholders (ACL-1325).
+- Every Sentry event carries the tag `manager`: `ACL_MACHINE_LABEL`, else
+  `MY_CM_NAME`, else `unset`; read when the event is sent, so a change applies
+  without a restart. The setup wizard writes `ACL_MACHINE_LABEL` from the name it
+  already asks for; Accounts → This computer → "Your name" changes it.
+- Sending runs in a background thread and swallows every error; a run never waits
+  for the network. `ACL_SENTRY_RUN_SUMMARY=0` turns summaries off.
+- `python scripts/run_summaries.py --from-sentry [--period 7d] [--format json]` lists
+  machines with their manager, campaign count per result, last run and release
+  (Sentry Discover API, `SENTRY_AUTH_TOKEN` with event:read). `scripts/robot_health.py`
+  (ACL-1434) was not on main yet, so the reader is its own script with
+  `machines_from_sentry()` for the health table to call.
+
 ## Ads in the account tree get their workbook numbers — ACL-1395
 
 2026-09-30 on Facebook_6540 (CO_bnc_All_Video_FX_Y_35_28.09) the campaign row had

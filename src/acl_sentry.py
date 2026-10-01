@@ -17,6 +17,22 @@
   их читает вся компания; отправлять то же самое в чужой сервис было бы
   странно. Тексты исключений проходят через тот же вычиститель
   (`run_telemetry.scrub`) — в них попадают адреса Ads Manager с `act=`.
+
+  **Имена — решение владельца 01.10 (ACL-1447).** Раньше имена аккаунтов и
+  кампаний считались той же чувствительной частью и в разделе страницы
+  заменялись заглушками (ACL-1325). Теперь отображаемое имя аккаунта
+  («FacebookDoc19») и имя кампании отправляются — в итоге кампании
+  (`report_run_summary`) и тегами `account` / `campaign`: без них итог по
+  машине байера не сопоставить с его кампаниями. Номера кабинетов и
+  профилей, адреса Ads Manager, токены и почта по-прежнему вычищаются.
+  Вычищенный раздел страницы (`sentry_signal`) остаётся с заглушками —
+  решение про итог его не меняет.
+
+  Каждое событие несёт тег `manager` — имя менеджера машины
+  (`ACL_MACHINE_LABEL`, иначе `MY_CM_NAME`; мастер установки и настройки
+  дешборда пишут первое). Тег ставится в `before_send`, а не один раз при
+  `init`, — иначе имя, исправленное в настройках, доехало бы только после
+  перезапуска.
 * **Постоянного профайлера.** В присланном примере стояли стопроцентные
   трассировка и профилирование. На машине байера уже крутятся Multilogin,
   Chrome и дешборд, а замер 30.07 показал, чем оборачивается лишняя нагрузка
@@ -69,7 +85,33 @@ def _scrub_deep(value: Any) -> Any:
     return scrub_diag(value)
 
 
+def manager_label() -> str:
+    """Имя менеджера этой машины (ACL-1447): `ACL_MACHINE_LABEL`, иначе
+    `MY_CM_NAME` — имя, под которым он входит в дешборд. Пусто — не задано."""
+    for key in ("ACL_MACHINE_LABEL", "MY_CM_NAME"):
+        value = (os.environ.get(key) or "").strip()
+        if value:
+            return value[:200]
+    return ""
+
+
+def _tag_manager(event: dict) -> None:
+    label = manager_label() or "unset"
+    tags = event.get("tags")
+    if isinstance(tags, dict):
+        tags["manager"] = label
+    elif isinstance(tags, list):
+        event["tags"] = [t for t in tags if not (isinstance(t, (list, tuple)) and t and t[0] == "manager")]
+        event["tags"].append(["manager", label])
+    else:
+        event["tags"] = {"manager": label}
+
+
 def _before_send(event: dict, _hint: dict) -> dict | None:
+    try:
+        _tag_manager(event)
+    except Exception:
+        pass  # без тега событие всё равно ценно
     try:
         return _scrub_deep(event)
     except Exception:
@@ -410,6 +452,41 @@ def failure_reason(failure: str, why: str = "") -> str:
             if kind != "other":
                 return kind
     return "other" if (detail or why) else "silent"
+
+
+#: Вид итога → уровень события. Не error: итог — не отказ, алертов не плодит.
+_SUMMARY_LEVELS = {"clean": "info", "warnings": "info",
+                   "do-not-publish": "warning", "stopped": "warning"}
+
+
+def report_run_summary(summary: dict) -> str:
+    """Итог одной кампании (ACL-1447) — собирает `run_summary.build`.
+
+    Отпечаток — только вид итога: четыре тикета на весь парк машин, события
+    внутри них. Имена аккаунта и кампании — тегами (решение владельца 01.10,
+    см. докстроку модуля); всё событие проходит тот же `before_send`.
+    """
+    if not init():
+        return ""
+    import sentry_sdk
+
+    result = str(summary.get("result") or "unknown")
+    with sentry_sdk.new_scope() as scope:
+        scope.fingerprint = ["acl-run-summary", result]
+        scope.set_tag("kind", "run_summary")
+        scope.set_tag("result", result)
+        scope.set_tag("editor", str(summary.get("editor") or "unknown"))
+        if summary.get("account"):
+            scope.set_tag("account", str(summary["account"])[:200])
+        if summary.get("campaign"):
+            scope.set_tag("campaign", str(summary["campaign"])[:200])
+        ctx = dict(summary)
+        if ctx.get("run_id"):
+            ctx["run_id"] = str(ctx["run_id"]).replace("-", "")
+        scope.set_context("run_summary", ctx)
+        return sentry_sdk.capture_message(
+            f"Run summary: {result}", level=_SUMMARY_LEVELS.get(result, "info")
+        ) or ""
 
 
 def report_problem(text: str, *, context: dict | None = None) -> str:
