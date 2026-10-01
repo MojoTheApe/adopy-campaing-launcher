@@ -232,6 +232,27 @@ def _get_upload_ref_cached() -> dict:
         return {}
 
 
+def _my_goal_countries(report: dict | None) -> list[str]:
+    """Страны человека — стартовый список его целей, пока своих он не задал.
+
+    Где у него есть хоть что-то в книге (спенд, лиды, депозиты), плюс страны,
+    к которым он сам привязал аккаунты на карте этой машины. Чужие страны
+    сюда не попадают: 30.09 у Дана стояли цели владельца (ACL-1452).
+    """
+    out: list[str] = []
+    for country in (report or {}).get("countries", []):
+        totals = country.get("my_totals") or {}
+        if any(float(totals.get(k) or 0) for k in ("spend", "leads", "deposits")):
+            out.append((country.get("country") or "").strip())
+    try:
+        from src.web import account_links
+
+        out += [v for v in account_links.all_values("country") if account_links.accounts_for("country", v)]
+    except Exception:  # карта связей не должна ронять цели
+        pass
+    return [c for c in out if c]
+
+
 def _build_goals_view(report: dict) -> dict:
     """Each country's target next to what actually happened, ready to render.
 
@@ -251,7 +272,7 @@ def _build_goals_view(report: dict) -> dict:
                 actual[key] = totals
 
     rows = []
-    for goal in goals_store.for_cm(cm):
+    for goal in goals_store.for_cm(cm, _my_goal_countries(report)):
         name = (goal.get("country") or "").strip()
         got = actual.get(name.casefold()) or actual.get((goal.get("code") or "").casefold()) or {}
         target = int(goal.get("ftd") or 0)
@@ -3381,6 +3402,15 @@ async def account_map_available_fragment(
     )
 
 
+def _goal_countries_now() -> list[str]:
+    """Те же страны, что видит панель, — для чтения и правки целей по запросу."""
+    try:
+        report, _df, _w = get_cached_report()
+    except Exception:
+        report = None
+    return _my_goal_countries(report)
+
+
 @app.get("/goals")
 async def goals_read(cm: str = "") -> JSONResponse:
     from src.web import goals as goals_store
@@ -3389,7 +3419,7 @@ async def goals_read(cm: str = "") -> JSONResponse:
     return JSONResponse({
         "ok": True,
         "cm": who,
-        "goals": goals_store.for_cm(who),
+        "goals": goals_store.for_cm(who, _goal_countries_now()),
         "team_lead": goals_store.is_team_lead(),
     })
 
@@ -3426,9 +3456,9 @@ async def goals_write(request: Request) -> JSONResponse:
             country = (data.get("country") or "").strip()
             if not country:
                 return JSONResponse({"ok": False, "error": "Which country?"}, status_code=400)
-            return JSONResponse({"ok": True, "goals": goals_store.delete(who, country)})
+            return JSONResponse({"ok": True, "goals": goals_store.delete(who, country, _goal_countries_now())})
         goal = data.get("goal") or {}
-        return JSONResponse({"ok": True, "goals": goals_store.upsert(who, goal)})
+        return JSONResponse({"ok": True, "goals": goals_store.upsert(who, goal, _goal_countries_now())})
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:  # pragma: no cover - defensive

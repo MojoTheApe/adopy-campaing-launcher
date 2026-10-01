@@ -1,5 +1,21 @@
 # System history
 
+## A new campaign manager no longer sees the owner's goals — ACL-1452
+
+2026-09-30 a test installation opened as Dan showed "Evgeni — Goals Progress" with
+the owner's seven countries and targets. The panel title had the owner's name written
+into the page, and a person without saved goals was given the owner's old template
+numbers as a start.
+
+- The title names the campaign manager whose goals are on screen.
+- A person without saved goals starts with **their own countries** — where they have
+  spend, leads or deposits in the workbook, plus countries they linked accounts to on
+  this machine's map — each with a target of 10 FTD and no other targets. With no
+  countries known, the strip is empty apart from "+ country".
+- The starting goals are shown, not written; the first edit saves them together with
+  the change, so editing one country does not drop the others. Saved goals are
+  untouched (the owner's own seven countries are saved on his machine).
+
 ## Connect Multilogin issues the token in the right workspace — ACL-1441
 
 2026-10-01. "Connect Multilogin" (Accounts → Connect) asked for the automation

@@ -20,16 +20,44 @@ def _isolated(monkeypatch, tmp_path):
     yield
 
 
-def test_a_machine_that_never_edited_anything_sees_what_it_always_saw():
-    assert goals.for_cm("Evgeni Sedin") == goals.DEFAULT_GOALS
+def test_a_new_manager_starts_with_their_own_countries_at_ten():
+    """30.09 установка «от имени Дана» показала цели владельца (ACL-1452)."""
+    got = goals.for_cm("Dan", ["Chile", "Kuwait", "Atlantis"])
+    assert [(g["country"], g["code"], g["market"], g["ftd"]) for g in got] == [
+        ("Kuwait", "KW", "GCC", 10), ("Chile", "CL", "Latam", 10), ("Atlantis", "", "Other", 10)]
+    assert all(g["cpa"] is None and g["cr"] is None and g["leads_per_day"] is None for g in got)
     assert not goals.goals_path().exists(), "reading must not create a file"
+
+
+def test_a_new_manager_without_countries_starts_empty():
+    assert goals.for_cm("Dan") == []
+    assert goals.for_cm("Dan", []) == []
+
+
+def test_nobody_inherits_the_owners_numbers():
+    got = goals.for_cm("Dan", ["Kuwait", "Mexico"])
+    assert {g["ftd"] for g in got} == {10}
+    assert not hasattr(goals, "DEFAULT_GOALS"), "чьи-то цели снова вшиты как старт"
+
+
+def test_stored_goals_are_returned_as_stored():
+    goals.save("Evgeni Sedin", [{"country": "Kuwait", "code": "KW", "market": "GCC", "ftd": 15, "cpa": 3000}])
+    got = goals.for_cm("Evgeni Sedin", ["Chile", "Mexico"])
+    assert [(g["country"], g["ftd"], g["cpa"]) for g in got] == [("Kuwait", 15, 3000.0)]
+
+
+def test_the_first_edit_keeps_the_starting_countries():
+    """Человек видел свои страны по 10 — правка одной не стирает остальные."""
+    goals.upsert("Dan", {"country": "Chile", "ftd": 25}, ["Chile", "Peru"])
+    got = {g["country"]: g["ftd"] for g in goals.for_cm("Dan")}
+    assert got == {"Chile": 25, "Peru": 10}
 
 
 def test_each_manager_keeps_their_own():
     goals.upsert("Evgeni", {"country": "Peru", "code": "PE", "market": "Latam", "ftd": 10})
 
     assert [g["country"] for g in goals.for_cm("Evgeni")].count("Peru") == 1
-    assert goals.for_cm("Yotam") == goals.DEFAULT_GOALS, "untouched, still on defaults"
+    assert goals.for_cm("Yotam") == [], "untouched, no countries known, nothing inherited"
 
 
 def test_editing_a_country_replaces_it_rather_than_adding_a_second():
@@ -41,7 +69,7 @@ def test_editing_a_country_replaces_it_rather_than_adding_a_second():
 
 
 def test_deleting_a_country_stops_the_target_and_nothing_else():
-    goals.delete("Evgeni", "Mexico")
+    goals.delete("Evgeni", "Mexico", ["Chile", "Mexico"])
 
     countries = [g["country"] for g in goals.for_cm("Evgeni")]
     assert "Mexico" not in countries
@@ -74,3 +102,24 @@ def test_team_lead_is_an_agreement_and_says_so(monkeypatch):
     module = (goals.__file__)
     text = open(module, encoding="utf-8").read()
     assert "an agreement, not a mechanism" in text
+
+
+# ── заголовок и страны человека (ACL-1452) ──────────────────────────────
+
+def test_the_panel_title_names_whose_goals_they_are():
+    from pathlib import Path
+    page = (Path(__file__).resolve().parent.parent / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    assert "Evgeni — Goals Progress" not in page, "имя владельца снова вписано в заголовок"
+    assert "{{ (gv.cm or '') | e | tojson }}" in page
+
+
+def test_the_persons_countries_come_from_their_numbers_and_their_map(monkeypatch):
+    from src.web import account_links, app as web
+    monkeypatch.setattr(account_links, "all_values", lambda kind: ["Peru", "Empty"])
+    monkeypatch.setattr(account_links, "accounts_for", lambda kind, v: ["Acc"] if v == "Peru" else [])
+    report = {"countries": [
+        {"country": "Chile", "my_totals": {"spend": 12.0}},
+        {"country": "Kuwait", "my_totals": {}},          # чужая страна: у него там ничего
+        {"country": "Mexico", "my_totals": {"leads": 3}},
+    ]}
+    assert web._my_goal_countries(report) == ["Chile", "Mexico", "Peru"]
