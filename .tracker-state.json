@@ -3642,7 +3642,7 @@
             "session": "run_f1476k_1001"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-F1476K",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -4250,6 +4250,30 @@
         "state": "reviewing",
         "report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise.",
         "keep_lane": true
+      },
+      "478": {
+        "id": "b979354fb0594a949b0bf731cabcdaba",
+        "pr": 478,
+        "issues": [
+          476
+        ],
+        "actor": "Reviewer-R1476P",
+        "session": "rev_r1476p_1002",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-01T21:02:55+00:00",
+        "state": "reviewing"
+      },
+      "479": {
+        "id": "b979354fb0594a949b0bf731cabcdaba",
+        "pr": 478,
+        "issues": [
+          476
+        ],
+        "actor": "Reviewer-R1476P",
+        "session": "rev_r1476p_1002",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-01T21:02:55+00:00",
+        "state": "reviewing"
       }
     },
     "review_queue": [
@@ -4275,18 +4299,7 @@
       31,
       466
     ],
-    "review": {
-      "id": "b979354fb0594a949b0bf731cabcdaba",
-      "pr": 478,
-      "issues": [
-        476
-      ],
-      "actor": "Reviewer-R1476P",
-      "session": "rev_r1476p_1002",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-10-01T21:02:55+00:00",
-      "state": "reviewing"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -5753,6 +5766,25 @@
         "pr": 478,
         "lane": "b979354fb0594a949b0bf731cabcdaba",
         "actor": "Reviewer-R1476P"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-01T21:52:49+00:00",
+        "review": {
+          "id": "b979354fb0594a949b0bf731cabcdaba",
+          "pr": 478,
+          "issues": [
+            476
+          ],
+          "actor": "Reviewer-R1476P",
+          "session": "rev_r1476p_1002",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-01T21:02:55+00:00",
+          "state": "reviewing"
+        },
+        "prs": [
+          479
+        ]
       }
     ],
     "policy": {
