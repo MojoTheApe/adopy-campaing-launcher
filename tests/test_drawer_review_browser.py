@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from email.parser import BytesParser
@@ -86,6 +87,19 @@ def add(page, account=0, count=1, valid=True):
     page.wait_for_function("document.querySelectorAll('.cbd-camp').length > 0")
 
 
+def _until(page, condition, timeout_s=10.0):
+    """Ждать, пока Python-сторона увидит перехваченный запрос (ACL-1397).
+
+    Проверка превью уходит с задержкой (debounce) и приходит в `route` на
+    стороне теста; прежде тест ждал ровно 450 мс и на занятой машине
+    (параллельный прогон) иногда проверял раньше, чем запрос дошёл.
+    Условие проверяется между короткими ожиданиями страницы — в них же
+    Playwright доставляет события `route`."""
+    deadline = time.monotonic() + timeout_s
+    while not condition() and time.monotonic() < deadline:
+        page.wait_for_timeout(50)
+
+
 def ready(page):
     page.wait_for_function("Array.from(document.querySelectorAll('.cb-slot')).every(s => s._drawerResult && s._drawerResult.state === 'ok')")
 
@@ -105,7 +119,7 @@ def test_readiness_uses_server_checks_and_recovers_after_edit(ui):
     p.evaluate('''() => {const x=document.querySelector('[name="camp_0_ad_0_creative_file"]'); x.value='good.png'; x.dispatchEvent(new Event('input',{bubbles:true}));}''')
     expect(p.locator('.cbd-ind-wait')).to_have_count(1)
     expect(p.locator('.cb-field-error')).to_have_count(0)
-    p.wait_for_timeout(450)
+    _until(p, lambda: state['held'])
     assert state['held']
     state['hold'] = False
     for r, data in state['held']:
@@ -146,7 +160,7 @@ def test_cancel_confirmation_and_active_queue_survive_repaint(ui):
     # не заперта (в идущую сборку докладывают другие аккаунты), а отказ
     # говорит, что оба аккаунта уже собираются.
     p.wait_for_function("CB_QUEUE.progress.stage === 'publishing'")
-    p.wait_for_timeout(300)
+    _until(p, lambda: len(state['posts']) >= 2)
     assert len(state['posts']) == 2
     said = []
     p.once('dialog', lambda d: (said.append(d.message), d.accept()))
@@ -187,7 +201,7 @@ def test_edit_during_preview_completes_without_submitting_stale_values(ui):
     ready(p)
     state['hold'] = True
     all_confirm(p)
-    p.wait_for_timeout(100)
+    _until(p, lambda: state['held'])
     assert state['held']
     p.evaluate('''() => {const x=document.querySelector('[name="camp_0_budget"]');x.value='99';x.dispatchEvent(new Event('input',{bubbles:true}));}''')
     state['hold'] = False
@@ -217,8 +231,13 @@ def test_repaint_does_not_refresh_an_untouched_accounts_expiry(ui):
     p, _ = ui
     add(p)
     add(p, account=1)
+    # Сначала обе карточки проверены сервером (ACL-1397): ответ проверки
+    # дописывает поля карточки, и если он приходил после снимка `before`
+    # (занятая машина, параллельный прогон), «Other» честно обновлял
+    # `touched` — тест ловил свою же гонку, а не перерисовку.
+    ready(p)
     p.evaluate('cbKeep.save()')
-    before = p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2')).forms")
+    before =p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2')).forms")
     p.wait_for_timeout(20)
     p.evaluate('''() => {document.querySelector('[name="camp_0_budget"]').value='81';cbKeep.save();}''')
     after = p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2')).forms")
@@ -232,7 +251,7 @@ def test_stale_check_cannot_overwrite_a_newer_valid_result(ui):
     p, state = ui
     state['hold'] = True
     add(p, valid=False)
-    p.wait_for_timeout(500)
+    _until(p, lambda: state['held'])
     assert state['held']
     old, data = state['held'][0]
     state['hold'] = False
@@ -246,6 +265,7 @@ def test_stale_check_cannot_overwrite_a_newer_valid_result(ui):
 def test_publish_all_skips_red_campaigns(ui):
     p, state = ui
     add(p, count=2)
+    ready(p)   # обе проверены сервером, и только потом одна краснеет (ACL-1397)
     p.evaluate('''() => {const x=document.querySelector('[name="camp_1_ad_0_creative_file"]'); x.value='';x.dispatchEvent(new Event('input',{bubbles:true}));}''')
     expect(p.locator('.cbd-ind-bad')).to_have_count(1)
     all_confirm(p)
