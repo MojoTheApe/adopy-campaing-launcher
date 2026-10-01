@@ -3576,7 +3576,7 @@
             "session": "run_f1476k_1001"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-F1476K",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3594,7 +3594,8 @@
           "report": "# ACL-1476 handoff (Worker-F1476K)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/478 (into `stage`)\nBranch: `codex/acl-1476-crop-fallback`, head 9f9771d, cut from work/main 428328c.\n\n## What changed\n- `src/fb_ads_rpa/crop_step.py`: two pair cases are now WARNINGS: `story_not_placed:no_crop_step` (no Crop step shown) and `story_not_placed:not_in_library` (the story is not in the library). Use `crop_step.warning()` to read them. Telemetry `ad_creative_crop` gets ok=None with the reason. In the not-in-library case Original and Meta AI expansion off are still applied and read back. Only Replace is skipped.\n- Live a88e3789f7ab: Meta's Replace picker opens inside the wizard dialog. It has the step row, Close and Save, but no Cancel, and the old fallback pressed the wizard's Close. The new `_back_to_crop` presses Cancel or the step row's \"Crop\". It falls back to Close and blocks with `crop_replace_picker_not_closed` only if Crop does not come back.\n- `src/fb_ads_rpa/meta_dom.py`: `upload_ad_creative_with_retry` keeps the warning of a successful step (`last_crop_warning()`). `story_not_placed_soft_fail(tag, label)` adds the ad's warning row for ad 1 and for ads 2+.\n- `src/fb_ads_rpa/simple_create.py`: English lines for both reasons (\"Story placement uses the post file: ...\").\n- `src/fb_ads_rpa/failure_policy.py`: per-ad `story_not_placed` is a WARNING, so the campaign stays publishable.\n- Still blocking: Meta AI on, `crop_unknown_toggle_on`, `crop_vertical_not_story`, `crop_square_changed`, `crop_replace_picker_unscoped`, Original not set, `crop_replace_off`.\n- `docs/system/CHANGELOG.md` entry.\n\n## Tests\nHeadless run with `ACL_LIBRARY_*` empty: 235 passed. Files: test_story_not_placed_is_a_warning (new, 27), test_crop_gate_on_every_success, test_crop_step_original_and_story, test_creative_pairing, test_bench_creative_wizard_steps, test_creative_wizard_opens_and_failures_are_named, test_the_wizard_after_upload_is_walked_out, test_wizard_steps_are_captured_passively, test_failure_policy, test_build_progress_model, test_bench_catalogue, test_known_defects_v96.\n\n## Open / risks\n- Live acceptance has not been run yet: a video pair campaign on the single-screen editor should end publishable with the warning.\n- Going back from the in-wizard picker through the step row's \"Crop\" is inferred from the captured picker DOM (that button is the only enabled one in the step row). It has not been seen live. If it does not work live, the step blocks with `crop_replace_picker_not_closed` and does not publish wrong."
         },
         "pr": 478,
-        "queued_at": "2026-10-01T21:01:47+00:00"
+        "queued_at": "2026-10-01T21:01:47+00:00",
+        "reviewer": "Reviewer-R1476P"
       }
     },
     "actors": {
@@ -3813,6 +3814,10 @@
       "Worker-F1476K": {
         "session": "run_f1476k_1001",
         "role": "Worker"
+      },
+      "Reviewer-R1476P": {
+        "session": "rev_r1476p_1002",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -4202,10 +4207,20 @@
       459,
       462,
       31,
-      466,
-      476
+      466
     ],
-    "review": null,
+    "review": {
+      "id": "b979354fb0594a949b0bf731cabcdaba",
+      "pr": 478,
+      "issues": [
+        476
+      ],
+      "actor": "Reviewer-R1476P",
+      "session": "rev_r1476p_1002",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-01T21:02:55+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -5665,6 +5680,13 @@
         "issue": 476,
         "pr": 478,
         "actor": "Worker-F1476K"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-01T21:02:55+00:00",
+        "pr": 478,
+        "lane": "b979354fb0594a949b0bf731cabcdaba",
+        "actor": "Reviewer-R1476P"
       }
     ],
     "policy": {
