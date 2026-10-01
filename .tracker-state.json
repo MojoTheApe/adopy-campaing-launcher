@@ -2269,22 +2269,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "31": {
-        "actor": "Worker-W132T",
-        "session": "run_w132t_1001",
-        "coordinator": "Coordinator-D0930K",
-        "branch": "codex/acl-132-copy-text",
-        "worktree": "C:\\acl-132-copytext",
-        "id": "197cfb68812e4b508c2f60f168068338",
-        "issue": 31,
-        "state": "handoff",
-        "started_at": "2026-10-01T13:43:59+00:00",
-        "from_status": "status:backlog",
-        "pr": 465,
-        "report": "# ACL-132 \u2014 implementation handoff\n- PR #465 (`codex/acl-132-copy-text` \u2192 `stage`), head 6bea56e, base 38351e6. Worker-W132T, run_w132t_1001, Coordinator-D0930K, `C:\\acl-132-copytext`.\n- Done (owner's simplified decision 30.09): Copy text + hint under disabled/restricted/blocked/review; line `<name before \" - \"> - Account <Status>`. Screenshot part is ACL-1430 (#431).\n- Checks: new tests (template lines, escaping, Chromium clipboard click) + status/map/JS guards: 34 passed. Diff applies cleanly onto the 1430 branch (checked). Full suite: CI.\n- Issue edit: `needs: ACL-1391` replaced by a satisfied-dependency note (1391 merged in main, verified live on Doc20; open only for package delivery).\n- Not done: live check \u2014 owner copies text + screenshot from Doc20 into the provider group. \"Copy text\" looks link-style only after ACL-1455 merges."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -3255,9 +3240,25 @@
             "session": "run_w132t_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W132T",
-        "coordinator": "Coordinator-D0930K"
+        "coordinator": "Coordinator-D0930K",
+        "handoff": {
+          "actor": "Worker-W132T",
+          "session": "run_w132t_1001",
+          "coordinator": "Coordinator-D0930K",
+          "branch": "codex/acl-132-copy-text",
+          "worktree": "C:\\acl-132-copytext",
+          "id": "197cfb68812e4b508c2f60f168068338",
+          "issue": 31,
+          "state": "handoff",
+          "started_at": "2026-10-01T13:43:59+00:00",
+          "from_status": "status:backlog",
+          "pr": 465,
+          "report": "# ACL-132 \u2014 implementation handoff\n- PR #465 (`codex/acl-132-copy-text` \u2192 `stage`), head 6bea56e, base 38351e6. Worker-W132T, run_w132t_1001, Coordinator-D0930K, `C:\\acl-132-copytext`.\n- Done (owner's simplified decision 30.09): Copy text + hint under disabled/restricted/blocked/review; line `<name before \" - \"> - Account <Status>`. Screenshot part is ACL-1430 (#431).\n- Checks: new tests (template lines, escaping, Chromium clipboard click) + status/map/JS guards: 34 passed. Diff applies cleanly onto the 1430 branch (checked). Full suite: CI.\n- Issue edit: `needs: ACL-1391` replaced by a satisfied-dependency note (1391 merged in main, verified live on Doc20; open only for package delivery).\n- Not done: live check \u2014 owner copies text + screenshot from Doc20 into the provider group. \"Copy text\" looks link-style only after ACL-1455 merges."
+        },
+        "pr": 465,
+        "queued_at": "2026-10-01T13:47:20+00:00"
       }
     },
     "actors": {
@@ -3715,7 +3716,8 @@
       455,
       457,
       459,
-      462
+      462,
+      31
     ],
     "review": {
       "id": "afc86d4be7054b90b0bf87c81be9ebc1",
@@ -4883,6 +4885,13 @@
         "at": "2026-10-01T13:43:59+00:00",
         "issue": 31,
         "claim": "197cfb68812e4b508c2f60f168068338",
+        "actor": "Worker-W132T"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-01T13:47:20+00:00",
+        "issue": 31,
+        "pr": 465,
         "actor": "Worker-W132T"
       }
     ],
