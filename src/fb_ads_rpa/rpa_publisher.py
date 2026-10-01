@@ -17,7 +17,7 @@ from src.fb_ads_rpa.config import get_browser_provider as get_browser_provider_n
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.operations import serialized_browser
 from src.fb_ads_rpa.enrich_draft import enrich_campaign_drafts
-from src.fb_ads_rpa import profile_trouble
+from src.fb_ads_rpa import hand_window, profile_trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
 
@@ -252,7 +252,11 @@ class RpaPublisher:
                 self._reset_browser(keep_browser_open=True)
 
         try:
-            self._conn = self._provider.open(entry, account_label)
+            # ACL-1427: Stop задания прерывает ожидание тишины ввода перед
+            # закрытием окна, открытого руками (`cancel()` ставит флаг из
+            # другого потока).
+            with hand_window.watch_cancel(lambda: bool(getattr(self, "_cancelled", False))):
+                self._conn = self._provider.open(entry, account_label)
             log.info("Browser opened via %s", self._provider.__class__.__name__)
         except Exception as exc:
             err_str = str(exc)
