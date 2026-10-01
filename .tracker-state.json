@@ -2471,22 +2471,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "426": {
-        "actor": "Worker-C1426P",
-        "session": "run_c1426p_1001",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1426-crop-post-story",
-        "worktree": "C:\\acl-1426-crop",
-        "id": "dbb150bfacca441ba990ac04c32e4bac",
-        "issue": 426,
-        "state": "handoff",
-        "started_at": "2026-10-01T19:23:08+00:00",
-        "from_status": "status:todo",
-        "pr": 440,
-        "report": "# ACL-1426 handoff r3 (Worker-C1426P, run_c1426p_1001): return_440\n\nPR #440 head is **c4fdf7d**. It is built on the coordinator's merge 5585aea, which brought in work/stage (ACL-1412 squashed, the full ACL-1433 bench) and work/main.\n\n- `tests/bench/catalogue.json` has three new rows for the ACL-1426 fixtures that were missing from the bench:\n  - `creative_wizard`, crop_step_video_simple_create_2026_10_01.html: Original already set on both cards, no clicks.\n  - `creative_wizard`, crop_step_image_classic_2026_10_01.html: Vertical moved from 9:16 to Original.\n  - `ads 2-3 (single-screen editor)`, ad_form_gone_verifying_2026_10_01.html: named `ad_form_gone_after_media` after 30 s.\n- Each row has its fragment, its test and status pass. No other fixture was uncatalogued.\n- `scripts/bench_catalogue.py --write` regenerated `tests/bench/CATALOGUE.md`, and `--check` is clean.\n- No product code changed.\n\nTests (headless, `ACL_LIBRARY_*` empty) passed: **133 passed.** The files run were:\n- test_bench_catalogue\n- test_crop_step_original_and_story\n- test_creative_pairing\n- test_crop_gate_on_every_success\n- test_bench_creative_wizard_steps\n- test_simple_create_new_ad_media\n- test_ad_form_gone_after_media\n\nThe round-2 fixes (H1, M1\u2013M3, L1, L4) are unchanged and already approved in review_440."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -3032,7 +3017,7 @@
             "session": "run_c1426p_1001"
           }
         ],
-        "state": "implementing",
+        "state": "reviewing",
         "worker": "Worker-C1426P",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3041,17 +3026,18 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1426-crop-post-story",
           "worktree": "C:\\acl-1426-crop",
-          "id": "298bdc18560f4d509110adb0ca35949c",
+          "id": "dbb150bfacca441ba990ac04c32e4bac",
           "issue": 426,
           "state": "handoff",
-          "started_at": "2026-10-01T14:02:53+00:00",
+          "started_at": "2026-10-01T19:23:08+00:00",
           "from_status": "status:todo",
           "pr": 440,
-          "report": "# ACL-1426 handoff (Worker-C1426P, run_c1426p_1001), review round 2\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/440 (into stage). Branch codex/acl-1426-crop-post-story, **head acef418**.\n- work/stage 38351e6 was merged first (b2a99f3), so 1441 and 1444 are in. The CHANGELOG conflict kept both sides.\n- The PR still carries #413 (ACL-1412).\n\n## Review findings (review_440, Reviewer-R1426F)\n- **H1 (blocking), fixed.** `meta_dom._crop_gate` asks `crop_step.outcome()` before every success return of the creative step:\n  - `upload_ad_creative` True;\n  - the retry loop's media check;\n  - known-file reuse;\n  - the three `media_already_on_ad*` returns.\n\n  Results:\n  - A Crop failure from the retry close-walk fails the step at once, with no media-check success and no retry.\n  - A failure from the give-up close is named before `set_plan(None)`.\n  - A pair whose wizard never showed Crop fails with `crop_step_not_shown`.\n  - Telemetry: `ad_creative_upload` False, with `where`.\n  - Both probe_440 scenarios now return False. The story to post swap still works.\n- **M1, fixed.** Crop is recognised by its heading \"Select media crop for placements\" as well as by the step row (`crop_step.on_crop_step`). A single file whose Crop was never handled gets a warning row, `ad_creative_crop` None / `crop_step_not_shown`, once per attempt. This does not block, because the owner's rule blocks pairs only.\n- **M2, fixed (fail closed).**\n  - The expansion regex now also matches \"AI expansion\", \"generative\" and the word \"AI\".\n  - A box outside the cards is switched off (`shared:expand_off`).\n  - Any other checked, visible box or switch on the step blocks with `crop_unknown_toggle_on`. That includes a localized expansion label.\n- **M3, fixed.** The picked tile's thumbnail ids are matched against the Vertical card's ids.\n  - Mismatch: `crop_vertical_not_story`.\n  - Picked id on Square: `crop_square_changed`.\n  - No ids on either side: warning row `as_planned_thumb_unconfirmed` (ok=None), not blocking, the same as the library-pick path.\n  - `selected_before` is logged.\n- **L1, fixed.** The picker's confirm and cancel are used only inside the picker's own `role=dialog` (not the wizard's dialog). Otherwise the step blocks with `crop_replace_picker_unscoped`. The wizard's Next is never pressed (tested).\n- **L4, fixed.** `simple_create.creative_why_text` gives `ad_form_gone_after_media` an English sentence, and gives `crop_*` reasons a generic one. The sentence goes in the step diag `text` (`last_upload_diag`) and in the `ad_media_check` row.\n- **L2, not changed.** A marker is recognised only as the last token, so the number is already the token before `_post`/`_story`. In the reviewer's example `4_es_2403_2024_post`, that token is 2024. Changing it needs an owner rule.\n- **L3, not changed.** The Builder side is `src/web/app.py`, which belongs to the dashboard track.\n\n## Tests\nAffected only, headless (`ACL_LIBRARY_*` empty): 30 files (crop, pairing, story label, creative, wizard, media, reuse, form_gone, simple_create, single_screen, build_progress_model). **385 passed.**\n\nNew tests:\n- `tests/test_crop_gate_on_every_success.py` (12): the H1 paths and L4.\n- `tests/test_crop_step_original_and_story.py` (+11): M1, M2, M3, L1.\n\n## Open (owner / next round)\n- The ads 2\u20133 root cause is not fixed. Options: (A) do Destination before the creative on ads 2+; (B) remount via the tree row; (C) keep failing fast.\n- Upload of a missing story through Replace.\n- Should \"Video touch-ups\" be switched off?\n- The Replace picker has never been captured live. Its first use is captured as `wizard_crop_replace`, and the thumbnail check will show `thumb` match, mismatch or unconfirmed.\n\n## Live switches\n- `FB_RPA_CROP_STEP=0`: old behaviour.\n- `FB_RPA_CROP_REPLACE=0`: pairs blocked.\n- `FB_RPA_WIZARD_CAPTURE=0`: wizard captures off.\n\n`serve.py` restart needed."
+          "report": "# ACL-1426 handoff r3 (Worker-C1426P, run_c1426p_1001): return_440\n\nPR #440 head is **c4fdf7d**. It is built on the coordinator's merge 5585aea, which brought in work/stage (ACL-1412 squashed, the full ACL-1433 bench) and work/main.\n\n- `tests/bench/catalogue.json` has three new rows for the ACL-1426 fixtures that were missing from the bench:\n  - `creative_wizard`, crop_step_video_simple_create_2026_10_01.html: Original already set on both cards, no clicks.\n  - `creative_wizard`, crop_step_image_classic_2026_10_01.html: Vertical moved from 9:16 to Original.\n  - `ads 2-3 (single-screen editor)`, ad_form_gone_verifying_2026_10_01.html: named `ad_form_gone_after_media` after 30 s.\n- Each row has its fragment, its test and status pass. No other fixture was uncatalogued.\n- `scripts/bench_catalogue.py --write` regenerated `tests/bench/CATALOGUE.md`, and `--check` is clean.\n- No product code changed.\n\nTests (headless, `ACL_LIBRARY_*` empty) passed: **133 passed.** The files run were:\n- test_bench_catalogue\n- test_crop_step_original_and_story\n- test_creative_pairing\n- test_crop_gate_on_every_success\n- test_bench_creative_wizard_steps\n- test_simple_create_new_ad_media\n- test_ad_form_gone_after_media\n\nThe round-2 fixes (H1, M1\u2013M3, L1, L4) are unchanged and already approved in review_440."
         },
         "pr": 440,
-        "queued_at": "2026-10-01T14:27:38+00:00",
-        "review_report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise."
+        "queued_at": "2026-10-01T19:29:53+00:00",
+        "review_report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise.",
+        "reviewer": "Reviewer-R1426F"
       },
       "427": {
         "implementers": [
@@ -4112,7 +4098,7 @@
       "session": "rev_r1426f_1001",
       "coordinator": "Coordinator-C0930A",
       "started_at": "2026-10-01T19:22:21+00:00",
-      "state": "fixing",
+      "state": "reviewing",
       "report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise.",
       "keep_lane": true
     },
@@ -5532,6 +5518,13 @@
         "at": "2026-10-01T19:23:08+00:00",
         "issue": 426,
         "claim": "dbb150bfacca441ba990ac04c32e4bac",
+        "actor": "Worker-C1426P"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-01T19:29:53+00:00",
+        "issue": 426,
+        "pr": 440,
         "actor": "Worker-C1426P"
       }
     ],
