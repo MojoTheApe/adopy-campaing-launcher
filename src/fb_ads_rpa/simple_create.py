@@ -560,6 +560,12 @@ _WHY_TEXT = {
 _CREATIVE_WHY_TEXT = {
     "ad_form_gone_after_media": ("After the media step Meta stopped showing this ad's form "
                                  "('Verifying your changes'); the ad is left in the draft for review."),
+    # ACL-1476: warnings, not refusals - the ad keeps the post file.
+    "story_not_placed:no_crop_step": ("Story placement uses the post file: Meta showed no Crop "
+                                      "step, so the story file could not be placed."),
+    "story_not_placed:not_in_library": ("Story placement uses the post file: the story file is not "
+                                        "in Meta's media library, so Replace was skipped (Original "
+                                        "and no Meta AI expansion are set)."),
 }
 
 

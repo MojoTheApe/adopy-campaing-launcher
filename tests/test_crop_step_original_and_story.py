@@ -218,10 +218,22 @@ def test_a_pair_gets_the_story_on_vertical_through_replace(page, tmp_path):
                for d in (tmp_path / "rpa_pages" / "run-1426b").iterdir())
 
 
-def test_a_story_missing_from_the_library_is_named_and_the_picker_closed(page):
-    _synthetic(page, tiles=("other.mp4",))
-    assert crop_step.apply(page, PAIR) == "crop_story_not_in_library"
+def test_a_story_missing_from_the_library_is_a_warning_and_the_rest_is_still_set(page, tmp_path):
+    # ACL-1476: Replace skipped, Original on Vertical (was 9:16) and the
+    # expansion off still applied and read back; the post stays on Vertical.
+    _synthetic(page, tiles=("other.mp4",), expand=("checked", ""))
+    crop_step.set_plan(PAIR)
+    assert crop_step.apply(page, PAIR) == ""
+    assert crop_step.warning() == crop_step.NOT_IN_LIBRARY
     assert page.evaluate("!document.getElementById('picker')")
+    state = crop_step.read(page)
+    assert state["cards"]["Vertical"]["original"] is True
+    assert not any(c["checked"] for c in state["cards"]["Square"]["expand"])
+    assert state["cards"]["Vertical"]["media"].endswith("4_es_2403_post.mp4")
+    row = _rows(tmp_path, "ad_creative_crop")[-1]
+    assert (row["ok"], row["note"]) == (None, "story_not_placed:not_in_library")
+    assert row["diag"]["picker_back"] == "Cancel"
+    assert crop_step.outcome() == ""
 
 
 def test_replace_switched_off_blocks_a_pair(page, monkeypatch):
@@ -417,12 +429,19 @@ def test_step_names_that_mean_crop():
     assert not crop_step.step_is_crop("Text")
 
 
-def test_a_pair_whose_wizard_never_showed_crop_is_named():
+def test_a_pair_whose_wizard_never_showed_crop_is_a_named_warning(tmp_path, monkeypatch):
+    # ACL-1476: not a refusal; the warning is named and said once per attempt.
+    monkeypatch.setattr(rt, "TELEMETRY_PATH", tmp_path / "telemetry.jsonl")
     crop_step.set_plan(PAIR)
     try:
-        assert crop_step.outcome() == "crop_step_not_shown"
+        assert crop_step.outcome() == ""
+        assert crop_step.outcome() == ""
+        assert crop_step.warning() == crop_step.NO_CROP_STEP
     finally:
         crop_step.set_plan(None)
+    assert crop_step.warning() == ""
+    assert [(r["ok"], r["note"]) for r in _rows(tmp_path, "ad_creative_crop")] \
+        == [(None, "story_not_placed:no_crop_step")]
 
 
 def test_a_crop_refusal_keeps_its_own_name_on_the_step():

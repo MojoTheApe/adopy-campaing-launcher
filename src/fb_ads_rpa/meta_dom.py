@@ -5940,6 +5940,9 @@ def run_recorded_campaign_flow(
                 else:
                     creative_uploaded = True
                     _shot("after_ad_creative_upload")
+                    story_warn = story_not_placed_soft_fail("ad", ad_name or "ad 1")
+                    if story_warn:
+                        ad_level_fails.append(story_warn)
             except Exception as exc:
                 if _page_gone(page, exc):
                     _browser_closed("ad_creative_upload", exc)
@@ -6166,6 +6169,9 @@ def run_recorded_campaign_flow(
                                 no_creative = True
                             else:
                                 _shot(f"after_{tag}_creative_upload")
+                                story_warn = story_not_placed_soft_fail(tag, extra_name or tag)
+                                if story_warn:
+                                    ad_level_fails.append(story_warn)
                         except Exception as exc:
                             if _page_gone(page, exc):
                                 _browser_closed(f"{tag}_creative_upload", exc)
@@ -9716,9 +9722,10 @@ def _crop_gate(creative_path: str, where: str) -> str:
     """ACL-1426, ревью PR #440 (H1): проверка Crop перед КАЖДЫМ успехом шага.
 
     Отказ Crop, сохранённый обходом мастера при закрытии (повтор, известный
-    файл), или пара post/story, чей мастер так и не показал Crop, — отказ шага
-    с названной причиной. Без этой проверки `set_plan(None)` в обёртке стирал
-    отказ, а шаг докладывал успех. "" — Crop в порядке (или плана нет).
+    файл), — отказ шага с названной причиной. Без этой проверки `set_plan(None)`
+    в обёртке стирал отказ, а шаг докладывал успех. "" — Crop в порядке (или
+    плана нет). ACL-1476: пара, чей мастер не показал Crop, — уже не отказ, а
+    предупреждение `story_not_placed:no_crop_step` (`crop_step.warning()`).
     """
     why = _crop.outcome()
     if not why:
@@ -9837,9 +9844,14 @@ def upload_ad_creative_with_retry(
                           diag={"square": plan.square_file, "vertical": plan.vertical_file,
                                 "replace": plan.replace_vertical, "number": plan.number})
     _crop.set_plan(plan)
+    _crop_warning_tls.why = ""
     try:
-        return _upload_ad_creative_with_retry(page, creative_type, creative_path,
-                                              edit_url=edit_url, attempts=attempts, reload=reload)
+        ok = _upload_ad_creative_with_retry(page, creative_type, creative_path,
+                                            edit_url=edit_url, attempts=attempts, reload=reload)
+        # ACL-1476: the pair's story was not placed (no Crop step / not in the
+        # library) - the ad keeps the post file; the caller adds a warning row.
+        _crop_warning_tls.why = _crop.warning() if ok else ""
+        return ok
     finally:
         _crop.set_plan(None)
         if owner:
@@ -13088,6 +13100,28 @@ _TEXT_OPTIONS_JS = r"""
 
 #: Строка мягкого отказа в результате прогона и телеметрии.
 SECOND_TEXT_NOT_ADDED = "second primary text not added"
+
+#: ACL-1476: the story of a post/story pair not placed by the last successful
+#: creative step of this thread (`crop_step.WARNINGS`, or "").
+_crop_warning_tls = threading.local()
+
+
+def last_crop_warning() -> str:
+    """Why the last successful creative step of this thread left the story unplaced ("" - it did not)."""
+    return getattr(_crop_warning_tls, "why", "") or ""
+
+
+def story_not_placed_soft_fail(tag: str, ad_label: str) -> str | None:
+    """ACL-1476: the ad's warning row when its pair's story was not placed (or None).
+
+    `<tag>_story_not_placed:<no_crop_step|not_in_library> - <ad>: <sentence>`;
+    `failure_policy` classifies `<tag>_story_not_placed` as a warning - the ad
+    has the post file and stays publishable.
+    """
+    why = last_crop_warning()
+    if not why:
+        return None
+    return f"{tag}_{why} - {ad_label}: {_simple.creative_why_text(why)}"
 
 
 def second_text_soft_fail(tag: str, ad_label: str, body2: str, report: dict) -> str | None:
