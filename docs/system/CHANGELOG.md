@@ -45,6 +45,87 @@ any step after Media existed (the editor page is cut at 4 MB before the wizard).
   (`src/fb_ads_rpa/wizard_capture.py`). Machine switch `FB_RPA_WIZARD_CAPTURE=0`
   turns the captures off (the telemetry row stays).
 
+## Finished clean profiles close themselves; a Close profile button for the rest — ACL-1444
+
+2026-10-01. With "Publish all", every finished account left its Multilogin
+window open ("Browser left open for manual review"), 0.6–1.5 GB each; on a
+tester's laptop 4 of 6 windows were idle, memory 92 %, and waiting accounts
+could not start.
+
+- End of a job (`publish_jobs._let_go_of_profile` → `RpaPublisher.finish_job`):
+  when every campaign is publishable, the job has no errors, it was not
+  stopped, no other job is waiting for the same profile, and the draft is
+  saved (fail closed: anywhere but the campaign list — classic `/edit`,
+  single-screen `simple_create`, any other page — Meta's autosave settles and
+  "All edits saved" must show), the robot stops
+  the profile gracefully through the MLX API — `allow_kill=False`, this
+  profile only. Only a profile the robot started or attached to over its
+  automation port and that still runs the same process (ACL-1320/1388
+  markers); a hand-opened window is never closed. Any problem keeps the window
+  open as before. The job panel says "Closed the profile — all campaigns are
+  ready"; telemetry `profile_closed_after_job` (ok True = closed, False = the
+  MLX stop failed, None = kept on purpose; note = why: `kept_problem`,
+  `kept_switch`, `kept_unsaved`, `hand_opened`, …).
+- Per-machine switch `FB_RPA_KEEP_PROFILES_OPEN=1` keeps every window open
+  (old behaviour).
+- Dashboard: "Close profile" on a finished job's panel →
+  `POST /publish-jobs/{job_id}/close-profile`, the same graceful MLX stop.
+  Refused (409) while any job of that profile is pending/queued/running or a
+  read holds the profile lock; the lock is held during the stop.
+- Profile queue: slots count jobs, released when the job ends (unchanged); the
+  memory decision now sees the freed memory once the job releases its slot.
+- Tests: `tests/test_a_finished_clean_profile_closes_itself.py` (46);
+  `tests/conftest.py` sets `FB_RPA_KEEP_PROFILES_OPEN=1` for all other tests.
+
+## Connect Multilogin issues the token in the right workspace — ACL-1441
+
+2026-10-01. "Connect Multilogin" (Accounts → Connect) asked for the automation
+token in the login's default workspace. For a team member whose default is
+their own Free workspace, Multilogin answered "403 Request is not allowed",
+although the same login may issue tokens in the team workspace that holds the
+profiles (seen live: ndays6443 → own Free workspace; KLD profiles in
+1ejadmedia, role `user`).
+
+- `src/web/multilogin_auth.py` `sign_in()` now: `POST /user/signin` →
+  `GET /user/workspaces` (`workspace_id`, `name`, `role`) → switch with
+  `POST /user/refresh_token {email, refresh_token, workspace_id}` →
+  `GET /workspace/automation_token?expiration_period=1mo` in that workspace.
+  Field names checked against the Multilogin X API documentation (Postman
+  collection 28533318/2s946h9Cv9).
+- Which workspace: the one the person picked → the slot's remembered one →
+  the only one → the only one whose plan has automation
+  (`GET /workspace/restrictions` → `automation_available`). Otherwise the
+  form shows a picker (name, role, "no automation") and Continue re-sends the
+  sign-in with the choice. No token is issued before the choice.
+- The slot remembers the workspace in machine settings
+  (`MULTILOGIN_WORKSPACE_<slot>`, `MULTILOGIN_WORKSPACE_ID_<slot>`); the
+  connection line shows it. The password is still never stored.
+- Named errors: "This workspace's plan has no automation — choose the
+  workspace with your profiles"; "Your role in this workspace cannot issue
+  tokens — ask the workspace owner"; a failed switch names the workspace.
+- Every Multilogin call from the sign-in carries a normal browser
+  User-Agent (Cloudflare answers 1010 to the python-requests one).
+- If the workspace list is unavailable, the old behaviour stays: token in the
+  default workspace.
+## Ads in the account tree get their workbook numbers — ACL-1395
+
+2026-09-30 on Facebook_6540 (CO_bnc_All_Video_FX_Y_35_28.09) the campaign row had
+its workbook numbers and both ads under it showed only dashes. Two causes.
+
+- The account read took the name cell's whole text, so Meta's label came with the
+  name: "1741 - Pro Bancolombia Unpublished edits Unpublished edits". Nothing in the
+  workbook matched it. The read now takes the name from the cell's own tooltip
+  (`data-tooltip-content`, present on every row in the captured Ads Manager pages)
+  and strips trailing labels by one list, `META_NAME_LABELS` in
+  `src/analysis_agent/account_spend.py`: "Unpublished edits", "In draft", "In
+  review", "Draft" — only at the end of a name, whole and exact, never leaving it
+  empty. The turn-off lookup compares names the same way. The tree applies the same
+  list to readings saved before the fix (`amapTreeName`, a copy kept equal by test).
+- Several ads with one name in one campaign used to get a dash. Owner decision
+  2026-09-30: each shows the workbook totals for that name once (not multiplied),
+  with a quiet "shared by N ads" mark and the tooltip "The workbook cannot tell ads
+  with the same name apart; these are the totals for all of them". Campaign rows are
+  unchanged; two campaigns with one name keep the dash.
 
 ## The test suite runs in parallel — ACL-1397
 
