@@ -1,5 +1,35 @@
 # System history
 
+## Connect Multilogin issues the token in the right workspace — ACL-1441
+
+2026-10-01. "Connect Multilogin" (Accounts → Connect) asked for the automation
+token in the login's default workspace. For a team member whose default is
+their own Free workspace, Multilogin answered "403 Request is not allowed",
+although the same login may issue tokens in the team workspace that holds the
+profiles (seen live: ndays6443 → own Free workspace; KLD profiles in
+1ejadmedia, role `user`).
+
+- `src/web/multilogin_auth.py` `sign_in()` now: `POST /user/signin` →
+  `GET /user/workspaces` (`workspace_id`, `name`, `role`) → switch with
+  `POST /user/refresh_token {email, refresh_token, workspace_id}` →
+  `GET /workspace/automation_token?expiration_period=1mo` in that workspace.
+  Field names checked against the Multilogin X API documentation (Postman
+  collection 28533318/2s946h9Cv9).
+- Which workspace: the one the person picked → the slot's remembered one →
+  the only one → the only one whose plan has automation
+  (`GET /workspace/restrictions` → `automation_available`). Otherwise the
+  form shows a picker (name, role, "no automation") and Continue re-sends the
+  sign-in with the choice. No token is issued before the choice.
+- The slot remembers the workspace in machine settings
+  (`MULTILOGIN_WORKSPACE_<slot>`, `MULTILOGIN_WORKSPACE_ID_<slot>`); the
+  connection line shows it. The password is still never stored.
+- Named errors: "This workspace's plan has no automation — choose the
+  workspace with your profiles"; "Your role in this workspace cannot issue
+  tokens — ask the workspace owner"; a failed switch names the workspace.
+- Every Multilogin call from the sign-in carries a normal browser
+  User-Agent (Cloudflare answers 1010 to the python-requests one).
+- If the workspace list is unavailable, the old behaviour stays: token in the
+  default workspace.
 ## Ads in the account tree get their workbook numbers — ACL-1395
 
 2026-09-30 on Facebook_6540 (CO_bnc_All_Video_FX_Y_35_28.09) the campaign row had
