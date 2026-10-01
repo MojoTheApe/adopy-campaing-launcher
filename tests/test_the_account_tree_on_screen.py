@@ -1004,17 +1004,91 @@ def test_a_row_the_workbook_does_not_know_gets_dashes(page):
     assert "No rows" in page.evaluate("() => document.querySelector('.amap-tree-num.attr').title")
 
 
-def test_two_ads_with_one_name_are_not_given_guessed_numbers(page):
-    """Doc19: несколько объявлений «1962 - Ar Aramco Officially» в одной
-    кампании. Книга отдаёт одно число на всех — делить его нечем."""
+SHARED_TIP = ("The workbook cannot tell ads with the same name apart; "
+              "these are the totals for all of them")
+
+
+def _shared(page, n):
+    return page.evaluate("""(n) => {
+      const line = document.querySelectorAll('.amap-tree-line')[n];
+      const mark = line.querySelector('.amap-tree-shared');
+      return {mark: mark ? mark.textContent : null, tip: mark ? mark.title : null,
+              cellTip: line.querySelector('.amap-tree-num.attr').title};
+    }""", n)
+
+
+def test_two_ads_with_one_name_share_the_workbook_totals(page):
+    """Doc19, Facebook_6540: несколько объявлений с одним именем в одной
+    кампании. Книга различить их не может, и решение владельца 30.09 —
+    показать каждому итог по этому имени один раз, с пометкой, а не прочерк."""
     a1 = dict(AD, parent_id=ADSET["id"])
     a2 = dict(AD, id="120250178850950704", parent_id=ADSET["id"])
     _paint(page, [ADSET, a1, a2])
     _fill(page, [ADSET, a1, a2], ATTR)
     assert _attr(page, 0)["leads"] == "7", "кампания при этом своё число получает"
-    assert set(_attr(page, 1).values()) == {"—"} and set(_attr(page, 2).values()) == {"—"}
-    assert "share this name" in page.evaluate(
-        "() => document.querySelectorAll('.amap-tree-line')[1].querySelector('.amap-tree-num.attr').title")
+    want = {"spend": "$120", "leads": "3", "deposits": "0", "cpl": "$40", "cpa": "—", "cr": "—"}
+    assert _attr(page, 1) == want and _attr(page, 2) == want, "итог имени — один раз, не умноженный"
+    for n in (1, 2):
+        got = _shared(page, n)
+        assert got["mark"] == "shared by 2 ads"
+        assert got["tip"] == SHARED_TIP and got["cellTip"] == SHARED_TIP
+    assert _shared(page, 0)["mark"] is None, "у кампании пометки нет"
+
+
+def test_a_single_ad_gets_its_own_numbers_without_a_mark(page):
+    ad = dict(AD, parent_id=ADSET["id"])
+    _paint(page, [ADSET, ad])
+    _fill(page, [ADSET, ad], ATTR)
+    assert _attr(page, 1)["leads"] == "3"
+    assert _shared(page, 1)["mark"] is None
+    assert _shared(page, 1)["cellTip"] == "From the stats workbook"
+
+
+def test_the_mark_goes_away_when_the_numbers_do(page):
+    """Второй ответ без строк для этого имени: прочерк, и пометка «общие
+    числа» над прочерком больше ничего не значит."""
+    a1 = dict(AD, parent_id=ADSET["id"])
+    a2 = dict(AD, id="120250178850950704", parent_id=ADSET["id"])
+    _paint(page, [ADSET, a1, a2])
+    _fill(page, [ADSET, a1, a2], ATTR)
+    _fill(page, [ADSET, a1, a2], dict(ATTR, ads={}))
+    assert set(_attr(page, 1).values()) == {"—"}
+    assert _shared(page, 1)["mark"] is None
+
+
+def test_same_name_ads_in_same_name_campaigns_keep_the_dash(page):
+    """Две кампании с одним именем — книга не знает, чьи это объявления."""
+    twin = dict(ADSET, id="120250178859040704")
+    a1 = dict(AD, parent_id=ADSET["id"])
+    a2 = dict(AD, id="120250178850950704", parent_id=twin["id"])
+    _paint(page, [ADSET, twin, a1, a2])
+    _fill(page, [ADSET, twin, a1, a2], ATTR)
+    lines = page.evaluate("() => document.querySelectorAll('.amap-tree-line').length")
+    assert lines == 4
+    for n in range(lines):
+        assert set(_attr(page, n).values()) == {"—"}
+        assert _shared(page, n)["mark"] is None
+
+
+def test_meta_labels_in_a_stored_name_do_not_hide_the_numbers(page):
+    """Чтения, сохранённые до ACL-1395, несут имя вместе с надписью Meta.
+    Дерево показывает и сопоставляет имя без неё."""
+    camp = dict(ADSET, name="SA_ARM_iOS_IMG_Reading_30_6.9 In draft")
+    dirty = dict(AD, parent_id=camp["id"],
+                 name="1962_12- Officialy Unpublished edits Unpublished edits")
+    _paint(page, [camp, dirty])
+    _fill(page, [camp, dirty], ATTR)
+    assert _attr(page, 0)["leads"] == "7" and _attr(page, 1)["leads"] == "3"
+    names = page.evaluate(
+        "() => Array.from(document.querySelectorAll('.amap-tree-name')).map(n => n.textContent)")
+    assert names == ["SA_ARM_iOS_IMG_Reading_30_6.9", "1962_12- Officialy"]
+
+
+def test_a_real_name_with_a_label_word_inside_stays_whole(page):
+    got = page.evaluate("""() => [amapTreeName('2002 - Draft 5 promo'),
+                                  amapTreeName('Draft'),
+                                  amapTreeName('ad  one In review Unpublished edits')]""")
+    assert got == ["2002 - Draft 5 promo", "Draft", "ad one"]
 
 
 def test_a_failed_workbook_answer_is_said_not_zeroed(page):
