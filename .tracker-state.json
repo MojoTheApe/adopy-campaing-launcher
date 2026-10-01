@@ -2390,7 +2390,7 @@
             "session": "run_t1395e_0930"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-T1395E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -2408,7 +2408,8 @@
           "report": "# ACL-1395 handoff \u2014 Worker-T1395E\n\nPR #398 `[ACL-1395] Clean Meta labels from tree names; same-name ads share workbook totals` into `stage`. Branch `codex/acl-1395-ad-tree-workbook`, head `e5d462a`, base `ef174b9` (work/main; it has not moved since).\n\n## What changed\n- `src/analysis_agent/account_spend.py`:\n  - `META_NAME_LABELS` = (\"Unpublished edits\", \"In draft\", \"In review\", \"Draft\") and `clean_object_name()`. Labels come off only at the end of a name, as whole words with exact case, and repeated labels are removed too. A name is never cut to empty.\n  - `_READ_TREE_JS` takes the name from the name cell's own tooltip (`data-tooltip-content` around the object link) and then applies the rule. The label list is injected into the JS from the Python constant.\n  - The by-name parse cleans names as well, and `read_level` cleans once more in Python.\n  - `_FIND_SWITCH_JS` and the Python name check in turn-off compare cleaned names.\n- `src/web/templates/report.html`:\n  - `AMAP_META_NAME_LABELS` is a copy of the list (a test keeps the two equal). `amapTreeName` strips the labels, and the tree shows and sends the cleaned name.\n  - Same-name ads in one campaign now get `data.ads[camp][name]` once, plus the `.amap-tree-shared` mark (\"shared by N ads\") and the tooltip \"The workbook cannot tell ads with the same name apart; these are the totals for all of them\".\n  - Campaign rows are unchanged, and same-name campaigns keep the dash.\n- Tests:\n  - New `tests/test_meta_name_labels.py`.\n  - In `tests/test_the_account_tree_on_screen.py`, the old same-name-ad dash test is replaced by the shared-totals test, and single-ad, mark-removal, same-name-campaign, stored-dirty-name and `amapTreeName` tests are added.\n- `docs/system/CHANGELOG.md` has a new entry.\n\n## Evidence for the labels\n- \"Unpublished edits\" (twice) appears in `%LOCALAPPDATA%\\ACL\\account_spend.json` on three names (two ads and one campaign), all read via data-surface.\n- `C:\\acl-live-0928\\output\\rpa_pages` (read-only): on all 80 real rows in the name cells the tooltip equals the link text (only the totals row has no tooltip). Drafts show \"In draft\".\n- \"In review\" and \"Draft\" are from the owner's list; no capture shows them.\n\n## Checks\n- Test-first: 20 tests failed before the change.\n- Full suite on e5d462a: 3828 passed, 6 skipped, 1 failed. The failure is the known flake `test_campaign_build_percent_browser.py::test_the_percent_sits_next_to_the_dot_and_keeps_the_tooltip`; that file passes alone (16 passed).\n- Secret scanner is clean.\n- No live runs, and the 9090 dashboard was not touched.\n\n## Risks / open\n- A real name ending in the separate word \"Draft\" would lose it, but only when the tooltip is missing or for stored readings.\n- The live name cell showing \"Unpublished edits\" was never captured. The tooltip approach is proven only on captured rows that had no labels.\n- Shared totals belong to the name, not to each ad, so adding up those ad rows counts the name N times. The mark says this.\n- Still open: the live check on Facebook_6540. It needs the release and then a re-read of the account."
         },
         "pr": 398,
-        "queued_at": "2026-09-30T12:01:34+00:00"
+        "queued_at": "2026-09-30T12:01:34+00:00",
+        "reviewer": "Reviewer-R1395G"
       },
       "397": {
         "implementers": [
@@ -2947,6 +2948,10 @@
       "Worker-E1437V": {
         "session": "run_e1437v_1001",
         "role": "Worker"
+      },
+      "Reviewer-R1395G": {
+        "session": "review_r1395g_1001",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -3136,7 +3141,6 @@
       }
     },
     "review_queue": [
-      395,
       406,
       330,
       357,
@@ -3150,7 +3154,18 @@
       430,
       434
     ],
-    "review": null,
+    "review": {
+      "id": "6457401d2fcb4698814f3b9664cc4d70",
+      "pr": 398,
+      "issues": [
+        395
+      ],
+      "actor": "Reviewer-R1395G",
+      "session": "review_r1395g_1001",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-01T09:19:08+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -4006,6 +4021,13 @@
         "prs": [
           436
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-01T09:19:08+00:00",
+        "pr": 398,
+        "lane": "6457401d2fcb4698814f3b9664cc4d70",
+        "actor": "Reviewer-R1395G"
       }
     ],
     "policy": {
