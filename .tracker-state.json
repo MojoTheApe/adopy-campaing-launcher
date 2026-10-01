@@ -810,7 +810,7 @@
       "source_sha": "45a82bdca4dfadaf81fff349658d0f2ac25ddb88",
       "main_tree": "081287edf11cb42f76e2a90cdce9338d64352bce",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-01T07:15:52+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -1271,6 +1271,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-01T04:59:55+00:00"
+      },
+      "391": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 429,
+            "merge_sha": "49915f76aabc63ea2488d2e507374aef155477af",
+            "tree_sha": "2717ad7a98b14d6d7c5d579784748e8d37fdf849"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-01T08:20:29+00:00"
       }
     },
     "promotions": {
@@ -2042,6 +2054,32 @@
           "report": "ACL-1388 stage verification: Git checks green on the actual stage; review rounds 1-3 approved (scratchpad/review_396_v3.md). Live check after release by the owner."
         },
         "verified_at": "2026-09-30T23:18:43+00:00"
+      },
+      "429": {
+        "pr": 392,
+        "issues": [
+          391
+        ],
+        "tree_sha": "2717ad7a98b14d6d7c5d579784748e8d37fdf849",
+        "source_sha": "45a82bdca4dfadaf81fff349658d0f2ac25ddb88",
+        "main_tree": "081287edf11cb42f76e2a90cdce9338d64352bce",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-01T07:15:52+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "45a82bdca4dfadaf81fff349658d0f2ac25ddb88",
+          "tree_sha": "2717ad7a98b14d6d7c5d579784748e8d37fdf849",
+          "checks": [
+            "Git checks on actual stage 45a82bd: CI run 36829298414 success",
+            "Windows installer run 36829298426 success; Delivery setup 36829298433 success",
+            "Live: the owner's live dashboard (local live branch incl. ACL-1391) read FacebookDoc20 as disabled correctly on 2026-09-30 and 2026-10-01"
+          ],
+          "report": "ACL-1391 stage verification: Git checks green on the actual stage; live Doc20 read confirmed by the owner. Review: scratchpad/review_392_v2.md."
+        },
+        "verified_at": "2026-10-01T07:46:03+00:00"
       }
     }
   },
