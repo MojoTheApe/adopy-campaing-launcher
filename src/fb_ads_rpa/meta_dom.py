@@ -17,6 +17,9 @@ from src.fb_ads_rpa import page_liveness as _liveness
 from src.fb_ads_rpa import profile_trouble as _trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
 from src.fb_ads_rpa import simple_create as _simple
+from src.fb_ads_rpa import wizard_capture as _wizard_capture
+from src.fb_ads_rpa import creative_pairing as _pairing
+from src.fb_ads_rpa import crop_step as _crop
 
 #: Порог, за которым Playwright отказывается передавать файл.
 #:
@@ -192,6 +195,13 @@ def _note_media_refused(why: str | None) -> None:
     _media_refusal_tls.why = why
 
 
+def _refused_why() -> str:
+    """Причина отказа по медиа для строки шага: отказ Crop (ACL-1426) — своим
+    именем, остальное — `media_refused_on_ad`, как раньше."""
+    why = media_refused_on_ad() or ""
+    return why if why.startswith("crop_") else "media_refused_on_ad"
+
+
 def media_refused_on_ad() -> str | None:
     """Причина отказа по медиа на объявлении в последней попытке этого потока."""
     return getattr(_media_refusal_tls, "why", None)
@@ -209,6 +219,10 @@ def last_upload_diag() -> dict:
     why = getattr(_creative_tls, "why", "")
     if why:
         out["why"] = why
+        # ACL-1426 (ревью L4): причина — и фразой для человека, как у соседних.
+        text = _simple.creative_why_text(why)
+        if text:
+            out["text"] = text
     phases = getattr(_creative_tls, "phases", None)
     if phases:
         out["phases"] = list(phases)[-12:]
@@ -9610,7 +9624,11 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         # Next после нашего выбора перевёл мастер на Text — значит, Meta
         # приняла медиа: без него шаг Text не открывается.
         at_text = _wizard_past_media(page)
-        _close_creative_setup_modal(page)
+        with _wizard_capture.origin("library_pick", filename):
+            _close_creative_setup_modal(page)
+        crop_why = _crop_refusal(filename, log)
+        if crop_why:
+            return REUSE_DIRTY
         _sleep_h(0.5)
         if _ad_editor_url(page.url) and _verify_ad_media_present(page):
             right, detail = _verify_ad_media_is_the_file(page, filename)
@@ -9677,6 +9695,42 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
         return _retreat(page, tiles, clicked, before)
 
 
+def _crop_refusal(filename: str, log: list[dict] | None = None) -> str:
+    """ACL-1426: после обхода мастера — отказ шага Crop, если он был.
+
+    Медиа уже на объявлении, но кроп не тот, что велел план (Original, без
+    Meta AI, story на Vertical): повтор и загрузка поверх ничего не исправят —
+    отказ с названной причиной, объявление уходит на проверку.
+    """
+    why = _crop.outcome()
+    if not why:
+        return ""
+    _note_media_refused(why)
+    _creative_why(why)
+    _telemetry.record("ad_creative_reuse", False, note=why,
+                      diag={"file": filename, "picks": (log or [])[-3:]})
+    return why
+
+
+def _crop_gate(creative_path: str, where: str) -> str:
+    """ACL-1426, ревью PR #440 (H1): проверка Crop перед КАЖДЫМ успехом шага.
+
+    Отказ Crop, сохранённый обходом мастера при закрытии (повтор, известный
+    файл), или пара post/story, чей мастер так и не показал Crop, — отказ шага
+    с названной причиной. Без этой проверки `set_plan(None)` в обёртке стирал
+    отказ, а шаг докладывал успех. "" — Crop в порядке (или плана нет).
+    """
+    why = _crop.outcome()
+    if not why:
+        return ""
+    _note_media_refused(why)
+    _creative_why(why)
+    _set_upload_why(why)
+    _telemetry.record("ad_creative_upload", False, note=why,
+                      diag={"file": Path(creative_path).name, "where": where})
+    return why
+
+
 def _attached_at_text(page: Page, filename: str, log: list[dict], how: str) -> str:
     """Мастер на шаге Text после нашего выбора: медиа прикреплено.
 
@@ -9685,9 +9739,12 @@ def _attached_at_text(page: Page, filename: str, log: list[dict], how: str) -> s
     шага при медиа, стоящем в объявлении.
     """
     try:
-        _close_creative_setup_modal(page)
+        with _wizard_capture.origin("library_pick", filename):
+            _close_creative_setup_modal(page)
     except Exception:
         pass
+    if _crop_refusal(filename, log):
+        return REUSE_DIRTY
     _telemetry.record("ad_creative_reuse", True, note="wizard_at_text_after_pick",
                       diag={"file": filename, "via": how, "picks": log[-3:],
                             "page_shows_media": _media_block_filled_now(page)})
@@ -9769,10 +9826,22 @@ def upload_ad_creative_with_retry(
         _creative_tls.deadline = time.time() + CREATIVE_STEP_BUDGET_S
         _creative_tls.why = ""
         _creative_tls.phases = []
+    # ACL-1426: пара post/story по номеру креатива — что ляжет на карточки
+    # Square и Vertical шага Crop. Медиа объявления — файл карточки Square:
+    # если в билдере выбран `_story`, а у номера есть `_post`, берётся post.
+    plan = _crop.plan_for(creative_path)
+    if plan is not None and plan.square_file and plan.square_file != Path(creative_path).name:
+        creative_path = str(Path(creative_path).with_name(plan.square_file))
+    if plan is not None:
+        _telemetry.record("ad_creative_pair", None, note=plan.rule,
+                          diag={"square": plan.square_file, "vertical": plan.vertical_file,
+                                "replace": plan.replace_vertical, "number": plan.number})
+    _crop.set_plan(plan)
     try:
         return _upload_ad_creative_with_retry(page, creative_type, creative_path,
                                               edit_url=edit_url, attempts=attempts, reload=reload)
     finally:
+        _crop.set_plan(None)
         if owner:
             _creative_tls.deadline = None
             # Ревью PR #368: срок шага после креатива считается с его конца,
@@ -9833,25 +9902,29 @@ def _upload_ad_creative_with_retry(
             _set_upload_why("upload_exception")
             attached = False
         if attached:
-            return True
+            return not _crop_gate(creative_path, "known_file_reuse")
         # Что не пустило к копии в медиатеке — до того, как проверки ниже
         # перепишут причину.
         blocked_by = last_upload_why()
         if media_refused_on_ad():
             # Чужой или битый файл уже на объявлении: «медиа есть» ниже его
             # не оправдывает (порт ACL-1284).
-            _set_upload_why("media_refused_on_ad")
+            _set_upload_why(_refused_why())
             return False
         # 17.09 04:30 (S15, 3-е объявление): медиа уже стояло — Meta перенесла
         # ролик в новое объявление, мастер не открылся, и шаг объявил
         # объявление пустым, хотя на экране «Uploaded media · 1 selected».
         # Файл здесь тот же, что уже поднят в этом прогоне, — медиа на месте.
         if _media_block_filled_now(page):
+            if _crop_gate(creative_path, "media_already_on_ad"):
+                return False
             _telemetry.record("ad_creative_upload", True, note="media_already_on_ad",
                               diag={"file": Path(creative_path).name})
             return True
         if _wizard_past_media(page):
             _close_creative_setup_modal(page)
+            if _crop_gate(creative_path, "media_already_on_ad_wizard_at_text"):
+                return False
             _telemetry.record("ad_creative_upload", True, note="media_already_on_ad_wizard_at_text",
                               diag={"file": Path(creative_path).name,
                                     "page_shows_media": _media_block_filled_now(page)})
@@ -9866,6 +9939,8 @@ def _upload_ad_creative_with_retry(
             _close_creative_setup_modal(page)
             _sleep_h(1.0)
             if _media_block_filled_now(page):
+                if _crop_gate(creative_path, "media_already_on_ad_after_wizard_closed"):
+                    return False
                 _telemetry.record("ad_creative_upload", True,
                                   note="media_already_on_ad_after_wizard_closed",
                                   diag={"file": Path(creative_path).name})
@@ -9890,7 +9965,7 @@ def _upload_ad_creative_with_retry(
         try:
             if upload_ad_creative(page, creative_type, creative_path, edit_url=edit_url):
                 remember_upload_succeeded(creative_path)
-                return True
+                return not _crop_gate(creative_path, "upload")
         except Exception as exc:
             # Раньше — молча: отказ выглядел как `silent`.
             _telemetry.record("ad_creative_upload", False, note="upload_exception",
@@ -9916,17 +9991,35 @@ def _upload_ad_creative_with_retry(
             # попытка его не исправят (порт ACL-1284).
             _close_creative_setup_modal(page)
             _remember_upload_failed(creative_path)
-            _set_upload_why("media_refused_on_ad")
+            _set_upload_why(_refused_why())
             return False
         _close_creative_setup_modal(page)
         _sleep_h(0.8)
+        if _crop.failure_pending():
+            # ACL-1426 (ревью H1): обход мастера при закрытии дошёл до Crop и
+            # не смог привести его к плану. Медиа, может быть, и на объявлении,
+            # но кроп не тот — повтор и «медиа есть» этого не исправят.
+            _crop_gate(creative_path, "retry_close_walk")
+            if _file_was_offered():
+                _remember_upload_failed(creative_path)
+            return False
+        if getattr(_creative_tls, "why", "") == AD_FORM_GONE:
+            # ACL-1426: форма объявления уже признана пропавшей (внутри
+            # выбора в медиатеке) — второй трёхминутной проверки и второго
+            # захода не делаем: «Set up creative» на такой странице нет.
+            _set_upload_why(AD_FORM_GONE)
+            break
         phase_t = time.time()
         media_ok = _verify_ad_media_present(page)
         _creative_phase("media_check", phase_t, ok=media_ok, attempt=attempt + 1)
         if media_ok:
             remember_upload_succeeded(creative_path)
-            return True
-        if getattr(_creative_tls, "why", "") in _PAGE_WHY:
+            # Пара, чей мастер не показал Crop, или отказ Crop из проверки
+            # медиа — не успех (ревью H1).
+            return not _crop_gate(creative_path, "retry_media_check")
+        if getattr(_creative_tls, "why", "") in _PAGE_WHY + (AD_FORM_GONE,):
+            if getattr(_creative_tls, "why", "") == AD_FORM_GONE:
+                _set_upload_why(AD_FORM_GONE)
             break
         if attempt + 1 < attempts and _creative_left() < CREATIVE_RETRY_MIN_S:
             # ACL-1354: срок шага на исходе — второй заход не начинаем.
@@ -9967,6 +10060,10 @@ def _upload_ad_creative_with_retry(
         _close_creative_setup_modal(page)
     except Exception:
         pass
+    if _crop.failure_pending():
+        # Отказ Crop из последнего закрытия — до того, как `set_plan(None)`
+        # его сотрёт: он конкретнее «upload_failed_unnamed».
+        _crop_gate(creative_path, "give_up_close_walk")
     if not last_upload_why():
         _set_upload_why("upload_failed_unnamed")
     # ACL-1348: запоминаем файл, только если его действительно подавали Meta.
@@ -10555,11 +10652,33 @@ def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
     still had Next a moment later — so a miss is counted, not acted on, and
     only four in a row end the walk.
     """
+    # ACL-1426: дневник шагов — только чтение (снимок шага до нажатия и одна
+    # строка телеметрии в конце); на нажатия он не влияет.
+    trail = _wizard_capture.Trail()
+    closed = False
+    try:
+        closed = _walk_creative_wizard_rounds(page, rounds, trail)
+        return closed
+    finally:
+        trail.finish(closed)
+
+
+def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
     misses = 0
     for _ in range(rounds):
         if not _creative_wizard_open(page):
             return True
-        if _press_wizard_forward(page) is None:
+        trail.see(page)
+        # ACL-1426: на шаге Crop — Original на обеих карточках, без «Crop and
+        # expand (Meta AI)», для пары — Replace на Vertical; до нажатия Next.
+        # Расхождение — названная причина (`crop_step.take_failure`), её
+        # забирает вызывающий; обход идёт дальше, чтобы мастер закрылся.
+        plan = _crop.current_plan()
+        if plan is not None and not _crop.applied() and _crop.on_crop_step(page, trail.current):
+            _crop.apply(page, plan)
+        pressed = _press_wizard_forward(page)
+        trail.pressed(pressed)
+        if pressed is None:
             misses += 1
             if misses >= 4:
                 break
@@ -11136,6 +11255,7 @@ def upload_ad_creative(
     """
     _set_last_upload_diag({"file": Path(creative_path).name, "attempts": []})
     _note_media_refused(None)
+    _crop.reset_attempt()
     is_video = (creative_type or "").strip().lower() == "video"
     option_label = "Video ad" if is_video else "Image ad"
 
@@ -11463,8 +11583,15 @@ def upload_ad_creative(
         # the diagnostic either way: a wizard left open is what breaks every
         # step after this one, and until 2026-09-16 the only trace of it was
         # `dialogs: 1` on the NEXT step's failure.
-        _diag["wizard"] = "closed" if _walk_creative_wizard(page) else "left_open"
+        with _wizard_capture.origin("upload", Path(creative_path).name):
+            _diag["wizard"] = "closed" if _walk_creative_wizard(page) else "left_open"
         _set_last_upload_diag(_diag)
+        crop_why = _crop_refusal(Path(creative_path).name)
+        if crop_why:
+            _diag["crop"] = crop_why
+            _set_last_upload_diag(_diag)
+            _set_upload_why(crop_why)
+            return False
         if _diag["wizard"] != "closed":
             _set_upload_why("wizard_left_open")
             return False
@@ -11894,6 +12021,49 @@ def _verify_ad_media_is_the_file(page: Page, filename: str) -> tuple[bool, dict]
     return True, {"state": state, "why": "name_not_shown"}
 
 
+#: ACL-1426: форма объявления пропала после мастера (см. `_ad_form_gone`).
+AD_FORM_GONE = "ad_form_gone_after_media"
+
+#: Сколько это состояние должно продержаться, чтобы в него поверить. В трёх
+#: живых прогонах 01.10 оно держалось 10+ минут, до конца кампании.
+AD_FORM_GONE_S = 30.0
+
+#: Раздел «Ad» нового редактора без формы: заголовок «Ad» (aria-level=2) есть,
+#: поля имени объявления и блока Media нет; рядом — карточка «Verifying your
+#: changes» и ошибки предпроверки (`/am/lib:GeoCollapsibleGuidanceCard/error:pf:…`).
+#: Превью справа при этом уже показывает медиа. Только чтение. Фикстура —
+#: tests/fixtures/ads_manager/ad_form_gone_verifying_2026_10_01.html.
+_AD_FORM_GONE_JS = r"""
+() => {
+  const norm = (s) => (s || '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
+  const shown = (e) => e.getClientRects().length > 0;
+  const adHead = [...document.querySelectorAll('[role=heading][aria-level="2"]')]
+    .some(h => shown(h) && norm(h.textContent) === 'Ad');
+  const nameField = [...document.querySelectorAll('input,textarea')]
+    .some(e => shown(e) && /ad name/i.test(e.getAttribute('placeholder') || e.getAttribute('aria-label') || ''));
+  const media = [...document.querySelectorAll('#imageVideoSelectorEditorComponent,'
+    + '[data-surface="/am/editor:ad/ad_image_video_selector_section"]')].some(shown);
+  const setUp = [...document.querySelectorAll('[role=button],button')]
+    .some(b => shown(b) && norm(b.textContent) === 'Set up creative');
+  const verifying = [...document.querySelectorAll('[role=heading]')]
+    .some(h => shown(h) && norm(h.textContent) === 'Verifying your changes');
+  const errors = [...document.querySelectorAll('[data-surface*="/error:pf:"]')]
+    .map(e => norm(e.textContent).slice(0, 160)).filter(Boolean).slice(0, 4);
+  const preview = !!document.querySelector('[data-surface*="ad_preview"] video, [data-surface*="ad_preview"] img');
+  return { gone: adHead && !nameField && !media && !setUp, verifying, errors, preview };
+}
+"""
+
+
+def _ad_form_gone(page: Page) -> dict:
+    """Форма объявления не отрисована (раздел «Ad» пуст). Только чтение."""
+    try:
+        got = _eval_bounded(page, _AD_FORM_GONE_JS)
+    except Exception:
+        return {"gone": False}
+    return got if isinstance(got, dict) else {"gone": False}
+
+
 def _verify_ad_media_present(page: Page) -> bool:
     """True once the ad's creative section is out of its empty state.
 
@@ -11932,6 +12102,7 @@ def _verify_ad_media_present(page: Page) -> bool:
     # media». Такие проходы возвращают блок на экран (только прокрутка).
     simple = _simple_page(page)
     unseen = 0
+    gone_since: float | None = None
     # ACL-1354: не позже срока шага креатива.
     deadline = _creative_deadline(time.time() + _UPLOAD_MAX_S)
     while idle < 150 and frozen < _UPLOAD_FROZEN_S and time.time() < deadline:
@@ -11981,6 +12152,23 @@ def _verify_ad_media_present(page: Page) -> bool:
             if unseen in (1, 10) or unseen % 30 == 0:
                 _simple.show_media_block(page, budget_s=8.0)
                 continue
+            # ACL-1426 (4121938e6dc3, 04c8c214d2ba, 0bd520418dbe — объявления
+            # 2–3): после мастера форма нового объявления не отрисована вовсе
+            # (раздел «Ad» пуст, справа «Verifying your changes» с ошибкой
+            # предпроверки), и так — до конца прогона. Ждать 150 проходов
+            # (~3 мин) и потом ещё раз столько же незачем.
+            gone = _ad_form_gone(page)
+            if gone.get("gone"):
+                gone_since = gone_since or time.time()
+                if time.time() - gone_since >= AD_FORM_GONE_S:
+                    _creative_why(AD_FORM_GONE)
+                    _creative_phase("media_check", started, why=AD_FORM_GONE)
+                    _telemetry.record("ad_media_check", False, note=AD_FORM_GONE,
+                                      diag={**(gone if isinstance(gone, dict) else {}),
+                                            "text": _simple.creative_why_text(AD_FORM_GONE)})
+                    return False
+            else:
+                gone_since = None
         if state.get("uploading"):
             grace = 0
             # Неподвижная полоса — застой, и ждать до потолка незачем: тот же

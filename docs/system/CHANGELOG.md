@@ -1,5 +1,70 @@
 # System history
 
+## Post and Story get the right file in the Crop step — ACL-1426
+
+Owner rules 2026-10-01 (Issue #426): the creative number pairs `_post`/`_square` with
+`_story`; the Square card gets the post, the Vertical card the story (Replace) or, without
+a pair, the same file; Original on both cards; "Crop and expand (Meta AI)" off.
+
+- `src/fb_ads_rpa/creative_pairing.py` — the table (pair by number regardless of the
+  prefix, same media kind, same folder; same prefix wins). A `_story` chosen in the
+  Builder with a `_post` sibling puts the post on Square (the ad's media).
+- `src/fb_ads_rpa/crop_step.py` — on the Crop step, before the walk's Next: Original on
+  each card, expansion unchecked, Replace on Vertical for a pair (library search, tile,
+  the picker's own confirm), read-back. Mismatch → named reason (`crop_*`, e.g.
+  `crop_vertical_not_original`, `crop_story_not_in_library`, `crop_step_not_shown`), the
+  creative step fails with it, no retry, the ad is held for review. Telemetry
+  `ad_creative_pair`, `ad_creative_crop`. Switches: `FB_RPA_CROP_STEP=0` (old
+  behaviour), `FB_RPA_CROP_REPLACE=0` (pairs blocked with `crop_replace_off`).
+- Ads 2–3 in the single-screen editor: the new ad's form gone after the wizard (empty
+  Ad section, "Verifying your changes" with the `#100 lead_gen_form_id` preflight
+  error) is named `ad_form_gone_after_media` after 30 s instead of 150 polls, and the
+  retry loop neither checks again nor opens a second wizard (was ~3 + 3 + 2 min per ad).
+- Builder: `/api/creatives` carries `story_label` ("Story: <file>" / "Story: same file,
+  Original"), printed under "Ad N" on the preview card. `serve.py` restart needed.
+- Review of PR #440 (round 2):
+  - H1: every success return of the creative step (`upload` True, the retry loop's
+    media check, the three known-file "media already on ad" returns, the known-file
+    reuse) first asks `crop_step.outcome()` through `meta_dom._crop_gate`. A Crop
+    failure stored by the retry or give-up close-walk, or a pair whose wizard never
+    showed Crop (`crop_step_not_shown`), fails the step with that reason (telemetry
+    `ad_creative_upload` with `where`) instead of being erased by `set_plan(None)`.
+  - M1: the walk recognises the Crop step by its heading "Select media crop for
+    placements" as well as by the step row; a single file whose Crop step was never
+    handled gets one warning row `ad_creative_crop` / `crop_step_not_shown`.
+  - M2: Meta AI expansion fails closed — "AI expansion"/"generative" labels count as
+    expansion, a box outside the cards is switched off (`shared:expand_off`), and any
+    other checked box or switch on the step blocks with `crop_unknown_toggle_on`.
+  - M3: Replace is proven by the picked tile's thumbnail ids on the Vertical card
+    (mismatch → `crop_vertical_not_story`; no ids on either side → warning row
+    `as_planned_thumb_unconfirmed`, as on the library-pick path).
+  - L1: the picker's Done/Select/... is pressed only inside the picker's own dialog;
+    without one (or inside the wizard's) → `crop_replace_picker_unscoped`.
+  - L4: `ad_form_gone_after_media` and `crop_*` reasons carry an English sentence
+    (`simple_create.creative_why_text`) in the step diag `text`.
+
+## Every step of the creative wizard is captured, read-only — ACL-1426 (phase A)
+
+Live runs 04c8c214d2ba and 0bd520418dbe (Facebook_1443, 2026-10-01): after a
+library pick the robot walks the Trim → Crop → Text → Image generation →
+Enhancements → Translation wizard with its forward button, so the Crop step keeps
+Meta's defaults (Vertical 9:16 with "Crop and expand (Meta AI)"), and no capture of
+any step after Media existed (the editor page is cut at 4 MB before the wizard).
+
+- While `_walk_creative_wizard` sees the wizard after a library pick or an upload
+  (both editors, all ads), each new step is captured before the forward press:
+  the scrubbed wizard block in `output/rpa_pages/<run>/NN_wizard_<step>`
+  (`wizard_trim`, `wizard_crop`, `wizard_text`, `wizard_image_generation`, …), the
+  read step state (step row, current step, headings, buttons, checkbox/radio
+  states) in `context.json`. At most 18 per run, on their own quota — the
+  failure-capture limit is untouched; no Sentry section is remembered for them.
+- One telemetry row per walk, `ad_creative_wizard` (note `<origin>:closed|left_open`,
+  diag `sequence`, per-step `at_s`/`s`/`pressed`).
+- Read-only: no presses, scrolls or waits added; the press sequence is the same with
+  capture on and off, and capture failures never reach the walk
+  (`src/fb_ads_rpa/wizard_capture.py`). Machine switch `FB_RPA_WIZARD_CAPTURE=0`
+  turns the captures off (the telemetry row stays).
+
 ## Ads 2-3 in the single-screen editor: media found, Creating... waited out — ACL-1412
 
 Live run d1755a59e139 (Facebook_1443, 2026-09-30) left ad 2 without media, link
@@ -272,6 +337,23 @@ only when it is safe.
 - Visible: job panel line "Closed the hand-opened window of <account> and reopened
   it for the robot", telemetry `profile_hand_window` (note = outcome or refusal
   reason, diag = where, age_s, idle_s) and a Sentry breadcrumb with the same data.
+
+## Ads 2-3 in the single-screen editor: media found, Creating... waited out — ACL-1412
+
+Live run d1755a59e139 (Facebook_1443, 2026-09-30) left ad 2 without media, link
+and text and stopped ad 3 at `dialog_open`.
+
+- Before opening the creative, checking the media or setting the destination of
+  ads 2+, the robot scrolls the new ad's Media block back on screen (the editor had
+  unmounted the ad form, so "Set up creative", the attached media and Destination
+  were not in the page). Only scrolling: no presses, no reloads, still inside
+  `hold_open_ad`. The media entry used is logged: `ad_creative_upload` note
+  `media_entry:<set_up_creative|picker_open|media_on_ad|media_block_*>`.
+- Meta's "Creating..." dialog after Create ad is waited out for up to 120 s
+  (`META_BUSY_WAIT_S`) whether or not the page answers; any other dialog stops the
+  ad at once (`adN_create:dialog_open`). Meta's media picker left over the new ad
+  is closed with its own Cancel. `simple_create_more_ads` telemetry gains
+  `progress_s`, `dialog.open_s`, `dialog_kind` and `media_picker`.
 
 ## The robot builds campaigns in Meta's single-screen editor — ACL-1327
 
