@@ -838,30 +838,16 @@
       }
     },
     "stage": {
-      "pr": 409,
+      "pr": 398,
       "issues": [
-        397
+        395
       ],
-      "tree_sha": "22919f34db1a63c2c94c656546b3207206a3431c",
-      "source_sha": "380c0d70bbf28e3a4bfcfbd921b259125898a317",
-      "main_tree": "2717ad7a98b14d6d7c5d579784748e8d37fdf849",
+      "tree_sha": "fd095b692c707356b7fa93346fa4085b9663e3d9",
+      "source_sha": "942f641e25cae9f32c439baf81707c9fdc88bf17",
+      "main_tree": "22919f34db1a63c2c94c656546b3207206a3431c",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-01T08:43:42+00:00",
-      "verification": {
-        "kind": "stage-verification",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "source_sha": "380c0d70bbf28e3a4bfcfbd921b259125898a317",
-        "tree_sha": "22919f34db1a63c2c94c656546b3207206a3431c",
-        "checks": [
-          "Git checks on actual stage 380c0d7: CI run 36838106042 success (sharded test jobs, first attempt)",
-          "Windows installer run 36838106045 success; Delivery setup 36838106048 success",
-          "Test-infrastructure change (pytest-xdist, CI shards, flake fixes); no runtime installation behaviour changed"
-        ],
-        "report": "ACL-1397 stage verification: Git checks green on the actual stage with the new sharded CI. Review: scratchpad/review_409.md."
-      },
-      "verified_at": "2026-10-01T08:58:32+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-01T10:39:18+00:00"
     },
     "tasks": {
       "248": {
