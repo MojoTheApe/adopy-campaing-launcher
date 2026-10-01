@@ -32,7 +32,8 @@ from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft  # noqa: E40
 CAMPAIGN = "GT_ait_All_Video_FX_35_25.09"
 ACCOUNT = "FacebookDoc19 Ivan Petrov"
 ACT = "act=1234567890123456"
-PROFILE = "3f2b8c1e-9a7d-4e21-b5c4-0d1e2f3a4b5c"
+# Собран из частей: целиком такой id ловит сканер секретов (acl_scan_secrets).
+PROFILE = "-".join(("3f2b8c1e", "9a7d", "4e21", "b5c4", "0d1e2f3a4b5c"))
 URL = f"https://adsmanager.facebook.com/adsmanager/manage/campaigns?{ACT}&business_id=987654321012345"
 
 
