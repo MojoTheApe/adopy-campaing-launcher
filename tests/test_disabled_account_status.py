@@ -109,6 +109,56 @@ def test_disabled_in_the_column_outranks_a_review_banner(page):
     assert sp._read_status(page)[0] == "disabled"
 
 
+_VERIFY_BANNER_TIGHT = (
+    '<div role="alert"><div>Verification required to advertise</div>'
+    "<div>Complete verification to remove restrictions from your ad account.</div></div>"
+)
+
+
+def test_disabled_in_the_column_outranks_the_verification_banner(page):
+    """Прогон ecce52f330b8 (22.09): баннер «Verification required to advertise»
+    выше ячейки «Account disabled». Детектор RPA отдаёт первое совпадение по
+    порядку DOM — баннер; чтение должно взять все и выбрать `disabled`
+    (ревью PR #392, F1)."""
+    page.set_content(_page_html(banner=_VERIFY_BANNER_TIGHT))
+    assert sp._read_status(page) == ("disabled", "Account disabled")
+
+
+def test_the_cell_in_a_frame_is_read_too(page):
+    """Совпадения собираются во всех фреймах, а не только в главном."""
+    page.set_content(
+        _page_html(delivery="Off", banner=_VERIFY_BANNER_TIGHT)
+        + '<iframe srcdoc="<span>Account disabled</span>"></iframe>'
+    )
+    page.wait_for_function("document.querySelector('iframe').contentDocument.body.innerText.length > 0")
+    assert sp._read_status(page)[0] == "disabled"
+
+
+def test_meta_lines_are_joined_with_a_space(page):
+    """`textContent` склеивает строки баннера: «…advertiseComplete…». В
+    подсказку человеку идёт текст с пробелом."""
+    page.set_content(_page_html(delivery="Off", banner=_VERIFY_BANNER_TIGHT))
+    state, text = sp._read_status(page)
+    assert state == "restricted"
+    assert "advertiseComplete" not in text
+    assert "advertise Complete verification" in text
+
+
+def test_a_broken_rpa_detector_is_logged_once(page, monkeypatch, caplog):
+    """Переименовали приватные имена RPA — чтение падает на баннеры, но не
+    молча: одно предупреждение в лог (ревью PR #392, F6)."""
+    from src.fb_ads_rpa import meta_dom
+
+    monkeypatch.delattr(meta_dom, "_ACCOUNT_BLOCKED_JS")
+    monkeypatch.setattr(sp, "_blocked_warned", False)
+    page.set_content(_page_html())
+    with caplog.at_level("WARNING", logger=sp.log.name):
+        assert sp._read_status(page, tries=2) == ("clear", "")
+        sp._read_status(page, tries=1)
+    warned = [r for r in caplog.records if "account-block detector" in r.getMessage()]
+    assert len(warned) == 1
+
+
 def test_every_kind_the_rpa_knows_has_a_status():
     """Одна правда на два места: новый вид блокировки у RPA без слова здесь —
     это тот самый расход, из-за которого Doc20 стоял «no warning»."""
@@ -152,7 +202,7 @@ def test_a_status_followed_by_failed_reads_is_not_refreshed(monkeypatch):
     assert got["stale"] == "1"
     assert got["tried_at"] == "2026-09-29 11:44:43"
     assert "open by hand" in got["tried_error"]
-    assert got["at_short"] == "22.09"
+    assert got["at_short"] == "22.09.26", "с годом: старое состояние не путается с прошлогодним"
 
 
 def test_the_read_that_wrote_the_status_does_not_make_it_stale(monkeypatch):
@@ -197,13 +247,13 @@ def _render(status: dict) -> str:
 
 
 def test_the_map_shows_when_the_status_was_read():
-    cell = _render({"status": "clear", "at": "2026-09-22 08:52:04", "at_short": "22.09", "stale": ""})
+    cell = _render({"status": "clear", "at": "2026-09-22 08:52:04", "at_short": "22.09.26", "stale": ""})
     assert "amap-st ok" in cell and "no warning" in cell
-    assert ">22.09</small>" in cell
+    assert ">22.09.26</small>" in cell
 
 
 def test_an_old_no_warning_is_marked_as_not_refreshed():
-    cell = _render({"status": "clear", "at": "2026-09-22 08:52:04", "at_short": "22.09", "stale": "1",
+    cell = _render({"status": "clear", "at": "2026-09-22 08:52:04", "at_short": "22.09.26", "stale": "1",
                     "tried_at": "2026-09-29 11:44:43", "tried_error": "the profile is open by hand"})
     assert "amap-st ok" not in cell, "устаревшее «no warning» выглядит как свежее"
     assert "amap-st dim" in cell
@@ -213,6 +263,6 @@ def test_an_old_no_warning_is_marked_as_not_refreshed():
 
 def test_a_disabled_account_is_red_on_the_map():
     cell = _render({"status": "disabled", "status_text": "Account disabled",
-                    "at": "2026-09-30 10:00:00", "at_short": "30.09", "stale": ""})
+                    "at": "2026-09-30 10:00:00", "at_short": "30.09.26", "stale": ""})
     assert "amap-st bad" in cell and ">disabled</span>" in cell
     assert "Account disabled" in cell

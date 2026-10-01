@@ -352,7 +352,7 @@ def get_status(account: str) -> dict[str, str]:
         "status": str(raw.get("status") or ""),
         "status_text": str(raw.get("status_text") or ""),
         "at": at,
-        "at_short": f"{at[8:10]}.{at[5:7]}" if len(at) >= 10 else "",
+        "at_short": f"{at[8:10]}.{at[5:7]}.{at[2:4]}" if len(at) >= 10 else "",
         "stale": "",
         "tried_at": "",
         "tried_error": "",
@@ -1099,7 +1099,34 @@ _BLOCKED_KIND_STATUS: dict[str, str] = {
 _STATUS_RANK = {"disabled": 0, "restricted": 1, "review": 2, "blocked": 3}
 
 
-def _blocked_on_page(page) -> tuple[str, str] | None:
+#: Анкер в `meta_dom._ACCOUNT_BLOCKED_JS`, рядом с которым чтение добавляет
+#: тот же узел словами `innerText`. `textContent` склеивает строки Meta без
+#: пробела («…advertiseComplete verification…»), а человеку в подсказке нужен
+#: читаемый текст. Код RPA не правится — меняется копия строки здесь; нет
+#: анкера — работает исходный скрипт, просто без пробелов.
+_BLOCKED_JS_PUSH = "out.push(t);"
+_BLOCKED_JS_SPACED = (
+    "{ const s = norm(el.innerText); if (s && s !== t) out.push(s); } out.push(t);"
+)
+
+#: Сломанная связка с RPA (переименовали приватные имена) — одно
+#: предупреждение на процесс, а не на каждую из восьми попыток чтения.
+_blocked_warned = False
+
+
+def _warn_blocked_once(why: str) -> None:
+    global _blocked_warned
+    if _blocked_warned:
+        return
+    _blocked_warned = True
+    log.warning(
+        "account status: the RPA account-block detector is unavailable (%s); "
+        "reading banners only, a disabled account may show as 'no warning'",
+        why,
+    )
+
+
+def _blocked_on_page(page) -> list[tuple[str, str]]:
     """Блокировка, которую видит RPA перед публикацией, — по отдельным ячейкам.
 
     Баннера у отключённого кабинета может не быть вовсе: у Doc20 30.09 было
@@ -1108,17 +1135,40 @@ def _blocked_on_page(page) -> tuple[str, str] | None:
     уже разошлись, и ошиблась та, что показывает статус на экране (ACL-1391).
     Совпадение — весь текст ячейки, а не подстрока страницы: справка «Why is
     my ad account disabled?» есть и у здорового кабинета.
+
+    Возвращаются **все** совпадения во всех фреймах, а не первое по порядку
+    DOM: у прогона ecce52f330b8 (22.09) баннер «Verification required to
+    advertise» стоял выше ячейки «Account disabled», и первое совпадение дало
+    бы `restricted`. Кто весомее, решает `_STATUS_RANK` в `_status_once`.
     """
     try:
         from src.fb_ads_rpa import meta_dom
 
-        text = meta_dom._account_blocked_text(page)
-        if not text:
-            return None
-        kind = meta_dom._account_blocked_match(text)
+        js = meta_dom._ACCOUNT_BLOCKED_JS
+        match = meta_dom._account_blocked_match
+        roots_of = meta_dom._roots
+    except Exception as exc:  # noqa: BLE001 — нет детектора: читаем баннеры
+        _warn_blocked_once(f"{type(exc).__name__}: {exc}")
+        return []
+    try:
+        roots = roots_of(page)
     except Exception:
-        return None
-    return _BLOCKED_KIND_STATUS.get(kind or "", "blocked"), text
+        # Подставная страница без фреймов: признаки ячеек — только добавка.
+        return []
+    if _BLOCKED_JS_PUSH in js:
+        js = js.replace(_BLOCKED_JS_PUSH, _BLOCKED_JS_SPACED, 1)
+    found: list[tuple[str, str]] = []
+    for root in roots:
+        try:
+            texts = root.evaluate(js) or []
+        except Exception:
+            # Фрейм ушёл между перечислением и вопросом — обычное дело.
+            continue
+        for text in texts:
+            kind = match(text)
+            if kind:
+                found.append((_BLOCKED_KIND_STATUS.get(kind, "blocked"), text))
+    return found
 
 
 def _status_once(page) -> tuple[str, str]:
@@ -1139,9 +1189,7 @@ def _status_once(page) -> tuple[str, str]:
             start = max(0, at - 60)
             found.append((state, flat[start : at + len(hit) + 140].strip()))
             break
-    cell = _blocked_on_page(page)
-    if cell:
-        found.append(cell)
+    found.extend(_blocked_on_page(page))
     if found:
         return min(found, key=lambda f: _STATUS_RANK.get(f[0], len(_STATUS_RANK)))
 

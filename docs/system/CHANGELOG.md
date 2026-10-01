@@ -12,10 +12,13 @@ wrote "Account disabled" in the Delivery column of its campaign. Two causes:
   disabled" as a whole Delivery cell reads as `disabled`, "Verification required
   to advertise" as `restricted`. A test fails if the robot learns a kind of block
   the status column has no word for. The help link "Why is my ad account
-  disabled?" still reads as nothing.
+  disabled?" still reads as nothing. Every sign in every frame is weighed, not
+  the first one on the page: a verification banner above an "Account disabled"
+  cell reads as `disabled`. Meta's lines come out space-joined, and a broken
+  link to the robot's detector is logged once instead of passing silently.
 - The last successful status stayed on screen after later reads failed: Doc20's
   "no warning" was from 22.09, and every read after it had failed. The map now
-  prints the read date under the status, and a status followed by a failed read
+  prints the read date (dd.mm.yy) under the status, and a status followed by a failed read
   is greyed out and marked "not refreshed", with the failed attempt in its tooltip.
 
 No new visits to accounts: the fix applies on the next Read a person asks for.
