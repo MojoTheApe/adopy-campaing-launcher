@@ -2123,7 +2123,31 @@ async def api_creatives() -> JSONResponse:
             # они не отличались никак.
             "size_bytes": size,
         })
+    _add_story_labels(files)
     return JSONResponse({"files": files})
+
+
+def _add_story_labels(files: list[dict]) -> None:
+    """ACL-1426: what goes on the Vertical (story) card of each file.
+
+    Same rules as the robot (`creative_pairing.plan`): the pair is looked up by
+    creative number among the files of the same folder. The Builder shows
+    `story_label` next to the ad ("Story: 2403_story.mp4" / "Story: same file,
+    Original").
+    """
+    from src.fb_ads_rpa import creative_pairing
+
+    by_folder: dict[str, list[str]] = {}
+    for f in files:
+        by_folder.setdefault(f.get("folder") or "", []).append(f["filename"])
+    for f in files:
+        try:
+            plan = creative_pairing.plan(f["filename"], by_folder.get(f.get("folder") or "", []))
+            f["story_label"] = plan.builder_label()
+            if plan.square_file != f["filename"]:
+                f["square_file"] = plan.square_file
+        except Exception:
+            f["story_label"] = ""
 
 
 def _ad_copy_rows() -> list[dict]:

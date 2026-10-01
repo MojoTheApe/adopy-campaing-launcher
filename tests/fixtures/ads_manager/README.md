@@ -196,3 +196,13 @@ What happened between 02 and 03 is not in any capture: 7.5 s after the press the
 | media_picker | d1755a59e139/03_simple_create_more_ads/block_dialog (Facebook_1443) | The `role=dialog` on screen after Create ad for ad 3 (the robot's `dialog_open` capture): step row Media / Trim / Crop / Text / Creative generation / Enhancements / Translation, Account library with Search media, Upload, five tiles, "1 selected", Cancel / Next | Which tile was selected is not in the markup (it lives in Meta CSS); position is emulated |
 
 The same run's page captures (`01_ad2_creative_upload`, `02_ad2_destination`) are truncated at 3.98 MB but still show the state that failed ad 2: the Ad section heading and the ad preview are in the DOM, the ad form (name, Media, Destination) is not — the editor had unmounted it while the page stood at the campaign and ad set. `tests/test_simple_create_new_ad_media.py` emulates that virtualisation (the Media block is mounted only while the scroll container is near it); the transition itself is synthetic.
+
+## ACL-1426 fragments (owner's capture run 2026-10-01)
+
+Re-built by `page_capture.scrub_section_html` (whitelisted tags and attributes: role, aria-*, data-surface, type, checked, disabled, id; no classes, svg, media URLs, names or ids) from the read-only wizard captures of phase A. UI language: English. Meta build identifier: not recorded. Browser: Multilogin Chrome, version not recorded.
+
+| Fixture | Source / capture state | Coverage limit |
+| --- | --- | --- |
+| crop_step_video_simple_create_2026_10_01.html | 4121938e6dc3/07_wizard_crop/block_creative_wizard.html (Facebook_1443, single-screen editor, ad 2, video from the library) — the wizard on Crop: step row, "Select media crop for placements", cards Vertical and Square, each with native radios Original (checked) / 9:16 or 1:1 (recommended), Crop and Replace | No "Crop and expand (Meta AI)" checkbox was on screen; no media (video blobs removed); no Meta runtime |
+| crop_step_image_classic_2026_10_01.html | 5edc0e7cca0a/05_wizard_crop/block_creative_wizard.html (Doc19, classic editor, ad 1, image upload) — Square Original checked, Vertical 9:16 (recommended) checked (Meta's default) | Same; the Replace picker was never captured (synthetic in the tests) |
+| ad_form_gone_verifying_2026_10_01.html | 4121938e6dc3/11_ad2_creative_upload/page.html (ad 2 after the library pick and the wizard) — Ad heading with an empty `/am/editor:ad` surface (no name field, no Media block) and the "Verifying your changes" card with the preflight error `#100 lead_gen_form_id` | The right-column preview is not in the fragment |

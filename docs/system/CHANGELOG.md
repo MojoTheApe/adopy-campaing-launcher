@@ -1,5 +1,28 @@
 # System history
 
+## Post and Story get the right file in the Crop step — ACL-1426
+
+Owner rules 2026-10-01 (Issue #426): the creative number pairs `_post`/`_square` with
+`_story`; the Square card gets the post, the Vertical card the story (Replace) or, without
+a pair, the same file; Original on both cards; "Crop and expand (Meta AI)" off.
+
+- `src/fb_ads_rpa/creative_pairing.py` — the table (pair by number regardless of the
+  prefix, same media kind, same folder; same prefix wins). A `_story` chosen in the
+  Builder with a `_post` sibling puts the post on Square (the ad's media).
+- `src/fb_ads_rpa/crop_step.py` — on the Crop step, before the walk's Next: Original on
+  each card, expansion unchecked, Replace on Vertical for a pair (library search, tile,
+  the picker's own confirm), read-back. Mismatch → named reason (`crop_*`, e.g.
+  `crop_vertical_not_original`, `crop_story_not_in_library`, `crop_step_not_shown`), the
+  creative step fails with it, no retry, the ad is held for review. Telemetry
+  `ad_creative_pair`, `ad_creative_crop`. Switches: `FB_RPA_CROP_STEP=0` (old
+  behaviour), `FB_RPA_CROP_REPLACE=0` (pairs blocked with `crop_replace_off`).
+- Ads 2–3 in the single-screen editor: the new ad's form gone after the wizard (empty
+  Ad section, "Verifying your changes" with the `#100 lead_gen_form_id` preflight
+  error) is named `ad_form_gone_after_media` after 30 s instead of 150 polls, and the
+  retry loop neither checks again nor opens a second wizard (was ~3 + 3 + 2 min per ad).
+- Builder: `/api/creatives` carries `story_label` ("Story: <file>" / "Story: same file,
+  Original"), printed under "Ad N" on the preview card. `serve.py` restart needed.
+
 ## Every step of the creative wizard is captured, read-only — ACL-1426 (phase A)
 
 Live runs 04c8c214d2ba and 0bd520418dbe (Facebook_1443, 2026-10-01): after a

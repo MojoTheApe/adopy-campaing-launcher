@@ -64,7 +64,7 @@ _MAX_SEEN = 24
 #: `aria-selected` (разметка 25.09, фикстура creative_wizard_steps_2026_09_25).
 STEP_STATE_JS = r"""
 (names) => {
-  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  const norm = (s) => (s || '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
   const box = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const hits = (el) => { const t = norm(el.textContent); return names.filter(n => t.includes(n)).length; };
   const nav = ['Next', 'Cancel', 'Done'];
@@ -193,14 +193,18 @@ class Trail:
         self._started = clock()
         self.seen: list[dict[str, Any]] = []
         self.captured: dict[str, str] = {}
+        #: The step on screen at the last `see` ("" when unread).
+        self.current = ""
 
     def see(self, page) -> None:
         """Прочитать текущий шаг и, если он новый для обхода, снять его."""
+        self.current = ""
         try:
             state = read_state(page)
             if not state or not state.get("open"):
                 return
             name = _step_name(state)
+            self.current = name
             at = round(self._clock() - self._started, 1)
             if self.seen and self.seen[-1]["step"] == name:
                 return   # тот же шаг на следующем круге — не новая запись

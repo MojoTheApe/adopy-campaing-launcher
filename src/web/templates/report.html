@@ -9736,13 +9736,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var vidRadio = row.querySelector('input[type="radio"][value="Video"]');
       var isVideo = !!(vidRadio && vidRadio.checked);
 
-      var media;
+      var media, story = '';
       if (fileVal) {
         var cr = CREATIVES.find(function(f) {
           return f.filename === fileVal || f.rel_path === fileVal;
         });
         var path = cr ? (cr.rel_path || cr.filename) : fileVal;
         var url = '/creative-file?path=' + encodeURIComponent(path);
+        // ACL-1426: what the robot puts on the Vertical (story) card.
+        if (cr && cr.story_label) {
+          story = cr.story_label + (cr.square_file ? ' · Post: ' + cr.square_file : '');
+        }
         if (isVideo || (cr && cr.type === 'Video') || /\.(mp4|mov|webm)$/i.test(path)) {
           media = '<video class="cbp-media" src="' + cbpEsc(url) + '" preload="metadata" muted controls></video>';
         } else {
@@ -9763,6 +9767,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       cards.push(
         '<div class="cbp-item">' +
         '<div class="cbp-adlabel">Ad ' + (i + 1) + '</div>' +
+        (story ? '<div class="cbp-story" data-cbp-story style="font-size:0.7rem;opacity:0.75">' + cbpEsc(story) + '</div>' : '') +
         '<div class="cbp-card">' +
           '<div class="cbp-head"><span class="cbp-avatar"></span>' +
             '<span><div class="cbp-pagename">Page name</div><div class="cbp-sub">Sponsored</div></span></div>' +
