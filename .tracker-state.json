@@ -4094,7 +4094,9 @@
       "session": "rev_r1426f_1001",
       "coordinator": "Coordinator-C0930A",
       "started_at": "2026-10-01T19:22:21+00:00",
-      "state": "reviewing"
+      "state": "returning",
+      "report": "# PR #440 (ACL-1426) returned before integration \u2014 coordinator, 2026-10-01\n\nCoordinator merged work/stage (now with ACL-1412 squashed as 56288e5 and the full ACL-1433 bench) and work/main into the branch. Conflicts: CHANGELOG and the fixtures README (union), and two hunks in `src/fb_ads_rpa/meta_dom.py` `_verify_ad_media_present` where stage's side was empty \u2014 the ACL-1426 side (`gone_since` / `_ad_form_gone` fast fail) was kept.\n\nAfter the merge `tests/test_bench_catalogue.py::test_every_fixture_in_the_bench_is_catalogued` fails: a 1426 fixture (`ad_form_gone_\u2026_2026_10_01.html`, and check any other new 1426 fixture) is not in `tests/bench/catalogue.json`. Add rows, regenerate `CATALOGUE.md` (`scripts/bench_catalogue.py --write`, `--check` clean). Round-2 review (review_440.md, approved) stands otherwise.",
+      "keep_lane": true
     },
     "history": [
       {
