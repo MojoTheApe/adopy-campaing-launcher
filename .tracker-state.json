@@ -2140,7 +2140,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "441": {
+        "actor": "Worker-W1441X",
+        "session": "run_w1441x_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1441-connect-workspace",
+        "worktree": "C:\\acl-1441-workspace",
+        "id": "7cfd461cf665457aa740e115a911f6ab",
+        "issue": 441,
+        "state": "implementing",
+        "started_at": "2026-10-01T10:15:47+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -2826,6 +2839,17 @@
         },
         "pr": 438,
         "queued_at": "2026-10-01T09:20:04+00:00"
+      },
+      "441": {
+        "implementers": [
+          {
+            "actor": "Worker-W1441X",
+            "session": "run_w1441x_1001"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1441X",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -2968,6 +2992,10 @@
       "Reviewer-R1395G": {
         "session": "review_r1395g_1001",
         "role": "Reviewer"
+      },
+      "Worker-W1441X": {
+        "session": "run_w1441x_1001",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -4102,6 +4130,13 @@
         "issue": 426,
         "pr": 440,
         "actor": "Worker-C1426P"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-01T10:15:47+00:00",
+        "issue": 441,
+        "claim": "7cfd461cf665457aa740e115a911f6ab",
+        "actor": "Worker-W1441X"
       }
     ],
     "policy": {
