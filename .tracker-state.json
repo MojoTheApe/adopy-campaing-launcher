@@ -2149,9 +2149,11 @@
         "worktree": "C:\\acl-1426-crop",
         "id": "144071218c8a407c8873429c9705fd8c",
         "issue": 426,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-01T07:27:36+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 440,
+        "report": "# ACL-1426 handoff (Worker-C1426P, run_c1426p_1001)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/440 (into stage). Branch codex/acl-1426-crop-post-story, head f585929. Built on #413 (ACL-1412) and merged with work/main 49915f7.\n\n## Done\n- Phase A (5bd3457, on the live build 410bd23): read-only capture of each wizard step and the `ad_creative_wizard` telemetry row.\n- Phase B:\n  - `creative_pairing`: the owner table.\n  - `crop_step`:\n    - Original on both cards.\n    - \"Crop and expand (Meta AI)\" unchecked.\n    - Replace on Vertical for a pair.\n    - Read-back; a mismatch is a named `crop_*` reason that blocks the ad with no retry.\n  - Ads 2\u20133: form gone after the wizard is named `ad_form_gone_after_media` in 30 s; no double media check, no second wizard.\n  - Builder: `story_label`.\n  - Fixtures from the capture run.\n- Tests: 511 affected tests pass (headless, `ACL_LIBRARY_*` empty).\n\n## What the wizard steps showed\n- Single-screen editor, video: Trim \u2192 Crop \u2192 Text \u2192 Creative generation \u2192 Enhancements (Done). Ad 1 had no Trim step.\n- Classic editor, image: Creative setup \u2192 Crop \u2192 Text \u2192 Image generation \u2192 Enhancements.\n- Crop step:\n  - Video: Original already selected on both cards.\n  - Image: Vertical defaulted to 9:16.\n  - No \"Crop and expand\" checkbox on any screen.\n- Enhancements: \"Video touch-ups (Meta AI, On by default)\" auto-crops video; not touched.\n\n## Open (owner / next round)\n- Ads 2\u20133 root cause is not fixed. Options: (A) Destination before the creative on ads 2+; (B) remount the form by clicking the ad's own tree row; (C) keep failing fast.\n- Upload of a missing story through Replace.\n- Switching off \"Video touch-ups\"?\n- The Replace picker has never been captured live.\n\n## Live switches\n- `FB_RPA_CROP_STEP=0`: old behaviour.\n- `FB_RPA_CROP_REPLACE=0`: pairs blocked with `crop_replace_off`.\n- `FB_RPA_WIZARD_CAPTURE=0`: wizard captures off.\n\n`serve.py` restart needed for the Builder label."
       }
     },
     "tasks": {
