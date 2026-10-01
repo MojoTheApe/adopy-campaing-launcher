@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**20 robot steps × 78 layouts, 44 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**20 robot steps × 81 layouts, 47 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -26,10 +26,10 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 5 | 5 | 0 | 0 |
-| creative_wizard | 6 | 6 | 0 | 0 |
+| creative_wizard | 8 | 8 | 0 | 0 |
 | ad_copy | 7 | 7 | 0 | 0 |
 | ad_destination / destination_sweep | 9 | 8 | 0 | 1 |
-| ads 2-3 (single-screen editor) | 1 | 1 | 0 | 0 |
+| ads 2-3 (single-screen editor) | 2 | 2 | 0 | 0 |
 | editor gone under the robot | 1 | 1 | 0 | 0 |
 | banners and blocks (any step) | 2 | 2 | 0 | 0 |
 
@@ -195,6 +195,8 @@ Robot: _creative_wizard_open, _wizard_media_step, _WIZARD_FORWARD_JS (walk), _cr
 | Video, no Creative setup: Media . Trim . Crop . Text . Creative generation . Enhancements . Translation | 4121938e6dc3/02-10_wizard_*, d7b470f4c983/01-16_wizard_* | `creative_wizard_steps_2026_10_01.html` · pick_crop | `tests/test_bench_creative_wizard_steps.py` | row read; forward Next | pass |
 | Video, short row: Media . Text . Creative generation . Enhancements . Translation; Media library without selection | b47bc815bb3c/05-07_wizard_* | `creative_wizard_steps_2026_10_01.html` · pick_media_library, pick_enhancements | `tests/test_bench_creative_wizard_steps.py` | Media: no forward button; Enhancements: Done | pass |
 | Video, Text before Crop: Creative setup . Media . Text . Crop . Image generation . Enhancements . Translation | cc8fcfa17ae9/03-12_wizard_* | `creative_wizard_steps_2026_10_01.html` · text_first_text, text_first_crop | `tests/test_bench_creative_wizard_steps.py` | row read in this order; forward Next | pass |
+| Crop step, video in the single-screen editor: cards Square and Vertical, Original already checked on both, Crop and Replace; no 'Crop and expand (Meta AI)' box | 4121938e6dc3/07_wizard_crop | `crop_step_video_simple_create_2026_10_01.html` · crop_step | `tests/test_crop_step_original_and_story.py` | both cards read as Original; apply makes no clicks; read-back clean (ACL-1426) | pass |
+| Crop step, image in the classic editor: Square Original, Vertical on Meta's default 9:16 (recommended) | 5edc0e7cca0a/05_wizard_crop | `crop_step_image_classic_2026_10_01.html` · crop_step | `tests/test_crop_step_original_and_story.py` | one guarded click moves Vertical to Original before the walk's Next; read-back clean (ACL-1426) | pass |
 
 ## ad_copy
 
@@ -233,6 +235,7 @@ Robot: simple_create.create_next_ad
 | Layout | Seen live | Fixture · fragment | Test | Expected | Status |
 | --- | --- | --- | --- | --- | --- |
 | Tree before, ad set Action menu, tree after Create ad, new ad name/media | f9b9fc8d7bb3/01-03, 8ce1b9985046/02-04, b3a333ff43ab/03-04, d1755a59e139/03-04, d66a22d0fa30/02-03, df5344da3a17/02 | `simple_create_more_ads_2026_09_30.html` · tree_before, adset_menu, tree_after_create, ad1_name, new_ad_name, new_ad_media | `tests/test_simple_create_more_ads.py` | Create ad from the ad set menu opens the new ad; 'Creating...' dialog waited out | pass |
+| New ad's form gone after the media wizard: Ad heading with an empty /am/editor:ad surface (no name field, no Media block) and 'Verifying your changes' with the #100 lead_gen_form_id preflight error | 4121938e6dc3/11_ad2_creative_upload, 04c8c214d2ba/01_ad2_creative_upload, 0bd520418dbe/01_ad2_creative_upload | `ad_form_gone_verifying_2026_10_01.html` · ad_form_gone_verifying | `tests/test_ad_form_gone_after_media.py` | named ad_form_gone_after_media after 30 s; no second media check or wizard (ACL-1426) | pass |
 
 ## editor gone under the robot
 
