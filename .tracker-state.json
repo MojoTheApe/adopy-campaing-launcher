@@ -2703,20 +2703,6 @@
         "started_at": "2026-10-02T05:48:49+00:00",
         "from_status": "status:todo"
       },
-      "427": {
-        "actor": "Worker-I1427Q",
-        "session": "run_i1427q_1001",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1427-idle-wait",
-        "worktree": "C:\\acl-1427-idle-wait",
-        "id": "3507d2b290cb4699ba7c36353846bb5b",
-        "issue": 427,
-        "state": "handoff",
-        "started_at": "2026-10-02T05:49:15+00:00",
-        "from_status": "status:todo",
-        "pr": 428,
-        "report": "# ACL-1427 \u2014 fixes after review of PR #428 (Worker-I1427Q / run_i1427q_1001)\n\nHead: 8826874d99b9205264ab6a81daf5c649bf55749b (branch codex/acl-1427-idle-wait)\n\n## Merges\n- work/stage merged (conflict only in docs/system/CHANGELOG.md: kept both sides \u2014 ACL-1427 entry on top, then stage's ACL-1455/1476/1426/1412/1445/1344/1444/1441/1395/1433/1397 entries). browser.py / rpa_publisher.py auto-merged with ACL-1444.\n- work/main merged cleanly after that.\n- tests/bench/catalogue.json: no conflict; tests/test_bench_catalogue.py passes (check is green).\n\n## Findings\n1. [Blocking] CHANGELOG conflict \u2014 resolved by the stage merge above; CI must re-run on the new head.\n2. [Low] Reopened window closed by ACL-1444 at the end of a clean job \u2014 no code change (consistent with both specs: after the reopen it is the robot's profile). Stated in the ACL-1427 CHANGELOG entry; to be called out in the ACL-1418 live check.\n3. [Low/UX] Stop during the wait read only as \"profile open by hand\" \u2014 fixed:\n   - browser.py: on WAIT_CANCELLED the ProfileStop detail becomes \"<where>; the job was stopped while waiting for the computer to be idle\" (new constant HAND_WINDOW_WAIT_STOPPED); code stays profile_open_by_hand so failure/retry policies and Sentry grouping are unchanged.\n   - rpa_publisher.py: `_report_profile_stop(..., cancelled=)` \u2014 when the job was stopped (self._cancelled) the telemetry row is still written but no Sentry campaign-stop event is sent (ACL-1318: only real failures).\n   - Tests: cancel test asserts the new detail; new parametrized test_a_stop_pressed_during_the_wait_is_not_a_sentry_failure (Sentry only when not cancelled); test_publish_draft_passes_the_job_stop_to_the_report.\n4. [Info] 409 on \"Close profile\" during the wait \u2014 expected (job keeps its slot); documented in the CHANGELOG entry. No change.\n5. [Info] ACL-1418 live check \u2014 out of PR scope, stays open on the Issue.\n\n## Tests (headless, ACL_LIBRARY_* empty)\n- test_a_finished_clean_profile_closes_itself, test_a_hand_opened_profile_is_never_stopped, test_a_hand_opened_profile_is_reopened_when_safe, test_a_hand_opened_window_waits_for_idle, test_browser_boundary_contract, test_browser_roles_review, test_publish_safety_contract, test_rpa_publisher_gates, test_bench_catalogue: 181 passed.\n- test_failures_reach_the_collector, test_sentry_gets_only_campaign_failures, test_sentry_page_snapshot: 144 passed.\n- report.html not touched."
-      },
       "434": {
         "actor": "Worker-H1434U",
         "session": "run_h1434u_1001",
@@ -3313,7 +3299,7 @@
             "session": "run_i1427q_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-I1427Q",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3322,16 +3308,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1427-idle-wait",
           "worktree": "C:\\acl-1427-idle-wait",
-          "id": "18306264951346d4bdfd076aae43c267",
+          "id": "3507d2b290cb4699ba7c36353846bb5b",
           "issue": 427,
           "state": "handoff",
-          "started_at": "2026-10-01T07:37:51+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-02T05:49:15+00:00",
+          "from_status": "status:todo",
           "pr": 428,
-          "report": "# ACL-1427 handoff \u2014 Worker-I1427Q\n\nPR #428 `codex/acl-1427-idle-wait` -> stage, head 2b470ea (base work/main 91e7049).\n\n## Design\n- `src/fb_ads_rpa/hand_window.py`: `wait_until_safe(pids, on_wait=)` -> `Wait(verdict, waited_s, outcome)`. Only RECENT_INPUT failing -> wait up to `IDLE_WAIT_S`=120 s (`FB_RPA_HAND_WINDOW_IDLE_WAIT_S`; 0 = old immediate stop), re-running full `assess` every `IDLE_POLL_S`=3 s; outcomes no_wait / idle / timeout / gate_failed / cancelled. Other gates never waited for.\n- Cancel: ContextVar `watch_cancel(check)`; `RpaPublisher._ensure_browser` wraps `provider.open` with `lambda: self._cancelled` (set by `publish_jobs.cancel_job` -> `publisher.cancel()` from the web thread). Checked every 0.5 s.\n- `src/fb_ads_rpa/browser.py` `_reopen_hand_opened`: uses the wait; job-panel notice `HAND_WINDOW_WAIT_NOTICE` via existing `report_notice`; `profile_hand_window` telemetry/Sentry diag gains `waited_s`, `wait_outcome`; note `cancelled` on Stop. ACL-1388 guarantees unchanged (publish only, graceful MLX stop, no kill).\n- Job keeps its profile slot while waiting (no slot code touched).\n\n## Tests\n- New `tests/test_a_hand_opened_window_waits_for_idle.py` (13, fake clock/sleep, stubbed Win32/MLX): 30 s input -> reopen; 120 s input -> stop; foreground -> immediate stop; gate flips mid-wait; Stop through publisher -> <=0.5 s; env override.\n- `tests/test_a_hand_opened_profile_is_reopened_when_safe.py`: RECENT_INPUT removed from immediate-stop parametrization (behaviour changed by spec).\n- Affected files: 282 passed (headless, ACL_LIBRARY_* empty).\n\n## Open\n- Acceptance \"ACL-1418 live check\" not run (no live profiles touched)."
+          "report": "# ACL-1427 \u2014 fixes after review of PR #428 (Worker-I1427Q / run_i1427q_1001)\n\nHead: 8826874d99b9205264ab6a81daf5c649bf55749b (branch codex/acl-1427-idle-wait)\n\n## Merges\n- work/stage merged (conflict only in docs/system/CHANGELOG.md: kept both sides \u2014 ACL-1427 entry on top, then stage's ACL-1455/1476/1426/1412/1445/1344/1444/1441/1395/1433/1397 entries). browser.py / rpa_publisher.py auto-merged with ACL-1444.\n- work/main merged cleanly after that.\n- tests/bench/catalogue.json: no conflict; tests/test_bench_catalogue.py passes (check is green).\n\n## Findings\n1. [Blocking] CHANGELOG conflict \u2014 resolved by the stage merge above; CI must re-run on the new head.\n2. [Low] Reopened window closed by ACL-1444 at the end of a clean job \u2014 no code change (consistent with both specs: after the reopen it is the robot's profile). Stated in the ACL-1427 CHANGELOG entry; to be called out in the ACL-1418 live check.\n3. [Low/UX] Stop during the wait read only as \"profile open by hand\" \u2014 fixed:\n   - browser.py: on WAIT_CANCELLED the ProfileStop detail becomes \"<where>; the job was stopped while waiting for the computer to be idle\" (new constant HAND_WINDOW_WAIT_STOPPED); code stays profile_open_by_hand so failure/retry policies and Sentry grouping are unchanged.\n   - rpa_publisher.py: `_report_profile_stop(..., cancelled=)` \u2014 when the job was stopped (self._cancelled) the telemetry row is still written but no Sentry campaign-stop event is sent (ACL-1318: only real failures).\n   - Tests: cancel test asserts the new detail; new parametrized test_a_stop_pressed_during_the_wait_is_not_a_sentry_failure (Sentry only when not cancelled); test_publish_draft_passes_the_job_stop_to_the_report.\n4. [Info] 409 on \"Close profile\" during the wait \u2014 expected (job keeps its slot); documented in the CHANGELOG entry. No change.\n5. [Info] ACL-1418 live check \u2014 out of PR scope, stays open on the Issue.\n\n## Tests (headless, ACL_LIBRARY_* empty)\n- test_a_finished_clean_profile_closes_itself, test_a_hand_opened_profile_is_never_stopped, test_a_hand_opened_profile_is_reopened_when_safe, test_a_hand_opened_window_waits_for_idle, test_browser_boundary_contract, test_browser_roles_review, test_publish_safety_contract, test_rpa_publisher_gates, test_bench_catalogue: 181 passed.\n- test_failures_reach_the_collector, test_sentry_gets_only_campaign_failures, test_sentry_page_snapshot: 144 passed.\n- report.html not touched."
         },
         "pr": 428,
-        "queued_at": "2026-10-01T07:45:21+00:00",
+        "queued_at": "2026-10-02T06:00:23+00:00",
         "review_report": "# Review PR #428 (ACL-1427) \u2014 Reviewer-R1427Q / rev_1427q_1002\n\nVerdict: **request-changes** (blocking only: merge conflict with work/stage; code itself is sound)\n\n- head: 1cafee739511ac55bc9631dc87430976efecae92 (tree e9ce1ccd54b16d56da9c34fd0201f39bd4e26f08)\n- base work/stage: 8322a6af0f9098114182cf327320bd87dd239a70 (merge-base 45a82bdca4df)\n- GitHub mergeable: CONFLICTING\n\n## Merge with work/stage (git merge-tree)\n- CONFLICT: docs/system/CHANGELOG.md only (both sides prepend entries at top: stage ACL-1476/1426/1412/1445/1344/1444/1441 vs PR's ACL-1427). Additive, keep both.\n- src/fb_ads_rpa/browser.py, src/fb_ads_rpa/rpa_publisher.py auto-merge cleanly (ACL-1444 code is in different hunks).\n\n## CI (head 1cafee7) \u2014 all 11 checks pass\ntest (3.11), test (3.13), ACL verification, tooling, tracker-link, installer (build/verify/classify), descriptor x2. No failing jobs. NB: CI ran on the pre-1444 stage; must re-run after the stage merge.\n\n## Local tests (headless, ACL_LIBRARY_* empty, affected files only)\n- Merged tree (stage + PR): 267 passed (14 files incl. test_a_finished_clean_profile_closes_itself.py from ACL-1444, hand-window x3, publisher gates/slots, browser boundary/roles, publish safety contract).\n- PR head: 221 passed.\n- Mutation check: wait disabled (limit=0) -> 7 failed; cancel wiring removed in publisher -> test_job_stop_during_the_wait_cancels_it_through_the_publisher fails; mid-wait gate re-check removed -> test_the_other_gates_are_rechecked_during_the_wait fails. Tests are real.\n\n## Findings\n1. [Blocking/process] docs/system/CHANGELOG.md:3 \u2014 conflicts with work/stage; merge stage, keep both entries, re-run CI on the new head.\n2. [Low/interaction ACL-1444] src/fb_ads_rpa/browser.py:2043 + stage rpa_publisher.py:377/422 \u2014 after a successful reopen the profile is marked a robot profile (`_start_via_mlx_api` -> `_mark_robot_profile`), so at the end of a clean job ACL-1444 `finish_job` -> `close_finished_profile` closes it. The person who opened the window by hand returns to no window at all (panel says \"Closed the profile \u2014 all campaigns are ready\"). Consistent with both specs (it is no longer a hand window), but worth stating in the ACL-1418 live check / to the owner. Non-blocking.\n3. [Low/UX] src/fb_ads_rpa/browser.py:2264-2266 \u2014 Stop during the wait raises ProfileStop(OPEN_BY_HAND); job finishes as cancelled (publish_jobs `_finish(cancelled=...)`) and telemetry note is `cancelled`, but the slot result/log line still reads \"profile open by hand\". Cosmetic.\n4. [Info/interaction ACL-1444] the 2-min wait runs inside the per-profile `serialized_browser` lock, so 1444's \"Close profile\" button returns 409 for that profile while waiting \u2014 matches \"job keeps its slot\"; Stop is the escape hatch. OK.\n5. [Info] Acceptance \"ACL-1418 live check\" not done (out of PR scope; stays open on the Issue).\n\n## Focus checks (OK)\n- Waits only when RECENT_INPUT is the sole failing gate; full `assess` every <=3 s; age/foreground/process/unknown gates stop at once, also mid-wait (WAIT_GATE) \u2014 a window brought to the front during the wait is never closed.\n- Timeout 120 s (env override, 0 = old stop, negative/garbage -> default); cancel polled every 0.5 s via ContextVar on the same thread as provider.open.\n- ACL-1388 guarantees unchanged: publish only (allow_restart and allow_kill), MLX API graceful stop allow_kill=False, never kill, no plain browser; spend reads never wait.\n- English panel text; telemetry adds only waited_s/wait_outcome, no profile ids."
       },
       "430": {
@@ -4504,7 +4490,8 @@
       457,
       462,
       31,
-      466
+      466,
+      427
     ],
     "review": {
       "id": "26d7af6509b643f38ae7d2074e8d9c1b",
@@ -6196,6 +6183,13 @@
         "pr": 460,
         "lane": "26d7af6509b643f38ae7d2074e8d9c1b",
         "actor": "Reviewer-R1459L"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-02T06:00:23+00:00",
+        "issue": 427,
+        "pr": 428,
+        "actor": "Worker-I1427Q"
       }
     ],
     "policy": {
