@@ -3331,7 +3331,7 @@
             "session": "run_e1437v_1001"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-E1437V",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3349,7 +3349,8 @@
           "report": "# ACL-1437 handoff \u2014 Worker-E1437V (run_e1437v_1001)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/438 (into `stage`)\nBranch: `codex/acl-1437-readable-errors` (from work/main 49915f7), head 245b99a\n\n## Done\n- `src/fb_ads_rpa/failure_policy.py`: `GUIDE` / `PER_AD_GUIDE` give every POLICY / PER_AD_POLICY step a title, one-sentence impact and one action (text only, no verdict change). `problem()` / `problems()` build the items: step, ad_index/ad_name for per-ad steps (name parsed from \"<name> has no text\" / \"<name> second primary text not added\"), severity, title, impact, action, note, raw. Blocking items come first and exact repeats are listed once. Unknown steps are listed as blocking with a generic text.\n- `src/fb_ads_rpa/draft.py`: `RpaPublishResult.run_id`, and `to_job_dict()` adds `problems` and `run_id`. `error` keeps the old plain text for old readers and Sentry.\n- `src/fb_ads_rpa/rpa_publisher.py`: fills `run_id` from telemetry after the flow returns.\n- `src/web/templates/report.html`: a self-contained `cbProblemsHtml(r)` plus a `.cb-problems*` CSS block, hooked in one place at the top of the per-result loop of `cbPollJob`. It renders the verdict headline, the count + \"draft saved, browser left open\", numbered items with \"\u2192\", red/amber, and collapsed \"Technical details\" (codes, notes, run id, campaign id, captures, step trail). Results without `problems` (old records) or with an empty list use the old rendering.\n- CHANGELOG: `docs/system/CHANGELOG.md`.\n\n## Tests\n- New: `tests/test_readable_problems.py` (8 tests: completeness, payload), `tests/test_readable_problems_browser.py` (5 tests, headless: mock-up 2 blocking + 1 warning, colours, collapsed details, no duplicates, warnings-only, not built, old-record fallback).\n- Affected tests run: 334 passed + 239 passed (failure_policy, flow/publisher, publish jobs/progress, screen-warning browser, Sentry, single-screen editor, etc.). Full suite: CI.\n\n## Not done / notes\n- The build-dot tooltip in the queue drawer (`classify`, \"Do not publish: <codes>\") still shows raw codes. It was left alone to keep the report.html diff tight next to PRs #408/#398/#431/#435. A possible follow-up is to use `problems[].title` there (it would need `problems` in `publish_progress._result_view`).\n- Acceptance criterion 3 (the owner checks a real card after a run) is open. It needs a `serve.py` restart on the live machine after merge."
         },
         "pr": 438,
-        "queued_at": "2026-10-01T09:20:04+00:00"
+        "queued_at": "2026-10-01T09:20:04+00:00",
+        "reviewer": "Reviewer-R1437Q"
       },
       "441": {
         "implementers": [
@@ -3943,6 +3944,10 @@
       "Reviewer-R1455J": {
         "session": "rev_r1455j_1001",
         "role": "Reviewer"
+      },
+      "Reviewer-R1437Q": {
+        "session": "rev_1437q_1002",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -4371,7 +4376,6 @@
       427,
       430,
       434,
-      437,
       433,
       447,
       452,
@@ -4381,7 +4385,18 @@
       31,
       466
     ],
-    "review": null,
+    "review": {
+      "id": "4d6e4bbebab840bb9b0c7ba8d8abc48a",
+      "pr": 438,
+      "issues": [
+        437
+      ],
+      "actor": "Reviewer-R1437Q",
+      "session": "rev_1437q_1002",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-02T05:45:07+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -5893,6 +5908,13 @@
         "prs": [
           481
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-02T05:45:07+00:00",
+        "pr": 438,
+        "lane": "4d6e4bbebab840bb9b0c7ba8d8abc48a",
+        "actor": "Reviewer-R1437Q"
       }
     ],
     "policy": {
