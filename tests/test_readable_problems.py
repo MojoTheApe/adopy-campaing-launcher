@@ -100,3 +100,42 @@ def test_a_clean_result_has_an_empty_list():
     job = RpaPublishResult(campaign_name="x", success=True).to_job_dict()
     assert job["problems"] == []
     assert job["run_id"] is None
+
+
+# ACL-1476 строка (meta_dom.story_not_placed_soft_fail): «<reason> - <ad>: <фраза>».
+def _story_warning(tag="ad2", ad="2046 - Story14"):
+    from src.fb_ads_rpa.simple_create import creative_why_text
+
+    why = "story_not_placed:no_crop_step"
+    return f"{tag}_{why} - {ad}: {creative_why_text(why)}"
+
+
+def test_story_not_placed_is_a_named_warning_with_its_ad():
+    item = fp.problem(_story_warning())
+    assert item["severity"] == fp.WARNING
+    assert item["title"] == "Story file not placed"
+    assert item["ad_index"] == 2
+    assert item["ad_name"] == "2046 - Story14"
+
+
+def test_a_publishable_draft_with_a_story_warning_serializes():
+    # Ревью F1: KeyError здесь превращал готовый черновик в ошибку задания.
+    from src.fb_ads_rpa.ads_manager_flow import apply_step_failures
+
+    result = RpaPublishResult(campaign_name="x", success=True)
+    apply_step_failures(result, [_story_warning("ad", "1741 - Pro Bancolombia")])
+    job = result.to_job_dict()
+    assert [p["step"] for p in job["problems"]] == ["ad_story_not_placed"]
+    assert job["problems"][0]["severity"] == "warning"
+    assert job["problems"][0]["ad_name"] == "1741 - Pro Bancolombia"
+
+
+def test_a_per_ad_step_without_guide_text_falls_back_to_the_policy_reason(monkeypatch):
+    # Будущий шаг в PER_AD_POLICY без текста не должен ронять to_job_dict.
+    monkeypatch.delitem(fp.PER_AD_GUIDE, "story_not_placed")
+    item = fp.problem(_story_warning())
+    assert item["severity"] == fp.WARNING
+    assert item["title"] == "Step 'ad2_story_not_placed'"
+    assert "story file" in item["impact"] and item["impact"][0].isupper()
+    assert "Unclassified" not in item["title"]
+    assert item["action"]

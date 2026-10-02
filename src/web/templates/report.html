@@ -1500,6 +1500,8 @@
     .cb-problems-tech > summary { cursor: pointer; }
     .cb-problems-tech-body { font-family: monospace; word-break: break-all; margin-top: 0.2rem; }
     .cb-problems-tech-body div { margin: 0.1rem 0; }
+    .cb-problems-tech-body .cb-problems-error { white-space: pre-wrap; }
+    .cb-problems-teach { margin: 0.1rem 0 0.2rem 1.4rem; font-size: 0.74rem; font-weight: 600; }
     /* ACL-1444: «Close profile» на панели закончившегося задания. */
     .cb-close-profile { margin: 0.5rem 0 0.2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
     .cb-close-profile-btn {
@@ -12373,6 +12375,40 @@ function _doCbPublish(form) {
   if (got.skipped.length) cbSayAlreadyBuilding(got.skipped);
 }
 
+// ACL-1437: часть `r.error`, которой нет в списке проблем ('' — нечего
+// добавить). Абзац «DO NOT PUBLISH AS IS … Check the draft in Ads Manager
+// first.» (ads_manager_flow) и заметки хэндоффа (rpa_publisher) — повтор.
+function cbErrorBeyondProblems(err) {
+  var s = String(err || '');
+  var head = 'DO NOT PUBLISH AS IS';
+  var tail = 'Check the draft in Ads Manager first.';
+  var i = s.indexOf(head);
+  if (i !== -1) {
+    var end = s.indexOf(tail, i);
+    s = s.slice(0, i) + (end === -1 ? '' : s.slice(end + tail.length));
+  }
+  [
+    'Browser left open for manual review; this draft is NOT publishable.',
+    'Draft ready — browser left open, Meta Publish was not clicked'
+  ].forEach(function(note) { s = s.split(note).join(''); });
+  return s.replace(/^[\s|]+|[\s|]+$/g, '');
+}
+
+// Метки режима обучения по шагам: «ждёт клика Website» / «локатор снят».
+// '' — меток нет. Одна функция для старой и новой отрисовки (ревью F3).
+function cbTeachMarkerHtml(steps, cls) {
+  steps = steps || [];
+  var waiting = steps.indexOf('teach_mode_website_waiting') !== -1
+    && steps.indexOf('conversion_location_website_teach') === -1
+    && steps.indexOf('teach_mode_website_still_failed') === -1;
+  var captured = steps.indexOf('teach_website_captured') !== -1;
+  var c = cls ? ' class="' + cls + '"' : '';
+  var tag = cls ? 'div' : 'span';
+  if (waiting) return ' <' + tag + c + ' style="color:#3b82f6;font-weight:600">⏸ waiting for a Website click</' + tag + '>';
+  if (captured) return ' <' + tag + c + ' style="color:#22c55e">✓ Website locator captured</' + tag + '>';
+  return '';
+}
+
 // ACL-1437: проблемы кампании — заголовок с вердиктом, число, пронумерованный
 // список (что сломалось, чем грозит, «→ что делать») и свёрнутые технические
 // подробности. Данные — `r.problems` от робота (failure_policy.problems);
@@ -12409,8 +12445,18 @@ function cbProblemsHtml(r) {
       + '</li>';
   });
   h += '</ol>';
-  var tech = items.map(function(p) {
-    return '<div>' + aclEscHtml(p.raw || p.step || '') + '</div>';
+  h += cbTeachMarkerHtml(r.steps_completed, 'cb-problems-teach');
+  var tech = [];
+  // ACL-1437 (ревью F2): в `error` бывает то, чего нет в списке — подробность
+  // остановки профиля, «Recorded flow failed at: …», текст исключения.
+  // Стандартный абзац «DO NOT PUBLISH AS IS» и заметку хэндоффа выкидываем:
+  // они повторяют список.
+  var extraError = cbErrorBeyondProblems(r.error);
+  if (extraError) {
+    tech.push('<div class="cb-problems-error">error: ' + aclEscHtml(extraError) + '</div>');
+  }
+  items.forEach(function(p) {
+    tech.push('<div>' + aclEscHtml(p.raw || p.step || '') + '</div>');
   });
   if (r.run_id) tech.push('<div>run id: ' + aclEscHtml(r.run_id) + '</div>');
   if (r.campaign_id) tech.push('<div>campaign_id: ' + aclEscHtml(r.campaign_id) + '</div>');
@@ -12569,13 +12615,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       }
       if (r.steps_completed && r.steps_completed.length) {
         var stepsHtml = r.steps_completed.map(aclEscHtml).join(' → ');
-        var teachWaiting = r.steps_completed.indexOf('teach_mode_website_waiting') !== -1
-          && r.steps_completed.indexOf('conversion_location_website_teach') === -1
-          && r.steps_completed.indexOf('teach_mode_website_still_failed') === -1;
-        var teachCapture = r.steps_completed.indexOf('teach_website_captured') !== -1;
-        var extra = teachWaiting
-          ? ' <span style="color:#3b82f6;font-weight:600">⏸ waiting for a Website click</span>'
-          : (teachCapture ? ' <span style="color:#22c55e">✓ Website locator captured</span>' : '');
+        var extra = cbTeachMarkerHtml(r.steps_completed, '');
         html += '<div class="cb-status-steps" style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem">'
           + 'Steps: ' + stepsHtml + extra + '</div>';
       }

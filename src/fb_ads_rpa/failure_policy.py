@@ -434,6 +434,12 @@ PER_AD_GUIDE: dict[str, tuple[str, str, str]] = {
         "The optional second text was not added; the ad runs with its first text.",
         "Add the second text option in Ads Manager if it is needed.",
     ),
+    # ACL-1476: сторис пары не встала — предупреждение, объявление годно.
+    "story_not_placed": (
+        "Story file not placed",
+        "The ad runs with the post file on Stories and Reels too.",
+        "Replace the Stories/Reels file in Ads Manager by hand if needed.",
+    ),
 }
 
 _PER_AD_NAME = re.compile(
@@ -500,9 +506,13 @@ def describe(failures: list[str]) -> str:
     return "\n".join(f"  {f} — {reason(f)}" for f in blocking)
 
 
-# "<ad name> has no text…" / "<ad name> second primary text not added (…)" —
-# the only details that name the ad (meta_dom); anything else is a note.
-_AD_NAME_IN_NOTE = re.compile(r"^(?P<name>.+?) (?:has no text|second primary text not added)\b")
+# "<ad name> has no text…" / "<ad name> second primary text not added (…)" /
+# "<reason> - <ad name>: <sentence>" (story_not_placed, ACL-1476) — the only
+# details that name the ad (meta_dom); anything else is a note.
+_AD_NAME_IN_NOTE = re.compile(
+    r"^(?:(?P<name>.+?) (?:has no text|second primary text not added)\b"
+    r"|[a-z_]+ - (?P<name2>.+?): )"
+)
 _TAG_ONLY = re.compile(r"^ad ?\d*$", re.I)
 _AD_TAG = re.compile(r"^ad(\d*)_")
 
@@ -512,7 +522,9 @@ def _guide(name: str) -> tuple[str, str, str] | None:
         return GUIDE[name]
     per_ad = _PER_AD_NAME.fullmatch(name)
     if per_ad:
-        return PER_AD_GUIDE[per_ad.group(1)]
+        # .get: новый шаг в PER_AD_POLICY без текста не должен ронять
+        # сериализацию задания (KeyError → результат кампании потерян).
+        return PER_AD_GUIDE.get(per_ad.group(1))
     for candidate, entry in GUIDE.items():
         if name.endswith("_" + candidate):
             return entry
@@ -526,18 +538,30 @@ def problem(failure: str) -> dict:
     raw = str(failure or "")
     name = base_name(raw)
     note = raw.split(":", 1)[1].strip() if ":" in raw else ""
+    known = _lookup(name)
     guide = _guide(name) or (
-        f"Unclassified step '{name or '?'}'",
-        "The robot reported a step it does not know, so it is treated as blocking.",
-        "Check this part of the draft in Ads Manager.",
+        # Шаг классифицирован, но текста для него нет: показываем причину из
+        # политики, а не «неизвестный шаг — блокирует» (он может быть warning).
+        (
+            f"Step '{name}'",
+            known[1][:1].upper() + known[1][1:],
+            "Check this part of the draft in Ads Manager.",
+        )
+        if known
+        else (
+            f"Unclassified step '{name or '?'}'",
+            "The robot reported a step it does not know, so it is treated as blocking.",
+            "Check this part of the draft in Ads Manager.",
+        )
     )
     ad_index: int | None = None
     ad_name = ""
     if name not in GUIDE and _PER_AD_NAME.fullmatch(name):
         ad_index = int(_AD_TAG.match(name).group(1) or 1)
         found = _AD_NAME_IN_NOTE.match(note)
-        if found and not _TAG_ONLY.match(found.group("name").strip()):
-            ad_name = found.group("name").strip()
+        label = (found.group("name") or found.group("name2") or "").strip() if found else ""
+        if label and not _TAG_ONLY.match(label):
+            ad_name = label
     title, impact, action = guide
     return {
         "step": name,

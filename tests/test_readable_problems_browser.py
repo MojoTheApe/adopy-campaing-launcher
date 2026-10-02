@@ -133,6 +133,8 @@ def test_two_blocking_and_one_warning_render_as_the_mockup(browser):
         assert "Do not publish:" not in text
         assert "Warnings:" not in text
         expect(panel.locator(".cb-status-err")).to_have_count(0)
+        # Стандартный абзац `error` повторяет список — отдельной строки нет.
+        expect(block.locator(".cb-problems-error")).to_have_count(0)
         assert not errors, errors
     finally:
         context.close()
@@ -166,6 +168,9 @@ def test_a_run_that_built_nothing_says_not_built(browser):
         expect(block.locator(".cb-problems-sub")).to_have_text(
             "1 problem · no complete draft, check Ads Manager")
         expect(block.locator(".cb-problem-title")).to_have_text("Ad account restricted by Meta")
+        # Ревью F2: текст из `error`, которого нет в списке, — в Technical details.
+        expect(block.locator(".cb-problems-tech-body .cb-problems-error")).to_have_text(
+            "error: account_blocked: Verification required to advertise")
         assert not errors, errors
     finally:
         context.close()
@@ -191,3 +196,32 @@ def test_problems_payload_matches_the_policy():
     """The browser fixtures come from the real producer, not a hand-made copy."""
     items = _result([CONVERSION, AD_COPY, SECOND_TEXT])["problems"]
     assert [i["severity"] for i in items] == [fp.BLOCKING, fp.BLOCKING, fp.WARNING]
+
+
+def test_error_text_beyond_the_list_is_kept_in_technical_details(browser):
+    # Ревью F2: «Recorded flow failed at …» перед абзацем DO NOT PUBLISH и
+    # заметка хэндоффа после него; на карточке остаётся только первое.
+    result = _result([CONVERSION])
+    result["error"] = ("Recorded flow failed at: ad_set_budget - timeout 30000ms | "
+                       + result["error"]
+                       + "\nBrowser left open for manual review; this draft is NOT publishable.")
+    context, page, panel, errors = _panel(browser, result)
+    try:
+        err = panel.locator(".cb-problems-tech-body .cb-problems-error")
+        expect(err).to_have_text("error: Recorded flow failed at: ad_set_budget - timeout 30000ms")
+        assert not errors, errors
+    finally:
+        context.close()
+
+
+def test_teach_mode_marker_survives_the_problem_list(browser):
+    # Ревью F3: метка «ждёт клика Website» видна и в новой отрисовке.
+    result = _result([CONVERSION])
+    result["steps_completed"].append("teach_mode_website_waiting")
+    context, page, panel, errors = _panel(browser, result)
+    try:
+        expect(panel.locator(".cb-problems .cb-problems-teach")).to_have_text(
+            "⏸ waiting for a Website click")
+        assert not errors, errors
+    finally:
+        context.close()

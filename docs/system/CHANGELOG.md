@@ -21,6 +21,12 @@ conversion_event, ad_copy:…"), with the failed steps listed twice.
   amber for warnings, and step codes, notes, run id, campaign id, capture paths
   and the step trail collapsed under "Technical details". Job records without
   `problems` render as before.
+- Review fixes: the ACL-1476 `story_not_placed` warning has its own text and
+  shows the ad name; a per-ad step without text falls back to the policy reason
+  instead of raising (a `KeyError` used to turn a publishable draft into a job
+  error). Any part of `error` the list does not repeat (profile stop detail,
+  "Recorded flow failed at: …") is shown under "Technical details"; the
+  teach-mode marker ("waiting for a Website click") stays visible.
 
 ## Buttons no longer look like input fields — ACL-1455
 
