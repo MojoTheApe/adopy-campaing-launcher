@@ -3915,7 +3915,7 @@
             "session": "run_w132t_1001"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W132T",
         "coordinator": "Coordinator-D0930K",
         "handoff": {
@@ -3933,7 +3933,8 @@
           "report": "# ACL-132 \u2014 implementation handoff\n- PR #465 (`codex/acl-132-copy-text` \u2192 `stage`), head 6bea56e, base 38351e6. Worker-W132T, run_w132t_1001, Coordinator-D0930K, `C:\\acl-132-copytext`.\n- Done (owner's simplified decision 30.09): Copy text + hint under disabled/restricted/blocked/review; line `<name before \" - \"> - Account <Status>`. Screenshot part is ACL-1430 (#431).\n- Checks: new tests (template lines, escaping, Chromium clipboard click) + status/map/JS guards: 34 passed. Diff applies cleanly onto the 1430 branch (checked). Full suite: CI.\n- Issue edit: `needs: ACL-1391` replaced by a satisfied-dependency note (1391 merged in main, verified live on Doc20; open only for package delivery).\n- Not done: live check \u2014 owner copies text + screenshot from Doc20 into the provider group. \"Copy text\" looks link-style only after ACL-1455 merges."
         },
         "pr": 465,
-        "queued_at": "2026-10-01T13:47:20+00:00"
+        "queued_at": "2026-10-01T13:47:20+00:00",
+        "reviewer": "Reviewer-R1331Q"
       },
       "466": {
         "implementers": [
@@ -4267,6 +4268,10 @@
       },
       "Reviewer-R1430Q": {
         "session": "rev_1430q_1002",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1331Q": {
+        "session": "rev_1331q_1002",
         "role": "Reviewer"
       }
     },
@@ -4787,7 +4792,6 @@
       390,
       399,
       433,
-      31,
       427,
       434,
       437,
@@ -4798,7 +4802,18 @@
       402,
       424
     ],
-    "review": null,
+    "review": {
+      "id": "4e0bac0cbe5b4149bef2b2a749abf1ca",
+      "pr": 465,
+      "issues": [
+        31
+      ],
+      "actor": "Reviewer-R1331Q",
+      "session": "rev_1331q_1002",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-02T09:40:25+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -6804,6 +6819,13 @@
         "prs": [
           487
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-02T09:40:25+00:00",
+        "pr": 465,
+        "lane": "4e0bac0cbe5b4149bef2b2a749abf1ca",
+        "actor": "Reviewer-R1331Q"
       }
     ],
     "policy": {
