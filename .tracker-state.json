@@ -2990,6 +2990,18 @@
         "state": "implementing",
         "started_at": "2026-10-02T12:48:16+00:00",
         "from_status": "status:todo"
+      },
+      "491": {
+        "actor": "Worker-T1491F",
+        "session": "run_t1491f_1002",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1491-timing-tests",
+        "worktree": "C:\\acl-1491-timing",
+        "id": "0bdd94ebaeb64502a195b1007acf8619",
+        "issue": 491,
+        "state": "implementing",
+        "started_at": "2026-10-02T12:48:43+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -4129,6 +4141,17 @@
         "pr": 478,
         "queued_at": "2026-10-01T21:01:47+00:00",
         "reviewer": "Reviewer-R1476P"
+      },
+      "491": {
+        "implementers": [
+          {
+            "actor": "Worker-T1491F",
+            "session": "run_t1491f_1002"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-T1491F",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -4415,6 +4438,10 @@
       "Reviewer-R1330P": {
         "session": "rev_r1330p_0930",
         "role": "Reviewer"
+      },
+      "Worker-T1491F": {
+        "session": "run_t1491f_1002",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -7158,6 +7185,13 @@
         "issue": 330,
         "claim": "7e2233db531a4170a2fbb0bca4b22b95",
         "actor": "Worker-S1330J"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-02T12:48:43+00:00",
+        "issue": 491,
+        "claim": "0bdd94ebaeb64502a195b1007acf8619",
+        "actor": "Worker-T1491F"
       }
     ],
     "policy": {
