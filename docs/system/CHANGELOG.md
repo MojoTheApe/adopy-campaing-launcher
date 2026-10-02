@@ -26,6 +26,27 @@ account has no campaigns".
   Meta numbers for …", without turn-off buttons, because their switches may have
   changed. "0 campaigns · 0 ads" appears only when the list was read and was empty.
 
+## A new campaign manager no longer sees the owner's goals — ACL-1452
+
+2026-09-30 a test installation opened as Dan showed "Evgeni — Goals Progress" with
+the owner's seven countries and targets. The panel title had the owner's name written
+into the page, and a person without saved goals was given the owner's old template
+numbers as a start.
+
+- The title names the campaign manager whose goals are on screen.
+- A person without saved goals starts with **their own countries** — where they have
+  spend, leads or deposits in the workbook, plus countries they linked accounts to on
+  this machine's map — each with a target of 10 FTD and no other targets. With no
+  countries known, the strip is empty apart from "+ country".
+- The starting goals are shown, not written; the first edit saves them together with
+  the change, so editing one country does not drop the others. Saved goals are
+  untouched (the owner's own seven countries are saved on his machine).
+- The starting countries do not depend on the date picker: the panel and the first
+  save both take them from the whole workbook, so what is saved is what was shown.
+  Saving reads the workbook only while the person has no saved goals, and off the
+  request loop. When a team lead edits another manager's goals, that manager's own
+  numbers are used, and this machine's account map is not added to them.
+
 ## A covered profile window is recorded and woken without the foreground — ACL-1402
 
 2026-09-30, Facebook_1443 (fba2c3f5): `website_selected` → `conversion_event` took
