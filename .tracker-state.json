@@ -3765,7 +3765,7 @@
             "session": "run_e1462r_1001"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-E1462R",
         "coordinator": "Coordinator-D0930K",
         "handoff": {
@@ -3783,7 +3783,8 @@
           "report": "# ACL-1462 \u2014 implementation handoff\n- Branch `codex/acl-1462-english-ui` \u2192 `stage`, head a039aa9, base 38351e6. Worker-E1462R, run_e1462r_1001, Coordinator-D0930K, `C:\\acl-english`.\n- Done: all user-facing Russian found by the scan translated (templates, publish_jobs, targeting_registry, country_split); guard test added; pinned tests updated.\n- Checks: affected suites + JS guard 134 passed. Full suite: CI.\n- Reviewer: report.html is also touched by ACL-1455 (#456), ACL-1457 (#458), ACL-1459 (#460) \u2014 different lines; expect only textual merge of CHANGELOG. Translations avoid apostrophes inside single-quoted JS strings."
         },
         "pr": 463,
-        "queued_at": "2026-10-01T13:29:10+00:00"
+        "queued_at": "2026-10-01T13:29:10+00:00",
+        "reviewer": "Reviewer-R1462M"
       },
       "31": {
         "implementers": [
@@ -4127,6 +4128,10 @@
       },
       "Reviewer-R1457K": {
         "session": "rev_r1457k_1001",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1462M": {
+        "session": "rev_r1462m_1001",
         "role": "Reviewer"
       }
     },
@@ -4577,7 +4582,6 @@
       419,
       430,
       433,
-      462,
       31,
       466,
       427,
@@ -4585,7 +4589,18 @@
       437,
       447
     ],
-    "review": null,
+    "review": {
+      "id": "d7dde3b6f1954e7f823cff5ec2882cf5",
+      "pr": 463,
+      "issues": [
+        462
+      ],
+      "actor": "Reviewer-R1462M",
+      "session": "rev_r1462m_1001",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-02T07:06:30+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -6446,6 +6461,13 @@
         "issue": 457,
         "claim": "5b049b3ac71f46bb82e7d710f6250be2",
         "actor": "Worker-C1457O"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-02T07:06:30+00:00",
+        "pr": 463,
+        "lane": "d7dde3b6f1954e7f823cff5ec2882cf5",
+        "actor": "Reviewer-R1462M"
       }
     ],
     "policy": {
