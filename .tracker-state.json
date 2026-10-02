@@ -2696,6 +2696,18 @@
         "state": "implementing",
         "started_at": "2026-10-02T05:49:15+00:00",
         "from_status": "status:todo"
+      },
+      "434": {
+        "actor": "Worker-H1434U",
+        "session": "run_h1434u_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1434-health",
+        "worktree": "C:\\acl-1434-health",
+        "id": "95c7e7cfe089421b87f41d10f244c90f",
+        "issue": 434,
+        "state": "implementing",
+        "started_at": "2026-10-02T05:49:37+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -3361,9 +3373,13 @@
           {
             "actor": "Worker-H1434U",
             "session": "run_h1434u_1001"
+          },
+          {
+            "actor": "Worker-H1434U",
+            "session": "run_h1434u_1001"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-H1434U",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3382,7 +3398,6 @@
         },
         "pr": 435,
         "queued_at": "2026-10-01T08:54:22+00:00",
-        "reviewer": "Reviewer-R1434Q",
         "review_report": "# Review PR #435 (ACL-1434) \u2014 Robot health page\n\nReviewer-R1434Q (rev_1434q_1002); implementer Worker-H1434U.\nHead f349f1332039587b6c007fa19d0e5e23d5cad898 (tree 1654358dfed713cf162b72e41b7a370054e185a3); base work/stage 8322a6af0f9098114182cf327320bd87dd239a70.\n\n## Verdict: request-changes\n\nThe code is sound and the tests are real. Two things block the merge. The PR no longer merges into stage because of a conflict in CHANGELOG. Build attribution also does not work on installed (buyer) builds.\n\n## Merge with stage\n`git merge-tree --write-tree work/stage f349f13`: CONFLICT in docs/system/CHANGELOG.md only (stage 942f641..8322a6a: ACL-1395, 1441, 1444, 1344, 1445, 1412, 1426, 1476 each added a top entry). src/web/app.py and src/web/templates/report.html auto-merge. GitHub reports mergeable=CONFLICTING. On a scratch merge of stage with the CHANGELOG conflict left open, tests/test_robot_health.py: 37 passed.\n\n## CI (head f349f13)\nAll green: test 3.11/3.13 x 3 shards, Build/install/repair/uninstall, Installer verification, Verify build inputs, ACL verification, Classify x2, descriptor x2, tracker-link. No failing jobs.\n\n## Findings\n1. BLOCKER: docs/system/CHANGELOG.md:3. A merge conflict with current stage. Merge stage again and keep both sides.\n2. MEDIUM: src/web/robot_health.py:464-466 (`default_sources`) and src/web/app.py (`_robot_health_output_dir`). The build log is read only from `<workspace>/output/serve*.log`. That file exists only on hand-run checkouts (acl-live-*, where stdout is redirected). Installed builds send stdout/stderr, including the \"RPA flow version\" line and the uvicorn access lines, to `%LOCALAPPDATA%\\ACL\\logs\\server.stdout.log` / `server.stderr.log` (packaging/windows/launcher.py:100-103, 218-224). As a result, on buyer machines every run started before the current process is \"unknown\" in \"Steps by build\". Fix: also read the launcher's logs dir (server.std*.log). Add a test.\n3. LOW: src/web/robot_health.py:134 and :125. The build is reset to \"\" for each log file, and the files are read in name order. When stdout and stderr go to separate files (serveN.log has the version, serveN.err.log has the uvicorn `/publish-jobs/<id>` lines), jobs named only in the .err.log never get a build. It works on the owner's combined serve-live.log.\n4. LOW: src/web/templates/robot_health.html:163 and robot_health.py:348. The column tooltip shows `accounts_full`, the raw account name. That can carry the profile id (`Facebook_1443_6157\u2026`) or a person's name (`FacebookDoc19 - Name`). The PR says accounts are \"shown without profile ids\". The page is local only, so this is not a leak, but it contradicts the claim. `--json` prints it as well.\n5. LOW: src/web/app.py robot_health_* handlers are `async def`. They do synchronous reads of the whole telemetry jsonl and all serve logs, plus the aggregation, on the event loop, which blocks progress polling of running jobs while the page loads. Make them plain `def` (threadpool) or use run_in_threadpool.\n6. NIT: src/web/templates/report.html:3050-3054. The link is inserted between the ACL-354 comment and the \"Report a problem\" button that the comment describes.\n7. TEST GAP (low): mutation \"remove `path.parent != folder`\" in capture_file (robot_health.py:530) leaves all 37 tests green. The check is still needed: a Windows drive-relative name such as `C:x.png` escapes the folder without it (verified: returns None with the check). Add that case to test_capture_serves_only_images_of_that_run.\n\n## Mutation spot-checks (tests/test_robot_health.py, 37 tests)\n- drop `<=` -> `<`: 1 failed\n- first record wins instead of last: 2 failed\n- streak over whole history instead of window: 1 failed\n- MIN_SAMPLES removed: 1 failed\n- \"known elsewhere\" merged into \"known\": 1 failed\n- capture_file parent check removed: 0 failed (finding 7)\n\n## Safety\nRead-only over local files. No Multilogin, Meta, or network calls, no Publish, no windows. The capture endpoint rejects bad run ids, separators, non-images, and drive-relative names. Jinja autoescape is on, so notes are escaped. CSP allows the inline theme script. The fixture is scrubbed: no 9+ digit ids except the r000\u2026 run ids, no URLs or e-mails, accounts AcctX_n, jobs job-NNNN. User-facing text is English.\n\n## Tests run\ntests/test_robot_health.py on the head: 37 passed (headless, ACL_LIBRARY_* empty). Also on a scratch merge with stage: 37 passed."
       },
       "437": {
@@ -6132,6 +6147,13 @@
         "issue": 427,
         "claim": "3507d2b290cb4699ba7c36353846bb5b",
         "actor": "Worker-I1427Q"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-02T05:49:37+00:00",
+        "issue": 434,
+        "claim": "95c7e7cfe089421b87f41d10f244c90f",
+        "actor": "Worker-H1434U"
       }
     ],
     "policy": {
