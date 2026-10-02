@@ -633,9 +633,117 @@ def _run_rpa(
             except Exception:
                 pass
     finally:
-        # Disconnect CDP only; Multilogin window stays open for FB login check.
-        publisher.close(force=False)
+        # Disconnect CDP; the Multilogin window stays open for review unless
+        # every campaign came out clean (ACL-1444, `_let_go_of_profile`).
+        _let_go_of_profile(job_id, publisher, account_label,
+                           clean=not (cancelled or _is_cancelled(job_id)) and _job_is_clean(job_id))
         _finish(job_id, cancelled=cancelled or _is_cancelled(job_id))
+
+
+def _job_is_clean(job_id: str) -> bool:
+    """Все кампании задания годны к публикации и ошибок нет (ACL-1444).
+
+    Тот же вердикт, что зелёный `publishable` у `get_job`, но до `_finish`:
+    ни одной ошибки задания, итог есть у каждой кампании, каждый годен.
+    """
+    with _jobs_lock:
+        job = _jobs.get(job_id) or {}
+        results = list(job.get("results") or [])
+        errors = list(job.get("errors") or [])
+        expected = int(job.get("total") or 0)
+    return (bool(results) and not errors and (expected <= 0 or len(results) == expected)
+            and all(_result_is_publishable(r) for r in results))
+
+
+def _let_go_of_profile(job_id: str, publisher: Any, account_label: str, *, clean: bool) -> None:
+    """Отпустить браузер в конце задания; чистое — закрывает профиль (ACL-1444).
+
+    Решает `RpaPublisher.finish_job` (выключатель, сохранён ли черновик,
+    профиль ли это робота). Закрыл — строка в панели задания и отметка
+    `profile_closed` (кнопка «Close profile» прячется). Другое задание уже
+    ждёт этот профиль — не закрываем (`other_job_waits`).
+    Публикатор без `finish_job` или его сбой — как раньше: только `close`.
+    """
+    finish = getattr(publisher, "finish_job", None)
+    outcome = ""
+    if callable(finish):
+        try:
+            outcome = finish(account_label, clean=clean,
+                             other_job_waits=clean and _profile_has_other_job(job_id, account_label))
+        except Exception:
+            outcome = ""
+            publisher.close(force=False)
+    else:
+        publisher.close(force=False)
+    if outcome == "closed":
+        from src.fb_ads_rpa.rpa_publisher import PROFILE_CLOSED_NOTICE
+
+        with _jobs_lock:
+            _jobs[job_id]["profile_closed"] = True
+        _append_creative_notice(job_id, PROFILE_CLOSED_NOTICE)
+        # Очередь будит `_slots.release` в `_run_job` сразу после этого.
+
+
+def _profile_has_other_job(job_id: str, account_label: str) -> bool:
+    """На профиль этого задания уже стоит другое активное задание (ревью PR #446, F6)."""
+    with _jobs_lock:
+        others = [(str(j.get("account_label") or ""), j.get("status"))
+                  for jid, j in _jobs.items() if jid != job_id]
+    try:
+        profile = profile_key_for(account_label)
+        return any(status in _ACTIVE_STATUSES and profile_key_for(label) == profile
+                   for label, status in others)
+    except Exception:
+        return True
+
+
+_ACTIVE_STATUSES = frozenset({"pending", "queued", "running", "cancelling"})
+
+
+def close_profile(job_id: str) -> dict[str, Any]:
+    """Кнопка «Close profile» на панели задания (ACL-1444).
+
+    Закрывает профиль аккаунта этого задания мягко, через MLX API, без
+    kill. Отказ (`busy`), пока на этом профиле идёт любое задание или его
+    держит чтение: замок профиля берётся без ожидания и держится всю
+    остановку, так что новая публикация того же профиля в это время ждёт.
+    Коды: `not_found`, `busy`, `failed`; текст ошибки — для человека.
+    """
+    from src.fb_ads_rpa import rpa_publisher as _rp
+
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            return {"ok": False, "code": "not_found", "error": "Job not found"}
+        account_label = str(job.get("account_label") or "")
+        others = [(str(j.get("account_label") or ""), j.get("status")) for j in _jobs.values()]
+    profile = profile_key_for(account_label)
+    busy_msg = "A run is using this profile — wait until it finishes, then close it."
+    if any(status in _ACTIVE_STATUSES and profile_key_for(label) == profile
+           for label, status in others):
+        return {"ok": False, "code": "busy", "error": busy_msg}
+    lease = _publish_serial(profile)
+    if not lease.acquire(blocking=False):
+        return {"ok": False, "code": "busy", "error": busy_msg}
+    try:
+        try:
+            _rp.close_account_profile(account_label)
+        except Exception as exc:
+            import logging
+
+            from src.fb_ads_rpa.run_telemetry import scrub
+
+            logging.getLogger(__name__).warning("Close profile for %s failed: %s",
+                                                account_label, scrub(str(exc))[:200])
+            return {"ok": False, "code": "failed",
+                    "error": "Multilogin could not close the profile. Close its window in Multilogin."}
+    finally:
+        lease.release()
+    with _jobs_lock:
+        if job_id in _jobs:
+            _jobs[job_id]["profile_closed"] = True
+    _slots.wake()
+    return {"ok": True, "job_id": job_id, "message": "Closed the profile"}
 
 
 def start_job(
