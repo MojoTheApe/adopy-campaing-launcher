@@ -214,3 +214,17 @@ def test_a_live_read_without_a_problem_offers_nothing(status):
         assert cell.locator(".amap-shot").count() == 0
         assert cell.locator(".amap-st-hint").count() == 0
         b.close()
+
+
+def test_a_live_read_escapes_the_account_name():
+    """Хвост ячейки после Read собирается строкой — имя аккаунта экранируется."""
+    with sync_playwright() as pw:
+        b, _ctx, p, _sent = _live(pw)
+        p.evaluate("""() => {
+            document.querySelector('.amap-live').dataset.account = 'Evil"><b id=x>y - Owner';
+            amapApplyReading('Evil"><b id=x>y - Owner', {state: 'ok', spend: 1, currency: 'USD',
+                             status: 'blocked', finished_at: '10:00'});
+        }""")
+        assert p.locator("#x").count() == 0, "имя аккаунта попало в разметку"
+        assert p.locator(".amap-copy-text").get_attribute("data-copy") == 'Evil"><b id=x>y - Account Blocked'
+        b.close()

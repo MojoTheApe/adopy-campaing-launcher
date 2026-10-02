@@ -15,6 +15,8 @@ sent by ACL. Healthy and unread statuses show neither.
   the live Read path alike). After a live Read the status cell keeps "Copy text" and
   the hint. A second click within 1.5 s no longer leaves the button stuck on "Copied".
   Tests check that copying makes no request and stores nothing — only the clipboard.
+  After a Read the status cell is rebuilt as one markup string, the same markup as the
+  map template (fixes a CI regression in the spend-poll test).
 ## Campaign problems are shown as a short readable list — ACL-1437
 
 2026-10-01 the builder card of CO_bnc_All_Video_FX_Y_35_01.10 showed its most
