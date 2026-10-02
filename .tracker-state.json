@@ -2923,22 +2923,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "31": {
-        "actor": "Worker-W132T",
-        "session": "run_w132t_1001",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-132-copy-text",
-        "worktree": "C:\\acl-132-copytext",
-        "id": "f5829d5c3a1a46ff987e0ae46da69f08",
-        "issue": 31,
-        "state": "handoff",
-        "started_at": "2026-10-02T11:31:33+00:00",
-        "from_status": "status:todo",
-        "pr": 465,
-        "report": "# ACL-132 \u2014 review fixes (PR #465)\n\nWorker-W132T, session run_w132t_1001. Branch codex/acl-132-copy-text, head 33db35c1 (on top of 52fc33c9, which already contains work/stage + work/main).\n\n## What changed (per review_465 \"Re-check\")\n1. Missing screenshot: on a problem status (anything except clear/unknown) without a screenshot, `_account_map_country.html` renders \"Copy screenshot\" **disabled** with the tooltip \"No screenshot on the last read \u2014 read the account again\" (Issue #31 line 22). No data-shot/onclick on it. CSS `.amap-shot:disabled`. `tests/test_status_screenshot.py::test_no_shot_no_button` now asserts every `amap-shot` button is disabled (or absent), not the phrase. With a screenshot nothing changes.\n2. Live Read: `amapApplyReading` (report.html) mirrors the template \u2014 disabled Copy screenshot when there is no shot, and a new shared helper `amapStatusReport` re-adds Copy text + the hint for disabled/restricted/blocked/review.\n3. Double click: `amapCopyText` stores the original label once in `data-label` and clears the previous timer; a second click within 1.5 s no longer leaves \"Copied\".\n4. Nothing sent: browser test routes every request and asserts none besides the page itself, empty localStorage/sessionStorage and no cookies after copying.\nCHANGELOG: bullet added to the acl-132 entry, blank line before the next heading.\n\n## Tests (headless, ACL_LIBRARY_* empty, C:/fb_agents/.venv python)\ntest_copy_status_text, test_status_screenshot, test_report_scripts_parse, test_bench_catalogue, test_account_map_view, test_disabled_account_status: **82 passed**.\nNew: test_without_a_screenshot_the_hint_points_at_a_disabled_button, test_a_second_click_does_not_leave_the_button_on_copied, test_copy_text_sends_and_stores_nothing, test_a_live_read_that_finds_a_problem_offers_copy_text[shot/no shot], test_a_live_read_without_a_problem_offers_nothing[clear/unknown].\nscripts/acl_scan_secrets.py: clean.\n\n## Safety\nOnly dashboard template/JS and tests. No Meta/Multilogin/account paths; port 9090 and C:\\acl-live-* untouched; no visible windows.\n\n## Round 2 \u2014 CI fix (head f6e48589, on top of coordinator merge e8002bd9)\nCause: `test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` runs amapMoney..amapSpendFailed in node with a fake DOM. My amapApplyReading drew the disabled Copy screenshot (status 'disabled', no shot) with `document.createElement` and called `amapStatusReport`, defined outside that range -> TypeError.\nFix (product): the status cell is rebuilt as `'<span></span>' + amapStatusTail(account, s)` \u2014 one markup string identical to `_account_map_country.html` (inline onclick, attributes escaped); helper and AMAP_STATUS_WORDS placed right before amapApplyReading. The regression test is unchanged. New test: hostile account name escaped on the live path.\nTests: test_review_ui_regressions + test_copy_status_text + test_status_screenshot + test_report_scripts_parse + test_bench_catalogue + test_account_map_view + test_disabled_account_status: 90 passed. acl_scan_secrets: clean."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -3995,7 +3980,7 @@
             "session": "run_w132t_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W132T",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -4004,16 +3989,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-132-copy-text",
           "worktree": "C:\\acl-132-copytext",
-          "id": "0f431ed6c5a84466af07a7d7ff9c1e64",
+          "id": "f5829d5c3a1a46ff987e0ae46da69f08",
           "issue": 31,
           "state": "handoff",
-          "started_at": "2026-10-02T09:44:19+00:00",
+          "started_at": "2026-10-02T11:31:33+00:00",
           "from_status": "status:todo",
           "pr": 465,
-          "report": "# ACL-132 \u2014 review fixes (PR #465)\n\nWorker-W132T, session run_w132t_1001. Branch codex/acl-132-copy-text, head 33db35c1 (on top of 52fc33c9, which already contains work/stage + work/main).\n\n## What changed (per review_465 \"Re-check\")\n1. Missing screenshot: on a problem status (anything except clear/unknown) without a screenshot, `_account_map_country.html` renders \"Copy screenshot\" **disabled** with the tooltip \"No screenshot on the last read \u2014 read the account again\" (Issue #31 line 22). No data-shot/onclick on it. CSS `.amap-shot:disabled`. `tests/test_status_screenshot.py::test_no_shot_no_button` now asserts every `amap-shot` button is disabled (or absent), not the phrase. With a screenshot nothing changes.\n2. Live Read: `amapApplyReading` (report.html) mirrors the template \u2014 disabled Copy screenshot when there is no shot, and a new shared helper `amapStatusReport` re-adds Copy text + the hint for disabled/restricted/blocked/review.\n3. Double click: `amapCopyText` stores the original label once in `data-label` and clears the previous timer; a second click within 1.5 s no longer leaves \"Copied\".\n4. Nothing sent: browser test routes every request and asserts none besides the page itself, empty localStorage/sessionStorage and no cookies after copying.\nCHANGELOG: bullet added to the acl-132 entry, blank line before the next heading.\n\n## Tests (headless, ACL_LIBRARY_* empty, C:/fb_agents/.venv python)\ntest_copy_status_text, test_status_screenshot, test_report_scripts_parse, test_bench_catalogue, test_account_map_view, test_disabled_account_status: **82 passed**.\nNew: test_without_a_screenshot_the_hint_points_at_a_disabled_button, test_a_second_click_does_not_leave_the_button_on_copied, test_copy_text_sends_and_stores_nothing, test_a_live_read_that_finds_a_problem_offers_copy_text[shot/no shot], test_a_live_read_without_a_problem_offers_nothing[clear/unknown].\nscripts/acl_scan_secrets.py: clean.\n\n## Safety\nOnly dashboard template/JS and tests. No Meta/Multilogin/account paths; port 9090 and C:\\acl-live-* untouched; no visible windows."
+          "report": "# ACL-132 \u2014 review fixes (PR #465)\n\nWorker-W132T, session run_w132t_1001. Branch codex/acl-132-copy-text, head 33db35c1 (on top of 52fc33c9, which already contains work/stage + work/main).\n\n## What changed (per review_465 \"Re-check\")\n1. Missing screenshot: on a problem status (anything except clear/unknown) without a screenshot, `_account_map_country.html` renders \"Copy screenshot\" **disabled** with the tooltip \"No screenshot on the last read \u2014 read the account again\" (Issue #31 line 22). No data-shot/onclick on it. CSS `.amap-shot:disabled`. `tests/test_status_screenshot.py::test_no_shot_no_button` now asserts every `amap-shot` button is disabled (or absent), not the phrase. With a screenshot nothing changes.\n2. Live Read: `amapApplyReading` (report.html) mirrors the template \u2014 disabled Copy screenshot when there is no shot, and a new shared helper `amapStatusReport` re-adds Copy text + the hint for disabled/restricted/blocked/review.\n3. Double click: `amapCopyText` stores the original label once in `data-label` and clears the previous timer; a second click within 1.5 s no longer leaves \"Copied\".\n4. Nothing sent: browser test routes every request and asserts none besides the page itself, empty localStorage/sessionStorage and no cookies after copying.\nCHANGELOG: bullet added to the acl-132 entry, blank line before the next heading.\n\n## Tests (headless, ACL_LIBRARY_* empty, C:/fb_agents/.venv python)\ntest_copy_status_text, test_status_screenshot, test_report_scripts_parse, test_bench_catalogue, test_account_map_view, test_disabled_account_status: **82 passed**.\nNew: test_without_a_screenshot_the_hint_points_at_a_disabled_button, test_a_second_click_does_not_leave_the_button_on_copied, test_copy_text_sends_and_stores_nothing, test_a_live_read_that_finds_a_problem_offers_copy_text[shot/no shot], test_a_live_read_without_a_problem_offers_nothing[clear/unknown].\nscripts/acl_scan_secrets.py: clean.\n\n## Safety\nOnly dashboard template/JS and tests. No Meta/Multilogin/account paths; port 9090 and C:\\acl-live-* untouched; no visible windows.\n\n## Round 2 \u2014 CI fix (head f6e48589, on top of coordinator merge e8002bd9)\nCause: `test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` runs amapMoney..amapSpendFailed in node with a fake DOM. My amapApplyReading drew the disabled Copy screenshot (status 'disabled', no shot) with `document.createElement` and called `amapStatusReport`, defined outside that range -> TypeError.\nFix (product): the status cell is rebuilt as `'<span></span>' + amapStatusTail(account, s)` \u2014 one markup string identical to `_account_map_country.html` (inline onclick, attributes escaped); helper and AMAP_STATUS_WORDS placed right before amapApplyReading. The regression test is unchanged. New test: hostile account name escaped on the live path.\nTests: test_review_ui_regressions + test_copy_status_text + test_status_screenshot + test_report_scripts_parse + test_bench_catalogue + test_account_map_view + test_disabled_account_status: 90 passed. acl_scan_secrets: clean."
         },
         "pr": 465,
-        "queued_at": "2026-10-02T09:49:55+00:00",
+        "queued_at": "2026-10-02T11:34:48+00:00",
         "review_report": "# PR #465 (ACL-132) returned \u2014 CI failure caused by the PR (coordinator, 2026-10-02)\n\nHead e8002bd (review approved round 2) fails CI on both Python versions, shard 3:\n`tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` \u2014 `TypeError: Cannot read properties of undefined (reading 'textContent')` (runs 36998587288, jobs 110815463601 / 110815463511; rerun failed the same way).\nLikely cause: the new `amapApplyReading` / `amapStatusReport` rebuild of the status cell changes the elements this regression test (and possibly the poll code) expects. Fix the product code or, if the test reads an element that legitimately moved, update the test with a reason; run test_review_ui_regressions.py together with the ACL-132 tests."
       },
       "466": {
@@ -4902,7 +4887,8 @@
       457,
       452,
       402,
-      424
+      424,
+      31
     ],
     "review": {
       "id": "418bb8ed1d7b4a1882f4e4b82a3199fa",
@@ -7025,6 +7011,13 @@
         "pr": 450,
         "lane": "418bb8ed1d7b4a1882f4e4b82a3199fa",
         "actor": "Reviewer-R1447Q"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-02T11:34:48+00:00",
+        "issue": 31,
+        "pr": 465,
+        "actor": "Worker-W132T"
       }
     ],
     "policy": {
