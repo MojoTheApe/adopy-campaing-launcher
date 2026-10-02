@@ -2667,20 +2667,6 @@
   },
   "execution": {
     "claims": {
-      "437": {
-        "actor": "Worker-E1437V",
-        "session": "run_e1437v_1001",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1437-readable-errors",
-        "worktree": "C:\\acl-1437-errors",
-        "id": "feb500ee842149939a87583ab65bf9fa",
-        "issue": 437,
-        "state": "handoff",
-        "started_at": "2026-10-02T05:48:00+00:00",
-        "from_status": "status:todo",
-        "pr": 438,
-        "report": "# ACL-1437 handoff after review (PR #438) - Worker-E1437V\n\nHead: 255389f9d177abcdc73044a1229a965cad5f9312 (branch codex/acl-1437-readable-errors)\n\n## Merges\n- work/stage (e0c4a91) merged in 96229f4. Conflicts resolved keep-both:\n  docs/system/CHANGELOG.md (ACL-1437 + stage entries), src/web/templates/report.html\n  (CSS: .cb-problems* + ACL-1444 .cb-close-profile*; JS: cbProblemsHtml + cbCloseProfileHtml/cbBindCloseProfile,\n  closing brace duplicated). tests/bench/catalogue.json did not conflict.\n- work/main (3e9cbac) merged in 9479051, no conflicts.\n\n## Findings\n- F1 [BLOCKER] fixed (src/fb_ads_rpa/failure_policy.py): PER_AD_GUIDE[\"story_not_placed\"] added\n  (\"Story file not placed\" / runs with the post file on Stories and Reels / replace by hand if needed);\n  _guide uses PER_AD_GUIDE.get(); a policy-known step without guide text falls back to\n  \"Step '<name>'\" + the policy reason (severity kept, e.g. warning) instead of KeyError / \"Unclassified\";\n  _AD_NAME_IN_NOTE also reads the \"<reason> - <ad>: <sentence>\" form, so the ad name shows.\n  Tests: test_story_not_placed_is_a_named_warning_with_its_ad, test_a_publishable_draft_with_a_story_warning_serializes,\n  test_a_per_ad_step_without_guide_text_falls_back_to_the_policy_reason; the completeness test now passes on the merged tree.\n- F2 [MEDIUM] fixed (report.html): cbErrorBeyondProblems(r.error) strips the standard\n  \"DO NOT PUBLISH AS IS ... Check the draft in Ads Manager first.\" paragraph and the two hand-off notes;\n  whatever remains (profile stop detail, \"Recorded flow failed at: ...\", exception text) is the first line\n  of Technical details (\"error: ...\", pre-wrap). Tests: not-built test asserts\n  \"error: account_blocked: Verification required to advertise\"; new test_error_text_beyond_the_list_is_kept_in_technical_details;\n  mock-up test asserts no error line when error is only the standard paragraph.\n- F3 [LOW] fixed: teach-mode marker extracted to cbTeachMarkerHtml(), used by the old Steps line and\n  shown under the problem list (.cb-problems-teach). Test: test_teach_mode_marker_survives_the_problem_list.\n\n## Tests (headless, ACL_LIBRARY_* empty, affected only)\n- test_readable_problems.py, test_readable_problems_browser.py, test_failure_policy.py: 28 passed.\n- test_a_finished_clean_profile_closes_itself, test_bench_catalogue, test_compressed_upload_browser,\n  test_crop_gate_on_every_success, test_crop_step_original_and_story, test_fb_ads_rpa_draft,\n  test_publishing_everything_at_once, test_report_scripts_parse, test_screen_warning_browser,\n  test_story_not_placed_is_a_warning: 143 passed.\n\nNo robot behaviour change (severities untouched); no Publish, no Multilogin, no port 9090."
-      },
       "447": {
         "actor": "Worker-S1447N",
         "session": "run_s1447n_1001",
@@ -3395,7 +3381,7 @@
             "session": "run_e1437v_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-E1437V",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3404,16 +3390,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1437-readable-errors",
           "worktree": "C:\\acl-1437-errors",
-          "id": "d61ac56ba0f3459d8c09b005a8b56ecf",
+          "id": "feb500ee842149939a87583ab65bf9fa",
           "issue": 437,
           "state": "handoff",
-          "started_at": "2026-10-01T09:02:49+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-02T05:48:00+00:00",
+          "from_status": "status:todo",
           "pr": 438,
-          "report": "# ACL-1437 handoff \u2014 Worker-E1437V (run_e1437v_1001)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/438 (into `stage`)\nBranch: `codex/acl-1437-readable-errors` (from work/main 49915f7), head 245b99a\n\n## Done\n- `src/fb_ads_rpa/failure_policy.py`: `GUIDE` / `PER_AD_GUIDE` give every POLICY / PER_AD_POLICY step a title, one-sentence impact and one action (text only, no verdict change). `problem()` / `problems()` build the items: step, ad_index/ad_name for per-ad steps (name parsed from \"<name> has no text\" / \"<name> second primary text not added\"), severity, title, impact, action, note, raw. Blocking items come first and exact repeats are listed once. Unknown steps are listed as blocking with a generic text.\n- `src/fb_ads_rpa/draft.py`: `RpaPublishResult.run_id`, and `to_job_dict()` adds `problems` and `run_id`. `error` keeps the old plain text for old readers and Sentry.\n- `src/fb_ads_rpa/rpa_publisher.py`: fills `run_id` from telemetry after the flow returns.\n- `src/web/templates/report.html`: a self-contained `cbProblemsHtml(r)` plus a `.cb-problems*` CSS block, hooked in one place at the top of the per-result loop of `cbPollJob`. It renders the verdict headline, the count + \"draft saved, browser left open\", numbered items with \"\u2192\", red/amber, and collapsed \"Technical details\" (codes, notes, run id, campaign id, captures, step trail). Results without `problems` (old records) or with an empty list use the old rendering.\n- CHANGELOG: `docs/system/CHANGELOG.md`.\n\n## Tests\n- New: `tests/test_readable_problems.py` (8 tests: completeness, payload), `tests/test_readable_problems_browser.py` (5 tests, headless: mock-up 2 blocking + 1 warning, colours, collapsed details, no duplicates, warnings-only, not built, old-record fallback).\n- Affected tests run: 334 passed + 239 passed (failure_policy, flow/publisher, publish jobs/progress, screen-warning browser, Sentry, single-screen editor, etc.). Full suite: CI.\n\n## Not done / notes\n- The build-dot tooltip in the queue drawer (`classify`, \"Do not publish: <codes>\") still shows raw codes. It was left alone to keep the report.html diff tight next to PRs #408/#398/#431/#435. A possible follow-up is to use `problems[].title` there (it would need `problems` in `publish_progress._result_view`).\n- Acceptance criterion 3 (the owner checks a real card after a run) is open. It needs a `serve.py` restart on the live machine after merge."
+          "report": "# ACL-1437 handoff after review (PR #438) - Worker-E1437V\n\nHead: 255389f9d177abcdc73044a1229a965cad5f9312 (branch codex/acl-1437-readable-errors)\n\n## Merges\n- work/stage (e0c4a91) merged in 96229f4. Conflicts resolved keep-both:\n  docs/system/CHANGELOG.md (ACL-1437 + stage entries), src/web/templates/report.html\n  (CSS: .cb-problems* + ACL-1444 .cb-close-profile*; JS: cbProblemsHtml + cbCloseProfileHtml/cbBindCloseProfile,\n  closing brace duplicated). tests/bench/catalogue.json did not conflict.\n- work/main (3e9cbac) merged in 9479051, no conflicts.\n\n## Findings\n- F1 [BLOCKER] fixed (src/fb_ads_rpa/failure_policy.py): PER_AD_GUIDE[\"story_not_placed\"] added\n  (\"Story file not placed\" / runs with the post file on Stories and Reels / replace by hand if needed);\n  _guide uses PER_AD_GUIDE.get(); a policy-known step without guide text falls back to\n  \"Step '<name>'\" + the policy reason (severity kept, e.g. warning) instead of KeyError / \"Unclassified\";\n  _AD_NAME_IN_NOTE also reads the \"<reason> - <ad>: <sentence>\" form, so the ad name shows.\n  Tests: test_story_not_placed_is_a_named_warning_with_its_ad, test_a_publishable_draft_with_a_story_warning_serializes,\n  test_a_per_ad_step_without_guide_text_falls_back_to_the_policy_reason; the completeness test now passes on the merged tree.\n- F2 [MEDIUM] fixed (report.html): cbErrorBeyondProblems(r.error) strips the standard\n  \"DO NOT PUBLISH AS IS ... Check the draft in Ads Manager first.\" paragraph and the two hand-off notes;\n  whatever remains (profile stop detail, \"Recorded flow failed at: ...\", exception text) is the first line\n  of Technical details (\"error: ...\", pre-wrap). Tests: not-built test asserts\n  \"error: account_blocked: Verification required to advertise\"; new test_error_text_beyond_the_list_is_kept_in_technical_details;\n  mock-up test asserts no error line when error is only the standard paragraph.\n- F3 [LOW] fixed: teach-mode marker extracted to cbTeachMarkerHtml(), used by the old Steps line and\n  shown under the problem list (.cb-problems-teach). Test: test_teach_mode_marker_survives_the_problem_list.\n\n## Tests (headless, ACL_LIBRARY_* empty, affected only)\n- test_readable_problems.py, test_readable_problems_browser.py, test_failure_policy.py: 28 passed.\n- test_a_finished_clean_profile_closes_itself, test_bench_catalogue, test_compressed_upload_browser,\n  test_crop_gate_on_every_success, test_crop_step_original_and_story, test_fb_ads_rpa_draft,\n  test_publishing_everything_at_once, test_report_scripts_parse, test_screen_warning_browser,\n  test_story_not_placed_is_a_warning: 143 passed.\n\nNo robot behaviour change (severities untouched); no Publish, no Multilogin, no port 9090."
         },
         "pr": 438,
-        "queued_at": "2026-10-01T09:20:04+00:00",
+        "queued_at": "2026-10-02T06:03:51+00:00",
         "review_report": "# Review PR #438 (Issue #437 / ACL-1437) - Reviewer-R1437Q (rev_1437q_1002)\n\nVerdict: REQUEST CHANGES\nHead: 250235f5de1b7f1b1f729d64f693a40492488c84 (tree 404daf1e1718d57e4849c52924b949a429a1b62b)\nBase work/stage: e0c4a911e8fe0fd21d1db3fe3021d1d6bb143df8 (moved from 8322a6a during review: +ACL-1455, report.html CSS only)\n\n## CI (head 250235f)\nAll 15 checks SUCCESS (CI test 3.11/3.13 x3 shards, ACL verification, tracker-link, installer, descriptor). No failing jobs.\nCI ran against the pre-2026-10-01 stage; after merging the current stage the PR's own test fails (see F1).\n\n## Merge into work/stage (git merge-tree)\nCONFLICTS: docs/system/CHANGELOG.md, src/web/templates/report.html (2 hunks).\n- report.html CSS: ACL-1444 .cb-close-profile* vs ACL-1437 .cb-problems* - keep both.\n- report.html JS: ACL-1444 cbCloseProfileHtml/cbBindCloseProfile vs ACL-1437 cbProblemsHtml - keep both; the shared closing `}` must be duplicated (one function loses its brace otherwise -> whole script fails, `cbPollJob is not defined`).\n- CHANGELOG: keep both entries.\nAuto-merged cleanly but SEMANTIC conflict: failure_policy.py (ACL-1476).\n\n## Findings\nF1 [BLOCKER, post-merge] src/fb_ads_rpa/failure_policy.py:_guide (PR line ~503 `return PER_AD_GUIDE[per_ad.group(1)]`) + PER_AD_GUIDE (~404).\n  Stage (ACL-1476, #478) added PER_AD_POLICY \"story_not_placed\" (WARNING) and added it to _PER_AD_NAME. PER_AD_GUIDE has no entry,\n  so after merge `problems()` raises KeyError('story_not_placed'). Reproduced on the merged tree:\n  RpaPublishResult(success=True, warnings=['ad_story_not_placed: ...']).to_job_dict() -> KeyError.\n  to_job_dict is called by publish_jobs._job_result_from_rpa (src/web/publish_jobs.py:53/596) inside the job loop's try:\n  a publishable draft with a story warning is turned into a job error, its result is lost, and the remaining campaigns in the job are not built.\n  Merged-tree test: tests/test_readable_problems.py::test_every_policy_step_has_title_impact_and_action[table1-guide1] FAILS\n  (\"steps without title/impact/action: ['story_not_placed']\").\n  Fix: merge stage, add PER_AD_GUIDE[\"story_not_placed\"] (English, warning wording: story file not placed, ad runs with the post file on Stories/Reels, replace in Ads Manager if needed);\n  and make _guide fail soft (`PER_AD_GUIDE.get(...)` -> fall through to the \"Unclassified\" item) so a future policy addition can never crash job serialization.\n  Optionally teach _AD_NAME_IN_NOTE the `<code> - <ad>: <sentence>` form used by story_not_placed_soft_fail (meta_dom.py:13124) so the ad name shows.\n\nF2 [MEDIUM, loss of detail] src/web/templates/report.html cbPollJob call site (`if (structured) { html += structured; return; }`) + cbProblemsHtml.\n  When `problems` is non-empty, r.error is not rendered anywhere, not even under Technical details. r.error can carry information that is not in problems:\n  - profile stop: `\"{code}: {message} ({stop.detail})\"` (rpa_publisher.py:542-544) - the detail is dropped;\n  - the PR's own not-built test uses error \"account_blocked: Verification required to advertise\" - \"Verification required to advertise\" is not on the card;\n  - \"Recorded flow failed at: X - reason\" / exception text (ads_manager_flow.py:2475, 2591) when warnings/blocking were also recorded.\n  Issue focus is \"no loss of detail\". Fix: put r.error (when it is not the standard \"DO NOT PUBLISH AS IS\" paragraph / hand-off note) into Technical details, and assert it in the not-built browser test.\n\nF3 [LOW] same call site: the early `return` also skips the teach-mode markers (\"waiting for a Website click\" / \"Website locator captured\") that the old Steps line showed. Steps text is kept in details, the markers are not. Acceptable if intended; mention in the PR.\n\n## Checked, OK\n- English user-facing text in GUIDE/PER_AD_GUIDE and template; Russian only in code comments (allowed).\n- Escaping: title/ad name/impact/action/raw/run id/captures go through aclEscHtml.\n- Old records (no `problems`) fall back to old rendering (tested).\n- No robot behaviour change: severities untouched; run_id read from telemetry only. No Publish, no Multilogin/browser opening, no secrets.\n- Tests real: disabling the structured branch (mutation) -> 3 of 5 browser tests fail; story_not_placed demonstrates the completeness test catches missing entries.\n- Browser tests headless (chromium.launch default), no port 9090.\n\n## Tests run (affected only, headless, ACL_LIBRARY_* empty)\nPR head: test_readable_problems.py, test_readable_problems_browser.py, test_failure_policy.py -> 23 passed.\nMerged with stage (conflicts resolved keep-both): readable_problems(+browser), failure_policy, fb_ads_rpa_draft, story_not_placed_is_a_warning, crop_step_*, crop_gate, a_finished_clean_profile_closes_itself, compressed_upload_browser, publishing_everything_at_once, screen_warning_browser\n-> 1 failed (F1), 105 passed in the final run (132 passed in the wider earlier run, plus the same F1 failure)."
       },
       "441": {
@@ -4471,7 +4457,8 @@
       466,
       427,
       424,
-      434
+      434,
+      437
     ],
     "review": {
       "id": "26d7af6509b643f38ae7d2074e8d9c1b",
@@ -6184,6 +6171,13 @@
         "issue": 434,
         "pr": 435,
         "actor": "Worker-H1434U"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-02T06:03:51+00:00",
+        "issue": 437,
+        "pr": 438,
+        "actor": "Worker-E1437V"
       }
     ],
     "policy": {
