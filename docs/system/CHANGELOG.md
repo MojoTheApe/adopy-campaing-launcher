@@ -26,6 +26,20 @@ account has no campaigns".
   Meta numbers for …", without turn-off buttons, because their switches may have
   changed. "0 campaigns · 0 ads" appears only when the list was read and was empty.
 
+## One Connect button opens the found profile and connects it — ACL-1457
+
+Each profile found in Multilogin had two buttons, Open and Connect, and they had to be
+pressed in that order: only a profile opened by automation can tell the dashboard its
+ad account number. The owner asked for one button (2026-10-01). Connect now opens the
+profile through the same `/mlx-profile-open` path (attaching if it already runs with
+automation; a window opened by hand is still never restarted), reads the number, and
+connects. If opening fails, connecting continues and the prompt says to close a
+hand-opened window and press Connect again, or to type the number, or to leave it for
+later. The "open profile" button on already connected accounts is unchanged.
+The button stays disabled until the whole open-and-connect finishes, so a second
+click while the profile is still being read does not start a second open
+(review fix, `tests/test_one_connect_button.py`).
+
 ## A new campaign manager no longer sees the owner's goals — ACL-1452
 
 2026-09-30 a test installation opened as Dan showed "Evgeni — Goals Progress" with
