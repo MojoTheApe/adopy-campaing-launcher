@@ -21,6 +21,261 @@ numbers as a start.
   request loop. When a team lead edits another manager's goals, that manager's own
   numbers are used, and this machine's account map is not added to them.
 
+## A covered profile window is recorded and woken without the foreground — ACL-1402
+
+2026-09-30, Facebook_1443 (fba2c3f5): `website_selected` → `conversion_event` took
+5 minutes, and the build continued the moment the owner opened the account window,
+which was covered by other windows (not minimised). Telemetry had no visibility data
+after attach.
+
+- `src/fb_ads_rpa/window_visibility.py`: `visibility_diag` — `document.visibilityState`
+  and `document.hasFocus()` (bounded probe), the profile window as Windows sees it
+  (read-only Win32: `IsIconic`, `IsWindowVisible`, foreground, share on screen and not
+  covered by windows above it in z-order; the browser process is found by its CDP
+  port), and whether `_disable_background_throttling` succeeded on the tab
+  (`browser.THROTTLE_STATUS`). Recorded in every `window_bounds` row (attach and each
+  section) and in `stall_unstuck`.
+- "Hidden" means what Windows saw: the window is minimised (`minimized`) or its
+  on-screen part is covered by other windows (`covered`). A window parked off-screen
+  is the robot's normal home for a minimised profile (`offscreen`/`parked`) and is
+  not hidden; it only gets a silent keep-alive screencast if the tab has none. The
+  page's own `visibilityState == "hidden"` decides only when Windows cannot be read:
+  with the window on screen it is just a background tab (review of PR #420, F1/F2).
+- `wake_if_hidden`: when a wait runs long and the window is hidden, the CDP helper is
+  re-applied, a keep-alive screencast is started if the tab has none, and a minimised
+  window goes back to normal off-screen — never `bring_to_front` or any foreground
+  call. A tab that does not answer gets no CDP session on itself (ACL-1320); only
+  browser-level commands. At most once per 30 s per tab. "Woke" is claimed only when
+  an animation frame (`requestAnimationFrame`) arrives within 2 s after the wake (F4).
+  Telemetry `window_hidden_woken` (with `reason` and `frames`); job panel, by reason:
+  "The profile window was covered by other windows — the robot woke it", "… was
+  minimised — the robot restored it off-screen", "The profile tab was hidden — …";
+  no frames: "The profile window stayed hidden and did not wake — bring it to the
+  front".
+- Hooked before every "tab is frozen" decision: `meta_dom._tab_frozen`,
+  `browser.page_answers`, the unresponsive branch of `_unstick`, and
+  `simple_create._wait_new_ad` (after 20 s; the 120 s Meta-busy limit is unchanged).
+  While Meta's "Creating..." dialog is on screen and the page answers, the wait does
+  not wake (Meta is busy, F3); in that poll the page is not probed, Windows decides.
+- Per-tab state (`THROTTLE_STATUS`, keep-alive tabs, last wake, notices, "woken in
+  this run") holds a weak reference next to `id(page)`, so a recycled id in the
+  long-lived serve.py never matches a dead tab (F5). A failed browser-pid lookup is
+  retried after 15 s instead of disabling Win32 for the process (F6). `_unstick`
+  still reloads an unanswering list tab when it cannot be asked after the wake (F7).
+- Not done yet: the live experiment with real covered windows (which mechanism
+  actually unfreezes an occluded Chrome window) — planned in PR ACL-1402.
+
+## Robot health: success rate of every step per account and build — ACL-1434
+
+A new read-only page, `/robot-health`, linked as "Robot health" in the dashboard
+header, and a script, `scripts/robot_health.py`, show how healthy the robot is.
+They read only the local run log (`output/rpa_telemetry.jsonl`) and the dashboard
+logs: `output/serve*.log` on a hand-run checkout, and the launcher's
+`server.stdout.log` / `server.stderr.log` in `%LOCALAPPDATA%/ACL/logs` on an
+installed build. No account is opened. The page reads in the server's thread
+pool, so it does not hold up progress polling of running jobs.
+
+- Rows are robot steps and columns are accounts plus "all". Accounts are shown
+  by a short label only, never the full account name, also in `--json`. A cell is ok/total
+  over that column's last N runs (default 10), with the change in points against
+  the N runs before. Only wizard outcomes count. Rows with `ok = null`,
+  `job_phase`, window/tab/profile/browser state, retries and attempts, and
+  always-false diagnostics such as `click_target_covered` and
+  `advantage_plus_off` are left out. A retried step counts by its last record.
+  A run that stopped earlier does not count for steps it never reached. Steps
+  that are only written on failure (`objective_leads`) are marked with `*`.
+- A second table shows each step by build. A run's build is the
+  "RPA flow version" the dashboard log was under when it first named the run's
+  job (the log has times without dates). When stdout and stderr go to separate
+  files (`serveN.log` + `serveN.err.log`, or the launcher's pair), the file
+  with the job ids is matched to its pair launch by launch, counting from the
+  newest. A `build` field in telemetry takes precedence. Runs the log never named, started after the dashboard process
+  started, take that process's own build.
+- Highlights: a drop of 30 or more points (at least 2 attempts in both windows),
+  2 or more failures in a row inside the current window, and a 30-point drop
+  from one build to the next. Each links to the failing runs. A run page shows
+  the run's steps, its failures marked new / known / known elsewhere, and its
+  screenshots from `output/rpa_screenshots/<run>`.
+- `python scripts/robot_health.py --top 15` prints the same table as Markdown.
+  `--run <id>` prints one run's summary with its capture folders.
+
+## A hand-opened window waits for the computer to go idle — ACL-1427
+
+The Publish click itself resets the "60 s without input" timer of ACL-1388, so the
+gate checked a few seconds later almost never passed. Owner decision 2026-10-01:
+wait instead of stopping at once.
+
+- `hand_window.wait_until_safe`: when the ONLY failing gate is recent input, wait up
+  to 2 minutes (`IDLE_WAIT_S`, per-machine `FB_RPA_HAND_WINDOW_IDLE_WAIT_S`; `0` =
+  old immediate stop), re-checking all gates every 3 s. Idle for 60 s with the other
+  gates still passing: close and reopen as in ACL-1388. Input for the whole 2 minutes:
+  the old `profile_open_by_hand` stop. Any other gate failing (before or during the
+  wait) stops at once. The job keeps its profile slot while waiting.
+- Stop of the job interrupts the wait within half a second: `RpaPublisher` wraps the
+  browser open in `hand_window.watch_cancel`.
+- Visible: job panel line "Waiting for the computer to be idle to reopen <account>'s
+  hand-opened window — don't use the mouse or keyboard for a minute"; telemetry
+  `profile_hand_window` diag gains `waited_s` and `wait_outcome`
+  (`no_wait`/`idle`/`timeout`/`gate_failed`/`cancelled`; note `cancelled` on Stop).
+- Stop during the wait: the slot result adds "the job was stopped while waiting for the
+  computer to be idle", and no Sentry campaign-stop event is sent (it is not a failure).
+- With ACL-1444: a reopened window is the robot's profile now, so at the end of a clean
+  job it closes itself like any robot profile; while the wait runs, the job keeps the
+  profile's slot and "Close profile" answers 409 — Stop is the way out.
+
+## A new Sentry failure starts the triage routine in the cloud — ACL-1330
+
+2026-09-30 owner decision: no polling and no empty runs; the triage agent starts only
+when Sentry reports a new failure kind, runs in the cloud with the laptop closed, and
+asks the owner on the phone before any release.
+
+- `deploy/sentry-relay/worker.js`: a Cloudflare Worker (free plan) between Sentry and the
+  routine's API trigger, because Sentry's webhooks cannot send the `Authorization`
+  header `/fire` needs. It checks Sentry's HMAC signature and the event time inside
+  the signed body (older than an hour or undated = refused; the unsigned timestamp
+  header is only an extra check), passes only the rule "ACL - new failure kind" for
+  project `python` and blocking / campaign_stop / job_exception failures, fires once
+  per Sentry issue per 24 h, at most 20 times an hour and 30 a day, and sends only a
+  short scrubbed text (issue id, title, culprit, step, reason, release, machine, link). Tests: `worker.test.js` (Node, no packages), run from
+  `tests/test_sentry_relay.py`.
+- `docs/system/ROUTINE_SENTRY_PROMPT.md`: the routine's instructions — payload as data,
+  Sentry read-only, tracker from a clean `main` checkout via REST-only `gh`, fix branch
+  from `stage`, affected Linux tests, independent reviewer, PR into `stage`, never a
+  merge or release, final question "Выпустить для <buyer>?".
+- `docs/system/SENTRY_ROUTINE_SETUP.md`: the owner's ~10-minute setup, token rotation and
+  switch-off. `scripts/sentry_selftest_event.py` sends one synthetic failure to test the
+  chain (`relay_selftest`, listed as known in `config/sentry_triage_map.json`).
+- The laptop scheduled task `acl-sentry-triage` is paused (manual "Run now" only).
+  Nothing is live until the owner does the setup.
+
+## Copy text for the account provider's group — acl-132
+
+Owner's decision (2026-09-30): when the account map shows a problem status (disabled,
+restricted, blocked, under review), a "Copy text" button copies one line for the
+provider's WhatsApp group — the account's short name and its status, e.g.
+`FacebookDoc20 - Account Disabled` — with the hint "Copy screenshot and account number to
+send in the group". The screenshot itself is copied by ACL-1430's button. Nothing is
+sent by ACL. Healthy and unread statuses show neither.
+
+- Review fixes (2026-10-02): a problem status without a screenshot now shows "Copy
+  screenshot" disabled, with the tooltip "No screenshot on the last read — read the
+  account again", so the hint never points at a missing button (the map template and
+  the live Read path alike). After a live Read the status cell keeps "Copy text" and
+  the hint. A second click within 1.5 s no longer leaves the button stuck on "Copied".
+  Tests check that copying makes no request and stores nothing — only the clipboard.
+  After a Read the status cell is rebuilt as one markup string, the same markup as the
+  map template (fixes a CI regression in the spend-poll test).
+## Every campaign sends a run summary to Sentry, labelled with the manager — ACL-1447
+
+2026-10-01. Until now only blocking failures reached Sentry; how a run went on a
+buyer's machine (warnings, slow steps, what passed) stayed in the local
+`rpa_telemetry.jsonl`, and most events named only the computer (`LAPTOP-UA006`).
+
+- When a campaign finishes — clean, with warnings, do-not-publish, or stopped
+  (including a stop while connecting the profile) — `src/fb_ads_rpa/run_summary.py`
+  sends one event "Run summary: <result>" at info level (clean, warnings) or warning
+  level (do-not-publish, stopped), never error. Fingerprint
+  `acl-run-summary` + result: four issues for the whole fleet, not one per campaign.
+  Context `run_summary`: result, account, campaign, editor (classic / single-screen),
+  steps (step, ok, duration, reason), blocking failures, warnings, total duration,
+  number of ads, attempts, run id. Release and machine come from the existing tags.
+- Owner decision 2026-10-01: the account display name (short label, e.g.
+  FacebookDoc19) and the campaign name are sent, in the summary and as tags `account`
+  and `campaign`. Ad account ids, profile ids, Ads Manager URLs, tokens and e-mails
+  are still scrubbed (`run_telemetry.scrub` plus URL / e-mail / `act_` rules in the
+  summary). The page section attached to failures keeps its placeholders (ACL-1325).
+- Every Sentry event carries the tag `manager`: `ACL_MACHINE_LABEL`, else
+  `MY_CM_NAME`, else `unset`; read when the event is sent, so a change applies
+  without a restart. The setup wizard writes `ACL_MACHINE_LABEL` from the name it
+  already asks for; Accounts → This computer → "Your name" changes it.
+- Sending runs in a background thread and swallows every error; a run never waits
+  for the network. `ACL_SENTRY_RUN_SUMMARY=0` turns summaries off.
+- `python scripts/run_summaries.py --from-sentry [--period 7d] [--format json]` lists
+  machines with their manager, campaign count per result, last run and release
+  (Sentry Discover API, `SENTRY_AUTH_TOKEN` with event:read). `scripts/robot_health.py`
+  (ACL-1434) was not on main yet, so the reader is its own script with
+  `machines_from_sentry()` for the health table to call.
+- Review of PR #450: the `machine` and `machine_id` tags are now set on the global
+  scope and again in `before_send`. Before, they lived only in the scope of the
+  thread that called `init`, so every summary after the first (sent from a new
+  thread) had no machine and was listed as "unknown". `run_summaries` groups by
+  `machine_id` and shows the latest label, so two computers of one manager stay two
+  rows. The campaign name in the summary goes through the summary scrubber
+  (URL / e-mail / `act_`).
+
+## Campaign problems are shown as a short readable list — ACL-1437
+
+2026-10-01 the builder card of CO_bnc_All_Video_FX_Y_35_01.10 showed its most
+important message as one long paragraph ("DO NOT PUBLISH AS IS — these steps
+failed: conversion_event — optimising for the wrong event … Do not publish:
+conversion_event, ad_copy:…"), with the failed steps listed twice.
+
+- `failure_policy.py` now gives every step a short English title, one sentence of
+  impact and one "what to do" line (`GUIDE`, `PER_AD_GUIDE`); a test fails if a
+  step of `POLICY` / `PER_AD_POLICY` has none. Text only: severities and the robot's
+  behaviour are unchanged.
+- The job result carries `problems` (step, ad number and name for per-ad steps,
+  severity, title, impact, action, technical note, raw code; blocking first) and
+  the campaign's `run_id`. The old plain text in `error` stays for older readers
+  and Sentry.
+- The job panel renders one block: the verdict headline (do not publish as is /
+  ready to publish with warnings / not built), the count with "draft saved,
+  browser left open", numbered items with a "→" action line, red for blocking and
+  amber for warnings, and step codes, notes, run id, campaign id, capture paths
+  and the step trail collapsed under "Technical details". Job records without
+  `problems` render as before.
+- Review fixes: the ACL-1476 `story_not_placed` warning has its own text and
+  shows the ad name; a per-ad step without text falls back to the policy reason
+  instead of raising (a `KeyError` used to turn a publishable draft into a job
+  error). Any part of `error` the list does not repeat (profile stop detail,
+  "Recorded flow failed at: …") is shown under "Technical details"; the
+  teach-mode marker ("waiting for a Website click") stays visible.
+
+## A problem status on the account map comes with a screenshot and a Copy screenshot button — ACL-1430
+
+2026-10-01 the owner asked for proof to send to support when the map shows a problem
+status (FacebookDoc20 disabled, Facebook_6540 restricted). Until now a page screenshot
+was kept only when a spend read failed, as a file path in a tooltip.
+
+- When a read finds any status other than `clear`, it saves a viewport screenshot of
+  the same Ads Manager page it just read the status from — the tab inside the
+  account's Multilogin profile; there is no capture outside Multilogin. Files go to
+  `%LOCALAPPDATA%\ACL\spend_shots\status_<account>__<time>.png`, the last 5 per
+  account are kept. The shot id and time are stored in the account's status entry.
+  A clear read takes no screenshot and removes the button; a failed screenshot never
+  fails the read.
+- `GET /account-spend/status-shot/<id>` serves a screenshot only by its id (strict
+  name, only from that folder, local dashboard only); anything else is 404.
+  `/account-spend/status-shot/<id>/view` is the fallback page with the image and
+  "Right-click → Copy image".
+- On the account map a small "Copy screenshot" button sits next to a problem status;
+  its tooltip says when the screenshot was taken. It copies an `image/png` to the
+  clipboard; when the browser refuses, it opens the fallback page in a new tab. No
+  screenshot, no button.
+
+## Saving a target waits out a briefly held registry file — ACL-1419
+
+`test_multiple_processes_do_not_lose_writes` failed intermittently on Windows CI.
+Two causes. Product: `targeting_registry._save_raw` replaced `targeting_registry.json`
+with a bare `os.replace`, which Windows refuses (`PermissionError [WinError 5]`)
+while the file is open for a moment elsewhere (Defender, the indexer, the previous
+writer's handle); the add/edit/remove then failed with that error. Reproduced locally
+3 of 18 runs under parallel load. It now uses `config.paths._replace_when_free`, the
+same short wait the other machine files already have. Test: each `spawn` worker
+imported the test module and with it `src.web.app` (~3 s quiet, much more on a
+loaded runner), and the test read `exitcode` right after `terminate()` without
+joining, so a slow worker showed up as `assert None == 0`. The worker now lives in
+`tests/targeting_worker.py` (registry import only), all workers share one 120 s
+deadline and are joined before exit codes are checked; the assertion is unchanged
+(three clean exits, 24 targets). `test_save_waits_out_a_briefly_held_registry` pins the wait.
+## A brief file hold on Windows no longer loses a spend reading — ACL-1466
+
+The spend and status store (`account_spend.json`) was replaced with a bare `os.replace`.
+Windows briefly holds a file after the previous replace or while Defender or the indexer
+looks at it, and answered `WinError 5`; the Read result was lost. The concurrent-writes
+test caught it ten times since 2026-09-15. The store now replaces through
+`config.paths._replace_when_free`, as the account-links file does since ACL-1216; a hold
+that does not end still raises.
 ## Builder: visible Duplicate on ads and campaigns, no repeated buttons — ACL-1459
 
 2026-10-01 the owner sent a screenshot of the builder drawer: duplicating an ad was a

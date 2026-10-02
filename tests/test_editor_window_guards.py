@@ -117,8 +117,13 @@ def test_attach_records_measured_bounds_after_resizing(monkeypatch):
     connection = br._connect_playwright(cdp_url='synthetic', provider='synthetic',
                                        debug_port=None, ws_endpoint=None)
     assert connection.page is page
-    record.assert_called_once_with('window_bounds', None,
-                                   diag={'section': 'attach', 'after': {'inner': [1280, 700]}})
+    record.assert_called_once()
+    args, kwargs = record.call_args
+    assert args == ('window_bounds', None)
+    assert kwargs['diag']['section'] == 'attach'
+    assert kwargs['diag']['after'] == {'inner': [1280, 700]}
+    # ACL-1402: видимость вкладки и окна профиля — в той же строке.
+    assert 'hidden' in kwargs['diag']['visibility']
     # Avoid leaving the synthetic object as the current thread's Playwright.
     br._pw_tls.playwright = None
 

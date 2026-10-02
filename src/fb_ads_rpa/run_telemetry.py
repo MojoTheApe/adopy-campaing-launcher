@@ -568,6 +568,13 @@ def record(
             _remember_failure(run_id or current_run_id(), step, _why_of(note, diag), diag)
         except Exception:
             pass
+    # ACL-1447: шаги прогона копятся и в памяти — из них строится итог
+    # кампании для Sentry (`run_summary`), без чтения журнала с диска.
+    try:
+        _remember_step(run_id or current_run_id(), step, ok, duration_s,
+                       _why_of(note, diag) if ok is not True else "")
+    except Exception:
+        pass
 
 
 #: Последний отказ каждого шага в каждом прогоне: (run_id, step) -> {why, diag}.
@@ -602,6 +609,44 @@ def last_failure(step: str, run_id: str = "") -> dict[str, Any] | None:
     with _FAILURES_LOCK:
         found = _FAILURES.get(key)
         return dict(found) if found else None
+
+
+#: Шаги каждого прогона по порядку (ACL-1447): run_id -> [{step, ok, duration_s, why}].
+#: Ограничено и по числу прогонов, и по шагам в прогоне — процесс дешборда
+#: живёт сутками, а итог кампании — не журнал.
+_STEPS: "OrderedDict[str, list[dict[str, Any]]]" = OrderedDict()
+_STEPS_LOCK = threading.Lock()
+_STEPS_MAX_RUNS = 64
+_STEPS_MAX_PER_RUN = 400
+
+
+def _remember_step(run_id: str, step: str, ok: bool | None,
+                   duration_s: float | None, why: str) -> None:
+    if not run_id:
+        return
+    row: dict[str, Any] = {"step": step or "", "ok": ok}
+    if duration_s is not None:
+        row["duration_s"] = round(float(duration_s), 1)
+    if why:
+        row["why"] = str(why)[:300]
+    with _STEPS_LOCK:
+        rows = _STEPS.pop(run_id, None) or []
+        if len(rows) < _STEPS_MAX_PER_RUN:
+            rows.append(row)
+        _STEPS[run_id] = rows
+        while len(_STEPS) > _STEPS_MAX_RUNS:
+            _STEPS.popitem(last=False)
+
+
+def run_steps(run_id: str = "") -> list[dict[str, Any]]:
+    """Шаги прогона `run_id` (по умолчанию — текущего) в порядке записи.
+
+    `why` — причина как её записал шаг, ещё НЕ вычищенная: вычищает тот, кто
+    отправляет (`run_summary`).
+    """
+    key = run_id or current_run_id()
+    with _STEPS_LOCK:
+        return [dict(r) for r in _STEPS.get(key, [])]
 
 
 @contextmanager
