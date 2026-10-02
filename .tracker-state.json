@@ -3621,7 +3621,7 @@
             "session": "run_g1452d_1001"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-G1452D",
         "coordinator": "Coordinator-D0930K",
         "handoff": {
@@ -3639,7 +3639,8 @@
           "report": "# ACL-1452 \u2014 implementation handoff\n\n- PR #453 (`codex/acl-1452-goals-defaults` \u2192 `stage`), head 147a497, base work/stage 3a629ca.\n- Worker-G1452D, session run_g1452d_1001, coordinator Coordinator-D0930K, worktree `C:\\acl-1452-goals`.\n\nAll acceptance criteria are implemented: title from the CM on screen; no saved goals + countries \u2192 one row per country at 10 FTD, other targets empty; no countries \u2192 empty; saved goals unchanged; reading writes nothing; tests for the three seeding cases and the title.\n\nChecks: test_goals + test_workbook_review + test_review_period_regressions 34 passed; JS guards 24 passed. Full suite: CI only (owner rule).\n\nRisk for the reviewer: `_my_goal_countries` decides \"this person's countries\" from `my_totals` (spend/leads/deposits > 0) plus map links with accounts; a country where the person has accounts but no numbers and no link would be missing from the start \u2014 they can add it with \"+ country\".\n\nNot done: live check on the live build with a CM name that has no saved goals."
         },
         "pr": 453,
-        "queued_at": "2026-10-01T12:19:11+00:00"
+        "queued_at": "2026-10-01T12:19:11+00:00",
+        "reviewer": "Reviewer-R1452H"
       },
       "455": {
         "implementers": [
@@ -4085,6 +4086,10 @@
       },
       "Reviewer-R1402Q": {
         "session": "rev_1402q_1002",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1452H": {
+        "session": "rev_r1452h_1001",
         "role": "Reviewer"
       }
     },
@@ -4535,7 +4540,6 @@
       419,
       430,
       433,
-      452,
       457,
       462,
       31,
@@ -4545,7 +4549,18 @@
       437,
       447
     ],
-    "review": null,
+    "review": {
+      "id": "a18781c458984635938b748f98109b5d",
+      "pr": 453,
+      "issues": [
+        452
+      ],
+      "actor": "Reviewer-R1452H",
+      "session": "rev_r1452h_1001",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-02T07:04:53+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -6342,6 +6357,13 @@
         "issue": 402,
         "claim": "54562634fdb54367ac8bc5277472769a",
         "actor": "Worker-V1402H"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-02T07:04:53+00:00",
+        "pr": 453,
+        "lane": "a18781c458984635938b748f98109b5d",
+        "actor": "Reviewer-R1452H"
       }
     ],
     "policy": {
