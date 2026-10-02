@@ -25,6 +25,23 @@ asks the owner on the phone before any release.
 - The laptop scheduled task `acl-sentry-triage` is paused (manual "Run now" only).
   Nothing is live until the owner does the setup.
 
+## Copy text for the account provider's group — acl-132
+
+Owner's decision (2026-09-30): when the account map shows a problem status (disabled,
+restricted, blocked, under review), a "Copy text" button copies one line for the
+provider's WhatsApp group — the account's short name and its status, e.g.
+`FacebookDoc20 - Account Disabled` — with the hint "Copy screenshot and account number to
+send in the group". The screenshot itself is copied by ACL-1430's button. Nothing is
+sent by ACL. Healthy and unread statuses show neither.
+
+- Review fixes (2026-10-02): a problem status without a screenshot now shows "Copy
+  screenshot" disabled, with the tooltip "No screenshot on the last read — read the
+  account again", so the hint never points at a missing button (the map template and
+  the live Read path alike). After a live Read the status cell keeps "Copy text" and
+  the hint. A second click within 1.5 s no longer leaves the button stuck on "Copied".
+  Tests check that copying makes no request and stores nothing — only the clipboard.
+  After a Read the status cell is rebuilt as one markup string, the same markup as the
+  map template (fixes a CI regression in the spend-poll test).
 ## Every campaign sends a run summary to Sentry, labelled with the manager — ACL-1447
 
 2026-10-01. Until now only blocking failures reached Sentry; how a run went on a
