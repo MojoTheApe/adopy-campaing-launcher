@@ -25,6 +25,12 @@ account has no campaigns".
   details". The last good rows are shown under "last good read · … · read <date> ·
   Meta numbers for …", without turn-off buttons, because their switches may have
   changed. "0 campaigns · 0 ads" appears only when the list was read and was empty.
+- Review of PR #505:
+  - Read again follows the row's Read spend button whenever its state changes:
+    after Read all (`amapReadAllControls`) and after each reading
+    (`amapRereadSync`). Before, it stayed grey after Read all until a reload.
+  - Bare Meta tokens (`EAA…`) are scrubbed from the technical text too.
+  - A not-read attempt for other dates says "not the dates on screen".
 
 ## One Connect button opens the found profile and connects it — ACL-1457
 

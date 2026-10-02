@@ -7178,6 +7178,9 @@ function amapApplyReading(account, s, split) {
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read spend'; btn.title = 'Read spend again';
     amapPaintTree(row, s);
   });
+  /* ACL-1504: Read spend мог погаснуть или включиться (идёт чтение, отказ) —
+     Read again в дереве следует за ним, перерисовано дерево или нет. */
+  amapRereadSync();
   amapUpdateCountrySummaries();
 }
 
@@ -7624,6 +7627,20 @@ function amapEnsureCaret(row, onToggle) {
    рисует, как и проблемы кампании (ACL-1437). Read again — та же кнопка Read
    spend этой строки, другого пути чтения нет. Сырой текст ошибки — свёрнут
    и уже без act= и адресов (`scrub_tree_error`). */
+/* ACL-1504 (ревью M1): Read again повторяет состояние Read spend своей
+   строки. Скопировать его один раз при рисовании мало: Read all гасит
+   `.amap-read` и потом включает обратно (`amapReadAllControls`), а дерево
+   при этом не перерисовывается — Read again оставался серым до перезагрузки.
+   Поэтому сверяем заново всякий раз, когда меняется состояние Read spend. */
+function amapRereadSync() {
+  document.querySelectorAll('.amap-tree-reread').forEach(function (again) {
+    var tree = again.closest('tr.amap-tree');
+    var row = tree && tree.previousElementSibling;
+    var read = row && row.querySelector('.amap-read');
+    again.disabled = !read || read.disabled;
+  });
+}
+
 function amapTreeNotRead(row, s, problem) {
   var box = document.createElement('div');
   box.className = 'amap-tree-notread';
@@ -7717,6 +7734,15 @@ function amapPaintTree(row, s) {
   if (problem) {
     head.textContent = 'in the account · campaigns not read · tried ' + (s.finished_at || '');
     head.classList.add('amap-tree-notread-head');
+    /* ACL-1504 (ревью L2): попытка за другие даты (запасное чтение ACL-1271)
+       говорит об этом и здесь — иначе её примут за попытку за даты на экране. */
+    if (onScreen && onScreen.from && s.date_from
+        && (s.date_from !== onScreen.from || (s.date_to || s.date_from) !== onScreen.to)) {
+      head.textContent += ' · for ' + s.date_from
+        + (s.date_to && s.date_to !== s.date_from ? '…' + s.date_to : '')
+        + ', not the dates on screen';
+      head.classList.add('old');
+    }
     box.appendChild(head);
     box.appendChild(amapTreeNotRead(row, s, problem));
     if (prev.length) {
@@ -8236,6 +8262,7 @@ function amapReadAllControls(busy) {
     var cell = amapSpendCell(b);
     b.disabled = busy || !b.getAttribute('onclick') || !!(cell && cell.dataset.running === '1');
   });
+  amapRereadSync();  // ACL-1504: Read again — следом за Read spend
 }
 
 async function amapReadAll(btn) {

@@ -232,14 +232,18 @@ class SpendReading:
 
 _URL_RE = re.compile(r"""\b(?:https?|wss?)://[^\s"'<>)\]]+""", re.I)
 _ACT_ID_RE = re.compile(r"\bact_\d+")
+#: Токен Meta сам по себе, без `access_token=` и вне адреса (ревью L1):
+#: `run_telemetry.scrub` ловит его только по имени ключа.
+_META_TOKEN_RE = re.compile(r"\bEAA[A-Za-z0-9]{20,}")
 
 
 def scrub_tree_error(text: str) -> str:
-    """Текст ошибки дерева без `act=`/`act_` id и без адресов."""
+    """Текст ошибки дерева без `act=`/`act_` id, адресов и токенов Meta."""
     from src.fb_ads_rpa import run_telemetry
 
     out = _URL_RE.sub("<url>", str(text or ""))
     out = _ACT_ID_RE.sub("act_<hidden>", out)
+    out = _META_TOKEN_RE.sub("<token>", out)
     return run_telemetry.scrub(out)
 
 

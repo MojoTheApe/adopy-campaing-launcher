@@ -217,3 +217,61 @@ def test_a_read_empty_list_says_zero_campaigns(page):
     text = page.evaluate("() => document.querySelector('.amap-tree-head').textContent")
     assert "0 campaigns · 0 ads" in text
     assert page.evaluate("() => !document.querySelector('.amap-tree-notread')")
+
+
+# ── ревью PR #505 ──────────────────────────────────────────────────────────
+
+def _template_fn(head: str) -> str:
+    src = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    start = src.index(head)
+    return src[start: src.index("\n}\n", start) + 2]
+
+
+def test_read_again_comes_back_after_read_all(page):
+    """M1: во время Read all Read spend погашен, и дерево рисуется с серым
+    Read again. Когда очередь кончилась, Read spend включается — Read again
+    обязан включиться вместе с ним, без перезагрузки."""
+    page.add_script_tag(content="var amapReadAllBusy = false;\n"
+                        + _template_fn("function amapSpendCell(btn) {") + "\n"
+                        + _template_fn("function amapReadAllControls(busy) {"))
+    page.evaluate("""() => {
+      window.__reads = 0;
+      const b = document.createElement('button');
+      b.className = 'amap-btn amap-read'; b.disabled = true;
+      b.setAttribute('onclick', 'window.__reads++');
+      document.querySelector('#acc td').appendChild(b);
+    }""")
+    _paint(page, _failed())
+    assert page.evaluate("() => document.querySelector('.amap-tree-reread').disabled") is True
+    page.evaluate("() => amapReadAllControls(false)")
+    got = page.evaluate("""() => ({
+      read: document.querySelector('#acc .amap-read').disabled,
+      again: document.querySelector('.amap-tree-reread').disabled,
+    })""")
+    assert got == {"read": False, "again": False}
+    page.evaluate("() => document.querySelector('.amap-tree-reread').click()")
+    assert page.evaluate("() => window.__reads") == 1
+    # И обратно: новый Read all гасит обе.
+    page.evaluate("() => amapReadAllControls(true)")
+    assert page.evaluate("() => document.querySelector('.amap-tree-reread').disabled") is True
+
+
+def test_a_bare_meta_token_is_scrubbed():
+    """L1: токен вне адреса и без `access_token=` тоже не уходит на экран."""
+    token = "EAA" + "Bx7" * 12  # собран на ходу — см. FAKE_ID
+    shown = sp.scrub_tree_error(f"campaign: request failed with {token} in a header")
+    assert token not in shown and "EAA" not in shown
+    assert "request failed" in shown
+
+
+def test_a_try_for_other_dates_says_so(page):
+    """L2: запасное чтение за другие даты (ACL-1271) и в «not read» говорит,
+    что даты не те, что на экране."""
+    _with_read_button(page)
+    _paint(page, _failed())  # чтение за 2026-09-29, на экране 1–12 сентября
+    head = page.evaluate("() => document.querySelector('.amap-tree-notread-head').textContent")
+    assert "campaigns not read" in head and "not the dates on screen" in head
+    page.evaluate("() => { window._amapPick = {from: '2026-09-29', to: '2026-09-29', span: ''}; }")
+    _paint(page, _failed())
+    head = page.evaluate("() => document.querySelector('.amap-tree-notread-head').textContent")
+    assert "not the dates on screen" not in head
