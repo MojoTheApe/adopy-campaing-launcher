@@ -2123,7 +2123,31 @@ async def api_creatives() -> JSONResponse:
             # они не отличались никак.
             "size_bytes": size,
         })
+    _add_story_labels(files)
     return JSONResponse({"files": files})
+
+
+def _add_story_labels(files: list[dict]) -> None:
+    """ACL-1426: what goes on the Vertical (story) card of each file.
+
+    Same rules as the robot (`creative_pairing.plan`): the pair is looked up by
+    creative number among the files of the same folder. The Builder shows
+    `story_label` next to the ad ("Story: 2403_story.mp4" / "Story: same file,
+    Original").
+    """
+    from src.fb_ads_rpa import creative_pairing
+
+    by_folder: dict[str, list[str]] = {}
+    for f in files:
+        by_folder.setdefault(f.get("folder") or "", []).append(f["filename"])
+    for f in files:
+        try:
+            plan = creative_pairing.plan(f["filename"], by_folder.get(f.get("folder") or "", []))
+            f["story_label"] = plan.builder_label()
+            if plan.square_file != f["filename"]:
+                f["square_file"] = plan.square_file
+        except Exception:
+            f["story_label"] = ""
 
 
 def _ad_copy_rows() -> list[dict]:
@@ -2918,6 +2942,41 @@ async def account_spend_read(request: Request) -> JSONResponse:
     # Нужно ли после этого спрашивать кабинет про страны, отвечает опрос
     # состояния: там видно дочитанную сумму (ACL-1288).
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
+
+
+@app.get("/account-spend/status-shot/{shot_id}")
+async def account_spend_status_shot(shot_id: str) -> Response:
+    """Снимок проблемного состояния кабинета (ACL-1430) — только по его id.
+
+    Путь с экрана не принимается: `status_shot_path` знает одну папку
+    снимков и строгий вид имени, всё прочее — 404.
+    """
+    from src.analysis_agent import account_spend
+
+    path = account_spend.status_shot_path(shot_id)
+    if path is None:
+        return JSONResponse({"error": "Screenshot not found"}, status_code=404)
+    return FileResponse(str(path), media_type="image/png")
+
+
+@app.get("/account-spend/status-shot/{shot_id}/view")
+async def account_spend_status_shot_view(shot_id: str) -> Response:
+    """Запасной путь кнопки Copy screenshot: браузер не дал положить картинку
+    в буфер — открываем её во вкладке с подсказкой, как скопировать руками."""
+    from html import escape
+
+    from src.analysis_agent import account_spend
+
+    if account_spend.status_shot_path(shot_id) is None:
+        return JSONResponse({"error": "Screenshot not found"}, status_code=404)
+    src = escape(f"/account-spend/status-shot/{shot_id}")
+    return HTMLResponse(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Account status screenshot</title>"
+        "<style>body{font:14px system-ui,sans-serif;margin:16px;background:#fff;color:#222}"
+        "img{max-width:100%;border:1px solid #ccc}</style></head><body>"
+        "<p>Right-click → Copy image</p>"
+        f"<img src=\"{src}\" alt=\"Account status screenshot\"></body></html>"
+    )
 
 
 @app.post("/account-spend/read-countries")
