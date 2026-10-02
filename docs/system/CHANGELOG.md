@@ -10,6 +10,9 @@ automation; a window opened by hand is still never restarted), reads the number,
 connects. If opening fails, connecting continues and the prompt says to close a
 hand-opened window and press Connect again, or to type the number, or to leave it for
 later. The "open profile" button on already connected accounts is unchanged.
+The button stays disabled until the whole open-and-connect finishes, so a second
+click while the profile is still being read does not start a second open
+(review fix, `tests/test_one_connect_button.py`).
 
 ## Builder: visible Duplicate on ads and campaigns, no repeated buttons — ACL-1459
 

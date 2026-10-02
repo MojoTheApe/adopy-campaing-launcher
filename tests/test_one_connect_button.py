@@ -28,7 +28,7 @@ def browser():
         b.close()
 
 
-def _run(browser, *, open_ok: bool, prompts: list[str]):
+def _page_html(prompts: list[str]) -> str:
     page_src = REPORT.read_text(encoding="utf-8")
     script = page_src[page_src.index("var _mlxCache ="):page_src.index("function amapAddThisCountry")]
     html = """<!doctype html><html><body>
@@ -45,6 +45,11 @@ var PROMPTS = %s;
 window.prompt = function () { return PROMPTS.length ? PROMPTS.shift() : null; };
 %s
 </script></body></html>""" % (json.dumps(prompts), script)
+    return html
+
+
+def _run(browser, *, open_ok: bool, prompts: list[str]):
+    html = _page_html(prompts)
     calls: list[str] = []
     ctx = browser.new_context()
     page = ctx.new_page()
@@ -109,3 +114,59 @@ def test_the_fallback_prompt_no_longer_points_to_an_open_button():
     page = REPORT.read_text(encoding="utf-8")
     assert "Press Open next to the profile" not in page
     assert "press Connect again" in page
+
+
+def test_a_second_click_while_it_works_does_not_open_twice(browser):
+    """Ревью ACL-1457: кнопка включалась сразу после /mlx-profile-open, пока
+    ещё ждали /mlx-profile-details, и второе нажатие начинало второе открытие."""
+    html = _page_html(["FacebookTest1", "act_111"])
+    calls: list[str] = []
+    held: list = []
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+
+    def route(r):
+        path = urlsplit(r.request.url).path
+        if path == "/":
+            r.fulfill(body=html, content_type="text/html"); return
+        calls.append(path)
+        if path == "/mlx-profile-details":
+            held.append(r); return          # держим ответ — кнопка «в работе»
+        body = {"/mlx-profile-open": {"ok": True, "message": "opened"},
+                "/account-probe/ad-account": {"ok": True, "act": "act_111"},
+                "/account-map-patch": {"ok": True}}.get(path)
+        if body is None:
+            r.abort(); return
+        r.fulfill(body=json.dumps(body), content_type="application/json")
+
+    ctx.route("**/*", route)
+    page.goto("http://acl.test/")
+    page.evaluate("""() => {
+      const box = document.querySelector('.amap-add');
+      amapRenderHits(box, box.querySelector('.amap-hits'),
+                     [{name: 'Test 1', profile_id: 'p1', folder_id: 'f1', _details: {ad_account_id: ''}}], 'A');
+    }""")
+    btn = page.locator(".amap-hit button", has_text="Connect")
+    btn.click()
+    for _ in range(100):
+        if held:
+            break
+        page.wait_for_timeout(50)
+    assert held, "/mlx-profile-details не запрошен"
+    assert page.evaluate("document.querySelector('.amap-hit button').disabled"),         "кнопка включена, пока ещё ждём ответа профиля"
+    # Второе нажатие: и обычный клик, и прямой вызов обработчика (обходит disabled).
+    page.evaluate("""() => { const b = document.querySelector('.amap-hit button');
+                             b.click(); b.onclick(); }""")
+    page.wait_for_timeout(300)
+    assert calls.count("/mlx-profile-open") == 1, f"второе открытие: {calls}"
+    held[0].fulfill(body=json.dumps({"ok": True, "folder_id": "f1", "ad_account_id": "",
+                                     "suggested_name": "FacebookTest1"}),
+                    content_type="application/json")
+    page.wait_for_function("SENT.length > 0", timeout=5000)
+    assert calls.count("/mlx-profile-open") == 1
+    assert calls.count("/account-map-patch") == 1
+    assert not page.evaluate("document.querySelector('.amap-hit button').disabled"),         "после подключения кнопка осталась выключенной"
+    assert not errors
+    ctx.close()

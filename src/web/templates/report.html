@@ -8671,7 +8671,9 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
     var r = await fetch('/mlx-profile-open', { method: 'POST', body: body, credentials: 'same-origin' });
     d = await r.json();
   } catch (e) { d = { ok: false, message: String(e && e.message || e) }; }
-  btn.disabled = false;
+  /* Кнопку не включать здесь: впереди ещё /mlx-profile-details и подключение,
+     и второе нажатие в этом окне начало бы второе открытие (ревью ACL-1457).
+     Включает её только amapOpenAndConnect, когда всё закончилось. */
   if ((box.querySelector('.amap-inst').value || 'A') !== inst) return false;
   msg.textContent = (d && (d.message || d.error)) || '';
   msg.className = 'amap-msg' + (d && d.ok ? '' : ' bad');
@@ -8694,7 +8696,6 @@ async function amapOpenAndConnect(box, p, inst, btn, row) {
   btn.disabled = true;
   try {
     var opened = await amapOpenFoundProfile(box, p, inst, btn, row);
-    btn.disabled = true;
     if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
     await amapConnect(box, p, inst, btn, opened);
   } finally {
