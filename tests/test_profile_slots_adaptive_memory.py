@@ -293,7 +293,7 @@ def test_each_hold_decision_goes_to_telemetry(monkeypatch):
     pj._record_slot_decision(rt, "CAMP_A", "Doc19", {
         "allow": False, "reason": "memory_low", "available_mb": 2150, "profile_mb": 3480,
         "measured_mb": 3480, "profile_mb_source": "measured", "per_profile_mb": [3480],
-        "leak": {"3f2a1b4c-0000-4000-8000-000000000001": 3480}})
+        "leak": {"550e8400-e29b-41d4-a716-446655440000": 3480}})
     step, ok, kw = rows[0]
     assert step == "job_phase" and ok is True and kw["note"] == "slot_decision"
     assert kw["campaign"] == "CAMP_A" and kw["diag"]["account"] == "Doc19"
@@ -364,8 +364,8 @@ def test_no_profile_id_reaches_the_queue_decision_or_telemetry(monkeypatch):
     from src.fb_ads_rpa import run_telemetry as rt
     from src.web import publish_jobs as pj
 
-    p1 = "3f2a1b4c-0000-4000-8000-000000000001"
-    p2 = "3f2a1b4c-0000-4000-8000-000000000002"
+    p1 = "550e8400-e29b-41d4-a716-446655440000"
+    p2 = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     m = Machine(available_gb=2.0, usage={p1: int(3.0 * GB)})
     slots = m.slots()
     a = Job(slots, "a", p1)
