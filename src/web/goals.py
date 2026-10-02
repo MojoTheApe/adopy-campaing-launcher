@@ -147,6 +147,11 @@ def for_cm(cm: str, countries=None) -> list[dict]:
     return [dict(g) for g in stored if isinstance(g, dict)]
 
 
+def has_stored(cm: str) -> bool:
+    """Задал ли человек свои цели (тогда стартовый список не нужен)."""
+    return _read().get((cm or "").strip()) is not None
+
+
 def save(cm: str, goals: list[dict]) -> list[dict]:
     cm = (cm or "").strip()
     if not cm:

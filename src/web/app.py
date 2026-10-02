@@ -232,28 +232,43 @@ def _get_upload_ref_cached() -> dict:
         return {}
 
 
-def _my_goal_countries(report: dict | None) -> list[str]:
+def _my_goal_countries(report: dict | None, cm: str | None = None) -> list[str]:
     """Страны человека — стартовый список его целей, пока своих он не задал.
 
     Где у него есть хоть что-то в книге (спенд, лиды, депозиты), плюс страны,
     к которым он сам привязал аккаунты на карте этой машины. Чужие страны
     сюда не попадают: 30.09 у Дана стояли цели владельца (ACL-1452).
-    """
-    out: list[str] = []
-    for country in (report or {}).get("countries", []):
-        totals = country.get("my_totals") or {}
-        if any(float(totals.get(k) or 0) for k in ("spend", "leads", "deposits")):
-            out.append((country.get("country") or "").strip())
-    try:
-        from src.web import account_links
 
-        out += [v for v in account_links.all_values("country") if account_links.accounts_for("country", v)]
-    except Exception:  # карта связей не должна ронять цели
-        pass
+    `report` должен быть полным (за всю книгу), а не отчётом за период:
+    панель и сохранение берут страны из одного источника, иначе первая
+    правка сохранит не те страны, что человек видел. Отчёт берётся только
+    если он про того же `cm`; карта связей этой машины — только для её
+    хозяина (MY_CM_NAME): тимлид, правящий чужие цели, не дарит их своих
+    стран.
+    """
+    report = report or {}
+    from src.web.buyer import default_cm
+
+    report_cm = (report.get("my_cm") or default_cm() or "").strip()
+    who = (report_cm if cm is None else cm).strip()
+    out: list[str] = []
+    if who.casefold() == report_cm.casefold():
+        for country in report.get("countries", []):
+            totals = country.get("my_totals") or {}
+            if any(float(totals.get(k) or 0) for k in ("spend", "leads", "deposits")):
+                out.append((country.get("country") or "").strip())
+    owner = default_cm()
+    if who and owner and who.casefold() == owner.casefold():
+        try:
+            from src.web import account_links
+
+            out += [v for v in account_links.all_values("country") if account_links.accounts_for("country", v)]
+        except Exception:  # карта связей не должна ронять цели
+            pass
     return [c for c in out if c]
 
 
-def _build_goals_view(report: dict) -> dict:
+def _build_goals_view(report: dict, seed_countries: list[str] | None = None) -> dict:
     """Each country's target next to what actually happened, ready to render.
 
     Progress is computed here rather than in the page so the compact strip and
@@ -272,7 +287,11 @@ def _build_goals_view(report: dict) -> dict:
                 actual[key] = totals
 
     rows = []
-    for goal in goals_store.for_cm(cm, _my_goal_countries(report)):
+    # Стартовые страны — из полного отчёта (seed_countries), а не из отчёта
+    # за период: так их видит и сохраняет POST /goals (ACL-1452, ревью #453).
+    if seed_countries is None:
+        seed_countries = _my_goal_countries(report, cm)
+    for goal in goals_store.for_cm(cm, seed_countries):
         name = (goal.get("country") or "").strip()
         got = actual.get(name.casefold()) or actual.get((goal.get("code") or "").casefold()) or {}
         target = int(goal.get("ftd") or 0)
@@ -1523,6 +1542,9 @@ def _render_report(
     # менял только карту, и две секции рядом отвечали на разные вопросы,
     # выглядя одинаково достоверно.
     date_from, date_to = resolve_period(_df, date_from.strip(), date_to.strip(), span.strip())
+    # Стартовые цели не зависят от выбранных дней — те же страны, что
+    # сохранит первая правка (_goal_countries_now).
+    goal_seed = _my_goal_countries(report)
     try:
         report = report_for_period(report, _df, date_from, date_to)
     except PeriodReportError as exc:
@@ -1588,7 +1610,7 @@ def _render_report(
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
-            "goals": _build_goals_view(report),
+            "goals": _build_goals_view(report, goal_seed),
         },
     )
 
@@ -3426,24 +3448,37 @@ async def account_map_available_fragment(
     )
 
 
-def _goal_countries_now() -> list[str]:
-    """Те же страны, что видит панель, — для чтения и правки целей по запросу."""
+def _goal_countries_now(who: str) -> list[str]:
+    """Те же страны, что видит панель, — для чтения и правки целей по запросу.
+
+    Только когда у человека ещё нет своих целей: иначе стартовый список не
+    нужен и отчёт не трогаем. Отчёт полный (не за период) и про того, чьи
+    цели правят. Синхронная — вызывать через run_in_threadpool: промах кэша
+    пересобирает книгу.
+    """
+    from src.web import goals as goals_store
+
+    if goals_store.has_stored(who):
+        return []
     try:
-        report, _df, _w = get_cached_report()
+        report, _df, _w = get_cached_report(my_cm=who) if who else get_cached_report()
     except Exception:
         report = None
-    return _my_goal_countries(report)
+    return _my_goal_countries(report, who)
 
 
 @app.get("/goals")
 async def goals_read(cm: str = "") -> JSONResponse:
     from src.web import goals as goals_store
 
+    from starlette.concurrency import run_in_threadpool
+
     who = (cm or "").strip() or (os.environ.get("MY_CM_NAME") or "").strip()
+    seed = await run_in_threadpool(_goal_countries_now, who)
     return JSONResponse({
         "ok": True,
         "cm": who,
-        "goals": goals_store.for_cm(who, _goal_countries_now()),
+        "goals": goals_store.for_cm(who, seed),
         "team_lead": goals_store.is_team_lead(),
     })
 
@@ -3475,14 +3510,17 @@ async def goals_write(request: Request) -> JSONResponse:
         )
 
     action = (data.get("action") or "save").strip().lower()
+    from starlette.concurrency import run_in_threadpool
+
+    seed = await run_in_threadpool(_goal_countries_now, who)
     try:
         if action == "delete":
             country = (data.get("country") or "").strip()
             if not country:
                 return JSONResponse({"ok": False, "error": "Which country?"}, status_code=400)
-            return JSONResponse({"ok": True, "goals": goals_store.delete(who, country, _goal_countries_now())})
+            return JSONResponse({"ok": True, "goals": goals_store.delete(who, country, seed)})
         goal = data.get("goal") or {}
-        return JSONResponse({"ok": True, "goals": goals_store.upsert(who, goal, _goal_countries_now())})
+        return JSONResponse({"ok": True, "goals": goals_store.upsert(who, goal, seed)})
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:  # pragma: no cover - defensive

@@ -115,6 +115,7 @@ def test_the_panel_title_names_whose_goals_they_are():
 
 def test_the_persons_countries_come_from_their_numbers_and_their_map(monkeypatch):
     from src.web import account_links, app as web
+    monkeypatch.setenv("MY_CM_NAME", "Dan")
     monkeypatch.setattr(account_links, "all_values", lambda kind: ["Peru", "Empty"])
     monkeypatch.setattr(account_links, "accounts_for", lambda kind, v: ["Acc"] if v == "Peru" else [])
     report = {"countries": [
@@ -123,3 +124,93 @@ def test_the_persons_countries_come_from_their_numbers_and_their_map(monkeypatch
         {"country": "Mexico", "my_totals": {"leads": 3}},
     ]}
     assert web._my_goal_countries(report) == ["Chile", "Mexico", "Peru"]
+
+
+def _js_title(cm):
+    """Отрисовать строку заголовка из настоящего шаблона и выполнить её в node."""
+    import json
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    from src.web import app as web
+
+    page = (Path(__file__).resolve().parent.parent / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    start = page.index("  var GOALS_WHO = ")
+    end = page.index("\n", page.index("goals-title", start))
+    snippet = page[start:end]
+    js = web.templates.env.from_string(snippet).render(gv={"cm": cm})
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("нет node — выполнить заголовок нечем")
+    out = subprocess.run([node, "-e", "var h='';" + js + ";process.stdout.write(JSON.stringify(h))"],
+                         capture_output=True, text=True, encoding="utf-8", timeout=30, check=True).stdout
+    return json.loads(out)
+
+
+def test_the_rendered_title_names_the_manager_or_nobody():
+    """Отрисованный заголовок, а не только исходник шаблона (ревью #453, п.4)."""
+    assert ">Dan — Goals Progress" in _js_title("Dan")
+    assert ">Goals Progress · FTDs" in _js_title(""), "без имени — без тире и без чужого имени"
+    tricky = _js_title('O"Neil</script><b>')
+    assert 'O"Neil' not in tricky and "<b>" not in tricky, "имя вставлено без экранирования"
+
+
+def _post_goals(web, body):
+    """POST /goals без TestClient: обработчик вызывается с готовым телом."""
+    import asyncio
+
+    class _Req:
+        async def json(self):
+            return body
+
+    return asyncio.run(web.goals_write(_Req()))
+
+
+def test_the_panel_and_the_save_seed_from_the_same_countries(monkeypatch, tmp_path):
+    """Панель за период и POST /goals берут одни и те же страны (ревью #453, п.1)."""
+    from src.web import account_links, app as web
+
+    monkeypatch.setenv("MY_CM_NAME", "Dan")
+    monkeypatch.setattr(account_links, "all_values", lambda kind: [])
+    full = {"my_cm": "Dan", "countries": [
+        {"country": "Chile", "my_totals": {"spend": 5.0}},
+        {"country": "Mexico", "my_totals": {"spend": 5.0}},
+        {"country": "Peru", "my_totals": {"leads": 2}},       # только в старых днях книги
+    ]}
+    period = {"my_cm": "Dan", "countries": [
+        {"country": "Chile", "my_totals": {"spend": 1.0}},
+        {"country": "Mexico", "my_totals": {}},              # в этот день ничего
+        {"country": "Peru", "my_totals": {}},
+    ]}
+    calls = []
+    monkeypatch.setattr(web, "get_cached_report", lambda **kw: (calls.append(kw) or full, None, []))
+
+    seed = web._my_goal_countries(full)
+    view = web._build_goals_view(period, seed)
+    shown = sorted(r["country"] for r in view["rows"])
+    assert shown == ["Chile", "Mexico", "Peru"], "панель за период сузила стартовые страны"
+
+    r = _post_goals(web, {"cm": "Dan", "goal": {"country": "Chile", "ftd": 25}})
+    assert r.status_code == 200, r.body
+    saved = {g["country"]: g["ftd"] for g in goals.for_cm("Dan")}
+    assert saved == {"Chile": 25, "Mexico": 10, "Peru": 10}, "сохранено не то, что было на экране"
+    assert calls == [{"my_cm": "Dan"}]
+
+    # цели уже свои — отчёт для стартового списка больше не собирается
+    _post_goals(web, {"cm": "Dan", "goal": {"country": "Peru", "ftd": 3}})
+    assert len(calls) == 1, "сохранение пересобирает книгу, хотя стартовый список не нужен"
+
+
+def test_a_lead_editing_someone_else_does_not_give_them_this_machines_map(monkeypatch):
+    """Карта связей этой машины — страны её хозяина, не того, чьи цели правят (п.3)."""
+    from src.web import account_links, app as web
+
+    monkeypatch.setenv("MY_CM_NAME", "Lead")
+    monkeypatch.setattr(account_links, "all_values", lambda kind: ["Kuwait"])
+    monkeypatch.setattr(account_links, "accounts_for", lambda kind, v: ["Acc"])
+    lead_report = {"my_cm": "Lead", "countries": [{"country": "Chile", "my_totals": {"spend": 1.0}}]}
+    assert web._my_goal_countries(lead_report, "Dan") == [], "страны тимлида ушли в цели Дана"
+    dan_report = {"my_cm": "Dan", "countries": [{"country": "Peru", "my_totals": {"spend": 1.0}}]}
+    assert web._my_goal_countries(dan_report, "Dan") == ["Peru"]
+    assert web._my_goal_countries(lead_report) == ["Chile", "Kuwait"]

@@ -15,6 +15,11 @@ numbers as a start.
 - The starting goals are shown, not written; the first edit saves them together with
   the change, so editing one country does not drop the others. Saved goals are
   untouched (the owner's own seven countries are saved on his machine).
+- The starting countries do not depend on the date picker: the panel and the first
+  save both take them from the whole workbook, so what is saved is what was shown.
+  Saving reads the workbook only while the person has no saved goals, and off the
+  request loop. When a team lead edits another manager's goals, that manager's own
+  numbers are used, and this machine's account map is not added to them.
 
 ## Builder: visible Duplicate on ads and campaigns, no repeated buttons — ACL-1459
 
