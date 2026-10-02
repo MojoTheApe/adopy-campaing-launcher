@@ -151,6 +151,9 @@
               {%- elif st.status == 'unknown' -%}<span class="amap-st dim" title="The page gave nothing to read at {{ st.at }}.{{ stale_note }}">unreadable</span>
               {%- else -%}<span class="amap-st bad" title="{{ st.status_text or st.status }} — read {{ st.at }}.{{ stale_note }}">{{ st.status }}</span>
               {%- endif -%}
+              {#- Доказательство для поддержки (ACL-1430): снимок страницы, на
+                  которой прочитали проблему. Нет снимка — нет кнопки. -#}
+              {%- if st.shot_id and st.status != 'clear' %} <button type="button" class="amap-shot" data-shot="{{ st.shot_id }}" title="Screenshot taken {{ st.shot_at }}. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>{% endif -%}
               {%- if st.at_short %}<small class="amap-st-at{{ ' stale' if st.stale }}">{{ st.at_short }}{% if st.stale %} · not refreshed{% endif %}</small>{% endif -%}
               {%- endif -%}
             </td>

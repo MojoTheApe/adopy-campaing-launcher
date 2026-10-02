@@ -195,6 +195,10 @@ class SpendReading:
     shot: str = ""                # скриншот при неудаче
     status: str = ""              # см. _read_status: clear | disabled | restricted | review | unknown
     status_text: str = ""         # словами страницы — человеку с этим идти и разбираться
+    #: Снимок страницы с проблемным состоянием (ACL-1430) — id для
+    #: `/account-spend/status-shot/<id>`, не путь: путь наружу не отдаётся.
+    status_shot: str = ""
+    status_shot_at: str = ""
 
     #: Дерево аккаунта: кампании и объявления с их id и положением тумблера.
     #: Читается тем же нажатием, что и спенд (решение владельца 11.09) — см.
@@ -329,6 +333,8 @@ def _put(reading: SpendReading) -> None:
                 "status": reading.status,
                 "status_text": reading.status_text,
                 "at": reading.finished_at or _now(),
+                "shot_id": reading.status_shot,
+                "shot_at": reading.status_shot_at,
             }
         _save_all(data)
         _UNSAVED.pop(key, None)
@@ -359,7 +365,14 @@ def get_status(account: str) -> dict[str, str]:
         "stale": "",
         "tried_at": "",
         "tried_error": "",
+        "shot_id": "",
+        "shot_at": "",
     }
+    # Кнопка «Copy screenshot» — только у снимка, который ещё лежит на диске.
+    shot_id = str(raw.get("shot_id") or "")
+    if shot_id and out["status"] != "clear" and status_shot_path(shot_id) is not None:
+        out["shot_id"] = shot_id
+        out["shot_at"] = str(raw.get("shot_at") or "")
     last_at, last = "", None
     for key, rec in data.items():
         if key.startswith(_STATUS_PREFIX) or not isinstance(rec, dict):
@@ -938,6 +951,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
             # Статус спрашиваем и здесь: у отключённого кабинета таблицы может
             # не быть вовсе, а знать о нём надо именно тогда.
             out.status, out.status_text = _read_status(page)
+            _shoot_status(page, out)
             out.error = "Ads Manager did not finish loading in time"
             # было `day` — переменной, которой здесь нет. Ошибка жила только на
             # пути отказа, то есть ровно там, где снимок и нужен: вместо
@@ -948,6 +962,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         # Один заход — оба ответа. Отдельный визит ради состояния кабинета
         # ничем не оправдан: каждое касание живого аккаунта чего-то стоит.
         out.status, out.status_text = _read_status(page)
+        _shoot_status(page, out)
 
         shown = _shown_period(page)
         if not _period_matches(shown, date_from, date_to):
@@ -967,7 +982,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
             return out
 
         if _act_from_url(page, tries=1) != expected_act or not _period_matches(_shown_period(page), date_from, date_to):
-            out.status = out.status_text = ""
+            out.status = out.status_text = out.status_shot = out.status_shot_at = ""
             out.error = "Account or period changed during reading; result refused."
             return out
         out.spend = spend
@@ -1539,10 +1554,18 @@ def _currency(page) -> str:
     return getattr(page, "_acl_spend_currency", "")
 
 
+def _shots_dir() -> Path:
+    return Path(paths.get_local_config_dir()) / "spend_shots"
+
+
+def _safe_name(account: str) -> str:
+    return "".join(c if c.isascii() and (c.isalnum() or c in "-_") else "_" for c in account)
+
+
 def _shoot(page, account: str, day: str) -> str:
     """Снимок при неудаче: первый живой прогон стоит тестового аккаунта."""
     try:
-        out = Path(paths.get_local_config_dir()) / "spend_shots"
+        out = _shots_dir()
         out.mkdir(parents=True, exist_ok=True)
         safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in account)
         target = out / f"{safe}_{day}.png"
@@ -1550,6 +1573,89 @@ def _shoot(page, account: str, day: str) -> str:
         return str(target)
     except Exception:
         return ""
+
+
+# ── Снимок проблемного состояния (ACL-1430) ──────────────────────────────
+#
+# Отключённый или ограниченный кабинет человеку надо доказать — поддержке,
+# поставщику аккаунта, коллеге. Снимаем видимую часть той самой страницы
+# Ads Manager, с которой только что прочитали состояние: баннер и колонка
+# Delivery там. Страница — вкладка профиля Multilogin, в которую чтение уже
+# вошло (`_attach_only`); другой страницы у чтения нет, и снимка вне
+# Multilogin здесь не бывает (решение владельца 26.09).
+#
+# Наружу уходит id, а не путь: `/account-spend/status-shot/<id>` отдаёт файл
+# только из этой папки и только по строгому имени.
+
+#: Сколько снимков держать на аккаунт. Нужен последний; пара предыдущих —
+#: чтобы сравнить, а не копить диск при каждом Read all.
+STATUS_SHOTS_KEEP = 5
+_STATUS_SHOT_PREFIX = "status_"
+_STATUS_SHOT_ID = re.compile(r"status_[A-Za-z0-9_-]{1,160}")
+_SHOT_STAMP = re.compile(r"\d{8}-\d{6}(?:-\d{1,3})?")
+
+
+def _shot_stamp() -> str:
+    from datetime import datetime
+
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def status_shot_path(shot_id: str) -> Path | None:
+    """Файл снимка по id — или None. Ничего за пределами папки снимков."""
+    if not isinstance(shot_id, str) or not _STATUS_SHOT_ID.fullmatch(shot_id):
+        return None
+    try:
+        folder = _shots_dir().resolve()
+        target = (folder / f"{shot_id}.png").resolve()
+    except (OSError, ValueError):
+        return None
+    if target.parent != folder or not target.is_file():
+        return None
+    return target
+
+
+def _prune_status_shots(folder: Path, safe: str) -> None:
+    """Оставить последние `STATUS_SHOTS_KEEP` снимков этого аккаунта.
+
+    Имя чужого аккаунта может начинаться так же («Doc2» и «Doc20»), поэтому
+    свой файл узнаём по точному хвосту-времени, а не по началу имени.
+    """
+    head = f"{_STATUS_SHOT_PREFIX}{safe}__"
+    mine = sorted(
+        p for p in folder.glob(f"{_STATUS_SHOT_PREFIX}*.png")
+        if p.stem.startswith(head) and _SHOT_STAMP.fullmatch(p.stem[len(head):])
+    )
+    for old in mine[:-STATUS_SHOTS_KEEP]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+
+
+def _status_shot(page, account: str) -> tuple[str, str]:
+    """Снять видимую часть страницы. (id, время) или ("", "") при неудаче."""
+    try:
+        folder = _shots_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        safe = _safe_name(account)[:120] or "account"
+        stem = f"{_STATUS_SHOT_PREFIX}{safe}__{_shot_stamp()}"
+        shot_id, n = stem, 1
+        while (folder / f"{shot_id}.png").exists() and n < 1000:
+            shot_id, n = f"{stem}-{n}", n + 1
+        page.screenshot(path=str(folder / f"{shot_id}.png"), full_page=False)
+        at = _now()
+        _prune_status_shots(folder, safe)
+        return shot_id, at
+    except Exception as exc:  # noqa: BLE001 — снимок не стоит чтения
+        log.warning("account status: screenshot for %s was not saved: %s", account, exc)
+        return "", ""
+
+
+def _shoot_status(page, out: "SpendReading") -> None:
+    """Снимок, если состояние — не «чисто». Чистая страница не снимается."""
+    if out.status and out.status != "clear":
+        out.status_shot, out.status_shot_at = _status_shot(page, out.account)
 
 
 # ══ Дерево аккаунта: кампании и объявления ════════════════════════════════
