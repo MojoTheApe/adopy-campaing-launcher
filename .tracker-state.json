@@ -3836,7 +3836,7 @@
             "session": "run_s1466w_1001"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1466W",
         "coordinator": "Coordinator-D0930K",
         "handoff": {
@@ -3854,7 +3854,8 @@
           "report": "# ACL-1466 \u2014 implementation handoff\n- Branch `codex/acl-1466-spend-store-replace` \u2192 `stage`, head 9dc8129, base 38351e6. Worker-S1466W, run_s1466w_1001, Coordinator-D0930K, `C:\\acl-1466-spend-replace`.\n- Done: `_save_all` uses `paths._replace_when_free`; one line plus comment.\n- Checks: new test (fails on unfixed stage) + spend suites 108 passed; flaky 12-thread test 20/20. Full suite: CI.\n- Reviewer: diff limited to `_save_all`; ACL-1430 (#431) touches other parts of account_spend.py \u2014 no overlap."
         },
         "pr": 467,
-        "queued_at": "2026-10-01T14:00:18+00:00"
+        "queued_at": "2026-10-01T14:00:18+00:00",
+        "reviewer": "Reviewer-R1466N"
       },
       "476": {
         "implementers": [
@@ -4148,6 +4149,10 @@
       },
       "Reviewer-R1462M": {
         "session": "rev_r1462m_1001",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1466N": {
+        "session": "rev_r1466n_1001",
         "role": "Reviewer"
       }
     },
@@ -4599,13 +4604,23 @@
       430,
       433,
       31,
-      466,
       427,
       434,
       437,
       447
     ],
-    "review": null,
+    "review": {
+      "id": "0cdf32088be44fce88f9dbe96077ceac",
+      "pr": 467,
+      "issues": [
+        466
+      ],
+      "actor": "Reviewer-R1466N",
+      "session": "rev_r1466n_1001",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-02T07:11:13+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -6498,6 +6513,13 @@
         "issue": 462,
         "claim": "2a5a7047df6049aa8f09e6677bcd98cb",
         "actor": "Worker-E1462R"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-02T07:11:13+00:00",
+        "pr": 467,
+        "lane": "0cdf32088be44fce88f9dbe96077ceac",
+        "actor": "Reviewer-R1466N"
       }
     ],
     "policy": {
