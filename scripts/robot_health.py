@@ -37,10 +37,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if a.output_dir:
         out_dir = Path(a.output_dir)
+        logs_dir = None  # явная папка — читаем только её
     else:
         from config.paths import get_runtime_workspace
         out_dir = get_runtime_workspace() / "output"
-    tel_default, log_default = rh.default_sources(out_dir)
+        logs_dir = rh.launcher_logs_dir()  # установленная сборка пишет логи туда
+    tel_default, log_default = rh.default_sources(out_dir, logs_dir)
     tel = a.telemetry or tel_default
     logs = a.log if a.log is not None else log_default
 

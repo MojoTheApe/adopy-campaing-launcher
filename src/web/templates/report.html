@@ -3089,11 +3089,11 @@
     </button>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
+    {#- ACL-1434: здоровье робота — отдельная страница, только чтение телеметрии. -#}
+    <a href="/robot-health" id="robot-health-link" title="Success rate of every robot step per account and build" style="font-size:0.85rem;color:var(--muted);text-decoration:none;">Robot health</a>
     {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
         с Refresh намеренно: беда случается на экране, и идти за ней в другое
         место человек не станет. -#}
-    {#- ACL-1434: здоровье робота — отдельная страница, только чтение телеметрии. -#}
-    <a href="/robot-health" id="robot-health-link" title="Success rate of every robot step per account and build" style="font-size:0.85rem;color:var(--muted);text-decoration:none;">Robot health</a>
     <button type="button" id="report-problem-btn" title="Tell us what went wrong — ACL attaches the machine's own facts">Report a problem</button>
     <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
     <button type="submit" id="dash-refresh-btn">Refresh</button>

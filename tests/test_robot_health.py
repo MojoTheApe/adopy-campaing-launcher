@@ -10,7 +10,7 @@
 """
 from __future__ import annotations
 
-import asyncio
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -196,6 +196,80 @@ def test_build_is_the_version_under_which_the_log_first_named_the_job(tmp_path):
     assert rh.job_builds_from_logs([log]) == {j1: "v96+10@aaa", j2: "v96+13@bbb"}
 
 
+def test_split_stdout_and_stderr_logs_are_paired_by_launch(tmp_path):
+    """serveN.log — версии (stdout), serveN.err.log — id заданий (stderr)."""
+    j1, j2, j3 = "job-0101", "job-0102", "job-0103"
+    (tmp_path / "serve7.log").write_text("\n".join([
+        "[serve] RPA flow version: v96+10@aaa",
+        "[serve] RPA engine: recipe_player (default)",
+        "[serve] RPA flow version: v96+13@bbb",
+        "[serve] RPA engine: recipe_player (default)",
+    ]), encoding="utf-8")
+    (tmp_path / "serve7.err.log").write_text("\n".join([
+        "[serve] Dashboard URL: http://127.0.0.1:1/",
+        f'INFO: "POST /publish-jobs/{j1} HTTP/1.1" 200 OK',
+        "[serve] Dashboard URL: http://127.0.0.1:1/",
+        f'INFO: "GET /publish-jobs/{j1}/progress HTTP/1.1" 200 OK',
+        f'INFO: "POST /publish-jobs/{j2} HTTP/1.1" 200 OK',
+    ]), encoding="utf-8")
+    # Чужой stderr без пары не получает сборку соседа.
+    (tmp_path / "other.err.log").write_text(
+        "[serve] Dashboard URL: x\n" f'INFO: "POST /publish-jobs/{j3} HTTP/1.1" 200 OK',
+        encoding="utf-8")
+    logs = sorted(tmp_path.glob("*.log"))
+    assert rh.job_builds_from_logs(logs) == {j1: "v96+10@aaa", j2: "v96+13@bbb"}
+
+
+def test_launch_that_died_before_uvicorn_shifts_only_older_launches(tmp_path):
+    j_old, j_new = "job-0201", "job-0202"
+    (tmp_path / "server.stdout.log").write_text("\n".join([
+        "[serve] RPA flow version: v96+1@aaa",
+        "[serve] RPA flow version: v96+2@bbb",   # упал до uvicorn
+        "[serve] RPA flow version: v96+3@ccc",
+    ]), encoding="utf-8")
+    (tmp_path / "server.stderr.log").write_text("\n".join([
+        "INFO:     Started server process [11]",
+        f'INFO: "POST /publish-jobs/{j_old} HTTP/1.1" 200 OK',
+        "INFO:     Started server process [12]",
+        f'INFO: "POST /publish-jobs/{j_new} HTTP/1.1" 200 OK',
+    ]), encoding="utf-8")
+    builds = rh.job_builds_from_logs([tmp_path / "server.stderr.log", tmp_path / "server.stdout.log"])
+    assert builds[j_new] == "v96+3@ccc"
+
+
+def test_installed_build_reads_the_launcher_logs(tmp_path):
+    """Установленная сборка: stdout/stderr сервера — в %LOCALAPPDATA%/ACL/logs."""
+    out = tmp_path / "workspace" / "output"
+    out.mkdir(parents=True)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    job = "job-0301"
+    (out / "rpa_telemetry.jsonl").write_text(json.dumps(
+        _row("r1", "placements", True, "2026-09-30T09:00:00+00:00", job=job)) + "\n",
+        encoding="utf-8")
+    (logs / "server.stdout.log").write_text("[serve] RPA flow version: v96+20@ddd\n", encoding="utf-8")
+    (logs / "server.stderr.log").write_text(
+        "[serve] Dashboard URL: x\n" f'INFO: "POST /publish-jobs/{job} HTTP/1.1" 200 OK\n',
+        encoding="utf-8")
+    tel, found = rh.default_sources(out, logs)
+    assert [p.name for p in found] == ["server.stderr.log", "server.stdout.log"]
+    (run,) = rh.build_runs(rh.load_rows(tel), rh.job_builds_from_logs(found))
+    assert run.build == "v96+20@ddd"
+    ctx = rh.page_context(out, 10, None, logs)
+    assert "v96+20@ddd" in ctx["report"]["builds"]
+    # Без папки лаунчера сборка неизвестна — ровно то, что чинили.
+    assert rh.page_context(out, 10, None)["report"]["builds"] == [rh.UNKNOWN_BUILD]
+
+
+def test_report_has_no_raw_account_names():
+    """Сырое имя аккаунта несёт id профиля или имя человека — в отчёт и --json
+    идёт только метка."""
+    raw = "Facebook_1443_61570000000000 - Some Person"
+    runs = rh.build_runs([_row("r1", "placements", False, "2026-09-30T09:00:00+00:00", account=raw)])
+    dumped = json.dumps(rh.build_report(runs, 10), ensure_ascii=False)
+    assert "61570000000000" not in dumped and "Some Person" not in dumped
+
+
 def test_runs_after_this_process_started_take_its_build():
     rows = [_row("r1", "placements", True, "2026-09-30T09:00:00+00:00"),
             _row("r2", "placements", True, "2026-09-30T11:00:00+00:00")]
@@ -278,12 +352,13 @@ def web_out(tmp_path, monkeypatch):
     (shots / "20261001_082900_recorded_fail_ad_creative_upload.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     monkeypatch.setattr(web, "_robot_health_output_dir", lambda: out)
     monkeypatch.setattr(web, "_robot_health_current_build", lambda: None)
+    monkeypatch.setattr(web, "_robot_health_logs_dir", lambda: tmp_path / "no-launcher-logs")
     return web, out
 
 
 def test_page_renders_the_table(web_out):
     web, _ = web_out
-    resp = asyncio.run(web.robot_health_page(n=5))
+    resp = web.robot_health_page(n=5)
     html = resp.body.decode("utf-8")
     assert resp.status_code == 200
     assert "<title>Robot health</title>" in html
@@ -295,7 +370,7 @@ def test_page_renders_the_table(web_out):
 
 def test_run_page_shows_failures_and_captures(web_out):
     web, out = web_out
-    resp = asyncio.run(web.robot_health_run("r00000000045", n=5))
+    resp = web.robot_health_run("r00000000045", n=5)
     html = resp.body.decode("utf-8")
     assert resp.status_code == 200
     assert "ad_creative_upload" in html and "known" in html
@@ -305,19 +380,34 @@ def test_run_page_shows_failures_and_captures(web_out):
 
 def test_unknown_run_is_404(web_out):
     web, _ = web_out
-    assert asyncio.run(web.robot_health_run("nope", n=5)).status_code == 404
-    assert asyncio.run(web.robot_health_run("../etc", n=5)).status_code == 404
+    assert web.robot_health_run("nope", n=5).status_code == 404
+    assert web.robot_health_run("../etc", n=5).status_code == 404
 
 
 def test_capture_serves_only_images_of_that_run(web_out):
     web, out = web_out
     (out / "secret.png").write_bytes(b"x")
-    ok = asyncio.run(web.robot_health_capture(
-        "r00000000045", "20261001_082900_recorded_fail_ad_creative_upload.png"))
+    ok = web.robot_health_capture(
+        "r00000000045", "20261001_082900_recorded_fail_ad_creative_upload.png")
     assert ok.status_code == 200
     for run_id, name in (("r00000000045", "..\\..\\secret.png"), ("r00000000045", "../../secret.png"),
-                         ("..", "secret.png"), ("r00000000045", "missing.png")):
-        assert asyncio.run(web.robot_health_capture(run_id, name)).status_code == 404
+                         ("..", "secret.png"), ("r00000000045", "missing.png"),
+                         # Имя с диском без разделителя (Windows): без проверки
+                         # родителя `папка / "C:x.png"` уходит из папки прогона.
+                         ("r00000000045", "C:x.png"), ("r00000000045", "C:secret.png")):
+        assert web.robot_health_capture(run_id, name).status_code == 404
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="drive letters exist only on Windows")
+def test_capture_rejects_a_name_on_another_drive(tmp_path, monkeypatch):
+    """`папка / "Z:x.png"` на Windows — это `Z:x.png` (текущая папка диска Z),
+    то есть вне папки прогона. Держит только проверка родителя: делаем вид,
+    что такой файл есть, чтобы её не подменила проверка существования."""
+    (tmp_path / "rpa_screenshots" / "r1").mkdir(parents=True)
+    monkeypatch.setattr(rh.Path, "is_file", lambda self: True)
+    assert rh.capture_file(tmp_path, "r1", "shot.png") is not None
+    for name in ("Z:x.png", "Q:shot.png"):
+        assert rh.capture_file(tmp_path, "r1", name) is None
 
 
 def test_empty_machine_gets_a_message(tmp_path, monkeypatch):
@@ -325,7 +415,8 @@ def test_empty_machine_gets_a_message(tmp_path, monkeypatch):
 
     monkeypatch.setattr(web, "_robot_health_output_dir", lambda: tmp_path)
     monkeypatch.setattr(web, "_robot_health_current_build", lambda: None)
-    html = asyncio.run(web.robot_health_page(n=10)).body.decode("utf-8")
+    monkeypatch.setattr(web, "_robot_health_logs_dir", lambda: tmp_path / "no-launcher-logs")
+    html = web.robot_health_page(n=10).body.decode("utf-8")
     assert "No robot runs on this machine yet" in html
 
 

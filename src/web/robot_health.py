@@ -1,7 +1,8 @@
 """Здоровье робота: доля успеха каждого шага по аккаунтам и сборкам (ACL-1434).
 
-Читает только локальную телеметрию (`output/rpa_telemetry.jsonl`) и лог
-дешборда (`output/serve*.log`) — ни одного обращения к аккаунтам. Отвечает на
+Читает только локальную телеметрию (`output/rpa_telemetry.jsonl`) и логи
+дешборда (`output/serve*.log`; у установленной сборки — `server.std*.log`
+лаунчера в `%LOCALAPPDATA%/ACL/logs`) — ни одного обращения к аккаунтам. Отвечает на
 вопрос «шаг X на аккаунте Y стал падать — с какой сборки и с какого прогона»,
 вместо «раньше же работало».
 
@@ -69,6 +70,8 @@ _BUILD_FIELDS = ("build", "flow_version", "rpa_flow_version")
 _VERSION_RE = re.compile(r"RPA flow version:\s*(\S+)")
 _UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 _JOB_PATH_RE = re.compile(r"/publish-jobs/([0-9A-Za-z_-]+)")
+_START_RE = re.compile(r"\[serve\] Dashboard URL:")
+_START_FALLBACK_RE = re.compile(r"Started server process")
 _RUN_ID_RE = re.compile(r"^[0-9A-Za-z_-]{1,64}$")
 
 
@@ -115,24 +118,82 @@ def load_rows(paths: Iterable[Path | str]) -> list[dict]:
     return rows
 
 
+def _read_lines(path: Path) -> list[str]:
+    with path.open(encoding="utf-8", errors="replace") as fh:
+        return fh.readlines()
+
+
+def _jobs_in(line: str) -> list[str]:
+    return _UUID_RE.findall(line) + _JOB_PATH_RE.findall(line)
+
+
+def _companion_key(path: Path) -> str:
+    """Общее имя пары stdout/stderr: serve3.log ↔ serve3.err.log,
+    server.stdout.log ↔ server.stderr.log (лаунчер установленной сборки)."""
+    name = path.name.lower()
+    name = name.replace(".stderr.", ".std.").replace(".stdout.", ".std.")
+    name = name.replace(".err.", ".").replace(".out.", ".")
+    return str(path.parent.resolve() / name)
+
+
 def job_builds_from_logs(paths: Iterable[Path | str]) -> dict[str, str]:
-    """job id → сборка, под которой лог дешборда впервые упомянул задание."""
-    out: dict[str, str] = {}
+    """job id → сборка, под которой лог дешборда впервые упомянул задание.
+
+    Строку версии serve.py печатает в stdout, а строки uvicorn с id заданий
+    идут в stderr. Пока они в одном файле (`serve-live.log` с `2>&1`), версия
+    просто открывает период. Если потоки в разных файлах (`serveN.log` +
+    `serveN.err.log`, у установленной сборки `server.stdout.log` +
+    `server.stderr.log` — оба дописываются при каждом запуске), файл без строк
+    версии сопоставляется со своим парным по запускам: k-й с конца запуск в
+    stderr («[serve] Dashboard URL», иначе «Started server process») — k-я с
+    конца версия в stdout. С конца — потому что запуск, упавший до uvicorn,
+    оставляет версию без запуска, и сдвиг тогда задевает только старые запуски.
+    """
+    files = []
     for p in paths:
         p = Path(p)
-        if not p.is_file():
-            continue
-        current = ""
-        with p.open(encoding="utf-8", errors="replace") as fh:
-            for line in fh:
+        if p.is_file():
+            files.append((p, _read_lines(p)))
+    versions_by_key: dict[str, list[str]] = defaultdict(list)
+    for p, lines in files:
+        versions_by_key[_companion_key(p)] += [m.group(1) for m in map(_VERSION_RE.search, lines) if m]
+
+    out: dict[str, str] = {}
+    for p, lines in files:
+        own = [m.group(1) for m in map(_VERSION_RE.search, lines) if m]
+        if own:
+            current = ""
+            for line in lines:
                 m = _VERSION_RE.search(line)
                 if m:
                     current = m.group(1)
                     continue
-                if not current:
-                    continue
-                for job in _UUID_RE.findall(line) + _JOB_PATH_RE.findall(line):
-                    out.setdefault(job, current)
+                if current:
+                    for job in _jobs_in(line):
+                        out.setdefault(job, current)
+            continue
+        versions = versions_by_key.get(_companion_key(p)) or []
+        if not versions:
+            continue
+        starts = [i for i, line in enumerate(lines) if _START_RE.search(line)]
+        if not starts:
+            starts = [i for i, line in enumerate(lines) if _START_FALLBACK_RE.search(line)]
+        if not starts:
+            # Ни одного запуска не видно: однозначно только при одной версии.
+            if len(versions) == 1:
+                for line in lines:
+                    for job in _jobs_in(line):
+                        out.setdefault(job, versions[0])
+            continue
+        shift = len(versions) - len(starts)
+        bounds = starts + [len(lines)]
+        for k in range(len(starts)):
+            if k + shift < 0:
+                continue  # запуск старше первой версии в парном файле
+            build = versions[k + shift]
+            for line in lines[bounds[k]:bounds[k + 1]]:
+                for job in _jobs_in(line):
+                    out.setdefault(job, build)
     return out
 
 
@@ -345,7 +406,6 @@ def build_report(runs: list[Run], window: int = DEFAULT_WINDOW,
     return {
         "window": window,
         "columns": columns,
-        "accounts_full": {account_label(r.account): r.account for r in counted},
         "steps": steps,
         "cells": cells,
         "builds": builds_seen,
@@ -461,9 +521,22 @@ def render_runs_markdown(report: dict, limit: int = 10) -> str:
     return "\n".join(out)
 
 
-def default_sources(output_dir: Path | str) -> tuple[list[Path], list[Path]]:
+def launcher_logs_dir() -> Path:
+    """Логи установленной сборки: лаунчер пишет stdout/stderr сервера в
+    `%LOCALAPPDATA%/ACL/logs` (packaging/windows/launcher.py)."""
+    from config.paths import get_local_config_dir
+    return Path(get_local_config_dir()) / "logs"
+
+
+def default_sources(output_dir: Path | str,
+                    logs_dir: Path | str | None = None) -> tuple[list[Path], list[Path]]:
+    """Телеметрия и логи дешборда: `output/serve*.log` (запуск руками) и,
+    если дан `logs_dir`, `server.std*.log` лаунчера установленной сборки."""
     base = Path(output_dir)
-    return [base / "rpa_telemetry.jsonl"], sorted(base.glob("serve*.log"))
+    logs = sorted(base.glob("serve*.log"))
+    if logs_dir is not None:
+        logs += sorted(Path(logs_dir).glob("server.std*.log"))
+    return [base / "rpa_telemetry.jsonl"], logs
 
 
 def report_from_files(telemetry: Iterable[Path | str], logs: Iterable[Path | str] = (),
@@ -478,17 +551,18 @@ def report_from_files(telemetry: Iterable[Path | str], logs: Iterable[Path | str
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
-def _sources(output_dir: Path | str, current_build) -> list[Run]:
-    tel, logs = default_sources(output_dir)
+def _sources(output_dir: Path | str, current_build, logs_dir=None) -> list[Run]:
+    tel, logs = default_sources(output_dir, logs_dir)
     return build_runs(load_rows(tel), job_builds_from_logs(logs), current_build)
 
 
 def page_context(output_dir: Path | str, window: int = DEFAULT_WINDOW,
-                 current_build: tuple[str, str] | None = None) -> dict:
+                 current_build: tuple[str, str] | None = None,
+                 logs_dir: Path | str | None = None) -> dict:
     window = min(max(int(window or DEFAULT_WINDOW), 1), 200)
     ctx = {"window": window, "drop_points": DROP_POINTS, "streak_len": STREAK_LEN,
            "run": None, "error": "", "report": None}
-    runs = _sources(output_dir, current_build)
+    runs = _sources(output_dir, current_build, logs_dir)
     if not any(r.outcomes for r in runs):
         ctx["error"] = ("No robot runs on this machine yet: the run log "
                         "output/rpa_telemetry.jsonl is empty or missing.")
@@ -498,12 +572,13 @@ def page_context(output_dir: Path | str, window: int = DEFAULT_WINDOW,
 
 
 def run_context(output_dir: Path | str, run_id: str, window: int = DEFAULT_WINDOW,
-                current_build: tuple[str, str] | None = None) -> dict:
+                current_build: tuple[str, str] | None = None,
+                logs_dir: Path | str | None = None) -> dict:
     window = min(max(int(window or DEFAULT_WINDOW), 1), 200)
     ctx = {"window": window, "drop_points": DROP_POINTS, "streak_len": STREAK_LEN,
            "run": None, "error": "", "report": None, "run_steps": [], "shots": [],
            "capture_dirs": []}
-    runs = _sources(output_dir, current_build)
+    runs = _sources(output_dir, current_build, logs_dir)
     summary = run_summary(runs, run_id, window) if _RUN_ID_RE.match(run_id or "") else {}
     if not summary:
         ctx["error"] = f"Run {run_id!r} is not in this machine's run log."

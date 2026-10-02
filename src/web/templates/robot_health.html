@@ -160,7 +160,7 @@
   <h2>Steps by account (last {{ window }} runs)</h2>
   <div class="scroll"><table>
     <tr><th class="step">Step</th>
-      {% for col in report.columns %}<th title="{{ report.accounts_full.get(col, 'all accounts') }}">{{ col }}</th>{% endfor %}</tr>
+      {% for col in report.columns %}<th title="{{ 'all accounts' if col == 'all' else 'account ' ~ col }}">{{ col }}</th>{% endfor %}</tr>
     {% for step in report.steps %}
     <tr><td class="step">{{ step }}{% if step in report.fail_only %} <span class="muted" title="Written only on failure: its success is logged under another step, so the cell is 0 / failures.">*</span>{% endif %}</td>
       {% for col in report.columns %}{{ cell(report.cells[step][col]) }}{% endfor %}</tr>

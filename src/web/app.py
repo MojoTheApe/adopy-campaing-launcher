@@ -3856,26 +3856,36 @@ def _robot_health_current_build() -> tuple[str, str] | None:
         return None
 
 
+def _robot_health_logs_dir() -> Path:
+    """Логи лаунчера установленной сборки (stdout/stderr сервера)."""
+    from src.web import robot_health
+    return robot_health.launcher_logs_dir()
+
+
+# Обработчики синхронные намеренно: чтение всей телеметрии и логов плюс сводка
+# идут в пуле потоков FastAPI и не держат event loop (опрос хода прогонов).
 @app.get("/robot-health", response_class=HTMLResponse)
-async def robot_health_page(n: int = 10) -> HTMLResponse:
+def robot_health_page(n: int = 10) -> HTMLResponse:
     from src.web import robot_health
     ctx = robot_health.page_context(_robot_health_output_dir(), n,
-                                    _robot_health_current_build())
+                                    _robot_health_current_build(),
+                                    _robot_health_logs_dir())
     return HTMLResponse(templates.get_template("robot_health.html").render(**ctx))
 
 
 @app.get("/robot-health/run/{run_id}", response_class=HTMLResponse)
-async def robot_health_run(run_id: str, n: int = 10) -> HTMLResponse:
+def robot_health_run(run_id: str, n: int = 10) -> HTMLResponse:
     from src.web import robot_health
     ctx = robot_health.run_context(_robot_health_output_dir(), run_id, n,
-                                   _robot_health_current_build())
+                                   _robot_health_current_build(),
+                                   _robot_health_logs_dir())
     status = 404 if ctx["error"] else 200
     return HTMLResponse(templates.get_template("robot_health.html").render(**ctx),
                         status_code=status)
 
 
 @app.get("/robot-health/capture/{run_id}/{name}")
-async def robot_health_capture(run_id: str, name: str) -> Response:
+def robot_health_capture(run_id: str, name: str) -> Response:
     from src.web import robot_health
     path = robot_health.capture_file(_robot_health_output_dir(), run_id, name)
     if path is None:
