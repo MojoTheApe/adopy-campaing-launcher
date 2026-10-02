@@ -1007,6 +1007,24 @@
           459
         ],
         "recorded_at": "2026-10-02T05:59:07+00:00"
+      },
+      "467": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1466N",
+        "review_session": "rev_r1466n_1001",
+        "execution_lane": "0cdf32088be44fce88f9dbe96077ceac",
+        "implementer": "Worker-S1466W",
+        "head_sha": "be3257cbd52ad6c65851536fc601365591f7838e",
+        "base_sha": "a6af892a08932a1672c449d7eb8721ddfeb15fd3",
+        "tree_sha": "7c625ee6e6bc7fe783115a29ff59f0a7eb75d89d",
+        "report": "# Independent review: PR #467 (ACL-1466, tracker issue #466)\nVerdict: APPROVED\nHead 9dc8129cc2a94b92d48414f9851826cc817ba689; base work/stage fe39254c990f37a534dd48948ed8f7f49e519c51 (merge-base 38351e6, branch is behind stage; diff limited to the 3 PR files, no conflicts expected).\n\n## Acceptance criteria\n- [x] _save_all replaces through config.paths._replace_when_free (src/analysis_agent/account_spend.py:245). Diff confined to _save_all; store format, _STORE_LOCK, callers unchanged; tmp still unlinked in finally.\n- [x] Brief hold test: 3 PermissionErrors then success; reading + status stored, no .tmp (tests/test_spend_store_survives_a_held_file.py:46). Break-the-fix (bare os.replace restored): this test FAILS -> test is real.\n- [x] Persistent hold still raises, no .tmp (test file :53). Passes on unfixed code too, by design (guards against silent swallowing).\n- [x] test_concurrent_readings_and_statuses_survive: 20/20 local reruns passed.\n\n## Correctness / safety\n- Bounded wait: 10 attempts x 50 ms = max ~450 ms sleep, under _STORE_LOCK; acceptable. Last attempt re-raises; only PermissionError retried.\n- No Meta/Multilogin paths touched; no secrets/ids in fixtures (account name \"Doc20\" only); CHANGELOG text English.\n\n## Findings\n- minor, src/analysis_agent/account_spend.py:245: calls a private helper (paths._replace_when_free) across modules; same pattern as src/web/account_links.py (ACL-1216), acceptable; a public alias would be cleaner later.\n- nit, docs/system/CHANGELOG.md:3: new entry lacks the date line (2026-10-01.) used by neighbouring entries.\n\n## Tests run locally (headless, ACL_LIBRARY_* empty)\ntest_spend_store_survives_a_held_file, test_account_spend, test_review_spend_regressions, test_disabled_account_status, test_account_status_read: 124 passed. Concurrent test 20/20.\n\n## CI (gh pr checks 467)\n- test (3.11, 1): FAIL - tests/test_drawer_review_browser.py::test_lost_or_cancelled_job_closes_the_queue_and_marks_it[missing] (assert 1 == 2 at :190). Browser drawer test, does not import account_spend; same shard on 3.13 passed and recent stage CI is green -> flaky, not caused by the PR. Rerun recommended.\n- ACL verification: FAIL - aggregate only (TESTS: failure from the shard above).\n- tracker-link: FAIL - \"PR linkage failed: #466: start and implement the task, then move it to Review before a ready PR\"; run created 14:00:03, 4 s after PR open, before the task moved to status:review (now status:review) -> tracker-link run made before handoff; rerun.\n- All other checks (installer, descriptor, 5 other test shards) pass.\n\n## Re-check 2026-10-02 (head be3257c, tree 7c625ee)\nRe-check after coordinator merged work/stage (a6af892) and work/main (41e2574): both are ancestors of be3257c, as is the approved head 9dc8129. git diff work/stage...be3257c touches only the same 3 files; patch-id of account_spend.py + test file = 6e3b4f8f9294c12cf30333eaee16354cf7a0bd30, identical to the approved head's diff against its base. CHANGELOG entry text unchanged (merge dropped the blank line before the next heading - cosmetic nit). No blocking findings had been raised. Headless (ACL_LIBRARY_* empty) on detached worktree: test_spend_store_survives_a_held_file, test_account_spend, test_review_spend_regressions, test_disabled_account_status, test_account_status_read - 124 passed. Worktree removed. Approval holds.\n",
+        "main_sha": "41e257456388e9eeb88f78d589d0483b8d2db42b",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          466
+        ],
+        "recorded_at": "2026-10-02T07:16:55+00:00"
       }
     },
     "stage": {
