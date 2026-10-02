@@ -8754,25 +8754,16 @@ function amapRenderHits(box, hits, profiles, inst) {
     row.className = 'amap-hit';
     row.innerHTML = '<b>' + aclEscHtml(p.name || '(unnamed)') + '</b>'
       + '<span class="amap-hint">checking this machine…</span>';
-    /* Открыть можно до подключения. Так человек и работает: нашёл профиль,
-       открыл, посмотрел в самом кабинете что нужно, подключил. Раньше открыть
-       предлагалось только уже подключённому аккаунту, а для подключения
-       требовался номер кабинета, который знает открытый профиль. */
-    var btnOpen = document.createElement('button');
-    btnOpen.type = 'button'; btnOpen.className = 'amap-btn';
-    btnOpen.textContent = 'Open';
-    btnOpen.title = 'Start this profile in Multilogin and leave the window open';
-    btnOpen.onclick = function () {
-      if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
-      amapOpenFoundProfile(box, p, inst, btnOpen, row);
-    };
-    row.appendChild(btnOpen);
-
+    /* Одна кнопка вместо Open и Connect (ACL-1457). Номер кабинета знает
+       только профиль, открытый автоматизацией, поэтому раньше надо было нажать
+       Open, потом Connect — и именно в этом порядке. Connect сам открывает
+       профиль тем же путём и подключает. */
     var btnAdd = document.createElement('button');
     btnAdd.type = 'button'; btnAdd.className = 'amap-btn'; btnAdd.textContent = 'Connect';
+    btnAdd.title = 'Open this profile in Multilogin, read its ad account and connect it here';
     btnAdd.onclick = function () {
       if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
-      amapConnect(box, p, inst, btnAdd);
+      amapOpenAndConnect(box, p, inst, btnAdd, row);
     };
     row.appendChild(btnAdd);
     hits.appendChild(row);
@@ -8808,11 +8799,13 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
     var r = await fetch('/mlx-profile-open', { method: 'POST', body: body, credentials: 'same-origin' });
     d = await r.json();
   } catch (e) { d = { ok: false, message: String(e && e.message || e) }; }
-  btn.disabled = false;
-  if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
+  /* Кнопку не включать здесь: впереди ещё /mlx-profile-details и подключение,
+     и второе нажатие в этом окне начало бы второе открытие (ревью ACL-1457).
+     Включает её только amapOpenAndConnect, когда всё закончилось. */
+  if ((box.querySelector('.amap-inst').value || 'A') !== inst) return false;
   msg.textContent = (d && (d.message || d.error)) || '';
   msg.className = 'amap-msg' + (d && d.ok ? '' : ' bad');
-  if (!d || !d.ok) return;
+  if (!d || !d.ok) return false;
   delete p._details;
   try {
     var det = await fetch('/mlx-profile-details?profile_id=' + encodeURIComponent(p.profile_id)
@@ -8820,6 +8813,22 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
     p._details = det;
     amapHint(row, det);
   } catch (e) { /* открыть удалось — это главное; подсказка обновится позже */ }
+  return true;
+}
+
+/* Открыть и подключить одним нажатием. Неудача открытия подключение не
+   отменяет: окно, открытое руками, робот не перезапускает (так разлогинился
+   x01), и тогда номер вписывают сами или оставляют на потом. */
+async function amapOpenAndConnect(box, p, inst, btn, row) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    var opened = await amapOpenFoundProfile(box, p, inst, btn, row);
+    if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
+    await amapConnect(box, p, inst, btn, opened);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* One credential form is mounted beside the account being connected. No
@@ -9004,7 +9013,7 @@ function amapHint(row, d) {
   else hint.textContent = 'never opened here — the ad account will be read from it';
 }
 
-async function amapConnect(box, profile, instance, btn) {
+async function amapConnect(box, profile, instance, btn, opened) {
   var country = box.getAttribute('data-amap-country');
   var msg = box.querySelector('.amap-msg');
   var d = profile._details || {};
@@ -9054,9 +9063,10 @@ async function amapConnect(box, profile, instance, btn) {
          впервые видит новый профиль: номер знает открытый профиль, а открыть
          его дешборд соглашался только у подключённого аккаунта. */
       head = 'Could not read it from the profile:\n' + ((found && found.error) || 'unknown')
-        + '\n\nPress Open next to the profile and try again, paste the Ads Manager '
-        + 'link or the account number — or leave this empty to connect now and '
-        + 'fill the number in later:';
+        + (opened === false ? '\n\nThe profile did not open with automation. If its window '
+            + 'is open by hand, close it in Multilogin and press Connect again.' : '')
+        + '\n\nPaste the Ads Manager link or the account number — or leave this '
+        + 'empty to connect now and fill the number in later:';
       seed = '';
     }
     var typed = prompt(head, seed);
