@@ -1919,6 +1919,10 @@ HAND_WINDOW_EXIT_WAIT_S = 20
 #: Строка для человека в панели задания, когда робот сам закрыл окно.
 HAND_WINDOW_NOTICE = "Closed the hand-opened window of {account} and reopened it for the robot"
 
+#: ACL-1427, ревью PR #428 (F3): хвост причины остановки, когда ожидание
+#: тишины ввода прервал Stop задания.
+HAND_WINDOW_WAIT_STOPPED = "the job was stopped while waiting for the computer to be idle"
+
 #: ACL-1427: строка в панели, пока робот ждёт тишины ввода на машине.
 HAND_WINDOW_WAIT_NOTICE = ("Waiting for the computer to be idle to reopen {account}'s hand-opened "
                            "window — don't use the mouse or keyboard for a minute")
@@ -2261,9 +2265,13 @@ class MultiloginAttachOnlyProvider:
             pids, on_wait=lambda v: _tell_job(HAND_WINDOW_WAIT_NOTICE.format(account=account_label)))
         verdict = wait.verdict
         if not verdict.safe:
-            note = "cancelled" if wait.outcome == hand_window.WAIT_CANCELLED else verdict.reason
+            cancelled = wait.outcome == hand_window.WAIT_CANCELLED
+            note = "cancelled" if cancelled else verdict.reason
             _record_hand_window(entry, ok=False, where=where, note=note, verdict=verdict, wait=wait)
-            raise _open_by_hand(profile_id, account_label, where, verdict)
+            # Ревью PR #428 (F3): Stop во время ожидания — в итоге слота видно,
+            # что задание остановил человек, а не только «открыт руками».
+            raise _open_by_hand(profile_id, account_label,
+                                f"{where}; {HAND_WINDOW_WAIT_STOPPED}" if cancelled else where, verdict)
         log.warning(
             "%s: profile %s is open by hand, but its window is %.0f s old and the machine has been "
             "idle for %.0f s - closing it through the MLX API and reopening it for the robot",

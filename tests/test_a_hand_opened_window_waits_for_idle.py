@@ -275,8 +275,56 @@ def test_job_stop_during_the_wait_cancels_it_through_the_publisher(world, monkey
     with observe_preparation(world.notices.append), pytest.raises(pt.ProfileStop) as stop:
         pub._ensure_browser(ACCOUNT)
     assert stop.value.code == pt.OPEN_BY_HAND
+    # Ревью PR #428 (F3): в причине видно, что остановил человек.
+    assert br.HAND_WINDOW_WAIT_STOPPED in stop.value.detail
+    assert br.HAND_WINDOW_WAIT_STOPPED in str(stop.value)
     assert world.m.t <= 10.0 + hw.CANCEL_SLICE_S, "Stop ждал конца двух минут"
     assert world.ev == []
     kw = world.rows[-1][2]
     assert kw["note"] == "cancelled" and kw["diag"]["wait_outcome"] == hw.WAIT_CANCELLED
     assert hw._cancelled() is False, "проверка Stop пережила открытие браузера"
+
+
+def _sentry_and_rows(monkeypatch):
+    import src.fb_ads_rpa.rpa_publisher as pub_mod
+    from src.fb_ads_rpa import sentry_signal
+
+    sent, rows = [], []
+    monkeypatch.setattr(sentry_signal, "report_campaign_stop", lambda code, **kw: sent.append(code) or "")
+    monkeypatch.setattr(pub_mod._telemetry, "record", lambda *a, **kw: rows.append((a, kw)))
+    return sent, rows
+
+
+@pytest.mark.parametrize("cancelled, to_sentry", [(False, True), (True, False)])
+def test_a_stop_pressed_during_the_wait_is_not_a_sentry_failure(monkeypatch, cancelled, to_sentry):
+    """Ревью PR #428 (F3): Stop задания во время ожидания — не сбой кампании.
+    Строка телеметрии пишется, событие Sentry (ACL-1318) — нет; обычная
+    остановка «открыт руками» по-прежнему уходит в Sentry."""
+    from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+
+    sent, rows = _sentry_and_rows(monkeypatch)
+    stop = pt.ProfileStop(pt.OPEN_BY_HAND, "attach")
+    RpaPublisher._report_profile_stop(stop, "C1", ACCOUNT, "attach", cancelled=cancelled)
+    assert [r[0][0] for r in rows] == [pt.OPEN_BY_HAND]
+    assert sent == ([pt.OPEN_BY_HAND] if to_sentry else [])
+
+
+def test_publish_draft_passes_the_job_stop_to_the_report(monkeypatch):
+    """`publish_draft` отдаёт флаг Stop задания в отчёт об остановке профиля."""
+    from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+
+    sent, rows = _sentry_and_rows(monkeypatch)
+    pub = RpaPublisher.__new__(RpaPublisher)
+    pub.hand_off = pub.dry_run = False
+    pub._conn = None
+    pub._cancelled = True
+
+    def ensure(label):
+        raise pt.ProfileStop(pt.OPEN_BY_HAND, f"attach; {br.HAND_WINDOW_WAIT_STOPPED}")
+
+    monkeypatch.setattr(pub, "_ensure_browser", ensure)
+    draft = SimpleNamespace(status="DRAFT", errors=[], name="C1", account_label=ACCOUNT)
+    result = pub.publish_draft(draft)
+    assert result.success is False
+    assert br.HAND_WINDOW_WAIT_STOPPED in result.error
+    assert sent == []

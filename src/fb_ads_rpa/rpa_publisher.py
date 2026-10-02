@@ -497,7 +497,7 @@ class RpaPublisher:
 
     @staticmethod
     def _report_profile_stop(stop: "profile_trouble.ProfileStop", campaign_name: str,
-                             account: str, where: str) -> None:
+                             account: str, where: str, *, cancelled: bool = False) -> None:
         """Остановка из-за профиля до кампании (подключение): строка
         телеметрии и событие Sentry — как у остановки внутри кампании
         (ревью PR #323, F7: open-by-hand чаще всего случается именно здесь).
@@ -510,6 +510,11 @@ class RpaPublisher:
                               diag={"detail": stop.detail, "message": profile_trouble.message(stop.code)})
         except Exception:
             pass
+        if cancelled:
+            # ACL-1427, ревью PR #428 (F3): задание остановил человек (Stop во
+            # время ожидания тишины ввода) — это не сбой кампании, в Sentry
+            # не шлём (ACL-1318: туда — только настоящие сбои).
+            return
         try:
             from src.fb_ads_rpa import sentry_signal
 
@@ -589,7 +594,8 @@ class RpaPublisher:
                 conn = self._ensure_browser(draft.account_label)
         except profile_trouble.ProfileStop as stop:
             self._account_stop = stop
-            self._report_profile_stop(stop, campaign_name, draft.account_label, "attach")
+            self._report_profile_stop(stop, campaign_name, draft.account_label, "attach",
+                                      cancelled=bool(getattr(self, "_cancelled", False)))
             return self._profile_stop_result(campaign_name, stop)
         flow = self._flow(conn, draft.account_label)
         try:

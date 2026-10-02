@@ -18,6 +18,11 @@ wait instead of stopping at once.
   hand-opened window — don't use the mouse or keyboard for a minute"; telemetry
   `profile_hand_window` diag gains `waited_s` and `wait_outcome`
   (`no_wait`/`idle`/`timeout`/`gate_failed`/`cancelled`; note `cancelled` on Stop).
+- Stop during the wait: the slot result adds "the job was stopped while waiting for the
+  computer to be idle", and no Sentry campaign-stop event is sent (it is not a failure).
+- With ACL-1444: a reopened window is the robot's profile now, so at the end of a clean
+  job it closes itself like any robot profile; while the wait runs, the job keeps the
+  profile's slot and "Close profile" answers 409 — Stop is the way out.
 
 ## Buttons no longer look like input fields — ACL-1455
 
