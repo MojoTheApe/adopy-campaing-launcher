@@ -121,8 +121,8 @@ with tempfile.TemporaryDirectory(dir=OUT) as config:
         form = page.locator('#manage-builder-saudi-arabia form.open-account-form')
         form.get_by_role('button',name='+ Add Campaign',exact=True).click()
         slot=form.locator('.cb-slot').first
-        slot.get_by_role('button',name='+ Add ad',exact=True).click()
-        slot.get_by_role('button',name='+ Add ad',exact=True).click()
+        slot.get_by_role('button',name='+ Ad',exact=True).click()
+        slot.get_by_role('button',name='+ Ad',exact=True).click()
         slot.locator('.cb-ad-row').nth(0).locator('input[value="Video"]').check()
         slot.locator('.cb-ad-row').nth(0).locator('[name$="_creative_file"]').evaluate("e=>e.value='first.mp4'")
         slot.locator('.cb-ad-row').nth(1).locator('[name$="_creative_file"]').evaluate("e=>e.value='second.jpg'")
