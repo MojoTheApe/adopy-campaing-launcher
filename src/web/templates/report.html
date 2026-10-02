@@ -4383,7 +4383,11 @@ async function dashRefresh(ev) {
   }
 
   var h = '<div class="goals-panel">';
-  h += '<div class="goals-title">Evgeni — Goals Progress · FTDs / CPA / CR / Leads per Day</div>';
+  /* Имя — того, чьи цели на экране. Было вписано «Evgeni» у всех (ACL-1452).
+     Экранировано для HTML до того, как стать строкой JS: имя приходит из
+     настроек, а не из кода (урок S01). */
+  var GOALS_WHO = {{ (gv.cm or '') | e | tojson }};
+  h += '<div class="goals-title">' + (GOALS_WHO ? GOALS_WHO + ' — ' : '') + 'Goals Progress · FTDs / CPA / CR / Leads per Day</div>';
   var totalDep = 0;
   for (var i = 0; i < ACT_RAW.length; i++) totalDep += ACT_RAW[i].dep;
   var totalPct = GRAND_FTD ? Math.min(100, Math.round(totalDep / GRAND_FTD * 100)) : 0;
