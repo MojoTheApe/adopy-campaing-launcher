@@ -99,6 +99,40 @@ def test_the_accounts_view_offers_both_fields():
     assert 'id="mp-stats"' in panel and 'id="mp-creatives"' in panel and 'id="mp-save"' in panel
 
 
+def test_the_manager_name_is_saved_as_the_run_report_label(machine, monkeypatch):
+    """ACL-1447: имя менеджера — тег `manager` событий Sentry этой машины."""
+    from src.web import app as web
+
+    _, env = machine
+    monkeypatch.delenv("ACL_MACHINE_LABEL", raising=False)
+    monkeypatch.setenv("MY_CM_NAME", "Dan")
+    assert mp.current()["manager_name"] == "Dan"  # до сохранения — имя входа
+
+    class Req:
+        def __init__(self, body): self.body = body
+        async def json(self): return self.body
+
+    ok = json.loads(asyncio.run(web.api_save_machine_paths(Req({"manager_name": "  Dan   K "}))).body)
+    assert ok["ok"] and ok["manager_name"] == "Dan K" and not ok["stats_changed"]
+    text = env.read_text(encoding="utf-8")
+    assert 'ACL_MACHINE_LABEL="Dan K"' in text and "KEEP_ME=1" in text
+    assert "MY_CM_NAME" not in text  # чьи аккаунты в отчёте — не меняется
+
+    for bad in ("x", "a" * 61, 'Dan"=1'):
+        with pytest.raises(mp.MachinePathError):
+            mp.save(manager=bad)
+    assert asyncio.run(web.api_save_machine_paths(Req({"manager_name": 5}))).status_code == 400
+    assert 'ACL_MACHINE_LABEL="Dan K"' in env.read_text(encoding="utf-8")
+
+
+def test_the_accounts_view_offers_the_manager_name():
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[1] / "src/web/templates/report.html").read_text(encoding="utf-8")
+    panel = html[html.index('id="view-accounts"'):html.index('id="view-targets"')]
+    assert 'id="mp-manager"' in panel
+    assert "body.manager_name" in html
+
+
 def _valid_book(path):
     from openpyxl import Workbook
     from src.analysis_agent.stats_workbook import STATS_COLUMNS

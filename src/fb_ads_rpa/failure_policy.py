@@ -257,6 +257,191 @@ PER_AD_POLICY: dict[str, tuple[str, str]] = {
     ),
 }
 
+# ── What the operator reads (ACL-1437) ─────────────────────────────────────
+#
+# name -> (title, impact, action). Text only: the verdict above is unchanged.
+# The dashboard renders one item per problem — the title (plus "ad N" for
+# per-ad steps), one sentence of impact and one "what to do" line — instead
+# of the long `reason()` paragraph. A test fails if a step of POLICY or
+# PER_AD_POLICY has no entry here, so add both in the same commit.
+GUIDE: dict[str, tuple[str, str, str]] = {
+    "account_blocked": (
+        "Ad account restricted by Meta",
+        "Meta asks for verification or has disabled this ad account, so nothing more was built.",
+        "Complete the verification in Meta, then publish again.",
+    ),
+    "browser_closed": (
+        "Browser tab closed during the build",
+        "The draft is incomplete and was not retried, so a replay does not duplicate it.",
+        "Open the draft in Ads Manager and finish or delete it.",
+    ),
+    "profile_unresponsive": (
+        "Multilogin profile not responding",
+        "The profile's browser did not answer even after a restart, so no draft was created.",
+        "Close the profile in Multilogin and publish again.",
+    ),
+    _profile.LOGGED_OUT: (
+        "Facebook logged out in this profile",
+        "Facebook showed its login page, so no draft was created.",
+        "Log in to Facebook in this Multilogin profile, close it, then publish again.",
+    ),
+    _profile.NETWORK: (
+        "Profile cannot reach Facebook",
+        "The profile's proxy or network failed, so no draft was created.",
+        "Check the proxy of this profile in Multilogin, then publish again.",
+    ),
+    _profile.OPEN_BY_HAND: (
+        "Profile window open by hand",
+        "The robot does not close a hand-opened window, so no draft was created.",
+        "Close the profile window so Multilogin saves the session, then publish again.",
+    ),
+    _profile.RESTART_FAILED: (
+        "Profile restart failed",
+        "The profile stopped answering and could not be restarted, so no draft was created.",
+        "Open the profile in Multilogin, check that Ads Manager loads, close it and publish again.",
+    ),
+    "simple_create_layout": (
+        "Unknown layout of Meta's single-screen editor",
+        "The robot could not find the Ad set / Ad sections, so a partial draft may be left.",
+        "Check the draft in Ads Manager and finish or delete it.",
+    ),
+    _profile.LEAD_TERMS: (
+        "Lead Ads Terms not accepted on the Page",
+        "Only a person can accept Meta's Lead Ads Terms, so the build stopped with a partial draft.",
+        "Accept the Page's Lead Ads Terms in Meta, then publish again.",
+    ),
+    "objective_inline": (
+        "Objective — not switched to Leads",
+        "The draft may run with the wrong campaign objective.",
+        "Set the objective to Leads in Ads Manager or delete the draft.",
+    ),
+    "simple_create_more_ads": (
+        "Only the first ad was built",
+        "Creating more ads in Meta's single-screen editor is switched off on this machine.",
+        "Add the other ads by hand in Ads Manager or publish again with the setting on.",
+    ),
+    "tab_frozen_budget_exceeded": (
+        "Browser tab kept freezing",
+        "The robot stopped instead of waiting, so the draft is incomplete.",
+        "Check the draft in Ads Manager, then close and reopen the profile.",
+    ),
+    "campaign_budget_exceeded": (
+        "Campaign build took too long",
+        "The build hit the robot's time limit, so the draft is incomplete.",
+        "Open the draft in Ads Manager and finish or delete it.",
+    ),
+    "step_budget_exceeded": (
+        "One step took too long",
+        "A step hit the robot's time limit, so the draft is incomplete.",
+        "Open the draft in Ads Manager and finish or delete it.",
+    ),
+    "window_too_small": (
+        "Browser window too small",
+        "The editor could not be read after window recovery, so the draft may be incomplete.",
+        "Restore a desktop-sized profile window and check the draft.",
+    ),
+    "creative_upload": (
+        "Ad media — missing",
+        "The ad has no image or video, so it cannot run.",
+        "Open the ad and upload the creative.",
+    ),
+    "destination_sweep": (
+        "Ad destination — not verified",
+        "Leads may go to the wrong place or nowhere while the budget is spent.",
+        "Open each ad and check the website / destination.",
+    ),
+    "audience_location": (
+        "Location — not set",
+        "The ad set may spend in the wrong country.",
+        "Check \"Locations\" on the ad set.",
+    ),
+    "conversion_event": (
+        "Conversion event — not verified",
+        "Ads may optimise for the wrong event and waste budget.",
+        "Check \"Conversion event\" on the ad set.",
+    ),
+    "audience_age": (
+        "Age range — not verified",
+        "Delivery may reach ages outside the requested range.",
+        "Check \"Age\" in the ad set audience.",
+    ),
+    "languages": (
+        "Languages — not verified",
+        "Delivery may reach people outside the requested languages.",
+        "Check \"Languages\" in the ad set audience.",
+    ),
+    "targeting_open": (
+        "Detailed targeting — panel did not open",
+        "The requested interests were not applied or verified.",
+        "Add the interests in \"Detailed targeting\" on the ad set.",
+    ),
+    "targeting_none_added": (
+        "Detailed targeting — no interests added",
+        "The ad set runs broad although interests were requested.",
+        "Add the interests in \"Detailed targeting\" on the ad set.",
+    ),
+    "targeting": (
+        "Detailed targeting — failed",
+        "The ad set targeting no longer matches the campaign specification.",
+        "Check \"Detailed targeting\" on the ad set.",
+    ),
+    "placements": (
+        "Placements — not verified",
+        "Budget may be spent on placements that were not requested.",
+        "Check \"Placements\" on the ad set.",
+    ),
+    "advantage_plus_audience": (
+        "Advantage+ audience still on",
+        "The age range is only a suggestion and Meta may deliver outside it.",
+        "Switch the ad set audience to original audience options.",
+    ),
+    "devices_ios": (
+        "iOS-only devices — not applied",
+        "Delivery may spend on devices that were not requested.",
+        "Check \"Devices\" in the ad set placements.",
+    ),
+}
+
+PER_AD_GUIDE: dict[str, tuple[str, str, str]] = {
+    "create": (
+        "Ad not created",
+        "The campaign has fewer ads than requested.",
+        "Add the missing ad by hand in Ads Manager.",
+    ),
+    "name": (
+        "Ad name",
+        "The ad name was not confirmed, so the ad may not match its source row.",
+        "Open the ad and check its name.",
+    ),
+    "creative_upload": GUIDE["creative_upload"],
+    "copy": (
+        "Ad text",
+        "Primary text / headline not confirmed.",
+        "Open the ad and check the text.",
+    ),
+    "destination": (
+        "Ad destination",
+        "Leads may be sent to the wrong place or into an Instant Form.",
+        "Open the ad and check the website / destination.",
+    ),
+    "extra_empty_ad": (
+        "Extra empty ad",
+        "Meta added an empty \"New Leads ad\" to this ad set.",
+        "Delete the empty \"New Leads ad\" before publishing.",
+    ),
+    "second_text": (
+        "Second primary text",
+        "The optional second text was not added; the ad runs with its first text.",
+        "Add the second text option in Ads Manager if it is needed.",
+    ),
+    # ACL-1476: сторис пары не встала — предупреждение, объявление годно.
+    "story_not_placed": (
+        "Story file not placed",
+        "The ad runs with the post file on Stories and Reels too.",
+        "Replace the Stories/Reels file in Ads Manager by hand if needed.",
+    ),
+}
+
 _PER_AD_NAME = re.compile(
     r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination|extra_empty_ad|second_text"
     r"|story_not_placed)$"
@@ -319,3 +504,86 @@ def describe(failures: list[str]) -> str:
     """One line per blocking failure, saying what it is and why it matters."""
     blocking, _ = split(failures)
     return "\n".join(f"  {f} — {reason(f)}" for f in blocking)
+
+
+# "<ad name> has no text…" / "<ad name> second primary text not added (…)" /
+# "<reason> - <ad name>: <sentence>" (story_not_placed, ACL-1476) — the only
+# details that name the ad (meta_dom); anything else is a note.
+_AD_NAME_IN_NOTE = re.compile(
+    r"^(?:(?P<name>.+?) (?:has no text|second primary text not added)\b"
+    r"|[a-z_]+ - (?P<name2>.+?): )"
+)
+_TAG_ONLY = re.compile(r"^ad ?\d*$", re.I)
+_AD_TAG = re.compile(r"^ad(\d*)_")
+
+
+def _guide(name: str) -> tuple[str, str, str] | None:
+    if name in GUIDE:
+        return GUIDE[name]
+    per_ad = _PER_AD_NAME.fullmatch(name)
+    if per_ad:
+        # .get: новый шаг в PER_AD_POLICY без текста не должен ронять
+        # сериализацию задания (KeyError → результат кампании потерян).
+        return PER_AD_GUIDE.get(per_ad.group(1))
+    for candidate, entry in GUIDE.items():
+        if name.endswith("_" + candidate):
+            return entry
+    return None
+
+
+def problem(failure: str) -> dict:
+    """One failure as the dashboard shows it (ACL-1437): plain title, which ad,
+    one sentence of impact, one action; the raw code and its note stay for
+    "Technical details"."""
+    raw = str(failure or "")
+    name = base_name(raw)
+    note = raw.split(":", 1)[1].strip() if ":" in raw else ""
+    known = _lookup(name)
+    guide = _guide(name) or (
+        # Шаг классифицирован, но текста для него нет: показываем причину из
+        # политики, а не «неизвестный шаг — блокирует» (он может быть warning).
+        (
+            f"Step '{name}'",
+            known[1][:1].upper() + known[1][1:],
+            "Check this part of the draft in Ads Manager.",
+        )
+        if known
+        else (
+            f"Unclassified step '{name or '?'}'",
+            "The robot reported a step it does not know, so it is treated as blocking.",
+            "Check this part of the draft in Ads Manager.",
+        )
+    )
+    ad_index: int | None = None
+    ad_name = ""
+    if name not in GUIDE and _PER_AD_NAME.fullmatch(name):
+        ad_index = int(_AD_TAG.match(name).group(1) or 1)
+        found = _AD_NAME_IN_NOTE.match(note)
+        label = (found.group("name") or found.group("name2") or "").strip() if found else ""
+        if label and not _TAG_ONLY.match(label):
+            ad_name = label
+    title, impact, action = guide
+    return {
+        "step": name,
+        "ad_index": ad_index,
+        "ad_name": ad_name,
+        "severity": severity(raw),
+        "title": title,
+        "impact": impact,
+        "action": action,
+        "note": note,
+        "raw": raw,
+    }
+
+
+def problems(failures: list[str]) -> list[dict]:
+    """Blocking first, then warnings; an exact repeat is listed once."""
+    seen: set[str] = set()
+    unique: list[str] = []
+    for f in failures or []:
+        key = str(f or "")
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(key)
+    blocking, warnings = split(unique)
+    return [problem(f) for f in blocking + warnings]

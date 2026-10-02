@@ -1967,11 +1967,13 @@ async def api_save_machine_paths(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
     if not isinstance(data, dict) or any(
-            k in data and not isinstance(data[k], str) for k in ("stats_workbook", "creatives_folder")):
-        return JSONResponse({"ok": False, "error": "Expected text paths"}, status_code=400)
+            k in data and not isinstance(data[k], str)
+            for k in ("stats_workbook", "creatives_folder", "manager_name")):
+        return JSONResponse({"ok": False, "error": "Expected text values"}, status_code=400)
     try:
         from starlette.concurrency import run_in_threadpool
-        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"), data.get("creatives_folder"))
+        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"),
+                                         data.get("creatives_folder"), data.get("manager_name"))
     except machine_paths.MachinePathError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if result["stats_changed"]:
@@ -2944,6 +2946,41 @@ async def account_spend_read(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
 
 
+@app.get("/account-spend/status-shot/{shot_id}")
+async def account_spend_status_shot(shot_id: str) -> Response:
+    """Снимок проблемного состояния кабинета (ACL-1430) — только по его id.
+
+    Путь с экрана не принимается: `status_shot_path` знает одну папку
+    снимков и строгий вид имени, всё прочее — 404.
+    """
+    from src.analysis_agent import account_spend
+
+    path = account_spend.status_shot_path(shot_id)
+    if path is None:
+        return JSONResponse({"error": "Screenshot not found"}, status_code=404)
+    return FileResponse(str(path), media_type="image/png")
+
+
+@app.get("/account-spend/status-shot/{shot_id}/view")
+async def account_spend_status_shot_view(shot_id: str) -> Response:
+    """Запасной путь кнопки Copy screenshot: браузер не дал положить картинку
+    в буфер — открываем её во вкладке с подсказкой, как скопировать руками."""
+    from html import escape
+
+    from src.analysis_agent import account_spend
+
+    if account_spend.status_shot_path(shot_id) is None:
+        return JSONResponse({"error": "Screenshot not found"}, status_code=404)
+    src = escape(f"/account-spend/status-shot/{shot_id}")
+    return HTMLResponse(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Account status screenshot</title>"
+        "<style>body{font:14px system-ui,sans-serif;margin:16px;background:#fff;color:#222}"
+        "img{max-width:100%;border:1px solid #ccc}</style></head><body>"
+        "<p>Right-click → Copy image</p>"
+        f"<img src=\"{src}\" alt=\"Account status screenshot\"></body></html>"
+    )
+
+
 @app.post("/account-spend/read-countries")
 async def account_spend_read_countries(request: Request) -> JSONResponse:
     """Прочитать пострановую разбивку аккаунта. Только по нажатию человека.
@@ -3833,6 +3870,64 @@ async def rpa_takeover(request: Request) -> JSONResponse:
     else:
         release_takeover()
         return JSONResponse({"ok": True, "status": "resumed"})
+
+
+# ── ACL-1434: здоровье робота ───────────────────────────────────────────────
+# Только чтение локальной телеметрии и лога дешборда; к аккаунтам не ходит.
+from datetime import datetime as _rh_datetime, timezone as _rh_timezone  # noqa: E402
+
+_ROBOT_HEALTH_STARTED = _rh_datetime.now(_rh_timezone.utc).isoformat()
+
+
+def _robot_health_output_dir() -> Path:
+    from config.paths import get_runtime_workspace
+    return get_runtime_workspace() / "output"
+
+
+def _robot_health_current_build() -> tuple[str, str] | None:
+    """Сборка этого процесса — для прогонов, которых лог ещё не назвал."""
+    try:
+        from src.fb_ads_rpa import telemetry_sync
+        return telemetry_sync.flow_version(), _ROBOT_HEALTH_STARTED
+    except Exception:
+        return None
+
+
+def _robot_health_logs_dir() -> Path:
+    """Логи лаунчера установленной сборки (stdout/stderr сервера)."""
+    from src.web import robot_health
+    return robot_health.launcher_logs_dir()
+
+
+# Обработчики синхронные намеренно: чтение всей телеметрии и логов плюс сводка
+# идут в пуле потоков FastAPI и не держат event loop (опрос хода прогонов).
+@app.get("/robot-health", response_class=HTMLResponse)
+def robot_health_page(n: int = 10) -> HTMLResponse:
+    from src.web import robot_health
+    ctx = robot_health.page_context(_robot_health_output_dir(), n,
+                                    _robot_health_current_build(),
+                                    _robot_health_logs_dir())
+    return HTMLResponse(templates.get_template("robot_health.html").render(**ctx))
+
+
+@app.get("/robot-health/run/{run_id}", response_class=HTMLResponse)
+def robot_health_run(run_id: str, n: int = 10) -> HTMLResponse:
+    from src.web import robot_health
+    ctx = robot_health.run_context(_robot_health_output_dir(), run_id, n,
+                                   _robot_health_current_build(),
+                                   _robot_health_logs_dir())
+    status = 404 if ctx["error"] else 200
+    return HTMLResponse(templates.get_template("robot_health.html").render(**ctx),
+                        status_code=status)
+
+
+@app.get("/robot-health/capture/{run_id}/{name}")
+def robot_health_capture(run_id: str, name: str) -> Response:
+    from src.web import robot_health
+    path = robot_health.capture_file(_robot_health_output_dir(), run_id, name)
+    if path is None:
+        return Response(status_code=404)
+    return FileResponse(str(path))
 
 
 @app.get("/rpa-takeover")
