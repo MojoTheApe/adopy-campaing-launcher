@@ -927,10 +927,14 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
                                              progress_since + busy_wait_s))
         if ready or now >= deadline or other_reads >= 2:
             break
-        if now - start >= _wv().WAKE_AFTER_S:
+        if now - start >= _wv().WAKE_AFTER_S and not is_progress_dialog(cur):
             # ACL-1402: страница отвечает, а объявления всё нет — окно может
-            # быть закрыто другими окнами (Chrome придерживает кадры).
-            _wv().wake_if_hidden(page, where="create_next_ad", waited_s=now - start)
+            # быть закрыто другими окнами (Chrome придерживает кадры). Окно
+            # прогресса Meta на экране — Meta занята, это не симптом скрытого
+            # окна (ревью PR #420, F3). Страницу о видимости не спрашиваем —
+            # она только что ответила, решает Windows (без 3 с в опросе).
+            _wv().wake_if_hidden(page, where="create_next_ad", waited_s=now - start,
+                                 answered=True, probe=False)
         time.sleep(0.5)
     got["dialog_first"] = dialog
     got["dialog_until_s"] = dialog_s if dialog else None

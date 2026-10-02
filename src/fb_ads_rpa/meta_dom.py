@@ -3649,8 +3649,11 @@ def _unstick(page: Page, where: str, *, editor: bool, waited_s: float = 0.0,
                                                       answered=False)
             if hidden.get("hidden"):
                 woke["hidden_wake"] = {"woke": hidden.get("woke"), "actions": hidden.get("actions")}
-                if hidden.get("woke"):
-                    responsive = _page_responsive(page)
+                # Ответила после побудки — живая; «спросить не удалось»
+                # (None) не отменяет перезагрузку неответившей вкладки
+                # (ревью PR #420, F7).
+                if hidden.get("woke") and _page_responsive(page) is True:
+                    responsive = True
         except Exception:
             pass
     else:

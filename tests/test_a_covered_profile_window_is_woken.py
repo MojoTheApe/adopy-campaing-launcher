@@ -54,9 +54,9 @@ class FakeContext:
 class FakePage:
     """Вкладка: отвечает ли и что говорит о видимости — по сценарию."""
 
-    def __init__(self, log, *, visibility="visible", answers=True, fail=()):
+    def __init__(self, log, *, visibility="visible", answers=True, fail=(), frames=True):
         self.context = FakeContext(log, fail)
-        self.visibility, self.answers = visibility, answers
+        self.visibility, self.answers, self.frames = visibility, answers, frames
         self.log = log
 
     def is_closed(self):
@@ -65,6 +65,8 @@ class FakePage:
     def wait_for_function(self, js, timeout=None, arg=None):
         if not self.answers:
             raise TimeoutError("Timeout 3000ms exceeded")
+        if "requestAnimationFrame" in js and not self.frames:
+            raise TimeoutError("Timeout 2000ms exceeded")
         page = self
 
         class Handle:
@@ -102,30 +104,36 @@ def env(monkeypatch):
 
 # ── Что видно в телеметрии ────────────────────────────────────────────────
 
-def test_a_window_under_another_window_is_occluded():
+def test_a_window_under_another_window_is_covered():
     got = wv.screen_share((0, 0, 1000, 800), [(-10, -10, 1200, 900)], (0, 0, 1920, 1080))
-    assert got == {"onscreen": 1.0, "uncovered": 0.0, "occluded": True}
+    assert got == {"onscreen": 1.0, "uncovered": 0.0, "offscreen": False, "covered": True}
 
 
-def test_a_half_covered_window_is_not_occluded():
+def test_a_half_covered_window_is_not_covered():
     got = wv.screen_share((0, 0, 1000, 800), [(0, 0, 500, 800)], (0, 0, 1920, 1080))
-    assert got["uncovered"] == 0.5 and got["occluded"] is False
+    assert got["uncovered"] == 0.5 and got["covered"] is False
 
 
-def test_a_window_parked_off_screen_counts_as_hidden():
+def test_a_window_parked_off_screen_is_parked_not_covered():
+    """Ревью PR #420, F1: за краем экрана — дом свёрнутого профиля у робота."""
     got = wv.screen_share((-1800, 0, -200, 900), [], (0, 0, 1920, 1080))
-    assert got["onscreen"] == 0.0 and got["occluded"] is True
+    assert got["onscreen"] == 0.0 and got["offscreen"] is True and got["covered"] is False
+
+
+def test_the_on_screen_part_covered_counts_as_covered():
+    got = wv.screen_share((-500, 0, 500, 800), [(0, 0, 600, 900)], (0, 0, 1920, 1080))
+    assert got["onscreen"] == 0.5 and got["covered"] is True
 
 
 def test_the_throttling_helper_records_whether_it_worked():
     log: list[str] = []
     page = FakePage(log)
     br._disable_background_throttling(page.context, page)
-    assert br.THROTTLE_STATUS[id(page)]["focus"] is True
-    assert br.THROTTLE_STATUS[id(page)]["lifecycle"] is True
+    assert br.THROTTLE_STATUS.get(page)["focus"] is True
+    assert br.THROTTLE_STATUS.get(page)["lifecycle"] is True
     failing = FakePage(log, fail={"Page.setWebLifecycleState"})
     br._disable_background_throttling(failing.context, failing)
-    assert br.THROTTLE_STATUS[id(failing)]["lifecycle"] is False
+    assert br.THROTTLE_STATUS.get(failing)["lifecycle"] is False
 
 
 def test_the_diag_has_page_window_and_helper(env, monkeypatch):
@@ -133,10 +141,10 @@ def test_the_diag_has_page_window_and_helper(env, monkeypatch):
     page = FakePage(log, visibility="hidden")
     br._disable_background_throttling(page.context, page)
     monkeypatch.setattr(wv, "win32_state", lambda p: {"found": True, "minimized": False,
-                                                      "occluded": True, "uncovered": 0.0})
+                                                      "covered": True, "uncovered": 0.0})
     got = wv.visibility_diag(page)
     assert got["page"] == {"answered": True, "visibility": "hidden", "focus": True}
-    assert got["win32"]["occluded"] is True
+    assert got["win32"]["covered"] is True and got["reason"] == "covered"
     assert got["throttle"]["focus"] is True and got["hidden"] is True
 
 
@@ -189,7 +197,8 @@ def test_a_hidden_tab_is_woken_without_the_foreground(env):
     assert "Page.startScreencast" in log, "the tab got no keep-alive screencast"
     row = [r for r in env["rows"] if r[0] == wv.WAKE_STEP][-1]
     assert row[1] is True and row[2]["diag"]["waited_s"] == 95
-    assert env["notices"] == [wv.TEXT_WOKEN]
+    assert row[2]["diag"]["frames"] is True and row[2]["diag"]["reason"] == "page_hidden"
+    assert env["notices"] == [wv.TEXTS_WOKEN["page_hidden"]]
 
 
 def test_a_visible_tab_is_left_alone(env):
@@ -203,8 +212,9 @@ def test_a_visible_tab_is_left_alone(env):
 def test_a_covered_window_counts_even_when_the_page_says_visible(env, monkeypatch):
     log: list[str] = []
     page = FakePage(log, visibility="visible")
-    monkeypatch.setattr(wv, "win32_state", lambda p: {"found": True, "occluded": True})
+    monkeypatch.setattr(wv, "win32_state", lambda p: {"found": True, "covered": True})
     assert wv.wake_if_hidden(page, where="x")["woke"] is True
+    assert env["notices"] == [wv.TEXT_WOKEN]
 
 
 def test_the_wake_is_not_repeated_every_poll(env):
@@ -218,7 +228,7 @@ def test_the_wake_is_not_repeated_every_poll(env):
 def test_an_unanswering_hidden_tab_asks_the_person(env, monkeypatch):
     log: list[str] = []
     page = FakePage(log, answers=False)
-    monkeypatch.setattr(wv, "win32_state", lambda p: {"found": True, "occluded": True})
+    monkeypatch.setattr(wv, "win32_state", lambda p: {"found": True, "covered": True})
     got = wv.wake_if_hidden(page, where="tab_frozen", answered=False)
     assert got["hidden"] and got["woke"] is False
     assert not log, "no CDP session on a tab that does not answer (ACL-1320)"
@@ -230,7 +240,7 @@ def test_the_notice_is_shown_once_per_tab(env, monkeypatch):
     page = FakePage(log, visibility="hidden")
     wv.wake_if_hidden(page, where="x")
     wv.wake_if_hidden(page, where="x", force=True)
-    assert env["notices"] == [wv.TEXT_WOKEN]
+    assert env["notices"] == [wv.TEXTS_WOKEN["page_hidden"]]
 
 
 def test_nothing_here_raises_a_window():
@@ -300,7 +310,7 @@ def test_a_long_meta_busy_wait_wakes_a_hidden_window_and_keeps_the_limit(env, mo
 
     def wake(p, **k):
         wakes.append(k)
-        wv._WOKEN.add(id(p))
+        wv._WOKEN.set(p, wv._run_id())
         return {"hidden": True, "woke": True}
     monkeypatch.setattr(wv, "wake_if_hidden", wake)
     got = sc._wait_new_ad(page, 1, ["Sample Ad 01"], wait_s=30, busy_wait_s=60)
@@ -325,3 +335,137 @@ def test_the_progress_model_puts_the_wake_on_hold():
     from scripts import acl_build_progress_model as m
 
     assert m.stage_of(wv.WAKE_STEP, m.read_model()["rules"]) == "hold"
+
+
+# ── Ревью PR #420 ─────────────────────────────────────────────────────────
+
+def test_a_parked_window_is_not_hidden_and_gets_no_notice(env, monkeypatch):
+    """F1: окно за краем экрана (парковка робота) — ни строки, ни слов в панели;
+    скринкаст свежей вкладке — молча."""
+    log: list[str] = []
+    page = FakePage(log, visibility="hidden")
+    monkeypatch.setattr(wv, "win32_state", lambda p: {"found": True, "minimized": False,
+                                                      "onscreen": 0.0, "offscreen": True,
+                                                      "covered": False})
+    got = wv.wake_if_hidden(page, where="create_next_ad", waited_s=40)
+    assert got["hidden"] is False and got["before"]["parked"] is True
+    assert got["actions"] == ["screencast_started"]
+    assert not env["rows"] and not env["notices"]
+
+
+def test_a_background_tab_in_a_visible_window_is_not_hidden(env, monkeypatch):
+    """F2: страница «hidden», а Windows видит окно на экране — это фоновая
+    вкладка (вперёд вернули вкладку человека), а не закрытое окно."""
+    log: list[str] = []
+    page = FakePage(log, visibility="hidden")
+    monkeypatch.setattr(wv, "win32_state", lambda p: {"found": True, "minimized": False,
+                                                      "onscreen": 1.0, "uncovered": 1.0,
+                                                      "offscreen": False, "covered": False})
+    got = wv.wake_if_hidden(page, where="x")
+    assert got["hidden"] is False and not env["rows"] and not env["notices"]
+
+
+def test_a_failed_win32_read_falls_back_to_the_page(env, monkeypatch):
+    page = FakePage([], visibility="hidden")
+    monkeypatch.setattr(wv, "win32_state", lambda p: {"error": "OSError: x"})
+    assert wv.visibility_diag(page)["reason"] == "page_hidden"
+
+
+def test_a_minimised_window_says_minimised(env, monkeypatch):
+    page = FakePage([], visibility="hidden")
+    monkeypatch.setattr(wv, "win32_state", lambda p: {"found": True, "minimized": True})
+    assert wv.wake_if_hidden(page, where="x")["reason"] == "minimized"
+    assert env["notices"] == [wv.TEXTS_WOKEN["minimized"]]
+
+
+def test_no_frames_after_the_wake_is_not_called_woken(env, monkeypatch):
+    """F4: страница отвечает, троттлинг снят, а кадров нет — не «разбудили»."""
+    log: list[str] = []
+    page = FakePage(log, visibility="visible", frames=False)
+    monkeypatch.setattr(wv, "win32_state", lambda p: {"found": True, "covered": True})
+    got = wv.wake_if_hidden(page, where="x")
+    assert got["hidden"] and got["frames"] is False and got["woke"] is False
+    row = [r for r in env["rows"] if r[0] == wv.WAKE_STEP][-1]
+    assert row[1] is False
+    assert env["notices"] == [wv.TEXT_FRONT]
+
+
+def test_per_page_state_ignores_a_recycled_id():
+    """F5: id умершей вкладки достался новой — старую запись не читаем."""
+    class P:
+        pass
+
+    m = wv.PerPage()
+    old, new = P(), P()
+    m.set(old, 123)
+    m._d[id(new)] = m._d.pop(id(old))     # как будто id(old) теперь у new
+    assert m.get(new) is None and new not in m
+    m.set(new, 7)
+    assert m.get(new) == 7
+
+
+def test_woken_is_per_run(env, monkeypatch):
+    """F5: «будили» прошлого прогона не делает «не помогло» в новом."""
+    page = FakePage([])
+    run = {"id": "run-a"}
+    monkeypatch.setattr(rt, "current_run_id", lambda: run["id"])
+    wv._WOKEN.set(page, wv._run_id())
+    assert wv.woken_recently(page) is True
+    run["id"] = "run-b"
+    assert wv.woken_recently(page) is False
+
+
+def test_a_missing_browser_pid_is_looked_up_again(monkeypatch):
+    """F6: порт ещё не слушал — через PID_RETRY_S ищем снова."""
+    wv._reset_for_tests()
+    page = FakePage([])
+    wv.remember_cdp_url(page.context, "http://127.0.0.1:41235")
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(wv.time, "time", lambda: clock["t"])
+    found = iter([None, 5151])
+    monkeypatch.setattr(wv, "_pid_listening", lambda port: next(found))
+    assert wv.browser_pid(page) is None
+    assert wv.browser_pid(page) is None, "within the retry window the miss is cached"
+    clock["t"] += wv.PID_RETRY_S + 1
+    assert wv.browser_pid(page) == 5151
+    wv._reset_for_tests()
+
+
+def test_a_long_creating_dialog_on_a_live_page_does_not_wake(env, monkeypatch):
+    """F3: окно «Creating...» на отвечающей странице — Meta занята, не повод."""
+    page = FakePage([])
+    script = [{"ads": 1, "dialog": CREATING}] * 200
+    _clock(monkeypatch, script)
+    wakes = []
+    monkeypatch.setattr(wv, "wake_if_hidden", lambda p, **k: wakes.append(k) or {})
+    sc._wait_new_ad(page, 1, ["Sample Ad 01"], wait_s=30, busy_wait_s=60)
+    assert not wakes and not env["notices"]
+
+
+def test_a_long_wait_without_a_dialog_asks_windows_only(env, monkeypatch):
+    """F3: страница ответила — о видимости её не спрашиваем (без 3 с в опросе)."""
+    page = FakePage([])
+    script = [{"ads": 1}] * 200
+    _clock(monkeypatch, script)
+    wakes = []
+    monkeypatch.setattr(wv, "wake_if_hidden", lambda p, **k: wakes.append(k) or {})
+    sc._wait_new_ad(page, 1, ["Sample Ad 01"], wait_s=30, busy_wait_s=60)
+    assert wakes and all(k["probe"] is False and k["answered"] is True for k in wakes)
+
+
+def test_unstick_still_reloads_when_the_tab_cannot_be_asked_after_the_wake(env, monkeypatch):
+    """F7: после побудки `_page_responsive` вернул None — неответившую вкладку
+    всё равно перезагружаем, а не пишем «woke»."""
+    answers = iter([False, None])
+    monkeypatch.setattr(md, "_page_responsive", lambda p, t=5.0: next(answers))
+    monkeypatch.setattr(md, "_tab_gone", lambda p: False)
+    monkeypatch.setattr(md, "_stall_evidence", lambda *a, **k: {})
+    monkeypatch.setattr(md, "_UNSTUCK_RELOADED", set())
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+    monkeypatch.setattr(md._telemetry, "current_run_id", lambda: "run1")
+    monkeypatch.setattr(wv, "wake_if_hidden", lambda p, **k: {"hidden": True, "woke": True})
+    monkeypatch.setattr(wv, "visibility_diag", lambda p, **k: {})
+    reloaded = []
+    monkeypatch.setattr(md, "_reload_awake", lambda p, where: reloaded.append(where) or True)
+    assert md._unstick(object(), "create", editor=False) == "reloaded"
+    assert reloaded == ["create"]

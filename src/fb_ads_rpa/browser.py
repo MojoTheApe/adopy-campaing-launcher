@@ -18,6 +18,7 @@ from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
 from src.fb_ads_rpa import hand_window, profile_trouble
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
+from src.fb_ads_rpa.window_visibility import PerPage
 
 log = logging.getLogger(__name__)
 
@@ -399,10 +400,11 @@ def _front_page(context):
     return None
 
 
-#: ACL-1402: id(page) → удался ли `_disable_background_throttling` в последний
+#: ACL-1402: вкладка → удался ли `_disable_background_throttling` в последний
 #: раз ({"focus", "lifecycle", "at"}). Читает `window_visibility.visibility_diag`
-#: — в телеметрию раздела и долгих ожиданий.
-THROTTLE_STATUS: dict[int, dict] = {}
+#: — в телеметрию раздела и долгих ожиданий. `PerPage`: `id()` умершей
+#: вкладки достаётся новой, serve.py живёт сутками (ревью PR #420, F5).
+THROTTLE_STATUS = PerPage()
 
 
 def _disable_background_throttling(context, page) -> None:
@@ -423,7 +425,7 @@ def _disable_background_throttling(context, page) -> None:
     commands achieve the same thing on a live target.
     """
     status = {"focus": False, "lifecycle": False, "at": round(time.time(), 1)}
-    THROTTLE_STATUS[id(page)] = status
+    THROTTLE_STATUS.set(page, status)
     try:
         session = context.new_cdp_session(page)
     except Exception as exc:
@@ -447,8 +449,8 @@ def _disable_background_throttling(context, page) -> None:
 # is garbage-collected python-side, its event handlers (screencast acks)
 # die with it and Chrome may pause the cast.
 _KEEPALIVE_SESSIONS: list = []
-#: ACL-1402: id(page) вкладок, на которых скринкаст уже запущен.
-_KEEPALIVE_PAGES: set[int] = set()
+#: ACL-1402: вкладки, на которых скринкаст уже запущен (`PerPage`, F5).
+_KEEPALIVE_PAGES = PerPage()
 
 
 def _keep_renderer_active(context, page) -> None:
@@ -502,7 +504,7 @@ def _keep_renderer_active(context, page) -> None:
              "everyNthFrame": 2},
         )
         _KEEPALIVE_SESSIONS.append(session)
-        _KEEPALIVE_PAGES.add(id(page))
+        _KEEPALIVE_PAGES.add(page)
     except Exception as exc:
         log.debug("keep_renderer_active skipped: %s", exc)
 
@@ -513,10 +515,10 @@ def ensure_renderer_kept_active(context, page) -> bool:
     Свежая вкладка (`fresh_tab`, перезагрузка) получала только снятие
     троттлинга, а скринкаст — лишь вкладка, к которой подключились.
     """
-    if id(page) in _KEEPALIVE_PAGES:
+    if page in _KEEPALIVE_PAGES:
         return False
     _keep_renderer_active(context, page)
-    return id(page) in _KEEPALIVE_PAGES
+    return page in _KEEPALIVE_PAGES
 
 
 def _patch_window_geometry(session, page) -> None:

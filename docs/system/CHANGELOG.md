@@ -14,16 +14,33 @@ after attach.
   port), and whether `_disable_background_throttling` succeeded on the tab
   (`browser.THROTTLE_STATUS`). Recorded in every `window_bounds` row (attach and each
   section) and in `stall_unstuck`.
-- `wake_if_hidden`: when a wait runs long and the page or its window is hidden, the
-  CDP helper is re-applied, a keep-alive screencast is started if the tab has none,
-  and a minimised window goes back to normal off-screen — never `bring_to_front` or
-  any foreground call. A tab that does not answer gets no CDP session on itself
-  (ACL-1320); only browser-level commands. At most once per 30 s per tab.
-  Telemetry `window_hidden_woken`; job panel: "The profile window was hidden behind
-  other windows — the robot woke it" or "… — bring it to the front".
+- "Hidden" means what Windows saw: the window is minimised (`minimized`) or its
+  on-screen part is covered by other windows (`covered`). A window parked off-screen
+  is the robot's normal home for a minimised profile (`offscreen`/`parked`) and is
+  not hidden; it only gets a silent keep-alive screencast if the tab has none. The
+  page's own `visibilityState == "hidden"` decides only when Windows cannot be read:
+  with the window on screen it is just a background tab (review of PR #420, F1/F2).
+- `wake_if_hidden`: when a wait runs long and the window is hidden, the CDP helper is
+  re-applied, a keep-alive screencast is started if the tab has none, and a minimised
+  window goes back to normal off-screen — never `bring_to_front` or any foreground
+  call. A tab that does not answer gets no CDP session on itself (ACL-1320); only
+  browser-level commands. At most once per 30 s per tab. "Woke" is claimed only when
+  an animation frame (`requestAnimationFrame`) arrives within 2 s after the wake (F4).
+  Telemetry `window_hidden_woken` (with `reason` and `frames`); job panel, by reason:
+  "The profile window was covered by other windows — the robot woke it", "… was
+  minimised — the robot restored it off-screen", "The profile tab was hidden — …";
+  no frames: "The profile window stayed hidden and did not wake — bring it to the
+  front".
 - Hooked before every "tab is frozen" decision: `meta_dom._tab_frozen`,
   `browser.page_answers`, the unresponsive branch of `_unstick`, and
   `simple_create._wait_new_ad` (after 20 s; the 120 s Meta-busy limit is unchanged).
+  While Meta's "Creating..." dialog is on screen and the page answers, the wait does
+  not wake (Meta is busy, F3); in that poll the page is not probed, Windows decides.
+- Per-tab state (`THROTTLE_STATUS`, keep-alive tabs, last wake, notices, "woken in
+  this run") holds a weak reference next to `id(page)`, so a recycled id in the
+  long-lived serve.py never matches a dead tab (F5). A failed browser-pid lookup is
+  retried after 15 s instead of disabling Win32 for the process (F6). `_unstick`
+  still reloads an unanswering list tab when it cannot be asked after the wake (F7).
 - Not done yet: the live experiment with real covered windows (which mechanism
   actually unfreezes an occluded Chrome window) — planned in PR ACL-1402.
 
