@@ -1025,6 +1025,24 @@
           466
         ],
         "recorded_at": "2026-10-02T07:16:55+00:00"
+      },
+      "421": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1419Q",
+        "review_session": "rev_1419q_1002",
+        "execution_lane": "893501db8cef4b9bb038e7efdb7316ed",
+        "implementer": "Worker-T1419R",
+        "head_sha": "6a38cfaad7bb464c794846477f74803b05677cd5",
+        "base_sha": "20939c4c6579645cd357f5ce41ac289d23a5eaa4",
+        "tree_sha": "102130277a0df6c522f9aa24dd6b351d56e92269",
+        "report": "# Review PR #421 (ACL-1419) - Reviewer-R1419Q / rev_1419q_1002\n\nVerdict: APPROVED (merge requires trivial CHANGELOG conflict resolution / rebase onto work/stage)\n\n- head 25414ba8cf50b4bee0683d4c62c826f513476ea2, tree 294ffaa0d8325debe9ba708b1f32c0db0ecebad6\n- base work/stage 8322a6af0f9098114182cf327320bd87dd239a70, merge-base 9216c5e41498e498aac42ac8c22543064ac88800\n\n## CI\nAll 11 checks green on head (test 3.11, test 3.13, ACL verification, tracker-link, installer jobs, descriptor). No failing jobs. Note: CI ran against the pre-2026-10-01 stage.\n\n## Merge with work/stage\n`git merge-tree` -> CONFLICT in docs/system/CHANGELOG.md only (both sides prepend entries at top: stage ACL-1476/1426/... vs PR ACL-1419). Keep both. Code files (targeting_registry.py, test_targeting_integration.py, config/paths.py) unchanged on stage since merge-base -> no semantic drift. GitHub reports mergeable=CONFLICTING.\n\n## Checks\n- src/analysis_agent/targeting_registry.py:143 - `paths._replace_when_free` (10 x 50 ms, last attempt re-raises, tmp unlinked in finally). Bounded (<=0.45 s extra under the registry lock); no lost writes; same helper as account_links/_atomic_write. OK.\n- tests/test_targeting_integration.py:37-56 - shared 120 s deadline, all workers joined before exitcode read, hung workers terminated+joined(10) and named. Bounded. Assertion strength kept (3 clean exits, 24 targets). Workers inherit env with ACL_LIBRARY_* removed -> local-only, team_library.configured() is env-only. OK.\n- tests/targeting_worker.py - light spawn target (registry import only). OK.\n- New test_save_waits_out_a_briefly_held_registry is real: reverting line 143 to `tmp.replace(p)` -> test fails with PermissionError; restored -> passes.\n- Affected tests (targeting_integration + targeting_registry + targeting_rpa), headless, empty ACL_LIBRARY_*: 45 passed.\n- Safety: no Meta/Multilogin/UI/window code touched; no secrets/ids; text English.\n\n## Findings\n1. [blocker-for-merge, trivial] docs/system/CHANGELOG.md:3 - conflict with work/stage; rebase/merge stage and keep both entries.\n2. [low, out of scope] Same bare-replace pattern remains in sibling stores: src/analysis_agent/ad_text_registry.py:162, country_split.py:161, account_spend.py:242, src/web/goals.py:73, publish_jobs.py:489, app.py:186. Candidate follow-up task, not a blocker.\n3. [nit] targeting_registry imports private `paths._replace_when_free`; consider a public name later (account_links does the same).\n\n## Re-check 2026-10-02 (head 6a38cfaad7bb464c794846477f74803b05677cd5, tree 102130277a0df6c522f9aa24dd6b351d56e92269)\n- Coordinator merged work/stage and work/main into the branch; work/stage 20939c4c6579645cd357f5ce41ac289d23a5eaa4 and work/main 2ab2253f are ancestors of head.\n- git diff work/stage...6a38cfa outside docs/system/CHANGELOG.md has the same patch-id (d308a826) as the approved diff 9216c5e4..25414ba8 -> code unchanged since approval.\n- CHANGELOG: ACL-1419 entry identical and both sides kept; only nit: blank line before the next '## ... ACL-1466' heading was dropped (cosmetic).\n- Affected tests (targeting_integration, targeting_registry, targeting_rpa) headless with empty ACL_LIBRARY_*: 45 passed. GitHub now reports MERGEABLE; CI on new head was pending at re-check time.\n- Verdict unchanged: APPROVED.\n",
+        "main_sha": "2ab2253f4cf3092fe88b207e0203b20518658b0c",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          419
+        ],
+        "recorded_at": "2026-10-02T08:10:16+00:00"
       }
     },
     "stage": {
