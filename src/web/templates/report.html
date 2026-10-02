@@ -1151,22 +1151,22 @@
       display: inline-block;
     }
     .cb-add-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
-    /* Duplication lives on the cards themselves: ⧉ on each ad row
-       (acl-705) and on each campaign slot's header (acl-706) — a bottom
-       button could not say which item it would take. */
-    .cb-dup-slot-btn {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      width: 1.4rem; height: 1.4rem;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      line-height: 1;
-      padding: 0;
-      font-family: inherit;
+    /* Дублирование — на самих карточках: «Duplicate» у объявления
+       (acl-705) и «⧉ Duplicate campaign» под объявлениями кампании. Кнопка
+       внизу формы не могла сказать, что именно копирует (acl-706); значок в
+       шапке слота ящик прятал вместе с шапкой (ACL-1459). Видом — ссылкой,
+       как остальные второстепенные кнопки (ACL-1455). */
+    .cb-dup-slot-btn, .cb-dup-ad-btn {
+      background: transparent; border: 1px solid transparent; border-radius: 4px;
+      color: var(--accent); font-weight: 500; font-family: inherit;
+      cursor: pointer; line-height: 1.4;
     }
-    .cb-dup-slot-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .cb-dup-slot-btn { display: block; margin-top: 0.6rem; padding: 0.2rem 0.4rem; font-size: 0.78rem; }
+    .cb-dup-slot-btn:hover, .cb-dup-ad-btn:hover { background: var(--accent-soft); }
+    .cb-dup-slot-btn:focus-visible, .cb-dup-ad-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+    /* В ящике кампанию добавляет его «+ Campaign» у аккаунта; кнопка формы
+       была второй дорогой туда же. На странице страны она остаётся. */
+    .cbd-host .cb-add-btn { display: none; }
 
     /* "Send to Builder" trigger + popup */
     /* Landing-page chips: second line under the adset name in the CM drill —
@@ -1259,21 +1259,7 @@
     }
     .cb-ad-row:hover .cb-remove-ad-btn { opacity: 1; }
     .cb-remove-ad-btn:hover { color: var(--bad); border-color: var(--bad); opacity: 1; }
-    .cb-dup-ad-btn {
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--muted);
-      width: 1.2rem; height: 1.2rem;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 0.8rem;
-      line-height: 1;
-      padding: 0;
-      font-family: inherit;
-      opacity: 0.5;
-    }
-    .cb-ad-row:hover .cb-dup-ad-btn { opacity: 1; }
-    .cb-dup-ad-btn:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
+    .cb-dup-ad-btn { padding: 0.05rem 0.35rem; font-size: 0.72rem; margin-left: auto; }
     .cb-ad-fields {
       display: grid;
       grid-template-columns: 7rem 1fr;
@@ -1478,6 +1464,16 @@
       border-radius: var(--radius-sm);
       color: var(--text); font-size: 0.78rem; line-height: 1.45;
     }
+    /* ACL-1444: «Close profile» на панели закончившегося задания. */
+    .cb-close-profile { margin: 0.5rem 0 0.2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+    .cb-close-profile-btn {
+      padding: 0.3rem 0.8rem; font-size: 0.76rem; cursor: pointer;
+      background: transparent; color: var(--text);
+      border: 1px solid var(--muted); border-radius: var(--radius-sm);
+    }
+    .cb-close-profile-btn:disabled { opacity: 0.6; cursor: default; }
+    .cb-close-profile-msg { font-size: 0.7rem; color: var(--muted); }
+    .cb-close-profile-msg.cb-close-profile-bad { color: var(--bad); }
 
     /* ── §6 Creative Brief ── */
     .brief-details { margin-top: 1.5rem; }
@@ -2974,6 +2970,31 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .cbd-root, .cbd-handle-arrow { transition: none; }
+    }
+    /* ── Второстепенные кнопки — ссылками (ACL-1455, вариант C 01.10) ──────
+       Были нарисованы рамкой полей (--field-border), почти тем же фоном и
+       серым текстом подсказки: глаз не отличал, куда писать, а что нажимать.
+       Рамка теперь значит «поле»; кнопка — синий текст без рамки. Правила в
+       одном месте и сильнее разбросанных выше; рамка остаётся прозрачной
+       шириной 1px, чтобы строки таблицы не прыгали. */
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn) {
+      background: transparent; border: 1px solid transparent;
+      color: var(--accent); font-weight: 500;
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):hover:not(:disabled) {
+      background: var(--accent-soft); border-color: transparent; color: var(--accent);
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):focus-visible {
+      outline: 2px solid var(--focus-ring); outline-offset: 1px;
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):disabled {
+      color: var(--muted); background: transparent; cursor: not-allowed;
+    }
+    :is(.amap-btn.danger, .amap .amap-x, .acc-btn.danger, .amap-btn.amap-live-bad) {
+      color: var(--bad); border-color: transparent;
+    }
+    :is(.amap-btn.danger, .amap .amap-x, .acc-btn.danger, .amap-btn.amap-live-bad):hover:not(:disabled) {
+      background: var(--bad-soft); color: var(--bad);
     }
   </style>
 </head>
@@ -5208,18 +5229,15 @@ window.cbTree = (function () {
   host.className = 'cbd-camp-body cbd-host';
   var BORROWED = null;
 
-  /* Дублирование кампании. Своё, а не спрятанное: шапка карточки с
-     кнопкой `⧉` в ящике скрыта — имя кампании и так стоит строкой выше, в
-     дереве, — и вместе с ней пропала возможность скопировать кампанию.
-     Здесь она возвращается внизу, где её и ищут: рядом с «+ Add Campaign».
-
-     Копирует та же функция, что и прежняя кнопка: она обходит все поля
-     слота, а не список, записанный руками. Список однажды отстал — язык
-     добавили в форму позже, и копия молча уходила без него. */
-  var tools = document.createElement('div');
-  tools.className = 'cbd-tools';
-  tools.innerHTML = '<button type="button" class="cbd-add" data-act="duplicate">'
-    + '⧉ Duplicate campaign</button>';
+  /* Дублирование кампании живёт в её карточке (ACL-1459). Ящик отвечает за
+     то, что после копии: раскрыть её, ведь её и пришли править — тем одним
+     полем, ради которого копировали. */
+  window.cbdDuplicateOpen = function (source) {
+    window.cbDuplicateSlot(source);
+    var copy = source.nextElementSibling;
+    if (copy && copy.classList.contains('cb-slot')) openCampaign(slotId(copy));
+    else paint();
+  };
 
   /* ── подключить аккаунт, не уходя из ящика ─────────────────────────────
      Третьей копии формы подключения здесь нет и не будет: их было две,
@@ -5277,7 +5295,6 @@ window.cbTree = (function () {
     form.parentNode.insertBefore(mark, form);
     BORROWED = { row: row, form: form, mark: mark };
     host.appendChild(form);
-    host.appendChild(tools);   // вне формы: кнопка внутри неё уходила бы на сервер
     showOnly(form, only);
   }
 
@@ -5414,19 +5431,6 @@ window.cbTree = (function () {
       paint();
     } else if (act === 'add-here') {
       addCampaign(hit.dataset.country, hit.dataset.account);
-    } else if (act === 'duplicate') {
-      var open = findCampaign(openId);
-      if (!open) return;
-      var source = open.camp.slot;
-      window.cbDuplicateSlot(source);
-      var copy = source.nextElementSibling;
-      if (copy && copy.classList.contains('cb-slot')) {
-        /* Копию сразу раскрываем: её и пришли править — тем одним полем,
-           ради которого копировали. */
-        openCampaign(slotId(copy));
-      } else {
-        paint();
-      }
     } else if (act === 'connect' || act === 'connect-picked') {
       var picked = foot.querySelector('.cbd-pick-country');
       var country = act === 'connect-picked' ? (picked && picked.value) : hit.dataset.country;
@@ -9834,13 +9838,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var vidRadio = row.querySelector('input[type="radio"][value="Video"]');
       var isVideo = !!(vidRadio && vidRadio.checked);
 
-      var media;
+      var media, story = '';
       if (fileVal) {
         var cr = CREATIVES.find(function(f) {
           return f.filename === fileVal || f.rel_path === fileVal;
         });
         var path = cr ? (cr.rel_path || cr.filename) : fileVal;
         var url = '/creative-file?path=' + encodeURIComponent(path);
+        // ACL-1426: what the robot puts on the Vertical (story) card.
+        if (cr && cr.story_label) {
+          story = cr.story_label + (cr.square_file ? ' · Post: ' + cr.square_file : '');
+        }
         if (isVideo || (cr && cr.type === 'Video') || /\.(mp4|mov|webm)$/i.test(path)) {
           media = '<video class="cbp-media" src="' + cbpEsc(url) + '" preload="metadata" muted controls></video>';
         } else {
@@ -9861,6 +9869,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       cards.push(
         '<div class="cbp-item">' +
         '<div class="cbp-adlabel">Ad ' + (i + 1) + '</div>' +
+        (story ? '<div class="cbp-story" data-cbp-story style="font-size:0.7rem;opacity:0.75">' + cbpEsc(story) + '</div>' : '') +
         '<div class="cbp-card">' +
           '<div class="cbp-head"><span class="cbp-avatar"></span>' +
             '<span><div class="cbp-pagename">Page name</div><div class="cbp-sub">Sponsored</div></span></div>' +
@@ -10366,7 +10375,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return '<div class="cb-ad-row" data-ad-idx="' + aIdx + '">' +
       '<div class="cb-ad-row-header">' +
       '<span class="cb-ad-row-label">Ad ' + (aIdx + 1) + '</span>' +
-      '<button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">⧉</button>' +
+      '<button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">Duplicate</button>' +
       '<button type="button" class="cb-remove-ad-btn" onclick="cbRemoveAd(this)" title="Remove ad">×</button>' +
       '</div>' +
       '<div class="cb-ad-fields">' +
@@ -10496,6 +10505,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // right under its source and the slots renumber. It used to be one
   // form-bottom button that silently took the last slot — with several
   // campaigns on screen nothing said which one it meant (acl-706).
+  /* Кнопка в карточке. В ящике копию надо ещё и раскрыть — этим заведует
+     ящик; на странице страны достаточно самой копии. */
+  window.cbDuplicateCampaign = function(btn) {
+    var slot = btn.closest('.cb-slot');
+    if (slot && btn.closest('.cbd-host') && window.cbdDuplicateOpen) return window.cbdDuplicateOpen(slot);
+    return window.cbDuplicateSlot(btn);
+  };
+
   window.cbDuplicateSlot = function(btn) {
     var srcSlot = btn.closest('.cb-slot');
     var form = btn.closest('form');
@@ -10679,7 +10696,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return '<div class="cb-slot" data-idx="' + idx + '">' +
       '<div class="cb-slot-header">' +
       '<span class="cb-slot-label">Campaign ' + (idx + 1) + '</span>' +
-      '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateSlot(this)" title="Duplicate this campaign (including its ads)">⧉</button>' +
       '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>' +
       '</div>' +
       '<div class="cb-slot-name" data-name-display></div>' +
@@ -10713,8 +10729,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-ads-divider">Ads</div>' +
       '<div class="cb-ad-rows">' + buildAdRowHTML(idx, 0) + '</div>' +
       '<input type="hidden" name="camp_' + idx + '_ad_count" class="cb-ad-count" value="1">' +
-      '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>' +
+      '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Ad</button>' +
       '</div>' +
+      /* Дублирование кампании — внутри её карточки, под объявлениями
+         (ACL-1459): раньше значок в шапке, которую ящик прячет, и запасная
+         кнопка внизу ящика, вдали от того, что она копирует. */
+      '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateCampaign(this)" title="Duplicate this campaign with its ads">⧉ Duplicate campaign</button>' +
       '</div>' +
       '<div class="cb-preview-col" data-preview-col></div>' +
       '</div>' +
@@ -12315,6 +12335,53 @@ function _doCbPublish(form) {
   if (got.skipped.length) cbSayAlreadyBuilding(got.skipped);
 }
 
+// ACL-1444: «Close profile» на панели закончившегося задания. Чистое задание
+// закрывает профиль само; остальные окна (есть что проверить) человек
+// закрывает отсюда. Сервер закрывает мягко, через MLX API, и отказывает
+// (409), пока на профиле идёт работа. Кнопки нет, пока задание идёт и когда
+// профиль уже закрыт (`job.profile_closed`).
+function cbCloseProfileHtml(job) {
+  if (!job || job.profile_closed) return '';
+  return '<div class="cb-close-profile">'
+    + '<button type="button" class="cb-close-profile-btn">Close profile</button>'
+    + '<span class="cb-close-profile-msg">closes the Multilogin window of this account to free memory (also a window opened by hand)</span>'
+    + '</div>';
+}
+
+function cbBindCloseProfile(panel, jobId) {
+  var btn = panel && panel.querySelector('.cb-close-profile-btn');
+  if (!btn || btn._bound) return;
+  btn._bound = true;
+  var msg = panel.querySelector('.cb-close-profile-msg');
+  function say(text, bad) {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.classList.toggle('cb-close-profile-bad', !!bad);
+  }
+  btn.addEventListener('click', function() {
+    btn.disabled = true;
+    btn.textContent = 'Closing…';
+    say('');
+    fetch('/publish-jobs/' + encodeURIComponent(jobId) + '/close-profile', { method: 'POST' })
+      .then(function(r) { return r.json().catch(function() { return { ok: false, error: 'HTTP ' + r.status }; }); })
+      .then(function(data) {
+        if (data && data.ok) {
+          btn.textContent = '✓ Profile closed';
+          say('the Multilogin window is closed');
+        } else {
+          btn.textContent = 'Close profile';
+          btn.disabled = false;
+          say((data && data.error) || 'Could not close the profile', true);
+        }
+      })
+      .catch(function(e) {
+        btn.textContent = 'Close profile';
+        btn.disabled = false;
+        say(e.message, true);
+      });
+  });
+}
+
 // `done` — необязательный: зовётся один раз, когда работа кончилась любым
 // образом. Нужен очереди «Publish all»: профиль в Multilogin один, и
 // следующий аккаунт начинается только после того, как закончился прошлый.
@@ -12421,6 +12488,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     (job.errors || []).forEach(function(e) {
       html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e) + '</div>';
     });
+    if (!isRunning) html += cbCloseProfileHtml(job);
     return html;
   }
 
@@ -12518,6 +12586,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         if (job === null) return;
         statusPanel.innerHTML = renderStatus(job);
         bindStopButton();
+        cbBindCloseProfile(statusPanel, jobId);
         if (onTick) { try { onTick(job); } catch (e) { /* список очереди подождёт */ } }
         if (!scrolledToStatus) {
           scrolledToStatus = true;
