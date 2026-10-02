@@ -35,6 +35,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.fb_ads_rpa import failure_policy  # noqa: E402
 from src.fb_ads_rpa import meta_dom as md  # noqa: E402
+from src.fb_ads_rpa import page_capture  # noqa: E402
 from src.fb_ads_rpa import run_telemetry  # noqa: E402
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ads_manager" / "ad_copy_text_options_2026_09_25.html"
@@ -143,6 +144,8 @@ def page(browser, monkeypatch, telemetry, typed):
     # Раскрытие полей подменено; путь с настоящим — в тестах ревью PR #346 ниже.
     monkeypatch.setattr(md, "_reveal_ad_copy_fields", lambda p, **kw: True)
     monkeypatch.setattr(md, "_await_creative_settled", lambda p, **kw: True)
+    # Отказ «Add text option» снимает блок креатива — в тестах не на диск.
+    monkeypatch.setattr(page_capture, "capture", lambda *a, **k: "")
     monkeypatch.setattr(md, "_focus_via_cdp_click", lambda p, loc: (loc.focus(), loc.element_handle())[1])
     monkeypatch.setattr(md, "_cdp_mouse_click", lambda pg, x, y: pg.evaluate(
         "([x, y]) => { const e = document.elementFromPoint(x, y); if (e) e.click(); }", [x, y]))

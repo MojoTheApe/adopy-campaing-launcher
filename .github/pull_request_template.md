@@ -11,6 +11,9 @@ PR back from that Issue. A promotion keeps the same task.
 Self-checks and results. Implementation claim, handoff, independent Reviewer/report
 and exact reviewed version. For stage promotion: source PR, same task, verified
 tree and environment proof. Follow the bounded legacy route only for ACL-1383.
+Robot (RPA) fix: the live capture that motivated it is in the bench — fixture
+cut with `scripts/capture_to_fixture.py`, a test running the step on it, a row
+in `tests/bench/catalogue.json` — or the reason there is no capture.
 
 ## Documentation and related processes
 
