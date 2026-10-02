@@ -1,0 +1,1526 @@
+{"run_id": "", "ts": "2026-09-30T06:49:30+00:00", "step": "job_phase", "ok": true, "job": "job-0001", "note": "slot_queue", "diag": {"account": "AcctA_1"}}
+{"run_id": "", "ts": "2026-09-30T06:56:50+00:00", "step": "job_phase", "ok": true, "job": "job-0002", "note": "slot_queue", "diag": {"account": "AcctB_2"}}
+{"run_id": "r00000000001", "ts": "2026-09-30T06:59:37+00:00", "step": "create", "ok": true, "job": "job-0002"}
+{"run_id": "r00000000001", "ts": "2026-09-30T06:59:43+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:00:49+00:00", "step": "create", "ok": true, "job": "job-0001"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:00:52+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:00:53+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:00:55+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:00:56+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:00+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:04+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:05+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:09+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:14+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:25+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:01:26+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:37+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:38+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:38+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:01:49+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:53+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:56+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:01:56+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:59+00:00", "step": "further_limit_row", "ok": true, "note": "dom"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:01:59+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:02:00+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:02:07+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:02:12+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:02:18+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:02:20+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:02:20+00:00", "step": "before_audience_location", "ok": null}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:02:24+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:02:30+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:02:36+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:02:41+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:02:41+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:02:45+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:03:03+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:03:13+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:03:15+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:03:23+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:03:52+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:04:36+00:00", "step": "conversion_website_pick", "ok": true, "note": "recorded_recipe"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:04:37+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:04:38+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:06:05+00:00", "step": "ad_creative_reuse", "ok": false, "note": "retreat_left_selection"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:07:59+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:08:07+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:08:08+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:08:08+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:08:09+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:08:36+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:09:33+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:09:54+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:10:09+00:00", "step": "audience_location", "ok": true}
+{"run_id": "", "ts": "2026-09-30T07:10:23+00:00", "step": "job_phase", "ok": true, "job": "job-0003", "note": "slot_queue", "diag": {"account": "AcctC_3"}}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:11:12+00:00", "step": "languages_pick", "ok": false, "note": "no_suggestion"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:11:31+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:11:57+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:11:57+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:11:58+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:12+00:00", "step": "tab_woken", "ok": null, "job": "job-0003", "note": "before_create"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:14+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:16+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:16+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:18+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:19+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:29+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:32+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:33+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:37+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:43+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:12:51+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:13:02+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:13:03+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:13:06+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:13:18+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:13:21+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:13:21+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:13:21+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:13:38+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:13:52+00:00", "step": "age_suggestion_off", "ok": true, "note": "dom"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:13:53+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:14:09+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:14:21+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:14:30+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:14:31+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:16:07+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:16:15+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:16:26+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:17:19+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:17:19+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:17:36+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:17:54+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:18:03+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:18:20+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:18:21+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:19:02+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:19:02+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:19:08+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:19:15+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:19:17+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:19:39+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:19:42+00:00", "step": "window_bounds", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:19:43+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000003", "ts": "2026-09-30T07:19:44+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:00+00:00", "step": "create", "ok": true, "job": "job-0003"}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:03+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:03+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:20:06+00:00", "step": "ad_copy_second_text", "ok": false, "note": "option_box_not_focused"}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:06+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:20:06+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:08+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:12+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:16+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:17+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:20+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:26+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:30+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:20:31+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:42+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:43+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:44+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:55+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:58+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:59+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:59+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:20:59+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:21:08+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:21:14+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:21:17+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:21:26+00:00", "step": "age_suggestion_off", "ok": false, "note": "dom"}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:21:26+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:21:47+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:21:53+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:21:59+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:21:59+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:22:26+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:22:31+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:22:34+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:23:06+00:00", "step": "tab_frozen", "ok": null, "note": "cdp_click"}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:23:18+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:23:18+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:23:47+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:24:00+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:24:09+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:24:11+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:24:43+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:24:43+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:24:53+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:24:53+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:24:56+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:25:22+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000004", "ts": "2026-09-30T07:25:23+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:25:50+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:25:52+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:26:40+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:26:41+00:00", "step": "ad_copy_blocked", "ok": false, "note": "before_first_try"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:26:42+00:00", "step": "browser_addon_repair", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:27:26+00:00", "step": "ad_copy_second_text", "ok": true, "note": "added_and_verified"}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:27:26+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000002", "ts": "2026-09-30T07:27:33+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:28:36+00:00", "step": "ad_copy_second_text", "ok": true, "note": "added_and_verified"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:28:36+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:28:58+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:29:02+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:31:18+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:31:18+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:31:22+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:31:53+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:31:53+00:00", "step": "ad_copy_blocked", "ok": false, "note": "before_first_try"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:33:23+00:00", "step": "ad_copy_second_text", "ok": true, "note": "added_and_verified"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:33:23+00:00", "step": "text_generation_off", "ok": null, "note": "label_not_found"}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:33:23+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000001", "ts": "2026-09-30T07:33:23+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:05+00:00", "step": "create", "ok": true, "job": "job-0002"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:08+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:08+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:10+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:13+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:18+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:30+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:31+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:37+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:42+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:45+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:56+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:56+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:34:56+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:35:24+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:35:35+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:35:36+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:35:36+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:35:38+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:35:48+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:35:57+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:36:22+00:00", "step": "locations_open", "ok": false, "note": "nothing_to_click"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:36:26+00:00", "step": "audience_location", "ok": false}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:36:33+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:36:37+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:36:37+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:37:18+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:37:25+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:37:34+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:38:22+00:00", "step": "ad_creative_reuse", "ok": null, "note": "pick_did_not_take"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:39:40+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:39:55+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:41:13+00:00", "step": "ad_copy_second_text", "ok": true, "note": "added_and_verified"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:41:13+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:41:22+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:41:29+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:43:17+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:43:17+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:43:53+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:44:57+00:00", "step": "ad_copy_second_text", "ok": true, "note": "added_and_verified"}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:44:57+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000005", "ts": "2026-09-30T07:45:01+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "", "ts": "2026-09-30T11:47:19+00:00", "step": "job_phase", "ok": true, "job": "job-0004", "note": "slot_queue", "diag": {"account": "AcctD_4"}}
+{"run_id": "", "ts": "2026-09-30T11:47:20+00:00", "step": "job_phase", "ok": true, "job": "job-0005", "note": "slot_queue", "diag": {"account": "AcctE_5"}}
+{"run_id": "", "ts": "2026-09-30T11:47:23+00:00", "step": "job_phase", "ok": true, "job": "job-0006", "note": "slot_queue", "diag": {"account": "AcctB_2"}}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:49:13+00:00", "step": "window_bounds", "ok": true, "job": "job-0004"}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:49:54+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:49:57+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:49:57+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:49:59+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:50:14+00:00", "step": "create", "ok": true, "job": "job-0006"}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:50:18+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:50:18+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:50:27+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:50:29+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:50:33+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:50:40+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:50:42+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:50:54+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:50:59+00:00", "step": "tab_woken", "ok": null, "job": "job-0005", "note": "before_create"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:51:04+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:51:07+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:51:07+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:51:07+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:51:12+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:51:12+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:51:16+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:51:19+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:51:27+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:51:36+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:51:37+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:51:37+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:51:39+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:52:13+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:52:15+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:52:17+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:52:27+00:00", "step": "loading_modal_reload", "ok": false, "note": "unresponsive"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:52:31+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:52:36+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:53:02+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:53:04+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:53:04+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:53:04+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:53:29+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:53:30+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:53:31+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:53:31+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:53:32+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:53:47+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:54:02+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:54:11+00:00", "step": "stall_evidence", "ok": null, "note": "stall"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:54:17+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:54:25+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:54:36+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:54:36+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:54:38+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:54:42+00:00", "step": "placements", "ok": false, "note": "placements_card_not_found"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:54:43+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:54:44+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:54:51+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:54:59+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:54:59+00:00", "step": "campaign_name", "ok": false}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:55:01+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:55:01+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:55:02+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:55:16+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:55:16+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:55:44+00:00", "step": "ad_destination", "ok": false, "note": "addon_none_not_set"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:56:35+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:57:02+00:00", "step": "destination_sweep", "ok": true}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:57:03+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000008", "ts": "2026-09-30T11:57:03+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "r00000000006", "ts": "2026-09-30T11:57:53+00:00", "step": "campaigns_list_ready", "ok": true, "note": "after_reload"}
+{"run_id": "r00000000007", "ts": "2026-09-30T11:58:09+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000009", "ts": "2026-09-30T11:58:14+00:00", "step": "create", "ok": true, "job": "job-0004"}
+{"run_id": "r00000000009", "ts": "2026-09-30T11:58:16+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000009", "ts": "2026-09-30T11:58:16+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000009", "ts": "2026-09-30T11:58:18+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000009", "ts": "2026-09-30T11:58:19+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000009", "ts": "2026-09-30T11:58:26+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000009", "ts": "2026-09-30T11:58:26+00:00", "step": "simple_create", "ok": null, "note": "after_continue"}
+{"run_id": "r00000000009", "ts": "2026-09-30T11:58:35+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:00:07+00:00", "step": "create", "ok": true, "job": "job-0005"}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:00:15+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:00:30+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:00:33+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:00:34+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T12:00:41+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:00:41+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000009", "ts": "2026-09-30T12:00:50+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000009", "ts": "2026-09-30T12:00:51+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:00:55+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:00:57+00:00", "step": "simple_objective", "ok": null, "note": "leads"}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:00:59+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:01:03+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:01:07+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:01:14+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000009", "ts": "2026-09-30T12:01:29+00:00", "step": "loading_modal_reload", "ok": false, "note": "unresponsive"}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:01:32+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:01:35+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:01:36+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000010", "ts": "2026-09-30T12:01:36+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000007", "ts": "2026-09-30T12:02:02+00:00", "step": "locations_open", "ok": true, "note": "expander"}
+{"run_id": "r00000000007", "ts": "2026-09-30T12:02:02+00:00", "step": "audience_location", "ok": false, "note": "default_location_left"}
+{"run_id": "r00000000007", "ts": "2026-09-30T12:02:07+00:00", "step": "audience_location", "ok": false}
+{"run_id": "", "ts": "2026-09-30T12:17:39+00:00", "step": "job_phase", "ok": true, "job": "job-0007", "note": "slot_queue", "diag": {"account": "AcctD_4"}}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:18:57+00:00", "step": "create", "ok": true, "job": "job-0007"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:18:59+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:18:59+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:19:02+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:19:03+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:19:13+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:19:20+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:19:28+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:19:29+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:19:33+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:19:38+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:20:09+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:20:10+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:20:10+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:20:11+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:25:28+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:25:30+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:25:33+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:25:33+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:25:34+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:26:02+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:28:57+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:30:56+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:31:52+00:00", "step": "languages_pick", "ok": false, "note": "no_suggestion"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:31:52+00:00", "step": "languages", "ok": null, "note": "already_selected"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:31:52+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:32:14+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:32:14+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:32:21+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:33:47+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:34:00+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:34:07+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:42:29+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:42:29+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:43:10+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:43:15+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:43:33+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:44:07+00:00", "step": "simple_create_more_ads", "ok": false, "note": "tab_frozen"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:44:31+00:00", "step": "ad2_create", "ok": false, "note": "tab_frozen"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:44:33+00:00", "step": "loading_modal_reload", "ok": false, "note": "skipped:simple_create_more_ads"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:44:34+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000011", "ts": "2026-09-30T12:44:34+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "", "ts": "2026-09-30T12:50:00+00:00", "step": "job_phase", "ok": true, "job": "job-0008", "note": "slot_queue", "diag": {"account": "AcctA_1"}}
+{"run_id": "", "ts": "2026-09-30T12:53:01+00:00", "step": "job_phase", "ok": true, "job": "job-0009", "note": "slot_queue", "diag": {"account": "AcctD_4"}}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:53:53+00:00", "step": "create", "ok": true, "job": "job-0009"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:53:56+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:53:56+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:53:58+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:53:59+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:10+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:18+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:18+00:00", "step": "simple_objective", "ok": null, "note": "leads"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:23+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:23+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:28+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:32+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:52+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:53+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:54+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:54:54+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:55:14+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:55:15+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:55:16+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:55:16+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:55:16+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:55:32+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:55:45+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:56:01+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:56:10+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:56:18+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:56:18+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:56:21+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:56:59+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:57:01+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:57:03+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:58:06+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:58:06+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:58:16+00:00", "step": "ad_destination", "ok": false, "note": "url_field_not_focused"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:58:17+00:00", "step": "ad_copy_blocked", "ok": false, "note": "before_first_try"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:58:30+00:00", "step": "browser_addon_repair", "ok": false}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:59:21+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:59:46+00:00", "step": "simple_create_more_ads", "ok": false, "note": "tab_frozen"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:59:51+00:00", "step": "ad2_create", "ok": false, "note": "tab_frozen"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:59:52+00:00", "step": "loading_modal_reload", "ok": false, "note": "skipped:simple_create_more_ads"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:59:52+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000012", "ts": "2026-09-30T12:59:52+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "r00000000013", "ts": "2026-09-30T13:06:07+00:00", "step": "fresh_tab", "ok": false, "job": "job-0008", "note": "meta_silent_in_new_tab"}
+{"run_id": "r00000000013", "ts": "2026-09-30T13:06:07+00:00", "step": "campaign_open_budget", "ok": false, "note": "profile_unresponsive"}
+{"run_id": "r00000000013", "ts": "2026-09-30T13:06:07+00:00", "step": "profile_unresponsive", "ok": false, "note": "page_closed"}
+{"run_id": "r00000000013", "ts": "2026-09-30T13:07:37+00:00", "step": "profile_restarted_unresponsive", "ok": false, "note": "campaign_open"}
+{"run_id": "r00000000013", "ts": "2026-09-30T13:07:37+00:00", "step": "profile_restart_failed", "ok": false, "note": "profile_restart_failed"}
+{"run_id": "", "ts": "2026-09-30T14:31:45+00:00", "step": "job_phase", "ok": true, "job": "job-0010", "note": "slot_queue", "diag": {"account": "AcctD_4"}}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:32:19+00:00", "step": "drafts_pending", "ok": null, "job": "job-0010"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:32:51+00:00", "step": "create_retry", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:32:55+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:32:55+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:32:56+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:32:57+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:33:07+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:33:18+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:33:21+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:33:22+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:33:32+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:33:37+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:33:58+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:33:59+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:34:00+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:34:00+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:34:18+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:34:19+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:34:20+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:34:20+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:34:21+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:34:37+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:34:47+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:35:03+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:35:12+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:35:19+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:35:19+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:35:22+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:35:59+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:36:02+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:36:04+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:36:10+00:00", "step": "click_refused", "ok": false, "note": "covered"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:37:09+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:37:09+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:37:34+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:37:40+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:37:54+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:38:15+00:00", "step": "simple_create_more_ads", "ok": true, "note": "created"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:38:15+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:38:17+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:42:54+00:00", "step": "ad_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:44:24+00:00", "step": "ad2_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:44:30+00:00", "step": "ad2_destination", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:44:31+00:00", "step": "ad2_listed", "ok": true, "note": "listed"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:45:11+00:00", "step": "simple_create_more_ads", "ok": false, "note": "dialog_open"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:45:18+00:00", "step": "ad3_create", "ok": false, "note": "dialog_open"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:45:18+00:00", "step": "loading_modal_reload", "ok": false, "note": "skipped:simple_create_more_ads"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:45:18+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000014", "ts": "2026-09-30T14:45:18+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "", "ts": "2026-09-30T20:22:08+00:00", "step": "job_phase", "ok": true, "job": "job-0011", "note": "slot_queue", "diag": {"account": "AcctE_5"}}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:23:14+00:00", "step": "browser_window", "ok": null, "job": "job-0011"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:23:25+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:23:28+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:23:28+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:23:30+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:23:31+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:23:41+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:23:50+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:23:53+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:23:56+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:01+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:07+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:25+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:27+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:27+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:27+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:43+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:49+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:50+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:50+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:24:51+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:25:07+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:25:31+00:00", "step": "audience_age", "ok": false}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:25:55+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:26:05+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:26:16+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:26:18+00:00", "step": "audience_age_row_opened", "ok": true, "note": "row"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:26:25+00:00", "step": "advantage_plus_audience", "ok": false, "note": "still_on"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:26:30+00:00", "step": "advantage_plus_audience", "ok": false}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:26:31+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:27:18+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:27:19+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:27:20+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:27:45+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:27:45+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:27:49+00:00", "step": "ad_destination", "ok": false, "note": "destination_section_hidden"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:27:49+00:00", "step": "ad_copy_blocked", "ok": false, "note": "before_first_try"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:28:01+00:00", "step": "browser_addon_repair", "ok": false}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:28:51+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:28:54+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:28:59+00:00", "step": "destination_sweep", "ok": false, "note": "url_field_not_focused"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:28:59+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000015", "ts": "2026-09-30T20:28:59+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:16+00:00", "step": "overlays_cleared", "ok": null, "job": "job-0011", "note": "network_trouble"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:19+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:19+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:19+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:20+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:21+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:29+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:36+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:37+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:37+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:38+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:29:43+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:02+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:02+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:03+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:04+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:20+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:22+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:22+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:22+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:23+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:36+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:30:45+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:31:30+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:32:34+00:00", "step": "languages_pick", "ok": false, "note": "no_suggestion"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:32:34+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:32:42+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:32:42+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:32:46+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:33:57+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:34:03+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:34:14+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:35:29+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:35:29+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:36:09+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:37:22+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:37:31+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000016", "ts": "2026-09-30T20:37:31+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "", "ts": "2026-10-01T06:14:17+00:00", "step": "job_phase", "ok": true, "job": "job-0012", "note": "slot_queue", "diag": {"account": "AcctD_4"}}
+{"run_id": "", "ts": "2026-10-01T06:14:17+00:00", "step": "job_phase", "ok": true, "job": "job-0013", "note": "slot_queue", "diag": {"account": "AcctC_3"}}
+{"run_id": "", "ts": "2026-10-01T06:14:18+00:00", "step": "job_phase", "ok": true, "job": "job-0014", "note": "slot_queue", "diag": {"account": "AcctE_5"}}
+{"run_id": "", "ts": "2026-10-01T06:14:18+00:00", "step": "job_phase", "ok": true, "job": "job-0015", "note": "slot_queue", "diag": {"account": "AcctA_1"}}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:15:04+00:00", "step": "window_bounds", "ok": true, "job": "job-0012"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:15:48+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:15:48+00:00", "step": "create", "ok": true, "job": "job-0015"}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:15:49+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:15:50+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000019", "ts": "2026-10-01T06:16:17+00:00", "step": "drafts_pending", "ok": null, "job": "job-0013"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:16:32+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000019", "ts": "2026-10-01T06:16:39+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000019", "ts": "2026-10-01T06:16:40+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:16:41+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:16:43+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:16:43+00:00", "step": "create", "ok": true, "job": "job-0014"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:16:44+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:00+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:06+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:11+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:11+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:14+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:17:15+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:17+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:17:20+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:30+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:31+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:32+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:32+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:17:33+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:17:41+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:42+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:43+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:44+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:44+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:44+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:17:50+00:00", "step": "objective_wait", "ok": null, "note": "budget"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:17:50+00:00", "step": "campaign_open_budget", "ok": false, "note": "objective_leads"}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:17:51+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:17:52+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:17:53+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:17:54+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:17:58+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:17:59+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:18:06+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000019", "ts": "2026-10-01T06:18:10+00:00", "step": "create_retry", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:18:10+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000019", "ts": "2026-10-01T06:18:10+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:18:18+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:18:24+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000019", "ts": "2026-10-01T06:18:31+00:00", "step": "campaign_open_budget", "ok": false, "note": "objective_leads"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:18:31+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:18:31+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:18:32+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000019", "ts": "2026-10-01T06:18:47+00:00", "step": "objective_leads", "ok": false, "note": "no_objective_dialog:loading_ceiling"}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:18:54+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:18:59+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:19:00+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:19:01+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:19:04+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000019", "ts": "2026-10-01T06:19:31+00:00", "step": "campaigns_list_ready", "ok": true, "note": "ready"}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:19:33+00:00", "step": "window_bounds", "ok": true, "job": "job-0013"}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:19:34+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:19:35+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:19:40+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:19:40+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:19:43+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:19:43+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:19:44+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:19:53+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:19:54+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:19:57+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:19:59+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:20:06+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:20:06+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:20:08+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:20:18+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:20:19+00:00", "step": "simple_create_more_ads", "ok": true, "note": "created"}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:20:19+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:20:20+00:00", "step": "further_limit_row", "ok": true, "note": "dom"}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:20:20+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:20:20+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:20:20+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:20:20+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:20:23+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:20:26+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:20:29+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:20:29+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:20:29+00:00", "step": "window_bounds", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:20:33+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:20:37+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:20:40+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:20:51+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:20:54+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:21:07+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:21:14+00:00", "step": "conversion_website_pick", "ok": true, "note": "recorded_recipe:menu_closed"}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:21:15+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:21:15+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:21:17+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:21:52+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:22:08+00:00", "step": "ad_creative_reuse", "ok": false, "note": "dirty_after_advance"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:22:19+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:22:24+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:22:25+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:22:30+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:22:39+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:22:40+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:22:40+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:22:42+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:22:58+00:00", "step": "languages_pick", "ok": false, "note": "no_suggestion"}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:22:58+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:23:08+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:23:20+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:23:21+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:24:06+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:25:26+00:00", "step": "ad_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:25:27+00:00", "step": "audience_location", "ok": false, "note": "default_location_left"}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:25:33+00:00", "step": "audience_location", "ok": false}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:25:48+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:25:51+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:25:56+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:26:08+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:26:08+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:26:14+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:26:21+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:26:33+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:26:35+00:00", "step": "audience_age_row_opened", "ok": true, "note": "row"}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:26:41+00:00", "step": "age_suggestion_off", "ok": false, "note": "dom"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:26:45+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:26:48+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:26:57+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:27:17+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:27:22+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000017", "ts": "2026-10-01T06:27:28+00:00", "step": "ad2_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:28:23+00:00", "step": "locations_open", "ok": false, "note": "nothing_to_click"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:28:31+00:00", "step": "audience_location", "ok": false}
+{"run_id": "r00000000021", "ts": "2026-10-01T06:28:35+00:00", "step": "placements", "ok": false}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:28:53+00:00", "step": "ad_name", "ok": false, "note": "not_on_ad_level"}
+{"run_id": "r00000000020", "ts": "2026-10-01T06:29:08+00:00", "step": "languages", "ok": false, "note": "field_not_found"}
+{"run_id": "r00000000018", "ts": "2026-10-01T06:29:09+00:00", "step": "ad_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "", "ts": "2026-10-01T06:31:43+00:00", "step": "job_phase", "ok": true, "job": "job-0016", "note": "slot_queue", "diag": {"account": "AcctD_4"}}
+{"run_id": "", "ts": "2026-10-01T06:31:44+00:00", "step": "job_phase", "ok": true, "job": "job-0017", "note": "slot_queue", "diag": {"account": "AcctC_3"}}
+{"run_id": "", "ts": "2026-10-01T06:31:44+00:00", "step": "job_phase", "ok": true, "job": "job-0018", "note": "slot_queue", "diag": {"account": "AcctE_5"}}
+{"run_id": "", "ts": "2026-10-01T06:31:46+00:00", "step": "job_phase", "ok": true, "job": "job-0019", "note": "slot_queue", "diag": {"account": "AcctA_1"}}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:01+00:00", "step": "browser_window", "ok": null, "job": "job-0017"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:11+00:00", "step": "create", "ok": true, "job": "job-0016"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:13+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:13+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:13+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:14+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:15+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:15+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:15+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:16+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:17+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:22+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:25+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:25+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:26+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:29+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:34+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:35+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:37+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:38+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:39+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:42+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:32:47+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:49+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:49+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:32:51+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000024", "ts": "2026-10-01T06:32:51+00:00", "step": "browser_window", "ok": null, "job": "job-0018"}
+{"run_id": "r00000000024", "ts": "2026-10-01T06:33:00+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:00+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:33:01+00:00", "step": "create", "ok": true, "job": "job-0019"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:03+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:04+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:05+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:05+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:05+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000024", "ts": "2026-10-01T06:33:07+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000024", "ts": "2026-10-01T06:33:07+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:07+00:00", "step": "further_limit_row", "ok": true, "note": "dom"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:07+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:07+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:20+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:22+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:23+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:24+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:24+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:24+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000024", "ts": "2026-10-01T06:33:28+00:00", "step": "objective_leads", "ok": false, "note": "no_objective_dialog:radio"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:33:32+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:32+00:00", "step": "age_suggestion_off", "ok": true, "note": "dom"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:32+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:39+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:48+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:33:48+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:33:49+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:51+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:33:56+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:33:58+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:33:59+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:34:04+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:34:05+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:34:05+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:34:05+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:34:12+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:34:15+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:34:17+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:34:18+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:34:18+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000024", "ts": "2026-10-01T06:34:18+00:00", "step": "campaigns_list_ready", "ok": true, "note": "ready"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:34:20+00:00", "step": "window_bounds", "ok": true, "job": "job-0018"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:34:20+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:34:29+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:34:32+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:34:35+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:34:41+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:34:49+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:34:51+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:34:57+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:34:59+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:35:00+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:35:02+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:35:04+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:35:05+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:35:06+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:35:07+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:35:17+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:35:23+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:35:24+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:35:24+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:35:32+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:35:32+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:35:41+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:35:41+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:35:44+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:35:45+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:35:48+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:35:48+00:00", "step": "further_limit_row", "ok": true, "note": "dom"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:35:48+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:35:49+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:36:03+00:00", "step": "text_variations_off", "ok": null, "note": "label_not_found"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:36:03+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:36:03+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:36:12+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:36:23+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:36:23+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:36:24+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:36:30+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:36:32+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:36:44+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:36:47+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:36:47+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:37:00+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:37:09+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:37:09+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:37:22+00:00", "step": "simple_create_more_ads", "ok": true, "note": "created"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:37:22+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:37:23+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:37:24+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:37:48+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000022", "ts": "2026-10-01T06:37:49+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:02+00:00", "step": "drafts_pending", "ok": null, "job": "job-0017"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:08+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:10+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:10+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:12+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:13+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:18+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:21+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:23+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:24+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:29+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:33+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:45+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:46+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:46+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:38:48+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:38:51+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:38:51+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:38:56+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:00+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:39:00+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:04+00:00", "step": "further_limit_row", "ok": true, "note": "dom"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:04+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:04+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:16+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:39:22+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:25+00:00", "step": "age_suggestion_off", "ok": true, "note": "cdp"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:25+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:39:29+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:39:30+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:39:34+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:35+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:39:36+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:39:37+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:39:37+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:39:38+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:41+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:47+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:39:47+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:39:56+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:40:15+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:40:17+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:40:17+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:40:20+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:40:40+00:00", "step": "audience_location_attempt", "ok": false, "note": "no_country_option"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:40:42+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:40:58+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:41:01+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:41:04+00:00", "step": "ad_creative_reuse", "ok": false, "note": "dirty_after_advance"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:41:10+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:41:10+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:41:12+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:41:40+00:00", "step": "ad_destination", "ok": false, "note": "addon_none_not_set"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:41:52+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:42:03+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:42:03+00:00", "step": "window_bounds", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:42:04+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:42:23+00:00", "step": "languages_pick", "ok": false, "note": "no_suggestion"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:42:24+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:42:43+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:42:43+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:42:53+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:43:21+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:43:33+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:43:34+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:43:37+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:43:42+00:00", "step": "destination_sweep", "ok": true}
+{"run_id": "r00000000027", "ts": "2026-10-01T06:43:42+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "", "ts": "2026-10-01T06:43:42+00:00", "step": "job_phase", "ok": true, "job": "job-0020", "note": "slot_queue", "diag": {"account": "AcctB_2"}}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:24+00:00", "step": "create", "ok": true, "job": "job-0020"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:26+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:26+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:28+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:29+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:33+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:37+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:38+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:43+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:48+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:44:51+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:01+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:02+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:02+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:11+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:45:12+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:45:12+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:15+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:15+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:15+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:15+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:22+00:00", "step": "further_limit_continue", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:28+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:36+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:52+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:45:59+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:46:04+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:46:04+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:46:06+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:46:35+00:00", "step": "ad_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:46:38+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:46:43+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:46:46+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:46:48+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:47:10+00:00", "step": "ad_copy_second_text", "ok": false, "note": "add_control_not_found"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:47:10+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:47:10+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:47:12+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:47:31+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:47:54+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:47:57+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:48:12+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:48:27+00:00", "step": "text_generation_off", "ok": null, "note": "label_not_found"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:48:56+00:00", "step": "ad_copy_second_text", "ok": true, "note": "added_and_verified"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:48:57+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:49:05+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:49:08+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:49:57+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:49:57+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:49:58+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:49:58+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:50:12+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:50:24+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:50:24+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:50:39+00:00", "step": "ad2_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:50:45+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:50:57+00:00", "step": "ad_copy_second_text", "ok": true, "note": "added_and_verified"}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:50:57+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000028", "ts": "2026-10-01T06:50:57+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:12+00:00", "step": "tab_woken", "ok": null, "job": "job-0020", "note": "before_create"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:15+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:51:15+00:00", "step": "ad2_destination", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:18+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:18+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:51:19+00:00", "step": "ad2_listed", "ok": true, "note": "listed"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:19+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:21+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:24+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:29+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:29+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:35+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:41+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:44+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:51:49+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:54+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:54+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:51:57+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:52:03+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:52:03+00:00", "step": "ad_copy_blocked", "ok": false, "note": "before_first_try"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:52:06+00:00", "step": "simple_create_more_ads", "ok": true, "note": "created"}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:52:06+00:00", "step": "ad3_create", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:07+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:10+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:10+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:10+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:10+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:52:12+00:00", "step": "ad3_name", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:25+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:33+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:45+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:52:51+00:00", "step": "text_generation_off", "ok": null, "note": "label_not_found"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:52+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:52:52+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:57+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:52:57+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:53:06+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000026", "ts": "2026-10-01T06:53:06+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:53:34+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:53:40+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:53:44+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:53:57+00:00", "step": "ad_copy_second_text", "ok": false, "note": "add_control_not_found"}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:53:59+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000025", "ts": "2026-10-01T06:54:02+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:54:02+00:00", "step": "create", "ok": true, "job": "job-0018"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:54:08+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:54:09+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:54:14+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:54:15+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:54:29+00:00", "step": "drafts_pending", "ok": null, "job": "job-0019"}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:54:47+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:54:48+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:54:48+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:54:52+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:55:05+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:55:16+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:55:20+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:55:21+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:55:34+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:55:41+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:55:44+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:55:47+00:00", "step": "ad_copy_second_text", "ok": true, "note": "added_and_verified"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:55:47+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:55:51+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:55:53+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:55:56+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:56:07+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:56:11+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:56:19+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:56:27+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:56:28+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:56:29+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:56:35+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:56:35+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:56:35+00:00", "step": "window_bounds", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:56:39+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:56:40+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:56:40+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:56:44+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:56:47+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:56:47+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:56:50+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:56:58+00:00", "step": "further_limit_row", "ok": true, "note": "dom"}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:56:58+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:56:58+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:56:59+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:57:21+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:57:32+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:57:33+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:57:33+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:57:35+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:57:41+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:57:46+00:00", "step": "ad_copy_second_text", "ok": true, "note": "added_and_verified"}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:57:46+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000029", "ts": "2026-10-01T06:57:46+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:57:52+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:57:58+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:58:06+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:58:06+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:58:11+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:58:12+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:58:13+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:58:13+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:58:13+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T06:58:17+00:00", "step": "ad_creative_reuse", "ok": false, "note": "dirty_after_advance"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:58:30+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:58:42+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:58:51+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:58:57+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:58:57+00:00", "step": "audience_location_attempt", "ok": false, "note": "no_suggestions"}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:58:58+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:59:00+00:00", "step": "audience_location", "ok": false, "note": "default_location_left"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:59:04+00:00", "step": "audience_location", "ok": false}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:59:24+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:59:30+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:59:31+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000030", "ts": "2026-10-01T06:59:33+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:59:48+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:59:48+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T06:59:59+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:00:14+00:00", "step": "text_variations_off", "ok": null, "note": "label_not_found"}
+{"run_id": "r00000000030", "ts": "2026-10-01T07:00:18+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T07:00:21+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T07:00:23+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:00:29+00:00", "step": "ad_copy_second_text", "ok": false, "note": "add_control_not_found"}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:00:29+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:00:46+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:00:46+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T07:01:01+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000030", "ts": "2026-10-01T07:01:01+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T07:01:23+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:01:32+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:01:32+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:01:35+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:01:48+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000030", "ts": "2026-10-01T07:01:54+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:02:17+00:00", "step": "ad_copy_second_text", "ok": false, "note": "add_control_not_found"}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:02:17+00:00", "step": "text_variations_off", "ok": null, "note": "label_not_found"}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:02:17+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000031", "ts": "2026-10-01T07:02:21+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "r00000000030", "ts": "2026-10-01T07:02:22+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000030", "ts": "2026-10-01T07:02:22+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "r00000000023", "ts": "2026-10-01T07:02:54+00:00", "step": "ad_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000023", "ts": "2026-10-01T07:05:50+00:00", "step": "ad3_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000023", "ts": "2026-10-01T07:06:08+00:00", "step": "ad3_destination", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000023", "ts": "2026-10-01T07:06:09+00:00", "step": "ad3_listed", "ok": true, "note": "listed"}
+{"run_id": "r00000000023", "ts": "2026-10-01T07:06:09+00:00", "step": "loading_modal_reload", "ok": false, "note": "skipped:simple_create_more_ads"}
+{"run_id": "r00000000023", "ts": "2026-10-01T07:06:12+00:00", "step": "destination_sweep", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000023", "ts": "2026-10-01T07:06:13+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000023", "ts": "2026-10-01T07:06:13+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:22+00:00", "step": "create", "ok": true, "job": "job-0016"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:23+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:23+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:24+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:25+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:30+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:36+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:37+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:38+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:39+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:43+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:55+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:56+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:57+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:06:57+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:08+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:09+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:09+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:09+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:09+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:21+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:27+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:27+00:00", "step": "before_audience_location", "ok": null}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:38+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:44+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:49+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:50+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:07:51+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:08:16+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:08:17+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:08:18+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:08:49+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:08:49+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:08:59+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:09:21+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:09:32+00:00", "step": "simple_create_more_ads", "ok": true, "note": "created"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:09:32+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:09:34+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:12:48+00:00", "step": "ad_creative_reuse", "ok": false, "note": "dirty_after_advance"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:17:05+00:00", "step": "ad_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:19:58+00:00", "step": "ad2_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:20:13+00:00", "step": "ad2_destination", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:20:13+00:00", "step": "ad2_listed", "ok": true, "note": "listed"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:20:19+00:00", "step": "simple_create_more_ads", "ok": true, "note": "created"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:20:19+00:00", "step": "ad3_create", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:20:20+00:00", "step": "ad3_name", "ok": true}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:25:40+00:00", "step": "ad_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:28:34+00:00", "step": "ad3_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:28:50+00:00", "step": "ad3_destination", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:28:50+00:00", "step": "ad3_listed", "ok": true, "note": "listed"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:28:50+00:00", "step": "loading_modal_reload", "ok": false, "note": "skipped:simple_create_more_ads"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:28:53+00:00", "step": "destination_sweep", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:28:53+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000032", "ts": "2026-10-01T07:28:53+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "", "ts": "2026-10-01T07:48:46+00:00", "step": "job_phase", "ok": true, "job": "job-0021", "note": "slot_queue", "diag": {"account": "AcctD_4"}}
+{"run_id": "", "ts": "2026-10-01T07:48:50+00:00", "step": "job_phase", "ok": true, "job": "job-0022", "note": "slot_queue", "diag": {"account": "AcctC_3"}}
+{"run_id": "", "ts": "2026-10-01T07:48:53+00:00", "step": "job_phase", "ok": true, "job": "job-0023", "note": "slot_queue", "diag": {"account": "AcctE_5"}}
+{"run_id": "", "ts": "2026-10-01T07:48:55+00:00", "step": "job_phase", "ok": true, "job": "job-0024", "note": "slot_queue", "diag": {"account": "AcctA_1"}}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:49:44+00:00", "step": "browser_window", "ok": null, "job": "job-0021"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:50:15+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000034", "ts": "2026-10-01T07:50:21+00:00", "step": "create", "ok": true, "job": "job-0022"}
+{"run_id": "r00000000034", "ts": "2026-10-01T07:50:22+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:50:24+00:00", "step": "create_took", "ok": false, "note": "table_loading"}
+{"run_id": "r00000000035", "ts": "2026-10-01T07:50:33+00:00", "step": "create", "ok": true, "job": "job-0023"}
+{"run_id": "r00000000035", "ts": "2026-10-01T07:50:38+00:00", "step": "create_took", "ok": false, "note": "frozen"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:50:54+00:00", "step": "create_quick_retry", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:50:55+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:50:56+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:50:58+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:50:59+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:51:07+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:51:18+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000036", "ts": "2026-10-01T07:51:21+00:00", "step": "loading_modal_reload", "ok": false, "job": "job-0024", "note": "unresponsive"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:51:22+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:51:23+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000035", "ts": "2026-10-01T07:51:25+00:00", "step": "fresh_tab", "ok": false, "note": "meta_silent_in_new_tab"}
+{"run_id": "r00000000035", "ts": "2026-10-01T07:51:25+00:00", "step": "campaign_open_budget", "ok": false, "note": "profile_unresponsive"}
+{"run_id": "r00000000035", "ts": "2026-10-01T07:51:25+00:00", "step": "profile_unresponsive", "ok": false, "note": "page_closed"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:51:27+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:51:32+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:51:49+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:51:50+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:51:51+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:51:51+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000034", "ts": "2026-10-01T07:52:15+00:00", "step": "fresh_tab", "ok": false, "note": "meta_silent_in_new_tab"}
+{"run_id": "r00000000034", "ts": "2026-10-01T07:52:15+00:00", "step": "campaign_open_budget", "ok": false, "note": "profile_unresponsive"}
+{"run_id": "r00000000034", "ts": "2026-10-01T07:52:15+00:00", "step": "profile_unresponsive", "ok": false, "note": "page_closed"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:52:17+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:52:19+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:52:20+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:52:20+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000036", "ts": "2026-10-01T07:52:20+00:00", "step": "campaign_open_budget", "ok": false, "note": "create"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:52:20+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000035", "ts": "2026-10-01T07:52:27+00:00", "step": "profile_restarted_unresponsive", "ok": false, "note": "campaign_open"}
+{"run_id": "r00000000035", "ts": "2026-10-01T07:52:27+00:00", "step": "profile_restart_failed", "ok": false, "note": "profile_restart_failed"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:52:37+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:52:47+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:53:06+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:53:16+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:53:23+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:53:23+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:53:26+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000034", "ts": "2026-10-01T07:53:34+00:00", "step": "window_resize", "ok": true}
+{"run_id": "r00000000036", "ts": "2026-10-01T07:53:42+00:00", "step": "campaigns_list_ready", "ok": true, "note": "after_reload"}
+{"run_id": "r00000000034", "ts": "2026-10-01T07:53:51+00:00", "step": "campaigns_list_ready", "ok": true, "note": "ready"}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:53:58+00:00", "step": "create", "ok": true, "job": "job-0024"}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:07+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:08+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:09+00:00", "step": "create", "ok": true, "job": "job-0022"}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:10+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:11+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:13+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:13+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:16+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:18+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:20+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:22+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:54:25+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:26+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:27+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:29+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:30+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:32+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:54:35+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:54:35+00:00", "step": "window_bounds", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:36+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:54:37+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:40+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:42+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:45+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:47+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:57+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:58+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:54:58+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:59+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:59+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:54:59+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:55:10+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:55:12+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:55:14+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:55:15+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:55:15+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:55:16+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:55:24+00:00", "step": "further_limit_row", "ok": true, "note": "dom"}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:55:24+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:55:24+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:55:32+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:55:45+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:55:46+00:00", "step": "age_suggestion_off", "ok": true, "note": "cdp"}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:55:46+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:55:53+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:55:53+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:55:59+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:56:03+00:00", "step": "audience_location_attempt", "ok": false, "note": "no_country_option"}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:56:11+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:56:18+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:56:23+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:56:31+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:56:31+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:56:32+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "", "ts": "2026-10-01T07:56:53+00:00", "step": "job_phase", "ok": true, "job": "job-0025", "note": "slot_queue", "diag": {"account": "AcctB_2"}}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:57:05+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:57:16+00:00", "step": "languages_pick", "ok": false, "note": "no_suggestion"}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:57:20+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:57:40+00:00", "step": "simple_create_more_ads", "ok": true, "note": "created"}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:57:40+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:57:44+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T07:57:47+00:00", "step": "ad_creative_upload", "ok": null, "note": "media_entry:set_up_creative"}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:57:59+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:58:21+00:00", "step": "create", "ok": true, "job": "job-0025"}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:58:21+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:58:24+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:58:27+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:58:30+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:58:32+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:58:36+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:58:40+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:58:41+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T07:58:43+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:58:44+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:58:55+00:00", "step": "next_to_ad", "ok": false}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:58:58+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:01+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:12+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:12+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:13+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:22+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:24+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:24+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:25+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:39+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000038", "ts": "2026-10-01T07:59:43+00:00", "step": "campaigns_list_ready", "ok": true, "note": "ready"}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:46+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:46+00:00", "step": "before_audience_location", "ok": null}
+{"run_id": "r00000000039", "ts": "2026-10-01T07:59:59+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:00:07+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:00:13+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:00:13+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000040", "ts": "2026-10-01T08:00:35+00:00", "step": "create", "ok": true, "job": "job-0022"}
+{"run_id": "r00000000040", "ts": "2026-10-01T08:00:44+00:00", "step": "create_took", "ok": false, "note": "table_loading"}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:00:58+00:00", "step": "placements", "ok": false}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:01:02+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:01:05+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000040", "ts": "2026-10-01T08:01:40+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000040", "ts": "2026-10-01T08:02:00+00:00", "step": "campaign_open_budget", "ok": false, "note": "objective_leads"}
+{"run_id": "r00000000040", "ts": "2026-10-01T08:02:22+00:00", "step": "objective_leads", "ok": false, "note": "no_objective_dialog:loading_ceiling"}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:02:35+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:02:48+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:03:03+00:00", "step": "text_generation_off", "ok": null, "note": "label_not_found"}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:03:25+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:03:34+00:00", "step": "ad_copy_second_text", "ok": true, "note": "added_and_verified"}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:03:34+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:03:43+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:03:46+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000041", "ts": "2026-10-01T08:03:50+00:00", "step": "create", "ok": true, "job": "job-0022"}
+{"run_id": "r00000000041", "ts": "2026-10-01T08:03:52+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:04:40+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:04:40+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:04:54+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:04:59+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000041", "ts": "2026-10-01T08:05:25+00:00", "step": "stall_evidence", "ok": null, "note": "loading_ceiling"}
+{"run_id": "r00000000041", "ts": "2026-10-01T08:05:25+00:00", "step": "campaign_open_budget", "ok": false, "note": "objective_leads"}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:05:30+00:00", "step": "ad_copy_second_text", "ok": false, "note": "add_control_not_found"}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:05:31+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000039", "ts": "2026-10-01T08:05:32+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "", "ts": "2026-10-01T08:05:33+00:00", "step": "job_phase", "ok": true, "job": "job-0026", "note": "slot_queue", "diag": {"account": "AcctE_5"}}
+{"run_id": "r00000000041", "ts": "2026-10-01T08:05:47+00:00", "step": "objective_leads", "ok": false, "note": "no_objective_dialog:loading_ceiling"}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:06:28+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:07:15+00:00", "step": "create", "ok": true, "job": "job-0026"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:07:16+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000041", "ts": "2026-10-01T08:07:27+00:00", "step": "campaigns_list_ready", "ok": false, "note": "route_placeholder"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:07:43+00:00", "step": "tab_woken", "ok": null, "job": "job-0022", "note": "before_create"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:07:52+00:00", "step": "create", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:07:53+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:08:02+00:00", "step": "ad_creative_reuse", "ok": false, "note": "dirty_after_advance"}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:08:07+00:00", "step": "ad_creative_reuse", "ok": false, "note": "retreat_left_selection"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:08:53+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:09:06+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:09:09+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:09:15+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:09:16+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:09:18+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:09:31+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:10:06+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:10:13+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:10:18+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:11:42+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:11:46+00:00", "step": "loading_modal_reload", "ok": true, "note": "no_objective_dialog"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:11:47+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:11:58+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:12:44+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:12:46+00:00", "step": "ad_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:12:55+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:13:01+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:13:15+00:00", "step": "ad_copy_second_text", "ok": false, "note": "add_control_not_found"}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:13:23+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:13:42+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:13:42+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:13:43+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:14:31+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:14:39+00:00", "step": "conversion_event", "ok": false}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:14:43+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:14:48+00:00", "step": "further_limit_row", "ok": true, "note": "dom"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:14:48+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:14:49+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:15:00+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:15:06+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:15:22+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:15:36+00:00", "step": "stall_unstuck", "ok": null, "note": "woke"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:15:49+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:15:50+00:00", "step": "age_suggestion_off", "ok": false, "note": "dom"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:15:50+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:15:58+00:00", "step": "ad2_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:16:03+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:16:16+00:00", "step": "ad2_destination", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:16:17+00:00", "step": "ad2_listed", "ok": true, "note": "listed"}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:16:26+00:00", "step": "simple_create_more_ads", "ok": true, "note": "created"}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:16:26+00:00", "step": "ad3_create", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:16:28+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:16:28+00:00", "step": "ad3_name", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:16:50+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:16:50+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:16:54+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:16:59+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:17:08+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:17:08+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:17:15+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:17:19+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:17:20+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:17:51+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:18:08+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:18:10+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:18:12+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:18:12+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:18:13+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:18:27+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:18:31+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:18:34+00:00", "step": "ad_copy_second_text", "ok": false, "note": "add_control_not_found"}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:18:34+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:18:36+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:18:42+00:00", "step": "destination_sweep_skipped", "ok": null, "note": "all_destinations_confirmed_in_flow"}
+{"run_id": "r00000000037", "ts": "2026-10-01T08:18:42+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:18:45+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:18:47+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:18:51+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:18:54+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:19:26+00:00", "step": "create", "ok": true, "job": "job-0024"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:19:27+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:19:30+00:00", "step": "audience_location_attempt", "ok": false, "note": "no_country_option"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:19:38+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:19:38+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:19:52+00:00", "step": "ad_destination", "ok": false, "note": "destination_not_website"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:19:59+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:20:29+00:00", "step": "ad_creative_reuse", "ok": false, "note": "dirty_after_advance"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:20:36+00:00", "step": "ad_copy", "ok": false}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:20:44+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:20:46+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:20:50+00:00", "step": "stall_evidence", "ok": null, "note": "stall"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:20:51+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:20:56+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:21:06+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:21:13+00:00", "step": "languages_pick", "ok": false, "note": "no_suggestion"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:21:14+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:21:21+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:21:21+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:21:23+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:21:25+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:21:37+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:21:38+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:21:41+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:21:55+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:21:55+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:21:58+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:22:01+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:22:15+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:22:17+00:00", "step": "destination_website_selected", "ok": true, "note": "switched_to_website"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:22:21+00:00", "step": "next_to_adset", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:22:36+00:00", "step": "destination_sweep", "ok": true}
+{"run_id": "r00000000043", "ts": "2026-10-01T08:22:36+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:22:43+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:22:54+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:23:27+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:23:28+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:23:30+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:24:37+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:24:39+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:24:43+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:24:45+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:24:46+00:00", "step": "further_limit_row", "ok": true, "note": "dom"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:24:46+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:24:46+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:24:59+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:25:10+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:25:35+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:25:46+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:25:47+00:00", "step": "ad_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:26:01+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:26:02+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:26:09+00:00", "step": "ad_creative_wizard", "ok": null, "note": "library_pick:closed"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:26:27+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:26:27+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:26:59+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:27:11+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:27:13+00:00", "step": "next_to_ad", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:27:19+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:27:48+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:28:08+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000042", "ts": "2026-10-01T08:28:08+00:00", "step": "ad_level_summary", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:28:27+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:28:27+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:28:46+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:28:49+00:00", "step": "ad3_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:29:07+00:00", "step": "ad3_destination", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:29:08+00:00", "step": "ad3_listed", "ok": true, "note": "listed"}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:29:08+00:00", "step": "loading_modal_reload", "ok": false, "note": "skipped:simple_create_more_ads"}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:29:11+00:00", "step": "destination_sweep", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:29:12+00:00", "step": "simple_create_draft", "ok": true, "note": "all_edits_saved"}
+{"run_id": "r00000000033", "ts": "2026-10-01T08:29:12+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:29:33+00:00", "step": "create", "ok": true, "job": "job-0021"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:29:36+00:00", "step": "create_took", "ok": true, "note": "ok"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:29:36+00:00", "step": "objective_wait", "ok": null, "note": "radio"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:29:36+00:00", "step": "campaign_open_budget", "ok": true, "note": "opened"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:29:38+00:00", "step": "leads", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:29:40+00:00", "step": "continue", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:29:42+00:00", "step": "ad_copy_second_text", "ok": false, "note": "add_control_not_found"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:29:46+00:00", "step": "text_variations_off", "ok": false}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:29:46+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:29:49+00:00", "step": "onboarding_modal", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:30:04+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:30:05+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:30:06+00:00", "step": "campaign_name", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:30:08+00:00", "step": "campaign_fields", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:30:11+00:00", "step": "simple_adset_section", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:30:17+00:00", "step": "adset_name", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:30:23+00:00", "step": "conversion_menu_open", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:30:49+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:30:50+00:00", "step": "conversion_website_pick", "ok": true, "note": "cdp"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:30:51+00:00", "step": "website_click", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:30:51+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:30:51+00:00", "step": "ad2_creative_upload", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:30:53+00:00", "step": "website_selected", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:30:56+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:31:10+00:00", "step": "ad2_destination", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:31:16+00:00", "step": "conversion_event", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:31:19+00:00", "step": "simple_card", "ok": true, "note": "Audience:opened"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:31:21+00:00", "step": "further_limit_row", "ok": true, "note": "cdp"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:31:21+00:00", "step": "further_limit_reach", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:31:22+00:00", "step": "pick_further_limit_radio", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:31:37+00:00", "step": "advantage_plus_off", "ok": false, "note": "still_on"}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:31:44+00:00", "step": "click_target_covered", "ok": false}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:31:46+00:00", "step": "ad_copy_second_text", "ok": false, "note": "add_control_not_found"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:31:53+00:00", "step": "audience_age", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:31:53+00:00", "step": "text_variations_off", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:31:54+00:00", "step": "ad2_copy", "ok": true}
+{"run_id": "r00000000044", "ts": "2026-10-01T08:31:55+00:00", "step": "ad_level_summary", "ok": false}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:32:13+00:00", "step": "audience_location", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:32:50+00:00", "step": "languages_pick", "ok": false, "note": "no_suggestion"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:32:50+00:00", "step": "languages", "ok": null, "note": "already_selected"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:32:50+00:00", "step": "languages", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:32:57+00:00", "step": "targeting", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:32:58+00:00", "step": "advantage_plus_audience", "ok": true, "note": "off"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:33:00+00:00", "step": "simple_card", "ok": true, "note": "Placements:opened"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:33:45+00:00", "step": "placements", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:33:46+00:00", "step": "simple_ad_section", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:33:51+00:00", "step": "ad_name", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:34:59+00:00", "step": "ad_creative_reuse", "ok": true, "note": "attached_from_library"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:34:59+00:00", "step": "ad_creative_upload", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:35:33+00:00", "step": "ad_destination", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:35:53+00:00", "step": "ad_copy", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:36:12+00:00", "step": "simple_create_more_ads", "ok": true, "note": "created"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:36:12+00:00", "step": "ad2_create", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:36:14+00:00", "step": "ad2_name", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:39:56+00:00", "step": "ad_creative_reuse", "ok": false, "note": "dirty_after_advance"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:44:41+00:00", "step": "ad_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:47:43+00:00", "step": "ad2_creative_upload", "ok": false, "note": "wizard_not_opened"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:48:01+00:00", "step": "ad2_destination", "ok": false, "note": "destination_section_missing"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:48:01+00:00", "step": "ad2_listed", "ok": true, "note": "listed"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:48:29+00:00", "step": "simple_create_more_ads", "ok": true, "note": "created"}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:48:29+00:00", "step": "ad3_create", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:48:31+00:00", "step": "ad3_name", "ok": true}
+{"run_id": "r00000000045", "ts": "2026-10-01T08:51:58+00:00", "step": "ad_creative_reuse", "ok": false, "note": "dirty_after_advance"}

@@ -1,5 +1,39 @@
 # System history
 
+## Robot health: success rate of every step per account and build — ACL-1434
+
+A new read-only page, `/robot-health`, linked as "Robot health" in the dashboard
+header, and a script, `scripts/robot_health.py`, show how healthy the robot is.
+They read only the local run log (`output/rpa_telemetry.jsonl`) and the dashboard
+logs: `output/serve*.log` on a hand-run checkout, and the launcher's
+`server.stdout.log` / `server.stderr.log` in `%LOCALAPPDATA%/ACL/logs` on an
+installed build. No account is opened. The page reads in the server's thread
+pool, so it does not hold up progress polling of running jobs.
+
+- Rows are robot steps and columns are accounts plus "all". Accounts are shown
+  by a short label only, never the full account name, also in `--json`. A cell is ok/total
+  over that column's last N runs (default 10), with the change in points against
+  the N runs before. Only wizard outcomes count. Rows with `ok = null`,
+  `job_phase`, window/tab/profile/browser state, retries and attempts, and
+  always-false diagnostics such as `click_target_covered` and
+  `advantage_plus_off` are left out. A retried step counts by its last record.
+  A run that stopped earlier does not count for steps it never reached. Steps
+  that are only written on failure (`objective_leads`) are marked with `*`.
+- A second table shows each step by build. A run's build is the
+  "RPA flow version" the dashboard log was under when it first named the run's
+  job (the log has times without dates). When stdout and stderr go to separate
+  files (`serveN.log` + `serveN.err.log`, or the launcher's pair), the file
+  with the job ids is matched to its pair launch by launch, counting from the
+  newest. A `build` field in telemetry takes precedence. Runs the log never named, started after the dashboard process
+  started, take that process's own build.
+- Highlights: a drop of 30 or more points (at least 2 attempts in both windows),
+  2 or more failures in a row inside the current window, and a 30-point drop
+  from one build to the next. Each links to the failing runs. A run page shows
+  the run's steps, its failures marked new / known / known elsewhere, and its
+  screenshots from `output/rpa_screenshots/<run>`.
+- `python scripts/robot_health.py --top 15` prints the same table as Markdown.
+  `--run <id>` prints one run's summary with its capture folders.
+
 ## A hand-opened window waits for the computer to go idle — ACL-1427
 
 The Publish click itself resets the "60 s without input" timer of ACL-1388, so the
