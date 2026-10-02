@@ -1718,6 +1718,11 @@
     }
     .amap-st-at { display: block; font-size: 0.62rem; color: var(--muted); margin-top: 0.1rem; }
     .amap-st-at.stale { color: var(--warn); font-weight: 500; }
+    .amap-shot {
+      font-size: 0.62rem; padding: 0 0.3rem; margin-left: 0.2rem; border: 1px solid var(--border);
+      border-radius: 3px; background: var(--bg-subtle); color: var(--muted); cursor: pointer; white-space: nowrap;
+    }
+    .amap-shot:hover { color: inherit; }
     .amap td { padding: 0.42rem 0.85rem; border-bottom: 1px solid var(--border); }
     .amap tbody tr:last-child td { border-bottom: 0; }
     .amap tbody tr:hover { background: var(--bg-hover); }
@@ -7036,6 +7041,36 @@ function amapReadTitle(s, split) {
   return when + ' · read ' + s.finished_at + ' · ' + s.how + amapSplitNote(s, split);
 }
 
+/* ACL-1430 copy-shot { */
+/* Снимок проблемного состояния — в буфер обмена картинкой. ClipboardItem
+   получает обещание, а не готовый blob: так Chrome и Safari засчитывают
+   клик как жест пользователя, хотя файл ещё качается. Браузер отказал
+   (нет ClipboardItem, нет прав) — открываем картинку во вкладке с
+   подсказкой «Right-click → Copy image». */
+function amapCopyShot(btn) {
+  var id = btn.dataset.shot;
+  if (!id) return;
+  var url = '/account-spend/status-shot/' + encodeURIComponent(id);
+  var label = 'Copy screenshot';
+  function fallback() {
+    window.open(url + '/view', '_blank');
+    btn.textContent = label;
+  }
+  if (!(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)) { fallback(); return; }
+  btn.textContent = 'Copying…';
+  var png = fetch(url).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.blob();
+  }).then(function (b) { return b.type === 'image/png' ? b : new Blob([b], {type: 'image/png'}); });
+  var item;
+  try { item = new ClipboardItem({'image/png': png}); } catch (e) { fallback(); return; }
+  navigator.clipboard.write([item]).then(function () {
+    btn.textContent = 'Copied';
+    setTimeout(function () { btn.textContent = label; }, 2000);
+  }, fallback);
+}
+/* } ACL-1430 copy-shot */
+
 function amapApplyReading(account, s, split) {
   document.querySelectorAll('.amap-live').forEach(function (cell) {
     if (cell.dataset.account !== account) return;
@@ -7052,6 +7087,15 @@ function amapApplyReading(account, s, split) {
       label.className = 'amap-st ' + (s.status === 'clear' ? 'ok' : s.status === 'unknown' ? 'dim' : 'bad');
       label.textContent = s.status === 'clear' ? 'no warning' : s.status === 'unknown' ? 'unreadable' : s.status;
       label.title = (s.status_text || (s.status === 'clear' ? 'No warning on the page; not a verified active status' : s.status)) + ' · read ' + (s.finished_at || '');
+      if (s.status_shot && s.status !== 'clear') {
+        var shotBtn = document.createElement('button');
+        shotBtn.type = 'button'; shotBtn.className = 'amap-shot'; shotBtn.textContent = 'Copy screenshot';
+        shotBtn.dataset.shot = s.status_shot;
+        shotBtn.title = 'Screenshot taken ' + (s.status_shot_at || '') + '. Copies the image to the clipboard.';
+        shotBtn.onclick = function () { amapCopyShot(shotBtn); };
+        status.appendChild(document.createTextNode(' '));
+        status.appendChild(shotBtn);
+      }
     }
     if (s.state === 'running') {
       btn.disabled = true; btn.textContent = 'reading…'; return;
