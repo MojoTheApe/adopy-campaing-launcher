@@ -7,7 +7,6 @@ test_drawer_review_browser.py): сервер подменён маршрутам
 из библиотеки, что выбор CTA исчез, что значение переживает дублирование
 объявления и кампании, перезагрузку страницы и уходит в «Publish all».
 """
-import os
 import re
 import sys
 from pathlib import Path
@@ -20,6 +19,8 @@ from playwright.sync_api import expect, sync_playwright
 from test_builder_per_account import _render
 from test_drawer_review_browser import add, all_confirm, fields, ready
 
+from tests._retry_once import goto, launch_chromium
+
 TEXTS = [
     {"ad_title": "Text6", "headline": "Regístrate", "body": "Texto uno", "description": ""},
     {"ad_title": "Text7", "headline": "Otro", "body": "Texto dos", "description": ""},
@@ -30,7 +31,7 @@ TEXTS = [
 @pytest.fixture(scope="module")
 def browser():
     with sync_playwright() as pw:
-        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        b = launch_chromium(pw)
         yield b
         b.close()
 
@@ -67,7 +68,9 @@ def ui(browser):
         r.fulfill(json=data)
 
     page.route("**/*", route)
-    page.goto("http://acl.test/")
+    # ACL-1491: CI 01.10 — первый переход упёрся в таймаут 30 с на
+    # нагруженном раннере; один повтор, проверки ниже от него не зависят.
+    goto(page, "http://acl.test/")
     page.evaluate("cbDrawer.open()")
     yield page, state
     assert not errors, errors
