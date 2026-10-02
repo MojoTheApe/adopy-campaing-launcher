@@ -2393,10 +2393,62 @@ class MultiloginAttachOnlyProvider:
         _record_profile_restart(entry, profile_id, ok=True, where="campaign_open")
         return conn
 
+    def close_finished_profile(self, entry: AccountMapEntry, account_label: str) -> str:
+        """Закрыть профиль, чьи кампании собрались чисто (ACL-1444).
+
+        Решение «чисто ли и сохранён ли черновик» принимает публикатор; здесь —
+        только «вправе ли робот закрыть это окно»: профиль, который робот сам
+        поднял или к которому цеплялся по порту автоматизации, и работает
+        всё тот же процесс (`_robot_profile`, как у ACL-1320/1388). Окно,
+        открытое руками, не трогаем. Закрытие — мягкая остановка ЭТОГО
+        профиля через MLX API, `allow_kill=False`: не остановился через API —
+        окно остаётся, ничего не убиваем.
+
+        Возвращает `closed` / `hand_opened` / `stop_failed` / `no_profile`.
+        """
+        profile_id = (entry.profile_id or "").strip()
+        if not profile_id:
+            return "no_profile"
+        user_data_dir = _find_mlx_profile_dir(profile_id)
+        udd = str(user_data_dir) if user_data_dir is not None else ""
+        if not _robot_profile(profile_id, udd):
+            log.info("%s: profile %s was not started by the robot - leaving its window open",
+                     account_label, profile_id)
+            return "hand_opened"
+        try:
+            self._stop_profile(entry, account_label, profile_id, udd, allow_kill=False)
+        except Exception as exc:
+            log.warning("%s: could not close the finished profile through the MLX API (%s); "
+                        "the window stays open", account_label, _exc_text(exc))
+            return "stop_failed"
+        _ROBOT_PROFILES.pop(profile_id, None)
+        self._launcher = None
+        self._api_started = False
+        return "closed"
+
     def close(self, entry: AccountMapEntry, *, keep_browser_open: bool = False) -> None:
         # Never stop the Multilogin profile — user keeps their window.
         self._launcher = None
         self._api_started = False
+
+
+def stop_profile_on_request(entry: AccountMapEntry, account_label: str) -> str:
+    """Кнопка «Close profile» на дешборде (ACL-1444): закрыть профиль аккаунта.
+
+    Человек сам просит закрыть окно, поэтому здесь не важно, кто его открыл.
+    Способ тот же, что у робота: мягкая остановка только этого профиля
+    через MLX API его рабочего пространства, без kill (`allow_kill=False`);
+    ошибка API уходит наверх, и окно остаётся как было. «Уже остановлен»
+    MLX считает успехом. Работает ли на профиле задание, проверяет вызывающий.
+    """
+    profile_id = (entry.profile_id or "").strip()
+    if not profile_id:
+        raise RuntimeError(f"{account_label}: profile_id is required")
+    user_data_dir = _find_mlx_profile_dir(profile_id)
+    udd = str(user_data_dir) if user_data_dir is not None else ""
+    MultiloginAttachOnlyProvider()._stop_profile(entry, account_label, profile_id, udd, allow_kill=False)
+    _ROBOT_PROFILES.pop(profile_id, None)
+    return "closed"
 
 
 class PlaywrightProfileProvider:

@@ -2123,7 +2123,31 @@ async def api_creatives() -> JSONResponse:
             # они не отличались никак.
             "size_bytes": size,
         })
+    _add_story_labels(files)
     return JSONResponse({"files": files})
+
+
+def _add_story_labels(files: list[dict]) -> None:
+    """ACL-1426: what goes on the Vertical (story) card of each file.
+
+    Same rules as the robot (`creative_pairing.plan`): the pair is looked up by
+    creative number among the files of the same folder. The Builder shows
+    `story_label` next to the ad ("Story: 2403_story.mp4" / "Story: same file,
+    Original").
+    """
+    from src.fb_ads_rpa import creative_pairing
+
+    by_folder: dict[str, list[str]] = {}
+    for f in files:
+        by_folder.setdefault(f.get("folder") or "", []).append(f["filename"])
+    for f in files:
+        try:
+            plan = creative_pairing.plan(f["filename"], by_folder.get(f.get("folder") or "", []))
+            f["story_label"] = plan.builder_label()
+            if plan.square_file != f["filename"]:
+                f["square_file"] = plan.square_file
+        except Exception:
+            f["story_label"] = ""
 
 
 def _ad_copy_rows() -> list[dict]:
@@ -4088,6 +4112,25 @@ async def publish_jobs_cancel(job_id: str) -> JSONResponse:
     return JSONResponse(result)
 
 
+@app.post("/publish-jobs/{job_id}/close-profile")
+async def publish_jobs_close_profile(job_id: str) -> JSONResponse:
+    """«Close profile» on a finished job's panel (ACL-1444).
+
+    Graceful MLX API stop of that account's profile (never kill); refused
+    with 409 while a run or a read is using the profile. Runs off the event
+    loop: the stop waits for Multilogin.
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    from src.web.publish_jobs import close_profile
+
+    result = await run_in_threadpool(close_profile, job_id)
+    if result.get("ok"):
+        return JSONResponse(result)
+    status = {"not_found": 404, "busy": 409}.get(str(result.get("code")), 502)
+    return JSONResponse(result, status_code=status)
+
+
 @app.get("/publish-jobs/{job_id}")
 async def publish_jobs_status(job_id: str) -> JSONResponse:
     """Poll publish job progress. Returns status + results so far."""
@@ -4212,7 +4255,9 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
         return JSONResponse({"ok": True, "has_token": True, "alive": False,
                              "reason": "expired", "expires_at": expires_at})
     return JSONResponse({"ok": True, "has_token": True, "alive": r.status_code == 200,
-                         "expires_at": expires_at, "email": email})
+                         "expires_at": expires_at, "email": email,
+                         # ACL-1441: в каком пространстве выдан токен слота.
+                         "workspace": (os.environ.get(f"MULTILOGIN_WORKSPACE_{instance}") or "").strip()})
 
 
 @app.post("/multilogin-search")
@@ -4321,8 +4366,11 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
 async def multilogin_signin(request: Request) -> JSONResponse:
     """Sign in to Multilogin, return folders + profiles list.
 
-    Body JSON: {email, password, save_token?: bool}
-    Credentials are used for a single API call and never persisted.
+    Body JSON: {email, password, save_token?: bool, instance?, workspace_id?}
+    Credentials are used for a single sign-in and never persisted.
+    ACL-1441: when the login has several workspaces with automation and none
+    is chosen or remembered, answers {choose_workspace: true, workspaces} and
+    the page re-sends with workspace_id.
     If save_token is true, updates the token in machine-local settings.
     """
     try:
@@ -4347,9 +4395,27 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     # Вход живёт одним местом на дешборд и мастер установки (ACL-1303):
     # мастер работает до того, как дешборд существует, а две копии одного
     # входа однажды разъедутся — починят одну и забудут вторую.
-    signed = sign_in(email, password, requests_module=_req)
+    #
+    # ACL-1441: токен выдаётся в выбранном рабочем пространстве. Слот помнит
+    # своё (имя и id в машинном .env) — повторное подключение не спрашивает.
+    # Пространств с автоматизацией несколько и ни одно не названо — ответ
+    # `choose_workspace`, ничего не сохраняется, страница присылает выбор.
+    ws_key, ws_id_key = f"MULTILOGIN_WORKSPACE_{instance}", f"MULTILOGIN_WORKSPACE_ID_{instance}"
+    workspace_id = str(data.get("workspace_id") or "").strip()
+    remembered = (os.environ.get(ws_id_key) or os.environ.get(ws_key) or "").strip()
+    signed = sign_in(email, password, workspace_id=workspace_id,
+                     remembered_workspace=remembered, requests_module=_req)
+    password = ""
     if not signed.ok:
         return JSONResponse({"ok": False, "error": signed.error})
+    workspaces = [{"workspace_id": w["workspace_id"], "name": w["name"], "role": w["role"],
+                   "automation": w.get("automation")} for w in signed.workspaces]
+    if signed.needs_choice:
+        return JSONResponse({
+            "ok": True, "instance": instance, "choose_workspace": True,
+            "token_saved": False, "token_error": signed.token_error,
+            "workspaces": workspaces,
+        })
     bearer = signed.bearer
     auto_token = signed.automation_token
     token_error = signed.token_error
@@ -4361,8 +4427,11 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     # token works for this request but could not be persisted for next launch.
     env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
     if save_token and auto_token:
+        values = {env_key: auto_token}
+        if signed.workspace_id:
+            values.update({ws_key: signed.workspace_name, ws_id_key: signed.workspace_id})
         try:
-            update_machine_env({env_key: auto_token})
+            update_machine_env(values)
         except Exception as exc:
             return JSONResponse(
                 {
@@ -4410,6 +4479,10 @@ async def multilogin_signin(request: Request) -> JSONResponse:
         # page could only say "not saved", which reads as a detail rather than
         # as the reason the next Publish will fail.
         "token_error": token_error if (save_token and not auto_token) else "",
+        "workspace": signed.workspace_name,
+        "workspace_role": signed.workspace_role,
+        # С выбранным не вышло — список остаётся, чтобы выбрать другое.
+        "workspaces": workspaces if not auto_token else [],
         "folders": folders,
         "profiles": profiles,
         "debug": profile_debug,

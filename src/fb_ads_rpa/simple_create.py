@@ -502,6 +502,10 @@ NEW_AD_WAIT_S = 30.0
 #: неответа; за это время страница должна ответить И окно — уйти.
 META_BUSY_WAIT_S = 120.0
 
+#: Окно прогресса ушло — сколько ещё ждать строку и имя нового объявления,
+#: если обычный срок `NEW_AD_WAIT_S` уже истёк (ACL-1412).
+PROGRESS_SETTLE_S = 8.0
+
 #: Окно прогресса Meta: surface или собственный текст.
 _PROGRESS_SURFACE = "ads_progress_dialog"
 _PROGRESS_TEXT = re.compile(r"^(creating|creando|loading creation)\b", re.I)
@@ -540,18 +544,49 @@ _WHY_TEXT = {
     "new_ad_not_open": ("Create ad added an ad, but the editor did not open it; the new empty ad "
                         "is left in the draft - fill it in or delete it by hand"),
     "tab_frozen": "the browser tab stopped answering while the ad was being created",
-    "dialog_open": ("a Meta dialog stayed open for {wait} s after Create ad, so the robot did not "
-                    "fill the new ad; check the dialog and the new ad in the draft by hand"),
+    "dialog_open": ("a Meta dialog that is not its progress dialog opened after Create ad, so the "
+                    "robot did not fill the new ad; check the dialog and the new ad in the draft by hand"),
+    # ACL-1412: окно прогресса ждём `META_BUSY_WAIT_S`, а не `NEW_AD_WAIT_S`.
+    "dialog_open_progress": ("Meta's progress dialog stayed open for {busy} s after Create ad, so the "
+                             "robot did not fill the new ad; check the new ad in the draft by hand"),
+    "dialog_open_media_picker": ("Meta's media picker opened over the new ad after Create ad and "
+                                 "could not be closed with its Cancel, so the robot did not fill the "
+                                 "new ad; close it and fill the new ad in the draft by hand"),
 }
+
+
+#: Причины отказа шага креатива — для человека (итог кампании, English).
+#: ACL-1426, ревью PR #440 (L4): у `ad_form_gone_after_media` была только метка.
+_CREATIVE_WHY_TEXT = {
+    "ad_form_gone_after_media": ("After the media step Meta stopped showing this ad's form "
+                                 "('Verifying your changes'); the ad is left in the draft for review."),
+    # ACL-1476: warnings, not refusals - the ad keeps the post file.
+    "story_not_placed:no_crop_step": ("Story placement uses the post file: Meta showed no Crop "
+                                      "step, so the story file could not be placed."),
+    "story_not_placed:not_in_library": ("Story placement uses the post file: the story file is not "
+                                        "in Meta's media library, so Replace was skipped (Original "
+                                        "and no Meta AI expansion are set)."),
+}
+
+
+def creative_why_text(why: str) -> str:
+    """Причина отказа шага креатива одной фразой; "" — фразы для неё нет."""
+    why = why or ""
+    if why in _CREATIVE_WHY_TEXT:
+        return _CREATIVE_WHY_TEXT[why]
+    if why.startswith("crop_"):
+        return ("The Crop step could not be set as planned (" + why + "); the ad is left in the "
+                "draft for review.")
+    return ""
 
 
 def why_text(why: str) -> str:
     """Причина отказа создания объявления — одной фразой для человека."""
     why = why or ""
     if why in _WHY_TEXT:
-        return _WHY_TEXT[why].format(wait=int(NEW_AD_WAIT_S))
+        return _WHY_TEXT[why].format(wait=int(NEW_AD_WAIT_S), busy=int(META_BUSY_WAIT_S))
     if why.startswith("dialog_open"):
-        return _WHY_TEXT["dialog_open"].format(wait=int(NEW_AD_WAIT_S))
+        return _WHY_TEXT["dialog_open"]
     if why.startswith("action_menu_"):
         return "the ad set's Action menu could not be pressed (" + why[len("action_menu_"):] + ")"
     if why.startswith("create_ad_"):
@@ -646,6 +681,10 @@ _NEW_AD_JS = r"""
       const s = dlg.closest('[data-surface]') || dlg.querySelector('[data-surface]');
       dialog = { text: norm(dlg.textContent).replace(/\d{5,}/g, '#').slice(0, 80),
                  surface: s ? (s.getAttribute('data-surface') || '').replace(/\d{5,}/g, '#').slice(0, 100) : '' };
+      // ACL-1412 (d1755a59e139, ad3): после «Create ad» на экране осталось
+      // окно выбора медиа нового объявления — кнопки внутри него несут
+      // surface блока Media раздела объявления.
+      if (dlg.querySelector('[data-surface*="ad_image_video_selector_section"]')) dialog.picker = true;
     }
     return { ads: rows.length, names, name_value: field ? field.value : null, dialog };
   }
@@ -791,17 +830,29 @@ def _wv():
     return window_visibility
 
 
+def is_media_picker(dialog) -> bool:
+    """Окно — выбор медиа открытого объявления (ACL-1412, d1755a59e139 ad3):
+    внутри кнопки с surface блока Media раздела объявления."""
+    return bool(dialog) and bool(dialog.get("picker"))
+
+
 def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
                  busy_wait_s: float | None = None) -> dict:
     """Ждать после «Create ad»: новая строка «Ad», раздел объявления показывает
     новое объявление, окна нет. Первое увиденное окно и сколько оно висело —
     в итог (в снимках шага 1 его уже не было).
 
-    Вкладка не ответила, а последним увиденным было окно прогресса Meta
-    («Creating...») — это «Meta занята», а не зависание (живьём 30.09): ждём
-    дальше, не нажимая и не перезагружая ничего, до `busy_wait_s` от первого
-    неответа — пока страница не ответит и окно не уйдёт. `busy_s` — сколько
-    страница не отвечала. Закрытая вкладка ожиданием не лечится."""
+    Окно прогресса Meta («Creating...») — это «Meta занята», а не зависание
+    (живьём 30.09): пока оно на экране, ждём до `busy_wait_s` от его первого
+    появления — отвечает страница или нет (ACL-1412: d1755a59e139, ad3 —
+    окно висело дольше 30 с при живой странице). Не ответила — отсчёт от
+    первого неответа, как прежде. Ничего не нажимаем и не перезагружаем.
+    `busy_s` — сколько страница не отвечала, `progress_s` — сколько висело
+    окно прогресса. Закрытая вкладка ожиданием не лечится.
+
+    Другое окно (не прогресс и не выбор медиа нового объявления) — два
+    чтения подряд, и ждать нечего: `other_dialog`. Выбор медиа нового
+    объявления готовности не мешает — его закрывает вызывающий."""
     md = _md()
     if busy_wait_s is None:
         busy_wait_s = META_BUSY_WAIT_S
@@ -815,6 +866,9 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
     busy_since = None            # первый неответ при окне прогресса
     busy_s = 0.0                 # сколько всего страница не отвечала
     unanswered_at = None
+    progress_since = None        # первое ответившее чтение с окном прогресса
+    progress_last = None         # последнее такое чтение
+    other_reads = 0              # чтений подряд с чужим окном
     while True:
         got = _read_ads(page)
         now = time.time()
@@ -839,24 +893,39 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
         if unanswered_at is not None:
             busy_s += now - unanswered_at
             unanswered_at = None
-        last_seen_dialog = got.get("dialog")
-        if got.get("dialog"):
+        cur = got.get("dialog")
+        last_seen_dialog = cur
+        if cur:
             if dialog is None:
-                dialog = dict(got["dialog"], seen_at_s=round(now - start, 1))
+                dialog = dict(cur, seen_at_s=round(now - start, 1))
             dialog_s = round(now - start, 1)
+        if is_progress_dialog(cur):
+            if progress_since is None:
+                progress_since = now
+            progress_last = now
+        other = bool(cur) and not is_progress_dialog(cur) and not is_media_picker(cur)
+        other_reads = other_reads + 1 if other else 0
         # Имя нового объявления — одно и то же два опроса подряд (F3): раздел
         # мог ещё дорисовываться.
         name = got.get("name_value")
         stable = _fresh(name, known) and name == last_name
         last_name = name
         got["name_stable"] = stable
-        ready = (int(got.get("ads") or 0) > ads_before and stable and not got.get("dialog"))
-        # Пока Meta занята, срок — от первого неответа (`busy_wait_s`), а не
-        # только обычный `wait_s`.
+        ready = (int(got.get("ads") or 0) > ads_before and stable
+                 and (not cur or is_media_picker(cur)))
+        # Пока Meta занята, срок — от первого неответа или от первого окна
+        # прогресса (`busy_wait_s`), а не только обычный `wait_s`; окно ушло —
+        # ещё `PROGRESS_SETTLE_S` на строку и имя нового объявления.
         deadline = start + wait_s
         if busy_since is not None:
             deadline = max(deadline, busy_since + busy_wait_s)
-        if ready or now >= deadline:
+        if progress_since is not None:
+            if is_progress_dialog(cur):
+                deadline = max(deadline, progress_since + busy_wait_s)
+            else:
+                deadline = max(deadline, min(progress_last + PROGRESS_SETTLE_S,
+                                             progress_since + busy_wait_s))
+        if ready or now >= deadline or other_reads >= 2:
             break
         if now - start >= _wv().WAKE_AFTER_S:
             # ACL-1402: страница отвечает, а объявления всё нет — окно может
@@ -867,7 +936,75 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
     got["dialog_until_s"] = dialog_s if dialog else None
     got["waited_s"] = round(time.time() - start, 1)
     got["busy_s"] = round(busy_s, 1) if (busy_since is not None or busy_s) else None
+    got["progress_s"] = (round(progress_last - progress_since, 1)
+                         if progress_since is not None else None)
+    got["other_dialog"] = other_reads >= 2
     return got
+
+
+_PICKER_CANCEL_JS = r"""
+  () => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const shown = (e) => e.getClientRects().length > 0;
+    document.querySelectorAll('[data-acl-more-ads="picker_cancel"]').forEach(e => e.removeAttribute('data-acl-more-ads'));
+    const dlg = [...document.querySelectorAll('[role=dialog]')]
+      .find(d => shown(d) && d.querySelector('[data-surface*="ad_image_video_selector_section"]'));
+    if (!dlg) return { picker: false };
+    const selected = [...dlg.querySelectorAll('span')].map(e => norm(e.textContent))
+      .find(t => /^\d+( of \d+)? selected$/.test(t)) || '';
+    // Своя кнопка окна ровно «Cancel» (не Close в строке шагов, не Next).
+    const btn = [...dlg.querySelectorAll('[role=button], button')]
+      .find(b => shown(b) && norm(b.textContent) === 'Cancel' && b.getAttribute('aria-disabled') !== 'true');
+    if (btn) btn.setAttribute('data-acl-more-ads', 'picker_cancel');
+    return { picker: true, cancel: !!btn, selected };
+  }
+"""
+"""Окно выбора медиа объявления: есть ли, что выбрано, его кнопка Cancel (помечается)."""
+
+
+def close_media_picker(page, *, wait_s: float = 6.0) -> dict:
+    """Закрыть окно выбора медиа, которое Meta оставила после «Create ad».
+
+    ACL-1412 (d1755a59e139, 30.09, ad3): через ~30 с после «Create ad» на
+    экране было окно выбора медиа (Media · Trim · Crop …, медиатека, «1
+    selected», Cancel / Next), а раздел объявления уже показывал новое
+    объявление. Под окном не набрать имя, а «Next» закрепил бы в новом
+    объявлении чужой выбор. Поэтому — его собственный Cancel (охраняемое
+    нажатие), а медиа новое объявление получает своим путём, как
+    объявление 1. Возвращает {"closed", "why", "selected"}.
+    """
+    md = _md()
+    try:
+        got = md._eval_bounded(page, _PICKER_CANCEL_JS) or {}
+    except Exception as exc:
+        return {"closed": False, "why": "tab_frozen", "error": type(exc).__name__}
+    if not isinstance(got, dict) or not got.get("picker"):
+        return {"closed": True, "why": "", "selected": ""}
+    out = {"closed": False, "why": "", "selected": got.get("selected") or ""}
+    if not got.get("cancel"):
+        out["why"] = "no_cancel"
+        return out
+    pressed = _press_marked(page, "picker_cancel")
+    if pressed != "pressed":
+        out["why"] = "tab_frozen" if pressed == "frozen" else "cancel_" + pressed
+        return out
+    deadline = time.time() + wait_s
+    while True:
+        now = _read_ads(page)
+        cur = None if now.get("error") else now.get("dialog")
+        if not now.get("error") and not cur:
+            out["closed"] = True
+            return out
+        if cur and not is_media_picker(cur):
+            # На Cancel Meta ответила другим окном (например, «Discard?») —
+            # ничего в нём не жмём.
+            out["why"] = "other_dialog"
+            out["dialog"] = cur
+            return out
+        if time.time() >= deadline:
+            out["why"] = "still_open"
+            return out
+        time.sleep(0.4)
 
 
 def create_next_ad(page, *, tag: str, known_names: list[str],
@@ -894,15 +1031,19 @@ def create_next_ad(page, *, tag: str, known_names: list[str],
     if not out["ok"] and not out["why"]:
         out["why"] = "unknown"
     out["text"] = "" if out["ok"] else why_text(out["why"])
+    if out["why"] == "dialog_open" and out.get("dialog_kind") in ("progress", "media_picker"):
+        out["text"] = why_text("dialog_open_" + out["dialog_kind"])
     if out["why"] == "tab_frozen" and out.get("busy_s"):
         # Живьём 30.09: Meta показывала «Creating...», и страница не отвечала.
         out["text"] += (f" (Meta showed its progress dialog and the page did not answer for "
                         f"{out['busy_s']:.0f} s, longer than the robot waits: "
                         f"{META_BUSY_WAIT_S:.0f} s; the new ad may still appear in the draft empty - "
                         "fill it in or delete it by hand)")
-    if out["why"] == "dialog_open" and (out.get("dialog") or {}).get("text"):
+    shown = out.get("dialog_last") or out.get("dialog") or {}
+    if out["why"] == "dialog_open" and shown.get("text"):
         # Текст окна (без номеров) — в причину: по нему человек его найдёт.
-        out["text"] += f' (dialog: "{out["dialog"]["text"][:80]}")'
+        # ACL-1412: окно, что осталось на экране, а не первое увиденное.
+        out["text"] += f' (dialog: "{shown["text"][:80]}")'
     if not out["ok"]:
         out["capture"] = _more_ads_capture(page, out["why"], {
             k: out.get(k) for k in ("tag", "pressed", "ads_before", "ads_after", "dialog",
@@ -912,7 +1053,9 @@ def create_next_ad(page, *, tag: str, known_names: list[str],
             MORE_ADS_STEP, True if out["ok"] else False,
             note="created" if out["ok"] else out["why"],
             diag={k: out.get(k) for k in ("tag", "pressed", "ads_before", "ads_after",
-                                          "extra_shells", "dialog", "waited_s", "busy_s", "tree", "menu",
+                                          "extra_shells", "dialog", "dialog_kind", "dialog_last",
+                                          "waited_s", "busy_s",
+                                          "progress_s", "media_picker", "tree", "menu",
                                           "capture", "text")})
     except Exception:
         pass
@@ -971,17 +1114,25 @@ def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
     out["dialog"] = after.get("dialog_first")
     if out["dialog"] is not None:
         out["dialog"]["until_s"] = after.get("dialog_until_s")
+        # ACL-1412: сколько окно было на экране (от первого до последнего чтения с окном).
+        out["dialog"]["open_s"] = round((after.get("dialog_until_s") or 0)
+                                        - (out["dialog"].get("seen_at_s") or 0), 1)
         out["dialog"]["still_open"] = bool(after.get("dialog"))
     out["waited_s"] = after.get("waited_s")
     out["busy_s"] = after.get("busy_s")
+    out["progress_s"] = after.get("progress_s")
     out["name_is_new"] = bool(after.get("name_stable"))
     if after.get("error"):
         out["why"] = "tab_frozen"
         return
-    if after.get("dialog"):
+    last = after.get("dialog")
+    if last and not is_media_picker(last):
         # Ревью PR #365, F1: окно после «Create ad» так и не ушло — что оно
-        # ждёт, неизвестно; под ним ничего не заполняем.
+        # ждёт, неизвестно; под ним ничего не заполняем. ACL-1412: окно
+        # прогресса — после `META_BUSY_WAIT_S`, чужое окно — сразу.
         out["why"] = "dialog_open"
+        out["dialog_kind"] = "progress" if is_progress_dialog(last) else "other"
+        out["dialog_last"] = last
         return
     ads_after = int(after.get("ads") or 0)
     if ads_after <= ads_before:
@@ -990,6 +1141,18 @@ def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
     if not out["name_is_new"]:
         out["why"] = "new_ad_not_open"
         return
+    if last:
+        # ACL-1412 (d1755a59e139, ad3): поверх нового объявления — окно выбора
+        # медиа. Закрываем его собственным Cancel; медиа — своим путём, как у
+        # объявления 1.
+        closed = close_media_picker(page)
+        out["media_picker"] = {k: closed.get(k) for k in ("closed", "why", "selected")}
+        if not closed.get("closed"):
+            out["why"] = "tab_frozen" if closed.get("why") == "tab_frozen" else "dialog_open"
+            out["dialog_kind"] = "media_picker" if closed.get("why") != "other_dialog" else "other"
+            if closed.get("dialog"):
+                out["dialog_last"] = closed["dialog"]
+            return
     # 17.09 (прежний мастер, Doc20): один «Create ad» дал ДВА новых объявления.
     out["extra_shells"] = max(0, ads_after - ads_before - 1)
     out["ok"] = True
@@ -1017,3 +1180,96 @@ def ad_listed(page, name: str, *, wait_s: float = 8.0) -> dict:
         if listed or time.time() >= deadline or got.get("error"):
             return {"listed": listed, "ads": got.get("ads"), "error": got.get("error")}
         time.sleep(0.5)
+
+
+# ── Медиа нового объявления (ACL-1412) ───────────────────────────────────
+#
+# Живой прогон d1755a59e139 (30.09, Facebook_1443, объявление 2): мастер
+# медиа открылся, файл ушёл в медиатеку, а дальше робот ни разу не увидел
+# блок Media объявления: проверка медиа 85 с читала страницу, на которой
+# нет ни «Please specify the media», ни «Edit media» (раздел объявления
+# размонтирован — страница стояла на кампании и группе, в снимке от раздела
+# «Ad» только превью), вторая попытка не нашла «Set up creative» (`button:
+# null`, `ad_section: false`), а назначение — раздела Destination
+# (`destination_section_missing`). Блок Media нового объявления тот же, что
+# у объявления 1 (вырезка `new_ad_media`: «Set up creative» — кнопка меню,
+# «Please specify the media…»; заполненный — «Edit media» / «Remove media»,
+# `simple_create_new_ad_media_2026_09_30.html`). Значит, прежде чем открывать
+# мастер или судить о медиа, блок надо вернуть на экран.
+
+#: Блок Media раздела объявления (не внутри окна выбора медиа).
+_MEDIA_BLOCK_JS = r"""
+  (scroll) => {
+    const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+    const shown = (e) => e.getClientRects().length > 0;
+    const outside = (e) => !e.closest('[role=dialog]');
+    const picker = [...document.querySelectorAll('[role=dialog]')]
+      .some(d => shown(d) && d.querySelector('[data-surface*="ad_image_video_selector_section"]'));
+    const block = [...document.querySelectorAll('#imageVideoSelectorEditorComponent')]
+                    .find(b => outside(b) && shown(b))
+      || [...document.querySelectorAll('[data-surface="/am/editor:ad/ad_image_video_selector_section"]')]
+                    .find(b => outside(b) && shown(b));
+    if (!block) return { mounted: false, picker };
+    if (scroll) block.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const texts = [...block.querySelectorAll('*')].filter(e => e.children.length === 0)
+      .map(e => norm(e.textContent)).filter(Boolean);
+    const setUp = [...block.querySelectorAll('[role=button], button')]
+      .some(b => norm(b.textContent) === 'Set up creative');
+    const empty = texts.some(t => t.includes('Please specify the media'));
+    const filled = texts.some(t => ['Edit media', 'Remove media', 'Change selections',
+                                    'Customize media'].includes(t));
+    const state = filled && !empty ? 'filled' : (setUp || empty) ? 'empty' : 'unknown';
+    return { mounted: true, state, set_up_creative: setUp, picker };
+  }
+"""
+"""Блок Media объявления: отрисован ли, пуст/заполнен, есть ли «Set up creative»;
+открыто ли окно выбора медиа. `scroll` — прокрутить блок в середину окна."""
+
+#: Для `meta_dom._scroll_until_mounted`: блок Media отрисован.
+MEDIA_BLOCK_PRESENT_JS = r"""
+  () => [...document.querySelectorAll('#imageVideoSelectorEditorComponent')]
+    .some(b => !b.closest('[role=dialog]') && b.getClientRects().length > 0)
+"""
+
+
+def media_block(page, *, scroll: bool = True) -> dict:
+    """Блок Media открытого объявления — одним ограниченным чтением."""
+    md = _md()
+    try:
+        got = md._eval_bounded(page, _MEDIA_BLOCK_JS, bool(scroll))
+    except Exception as exc:
+        return {"mounted": False, "error": type(exc).__name__}
+    return dict(got) if isinstance(got, dict) else {"mounted": False, "error": "no_answer"}
+
+
+def show_media_block(page, *, budget_s: float = 12.0) -> dict:
+    """Вернуть блок Media открытого объявления на экран (без нажатий).
+
+    Порядок: уже отрисован — прокрутить к нему; нет — дойти до раздела «Ad»
+    (заголовок и поле имени, `scroll_to_level`); всё ещё нет — прокрутка
+    контейнера долями (`meta_dom._scroll_until_mounted`). В итоге — `via`:
+    "mounted" | "ad_heading" | "scroll" | "" (не нашли). Только прокрутка:
+    ни нажатий, ни перезагрузок — годится внутри `hold_open_ad`.
+    """
+    md = _md()
+    got = media_block(page)
+    if got.get("mounted"):
+        got["via"] = "mounted"
+        return got
+    if got.get("error"):
+        got["via"] = ""
+        return got
+    level = scroll_to_level(page, "ad", budget_s=max(1.0, min(8.0, budget_s / 2)))
+    got = media_block(page)
+    if got.get("mounted"):
+        got["via"] = "ad_heading"
+        return got
+    try:
+        md._scroll_until_mounted(page, MEDIA_BLOCK_PRESENT_JS)
+    except Exception:
+        pass
+    got = media_block(page)
+    got["via"] = "scroll" if got.get("mounted") else ""
+    if not got.get("mounted"):
+        got["ad_section"] = level.get("why") or bool(level.get("ok"))
+    return got

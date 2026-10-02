@@ -27,6 +27,361 @@ after attach.
 - Not done yet: the live experiment with real covered windows (which mechanism
   actually unfreezes an occluded Chrome window) — planned in PR ACL-1402.
 
+## Builder: visible Duplicate on ads and campaigns, no repeated buttons — ACL-1459
+
+2026-10-01 the owner sent a screenshot of the builder drawer: duplicating an ad was a
+faint icon in the card's corner, duplicating a campaign was a separate button at the
+bottom of the drawer, and "+ Add Campaign" stood next to "+ Campaign" for the same
+account. Now each ad card has a visible "Duplicate"; "+ Add ad" reads "+ Ad"; "⧉
+Duplicate campaign" sits inside the campaign card under its ads and, in the drawer,
+opens the copy for editing, as the old bottom button did. Removed: the slot-header
+icon, the bottom-of-drawer button and, inside the drawer only, the form's "+ Add
+Campaign" (the country page keeps it). Duplication logic is unchanged.
+## Buttons no longer look like input fields — ACL-1455
+
+2026-10-01 the owner noted that small buttons and input fields look the same. The
+secondary buttons (`.amap-btn`, `.amap-x`, `.acc-btn`) were drawn with the fields'
+frame, nearly the same background and the placeholder's grey text. Owner's choice
+among three mockups: link-style buttons. They now have blue text and no frame, with
+a soft blue background on hover and a focus ring for the keyboard; delete and error
+states are red, disabled ones grey. Fields keep their frame — the frame now means
+"type here". Primary and other filled buttons are unchanged. One CSS block, both
+themes; no markup changes.
+## Video pairs keep the post file with a warning when the story cannot be placed — ACL-1476
+
+Owner decision 2026-10-01 (Issue #476) after ACL-1426 went live: two post/story pair
+cases no longer hold the campaign as "do not publish".
+
+- `crop_step` — a pair whose wizard showed no Crop step (the single-screen editor walks
+  Media → Text → Creative generation → Enhancements; runs e4fd79d26e63, bd7b2f…) and a
+  pair whose `_story` file is not in Meta's library (runs a88e3789f7ab, 362762a797c3)
+  are warnings `story_not_placed:no_crop_step` / `story_not_placed:not_in_library`
+  (`crop_step.warning()`, telemetry `ad_creative_crop` ok=None). The ad keeps the post
+  file. In the not-in-library case Original on both cards and Meta AI expansion off are
+  still applied and read back; only Replace is skipped.
+- Meta's "Replace media for Stories, Status, Reels" opens inside the wizard dialog (step
+  row, Close, Save; no Cancel). The way back to Crop is the step row's "Crop", not the
+  wizard's Close (which closed the wizard in a88e3789f7ab). If Crop does not come back,
+  the step blocks with `crop_replace_picker_not_closed`.
+- `meta_dom` — a successful creative step with such a warning adds the ad's warning row
+  `<ad>_story_not_placed:<reason> - <ad>: <English line>` (`simple_create.creative_why_text`:
+  "Story placement uses the post file: …"); `failure_policy` classifies
+  `story_not_placed` as WARNING, so the campaign stays publishable.
+- Still blocking: Meta AI expansion left on, `crop_unknown_toggle_on`,
+  `crop_vertical_not_story`, `crop_square_changed`, `crop_replace_picker_unscoped`,
+  Original not set, `crop_replace_off`.
+
+## Post and Story get the right file in the Crop step — ACL-1426
+
+Owner rules 2026-10-01 (Issue #426): the creative number pairs `_post`/`_square` with
+`_story`; the Square card gets the post, the Vertical card the story (Replace) or, without
+a pair, the same file; Original on both cards; "Crop and expand (Meta AI)" off.
+
+- `src/fb_ads_rpa/creative_pairing.py` — the table (pair by number regardless of the
+  prefix, same media kind, same folder; same prefix wins). A `_story` chosen in the
+  Builder with a `_post` sibling puts the post on Square (the ad's media).
+- `src/fb_ads_rpa/crop_step.py` — on the Crop step, before the walk's Next: Original on
+  each card, expansion unchecked, Replace on Vertical for a pair (library search, tile,
+  the picker's own confirm), read-back. Mismatch → named reason (`crop_*`, e.g.
+  `crop_vertical_not_original`, `crop_story_not_in_library`, `crop_step_not_shown`), the
+  creative step fails with it, no retry, the ad is held for review. Telemetry
+  `ad_creative_pair`, `ad_creative_crop`. Switches: `FB_RPA_CROP_STEP=0` (old
+  behaviour), `FB_RPA_CROP_REPLACE=0` (pairs blocked with `crop_replace_off`).
+- Ads 2–3 in the single-screen editor: the new ad's form gone after the wizard (empty
+  Ad section, "Verifying your changes" with the `#100 lead_gen_form_id` preflight
+  error) is named `ad_form_gone_after_media` after 30 s instead of 150 polls, and the
+  retry loop neither checks again nor opens a second wizard (was ~3 + 3 + 2 min per ad).
+- Builder: `/api/creatives` carries `story_label` ("Story: <file>" / "Story: same file,
+  Original"), printed under "Ad N" on the preview card. `serve.py` restart needed.
+- Review of PR #440 (round 2):
+  - H1: every success return of the creative step (`upload` True, the retry loop's
+    media check, the three known-file "media already on ad" returns, the known-file
+    reuse) first asks `crop_step.outcome()` through `meta_dom._crop_gate`. A Crop
+    failure stored by the retry or give-up close-walk, or a pair whose wizard never
+    showed Crop (`crop_step_not_shown`), fails the step with that reason (telemetry
+    `ad_creative_upload` with `where`) instead of being erased by `set_plan(None)`.
+  - M1: the walk recognises the Crop step by its heading "Select media crop for
+    placements" as well as by the step row; a single file whose Crop step was never
+    handled gets one warning row `ad_creative_crop` / `crop_step_not_shown`.
+  - M2: Meta AI expansion fails closed — "AI expansion"/"generative" labels count as
+    expansion, a box outside the cards is switched off (`shared:expand_off`), and any
+    other checked box or switch on the step blocks with `crop_unknown_toggle_on`.
+  - M3: Replace is proven by the picked tile's thumbnail ids on the Vertical card
+    (mismatch → `crop_vertical_not_story`; no ids on either side → warning row
+    `as_planned_thumb_unconfirmed`, as on the library-pick path).
+  - L1: the picker's Done/Select/... is pressed only inside the picker's own dialog;
+    without one (or inside the wizard's) → `crop_replace_picker_unscoped`.
+  - L4: `ad_form_gone_after_media` and `crop_*` reasons carry an English sentence
+    (`simple_create.creative_why_text`) in the step diag `text`.
+
+## Every step of the creative wizard is captured, read-only — ACL-1426 (phase A)
+
+Live runs 04c8c214d2ba and 0bd520418dbe (Facebook_1443, 2026-10-01): after a
+library pick the robot walks the Trim → Crop → Text → Image generation →
+Enhancements → Translation wizard with its forward button, so the Crop step keeps
+Meta's defaults (Vertical 9:16 with "Crop and expand (Meta AI)"), and no capture of
+any step after Media existed (the editor page is cut at 4 MB before the wizard).
+
+- While `_walk_creative_wizard` sees the wizard after a library pick or an upload
+  (both editors, all ads), each new step is captured before the forward press:
+  the scrubbed wizard block in `output/rpa_pages/<run>/NN_wizard_<step>`
+  (`wizard_trim`, `wizard_crop`, `wizard_text`, `wizard_image_generation`, …), the
+  read step state (step row, current step, headings, buttons, checkbox/radio
+  states) in `context.json`. At most 18 per run, on their own quota — the
+  failure-capture limit is untouched; no Sentry section is remembered for them.
+- One telemetry row per walk, `ad_creative_wizard` (note `<origin>:closed|left_open`,
+  diag `sequence`, per-step `at_s`/`s`/`pressed`).
+- Read-only: no presses, scrolls or waits added; the press sequence is the same with
+  capture on and off, and capture failures never reach the walk
+  (`src/fb_ads_rpa/wizard_capture.py`). Machine switch `FB_RPA_WIZARD_CAPTURE=0`
+  turns the captures off (the telemetry row stays).
+
+## Ads 2-3 in the single-screen editor: media found, Creating... waited out — ACL-1412
+
+Live run d1755a59e139 (Facebook_1443, 2026-09-30) left ad 2 without media, link
+and text and stopped ad 3 at `dialog_open`.
+
+- Before opening the creative, checking the media or setting the destination of
+  ads 2+, the robot scrolls the new ad's Media block back on screen (the editor had
+  unmounted the ad form, so "Set up creative", the attached media and Destination
+  were not in the page). Only scrolling: no presses, no reloads, still inside
+  `hold_open_ad`. The media entry used is logged: `ad_creative_upload` note
+  `media_entry:<set_up_creative|picker_open|media_on_ad|media_block_*>`.
+- Meta's "Creating..." dialog after Create ad is waited out for up to 120 s
+  (`META_BUSY_WAIT_S`) whether or not the page answers; any other dialog stops the
+  ad at once (`adN_create:dialog_open`). Meta's media picker left over the new ad
+  is closed with its own Cancel. `simple_create_more_ads` telemetry gains
+  `progress_s`, `dialog.open_s`, `dialog_kind` and `media_picker`.
+## Placements pass when Meta no longer offers a placement, and in the single-screen editor — ACL-1445
+
+2026-10-01 campaigns ended "do not publish: placements" on Doc19 and on the tester's
+machine although the placements were right. Three causes, each now a bench test
+(`tests/test_bench_placements.py`).
+
+- Meta stopped offering "Messenger Stories" on some accounts during the day. The robot
+  has to switch it off, and it treated the placement's absence as a failure. Rule
+  (`fill_placements`, `_settle_category`, `_CATEGORY_END_JS`): a placement to switch OFF
+  that is absent counts as "not offered" only when all of these hold:
+  - all five categories are present;
+  - its own category (`_SUBITEMS_BY_CATEGORY`) is open;
+  - the category's list is scrolled to a proven end: the last row is shown, no row of
+    the category is hidden, the inner scroll is at the bottom, nothing is loading, and
+    the next category is shown;
+  - the list and that proof have not changed for 1.5 s (polled for up to 6 s while
+    the end is unproven; rows that appear meanwhile are set at once);
+  - every placement to switch ON in that category was rendered;
+  - the placement never appeared anywhere in the step (`subitems_seen`).
+
+  Otherwise the absence stays a failure, as before. A tail that never mounted is never
+  judged; 8e9acb2 / ACL-1220 recorded "Threads feed" and "Facebook Notifications"
+  mounting only after scrolling. A placement to switch ON is never "not offered". The
+  step's telemetry line names the not-offered placements (`subitems_not_offered`, note
+  "not offered: …"). Read-back still checks every offered placement.
+- Single-screen editor (cb854b07857b, 30.09): the open Placements card showed only a
+  "Loading..." progressbar, with no "Account controls" to anchor on, and the step
+  reported `placements_card_not_found`. The card is now found by its own anchor
+  (`data-surface` ending in `adset_placement_static_pgd_section`). Its body is waited
+  for (20 s), the card is tagged again once it has loaded, and placements are then set
+  and read back there as in the classic editor. A body that never loads is reported as
+  `placements_card_loading`.
+- Single-screen editor (SA_ARC_All_Video_IPO_35_01.10, tester): the placements list was
+  collapsed to "Placements · Included: 7 · Allowed with limited spend: 0 · Excluded:
+  13". The counts are not proof of which placements are included, so the summary is not
+  accepted. The step opens it and reads the rows back; if it cannot open it, the step
+  fails and reports the counts (`placements_summary`). The fixture was rebuilt from the
+  screenshot text, as there is no capture.
+## The robot finds Meta's "Add text option" next to the text generation section — ACL-1344
+
+28.09–01.10 the second primary text was not added on most video ads
+(`ad_copy_second_text: add_control_not_found`, Doc21 four runs in a row, the
+tester's machine 01.10 twice). Every live capture of the block has the control:
+`#add-bodies-option-button` > `div[role=button]` with `data-surface`
+`.../message_field/lib:dco-add-asset-button`, text "Add text option" — the
+same in the classic and the single-screen editor (bench captures
+cc8fcfa17ae9 01.10 and 3100d06ad51e 30.09). The old finder looked for it by
+text only and dropped anything inside a "text generation zone"; when Meta
+draws "Advantage+ creative text generation" in the same `message_field`, the
+zone grew from that heading up to the parent it shares with the button and
+swallowed it. Every failure on 01.10 had `zones 3–7` and the generation
+section on the page; every success had no section.
+
+- The button is taken by its `data-surface` (in Meta's slot), and a
+  generation zone stops below anything that holds our field's controls.
+  Nothing inside Meta's generation section is pressed or counted as ours.
+- If Meta redraws the new option box right after the robot marks it, the box
+  is taken again instead of failing with `option_box_not_focused` (29.09–30.09
+  live, up to two retries; `reclaims` in telemetry).
+- Not found still means a warning, not a blocked ad (owner decision); the ad
+  creative block is captured once per ad for the next diagnosis.
+- Tests: `tests/test_bench_add_text_option.py` on both real pages, as captured
+  and with the real 29.09 generation section in place — find, press, type
+  text 2, read both texts back. Meta's new box itself is still emulated.
+
+## Finished clean profiles close themselves; a Close profile button for the rest — ACL-1444
+
+2026-10-01. With "Publish all", every finished account left its Multilogin
+window open ("Browser left open for manual review"), 0.6–1.5 GB each; on a
+tester's laptop 4 of 6 windows were idle, memory 92 %, and waiting accounts
+could not start.
+
+- End of a job (`publish_jobs._let_go_of_profile` → `RpaPublisher.finish_job`):
+  when every campaign is publishable, the job has no errors, it was not
+  stopped, no other job is waiting for the same profile, and the draft is
+  saved (fail closed: anywhere but the campaign list — classic `/edit`,
+  single-screen `simple_create`, any other page — Meta's autosave settles and
+  "All edits saved" must show), the robot stops
+  the profile gracefully through the MLX API — `allow_kill=False`, this
+  profile only. Only a profile the robot started or attached to over its
+  automation port and that still runs the same process (ACL-1320/1388
+  markers); a hand-opened window is never closed. Any problem keeps the window
+  open as before. The job panel says "Closed the profile — all campaigns are
+  ready"; telemetry `profile_closed_after_job` (ok True = closed, False = the
+  MLX stop failed, None = kept on purpose; note = why: `kept_problem`,
+  `kept_switch`, `kept_unsaved`, `hand_opened`, …).
+- Per-machine switch `FB_RPA_KEEP_PROFILES_OPEN=1` keeps every window open
+  (old behaviour).
+- Dashboard: "Close profile" on a finished job's panel →
+  `POST /publish-jobs/{job_id}/close-profile`, the same graceful MLX stop.
+  Refused (409) while any job of that profile is pending/queued/running or a
+  read holds the profile lock; the lock is held during the stop.
+- Profile queue: slots count jobs, released when the job ends (unchanged); the
+  memory decision now sees the freed memory once the job releases its slot.
+- Tests: `tests/test_a_finished_clean_profile_closes_itself.py` (46);
+  `tests/conftest.py` sets `FB_RPA_KEEP_PROFILES_OPEN=1` for all other tests.
+
+## Connect Multilogin issues the token in the right workspace — ACL-1441
+
+2026-10-01. "Connect Multilogin" (Accounts → Connect) asked for the automation
+token in the login's default workspace. For a team member whose default is
+their own Free workspace, Multilogin answered "403 Request is not allowed",
+although the same login may issue tokens in the team workspace that holds the
+profiles (seen live: ndays6443 → own Free workspace; KLD profiles in
+1ejadmedia, role `user`).
+
+- `src/web/multilogin_auth.py` `sign_in()` now: `POST /user/signin` →
+  `GET /user/workspaces` (`workspace_id`, `name`, `role`) → switch with
+  `POST /user/refresh_token {email, refresh_token, workspace_id}` →
+  `GET /workspace/automation_token?expiration_period=1mo` in that workspace.
+  Field names checked against the Multilogin X API documentation (Postman
+  collection 28533318/2s946h9Cv9).
+- Which workspace: the one the person picked → the slot's remembered one →
+  the only one → the only one whose plan has automation
+  (`GET /workspace/restrictions` → `automation_available`). Otherwise the
+  form shows a picker (name, role, "no automation") and Continue re-sends the
+  sign-in with the choice. No token is issued before the choice.
+- The slot remembers the workspace in machine settings
+  (`MULTILOGIN_WORKSPACE_<slot>`, `MULTILOGIN_WORKSPACE_ID_<slot>`); the
+  connection line shows it. The password is still never stored.
+- Named errors: "This workspace's plan has no automation — choose the
+  workspace with your profiles"; "Your role in this workspace cannot issue
+  tokens — ask the workspace owner"; a failed switch names the workspace.
+- Every Multilogin call from the sign-in carries a normal browser
+  User-Agent (Cloudflare answers 1010 to the python-requests one).
+- If the workspace list is unavailable, the old behaviour stays: token in the
+  default workspace.
+
+## Ads in the account tree get their workbook numbers — ACL-1395
+
+2026-09-30 on Facebook_6540 (CO_bnc_All_Video_FX_Y_35_28.09) the campaign row had
+its workbook numbers and both ads under it showed only dashes. Two causes.
+
+- The account read took the name cell's whole text, so Meta's label came with the
+  name: "1741 - Pro Bancolombia Unpublished edits Unpublished edits". Nothing in the
+  workbook matched it. The read now takes the name from the cell's own tooltip
+  (`data-tooltip-content`, present on every row in the captured Ads Manager pages)
+  and strips trailing labels by one list, `META_NAME_LABELS` in
+  `src/analysis_agent/account_spend.py`: "Unpublished edits", "In draft", "In
+  review", "Draft" — only at the end of a name, whole and exact, never leaving it
+  empty. The turn-off lookup compares names the same way. The tree applies the same
+  list to readings saved before the fix (`amapTreeName`, a copy kept equal by test).
+- Several ads with one name in one campaign used to get a dash. Owner decision
+  2026-09-30: each shows the workbook totals for that name once (not multiplied),
+  with a quiet "shared by N ads" mark and the tooltip "The workbook cannot tell ads
+  with the same name apart; these are the totals for all of them". Campaign rows are
+  unchanged; two campaigns with one name keep the dash.
+
+## Every Meta layout the robot has met is an offline test — ACL-1433
+
+2026-10-01 Doc19 placements failed on code that passed the same morning: a Meta
+variation, learned only on the next live run. The bench now holds every layout
+the robot has met, so a robot change is checked against all of them before merge.
+
+- `tests/bench/CATALOGUE.md` (from `tests/bench/catalogue.json`,
+  `scripts/bench_catalogue.py --write`): per robot step every layout seen live,
+  with its fixture, test, expected result and status; captures seen but not cut
+  are listed with the reason. `tests/test_bench_catalogue.py` fails when a
+  fixture is not catalogued, a named fixture/fragment/test is missing or the
+  Markdown is stale.
+- `scripts/capture_to_fixture.py`: a live capture folder (`page.html`, possibly
+  truncated at 4 MB, or `block_*.html`, plus `context.json`) becomes a scrubbed,
+  trimmed fixture (named blocks only; ids, `act=`, URLs, e-mails, phones,
+  tokens, media file names, campaign and profile names replaced; render ids to
+  `syn_N`) checked with the secret scanner's rules, plus an optional test stub.
+  Documented in `tests/fixtures/ads_manager/README.md`.
+- Harvest of 29.09–01.10 captures: 10 new fixtures (wizard steps of five step
+  rows incl. Trim/Crop, Doc19 and single-screen placements, five destination
+  layouts and the ad error block, editor gone under the robot, languages chips,
+  ad copy without Headline with the first real "Add text option", conversion
+  card with a heading button group, default-only Locations, single-screen
+  Audience Advantage+ on). Each test runs the robot's own step or reader.
+- Live bugs found, kept as strict xfail for the RPA track: Doc19 fails
+  placements because Meta no longer offers "Messenger Stories"; the
+  single-screen Placements card is not found (anchored on "Account controls").
+- Review checklist (`.github/pull_request_template.md`,
+  `docs/system/AGENT_CONTEXT.md`): every robot fix adds its live capture to the bench.
+
+No robot code changed.
+
+## The test suite runs in parallel — ACL-1397
+
+2026-09-30. The full suite (3800+ tests) ran one test at a time: 82 min on the
+owner's laptop while other sessions shared it, 22–23 min for the test step in CI
+per Python version. It now runs with pytest-xdist:
+`python -m pytest tests/ -q -n auto --dist loadfile` (CI and
+docs/repository/WORKFLOW.md). Locally on the same laptop: 20 min with 8 workers.
+
+- `--dist loadfile`: each test file stays on one worker, so the 80+ files that
+  start their own Chromium start it once, not once per worker.
+- CI: the hosted Windows runner (private repository) has 2 CPUs, and xdist
+  alone left CI at 23–31 min. The suite is now also split into 3 jobs per
+  Python version by `scripts/acl_test_shard.py` (every test file in exactly one
+  shard, checked by `tests/test_acl_test_shard.py`).
+- `test_a_stopped_profile_never_spins_the_robot` reserved a "free" port and
+  released it before Chromium took it; under parallel runs another worker got
+  it first (ECONNREFUSED, CI 3.13). Chromium now picks the port itself
+  (`--remote-debugging-port=0`) and the test reads it from `DevToolsActivePort`.
+- `tests/conftest.py` sets `ACL_LIBRARY_REPO/TOKEN/BRANCH` to empty strings in
+  every worker, so a machine `.env` with the live team library can never be
+  picked up by a test run.
+- Fixed waits replaced with waits for the event itself: the build-percent
+  layout check (`test_campaign_build_percent_browser`, a known flake) reads both
+  boxes in one settled frame; the drawer tests wait for the intercepted preview
+  request instead of sleeping 100–500 ms; a publish log in
+  `test_meta_campaign_agent` goes to `tmp_path`, not the repository `output/`.
+- No product code changed; no test is serial-only.
+## A disabled ad account no longer shows as "no warning" — ACL-1391
+
+2026-09-30 the account map showed "no warning" for FacebookDoc20 while Ads Manager
+wrote "Account disabled" in the Delivery column of its campaign. Two causes:
+
+- The status read looked only for banner sentences. A disabled account can have no
+  banner at all, only the Delivery cell. The robot already recognised that shape
+  before publishing (ACL-1313) with its own list of signs, and the two lists had
+  drifted apart. The status read now also asks the robot's detector: "Account
+  disabled" as a whole Delivery cell reads as `disabled`, "Verification required
+  to advertise" as `restricted`. A test fails if the robot learns a kind of block
+  the status column has no word for. The help link "Why is my ad account
+  disabled?" still reads as nothing. Every sign in every frame is weighed, not
+  the first one on the page: a verification banner above an "Account disabled"
+  cell reads as `disabled`. Meta's lines come out space-joined, and a broken
+  link to the robot's detector is logged once instead of passing silently.
+- The last successful status stayed on screen after later reads failed: Doc20's
+  "no warning" was from 22.09, and every read after it had failed. The map now
+  prints the read date (dd.mm.yy) under the status, and a status followed by a failed read
+  is greyed out and marked "not refreshed", with the failed attempt in its tooltip.
+
+No new visits to accounts: the fix applies on the next Read a person asks for.
+
 ## The robot closes and reopens a hand-opened profile window when it is safe — ACL-1388
 
 2026-09-30 06:49 UTC a "Publish all" run stopped Facebook_6540 at the start with
@@ -53,6 +408,23 @@ only when it is safe.
 - Visible: job panel line "Closed the hand-opened window of <account> and reopened
   it for the robot", telemetry `profile_hand_window` (note = outcome or refusal
   reason, diag = where, age_s, idle_s) and a Sentry breadcrumb with the same data.
+
+## Ads 2-3 in the single-screen editor: media found, Creating... waited out — ACL-1412
+
+Live run d1755a59e139 (Facebook_1443, 2026-09-30) left ad 2 without media, link
+and text and stopped ad 3 at `dialog_open`.
+
+- Before opening the creative, checking the media or setting the destination of
+  ads 2+, the robot scrolls the new ad's Media block back on screen (the editor had
+  unmounted the ad form, so "Set up creative", the attached media and Destination
+  were not in the page). Only scrolling: no presses, no reloads, still inside
+  `hold_open_ad`. The media entry used is logged: `ad_creative_upload` note
+  `media_entry:<set_up_creative|picker_open|media_on_ad|media_block_*>`.
+- Meta's "Creating..." dialog after Create ad is waited out for up to 120 s
+  (`META_BUSY_WAIT_S`) whether or not the page answers; any other dialog stops the
+  ad at once (`adN_create:dialog_open`). Meta's media picker left over the new ad
+  is closed with its own Cancel. `simple_create_more_ads` telemetry gains
+  `progress_s`, `dialog.open_s`, `dialog_kind` and `media_picker`.
 
 ## The robot builds campaigns in Meta's single-screen editor — ACL-1327
 
