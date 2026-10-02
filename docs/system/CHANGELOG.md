@@ -8,6 +8,14 @@ provider's WhatsApp group — the account's short name and its status, e.g.
 `FacebookDoc20 - Account Disabled` — with the hint "Copy screenshot and account number to
 send in the group". The screenshot itself is copied by ACL-1430's button. Nothing is
 sent by ACL. Healthy and unread statuses show neither.
+
+- Review fixes (2026-10-02): a problem status without a screenshot now shows "Copy
+  screenshot" disabled, with the tooltip "No screenshot on the last read — read the
+  account again", so the hint never points at a missing button (the map template and
+  the live Read path alike). After a live Read the status cell keeps "Copy text" and
+  the hint. A second click within 1.5 s no longer leaves the button stuck on "Copied".
+  Tests check that copying makes no request and stores nothing — only the clipboard.
+
 ## A problem status on the account map comes with a screenshot and a Copy screenshot button — ACL-1430
 
 2026-10-01 the owner asked for proof to send to support when the map shows a problem

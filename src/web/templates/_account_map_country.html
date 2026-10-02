@@ -152,8 +152,12 @@
               {%- else -%}<span class="amap-st bad" title="{{ st.status_text or st.status }} — read {{ st.at }}.{{ stale_note }}">{{ st.status }}</span>
               {%- endif -%}
               {#- Доказательство для поддержки (ACL-1430): снимок страницы, на
-                  которой прочитали проблему. Нет снимка — нет кнопки. -#}
-              {%- if st.shot_id and st.status != 'clear' %} <button type="button" class="amap-shot" data-shot="{{ st.shot_id }}" title="Screenshot taken {{ st.shot_at }}. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>{% endif -%}
+                  которой прочитали проблему. Нет снимка у красного статуса —
+                  кнопка есть, но выключена и говорит почему (acl-132): под ней
+                  подсказка «Copy screenshot …», и она не должна указывать на
+                  кнопку, которой нет. -#}
+              {%- if st.shot_id and st.status != 'clear' %} <button type="button" class="amap-shot" data-shot="{{ st.shot_id }}" title="Screenshot taken {{ st.shot_at }}. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>
+              {%- elif st.status not in ('clear', 'unknown') %} <button type="button" class="amap-shot" disabled title="No screenshot on the last read — read the account again">Copy screenshot</button>{% endif -%}
               {%- if st.at_short %}<small class="amap-st-at{{ ' stale' if st.stale }}">{{ st.at_short }}{% if st.stale %} · not refreshed{% endif %}</small>{% endif -%}
               {#- Сообщение поставщику аккаунтов (acl-132): одна строка «имя -
                   статус», вставляется в группу WhatsApp вместе со снимком.

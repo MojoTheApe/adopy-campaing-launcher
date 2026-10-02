@@ -1723,6 +1723,8 @@
       border-radius: 3px; background: var(--bg-subtle); color: var(--muted); cursor: pointer; white-space: nowrap;
     }
     .amap-shot:hover { color: inherit; }
+    .amap-shot:disabled { cursor: not-allowed; opacity: 0.55; }
+    .amap-shot:disabled:hover { color: var(--muted); }
     .amap td { padding: 0.42rem 0.85rem; border-bottom: 1px solid var(--border); }
     .amap tbody tr:last-child td { border-bottom: 0; }
     .amap tbody tr:hover { background: var(--bg-hover); }
@@ -7091,15 +7093,23 @@ function amapApplyReading(account, s, split) {
       label.className = 'amap-st ' + (s.status === 'clear' ? 'ok' : s.status === 'unknown' ? 'dim' : 'bad');
       label.textContent = s.status === 'clear' ? 'no warning' : s.status === 'unknown' ? 'unreadable' : s.status;
       label.title = (s.status_text || (s.status === 'clear' ? 'No warning on the page; not a verified active status' : s.status)) + ' · read ' + (s.finished_at || '');
-      if (s.status_shot && s.status !== 'clear') {
+      if (s.status !== 'clear' && (s.status_shot || s.status !== 'unknown')) {
         var shotBtn = document.createElement('button');
         shotBtn.type = 'button'; shotBtn.className = 'amap-shot'; shotBtn.textContent = 'Copy screenshot';
-        shotBtn.dataset.shot = s.status_shot;
-        shotBtn.title = 'Screenshot taken ' + (s.status_shot_at || '') + '. Copies the image to the clipboard.';
-        shotBtn.onclick = function () { amapCopyShot(shotBtn); };
+        if (s.status_shot) {
+          shotBtn.dataset.shot = s.status_shot;
+          shotBtn.title = 'Screenshot taken ' + (s.status_shot_at || '') + '. Copies the image to the clipboard.';
+          shotBtn.onclick = function () { amapCopyShot(shotBtn); };
+        } else {
+          /* Как в шаблоне карты (acl-132): красный статус без снимка — кнопка
+             выключена и говорит почему, подсказка ниже не врёт. */
+          shotBtn.disabled = true;
+          shotBtn.title = 'No screenshot on the last read — read the account again';
+        }
         status.appendChild(document.createTextNode(' '));
         status.appendChild(shotBtn);
       }
+      amapStatusReport(status, account, s.status);
     }
     if (s.state === 'running') {
       btn.disabled = true; btn.textContent = 'reading…'; return;
@@ -8677,9 +8687,35 @@ async function amapCopyText(btn) {
     try { done = document.execCommand('copy'); } catch (e2) { done = false; }
     ta.remove();
   }
-  var label = btn.textContent;
+  /* Подпись запоминается один раз: второй клик за 1,5 с иначе запомнил бы
+     «Copied» и оставил бы её на кнопке навсегда (ревью #465). */
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
   btn.textContent = done ? 'Copied' : 'Copy failed';
-  setTimeout(function () { btn.textContent = label; }, 1500);
+  clearTimeout(btn._amapCopyTimer);
+  btn._amapCopyTimer = setTimeout(function () { btn.textContent = btn.dataset.label; }, 1500);
+}
+
+/* Тот же блок «Copy text + подсказка», что рисует _account_map_country.html,
+   — для живого Read: amapApplyReading пересобирает ячейку статуса, и без
+   этого кнопка пропадала ровно тогда, когда чтение нашло проблему. */
+var AMAP_STATUS_WORDS = {disabled: 'Account Disabled', restricted: 'Account Restricted',
+                         blocked: 'Account Blocked', review: 'Account Under Review'};
+function amapStatusReport(cell, account, status) {
+  var word = AMAP_STATUS_WORDS[status];
+  if (!word) return;
+  var line = String(account || '').split(' - ')[0] + ' - ' + word;
+  var box = document.createElement('div');
+  box.className = 'amap-st-report';
+  var b = document.createElement('button');
+  b.type = 'button'; b.className = 'amap-btn amap-copy-text'; b.textContent = 'Copy text';
+  b.setAttribute('data-copy', line);
+  b.title = 'Copies: ' + line;
+  b.onclick = function () { amapCopyText(b); };
+  var hint = document.createElement('small');
+  hint.className = 'amap-st-hint';
+  hint.textContent = 'Copy screenshot and account number to send in the group';
+  box.appendChild(b); box.appendChild(hint);
+  cell.appendChild(box);
 }
 
 /* Один рисовальщик на оба пути — и на кнопку, и на ввод. Две копии этой
