@@ -5986,6 +5986,13 @@ window.cbBuild = (function () {
       return { state: 'build-wait', sign: '',
                why: 'Waiting for the Multilogin profile — another run is using it' };
     }
+    // ACL-1424: мало памяти — сколько свободно и сколько берёт профиль.
+    var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+    if (q.hold === 'memory_low' && q.available_mb != null && q.profile_mb) {
+      return { state: 'build-wait', sign: '',
+               why: 'Waiting: ' + gb(q.available_mb) + ' GB free, a profile uses ~' + gb(q.profile_mb) + ' GB'
+                    + (ahead ? ' (' + ahead + ' ahead)' : '') };
+    }
     return { state: 'build-wait', sign: '',
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
   }
