@@ -3308,7 +3308,7 @@
             "session": "run_h1434u_1001"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-H1434U",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3326,7 +3326,8 @@
           "report": "# ACL-1434 handoff (Worker-H1434U, run_h1434u_1001)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/435 (into stage). Branch codex/acl-1434-health, head 5511cec, based on work/main 49915f7.\n\n## Delivered\n- `src/web/robot_health.py`: the aggregation. It reads only local telemetry and serve logs, and never touches an account.\n  - Rows are outcome steps; columns are `all` plus each account. A cell is ok/total over the last N runs (default 10), with the trend against the previous N.\n  - A separate per-build table.\n  - Highlights: a drop of 30+ points (at least 2 attempts in each window), 2+ failures in a row inside the current window, and build-to-build drops.\n  - Per-run summary: failed steps marked new / known / known elsewhere, plus the stop reason.\n- `scripts/robot_health.py`: Markdown output; also `--run <id>` and `--json`.\n- `src/web/templates/robot_health.html`: a separate template.\n  - Routes in `src/web/app.py`: `/robot-health`, `/robot-health/run/{id}`, and `/robot-health/capture/{id}/{file}` (images only, inside that run's folder).\n  - `report.html` gets 2 lines: a \"Robot health\" link in the header, next to Report a problem. It does not overlap PR #408's hunks.\n- `docs/system/CHANGELOG.md` entry.\n\n## Decisions\n- **Counted steps:** only rows with ok true or false that are not diagnostics. The full list is in the module docstring.\n- **Retries and unreached steps:** a retried step counts by its last record. Steps a run never reached are not counted as failures.\n- **Failure-only steps** (`objective_leads`, `ad3_*`) are marked `*`.\n- **Build:** a telemetry field if present; otherwise the version the serve log was under when it first named the job's id. The log has times without dates, so matching by time is not possible. Runs started after the current process started fall back to that process's own flow_version().\n\n## Tests\n- `tests/test_robot_health.py`: 37 passed (headless, ACL_LIBRARY_* empty).\n- Fixture `tests/fixtures/robot_health/`: the last 45 runs of real telemetry (30.09\u201301.10), scrubbed. Accounts are renamed AcctA_1\u2026, jobs job-0001\u2026, runs r000\u2026; there are no ids or URLs. acl_scan_secrets reports it clean.\n- Other test suites were not run; the change is additive (new routes only).\n\n## Real telemetry (28.09\u201301.10, 109 runs)\n- Facebook_1443: ad_creative_upload 2/8 (down 75 points); ad2_creative_upload 0/6, failing 6 in a row (wizard_not_opened); ad_creative_reuse 3/8.\n- ad_copy_second_text: 0/3 overall, failing 4 in a row on FacebookDoc21 (add_control_not_found).\n- ad_level_summary: 1/5 overall; 0/6 on Facebook_1443.\n- objective_leads: failed 3 in a row on Facebook_6540.\n\n## Open\n- The live dashboard needs a serve.py restart before the page appears. This was not done (9090 was not touched).\n- Acceptance item 3: the owner checks the page after a run."
         },
         "pr": 435,
-        "queued_at": "2026-10-01T08:54:22+00:00"
+        "queued_at": "2026-10-01T08:54:22+00:00",
+        "reviewer": "Reviewer-R1434Q"
       },
       "437": {
         "implementers": [
@@ -3967,6 +3968,10 @@
       "Reviewer-R1427Q": {
         "session": "rev_1427q_1002",
         "role": "Reviewer"
+      },
+      "Reviewer-R1434Q": {
+        "session": "rev_1434q_1002",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -4392,7 +4397,6 @@
       402,
       419,
       430,
-      434,
       433,
       452,
       457,
@@ -4401,7 +4405,18 @@
       31,
       466
     ],
-    "review": null,
+    "review": {
+      "id": "1aa544fdd2e64924bd1c5d34c76eb6cb",
+      "pr": 435,
+      "issues": [
+        434
+      ],
+      "actor": "Reviewer-R1434Q",
+      "session": "rev_1434q_1002",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-02T05:47:12+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -6013,6 +6028,13 @@
           "report": "# Review PR #428 (ACL-1427) \u2014 Reviewer-R1427Q / rev_1427q_1002\n\nVerdict: **request-changes** (blocking only: merge conflict with work/stage; code itself is sound)\n\n- head: 1cafee739511ac55bc9631dc87430976efecae92 (tree e9ce1ccd54b16d56da9c34fd0201f39bd4e26f08)\n- base work/stage: 8322a6af0f9098114182cf327320bd87dd239a70 (merge-base 45a82bdca4df)\n- GitHub mergeable: CONFLICTING\n\n## Merge with work/stage (git merge-tree)\n- CONFLICT: docs/system/CHANGELOG.md only (both sides prepend entries at top: stage ACL-1476/1426/1412/1445/1344/1444/1441 vs PR's ACL-1427). Additive, keep both.\n- src/fb_ads_rpa/browser.py, src/fb_ads_rpa/rpa_publisher.py auto-merge cleanly (ACL-1444 code is in different hunks).\n\n## CI (head 1cafee7) \u2014 all 11 checks pass\ntest (3.11), test (3.13), ACL verification, tooling, tracker-link, installer (build/verify/classify), descriptor x2. No failing jobs. NB: CI ran on the pre-1444 stage; must re-run after the stage merge.\n\n## Local tests (headless, ACL_LIBRARY_* empty, affected files only)\n- Merged tree (stage + PR): 267 passed (14 files incl. test_a_finished_clean_profile_closes_itself.py from ACL-1444, hand-window x3, publisher gates/slots, browser boundary/roles, publish safety contract).\n- PR head: 221 passed.\n- Mutation check: wait disabled (limit=0) -> 7 failed; cancel wiring removed in publisher -> test_job_stop_during_the_wait_cancels_it_through_the_publisher fails; mid-wait gate re-check removed -> test_the_other_gates_are_rechecked_during_the_wait fails. Tests are real.\n\n## Findings\n1. [Blocking/process] docs/system/CHANGELOG.md:3 \u2014 conflicts with work/stage; merge stage, keep both entries, re-run CI on the new head.\n2. [Low/interaction ACL-1444] src/fb_ads_rpa/browser.py:2043 + stage rpa_publisher.py:377/422 \u2014 after a successful reopen the profile is marked a robot profile (`_start_via_mlx_api` -> `_mark_robot_profile`), so at the end of a clean job ACL-1444 `finish_job` -> `close_finished_profile` closes it. The person who opened the window by hand returns to no window at all (panel says \"Closed the profile \u2014 all campaigns are ready\"). Consistent with both specs (it is no longer a hand window), but worth stating in the ACL-1418 live check / to the owner. Non-blocking.\n3. [Low/UX] src/fb_ads_rpa/browser.py:2264-2266 \u2014 Stop during the wait raises ProfileStop(OPEN_BY_HAND); job finishes as cancelled (publish_jobs `_finish(cancelled=...)`) and telemetry note is `cancelled`, but the slot result/log line still reads \"profile open by hand\". Cosmetic.\n4. [Info/interaction ACL-1444] the 2-min wait runs inside the per-profile `serialized_browser` lock, so 1444's \"Close profile\" button returns 409 for that profile while waiting \u2014 matches \"job keeps its slot\"; Stop is the escape hatch. OK.\n5. [Info] Acceptance \"ACL-1418 live check\" not done (out of PR scope; stays open on the Issue).\n\n## Focus checks (OK)\n- Waits only when RECENT_INPUT is the sole failing gate; full `assess` every <=3 s; age/foreground/process/unknown gates stop at once, also mid-wait (WAIT_GATE) \u2014 a window brought to the front during the wait is never closed.\n- Timeout 120 s (env override, 0 = old stop, negative/garbage -> default); cancel polled every 0.5 s via ContextVar on the same thread as provider.open.\n- ACL-1388 guarantees unchanged: publish only (allow_restart and allow_kill), MLX API graceful stop allow_kill=False, never kill, no plain browser; spend reads never wait.\n- English panel text; telemetry adds only waited_s/wait_outcome, no profile ids.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-02T05:47:12+00:00",
+        "pr": 435,
+        "lane": "1aa544fdd2e64924bd1c5d34c76eb6cb",
+        "actor": "Reviewer-R1434Q"
       }
     ],
     "policy": {
