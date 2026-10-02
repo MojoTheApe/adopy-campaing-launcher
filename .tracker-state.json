@@ -1100,29 +1100,16 @@
       }
     },
     "stage": {
-      "pr": 438,
+      "pr": 450,
       "issues": [
-        437
+        447
       ],
-      "tree_sha": "0287b5afbd71b2506a023766f6c631bd0435fead",
-      "source_sha": "65f522c39f1672c5c5ba625a3ccf75b65a542536",
-      "main_tree": "8d84fda2ab9f72c30efeeeb851b62576ece1911d",
+      "tree_sha": "ac16b7755f267759e685fe6185ba8653c9bc0ecb",
+      "source_sha": "9b5209fd5455c296d44c1c8ee168d9de4ff1eda6",
+      "main_tree": "0287b5afbd71b2506a023766f6c631bd0435fead",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-02T10:04:55+00:00",
-      "verification": {
-        "kind": "stage-verification",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "source_sha": "65f522c39f1672c5c5ba625a3ccf75b65a542536",
-        "tree_sha": "0287b5afbd71b2506a023766f6c631bd0435fead",
-        "checks": [
-          "Git checks on actual stage 65f522c: CI run 36993448534 success (sharded, Python 3.11/3.13)",
-          "Windows installer run 36993448367 success"
-        ],
-        "report": "ACL-1437 stage verification: Git and installer checks green on the actual stage 65f522c. Independent review: scratchpad/review_438.md."
-      },
-      "verified_at": "2026-10-02T10:38:57+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-02T11:51:13+00:00"
     },
     "tasks": {
       "248": {
