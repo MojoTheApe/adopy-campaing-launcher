@@ -2690,20 +2690,6 @@
         "state": "implementing",
         "started_at": "2026-10-02T05:48:25+00:00",
         "from_status": "status:todo"
-      },
-      "434": {
-        "actor": "Worker-H1434U",
-        "session": "run_h1434u_1001",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1434-health",
-        "worktree": "C:\\acl-1434-health",
-        "id": "95c7e7cfe089421b87f41d10f244c90f",
-        "issue": 434,
-        "state": "handoff",
-        "started_at": "2026-10-02T05:49:37+00:00",
-        "from_status": "status:todo",
-        "pr": 435,
-        "report": "# ACL-1434 \u2014 fixes after review (PR #435)\n\nHead: cc2dc57d4849b3817369cc20b1eeff8a66d5ed7a (branch codex/acl-1434-health).\nMerged work/stage (a74b392; CHANGELOG conflict only, both sides kept) and work/main (da2502c, clean).\n\n## Findings\n1. BLOCKER CHANGELOG conflict: merged stage, both entries kept (ACL-1434 on top, then ACL-1455 and the rest of stage).\n2. MEDIUM installed builds never get a build: `robot_health.default_sources(output_dir, logs_dir)` now also reads `server.std*.log` from the launcher logs dir (`robot_health.launcher_logs_dir()` = `get_local_config_dir()/logs`, same as packaging/windows/launcher.py). The app passes it through `_robot_health_logs_dir()`; `scripts/robot_health.py` uses it when `--output-dir` is not given. Test: `test_installed_build_reads_the_launcher_logs` (and without the logs dir the build is unknown).\n3. LOW split stdout/stderr: `job_builds_from_logs` reads a log file that has no version lines against its pair (`serveN.log`/`serveN.err.log`, `server.stdout.log`/`server.stderr.log`). It matches them launch by launch, counting from the newest. A launch marker is `[serve] Dashboard URL` (stderr, once per start), or `Started server process` as a fallback. Counting from the newest means a launch that died before uvicorn shifts only older launches. A file with no pair gets no build. Tests: `test_split_stdout_and_stderr_logs_are_paired_by_launch`, `test_launch_that_died_before_uvicorn_shifts_only_older_launches`.\n4. LOW raw account names: `accounts_full` is gone from the report and `--json`. The column tooltip says \"account <label>\" or \"all accounts\". Test: `test_report_has_no_raw_account_names`.\n5. LOW event loop: the three robot_health handlers are plain `def` now, so they run in the threadpool. The tests call them directly.\n6. NIT report.html: the Robot health link moved above the ACL-354 comment, so the comment sits on its button again.\n7. TEST GAP: `C:x.png` does not escape (same drive: pathlib keeps it inside the folder). Another drive does escape (`Z:x.png` becomes `Z:x.png`). New test `test_capture_rejects_a_name_on_another_drive` (Windows only) fakes `is_file` so that only the parent check holds. Mutation \"drop parent check\" now gives 1 failed. `C:x.png` was also added to the existing 404 list.\n\nNot fixed: nothing.\n\n## Tests\n`tests/test_robot_health.py tests/test_bench_catalogue.py tests/test_report_scripts_parse.py`: 52 passed (headless, ACL_LIBRARY_* empty). `scripts/bench_catalogue.py --check`: up to date. Mutation checks: parent check removed gives 1 failed; launch alignment without the shift gives 1 failed."
       }
     },
     "tasks": {
@@ -3375,7 +3361,7 @@
             "session": "run_h1434u_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-H1434U",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3384,16 +3370,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1434-health",
           "worktree": "C:\\acl-1434-health",
-          "id": "1ea2f614b52b4ec588f05e452b4fe019",
+          "id": "95c7e7cfe089421b87f41d10f244c90f",
           "issue": 434,
           "state": "handoff",
-          "started_at": "2026-10-01T08:40:14+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-02T05:49:37+00:00",
+          "from_status": "status:todo",
           "pr": 435,
-          "report": "# ACL-1434 handoff (Worker-H1434U, run_h1434u_1001)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/435 (into stage). Branch codex/acl-1434-health, head 5511cec, based on work/main 49915f7.\n\n## Delivered\n- `src/web/robot_health.py`: the aggregation. It reads only local telemetry and serve logs, and never touches an account.\n  - Rows are outcome steps; columns are `all` plus each account. A cell is ok/total over the last N runs (default 10), with the trend against the previous N.\n  - A separate per-build table.\n  - Highlights: a drop of 30+ points (at least 2 attempts in each window), 2+ failures in a row inside the current window, and build-to-build drops.\n  - Per-run summary: failed steps marked new / known / known elsewhere, plus the stop reason.\n- `scripts/robot_health.py`: Markdown output; also `--run <id>` and `--json`.\n- `src/web/templates/robot_health.html`: a separate template.\n  - Routes in `src/web/app.py`: `/robot-health`, `/robot-health/run/{id}`, and `/robot-health/capture/{id}/{file}` (images only, inside that run's folder).\n  - `report.html` gets 2 lines: a \"Robot health\" link in the header, next to Report a problem. It does not overlap PR #408's hunks.\n- `docs/system/CHANGELOG.md` entry.\n\n## Decisions\n- **Counted steps:** only rows with ok true or false that are not diagnostics. The full list is in the module docstring.\n- **Retries and unreached steps:** a retried step counts by its last record. Steps a run never reached are not counted as failures.\n- **Failure-only steps** (`objective_leads`, `ad3_*`) are marked `*`.\n- **Build:** a telemetry field if present; otherwise the version the serve log was under when it first named the job's id. The log has times without dates, so matching by time is not possible. Runs started after the current process started fall back to that process's own flow_version().\n\n## Tests\n- `tests/test_robot_health.py`: 37 passed (headless, ACL_LIBRARY_* empty).\n- Fixture `tests/fixtures/robot_health/`: the last 45 runs of real telemetry (30.09\u201301.10), scrubbed. Accounts are renamed AcctA_1\u2026, jobs job-0001\u2026, runs r000\u2026; there are no ids or URLs. acl_scan_secrets reports it clean.\n- Other test suites were not run; the change is additive (new routes only).\n\n## Real telemetry (28.09\u201301.10, 109 runs)\n- Facebook_1443: ad_creative_upload 2/8 (down 75 points); ad2_creative_upload 0/6, failing 6 in a row (wizard_not_opened); ad_creative_reuse 3/8.\n- ad_copy_second_text: 0/3 overall, failing 4 in a row on FacebookDoc21 (add_control_not_found).\n- ad_level_summary: 1/5 overall; 0/6 on Facebook_1443.\n- objective_leads: failed 3 in a row on Facebook_6540.\n\n## Open\n- The live dashboard needs a serve.py restart before the page appears. This was not done (9090 was not touched).\n- Acceptance item 3: the owner checks the page after a run."
+          "report": "# ACL-1434 \u2014 fixes after review (PR #435)\n\nHead: cc2dc57d4849b3817369cc20b1eeff8a66d5ed7a (branch codex/acl-1434-health).\nMerged work/stage (a74b392; CHANGELOG conflict only, both sides kept) and work/main (da2502c, clean).\n\n## Findings\n1. BLOCKER CHANGELOG conflict: merged stage, both entries kept (ACL-1434 on top, then ACL-1455 and the rest of stage).\n2. MEDIUM installed builds never get a build: `robot_health.default_sources(output_dir, logs_dir)` now also reads `server.std*.log` from the launcher logs dir (`robot_health.launcher_logs_dir()` = `get_local_config_dir()/logs`, same as packaging/windows/launcher.py). The app passes it through `_robot_health_logs_dir()`; `scripts/robot_health.py` uses it when `--output-dir` is not given. Test: `test_installed_build_reads_the_launcher_logs` (and without the logs dir the build is unknown).\n3. LOW split stdout/stderr: `job_builds_from_logs` reads a log file that has no version lines against its pair (`serveN.log`/`serveN.err.log`, `server.stdout.log`/`server.stderr.log`). It matches them launch by launch, counting from the newest. A launch marker is `[serve] Dashboard URL` (stderr, once per start), or `Started server process` as a fallback. Counting from the newest means a launch that died before uvicorn shifts only older launches. A file with no pair gets no build. Tests: `test_split_stdout_and_stderr_logs_are_paired_by_launch`, `test_launch_that_died_before_uvicorn_shifts_only_older_launches`.\n4. LOW raw account names: `accounts_full` is gone from the report and `--json`. The column tooltip says \"account <label>\" or \"all accounts\". Test: `test_report_has_no_raw_account_names`.\n5. LOW event loop: the three robot_health handlers are plain `def` now, so they run in the threadpool. The tests call them directly.\n6. NIT report.html: the Robot health link moved above the ACL-354 comment, so the comment sits on its button again.\n7. TEST GAP: `C:x.png` does not escape (same drive: pathlib keeps it inside the folder). Another drive does escape (`Z:x.png` becomes `Z:x.png`). New test `test_capture_rejects_a_name_on_another_drive` (Windows only) fakes `is_file` so that only the parent check holds. Mutation \"drop parent check\" now gives 1 failed. `C:x.png` was also added to the existing 404 list.\n\nNot fixed: nothing.\n\n## Tests\n`tests/test_robot_health.py tests/test_bench_catalogue.py tests/test_report_scripts_parse.py`: 52 passed (headless, ACL_LIBRARY_* empty). `scripts/bench_catalogue.py --check`: up to date. Mutation checks: parent check removed gives 1 failed; launch alignment without the shift gives 1 failed."
         },
         "pr": 435,
-        "queued_at": "2026-10-01T08:54:22+00:00",
+        "queued_at": "2026-10-02T06:03:36+00:00",
         "review_report": "# Review PR #435 (ACL-1434) \u2014 Robot health page\n\nReviewer-R1434Q (rev_1434q_1002); implementer Worker-H1434U.\nHead f349f1332039587b6c007fa19d0e5e23d5cad898 (tree 1654358dfed713cf162b72e41b7a370054e185a3); base work/stage 8322a6af0f9098114182cf327320bd87dd239a70.\n\n## Verdict: request-changes\n\nThe code is sound and the tests are real. Two things block the merge. The PR no longer merges into stage because of a conflict in CHANGELOG. Build attribution also does not work on installed (buyer) builds.\n\n## Merge with stage\n`git merge-tree --write-tree work/stage f349f13`: CONFLICT in docs/system/CHANGELOG.md only (stage 942f641..8322a6a: ACL-1395, 1441, 1444, 1344, 1445, 1412, 1426, 1476 each added a top entry). src/web/app.py and src/web/templates/report.html auto-merge. GitHub reports mergeable=CONFLICTING. On a scratch merge of stage with the CHANGELOG conflict left open, tests/test_robot_health.py: 37 passed.\n\n## CI (head f349f13)\nAll green: test 3.11/3.13 x 3 shards, Build/install/repair/uninstall, Installer verification, Verify build inputs, ACL verification, Classify x2, descriptor x2, tracker-link. No failing jobs.\n\n## Findings\n1. BLOCKER: docs/system/CHANGELOG.md:3. A merge conflict with current stage. Merge stage again and keep both sides.\n2. MEDIUM: src/web/robot_health.py:464-466 (`default_sources`) and src/web/app.py (`_robot_health_output_dir`). The build log is read only from `<workspace>/output/serve*.log`. That file exists only on hand-run checkouts (acl-live-*, where stdout is redirected). Installed builds send stdout/stderr, including the \"RPA flow version\" line and the uvicorn access lines, to `%LOCALAPPDATA%\\ACL\\logs\\server.stdout.log` / `server.stderr.log` (packaging/windows/launcher.py:100-103, 218-224). As a result, on buyer machines every run started before the current process is \"unknown\" in \"Steps by build\". Fix: also read the launcher's logs dir (server.std*.log). Add a test.\n3. LOW: src/web/robot_health.py:134 and :125. The build is reset to \"\" for each log file, and the files are read in name order. When stdout and stderr go to separate files (serveN.log has the version, serveN.err.log has the uvicorn `/publish-jobs/<id>` lines), jobs named only in the .err.log never get a build. It works on the owner's combined serve-live.log.\n4. LOW: src/web/templates/robot_health.html:163 and robot_health.py:348. The column tooltip shows `accounts_full`, the raw account name. That can carry the profile id (`Facebook_1443_6157\u2026`) or a person's name (`FacebookDoc19 - Name`). The PR says accounts are \"shown without profile ids\". The page is local only, so this is not a leak, but it contradicts the claim. `--json` prints it as well.\n5. LOW: src/web/app.py robot_health_* handlers are `async def`. They do synchronous reads of the whole telemetry jsonl and all serve logs, plus the aggregation, on the event loop, which blocks progress polling of running jobs while the page loads. Make them plain `def` (threadpool) or use run_in_threadpool.\n6. NIT: src/web/templates/report.html:3050-3054. The link is inserted between the ACL-354 comment and the \"Report a problem\" button that the comment describes.\n7. TEST GAP (low): mutation \"remove `path.parent != folder`\" in capture_file (robot_health.py:530) leaves all 37 tests green. The check is still needed: a Windows drive-relative name such as `C:x.png` escapes the folder without it (verified: returns None with the check). Add that case to test_capture_serves_only_images_of_that_run.\n\n## Mutation spot-checks (tests/test_robot_health.py, 37 tests)\n- drop `<=` -> `<`: 1 failed\n- first record wins instead of last: 2 failed\n- streak over whole history instead of window: 1 failed\n- MIN_SAMPLES removed: 1 failed\n- \"known elsewhere\" merged into \"known\": 1 failed\n- capture_file parent check removed: 0 failed (finding 7)\n\n## Safety\nRead-only over local files. No Multilogin, Meta, or network calls, no Publish, no windows. The capture endpoint rejects bad run ids, separators, non-images, and drive-relative names. Jinja autoescape is on, so notes are escaped. CSP allows the inline theme script. The fixture is scrubbed: no 9+ digit ids except the r000\u2026 run ids, no URLs or e-mails, accounts AcctX_n, jobs job-NNNN. User-facing text is English.\n\n## Tests run\ntests/test_robot_health.py on the head: 37 passed (headless, ACL_LIBRARY_* empty). Also on a scratch merge with stage: 37 passed."
       },
       "437": {
@@ -4482,7 +4468,8 @@
       31,
       466,
       427,
-      424
+      424,
+      434
     ],
     "review": {
       "id": "26d7af6509b643f38ae7d2074e8d9c1b",
@@ -6188,6 +6175,13 @@
         "issue": 424,
         "pr": 425,
         "actor": "Worker-A1424N"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-02T06:03:36+00:00",
+        "issue": 434,
+        "pr": 435,
+        "actor": "Worker-H1434U"
       }
     ],
     "policy": {
