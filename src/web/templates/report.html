@@ -1478,6 +1478,16 @@
       border-radius: var(--radius-sm);
       color: var(--text); font-size: 0.78rem; line-height: 1.45;
     }
+    /* ACL-1444: «Close profile» на панели закончившегося задания. */
+    .cb-close-profile { margin: 0.5rem 0 0.2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+    .cb-close-profile-btn {
+      padding: 0.3rem 0.8rem; font-size: 0.76rem; cursor: pointer;
+      background: transparent; color: var(--text);
+      border: 1px solid var(--muted); border-radius: var(--radius-sm);
+    }
+    .cb-close-profile-btn:disabled { opacity: 0.6; cursor: default; }
+    .cb-close-profile-msg { font-size: 0.7rem; color: var(--muted); }
+    .cb-close-profile-msg.cb-close-profile-bad { color: var(--bad); }
 
     /* ── §6 Creative Brief ── */
     .brief-details { margin-top: 1.5rem; }
@@ -2061,6 +2071,13 @@
     .amap-tree-kind {
       flex: 0 0 4.6rem; color: var(--muted); font-size: 0.7rem;
       text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    /* ACL-1395: у объявлений с одним именем числа книги общие. Тихая пометка
+       в строке уровня, как «not in the workbook» у аккаунта; объяснение — в
+       подсказке. */
+    .amap-tree-shared {
+      margin-left: 0.35rem; color: var(--muted); text-transform: none;
+      letter-spacing: 0; cursor: help; border-bottom: 1px dotted var(--border);
     }
     /* Стрелка кампании. Пустое место вместо неё держит ту же ширину, иначе
        строки без объявлений разъезжаются относительно остальных. */
@@ -2967,6 +2984,31 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .cbd-root, .cbd-handle-arrow { transition: none; }
+    }
+    /* ── Второстепенные кнопки — ссылками (ACL-1455, вариант C 01.10) ──────
+       Были нарисованы рамкой полей (--field-border), почти тем же фоном и
+       серым текстом подсказки: глаз не отличал, куда писать, а что нажимать.
+       Рамка теперь значит «поле»; кнопка — синий текст без рамки. Правила в
+       одном месте и сильнее разбросанных выше; рамка остаётся прозрачной
+       шириной 1px, чтобы строки таблицы не прыгали. */
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn) {
+      background: transparent; border: 1px solid transparent;
+      color: var(--accent); font-weight: 500;
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):hover:not(:disabled) {
+      background: var(--accent-soft); border-color: transparent; color: var(--accent);
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):focus-visible {
+      outline: 2px solid var(--focus-ring); outline-offset: 1px;
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):disabled {
+      color: var(--muted); background: transparent; cursor: not-allowed;
+    }
+    :is(.amap-btn.danger, .amap .amap-x, .acc-btn.danger, .amap-btn.amap-live-bad) {
+      color: var(--bad); border-color: transparent;
+    }
+    :is(.amap-btn.danger, .amap .amap-x, .acc-btn.danger, .amap-btn.amap-live-bad):hover:not(:disabled) {
+      background: var(--bad-soft); color: var(--bad);
     }
   </style>
 </head>
@@ -7085,7 +7127,7 @@ function amapTreeLine(o, adCount) {
     caret.type = 'button';
     caret.className = 'amap-tree-caret';
     caret.textContent = '▸';
-    caret.setAttribute('aria-label', adCount + ' ads in ' + (o.name || 'this campaign'));
+    caret.setAttribute('aria-label', adCount + ' ads in ' + (amapTreeName(o.name) || 'this campaign'));
     who.appendChild(caret);
   } else {
     var gap = document.createElement('span');
@@ -7132,13 +7174,15 @@ function amapTreeLine(o, adCount) {
     sw.dataset.level = o.level;
     sw.dataset.objectId = o.id || '';
     sw.dataset.parentId = o.parent_id || '';
-    sw.dataset.name = o.name || '';
+    sw.dataset.name = amapTreeName(o.name);
   }
 
   var name = document.createElement('span');
   name.className = 'amap-tree-name';
-  name.textContent = o.name || '(no name)';
-  name.title = (o.name || '') + (o.id ? '  ·  ' + o.id : '');
+  /* Имя — без надписей Meta, как его сопоставляет книга (ACL-1395). */
+  var shownName = amapTreeName(o.name);
+  name.textContent = shownName || '(no name)';
+  name.title = shownName + (o.id ? '  ·  ' + o.id : '');
 
   var del = document.createElement('span');
   var stopped = /off|review|reject|not deliver|error/i.test(o.delivery || '');
@@ -7221,11 +7265,35 @@ function amapAttrCell(field) {
    «Adset Name» книги, объявление — «Ad Title» под ним. Считает сервер той
    же формулой и форматирует тем же `fmt_usd`, что и строку аккаунта.
 
-   Совпадение — по имени, и только однозначное. Две кампании с одним именем
-   (или два объявления с одним именем в кампании) по имени не различить:
-   такие строки получают прочерк с объяснением, а не угаданные числа. Нет
-   строк в книге — прочерк, а не ноль: «не нашли» и «ноль» — разные ответы. */
-function amapTreeName(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+   Совпадение — по имени. Две кампании с одним именем по имени не различить:
+   такие строки получают прочерк с объяснением, а не угаданные числа.
+   Несколько объявлений с одним именем в одной кампании (ACL-1395, решение
+   владельца 30.09) получают каждое итог книги по этому имени — один раз, не
+   умноженный — и пометку «shared by N ads»: делить итог между ними нечем.
+   Нет строк в книге — прочерк, а не ноль: «не нашли» и «ноль» — разные ответы. */
+
+/* Надписи Meta из ячейки имени (ACL-1395): «1741 - Pro Bancolombia Unpublished
+   edits Unpublished edits». Чтение их теперь снимает само; здесь — для
+   чтений, сохранённых раньше. Копия `META_NAME_LABELS` из
+   `src/analysis_agent/account_spend.py`, тест держит их равными. Снимаются
+   только с конца имени и только если перед ними есть имя. */
+var AMAP_META_NAME_LABELS = ['Unpublished edits', 'In draft', 'In review', 'Draft'];
+
+function amapTreeName(s) {
+  var text = String(s || '').replace(/\s+/g, ' ').trim();
+  for (;;) {
+    var hit = null;
+    for (var i = 0; i < AMAP_META_NAME_LABELS.length; i++) {
+      var l = ' ' + AMAP_META_NAME_LABELS[i];
+      if (text.length > l.length && text.slice(-l.length) === l) { hit = l; break; }
+    }
+    if (!hit) return text;
+    text = text.slice(0, -hit.length).trim();
+  }
+}
+
+var AMAP_SHARED_TIP = 'The workbook cannot tell ads with the same name apart; '
+                    + 'these are the totals for all of them';
 
 function amapOwn(obj, key) {
   return obj && Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null;
@@ -7254,7 +7322,11 @@ function amapFillAttribution(box, objects, data) {
   lines.forEach(function (line, i) {
     var o = line._amapObject;
     if (!o) return;
-    var got = null, why = '';
+    var got = null, why = '', shared = 0;
+    /* Ответ может прийти второй раз (перечитали период) — прежняя пометка
+       снимается, новая ставится по новому ответу. */
+    var oldMark = line.querySelector('.amap-tree-shared');
+    if (oldMark) oldMark.remove();
     if (!data || !data.ok) {
       why = (data && data.error) || 'Workbook numbers are not available';
     } else if (o.level === 'ad') {
@@ -7262,8 +7334,10 @@ function amapFillAttribution(box, objects, data) {
       var n = amapTreeName(o.name);
       if (!camp) why = 'The campaign of this ad is not known';
       else if (keys.campCount[camp] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
-      else if (keys.adCount[camp + '\u0001' + n] > 1) why = 'Several ads in this campaign share this name — the workbook cannot tell them apart';
-      else got = amapOwn(amapOwn(data.ads, camp), n);
+      else {
+        got = amapOwn(amapOwn(data.ads, camp), n);
+        shared = keys.adCount[camp + '\u0001' + n] || 0;
+      }
       if (!got && !why) why = 'No rows for this ad in the stats workbook for these dates';
     } else {
       var cn = amapTreeName(o.name);
@@ -7279,8 +7353,21 @@ function amapFillAttribution(box, objects, data) {
       var has = text !== '';
       cell.textContent = has ? text : '—';
       cell.classList.toggle('nodata', !has);
-      cell.title = got ? 'From the stats workbook' : why;
+      cell.title = got ? (shared > 1 ? AMAP_SHARED_TIP : 'From the stats workbook') : why;
     });
+    /* Пометка — только над числами: над прочерком «общие числа» ничего не
+       значат. Стоит в мелкой строке уровня над именем («ad»), чтобы не
+       отнимать ширину у самого имени. */
+    if (got && shared > 1) {
+      var kind = line.querySelector('.amap-tree-kind');
+      if (kind) {
+        var mark = document.createElement('span');
+        mark.className = 'amap-tree-shared';
+        mark.textContent = 'shared by ' + shared + ' ads';
+        mark.title = AMAP_SHARED_TIP;
+        kind.appendChild(mark);
+      }
+    }
   });
   /* Прочерки в узкой раскладке спрятаны, и «книга не прочиталась» выглядело
      бы там ровно как «в книге нет строк» — то есть никак. Поломку говорим
@@ -8663,6 +8750,7 @@ function amapMlPaint(block) {
     state.reason === 'expired' ? 'token expired' : state.has_token ? 'token could not be verified' : 'not connected';
   line.appendChild(mark);
   if (alive && state.email) line.appendChild(document.createTextNode(' · ' + state.email));
+  if (alive && state.workspace) line.appendChild(document.createTextNode(' · workspace ' + state.workspace));
   if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
   ml.querySelector('.amap-ml-open').hidden = !state || alive;
   var signin = ml.querySelector('.amap-ml-signin');
@@ -8716,6 +8804,10 @@ async function amapMlSubmit(btn, paste) {
   var data = paste ? {token: token.value.trim(), instance: inst} : {
     email: form.querySelector('.amap-ml-email').value.trim(), password: pass.value, save_token: true, instance: inst
   };
+  /* ACL-1441: выбор рабочего пространства из пикера — тем же запросом. */
+  var picker = form.querySelector('.amap-ml-ws');
+  if (!paste && picker) data.workspace_id = picker.querySelector('select').value;
+  var keepPass = false;
   if (paste ? !data.token : !data.email || !data.password) {
     amapMlSay(block, paste ? 'Paste the token first' : 'Email and password, please', true); return;
   }
@@ -8730,6 +8822,16 @@ async function amapMlSubmit(btn, paste) {
     });
     var j = await response.json();
     if (!response.ok || !j || !j.ok) throw new Error((j && j.error) || 'Connection failed');
+    /* ACL-1441: у логина несколько пространств, и какое с профилями — знает
+       человек. Пароль остаётся в поле до выбора (на сервере он не хранится),
+       Continue шлёт тот же вход с workspace_id. С выбранным не вышло — пикер
+       остаётся с причиной, чтобы выбрать другое. */
+    if (!paste && !j.token_saved && j.workspaces && j.workspaces.length > 1) {
+      amapMlWorkspacePicker(form, j.workspaces, data.workspace_id);
+      keepPass = true;
+      amapMlSay(block, j.token_error || 'This login has several Multilogin workspaces — choose the one with your profiles.', !!j.token_error);
+      return;
+    }
     if (!paste && !j.token_saved) throw new Error(j.token_error || 'Signed in, but no automation token was saved. Ask the workspace owner for a token.');
     /* A new workspace token invalidates both cached profiles and in-flight
        results. Ключ кэша теперь «инстанс + набранное», поэтому чистим ВСЕ
@@ -8751,17 +8853,44 @@ async function amapMlSubmit(btn, paste) {
     token.value = '';
     amapMlSay(block, 'Token saved; checking connection…');
     var state = await amapMlRefresh(inst, true);
-    amapMlSay(block, state && state.alive ? 'Connected. Reload to search profiles.' :
+    amapMlSay(block, state && state.alive ? 'Connected' + (j.workspace ? ' to workspace ' + j.workspace : '') + '. Reload to search profiles.' :
       'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
   } catch (e) { amapMlSay(block, String(e.message || e), true); }
   finally {
-    pass.value = '';
+    if (!keepPass) pass.value = '';
     delete form.dataset.busy;
     selector.disabled = false;
     form.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
   }
 }
 function amapMlSignin(btn) { return amapMlSubmit(btn, false); }
+/* ACL-1441: пикер пространства — имя и роль; без автоматизации видно сразу. */
+function amapMlWorkspacePicker(form, workspaces, chosen) {
+  var box = form.querySelector('.amap-ml-ws');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'amap-ml-ws';
+    var label = document.createElement('span');
+    label.textContent = 'Workspace: ';
+    var sel = document.createElement('select');
+    var go = document.createElement('button');
+    go.type = 'button'; go.className = 'amap-btn'; go.textContent = 'Continue';
+    go.onclick = function () { amapMlSubmit(go, false); };
+    box.append(label, sel, go);
+    form.appendChild(box);
+  }
+  var select = box.querySelector('select');
+  select.replaceChildren();
+  workspaces.forEach(function (w) {
+    var o = document.createElement('option');
+    o.value = w.workspace_id;
+    o.textContent = w.name + ' \u2014 ' + (w.role || 'member') + (w.automation === false ? ' \u00b7 no automation' : '');
+    select.appendChild(o);
+  });
+  var pick = chosen && workspaces.some(function (w) { return w.workspace_id === chosen && w.automation !== false; })
+    ? chosen : ((workspaces.filter(function (w) { return w.automation !== false; })[0] || workspaces[0]).workspace_id);
+  select.value = pick;
+}
 function amapMlSaveToken(btn) { return amapMlSubmit(btn, true); }
 function amapMlBoot() {
   var wanted = {};
@@ -9736,13 +9865,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var vidRadio = row.querySelector('input[type="radio"][value="Video"]');
       var isVideo = !!(vidRadio && vidRadio.checked);
 
-      var media;
+      var media, story = '';
       if (fileVal) {
         var cr = CREATIVES.find(function(f) {
           return f.filename === fileVal || f.rel_path === fileVal;
         });
         var path = cr ? (cr.rel_path || cr.filename) : fileVal;
         var url = '/creative-file?path=' + encodeURIComponent(path);
+        // ACL-1426: what the robot puts on the Vertical (story) card.
+        if (cr && cr.story_label) {
+          story = cr.story_label + (cr.square_file ? ' · Post: ' + cr.square_file : '');
+        }
         if (isVideo || (cr && cr.type === 'Video') || /\.(mp4|mov|webm)$/i.test(path)) {
           media = '<video class="cbp-media" src="' + cbpEsc(url) + '" preload="metadata" muted controls></video>';
         } else {
@@ -9763,6 +9896,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       cards.push(
         '<div class="cbp-item">' +
         '<div class="cbp-adlabel">Ad ' + (i + 1) + '</div>' +
+        (story ? '<div class="cbp-story" data-cbp-story style="font-size:0.7rem;opacity:0.75">' + cbpEsc(story) + '</div>' : '') +
         '<div class="cbp-card">' +
           '<div class="cbp-head"><span class="cbp-avatar"></span>' +
             '<span><div class="cbp-pagename">Page name</div><div class="cbp-sub">Sponsored</div></span></div>' +
@@ -12217,6 +12351,53 @@ function _doCbPublish(form) {
   if (got.skipped.length) cbSayAlreadyBuilding(got.skipped);
 }
 
+// ACL-1444: «Close profile» на панели закончившегося задания. Чистое задание
+// закрывает профиль само; остальные окна (есть что проверить) человек
+// закрывает отсюда. Сервер закрывает мягко, через MLX API, и отказывает
+// (409), пока на профиле идёт работа. Кнопки нет, пока задание идёт и когда
+// профиль уже закрыт (`job.profile_closed`).
+function cbCloseProfileHtml(job) {
+  if (!job || job.profile_closed) return '';
+  return '<div class="cb-close-profile">'
+    + '<button type="button" class="cb-close-profile-btn">Close profile</button>'
+    + '<span class="cb-close-profile-msg">closes the Multilogin window of this account to free memory (also a window opened by hand)</span>'
+    + '</div>';
+}
+
+function cbBindCloseProfile(panel, jobId) {
+  var btn = panel && panel.querySelector('.cb-close-profile-btn');
+  if (!btn || btn._bound) return;
+  btn._bound = true;
+  var msg = panel.querySelector('.cb-close-profile-msg');
+  function say(text, bad) {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.classList.toggle('cb-close-profile-bad', !!bad);
+  }
+  btn.addEventListener('click', function() {
+    btn.disabled = true;
+    btn.textContent = 'Closing…';
+    say('');
+    fetch('/publish-jobs/' + encodeURIComponent(jobId) + '/close-profile', { method: 'POST' })
+      .then(function(r) { return r.json().catch(function() { return { ok: false, error: 'HTTP ' + r.status }; }); })
+      .then(function(data) {
+        if (data && data.ok) {
+          btn.textContent = '✓ Profile closed';
+          say('the Multilogin window is closed');
+        } else {
+          btn.textContent = 'Close profile';
+          btn.disabled = false;
+          say((data && data.error) || 'Could not close the profile', true);
+        }
+      })
+      .catch(function(e) {
+        btn.textContent = 'Close profile';
+        btn.disabled = false;
+        say(e.message, true);
+      });
+  });
+}
+
 // `done` — необязательный: зовётся один раз, когда работа кончилась любым
 // образом. Нужен очереди «Publish all»: профиль в Multilogin один, и
 // следующий аккаунт начинается только после того, как закончился прошлый.
@@ -12323,6 +12504,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     (job.errors || []).forEach(function(e) {
       html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e) + '</div>';
     });
+    if (!isRunning) html += cbCloseProfileHtml(job);
     return html;
   }
 
@@ -12420,6 +12602,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         if (job === null) return;
         statusPanel.innerHTML = renderStatus(job);
         bindStopButton();
+        cbBindCloseProfile(statusPanel, jobId);
         if (onTick) { try { onTick(job); } catch (e) { /* список очереди подождёт */ } }
         if (!scrolledToStatus) {
           scrolledToStatus = true;
