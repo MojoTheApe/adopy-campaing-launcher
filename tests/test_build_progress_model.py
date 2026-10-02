@@ -78,7 +78,8 @@ def test_every_step_the_robot_names_maps_to_a_stage():
     ("simple_card", "adset"), ("ad_name", "ad"), ("ad3_creative_upload", "ad"),
     ("ad_creative_reuse", "ad"), ("simple_create_more_ads", "ad"), ("ad_level_summary", "final"),
     ("simple_create_draft", "final"), ("destination_sweep_skipped", "final"),
-    ("window_bounds", "hold"), ("tab_frozen", "hold"), ("account_blocked", "hold"),
+    ("window_bounds", "hold"), ("window_hidden_woken", "hold"), ("tab_frozen", "hold"),
+    ("account_blocked", "hold"),
     ("ad_copy:attempt2", "ad"),
 ])
 def test_stage_of_known_steps(step, stage):

@@ -142,7 +142,7 @@ def _render_status() -> str:
 def test_the_dashboard_names_the_cause():
     block = _render_status()
     assert "job.screen_was_locked" in block, "дешборд не смотрит на признак"
-    assert re.search(r"экран был заблокирован", block), "причина не названа словами"
+    assert re.search(r"screen was locked", block), "причина не названа словами"
 
 
 def test_it_is_not_said_over_a_finished_draft():

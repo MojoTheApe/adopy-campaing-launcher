@@ -606,7 +606,7 @@ def _run_rpa(
 
     if _is_cancelled(job_id):
         with _jobs_lock:
-            _jobs[job_id]["errors"].append("Остановлено пользователем")
+            _jobs[job_id]["errors"].append("Stopped by the user")
         # Never stop Multilogin — user needs the window to verify FB login.
         publisher.close(force=False)
         _finish(job_id, cancelled=True)
@@ -629,7 +629,7 @@ def _run_rpa(
         if _is_cancelled(job_id):
             cancelled = True
             with _jobs_lock:
-                _jobs[job_id]["errors"].append("Остановлено пользователем")
+                _jobs[job_id]["errors"].append("Stopped by the user")
         else:
             with _jobs_lock:
                 _jobs[job_id]["errors"].append(f"RPA error: {e}")

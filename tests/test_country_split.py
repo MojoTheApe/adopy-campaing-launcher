@@ -184,7 +184,7 @@ def test_an_open_report_is_left_without_saving(monkeypatch):
     assert reached is True, note
     assert "All reports" in page.clicked and "Don't save" in page.clicked
     assert "Save" not in page.clicked, "сохранили чужой отчёт на кабинете"
-    assert "изменения не сохраняли" in note
+    assert "changes not saved" in note
 
 
 def test_a_report_we_cannot_leave_is_refused(monkeypatch):
@@ -205,7 +205,7 @@ def test_an_unanswered_dialog_is_refused(monkeypatch):
     )
     reached, note = cs._leave_open_report(page)
     assert reached is False
-    assert "несохранённых" in note
+    assert "unsaved-changes" in note
 
 
 def test_waiting_for_the_interface_not_for_seconds(monkeypatch):
@@ -335,18 +335,18 @@ def test_a_masked_field_that_appends_is_refused(monkeypatch):
     page = _DatePage(mask=True)
     ok, note = cs._set_period(page, "2026-08-16", "2026-09-15")
     assert ok is False
-    assert "осталось" in note and page.updated is False
+    assert "the period fields show" in note and page.updated is False
 
 
 def test_a_period_panel_without_two_fields_is_refused(monkeypatch):
     monkeypatch.setattr(cs, "_sleep", lambda *a, **k: None)
     page = _DatePage(fields=1)
     ok, note = cs._set_period(page, "2026-08-16", "2026-09-15")
-    assert ok is False and "полей периода найдено 1" in note
+    assert ok is False and "found 1 period fields" in note
 
 
 def test_no_period_button_is_refused(monkeypatch):
     monkeypatch.setattr(cs, "_sleep", lambda *a, **k: None)
     page = _DatePage(control="Customize")
     ok, note = cs._set_period(page, "2026-08-16", "2026-09-15")
-    assert ok is False and "кнопка периода не найдена" in note
+    assert ok is False and "period button not found" in note
