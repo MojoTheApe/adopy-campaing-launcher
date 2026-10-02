@@ -3444,6 +3444,11 @@ async function dashRefresh(ev) {
     <h3>This computer</h3>
     <p class="acc-sub">Where ACL reads your stats and looks for creatives. Paste a path from Explorer (Shift + right-click → Copy as path).</p>
     <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:70ch">
+      {#- ACL-1447: имя менеджера — тег `manager` у событий Sentry этой машины. -#}
+      <label>
+        <div style="font-size:0.75rem;color:var(--muted)">Your name (run reports from this computer are labelled with it)</div>
+        <input id="mp-manager" type="text" style="width:100%" autocomplete="off" maxlength="60">
+      </label>
       <label>
         <div style="font-size:0.75rem;color:var(--muted)">Stats workbook (Excel)</div>
         <input id="mp-stats" type="text" style="width:100%" autocomplete="off">
@@ -13567,7 +13572,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   function el(id) { return document.getElementById(id); }
   function say(text, error) { el('mp-msg').textContent = text || ''; el('mp-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
   function show(d) {
-    loaded = {stats: d.stats_workbook || '', creatives: d.creatives_folder || ''};
+    loaded = {stats: d.stats_workbook || '', creatives: d.creatives_folder || '', manager: d.manager_name || ''};
+    el('mp-manager').value = loaded.manager;
     el('mp-stats').value = loaded.stats;
     el('mp-creatives').value = loaded.creatives;
     var missing = [];
@@ -13587,6 +13593,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var body = {};
     if (el('mp-stats').value !== loaded.stats) body.stats_workbook = el('mp-stats').value;
     if (el('mp-creatives').value !== loaded.creatives) body.creatives_folder = el('mp-creatives').value;
+    if (el('mp-manager').value !== loaded.manager) body.manager_name = el('mp-manager').value;
     if (!Object.keys(body).length) { say('Nothing changed.'); return; }
     pending = true; el('mp-save').disabled = true; say('Saving…');
     try {
