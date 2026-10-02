@@ -3363,22 +3363,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "504": {
-        "actor": "Worker-N1504R",
-        "session": "run_n1504r_1002",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1504-campaigns-not-read",
-        "worktree": "C:\\acl-1504-notread",
-        "id": "f350c14a6ea647d689d6e8b9653939a2",
-        "issue": 504,
-        "state": "handoff",
-        "started_at": "2026-10-02T19:35:29+00:00",
-        "from_status": "status:backlog",
-        "pr": 505,
-        "report": "# ACL-1504 handoff \u2014 Worker-N1504R (run_n1504r_1002)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/505 (into `stage`)\nHead: a2677d4f, branch `codex/acl-1504-campaigns-not-read` (cut from work/main)\n\n## What changed\n- `src/analysis_agent/account_spend.py`:\n  - `SpendReading.objects_read` records whether the campaign list was reached (`_read_tree(..., reached=)`). An unparsed table counts as not reached.\n  - `tree_not_read()` judges records saved before this change by themselves: no rows plus an error means not read.\n  - `to_dict()` adds `objects_problem` ({reason, action}, from `tree_problem()`, a local readable table in the ACL-1437 style) and scrubs `objects_error` with `scrub_tree_error()`: URLs and `act=`/`act_` ids are removed, then `run_telemetry.scrub` runs.\n  - `_put()` attaches the last good tree (`objects_prev`: objects, at, date_from, date_to) to a reading that did not reach the list. It survives repeated failures.\n- `src/web/templates/report.html`:\n  - `amapTreeNotRead()` and the not-read branch in `amapPaintTree()` show \"campaigns not read \u00b7 tried \u2026\", the reason, what to do, and **Read again**. Read again calls `.click()` on the row's existing `.amap-read`; there is no new read path.\n  - The raw error is under a collapsed \"Technical details\".\n  - The last good rows are shown under \"last good read \u00b7 \u2026 \u00b7 read <date> \u00b7 Meta numbers for \u2026\". They are read-only (`_stale` disables turn-off).\n  - A list that was read and is empty now shows \"0 campaigns \u00b7 0 ads\".\n  - The campaign-card guides are untouched.\n- `docs/system/CHANGELOG.md`: ACL-1504 entry.\n- Tests: new `tests/test_tree_campaigns_not_read.py` (15 tests). The listener guard in `tests/test_the_account_tree_on_screen.py` now counts 8 listeners and names Read again.\n\n## Verification\n- The new tests, `test_the_account_tree_on_screen` and `test_read_the_account_tree` passed: 195.\n- A second run of 454 passed:\n  - test_report_scripts_parse, test_bench_catalogue, test_review_ui_regressions\n  - test_account_map_* (5), test_tree_attribution, test_account_spend, test_account_status_read\n  - test_copy_status_text, test_status_screenshot, test_country_refresh_review, test_read_fallback\n  - test_review_spend_regressions, test_september_review, test_spend_store_survives_a_held_file, test_turn_off_safety_browser\n  - test_idless_campaign_table_boundaries, test_meta_name_labels, test_one_button_reads_what_is_needed, test_disabled_account_status\n  - test_every_change_leaves_a_record, test_workbook_review, test_browser_boundary_contract, test_spend_reads_day_first_dates, test_spend_totals_scroll\n- All of these ran headless.\n- `scripts/acl_scan_secrets.py` is clean.\n- No live accounts, Meta, Multilogin or port 9090 were touched.\n\n## Open\n- Owner check of the Facebook_1443 row after a failed and a good read. This needs a `serve.py` restart with this code."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -4559,9 +4544,25 @@
             "session": "run_n1504r_1002"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-N1504R",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-N1504R",
+          "session": "run_n1504r_1002",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1504-campaigns-not-read",
+          "worktree": "C:\\acl-1504-notread",
+          "id": "f350c14a6ea647d689d6e8b9653939a2",
+          "issue": 504,
+          "state": "handoff",
+          "started_at": "2026-10-02T19:35:29+00:00",
+          "from_status": "status:backlog",
+          "pr": 505,
+          "report": "# ACL-1504 handoff \u2014 Worker-N1504R (run_n1504r_1002)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/505 (into `stage`)\nHead: a2677d4f, branch `codex/acl-1504-campaigns-not-read` (cut from work/main)\n\n## What changed\n- `src/analysis_agent/account_spend.py`:\n  - `SpendReading.objects_read` records whether the campaign list was reached (`_read_tree(..., reached=)`). An unparsed table counts as not reached.\n  - `tree_not_read()` judges records saved before this change by themselves: no rows plus an error means not read.\n  - `to_dict()` adds `objects_problem` ({reason, action}, from `tree_problem()`, a local readable table in the ACL-1437 style) and scrubs `objects_error` with `scrub_tree_error()`: URLs and `act=`/`act_` ids are removed, then `run_telemetry.scrub` runs.\n  - `_put()` attaches the last good tree (`objects_prev`: objects, at, date_from, date_to) to a reading that did not reach the list. It survives repeated failures.\n- `src/web/templates/report.html`:\n  - `amapTreeNotRead()` and the not-read branch in `amapPaintTree()` show \"campaigns not read \u00b7 tried \u2026\", the reason, what to do, and **Read again**. Read again calls `.click()` on the row's existing `.amap-read`; there is no new read path.\n  - The raw error is under a collapsed \"Technical details\".\n  - The last good rows are shown under \"last good read \u00b7 \u2026 \u00b7 read <date> \u00b7 Meta numbers for \u2026\". They are read-only (`_stale` disables turn-off).\n  - A list that was read and is empty now shows \"0 campaigns \u00b7 0 ads\".\n  - The campaign-card guides are untouched.\n- `docs/system/CHANGELOG.md`: ACL-1504 entry.\n- Tests: new `tests/test_tree_campaigns_not_read.py` (15 tests). The listener guard in `tests/test_the_account_tree_on_screen.py` now counts 8 listeners and names Read again.\n\n## Verification\n- The new tests, `test_the_account_tree_on_screen` and `test_read_the_account_tree` passed: 195.\n- A second run of 454 passed:\n  - test_report_scripts_parse, test_bench_catalogue, test_review_ui_regressions\n  - test_account_map_* (5), test_tree_attribution, test_account_spend, test_account_status_read\n  - test_copy_status_text, test_status_screenshot, test_country_refresh_review, test_read_fallback\n  - test_review_spend_regressions, test_september_review, test_spend_store_survives_a_held_file, test_turn_off_safety_browser\n  - test_idless_campaign_table_boundaries, test_meta_name_labels, test_one_button_reads_what_is_needed, test_disabled_account_status\n  - test_every_change_leaves_a_record, test_workbook_review, test_browser_boundary_contract, test_spend_reads_day_first_dates, test_spend_totals_scroll\n- All of these ran headless.\n- `scripts/acl_scan_secrets.py` is clean.\n- No live accounts, Meta, Multilogin or port 9090 were touched.\n\n## Open\n- Owner check of the Facebook_1443 row after a failed and a good read. This needs a `serve.py` restart with this code."
+        },
+        "pr": 505,
+        "queued_at": "2026-10-02T19:48:44+00:00"
       }
     },
     "actors": {
@@ -5595,7 +5596,8 @@
       399,
       433,
       462,
-      424
+      424,
+      504
     ],
     "review": {
       "id": "ff2a5752174c4c1e9c6b6b0184479f7c",
@@ -7993,6 +7995,13 @@
         "pr": 458,
         "lane": "ff2a5752174c4c1e9c6b6b0184479f7c",
         "actor": "Reviewer-R1457K"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-02T19:48:44+00:00",
+        "issue": 504,
+        "pr": 505,
+        "actor": "Worker-N1504R"
       }
     ],
     "policy": {
