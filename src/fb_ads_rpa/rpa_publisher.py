@@ -523,6 +523,14 @@ class RpaPublisher:
                                                attach_section=False)
         except Exception:
             pass
+        try:
+            # ACL-1447: и итог кампании — остановлена до первого шага.
+            from src.fb_ads_rpa import run_summary
+
+            run_summary.report_finished(campaign=campaign_name, account=account or "",
+                                        stopped_at=stop.code, steps=[])
+        except Exception:
+            pass
 
     @staticmethod
     def _begin_campaign_context() -> None:
@@ -620,6 +628,9 @@ class RpaPublisher:
                 raise self._mlx_fallback_error(exc, re_exc) from re_exc
             flow = self._flow(conn, draft.account_label)
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
+        # ACL-1437: номер прогона — в «Technical details» карточки.
+        if isinstance(result, RpaPublishResult) and not result.run_id:
+            result.run_id = _telemetry.current_run_id() or None
         for failure in result.blocking_failures or []:
             code = str(failure).split(":", 1)[0]
             if code in profile_trouble.ACCOUNT_STOPS:
