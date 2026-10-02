@@ -238,6 +238,15 @@ PER_AD_POLICY: dict[str, tuple[str, str]] = {
         "Meta created an extra empty ad in this ad set; delete the empty "
         "\"New Leads ad\" before publishing",
     ),
+    # ACL-1476 (owner, 2026-10-01): the story of a post/story pair could not
+    # be placed (`no_crop_step` / `not_in_library`); the ad has the post file
+    # on all placements and is publishable.
+    "story_not_placed": (
+        WARNING,
+        "the story file of the post/story pair was not placed (Meta showed no Crop "
+        "step, or the story file is not in the media library); the ad runs with the "
+        "post file on Stories and Reels too - replace it in Ads Manager by hand if needed",
+    ),
     # ACL-1344: второй вариант основного текста не встал. Первый текст
     # сверен, объявление годно — предупреждение, а не блокировка.
     "second_text": (
@@ -428,7 +437,8 @@ PER_AD_GUIDE: dict[str, tuple[str, str, str]] = {
 }
 
 _PER_AD_NAME = re.compile(
-    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination|extra_empty_ad|second_text)$"
+    r"^ad(?:\d+)?_(create|name|creative_upload|copy|destination|extra_empty_ad|second_text"
+    r"|story_not_placed)$"
 )
 
 

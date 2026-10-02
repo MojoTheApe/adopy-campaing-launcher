@@ -1736,9 +1736,71 @@ def _snapshot_empty_table(page, level: str, how: str) -> None:
         pass
 
 
+#: Надписи, которые Meta рисует в ячейке имени рядом с самим именем (ACL-1395).
+#:
+#: 30.09, Facebook_6540: объявление прочиталось как
+#: «1741 - Pro Bancolombia Unpublished edits Unpublished edits» — надпись о
+#: несохранённых правках, дважды, — и книга статистики не нашла под ним ни
+#: одной строки. Так же пришли ещё одно объявление и кампания (сохранённые
+#: чтения этой машины). «In draft» Meta пишет у черновиков (снятые страницы
+#: `rpa_pages`); «In review» и «Draft» — надписи того же ряда по списку
+#: владельца.
+#:
+#: Список один. Им пользуются разбор таблицы и поиск тумблера (в JS он
+#: подставляется отсюда) и `clean_object_name`; в `report.html` — копия для
+#: уже сохранённых чтений, и тест держит её равной этой.
+#:
+#: Снимаются только с конца имени, целым словом и точно как написано:
+#: «2002 - Draft 5 promo» остаётся как есть.
+META_NAME_LABELS: tuple[str, ...] = ("Unpublished edits", "In draft", "In review", "Draft")
+
+
+def clean_object_name(name: Any) -> str:
+    """Имя без надписей Meta в конце; пробелы схлопнуты, как их схлопывает разбор.
+
+    Надпись снимается, только если перед ней есть имя: объект, названный
+    просто «Draft», остаётся «Draft», а не пустой строкой.
+    """
+    text = " ".join(str(name or "").split())
+    while True:
+        for label in META_NAME_LABELS:
+            if text.endswith(" " + label):
+                text = text[: -len(label) - 1].rstrip()
+                break
+        else:
+            return text
+
+
+#: Та же чистка для страницы. Список подставляется из `META_NAME_LABELS`,
+#: чтобы у разбора таблицы и у поиска тумблера не было своих копий.
+#:
+#: Имя ячейки берётся сперва из подсказки вокруг ссылки на объект
+#: (`data-tooltip-content`) — там Meta держит одно имя, без надписей рядом;
+#: на снятых страницах она есть у каждой строки. Нет подсказки — текст
+#: ячейки, и тогда надписи снимает правило.
+_CLEAN_NAME_JS = (
+    "const META_NAME_LABELS = " + json.dumps(list(META_NAME_LABELS)) + ";\n"
+    r"""  const cleanName = (s) => {
+    let text = (s || '').replace(/\s+/g, ' ').trim();
+    for (;;) {
+      const hit = META_NAME_LABELS.find(l => text.endsWith(' ' + l));
+      if (!hit) return text;
+      text = text.slice(0, -hit.length - 1).trim();
+    }
+  };
+  const cellName = (cell) => {
+    const tips = Array.from(cell.querySelectorAll('[data-tooltip-content]'))
+      .filter(e => e.querySelector('a'));
+    const tip = tips.length === 1 ? tips[0].getAttribute('data-tooltip-content') : '';
+    return cleanName(tip && tip.trim() ? tip : cell.innerText);
+  };"""
+)
+
+
 _READ_TREE_JS = r"""
 (level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  /*ACL_CLEAN_NAME*/
   // Разметку строк Meta теперь вешает на обёртки `display: contents` (17.09):
   // своих прямоугольников у них нет, и все 88 строк Doc20 считались
   // невидимыми. Видимость такой обёртки — видимость её содержимого.
@@ -1805,7 +1867,7 @@ _READ_TREE_JS = r"""
       const sw = row.querySelector('[role="switch"]');
       const aria = sw ? sw.getAttribute('aria-checked') : null;
       rows.push({
-        id: '', id_from: 'none', name: norm(n.getAttribute('data-tooltip-content')),
+        id: '', id_from: 'none', name: cleanName(n.getAttribute('data-tooltip-content')),
         switch: aria === 'true' ? 'on' : aria === 'false' ? 'off' : 'unknown',
         switch_label: sw ? norm(sw.getAttribute('aria-label')) : '',
         delivery: val('delivery'), results: val('results'),
@@ -1858,7 +1920,8 @@ _READ_TREE_JS = r"""
     // Одна и та же разметка висит на нескольких вложенных узлах: берём первое
     // непустое, а не последнее — внутренние копии часто пустые.
     if (cell.startsWith('forObjectType(name')) {
-      const txt = norm(el.innerText);
+      // Имя без надписей Meta рядом с ним (ACL-1395): «Unpublished edits».
+      const txt = cellName(el);
       if (txt && !r.name) r.name = txt;
     } else if (cell.startsWith('forObjectType(delivery')) {
       const txt = norm(el.innerText);
@@ -1921,7 +1984,7 @@ _READ_TREE_JS = r"""
   return {rows: Array.from(rows.values()), how: 'data-surface',
           kinds: Array.from(kinds), view: view, partial: scrollable};
 }
-"""
+""".replace("/*ACL_CLEAN_NAME*/", _CLEAN_NAME_JS)
 
 
 def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
@@ -1984,7 +2047,9 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         AdObject(
             level=level,
             id=str(r.get("id") or ""),
-            name=str(r.get("name") or ""),
+            # Страница уже чистит; правило ещё раз — на случай, если её
+            # разметка изменится, а надпись окажется в тексте ячейки.
+            name=clean_object_name(r.get("name")),
             switch=str(r.get("switch") or "unknown"),
             switch_label=str(r.get("switch_label") or ""),
             delivery=str(r.get("delivery") or ""),
@@ -2520,6 +2585,7 @@ SEL_MARKED_SWITCH = '[data-acl-switch="1"]'
 _FIND_SWITCH_JS = r"""
 (args) => {
   const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  /*ACL_CLEAN_NAME*/
   // display:contents-обёртки строк (Meta, 17.09) своих прямоугольников не имеют —
   // их видимость берётся у содержимого, как в чтении дерева.
   const hasBox = e => e.getClientRects().length > 0 || (getComputedStyle(e).display === 'contents' && [...e.children].some(hasBox));
@@ -2538,7 +2604,10 @@ _FIND_SWITCH_JS = r"""
     if (!m || m[1] !== args.id) continue;
     const kind = m[2].match(/forObjectType\([^,]+,([^,)]+)/);
     if (kind) kinds.add(kind[1]);
-    if (m[2].startsWith('forObjectType(name') && norm(el.innerText)) names.add(norm(el.innerText));
+    // Имя — как его прочитало дерево: без надписей Meta (ACL-1395). Иначе
+    // строку с «Unpublished edits» нельзя было бы выключить: дешборд
+    // показывает и присылает чистое имя.
+    if (m[2].startsWith('forObjectType(name') && cellName(el)) names.add(cellName(el));
     if (m[2].startsWith('forObjectType(delivery') && norm(el.innerText)) deliveries.add(norm(el.innerText));
     if (m[2].startsWith('forObjectType(toggle')) {
       el.querySelectorAll('[role="switch"],input[type="checkbox"]').forEach(sw => {
@@ -2548,7 +2617,7 @@ _FIND_SWITCH_JS = r"""
   }
   if (kinds.size !== 1 || !kinds.has(args.kind) || names.size !== 1 || switches.size !== 1) return fail('row identity or switch is ambiguous');
   const name = [...names][0], sw = [...switches][0];
-  if (!args.name || name !== norm(args.name)) return fail('row name changed');
+  if (!args.name || name !== cleanName(args.name)) return fail('row name changed');
   if (sw.disabled || sw.closest('[aria-disabled="true"]')) return fail('switch is disabled');
   const aria = sw.getAttribute('aria-checked');
   const state = aria === 'true' ? 'on' : aria === 'false' ? 'off' :
@@ -2588,7 +2657,7 @@ _FIND_SWITCH_JS = r"""
   sw.setAttribute('data-acl-switch', '1');
   return result;
 }
-"""
+""".replace("/*ACL_CLEAN_NAME*/", _CLEAN_NAME_JS)
 
 # Re-read the same visible period in the exact browser task that may click.
 _SWITCH_ACTION_JS = """args => {
@@ -2747,7 +2816,9 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
 
         # Имя сверяется, если дешборд его прислал: id мог устареть, а строка
         # под ним — оказаться чужой. Выключить не то хуже, чем не выключить.
-        if expected_name and out.name and out.name != expected_name:
+        # Сравниваются имена без надписей Meta (ACL-1395): страница их уже
+        # сняла, а чтение, сохранённое раньше, могло прислать имя с ними.
+        if expected_name and out.name and out.name != clean_object_name(expected_name):
             out.error = (
                 f"the page shows \"{out.name}\" under this id, but the dashboard showed "
                 f"\"{expected_name}\"; nothing was touched"
