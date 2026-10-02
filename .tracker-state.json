@@ -2648,7 +2648,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "437": {
+        "actor": "Worker-E1437V",
+        "session": "run_e1437v_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1437-readable-errors",
+        "worktree": "C:\\acl-1437-errors",
+        "id": "feb500ee842149939a87583ab65bf9fa",
+        "issue": 437,
+        "state": "implementing",
+        "started_at": "2026-10-02T05:48:00+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -3335,9 +3348,13 @@
           {
             "actor": "Worker-E1437V",
             "session": "run_e1437v_1001"
+          },
+          {
+            "actor": "Worker-E1437V",
+            "session": "run_e1437v_1001"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-E1437V",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3356,7 +3373,6 @@
         },
         "pr": 438,
         "queued_at": "2026-10-01T09:20:04+00:00",
-        "reviewer": "Reviewer-R1437Q",
         "review_report": "# Review PR #438 (Issue #437 / ACL-1437) - Reviewer-R1437Q (rev_1437q_1002)\n\nVerdict: REQUEST CHANGES\nHead: 250235f5de1b7f1b1f729d64f693a40492488c84 (tree 404daf1e1718d57e4849c52924b949a429a1b62b)\nBase work/stage: e0c4a911e8fe0fd21d1db3fe3021d1d6bb143df8 (moved from 8322a6a during review: +ACL-1455, report.html CSS only)\n\n## CI (head 250235f)\nAll 15 checks SUCCESS (CI test 3.11/3.13 x3 shards, ACL verification, tracker-link, installer, descriptor). No failing jobs.\nCI ran against the pre-2026-10-01 stage; after merging the current stage the PR's own test fails (see F1).\n\n## Merge into work/stage (git merge-tree)\nCONFLICTS: docs/system/CHANGELOG.md, src/web/templates/report.html (2 hunks).\n- report.html CSS: ACL-1444 .cb-close-profile* vs ACL-1437 .cb-problems* - keep both.\n- report.html JS: ACL-1444 cbCloseProfileHtml/cbBindCloseProfile vs ACL-1437 cbProblemsHtml - keep both; the shared closing `}` must be duplicated (one function loses its brace otherwise -> whole script fails, `cbPollJob is not defined`).\n- CHANGELOG: keep both entries.\nAuto-merged cleanly but SEMANTIC conflict: failure_policy.py (ACL-1476).\n\n## Findings\nF1 [BLOCKER, post-merge] src/fb_ads_rpa/failure_policy.py:_guide (PR line ~503 `return PER_AD_GUIDE[per_ad.group(1)]`) + PER_AD_GUIDE (~404).\n  Stage (ACL-1476, #478) added PER_AD_POLICY \"story_not_placed\" (WARNING) and added it to _PER_AD_NAME. PER_AD_GUIDE has no entry,\n  so after merge `problems()` raises KeyError('story_not_placed'). Reproduced on the merged tree:\n  RpaPublishResult(success=True, warnings=['ad_story_not_placed: ...']).to_job_dict() -> KeyError.\n  to_job_dict is called by publish_jobs._job_result_from_rpa (src/web/publish_jobs.py:53/596) inside the job loop's try:\n  a publishable draft with a story warning is turned into a job error, its result is lost, and the remaining campaigns in the job are not built.\n  Merged-tree test: tests/test_readable_problems.py::test_every_policy_step_has_title_impact_and_action[table1-guide1] FAILS\n  (\"steps without title/impact/action: ['story_not_placed']\").\n  Fix: merge stage, add PER_AD_GUIDE[\"story_not_placed\"] (English, warning wording: story file not placed, ad runs with the post file on Stories/Reels, replace in Ads Manager if needed);\n  and make _guide fail soft (`PER_AD_GUIDE.get(...)` -> fall through to the \"Unclassified\" item) so a future policy addition can never crash job serialization.\n  Optionally teach _AD_NAME_IN_NOTE the `<code> - <ad>: <sentence>` form used by story_not_placed_soft_fail (meta_dom.py:13124) so the ad name shows.\n\nF2 [MEDIUM, loss of detail] src/web/templates/report.html cbPollJob call site (`if (structured) { html += structured; return; }`) + cbProblemsHtml.\n  When `problems` is non-empty, r.error is not rendered anywhere, not even under Technical details. r.error can carry information that is not in problems:\n  - profile stop: `\"{code}: {message} ({stop.detail})\"` (rpa_publisher.py:542-544) - the detail is dropped;\n  - the PR's own not-built test uses error \"account_blocked: Verification required to advertise\" - \"Verification required to advertise\" is not on the card;\n  - \"Recorded flow failed at: X - reason\" / exception text (ads_manager_flow.py:2475, 2591) when warnings/blocking were also recorded.\n  Issue focus is \"no loss of detail\". Fix: put r.error (when it is not the standard \"DO NOT PUBLISH AS IS\" paragraph / hand-off note) into Technical details, and assert it in the not-built browser test.\n\nF3 [LOW] same call site: the early `return` also skips the teach-mode markers (\"waiting for a Website click\" / \"Website locator captured\") that the old Steps line showed. Steps text is kept in details, the markers are not. Acceptable if intended; mention in the PR.\n\n## Checked, OK\n- English user-facing text in GUIDE/PER_AD_GUIDE and template; Russian only in code comments (allowed).\n- Escaping: title/ad name/impact/action/raw/run id/captures go through aclEscHtml.\n- Old records (no `problems`) fall back to old rendering (tested).\n- No robot behaviour change: severities untouched; run_id read from telemetry only. No Publish, no Multilogin/browser opening, no secrets.\n- Tests real: disabling the structured branch (mutation) -> 3 of 5 browser tests fail; story_not_placed demonstrates the completeness test catches missing entries.\n- Browser tests headless (chromium.launch default), no port 9090.\n\n## Tests run (affected only, headless, ACL_LIBRARY_* empty)\nPR head: test_readable_problems.py, test_readable_problems_browser.py, test_failure_policy.py -> 23 passed.\nMerged with stage (conflicts resolved keep-both): readable_problems(+browser), failure_policy, fb_ads_rpa_draft, story_not_placed_is_a_warning, crop_step_*, crop_gate, a_finished_clean_profile_closes_itself, compressed_upload_browser, publishing_everything_at_once, screen_warning_browser\n-> 1 failed (F1), 105 passed in the final run (132 passed in the wider earlier run, plus the same F1 failure)."
       },
       "441": {
@@ -6043,6 +6059,13 @@
           "report": "# Review PR #435 (ACL-1434) \u2014 Robot health page\n\nReviewer-R1434Q (rev_1434q_1002); implementer Worker-H1434U.\nHead f349f1332039587b6c007fa19d0e5e23d5cad898 (tree 1654358dfed713cf162b72e41b7a370054e185a3); base work/stage 8322a6af0f9098114182cf327320bd87dd239a70.\n\n## Verdict: request-changes\n\nThe code is sound and the tests are real. Two things block the merge. The PR no longer merges into stage because of a conflict in CHANGELOG. Build attribution also does not work on installed (buyer) builds.\n\n## Merge with stage\n`git merge-tree --write-tree work/stage f349f13`: CONFLICT in docs/system/CHANGELOG.md only (stage 942f641..8322a6a: ACL-1395, 1441, 1444, 1344, 1445, 1412, 1426, 1476 each added a top entry). src/web/app.py and src/web/templates/report.html auto-merge. GitHub reports mergeable=CONFLICTING. On a scratch merge of stage with the CHANGELOG conflict left open, tests/test_robot_health.py: 37 passed.\n\n## CI (head f349f13)\nAll green: test 3.11/3.13 x 3 shards, Build/install/repair/uninstall, Installer verification, Verify build inputs, ACL verification, Classify x2, descriptor x2, tracker-link. No failing jobs.\n\n## Findings\n1. BLOCKER: docs/system/CHANGELOG.md:3. A merge conflict with current stage. Merge stage again and keep both sides.\n2. MEDIUM: src/web/robot_health.py:464-466 (`default_sources`) and src/web/app.py (`_robot_health_output_dir`). The build log is read only from `<workspace>/output/serve*.log`. That file exists only on hand-run checkouts (acl-live-*, where stdout is redirected). Installed builds send stdout/stderr, including the \"RPA flow version\" line and the uvicorn access lines, to `%LOCALAPPDATA%\\ACL\\logs\\server.stdout.log` / `server.stderr.log` (packaging/windows/launcher.py:100-103, 218-224). As a result, on buyer machines every run started before the current process is \"unknown\" in \"Steps by build\". Fix: also read the launcher's logs dir (server.std*.log). Add a test.\n3. LOW: src/web/robot_health.py:134 and :125. The build is reset to \"\" for each log file, and the files are read in name order. When stdout and stderr go to separate files (serveN.log has the version, serveN.err.log has the uvicorn `/publish-jobs/<id>` lines), jobs named only in the .err.log never get a build. It works on the owner's combined serve-live.log.\n4. LOW: src/web/templates/robot_health.html:163 and robot_health.py:348. The column tooltip shows `accounts_full`, the raw account name. That can carry the profile id (`Facebook_1443_6157\u2026`) or a person's name (`FacebookDoc19 - Name`). The PR says accounts are \"shown without profile ids\". The page is local only, so this is not a leak, but it contradicts the claim. `--json` prints it as well.\n5. LOW: src/web/app.py robot_health_* handlers are `async def`. They do synchronous reads of the whole telemetry jsonl and all serve logs, plus the aggregation, on the event loop, which blocks progress polling of running jobs while the page loads. Make them plain `def` (threadpool) or use run_in_threadpool.\n6. NIT: src/web/templates/report.html:3050-3054. The link is inserted between the ACL-354 comment and the \"Report a problem\" button that the comment describes.\n7. TEST GAP (low): mutation \"remove `path.parent != folder`\" in capture_file (robot_health.py:530) leaves all 37 tests green. The check is still needed: a Windows drive-relative name such as `C:x.png` escapes the folder without it (verified: returns None with the check). Add that case to test_capture_serves_only_images_of_that_run.\n\n## Mutation spot-checks (tests/test_robot_health.py, 37 tests)\n- drop `<=` -> `<`: 1 failed\n- first record wins instead of last: 2 failed\n- streak over whole history instead of window: 1 failed\n- MIN_SAMPLES removed: 1 failed\n- \"known elsewhere\" merged into \"known\": 1 failed\n- capture_file parent check removed: 0 failed (finding 7)\n\n## Safety\nRead-only over local files. No Multilogin, Meta, or network calls, no Publish, no windows. The capture endpoint rejects bad run ids, separators, non-images, and drive-relative names. Jinja autoescape is on, so notes are escaped. CSP allows the inline theme script. The fixture is scrubbed: no 9+ digit ids except the r000\u2026 run ids, no URLs or e-mails, accounts AcctX_n, jobs job-NNNN. User-facing text is English.\n\n## Tests run\ntests/test_robot_health.py on the head: 37 passed (headless, ACL_LIBRARY_* empty). Also on a scratch merge with stage: 37 passed.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-02T05:48:00+00:00",
+        "issue": 437,
+        "claim": "feb500ee842149939a87583ab65bf9fa",
+        "actor": "Worker-E1437V"
       }
     ],
     "policy": {
