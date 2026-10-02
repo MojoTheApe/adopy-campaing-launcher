@@ -38,6 +38,89 @@ buyer's machine (warnings, slow steps, what passed) stayed in the local
   rows. The campaign name in the summary goes through the summary scrubber
   (URL / e-mail / `act_`).
 
+## Campaign problems are shown as a short readable list — ACL-1437
+
+2026-10-01 the builder card of CO_bnc_All_Video_FX_Y_35_01.10 showed its most
+important message as one long paragraph ("DO NOT PUBLISH AS IS — these steps
+failed: conversion_event — optimising for the wrong event … Do not publish:
+conversion_event, ad_copy:…"), with the failed steps listed twice.
+
+- `failure_policy.py` now gives every step a short English title, one sentence of
+  impact and one "what to do" line (`GUIDE`, `PER_AD_GUIDE`); a test fails if a
+  step of `POLICY` / `PER_AD_POLICY` has none. Text only: severities and the robot's
+  behaviour are unchanged.
+- The job result carries `problems` (step, ad number and name for per-ad steps,
+  severity, title, impact, action, technical note, raw code; blocking first) and
+  the campaign's `run_id`. The old plain text in `error` stays for older readers
+  and Sentry.
+- The job panel renders one block: the verdict headline (do not publish as is /
+  ready to publish with warnings / not built), the count with "draft saved,
+  browser left open", numbered items with a "→" action line, red for blocking and
+  amber for warnings, and step codes, notes, run id, campaign id, capture paths
+  and the step trail collapsed under "Technical details". Job records without
+  `problems` render as before.
+- Review fixes: the ACL-1476 `story_not_placed` warning has its own text and
+  shows the ad name; a per-ad step without text falls back to the policy reason
+  instead of raising (a `KeyError` used to turn a publishable draft into a job
+  error). Any part of `error` the list does not repeat (profile stop detail,
+  "Recorded flow failed at: …") is shown under "Technical details"; the
+  teach-mode marker ("waiting for a Website click") stays visible.
+
+## A problem status on the account map comes with a screenshot and a Copy screenshot button — ACL-1430
+
+2026-10-01 the owner asked for proof to send to support when the map shows a problem
+status (FacebookDoc20 disabled, Facebook_6540 restricted). Until now a page screenshot
+was kept only when a spend read failed, as a file path in a tooltip.
+
+- When a read finds any status other than `clear`, it saves a viewport screenshot of
+  the same Ads Manager page it just read the status from — the tab inside the
+  account's Multilogin profile; there is no capture outside Multilogin. Files go to
+  `%LOCALAPPDATA%\ACL\spend_shots\status_<account>__<time>.png`, the last 5 per
+  account are kept. The shot id and time are stored in the account's status entry.
+  A clear read takes no screenshot and removes the button; a failed screenshot never
+  fails the read.
+- `GET /account-spend/status-shot/<id>` serves a screenshot only by its id (strict
+  name, only from that folder, local dashboard only); anything else is 404.
+  `/account-spend/status-shot/<id>/view` is the fallback page with the image and
+  "Right-click → Copy image".
+- On the account map a small "Copy screenshot" button sits next to a problem status;
+  its tooltip says when the screenshot was taken. It copies an `image/png` to the
+  clipboard; when the browser refuses, it opens the fallback page in a new tab. No
+  screenshot, no button.
+
+## Saving a target waits out a briefly held registry file — ACL-1419
+
+`test_multiple_processes_do_not_lose_writes` failed intermittently on Windows CI.
+Two causes. Product: `targeting_registry._save_raw` replaced `targeting_registry.json`
+with a bare `os.replace`, which Windows refuses (`PermissionError [WinError 5]`)
+while the file is open for a moment elsewhere (Defender, the indexer, the previous
+writer's handle); the add/edit/remove then failed with that error. Reproduced locally
+3 of 18 runs under parallel load. It now uses `config.paths._replace_when_free`, the
+same short wait the other machine files already have. Test: each `spawn` worker
+imported the test module and with it `src.web.app` (~3 s quiet, much more on a
+loaded runner), and the test read `exitcode` right after `terminate()` without
+joining, so a slow worker showed up as `assert None == 0`. The worker now lives in
+`tests/targeting_worker.py` (registry import only), all workers share one 120 s
+deadline and are joined before exit codes are checked; the assertion is unchanged
+(three clean exits, 24 targets). `test_save_waits_out_a_briefly_held_registry` pins the wait.
+## A brief file hold on Windows no longer loses a spend reading — ACL-1466
+
+The spend and status store (`account_spend.json`) was replaced with a bare `os.replace`.
+Windows briefly holds a file after the previous replace or while Defender or the indexer
+looks at it, and answered `WinError 5`; the Read result was lost. The concurrent-writes
+test caught it ten times since 2026-09-15. The store now replaces through
+`config.paths._replace_when_free`, as the account-links file does since ACL-1216; a hold
+that does not end still raises.
+## Builder: visible Duplicate on ads and campaigns, no repeated buttons — ACL-1459
+
+2026-10-01 the owner sent a screenshot of the builder drawer: duplicating an ad was a
+faint icon in the card's corner, duplicating a campaign was a separate button at the
+bottom of the drawer, and "+ Add Campaign" stood next to "+ Campaign" for the same
+account. Now each ad card has a visible "Duplicate"; "+ Add ad" reads "+ Ad"; "⧉
+Duplicate campaign" sits inside the campaign card under its ads and, in the drawer,
+opens the copy for editing, as the old bottom button did. Removed: the slot-header
+icon, the bottom-of-drawer button and, inside the drawer only, the form's "+ Add
+Campaign" (the country page keeps it). Duplication logic is unchanged.
 ## Buttons no longer look like input fields — ACL-1455
 
 2026-10-01 the owner noted that small buttons and input fields look the same. The
