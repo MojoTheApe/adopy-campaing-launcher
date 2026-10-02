@@ -136,7 +136,11 @@ def _save_raw(data: dict) -> None:
             json.dump(data, f, ensure_ascii=False, indent=2)
             f.flush()
             os.fsync(f.fileno())
-        tmp.replace(p)
+        # ACL-1419: on Windows the replace is refused (WinError 5) while the
+        # target is open for a moment elsewhere: the previous writer's
+        # handle, Defender, the indexer. Wait it out like the other machine
+        # files do; failing here refused the edit with an error.
+        paths._replace_when_free(tmp, p)
     finally:
         if tmp is not None:
             tmp.unlink(missing_ok=True)

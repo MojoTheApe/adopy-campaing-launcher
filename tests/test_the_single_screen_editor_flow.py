@@ -226,6 +226,29 @@ def test_more_ads_are_created_and_filled_like_the_first(sim, monkeypatch):
     assert sim["page"].reload.call_count == 0
 
 
+def test_the_new_ad_media_block_is_shown_before_its_destination(sim, monkeypatch):
+    """ACL-1412 (d1755a59e139, ad2): после мастера медиа раздел объявления
+    бывал размонтирован — `destination_section_missing`. Перед назначением
+    объявлений 2+ блок Media (над Destination) возвращается на экран — только
+    прокруткой, внутри `hold_open_ad`; у объявления 1 — как прежде."""
+    _creates(sim)
+    order: list = []
+    monkeypatch.setattr(sc, "show_media_block",
+                        lambda p, **kw: order.append(("show", getattr(dom._reload_block, "why", "")))
+                        or {"mounted": True, "state": "filled", "via": "mounted"})
+    monkeypatch.setattr(dom, "upload_ad_creative_with_retry", lambda p, ctype, path, **kw: True)
+    monkeypatch.setattr(dom, "set_ad_destination_website",
+                        lambda p, url: order.append(("destination",)) or True)
+    monkeypatch.setattr(dom, "_browser_addon_none_checked", lambda p: True)
+    monkeypatch.setattr(dom, "_review_errors_visible", lambda p: False)
+    out: list[str] = []
+    assert sim["run"](additional_ads=_THREE, soft_fails_out=out) == ""
+    assert order == [("destination",),
+                     ("show", "simple_create_new_ad"), ("destination",),
+                     ("show", "simple_create_new_ad"), ("destination",)], order
+    assert sim["page"].reload.call_count == 0 and sim["page"].goto.call_count == 0
+
+
 def test_no_page_recovery_reloads_the_editor_around_the_new_ads(sim, monkeypatch):
     """Ревью PR #365, B1: ни восстановление зависшей страницы, ни закрытие окон
     не перезагружают новый редактор после «Create ad»."""

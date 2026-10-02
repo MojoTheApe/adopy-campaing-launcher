@@ -195,6 +195,10 @@ class SpendReading:
     shot: str = ""                # скриншот при неудаче
     status: str = ""              # см. _read_status: clear | disabled | restricted | review | unknown
     status_text: str = ""         # словами страницы — человеку с этим идти и разбираться
+    #: Снимок страницы с проблемным состоянием (ACL-1430) — id для
+    #: `/account-spend/status-shot/<id>`, не путь: путь наружу не отдаётся.
+    status_shot: str = ""
+    status_shot_at: str = ""
 
     #: Дерево аккаунта: кампании и объявления с их id и положением тумблера.
     #: Читается тем же нажатием, что и спенд (решение владельца 11.09) — см.
@@ -239,7 +243,10 @@ def _save_all(data: dict[str, dict]) -> None:
             json.dump(data, handle, ensure_ascii=False, indent=2)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp, p)
+        # Windows на миг держит файл (прошлая подмена, Defender, индексатор) и
+        # отвечает WinError 5 — показание Read терялось (ACL-1466). Ждём, как
+        # файл связей (ACL-1216); упорный отказ по-прежнему бросает.
+        paths._replace_when_free(tmp, p)
     finally:
         if tmp is not None:
             tmp.unlink(missing_ok=True)
@@ -326,6 +333,8 @@ def _put(reading: SpendReading) -> None:
                 "status": reading.status,
                 "status_text": reading.status_text,
                 "at": reading.finished_at or _now(),
+                "shot_id": reading.status_shot,
+                "shot_at": reading.status_shot_at,
             }
         _save_all(data)
         _UNSAVED.pop(key, None)
@@ -336,15 +345,50 @@ def get_status(account: str) -> dict[str, str]:
 
     Пусто и `clear` — разное. Первое значит «не смотрели», второе — «смотрели,
     предупреждений не было». Экран обязан их различать.
+
+    И ещё одно различие (ACL-1391): состояние, которое с тех пор не удалось
+    перечитать. 30.09 карта показывала у Doc20 «no warning» от 22.09, хотя
+    все чтения после этого упали, а сам кабинет уже был отключён. Старый ответ
+    выглядел как сегодняшний. `stale` говорит, что после этого состояния была
+    попытка чтения, и она ничего о состоянии не узнала.
     """
-    raw = _load_all().get(_STATUS_PREFIX + account)
+    data = _load_all()
+    raw = data.get(_STATUS_PREFIX + account)
     if not isinstance(raw, dict):
         return {}
-    return {
+    at = str(raw.get("at") or "")
+    out = {
         "status": str(raw.get("status") or ""),
         "status_text": str(raw.get("status_text") or ""),
-        "at": str(raw.get("at") or ""),
+        "at": at,
+        "at_short": f"{at[8:10]}.{at[5:7]}.{at[2:4]}" if len(at) >= 10 else "",
+        "stale": "",
+        "tried_at": "",
+        "tried_error": "",
+        "shot_id": "",
+        "shot_at": "",
     }
+    # Кнопка «Copy screenshot» — только у снимка, который ещё лежит на диске.
+    shot_id = str(raw.get("shot_id") or "")
+    if shot_id and out["status"] != "clear" and status_shot_path(shot_id) is not None:
+        out["shot_id"] = shot_id
+        out["shot_at"] = str(raw.get("shot_at") or "")
+    last_at, last = "", None
+    for key, rec in data.items():
+        if key.startswith(_STATUS_PREFIX) or not isinstance(rec, dict):
+            continue
+        if rec.get("account") != account:
+            continue
+        finished = str(rec.get("finished_at") or "")
+        if finished > last_at:
+            last_at, last = finished, rec
+    # Чтение, которое прочитало состояние, само его и записало с тем же
+    # временем, поэтому «позже» здесь значит только неудачу до состояния.
+    if last is not None and at and last_at > at and not last.get("status"):
+        out["stale"] = "1"
+        out["tried_at"] = last_at
+        out["tried_error"] = str(last.get("error") or "")[:200]
+    return out
 
 
 # ─────────────────────────── очередь ───────────────────────────
@@ -907,6 +951,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
             # Статус спрашиваем и здесь: у отключённого кабинета таблицы может
             # не быть вовсе, а знать о нём надо именно тогда.
             out.status, out.status_text = _read_status(page)
+            _shoot_status(page, out)
             out.error = "Ads Manager did not finish loading in time"
             # было `day` — переменной, которой здесь нет. Ошибка жила только на
             # пути отказа, то есть ровно там, где снимок и нужен: вместо
@@ -917,6 +962,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         # Один заход — оба ответа. Отдельный визит ради состояния кабинета
         # ничем не оправдан: каждое касание живого аккаунта чего-то стоит.
         out.status, out.status_text = _read_status(page)
+        _shoot_status(page, out)
 
         shown = _shown_period(page)
         if not _period_matches(shown, date_from, date_to):
@@ -936,7 +982,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
             return out
 
         if _act_from_url(page, tries=1) != expected_act or not _period_matches(_shown_period(page), date_from, date_to):
-            out.status = out.status_text = ""
+            out.status = out.status_text = out.status_shot = out.status_shot_at = ""
             out.error = "Account or period changed during reading; result refused."
             return out
         out.spend = spend
@@ -1058,6 +1104,91 @@ def _read_status(page, tries: int = STATUS_TRIES) -> tuple[str, str]:
     return answer
 
 
+#: Вид блокировки, который узнаёт RPA (`meta_dom._ACCOUNT_BLOCKED_PATTERNS`), —
+#: словом колонки состояния. Неизвестный вид становится `blocked`, не `clear`.
+_BLOCKED_KIND_STATUS: dict[str, str] = {
+    "account_disabled": "disabled",
+    "verification_required": "restricted",
+    "start_authentication": "blocked",
+    "authentication_error": "blocked",
+}
+
+#: Кто весомее, если на странице несколько признаков сразу.
+_STATUS_RANK = {"disabled": 0, "restricted": 1, "review": 2, "blocked": 3}
+
+
+#: Анкер в `meta_dom._ACCOUNT_BLOCKED_JS`, рядом с которым чтение добавляет
+#: тот же узел словами `innerText`. `textContent` склеивает строки Meta без
+#: пробела («…advertiseComplete verification…»), а человеку в подсказке нужен
+#: читаемый текст. Код RPA не правится — меняется копия строки здесь; нет
+#: анкера — работает исходный скрипт, просто без пробелов.
+_BLOCKED_JS_PUSH = "out.push(t);"
+_BLOCKED_JS_SPACED = (
+    "{ const s = norm(el.innerText); if (s && s !== t) out.push(s); } out.push(t);"
+)
+
+#: Сломанная связка с RPA (переименовали приватные имена) — одно
+#: предупреждение на процесс, а не на каждую из восьми попыток чтения.
+_blocked_warned = False
+
+
+def _warn_blocked_once(why: str) -> None:
+    global _blocked_warned
+    if _blocked_warned:
+        return
+    _blocked_warned = True
+    log.warning(
+        "account status: the RPA account-block detector is unavailable (%s); "
+        "reading banners only, a disabled account may show as 'no warning'",
+        why,
+    )
+
+
+def _blocked_on_page(page) -> list[tuple[str, str]]:
+    """Блокировка, которую видит RPA перед публикацией, — по отдельным ячейкам.
+
+    Баннера у отключённого кабинета может не быть вовсе: у Doc20 30.09 было
+    только «Account disabled» в колонке Delivery, и чтение отвечало «no
+    warning». Признаки берутся у RPA, а не копируются: две копии одного списка
+    уже разошлись, и ошиблась та, что показывает статус на экране (ACL-1391).
+    Совпадение — весь текст ячейки, а не подстрока страницы: справка «Why is
+    my ad account disabled?» есть и у здорового кабинета.
+
+    Возвращаются **все** совпадения во всех фреймах, а не первое по порядку
+    DOM: у прогона ecce52f330b8 (22.09) баннер «Verification required to
+    advertise» стоял выше ячейки «Account disabled», и первое совпадение дало
+    бы `restricted`. Кто весомее, решает `_STATUS_RANK` в `_status_once`.
+    """
+    try:
+        from src.fb_ads_rpa import meta_dom
+
+        js = meta_dom._ACCOUNT_BLOCKED_JS
+        match = meta_dom._account_blocked_match
+        roots_of = meta_dom._roots
+    except Exception as exc:  # noqa: BLE001 — нет детектора: читаем баннеры
+        _warn_blocked_once(f"{type(exc).__name__}: {exc}")
+        return []
+    try:
+        roots = roots_of(page)
+    except Exception:
+        # Подставная страница без фреймов: признаки ячеек — только добавка.
+        return []
+    if _BLOCKED_JS_PUSH in js:
+        js = js.replace(_BLOCKED_JS_PUSH, _BLOCKED_JS_SPACED, 1)
+    found: list[tuple[str, str]] = []
+    for root in roots:
+        try:
+            texts = root.evaluate(js) or []
+        except Exception:
+            # Фрейм ушёл между перечислением и вопросом — обычное дело.
+            continue
+        for text in texts:
+            kind = match(text)
+            if kind:
+                found.append((_BLOCKED_KIND_STATUS.get(kind, "blocked"), text))
+    return found
+
+
 def _status_once(page) -> tuple[str, str]:
     """Один взгляд на страницу. Ожиданием заведует `_read_status`."""
     try:
@@ -1068,12 +1199,17 @@ def _status_once(page) -> tuple[str, str]:
     if not flat:
         return "unknown", ""
     low = flat.lower()
+    found: list[tuple[str, str]] = []
     for state, phrases in _STATUS_SIGNS:
-        for phrase in phrases:
-            at = low.find(phrase)
-            if at != -1:
-                start = max(0, at - 60)
-                return state, flat[start : at + len(phrase) + 140].strip()
+        hit = next((p for p in phrases if p in low), None)
+        if hit:
+            at = low.find(hit)
+            start = max(0, at - 60)
+            found.append((state, flat[start : at + len(hit) + 140].strip()))
+            break
+    found.extend(_blocked_on_page(page))
+    if found:
+        return min(found, key=lambda f: _STATUS_RANK.get(f[0], len(_STATUS_RANK)))
 
     # Банер есть, а какой — не опознали. Говорим это вслух её же словами.
     #
@@ -1418,10 +1554,18 @@ def _currency(page) -> str:
     return getattr(page, "_acl_spend_currency", "")
 
 
+def _shots_dir() -> Path:
+    return Path(paths.get_local_config_dir()) / "spend_shots"
+
+
+def _safe_name(account: str) -> str:
+    return "".join(c if c.isascii() and (c.isalnum() or c in "-_") else "_" for c in account)
+
+
 def _shoot(page, account: str, day: str) -> str:
     """Снимок при неудаче: первый живой прогон стоит тестового аккаунта."""
     try:
-        out = Path(paths.get_local_config_dir()) / "spend_shots"
+        out = _shots_dir()
         out.mkdir(parents=True, exist_ok=True)
         safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in account)
         target = out / f"{safe}_{day}.png"
@@ -1429,6 +1573,89 @@ def _shoot(page, account: str, day: str) -> str:
         return str(target)
     except Exception:
         return ""
+
+
+# ── Снимок проблемного состояния (ACL-1430) ──────────────────────────────
+#
+# Отключённый или ограниченный кабинет человеку надо доказать — поддержке,
+# поставщику аккаунта, коллеге. Снимаем видимую часть той самой страницы
+# Ads Manager, с которой только что прочитали состояние: баннер и колонка
+# Delivery там. Страница — вкладка профиля Multilogin, в которую чтение уже
+# вошло (`_attach_only`); другой страницы у чтения нет, и снимка вне
+# Multilogin здесь не бывает (решение владельца 26.09).
+#
+# Наружу уходит id, а не путь: `/account-spend/status-shot/<id>` отдаёт файл
+# только из этой папки и только по строгому имени.
+
+#: Сколько снимков держать на аккаунт. Нужен последний; пара предыдущих —
+#: чтобы сравнить, а не копить диск при каждом Read all.
+STATUS_SHOTS_KEEP = 5
+_STATUS_SHOT_PREFIX = "status_"
+_STATUS_SHOT_ID = re.compile(r"status_[A-Za-z0-9_-]{1,160}")
+_SHOT_STAMP = re.compile(r"\d{8}-\d{6}(?:-\d{1,3})?")
+
+
+def _shot_stamp() -> str:
+    from datetime import datetime
+
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def status_shot_path(shot_id: str) -> Path | None:
+    """Файл снимка по id — или None. Ничего за пределами папки снимков."""
+    if not isinstance(shot_id, str) or not _STATUS_SHOT_ID.fullmatch(shot_id):
+        return None
+    try:
+        folder = _shots_dir().resolve()
+        target = (folder / f"{shot_id}.png").resolve()
+    except (OSError, ValueError):
+        return None
+    if target.parent != folder or not target.is_file():
+        return None
+    return target
+
+
+def _prune_status_shots(folder: Path, safe: str) -> None:
+    """Оставить последние `STATUS_SHOTS_KEEP` снимков этого аккаунта.
+
+    Имя чужого аккаунта может начинаться так же («Doc2» и «Doc20»), поэтому
+    свой файл узнаём по точному хвосту-времени, а не по началу имени.
+    """
+    head = f"{_STATUS_SHOT_PREFIX}{safe}__"
+    mine = sorted(
+        p for p in folder.glob(f"{_STATUS_SHOT_PREFIX}*.png")
+        if p.stem.startswith(head) and _SHOT_STAMP.fullmatch(p.stem[len(head):])
+    )
+    for old in mine[:-STATUS_SHOTS_KEEP]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+
+
+def _status_shot(page, account: str) -> tuple[str, str]:
+    """Снять видимую часть страницы. (id, время) или ("", "") при неудаче."""
+    try:
+        folder = _shots_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        safe = _safe_name(account)[:120] or "account"
+        stem = f"{_STATUS_SHOT_PREFIX}{safe}__{_shot_stamp()}"
+        shot_id, n = stem, 1
+        while (folder / f"{shot_id}.png").exists() and n < 1000:
+            shot_id, n = f"{stem}-{n}", n + 1
+        page.screenshot(path=str(folder / f"{shot_id}.png"), full_page=False)
+        at = _now()
+        _prune_status_shots(folder, safe)
+        return shot_id, at
+    except Exception as exc:  # noqa: BLE001 — снимок не стоит чтения
+        log.warning("account status: screenshot for %s was not saved: %s", account, exc)
+        return "", ""
+
+
+def _shoot_status(page, out: "SpendReading") -> None:
+    """Снимок, если состояние — не «чисто». Чистая страница не снимается."""
+    if out.status and out.status != "clear":
+        out.status_shot, out.status_shot_at = _status_shot(page, out.account)
 
 
 # ══ Дерево аккаунта: кампании и объявления ════════════════════════════════
@@ -1618,9 +1845,71 @@ def _snapshot_empty_table(page, level: str, how: str) -> None:
         pass
 
 
+#: Надписи, которые Meta рисует в ячейке имени рядом с самим именем (ACL-1395).
+#:
+#: 30.09, Facebook_6540: объявление прочиталось как
+#: «1741 - Pro Bancolombia Unpublished edits Unpublished edits» — надпись о
+#: несохранённых правках, дважды, — и книга статистики не нашла под ним ни
+#: одной строки. Так же пришли ещё одно объявление и кампания (сохранённые
+#: чтения этой машины). «In draft» Meta пишет у черновиков (снятые страницы
+#: `rpa_pages`); «In review» и «Draft» — надписи того же ряда по списку
+#: владельца.
+#:
+#: Список один. Им пользуются разбор таблицы и поиск тумблера (в JS он
+#: подставляется отсюда) и `clean_object_name`; в `report.html` — копия для
+#: уже сохранённых чтений, и тест держит её равной этой.
+#:
+#: Снимаются только с конца имени, целым словом и точно как написано:
+#: «2002 - Draft 5 promo» остаётся как есть.
+META_NAME_LABELS: tuple[str, ...] = ("Unpublished edits", "In draft", "In review", "Draft")
+
+
+def clean_object_name(name: Any) -> str:
+    """Имя без надписей Meta в конце; пробелы схлопнуты, как их схлопывает разбор.
+
+    Надпись снимается, только если перед ней есть имя: объект, названный
+    просто «Draft», остаётся «Draft», а не пустой строкой.
+    """
+    text = " ".join(str(name or "").split())
+    while True:
+        for label in META_NAME_LABELS:
+            if text.endswith(" " + label):
+                text = text[: -len(label) - 1].rstrip()
+                break
+        else:
+            return text
+
+
+#: Та же чистка для страницы. Список подставляется из `META_NAME_LABELS`,
+#: чтобы у разбора таблицы и у поиска тумблера не было своих копий.
+#:
+#: Имя ячейки берётся сперва из подсказки вокруг ссылки на объект
+#: (`data-tooltip-content`) — там Meta держит одно имя, без надписей рядом;
+#: на снятых страницах она есть у каждой строки. Нет подсказки — текст
+#: ячейки, и тогда надписи снимает правило.
+_CLEAN_NAME_JS = (
+    "const META_NAME_LABELS = " + json.dumps(list(META_NAME_LABELS)) + ";\n"
+    r"""  const cleanName = (s) => {
+    let text = (s || '').replace(/\s+/g, ' ').trim();
+    for (;;) {
+      const hit = META_NAME_LABELS.find(l => text.endsWith(' ' + l));
+      if (!hit) return text;
+      text = text.slice(0, -hit.length - 1).trim();
+    }
+  };
+  const cellName = (cell) => {
+    const tips = Array.from(cell.querySelectorAll('[data-tooltip-content]'))
+      .filter(e => e.querySelector('a'));
+    const tip = tips.length === 1 ? tips[0].getAttribute('data-tooltip-content') : '';
+    return cleanName(tip && tip.trim() ? tip : cell.innerText);
+  };"""
+)
+
+
 _READ_TREE_JS = r"""
 (level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  /*ACL_CLEAN_NAME*/
   // Разметку строк Meta теперь вешает на обёртки `display: contents` (17.09):
   // своих прямоугольников у них нет, и все 88 строк Doc20 считались
   // невидимыми. Видимость такой обёртки — видимость её содержимого.
@@ -1687,7 +1976,7 @@ _READ_TREE_JS = r"""
       const sw = row.querySelector('[role="switch"]');
       const aria = sw ? sw.getAttribute('aria-checked') : null;
       rows.push({
-        id: '', id_from: 'none', name: norm(n.getAttribute('data-tooltip-content')),
+        id: '', id_from: 'none', name: cleanName(n.getAttribute('data-tooltip-content')),
         switch: aria === 'true' ? 'on' : aria === 'false' ? 'off' : 'unknown',
         switch_label: sw ? norm(sw.getAttribute('aria-label')) : '',
         delivery: val('delivery'), results: val('results'),
@@ -1740,7 +2029,8 @@ _READ_TREE_JS = r"""
     // Одна и та же разметка висит на нескольких вложенных узлах: берём первое
     // непустое, а не последнее — внутренние копии часто пустые.
     if (cell.startsWith('forObjectType(name')) {
-      const txt = norm(el.innerText);
+      // Имя без надписей Meta рядом с ним (ACL-1395): «Unpublished edits».
+      const txt = cellName(el);
       if (txt && !r.name) r.name = txt;
     } else if (cell.startsWith('forObjectType(delivery')) {
       const txt = norm(el.innerText);
@@ -1803,7 +2093,7 @@ _READ_TREE_JS = r"""
   return {rows: Array.from(rows.values()), how: 'data-surface',
           kinds: Array.from(kinds), view: view, partial: scrollable};
 }
-"""
+""".replace("/*ACL_CLEAN_NAME*/", _CLEAN_NAME_JS)
 
 
 def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
@@ -1866,7 +2156,9 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         AdObject(
             level=level,
             id=str(r.get("id") or ""),
-            name=str(r.get("name") or ""),
+            # Страница уже чистит; правило ещё раз — на случай, если её
+            # разметка изменится, а надпись окажется в тексте ячейки.
+            name=clean_object_name(r.get("name")),
             switch=str(r.get("switch") or "unknown"),
             switch_label=str(r.get("switch_label") or ""),
             delivery=str(r.get("delivery") or ""),
@@ -2402,6 +2694,7 @@ SEL_MARKED_SWITCH = '[data-acl-switch="1"]'
 _FIND_SWITCH_JS = r"""
 (args) => {
   const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  /*ACL_CLEAN_NAME*/
   // display:contents-обёртки строк (Meta, 17.09) своих прямоугольников не имеют —
   // их видимость берётся у содержимого, как в чтении дерева.
   const hasBox = e => e.getClientRects().length > 0 || (getComputedStyle(e).display === 'contents' && [...e.children].some(hasBox));
@@ -2420,7 +2713,10 @@ _FIND_SWITCH_JS = r"""
     if (!m || m[1] !== args.id) continue;
     const kind = m[2].match(/forObjectType\([^,]+,([^,)]+)/);
     if (kind) kinds.add(kind[1]);
-    if (m[2].startsWith('forObjectType(name') && norm(el.innerText)) names.add(norm(el.innerText));
+    // Имя — как его прочитало дерево: без надписей Meta (ACL-1395). Иначе
+    // строку с «Unpublished edits» нельзя было бы выключить: дешборд
+    // показывает и присылает чистое имя.
+    if (m[2].startsWith('forObjectType(name') && cellName(el)) names.add(cellName(el));
     if (m[2].startsWith('forObjectType(delivery') && norm(el.innerText)) deliveries.add(norm(el.innerText));
     if (m[2].startsWith('forObjectType(toggle')) {
       el.querySelectorAll('[role="switch"],input[type="checkbox"]').forEach(sw => {
@@ -2430,7 +2726,7 @@ _FIND_SWITCH_JS = r"""
   }
   if (kinds.size !== 1 || !kinds.has(args.kind) || names.size !== 1 || switches.size !== 1) return fail('row identity or switch is ambiguous');
   const name = [...names][0], sw = [...switches][0];
-  if (!args.name || name !== norm(args.name)) return fail('row name changed');
+  if (!args.name || name !== cleanName(args.name)) return fail('row name changed');
   if (sw.disabled || sw.closest('[aria-disabled="true"]')) return fail('switch is disabled');
   const aria = sw.getAttribute('aria-checked');
   const state = aria === 'true' ? 'on' : aria === 'false' ? 'off' :
@@ -2470,7 +2766,7 @@ _FIND_SWITCH_JS = r"""
   sw.setAttribute('data-acl-switch', '1');
   return result;
 }
-"""
+""".replace("/*ACL_CLEAN_NAME*/", _CLEAN_NAME_JS)
 
 # Re-read the same visible period in the exact browser task that may click.
 _SWITCH_ACTION_JS = """args => {
@@ -2629,7 +2925,9 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
 
         # Имя сверяется, если дешборд его прислал: id мог устареть, а строка
         # под ним — оказаться чужой. Выключить не то хуже, чем не выключить.
-        if expected_name and out.name and out.name != expected_name:
+        # Сравниваются имена без надписей Meta (ACL-1395): страница их уже
+        # сняла, а чтение, сохранённое раньше, могло прислать имя с ними.
+        if expected_name and out.name and out.name != clean_object_name(expected_name):
             out.error = (
                 f"the page shows \"{out.name}\" under this id, but the dashboard showed "
                 f"\"{expected_name}\"; nothing was touched"

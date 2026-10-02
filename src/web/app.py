@@ -1967,11 +1967,13 @@ async def api_save_machine_paths(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
     if not isinstance(data, dict) or any(
-            k in data and not isinstance(data[k], str) for k in ("stats_workbook", "creatives_folder")):
-        return JSONResponse({"ok": False, "error": "Expected text paths"}, status_code=400)
+            k in data and not isinstance(data[k], str)
+            for k in ("stats_workbook", "creatives_folder", "manager_name")):
+        return JSONResponse({"ok": False, "error": "Expected text values"}, status_code=400)
     try:
         from starlette.concurrency import run_in_threadpool
-        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"), data.get("creatives_folder"))
+        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"),
+                                         data.get("creatives_folder"), data.get("manager_name"))
     except machine_paths.MachinePathError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if result["stats_changed"]:
@@ -2123,7 +2125,31 @@ async def api_creatives() -> JSONResponse:
             # они не отличались никак.
             "size_bytes": size,
         })
+    _add_story_labels(files)
     return JSONResponse({"files": files})
+
+
+def _add_story_labels(files: list[dict]) -> None:
+    """ACL-1426: what goes on the Vertical (story) card of each file.
+
+    Same rules as the robot (`creative_pairing.plan`): the pair is looked up by
+    creative number among the files of the same folder. The Builder shows
+    `story_label` next to the ad ("Story: 2403_story.mp4" / "Story: same file,
+    Original").
+    """
+    from src.fb_ads_rpa import creative_pairing
+
+    by_folder: dict[str, list[str]] = {}
+    for f in files:
+        by_folder.setdefault(f.get("folder") or "", []).append(f["filename"])
+    for f in files:
+        try:
+            plan = creative_pairing.plan(f["filename"], by_folder.get(f.get("folder") or "", []))
+            f["story_label"] = plan.builder_label()
+            if plan.square_file != f["filename"]:
+                f["square_file"] = plan.square_file
+        except Exception:
+            f["story_label"] = ""
 
 
 def _ad_copy_rows() -> list[dict]:
@@ -2918,6 +2944,41 @@ async def account_spend_read(request: Request) -> JSONResponse:
     # Нужно ли после этого спрашивать кабинет про страны, отвечает опрос
     # состояния: там видно дочитанную сумму (ACL-1288).
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
+
+
+@app.get("/account-spend/status-shot/{shot_id}")
+async def account_spend_status_shot(shot_id: str) -> Response:
+    """Снимок проблемного состояния кабинета (ACL-1430) — только по его id.
+
+    Путь с экрана не принимается: `status_shot_path` знает одну папку
+    снимков и строгий вид имени, всё прочее — 404.
+    """
+    from src.analysis_agent import account_spend
+
+    path = account_spend.status_shot_path(shot_id)
+    if path is None:
+        return JSONResponse({"error": "Screenshot not found"}, status_code=404)
+    return FileResponse(str(path), media_type="image/png")
+
+
+@app.get("/account-spend/status-shot/{shot_id}/view")
+async def account_spend_status_shot_view(shot_id: str) -> Response:
+    """Запасной путь кнопки Copy screenshot: браузер не дал положить картинку
+    в буфер — открываем её во вкладке с подсказкой, как скопировать руками."""
+    from html import escape
+
+    from src.analysis_agent import account_spend
+
+    if account_spend.status_shot_path(shot_id) is None:
+        return JSONResponse({"error": "Screenshot not found"}, status_code=404)
+    src = escape(f"/account-spend/status-shot/{shot_id}")
+    return HTMLResponse(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Account status screenshot</title>"
+        "<style>body{font:14px system-ui,sans-serif;margin:16px;background:#fff;color:#222}"
+        "img{max-width:100%;border:1px solid #ccc}</style></head><body>"
+        "<p>Right-click → Copy image</p>"
+        f"<img src=\"{src}\" alt=\"Account status screenshot\"></body></html>"
+    )
 
 
 @app.post("/account-spend/read-countries")
@@ -4088,6 +4149,25 @@ async def publish_jobs_cancel(job_id: str) -> JSONResponse:
     return JSONResponse(result)
 
 
+@app.post("/publish-jobs/{job_id}/close-profile")
+async def publish_jobs_close_profile(job_id: str) -> JSONResponse:
+    """«Close profile» on a finished job's panel (ACL-1444).
+
+    Graceful MLX API stop of that account's profile (never kill); refused
+    with 409 while a run or a read is using the profile. Runs off the event
+    loop: the stop waits for Multilogin.
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    from src.web.publish_jobs import close_profile
+
+    result = await run_in_threadpool(close_profile, job_id)
+    if result.get("ok"):
+        return JSONResponse(result)
+    status = {"not_found": 404, "busy": 409}.get(str(result.get("code")), 502)
+    return JSONResponse(result, status_code=status)
+
+
 @app.get("/publish-jobs/{job_id}")
 async def publish_jobs_status(job_id: str) -> JSONResponse:
     """Poll publish job progress. Returns status + results so far."""
@@ -4212,7 +4292,9 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
         return JSONResponse({"ok": True, "has_token": True, "alive": False,
                              "reason": "expired", "expires_at": expires_at})
     return JSONResponse({"ok": True, "has_token": True, "alive": r.status_code == 200,
-                         "expires_at": expires_at, "email": email})
+                         "expires_at": expires_at, "email": email,
+                         # ACL-1441: в каком пространстве выдан токен слота.
+                         "workspace": (os.environ.get(f"MULTILOGIN_WORKSPACE_{instance}") or "").strip()})
 
 
 @app.post("/multilogin-search")
@@ -4321,8 +4403,11 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
 async def multilogin_signin(request: Request) -> JSONResponse:
     """Sign in to Multilogin, return folders + profiles list.
 
-    Body JSON: {email, password, save_token?: bool}
-    Credentials are used for a single API call and never persisted.
+    Body JSON: {email, password, save_token?: bool, instance?, workspace_id?}
+    Credentials are used for a single sign-in and never persisted.
+    ACL-1441: when the login has several workspaces with automation and none
+    is chosen or remembered, answers {choose_workspace: true, workspaces} and
+    the page re-sends with workspace_id.
     If save_token is true, updates the token in machine-local settings.
     """
     try:
@@ -4347,9 +4432,27 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     # Вход живёт одним местом на дешборд и мастер установки (ACL-1303):
     # мастер работает до того, как дешборд существует, а две копии одного
     # входа однажды разъедутся — починят одну и забудут вторую.
-    signed = sign_in(email, password, requests_module=_req)
+    #
+    # ACL-1441: токен выдаётся в выбранном рабочем пространстве. Слот помнит
+    # своё (имя и id в машинном .env) — повторное подключение не спрашивает.
+    # Пространств с автоматизацией несколько и ни одно не названо — ответ
+    # `choose_workspace`, ничего не сохраняется, страница присылает выбор.
+    ws_key, ws_id_key = f"MULTILOGIN_WORKSPACE_{instance}", f"MULTILOGIN_WORKSPACE_ID_{instance}"
+    workspace_id = str(data.get("workspace_id") or "").strip()
+    remembered = (os.environ.get(ws_id_key) or os.environ.get(ws_key) or "").strip()
+    signed = sign_in(email, password, workspace_id=workspace_id,
+                     remembered_workspace=remembered, requests_module=_req)
+    password = ""
     if not signed.ok:
         return JSONResponse({"ok": False, "error": signed.error})
+    workspaces = [{"workspace_id": w["workspace_id"], "name": w["name"], "role": w["role"],
+                   "automation": w.get("automation")} for w in signed.workspaces]
+    if signed.needs_choice:
+        return JSONResponse({
+            "ok": True, "instance": instance, "choose_workspace": True,
+            "token_saved": False, "token_error": signed.token_error,
+            "workspaces": workspaces,
+        })
     bearer = signed.bearer
     auto_token = signed.automation_token
     token_error = signed.token_error
@@ -4361,8 +4464,11 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     # token works for this request but could not be persisted for next launch.
     env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
     if save_token and auto_token:
+        values = {env_key: auto_token}
+        if signed.workspace_id:
+            values.update({ws_key: signed.workspace_name, ws_id_key: signed.workspace_id})
         try:
-            update_machine_env({env_key: auto_token})
+            update_machine_env(values)
         except Exception as exc:
             return JSONResponse(
                 {
@@ -4410,6 +4516,10 @@ async def multilogin_signin(request: Request) -> JSONResponse:
         # page could only say "not saved", which reads as a detail rather than
         # as the reason the next Publish will fail.
         "token_error": token_error if (save_token and not auto_token) else "",
+        "workspace": signed.workspace_name,
+        "workspace_role": signed.workspace_role,
+        # С выбранным не вышло — список остаётся, чтобы выбрать другое.
+        "workspaces": workspaces if not auto_token else [],
         "folders": folders,
         "profiles": profiles,
         "debug": profile_debug,

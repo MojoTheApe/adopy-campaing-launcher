@@ -103,6 +103,14 @@ def observe_preparation(callback: Callable[[str], None]):
         _notice_sink.reset(token)
 
 
+def report_notice(text: str) -> None:
+    """Строка для человека в панели задания (ACL-1388: робот сам закрыл окно
+    профиля). Тот же канал, что у сжатия креативов; вне задания — ничего."""
+    callback = _notice_sink.get()
+    if callback and text:
+        callback(text)
+
+
 def report_preparation(original_path: str, prepared: Prepared) -> None:
     callback = _notice_sink.get()
     if callback and prepared.note:
