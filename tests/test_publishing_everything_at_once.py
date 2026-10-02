@@ -82,7 +82,7 @@ def test_the_owner_is_asked_once_and_told_what_will_happen():
     ask = ask[: ask.index("function _runPublishQueue")]
     assert "_safeConfirm(" in ask
     assert "Draft" in ask and "never clicks Publish" in ask, "в вопросе не сказано, что это черновик"
-    assert "Не блокируйте экран" in ask, (
+    assert "Do not lock the screen" in ask, (
         "пропало предупреждение о заблокированном экране — на нём загрузка креативов встаёт"
     )
 

@@ -57,8 +57,8 @@ def test_warning_preserves_actual_error_and_only_explains_failed_jobs(browser, s
         expect(panel.locator('.cb-status-title')).to_contain_text('1/1')
         expect(panel.locator('.cb-status-cause')).to_have_count(1 if warning else 0)
         if warning:
-            expect(panel.locator('.cb-status-cause')).to_contain_text('экран был заблокирован')
-            expect(panel.locator('.cb-status-cause')).to_contain_text('Проверьте ошибки ниже')
+            expect(panel.locator('.cb-status-cause')).to_contain_text('screen was locked')
+            expect(panel.locator('.cb-status-cause')).to_contain_text('Check the errors below')
             expect(panel.locator('.cb-status-cause')).not_to_contain_text('всё в порядке')
         if not publishable:
             expect(panel.locator('.cb-status-fatal')).to_contain_text('Original account error <details>')

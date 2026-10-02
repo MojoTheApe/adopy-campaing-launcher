@@ -1,5 +1,23 @@
 # System history
 
+## On-screen messages are English — ACL-1462
+
+2026-10-01 the owner saw Russian text in the confirmation shown before Publish. Translated
+everything the dashboard shows that was still Russian: the Publish confirmation (locked-
+screen warning, tracking-link and targeting warnings, the "Build anyway" button), the
+locked-screen notice after a run, the ad-text library's Body hint, the read-failure
+tooltip's "screenshot:" label, "Stopped by the user", the targeting-library read error
+and the reasons in the "countries failed" tooltip. Code comments, Obsidian note
+generators and page-matching keywords stay Russian. A new test fails on any Cyrillic in
+the templates outside comments, except the two checks that recognise older stored
+errors.
+
+Review of PR #463: the "countries failed" reasons from setting the report period,
+the account-map miss, the period mismatch, the refused table and the pivot / section
+checks were still Russian; now English. `tests/test_country_split_reasons_are_english.py`
+tokenizes `country_split.py` and fails on Cyrillic in any string literal other than
+docstrings and `//` comments inside JS blocks.
+
 ## One Connect button opens the found profile and connects it — ACL-1457
 
 Each profile found in Multilogin had two buttons, Open and Connect, and they had to be
