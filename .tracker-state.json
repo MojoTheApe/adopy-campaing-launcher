@@ -3675,7 +3675,7 @@
             "session": "run_d1459b_1001"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-D1459B",
         "coordinator": "Coordinator-D0930K",
         "handoff": {
@@ -3693,7 +3693,8 @@
           "report": "# ACL-1459 \u2014 implementation handoff\n- Branch `codex/acl-1459-dup-buttons` \u2192 `stage`, head b944538, base 3a629ca. Worker-D1459B, run_d1459b_1001, Coordinator-D0930K, `C:\\acl-dup-buttons`.\n- Done per owner-approved mockup: ad \"Duplicate\" visible; \"+ Ad\"; \"\u29c9 Duplicate campaign\" in the card under ads (drawer: copy + open copy via cbdDuplicateOpen); removed header icon, bottom-of-drawer button, drawer-only \"+ Add Campaign\".\n- Checks: new drawer click test (4) + builder/drawer browser suites + JS guard: 49 passed. Full suite: CI.\n- Reviewer: `cbdDuplicateOpen` is defined inside the drawer IIFE and uses its `openCampaign`/`slotId`/`paint`; `.cb-dup-slot-btn` class kept on the new button on purpose (tests and click handlers at ~9926/11079 key on it). Overlaps report.html with ACL-1455 (#456) only in different CSS blocks.\n- Not done: owner's visual check on the live build."
         },
         "pr": 460,
-        "queued_at": "2026-10-01T13:17:00+00:00"
+        "queued_at": "2026-10-01T13:17:00+00:00",
+        "reviewer": "Reviewer-R1459L"
       },
       "462": {
         "implementers": [
@@ -4048,6 +4049,10 @@
       },
       "Reviewer-R1434Q": {
         "session": "rev_1434q_1002",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1459L": {
+        "session": "rev_r1459l_1001",
         "role": "Reviewer"
       }
     },
@@ -4477,12 +4482,22 @@
       433,
       452,
       457,
-      459,
       462,
       31,
       466
     ],
-    "review": null,
+    "review": {
+      "id": "26d7af6509b643f38ae7d2074e8d9c1b",
+      "pr": 460,
+      "issues": [
+        459
+      ],
+      "actor": "Reviewer-R1459L",
+      "session": "rev_r1459l_1001",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-02T05:52:58+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -6154,6 +6169,13 @@
         "issue": 434,
         "claim": "95c7e7cfe089421b87f41d10f244c90f",
         "actor": "Worker-H1434U"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-02T05:52:58+00:00",
+        "pr": 460,
+        "lane": "26d7af6509b643f38ae7d2074e8d9c1b",
+        "actor": "Reviewer-R1459L"
       }
     ],
     "policy": {
