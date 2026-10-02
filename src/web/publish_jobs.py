@@ -344,8 +344,10 @@ def _run_job(
             try:
                 _rt.record("job_phase", True, campaign=first_campaign, note="slot_queue",
                            duration_s=float(grant["waited_s"]),
-                           diag={"account": account_label, "decision": grant["decision"],
-                                 "first_hold": grant["first_hold"]})
+                           diag={"account": account_label,
+                                 "decision": _decision_for_telemetry(grant["decision"]),
+                                 "first_hold": (_decision_for_telemetry(grant["first_hold"])
+                                                if grant["first_hold"] else None)})
             except Exception:
                 pass
         with _publish_serial(profile):
@@ -396,13 +398,20 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _decision_for_telemetry(verdict: dict[str, Any] | None) -> dict[str, Any]:
+    """Решение очереди без словарей: ключи словаря `scrub_diag` не чистит, а
+    там мог бы оказаться id профиля Multilogin (ревью #425). Числа, строки и
+    списки чисел проходят, вложенные словари — нет."""
+    return {k: v for k, v in dict(verdict or {}).items() if not isinstance(v, dict)}
+
+
 def _record_slot_decision(rt: Any, campaign: str, account: str, verdict: dict[str, Any]) -> None:
     """Строка телеметрии на решение очереди — для подбора чисел потом."""
     if rt is None:
         return
     try:
         rt.record("job_phase", True, campaign=campaign, note="slot_decision",
-                  diag={"account": account, "decision": dict(verdict)})
+                  diag={"account": account, "decision": _decision_for_telemetry(verdict)})
     except Exception:
         pass
 

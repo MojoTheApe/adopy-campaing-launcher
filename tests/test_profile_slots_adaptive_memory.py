@@ -110,7 +110,8 @@ class Machine:
         self.available_gb = available_gb
         self.now = 1000.0
         self.usage = usage or {}          # профиль → МБ; исключение — сбой замера
-        self.settings = settings or ps.SlotSettings(warmup_s=60)
+        # settle_s=60: здесь «прогрелся» и «устоялся» совпадают; молодой профиль — свой тест.
+        self.settings = settings or ps.SlotSettings(warmup_s=60, settle_s=60)
         self.asked: list[list[str]] = []
 
     def memory(self):
@@ -291,9 +292,124 @@ def test_each_hold_decision_goes_to_telemetry(monkeypatch):
     monkeypatch.setattr(rt, "record", lambda step, ok, **kw: rows.append((step, ok, kw)))
     pj._record_slot_decision(rt, "CAMP_A", "Doc19", {
         "allow": False, "reason": "memory_low", "available_mb": 2150, "profile_mb": 3480,
-        "measured_mb": 3480, "profile_mb_source": "measured", "per_profile_mb": {"p1": 3480}})
+        "measured_mb": 3480, "profile_mb_source": "measured", "per_profile_mb": [3480],
+        "leak": {"3f2a1b4c-0000-4000-8000-000000000001": 3480}})
     step, ok, kw = rows[0]
     assert step == "job_phase" and ok is True and kw["note"] == "slot_decision"
     assert kw["campaign"] == "CAMP_A" and kw["diag"]["account"] == "Doc19"
     assert kw["diag"]["decision"]["reason"] == "memory_low"
     assert kw["diag"]["decision"]["measured_mb"] == 3480
+
+
+# ── ревью PR #425: никогда не перегружать, без id в телеметрии ──────────
+
+def test_the_growth_of_running_profiles_is_reserved():
+    s = ps.SlotSettings()
+    # Средняя 3,4; один профиль сейчас 2,0 — ему ещё расти на 1,4 ГБ.
+    d = ps.decide(2, 0, mem(6.0), s, measured_mb=int(3.4 * GB),
+                  current_mb=[int(2.0 * GB), int(3.4 * GB)])
+    assert d["growth_mb"] == int(3.4 * GB) - int(2.0 * GB)
+    assert d["need_mb"] == int(3.4 * GB) + s.reserve_mb + d["growth_mb"]
+    assert d["allow"] is False and d["reason"] == "memory_low"
+    # Без роста (все уже на средней) те же 6 ГБ пускают.
+    flat = ps.decide(2, 0, mem(6.0), s, measured_mb=int(3.4 * GB),
+                     current_mb=[int(3.4 * GB), int(3.4 * GB)])
+    assert flat["growth_mb"] == 0 and flat["allow"] is True
+
+
+def test_a_young_profile_measured_small_does_not_lower_the_estimate():
+    m = Machine(available_gb=5.5, usage={"P1": int(1.0 * GB)},
+                settings=ps.SlotSettings(warmup_s=60, settle_s=300))
+    slots = m.slots()
+    a = Job(slots, "a", "P1")
+    m.now += 61                                     # прогрелся, но кампании ещё не открыл
+    b = Job(slots, "b", "P2")
+    time.sleep(0.15)
+    assert not b.started
+    nxt = slots.snapshot()["next"]
+    assert nxt["profile_mb"] == int(3.5 * GB), "молодой профиль опустил оценку"
+    assert nxt["growth_mb"] == int(3.5 * GB) - int(1.0 * GB)
+    assert nxt["reason"] == "memory_low"
+    m.now += 300                                    # устоялся на 1,0 ГБ — теперь верим замеру
+    m.available_gb = 5.5
+    assert _until(lambda: b.started)
+    assert b.grant["decision"]["profile_mb"] == ps.SlotSettings().profile_floor_mb
+    a.finish()
+    b.finish()
+
+
+def test_a_shrinking_profile_keeps_its_peak():
+    m = Machine(available_gb=4.0, usage={"P1": int(3.4 * GB)})
+    slots = m.slots()
+    a = Job(slots, "a", "P1")
+    m.now += 61
+    b = Job(slots, "b", "P2")
+    time.sleep(0.15)
+    assert not b.started
+    assert slots.snapshot()["next"]["measured_mb"] == int(3.4 * GB)
+    m.usage["P1"] = int(1.0 * GB)                   # закрывается (ACL-1444) или сбросил вкладку
+    m.now += 10                                     # замер перечитан
+    nxt = slots.snapshot()["next"]
+    assert nxt["measured_mb"] == int(3.4 * GB), "сжатие профиля опустило среднее"
+    assert nxt["per_profile_mb"] == [int(1.0 * GB)]
+    assert not b.started
+    a.finish()
+    assert _until(lambda: b.started)
+    b.finish()
+
+
+def test_no_profile_id_reaches_the_queue_decision_or_telemetry(monkeypatch):
+    import json
+
+    from src.fb_ads_rpa import run_telemetry as rt
+    from src.web import publish_jobs as pj
+
+    p1 = "3f2a1b4c-0000-4000-8000-000000000001"
+    p2 = "3f2a1b4c-0000-4000-8000-000000000002"
+    m = Machine(available_gb=2.0, usage={p1: int(3.0 * GB)})
+    slots = m.slots()
+    a = Job(slots, "a", p1)
+    m.now += 61
+    b = Job(slots, "b", p2)
+    time.sleep(0.15)
+    hold = b.waits[-1]
+    assert hold["per_profile_mb"] == [int(3.0 * GB)]
+    rows = []
+    monkeypatch.setattr(rt, "record", lambda step, ok, **kw: rows.append((step, ok, kw)))
+    pj._record_slot_decision(rt, "CAMP_A", "Doc19", hold)
+    pj._record_slot_decision(rt, "CAMP_A", "Doc19", {"reason": "memory_low", "leak": {p1: 1}})
+    dumped = json.dumps([kw for _, _, kw in rows])
+    assert p1 not in dumped and p2 not in dumped
+    assert rows[0][2]["diag"]["decision"]["per_profile_mb"] == [int(3.0 * GB)]
+    a.finish()
+    b.finish()
+
+
+def test_a_probe_hung_for_too_long_is_replaced_by_a_new_one():
+    now = [0.0]
+    gates = [threading.Event(), threading.Event()]
+    calls = []
+
+    def slow(profiles):
+        gate = gates[min(len(calls), 1)]
+        calls.append(profiles)
+        gate.wait(5)
+        return {"P1": 1000 * len(calls)}
+
+    probe = ps.ProfileUsage(slow, clock=lambda: now[0], timeout_s=3.0, restart_factor=4)
+    assert probe.read(["P1"])["status"] == "pending"
+    now[0] = 4.0
+    assert probe.read(["P1"])["status"] == "timeout" and len(calls) == 1
+    now[0] = 13.0                                   # дольше 4 × 3 с — бросаем
+    probe.read(["P1"])
+    assert _until(lambda: len(calls) == 2), "зависший замер навсегда остановил адаптацию"
+    gates[0].set()                                  # старый вернулся — новый всё ещё «идёт»
+    assert _until(lambda: probe.read(["P1"])["status"] == "ok")
+    assert probe._inflight_since is not None
+    gates[1].set()
+    assert _until(lambda: probe._inflight_since is None)
+
+
+def test_the_settle_time_is_read_from_the_machine_env():
+    assert ps.load_settings({}).settle_s == ps.DEFAULT_SETTLE_S == 300.0
+    assert ps.load_settings({"ACL_PROFILE_SETTLE_S": "120"}).settle_s == 120.0

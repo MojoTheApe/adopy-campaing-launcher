@@ -50,6 +50,20 @@ ACL-1424 (01.10): четыре профиля заняли 13,6 ГБ — по �
   сбой или профиль, которого не нашли, — снова оценка 3,5 ГБ.
 * Свободную память читаем каждый раз заново: человек открыл тяжёлое —
   следующий профиль ждёт, закрыл — стартует. Потолок и пол — как были.
+
+Ревью PR #425 (02.10), «никогда не перегружать»:
+
+* Профиль на 90-й секунде ещё может не открыть список кампаний — замер мал,
+  среднее падает к полу, а профиль потом дорастёт до ~3,4 ГБ. Поэтому у
+  каждого идущего профиля храним пик замера (не опускается, пока задание
+  идёт: закрывающийся профиль ACL-1444 среднее вниз не тянет), а профиль
+  моложе `ACL_PROFILE_SETTLE_S` (300 с) считаем не легче оценки.
+* Рост уже идущих профилей резервируем: к «профиль + запас» прибавляем
+  `growth_mb` — сумму «сколько каждому замеренному профилю ещё до
+  `profile_mb`», и свободной памяти должно хватить и на это.
+* В решение (и в телеметрию) идут только числа МБ списком — без id профилей.
+* Замер, зависший дольше `MEASURE_RESTART_FACTOR` × `MEASURE_TIMEOUT_S`,
+  адаптацию больше не держит: запускаем новый.
 """
 from __future__ import annotations
 
@@ -75,6 +89,8 @@ DEFAULT_PROFILE_MEMORY_GB = 3.5
 DEFAULT_PROFILE_FLOOR_GB = 1.5
 DEFAULT_RESERVE_GB = 1.5
 DEFAULT_WARMUP_S = 90.0
+#: Моложе этого профиль считаем не легче оценки: кампании/редактор ещё впереди.
+DEFAULT_SETTLE_S = 300.0
 
 #: Замер памяти профилей: свежим ответ считается столько секунд, дальше —
 #: перечитать; старше `MEASURE_MAX_AGE_S` — не верить и брать оценку.
@@ -82,6 +98,8 @@ MEASURE_TTL_S = 5.0
 MEASURE_MAX_AGE_S = 30.0
 #: Замер, не вернувшийся за это время, считается сбоем (решение — по оценке).
 MEASURE_TIMEOUT_S = 5.0
+#: Замер висит дольше стольких таймаутов — бросаем его и запускаем новый.
+MEASURE_RESTART_FACTOR = 4.0
 
 
 @dataclass(frozen=True)
@@ -94,6 +112,7 @@ class SlotSettings:
     profile_floor_mb: int = int(DEFAULT_PROFILE_FLOOR_GB * 1024)
     reserve_mb: int = int(DEFAULT_RESERVE_GB * 1024)
     warmup_s: float = DEFAULT_WARMUP_S
+    settle_s: float = DEFAULT_SETTLE_S
 
 
 @dataclass(frozen=True)
@@ -135,6 +154,7 @@ def load_settings(env: dict[str, str] | Any = None) -> SlotSettings:
                                          minimum=0.1) * 1024),
         reserve_mb=int(_env_number(env, "ACL_MEMORY_RESERVE_GB", DEFAULT_RESERVE_GB, minimum=0) * 1024),
         warmup_s=_env_number(env, "ACL_PROFILE_WARMUP_S", DEFAULT_WARMUP_S, minimum=0),
+        settle_s=_env_number(env, "ACL_PROFILE_SETTLE_S", DEFAULT_SETTLE_S, minimum=0),
     )
 
 
@@ -246,7 +266,8 @@ class ProfileUsage:
     `read(profiles)` отдаёт последний готовый замер этих профилей и, если он
     устарел (`ttl_s`), запускает новый в фоне. Ответ `status`:
     `ok` (есть `per_profile`), `pending` (первый замер ещё идёт), `timeout`
-    (замер висит дольше `timeout_s`; второй поверх не запускаем), `failed`
+    (замер висит дольше `timeout_s`; второй поверх не запускаем, пока он не
+    провисит `restart_factor` таймаутов — тогда запускаем новый), `failed`
     (замер упал), `stale` (последний ответ старше `max_age_s`). Кроме `ok`
     решает оценка. Готовый фоновый замер зовёт `on_ready` — очередь
     перепроверяет решение сразу, не дожидаясь таймера.
@@ -263,6 +284,7 @@ class ProfileUsage:
         ttl_s: float = MEASURE_TTL_S,
         max_age_s: float = MEASURE_MAX_AGE_S,
         timeout_s: float = MEASURE_TIMEOUT_S,
+        restart_factor: float = MEASURE_RESTART_FACTOR,
         background: bool = True,
         on_ready: Callable[[], None] | None = None,
     ) -> None:
@@ -271,6 +293,7 @@ class ProfileUsage:
         self._ttl_s = ttl_s
         self._max_age_s = max_age_s
         self._timeout_s = timeout_s
+        self._restart_after_s = timeout_s * restart_factor
         self._background = background
         self.on_ready = on_ready
         self._lock = threading.Lock()
@@ -280,8 +303,11 @@ class ProfileUsage:
         self._value: dict[str, int] | None = None
         self._error = ""
         self._inflight_since: float | None = None
+        # Номер замера: брошенный зависший замер, вернувшись, не снимает
+        # отметку «идёт» с нового.
+        self._gen = 0
 
-    def _run(self, profiles: list[str]) -> None:
+    def _run(self, profiles: list[str], gen: int = 0) -> None:
         try:
             value, error = dict(self._measure(profiles)), ""
         except Exception as exc:   # нечем прочитать, нет прав — решит оценка
@@ -289,7 +315,8 @@ class ProfileUsage:
             log.info("profile memory probe failed: %s", exc)
         with self._lock:
             self._at, self._for, self._value, self._error = self._clock(), frozenset(profiles), value, error
-            self._inflight_since = None
+            if gen == self._gen:
+                self._inflight_since = None
         if self._background and self.on_ready is not None:
             try:
                 self.on_ready()
@@ -301,15 +328,22 @@ class ProfileUsage:
         now = self._clock()
         with self._lock:
             fresh = self._at is not None and self._for == wanted and now - self._at < self._ttl_s
-            start = not fresh and self._inflight_since is None
+            hung = (self._inflight_since is not None
+                    and now - self._inflight_since > self._restart_after_s)
+            if hung:
+                log.info("profile memory probe hung for %.0f s; starting a new one",
+                         now - self._inflight_since)
+            start = not fresh and (self._inflight_since is None or hung)
             if start:
                 self._inflight_since = now
+                self._gen += 1
+            gen = self._gen
         if start:
             if self._background:
-                threading.Thread(target=self._run, args=(sorted(wanted),), daemon=True,
+                threading.Thread(target=self._run, args=(sorted(wanted), gen), daemon=True,
                                  name="acl-profile-memory").start()
             else:
-                self._run(sorted(wanted))
+                self._run(sorted(wanted), gen)
         with self._lock:
             if self._at is not None and self._for == wanted and now - self._at < self._max_age_s:
                 if self._value is None:
@@ -323,12 +357,15 @@ class ProfileUsage:
 
 
 def decide(running: int, warming: int, memory: MemoryReading | None,
-           settings: SlotSettings, measured_mb: int | None = None) -> dict[str, Any]:
+           settings: SlotSettings, measured_mb: int | None = None,
+           current_mb: list[int] | None = None) -> dict[str, Any]:
     """Можно ли стартовать ещё один профиль. Чистая функция — всё на входе.
 
     `running` — сколько профилей идёт, `warming` — сколько из них стартовали
     недавно и память ещё не заняли, `measured_mb` — средняя замеренная
-    память прогретого профиля (None — замера нет, решает оценка). Ответ —
+    память прогретого профиля (None — замера нет, решает оценка),
+    `current_mb` — сколько каждый замеренный профиль занимает сейчас: до
+    `profile_mb` он ещё дорастёт, этот рост (`growth_mb`) резервируем. Ответ —
     факты для телеметрии: `allow`, `reason`, `limit` (сколько разом сейчас
     выходит), память, `profile_mb` (по чём считали профиль) и его источник.
     """
@@ -342,13 +379,17 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
         else:
             out["profile_mb_source"] = "estimate"
         out["profile_mb"] = settings.profile_mb
+    growth = sum(max(0, settings.profile_mb - int(c)) for c in (current_mb or []))
+    if settings.override is None and current_mb:
+        out["growth_mb"] = growth
     if settings.override is not None:
         limit = settings.override
         out.update(limit=limit, allow=running < limit,
                    reason="override" if running < limit else "override_full")
         return out
     if running == 0:
-        out.update(limit=_auto_limit(running, warming, memory, settings), allow=True, reason="floor")
+        out.update(limit=_auto_limit(running, warming, memory, settings, growth), allow=True,
+                   reason="floor")
         return out
     if running >= settings.ceiling:
         out.update(limit=settings.ceiling, allow=False, reason="ceiling")
@@ -358,20 +399,21 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
         out.update(limit=limit, allow=running < limit,
                    reason="memory_unknown" if running < limit else "memory_unknown_full")
         return out
-    need = settings.profile_mb * (1 + warming) + settings.reserve_mb
+    need = settings.profile_mb * (1 + warming) + settings.reserve_mb + growth
     out["need_mb"] = need
-    limit = _auto_limit(running, warming, memory, settings)
+    limit = _auto_limit(running, warming, memory, settings, growth)
     ok = memory.available_mb >= need
     out.update(limit=limit, allow=ok, reason="memory_ok" if ok else "memory_low")
     return out
 
 
 def _auto_limit(running: int, warming: int, memory: MemoryReading | None,
-                settings: SlotSettings) -> int:
+                settings: SlotSettings, growth_mb: int = 0) -> int:
     """Сколько профилей разом выходит по памяти сейчас (для показа и журнала)."""
     if memory is None:
         return max(1, min(FALLBACK_LIMIT, settings.ceiling))
-    spare = memory.available_mb - settings.reserve_mb - settings.profile_mb * warming
+    spare = (memory.available_mb - settings.reserve_mb - settings.profile_mb * warming
+             - growth_mb)
     more = max(0, spare // settings.profile_mb) if settings.profile_mb > 0 else 0
     return int(max(1, min(settings.ceiling, running + more)))
 
@@ -442,20 +484,37 @@ class ProfileSlots:
         measured_mb: int | None = None
         probe: dict[str, Any] = {}
         # Мерим, только когда это что-то решает: авто, кто-то идёт, потолок не взят.
+        current: list[int] = []
         if settings.override is None and 0 < running < settings.ceiling:
             now = self._clock()
-            settled = sorted({r["profile"] for r in self._running.values()
-                              if now - r["started"] >= settings.warmup_s})
+            settled = [r for r in self._running.values() if now - r["started"] >= settings.warmup_s]
             if settled:
-                probe = self._usage.read(settled)
+                probe = self._usage.read(sorted({r["profile"] for r in settled}))
                 per = probe.get("per_profile") or {}
                 if probe.get("status") == "ok" and per:
-                    measured_mb = int(sum(per.values()) / len(per))
-        decision = decide(running, self._warming(), self._memory(), settings, measured_mb)
+                    values: list[int] = []
+                    for r in settled:
+                        if r["profile"] not in per:
+                            continue   # не нашли — не в среднем (закрылся / ещё не виден)
+                        now_mb = int(per[r["profile"]])
+                        # Пик: дерево, которое сжимается (профиль закрывается,
+                        # ACL-1444) или ещё не выросло, среднее вниз не тянет.
+                        r["peak_mb"] = max(int(r.get("peak_mb") or 0), now_mb)
+                        value = r["peak_mb"]
+                        if now - r["started"] < settings.settle_s:
+                            # Молодой профиль кампании/редактор ещё не открыл —
+                            # не легче оценки, что бы ни показал замер.
+                            value = max(value, settings.profile_mb)
+                        values.append(value)
+                        current.append(now_mb)
+                    if values:
+                        measured_mb = int(sum(values) / len(values))
+        decision = decide(running, self._warming(), self._memory(), settings, measured_mb, current)
         if probe:
             decision["measure"] = probe.get("status")
-            if probe.get("per_profile"):
-                decision["per_profile_mb"] = dict(probe["per_profile"])
+            if current:
+                # Только числа: id профилей в телеметрию не уходят (ревью #425).
+                decision["per_profile_mb"] = sorted(current)
         return decision
 
     # ── для заданий ────────────────────────────────────────────────────

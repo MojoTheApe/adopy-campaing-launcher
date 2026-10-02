@@ -24,6 +24,14 @@ profile. Owner decision: start from 3.5 GB and adapt to the free memory.
   (free memory, estimate or measured average, per-profile readings, decision); the
   start keeps the existing `slot_queue` row. `GET /publish-jobs/slots` shows the same
   fields under `next`.
+- Review of PR #425 (never overcommit): each running profile keeps its peak
+  reading, so a closing or shrinking profile does not pull the average down; a
+  profile younger than `ACL_PROFILE_SETTLE_S` (300 s) counts at least the estimate,
+  however small it measures; and the growth still ahead of measured profiles
+  (`growth_mb`, up to the per-profile figure) is added to what the next start needs.
+  Telemetry carries only a list of MB readings (`per_profile_mb`), never profile ids,
+  and nested dicts are dropped from the recorded decision. A probe hung for 4x its
+  timeout is abandoned and a new one starts, so adaptation does not stop.
 
 ## Buttons no longer look like input fields — ACL-1455
 
