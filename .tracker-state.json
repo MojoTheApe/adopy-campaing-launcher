@@ -3326,7 +3326,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "504": {
+        "actor": "Worker-N1504R",
+        "session": "run_n1504r_1002",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1504-campaigns-not-read",
+        "worktree": "C:\\acl-1504-notread",
+        "id": "f350c14a6ea647d689d6e8b9653939a2",
+        "issue": 504,
+        "state": "implementing",
+        "started_at": "2026-10-02T19:35:29+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -4498,6 +4511,17 @@
         "pr": 494,
         "queued_at": "2026-10-02T13:45:23+00:00",
         "reviewer": "Reviewer-R1491V"
+      },
+      "504": {
+        "implementers": [
+          {
+            "actor": "Worker-N1504R",
+            "session": "run_n1504r_1002"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-N1504R",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -4792,6 +4816,10 @@
       "Reviewer-R1491V": {
         "session": "rev_r1491v_1002",
         "role": "Reviewer"
+      },
+      "Worker-N1504R": {
+        "session": "run_n1504r_1002",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -7869,6 +7897,13 @@
         "pr": 453,
         "lane": "7a9be999410c41318bf0ba181e4341f0",
         "actor": "Reviewer-R1452H"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-02T19:35:29+00:00",
+        "issue": 504,
+        "claim": "f350c14a6ea647d689d6e8b9653939a2",
+        "actor": "Worker-N1504R"
       }
     ],
     "policy": {
