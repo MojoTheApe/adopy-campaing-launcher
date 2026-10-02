@@ -1478,6 +1478,16 @@
       border-radius: var(--radius-sm);
       color: var(--text); font-size: 0.78rem; line-height: 1.45;
     }
+    /* ACL-1444: «Close profile» на панели закончившегося задания. */
+    .cb-close-profile { margin: 0.5rem 0 0.2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+    .cb-close-profile-btn {
+      padding: 0.3rem 0.8rem; font-size: 0.76rem; cursor: pointer;
+      background: transparent; color: var(--text);
+      border: 1px solid var(--muted); border-radius: var(--radius-sm);
+    }
+    .cb-close-profile-btn:disabled { opacity: 0.6; cursor: default; }
+    .cb-close-profile-msg { font-size: 0.7rem; color: var(--muted); }
+    .cb-close-profile-msg.cb-close-profile-bad { color: var(--bad); }
 
     /* ── §6 Creative Brief ── */
     .brief-details { margin-top: 1.5rem; }
@@ -2974,6 +2984,31 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .cbd-root, .cbd-handle-arrow { transition: none; }
+    }
+    /* ── Второстепенные кнопки — ссылками (ACL-1455, вариант C 01.10) ──────
+       Были нарисованы рамкой полей (--field-border), почти тем же фоном и
+       серым текстом подсказки: глаз не отличал, куда писать, а что нажимать.
+       Рамка теперь значит «поле»; кнопка — синий текст без рамки. Правила в
+       одном месте и сильнее разбросанных выше; рамка остаётся прозрачной
+       шириной 1px, чтобы строки таблицы не прыгали. */
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn) {
+      background: transparent; border: 1px solid transparent;
+      color: var(--accent); font-weight: 500;
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):hover:not(:disabled) {
+      background: var(--accent-soft); border-color: transparent; color: var(--accent);
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):focus-visible {
+      outline: 2px solid var(--focus-ring); outline-offset: 1px;
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):disabled {
+      color: var(--muted); background: transparent; cursor: not-allowed;
+    }
+    :is(.amap-btn.danger, .amap .amap-x, .acc-btn.danger, .amap-btn.amap-live-bad) {
+      color: var(--bad); border-color: transparent;
+    }
+    :is(.amap-btn.danger, .amap .amap-x, .acc-btn.danger, .amap-btn.amap-live-bad):hover:not(:disabled) {
+      background: var(--bad-soft); color: var(--bad);
     }
   </style>
 </head>
@@ -9835,13 +9870,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var vidRadio = row.querySelector('input[type="radio"][value="Video"]');
       var isVideo = !!(vidRadio && vidRadio.checked);
 
-      var media;
+      var media, story = '';
       if (fileVal) {
         var cr = CREATIVES.find(function(f) {
           return f.filename === fileVal || f.rel_path === fileVal;
         });
         var path = cr ? (cr.rel_path || cr.filename) : fileVal;
         var url = '/creative-file?path=' + encodeURIComponent(path);
+        // ACL-1426: what the robot puts on the Vertical (story) card.
+        if (cr && cr.story_label) {
+          story = cr.story_label + (cr.square_file ? ' · Post: ' + cr.square_file : '');
+        }
         if (isVideo || (cr && cr.type === 'Video') || /\.(mp4|mov|webm)$/i.test(path)) {
           media = '<video class="cbp-media" src="' + cbpEsc(url) + '" preload="metadata" muted controls></video>';
         } else {
@@ -9862,6 +9901,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       cards.push(
         '<div class="cbp-item">' +
         '<div class="cbp-adlabel">Ad ' + (i + 1) + '</div>' +
+        (story ? '<div class="cbp-story" data-cbp-story style="font-size:0.7rem;opacity:0.75">' + cbpEsc(story) + '</div>' : '') +
         '<div class="cbp-card">' +
           '<div class="cbp-head"><span class="cbp-avatar"></span>' +
             '<span><div class="cbp-pagename">Page name</div><div class="cbp-sub">Sponsored</div></span></div>' +
@@ -12316,6 +12356,53 @@ function _doCbPublish(form) {
   if (got.skipped.length) cbSayAlreadyBuilding(got.skipped);
 }
 
+// ACL-1444: «Close profile» на панели закончившегося задания. Чистое задание
+// закрывает профиль само; остальные окна (есть что проверить) человек
+// закрывает отсюда. Сервер закрывает мягко, через MLX API, и отказывает
+// (409), пока на профиле идёт работа. Кнопки нет, пока задание идёт и когда
+// профиль уже закрыт (`job.profile_closed`).
+function cbCloseProfileHtml(job) {
+  if (!job || job.profile_closed) return '';
+  return '<div class="cb-close-profile">'
+    + '<button type="button" class="cb-close-profile-btn">Close profile</button>'
+    + '<span class="cb-close-profile-msg">closes the Multilogin window of this account to free memory (also a window opened by hand)</span>'
+    + '</div>';
+}
+
+function cbBindCloseProfile(panel, jobId) {
+  var btn = panel && panel.querySelector('.cb-close-profile-btn');
+  if (!btn || btn._bound) return;
+  btn._bound = true;
+  var msg = panel.querySelector('.cb-close-profile-msg');
+  function say(text, bad) {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.classList.toggle('cb-close-profile-bad', !!bad);
+  }
+  btn.addEventListener('click', function() {
+    btn.disabled = true;
+    btn.textContent = 'Closing…';
+    say('');
+    fetch('/publish-jobs/' + encodeURIComponent(jobId) + '/close-profile', { method: 'POST' })
+      .then(function(r) { return r.json().catch(function() { return { ok: false, error: 'HTTP ' + r.status }; }); })
+      .then(function(data) {
+        if (data && data.ok) {
+          btn.textContent = '✓ Profile closed';
+          say('the Multilogin window is closed');
+        } else {
+          btn.textContent = 'Close profile';
+          btn.disabled = false;
+          say((data && data.error) || 'Could not close the profile', true);
+        }
+      })
+      .catch(function(e) {
+        btn.textContent = 'Close profile';
+        btn.disabled = false;
+        say(e.message, true);
+      });
+  });
+}
+
 // `done` — необязательный: зовётся один раз, когда работа кончилась любым
 // образом. Нужен очереди «Publish all»: профиль в Multilogin один, и
 // следующий аккаунт начинается только после того, как закончился прошлый.
@@ -12422,6 +12509,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     (job.errors || []).forEach(function(e) {
       html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e) + '</div>';
     });
+    if (!isRunning) html += cbCloseProfileHtml(job);
     return html;
   }
 
@@ -12519,6 +12607,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         if (job === null) return;
         statusPanel.innerHTML = renderStatus(job);
         bindStopButton();
+        cbBindCloseProfile(statusPanel, jobId);
         if (onTick) { try { onTick(job); } catch (e) { /* список очереди подождёт */ } }
         if (!scrolledToStatus) {
           scrolledToStatus = true;
