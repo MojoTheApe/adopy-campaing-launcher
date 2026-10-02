@@ -335,14 +335,14 @@ def test_a_masked_field_that_appends_is_refused(monkeypatch):
     page = _DatePage(mask=True)
     ok, note = cs._set_period(page, "2026-08-16", "2026-09-15")
     assert ok is False
-    assert "осталось" in note and page.updated is False
+    assert "the period fields show" in note and page.updated is False
 
 
 def test_a_period_panel_without_two_fields_is_refused(monkeypatch):
     monkeypatch.setattr(cs, "_sleep", lambda *a, **k: None)
     page = _DatePage(fields=1)
     ok, note = cs._set_period(page, "2026-08-16", "2026-09-15")
-    assert ok is False and "полей периода найдено 1" in note
+    assert ok is False and "found 1 period fields" in note
 
 
 def test_no_period_button_is_refused(monkeypatch):

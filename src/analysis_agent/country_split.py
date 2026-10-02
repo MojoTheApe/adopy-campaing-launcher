@@ -777,17 +777,17 @@ _DATE_CONTROLS_JS = "() => {" + _VISIBLE_JS + """
 _PICK_PIVOT_JS = "() => {" + _VISIBLE_JS + """
   const dlg = [...document.querySelectorAll('[role="dialog"]')].filter(visible)
     .find(d => norm(d.innerText).includes('create your report'));
-  if (!dlg) return { ok: false, why: 'диалог выбора вида отчёта не найден' };
+  if (!dlg) return { ok: false, why: 'report type dialog not found' };
   const rows = [...dlg.querySelectorAll('div,li,label')].filter(visible)
     .filter(e => norm(e.innerText).startsWith('pivot table'))
     .sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length);
-  if (!rows.length) return { ok: false, why: 'варианта «Pivot table» в диалоге нет' };
+  if (!rows.length) return { ok: false, why: 'no "Pivot table" option in the dialog' };
   let radio = null, node = rows[0];
   for (let i = 0; i < 4 && node && node !== dlg && !radio; i++) {
     radio = node.querySelector('[role="radio"],input[type="radio"]');
     node = node.parentElement;
   }
-  if (!radio) return { ok: false, why: 'у варианта «Pivot table» нет переключателя' };
+  if (!radio) return { ok: false, why: 'the "Pivot table" option has no radio button' };
   const aria = radio.getAttribute('aria-checked');
   const on = aria !== null ? aria === 'true' : !!radio.checked;
   if (!on) radio.click();
@@ -858,8 +858,8 @@ _SECTION_CHECKBOX_JS = "(args) => {" + _VISIBLE_JS + """
     // Без этого следующий разбор снова начнётся с живого прогона.
     const seen = [...new Set(leaves.map(e => norm(e.textContent))
       .filter(t => args.sections.some(s => norm(s) === t)))];
-    return { ok: false, why: 'раздел «' + args.section + '» найден ' + heads.length
-      + ' раз(а); в панели видно: ' + (seen.join(', ') || 'ни одного раздела') };
+    return { ok: false, why: 'section "' + args.section + '" found ' + heads.length
+      + ' time(s); the panel shows: ' + (seen.join(', ') || 'no sections') };
   }
   const start = top(heads[0]);
   const others = leaves.filter(e => args.sections.some(s => norm(e.textContent) === norm(s)))
@@ -873,10 +873,10 @@ _SECTION_CHECKBOX_JS = "(args) => {" + _VISIBLE_JS + """
   };
   const boxes = [...document.querySelectorAll('[role="checkbox"],input[type="checkbox"]')]
     .filter(el => visible(el) && top(el) >= start && top(el) < end && name(el) === norm(args.label));
-  if (boxes.length !== 1) return { ok: false, why: 'в разделе найдено ' + boxes.length + ' шт.' };
+  if (boxes.length !== 1) return { ok: false, why: 'found ' + boxes.length + ' checkboxes in the section' };
   const el = boxes[0];
   if (el.disabled || el.getAttribute('aria-disabled') === 'true' || el.indeterminate)
-    return { ok: false, why: 'галочка недоступна' };
+    return { ok: false, why: 'the checkbox is disabled' };
   const aria = el.getAttribute('aria-checked');
   const state = aria !== null ? aria === 'true' : !!el.checked;
   if (state !== args.wanted) el.click();
@@ -1007,11 +1007,11 @@ def _set_period(page, date_from: str, date_to: str) -> tuple[bool, str]:
                 control = text
                 break
     except Exception as exc:
-        return False, f"не удалось найти кнопку периода ({str(exc)[:60]})"
+        return False, f"could not look for the period button ({str(exc)[:60]})"
     if not control:
         return False, "period button not found"
     if not _click_label(page, control, tries=6, allow_many=True):
-        return False, f"кнопка периода «{control}» не нажалась"
+        return False, f"period button \"{control}\" did not respond"
     _sleep(2)
 
     found = 0
@@ -1024,7 +1024,7 @@ def _set_period(page, date_from: str, date_to: str) -> tuple[bool, str]:
             break
         _sleep(1)
     if found != 2:
-        return False, f"полей периода найдено {found}, а нужно два"
+        return False, f"found {found} period fields, expected two"
 
     read = "() => [...document.querySelectorAll('[data-acl-date]')].map(e => (e.value || '').trim())"
     got: tuple = ()
@@ -1050,7 +1050,7 @@ def _set_period(page, date_from: str, date_to: str) -> tuple[bool, str]:
             _sleep(0.7)
             _type_into('[data-acl-date="to"]', _typed_date(date_to))
         except Exception as exc:
-            return False, f"поля периода не заполнились ({str(exc)[:60]})"
+            return False, f"could not type into the period fields ({str(exc)[:60]})"
         _sleep(1)
         try:
             got = tuple(page.evaluate(read) or ())
@@ -1059,11 +1059,11 @@ def _set_period(page, date_from: str, date_to: str) -> tuple[bool, str]:
         if len(got) == 2 and _same_day(got[0], date_from) and _same_day(got[1], date_to):
             break
     else:
-        return False, (f"в полях осталось {list(got)}, "
-                       f"а вводили {[_typed_date(date_from), _typed_date(date_to)]}")
+        return False, (f"the period fields show {list(got)}, "
+                       f"but we typed {[_typed_date(date_from), _typed_date(date_to)]}")
 
     if not _click_label(page, "Update", tries=6):
-        return False, "«Update» did not respond"
+        return False, "\"Update\" did not respond"
     _sleep(3)
     return True, f"{_meta_date(date_from)} — {_meta_date(date_to)}"
 
@@ -1214,7 +1214,7 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
     try:
         entry = _entry_for(account)
         if entry is None:
-            raise ValueError(f"{account} нет в карте аккаунтов")
+            raise ValueError(f"{account} is not in the account map")
         act = (entry.ad_account_id or "").strip()
         url = _reporting_url(act, date_from, date_to)  # validate before attach
         expected_act = "act_" + act.removeprefix("act_")
@@ -1297,7 +1297,7 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
             shown = _shown_period_text(page) or "(period not recognised)"
             raise ValueError(
                 "Displayed report period does not match the requested dates: "
-                f"на экране {shown!r}; чем задаётся период: {controls}"
+                f"shown {shown!r}; period controls: {controls}"
             )
 
         rows, how = [], "refused: report not loaded"
@@ -1322,8 +1322,8 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
                 dropped = page.evaluate("() => window.__aclDropped || []") or []
             except Exception:
                 dropped = []
-            tail = f"; не легло в колонки: {dropped}" if dropped else ""
-            raise ValueError(f"{how}; таблица: [{shown[:600]}]{tail}")
+            tail = f"; did not fit the columns: {dropped}" if dropped else ""
+            raise ValueError(f"{how}; table: [{shown[:600]}]{tail}")
         if _act_from_url(page, tries=1) != expected_act:
             raise ValueError("Account changed during reading; result refused")
         if not _period_matches(_shown_period_text(page), date_from, date_to):

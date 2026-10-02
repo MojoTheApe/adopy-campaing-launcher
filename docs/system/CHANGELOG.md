@@ -12,6 +12,12 @@ generators and page-matching keywords stay Russian. A new test fails on any Cyri
 the templates outside comments, except the two checks that recognise older stored
 errors.
 
+Review of PR #463: the "countries failed" reasons from setting the report period,
+the account-map miss, the period mismatch, the refused table and the pivot / section
+checks were still Russian; now English. `tests/test_country_split_reasons_are_english.py`
+tokenizes `country_split.py` and fails on Cyrillic in any string literal other than
+docstrings and `//` comments inside JS blocks.
+
 ## Builder: visible Duplicate on ads and campaigns, no repeated buttons — ACL-1459
 
 2026-10-01 the owner sent a screenshot of the builder drawer: duplicating an ad was a
