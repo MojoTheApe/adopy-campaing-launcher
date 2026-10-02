@@ -2895,9 +2895,11 @@
         "worktree": "C:\\acl-132-copytext",
         "id": "0f431ed6c5a84466af07a7d7ff9c1e64",
         "issue": 31,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-02T09:44:19+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 465,
+        "report": "# ACL-132 \u2014 review fixes (PR #465)\n\nWorker-W132T, session run_w132t_1001. Branch codex/acl-132-copy-text, head 33db35c1 (on top of 52fc33c9, which already contains work/stage + work/main).\n\n## What changed (per review_465 \"Re-check\")\n1. Missing screenshot: on a problem status (anything except clear/unknown) without a screenshot, `_account_map_country.html` renders \"Copy screenshot\" **disabled** with the tooltip \"No screenshot on the last read \u2014 read the account again\" (Issue #31 line 22). No data-shot/onclick on it. CSS `.amap-shot:disabled`. `tests/test_status_screenshot.py::test_no_shot_no_button` now asserts every `amap-shot` button is disabled (or absent), not the phrase. With a screenshot nothing changes.\n2. Live Read: `amapApplyReading` (report.html) mirrors the template \u2014 disabled Copy screenshot when there is no shot, and a new shared helper `amapStatusReport` re-adds Copy text + the hint for disabled/restricted/blocked/review.\n3. Double click: `amapCopyText` stores the original label once in `data-label` and clears the previous timer; a second click within 1.5 s no longer leaves \"Copied\".\n4. Nothing sent: browser test routes every request and asserts none besides the page itself, empty localStorage/sessionStorage and no cookies after copying.\nCHANGELOG: bullet added to the acl-132 entry, blank line before the next heading.\n\n## Tests (headless, ACL_LIBRARY_* empty, C:/fb_agents/.venv python)\ntest_copy_status_text, test_status_screenshot, test_report_scripts_parse, test_bench_catalogue, test_account_map_view, test_disabled_account_status: **82 passed**.\nNew: test_without_a_screenshot_the_hint_points_at_a_disabled_button, test_a_second_click_does_not_leave_the_button_on_copied, test_copy_text_sends_and_stores_nothing, test_a_live_read_that_finds_a_problem_offers_copy_text[shot/no shot], test_a_live_read_without_a_problem_offers_nothing[clear/unknown].\nscripts/acl_scan_secrets.py: clean.\n\n## Safety\nOnly dashboard template/JS and tests. No Meta/Multilogin/account paths; port 9090 and C:\\acl-live-* untouched; no visible windows."
       }
     },
     "tasks": {
