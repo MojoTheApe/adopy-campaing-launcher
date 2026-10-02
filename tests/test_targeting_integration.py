@@ -2,8 +2,10 @@
 import asyncio
 import json
 import multiprocessing
+import os
 import shutil
 import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +15,7 @@ import pytest
 
 from src.analysis_agent import team_library as tl, targeting_registry as tr
 from src.web import app as web
+from tests import targeting_worker
 
 
 @pytest.fixture(autouse=True)
@@ -31,23 +34,43 @@ def test_bad_registry_is_preserved(tmp_path):
         assert tr._store().read_text(encoding='utf-8') == content
 
 
-def _process_add(path, prefix):
-    tr._store = lambda: Path(path)
-    for i in range(8):
-        tr.add(f'{prefix}-{i}', f'Interest {prefix} {i}')
-
-
 def test_multiple_processes_do_not_lose_writes():
+    # ACL-1419: the worker sits in a light module (see tests/targeting_worker.py),
+    # every worker is joined before its exit code is read, and a worker that
+    # outlives the deadline is reported as a hang, not as `None == 0`.
     ctx = multiprocessing.get_context('spawn')
-    workers = [ctx.Process(target=_process_add, args=(str(tr._store()), i)) for i in range(3)]
+    workers = [ctx.Process(target=targeting_worker.add_eight, args=(str(tr._store()), i))
+               for i in range(3)]
     for w in workers:
         w.start()
+    deadline = time.monotonic() + 120
     for w in workers:
-        w.join(40)
+        w.join(max(0.0, deadline - time.monotonic()))
+    hung = [w.name for w in workers if w.is_alive()]
+    for w in workers:
         if w.is_alive():
             w.terminate()
-        assert w.exitcode == 0
+            w.join(10)
+    assert not hung, f'workers still running after 120 s: {hung}'
+    assert [w.exitcode for w in workers] == [0, 0, 0]
     assert len(tr.all_targets()) == 24
+
+
+def test_save_waits_out_a_briefly_held_registry(monkeypatch):
+    # ACL-1419: Windows refuses os.replace (WinError 5) while the target is
+    # open for a moment elsewhere; the save must wait, not drop the edit.
+    real, refusals = os.replace, []
+
+    def held_twice(src, dst):
+        if len(refusals) < 2:
+            refusals.append(dst)
+            raise PermissionError(5, 'Access is denied')
+        return real(src, dst)
+
+    monkeypatch.setattr(os, 'replace', held_twice)
+    tr.add('Held', 'Finance')
+    assert len(refusals) == 2
+    assert [t.name for t in tr.all_targets()] == ['Held']
 
 
 def test_concurrent_duplicate_check_is_atomic():

@@ -260,7 +260,9 @@ def test_the_reopen_is_visible_in_the_job_panel_telemetry_and_sentry(world):
     assert crumb["data"]["age_s"] == 1500.0 and crumb["data"]["idle_s"] == 300.0
 
 
-@pytest.mark.parametrize("reason", [hw.TOO_YOUNG, hw.IN_FOREGROUND, hw.RECENT_INPUT,
+# ACL-1427: RECENT_INPUT больше не стоп сразу — робот ждёт тишины ввода
+# (tests/test_a_hand_opened_window_waits_for_idle.py).
+@pytest.mark.parametrize("reason", [hw.TOO_YOUNG, hw.IN_FOREGROUND,
                                     hw.FOREGROUND_UNKNOWN, hw.IDLE_UNKNOWN, hw.NO_PROCESS])
 def test_an_unsafe_window_still_stops_with_the_current_message(world, reason):
     world.verdict = hw.Verdict(False, reason, age_s=120.0)

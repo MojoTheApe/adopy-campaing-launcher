@@ -68,7 +68,11 @@ jobs:
     name: Build, install, repair, and uninstall
     needs: phase-1-isolation
     runs-on: windows-latest
-    timeout-minutes: 45
+    # ACL-1491: a green run takes ~12 min (2026-10-02: 736 s). One run hung
+    # for 50 min before someone cancelled it; 30 min is 2.5x a green run, and
+    # every step that starts the packaged app has its own, tighter limit, so
+    # a hang fails on the step that hung instead of eating the lane.
+    timeout-minutes: 30
     env:
       ACL_NO_TELEMETRY: "1"
       PYTHONIOENCODING: utf-8
@@ -97,28 +101,34 @@ jobs:
           python -m unittest discover -s packaging/windows/tests -p "test_setup_wizard.py" -v
 
       - name: Build previous isolated test package from the candidate source
+        timeout-minutes: 12
         shell: pwsh
         run: |
           ./packaging/windows/build.ps1 -Version "$env:ACL_TEST_PREVIOUS_VERSION"
           ./packaging/windows/build_installer.ps1 -Version "$env:ACL_TEST_PREVIOUS_VERSION"
 
       - name: Build onedir bundle
+        timeout-minutes: 8
         shell: pwsh
         run: ./packaging/windows/build.ps1 -Version "$env:ACL_PACKAGE_VERSION"
 
       - name: Test the packaged executable
+        timeout-minutes: 5
         shell: pwsh
         run: ./packaging/windows/test_bundle.ps1
 
       - name: Build per-user Windows installer
+        timeout-minutes: 10
         shell: pwsh
         run: ./packaging/windows/build_installer.ps1 -Version "$env:ACL_PACKAGE_VERSION"
 
       - name: Test install, launch, repair, and uninstall
+        timeout-minutes: 8
         shell: pwsh
         run: ./packaging/windows/test_installer.ps1 -Version "$env:ACL_PACKAGE_VERSION"
 
       - name: Test real package update, restart, and recovery
+        timeout-minutes: 8
         shell: pwsh
         run: |
           python packaging/windows/test_update_cycle.py --old-version "$env:ACL_TEST_PREVIOUS_VERSION" --version "$env:ACL_PACKAGE_VERSION"
@@ -159,6 +169,7 @@ jobs:
     if: ${{ always() }}
     needs: [scope, phase-1-isolation, phase-2-packaging-spike]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Require every applicable packaging check
         env:

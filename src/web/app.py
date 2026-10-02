@@ -1967,11 +1967,13 @@ async def api_save_machine_paths(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
     if not isinstance(data, dict) or any(
-            k in data and not isinstance(data[k], str) for k in ("stats_workbook", "creatives_folder")):
-        return JSONResponse({"ok": False, "error": "Expected text paths"}, status_code=400)
+            k in data and not isinstance(data[k], str)
+            for k in ("stats_workbook", "creatives_folder", "manager_name")):
+        return JSONResponse({"ok": False, "error": "Expected text values"}, status_code=400)
     try:
         from starlette.concurrency import run_in_threadpool
-        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"), data.get("creatives_folder"))
+        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"),
+                                         data.get("creatives_folder"), data.get("manager_name"))
     except machine_paths.MachinePathError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if result["stats_changed"]:
@@ -2942,6 +2944,41 @@ async def account_spend_read(request: Request) -> JSONResponse:
     # Нужно ли после этого спрашивать кабинет про страны, отвечает опрос
     # состояния: там видно дочитанную сумму (ACL-1288).
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
+
+
+@app.get("/account-spend/status-shot/{shot_id}")
+async def account_spend_status_shot(shot_id: str) -> Response:
+    """Снимок проблемного состояния кабинета (ACL-1430) — только по его id.
+
+    Путь с экрана не принимается: `status_shot_path` знает одну папку
+    снимков и строгий вид имени, всё прочее — 404.
+    """
+    from src.analysis_agent import account_spend
+
+    path = account_spend.status_shot_path(shot_id)
+    if path is None:
+        return JSONResponse({"error": "Screenshot not found"}, status_code=404)
+    return FileResponse(str(path), media_type="image/png")
+
+
+@app.get("/account-spend/status-shot/{shot_id}/view")
+async def account_spend_status_shot_view(shot_id: str) -> Response:
+    """Запасной путь кнопки Copy screenshot: браузер не дал положить картинку
+    в буфер — открываем её во вкладке с подсказкой, как скопировать руками."""
+    from html import escape
+
+    from src.analysis_agent import account_spend
+
+    if account_spend.status_shot_path(shot_id) is None:
+        return JSONResponse({"error": "Screenshot not found"}, status_code=404)
+    src = escape(f"/account-spend/status-shot/{shot_id}")
+    return HTMLResponse(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Account status screenshot</title>"
+        "<style>body{font:14px system-ui,sans-serif;margin:16px;background:#fff;color:#222}"
+        "img{max-width:100%;border:1px solid #ccc}</style></head><body>"
+        "<p>Right-click → Copy image</p>"
+        f"<img src=\"{src}\" alt=\"Account status screenshot\"></body></html>"
+    )
 
 
 @app.post("/account-spend/read-countries")

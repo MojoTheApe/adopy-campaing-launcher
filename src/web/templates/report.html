@@ -1151,22 +1151,22 @@
       display: inline-block;
     }
     .cb-add-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
-    /* Duplication lives on the cards themselves: ⧉ on each ad row
-       (acl-705) and on each campaign slot's header (acl-706) — a bottom
-       button could not say which item it would take. */
-    .cb-dup-slot-btn {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      width: 1.4rem; height: 1.4rem;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      line-height: 1;
-      padding: 0;
-      font-family: inherit;
+    /* Дублирование — на самих карточках: «Duplicate» у объявления
+       (acl-705) и «⧉ Duplicate campaign» под объявлениями кампании. Кнопка
+       внизу формы не могла сказать, что именно копирует (acl-706); значок в
+       шапке слота ящик прятал вместе с шапкой (ACL-1459). Видом — ссылкой,
+       как остальные второстепенные кнопки (ACL-1455). */
+    .cb-dup-slot-btn, .cb-dup-ad-btn {
+      background: transparent; border: 1px solid transparent; border-radius: 4px;
+      color: var(--accent); font-weight: 500; font-family: inherit;
+      cursor: pointer; line-height: 1.4;
     }
-    .cb-dup-slot-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .cb-dup-slot-btn { display: block; margin-top: 0.6rem; padding: 0.2rem 0.4rem; font-size: 0.78rem; }
+    .cb-dup-slot-btn:hover, .cb-dup-ad-btn:hover { background: var(--accent-soft); }
+    .cb-dup-slot-btn:focus-visible, .cb-dup-ad-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+    /* В ящике кампанию добавляет его «+ Campaign» у аккаунта; кнопка формы
+       была второй дорогой туда же. На странице страны она остаётся. */
+    .cbd-host .cb-add-btn { display: none; }
 
     /* "Send to Builder" trigger + popup */
     /* Landing-page chips: second line under the adset name in the CM drill —
@@ -1259,21 +1259,7 @@
     }
     .cb-ad-row:hover .cb-remove-ad-btn { opacity: 1; }
     .cb-remove-ad-btn:hover { color: var(--bad); border-color: var(--bad); opacity: 1; }
-    .cb-dup-ad-btn {
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--muted);
-      width: 1.2rem; height: 1.2rem;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 0.8rem;
-      line-height: 1;
-      padding: 0;
-      font-family: inherit;
-      opacity: 0.5;
-    }
-    .cb-ad-row:hover .cb-dup-ad-btn { opacity: 1; }
-    .cb-dup-ad-btn:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
+    .cb-dup-ad-btn { padding: 0.05rem 0.35rem; font-size: 0.72rem; margin-left: auto; }
     .cb-ad-fields {
       display: grid;
       grid-template-columns: 7rem 1fr;
@@ -1478,6 +1464,30 @@
       border-radius: var(--radius-sm);
       color: var(--text); font-size: 0.78rem; line-height: 1.45;
     }
+    /* ACL-1437: проблемы кампании — коротким списком, а не абзацем.
+       Красный — блокирует, жёлтый — предупреждение (публиковать можно). */
+    .cb-problems {
+      margin: 0.35rem 0 0.2rem; padding: 0.5rem 0.65rem;
+      border: 1px solid var(--bad); border-left-width: 3px;
+      border-radius: var(--radius-sm); background: var(--bad-soft);
+      color: var(--text); line-height: 1.4;
+    }
+    .cb-problems--warning { border-color: var(--warn); background: var(--warn-soft); }
+    .cb-problems-head { font-weight: 600; color: var(--bad); word-break: break-word; }
+    .cb-problems--warning .cb-problems-head { color: var(--warn); }
+    .cb-problems-sub { color: var(--muted); font-size: 0.72rem; margin: 0.1rem 0 0.35rem 1.4rem; }
+    .cb-problems ol { margin: 0 0 0 1.4rem; padding: 0 0 0 1.1rem; }
+    .cb-problem { margin: 0 0 0.4rem; padding-left: 0.4rem; border-left: 2px solid var(--bad); }
+    .cb-problem--warning { border-left-color: var(--warn); }
+    .cb-problem-title { font-weight: 600; word-break: break-word; }
+    .cb-problem-impact { font-size: 0.74rem; }
+    .cb-problem-action { font-size: 0.74rem; color: var(--accent); }
+    .cb-problems-tech { margin: 0.2rem 0 0 1.4rem; font-size: 0.7rem; color: var(--muted); }
+    .cb-problems-tech > summary { cursor: pointer; }
+    .cb-problems-tech-body { font-family: monospace; word-break: break-all; margin-top: 0.2rem; }
+    .cb-problems-tech-body div { margin: 0.1rem 0; }
+    .cb-problems-tech-body .cb-problems-error { white-space: pre-wrap; }
+    .cb-problems-teach { margin: 0.1rem 0 0.2rem 1.4rem; font-size: 0.74rem; font-weight: 600; }
     /* ACL-1444: «Close profile» на панели закончившегося задания. */
     .cb-close-profile { margin: 0.5rem 0 0.2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
     .cb-close-profile-btn {
@@ -1732,6 +1742,13 @@
     }
     .amap-st-at { display: block; font-size: 0.62rem; color: var(--muted); margin-top: 0.1rem; }
     .amap-st-at.stale { color: var(--warn); font-weight: 500; }
+    .amap-shot {
+      font-size: 0.62rem; padding: 0 0.3rem; margin-left: 0.2rem; border: 1px solid var(--border);
+      border-radius: 3px; background: var(--bg-subtle); color: var(--muted); cursor: pointer; white-space: nowrap;
+    }
+    .amap-shot:hover { color: inherit; }
+    .amap-shot:disabled { cursor: not-allowed; opacity: 0.55; }
+    .amap-shot:disabled:hover { color: var(--muted); }
     .amap td { padding: 0.42rem 0.85rem; border-bottom: 1px solid var(--border); }
     .amap tbody tr:last-child td { border-bottom: 0; }
     .amap tbody tr:hover { background: var(--bg-hover); }
@@ -1946,6 +1963,10 @@
     .amap-btn.primary:hover {
       background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent);
     }
+    /* Сообщение поставщику (acl-132): кнопка и подсказка под плохим статусом. */
+    .amap-st-report { margin-top: 0.2rem; white-space: normal; }
+    .amap-st-report .amap-copy-text { font-size: 0.68rem; padding: 0.05rem 0.35rem; }
+    .amap-st-hint { display: block; font-size: 0.62rem; color: var(--muted); line-height: 1.3; margin-top: 0.1rem; }
 
     /* Состояние Multilogin внутри формы подключения: строка всегда, поля
        входа — только когда токена нет (ACL-1130). */
@@ -3425,6 +3446,11 @@ async function dashRefresh(ev) {
     <h3>This computer</h3>
     <p class="acc-sub">Where ACL reads your stats and looks for creatives. Paste a path from Explorer (Shift + right-click → Copy as path).</p>
     <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:70ch">
+      {#- ACL-1447: имя менеджера — тег `manager` у событий Sentry этой машины. -#}
+      <label>
+        <div style="font-size:0.75rem;color:var(--muted)">Your name (run reports from this computer are labelled with it)</div>
+        <input id="mp-manager" type="text" style="width:100%" autocomplete="off" maxlength="60">
+      </label>
       <label>
         <div style="font-size:0.75rem;color:var(--muted)">Stats workbook (Excel)</div>
         <input id="mp-stats" type="text" style="width:100%" autocomplete="off">
@@ -5241,18 +5267,15 @@ window.cbTree = (function () {
   host.className = 'cbd-camp-body cbd-host';
   var BORROWED = null;
 
-  /* Дублирование кампании. Своё, а не спрятанное: шапка карточки с
-     кнопкой `⧉` в ящике скрыта — имя кампании и так стоит строкой выше, в
-     дереве, — и вместе с ней пропала возможность скопировать кампанию.
-     Здесь она возвращается внизу, где её и ищут: рядом с «+ Add Campaign».
-
-     Копирует та же функция, что и прежняя кнопка: она обходит все поля
-     слота, а не список, записанный руками. Список однажды отстал — язык
-     добавили в форму позже, и копия молча уходила без него. */
-  var tools = document.createElement('div');
-  tools.className = 'cbd-tools';
-  tools.innerHTML = '<button type="button" class="cbd-add" data-act="duplicate">'
-    + '⧉ Duplicate campaign</button>';
+  /* Дублирование кампании живёт в её карточке (ACL-1459). Ящик отвечает за
+     то, что после копии: раскрыть её, ведь её и пришли править — тем одним
+     полем, ради которого копировали. */
+  window.cbdDuplicateOpen = function (source) {
+    window.cbDuplicateSlot(source);
+    var copy = source.nextElementSibling;
+    if (copy && copy.classList.contains('cb-slot')) openCampaign(slotId(copy));
+    else paint();
+  };
 
   /* ── подключить аккаунт, не уходя из ящика ─────────────────────────────
      Третьей копии формы подключения здесь нет и не будет: их было две,
@@ -5310,7 +5333,6 @@ window.cbTree = (function () {
     form.parentNode.insertBefore(mark, form);
     BORROWED = { row: row, form: form, mark: mark };
     host.appendChild(form);
-    host.appendChild(tools);   // вне формы: кнопка внутри неё уходила бы на сервер
     showOnly(form, only);
   }
 
@@ -5447,19 +5469,6 @@ window.cbTree = (function () {
       paint();
     } else if (act === 'add-here') {
       addCampaign(hit.dataset.country, hit.dataset.account);
-    } else if (act === 'duplicate') {
-      var open = findCampaign(openId);
-      if (!open) return;
-      var source = open.camp.slot;
-      window.cbDuplicateSlot(source);
-      var copy = source.nextElementSibling;
-      if (copy && copy.classList.contains('cb-slot')) {
-        /* Копию сразу раскрываем: её и пришли править — тем одним полем,
-           ради которого копировали. */
-        openCampaign(slotId(copy));
-      } else {
-        paint();
-      }
     } else if (act === 'connect' || act === 'connect-picked') {
       var picked = foot.querySelector('.cbd-pick-country');
       var country = act === 'connect-picked' ? (picked && picked.value) : hit.dataset.country;
@@ -7069,6 +7078,67 @@ function amapReadTitle(s, split) {
   return when + ' · read ' + s.finished_at + ' · ' + s.how + amapSplitNote(s, split);
 }
 
+/* ACL-1430 copy-shot { */
+/* Снимок проблемного состояния — в буфер обмена картинкой. ClipboardItem
+   получает обещание, а не готовый blob: так Chrome и Safari засчитывают
+   клик как жест пользователя, хотя файл ещё качается. Браузер отказал
+   (нет ClipboardItem, нет прав) — открываем картинку во вкладке с
+   подсказкой «Right-click → Copy image». */
+function amapCopyShot(btn) {
+  var id = btn.dataset.shot;
+  if (!id) return;
+  var url = '/account-spend/status-shot/' + encodeURIComponent(id);
+  var label = 'Copy screenshot';
+  function fallback() {
+    window.open(url + '/view', '_blank');
+    btn.textContent = label;
+  }
+  if (!(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)) { fallback(); return; }
+  btn.textContent = 'Copying…';
+  var png = fetch(url).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.blob();
+  }).then(function (b) { return b.type === 'image/png' ? b : new Blob([b], {type: 'image/png'}); });
+  var item;
+  try { item = new ClipboardItem({'image/png': png}); } catch (e) { fallback(); return; }
+  navigator.clipboard.write([item]).then(function () {
+    btn.textContent = 'Copied';
+    setTimeout(function () { btn.textContent = label; }, 2000);
+  }, fallback);
+}
+/* } ACL-1430 copy-shot */
+
+/* Хвост ячейки статуса после живого Read — та же разметка, что рисует
+   _account_map_country.html (acl-132): Copy screenshot (выключенная, если
+   снимка нет) и для плохих статусов Copy text с подсказкой. Строкой, а не
+   createElement: ячейка собирается одним innerHTML, обработчики — атрибутами,
+   как в шаблоне. Без этого после Read кнопка пропадала ровно тогда, когда
+   чтение нашло проблему. */
+var AMAP_STATUS_WORDS = {disabled: 'Account Disabled', restricted: 'Account Restricted',
+                         blocked: 'Account Blocked', review: 'Account Under Review'};
+function amapStatusTail(account, s) {
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+  var out = '';
+  if (s.status !== 'clear' && (s.status_shot || s.status !== 'unknown')) {
+    out += s.status_shot
+      ? ' <button type="button" class="amap-shot" data-shot="' + esc(s.status_shot) + '" title="Screenshot taken '
+        + esc(s.status_shot_at) + '. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>'
+      : ' <button type="button" class="amap-shot" disabled title="No screenshot on the last read — read the account again">Copy screenshot</button>';
+  }
+  var word = AMAP_STATUS_WORDS[s.status];
+  if (word) {
+    var line = String(account || '').split(' - ')[0] + ' - ' + word;
+    out += '<div class="amap-st-report"><button type="button" class="amap-btn amap-copy-text" data-copy="' + esc(line)
+      + '" title="Copies: ' + esc(line) + '" onclick="amapCopyText(this)">Copy text</button>'
+      + '<small class="amap-st-hint">Copy screenshot and account number to send in the group</small></div>';
+  }
+  return out;
+}
+
 function amapApplyReading(account, s, split) {
   document.querySelectorAll('.amap-live').forEach(function (cell) {
     if (cell.dataset.account !== account) return;
@@ -7080,7 +7150,7 @@ function amapApplyReading(account, s, split) {
     cell.dataset.readCurrency = s.currency || '';
     if (s.status) {
       var status = row.querySelector('.amap-status');
-      status.innerHTML = '<span></span>';
+      status.innerHTML = '<span></span>' + amapStatusTail(account, s);
       var label = status.firstChild;
       label.className = 'amap-st ' + (s.status === 'clear' ? 'ok' : s.status === 'unknown' ? 'dim' : 'bad');
       label.textContent = s.status === 'clear' ? 'no warning' : s.status === 'unknown' ? 'unreadable' : s.status;
@@ -8647,6 +8717,27 @@ function amapFilter(input, reload) {
 
 function amapFind(btn) {
   return amapFilter(btn.closest('.amap-add').querySelector('.amap-find'), true);
+}
+
+/* Строка для группы поставщика (acl-132). Clipboard API на localhost
+   доступен; запасной путь — скрытое поле и execCommand, если браузер
+   откажет. Ничего не отправляется: человек вставляет и жмёт Send сам. */
+async function amapCopyText(btn) {
+  var text = btn.getAttribute('data-copy') || '';
+  var done = false;
+  try { await navigator.clipboard.writeText(text); done = true; } catch (e) {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'absolute'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select();
+    try { done = document.execCommand('copy'); } catch (e2) { done = false; }
+    ta.remove();
+  }
+  /* Подпись запоминается один раз: второй клик за 1,5 с иначе запомнил бы
+     «Copied» и оставил бы её на кнопке навсегда (ревью #465). */
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+  btn.textContent = done ? 'Copied' : 'Copy failed';
+  clearTimeout(btn._amapCopyTimer);
+  btn._amapCopyTimer = setTimeout(function () { btn.textContent = btn.dataset.label; }, 1500);
 }
 
 /* Один рисовальщик на оба пути — и на кнопку, и на ввод. Две копии этой
@@ -10404,7 +10495,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return '<div class="cb-ad-row" data-ad-idx="' + aIdx + '">' +
       '<div class="cb-ad-row-header">' +
       '<span class="cb-ad-row-label">Ad ' + (aIdx + 1) + '</span>' +
-      '<button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">⧉</button>' +
+      '<button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">Duplicate</button>' +
       '<button type="button" class="cb-remove-ad-btn" onclick="cbRemoveAd(this)" title="Remove ad">×</button>' +
       '</div>' +
       '<div class="cb-ad-fields">' +
@@ -10534,6 +10625,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // right under its source and the slots renumber. It used to be one
   // form-bottom button that silently took the last slot — with several
   // campaigns on screen nothing said which one it meant (acl-706).
+  /* Кнопка в карточке. В ящике копию надо ещё и раскрыть — этим заведует
+     ящик; на странице страны достаточно самой копии. */
+  window.cbDuplicateCampaign = function(btn) {
+    var slot = btn.closest('.cb-slot');
+    if (slot && btn.closest('.cbd-host') && window.cbdDuplicateOpen) return window.cbdDuplicateOpen(slot);
+    return window.cbDuplicateSlot(btn);
+  };
+
   window.cbDuplicateSlot = function(btn) {
     var srcSlot = btn.closest('.cb-slot');
     var form = btn.closest('form');
@@ -10717,7 +10816,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return '<div class="cb-slot" data-idx="' + idx + '">' +
       '<div class="cb-slot-header">' +
       '<span class="cb-slot-label">Campaign ' + (idx + 1) + '</span>' +
-      '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateSlot(this)" title="Duplicate this campaign (including its ads)">⧉</button>' +
       '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>' +
       '</div>' +
       '<div class="cb-slot-name" data-name-display></div>' +
@@ -10751,8 +10849,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-ads-divider">Ads</div>' +
       '<div class="cb-ad-rows">' + buildAdRowHTML(idx, 0) + '</div>' +
       '<input type="hidden" name="camp_' + idx + '_ad_count" class="cb-ad-count" value="1">' +
-      '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>' +
+      '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Ad</button>' +
       '</div>' +
+      /* Дублирование кампании — внутри её карточки, под объявлениями
+         (ACL-1459): раньше значок в шапке, которую ящик прячет, и запасная
+         кнопка внизу ящика, вдали от того, что она копирует. */
+      '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateCampaign(this)" title="Duplicate this campaign with its ads">⧉ Duplicate campaign</button>' +
       '</div>' +
       '<div class="cb-preview-col" data-preview-col></div>' +
       '</div>' +
@@ -12353,6 +12455,103 @@ function _doCbPublish(form) {
   if (got.skipped.length) cbSayAlreadyBuilding(got.skipped);
 }
 
+// ACL-1437: часть `r.error`, которой нет в списке проблем ('' — нечего
+// добавить). Абзац «DO NOT PUBLISH AS IS … Check the draft in Ads Manager
+// first.» (ads_manager_flow) и заметки хэндоффа (rpa_publisher) — повтор.
+function cbErrorBeyondProblems(err) {
+  var s = String(err || '');
+  var head = 'DO NOT PUBLISH AS IS';
+  var tail = 'Check the draft in Ads Manager first.';
+  var i = s.indexOf(head);
+  if (i !== -1) {
+    var end = s.indexOf(tail, i);
+    s = s.slice(0, i) + (end === -1 ? '' : s.slice(end + tail.length));
+  }
+  [
+    'Browser left open for manual review; this draft is NOT publishable.',
+    'Draft ready — browser left open, Meta Publish was not clicked'
+  ].forEach(function(note) { s = s.split(note).join(''); });
+  return s.replace(/^[\s|]+|[\s|]+$/g, '');
+}
+
+// Метки режима обучения по шагам: «ждёт клика Website» / «локатор снят».
+// '' — меток нет. Одна функция для старой и новой отрисовки (ревью F3).
+function cbTeachMarkerHtml(steps, cls) {
+  steps = steps || [];
+  var waiting = steps.indexOf('teach_mode_website_waiting') !== -1
+    && steps.indexOf('conversion_location_website_teach') === -1
+    && steps.indexOf('teach_mode_website_still_failed') === -1;
+  var captured = steps.indexOf('teach_website_captured') !== -1;
+  var c = cls ? ' class="' + cls + '"' : '';
+  var tag = cls ? 'div' : 'span';
+  if (waiting) return ' <' + tag + c + ' style="color:#3b82f6;font-weight:600">⏸ waiting for a Website click</' + tag + '>';
+  if (captured) return ' <' + tag + c + ' style="color:#22c55e">✓ Website locator captured</' + tag + '>';
+  return '';
+}
+
+// ACL-1437: проблемы кампании — заголовок с вердиктом, число, пронумерованный
+// список (что сломалось, чем грозит, «→ что делать») и свёрнутые технические
+// подробности. Данные — `r.problems` от робота (failure_policy.problems);
+// дешборд их только рисует. '' — старая запись без списка или чистый итог:
+// тогда работает прежний текстовый вывод.
+function cbProblemsHtml(r) {
+  var items = r && Array.isArray(r.problems) ? r.problems : null;
+  if (!items || !items.length) return '';
+  var nBlock = items.filter(function(p) { return p.severity !== 'warning'; }).length;
+  var nWarn = items.length - nBlock;
+  var built = r.success === true;
+  var verdict = !built ? ['❌', 'not built', 'blocking']
+    : (nBlock ? ['⛔', 'do not publish as is', 'blocking']
+      : ['⚠️', 'ready to publish (with warnings)', 'warning']);
+  var plural = function(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); };
+  var counts = [];
+  if (nBlock) counts.push(plural(nBlock, 'problem'));
+  if (nWarn) counts.push(plural(nWarn, 'warning'));
+  counts.push(built ? 'draft saved, browser left open' : 'no complete draft, check Ads Manager');
+  var h = '<div class="cb-problems cb-problems--' + verdict[2] + '">'
+    + '<div class="cb-problems-head">' + verdict[0] + ' '
+    + aclEscHtml(r.campaign_name || '?') + ' — ' + verdict[1] + '</div>'
+    + '<div class="cb-problems-sub">' + counts.join(' · ') + '</div><ol>';
+  items.forEach(function(p) {
+    var sev = p.severity === 'warning' ? 'warning' : 'blocking';
+    var title = String(p.title || p.step || '?');
+    if (p.ad_index) {
+      title += ' — ad ' + p.ad_index + (p.ad_name ? ' "' + p.ad_name + '"' : '');
+    }
+    h += '<li class="cb-problem cb-problem--' + sev + '">'
+      + '<div class="cb-problem-title">' + aclEscHtml(title) + '</div>'
+      + (p.impact ? '<div class="cb-problem-impact">' + aclEscHtml(p.impact) + '</div>' : '')
+      + (p.action ? '<div class="cb-problem-action">→ ' + aclEscHtml(p.action) + '</div>' : '')
+      + '</li>';
+  });
+  h += '</ol>';
+  h += cbTeachMarkerHtml(r.steps_completed, 'cb-problems-teach');
+  var tech = [];
+  // ACL-1437 (ревью F2): в `error` бывает то, чего нет в списке — подробность
+  // остановки профиля, «Recorded flow failed at: …», текст исключения.
+  // Стандартный абзац «DO NOT PUBLISH AS IS» и заметку хэндоффа выкидываем:
+  // они повторяют список.
+  var extraError = cbErrorBeyondProblems(r.error);
+  if (extraError) {
+    tech.push('<div class="cb-problems-error">error: ' + aclEscHtml(extraError) + '</div>');
+  }
+  items.forEach(function(p) {
+    tech.push('<div>' + aclEscHtml(p.raw || p.step || '') + '</div>');
+  });
+  if (r.run_id) tech.push('<div>run id: ' + aclEscHtml(r.run_id) + '</div>');
+  if (r.campaign_id) tech.push('<div>campaign_id: ' + aclEscHtml(r.campaign_id) + '</div>');
+  (r.screenshots || []).forEach(function(s) {
+    tech.push('<div>capture: ' + aclEscHtml(s) + '</div>');
+  });
+  if (r.steps_completed && r.steps_completed.length) {
+    tech.push('<div>steps: ' + r.steps_completed.map(aclEscHtml).join(' → ') + '</div>');
+  }
+  h += '<details class="cb-problems-tech"><summary>Technical details '
+    + '<span>(step codes, run id)</span></summary>'
+    + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
+  return h + '</div>';
+}
+
 // ACL-1444: «Close profile» на панели закончившегося задания. Чистое задание
 // закрывает профиль само; остальные окна (есть что проверить) человек
 // закрывает отсюда. Сервер закрывает мягко, через MLX API, и отказывает
@@ -12454,6 +12653,10 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       html += '<div class="cb-status-cause">' + aclEscHtml(note) + '</div>';
     });
     (job.results || []).forEach(function(r) {
+      // ACL-1437: a result with a structured problem list renders as one
+      // block; older records (no `problems`) keep the text rendering below.
+      var structured = cbProblemsHtml(r);
+      if (structured) { html += structured; return; }
       // Three states, not two. `success` only says the automation reached the
       // end and a draft exists; `publishable` says a human may send it out.
       // This used to pick the checkmark from `success` alone and then render
@@ -12492,13 +12695,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       }
       if (r.steps_completed && r.steps_completed.length) {
         var stepsHtml = r.steps_completed.map(aclEscHtml).join(' → ');
-        var teachWaiting = r.steps_completed.indexOf('teach_mode_website_waiting') !== -1
-          && r.steps_completed.indexOf('conversion_location_website_teach') === -1
-          && r.steps_completed.indexOf('teach_mode_website_still_failed') === -1;
-        var teachCapture = r.steps_completed.indexOf('teach_website_captured') !== -1;
-        var extra = teachWaiting
-          ? ' <span style="color:#3b82f6;font-weight:600">⏸ waiting for a Website click</span>'
-          : (teachCapture ? ' <span style="color:#22c55e">✓ Website locator captured</span>' : '');
+        var extra = cbTeachMarkerHtml(r.steps_completed, '');
         html += '<div class="cb-status-steps" style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem">'
           + 'Steps: ' + stepsHtml + extra + '</div>';
       }
@@ -13377,7 +13574,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   function el(id) { return document.getElementById(id); }
   function say(text, error) { el('mp-msg').textContent = text || ''; el('mp-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
   function show(d) {
-    loaded = {stats: d.stats_workbook || '', creatives: d.creatives_folder || ''};
+    loaded = {stats: d.stats_workbook || '', creatives: d.creatives_folder || '', manager: d.manager_name || ''};
+    el('mp-manager').value = loaded.manager;
     el('mp-stats').value = loaded.stats;
     el('mp-creatives').value = loaded.creatives;
     var missing = [];
@@ -13397,6 +13595,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var body = {};
     if (el('mp-stats').value !== loaded.stats) body.stats_workbook = el('mp-stats').value;
     if (el('mp-creatives').value !== loaded.creatives) body.creatives_folder = el('mp-creatives').value;
+    if (el('mp-manager').value !== loaded.manager) body.manager_name = el('mp-manager').value;
     if (!Object.keys(body).length) { say('Nothing changed.'); return; }
     pending = true; el('mp-save').disabled = true; say('Saving…');
     try {
