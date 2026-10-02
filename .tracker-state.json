@@ -3027,7 +3027,7 @@
             "session": "run_v1402h_0930"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-V1402H",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3045,7 +3045,8 @@
           "report": "# ACL-1402 handoff (Worker-V1402H, run_v1402h_0930)\n\nPR #420 into stage. Branch codex/acl-1402-covered-window, head e1b75e4. It contains work/main 91e7049 (fast-forward).\n\n## Done (headless)\n- `src/fb_ads_rpa/window_visibility.py` provides `visibility_diag`:\n  - page visibilityState/hasFocus, bounded at 3 s;\n  - read-only Win32 window state: IsIconic, IsWindowVisible, foreground, share on screen and uncovered share by z-order;\n  - the browser pid, found from the CDP port;\n  - `browser.THROTTLE_STATUS`.\n  It is in the `window_bounds` rows (attach and each section) and in `stall_unstuck`.\n- `wake_if_hidden`:\n  - re-applies `_disable_background_throttling`;\n  - starts a keep-alive screencast if the tab has none;\n  - puts a minimised window back to normal off-screen.\n  - It makes no foreground calls. An unanswering tab gets browser-level commands only.\n  - Limited to once per 30 s per tab.\n  - Telemetry `window_hidden_woken` (hold stage); English job-panel notices \"...the robot woke it\" / \"...bring it to the front\".\n- The wake is tried before each frozen decision: `_tab_frozen`, `page_answers`, `_unstick` (unresponsive branch), and `_wait_new_ad` after 20 s. The 120 s busy limit is intact.\n- Tests: 23 new in `tests/test_a_covered_profile_window_is_woken.py`; 31 affected files, 524 passed. One exact-diag assertion was updated in `tests/test_editor_window_guards.py`. `docs/system/CHANGELOG.md` has an entry.\n\n## Not done\n- The local experiment with real covered windows and the live covered-window run were not done: no visible windows were allowed on the owner's laptop. The plan is in the PR body under \"Experiment plan\".\n- `browser.wake_page` still calls `bring_to_front` (pre-existing). This needs an owner decision."
         },
         "pr": 420,
-        "queued_at": "2026-10-01T05:20:33+00:00"
+        "queued_at": "2026-10-01T05:20:33+00:00",
+        "reviewer": "Reviewer-R1402Q"
       },
       "406": {
         "implementers": [
@@ -4065,6 +4066,10 @@
       "Reviewer-R1459L": {
         "session": "rev_r1459l_1001",
         "role": "Reviewer"
+      },
+      "Reviewer-R1402Q": {
+        "session": "rev_1402q_1002",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -4511,7 +4516,6 @@
       357,
       390,
       399,
-      402,
       419,
       430,
       433,
@@ -4525,7 +4529,18 @@
       437,
       447
     ],
-    "review": null,
+    "review": {
+      "id": "f6b7022cdb594d479ab86228eaf9f0b5",
+      "pr": 420,
+      "issues": [
+        402
+      ],
+      "actor": "Reviewer-R1402Q",
+      "session": "rev_1402q_1002",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-02T07:04:02+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -6290,6 +6305,13 @@
         "issue": 424,
         "claim": "5ebdc37523594b649cfb26c7e1c3b592",
         "actor": "Worker-A1424N"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-02T07:04:02+00:00",
+        "pr": 420,
+        "lane": "f6b7022cdb594d479ab86228eaf9f0b5",
+        "actor": "Reviewer-R1402Q"
       }
     ],
     "policy": {
