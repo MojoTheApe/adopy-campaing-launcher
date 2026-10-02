@@ -15,6 +15,7 @@
     {"step": "ad_creative_upload", "reason": "media-step-*", "task": "ACL-1348", "note": "creative wizard's Media step locked / covered / not reachable"},
     {"step": "ad_creative_upload", "reason": "upload-button-missing", "task": "ACL-1348", "note": "wizard open, no Upload button on the Media step"},
     {"step": "ad_creative_upload", "reason": "wizard-not-opened", "task": "ACL-1348", "note": "Set up creative did not open the creative wizard"},
-    {"step": "ad_creative_upload", "reason": "same-file-already-*", "task": "ACL-1348", "note": "same file refused for a later ad of the run"}
+    {"step": "ad_creative_upload", "reason": "same-file-already-*", "task": "ACL-1348", "note": "same file refused for a later ad of the run"},
+    {"step": "relay_selftest", "reason": "*", "task": "ACL-1330", "note": "synthetic self-test of the Sentry -> cloud routine trigger (docs/system/SENTRY_ROUTINE_SETUP.md) - not a robot failure, keep this row"}
   ]
 }
