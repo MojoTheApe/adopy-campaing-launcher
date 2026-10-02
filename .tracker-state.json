@@ -2766,9 +2766,11 @@
         "worktree": "C:\\acl-1457-connect",
         "id": "5b049b3ac71f46bb82e7d710f6250be2",
         "issue": 457,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-02T07:06:13+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 458,
+        "report": "# ACL-1457 \u2014 review fixes (PR #458)\n\nHead: 3694743da6dd99ed54a932d545840a8269afd442 (branch codex/acl-1457-one-connect).\n\n## Merges\n- work/stage merged (552866f): conflict only in docs/system/CHANGELOG.md, both sides kept (ACL-1457 entry first, then stage entries).\n- work/main merged (e0c2e35): clean.\n\n## Findings\n1. MEDIUM (double click while details pending) \u2014 fixed. `amapOpenFoundProfile` no longer sets `btn.disabled = false` after /mlx-profile-open; the only caller `amapOpenAndConnect` keeps the button disabled through open, details and connect and re-enables it in its `finally`. The now-redundant re-disable after the helper was removed.\n2. LOW (test gap) \u2014 fixed. New `tests/test_one_connect_button.py::test_a_second_click_while_it_works_does_not_open_twice`: holds the /mlx-profile-details response, asserts the button is disabled, clicks again (DOM click and direct `onclick()` call that bypasses `disabled`), asserts exactly one /mlx-profile-open, then releases details and asserts one /account-map-patch and the button re-enabled. Mutation check: putting `btn.disabled = false;` back makes this test fail.\n3. INFO (cancel after open leaves the profile running unconnected) \u2014 not changed: acceptable per the Issue, opening is the first step.\n\nCHANGELOG entry for ACL-1457 notes the review fix.\n\n## CI notes from review\n- tracker-link failure was a timing issue (run before the handoff); rerun after this handoff.\n- test (3.13, 1) DevToolsActivePort timeout in test_a_stopped_profile_never_spins_the_robot is unrelated infra flake.\n\n## Tests (headless, ACL_LIBRARY_* empty)\ntests/test_one_connect_button.py, test_connect_without_act.py, test_accounts_tab_connects_the_same_way.py, test_report_scripts_parse.py, test_country_refresh_review.py, test_the_account_tree_on_screen.py, test_bench_catalogue.py: 163 passed.\n\nscripts/acl_scan_secrets.py: clean (rc=0).\n\nNo Meta, real Multilogin, port 9090 or acl-live folders touched."
       }
     },
     "tasks": {
