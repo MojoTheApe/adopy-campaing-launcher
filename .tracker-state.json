@@ -2684,6 +2684,18 @@
         "state": "implementing",
         "started_at": "2026-10-02T05:48:49+00:00",
         "from_status": "status:todo"
+      },
+      "427": {
+        "actor": "Worker-I1427Q",
+        "session": "run_i1427q_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1427-idle-wait",
+        "worktree": "C:\\acl-1427-idle-wait",
+        "id": "3507d2b290cb4699ba7c36353846bb5b",
+        "issue": 427,
+        "state": "implementing",
+        "started_at": "2026-10-02T05:49:15+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -3263,9 +3275,13 @@
           {
             "actor": "Worker-I1427Q",
             "session": "run_i1427q_1001"
+          },
+          {
+            "actor": "Worker-I1427Q",
+            "session": "run_i1427q_1001"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-I1427Q",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3284,7 +3300,6 @@
         },
         "pr": 428,
         "queued_at": "2026-10-01T07:45:21+00:00",
-        "reviewer": "Reviewer-R1427Q",
         "review_report": "# Review PR #428 (ACL-1427) \u2014 Reviewer-R1427Q / rev_1427q_1002\n\nVerdict: **request-changes** (blocking only: merge conflict with work/stage; code itself is sound)\n\n- head: 1cafee739511ac55bc9631dc87430976efecae92 (tree e9ce1ccd54b16d56da9c34fd0201f39bd4e26f08)\n- base work/stage: 8322a6af0f9098114182cf327320bd87dd239a70 (merge-base 45a82bdca4df)\n- GitHub mergeable: CONFLICTING\n\n## Merge with work/stage (git merge-tree)\n- CONFLICT: docs/system/CHANGELOG.md only (both sides prepend entries at top: stage ACL-1476/1426/1412/1445/1344/1444/1441 vs PR's ACL-1427). Additive, keep both.\n- src/fb_ads_rpa/browser.py, src/fb_ads_rpa/rpa_publisher.py auto-merge cleanly (ACL-1444 code is in different hunks).\n\n## CI (head 1cafee7) \u2014 all 11 checks pass\ntest (3.11), test (3.13), ACL verification, tooling, tracker-link, installer (build/verify/classify), descriptor x2. No failing jobs. NB: CI ran on the pre-1444 stage; must re-run after the stage merge.\n\n## Local tests (headless, ACL_LIBRARY_* empty, affected files only)\n- Merged tree (stage + PR): 267 passed (14 files incl. test_a_finished_clean_profile_closes_itself.py from ACL-1444, hand-window x3, publisher gates/slots, browser boundary/roles, publish safety contract).\n- PR head: 221 passed.\n- Mutation check: wait disabled (limit=0) -> 7 failed; cancel wiring removed in publisher -> test_job_stop_during_the_wait_cancels_it_through_the_publisher fails; mid-wait gate re-check removed -> test_the_other_gates_are_rechecked_during_the_wait fails. Tests are real.\n\n## Findings\n1. [Blocking/process] docs/system/CHANGELOG.md:3 \u2014 conflicts with work/stage; merge stage, keep both entries, re-run CI on the new head.\n2. [Low/interaction ACL-1444] src/fb_ads_rpa/browser.py:2043 + stage rpa_publisher.py:377/422 \u2014 after a successful reopen the profile is marked a robot profile (`_start_via_mlx_api` -> `_mark_robot_profile`), so at the end of a clean job ACL-1444 `finish_job` -> `close_finished_profile` closes it. The person who opened the window by hand returns to no window at all (panel says \"Closed the profile \u2014 all campaigns are ready\"). Consistent with both specs (it is no longer a hand window), but worth stating in the ACL-1418 live check / to the owner. Non-blocking.\n3. [Low/UX] src/fb_ads_rpa/browser.py:2264-2266 \u2014 Stop during the wait raises ProfileStop(OPEN_BY_HAND); job finishes as cancelled (publish_jobs `_finish(cancelled=...)`) and telemetry note is `cancelled`, but the slot result/log line still reads \"profile open by hand\". Cosmetic.\n4. [Info/interaction ACL-1444] the 2-min wait runs inside the per-profile `serialized_browser` lock, so 1444's \"Close profile\" button returns 409 for that profile while waiting \u2014 matches \"job keeps its slot\"; Stop is the escape hatch. OK.\n5. [Info] Acceptance \"ACL-1418 live check\" not done (out of PR scope; stays open on the Issue).\n\n## Focus checks (OK)\n- Waits only when RECENT_INPUT is the sole failing gate; full `assess` every <=3 s; age/foreground/process/unknown gates stop at once, also mid-wait (WAIT_GATE) \u2014 a window brought to the front during the wait is never closed.\n- Timeout 120 s (env override, 0 = old stop, negative/garbage -> default); cancel polled every 0.5 s via ContextVar on the same thread as provider.open.\n- ACL-1388 guarantees unchanged: publish only (allow_restart and allow_kill), MLX API graceful stop allow_kill=False, never kill, no plain browser; spend reads never wait.\n- English panel text; telemetry adds only waited_s/wait_outcome, no profile ids."
       },
       "430": {
@@ -6110,6 +6125,13 @@
         "issue": 424,
         "claim": "462bb983d49c4bd6aa17343d8c56f054",
         "actor": "Worker-A1424N"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-02T05:49:15+00:00",
+        "issue": 427,
+        "claim": "3507d2b290cb4699ba7c36353846bb5b",
+        "actor": "Worker-I1427Q"
       }
     ],
     "policy": {
