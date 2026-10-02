@@ -1,5 +1,31 @@
 # System history
 
+## A failed read says "Campaigns not read", not "0 campaigns" — ACL-1504
+
+2026-10-02, Facebook_1443: Ads Manager did not open within 90 s, and the account
+map's expanded row said "IN THE ACCOUNT · 0 CAMPAIGNS · 0 ADS" above the raw
+`Page.goto` error, including the Ads Manager address with `act=`. It read as "this
+account has no campaigns".
+
+- `src/analysis_agent/account_spend.py`: a reading records whether the campaign list
+  itself was reached (`objects_read`; `_read_tree(..., reached=)`). An unparsed table
+  counts as not reached. Older records without the field are judged by themselves:
+  no rows plus an error means not read.
+- When the list was not reached, the reading sent to the screen carries
+  `objects_problem`: one short reason (for example "Ads Manager did not open in
+  90 s.") and what to do. As in ACL-1437, the reason comes from a local table of raw
+  errors. The campaign-card guides are unchanged. The tree error text is scrubbed
+  on output (`scrub_tree_error`: URLs, `act=`/`act_` ids, `run_telemetry.scrub`),
+  including in records saved before this change.
+- The last good tree for the account (any period, `objects_prev`) is kept with a
+  reading that did not reach the list. A second failure in a row does not erase it.
+- `report.html` (account tree): "campaigns not read · tried …", the reason, what to
+  do, and a **Read again** button that presses the row's existing Read spend.
+  There is no new reading path. The raw error is under a collapsed "Technical
+  details". The last good rows are shown under "last good read · … · read <date> ·
+  Meta numbers for …", without turn-off buttons, because their switches may have
+  changed. "0 campaigns · 0 ads" appears only when the list was read and was empty.
+
 ## A covered profile window is recorded and woken without the foreground — ACL-1402
 
 2026-09-30, Facebook_1443 (fba2c3f5): `website_selected` → `conversion_event` took

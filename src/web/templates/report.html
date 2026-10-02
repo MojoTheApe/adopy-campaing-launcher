@@ -2147,6 +2147,14 @@
        число (ревью 22.09). Тогда источник остаётся только в подсказке. */
     body.cbd-open .amap-tree-num.res .amap-tree-src { display: none; }
     .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
+    /* ACL-1504: список кампаний не прочитан — причина, что делать, Read again. */
+    .amap-tree-notread { font-size: 0.78rem; margin-bottom: 0.5rem; }
+    .amap-tree-notread-why { color: var(--danger); font-weight: 600; }
+    .amap-tree-notread-do { color: var(--text); padding-top: 0.15rem; }
+    .amap-tree-notread-do .amap-tree-reread { margin-left: 0.4rem; }
+    .amap-tree-tech { padding-top: 0.3rem; color: var(--muted); font-size: 0.72rem; }
+    .amap-tree-tech summary { cursor: pointer; }
+    .amap-tree-tech-body { white-space: pre-wrap; word-break: break-word; padding-top: 0.2rem; }
     /* Включённая строка — кнопка: её можно выключить. Выключенная и
        «непонятно» остаются надписями, нажимать там нечего. */
     button.amap-tree-sw { cursor: pointer; font-family: inherit; }
@@ -7225,7 +7233,9 @@ function amapTreeLine(o, adCount) {
      Перечитать аккаунт — и всё встанет на место. */
   /* Без id (новая таблица Ads Manager, Doc19 18.09) выключать нечем: turn_off
      откажет. Кнопку не рисуем, а в подсказке говорим почему. */
-  var canAct = o.switch === 'on' && !!o.id
+  /* ACL-1504: строки прежнего удачного чтения (`_stale`) — только для
+     показа: тумблер с тех пор мог смениться. */
+  var canAct = o.switch === 'on' && !!o.id && !o._stale
     && (o.level === 'campaign' || (o.level === 'ad' && o.parent_id));
   var live = canAct;
   var sw = document.createElement(live ? 'button' : 'span');
@@ -7605,6 +7615,52 @@ function amapEnsureCaret(row, onToggle) {
   return caret;
 }
 
+/* ACL-1504: список кампаний не прочитан. Причина и «что делать» приходят с
+   сервера готовыми (`tree_problem` в account_spend.py) — дешборд их только
+   рисует, как и проблемы кампании (ACL-1437). Read again — та же кнопка Read
+   spend этой строки, другого пути чтения нет. Сырой текст ошибки — свёрнут
+   и уже без act= и адресов (`scrub_tree_error`). */
+function amapTreeNotRead(row, s, problem) {
+  var box = document.createElement('div');
+  box.className = 'amap-tree-notread';
+  var why = document.createElement('div');
+  why.className = 'amap-tree-notread-why';
+  why.textContent = problem.reason || 'The campaign list was not reached.';
+  box.appendChild(why);
+
+  var todo = document.createElement('div');
+  todo.className = 'amap-tree-notread-do';
+  todo.textContent = '→ ' + (problem.action || 'Read again.') + ' ';
+  var again = document.createElement('button');
+  again.type = 'button';
+  again.className = 'amap-btn amap-tree-reread';
+  again.textContent = 'Read again';
+  again.title = 'Read spend and campaigns for this account again';
+  var read = row.querySelector('.amap-read');
+  again.disabled = !read || read.disabled;
+  again.addEventListener('click', function () {
+    var btn = row.querySelector('.amap-read');
+    if (!btn || btn.disabled) return;
+    again.disabled = true;
+    btn.click();
+  });
+  todo.appendChild(again);
+  box.appendChild(todo);
+
+  if (s.objects_error) {
+    var tech = document.createElement('details');
+    tech.className = 'amap-tree-tech';
+    var sum = document.createElement('summary');
+    sum.textContent = 'Technical details';
+    var body = document.createElement('div');
+    body.className = 'amap-tree-tech-body';
+    body.textContent = s.objects_error;
+    tech.appendChild(sum); tech.appendChild(body);
+    box.appendChild(tech);
+  }
+  return box;
+}
+
 function amapPaintTree(row, s) {
   /* Прежний блок снимается всегда: устаревшее состояние живого аккаунта —
      худшее, что здесь можно оставить на экране. Раскрытость при этом
@@ -7624,7 +7680,16 @@ function amapPaintTree(row, s) {
   }
 
   var objects = (s && s.objects) || [];
-  if (!objects.length && !(s && s.objects_error)) {
+  /* ACL-1504: чтение не дошло до списка кампаний (сервер сказал это в
+     `objects_problem`). Тогда «0 campaigns · 0 ads» — неправда: список не
+     пустой, его просто не видели. Пишем «campaigns not read», причину одной
+     фразой, что делать, Read again и свёрнутые технические подробности;
+     прежнее удачное дерево остаётся со своей датой. */
+  var problem = (s && s.objects_problem) || null;
+  var prev = (problem && s.objects_prev && s.objects_prev.objects) || [];
+  /* `objects_read === true` при пустом списке — список прочитан и пуст:
+     тогда «0 campaigns» — правда, и её показываем (ACL-1504). */
+  if (!objects.length && !(s && s.objects_error) && !problem && !(s && s.objects_read === true)) {
     row.classList.remove('amap-tree-open');
     return;
   }
@@ -7645,7 +7710,27 @@ function amapPaintTree(row, s) {
   /* ACL-1271: дерево из чтения за другие даты говорит об этом сразу — его
      числа Meta за те даты, не за период на экране. */
   var onScreen = typeof amapPeriod === 'function' ? amapPeriod() : null;
-  if (onScreen && onScreen.from && s.date_from
+  if (problem) {
+    head.textContent = 'in the account · campaigns not read · tried ' + (s.finished_at || '');
+    head.classList.add('amap-tree-notread-head');
+    box.appendChild(head);
+    box.appendChild(amapTreeNotRead(row, s, problem));
+    if (prev.length) {
+      /* Прежние строки — только для чтения: их тумблер мог с тех пор
+         смениться, и выключать по ним нельзя (см. `_stale` в amapTreeLine). */
+      var p = s.objects_prev;
+      var pSets = prev.filter(function (o) { return o.level !== 'ad'; }).length;
+      head = document.createElement('div');
+      head.className = 'amap-tree-head old amap-tree-prev-head';
+      head.textContent = 'last good read · ' + pSets + ' campaigns · ' + (prev.length - pSets)
+        + ' ads · read ' + (p.at || '') + (p.date_from ? ' · Meta numbers for ' + p.date_from
+        + (p.date_to && p.date_to !== p.date_from ? '…' + p.date_to : '') : '');
+      objects = prev.map(function (o) { return Object.assign({}, o, {_stale: true}); });
+    } else {
+      head = null;
+      objects = [];
+    }
+  } else if (onScreen && onScreen.from && s.date_from
       && (s.date_from !== onScreen.from || (s.date_to || s.date_from) !== onScreen.to)) {
     /* Колонки Meta в дереве — за даты чтения, колонки книги (ACL-1256) — за
        даты на экране; говорим это прямо, иначе рядом стоят числа за разное. */
@@ -7654,7 +7739,7 @@ function amapPaintTree(row, s) {
       + ', workbook numbers for the dates on screen';
     head.classList.add('old');
   }
-  box.appendChild(head);
+  if (head) box.appendChild(head);
 
   /* Объявления встают под свою кампанию, а не общим списком следом. Порядок
      задаёт `parent_id`, который чтение знает по построению: список
@@ -7713,7 +7798,10 @@ function amapPaintTree(row, s) {
   /* Оговорка идёт по каждому уровню отдельно: кампании могут сойтись копейка
      в копейку, а объявления нет — так и было на живом аккаунте. Общая фраза
      про «строки» заставила бы усомниться и в тех, что сходятся. */
+  /* ACL-1504: у прежнего дерева другие даты, чем у спенда этого чтения, —
+     сравнивать их суммы нельзя. */
   [['campaign', 'campaigns'], ['ad', 'ads']].forEach(function (pair) {
+    if (problem) return;
     var gap = amapCoverage(objects, pair[0], s.spend);
     if (!gap) return;
     var note = document.createElement('div');
@@ -7728,7 +7816,7 @@ function amapPaintTree(row, s) {
     box.appendChild(note);
   });
 
-  if (s.objects_error) {
+  if (s.objects_error && !problem) {  // ACL-1504: при `problem` — в Technical details
     var err = document.createElement('div');
     err.className = 'amap-tree-err';
     err.textContent = s.objects_error;

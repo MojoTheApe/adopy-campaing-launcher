@@ -208,9 +208,106 @@ class SpendReading:
     objects: list[dict] = field(default_factory=list)
     objects_error: str = ""
     objects_how: str = ""         # чем разобрана таблица — чтобы знать, что сломалось
+    #: ACL-1504: дошло ли чтение до самого списка кампаний. `False` — не
+    #: дошло (Ads Manager не открылся, открылся чужой кабинет…), и пустой
+    #: `objects` тогда значит «не прочитано», а не «0 кампаний». `None` — запись
+    #: старше этого поля: тогда судим по ней самой, см. `tree_not_read`.
+    objects_read: bool | None = None
+    #: ACL-1504: последнее удачно прочитанное дерево аккаунта, если это чтение
+    #: до списка не дошло: `{objects, at, date_from, date_to}`. Иначе пусто.
+    objects_prev: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        out = asdict(self)
+        # ACL-1504: текст ошибки дерева уходит на экран и в «Technical
+        # details» — без id кабинета и адресов. Чистим здесь, на выходе, чтобы
+        # это касалось и записей, сохранённых до правки.
+        out["objects_error"] = scrub_tree_error(self.objects_error)
+        if tree_not_read(self):
+            out["objects_problem"] = tree_problem(self.objects_error)
+        return out
+
+
+# ─────────────────────── дерево не прочитано (ACL-1504) ───────────────────────
+
+_URL_RE = re.compile(r"""\b(?:https?|wss?)://[^\s"'<>)\]]+""", re.I)
+_ACT_ID_RE = re.compile(r"\bact_\d+")
+
+
+def scrub_tree_error(text: str) -> str:
+    """Текст ошибки дерева без `act=`/`act_` id и без адресов."""
+    from src.fb_ads_rpa import run_telemetry
+
+    out = _URL_RE.sub("<url>", str(text or ""))
+    out = _ACT_ID_RE.sub("act_<hidden>", out)
+    return run_telemetry.scrub(out)
+
+
+def tree_not_read(reading: "SpendReading") -> bool:
+    """Чтение не дошло до списка кампаний — показывать «not read», не «0».
+
+    Старые записи поля `objects_read` не знают: у них пустое дерево вместе с
+    ошибкой значит то же самое — удачно прочитанный пустой список ошибки не
+    оставляет.
+    """
+    if reading.state != "ok":
+        return False
+    if reading.objects_read is not None:
+        return not reading.objects_read
+    return not reading.objects and bool(reading.objects_error)
+
+
+#: Сырые ошибки дерева → одна фраза человеку и что делать. Подход ACL-1437
+#: (`failure_policy.GUIDE`), но своё и местное: здесь читают, а не строят.
+_TREE_RETRY = "Open the profile in Multilogin, check Ads Manager loads, close it, then Read again."
+_TREE_GUIDE: tuple[tuple[str, str, str], ...] = (
+    # (признак в сырой ошибке, причина, что делать)
+    ("navigation failed", "Ads Manager did not open.", _TREE_RETRY),
+    ("did not load in time", "The campaign table did not load in time.", _TREE_RETRY),
+    ("a different ad account opened", "Ads Manager opened a different ad account.",
+     "Open the profile in Multilogin, switch Ads Manager to this ad account, close it, then Read again."),
+    ("a different period is on screen", "Ads Manager showed a different period.",
+     "Read again; if it repeats, check the date picker in Ads Manager."),
+    ("table was not parsed", "The campaign table could not be read.", _TREE_RETRY),
+    ("unexpected page response", "The campaign table could not be read.", _TREE_RETRY),
+)
+
+
+def tree_problem(error: str) -> dict[str, str]:
+    """Почему список кампаний не прочитан — одной фразой, и что делать."""
+    low = str(error or "").lower()
+    for sign, reason, action in _TREE_GUIDE:
+        if sign in low:
+            if sign == "navigation failed":
+                m = re.search(r"timeout\s+(\d+)\s*ms", low)
+                if m:
+                    reason = f"Ads Manager did not open in {int(m.group(1)) // 1000} s."
+            return {"reason": reason, "action": action}
+    return {"reason": "The campaign list was not reached.", "action": _TREE_RETRY}
+
+
+def _last_good_tree(data: dict[str, dict], account: str) -> dict:
+    """Последнее удачно прочитанное дерево аккаунта за любой период.
+
+    Берём и из записей, которые сами несут прежнее дерево (`objects_prev`):
+    две неудачи подряд не должны стирать то, что было прочитано до них.
+    """
+    best: dict = {}
+    for key, rec in data.items():
+        if key.startswith(_STATUS_PREFIX) or not isinstance(rec, dict):
+            continue
+        if rec.get("account") != account:
+            continue
+        got: dict = {}
+        if rec.get("objects") and rec.get("objects_read") is not False:
+            got = {"objects": rec["objects"], "at": str(rec.get("finished_at") or ""),
+                   "date_from": str(rec.get("date_from") or ""),
+                   "date_to": str(rec.get("date_to") or "")}
+        elif isinstance(rec.get("objects_prev"), dict) and rec["objects_prev"].get("objects"):
+            got = dict(rec["objects_prev"])
+        if got and str(got.get("at") or "") > str(best.get("at") or ""):
+            best = got
+    return best
 
 
 # ─────────────────────────── хранилище ───────────────────────────
@@ -327,6 +424,10 @@ def _put(reading: SpendReading) -> None:
     with _STORE_LOCK:
         data = _load_all()
         key = _key(reading.account, reading.date_from, reading.date_to)
+        if tree_not_read(reading) and not reading.objects_prev:
+            # ACL-1504: список не прочитан — прежнее дерево остаётся на экране
+            # со своей датой, а не исчезает вместе с неудачей.
+            reading.objects_prev = _last_good_tree(data, reading.account)
         data[key] = reading.to_dict()
         if reading.status:
             data[_STATUS_PREFIX + reading.account] = {
@@ -999,12 +1100,15 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         # здесь `except Exception`: сюда мы приходим с готовым результатом, и
         # уронить его необработанным исключением — самое плохое, что может
         # случиться.
+        reached: dict[str, bool] = {}
         try:
             out.objects, out.objects_how, out.objects_error = _read_tree(
-                page, act, expected_act, date_from, date_to
+                page, act, expected_act, date_from, date_to, reached=reached,
             )
         except Exception as exc:            # noqa: BLE001 — см. выше
             out.objects_error = f"Campaign tree was not read: {exc}"
+        # ACL-1504: «0 кампаний» — только если список действительно прочитан.
+        out.objects_read = bool(reached.get("list"))
         return out
     finally:
         if conn is not None:
@@ -2308,6 +2412,7 @@ def _campaigns_from_page_data(page) -> dict[str, dict]:
 
 def _read_tree(
     page, act: str, expected_act: str, date_from: str, date_to: str = "",
+    *, reached: dict[str, bool] | None = None,
 ) -> tuple[list[dict], str, str]:
     """Пройти уровни и собрать дерево. Возвращает `(объекты, чем, ошибка)`.
 
@@ -2360,6 +2465,10 @@ def _read_tree(
         parents, how, err = read_level(page, top)
         if not _context_matches(top):
             return [], how, "; ".join(errors)
+        if reached is not None:
+            # ACL-1504: список кампаний прочитан (пусть и пустой) — отказ
+            # разбора таблицы приходит пустым списком с ошибкой, это не он.
+            reached["list"] = bool(parents) or not err
         if how:
             hows.append(f"{top}:{how}")
         if err:
