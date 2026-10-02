@@ -2123,7 +2123,31 @@ async def api_creatives() -> JSONResponse:
             # они не отличались никак.
             "size_bytes": size,
         })
+    _add_story_labels(files)
     return JSONResponse({"files": files})
+
+
+def _add_story_labels(files: list[dict]) -> None:
+    """ACL-1426: what goes on the Vertical (story) card of each file.
+
+    Same rules as the robot (`creative_pairing.plan`): the pair is looked up by
+    creative number among the files of the same folder. The Builder shows
+    `story_label` next to the ad ("Story: 2403_story.mp4" / "Story: same file,
+    Original").
+    """
+    from src.fb_ads_rpa import creative_pairing
+
+    by_folder: dict[str, list[str]] = {}
+    for f in files:
+        by_folder.setdefault(f.get("folder") or "", []).append(f["filename"])
+    for f in files:
+        try:
+            plan = creative_pairing.plan(f["filename"], by_folder.get(f.get("folder") or "", []))
+            f["story_label"] = plan.builder_label()
+            if plan.square_file != f["filename"]:
+                f["square_file"] = plan.square_file
+        except Exception:
+            f["story_label"] = ""
 
 
 def _ad_copy_rows() -> list[dict]:
@@ -4086,6 +4110,25 @@ async def publish_jobs_cancel(job_id: str) -> JSONResponse:
     if not result.get("ok"):
         return JSONResponse(result, status_code=404 if result.get("error") == "Job not found" else 400)
     return JSONResponse(result)
+
+
+@app.post("/publish-jobs/{job_id}/close-profile")
+async def publish_jobs_close_profile(job_id: str) -> JSONResponse:
+    """«Close profile» on a finished job's panel (ACL-1444).
+
+    Graceful MLX API stop of that account's profile (never kill); refused
+    with 409 while a run or a read is using the profile. Runs off the event
+    loop: the stop waits for Multilogin.
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    from src.web.publish_jobs import close_profile
+
+    result = await run_in_threadpool(close_profile, job_id)
+    if result.get("ok"):
+        return JSONResponse(result)
+    status = {"not_found": 404, "busy": 409}.get(str(result.get("code")), 502)
+    return JSONResponse(result, status_code=status)
 
 
 @app.get("/publish-jobs/{job_id}")
