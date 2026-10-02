@@ -2985,6 +2985,31 @@
     @media (prefers-reduced-motion: reduce) {
       .cbd-root, .cbd-handle-arrow { transition: none; }
     }
+    /* ── Второстепенные кнопки — ссылками (ACL-1455, вариант C 01.10) ──────
+       Были нарисованы рамкой полей (--field-border), почти тем же фоном и
+       серым текстом подсказки: глаз не отличал, куда писать, а что нажимать.
+       Рамка теперь значит «поле»; кнопка — синий текст без рамки. Правила в
+       одном месте и сильнее разбросанных выше; рамка остаётся прозрачной
+       шириной 1px, чтобы строки таблицы не прыгали. */
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn) {
+      background: transparent; border: 1px solid transparent;
+      color: var(--accent); font-weight: 500;
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):hover:not(:disabled) {
+      background: var(--accent-soft); border-color: transparent; color: var(--accent);
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):focus-visible {
+      outline: 2px solid var(--focus-ring); outline-offset: 1px;
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):disabled {
+      color: var(--muted); background: transparent; cursor: not-allowed;
+    }
+    :is(.amap-btn.danger, .amap .amap-x, .acc-btn.danger, .amap-btn.amap-live-bad) {
+      color: var(--bad); border-color: transparent;
+    }
+    :is(.amap-btn.danger, .amap .amap-x, .acc-btn.danger, .amap-btn.amap-live-bad):hover:not(:disabled) {
+      background: var(--bad-soft); color: var(--bad);
+    }
   </style>
 </head>
 <body>

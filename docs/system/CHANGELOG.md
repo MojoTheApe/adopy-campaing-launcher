@@ -1,5 +1,15 @@
 # System history
 
+## Buttons no longer look like input fields — ACL-1455
+
+2026-10-01 the owner noted that small buttons and input fields look the same. The
+secondary buttons (`.amap-btn`, `.amap-x`, `.acc-btn`) were drawn with the fields'
+frame, nearly the same background and the placeholder's grey text. Owner's choice
+among three mockups: link-style buttons. They now have blue text and no frame, with
+a soft blue background on hover and a focus ring for the keyboard; delete and error
+states are red, disabled ones grey. Fields keep their frame — the frame now means
+"type here". Primary and other filled buttons are unchanged. One CSS block, both
+themes; no markup changes.
 ## Video pairs keep the post file with a warning when the story cannot be placed — ACL-1476
 
 Owner decision 2026-10-01 (Issue #476) after ACL-1426 went live: two post/story pair
