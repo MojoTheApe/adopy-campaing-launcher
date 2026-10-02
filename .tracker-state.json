@@ -2923,7 +2923,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "31": {
+        "actor": "Worker-W132T",
+        "session": "run_w132t_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-132-copy-text",
+        "worktree": "C:\\acl-132-copytext",
+        "id": "f5829d5c3a1a46ff987e0ae46da69f08",
+        "issue": 31,
+        "state": "implementing",
+        "started_at": "2026-10-02T11:31:33+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -3973,9 +3986,13 @@
           {
             "actor": "Worker-W132T",
             "session": "run_w132t_1001"
+          },
+          {
+            "actor": "Worker-W132T",
+            "session": "run_w132t_1001"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W132T",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3994,8 +4011,7 @@
         },
         "pr": 465,
         "queued_at": "2026-10-02T09:49:55+00:00",
-        "review_report": "# PR #465 (ACL-132) returned \u2014 CI failure caused by the PR (coordinator, 2026-10-02)\n\nHead e8002bd (review approved round 2) fails CI on both Python versions, shard 3:\n`tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` \u2014 `TypeError: Cannot read properties of undefined (reading 'textContent')` (runs 36998587288, jobs 110815463601 / 110815463511; rerun failed the same way).\nLikely cause: the new `amapApplyReading` / `amapStatusReport` rebuild of the status cell changes the elements this regression test (and possibly the poll code) expects. Fix the product code or, if the test reads an element that legitimately moved, update the test with a reason; run test_review_ui_regressions.py together with the ACL-132 tests.",
-        "reviewer": "Reviewer-R1331Q"
+        "review_report": "# PR #465 (ACL-132) returned \u2014 CI failure caused by the PR (coordinator, 2026-10-02)\n\nHead e8002bd (review approved round 2) fails CI on both Python versions, shard 3:\n`tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` \u2014 `TypeError: Cannot read properties of undefined (reading 'textContent')` (runs 36998587288, jobs 110815463601 / 110815463511; rerun failed the same way).\nLikely cause: the new `amapApplyReading` / `amapStatusReport` rebuild of the status cell changes the elements this regression test (and possibly the poll code) expects. Fix the product code or, if the test reads an element that legitimately moved, update the test with a reason; run test_review_ui_regressions.py together with the ACL-132 tests."
       },
       "466": {
         "implementers": [
@@ -6982,6 +6998,13 @@
           "report": "# PR #465 (ACL-132) returned \u2014 CI failure caused by the PR (coordinator, 2026-10-02)\n\nHead e8002bd (review approved round 2) fails CI on both Python versions, shard 3:\n`tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` \u2014 `TypeError: Cannot read properties of undefined (reading 'textContent')` (runs 36998587288, jobs 110815463601 / 110815463511; rerun failed the same way).\nLikely cause: the new `amapApplyReading` / `amapStatusReport` rebuild of the status cell changes the elements this regression test (and possibly the poll code) expects. Fix the product code or, if the test reads an element that legitimately moved, update the test with a reason; run test_review_ui_regressions.py together with the ACL-132 tests.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-02T11:31:33+00:00",
+        "issue": 31,
+        "claim": "f5829d5c3a1a46ff987e0ae46da69f08",
+        "actor": "Worker-W132T"
       }
     ],
     "policy": {
