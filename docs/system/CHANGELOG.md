@@ -1,5 +1,29 @@
 # System history
 
+## A hand-opened window waits for the computer to go idle — ACL-1427
+
+The Publish click itself resets the "60 s without input" timer of ACL-1388, so the
+gate checked a few seconds later almost never passed. Owner decision 2026-10-01:
+wait instead of stopping at once.
+
+- `hand_window.wait_until_safe`: when the ONLY failing gate is recent input, wait up
+  to 2 minutes (`IDLE_WAIT_S`, per-machine `FB_RPA_HAND_WINDOW_IDLE_WAIT_S`; `0` =
+  old immediate stop), re-checking all gates every 3 s. Idle for 60 s with the other
+  gates still passing: close and reopen as in ACL-1388. Input for the whole 2 minutes:
+  the old `profile_open_by_hand` stop. Any other gate failing (before or during the
+  wait) stops at once. The job keeps its profile slot while waiting.
+- Stop of the job interrupts the wait within half a second: `RpaPublisher` wraps the
+  browser open in `hand_window.watch_cancel`.
+- Visible: job panel line "Waiting for the computer to be idle to reopen <account>'s
+  hand-opened window — don't use the mouse or keyboard for a minute"; telemetry
+  `profile_hand_window` diag gains `waited_s` and `wait_outcome`
+  (`no_wait`/`idle`/`timeout`/`gate_failed`/`cancelled`; note `cancelled` on Stop).
+- Stop during the wait: the slot result adds "the job was stopped while waiting for the
+  computer to be idle", and no Sentry campaign-stop event is sent (it is not a failure).
+- With ACL-1444: a reopened window is the robot's profile now, so at the end of a clean
+  job it closes itself like any robot profile; while the wait runs, the job keeps the
+  profile's slot and "Close profile" answers 409 — Stop is the way out.
+
 ## A new Sentry failure starts the triage routine in the cloud — ACL-1330
 
 2026-09-30 owner decision: no polling and no empty runs; the triage agent starts only

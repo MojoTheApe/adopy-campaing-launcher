@@ -1919,17 +1919,27 @@ HAND_WINDOW_EXIT_WAIT_S = 20
 #: Строка для человека в панели задания, когда робот сам закрыл окно.
 HAND_WINDOW_NOTICE = "Closed the hand-opened window of {account} and reopened it for the robot"
 
+#: ACL-1427, ревью PR #428 (F3): хвост причины остановки, когда ожидание
+#: тишины ввода прервал Stop задания.
+HAND_WINDOW_WAIT_STOPPED = "the job was stopped while waiting for the computer to be idle"
+
+#: ACL-1427: строка в панели, пока робот ждёт тишины ввода на машине.
+HAND_WINDOW_WAIT_NOTICE = ("Waiting for the computer to be idle to reopen {account}'s hand-opened "
+                           "window — don't use the mouse or keyboard for a minute")
+
 
 def _record_hand_window(entry: AccountMapEntry, *, ok: bool, where: str, note: str,
-                        verdict: "hand_window.Verdict", error: str = "") -> None:
+                        verdict: "hand_window.Verdict", error: str = "",
+                        wait: "hand_window.Wait | None" = None) -> None:
     """Строка телеметрии `profile_hand_window` и крошка Sentry (ACL-1388).
 
     `note` — чем кончилось (`reopened`, причина отказа, `mlx_stop_failed`…),
     в `diag` — где и что намерили (возраст окна, тишина ввода). Без id
-    профиля, как у `_record_profile_restart`.
+    профиля, как у `_record_profile_restart`. ACL-1427: `wait` — сколько
+    ждали тишины ввода и чем кончилось (`waited_s`, `wait_outcome`).
     """
     diag = {"where": where, "workspace": (getattr(entry, "multilogin_instance", "") or "A"),
-            **verdict.diag()}
+            **verdict.diag(), **(wait.diag() if wait is not None else {})}
     if error:
         diag["error"] = error[:160]
     try:
@@ -2244,12 +2254,24 @@ class MultiloginAttachOnlyProvider:
         профили, простой браузер не открываем. Вход в Facebook проверяет
         обычный путь к списку кампаний: разлогинен — `profile_logged_out`,
         без повторов.
+
+        ACL-1427: если не прошла только тишина ввода (щелчок Publish сам её
+        сбрасывает), ждём её до 2 минут (`hand_window.wait_until_safe`) с
+        перепроверкой всех условий и строкой в панели; Stop задания
+        прерывает ожидание. Место профиля задание при этом держит.
         """
         pids = _profile_pids(udd, profile_id)
-        verdict = hand_window.assess(pids)
+        wait = hand_window.wait_until_safe(
+            pids, on_wait=lambda v: _tell_job(HAND_WINDOW_WAIT_NOTICE.format(account=account_label)))
+        verdict = wait.verdict
         if not verdict.safe:
-            _record_hand_window(entry, ok=False, where=where, note=verdict.reason, verdict=verdict)
-            raise _open_by_hand(profile_id, account_label, where, verdict)
+            cancelled = wait.outcome == hand_window.WAIT_CANCELLED
+            note = "cancelled" if cancelled else verdict.reason
+            _record_hand_window(entry, ok=False, where=where, note=note, verdict=verdict, wait=wait)
+            # Ревью PR #428 (F3): Stop во время ожидания — в итоге слота видно,
+            # что задание остановил человек, а не только «открыт руками».
+            raise _open_by_hand(profile_id, account_label,
+                                f"{where}; {HAND_WINDOW_WAIT_STOPPED}" if cancelled else where, verdict)
         log.warning(
             "%s: profile %s is open by hand, but its window is %.0f s old and the machine has been "
             "idle for %.0f s - closing it through the MLX API and reopening it for the robot",
@@ -2259,10 +2281,11 @@ class MultiloginAttachOnlyProvider:
         except Exception as exc:
             # Не закрылось через API — окно человека остаётся как было.
             _record_hand_window(entry, ok=False, where=where, note="mlx_stop_failed", verdict=verdict,
-                                error=_exc_text(exc))
+                                wait=wait, error=_exc_text(exc))
             raise _open_by_hand(profile_id, account_label, where, verdict) from exc
         if not _hand_window_gone(udd, profile_id, pids):
-            _record_hand_window(entry, ok=False, where=where, note="still_running", verdict=verdict)
+            _record_hand_window(entry, ok=False, where=where, note="still_running", verdict=verdict,
+                                wait=wait)
             raise _open_by_hand(profile_id, account_label, where, verdict)
         # Окно уже закрыто: не поднялось — это отказ перезапуска, профиль
         # может остаться закрытым (как у `restart_unresponsive`).
@@ -2272,9 +2295,9 @@ class MultiloginAttachOnlyProvider:
         except Exception as exc:
             detail = _exc_text(exc)
             _record_hand_window(entry, ok=False, where=where, note="restart_failed", verdict=verdict,
-                                error=detail)
+                                wait=wait, error=detail)
             raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
-        _record_hand_window(entry, ok=True, where=where, note="reopened", verdict=verdict)
+        _record_hand_window(entry, ok=True, where=where, note="reopened", verdict=verdict, wait=wait)
         _tell_job(HAND_WINDOW_NOTICE.format(account=account_label))
         return conn
 
