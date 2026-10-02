@@ -2739,6 +2739,18 @@
         "state": "implementing",
         "started_at": "2026-10-02T07:05:22+00:00",
         "from_status": "status:todo"
+      },
+      "457": {
+        "actor": "Worker-C1457O",
+        "session": "run_c1457o_1001",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1457-one-connect",
+        "worktree": "C:\\acl-1457-connect",
+        "id": "5b049b3ac71f46bb82e7d710f6250be2",
+        "issue": 457,
+        "state": "implementing",
+        "started_at": "2026-10-02T07:06:13+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -3691,11 +3703,15 @@
           {
             "actor": "Worker-C1457O",
             "session": "run_c1457o_1001"
+          },
+          {
+            "actor": "Worker-C1457O",
+            "session": "run_c1457o_1001"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-C1457O",
-        "coordinator": "Coordinator-D0930K",
+        "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-C1457O",
           "session": "run_c1457o_1001",
@@ -3712,7 +3728,6 @@
         },
         "pr": 458,
         "queued_at": "2026-10-01T12:41:31+00:00",
-        "reviewer": "Reviewer-R1457K",
         "review_report": "# Independent review \u2014 PR #458 (Issue #457 / ACL-1457)\n\nReviewer-R1457K (rev_r1457k_1001); implementer Worker-C1457O.\nHead e3ec72917074edbe7763de843f606ced8e5b30ed, base work/stage fe39254c990f37a534dd48948ed8f7f49e519c51 (merge-base 3a629ca), tree ceb4efd6339ed62581a5ba2681065984bab0e19f.\n\n## Verdict: request-changes\n\n## Findings\n1. MEDIUM \u2014 src/web/templates/report.html:8670 (amapOpenFoundProfile `btn.disabled = false;`) together with :8690-8698 (amapOpenAndConnect).\n   The shared helper re-enables the button right after /mlx-profile-open returns, then awaits /mlx-profile-details with the button ENABLED. amapOpenAndConnect only re-disables after the helper returns. A second click in that window passes `if (btn.disabled) return;` and starts a second open + connect flow.\n   Reproduced headless (held /mlx-profile-details response): button.disabled == false while details pending; a 2nd click produced calls [/mlx-profile-open, /mlx-profile-details, /mlx-profile-open, /mlx-profile-details] \u2014 two opens, two name prompts, potentially two /account-map-patch. Violates the Issue criterion \"The button is disabled while it works, so a double click does not start two opens\".\n   Fix: don't re-enable inside amapOpenFoundProfile when called from amapOpenAndConnect (e.g. a keepDisabled flag, or move the re-enable to the caller / finally), and add a test that clicks twice while details are pending and asserts one /mlx-profile-open.\n2. LOW (test gap) \u2014 tests/test_one_connect_button.py: no double-click / disabled-state test; the criterion above is untested, which is why finding 1 passed.\n3. INFO \u2014 amapConnect name-prompt cancel after a successful open leaves the profile running unconnected; acceptable per Issue (open is the first step), noting only.\n\n## Verified OK\n- One Connect button, no Open (render + Playwright test). Open goes only through /mlx-profile-open (Multilogin automation; server unchanged; no plain-browser path added). amap-openprof untouched.\n- Failed open continues connecting; fallback prompt no longer mentions Open; new text English.\n- No Publish/Meta paths touched; fixtures use fake ids (p1/f1/act_111), no secrets.\n- Mutation checks: `if (!opened) return;` -> test_a_failed_open_does_not_cancel_connecting fails; render calling amapConnect directly -> 3 tests fail. Tests are real.\n\n## Tests run (headless, ACL_LIBRARY_* empty)\ntest_one_connect_button, test_connect_without_act, test_accounts_tab_connects_the_same_way, test_report_scripts_parse, test_country_refresh_review, test_the_account_tree_on_screen: 155 passed.\n\n## CI\n- tracker-link FAIL: \"#457: start and implement the task, then move it to Review before a ready PR\" \u2014 run created 12:41:15, Issue moved to status:review 12:41:27: tracker-link run made before handoff; re-run should pass.\n- test (3.13, 1) FAIL: ERROR tests/test_a_stopped_profile_never_spins_the_robot.py::test_the_probe_and_the_waits_on_a_stopped_profile_return_at_once \u2014 TimeoutError no DevToolsActivePort after 60 s (Chromium start on runner). Not touched by the PR, passes on 3.11 shard: flaky/infra. 1309 passed.\n- ACL verification FAIL: aggregate (TESTS: failure) of the above.\n- All other checks pass."
       },
       "459": {
@@ -6424,6 +6439,13 @@
           "report": "# Independent review \u2014 PR #458 (Issue #457 / ACL-1457)\n\nReviewer-R1457K (rev_r1457k_1001); implementer Worker-C1457O.\nHead e3ec72917074edbe7763de843f606ced8e5b30ed, base work/stage fe39254c990f37a534dd48948ed8f7f49e519c51 (merge-base 3a629ca), tree ceb4efd6339ed62581a5ba2681065984bab0e19f.\n\n## Verdict: request-changes\n\n## Findings\n1. MEDIUM \u2014 src/web/templates/report.html:8670 (amapOpenFoundProfile `btn.disabled = false;`) together with :8690-8698 (amapOpenAndConnect).\n   The shared helper re-enables the button right after /mlx-profile-open returns, then awaits /mlx-profile-details with the button ENABLED. amapOpenAndConnect only re-disables after the helper returns. A second click in that window passes `if (btn.disabled) return;` and starts a second open + connect flow.\n   Reproduced headless (held /mlx-profile-details response): button.disabled == false while details pending; a 2nd click produced calls [/mlx-profile-open, /mlx-profile-details, /mlx-profile-open, /mlx-profile-details] \u2014 two opens, two name prompts, potentially two /account-map-patch. Violates the Issue criterion \"The button is disabled while it works, so a double click does not start two opens\".\n   Fix: don't re-enable inside amapOpenFoundProfile when called from amapOpenAndConnect (e.g. a keepDisabled flag, or move the re-enable to the caller / finally), and add a test that clicks twice while details are pending and asserts one /mlx-profile-open.\n2. LOW (test gap) \u2014 tests/test_one_connect_button.py: no double-click / disabled-state test; the criterion above is untested, which is why finding 1 passed.\n3. INFO \u2014 amapConnect name-prompt cancel after a successful open leaves the profile running unconnected; acceptable per Issue (open is the first step), noting only.\n\n## Verified OK\n- One Connect button, no Open (render + Playwright test). Open goes only through /mlx-profile-open (Multilogin automation; server unchanged; no plain-browser path added). amap-openprof untouched.\n- Failed open continues connecting; fallback prompt no longer mentions Open; new text English.\n- No Publish/Meta paths touched; fixtures use fake ids (p1/f1/act_111), no secrets.\n- Mutation checks: `if (!opened) return;` -> test_a_failed_open_does_not_cancel_connecting fails; render calling amapConnect directly -> 3 tests fail. Tests are real.\n\n## Tests run (headless, ACL_LIBRARY_* empty)\ntest_one_connect_button, test_connect_without_act, test_accounts_tab_connects_the_same_way, test_report_scripts_parse, test_country_refresh_review, test_the_account_tree_on_screen: 155 passed.\n\n## CI\n- tracker-link FAIL: \"#457: start and implement the task, then move it to Review before a ready PR\" \u2014 run created 12:41:15, Issue moved to status:review 12:41:27: tracker-link run made before handoff; re-run should pass.\n- test (3.13, 1) FAIL: ERROR tests/test_a_stopped_profile_never_spins_the_robot.py::test_the_probe_and_the_waits_on_a_stopped_profile_return_at_once \u2014 TimeoutError no DevToolsActivePort after 60 s (Chromium start on runner). Not touched by the PR, passes on 3.11 shard: flaky/infra. 1309 passed.\n- ACL verification FAIL: aggregate (TESTS: failure) of the above.\n- All other checks pass.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-02T07:06:13+00:00",
+        "issue": 457,
+        "claim": "5b049b3ac71f46bb82e7d710f6250be2",
+        "actor": "Worker-C1457O"
       }
     ],
     "policy": {
