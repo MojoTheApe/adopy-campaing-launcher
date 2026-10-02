@@ -125,7 +125,7 @@
                     строку итогов» стало «профиль открыт вручную», а на экране
                     ничего не изменилось. -#}
                 <span class="amap-live-bad" title="{{ sr.error }}{% if sr.how %} · {{ sr.how }}{% endif %}{% if sr.shot %}
-снимок: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}</span>
+screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}</span>
                 {%- if fb %}{{ fb_html }}{% endif -%}
               {%- else -%}<span class="nodata">—</span>{%- endif -%}
               {%- if sp and sp.state == 'failed' %}<small class="amap-split-bad" title="The country split failed: {{ sp.error }}{% if sp.entered %} · {{ sp.entered }}{% endif %}. The spend reading is unaffected; read again to retry the countries.">countries failed</small>{% endif -%}

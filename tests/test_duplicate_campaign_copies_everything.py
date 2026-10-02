@@ -93,4 +93,4 @@ def test_the_publish_dialog_warns_about_locking_the_screen():
     tpl = TPL.read_text(encoding="utf-8")
     block = tpl[tpl.index("window.cbPublish = function"):]
     block = block[: block.index("function _doCbPublish")]
-    assert "Не блокируйте экран" in block, "о блокировке экрана не предупреждают"
+    assert "Do not lock the screen" in block, "о блокировке экрана не предупреждают"
