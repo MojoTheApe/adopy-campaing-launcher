@@ -244,9 +244,14 @@ def test_a_problem_status_with_a_shot_has_the_copy_button():
 
 
 def test_no_shot_no_button():
+    """Нет снимка — нет рабочей кнопки. С acl-132 у красного статуса кнопка
+    остаётся, но выключена и говорит почему: подсказка «Copy screenshot …»
+    под ней не должна указывать на кнопку, которой нет (Issue #31)."""
     cell = _render({"status": "disabled", "status_text": "Account disabled", "at": "2026-09-30 10:00:00",
                     "at_short": "30.09.26", "stale": "", "shot_id": "", "shot_at": ""})
-    assert "Copy screenshot" not in cell
+    buttons = re.findall(r'<button[^>]*class="amap-shot"[^>]*>', cell)
+    assert all(" disabled" in b for b in buttons), "кнопка без снимка нажимается"
+    assert all("data-shot" not in b and "onclick" not in b for b in buttons)
 
 
 def test_a_clear_status_never_has_the_button():
