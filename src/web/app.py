@@ -232,7 +232,43 @@ def _get_upload_ref_cached() -> dict:
         return {}
 
 
-def _build_goals_view(report: dict) -> dict:
+def _my_goal_countries(report: dict | None, cm: str | None = None) -> list[str]:
+    """Страны человека — стартовый список его целей, пока своих он не задал.
+
+    Где у него есть хоть что-то в книге (спенд, лиды, депозиты), плюс страны,
+    к которым он сам привязал аккаунты на карте этой машины. Чужие страны
+    сюда не попадают: 30.09 у Дана стояли цели владельца (ACL-1452).
+
+    `report` должен быть полным (за всю книгу), а не отчётом за период:
+    панель и сохранение берут страны из одного источника, иначе первая
+    правка сохранит не те страны, что человек видел. Отчёт берётся только
+    если он про того же `cm`; карта связей этой машины — только для её
+    хозяина (MY_CM_NAME): тимлид, правящий чужие цели, не дарит их своих
+    стран.
+    """
+    report = report or {}
+    from src.web.buyer import default_cm
+
+    report_cm = (report.get("my_cm") or default_cm() or "").strip()
+    who = (report_cm if cm is None else cm).strip()
+    out: list[str] = []
+    if who.casefold() == report_cm.casefold():
+        for country in report.get("countries", []):
+            totals = country.get("my_totals") or {}
+            if any(float(totals.get(k) or 0) for k in ("spend", "leads", "deposits")):
+                out.append((country.get("country") or "").strip())
+    owner = default_cm()
+    if who and owner and who.casefold() == owner.casefold():
+        try:
+            from src.web import account_links
+
+            out += [v for v in account_links.all_values("country") if account_links.accounts_for("country", v)]
+        except Exception:  # карта связей не должна ронять цели
+            pass
+    return [c for c in out if c]
+
+
+def _build_goals_view(report: dict, seed_countries: list[str] | None = None) -> dict:
     """Each country's target next to what actually happened, ready to render.
 
     Progress is computed here rather than in the page so the compact strip and
@@ -251,7 +287,11 @@ def _build_goals_view(report: dict) -> dict:
                 actual[key] = totals
 
     rows = []
-    for goal in goals_store.for_cm(cm):
+    # Стартовые страны — из полного отчёта (seed_countries), а не из отчёта
+    # за период: так их видит и сохраняет POST /goals (ACL-1452, ревью #453).
+    if seed_countries is None:
+        seed_countries = _my_goal_countries(report, cm)
+    for goal in goals_store.for_cm(cm, seed_countries):
         name = (goal.get("country") or "").strip()
         got = actual.get(name.casefold()) or actual.get((goal.get("code") or "").casefold()) or {}
         target = int(goal.get("ftd") or 0)
@@ -1502,6 +1542,9 @@ def _render_report(
     # менял только карту, и две секции рядом отвечали на разные вопросы,
     # выглядя одинаково достоверно.
     date_from, date_to = resolve_period(_df, date_from.strip(), date_to.strip(), span.strip())
+    # Стартовые цели не зависят от выбранных дней — те же страны, что
+    # сохранит первая правка (_goal_countries_now).
+    goal_seed = _my_goal_countries(report)
     try:
         report = report_for_period(report, _df, date_from, date_to)
     except PeriodReportError as exc:
@@ -1567,7 +1610,7 @@ def _render_report(
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
-            "goals": _build_goals_view(report),
+            "goals": _build_goals_view(report, goal_seed),
         },
     )
 
@@ -1967,11 +2010,13 @@ async def api_save_machine_paths(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
     if not isinstance(data, dict) or any(
-            k in data and not isinstance(data[k], str) for k in ("stats_workbook", "creatives_folder")):
-        return JSONResponse({"ok": False, "error": "Expected text paths"}, status_code=400)
+            k in data and not isinstance(data[k], str)
+            for k in ("stats_workbook", "creatives_folder", "manager_name")):
+        return JSONResponse({"ok": False, "error": "Expected text values"}, status_code=400)
     try:
         from starlette.concurrency import run_in_threadpool
-        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"), data.get("creatives_folder"))
+        result = await run_in_threadpool(machine_paths.save, data.get("stats_workbook"),
+                                         data.get("creatives_folder"), data.get("manager_name"))
     except machine_paths.MachinePathError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if result["stats_changed"]:
@@ -2944,6 +2989,41 @@ async def account_spend_read(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "reading": reading.to_dict()})
 
 
+@app.get("/account-spend/status-shot/{shot_id}")
+async def account_spend_status_shot(shot_id: str) -> Response:
+    """Снимок проблемного состояния кабинета (ACL-1430) — только по его id.
+
+    Путь с экрана не принимается: `status_shot_path` знает одну папку
+    снимков и строгий вид имени, всё прочее — 404.
+    """
+    from src.analysis_agent import account_spend
+
+    path = account_spend.status_shot_path(shot_id)
+    if path is None:
+        return JSONResponse({"error": "Screenshot not found"}, status_code=404)
+    return FileResponse(str(path), media_type="image/png")
+
+
+@app.get("/account-spend/status-shot/{shot_id}/view")
+async def account_spend_status_shot_view(shot_id: str) -> Response:
+    """Запасной путь кнопки Copy screenshot: браузер не дал положить картинку
+    в буфер — открываем её во вкладке с подсказкой, как скопировать руками."""
+    from html import escape
+
+    from src.analysis_agent import account_spend
+
+    if account_spend.status_shot_path(shot_id) is None:
+        return JSONResponse({"error": "Screenshot not found"}, status_code=404)
+    src = escape(f"/account-spend/status-shot/{shot_id}")
+    return HTMLResponse(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Account status screenshot</title>"
+        "<style>body{font:14px system-ui,sans-serif;margin:16px;background:#fff;color:#222}"
+        "img{max-width:100%;border:1px solid #ccc}</style></head><body>"
+        "<p>Right-click → Copy image</p>"
+        f"<img src=\"{src}\" alt=\"Account status screenshot\"></body></html>"
+    )
+
+
 @app.post("/account-spend/read-countries")
 async def account_spend_read_countries(request: Request) -> JSONResponse:
     """Прочитать пострановую разбивку аккаунта. Только по нажатию человека.
@@ -3405,15 +3485,37 @@ async def account_map_available_fragment(
     )
 
 
+def _goal_countries_now(who: str) -> list[str]:
+    """Те же страны, что видит панель, — для чтения и правки целей по запросу.
+
+    Только когда у человека ещё нет своих целей: иначе стартовый список не
+    нужен и отчёт не трогаем. Отчёт полный (не за период) и про того, чьи
+    цели правят. Синхронная — вызывать через run_in_threadpool: промах кэша
+    пересобирает книгу.
+    """
+    from src.web import goals as goals_store
+
+    if goals_store.has_stored(who):
+        return []
+    try:
+        report, _df, _w = get_cached_report(my_cm=who) if who else get_cached_report()
+    except Exception:
+        report = None
+    return _my_goal_countries(report, who)
+
+
 @app.get("/goals")
 async def goals_read(cm: str = "") -> JSONResponse:
     from src.web import goals as goals_store
 
+    from starlette.concurrency import run_in_threadpool
+
     who = (cm or "").strip() or (os.environ.get("MY_CM_NAME") or "").strip()
+    seed = await run_in_threadpool(_goal_countries_now, who)
     return JSONResponse({
         "ok": True,
         "cm": who,
-        "goals": goals_store.for_cm(who),
+        "goals": goals_store.for_cm(who, seed),
         "team_lead": goals_store.is_team_lead(),
     })
 
@@ -3445,14 +3547,17 @@ async def goals_write(request: Request) -> JSONResponse:
         )
 
     action = (data.get("action") or "save").strip().lower()
+    from starlette.concurrency import run_in_threadpool
+
+    seed = await run_in_threadpool(_goal_countries_now, who)
     try:
         if action == "delete":
             country = (data.get("country") or "").strip()
             if not country:
                 return JSONResponse({"ok": False, "error": "Which country?"}, status_code=400)
-            return JSONResponse({"ok": True, "goals": goals_store.delete(who, country)})
+            return JSONResponse({"ok": True, "goals": goals_store.delete(who, country, seed)})
         goal = data.get("goal") or {}
-        return JSONResponse({"ok": True, "goals": goals_store.upsert(who, goal)})
+        return JSONResponse({"ok": True, "goals": goals_store.upsert(who, goal, seed)})
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:  # pragma: no cover - defensive
@@ -3833,6 +3938,64 @@ async def rpa_takeover(request: Request) -> JSONResponse:
     else:
         release_takeover()
         return JSONResponse({"ok": True, "status": "resumed"})
+
+
+# ── ACL-1434: здоровье робота ───────────────────────────────────────────────
+# Только чтение локальной телеметрии и лога дешборда; к аккаунтам не ходит.
+from datetime import datetime as _rh_datetime, timezone as _rh_timezone  # noqa: E402
+
+_ROBOT_HEALTH_STARTED = _rh_datetime.now(_rh_timezone.utc).isoformat()
+
+
+def _robot_health_output_dir() -> Path:
+    from config.paths import get_runtime_workspace
+    return get_runtime_workspace() / "output"
+
+
+def _robot_health_current_build() -> tuple[str, str] | None:
+    """Сборка этого процесса — для прогонов, которых лог ещё не назвал."""
+    try:
+        from src.fb_ads_rpa import telemetry_sync
+        return telemetry_sync.flow_version(), _ROBOT_HEALTH_STARTED
+    except Exception:
+        return None
+
+
+def _robot_health_logs_dir() -> Path:
+    """Логи лаунчера установленной сборки (stdout/stderr сервера)."""
+    from src.web import robot_health
+    return robot_health.launcher_logs_dir()
+
+
+# Обработчики синхронные намеренно: чтение всей телеметрии и логов плюс сводка
+# идут в пуле потоков FastAPI и не держат event loop (опрос хода прогонов).
+@app.get("/robot-health", response_class=HTMLResponse)
+def robot_health_page(n: int = 10) -> HTMLResponse:
+    from src.web import robot_health
+    ctx = robot_health.page_context(_robot_health_output_dir(), n,
+                                    _robot_health_current_build(),
+                                    _robot_health_logs_dir())
+    return HTMLResponse(templates.get_template("robot_health.html").render(**ctx))
+
+
+@app.get("/robot-health/run/{run_id}", response_class=HTMLResponse)
+def robot_health_run(run_id: str, n: int = 10) -> HTMLResponse:
+    from src.web import robot_health
+    ctx = robot_health.run_context(_robot_health_output_dir(), run_id, n,
+                                   _robot_health_current_build(),
+                                   _robot_health_logs_dir())
+    status = 404 if ctx["error"] else 200
+    return HTMLResponse(templates.get_template("robot_health.html").render(**ctx),
+                        status_code=status)
+
+
+@app.get("/robot-health/capture/{run_id}/{name}")
+def robot_health_capture(run_id: str, name: str) -> Response:
+    from src.web import robot_health
+    path = robot_health.capture_file(_robot_health_output_dir(), run_id, name)
+    if path is None:
+        return Response(status_code=404)
+    return FileResponse(str(path))
 
 
 @app.get("/rpa-takeover")

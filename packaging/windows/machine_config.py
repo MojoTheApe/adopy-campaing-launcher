@@ -167,6 +167,9 @@ def apply_machine_configuration(
     existing_env = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
     env_values = {
         "MY_CM_NAME": configuration.campaign_manager_name,
+        # ACL-1447: тем же именем подписаны события Sentry (тег `manager`);
+        # в настройках дешборда меняется отдельно от MY_CM_NAME.
+        "ACL_MACHINE_LABEL": configuration.campaign_manager_name,
         "FB_STATS_EXCEL": str(Path(stats_workbook)),
         "FB_CREATIVES_ROOT": str(Path(creatives_directory)),
         **SAFETY_ENV,

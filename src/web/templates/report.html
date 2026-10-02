@@ -1464,6 +1464,30 @@
       border-radius: var(--radius-sm);
       color: var(--text); font-size: 0.78rem; line-height: 1.45;
     }
+    /* ACL-1437: проблемы кампании — коротким списком, а не абзацем.
+       Красный — блокирует, жёлтый — предупреждение (публиковать можно). */
+    .cb-problems {
+      margin: 0.35rem 0 0.2rem; padding: 0.5rem 0.65rem;
+      border: 1px solid var(--bad); border-left-width: 3px;
+      border-radius: var(--radius-sm); background: var(--bad-soft);
+      color: var(--text); line-height: 1.4;
+    }
+    .cb-problems--warning { border-color: var(--warn); background: var(--warn-soft); }
+    .cb-problems-head { font-weight: 600; color: var(--bad); word-break: break-word; }
+    .cb-problems--warning .cb-problems-head { color: var(--warn); }
+    .cb-problems-sub { color: var(--muted); font-size: 0.72rem; margin: 0.1rem 0 0.35rem 1.4rem; }
+    .cb-problems ol { margin: 0 0 0 1.4rem; padding: 0 0 0 1.1rem; }
+    .cb-problem { margin: 0 0 0.4rem; padding-left: 0.4rem; border-left: 2px solid var(--bad); }
+    .cb-problem--warning { border-left-color: var(--warn); }
+    .cb-problem-title { font-weight: 600; word-break: break-word; }
+    .cb-problem-impact { font-size: 0.74rem; }
+    .cb-problem-action { font-size: 0.74rem; color: var(--accent); }
+    .cb-problems-tech { margin: 0.2rem 0 0 1.4rem; font-size: 0.7rem; color: var(--muted); }
+    .cb-problems-tech > summary { cursor: pointer; }
+    .cb-problems-tech-body { font-family: monospace; word-break: break-all; margin-top: 0.2rem; }
+    .cb-problems-tech-body div { margin: 0.1rem 0; }
+    .cb-problems-tech-body .cb-problems-error { white-space: pre-wrap; }
+    .cb-problems-teach { margin: 0.1rem 0 0.2rem 1.4rem; font-size: 0.74rem; font-weight: 600; }
     /* ACL-1444: «Close profile» на панели закончившегося задания. */
     .cb-close-profile { margin: 0.5rem 0 0.2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
     .cb-close-profile-btn {
@@ -1718,6 +1742,13 @@
     }
     .amap-st-at { display: block; font-size: 0.62rem; color: var(--muted); margin-top: 0.1rem; }
     .amap-st-at.stale { color: var(--warn); font-weight: 500; }
+    .amap-shot {
+      font-size: 0.62rem; padding: 0 0.3rem; margin-left: 0.2rem; border: 1px solid var(--border);
+      border-radius: 3px; background: var(--bg-subtle); color: var(--muted); cursor: pointer; white-space: nowrap;
+    }
+    .amap-shot:hover { color: inherit; }
+    .amap-shot:disabled { cursor: not-allowed; opacity: 0.55; }
+    .amap-shot:disabled:hover { color: var(--muted); }
     .amap td { padding: 0.42rem 0.85rem; border-bottom: 1px solid var(--border); }
     .amap tbody tr:last-child td { border-bottom: 0; }
     .amap tbody tr:hover { background: var(--bg-hover); }
@@ -1932,6 +1963,10 @@
     .amap-btn.primary:hover {
       background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent);
     }
+    /* Сообщение поставщику (acl-132): кнопка и подсказка под плохим статусом. */
+    .amap-st-report { margin-top: 0.2rem; white-space: normal; }
+    .amap-st-report .amap-copy-text { font-size: 0.68rem; padding: 0.05rem 0.35rem; }
+    .amap-st-hint { display: block; font-size: 0.62rem; color: var(--muted); line-height: 1.3; margin-top: 0.1rem; }
 
     /* Состояние Multilogin внутри формы подключения: строка всегда, поля
        входа — только когда токена нет (ACL-1130). */
@@ -3075,6 +3110,8 @@
     </button>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
+    {#- ACL-1434: здоровье робота — отдельная страница, только чтение телеметрии. -#}
+    <a href="/robot-health" id="robot-health-link" title="Success rate of every robot step per account and build" style="font-size:0.85rem;color:var(--muted);text-decoration:none;">Robot health</a>
     {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
         с Refresh намеренно: беда случается на экране, и идти за ней в другое
         место человек не станет. -#}
@@ -3409,6 +3446,11 @@ async function dashRefresh(ev) {
     <h3>This computer</h3>
     <p class="acc-sub">Where ACL reads your stats and looks for creatives. Paste a path from Explorer (Shift + right-click → Copy as path).</p>
     <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:70ch">
+      {#- ACL-1447: имя менеджера — тег `manager` у событий Sentry этой машины. -#}
+      <label>
+        <div style="font-size:0.75rem;color:var(--muted)">Your name (run reports from this computer are labelled with it)</div>
+        <input id="mp-manager" type="text" style="width:100%" autocomplete="off" maxlength="60">
+      </label>
       <label>
         <div style="font-size:0.75rem;color:var(--muted)">Stats workbook (Excel)</div>
         <input id="mp-stats" type="text" style="width:100%" autocomplete="off">
@@ -4341,7 +4383,11 @@ async function dashRefresh(ev) {
   }
 
   var h = '<div class="goals-panel">';
-  h += '<div class="goals-title">Evgeni — Goals Progress · FTDs / CPA / CR / Leads per Day</div>';
+  /* Имя — того, чьи цели на экране. Было вписано «Evgeni» у всех (ACL-1452).
+     Экранировано для HTML до того, как стать строкой JS: имя приходит из
+     настроек, а не из кода (урок S01). */
+  var GOALS_WHO = {{ (gv.cm or '') | e | tojson }};
+  h += '<div class="goals-title">' + (GOALS_WHO ? GOALS_WHO + ' — ' : '') + 'Goals Progress · FTDs / CPA / CR / Leads per Day</div>';
   var totalDep = 0;
   for (var i = 0; i < ACT_RAW.length; i++) totalDep += ACT_RAW[i].dep;
   var totalPct = GRAND_FTD ? Math.min(100, Math.round(totalDep / GRAND_FTD * 100)) : 0;
@@ -7036,6 +7082,67 @@ function amapReadTitle(s, split) {
   return when + ' · read ' + s.finished_at + ' · ' + s.how + amapSplitNote(s, split);
 }
 
+/* ACL-1430 copy-shot { */
+/* Снимок проблемного состояния — в буфер обмена картинкой. ClipboardItem
+   получает обещание, а не готовый blob: так Chrome и Safari засчитывают
+   клик как жест пользователя, хотя файл ещё качается. Браузер отказал
+   (нет ClipboardItem, нет прав) — открываем картинку во вкладке с
+   подсказкой «Right-click → Copy image». */
+function amapCopyShot(btn) {
+  var id = btn.dataset.shot;
+  if (!id) return;
+  var url = '/account-spend/status-shot/' + encodeURIComponent(id);
+  var label = 'Copy screenshot';
+  function fallback() {
+    window.open(url + '/view', '_blank');
+    btn.textContent = label;
+  }
+  if (!(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)) { fallback(); return; }
+  btn.textContent = 'Copying…';
+  var png = fetch(url).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.blob();
+  }).then(function (b) { return b.type === 'image/png' ? b : new Blob([b], {type: 'image/png'}); });
+  var item;
+  try { item = new ClipboardItem({'image/png': png}); } catch (e) { fallback(); return; }
+  navigator.clipboard.write([item]).then(function () {
+    btn.textContent = 'Copied';
+    setTimeout(function () { btn.textContent = label; }, 2000);
+  }, fallback);
+}
+/* } ACL-1430 copy-shot */
+
+/* Хвост ячейки статуса после живого Read — та же разметка, что рисует
+   _account_map_country.html (acl-132): Copy screenshot (выключенная, если
+   снимка нет) и для плохих статусов Copy text с подсказкой. Строкой, а не
+   createElement: ячейка собирается одним innerHTML, обработчики — атрибутами,
+   как в шаблоне. Без этого после Read кнопка пропадала ровно тогда, когда
+   чтение нашло проблему. */
+var AMAP_STATUS_WORDS = {disabled: 'Account Disabled', restricted: 'Account Restricted',
+                         blocked: 'Account Blocked', review: 'Account Under Review'};
+function amapStatusTail(account, s) {
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+  var out = '';
+  if (s.status !== 'clear' && (s.status_shot || s.status !== 'unknown')) {
+    out += s.status_shot
+      ? ' <button type="button" class="amap-shot" data-shot="' + esc(s.status_shot) + '" title="Screenshot taken '
+        + esc(s.status_shot_at) + '. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>'
+      : ' <button type="button" class="amap-shot" disabled title="No screenshot on the last read — read the account again">Copy screenshot</button>';
+  }
+  var word = AMAP_STATUS_WORDS[s.status];
+  if (word) {
+    var line = String(account || '').split(' - ')[0] + ' - ' + word;
+    out += '<div class="amap-st-report"><button type="button" class="amap-btn amap-copy-text" data-copy="' + esc(line)
+      + '" title="Copies: ' + esc(line) + '" onclick="amapCopyText(this)">Copy text</button>'
+      + '<small class="amap-st-hint">Copy screenshot and account number to send in the group</small></div>';
+  }
+  return out;
+}
+
 function amapApplyReading(account, s, split) {
   document.querySelectorAll('.amap-live').forEach(function (cell) {
     if (cell.dataset.account !== account) return;
@@ -7047,7 +7154,7 @@ function amapApplyReading(account, s, split) {
     cell.dataset.readCurrency = s.currency || '';
     if (s.status) {
       var status = row.querySelector('.amap-status');
-      status.innerHTML = '<span></span>';
+      status.innerHTML = '<span></span>' + amapStatusTail(account, s);
       var label = status.firstChild;
       label.className = 'amap-st ' + (s.status === 'clear' ? 'ok' : s.status === 'unknown' ? 'dim' : 'bad');
       label.textContent = s.status === 'clear' ? 'no warning' : s.status === 'unknown' ? 'unreadable' : s.status;
@@ -8616,6 +8723,27 @@ function amapFind(btn) {
   return amapFilter(btn.closest('.amap-add').querySelector('.amap-find'), true);
 }
 
+/* Строка для группы поставщика (acl-132). Clipboard API на localhost
+   доступен; запасной путь — скрытое поле и execCommand, если браузер
+   откажет. Ничего не отправляется: человек вставляет и жмёт Send сам. */
+async function amapCopyText(btn) {
+  var text = btn.getAttribute('data-copy') || '';
+  var done = false;
+  try { await navigator.clipboard.writeText(text); done = true; } catch (e) {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'absolute'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select();
+    try { done = document.execCommand('copy'); } catch (e2) { done = false; }
+    ta.remove();
+  }
+  /* Подпись запоминается один раз: второй клик за 1,5 с иначе запомнил бы
+     «Copied» и оставил бы её на кнопке навсегда (ревью #465). */
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+  btn.textContent = done ? 'Copied' : 'Copy failed';
+  clearTimeout(btn._amapCopyTimer);
+  btn._amapCopyTimer = setTimeout(function () { btn.textContent = btn.dataset.label; }, 1500);
+}
+
 /* Один рисовальщик на оба пути — и на кнопку, и на ввод. Две копии этой
    разметки разошлись бы, и заметил бы это тот, кто поверил не той. */
 function amapRenderHits(box, hits, profiles, inst) {
@@ -8626,25 +8754,16 @@ function amapRenderHits(box, hits, profiles, inst) {
     row.className = 'amap-hit';
     row.innerHTML = '<b>' + aclEscHtml(p.name || '(unnamed)') + '</b>'
       + '<span class="amap-hint">checking this machine…</span>';
-    /* Открыть можно до подключения. Так человек и работает: нашёл профиль,
-       открыл, посмотрел в самом кабинете что нужно, подключил. Раньше открыть
-       предлагалось только уже подключённому аккаунту, а для подключения
-       требовался номер кабинета, который знает открытый профиль. */
-    var btnOpen = document.createElement('button');
-    btnOpen.type = 'button'; btnOpen.className = 'amap-btn';
-    btnOpen.textContent = 'Open';
-    btnOpen.title = 'Start this profile in Multilogin and leave the window open';
-    btnOpen.onclick = function () {
-      if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
-      amapOpenFoundProfile(box, p, inst, btnOpen, row);
-    };
-    row.appendChild(btnOpen);
-
+    /* Одна кнопка вместо Open и Connect (ACL-1457). Номер кабинета знает
+       только профиль, открытый автоматизацией, поэтому раньше надо было нажать
+       Open, потом Connect — и именно в этом порядке. Connect сам открывает
+       профиль тем же путём и подключает. */
     var btnAdd = document.createElement('button');
     btnAdd.type = 'button'; btnAdd.className = 'amap-btn'; btnAdd.textContent = 'Connect';
+    btnAdd.title = 'Open this profile in Multilogin, read its ad account and connect it here';
     btnAdd.onclick = function () {
       if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
-      amapConnect(box, p, inst, btnAdd);
+      amapOpenAndConnect(box, p, inst, btnAdd, row);
     };
     row.appendChild(btnAdd);
     hits.appendChild(row);
@@ -8680,11 +8799,13 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
     var r = await fetch('/mlx-profile-open', { method: 'POST', body: body, credentials: 'same-origin' });
     d = await r.json();
   } catch (e) { d = { ok: false, message: String(e && e.message || e) }; }
-  btn.disabled = false;
-  if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
+  /* Кнопку не включать здесь: впереди ещё /mlx-profile-details и подключение,
+     и второе нажатие в этом окне начало бы второе открытие (ревью ACL-1457).
+     Включает её только amapOpenAndConnect, когда всё закончилось. */
+  if ((box.querySelector('.amap-inst').value || 'A') !== inst) return false;
   msg.textContent = (d && (d.message || d.error)) || '';
   msg.className = 'amap-msg' + (d && d.ok ? '' : ' bad');
-  if (!d || !d.ok) return;
+  if (!d || !d.ok) return false;
   delete p._details;
   try {
     var det = await fetch('/mlx-profile-details?profile_id=' + encodeURIComponent(p.profile_id)
@@ -8692,6 +8813,22 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
     p._details = det;
     amapHint(row, det);
   } catch (e) { /* открыть удалось — это главное; подсказка обновится позже */ }
+  return true;
+}
+
+/* Открыть и подключить одним нажатием. Неудача открытия подключение не
+   отменяет: окно, открытое руками, робот не перезапускает (так разлогинился
+   x01), и тогда номер вписывают сами или оставляют на потом. */
+async function amapOpenAndConnect(box, p, inst, btn, row) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    var opened = await amapOpenFoundProfile(box, p, inst, btn, row);
+    if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
+    await amapConnect(box, p, inst, btn, opened);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* One credential form is mounted beside the account being connected. No
@@ -8876,7 +9013,7 @@ function amapHint(row, d) {
   else hint.textContent = 'never opened here — the ad account will be read from it';
 }
 
-async function amapConnect(box, profile, instance, btn) {
+async function amapConnect(box, profile, instance, btn, opened) {
   var country = box.getAttribute('data-amap-country');
   var msg = box.querySelector('.amap-msg');
   var d = profile._details || {};
@@ -8926,9 +9063,10 @@ async function amapConnect(box, profile, instance, btn) {
          впервые видит новый профиль: номер знает открытый профиль, а открыть
          его дешборд соглашался только у подключённого аккаунта. */
       head = 'Could not read it from the profile:\n' + ((found && found.error) || 'unknown')
-        + '\n\nPress Open next to the profile and try again, paste the Ads Manager '
-        + 'link or the account number — or leave this empty to connect now and '
-        + 'fill the number in later:';
+        + (opened === false ? '\n\nThe profile did not open with automation. If its window '
+            + 'is open by hand, close it in Multilogin and press Connect again.' : '')
+        + '\n\nPaste the Ads Manager link or the account number — or leave this '
+        + 'empty to connect now and fill the number in later:';
       seed = '';
     }
     var typed = prompt(head, seed);
@@ -12331,6 +12469,103 @@ function _doCbPublish(form) {
   if (got.skipped.length) cbSayAlreadyBuilding(got.skipped);
 }
 
+// ACL-1437: часть `r.error`, которой нет в списке проблем ('' — нечего
+// добавить). Абзац «DO NOT PUBLISH AS IS … Check the draft in Ads Manager
+// first.» (ads_manager_flow) и заметки хэндоффа (rpa_publisher) — повтор.
+function cbErrorBeyondProblems(err) {
+  var s = String(err || '');
+  var head = 'DO NOT PUBLISH AS IS';
+  var tail = 'Check the draft in Ads Manager first.';
+  var i = s.indexOf(head);
+  if (i !== -1) {
+    var end = s.indexOf(tail, i);
+    s = s.slice(0, i) + (end === -1 ? '' : s.slice(end + tail.length));
+  }
+  [
+    'Browser left open for manual review; this draft is NOT publishable.',
+    'Draft ready — browser left open, Meta Publish was not clicked'
+  ].forEach(function(note) { s = s.split(note).join(''); });
+  return s.replace(/^[\s|]+|[\s|]+$/g, '');
+}
+
+// Метки режима обучения по шагам: «ждёт клика Website» / «локатор снят».
+// '' — меток нет. Одна функция для старой и новой отрисовки (ревью F3).
+function cbTeachMarkerHtml(steps, cls) {
+  steps = steps || [];
+  var waiting = steps.indexOf('teach_mode_website_waiting') !== -1
+    && steps.indexOf('conversion_location_website_teach') === -1
+    && steps.indexOf('teach_mode_website_still_failed') === -1;
+  var captured = steps.indexOf('teach_website_captured') !== -1;
+  var c = cls ? ' class="' + cls + '"' : '';
+  var tag = cls ? 'div' : 'span';
+  if (waiting) return ' <' + tag + c + ' style="color:#3b82f6;font-weight:600">⏸ waiting for a Website click</' + tag + '>';
+  if (captured) return ' <' + tag + c + ' style="color:#22c55e">✓ Website locator captured</' + tag + '>';
+  return '';
+}
+
+// ACL-1437: проблемы кампании — заголовок с вердиктом, число, пронумерованный
+// список (что сломалось, чем грозит, «→ что делать») и свёрнутые технические
+// подробности. Данные — `r.problems` от робота (failure_policy.problems);
+// дешборд их только рисует. '' — старая запись без списка или чистый итог:
+// тогда работает прежний текстовый вывод.
+function cbProblemsHtml(r) {
+  var items = r && Array.isArray(r.problems) ? r.problems : null;
+  if (!items || !items.length) return '';
+  var nBlock = items.filter(function(p) { return p.severity !== 'warning'; }).length;
+  var nWarn = items.length - nBlock;
+  var built = r.success === true;
+  var verdict = !built ? ['❌', 'not built', 'blocking']
+    : (nBlock ? ['⛔', 'do not publish as is', 'blocking']
+      : ['⚠️', 'ready to publish (with warnings)', 'warning']);
+  var plural = function(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); };
+  var counts = [];
+  if (nBlock) counts.push(plural(nBlock, 'problem'));
+  if (nWarn) counts.push(plural(nWarn, 'warning'));
+  counts.push(built ? 'draft saved, browser left open' : 'no complete draft, check Ads Manager');
+  var h = '<div class="cb-problems cb-problems--' + verdict[2] + '">'
+    + '<div class="cb-problems-head">' + verdict[0] + ' '
+    + aclEscHtml(r.campaign_name || '?') + ' — ' + verdict[1] + '</div>'
+    + '<div class="cb-problems-sub">' + counts.join(' · ') + '</div><ol>';
+  items.forEach(function(p) {
+    var sev = p.severity === 'warning' ? 'warning' : 'blocking';
+    var title = String(p.title || p.step || '?');
+    if (p.ad_index) {
+      title += ' — ad ' + p.ad_index + (p.ad_name ? ' "' + p.ad_name + '"' : '');
+    }
+    h += '<li class="cb-problem cb-problem--' + sev + '">'
+      + '<div class="cb-problem-title">' + aclEscHtml(title) + '</div>'
+      + (p.impact ? '<div class="cb-problem-impact">' + aclEscHtml(p.impact) + '</div>' : '')
+      + (p.action ? '<div class="cb-problem-action">→ ' + aclEscHtml(p.action) + '</div>' : '')
+      + '</li>';
+  });
+  h += '</ol>';
+  h += cbTeachMarkerHtml(r.steps_completed, 'cb-problems-teach');
+  var tech = [];
+  // ACL-1437 (ревью F2): в `error` бывает то, чего нет в списке — подробность
+  // остановки профиля, «Recorded flow failed at: …», текст исключения.
+  // Стандартный абзац «DO NOT PUBLISH AS IS» и заметку хэндоффа выкидываем:
+  // они повторяют список.
+  var extraError = cbErrorBeyondProblems(r.error);
+  if (extraError) {
+    tech.push('<div class="cb-problems-error">error: ' + aclEscHtml(extraError) + '</div>');
+  }
+  items.forEach(function(p) {
+    tech.push('<div>' + aclEscHtml(p.raw || p.step || '') + '</div>');
+  });
+  if (r.run_id) tech.push('<div>run id: ' + aclEscHtml(r.run_id) + '</div>');
+  if (r.campaign_id) tech.push('<div>campaign_id: ' + aclEscHtml(r.campaign_id) + '</div>');
+  (r.screenshots || []).forEach(function(s) {
+    tech.push('<div>capture: ' + aclEscHtml(s) + '</div>');
+  });
+  if (r.steps_completed && r.steps_completed.length) {
+    tech.push('<div>steps: ' + r.steps_completed.map(aclEscHtml).join(' → ') + '</div>');
+  }
+  h += '<details class="cb-problems-tech"><summary>Technical details '
+    + '<span>(step codes, run id)</span></summary>'
+    + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
+  return h + '</div>';
+}
+
 // ACL-1444: «Close profile» на панели закончившегося задания. Чистое задание
 // закрывает профиль само; остальные окна (есть что проверить) человек
 // закрывает отсюда. Сервер закрывает мягко, через MLX API, и отказывает
@@ -12432,6 +12667,10 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       html += '<div class="cb-status-cause">' + aclEscHtml(note) + '</div>';
     });
     (job.results || []).forEach(function(r) {
+      // ACL-1437: a result with a structured problem list renders as one
+      // block; older records (no `problems`) keep the text rendering below.
+      var structured = cbProblemsHtml(r);
+      if (structured) { html += structured; return; }
       // Three states, not two. `success` only says the automation reached the
       // end and a draft exists; `publishable` says a human may send it out.
       // This used to pick the checkmark from `success` alone and then render
@@ -12470,13 +12709,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       }
       if (r.steps_completed && r.steps_completed.length) {
         var stepsHtml = r.steps_completed.map(aclEscHtml).join(' → ');
-        var teachWaiting = r.steps_completed.indexOf('teach_mode_website_waiting') !== -1
-          && r.steps_completed.indexOf('conversion_location_website_teach') === -1
-          && r.steps_completed.indexOf('teach_mode_website_still_failed') === -1;
-        var teachCapture = r.steps_completed.indexOf('teach_website_captured') !== -1;
-        var extra = teachWaiting
-          ? ' <span style="color:#3b82f6;font-weight:600">⏸ waiting for a Website click</span>'
-          : (teachCapture ? ' <span style="color:#22c55e">✓ Website locator captured</span>' : '');
+        var extra = cbTeachMarkerHtml(r.steps_completed, '');
         html += '<div class="cb-status-steps" style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem">'
           + 'Steps: ' + stepsHtml + extra + '</div>';
       }
@@ -13355,7 +13588,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   function el(id) { return document.getElementById(id); }
   function say(text, error) { el('mp-msg').textContent = text || ''; el('mp-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
   function show(d) {
-    loaded = {stats: d.stats_workbook || '', creatives: d.creatives_folder || ''};
+    loaded = {stats: d.stats_workbook || '', creatives: d.creatives_folder || '', manager: d.manager_name || ''};
+    el('mp-manager').value = loaded.manager;
     el('mp-stats').value = loaded.stats;
     el('mp-creatives').value = loaded.creatives;
     var missing = [];
@@ -13375,6 +13609,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var body = {};
     if (el('mp-stats').value !== loaded.stats) body.stats_workbook = el('mp-stats').value;
     if (el('mp-creatives').value !== loaded.creatives) body.creatives_folder = el('mp-creatives').value;
+    if (el('mp-manager').value !== loaded.manager) body.manager_name = el('mp-manager').value;
     if (!Object.keys(body).length) { say('Nothing changed.'); return; }
     pending = true; el('mp-save').disabled = true; say('Saving…');
     try {

@@ -12,7 +12,7 @@ RPA_FLOW_VERSION = "v96"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
-from src.fb_ads_rpa import failure_policy, profile_trouble, retry_policy, sentry_signal
+from src.fb_ads_rpa import failure_policy, profile_trouble, retry_policy, run_summary, sentry_signal
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.page_diagnostics import diagnose_and_recover
 from src.fb_ads_rpa.meta_dom import (
@@ -2339,6 +2339,8 @@ class AdsManagerFlow:
         from src.fb_ads_rpa.config import get_use_llm_agent, get_use_recipe_player, get_use_recorded_flow
 
         if get_use_recorded_flow():
+            # ACL-1447: общая длительность кампании — для её итога в Sentry.
+            flow_started = time.monotonic()
             ad = ad_set.ads[0]
             additional_ads = [
                 {
@@ -2497,6 +2499,12 @@ class AdsManagerFlow:
             sentry_signal.report_blocking_failures(
                 ad_soft_fails, campaign=draft.name, account=draft.account_label or "",
                 names=sentry_signal.draft_names(draft),
+            )
+            # ACL-1447: итог кампании — одно событие info/warning, в фоне.
+            run_summary.report_finished(
+                campaign=draft.name, account=draft.account_label or "",
+                stopped_at=fail_step, failures=ad_soft_fails, ads=len(ad_set.ads),
+                started=flow_started, attempts=attempt,
             )
             return result
 

@@ -18,6 +18,7 @@ from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
 from src.fb_ads_rpa import hand_window, profile_trouble
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
+from src.fb_ads_rpa.window_visibility import PerPage
 
 log = logging.getLogger(__name__)
 
@@ -399,6 +400,13 @@ def _front_page(context):
     return None
 
 
+#: ACL-1402: вкладка → удался ли `_disable_background_throttling` в последний
+#: раз ({"focus", "lifecycle", "at"}). Читает `window_visibility.visibility_diag`
+#: — в телеметрию раздела и долгих ожиданий. `PerPage`: `id()` умершей
+#: вкладки достаётся новой, serve.py живёт сутками (ревью PR #420, F5).
+THROTTLE_STATUS = PerPage()
+
+
 def _disable_background_throttling(context, page) -> None:
     """Stop Chrome throttling the page when its window is minimised or behind
     another one.
@@ -416,18 +424,23 @@ def _disable_background_throttling(context, page) -> None:
     `--disable-renderer-backgrounding` launch flags — but these two CDP
     commands achieve the same thing on a live target.
     """
+    status = {"focus": False, "lifecycle": False, "at": round(time.time(), 1)}
+    THROTTLE_STATUS.set(page, status)
     try:
         session = context.new_cdp_session(page)
-    except Exception:
+    except Exception as exc:
+        status["error"] = type(exc).__name__
         return
     # Report the page as focused/active regardless of real window state.
     try:
         session.send("Emulation.setFocusEmulationEnabled", {"enabled": True})
+        status["focus"] = True
     except Exception:
         pass
     # Keep the page out of the frozen/discarded lifecycle states.
     try:
         session.send("Page.setWebLifecycleState", {"state": "active"})
+        status["lifecycle"] = True
     except Exception:
         pass
 
@@ -436,6 +449,8 @@ def _disable_background_throttling(context, page) -> None:
 # is garbage-collected python-side, its event handlers (screencast acks)
 # die with it and Chrome may pause the cast.
 _KEEPALIVE_SESSIONS: list = []
+#: ACL-1402: вкладки, на которых скринкаст уже запущен (`PerPage`, F5).
+_KEEPALIVE_PAGES = PerPage()
 
 
 def _keep_renderer_active(context, page) -> None:
@@ -489,8 +504,21 @@ def _keep_renderer_active(context, page) -> None:
              "everyNthFrame": 2},
         )
         _KEEPALIVE_SESSIONS.append(session)
+        _KEEPALIVE_PAGES.add(page)
     except Exception as exc:
         log.debug("keep_renderer_active skipped: %s", exc)
+
+
+def ensure_renderer_kept_active(context, page) -> bool:
+    """Скринкаст на вкладке, если его ещё нет (ACL-1402). True — запустили сейчас.
+
+    Свежая вкладка (`fresh_tab`, перезагрузка) получала только снятие
+    троттлинга, а скринкаст — лишь вкладка, к которой подключились.
+    """
+    if page in _KEEPALIVE_PAGES:
+        return False
+    _keep_renderer_active(context, page)
+    return page in _KEEPALIVE_PAGES
 
 
 def _patch_window_geometry(session, page) -> None:
@@ -934,7 +962,20 @@ def page_answers(page, timeout_s: float = 5.0) -> bool | None:
     """
     from src.fb_ads_rpa.page_liveness import answers
 
-    return answers(page, timeout_s)
+    got = answers(page, timeout_s)
+    if got is False:
+        # ACL-1402: прежде чем назвать вкладку зависшей — не скрыто ли её
+        # окно (закрыто другими окнами, свёрнуто). Скрыто — будим без
+        # переднего плана и спрашиваем ещё раз.
+        try:
+            from src.fb_ads_rpa import window_visibility
+
+            woke = window_visibility.wake_if_hidden(page, where="page_answers", answered=False)
+        except Exception:
+            woke = {}
+        if woke.get("woke"):
+            got = answers(page, timeout_s)
+    return got
 
 
 def _open_tab_via_browser(context, timeout_s: float = 10.0, *, like_url: str = ""):
@@ -1121,6 +1162,16 @@ def wake_page_quietly(page) -> dict:
     return out
 
 
+def _visibility(page) -> dict:
+    """Видимость вкладки и окна профиля для строки раздела (ACL-1402). Не бросает."""
+    try:
+        from src.fb_ads_rpa import window_visibility
+
+        return window_visibility.visibility_diag(page)
+    except Exception as exc:
+        return {"error": str(exc)[:80]}
+
+
 def ensure_editor_window(page, section: str) -> bool:
     """Check at section boundaries; recover once, then stop without replaying drafts."""
     from src.fb_ads_rpa import run_telemetry as rt
@@ -1156,7 +1207,7 @@ def ensure_editor_window(page, section: str) -> bool:
         after = rt.window_state(page)
     ok = readable(after)
     diag = {"section": section, "minimum_width": MIN_EDITOR_WIDTH,
-            "before": before, "after": after}
+            "before": before, "after": after, "visibility": _visibility(page)}
     rt.record("window_bounds", ok, diag=diag)
     if not ok:
         rt.record("window_too_small", False, diag=diag)
@@ -1268,10 +1319,17 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
         if restored:
             # В конце кампании `put_window_back` вернёт окно на место и свернёт.
             _OFFSCREEN[id(context)] = {"window_id": restored[0]["window"], **restored[0]["was"]}
+        try:
+            from src.fb_ads_rpa import window_visibility
+
+            window_visibility.remember_cdp_url(context, cdp_url)
+        except Exception:
+            pass
         _disable_background_throttling(context, page)
         _ensure_wide_window(context, page)
         from src.fb_ads_rpa import run_telemetry as rt
-        rt.record("window_bounds", None, diag={"section": "attach", "after": rt.window_state(page)})
+        rt.record("window_bounds", None, diag={"section": "attach", "after": rt.window_state(page),
+                                               "visibility": _visibility(page)})
         _keep_renderer_active(context, page)
         # Новая вкладка в Chrome сразу становится активной, и окно человека на
         # минуты уезжает на нашу страницу. Возвращаем то, на что он смотрел:
@@ -1919,17 +1977,27 @@ HAND_WINDOW_EXIT_WAIT_S = 20
 #: Строка для человека в панели задания, когда робот сам закрыл окно.
 HAND_WINDOW_NOTICE = "Closed the hand-opened window of {account} and reopened it for the robot"
 
+#: ACL-1427, ревью PR #428 (F3): хвост причины остановки, когда ожидание
+#: тишины ввода прервал Stop задания.
+HAND_WINDOW_WAIT_STOPPED = "the job was stopped while waiting for the computer to be idle"
+
+#: ACL-1427: строка в панели, пока робот ждёт тишины ввода на машине.
+HAND_WINDOW_WAIT_NOTICE = ("Waiting for the computer to be idle to reopen {account}'s hand-opened "
+                           "window — don't use the mouse or keyboard for a minute")
+
 
 def _record_hand_window(entry: AccountMapEntry, *, ok: bool, where: str, note: str,
-                        verdict: "hand_window.Verdict", error: str = "") -> None:
+                        verdict: "hand_window.Verdict", error: str = "",
+                        wait: "hand_window.Wait | None" = None) -> None:
     """Строка телеметрии `profile_hand_window` и крошка Sentry (ACL-1388).
 
     `note` — чем кончилось (`reopened`, причина отказа, `mlx_stop_failed`…),
     в `diag` — где и что намерили (возраст окна, тишина ввода). Без id
-    профиля, как у `_record_profile_restart`.
+    профиля, как у `_record_profile_restart`. ACL-1427: `wait` — сколько
+    ждали тишины ввода и чем кончилось (`waited_s`, `wait_outcome`).
     """
     diag = {"where": where, "workspace": (getattr(entry, "multilogin_instance", "") or "A"),
-            **verdict.diag()}
+            **verdict.diag(), **(wait.diag() if wait is not None else {})}
     if error:
         diag["error"] = error[:160]
     try:
@@ -2244,12 +2312,24 @@ class MultiloginAttachOnlyProvider:
         профили, простой браузер не открываем. Вход в Facebook проверяет
         обычный путь к списку кампаний: разлогинен — `profile_logged_out`,
         без повторов.
+
+        ACL-1427: если не прошла только тишина ввода (щелчок Publish сам её
+        сбрасывает), ждём её до 2 минут (`hand_window.wait_until_safe`) с
+        перепроверкой всех условий и строкой в панели; Stop задания
+        прерывает ожидание. Место профиля задание при этом держит.
         """
         pids = _profile_pids(udd, profile_id)
-        verdict = hand_window.assess(pids)
+        wait = hand_window.wait_until_safe(
+            pids, on_wait=lambda v: _tell_job(HAND_WINDOW_WAIT_NOTICE.format(account=account_label)))
+        verdict = wait.verdict
         if not verdict.safe:
-            _record_hand_window(entry, ok=False, where=where, note=verdict.reason, verdict=verdict)
-            raise _open_by_hand(profile_id, account_label, where, verdict)
+            cancelled = wait.outcome == hand_window.WAIT_CANCELLED
+            note = "cancelled" if cancelled else verdict.reason
+            _record_hand_window(entry, ok=False, where=where, note=note, verdict=verdict, wait=wait)
+            # Ревью PR #428 (F3): Stop во время ожидания — в итоге слота видно,
+            # что задание остановил человек, а не только «открыт руками».
+            raise _open_by_hand(profile_id, account_label,
+                                f"{where}; {HAND_WINDOW_WAIT_STOPPED}" if cancelled else where, verdict)
         log.warning(
             "%s: profile %s is open by hand, but its window is %.0f s old and the machine has been "
             "idle for %.0f s - closing it through the MLX API and reopening it for the robot",
@@ -2259,10 +2339,11 @@ class MultiloginAttachOnlyProvider:
         except Exception as exc:
             # Не закрылось через API — окно человека остаётся как было.
             _record_hand_window(entry, ok=False, where=where, note="mlx_stop_failed", verdict=verdict,
-                                error=_exc_text(exc))
+                                wait=wait, error=_exc_text(exc))
             raise _open_by_hand(profile_id, account_label, where, verdict) from exc
         if not _hand_window_gone(udd, profile_id, pids):
-            _record_hand_window(entry, ok=False, where=where, note="still_running", verdict=verdict)
+            _record_hand_window(entry, ok=False, where=where, note="still_running", verdict=verdict,
+                                wait=wait)
             raise _open_by_hand(profile_id, account_label, where, verdict)
         # Окно уже закрыто: не поднялось — это отказ перезапуска, профиль
         # может остаться закрытым (как у `restart_unresponsive`).
@@ -2272,9 +2353,9 @@ class MultiloginAttachOnlyProvider:
         except Exception as exc:
             detail = _exc_text(exc)
             _record_hand_window(entry, ok=False, where=where, note="restart_failed", verdict=verdict,
-                                error=detail)
+                                wait=wait, error=detail)
             raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
-        _record_hand_window(entry, ok=True, where=where, note="reopened", verdict=verdict)
+        _record_hand_window(entry, ok=True, where=where, note="reopened", verdict=verdict, wait=wait)
         _tell_job(HAND_WINDOW_NOTICE.format(account=account_label))
         return conn
 
