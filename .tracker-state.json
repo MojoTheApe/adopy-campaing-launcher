@@ -3693,7 +3693,7 @@
             "session": "run_c1457o_1001"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-C1457O",
         "coordinator": "Coordinator-D0930K",
         "handoff": {
@@ -3711,7 +3711,8 @@
           "report": "# ACL-1457 \u2014 implementation handoff\n- Branch `codex/acl-1457-one-connect` \u2192 `stage`, head e3ec729, base 3a629ca. Worker-C1457O, run_c1457o_1001, Coordinator-D0930K, `C:\\acl-1457-connect`.\n- Done: one Connect (opens via /mlx-profile-open, then existing connect flow); failed open does not cancel; prompt text updated; no server change.\n- Checks: new offline-Chromium behaviour test (4) + updated old checks + connect-form browser tests + JS guard: 38 passed. Full suite: CI.\n- For the reviewer: `amapOpenFoundProfile` re-enables the button at its end; `amapOpenAndConnect` disables it again before `amapConnect` and re-enables in `finally`. Check no double-open on fast double click.\n- Not done: owner's live check (connect a never-opened profile; the number must fill in without typing)."
         },
         "pr": 458,
-        "queued_at": "2026-10-01T12:41:31+00:00"
+        "queued_at": "2026-10-01T12:41:31+00:00",
+        "reviewer": "Reviewer-R1457K"
       },
       "459": {
         "implementers": [
@@ -4106,6 +4107,10 @@
       },
       "Reviewer-R1452H": {
         "session": "rev_r1452h_1001",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1457K": {
+        "session": "rev_r1457k_1001",
         "role": "Reviewer"
       }
     },
@@ -4556,7 +4561,6 @@
       419,
       430,
       433,
-      457,
       462,
       31,
       466,
@@ -4565,7 +4569,18 @@
       437,
       447
     ],
-    "review": null,
+    "review": {
+      "id": "b841da1e2e94483982af287385a0f7c6",
+      "pr": 458,
+      "issues": [
+        457
+      ],
+      "actor": "Reviewer-R1457K",
+      "session": "rev_r1457k_1001",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-02T07:05:40+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -6394,6 +6409,13 @@
         "issue": 452,
         "claim": "4cf6ce55813e4c588f2e31cb77e9bb7e",
         "actor": "Worker-G1452D"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-02T07:05:40+00:00",
+        "pr": 458,
+        "lane": "b841da1e2e94483982af287385a0f7c6",
+        "actor": "Reviewer-R1457K"
       }
     ],
     "policy": {
