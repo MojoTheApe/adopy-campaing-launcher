@@ -3846,7 +3846,7 @@
             "session": "run_s1447n_1001"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-S1447N",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -4927,6 +4927,30 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-02T09:45:14+00:00",
         "state": "reviewing"
+      },
+      "450": {
+        "id": "418bb8ed1d7b4a1882f4e4b82a3199fa",
+        "pr": 450,
+        "issues": [
+          447
+        ],
+        "actor": "Reviewer-R1447Q",
+        "session": "rev_1447q_1002",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-02T11:32:18+00:00",
+        "state": "reviewing"
+      },
+      "492": {
+        "id": "418bb8ed1d7b4a1882f4e4b82a3199fa",
+        "pr": 450,
+        "issues": [
+          447
+        ],
+        "actor": "Reviewer-R1447Q",
+        "session": "rev_1447q_1002",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-02T11:32:18+00:00",
+        "state": "reviewing"
       }
     },
     "review_queue": [
@@ -4945,18 +4969,7 @@
       424,
       31
     ],
-    "review": {
-      "id": "418bb8ed1d7b4a1882f4e4b82a3199fa",
-      "pr": 450,
-      "issues": [
-        447
-      ],
-      "actor": "Reviewer-R1447Q",
-      "session": "rev_1447q_1002",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-10-02T11:32:18+00:00",
-      "state": "reviewing"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -7073,6 +7086,25 @@
         "issue": 31,
         "pr": 465,
         "actor": "Worker-W132T"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-02T12:47:16+00:00",
+        "review": {
+          "id": "418bb8ed1d7b4a1882f4e4b82a3199fa",
+          "pr": 450,
+          "issues": [
+            447
+          ],
+          "actor": "Reviewer-R1447Q",
+          "session": "rev_1447q_1002",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-02T11:32:18+00:00",
+          "state": "reviewing"
+        },
+        "prs": [
+          492
+        ]
       }
     ],
     "policy": {
