@@ -33,7 +33,7 @@ The machine label (`server_name` / `machine`, e.g. `DAN-LT25`) names the buyer's
 - `config/sentry_triage_map.json`: a row whose `step`/`reason` patterns match (ad2_/ad3_ fold to ad_) names the task that already covers this kind.
 - GitHub (use REST through `gh api`; GraphQL is blocked in this environment, so do not use `gh issue list/create/comment` or `gh pr create`): search open Issues and PRs for the step, the reason and "Sentry issue <sentry_issue_id>":
   `gh api -X GET search/issues -f q='repo:MojoTheApe/adopy-campaing-launcher is:open "<step>"'`
-- If a task or open PR already covers it (or a previous run of this routine already filed it — its body contains "Sentry issue <id>"), add the new evidence as ONE comment on that Issue (`gh api repos/MojoTheApe/adopy-campaing-launcher/issues/<N>/comments -f body=@/tmp/comment.md`), unless an identical comment is already there. Do not open a duplicate, do not touch a task another session has claimed, do not start a second fix. Then go to step 7 (report) with "уже в работе: <task link>".
+- If a task or open PR already covers it (or a previous run of this routine already filed it — its body contains "Sentry issue <id>"), add the new evidence as ONE comment on that Issue (`gh api repos/MojoTheApe/adopy-campaing-launcher/issues/<N>/comments -F body=@/tmp/comment.md`), unless an identical comment is already there. Do not open a duplicate, do not touch a task another session has claimed, do not start a second fix. Then go to step 7 (report) with "уже в работе: <task link>".
 - Buyer-side stops (logged out, proxy/network, profile open by hand, account restricted by Meta) need the buyer, not code: report them and stop.
 
 ## 3. Tracker (task first, then code)

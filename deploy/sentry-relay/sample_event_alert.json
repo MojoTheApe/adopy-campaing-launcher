@@ -14,6 +14,8 @@
       "environment": "production",
       "platform": "python",
       "level": "error",
+      "datetime": "2026-09-30T12:00:01.000000Z",
+      "timestamp": 1790769601.0,
       "tags": [
         ["environment", "production"],
         ["failure_kind", "blocking"],

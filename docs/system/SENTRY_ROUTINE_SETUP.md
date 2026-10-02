@@ -65,7 +65,7 @@ into a chat, an Issue or a file in the repository.
     - `SENTRY_PROJECT` — type **Text** — `python`.
     **Deploy**. Optional variables (defaults are fine): `ALERT_RULE`
     (`ACL - new failure kind`), `FAILURE_KINDS` (`blocking,campaign_stop,job_exception`),
-    `DEDUPE_HOURS` (`24`), `MAX_FIRES_PER_HOUR` (`20`).
+    `DEDUPE_HOURS` (`24`), `MAX_FIRES_PER_HOUR` (`20`), `MAX_FIRES_PER_DAY` (`30`).
 
 ## C. Sentry (~2 min)
 
@@ -95,9 +95,10 @@ into a chat, an Issue or a file in the repository.
       → **Code** shows the same session. Its answer should be "Проверка прошла: Sentry →
       релей → облачная routine работает …".
     If the log says `ignored: …`, the reason is in the text (other rule, other project,
-    failure kind not watched). `bad signature` → step 13 value is wrong. `routine is not
-    configured` → step 11. `fire failed … HTTP 401` → the token in step 11 is wrong or was
-    regenerated.
+    failure kind not watched). `bad signature` → step 13 value is wrong. `stale or undated
+    event` → the event inside the alert is more than an hour old (a replayed or late
+    alert) or carries no time; send a fresh self-test. `routine is not configured` → step
+    11. `fire failed … HTTP 401` → the token in step 11 is wrong or was regenerated.
 
 ## E. The phone
 
@@ -127,6 +128,20 @@ into a chat, an Issue or a file in the repository.
   → the worker → **Edit code** → replace → **Deploy**. Variables and the KV binding stay.
 
 Limits to know: the routine can be fired 30 times per hour, the account 100 per hour;
-the relay stops at 20 per hour (`MAX_FIRES_PER_HOUR`) and fires once per Sentry issue per
-24 hours (`DEDUPE_HOURS`). Each run uses your Claude subscription like any other session.
+the relay stops at 20 per hour (`MAX_FIRES_PER_HOUR`) and 30 per day
+(`MAX_FIRES_PER_DAY`), and fires once per Sentry issue per 24 hours (`DEDUPE_HOURS`).
+Each run uses your Claude subscription like any other session.
+
+A flood: the Sentry DSN ships with every install, so anyone holding it can create new
+Sentry issues. If claude.ai/code/routines shows many `ACL Sentry triage` runs you did not
+expect, or the worker log shows `daily limit reached`, pause the relay action in the
+Sentry rule (first item above), then look at the new issues in Sentry before turning it
+back on.
+
+Known limits: the Sentry connector also has write tools (resolve / assign an issue,
+Seer); the routine is told to use it read-only, but that is enforced by the prompt, not
+by the connector. Sentry does not sign the `Sentry-Hook-Timestamp` header, so the relay
+judges the age of an alert by the event time inside the signed body (Sentry's
+`received`, else the event `datetime`) and refuses an event older than one hour or
+without a time.
 The laptop scheduled task `acl-sentry-triage` stays paused (manual "Run now" only).

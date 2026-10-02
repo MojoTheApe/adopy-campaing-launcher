@@ -6,12 +6,14 @@
 // This Worker sits between the two:
 //
 //   1. checks Sentry's signature (Sentry-Hook-Signature = HMAC-SHA256 of the raw
-//      body with the Internal Integration's client secret) and the timestamp;
+//      body with the Internal Integration's client secret) and the event time
+//      inside the signed body (Sentry does not sign the Sentry-Hook-Timestamp
+//      header, so only the body time stops a replay; no time = refused);
 //   2. accepts only `event_alert` for our alert rule, our project and our
 //      failure kinds (blocking / campaign_stop / job_exception);
-//   3. fires the routine at most once per Sentry issue within DEDUPE_HOURS and at
+//   3. fires the routine at most once per Sentry issue within DEDUPE_HOURS, at
 //      most MAX_FIRES_PER_HOUR times per hour (below the routine's 30/hour and the
-//      account's 100/hour limits);
+//      account's 100/hour limits) and at most MAX_FIRES_PER_DAY times a day;
 //   4. sends only a short, scrubbed text: ids, e-mails, tokens, URLs and long
 //      digit runs never leave Sentry through this path.
 //
@@ -27,6 +29,7 @@
 //   FAILURE_KINDS         text    default "blocking,campaign_stop,job_exception"
 //   DEDUPE_HOURS          text    default 24
 //   MAX_FIRES_PER_HOUR    text    default 20
+//   MAX_FIRES_PER_DAY     text    default 30
 // Binding: KV namespace as FIRED (dedupe + hourly counter). Without it nothing fires.
 //
 // Tests: `node --test deploy/sentry-relay/` (Node 20+, no packages).
@@ -36,6 +39,10 @@ const BETA = "experimental-cc-routine-2026-04-01";
 const DEFAULT_RULE = "ACL - new failure kind";
 const DEFAULT_KINDS = "blocking,campaign_stop,job_exception";
 const MAX_SKEW_SECONDS = 15 * 60;
+// Возраст события по времени из подписанного тела. Окно не длиннее
+// минимального DEDUPE_HOURS (1 ч): повтор старого тела внутри окна упирается в
+// метку дедупа, а после окна отвергается как старый.
+const MAX_EVENT_AGE_SECONDS = 60 * 60;
 const MAX_BODY_BYTES = 512 * 1024;
 const TAGS = ["failure_kind", "step", "reason", "release", "server_name", "machine", "account", "environment"];
 // Версии («v96+8@22aea04», «acl-release-2026-09-29b») и имена машин — не
@@ -73,13 +80,40 @@ async function signatureOk(secret, rawBody, given) {
 }
 
 function timestampOk(value, nowMs) {
-  // Без метки — принимаем (подпись всё равно проверена); старую — нет: повтор
-  // перехваченного запроса не должен запускать routine.
+  // Заголовок Sentry не подписывает — это лишь дополнительная проверка; без
+  // него принимаем, старый — нет. Настоящая защита от повтора — eventTimeOk.
   if (value === null || value === undefined || String(value).trim() === "") return true;
   let ts = Number(String(value).trim());
   if (!Number.isFinite(ts)) return false;
   if (ts > 1e12) ts /= 1000;
   return Math.abs(nowMs / 1000 - ts) <= MAX_SKEW_SECONDS;
+}
+
+function epochSeconds(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" || /^\s*\d+(\.\d+)?\s*$/.test(String(value))) {
+    let ts = Number(value);
+    if (!Number.isFinite(ts) || ts <= 0) return null;
+    if (ts > 1e12) ts /= 1000;
+    return ts;
+  }
+  const ms = Date.parse(String(value));
+  return Number.isFinite(ms) ? ms / 1000 : null;
+}
+
+// Время события из подписанного тела: received (время приёма Sentry, часы
+// сервера), затем datetime / timestamp (часы машины байера). Нет времени —
+// отказ: тело без времени нельзя отличить от повтора.
+function eventTimeOk(payload, nowMs) {
+  const event = (payload && payload.data && payload.data.event) || {};
+  let ts = null;
+  for (const name of ["received", "datetime", "timestamp"]) {
+    ts = epochSeconds(event[name]);
+    if (ts !== null) break;
+  }
+  if (ts === null) return false;
+  const age = nowMs / 1000 - ts;
+  return age <= MAX_EVENT_AGE_SECONDS && age >= -MAX_SKEW_SECONDS;
 }
 
 // Вычистка — тот же принцип, что run_telemetry.scrub: наружу не уходят
@@ -89,8 +123,10 @@ function scrub(value, limit = 200, keepNumbers = false) {
   text = text.replace(/[\u0000-\u001f\u007f]+/g, " ");
   text = text.replace(/-----BEGIN[^-]*-----[\s\S]*?(-----END[^-]*-----|$)/g, "[key]");
   text = text.replace(/\bBearer\s+\S+/gi, "Bearer [token]");
-  text = text.replace(/\b(?:sk-[A-Za-z0-9_-]{8,}|sntr[a-z]{1,3}_[A-Za-z0-9_=-]{8,}|gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}|xox[abpr]-[A-Za-z0-9-]{8,}|eyJ[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]+){0,2})/g, "[token]");
+  text = text.replace(/\b(?:sk-[A-Za-z0-9_-]{8,}|sntr[a-z]{1,3}_[A-Za-z0-9_=-]{8,}|gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}|xox[abpr]-[A-Za-z0-9-]{8,}|EAA[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]+){0,2})/g, "[token]");
   text = text.replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, "[url]");
+  // Адреса без схемы (business.facebook.com/adsmanager?...) — тоже [url].
+  text = text.replace(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}\/\S*/gi, "[url]");
   text = text.replace(/\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g, "[email]");
   text = text.replace(/\bact[_=]\s*\d+/gi, "act=[hidden]");
   text = text.replace(/\b([a-z_]*_id|id|token|key|secret|password)\s*[=:]\s*[^\s&,;]+/gi, "$1=[hidden]");
@@ -214,8 +250,12 @@ async function handle(request, env, ctx, { now = () => Date.now(), fetchImpl = (
   if (request.method === "GET") return reply(200, "sentry-relay ok");
   if (request.method !== "POST") return reply(405, "method not allowed");
 
-  const raw = await request.text();
-  if (raw.length > MAX_BODY_BYTES) return reply(413, "too large");
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return reply(413, "too large");
+  // Предел — в байтах, а не в символах строки.
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.length > MAX_BODY_BYTES) return reply(413, "too large");
+  const raw = new TextDecoder().decode(bytes);
   const ok = await signatureOk(env.SENTRY_CLIENT_SECRET, raw, request.headers.get("sentry-hook-signature"));
   if (!ok) return reply(401, "bad signature");
   if (!timestampOk(request.headers.get("sentry-hook-timestamp"), now())) return reply(401, "stale request");
@@ -226,6 +266,7 @@ async function handle(request, env, ctx, { now = () => Date.now(), fetchImpl = (
   } catch {
     return reply(400, "bad json");
   }
+  if (!eventTimeOk(payload, now())) return reply(401, "stale or undated event");
   const fire = buildFire(payload, env, request.headers.get("sentry-hook-resource"));
   if (fire.skip) return reply(200, "ignored: " + fire.skip);
 
@@ -243,12 +284,19 @@ async function handle(request, env, ctx, { now = () => Date.now(), fetchImpl = (
   const cap = intSetting(env.MAX_FIRES_PER_HOUR, 20, 1, 100);
   const used = intSetting(await kv.get(hourKey), 0, 0, 1e9);
   if (used >= cap) return reply(200, "hourly limit reached; not fired");
+  // Суточный предел: DSN есть в каждой установке, и поток поддельных
+  // «новых» проблем не должен съесть подписку владельца.
+  const dayKey = `day:${new Date(now()).toISOString().slice(0, 10)}`;
+  const dayCap = intSetting(env.MAX_FIRES_PER_DAY, 30, 1, 480);
+  const usedToday = intSetting(await kv.get(dayKey), 0, 0, 1e9);
+  if (usedToday >= dayCap) return reply(200, "daily limit reached; not fired");
 
   const dedupeTtl = intSetting(env.DEDUPE_HOURS, 24, 1, 24 * 30) * 3600;
   // Сначала метка «в работе» — второй алерт, пришедший через секунду, уже
   // видит её и не запускает вторую routine.
   await kv.put(dedupeKey, JSON.stringify({ state: "pending", at: new Date(now()).toISOString() }), { expirationTtl: dedupeTtl });
   await kv.put(hourKey, String(used + 1), { expirationTtl: 7200 });
+  await kv.put(dayKey, String(usedToday + 1), { expirationTtl: 2 * 86400 });
 
   const work = fireRoutine(env, fire, kv, dedupeKey, dedupeTtl, fetchImpl);
   if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);

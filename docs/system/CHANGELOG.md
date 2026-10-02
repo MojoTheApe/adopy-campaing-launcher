@@ -8,11 +8,12 @@ asks the owner on the phone before any release.
 
 - `deploy/sentry-relay/worker.js`: a Cloudflare Worker (free plan) between Sentry and the
   routine's API trigger, because Sentry's webhooks cannot send the `Authorization`
-  header `/fire` needs. It checks Sentry's HMAC signature and timestamp, passes only
-  the rule "ACL - new failure kind" for project `python` and blocking / campaign_stop /
-  job_exception failures, fires once per Sentry issue per 24 h and at most 20 times an
-  hour, and sends only a short scrubbed text (issue id, title, culprit, step, reason,
-  release, machine, link). Tests: `worker.test.js` (Node, no packages), run from
+  header `/fire` needs. It checks Sentry's HMAC signature and the event time inside
+  the signed body (older than an hour or undated = refused; the unsigned timestamp
+  header is only an extra check), passes only the rule "ACL - new failure kind" for
+  project `python` and blocking / campaign_stop / job_exception failures, fires once
+  per Sentry issue per 24 h, at most 20 times an hour and 30 a day, and sends only a
+  short scrubbed text (issue id, title, culprit, step, reason, release, machine, link). Tests: `worker.test.js` (Node, no packages), run from
   `tests/test_sentry_relay.py`.
 - `docs/system/ROUTINE_SENTRY_PROMPT.md`: the routine's instructions — payload as data,
   Sentry read-only, tracker from a clean `main` checkout via REST-only `gh`, fix branch

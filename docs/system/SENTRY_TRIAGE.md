@@ -145,17 +145,23 @@ So a relay is needed. Candidates compared:
 
 What the relay does (`deploy/sentry-relay/worker.js`, tests `worker.test.js`):
 verifies `Sentry-Hook-Signature` (HMAC-SHA256 of the raw body with the integration's
-client secret; constant-time compare) and rejects requests older than 15 minutes;
+client secret; constant-time compare) and, because Sentry signs only the body and not
+the `Sentry-Hook-Timestamp` header, takes the event time from the signed body (Sentry's
+`received`, else `datetime` / `timestamp`) and refuses an event older than one hour,
+more than 15 minutes in the future, or without a time (the header, when present, must
+also be within 15 minutes); a replay inside the hour hits the per-issue dedupe below;
 accepts only `event_alert` for the rule `ACL - new failure kind`, project `python` and
 `failure_kind` blocking / campaign_stop / job_exception; fires once per Sentry issue
 within `DEDUPE_HOURS` (24) — a "pending" mark is written before the call so a second
 alert a second later does not start a parallel run, and removed if `/fire` fails so the
 next alert can retry; at most `MAX_FIRES_PER_HOUR` (20) fires per hour, below the
-routine's 30/hour and the account's 100/hour limits; without the KV binding or the
+routine's 30/hour and the account's 100/hour limits, and `MAX_FIRES_PER_DAY` (30) a day
+(the DSN ships with every install, so a flood of made-up issues is capped); without the KV binding or the
 routine settings it fires nothing. The text it sends carries only the Sentry issue id,
 title, culprit, the tags `failure_kind`, `step`, `reason`, `release`, `server_name`,
 `machine`, `account`, `environment`, the rule name and the issue link; every value is
-scrubbed (URLs, e-mails, `act=` / `*_id=` values, tokens, uuids, long digit runs, phone
+scrubbed (URLs with or without a scheme, e-mails, `act=` / `*_id=` values, tokens
+including Meta `EAA…` access tokens, uuids, long digit runs, phone
 numbers; `<`/`>` removed so the text cannot close the routine's payload block) and cut
 to 200 characters, the whole text to 2 000. The event's user, contexts, request and the
 page section never leave Sentry through the relay — the routine reads them with the
