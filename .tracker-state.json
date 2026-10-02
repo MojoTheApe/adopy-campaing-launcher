@@ -2666,22 +2666,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "447": {
-        "actor": "Worker-S1447N",
-        "session": "run_s1447n_1001",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1447-run-summary",
-        "worktree": "C:\\acl-1447-summary",
-        "id": "80101c0ca5a34afb86e2427521a9c532",
-        "issue": 447,
-        "state": "handoff",
-        "started_at": "2026-10-02T05:48:25+00:00",
-        "from_status": "status:todo",
-        "pr": 450,
-        "report": "# ACL-1447 \u2014 fixes after review (PR #450)\n\nHead: 27cf7d1574f5a3d2d5387743326a18e0805721aa (branch codex/acl-1447-run-summary)\n\n## Merges\n- Merged work/stage (e0c4a91) then work/main (3e9cbac) into the branch.\n- One conflict: docs/system/CHANGELOG.md \u2014 both sides kept (ACL-1447 entry, then ACL-1455/1476/... entries).\n- tests/bench/catalogue.json: no conflict; `scripts/bench_catalogue.py --check` reports up to date.\n\n## Findings\n1. HIGH (machine tag lost from non-init threads) \u2014 fixed. `src/acl_sentry.py`: `init()` stores\n   machine / machine_id in `_machine_tags`, sets them on `sentry_sdk.get_global_scope()`, and\n   `_before_send` adds them to every event when the event has no such tag (`_tag_machine`,\n   generic `_set_event_tag`, also used by `_tag_manager`). Test\n   `test_every_summary_from_a_job_thread_carries_the_machine`: a job thread sends two background\n   summaries, init happens lazily in the first summary's thread; both carry machine, machine_id and\n   manager. Verified the test fails (KeyError 'machine') with the fix reverted. Plus\n   `test_a_tag_already_on_the_event_is_not_overridden` (dict, list and missing tags).\n   Fixture now resets `_machine_tags` and removes the global-scope tags on teardown (otherwise\n   they leaked into tests/test_sentry_gets_only_campaign_failures.py).\n2. MEDIUM (grouping by label) \u2014 fixed. `scripts/run_summaries.py`: `machine_id` added to FIELDS;\n   `machines()` groups by machine_id (falls back to the label for older events without it), shows\n   the latest label, and the text table has a \"machine id\" column. Test\n   `test_two_computers_of_one_manager_are_two_rows` (two ids, one label; a renamed label stays one row).\n3. LOW (no summary on exceptions / other engines) \u2014 not fixed, deliberately. The recorded_flow\n   block in ads_manager_flow.py is ~170 lines; wrapping it in try/except means re-indenting a hot\n   RPA file that other PRs touch. The job exception already reaches Sentry via\n   `report_job_exception` (tagged with manager and now machine), and llm_agent / recipe_player are\n   experimental, non-default engines. Worth a follow-up issue if the owner wants summaries there.\n4. LOW (campaign name not scrubbed in the summary) \u2014 fixed. `run_summary.build` passes the\n   campaign through `scrub_text` (URL / e-mail / act_ + run_telemetry.scrub); plain names are\n   unchanged. Test `test_an_id_typed_into_the_campaign_name_is_scrubbed_in_the_summary`.\n5. INFO (live acceptance on owner and tester machines) \u2014 still open by design.\n\nCHANGELOG: one bullet added to the ACL-1447 entry describing the review fixes.\n\n## Tests (headless, empty ACL_LIBRARY_*)\n32 affected files incl. test_run_summary_reaches_sentry, test_run_summaries_from_sentry,\ntest_sentry_gets_only_campaign_failures, test_a_job_exception_reaches_sentry_tagged,\ntest_sentry_page_snapshot, test_sentry_triage, test_rpa_publisher_gates, test_publish_safety_contract,\ntest_machine_paths, test_bench_catalogue, test_report_scripts_parse,\npackaging/windows/tests/test_machine_config: 651 passed."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -3537,7 +3522,7 @@
             "session": "run_s1447n_1001"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1447N",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -3546,16 +3531,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1447-run-summary",
           "worktree": "C:\\acl-1447-summary",
-          "id": "aab39b470085452bb6f325490bfeeb32",
+          "id": "80101c0ca5a34afb86e2427521a9c532",
           "issue": 447,
           "state": "handoff",
-          "started_at": "2026-10-01T11:38:24+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-02T05:48:25+00:00",
+          "from_status": "status:todo",
           "pr": 450,
-          "report": "# ACL-1447 handoff \u2014 Worker-S1447N\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/450 (codex/acl-1447-run-summary \u2192 stage), head bfa3107.\n\n## Done\n- `src/fb_ads_rpa/run_summary.py`: one Sentry event per finished campaign (clean / warnings / do-not-publish / stopped, incl. stop while connecting the profile). Daemon thread, errors swallowed, `ACL_SENTRY_RUN_SUMMARY=0` switch.\n- `src/acl_sentry.py`: `report_run_summary` (message `Run summary: <result>`, level info|warning, fingerprint `[\"acl-run-summary\", result]`, tags kind/result/editor/account/campaign, context `run_summary`); `manager` tag on every event in `before_send` (ACL_MACHINE_LABEL \u2192 MY_CM_NAME \u2192 unset). Docstring records owner decision 2026-10-01 on names.\n- `run_telemetry.run_steps` \u2014 bounded in-memory per-run step buffer.\n- Names sent (account short label, campaign); ids, profile ids, Ads Manager URLs, tokens, e-mails scrubbed. Page-section placeholders in sentry_signal unchanged.\n- Manager label: setup wizard writes ACL_MACHINE_LABEL; dashboard Accounts \u2192 This computer \u2192 \"Your name\" (`/api/machine-paths` manager_name).\n- `scripts/run_summaries.py --from-sentry` (robot_health.py from ACL-1434 not on main \u2192 separate script, `machines_from_sentry()` reusable).\n- docs/system/CHANGELOG.md entry.\n\n## Tests\nFake sentry transport, real sentry_sdk: tests/test_run_summary_reaches_sentry.py (14), tests/test_run_summaries_from_sentry.py (3), tests/test_machine_paths.py (+2), packaging test_machine_config (+1 assertion); tests/test_sentry_gets_only_campaign_failures.py updated for the manager tag. conftest sets ACL_SENTRY_RUN_SUMMARY=0 by default. Affected suites: 1060 passed locally.\n\n## Open\n- Live acceptance: one run on owner's machine + one on a tester's machine show summaries with the manager label; `scripts/run_summaries.py --from-sentry` lists both (needs SENTRY_AUTH_TOKEN with event:read).\n- When ACL-1434 lands, wire `robot_health.py --from-sentry` to `scripts.run_summaries.machines_from_sentry()`."
+          "report": "# ACL-1447 \u2014 fixes after review (PR #450)\n\nHead: 27cf7d1574f5a3d2d5387743326a18e0805721aa (branch codex/acl-1447-run-summary)\n\n## Merges\n- Merged work/stage (e0c4a91) then work/main (3e9cbac) into the branch.\n- One conflict: docs/system/CHANGELOG.md \u2014 both sides kept (ACL-1447 entry, then ACL-1455/1476/... entries).\n- tests/bench/catalogue.json: no conflict; `scripts/bench_catalogue.py --check` reports up to date.\n\n## Findings\n1. HIGH (machine tag lost from non-init threads) \u2014 fixed. `src/acl_sentry.py`: `init()` stores\n   machine / machine_id in `_machine_tags`, sets them on `sentry_sdk.get_global_scope()`, and\n   `_before_send` adds them to every event when the event has no such tag (`_tag_machine`,\n   generic `_set_event_tag`, also used by `_tag_manager`). Test\n   `test_every_summary_from_a_job_thread_carries_the_machine`: a job thread sends two background\n   summaries, init happens lazily in the first summary's thread; both carry machine, machine_id and\n   manager. Verified the test fails (KeyError 'machine') with the fix reverted. Plus\n   `test_a_tag_already_on_the_event_is_not_overridden` (dict, list and missing tags).\n   Fixture now resets `_machine_tags` and removes the global-scope tags on teardown (otherwise\n   they leaked into tests/test_sentry_gets_only_campaign_failures.py).\n2. MEDIUM (grouping by label) \u2014 fixed. `scripts/run_summaries.py`: `machine_id` added to FIELDS;\n   `machines()` groups by machine_id (falls back to the label for older events without it), shows\n   the latest label, and the text table has a \"machine id\" column. Test\n   `test_two_computers_of_one_manager_are_two_rows` (two ids, one label; a renamed label stays one row).\n3. LOW (no summary on exceptions / other engines) \u2014 not fixed, deliberately. The recorded_flow\n   block in ads_manager_flow.py is ~170 lines; wrapping it in try/except means re-indenting a hot\n   RPA file that other PRs touch. The job exception already reaches Sentry via\n   `report_job_exception` (tagged with manager and now machine), and llm_agent / recipe_player are\n   experimental, non-default engines. Worth a follow-up issue if the owner wants summaries there.\n4. LOW (campaign name not scrubbed in the summary) \u2014 fixed. `run_summary.build` passes the\n   campaign through `scrub_text` (URL / e-mail / act_ + run_telemetry.scrub); plain names are\n   unchanged. Test `test_an_id_typed_into_the_campaign_name_is_scrubbed_in_the_summary`.\n5. INFO (live acceptance on owner and tester machines) \u2014 still open by design.\n\nCHANGELOG: one bullet added to the ACL-1447 entry describing the review fixes.\n\n## Tests (headless, empty ACL_LIBRARY_*)\n32 affected files incl. test_run_summary_reaches_sentry, test_run_summaries_from_sentry,\ntest_sentry_gets_only_campaign_failures, test_a_job_exception_reaches_sentry_tagged,\ntest_sentry_page_snapshot, test_sentry_triage, test_rpa_publisher_gates, test_publish_safety_contract,\ntest_machine_paths, test_bench_catalogue, test_report_scripts_parse,\npackaging/windows/tests/test_machine_config: 651 passed."
         },
         "pr": 450,
-        "queued_at": "2026-10-01T11:56:01+00:00",
+        "queued_at": "2026-10-02T06:15:25+00:00",
         "review_report": "# Independent review: PR #450 (ACL-1447, Issue #447)\n\nReviewer-R1447Q (rev_1447q_1002). Implementer: Worker-S1447N.\nHead 268500f3f22736500eb92a36228ab21f4a3c262d (tree 0937f8626895e24a7dc9ec293d195dbba0034c49).\nBase work/stage e0c4a911e8fe0fd21d1db3fe3021d1d6bb143df8 (tests were run on the merge with 8322a6a; e0c4a91 only adds ACL-1455 CSS in report.html plus a test).\n\n## Verdict: request-changes\n\n## CI\nAll 15 checks green (CI test 3.11/3.13 x3, ACL verification, Installer verification, descriptor x2, tracker-link, Windows installer). No failing jobs, so nothing to classify.\n\n## Merge with work/stage\n`git merge-tree` shows one conflict: docs/system/CHANGELOG.md. Both sides add entries at the top, so keeping both resolves it. rpa_publisher.py, app.py, report.html and conftest.py merge automatically. The merged tree passed 637 affected tests (31 test files plus packaging test_machine_config), run headless with an empty ACL_LIBRARY_*. GitHub reports the PR as CONFLICTING.\n\n## Findings\n1. HIGH, src/acl_sentry.py:167-169 (pre-existing, but now load-bearing), used by src/fb_ads_rpa/run_summary.py:565 and scripts/run_summaries.py:130.\n   `init()` sets the `machine` and `machine_id` tags with `sentry_sdk.set_tag`, which writes to the isolation scope of whichever thread calls init first. The summary is sent from a new daemon thread. Once init has run, the threading integration forks that new thread's scope from the spawning job thread, which never had the tags. Reproduced with real sentry_sdk 2.69.1 and a fake transport: a job thread sends two summaries. The first carries machine=Dan and machine_id; the second has no machine or machine_id tag at all. Only `manager` survives, because it is added in before_send. `run_summaries.machines()` groups by `machine`, so every summary after the first lands in \"unknown\". That breaks the per-machine table (AC 4 and the live acceptance \"lists both machines\").\n   Fix: set machine/machine_id in `_before_send`, as is done for manager, or on `sentry_sdk.get_global_scope()`. Add a test that sends two summaries from a non-init thread and asserts the machine tag.\n2. MEDIUM, scripts/run_summaries.py:45,84. Grouping is keyed on the `machine` label. The wizard now writes ACL_MACHINE_LABEL = manager name, and telemetry_sync.machine_identity uses that as the machine label (the test asserts machine == \"Dan\"). Two computers of the same manager, or a renamed label, merge into one row, and the hostname is no longer visible. Fix: add machine_id to FIELDS and group by it, with the label shown.\n3. LOW, src/fb_ads_rpa/ads_manager_flow.py:2339-2509. The summary is sent only on the recorded_flow normal return. If run_recorded_campaign_flow or _goto_campaigns raises something other than ProfileStop, no summary is sent (the job exception still goes to Sentry). The llm_agent and recipe_player engines send no summary. This is acceptable because recorded_flow is the default, but it is worth a note.\n4. LOW, src/fb_ads_rpa/run_summary.py:527. The campaign name is not passed through scrub_text. It still goes through before_send scrub_diag, so this matches the owner decision, but an e-mail or act_ id typed into a campaign name would only be caught by the generic scrubber.\n5. INFO: the live acceptance (owner and tester machines in Sentry, --from-sentry listing both) is still open by design.\n\n## Checks done\n- Safety: no Publish path, no browser or Multilogin changes, and no visible windows. Sending happens in a daemon thread and swallows all errors. The switch ACL_SENTRY_RUN_SUMMARY=0 works, and conftest defaults it to off.\n- Ids, URLs, tokens and e-mails are scrubbed; names are sent, as the owner decided.\n- User-facing text (wizard, dashboard, errors) is in English.\n- Mutation spot-checks on tests/test_run_summary_reaches_sentry.py: dropping the manager tag, the URL/e-mail scrub, the switch, background sending, or do-not-publish each makes tests fail. The tests are real.\n- Profile-stop path: the publisher clears the current run per campaign, so a stop at connection does not pick up the previous campaign's steps."
       },
       "452": {
@@ -4460,7 +4445,8 @@
       427,
       424,
       434,
-      437
+      437,
+      447
     ],
     "review": {
       "id": "26d7af6509b643f38ae7d2074e8d9c1b",
@@ -6180,6 +6166,13 @@
         "issue": 437,
         "pr": 438,
         "actor": "Worker-E1437V"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-02T06:15:25+00:00",
+        "issue": 447,
+        "pr": 450,
+        "actor": "Worker-S1447N"
       }
     ],
     "policy": {
