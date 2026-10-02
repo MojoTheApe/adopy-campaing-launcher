@@ -95,16 +95,38 @@ def manager_label() -> str:
     return ""
 
 
-def _tag_manager(event: dict) -> None:
-    label = manager_label() or "unset"
+#: Теги машины, снятые при `init` (ACL-1447, ревью PR #450). Ставятся в
+#: `before_send`, а не только `set_tag` при `init`: `set_tag` пишет в scope
+#: того потока, что звал `init`, а итог кампании уходит из нового потока,
+#: чей scope форкается от потока задания — без тегов. Тогда все итоги, кроме
+#: первого, приходили без `machine` и складывались в «unknown».
+_machine_tags: dict[str, str] = {}
+
+
+def _set_event_tag(event: dict, key: str, value: str, *, override: bool = True) -> None:
     tags = event.get("tags")
     if isinstance(tags, dict):
-        tags["manager"] = label
+        if override or not tags.get(key):
+            tags[key] = value
     elif isinstance(tags, list):
-        event["tags"] = [t for t in tags if not (isinstance(t, (list, tuple)) and t and t[0] == "manager")]
-        event["tags"].append(["manager", label])
+        has = [t for t in tags if isinstance(t, (list, tuple)) and t and t[0] == key]
+        if has and not override and any(len(t) > 1 and t[1] for t in has):
+            return
+        event["tags"] = [t for t in tags if not (isinstance(t, (list, tuple)) and t and t[0] == key)]
+        event["tags"].append([key, value])
     else:
-        event["tags"] = {"manager": label}
+        event["tags"] = {key: value}
+
+
+def _tag_manager(event: dict) -> None:
+    _set_event_tag(event, "manager", manager_label() or "unset")
+
+
+def _tag_machine(event: dict) -> None:
+    # Тег, уже стоящий на событии, не перебиваем — он точнее нашего снимка.
+    for key, value in _machine_tags.items():
+        if value:
+            _set_event_tag(event, key, value, override=False)
 
 
 def _before_send(event: dict, _hint: dict) -> dict | None:
@@ -112,6 +134,10 @@ def _before_send(event: dict, _hint: dict) -> dict | None:
         _tag_manager(event)
     except Exception:
         pass  # без тега событие всё равно ценно
+    try:
+        _tag_machine(event)
+    except Exception:
+        pass
     try:
         return _scrub_deep(event)
     except Exception:
@@ -164,9 +190,20 @@ def init() -> bool:
         # «выход», а мы держим окно ради отчёта — это про нас же плохо.
         shutdown_timeout=3,
     )
-    sentry_sdk.set_tag("machine", machine_label)
+    _machine_tags.clear()
+    _machine_tags["machine"] = str(machine_label or "")
     if machine_id:
-        sentry_sdk.set_tag("machine_id", machine_id)
+        _machine_tags["machine_id"] = str(machine_id)
+    # Глобальный scope виден всем потокам; `before_send` — страховка.
+    try:
+        global_scope = sentry_sdk.get_global_scope()
+        for key, value in _machine_tags.items():
+            if value:
+                global_scope.set_tag(key, value)
+    except Exception:
+        for key, value in _machine_tags.items():
+            if value:
+                sentry_sdk.set_tag(key, value)
     _started = True
     return True
 

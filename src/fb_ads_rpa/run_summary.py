@@ -146,7 +146,10 @@ def build(
     truncated = max(0, len(step_rows) - MAX_STEPS)
     summary: dict[str, Any] = {
         "result": result,
-        "campaign": (campaign or "").strip()[:MAX_TEXT],
+        # Имя едет (решение владельца 01.10), но набранные в него почта,
+        # `act_`-номер или адрес вычищаются здесь же, а не только общим
+        # вычистителем в `before_send` (ревью PR #450, LOW).
+        "campaign": scrub_text((campaign or "").strip()),
         "account": account_label(account),
         "editor": editor_kind(steps),
         "stopped_at": scrub_text(stopped_at),

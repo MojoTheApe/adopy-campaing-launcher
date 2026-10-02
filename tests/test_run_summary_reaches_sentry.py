@@ -75,6 +75,7 @@ def sentry(monkeypatch):
     monkeypatch.setenv("ACL_SENTRY_RUN_SUMMARY", "1")
     monkeypatch.setenv("ACL_MACHINE_LABEL", "Dan")
     monkeypatch.setattr(acl_sentry, "_started", False)
+    monkeypatch.setattr(acl_sentry, "_machine_tags", {})
     monkeypatch.setattr(sentry_sdk, "init", init_with_fake_transport)
     from src.fb_ads_rpa import telemetry_sync
 
@@ -88,6 +89,10 @@ def sentry(monkeypatch):
     except Exception:
         pass
     real_init(dsn="")  # клиент без адреса — ничего не шлёт
+    # `init` ставит теги машины на глобальный scope — он переживает тест и
+    # подписал бы события следующих файлов.
+    for key in ("machine", "machine_id"):
+        sentry_sdk.get_global_scope().remove_tag(key)
 
 
 def _steps(run_id: str, *, simple: bool = False) -> None:
@@ -177,6 +182,13 @@ def test_names_are_sent_and_ids_urls_tokens_emails_are_scrubbed(sentry):
     assert "<ads-manager-url>" in reason and "<email>" in reason and "<uuid>" in reason
 
 
+def test_an_id_typed_into_the_campaign_name_is_scrubbed_in_the_summary():
+    summary = run_summary.build(campaign=f"{CAMPAIGN} act_123456789 ivan@example.com", steps=[])
+    assert summary["campaign"].startswith(CAMPAIGN)
+    assert "123456789" not in summary["campaign"] and "ivan@example.com" not in summary["campaign"]
+    assert run_summary.build(campaign=CAMPAIGN, steps=[])["campaign"] == CAMPAIGN
+
+
 # ── подпись менеджера на каждом событии ────────────────────────────────────
 
 def test_every_event_carries_the_manager_label(sentry, monkeypatch):
@@ -198,6 +210,53 @@ def test_the_label_falls_back_to_the_dashboard_name(sentry, monkeypatch):
     monkeypatch.delenv("MY_CM_NAME", raising=False)
     acl_sentry.report_problem("y")
     assert sentry.events[-1]["tags"]["manager"] == "unset"
+
+
+def test_every_summary_from_a_job_thread_carries_the_machine(sentry, monkeypatch):
+    """Ревью PR #450, HIGH: `init` ставил `machine` в scope своего потока; итог
+    уходит из нового потока, форкнутого от потока задания, — со второго итога
+    тег пропадал, и `run_summaries.machines()` складывал всё в «unknown»."""
+    from src.fb_ads_rpa import telemetry_sync
+
+    monkeypatch.setattr(telemetry_sync, "machine_identity", lambda: ("Dan", "a1b2c3d4e5f6"))
+    # `init` не зовём заранее: его зовёт первый итог из своего потока — как на
+    # машине байера, где до первой кампании Sentry никто не поднимал.
+
+    errors: list[BaseException] = []
+
+    def job():
+        try:
+            for n in range(2):
+                _steps(f"run0000001{n}")
+                worker = run_summary.report_finished(campaign=CAMPAIGN, account=ACCOUNT)
+                # Первый итог поднимает Sentry сам — холодный импорт бывает долгим.
+                worker.join(60)
+        except BaseException as exc:  # noqa: BLE001 — показать в assert
+            errors.append(exc)
+
+    thread = threading.Thread(target=job)
+    thread.start()
+    thread.join(130)
+    assert not thread.is_alive() and errors == []
+    summaries = [e for e in sentry.events if (e.get("tags") or {}).get("kind") == "run_summary"]
+    assert len(summaries) == 2, sentry.events
+    for event in summaries:
+        assert event["tags"]["machine"] == "Dan"
+        assert event["tags"]["machine_id"] == "a1b2c3d4e5f6"
+        assert event["tags"]["manager"] == "Dan"
+
+
+def test_a_tag_already_on_the_event_is_not_overridden(monkeypatch):
+    monkeypatch.setattr(acl_sentry, "_machine_tags", {"machine": "Dan", "machine_id": "a1b2c3"})
+    event = {"tags": {"machine": "Other"}}
+    acl_sentry._tag_machine(event)
+    assert event["tags"] == {"machine": "Other", "machine_id": "a1b2c3"}
+    listed = {"tags": [["machine", "Other"]]}
+    acl_sentry._tag_machine(listed)
+    assert ["machine", "Other"] in listed["tags"] and ["machine_id", "a1b2c3"] in listed["tags"]
+    bare: dict = {}
+    acl_sentry._tag_machine(bare)
+    assert bare["tags"] == {"machine": "Dan", "machine_id": "a1b2c3"}
 
 
 # ── выключатель и сеть ─────────────────────────────────────────────────────

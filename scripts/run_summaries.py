@@ -2,7 +2,7 @@
 
 Что делает. Читает события `kind:run_summary` (их шлёт
 `src/fb_ads_rpa/run_summary.py` в конце каждой кампании) через Discover API
-Sentry и складывает по машинам: сколько кампаний, с каким итогом (clean /
+Sentry и складывает по машинам (по `machine_id`, с ярлыком): сколько кампаний, с каким итогом (clean /
 warnings / do-not-publish / stopped), когда последняя, на каком релизе и под
 каким именем менеджера. Это режим `--from-sentry` таблицы здоровья робота:
 локальный `rpa_telemetry.jsonl` видит только свою машину.
@@ -42,7 +42,7 @@ from scripts.sentry_triage import (  # noqa: E402
     _NEXT_RE,
 )
 
-FIELDS = ("timestamp", "machine", "manager", "result", "release", "account", "campaign", "editor")
+FIELDS = ("timestamp", "machine", "machine_id", "manager", "result", "release", "account", "campaign", "editor")
 RESULTS = ("clean", "warnings", "do-not-publish", "stopped")
 MAX_EVENTS = 2000
 
@@ -78,12 +78,20 @@ def summary_events(client: SentryClient, *, period: str = "7d", project: str = "
 
 
 def machines(events: list[dict[str, str]]) -> list[dict[str, Any]]:
-    """Сложить итоги по машине: одна строка на машину, свежие сверху."""
+    """Сложить итоги по машине: одна строка на машину, свежие сверху.
+
+    Ключ — `machine_id` (ревью PR #450): ярлык `machine` теперь равен имени
+    менеджера, и два компьютера одного менеджера (или переименованный ярлык)
+    по ярлыку слились бы в одну строку. Ярлык показываем последний. Старые
+    события без `machine_id` группируются по ярлыку, как раньше.
+    """
     by_machine: dict[str, dict[str, Any]] = {}
     for ev in events:
-        key = ev.get("machine") or "unknown"
+        machine_id = ev.get("machine_id") or ""
+        label = ev.get("machine") or ""
+        key = f"id:{machine_id}" if machine_id else f"label:{label or 'unknown'}"
         row = by_machine.setdefault(key, {
-            "machine": key, "manager": "", "runs": 0,
+            "machine": label or "unknown", "machine_id": machine_id, "manager": "", "runs": 0,
             **{r: 0 for r in RESULTS}, "last_run": "", "release": "",
             "last_account": "", "last_campaign": "", "last_result": "",
         })
@@ -94,6 +102,7 @@ def machines(events: list[dict[str, str]]) -> list[dict[str, Any]]:
         ts = ev.get("timestamp") or ""
         if ts >= row["last_run"]:
             row.update(last_run=ts, release=ev.get("release") or row["release"],
+                       machine=label or row["machine"],
                        manager=ev.get("manager") or row["manager"],
                        last_account=ev.get("account") or "", last_campaign=ev.get("campaign") or "",
                        last_result=result)
@@ -123,11 +132,11 @@ def to_text(digest: dict[str, Any]) -> str:
     if not rows:
         return f"No run summaries in Sentry for the last {digest.get('period')}."
     lines = [f"Run summaries from Sentry, last {digest.get('period')} ({digest.get('events')} campaigns)",
-             f"{'machine':22s} {'manager':14s} {'runs':>4s} {'clean':>5s} {'warn':>4s} "
+             f"{'machine':22s} {'machine id':12s} {'manager':14s} {'runs':>4s} {'clean':>5s} {'warn':>4s} "
              f"{'dnp':>4s} {'stop':>4s}  {'last run':20s} release"]
     for r in rows:
         lines.append(
-            f"{r['machine'][:22]:22s} {(r['manager'] or '-')[:14]:14s} {r['runs']:4d} {r['clean']:5d} "
+            f"{r['machine'][:22]:22s} {(r['machine_id'] or '-')[:12]:12s} {(r['manager'] or '-')[:14]:14s} {r['runs']:4d} {r['clean']:5d} "
             f"{r['warnings']:4d} {r['do-not-publish']:4d} {r['stopped']:4d}  "
             f"{r['last_run'][:19]:20s} {r['release']}")
     return "\n".join(lines)

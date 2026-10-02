@@ -30,6 +30,13 @@ buyer's machine (warnings, slow steps, what passed) stayed in the local
   (Sentry Discover API, `SENTRY_AUTH_TOKEN` with event:read). `scripts/robot_health.py`
   (ACL-1434) was not on main yet, so the reader is its own script with
   `machines_from_sentry()` for the health table to call.
+- Review of PR #450: the `machine` and `machine_id` tags are now set on the global
+  scope and again in `before_send`. Before, they lived only in the scope of the
+  thread that called `init`, so every summary after the first (sent from a new
+  thread) had no machine and was listed as "unknown". `run_summaries` groups by
+  `machine_id` and shows the latest label, so two computers of one manager stay two
+  rows. The campaign name in the summary goes through the summary scrubber
+  (URL / e-mail / `act_`).
 
 ## Buttons no longer look like input fields — ACL-1455
 
