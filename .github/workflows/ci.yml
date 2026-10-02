@@ -65,6 +65,11 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.13"]
+        # ACL-1397: the suite is split into 3 jobs per Python version
+        # (scripts/acl_test_shard.py). A private repository's hosted Windows
+        # runner has 2 CPUs, so pytest-xdist alone did not shorten CI; three
+        # runners do. Together the shards are exactly tests/test_*.py.
+        shard: [1, 2, 3]
 
     steps:
       - uses: actions/checkout@v4
@@ -101,8 +106,20 @@ jobs:
       - name: Install Chromium for isolated DOM tests
         run: python -m playwright install chromium
 
-      - name: Tests
-        run: python -m pytest tests/ -q
+      # Parallel since ACL-1397: this job's shard of the test files, with one
+      # pytest-xdist worker per runner CPU. `loadfile` keeps each test file on
+      # one worker: 80+ files launch their own Chromium in a module fixture,
+      # and spreading a file's tests over workers launched that browser once
+      # per worker (measured locally: 41 min with test-by-test `load` vs
+      # 20 min with `loadfile`). See docs/repository/WORKFLOW.md.
+      - name: Tests (shard ${{ matrix.shard }} of 3)
+        run: |
+          Write-Output "CPUs on this runner: $env:NUMBER_OF_PROCESSORS"
+          $files = @(python scripts/acl_test_shard.py ${{ matrix.shard }} 3)
+          if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { throw "no test files for shard ${{ matrix.shard }}" }
+          Write-Output "$($files.Count) test files in this shard"
+          python -m pytest @files -q -n auto --dist loadfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   admission:
     name: ACL verification
