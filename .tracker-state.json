@@ -3830,9 +3830,11 @@
         "worktree": "C:\\acl-1520-copygroup",
         "id": "cba4d6be9348475c89f37e9b9df9257b",
         "issue": 520,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-03T05:54:53+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 522,
+        "report": "# ACL-1520 handoff \u2014 Worker-C1520G (run_c1520g_1003)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/522 (into stage), branch codex/acl-1520-copy-for-group, head ea49df73.\n\n## Changed\n- `src/web/templates/_account_map_country.html`, `report.html` (`amapStatusTail`, new block `ACL-1520 copy-group`: `amapComposeGroup`, `amapOpenGroupImage`, `amapCopyGroup`; removed unused `amapCopyText`; CSS class renamed to `.amap-copy-group`).\n- One Copy for group button under disabled/restricted/blocked/review; hint \"Copy for group \u2014 paste it into the provider's group\".\n- Canvas-composed PNG: red band with `<short name> \u2014 Account <Status> \u00b7 <read time>` over the stored status shot; ClipboardItem image/png; nothing sent or stored.\n- No shot: disabled with \"No screenshot on the last read \u2014 read the account again\". Clipboard refused: composed image in a new tab with \"Right-click \u2192 Copy image\"; tab/image failure: old `/view`.\n- \"unreadable\" with a shot keeps Copy screenshot. `amapApplyReading` not touched.\n\n## Point 5 (banner in capture)\nCapture = whole viewport (`full_page=False`), taken right after the status read, before scrolling to totals. Real shots inside the profile: 6540 (restricted) \u2014 red \"We restricted your ad account\" banner above the table, in the shot. Doc20 (disabled) \u2014 no banner, \"Account disabled\" in Delivery. No capture change; fixture test with a banner page + order test (shot before scroll).\n\n## Tests\ntest_copy_for_group.py (10 new), test_copy_status_text.py and test_status_screenshot.py updated; with test_read_fallback, test_tree_campaigns_not_read, test_report_scripts_parse, test_screens_are_in_english, test_review_ui_regressions, test_bench_catalogue, test_country_refresh_review \u2014 all passed (109 + 77). scripts/acl_scan_secrets.py clean. CHANGELOG entry added.\n\n## Open\n- Live check: Doc20 / 6540 pasted into the group as one image (with ACL-1485 / ACL-1489).\n- Side note: some status shots (9943, 03.10) have a large white margin \u2014 window bigger than the rendered page; not changed here."
       }
     },
     "tasks": {
