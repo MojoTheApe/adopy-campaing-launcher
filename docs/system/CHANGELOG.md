@@ -31,6 +31,41 @@ the window (ACL-1388/1427). The read paths now use the same path.
 - Tests: `tests/test_reads_reopen_a_hand_opened_profile.py` (stubbed clock, Win32,
   processes and MLX; no real Multilogin).
 
+## The country is retried in place and once more at the end of the campaign — ACL-1390
+
+2026-09-30 07:36 UTC (FacebookDoc19, SA_arc_All_Image_PF_35_30.09, run 64cc3d5510b2):
+Meta's location search showed no suggestions for "Saudi Arabia" twice, the campaign
+ended "the country was not set", although the same account had set Saudi Arabia 25
+minutes earlier. Owner decision 2026-09-30: retry in place and once more at the end.
+
+- In place: up to 4 attempts. The first is the text already typed with the old 6 s
+  wait (no slowdown when suggestions appear at once); then click back into the field,
+  clear it and type slower (8 s); the first word / a shorter prefix (10 s); the full
+  name typed slowest with the longest wait (15 s). Only the "<country> (Country)"
+  option or the bare country name is picked — a region or city of the same name never
+  is (the old "first option" fallback is gone; with no `role=option` rows but an open
+  list, Enter stays as before and the rows check decides). Every attempt after a failed
+  first one is a telemetry row `audience_location_attempt` (attempt, typed, options,
+  outcome). On give-up the search field is left empty.
+- Second pass: if `audience_location` still failed, after the rest of the campaign
+  (ads and the destination sweep) the robot returns to the same ad set — the ad-set row
+  of the left tree in the classic editor, the ad-set section and Audience card in the
+  single-screen editor — reads Locations, and runs the location step once more (same
+  default-country removal), then reads Locations back. Fixed → the blocking
+  `audience_location` is replaced by the warning `audience_location_second_pass`
+  shown on the job card; not fixed → the same `audience_location` stop as before.
+  Telemetry `audience_location_second_pass` (listed_before / listed_after). No campaign
+  replay, no second draft, no Publish.
+- Review of PR #393: in the single-screen editor after ads 2+ the second pass runs under
+  ACL-1353's `hold_open_ad("simple_create_open_ad_n")` (no reload, no tree open); an
+  empty search field is retyped on attempt 1 and the attempt row records what was
+  really in the field; keys are sent only when the location search has focus; the
+  read-back requires row names equal to the country ("Riyadh, Saudi Arabia" is not).
+- Review round 2: the job panel titles the warning "Country set on the second pass"
+  (`failure_policy.GUIDE`); a miss opening the ad-set row is recorded on the
+  `audience_location_second_pass` row as `open:<why>`, so Robot health does not count
+  it as a failed step.
+
 ## Screenshot endpoint tests prove a path outside the folder is refused — ACL-1486
 
 The ACL-1430 review found that the tests for `/account-spend/status-shot/<id>`

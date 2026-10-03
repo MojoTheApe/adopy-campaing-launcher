@@ -161,6 +161,14 @@ POLICY: dict[str, tuple[str, str]] = {
         "the country was not set, so the adset keeps whatever Meta defaults to "
         "— the campaign spends in the wrong market",
     ),
+    # ACL-1390: страна встала только на втором проходе в конце кампании и
+    # подтверждена перечитыванием Locations — черновик годен, это сведения.
+    "audience_location_second_pass": (
+        WARNING,
+        "Meta's location search showed no suggestions when the country was first typed; "
+        "the robot set it on a second pass at the end of the campaign and read it back "
+        "from Locations",
+    ),
     "conversion_event": (
         BLOCKING,
         "optimising for the wrong event spends the budget on the wrong people; "
@@ -354,6 +362,13 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Location — not set",
         "The ad set may spend in the wrong country.",
         "Check \"Locations\" on the ad set.",
+    ),
+    # ACL-1390: страна встала со второго прохода — предупреждение, не стоп.
+    "audience_location_second_pass": (
+        "Country set on the second pass",
+        "Meta's location search stalled; the robot set the country at the end "
+        "of the campaign and read it back.",
+        "Check \"Locations\" on the ad set before publishing.",
     ),
     "conversion_event": (
         "Conversion event — not verified",
