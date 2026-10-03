@@ -5517,7 +5517,7 @@
             "session": "run_o1535f_1003"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-O1535F",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -5536,7 +5536,8 @@
         },
         "pr": 536,
         "queued_at": "2026-10-03T15:20:26+00:00",
-        "review_report": "# PR #536 (ACL-1535) returned by the coordinator before review \u2014 scope gap\n\nThe worker's own open item 1: `_shoot` in `src/analysis_agent/account_spend.py` still calls `page.screenshot` when a spend read fails (grid timeout, wrong period, no totals row). It is the same capture method ACL-1532 measured resetting the profile's viewport. Owner intent (2026-10-03): no capture that can touch the profile. Gate `_shoot` behind the same `ACL_STATUS_SHOT=1` flag (or a sibling flag documented together), keep the HTML/JSON diagnostics that do not capture an image, and add a spy test that a failed read makes no screenshot call by default. Also grep the dashboard read paths (account_spend, country_split, account status read, open-profile) for any other `page.screenshot` / `captureScreenshot` call and gate or list them."
+        "review_report": "# PR #536 (ACL-1535) returned by the coordinator before review \u2014 scope gap\n\nThe worker's own open item 1: `_shoot` in `src/analysis_agent/account_spend.py` still calls `page.screenshot` when a spend read fails (grid timeout, wrong period, no totals row). It is the same capture method ACL-1532 measured resetting the profile's viewport. Owner intent (2026-10-03): no capture that can touch the profile. Gate `_shoot` behind the same `ACL_STATUS_SHOT=1` flag (or a sibling flag documented together), keep the HTML/JSON diagnostics that do not capture an image, and add a spy test that a failed read makes no screenshot call by default. Also grep the dashboard read paths (account_spend, country_split, account status read, open-profile) for any other `page.screenshot` / `captureScreenshot` call and gate or list them.",
+        "reviewer": "Reviewer-R1535S"
       }
     },
     "actors": {
@@ -6941,10 +6942,20 @@
       526,
       532,
       529,
-      535,
       533
     ],
-    "review": null,
+    "review": {
+      "id": "5fec62e8a6d34e02ba21de4177737898",
+      "pr": 536,
+      "issues": [
+        535
+      ],
+      "actor": "Reviewer-R1535S",
+      "session": "rev_r1535s_1003",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-03T15:28:44+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -10054,6 +10065,13 @@
         "issue": 533,
         "pr": 537,
         "actor": "Worker-K1533C"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-03T15:28:44+00:00",
+        "pr": 536,
+        "lane": "5fec62e8a6d34e02ba21de4177737898",
+        "actor": "Reviewer-R1535S"
       }
     ],
     "policy": {
