@@ -31,6 +31,31 @@ Fix: one shared helper, `config.paths.machine_file_lock(path, timeout=None)`.
 - `ad_text_registry.py`, `team_library.py` and `acl_log.py` still use the old
   pattern. They are not changed here.
 
+## The dashboard stays responsive while the report is built — ACL-1399
+
+2026-09-30 after a restart the first page built the report inside the request
+handler: about a minute in which `/health` and the publish queue did not answer,
+and the owner's Publish on Facebook_1443 failed with "Failed to fetch".
+
+- Cold build faster: `config/analysis_rules.py` parsed its JSON file on every
+  workbook row (60 256 reads, 69 s of a 106 s profiled build); it is now read once
+  and re-checked by mtime at most every 2 s. The unknown-interest log no longer
+  rescans the workbook and re-reads its journal per code. Numbers are unchanged.
+- The report is never built on the event loop: GET / answers at once with a
+  "Loading the numbers…" page, builds in a background thread (report + the page's
+  period) and reloads itself when `/report/status` says ready. Every handler that
+  reads the report runs in its own thread pool; builds are single-flight. `/health`
+  no longer waits for git, `/acl/update/check` runs `git fetch` off the loop, and
+  preview / publish start build their drafts in a thread.
+- Stop no longer runs the RPA teardown on the server thread: `cancel_job` hands
+  `publisher.cancel()` to its own thread. On 2026-09-29 12:54:59 (local) that
+  teardown reset the event loop's running-loop mark and the dashboard died.
+- Publish that gets no answer (busy server, lost response) no longer freezes the
+  tab: the account shows "the server is busy — Retry", and Retry resends with the
+  same `request_id`, for which the server returns the job it already created.
+  Dismiss frees the account instead; its next Publish reuses that same
+  `request_id`, so a submission that did reach the server is not doubled.
+  Other accounts may keep publishing while one waits for Retry.
 ## A failed read says "Campaigns not read", not "0 campaigns" — ACL-1504
 
 2026-10-02, Facebook_1443: Ads Manager did not open within 90 s, and the account
