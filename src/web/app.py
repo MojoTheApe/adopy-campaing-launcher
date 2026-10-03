@@ -3483,8 +3483,8 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     # ACL-1518: окно, открытое руками, теперь переоткрывается путём Publish.
     # Не дождались тишины / окно на переднем плане — это не конфликт, а
     # простой ответ строке, как у чтения: не 409.
-    if not ok and message == account_spend.HAND_OPEN_MESSAGE:
-        return JSONResponse({"ok": False, "message": message, "code": account_spend.HAND_OPEN_CODE})
+    if not ok and getattr(message, "code", "") == account_spend.HAND_OPEN_CODE:
+        return JSONResponse({"ok": False, "message": str(message), "code": account_spend.HAND_OPEN_CODE})
     return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
 
 

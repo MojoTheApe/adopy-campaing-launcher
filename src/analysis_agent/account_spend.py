@@ -1085,13 +1085,28 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     return True, "The profile is open. Log in if needed and leave the window open."
 
 
+class CodedMessage(str):
+    """Текст ответа «open profile» с устойчивым кодом отказа (ревью PR #519, F6).
+
+    Строка — чтобы ответ `(ok, message)` остался прежним для всех вызывающих;
+    `code` — чтобы маршрут решал по коду, а не по сравнению текста.
+    """
+
+    code: str = ""
+
+    def __new__(cls, text: str, code: str = ""):
+        obj = super().__new__(cls, text)
+        obj.code = code
+        return obj
+
+
 def _reopen_for_automation(entry, who: str) -> tuple[bool, str]:
     """Окно открыто руками: переоткрыть путём Publish и оставить открытым (ACL-1518)."""
     try:
         with reopening_by_hand():
             conn = _attach_only(entry, who)
     except ProfileNotAttachable as exc:
-        return False, str(exc)
+        return False, CodedMessage(str(exc), getattr(exc, "code", ""))
     try:
         # Как у обычного «open profile»: вкладку не закрываем — после
         # переоткрытия она может оказаться единственной, и окно закрылось бы.

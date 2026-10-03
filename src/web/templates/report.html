@@ -6903,9 +6903,9 @@ function amapSplitMark(account, why, code) {
     if (old) old.remove();
     if (!why) return;
     var mark = document.createElement('small');
-    mark.className = code === AMAP_HAND_CODE ? 'amap-split-bad hand' : 'amap-split-bad';
+    mark.className = code === 'open_by_hand' ? 'amap-split-bad hand' : 'amap-split-bad';
     /* ACL-1518: окно открыто руками — это не сбой чтения, а что сделать. */
-    mark.textContent = code === AMAP_HAND_CODE ? why : 'countries failed';
+    mark.textContent = code === 'open_by_hand' ? why : 'countries failed';
     mark.title = why + '. The spend reading is unaffected; read again to retry the countries.';
     cell.appendChild(mark);
   });
@@ -6999,7 +6999,7 @@ function amapAwaitSplit(account, per, tries) {
           if (!j.ok) throw new Error(j.error || 'Could not read status');
           var s = j.split;
           if (!s) throw new Error('the reading disappeared before it finished');
-          amapHandWait(account, s.state === 'running' ? (j.waiting || '') : '');
+          if (typeof amapHandWait === 'function') amapHandWait(account, s.state === 'running' ? (j.waiting || '') : '');
           if (s.state !== 'running') { resolve(s); return; }
           if (tries > 120) throw new Error('no answer after six minutes — check the launcher window');
           resolve(amapAwaitSplit(account, per, tries + 1));
@@ -7200,7 +7200,8 @@ function amapStatusTail(account, s) {
 /* ACL-1518: окно профиля, открытое руками, чтение переоткрывает путём
    Publish — ждёт тишины ввода на машине. Пока ждёт, строка аккаунта говорит
    об этом; не дождалось — простой текст вместо «failed · retry». */
-var AMAP_HAND_CODE = 'open_by_hand';
+/* Код отказа — строкой прямо в функциях (`'open_by_hand'`), а не общей
+   переменной: тестовые стенды вырезают функции по одной (ревью PR #519). */
 /* Чьи строки сейчас показывают ожидание — чтобы не искать его в каждой. */
 var amapHandWaitShown = {};
 function amapHandWait(account, note) {
@@ -7249,7 +7250,7 @@ function amapApplyReading(account, s, split, waiting) {
     amapPaintTree(row, s);
   });
   /* ACL-1518: строка ожидания тишины ввода — только пока чтение идёт. */
-  amapHandWait(account, s.state === 'running' ? (waiting || '') : '');
+  if (typeof amapHandWait === 'function') amapHandWait(account, s.state === 'running' ? (waiting || '') : '');
   /* ACL-1504: Read spend мог погаснуть или включиться (идёт чтение, отказ) —
      Read again в дереве следует за ним, перерисовано дерево или нет. */
   amapRereadSync();
@@ -8439,7 +8440,7 @@ async function amapAwaitReading(account, per, tries) {
 }
 
 function amapSpendFailed(btn, cell, why, shot, how, code) {
-  var hand = code === AMAP_HAND_CODE;
+  var hand = code === 'open_by_hand';
   btn.disabled = !!amapReadAllBusy;
   /* ACL-1518: окно открыто руками — не сбой, а что сделать человеку: кнопка
      остаётся обычной Read spend, текст — целиком в ячейке. */
@@ -8502,7 +8503,7 @@ function amapOpenProfile(btn) {
     .then(function (r) { return r.json(); })
     .then(function (j) {
       stopWatch();
-      if (!j.ok && j.code === AMAP_HAND_CODE && read) {
+      if (!j.ok && j.code === 'open_by_hand' && read) {
         btn.disabled = false;
         btn.textContent = 'open profile';
         btn.title = j.message || '';

@@ -96,9 +96,24 @@ def _attach(account=ACCOUNT):
 
 # ── hand-opened + idle → переоткрыто и прочитано ───────────────────────────
 
-def test_hand_opened_and_idle_is_reopened_for_the_read(reads):
+def test_hand_opened_and_idle_is_reopened_for_the_read(reads, monkeypatch):
     reads.m.input_until = 30.0
+    # Ревью PR #519 (M12): ни остановка, ни подъём не просят права убить.
+    kills: list = []
+    real_stop, real_start = reads.prov._stop_profile, reads.prov._start_via_mlx_api
+
+    def stop(*a, **kw):
+        kills.append(("stop", kw.get("allow_kill", True)))
+        return real_stop(*a, **kw)
+
+    def start(*a, **kw):
+        kills.append(("start", kw.get("allow_kill", True)))
+        return real_start(*a, **kw)
+
+    monkeypatch.setattr(reads.prov, "_stop_profile", stop)
+    monkeypatch.setattr(reads.prov, "_start_via_mlx_api", start)
     conn = _attach()
+    assert kills == [("stop", False), ("start", False)], kills
     assert conn.page == "reopened-page"
     assert reads.ev == [("stop", PROFILE), "start", "connect"]
     assert "kill" not in reads.ev, "чтение убило окно человека"
@@ -233,37 +248,62 @@ def test_read_all_reopens_two_hand_opened_profiles_one_after_another(reads):
     assert notes == ["reopened", "reopened"]
 
 
-def test_a_waiting_read_does_not_block_another_account(monkeypatch, tmp_path):
-    """Read all: пока один аккаунт ждёт тишины ввода, чтение другого не стоит."""
-    monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
-    monkeypatch.setattr(sp, "_profile_key", lambda account, *a, **k: account)
-    waiting, release = threading.Event(), threading.Event()
+def _wait_for(predicate, seconds=5.0):
+    for _ in range(int(seconds / 0.02)):
+        if predicate():
+            return True
+        threading.Event().wait(0.02)
+    return predicate()
 
-    def reader(account, date_from, date_to):
-        if account == ACCOUNT:
-            sp._set_hand_wait(account, True)
+
+def test_a_waiting_read_does_not_block_another_account(monkeypatch, tmp_path):
+    """Read all: пока один аккаунт ждёт тишины ввода, чтение другого не стоит.
+
+    Ревью PR #519 (F3): через настоящий `read_via_rpa` и его замок профиля
+    (`serialized_browser(key=_profile_key, reading=True)`), а не подменённое
+    чтение. Третий ярлык на ТОТ ЖЕ профиль, наоборот, ждёт — замок настоящий.
+    """
+    monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
+    monkeypatch.setattr(sp, "_UNSAVED", {})
+    same = "Facebook_1443_alias"
+    entries = {ACCOUNT: SimpleNamespace(profile_id="p-1443", ad_account_id="act_1"),
+               OTHER: SimpleNamespace(profile_id="p-6540", ad_account_id="act_2"),
+               same: SimpleNamespace(profile_id="p-1443", ad_account_id="act_1")}
+    monkeypatch.setattr(sp, "_entry_for", entries.get)
+    waiting, release = threading.Event(), threading.Event()
+    attached: list = []
+
+    def attach(entry, label):
+        attached.append(label)
+        assert sp._REOPEN_BY_HAND.get() is True
+        if label == ACCOUNT:
+            # Так выглядит ожидание тишины ввода изнутри: строка на карте и
+            # поток, который держит замок своего профиля.
+            sp._set_hand_wait(label, True)
             waiting.set()
             release.wait(10)
-            sp._set_hand_wait(account, False)
-        return sp.SpendReading(account=account, date_from=date_from, date_to=date_to,
-                               state="ok", spend=1.0)
+            sp._set_hand_wait(label, False)
+            raise sp.ProfileNotAttachable(sp.HAND_OPEN_MESSAGE, code=sp.HAND_OPEN_CODE)
+        raise sp.ProfileNotAttachable(f"{label}: the profile is not open.")
 
-    sp.start_read(ACCOUNT, "2026-10-01", "2026-10-01", reader=reader)
+    monkeypatch.setattr(sp, "_attach_only", attach)
+    day = "2026-10-01"
+    sp.start_read(ACCOUNT, day, day)
     assert waiting.wait(5)
-    sp.start_read(OTHER, "2026-10-01", "2026-10-01", reader=reader)
-    for _ in range(200):
-        if sp.get_reading(OTHER, "2026-10-01", "2026-10-01").state == "ok":
-            break
-        threading.Event().wait(0.02)
-    assert sp.get_reading(OTHER, "2026-10-01", "2026-10-01").state == "ok"
-    assert sp.get_reading(ACCOUNT, "2026-10-01", "2026-10-01").state == "running"
+    sp.start_read(OTHER, day, day)
+    sp.start_read(same, day, day)
+    assert _wait_for(lambda: sp.get_reading(OTHER, day, day).state != "running")
+    assert sp.get_reading(OTHER, day, day).error.endswith("the profile is not open.")
+    # Тот же профиль стоит за ждущим чтением — до его конца.
+    assert sp.get_reading(ACCOUNT, day, day).state == "running"
+    assert sp.get_reading(same, day, day).state == "running"
+    assert same not in attached
     assert sp.hand_wait_note(ACCOUNT) == sp.HAND_WAIT_NOTE
     release.set()
-    for _ in range(200):
-        if sp.get_reading(ACCOUNT, "2026-10-01", "2026-10-01").state == "ok":
-            break
-        threading.Event().wait(0.02)
-    assert sp.get_reading(ACCOUNT, "2026-10-01", "2026-10-01").state == "ok"
+    assert _wait_for(lambda: sp.get_reading(same, day, day).state != "running")
+    first = sp.get_reading(ACCOUNT, day, day)
+    assert first.state == "failed" and first.error_code == sp.HAND_OPEN_CODE
+    assert attached.index(same) > attached.index(ACCOUNT)
     assert sp.hand_wait_note(ACCOUNT) == ""
 
 
@@ -312,6 +352,9 @@ def test_open_profile_that_cannot_reopen_gives_the_plain_message_not_409(reads):
     assert body["ok"] is False and body["message"] == sp.HAND_OPEN_MESSAGE
     assert body["code"] == sp.HAND_OPEN_CODE
     assert reads.ev == []
+    # Ревью PR #519 (F6): маршрут решает по коду, а не по тексту.
+    ok, message = sp.open_for_automation(ACCOUNT)
+    assert not ok and message.code == sp.HAND_OPEN_CODE and message == sp.HAND_OPEN_MESSAGE
 
 
 def test_connecting_a_new_profile_still_leaves_a_hand_opened_window_alone(reads):
@@ -349,13 +392,15 @@ def test_the_row_texts_are_english():
 
 def test_the_row_shows_the_wait_and_the_plain_message():
     js = PAGE.read_text(encoding="utf-8")
-    assert "var AMAP_HAND_CODE = 'open_by_hand';" in js
+    # Без общих переменных: стенды вырезают функции по одной (ревью PR #519).
+    assert "AMAP_HAND_CODE" not in js
+    assert js.count("typeof amapHandWait === 'function'") >= 2
     assert "function amapHandWait(account, note)" in js
     # Ожидание — из опроса состояния, в спенде, в странах и в «open profile».
     assert js.count("j.waiting") >= 4
     # Отказ «открыт руками» — не «failed · retry» и не «countries failed».
     assert "btn.textContent = hand ? 'Read spend' : 'failed · retry';" in js
-    assert "mark.textContent = code === AMAP_HAND_CODE ? why : 'countries failed';" in js
+    assert "mark.textContent = code === 'open_by_hand' ? why : 'countries failed';" in js
     assert "s.error_code" in js
     row = ROW.read_text(encoding="utf-8")
     assert "sr.error_code == 'open_by_hand'" in row
@@ -436,7 +481,7 @@ def test_the_row_paints_the_wait_and_the_plain_message_in_node(tmp_path):
         return page[at:page.index(end, at)]
 
     script = "\n".join([
-        cut("var AMAP_HAND_CODE", "/* ── Что в аккаунте на самом деле"),
+        cut("var amapHandWaitShown", "/* ── Что в аккаунте на самом деле"),
         cut("function amapSpendFailed(", "function amapOpenProfile("),
         cut("function amapSplitMark(", "function amapSplitBusy("),
     ])
@@ -447,3 +492,61 @@ def test_the_row_paints_the_wait_and_the_plain_message_in_node(tmp_path):
     path = tmp_path / "row.cjs"
     path.write_text(source, encoding="utf-8")
     run_node([path])
+
+
+# ── строка карты с сервера (ревью PR #519, F2) ─────────────────────────────
+
+@pytest.fixture
+def rendered(monkeypatch, tmp_path):
+    """Карта, собранная `_build_account_map_view` и отрисованная шаблоном."""
+    from src.web import account_links as links
+    from src.web import app
+
+    monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
+    monkeypatch.setattr(sp, "_UNSAVED", {})
+    monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "country_splits.json")
+    monkeypatch.setattr(links, "get_local_config_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(links, "get_ad_account_map_path", lambda: str(tmp_path / "missing.csv"))
+    monkeypatch.setattr(app, "get_ad_account_map_path", lambda: str(tmp_path / "missing.csv"))
+    links.link(ACCOUNT, "country", "KW")
+
+    def render(error, code, split_code=None):
+        sp._put(sp.SpendReading(account=ACCOUNT, date_from="2026-10-01", date_to="2026-10-01",
+                                state="failed", error=error, error_code=code,
+                                finished_at="2026-10-03 07:45:00"))
+        if split_code is not None:
+            cs.save_split(cs.CountrySplit(account=ACCOUNT, date_from="2026-10-01",
+                                          date_to="2026-10-01", state="failed",
+                                          error=error, error_code=split_code))
+        view = app._build_account_map_view({"countries": []}, date_from="2026-10-01",
+                                           date_to="2026-10-01")
+        return app.templates.env.get_template("_account_map.html").render(amap=view, mlx={})
+
+    return render
+
+
+def _cell(html, marker):
+    part = html[html.index(marker):]
+    return part[:part.index("</td>")]
+
+
+def test_the_server_row_shows_the_plain_message_for_a_hand_opened_profile(rendered):
+    html = rendered(sp.HAND_OPEN_MESSAGE, sp.HAND_OPEN_CODE, split_code=sp.HAND_OPEN_CODE)
+    cell = _cell(html, 'class="num amap-live"')
+    # Текст целиком, в своём классе, не обрезан до 40 знаков.
+    assert (f'<span class="amap-live-hand" title="{sp.HAND_OPEN_MESSAGE}">'
+            f'{sp.HAND_OPEN_MESSAGE}</span>') in cell
+    assert "amap-live-bad" not in cell
+    # Страны — тем же текстом, не «countries failed».
+    assert '<small class="amap-split-bad hand"' in cell and "countries failed" not in cell
+    actions = _cell(html, '<td class="amap-actions">')
+    assert ">Read spend</button>" in actions and "failed · retry" not in actions
+    assert "amap-openprof" in actions, "open profile is still offered"
+
+
+def test_the_server_row_keeps_failed_retry_for_other_failures(rendered):
+    html = rendered("Ads Manager did not finish loading in time", "", split_code="")
+    cell = _cell(html, 'class="num amap-live"')
+    assert "amap-live-hand" not in cell and 'class="amap-live-bad"' in cell
+    assert "countries failed" in cell
+    assert "failed · retry" in _cell(html, '<td class="amap-actions">')
