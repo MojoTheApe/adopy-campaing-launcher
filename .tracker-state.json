@@ -3980,6 +3980,18 @@
         "state": "implementing",
         "started_at": "2026-10-03T11:59:01+00:00",
         "from_status": "status:backlog"
+      },
+      "512": {
+        "actor": "Worker-L1512M",
+        "session": "run_l1512m_1003",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1512-shared-locks",
+        "worktree": "C:\\acl-1512-locks",
+        "id": "103a2c918f9845858a3ca81d6522884e",
+        "issue": 512,
+        "state": "implementing",
+        "started_at": "2026-10-03T11:59:24+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -5333,6 +5345,17 @@
         "state": "implementing",
         "worker": "Worker-P1526E",
         "coordinator": "Coordinator-C0930A"
+      },
+      "512": {
+        "implementers": [
+          {
+            "actor": "Worker-L1512M",
+            "session": "run_l1512m_1003"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-L1512M",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -5682,6 +5705,10 @@
       },
       "Worker-P1526E": {
         "session": "run_p1526e_1003",
+        "role": "Worker"
+      },
+      "Worker-L1512M": {
+        "session": "run_l1512m_1003",
         "role": "Worker"
       }
     },
@@ -9576,6 +9603,13 @@
         "issue": 526,
         "claim": "f74179c0fee4434f9dea0f2c86f32eac",
         "actor": "Worker-P1526E"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-03T11:59:24+00:00",
+        "issue": 512,
+        "claim": "103a2c918f9845858a3ca81d6522884e",
+        "actor": "Worker-L1512M"
       }
     ],
     "policy": {
