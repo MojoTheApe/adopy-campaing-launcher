@@ -30,7 +30,10 @@ from src.web import profile_slots as ps  # noqa: E402
 from src.web import publish_jobs as pj  # noqa: E402
 
 GB = 1024
-S = ps.SlotSettings()   # умолчания: потолок 4, профиль 1,5 ГБ, запас 1,5 ГБ
+# Правило очереди считается здесь при профиле 1,5 ГБ (так было до ACL-1424);
+# оценка 3,5 ГБ и замер профилей — test_profile_slots_adaptive_memory.py.
+OLD_PROFILE_MB = int(1.5 * GB)
+S = ps.SlotSettings(profile_mb=OLD_PROFILE_MB)   # потолок 4, профиль 1,5 ГБ, запас 1,5 ГБ
 
 
 def mem(available_gb: float, total_gb: float = 16) -> ps.MemoryReading:
@@ -121,14 +124,16 @@ class Machine:
     def __init__(self, available_gb: float, settings: ps.SlotSettings | None = None):
         self.available_gb = available_gb
         self.now = 1000.0
-        self.settings = settings or ps.SlotSettings(warmup_s=0)
+        self.settings = settings or ps.SlotSettings(warmup_s=0, profile_mb=OLD_PROFILE_MB)
 
     def memory(self):
         return None if self.available_gb is None else mem(self.available_gb)
 
     def slots(self, tick_s: float = 0.05) -> ps.ProfileSlots:
+        # Замер профилей подставной: «не нашли» — решает оценка из настроек.
+        probe = ps.ProfileUsage(lambda profiles: {}, clock=lambda: self.now, background=False)
         return ps.ProfileSlots(memory=self.memory, settings=lambda: self.settings,
-                               clock=lambda: self.now, tick_s=tick_s)
+                               clock=lambda: self.now, tick_s=tick_s, usage=probe)
 
 
 class Job:
@@ -315,7 +320,7 @@ def test_a_cancelled_waiting_job_leaves_the_queue_at_once():
 
 
 def test_a_just_started_profile_holds_back_the_next_until_it_has_warmed_up():
-    m = Machine(available_gb=3.5, settings=ps.SlotSettings(warmup_s=90))
+    m = Machine(available_gb=3.5, settings=ps.SlotSettings(warmup_s=90, profile_mb=OLD_PROFILE_MB))
     slots = m.slots()
     a = Job(slots, "a", "P1")
     b = Job(slots, "b", "P2")

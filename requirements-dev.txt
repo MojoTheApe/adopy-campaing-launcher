@@ -8,6 +8,7 @@
 -r requirements.txt
 
 pytest==9.0.3
+pytest-xdist==3.8.0    # parallel suite: python -m pytest tests/ -q -n auto --dist loadfile (ACL-1397)
 httpx==0.28.1          # real ASGI/HTTP endpoint tests (not mocked Request.form)
 
 # Used only by one-off scripts, not by the dashboard or RPA:

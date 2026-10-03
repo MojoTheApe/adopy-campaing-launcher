@@ -389,6 +389,8 @@ class SetupWizard:
         self.tk.Label(self.body, text="Your name", anchor="w").pack(fill="x")
         self.tk.Entry(self.body, textvariable=self.campaign_manager_name).pack(fill="x", pady=(2, 12))
         self._text("ACL finds your ad accounts in the workbook by this name.")
+        self._text("Run reports from this computer are labelled with this name, so support can tell whose "
+                   "runs they are. You can change the label later in the dashboard (Accounts → This computer).")
 
     def _path_row(self, label: str, variable, directory: bool = False) -> None:
         from tkinter import filedialog
