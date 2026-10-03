@@ -1,5 +1,36 @@
 # System history
 
+## Hidden accounts and targeting file locks never lose an update under load — ACL-1495
+
+`tests/test_hidden_accounts_review.py::test_processes_preserve_each_update` failed at
+random on CI with "OSError [Errno 36] Resource deadlock avoided". The ACL-1491
+investigation found two product bugs in the machine file lock used by
+`src/web/hidden_accounts.py` and `src/analysis_agent/targeting_registry.py`:
+
+1. `msvcrt.locking(LK_LOCK)` tries 10 times, once a second, and then raises EDEADLK.
+   A queue longer than 10 s under load is not a deadlock, but the update was lost.
+2. On first use every process that saw an empty `.lock` file wrote `b"0"` into it; when
+   another process already held byte 0, `flush()` raised PermissionError (Errno 13).
+
+Fix: one shared helper, `config.paths.machine_file_lock(path, timeout=None)`.
+
+- Waits with non-blocking attempts and a growing, jittered pause (5 ms to 100 ms).
+  EDEADLK, EACCES and EAGAIN mean "busy, try again". The wait is bounded by
+  `paths._LOCK_TIMEOUT` (120 s), after which it raises `TimeoutError` instead of
+  hanging the dashboard request.
+- The lock file is created by a single atomic `os.open(O_CREAT)` and is never
+  written. Windows allows locking a byte past the end of the file, and `flock` has
+  no byte ranges, so the file needs no content.
+- Both `_transaction()` functions now use it. Writes still go through
+  `paths._replace_when_free` (`_atomic_write` for hidden accounts, `_save_raw`
+  for targeting).
+- `tests/test_file_lock_races.py` reproduces both bugs deterministically (a fake
+  EDEADLK from the lock call, and an empty lock file whose byte 0 is held by another
+  handle). Both tests failed on the old code with the original errors. The file also
+  covers the bounded wait and checks that the lock file is never written.
+- `ad_text_registry.py`, `team_library.py` and `acl_log.py` still use the old
+  pattern. They are not changed here.
+
 ## The dashboard stays responsive while the report is built — ACL-1399
 
 2026-09-30 after a restart the first page built the report inside the request
