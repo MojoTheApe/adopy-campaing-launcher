@@ -342,21 +342,29 @@ def _render(status: dict) -> str:
 
 
 def test_a_problem_status_with_a_shot_has_the_copy_button():
+    """С ACL-1520 снимок проблемного статуса копирует Copy for group."""
     cell = _render({"status": "disabled", "status_text": "Account disabled", "at": "2026-09-30 10:00:00",
                     "at_short": "30.09.26", "stale": "", "shot_id": "status_Doc20__20260930-100001",
                     "shot_at": "2026-09-30 10:00:01"})
-    assert "Copy screenshot" in cell
+    assert "Copy for group" in cell
     assert 'data-shot="status_Doc20__20260930-100001"' in cell
-    assert "Screenshot taken 2026-09-30 10:00:01" in cell
+    assert "the screenshot taken 2026-09-30 10:00:01" in cell
+
+
+def test_an_unreadable_status_with_a_shot_keeps_copy_screenshot():
+    cell = _render({"status": "unknown", "at": "2026-09-30 10:00:00", "at_short": "30.09.26", "stale": "",
+                    "shot_id": "status_Doc20__20260930-100001", "shot_at": "2026-09-30 10:00:01"})
+    assert "Copy screenshot" in cell and "Screenshot taken 2026-09-30 10:00:01" in cell
+    assert "Copy for group" not in cell
 
 
 def test_no_shot_no_button():
-    """Нет снимка — нет рабочей кнопки. С acl-132 у красного статуса кнопка
-    остаётся, но выключена и говорит почему: подсказка «Copy screenshot …»
-    под ней не должна указывать на кнопку, которой нет (Issue #31)."""
+    """Нет снимка — нет рабочей кнопки: она есть, но выключена и говорит
+    почему (Issue #31, ACL-1520 п.3)."""
     cell = _render({"status": "disabled", "status_text": "Account disabled", "at": "2026-09-30 10:00:00",
                     "at_short": "30.09.26", "stale": "", "shot_id": "", "shot_at": ""})
-    buttons = re.findall(r'<button[^>]*class="amap-shot"[^>]*>', cell)
+    buttons = re.findall(r'<button[^>]*class="amap-(?:shot|btn amap-copy-group)"[^>]*>', cell)
+    assert buttons, "кнопки нет вовсе"
     assert all(" disabled" in b for b in buttons), "кнопка без снимка нажимается"
     assert all("data-shot" not in b and "onclick" not in b for b in buttons)
 
@@ -364,7 +372,7 @@ def test_no_shot_no_button():
 def test_a_clear_status_never_has_the_button():
     cell = _render({"status": "clear", "at": "2026-09-30 10:00:00", "at_short": "30.09.26", "stale": "",
                     "shot_id": "status_Doc20__20260930-100001", "shot_at": "2026-09-30 10:00:01"})
-    assert "Copy screenshot" not in cell
+    assert "Copy screenshot" not in cell and "Copy for group" not in cell
 
 
 # ── кнопка в браузере: буфер обмена и запасной путь ─────────────────────
