@@ -912,6 +912,33 @@ and text and stopped ad 3 at `dialog_open`.
   is closed with its own Cancel. `simple_create_more_ads` telemetry gains
   `progress_s`, `dialog.open_s`, `dialog_kind` and `media_picker`.
 
+## Updates install only what CI and the publisher vouch for — ACL-1357
+
+Audit S06: the git update gate (`scripts/acl_update_gate.py`, and its PowerShell
+copy in `Install ACL.bat`) accepted a release tag that merely contained "success"
+and any `/actions/runs/` link, and the packaged ACL.exe trusted `release.json`
+(with the installer SHA-256) from the same GitHub Release it downloaded.
+
+- Git gate: the run link must be in this repository and the GitHub API must
+  confirm `ci.yml`, `head_sha` = the tag commit, branch `main`, event
+  push/workflow_dispatch, completed/success. A fabricated or foreign run is
+  refused. A run that cannot be checked (no token, no network) is reported (log +
+  Sentry) and, in warn mode, falls back to the old tag check;
+  `ACL_UPDATE_GATE=enforce` refuses it.
+- Packaged client: `release.json.sig` (Ed25519 over the exact bytes) is checked
+  against keys pinned in `src/web/release_signing.py` before the hash is
+  believed; an unknown key, a bad or malformed signature, or a signed manifest of
+  another tag (or with no tag) is refused and not cached. The owner's public key
+  `428a74e4f8e6e616` is pinned (Issue #357); a missing signature is still only
+  reported (log + Sentry `kind=update_trust`) until enforcement: `ENFORCE`,
+  build var `ACL_ENFORCE_RELEASE_SIGNATURES=true` or `ACL_RELEASE_SIGNATURES=enforce`.
+  With a key pinned, CI refuses to publish an unsigned release.
+- Installer gate stage `$AclGateEnforce` in `Install ACL.bat` mirrors
+  `GATE_ENFORCE`; a test keeps them equal.
+- CI signs with `scripts/acl_sign_release.py` and secret `ACL_RELEASE_SIGNING_KEY`
+  (environment `release`). Owner steps and the GitHub protection checklist:
+  `docs/RELEASE_TRUST.md`.
+
 ## The robot builds campaigns in Meta's single-screen editor — ACL-1327
 
 2026-09-26 Meta started opening a new editor on some accounts
