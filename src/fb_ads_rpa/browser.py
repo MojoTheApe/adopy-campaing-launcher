@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 
@@ -2176,7 +2176,17 @@ class MultiloginAttachOnlyProvider:
 
     def open(self, entry: AccountMapEntry, account_label: str, *,
              allow_missing_dir: bool = False, allow_restart: bool = True,
-             allow_kill: bool = True) -> BrowserConnection:
+             allow_kill: bool = True, reopen_hand_window: bool | None = None,
+             on_hand_wait: "Callable[[], None] | None" = None) -> BrowserConnection:
+        """Открыть профиль для робота.
+
+        ACL-1518: `reopen_hand_window=True` — окно, открытое руками, закрыть и
+        поднять заново тем же путём, что у Publish (ACL-1388/1427: те же
+        условия, ожидание тишины ввода, только мягкая остановка через MLX API),
+        даже при `allow_kill=False`. Так читают спенд и страны. `None` — как
+        прежде: решает `allow_kill`. `on_hand_wait` зовётся один раз, когда
+        начинается ожидание тишины ввода (строка на дешборде).
+        """
         profile_id = entry.profile_id
         if not profile_id:
             raise RuntimeError(f"{account_label}: profile_id is required")
@@ -2209,7 +2219,10 @@ class MultiloginAttachOnlyProvider:
         # сам, когда это безопасно (`hand_window.assess`), — но только при
         # публикации. Чтение спенда (`allow_kill=False`) окно человека не
         # закрывает никогда и останавливается, как раньше.
-        reopen_by_hand = allow_restart and allow_kill
+        # ACL-1518: чтение просит того же явно (`reopen_hand_window=True`) —
+        # убивать ему по-прежнему нельзя, а мягкая остановка не убивает.
+        reopen_by_hand = allow_restart and (allow_kill if reopen_hand_window is None
+                                            else bool(reopen_hand_window))
         if reused is not None:
             log.info("Attached to already-open Multilogin profile %s", profile_id)
             if owned:
@@ -2221,7 +2234,8 @@ class MultiloginAttachOnlyProvider:
                 # открыто руками; останавливать его вправе только когда
                 # безопасно (ACL-1388).
                 if reopen_by_hand:
-                    return self._reopen_hand_opened(entry, account_label, profile_id, udd, "unowned_port")
+                    return self._reopen_hand_opened(entry, account_label, profile_id, udd, "unowned_port",
+                                                    on_wait=on_hand_wait)
                 raise _open_by_hand(profile_id, account_label, "unowned_port")
             # У него есть свой порт автоматизации — это профиль робота.
             _mark_robot_profile(profile_id, udd)
@@ -2239,7 +2253,7 @@ class MultiloginAttachOnlyProvider:
             if not _robot_profile(profile_id, udd):
                 if reopen_by_hand:
                     return self._reopen_hand_opened(entry, account_label, profile_id, udd,
-                                                    "no_automation_port")
+                                                    "no_automation_port", on_wait=on_hand_wait)
                 raise _open_by_hand(profile_id, account_label, "no_automation_port")
             log.info(
                 "Profile %s (started by the robot earlier) has no CDP port. Will restart it via "
@@ -2255,7 +2269,8 @@ class MultiloginAttachOnlyProvider:
                 # Процесса не видно, а MLX держит профиль — тоже окно руками.
                 if (reopen_by_hand and stop.code == profile_trouble.OPEN_BY_HAND
                         and stop.detail == "mlx_lock"):
-                    return self._reopen_hand_opened(entry, account_label, profile_id, udd, "mlx_lock")
+                    return self._reopen_hand_opened(entry, account_label, profile_id, udd, "mlx_lock",
+                                                    on_wait=on_hand_wait)
                 raise
             return self._connect_started(started, profile_id)
         # Ревью PR #323 (F7): робот сам остановил не отвечавший профиль — не
@@ -2302,7 +2317,8 @@ class MultiloginAttachOnlyProvider:
         )
 
     def _reopen_hand_opened(self, entry: AccountMapEntry, account_label: str, profile_id: str,
-                            udd: str, where: str) -> BrowserConnection:
+                            udd: str, where: str, *,
+                            on_wait: "Callable[[], None] | None" = None) -> BrowserConnection:
         """Закрыть окно, открытое руками, и поднять профиль для робота (ACL-1388).
 
         Только когда безопасно (`hand_window.assess`: окну не меньше 15 минут,
@@ -2319,8 +2335,18 @@ class MultiloginAttachOnlyProvider:
         прерывает ожидание. Место профиля задание при этом держит.
         """
         pids = _profile_pids(udd, profile_id)
-        wait = hand_window.wait_until_safe(
-            pids, on_wait=lambda v: _tell_job(HAND_WINDOW_WAIT_NOTICE.format(account=account_label)))
+
+        def waiting(_verdict: "hand_window.Verdict") -> None:
+            _tell_job(HAND_WINDOW_WAIT_NOTICE.format(account=account_label))
+            # ACL-1518: у чтения нет панели задания — строку пишет сама строка
+            # аккаунта на карте, по этому сигналу.
+            if on_wait is not None:
+                try:
+                    on_wait()
+                except Exception:
+                    pass
+
+        wait = hand_window.wait_until_safe(pids, on_wait=waiting)
         verdict = wait.verdict
         if not verdict.safe:
             cancelled = wait.outcome == hand_window.WAIT_CANCELLED

@@ -38,12 +38,14 @@ from src.fb_ads_rpa.operations import serialized_browser
 from src.analysis_agent.account_spend import (
     _act_from_url,
     _profile_key,
+    ProfileNotAttachable,
     _attach_only,
     _entry_for,
     _period_matches,
     _read_status,
     _shoot,
     _sleep,
+    reopening_by_hand,
 )
 
 #: Экран отчётов Ads Manager. `?act=` обязателен — без него Reporting
@@ -77,6 +79,9 @@ class CountrySplit:
     #: «что мы вообще читали»: в отчёте байера могут висеть чужие фильтры.
     entered: str = ""
     error: str = ""
+    #: ACL-1518: устойчивое имя отказа (`open_by_hand`) — строка карты пишет
+    #: простой текст вместо «countries failed».
+    error_code: str = ""
     shot: str = ""
     #: Когда чтение началось и когда закончилось (ACL-1282).
     started_at: str = ""
@@ -1218,7 +1223,9 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
         act = (entry.ad_account_id or "").strip()
         url = _reporting_url(act, date_from, date_to)  # validate before attach
         expected_act = "act_" + act.removeprefix("act_")
-        conn = _attach_only(entry, account)
+        # ACL-1518: окно, открытое руками, переоткрывается путём Publish.
+        with reopening_by_hand():
+            conn = _attach_only(entry, account)
         page = conn.page
         page.goto(url, timeout=REPORT_TIMEOUT_MS, wait_until="domcontentloaded")
         _sleep(4)
@@ -1335,6 +1342,7 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
     except Exception as exc:
         out.state, out.rows = "failed", []
         out.error = str(exc) or type(exc).__name__
+        out.error_code = str(getattr(exc, "code", "") or "") if isinstance(exc, ProfileNotAttachable) else ""
     finally:
         # Persist failures too: a failed retry must not expose an old success.
         try:

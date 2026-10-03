@@ -92,20 +92,29 @@ def test_unknown_child_branch_is_not_inferred_from_only_one_sibling():
 
 
 def test_short_named_manual_profile_is_not_started_again(monkeypatch):
-    from src.fb_ads_rpa import browser
+    """ACL-1518: окно, открытое руками (видно по короткому имени папки), не
+    поднимается вторым запуском — только путём Publish: те же условия и
+    ожидание тишины ввода, без kill. Не вышло — простой текст, не 409."""
+    from src.fb_ads_rpa import browser, profile_trouble
     from pathlib import Path
     calls = []
     # Публичная пара, как у настоящего провайдера: чтение ходит через неё.
     provider = NS(attach_existing_only=lambda *a, **kw: None,
                   profile_is_running=lambda path, profile="": path == "SHORT")
+
+    def gated_open(entry, label, **options):
+        calls.append(options)
+        raise profile_trouble.ProfileStop(profile_trouble.OPEN_BY_HAND, "no_automation_port")
+
     monkeypatch.setattr(spend, "_entry_for", lambda a: NS(profile_id="demo", folder_id="folder"))
     monkeypatch.setattr(spend, "_mlx_profile_dir", lambda *a: Path("LONG"))
     monkeypatch.setattr(spend, "_dir_spellings", lambda p: ["LONG", "SHORT"])
     monkeypatch.setattr(browser, "MultiloginDirectCDPProvider", lambda: provider)
-    monkeypatch.setattr(browser, "get_browser_provider", lambda name: NS(open=lambda *a: calls.append(a)))
+    monkeypatch.setattr(browser, "get_browser_provider", lambda name: NS(open=gated_open))
     ok, message = spend.open_for_automation("Demo")
-    assert not ok and "opened manually" in message
-    assert calls == [], "must not start a profile whose short-named process is already running"
+    assert not ok and message == spend.HAND_OPEN_MESSAGE
+    assert len(calls) == 1, "the hand-opened window goes through the gated reopen exactly once"
+    assert calls[0]["reopen_hand_window"] is True and calls[0]["allow_kill"] is False
 
 
 @pytest.mark.parametrize("status", ["DRAFT", "ACTIVE"])
