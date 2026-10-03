@@ -3558,20 +3558,6 @@
         "state": "implementing",
         "started_at": "2026-10-03T00:03:55+00:00",
         "from_status": "status:backlog"
-      },
-      "486": {
-        "actor": "Worker-P1486T",
-        "session": "run_p1486t_1003",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1486-shot-path-tests",
-        "worktree": "C:\\acl-1486-shotpath",
-        "id": "576cb14d170a4e1d90b9a042ebc765b8",
-        "issue": 486,
-        "state": "handoff",
-        "started_at": "2026-10-03T00:04:23+00:00",
-        "from_status": "status:backlog",
-        "pr": 509,
-        "report": "ACL-1486 handoff \u2014 Worker-P1486T (run_p1486t_1003), 2026-10-03\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/509 (codex/acl-1486-shot-path-tests -> stage)\nHead: f234033e57c8b725ba535a5c765f8f6517d90978\n\nWhat changed (tests only; product code unchanged, no escape found):\n- tests/test_status_screenshot.py: real PNGs placed in the parent, a sibling `spend_shots_evil/`, and a folder elsewhere. Each is requested via `..`, backslashes, a subfolder walked back out, absolute path (both slash styles), and raw / URL-encoded / double-encoded forms, on the image and `/view` routes. Each case first asserts a guard-less lookup would find the file. The folder check is tested alone (name regex loosened), plus a non-`status_*` PNG in the folder and a directory named like a shot.\n- docs/system/CHANGELOG.md: ACL-1486 entry.\n\nMutation check (applied to `status_shot_path`, then restored from a backup):\n- name check removed: 2 tests fail\n- folder check removed: 16 tests fail\n- is_file check removed: 20 tests fail\n- name + folder checks removed: 34 tests fail; every escape route fails at least one test\nNote: forward-slash routes never reach the handler at the endpoint (the router does not match `/` in `{shot_id}`, and httpx normalises `%2E%2E`); they are covered at the `status_shot_path` level.\n\nTests: pytest tests/test_status_screenshot.py tests/test_bench_catalogue.py \u2014 90 passed (headless). report.html unchanged. scripts/acl_scan_secrets.py clean.\n\nAcceptance criterion met: with the path guards removed, at least one test fails for each escape route."
       }
     },
     "tasks": {
@@ -4800,9 +4786,25 @@
             "session": "run_p1486t_1003"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P1486T",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-P1486T",
+          "session": "run_p1486t_1003",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1486-shot-path-tests",
+          "worktree": "C:\\acl-1486-shotpath",
+          "id": "576cb14d170a4e1d90b9a042ebc765b8",
+          "issue": 486,
+          "state": "handoff",
+          "started_at": "2026-10-03T00:04:23+00:00",
+          "from_status": "status:backlog",
+          "pr": 509,
+          "report": "ACL-1486 handoff \u2014 Worker-P1486T (run_p1486t_1003), 2026-10-03\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/509 (codex/acl-1486-shot-path-tests -> stage)\nHead: f234033e57c8b725ba535a5c765f8f6517d90978\n\nWhat changed (tests only; product code unchanged, no escape found):\n- tests/test_status_screenshot.py: real PNGs placed in the parent, a sibling `spend_shots_evil/`, and a folder elsewhere. Each is requested via `..`, backslashes, a subfolder walked back out, absolute path (both slash styles), and raw / URL-encoded / double-encoded forms, on the image and `/view` routes. Each case first asserts a guard-less lookup would find the file. The folder check is tested alone (name regex loosened), plus a non-`status_*` PNG in the folder and a directory named like a shot.\n- docs/system/CHANGELOG.md: ACL-1486 entry.\n\nMutation check (applied to `status_shot_path`, then restored from a backup):\n- name check removed: 2 tests fail\n- folder check removed: 16 tests fail\n- is_file check removed: 20 tests fail\n- name + folder checks removed: 34 tests fail; every escape route fails at least one test\nNote: forward-slash routes never reach the handler at the endpoint (the router does not match `/` in `{shot_id}`, and httpx normalises `%2E%2E`); they are covered at the `status_shot_path` level.\n\nTests: pytest tests/test_status_screenshot.py tests/test_bench_catalogue.py \u2014 90 passed (headless). report.html unchanged. scripts/acl_scan_secrets.py clean.\n\nAcceptance criterion met: with the path guards removed, at least one test fails for each escape route."
+        },
+        "pr": 509,
+        "queued_at": "2026-10-03T00:10:35+00:00"
       }
     },
     "actors": {
@@ -5918,7 +5920,8 @@
       357,
       390,
       399,
-      433
+      433,
+      486
     ],
     "review": {
       "id": "214218ba36504160bf26dd94d9f15bc9",
@@ -8453,6 +8456,13 @@
         "at": "2026-10-03T00:04:23+00:00",
         "issue": 486,
         "claim": "576cb14d170a4e1d90b9a042ebc765b8",
+        "actor": "Worker-P1486T"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-03T00:10:35+00:00",
+        "issue": 486,
+        "pr": 509,
         "actor": "Worker-P1486T"
       }
     ],
