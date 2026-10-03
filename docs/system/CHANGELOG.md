@@ -31,6 +31,37 @@ Fix: one shared helper, `config.paths.machine_file_lock(path, timeout=None)`.
 - `ad_text_registry.py`, `team_library.py` and `acl_log.py` still use the old
   pattern. They are not changed here.
 
+## A failed read says "Campaigns not read", not "0 campaigns" — ACL-1504
+
+2026-10-02, Facebook_1443: Ads Manager did not open within 90 s, and the account
+map's expanded row said "IN THE ACCOUNT · 0 CAMPAIGNS · 0 ADS" above the raw
+`Page.goto` error, including the Ads Manager address with `act=`. It read as "this
+account has no campaigns".
+
+- `src/analysis_agent/account_spend.py`: a reading records whether the campaign list
+  itself was reached (`objects_read`; `_read_tree(..., reached=)`). An unparsed table
+  counts as not reached. Older records without the field are judged by themselves:
+  no rows plus an error means not read.
+- When the list was not reached, the reading sent to the screen carries
+  `objects_problem`: one short reason (for example "Ads Manager did not open in
+  90 s.") and what to do. As in ACL-1437, the reason comes from a local table of raw
+  errors. The campaign-card guides are unchanged. The tree error text is scrubbed
+  on output (`scrub_tree_error`: URLs, `act=`/`act_` ids, `run_telemetry.scrub`),
+  including in records saved before this change.
+- The last good tree for the account (any period, `objects_prev`) is kept with a
+  reading that did not reach the list. A second failure in a row does not erase it.
+- `report.html` (account tree): "campaigns not read · tried …", the reason, what to
+  do, and a **Read again** button that presses the row's existing Read spend.
+  There is no new reading path. The raw error is under a collapsed "Technical
+  details". The last good rows are shown under "last good read · … · read <date> ·
+  Meta numbers for …", without turn-off buttons, because their switches may have
+  changed. "0 campaigns · 0 ads" appears only when the list was read and was empty.
+- Review of PR #505:
+  - Read again follows the row's Read spend button whenever its state changes:
+    after Read all (`amapReadAllControls`) and after each reading
+    (`amapRereadSync`). Before, it stayed grey after Read all until a reload.
+  - Bare Meta tokens (`EAA…`) are scrubbed from the technical text too.
+  - A not-read attempt for other dates says "not the dates on screen".
 ## Parallel profiles start at 3.5 GB each and adapt to measured use — ACL-1424
 
 2026-10-01 four Multilogin profiles used 13.6 GB (about 3.4 GB each) and the laptop
