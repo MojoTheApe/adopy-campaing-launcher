@@ -349,18 +349,48 @@ def test_nothing_happens_when_the_country_was_set_in_the_step(page, clicks, monk
 
 
 def test_the_ad_set_that_cannot_be_reached_keeps_the_stop(page, rec, monkeypatch):
-    monkeypatch.setattr(md, "_open_tree_adset", lambda pg, name: False)
+    def _miss(pg, name, miss=None):
+        miss.append("not_found")
+        return False
+
+    monkeypatch.setattr(md, "_open_tree_adset", _miss)
     monkeypatch.setattr(md, "fill_audience_location",
                         lambda *a: pytest.fail("must not type outside the ad set"))
     page.set_content(_editor_page(show=0))
     soft_fails = ["audience_location"]
     md.retry_location_at_end(page, soft_fails, country="SA", simple=False, adset_name="Campaign_A")
     assert soft_fails == ["audience_location"]
+    # Ревью PR #393, m1: промах дерева — одна строка второго прохода с
+    # пометкой open:<почему>, без отдельного шага *_open.
+    assert [(step, ok, k.get("note")) for step, ok, k in rec] == [
+        ("audience_location_second_pass", False, "open:not_found")]
+
+
+def test_a_tree_miss_is_not_an_outcome_step_in_robot_health(page, rec):
+    from src.web.robot_health import is_outcome_step
+
+    page.set_content("<html><body><p>no tree here</p></body></html>")
+    soft_fails = ["audience_location"]
+    md.retry_location_at_end(page, soft_fails, country="SA", simple=False, adset_name="Campaign_A")
+    assert soft_fails == ["audience_location"]
+    assert rec and all(step == "audience_location_second_pass" for step, _ok, _k in rec)
+    assert rec[-1][2]["note"].startswith("open:")
+    assert not any(is_outcome_step(step, ok) for step, ok, _k in rec)
 
 
 def test_the_second_pass_is_a_warning_not_a_block():
     assert failure_policy.severity("audience_location_second_pass:Saudi Arabia") == failure_policy.WARNING
     assert failure_policy.severity("audience_location") == failure_policy.BLOCKING
+
+
+def test_the_job_panel_says_the_country_was_set_on_the_second_pass():
+    item = failure_policy.problem(
+        "audience_location_second_pass:Saudi Arabia was set on the second pass "
+        "and read back from Locations")
+    assert item["severity"] == failure_policy.WARNING
+    assert item["title"] == "Country set on the second pass"
+    assert len(item["title"]) <= 60
+    assert item["impact"] and item["action"]
 
 
 def test_the_flow_runs_the_second_pass_after_the_rest_of_the_campaign():

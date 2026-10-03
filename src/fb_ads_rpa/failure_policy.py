@@ -363,6 +363,13 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "The ad set may spend in the wrong country.",
         "Check \"Locations\" on the ad set.",
     ),
+    # ACL-1390: страна встала со второго прохода — предупреждение, не стоп.
+    "audience_location_second_pass": (
+        "Country set on the second pass",
+        "Meta's location search stalled; the robot set the country at the end "
+        "of the campaign and read it back.",
+        "Check \"Locations\" on the ad set before publishing.",
+    ),
     "conversion_event": (
         "Conversion event — not verified",
         "Ads may optimise for the wrong event and waste budget.",
