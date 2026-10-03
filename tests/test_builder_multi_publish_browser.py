@@ -12,7 +12,8 @@ open the dashboard in a second browser tab». Сервер при этом да�
 тот же аккаунт второй раз не заводит дубль и говорит об этом; «Publish
 all» поверх одиночного запуска ставит остальных и пропускает идущий;
 Stop останавливает только своё задание; F5 возвращает оба задания; после
-потери статуса остаётся прежняя подсказка «перезагрузите страницу».
+потери статуса остаётся прежняя подсказка «перезагрузите страницу»; сервер,
+не ответивший на отправку, даёт Retry с тем же ключом (ACL-1399).
 """
 import os
 import sys
@@ -353,25 +354,90 @@ def test_f5_before_the_first_progress_answer_still_refuses_a_duplicate(ui):
     assert 'Demo is already being built' in state['dialogs'][-1]
 
 
-def test_a_failed_submission_leaves_the_tab_in_unknown_status(ui):
-    """Запрос на отправку оборвался — дошёл ли он до сервера, неизвестно.
-    Вкладка не делает вид, что ничего не было: новые запуски — только после F5."""
+def test_a_submission_the_server_did_not_answer_offers_retry_without_a_double(ui):
+    """ACL-1399 (было — ревью PR #363: «исход неизвестен, только после F5»).
+
+    30.09 так пропал Publish владельца: сервер собирал отчёт и не ответил,
+    страница написала «Failed to fetch» и заперла вкладку. Теперь у отправки
+    есть ключ (`request_id`), и сервер по нему возвращает уже созданное
+    задание — повтор безопасен. Аккаунт ждёт повтора и остаётся занятым
+    (второй Publish на нём не уходит). Решение: ДРУГИЕ аккаунты публиковать
+    можно — их задания от этой отправки не зависят, а запирать всю вкладку
+    незачем, раз исход этой отправки восстановим."""
     p, state = ui
     add(p, 0)
     add(p, 1)
     ready(p)
-    p.route('**/publish-jobs', lambda r: r.abort() if r.request.method == 'POST' else r.fallback())
+    dropped = []
+
+    def flaky(r):
+        if r.request.method == 'POST' and not dropped:
+            dropped.append(fields(r.request).get('request_id'))
+            r.abort()
+        else:
+            r.fallback()
+    p.route('**/publish-jobs', flaky)
     press_publish(p, 0)
     p.locator('#sfc-ok').click()
-    p.wait_for_function('window.CB_QUEUE && CB_QUEUE.uncertain', timeout=8000)
-    expect(panel(p, 0)).to_contain_text('Request failed')
-    assert 'Submission outcome unknown' in p.evaluate('CB_QUEUE.progress.report[0].why')
-    open_card(p, 1)
-    p.locator('.cb-in-drawer .cb-publish-btn').evaluate('b => cbPublish(b.closest("form"))')
+    expect(panel(p, 0)).to_contain_text('server is busy', timeout=8000)
+    expect(panel(p, 0)).to_contain_text('nothing was sent twice')
+    expect(panel(p, 0).locator('.cb-retry-btn')).to_have_count(1)
+    expect(p.locator('.cbd-queue')).to_contain_text('Demo — the server is busy', timeout=6000)
+    assert dropped and dropped[0], 'the submission carried no request_id'
+    assert p.evaluate('CB_QUEUE.uncertain') is False, 'a busy server froze the whole tab again'
+    assert p.evaluate('CB_QUEUE.active') is True
+    assert state['posts'] == []
+
+    # Тот же аккаунт второй раз не уходит мимо повтора — и сказано почему.
+    press_publish(p, 0)
     p.wait_for_timeout(200)
     expect(p.locator('#sfc-ok')).to_have_count(0)
-    assert 'Reload the page (F5)' in state['dialogs'][-1]
+    assert 'Demo is already being built' in state['dialogs'][-1]
     assert state['posts'] == []
+
+    # Другой аккаунт публикуется, пока первый ждёт повтора.
+    publish_one(p, state, 1)
+    assert [f['account_label'] for f in state['posts']] == ['Other']
+
+    # Retry в ящике (панель Demo сейчас не на экране — открыт Other) — тот же
+    # ключ: дошла ли первая отправка, заданий будет одно.
+    p.locator('.cbd-queue [data-cb-retry$="|Demo"]').click()
+    for _ in range(50):
+        if len(state['posts']) == 2:
+            break
+        p.wait_for_timeout(100)
+    assert [f['account_label'] for f in state['posts']] == ['Other', 'Demo']
+    assert state['posts'][1]['request_id'] == dropped[0], 'retry used a new key'
+    assert state['posts'][0]['request_id'] != dropped[0]
+    expect(panel(p, 0)).to_contain_text('running', timeout=6000)
+    finish(p, state, 'Demo')
+    finish(p, state, 'Other')
+    expect(p.locator('.cbd-queue')).to_contain_text('Done — 2 of 2 accounts', timeout=8000)
+
+
+def test_dismissing_a_pending_retry_frees_the_account_with_the_same_key(ui):
+    """Ревью PR #408, R9: не ждать повтора. Аккаунт свободен, а следующая
+    его отправка идёт с прежним ключом — второго задания не будет."""
+    p, state = ui
+    add(p, 0)
+    ready(p)
+    dropped = []
+
+    def flaky(r):
+        if r.request.method == 'POST' and not dropped:
+            dropped.append(fields(r.request).get('request_id'))
+            r.abort()
+        else:
+            r.fallback()
+    p.route('**/publish-jobs', flaky)
+    press_publish(p, 0)
+    p.locator('#sfc-ok').click()
+    expect(panel(p, 0).locator('.cb-dismiss-btn')).to_have_count(1, timeout=8000)
+    panel(p, 0).locator('.cb-dismiss-btn').click()
+    expect(panel(p, 0)).to_contain_text('dismissed')
+    assert p.evaluate('CB_QUEUE.active') is False
+    publish_one(p, state, 0)
+    assert state['posts'][0]['request_id'] == dropped[0]
 
 
 # Один аккаунт в двух странах (account_links: FacebookUL869 → Chile, Peru):
