@@ -77,6 +77,19 @@ try {
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid commit --allow-empty --quiet -m fixture
     $sha = (& $git -C $temp rev-parse HEAD).Trim()
     & $git -C $temp update-ref refs/remotes/origin/main $sha
+
+    # ACL-1357: a fake GitHub API. Every scenario sets what the token and the
+    # API answer; nothing here reaches the network or the machine's credentials.
+    function New-FakeRun([hashtable]$Change) {
+        $run = @{ id = 123; repository = @{ full_name = 'MojoTheApe/adopy-campaing-launcher' }; path = '.github/workflows/ci.yml'
+                  head_sha = $sha; head_branch = 'main'; event = 'push'; status = 'completed'; conclusion = 'success' }
+        foreach ($key in $Change.Keys) { $run[$key] = $Change[$key] }
+        return [pscustomobject]$run
+    }
+    $realTokenLookup = ${function:Get-AclGitHubToken}
+    function Get-AclGitHubToken { 'test-token' }
+    function Invoke-AclGitHubApi { throw 'scenario must define the API' }
+
     Expect-Failure { Get-AclRelease $git $temp $true } 'no verified annotated'
     & $git -C $temp tag acl-release-test
     Expect-Failure { Get-AclRelease $git $temp $true } 'no verified annotated'
@@ -84,10 +97,82 @@ try {
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-test -m 'unverified release'
     Expect-Failure { Get-AclRelease $git $temp $true } 'no verified annotated'
     & $git -C $temp tag -d acl-release-test | Out-Null
+    & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-test -m 'CI success https://github.com/org/repo/actions/runs/123'
+    & { function Invoke-AclGitHubApi { throw 'another repository must not reach the API' }
+        Expect-Failure { Get-AclRelease $git $temp $true } 'links no CI run' }
+    & $git -C $temp tag -d acl-release-test | Out-Null
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-test -m 'CI success https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/123'
-    $release = Get-AclRelease $git $temp $true
-    Assert ($release.Sha -eq $sha) 'Annotated release must select its exact commit'
+
+    # Verified by the API.
+    & { function Invoke-AclGitHubApi { @{ Code = 200; Body = (New-FakeRun @{}) } }
+        $release = Get-AclRelease $git $temp $true
+        Assert ($release.Sha -eq $sha) 'Annotated release must select its exact commit'
+        Assert ($release.Run -eq '123' -and !$release.Unverified) 'Release must name the verified run' }
+
+    # Definite negatives: refused in every mode.
+    foreach ($case in @(
+            @{ Change = @{ conclusion = 'failure' }; Why = 'did not succeed' },
+            @{ Change = @{ repository = @{ full_name = 'attacker/fork' } }; Why = 'another repository' },
+            @{ Change = @{ head_sha = ('c' * 40) }; Why = 'tagged commit' },
+            @{ Change = @{ path = '.github/workflows/release.yml' }; Why = 'CI workflow' },
+            @{ Change = @{ head_branch = 'stage' }; Why = 'main' },
+            @{ Change = @{ event = 'pull_request' }; Why = 'push/dispatch' })) {
+        & { function Invoke-AclGitHubApi { @{ Code = 200; Body = (New-FakeRun $case.Change) } }
+            Expect-Failure { Get-AclRelease $git $temp $true } $case.Why }
+    }
+    & { function Invoke-AclGitHubApi([string]$Token, [string]$Path) {
+            if ($Path) { @{ Code = 404 } } else { @{ Code = 200; Body = [pscustomobject]@{ full_name = 'MojoTheApe/adopy-campaing-launcher' } } } }
+        Expect-Failure { Get-AclRelease $git $temp $true } 'not a real run' }
+
+    # Nothing to verify with: warn falls back to the tag text, enforce refuses.
+    $unverifiable = @(
+        @{ Name = 'no token'; Token = ''; Api = { throw 'must not call the API without a token' }; Why = 'no GitHub credential' },
+        @{ Name = '403'; Token = 't'; Api = { @{ Code = 403 } }; Why = 'HTTP 403' },
+        @{ Name = 'offline'; Token = 't'; Api = { @{ Code = 0 } }; Why = 'unreachable' },
+        @{ Name = '404, repo hidden'; Token = 't'; Api = { @{ Code = 404 } }; Why = 'HTTP 404' })
+    foreach ($case in $unverifiable) {
+        & { function Get-AclGitHubToken { $case.Token }
+            function Invoke-AclGitHubApi { & $case.Api }
+            $release = Get-AclRelease $git $temp $true 3>$null
+            Assert ($release.Sha -eq $sha -and $release.Unverified -match $case.Why) "warn fallback failed: $($case.Name)"
+            $env:ACL_UPDATE_GATE = 'enforce'
+            try { Expect-Failure { Get-AclRelease $git $temp $true } $case.Why } finally { Remove-Item Env:ACL_UPDATE_GATE }
+        }
+    }
+
+    # The fallback is still the old check: a tag that does not record success is refused.
+    & $git -C $temp tag -d acl-release-test | Out-Null
+    & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-test -m 'Built https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/123'
+    & { function Get-AclGitHubToken { '' }
+        Expect-Failure { Get-AclRelease $git $temp $true } 'does not record success' }
+    & $git -C $temp tag -d acl-release-test | Out-Null
+    & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-test -m 'CI success https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/123'
+
+    # The token lookup runs git in the clone, with no prompt and no askpass.
+    & {
+        function Invoke-FakeGit {
+            $script:gitArgs = $args
+            $script:askpassSeen = "$env:GIT_ASKPASS|$env:SSH_ASKPASS|$env:GIT_TERMINAL_PROMPT|$env:GCM_INTERACTIVE"
+            $global:LASTEXITCODE = 0
+            'protocol=https'; 'host=github.com'; 'password=stored-token'
+        }
+        ${function:Get-AclGitHubToken} = $realTokenLookup
+        $env:GIT_ASKPASS = 'C:\ide\askpass.exe'; $env:SSH_ASKPASS = 'C:\ssh\askpass.exe'
+        $savedToken = $env:ACL_UPDATE_GATE_TOKEN; $env:ACL_UPDATE_GATE_TOKEN = $null
+        try {
+            $token = Get-AclGitHubToken 'Invoke-FakeGit' 'C:\acl-target'
+            Assert ($token -eq 'stored-token') 'stored credential must be used'
+            Assert (($script:gitArgs -join ' ') -eq '-C C:\acl-target -c core.askPass= credential fill') "git args: $($script:gitArgs -join ' ')"
+            Assert ($script:askpassSeen -eq '||0|never') "askpass must be off during the lookup: $script:askpassSeen"
+            Assert ($env:GIT_ASKPASS -eq 'C:\ide\askpass.exe' -and $env:SSH_ASKPASS -eq 'C:\ssh\askpass.exe') 'environment must be restored'
+        } finally {
+            Remove-Item Env:GIT_ASKPASS, Env:SSH_ASKPASS -ErrorAction SilentlyContinue
+            $env:ACL_UPDATE_GATE_TOKEN = $savedToken
+        }
+    }
+
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid commit --allow-empty --quiet -m divergence
-    Expect-Failure { Get-AclRelease $git $temp $false } 'Git failed'
+    & { function Invoke-AclGitHubApi { @{ Code = 200; Body = (New-FakeRun @{}) } }
+        Expect-Failure { Get-AclRelease $git $temp $false } 'Git failed' }
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force }
 Write-Host 'Bootstrap scenarios passed'
