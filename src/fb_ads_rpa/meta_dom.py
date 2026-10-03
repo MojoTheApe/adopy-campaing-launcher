@@ -2101,6 +2101,13 @@ _PRESS_GUARD_JS = r"""([x, y, token, strict]) => {
   if (target) target.removeAttribute('data-acl-press-target');
   const at = document.elementFromPoint(x, y);
   if (!at) return {ok: true};
+  // ACL-1543: условия Lead Ads принимает человек, форму робот не создаёт —
+  // в карточке Instant form add-on (View terms / Close / Create form) не
+  // нажимается ничего. `closest`, а не обход на 12 узлов: живьём «View terms»
+  // на 16 уровней ниже карточки (ревью PR #545).
+  if (at.closest && at.closest('[data-surface*="pce_website_extension_instant_form_field"]')) {
+    return {ok: false, why: 'lead_terms'};
+  }
   for (let n = at, i = 0; n && n.nodeType === 1 && i < 12; n = n.parentElement, i++) {
     const surface = n.getAttribute('data-surface') || '';
     if (surface.indexOf('syd_simple_create_publish') !== -1) return {ok: false, why: 'publish'};
@@ -2114,14 +2121,10 @@ _PRESS_GUARD_JS = r"""([x, y, token, strict]) => {
     if (n.querySelector('[data-surface*="syd_simple_create_publish"]') && norm(n.textContent).length < 400) {
       return {ok: false, why: 'editor_footer'};
     }
-    // ACL-1543: условия Lead Ads принимает человек, форму робот не создаёт —
-    // карточка Instant form add-on (View terms / Close / Create form) и
-    // кнопки условий не нажимаются никогда.
-    if (surface.indexOf('pce_website_extension_instant_form_field') !== -1) {
-      return {ok: false, why: 'lead_terms'};
-    }
+    // ACL-1543: кнопки условий Lead Ads и создания формы — ни по тексту, ни
+    // по aria-label (иконка с подписью «Accept» тоже).
     if (n.matches('button, [role=button], a, [role=link]')
-        && leadTerms.test(norm(n.textContent) || norm(n.getAttribute('aria-label')))) {
+        && (leadTerms.test(norm(n.textContent)) || leadTerms.test(norm(n.getAttribute('aria-label'))))) {
       return {ok: false, why: 'lead_terms'};
     }
   }
@@ -14056,6 +14059,7 @@ INSTANT_FORM_NOT_SWITCHED = "instant_form_not_switched"
 _DESTINATION_FIELD_WHYS = frozenset({
     "url_field_missing", "url_field_not_focused", "url_insert_error",
     "addon_none_not_set", "url_not_kept", "addon_not_none",
+    "instant_form_switch_on",
 })
 
 #: Состояние раздела Destination. URL в ответ не попадает (это ссылка
@@ -14324,7 +14328,10 @@ def _show_destination_section(page: Page) -> bool | None:
 
 #: Переключатель «Instant form» (opt-in) раздела: пометить и дать точку.
 _MARK_INSTANT_FORM_SWITCH_JS = r"""() => {
-  const host = document.querySelector('[data-surface$="/pce_lead_gen_instant_form_opt_in_field"]');
+  const sec = document.getElementById('adgroupAdDestinationGeneric')
+    || document.querySelector('[data-surface$="/ad_destination_generic_section"]');
+  if (!sec) return null;
+  const host = sec.querySelector('[data-surface$="/pce_lead_gen_instant_form_opt_in_field"]');
   if (!host) return null;
   const sw = host.querySelector('[role=switch], input[type=checkbox]');
   if (!sw) return null;
@@ -14559,8 +14566,15 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
         except Exception:
             return False
 
+    def _switch_on() -> bool:
+        # ACL-1543 (ревью PR #545, B2): переключатель «Instant form» так и
+        # включён — объявление не на Website, как бы ни стояли URL и add-on.
+        return destination_state(page).get("opt_in") == "on"
+
     def _both_ok() -> bool:
         if not _url_matches():
+            return False
+        if _switch_on():
             return False
         # None (unreadable state) must not fail the whole step — but a
         # definite False must, since that is the exact broken state seen
@@ -14571,6 +14585,8 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     if not _both_ok():
         for _ in range(2):
             try:
+                if _switch_on():
+                    _turn_off_instant_form_switch(page)
                 retry_box = destination_url_box(page)
                 if retry_box is not None and _focus_via_cdp_click(page, retry_box) is not None:
                     page.keyboard.press("Control+A")  # replace, never append
@@ -14586,8 +14602,15 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     if _both_ok():
         return True
     # ACL-1371: какая из двух половин не удержалась — это и есть причина.
-    return _destination_failed(page, "addon_not_none" if _url_matches() else "url_not_kept",
-                               destination_url)
+    # ACL-1543: переключатель «Instant form» включён — `instant_form_switch_on`
+    # (`_destination_failed` назовёт это `instant_form_not_switched`).
+    if not _url_matches():
+        field_why = "url_not_kept"
+    elif _switch_on():
+        field_why = "instant_form_switch_on"
+    else:
+        field_why = "addon_not_none"
+    return _destination_failed(page, field_why, destination_url)
 
 
 def _holds_focus(handle) -> bool:
@@ -14705,6 +14728,9 @@ def _ad_destination_persisted(page: Page, destination_url: str) -> bool:
             box = destination_url_box(page)
             if box is not None:
                 if (box.input_value(timeout=2000) or "").strip() == destination_url.strip():
+                    # ACL-1543: при включённом «Instant form» это не Website.
+                    if destination_state(page).get("opt_in") == "on":
+                        return False
                     return _browser_addon_none_checked(page) is not False
                 return False
         except Exception:

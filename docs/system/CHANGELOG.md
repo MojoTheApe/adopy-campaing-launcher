@@ -25,6 +25,13 @@ Browser add-ons on "Instant form (suggested)", Lead Ads Terms card, Lead Gen err
   reason stays in diag as `field_why`), the ad row reads
   `<tag>_destination:instant_form_not_switched - <ad>: <sentence>` and stays blocking;
   the dashboard problem is titled "Ad destination - Instant form".
+- Review round 2: an "Instant form" opt-in switch that stays on is not success - the
+  final check, its retry and the classic sweep's read-back refuse it
+  (`instant_form_not_switched`, `field_why: instant_form_switch_on`). The press guard
+  checks the Instant form card with `closest()` (live "View terms" sits 16 levels below
+  it) and tests both the text and the aria-label of a button. The switch is looked up
+  inside the destination section only. The new step `destination_instant_form_off` has
+  its build-progress rule (ad stage).
 - Bench: `ad_destination_instant_form_2026_10_03.html` (scrubbed 04509d5eed75 capture),
   `tests/test_bench_destination_instant_form.py`.
 

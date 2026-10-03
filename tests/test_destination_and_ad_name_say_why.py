@@ -432,6 +432,8 @@ _REASONS = [
     "name_section_missing", "page_unreadable", "name_fill_timeout", "name_fill_strict_mode",
     "name_fill_intercepted", "name_fill_not_editable", "name_fill_detached", "name_fill_error",
     "name_fill_failed", "not_the_new_ad_after_reload", "website_radio_not_focused",
+    # ACL-1543
+    "instant_form_not_switched", "instant_form_switch_on",
 ]
 
 

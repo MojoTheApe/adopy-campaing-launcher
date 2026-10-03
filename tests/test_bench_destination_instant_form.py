@@ -41,7 +41,7 @@ URL = "https://example.com/landing?src=test"
 
 #: Модель Meta поверх вырезки (см. описание модуля).
 _META_MODEL = r"""
-(sticky) => {
+([sticky, stickySwitch]) => {
   const sec = document.getElementById('adgroupAdDestinationGeneric');
   const wrap = sec.closest('[data-virtualized]');
   const inView = () => {
@@ -102,14 +102,14 @@ _META_MODEL = r"""
   });
   const sw = sec.querySelector('[data-surface$="/pce_lead_gen_instant_form_opt_in_field"] input[role=switch]');
   sw.addEventListener('click', () => {
-    if (sticky) { sw.checked = true; sw.setAttribute('aria-checked', 'true'); return; }
+    if (stickySwitch) { sw.checked = true; sw.setAttribute('aria-checked', 'true'); return; }
     sw.setAttribute('aria-checked', sw.checked ? 'true' : 'false');
   });
 }
 """
 
 
-def _open(page, *, sticky: bool = False, switch_on: bool = False) -> None:
+def _open(page, *, sticky: bool = False, switch_on: bool = False, sticky_switch: bool = False) -> None:
     section = fragment(FIXTURE, "simple_create_instant_form_terms")
     if switch_on:
         section = section.replace('aria-checked="false" aria-label="Instant form" role="switch"',
@@ -122,7 +122,7 @@ def _open(page, *, sticky: bool = False, switch_on: bool = False) -> None:
         f'<div>{fragment(FIXTURE, "errors_lead_gen")}</div>'
         '<div style="height:2600px">Tracking</div>'
         '</body></html>')
-    page.evaluate(_META_MODEL, sticky)
+    page.evaluate(_META_MODEL, [sticky, sticky_switch])
 
 
 @pytest.fixture
@@ -243,3 +243,86 @@ def test_the_press_guard_refuses_the_lead_ads_terms_card(offline_page, rows, lab
     assert md._press_allowed(offline_page, x, y, "") is False
     refused = [r for r in rows if r[0] == "click_refused"]
     assert refused and refused[-1][2]["note"] == "lead_terms"
+
+
+# ── Ревью PR #545 ──────────────────────────────────────────────────────────
+
+
+def test_a_switch_that_stays_on_is_blocking_and_named(offline_page, rows):
+    """B2: «Instant form» opt-in не выключился — URL и «None» встали, но это не Website."""
+    _open(offline_page, switch_on=True, sticky_switch=True)
+    assert md.set_ad_destination_website(offline_page, URL) is False
+    assert md.last_destination_why() == "instant_form_not_switched"
+    diag = md.last_destination_diag()
+    assert diag["opt_in"] == "on" and diag["field_why"] == "instant_form_switch_on"
+    off = [r for r in rows if r[0] == "destination_instant_form_off"]
+    assert off and off[0][1] is False
+    assert md.destination_soft_fail("ad", "Ad 1").startswith("ad_destination:instant_form_not_switched")
+
+
+def test_the_sweep_does_not_accept_a_switch_that_is_on(offline_page, rows):
+    _open(offline_page, switch_on=True, sticky_switch=True)
+    md._show_destination_section(offline_page)
+    box = md.destination_url_box(offline_page)
+    box.fill(URL)
+    offline_page.evaluate(
+        "() => { for (const r of document.querySelectorAll('input[type=radio]')) {"
+        " if (r.value === 'none') r.setAttribute('aria-checked', 'true');"
+        " if (r.value === 'instant_form') r.setAttribute('aria-checked', 'false'); }"
+        " for (const e of document.querySelectorAll('[data-surface*=\"GeoCollapsibleGuidanceCard/error\"]'))"
+        " e.remove(); }")
+    assert md._browser_addon_none_checked(offline_page) is True
+    assert md._ad_destination_persisted(offline_page, URL) is False
+
+
+def test_the_url_field_hidden_again_is_retried_after_re_showing(offline_page, rows, monkeypatch):
+    """Раздел спрятали между пометкой поля и нажатием: вторая попытка после показа."""
+    _open(offline_page)
+    real = md._focus_via_cdp_click
+    calls = {"n": 0}
+
+    def first_misses(page, locator):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return None
+        return real(page, locator)
+
+    monkeypatch.setattr(md, "_focus_via_cdp_click", first_misses)
+    assert md.set_ad_destination_website(offline_page, URL) is True, md.last_destination_diag()
+    assert calls["n"] >= 2
+
+
+def _press_target(page, html: str) -> tuple[float, float]:
+    page.set_content(f'<!doctype html><html><body>{html}</body></html>')
+    box = page.locator("#target").bounding_box()
+    return box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+
+
+def test_the_guard_reaches_a_button_deep_inside_the_card(offline_page, rows):
+    """Живьём «View terms» на 16 уровней ниже карточки; кнопка без особого текста тоже."""
+    deep = "<div>" * 20 + '<div role="button" id="target">Learn more</div>' + "</div>" * 20
+    x, y = _press_target(
+        offline_page,
+        '<span data-surface="/am/editor:ad/ad_destination_generic_section/pce_website_extension_field/'
+        f'pce_website_extension_instant_form_field">{deep}</span>')
+    assert md._press_allowed(offline_page, x, y, "") is False
+    assert rows[-1][0] == "click_refused" and rows[-1][2]["note"] == "lead_terms"
+
+
+def test_the_guard_reads_the_aria_label_of_an_icon_button(offline_page, rows):
+    x, y = _press_target(offline_page, '<div role="button" aria-label="Accept" id="target">&#10003;</div>')
+    assert md._press_allowed(offline_page, x, y, "") is False
+    assert rows[-1][2]["note"] == "lead_terms"
+
+
+def test_the_guard_lets_the_destination_controls_through(offline_page, rows):
+    _open(offline_page)
+    md._show_destination_section(offline_page)
+    for sel in ('input[value="none"]', 'input[value="external"]', 'input[role=switch]',
+                '[data-surface$="/pce_website_url_field"] input'):
+        el = offline_page.locator(sel).first
+        el.scroll_into_view_if_needed()
+        box = el.bounding_box()
+        assert box, sel
+        assert md._press_allowed(offline_page, box["x"] + box["width"] / 2,
+                                 box["y"] + box["height"] / 2, "") is True, sel
