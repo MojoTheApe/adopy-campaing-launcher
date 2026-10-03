@@ -566,6 +566,12 @@ _CREATIVE_WHY_TEXT = {
     "story_not_placed:not_in_library": ("Story placement uses the post file: the story file is not "
                                         "in Meta's media library, so Replace was skipped (Original "
                                         "and no Meta AI expansion are set)."),
+    # ACL-1533: Replace on Vertical without evidence that the story is there.
+    "crop_vertical_replace_unconfirmed": ("The story file could not be confirmed on the Vertical "
+                                          "crop after Replace (the post may still be there); the "
+                                          "ad is left in the draft for review."),
+    "crop_vertical_changed_without_story": ("The Vertical crop changed although no story file was "
+                                            "picked; the ad is left in the draft for review."),
 }
 
 

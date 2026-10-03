@@ -228,6 +228,15 @@ Re-built by `page_capture.scrub_section_html` (whitelisted tags and attributes: 
 | crop_step_image_classic_2026_10_01.html | 5edc0e7cca0a/05_wizard_crop/block_creative_wizard.html (Doc19, classic editor, ad 1, image upload) — Square Original checked, Vertical 9:16 (recommended) checked (Meta's default) | Same; the Replace picker was never captured (synthetic in the tests) |
 | ad_form_gone_verifying_2026_10_01.html | 4121938e6dc3/11_ad2_creative_upload/page.html (ad 2 after the library pick and the wizard) — Ad heading with an empty `/am/editor:ad` surface (no name field, no Media block) and the "Verifying your changes" card with the preflight error `#100 lead_gen_form_id` | The right-column preview is not in the fragment |
 
+## ACL-1533 fragments (live runs 2026-10-03, Facebook_1443)
+
+Cut by `scripts/capture_to_fixture.py` from the read-only captures of run 2e98a75f252d (same layout in d54d68303e57, f35a2b31f7d8, a39407b72507). Media file names → `sample_media_NN`, videos and thumbnails → `<i>`, render ids → `syn_N`. UI language: English. Meta build identifier: not recorded. Browser: Multilogin Chrome, version not recorded.
+
+| Fixture | Source / capture state | Coverage limit |
+| --- | --- | --- |
+| crop_step_pair_video_2026_10_03.html | 2e98a75f252d/06_wizard_crop/block_creative_wizard.html — the wizard on Crop for a post/story pair (video from the library): Vertical (Original checked, 9:16 enabled, "will not show up on certain placements" note) and Square (Original checked, 1:1 disabled) | The cards' `blob:` videos are removed; the test puts one back per card and re-mints it the way Meta does after Replace. No capture after Replace exists (telemetry `after` is the reference) |
+| crop_replace_in_wizard_picker_2026_10_03.html | 2e98a75f252d/07_wizard_crop_replace/block_creative_wizard.html — Meta's "Replace media for Stories, Status, Reels" inside the wizard dialog: step row (Crop `aria-current=step`), header Close and Save, Account/Video URL/Page tabs, "Search media", Filters, Upload, grid of six tiles, footer Save (the primary slot that is Next on Crop) | No Meta runtime: what each button does is wired by the test as seen live (footer Save after a pick returned to Crop; the row's Crop did nothing) |
+
 ## ACL-1433 bench harvest (live runs 2026-09-29 … 10-01)
 
 Cut with `scripts/capture_to_fixture.py` from `C:\acl-live-1001`, `C:\acl-live-0930` and `C:\acl-live-0928` `output\rpa_pages` (the oldest capture kept there is from 29.09). Scrubbed as described above; extra `--replace` pairs: the Page name in the wizard previews, the ad copy of cc8fcfa17ae9, the interests of 3100d06ad51e. UI language: English. Meta build identifier and browser version: not recorded. No Meta JS or CSS in any block: tests lay out what geometry depends on (the wizard step row) and emulate accordions where the step clicks. Every row with its test and expected result is in `tests/bench/CATALOGUE.md`.

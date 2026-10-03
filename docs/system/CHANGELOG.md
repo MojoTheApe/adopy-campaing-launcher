@@ -1,5 +1,40 @@
 # System history
 
+## Crop step: no false "Square changed", the in-wizard Replace picker left through its Save — ACL-1533
+
+Live runs on Facebook_1443 on 2026-10-03 (d54d68303e57, f35a2b31f7d8, 2e98a75f252d,
+a39407b72507): every post/story pair ended "do not publish".
+
+- `crop_square_changed` was a false positive. The Crop cards' video media is a `blob:`
+  URL that Meta re-mints whenever the step is drawn again; after Replace both cards had a
+  new one, so the src comparison said "Square changed" although Square was still on
+  Original with the post (1:1 still disabled, no thumbnail ids). `crop_step.square_changed`
+  now blocks only on positive evidence: the picked tile's thumbnail id appears on Square,
+  Square's ids are replaced by others, its stable media identity (`media_key`: a CDN path
+  without its signed query; `blob:`/`data:` have none) changed, or its ratio radios
+  changed (another shape).
+- `crop_replace_picker_not_closed`: in Meta's in-wizard "Replace media for Stories,
+  Status, Reels" the step row's "Crop" is the current step (`aria-current=step`) and
+  pressing it does nothing. The way back to Crop is the picker's own Save: the footer's
+  primary button after the "Search media" box (where Crop has Next), which already
+  brought Crop back after a pick live. It is now the only control pressed there, after a
+  pick and, for a story not in the library, with nothing picked; never the header Save,
+  Close, Next or Publish (a slot that reads anything but "Save" is not pressed). If Crop
+  does not come back, Close and `crop_replace_picker_not_closed` as before. If Save
+  without a pick changed the Vertical card (media gone or other ratio radios), the step
+  blocks with `crop_vertical_changed_without_story`.
+- Review round 2: the Vertical side of Replace needs positive evidence too
+  (`crop_step.vertical_replaced`, same rules as Square via `card_changed`: picked thumbnail
+  id, Vertical ids replaced, stable `media_key` changed, ratio radios changed - live the
+  story made "9:16 (recommended)" disabled). The raw-src check alone passed every video
+  Replace (`blob:` re-minted), so a Replace that left the post on Vertical read as "as
+  planned"; without evidence the step now blocks with `crop_vertical_replace_unconfirmed`
+  (English line in `simple_create.creative_why_text`; the creative step fails, blocking).
+  `crop_vertical_changed_without_story` uses the same evidence (thumbnail ids included).
+- Bench: `crop_step_pair_video_2026_10_03.html`, `crop_replace_in_wizard_picker_2026_10_03.html`
+  (scrubbed, `tests/bench/catalogue.json`), `tests/test_bench_crop_live_1003.py`; the
+  in-wizard tests of `tests/test_story_not_placed_is_a_warning.py` follow the live way back.
+
 ## Status screenshot is off by default: it resets the profile's viewport — ACL-1535
 
 ACL-1532 measured live (2026-10-03): the status screenshot taken on every account read
