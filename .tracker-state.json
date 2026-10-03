@@ -4036,20 +4036,6 @@
         "started_at": "2026-10-03T14:51:09+00:00",
         "from_status": "status:todo"
       },
-      "532": {
-        "actor": "Worker-E1532P",
-        "session": "run_e1532p_1003",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1532-screen-probe",
-        "worktree": "C:\\acl-1532-emuprobe",
-        "id": "b448ae771df4445eaa5302b6d45cf35e",
-        "issue": 532,
-        "state": "handoff",
-        "started_at": "2026-10-03T14:52:05+00:00",
-        "from_status": "status:backlog",
-        "pr": 534,
-        "report": "# ACL-1532: do our screenshots change the profile's screen values\n\nLive, read-only probe on 2026-10-03 inside the Multilogin profile Facebook_9943.\n\n## How it was run\n- Publish slots were empty: no job running, none waiting.\n- The profile was already running with its own automation port. The port was found with the robot's helper `_discover_owned_debug_port`, which checks that the listening socket belongs to this profile's Mimic process. The probe attached with a bare `connect_over_cdp` and did **not** use `_connect_playwright`, because that would un-minimise and widen the window.\n- The probe did not click, type, navigate, reload, raise or resize anything. It only ran read-only `page.evaluate` and the capture calls under test. The probe did not open the profile, so it did not stop it.\n- One tab was open: Ads Manager, the campaigns page.\n- **The window was minimised**: OS bounds 1294\u00d7814, `windowState=minimized`. It stayed that way for the whole probe.\n- Script: `scripts/probe_screen_values.py`. Images go to `out/`. None were produced (see below).\n\n## Values (CSS px unless noted)\n\n`screen.width/height`, `availWidth`, `colorDepth`, `devicePixelRatio`, `outerWidth/Height`, `visualViewport.scale`, `screenX/Y` and both resolution media queries had the same value in every snapshot:\n1280, 800, 1280, 24, **0.75**, 159\u00d727, 1, \u221221333/\u221221333, 1dppx=false, 2dppx=false.\n\nThe table shows only the values that moved:\n\n| Snapshot | availHeight | innerWidth \u00d7 innerHeight | visualViewport w \u00d7 h | capture result |\n|---|---|---|---|---|\n| before | **752** | **2558 \u00d7 1438** | 2558.67 \u00d7 1438.67 | \u2013 |\n| after (a) `page.screenshot(full_page=False)` (status shot) | **800** | 2558 \u00d7 1438 | 2558.67 \u00d7 1438.67 | timed out after 15 s waiting for a frame (minimised window) |\n| after (b) `screenshots.capture` (failure-step PNG) | 800 | 2558 \u00d7 1438 | 2558.67 \u00d7 1438.67 | skipped by its own check: page hidden (minimised) |\n| after (c) CDP `Page.captureScreenshot` with clip and scale 2, new session | 800 | 2558 \u00d7 1438 | 2558.67 \u00d7 1438.67 | **not run**: window minimised; this call has no timeout and would hang |\n| after (d) CDP `Page.captureScreenshot` with no clip, new session | 800 | 2558 \u00d7 1438 | 2558.67 \u00d7 1438.67 | **not run**: same reason |\n| 3 s later, still attached | 800 | 2558 \u00d7 1438 | 2558.67 \u00d7 1438.67 | \u2013 |\n| after the probe detached (re-attach, read only, 3 reads 5 s apart) | **752** | **5116 \u00d7 2876** | 5116 \u00d7 2876 | \u2013 (stable) |\n\nNote: `page_capture.capture` (the failure page capture) saves only HTML and JSON. The failure-step PNG comes from `screenshots.capture`, which calls `page.screenshot` and falls back to CDP. That is why it was used for (b).\n\n## Conclusion\n- **The fingerprint values stay put.** `screen` 1280\u00d7800, `devicePixelRatio` 0.75, `colorDepth` and the resolution media queries did not change after any attempted capture. Multilogin applies these natively, not through a DevTools override that a capture could reset.\n- **(a), the status shot (`page.screenshot`), did change values**, even though it never produced an image:\n  - While its capture was pending, `screen.availHeight` went from 752 to 800, so the taskbar inset disappeared.\n  - When our session detached, availHeight went back to 752. However, the layout viewport jumped from 2558\u00d71438 to 5116\u00d72876 CSS px and stayed there. That is 1919\u00d71079 device px before and 3837\u00d72157 device px after.\n  - The probable mechanism: before the probe, the page was held at a ~1920\u00d71080 device-px viewport, which is the \"page \u22481920 px inside a 3837 px window\" seen in the 9943 shots. Our code never sends `Emulation.setDeviceMetricsOverride`, so another DevTools client most likely held that override. Playwright's `page.screenshot` is itself a clipped `Page.captureScreenshot` (clip.scale = visualViewport.scale). Tearing down its pending capture cleared that override, and the page now lays out at the full window size.\n  - This matches the headless finding from ACL-1529, except that here `screen` and `devicePixelRatio` survived.\n- **(b)** made no change: it skips minimised windows before capturing.\n- **(c) and (d) were not measured.** The window was minimised, and un-minimising it was not allowed. To measure them, re-run the probe while the 9943 window is restored by its owner or a robot run. The rule against touching the window stays.\n\n## Caveats\n- This was a single run on a minimised window. Normally the robot un-minimises the window before a capture, so the frame-wait and teardown path seen in (a) may differ from a normal status shot.\n- The viewport change showed up only after detach, so we cannot tell which teardown cleared the override: Playwright's own screenshot session or a temporary override inside `captureScreenshot`.\n\n## Follow-up (acceptance criterion 2)\n(a) changed the profile's viewport metrics. Proposed follow-up:\n1. Re-measure (a), (c) and (d) with the window restored.\n2. Then move all captures to a method that leaves another session's device-metrics override alone. One candidate: a `Page.captureScreenshot` with no clip on the page's existing session, after checking that the window is not minimised. Add tests for it."
-      },
       "533": {
         "actor": "Worker-K1533C",
         "session": "run_k1533c_1003",
@@ -5498,9 +5484,25 @@
             "session": "run_e1532p_1003"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-E1532P",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-E1532P",
+          "session": "run_e1532p_1003",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1532-screen-probe",
+          "worktree": "C:\\acl-1532-emuprobe",
+          "id": "b448ae771df4445eaa5302b6d45cf35e",
+          "issue": 532,
+          "state": "handoff",
+          "started_at": "2026-10-03T14:52:05+00:00",
+          "from_status": "status:backlog",
+          "pr": 534,
+          "report": "# ACL-1532: do our screenshots change the profile's screen values\n\nLive, read-only probe on 2026-10-03 inside the Multilogin profile Facebook_9943.\n\n## How it was run\n- Publish slots were empty: no job running, none waiting.\n- The profile was already running with its own automation port. The port was found with the robot's helper `_discover_owned_debug_port`, which checks that the listening socket belongs to this profile's Mimic process. The probe attached with a bare `connect_over_cdp` and did **not** use `_connect_playwright`, because that would un-minimise and widen the window.\n- The probe did not click, type, navigate, reload, raise or resize anything. It only ran read-only `page.evaluate` and the capture calls under test. The probe did not open the profile, so it did not stop it.\n- One tab was open: Ads Manager, the campaigns page.\n- **The window was minimised**: OS bounds 1294\u00d7814, `windowState=minimized`. It stayed that way for the whole probe.\n- Script: `scripts/probe_screen_values.py`. Images go to `out/`. None were produced (see below).\n\n## Values (CSS px unless noted)\n\n`screen.width/height`, `availWidth`, `colorDepth`, `devicePixelRatio`, `outerWidth/Height`, `visualViewport.scale`, `screenX/Y` and both resolution media queries had the same value in every snapshot:\n1280, 800, 1280, 24, **0.75**, 159\u00d727, 1, \u221221333/\u221221333, 1dppx=false, 2dppx=false.\n\nThe table shows only the values that moved:\n\n| Snapshot | availHeight | innerWidth \u00d7 innerHeight | visualViewport w \u00d7 h | capture result |\n|---|---|---|---|---|\n| before | **752** | **2558 \u00d7 1438** | 2558.67 \u00d7 1438.67 | \u2013 |\n| after (a) `page.screenshot(full_page=False)` (status shot) | **800** | 2558 \u00d7 1438 | 2558.67 \u00d7 1438.67 | timed out after 15 s waiting for a frame (minimised window) |\n| after (b) `screenshots.capture` (failure-step PNG) | 800 | 2558 \u00d7 1438 | 2558.67 \u00d7 1438.67 | skipped by its own check: page hidden (minimised) |\n| after (c) CDP `Page.captureScreenshot` with clip and scale 2, new session | 800 | 2558 \u00d7 1438 | 2558.67 \u00d7 1438.67 | **not run**: window minimised; this call has no timeout and would hang |\n| after (d) CDP `Page.captureScreenshot` with no clip, new session | 800 | 2558 \u00d7 1438 | 2558.67 \u00d7 1438.67 | **not run**: same reason |\n| 3 s later, still attached | 800 | 2558 \u00d7 1438 | 2558.67 \u00d7 1438.67 | \u2013 |\n| after the probe detached (re-attach, read only, 3 reads 5 s apart) | **752** | **5116 \u00d7 2876** | 5116 \u00d7 2876 | \u2013 (stable) |\n\nNote: `page_capture.capture` (the failure page capture) saves only HTML and JSON. The failure-step PNG comes from `screenshots.capture`, which calls `page.screenshot` and falls back to CDP. That is why it was used for (b).\n\n## Conclusion\n- **The fingerprint values stay put.** `screen` 1280\u00d7800, `devicePixelRatio` 0.75, `colorDepth` and the resolution media queries did not change after any attempted capture. Multilogin applies these natively, not through a DevTools override that a capture could reset.\n- **(a), the status shot (`page.screenshot`), did change values**, even though it never produced an image:\n  - While its capture was pending, `screen.availHeight` went from 752 to 800, so the taskbar inset disappeared.\n  - When our session detached, availHeight went back to 752. However, the layout viewport jumped from 2558\u00d71438 to 5116\u00d72876 CSS px and stayed there. That is 1919\u00d71079 device px before and 3837\u00d72157 device px after.\n  - The probable mechanism: before the probe, the page was held at a ~1920\u00d71080 device-px viewport, which is the \"page \u22481920 px inside a 3837 px window\" seen in the 9943 shots. Our code never sends `Emulation.setDeviceMetricsOverride`, so another DevTools client most likely held that override. Playwright's `page.screenshot` is itself a clipped `Page.captureScreenshot` (clip.scale = visualViewport.scale). Tearing down its pending capture cleared that override, and the page now lays out at the full window size.\n  - This matches the headless finding from ACL-1529, except that here `screen` and `devicePixelRatio` survived.\n- **(b)** made no change: it skips minimised windows before capturing.\n- **(c) and (d) were not measured.** The window was minimised, and un-minimising it was not allowed. To measure them, re-run the probe while the 9943 window is restored by its owner or a robot run. The rule against touching the window stays.\n\n## Caveats\n- This was a single run on a minimised window. Normally the robot un-minimises the window before a capture, so the frame-wait and teardown path seen in (a) may differ from a normal status shot.\n- The viewport change showed up only after detach, so we cannot tell which teardown cleared the override: Playwright's own screenshot session or a temporary override inside `captureScreenshot`.\n\n## Follow-up (acceptance criterion 2)\n(a) changed the profile's viewport metrics. Proposed follow-up:\n1. Re-measure (a), (c) and (d) with the window restored.\n2. Then move all captures to a method that leaves another session's device-metrics override alone. One candidate: a `Page.captureScreenshot` with no clip on the page's existing session, after checking that the window is not minimised. Add tests for it."
+        },
+        "pr": 534,
+        "queued_at": "2026-10-03T15:02:32+00:00"
       },
       "533": {
         "implementers": [
@@ -6905,7 +6907,8 @@
     "review_queue": [
       406,
       433,
-      526
+      526,
+      532
     ],
     "review": null,
     "history": [
@@ -9943,6 +9946,13 @@
         "issue": 533,
         "claim": "03f86eadabd742c9ab3ed9b9218ef8e7",
         "actor": "Worker-K1533C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-03T15:02:32+00:00",
+        "issue": 532,
+        "pr": 534,
+        "actor": "Worker-E1532P"
       }
     ],
     "policy": {
