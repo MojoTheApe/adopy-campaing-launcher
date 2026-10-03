@@ -787,9 +787,13 @@ and any `/actions/runs/` link, and the packaged ACL.exe trusted `release.json`
 - Packaged client: `release.json.sig` (Ed25519 over the exact bytes) is checked
   against keys pinned in `src/web/release_signing.py` before the hash is
   believed; an unknown key, a bad or malformed signature, or a signed manifest of
-  another tag is refused and not cached. Warn mode until the owner pins a key
-  (missing signature → log + Sentry `kind=update_trust`); enforce via `ENFORCE`,
+  another tag (or with no tag) is refused and not cached. The owner's public key
+  `428a74e4f8e6e616` is pinned (Issue #357); a missing signature is still only
+  reported (log + Sentry `kind=update_trust`) until enforcement: `ENFORCE`,
   build var `ACL_ENFORCE_RELEASE_SIGNATURES=true` or `ACL_RELEASE_SIGNATURES=enforce`.
+  With a key pinned, CI refuses to publish an unsigned release.
+- Installer gate stage `$AclGateEnforce` in `Install ACL.bat` mirrors
+  `GATE_ENFORCE`; a test keeps them equal.
 - CI signs with `scripts/acl_sign_release.py` and secret `ACL_RELEASE_SIGNING_KEY`
   (environment `release`). Owner steps and the GitHub protection checklist:
   `docs/RELEASE_TRUST.md`.

@@ -2,8 +2,9 @@
 
 The installer hash comes from the same GitHub Release as the installer, so the
 client must also check who published release.json: an Ed25519 signature from a
-key pinned in the client. All keys here are generated per test run; no real
-key exists in the repository.
+key pinned in the client. Private keys here are generated per test run; the
+only real key material in the repository is the owner's PUBLIC key pinned in
+src/web/release_signing.py (its private half lives only in the CI secret).
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ import logging
 
 import pytest
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from src.web import release_signing as rs
 from src.web import release_updates as ru
@@ -140,13 +141,60 @@ def test_mode_can_only_be_made_stricter(monkeypatch):
     assert rs.mode({"signatures": "warn"}) == "enforce"
 
 
-def test_shipped_state_is_warn_with_no_key_material():
-    # Этап выкатки на сегодня: ключ ещё не закреплён, отказ по «нет подписи»
-    # включается отдельным решением (docs/RELEASE_TRUST.md).
+def test_shipped_state_is_warn_with_only_public_key_material():
+    # Этап выкатки на сегодня: ключ владельца закреплён, но отказ по «нет
+    # подписи» включается отдельным решением (docs/RELEASE_TRUST.md, шаги 4–6).
     assert rs.ENFORCE is False
     for key_id, public in rs.PINNED_PUBLIC_KEYS.items():
         raw = base64.b64decode(public)
         assert len(raw) == 32 and rs.key_id_for(raw) == key_id
+
+
+# Ключ владельца из Issue #357; любая правка таблицы должна быть осознанной.
+OWNER_KEY_ID = "428a74e4f8e6e616"
+OWNER_PUBLIC = "zNclue/L3oMZN3SnynUUOnk5AAVEzSwgCc8GzC0WWcM="
+
+
+def _claiming(signature: bytes, key_id: str) -> bytes:
+    doc = json.loads(signature)
+    doc["key_id"] = key_id
+    return json.dumps(doc).encode()
+
+
+def test_owner_key_is_pinned_and_its_id_matches_the_key():
+    assert rs.PINNED_PUBLIC_KEYS == {OWNER_KEY_ID: OWNER_PUBLIC}
+    raw = base64.b64decode(OWNER_PUBLIC, validate=True)
+    assert len(raw) == 32 and rs.key_id_for(raw) == OWNER_KEY_ID
+    Ed25519PublicKey.from_public_bytes(raw)  # это настоящий ключ Ed25519
+
+
+@pytest.mark.parametrize("mode", ["warn", "enforce"])
+def test_manifest_signed_by_another_key_is_refused_by_the_shipped_table(mode):
+    # Без monkeypatch: работает настоящая таблица PINNED_PUBLIC_KEYS.
+    stranger = Ed25519PrivateKey.generate()
+    manifest = _manifest()
+    signature = rs.sign_manifest(manifest, stranger)
+
+    unknown = rs.verify_manifest(manifest, signature)
+    assert unknown.status == rs.UNKNOWN_KEY
+    assert rs.decide(unknown, mode)[0] is False
+
+    # Чужая подпись, выдающая себя за ключ владельца, не сходится.
+    forged = rs.verify_manifest(manifest, _claiming(signature, OWNER_KEY_ID))
+    assert forged.status == rs.BAD_SIGNATURE and forged.key_id == OWNER_KEY_ID
+    assert rs.decide(forged, mode)[0] is False
+
+
+def test_ci_with_a_key_other_than_the_pinned_owner_key_fails(tmp_path):
+    from scripts import acl_sign_release as signer
+
+    manifest = tmp_path / "release.json"
+    manifest.write_bytes(_manifest())
+    stranger = Ed25519PrivateKey.generate()
+    env = {rs.SIGNING_KEY_ENV: stranger.private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()}
+    assert signer.sign(manifest, require=False, env=env) == 1
+    assert not (tmp_path / rs.SIGNATURE_ASSET).exists()
 
 
 def test_private_key_loads_from_pem_or_raw_seed(publisher):
@@ -268,6 +316,19 @@ def test_signed_manifest_of_another_release_is_refused(client, publisher):
         ru.download()
 
 
+def test_signed_manifest_without_a_tag_is_refused(client, publisher):
+    # Подпись без привязки к выпуску позволила бы переложить release.json в
+    # чужой релиз, поэтому у подписанного манифеста tag обязателен.
+    doc = json.loads(_manifest())
+    del doc["tag"]
+    manifest = json.dumps(doc, indent=2).encode()
+    fake = client(FakeRelease(manifest, rs.sign_manifest(manifest, publisher)))
+
+    with pytest.raises(ru.UntrustedRelease, match="different release"):
+        ru.download()
+    assert "api://asset/installer" not in fake.requested
+
+
 def test_unsigned_release_is_reported_but_still_installs_in_warn_mode(client):
     client(FakeRelease(_manifest(), None))
 
@@ -324,6 +385,18 @@ def test_ci_without_the_secret_publishes_unsigned_only_when_not_required(tmp_pat
     manifest.write_bytes(_manifest())
     assert signer.sign(manifest, require=False, env={}, pinned={}) == 0
     assert signer.sign(manifest, require=True, env={}, pinned={}) == 1
+    assert not (tmp_path / rs.SIGNATURE_ASSET).exists()
+
+
+def test_ci_without_the_secret_fails_once_a_key_is_pinned(tmp_path, publisher):
+    from scripts import acl_sign_release as signer
+
+    manifest = tmp_path / "release.json"
+    manifest.write_bytes(_manifest())
+    pinned = dict([rs.pinned_entry(publisher)])
+    # Закреплённый ключ сам по себе требует подписи, даже без --require.
+    assert signer.sign(manifest, require=False, env={}, pinned=pinned) == 1
+    assert signer.sign(manifest, require=False, env={}) == 1  # настоящая таблица
     assert not (tmp_path / rs.SIGNATURE_ASSET).exists()
 
 

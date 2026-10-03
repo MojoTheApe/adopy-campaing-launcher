@@ -41,7 +41,8 @@ The gate has three outcomes, staged like the signatures below:
 
 An attacker controls neither the buyer's token nor the network, so cannot
 push a real check into the unverified path. Enforcement only tightens:
-`GATE_ENFORCE = True` in `scripts/acl_update_gate.py` or
+`GATE_ENFORCE = True` in `scripts/acl_update_gate.py` together with
+`$AclGateEnforce = $true` in `Install ACL.bat` (a test keeps the two equal), or
 `ACL_UPDATE_GATE=enforce` on the machine (the environment or the machine
 `.env`; `Install ACL.bat` reads the environment). Switch it on when Sentry
 shows no `gate=unverified` events for a release.
@@ -133,13 +134,19 @@ code-signing certificate or Azure Trusted Signing).
    the key stays a repository secret until the plan upgrade; then move it to
    the `release` environment (see the checklist).
 3. **Pin the public key**: a reviewed PR that sets `PINNED_PUBLIC_KEYS` in
-   `src/web/release_signing.py`. Never commit the private key.
+   `src/web/release_signing.py`. Never commit the private key. Done in
+   PR #370: key id `428a74e4f8e6e616` (owner key, Issue #357). The public key
+   is not a secret — it can only check signatures — and
+   `scripts/acl_scan_secrets.py` does not flag it.
 4. **Release** normally. The release workflow signs `release.json`
    (`Sign release.json with the publisher key`); it fails if the key is set
    but not the pinned one. Check the release has `release.json.sig`:
    `python scripts/acl_sign_release.py verify --manifest release.json`.
-5. **Require signatures in CI**: repository variable
-   `ACL_REQUIRE_RELEASE_SIGNATURE=true` — a release without the key fails.
+5. **Require signatures in CI**: once a key is pinned, `acl_sign_release.py
+   sign` already fails when the secret is missing, so a deleted secret cannot
+   silently publish unsigned releases. The repository variable
+   `ACL_REQUIRE_RELEASE_SIGNATURE=true` additionally makes the requirement
+   explicit in the workflow.
 6. **Enforce on clients** once managers run a build with the pinned key and no
    `update_trust` warnings arrive for a release: set
    `ACL_ENFORCE_RELEASE_SIGNATURES=true` (per build) or `ENFORCE = True` (in
