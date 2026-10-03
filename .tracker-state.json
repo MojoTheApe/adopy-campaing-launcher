@@ -3968,7 +3968,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "526": {
+        "actor": "Worker-P1526E",
+        "session": "run_p1526e_1003",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1526-repin-engine",
+        "worktree": "C:\\acl-1526-repin",
+        "id": "f74179c0fee4434f9dea0f2c86f32eac",
+        "issue": 526,
+        "state": "implementing",
+        "started_at": "2026-10-03T11:59:01+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -5309,6 +5322,17 @@
         "pr": 522,
         "queued_at": "2026-10-03T06:04:45+00:00",
         "reviewer": "Reviewer-R1520S"
+      },
+      "526": {
+        "implementers": [
+          {
+            "actor": "Worker-P1526E",
+            "session": "run_p1526e_1003"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-P1526E",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -5655,6 +5679,10 @@
       "Reviewer-R1520S": {
         "session": "rev_r1520s_1003",
         "role": "Reviewer"
+      },
+      "Worker-P1526E": {
+        "session": "run_p1526e_1003",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -9541,6 +9569,13 @@
         "pr": 519,
         "lane": "f104d038d0fc401397a643008b0994dd",
         "actor": "Reviewer-R1518S"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-03T11:59:01+00:00",
+        "issue": 526,
+        "claim": "f74179c0fee4434f9dea0f2c86f32eac",
+        "actor": "Worker-P1526E"
       }
     ],
     "policy": {
