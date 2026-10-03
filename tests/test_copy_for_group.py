@@ -4,9 +4,9 @@
 Решение владельца 03.10 (ACL-1520): в группу поставщика вставляется одна
 картинка. Отзыв 03.10 (ACL-1529, 9943 Account Disabled): полоса сверху
 закрывала верх картинки, а сам снимок был мелким — страница занимала левый
-верхний угол, остальное белое. Теперь в буфер уходит сам снимок: снят в
-масштабе 2, обрезан по таблице, а у старых снимков пустые белые поля справа и
-снизу срезаются при копировании. Наружу ничего не уходит и нигде не
+верхний угол, остальное белое. Теперь в буфер уходит сам снимок: видимая
+область без clip и scale, обрезанная по таблице и белым полям уже при чтении,
+а у старых снимков пустые белые поля справа и снизу срезаются при копировании. Наружу ничего не уходит и нигде не
 сохраняется.
 
 Плюс п.5 ACL-1520: снимок берёт баннер Meta о состоянии кабинета, если тот
@@ -166,6 +166,8 @@ def test_the_button_copies_the_screenshot_itself_without_a_band(browser):
     try:
         page.click(".amap-copy-group")
         page.wait_for_function("window.__copied.length > 0")
+        # Сразу: через 2 с надпись возвращается, а разбор PNG под нагрузкой дольше.
+        page.wait_for_function("document.querySelector('.amap-copy-group').textContent === 'Copied'")
         assert page.evaluate("window.__copied.map(c => [c.type, c.blob.type])") == [["image/png", "image/png"]]
         px = _decode(page, "window.__copied[0].blob")
         assert (px["w"], px["h"]) == (W, H), "в буфере не снимок как есть"
@@ -173,7 +175,6 @@ def test_the_button_copies_the_screenshot_itself_without_a_band(browser):
         assert px["bottom"] == list(GREEN)
         assert px["red"] == 0, "красная полоса ACL-1520 всё ещё рисуется"
         assert page.evaluate("window.__texts") == [], "на картинке больше ничего не пишется"
-        assert page.text_content(".amap-copy-group") == "Copied"
         assert len(ctx.pages) == 1, "при удачном копировании вкладка не открывается"
     finally:
         ctx.close()
@@ -292,8 +293,9 @@ def test_nothing_is_sent_or_stored(browser, clipboard):
 # таблицей и в снимок попадает; у Doc20 (disabled) баннера нет, «Account
 # disabled» — в колонке Delivery.
 #
-# ACL-1529: снимок — видимая область страницы в масштабе 2, снизу обрезанная
-# по последнему тексту таблицы. Верх (выбор кабинета с номером, баннер,
+# ACL-1529: снимок — видимая область страницы голым Page.captureScreenshot
+# (без clip и scale — экран профиля не трогаем), снизу обрезанная в Python по
+# последнему тексту таблицы, белые поля срезаны. Верх (выбор кабинета с номером, баннер,
 # заголовок таблицы) не режется; все строки и колонка Delivery — в кадре.
 # Подставная страница похожа на Ads Manager: верхняя полоса с выбором
 # кабинета, баннер, таблица, левая колонка навигации во всю высоту и пустое
@@ -343,30 +345,127 @@ def _probe(ctx, png: bytes, points: dict) -> dict:
     }""", [base64.b64encode(png).decode(), points])
 
 
-def _shoot_fixture(browser, html: str = _FIXTURE, scroll: int = 0):
-    ctx = browser.new_context(viewport={"width": VW, "height": VH})
+#: Что не должно меняться от снимка: размеры, DPR, экран и медиазапросы
+#: разрешения — отпечаток экрана профиля Multilogin (ревью PR #530, B2).
+_SCREEN_PROBE = ("[innerWidth, innerHeight, devicePixelRatio, scrollY, screen.width, screen.height,"
+                 " screen.availWidth, screen.availHeight,"
+                 " matchMedia('(min-resolution: 1.5dppx)').matches, matchMedia('(min-resolution: 2dppx)').matches]")
+
+
+@pytest.fixture
+def telemetry(monkeypatch):
+    """Записи `run_telemetry.record` о снимке: какой путь сработал."""
+    from src.fb_ads_rpa import run_telemetry
+
+    got: list[tuple[str, object, dict]] = []
+    monkeypatch.setattr(run_telemetry, "record",
+                        lambda step, ok=None, **kw: got.append((step, ok, kw.get("diag") or {})))
+    return got
+
+
+def _paths(telemetry) -> list[tuple[str, str]]:
+    return [(d.get("path"), d.get("reason", "")) for step, _ok, d in telemetry if step == "status_shot"]
+
+
+def _shoot_fixture(browser, html: str = _FIXTURE, scroll: int = 0, dpr: float = 1):
+    ctx = browser.new_context(viewport={"width": VW, "height": VH}, device_scale_factor=dpr)
     page = ctx.new_page()
     page.set_content(html)
     if scroll:
         page.evaluate(f"window.scrollTo(0, {scroll})")
-    before = page.evaluate("[innerWidth, innerHeight, devicePixelRatio, scrollY]")
+    before = page.evaluate(_SCREEN_PROBE)
     shot_id, _at = sp._status_shot(page, "FacebookExample - Owner")
     assert shot_id
-    after = page.evaluate("[innerWidth, innerHeight, devicePixelRatio, scrollY]")
-    assert after == before, "масштаб снимка остался на странице или страница сдвинулась"
+    after = page.evaluate(_SCREEN_PROBE)
+    assert after == before, "снимок изменил экран, масштаб или прокрутку страницы"
     return ctx, page, sp.status_shot_path(shot_id).read_bytes()
 
 
-def test_the_capture_is_at_scale_two_and_cropped_below_the_table(browser, local):
+def test_the_capture_is_the_view_cropped_below_the_table(browser, local, telemetry):
     ctx, page, png = _shoot_fixture(browser)
     try:
         last = page.evaluate("document.getElementById('last').getBoundingClientRect().bottom")
         got = _probe(ctx, png, {})
-        assert sp.STATUS_SHOT_SCALE == 2
-        assert got["w"] == VW * 2, "снимок не в масштабе 2"
-        assert last * 2 <= got["h"] <= (last + sp._SHOT_PAD + 2) * 2, \
+        assert got["w"] == VW, "по ширине — не вся видимая область"
+        assert last <= got["h"] <= last + sp._SHOT_PAD + 2, \
             f"низ не обрезан по таблице: {got['h']} при последней строке на {last}"
-        assert got["h"] < VH * 2, "пустое место под таблицей осталось в кадре"
+        assert got["h"] < VH, "пустое место под таблицей осталось в кадре"
+        assert _paths(telemetry) == [("full", "")]
+    finally:
+        ctx.close()
+
+
+@pytest.fixture(scope="module")
+def hidpi(browser):
+    """Хост с настоящим масштабом экрана (Windows 150 %, 200 %…), headless.
+
+    Не `device_scale_factor` контекста: это подмена метрик через CDP, а
+    снимок без clip под подменой приходит в пикселях хоста, не в DPR страницы.
+    """
+    browsers: dict[float, object] = {}
+
+    def launch(dsf: float):
+        if dsf not in browsers:
+            browsers[dsf] = browser.browser_type.launch(
+                executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None,
+                args=[f"--force-device-scale-factor={dsf}", f"--window-size={VW},{VH}"])
+        return browsers[dsf]
+    try:
+        yield launch
+    finally:
+        for b in browsers.values():
+            b.close()
+
+
+def _shoot_hidpi(hidpi, dsf: float, override: dict | None = None):
+    ctx = hidpi(dsf).new_context(no_viewport=True)
+    page = ctx.new_page()
+    page.set_content(_FIXTURE)
+    if override:
+        ctx.new_cdp_session(page).send("Emulation.setDeviceMetricsOverride", dict(
+            width=0, height=0, mobile=False, **override))
+    before = page.evaluate(_SCREEN_PROBE)
+    shot_id, _at = sp._status_shot(page, "FacebookExample - Owner")
+    assert shot_id
+    assert page.evaluate(_SCREEN_PROBE) == before, "снимок изменил экран или масштаб страницы"
+    css = page.evaluate("[innerWidth, document.getElementById('last').getBoundingClientRect()]")
+    return ctx, css[0], css[1], sp.status_shot_path(shot_id).read_bytes()
+
+
+def test_the_crop_follows_the_screen_scale(hidpi, local):
+    """Хост 200 %: снимок в пикселях устройства, рамка CSS px ×2."""
+    ctx, vw, last, png = _shoot_hidpi(hidpi, 2)
+    try:
+        got = _probe(ctx, png, {"last": (vw * 2 - 40, int(last["bottom"] * 2) - 10)})
+        assert got["w"] == vw * 2
+        assert last["bottom"] * 2 <= got["h"] <= (last["bottom"] + sp._SHOT_PAD + 2) * 2
+        assert got["last"] == list(_LAST_RGB)
+    finally:
+        ctx.close()
+
+
+def test_a_profile_dpr_override_does_not_halve_the_crop(hidpi, local):
+    """Как в профиле 9943: хост 150 %, профиль держит DPR 0.75 и экран 1280×800.
+    Снимок — 1.5 px на CSS px, а не 0.75: кадр не режется пополам."""
+    ctx, vw, last, png = _shoot_hidpi(hidpi, 1.5, {"deviceScaleFactor": 0.75, "screenWidth": 1280,
+                                                   "screenHeight": 800})
+    try:
+        got = _probe(ctx, png, {"bar": (int(vw * 1.5) - 20, 4),
+                                "last": (int(vw * 1.5) - 20, int(last["bottom"] * 1.5) - 8)})
+        assert got["w"] == round(vw * 1.5), "ширина кадра посчитана по подменённому DPR"
+        assert got["bar"] == list(_BAR_RGB) and got["last"] == list(_LAST_RGB)
+        assert got["h"] <= (last["bottom"] + sp._SHOT_PAD + 2) * 1.5, "низ не обрезан по таблице"
+    finally:
+        ctx.close()
+
+
+def test_a_wide_capture_is_capped(hidpi, local):
+    """Хост 300 %: 1280 CSS px — 3840 px; храним не шире `STATUS_SHOT_MAX_WIDTH` (ревью N1)."""
+    ctx, _vw, _last, png = _shoot_hidpi(hidpi, 3)
+    try:
+        got = _probe(ctx, png, {"bar": (sp.STATUS_SHOT_MAX_WIDTH - 10, 4)})
+        assert got["w"] == sp.STATUS_SHOT_MAX_WIDTH
+        assert got["bar"] == list(_BAR_RGB)
     finally:
         ctx.close()
 
@@ -381,7 +480,7 @@ def test_the_capture_keeps_the_selector_banner_header_and_all_rows(browser, loca
                              " return [r.right - 20, r.top + 4]; })()")
         delivery = page.evaluate("(() => { const r = document.querySelectorAll('#grid tr')[1].children[1]"
                                  ".getBoundingClientRect(); return [r.right - 4, r.top + 4]; })()")
-        pt = {k: (int(x * 2), int(y * 2)) for k, (x, y) in
+        pt = {k: (int(x), int(y)) for k, (x, y) in
               dict(bar=(VW - 20, 4), banner=(VW - 20, box["banner"][1]), head=head,
                    delivery=delivery, last=(VW - 20, box["last"][1]), nav=(10, 10)).items()}
         got = _probe(ctx, png, pt)
@@ -391,7 +490,7 @@ def test_the_capture_keeps_the_selector_banner_header_and_all_rows(browser, loca
         assert got["delivery"] == list(_TABLE_RGB), "колонка Delivery срезана"
         assert got["last"] == list(_LAST_RGB), "последняя строка таблицы срезана"
         assert got["nav"] == list(_NAV_RGB)
-        assert box["selector"][0] * 2 < got["w"] and box["selector"][1] * 2 < got["h"], \
+        assert box["selector"][0] < got["w"] and box["selector"][1] < got["h"], \
             "выбор кабинета с номером не целиком в кадре"
     finally:
         ctx.close()
@@ -401,37 +500,269 @@ def test_the_capture_follows_the_scrolled_page(browser, local):
     """Рамка — то, что на экране, а не верх документа."""
     ctx, _page, png = _shoot_fixture(browser, scroll=40)
     try:
-        got = _probe(ctx, png, {"top": (VW * 2 - 40, 4)})
+        got = _probe(ctx, png, {"top": (VW - 40, 4)})
         assert got["top"] == list(_BANNER_RGB), "снят верх документа, а не видимая часть"
     finally:
         ctx.close()
 
 
 def test_without_a_table_the_whole_view_is_kept(browser, local):
-    """У отключённого кабинета таблицы может не быть — тогда весь экран, в масштабе 2."""
+    """У отключённого кабинета таблицы может не быть — тогда весь экран."""
     ctx, _page, png = _shoot_fixture(
-        browser, f'<body style="margin:0"><div style="height:60px;background:rgb{_BANNER_RGB}">'
+        browser, f'<body style="margin:0;background:#888"><div style="height:60px;background:rgb{_BANNER_RGB}">'
                  'Your ad account is disabled</div></body>')
     try:
         got = _probe(ctx, png, {"banner": (200, 20)})
-        assert (got["w"], got["h"]) == (VW * 2, VH * 2)
+        assert (got["w"], got["h"]) == (VW, VH)
         assert got["banner"] == list(_BANNER_RGB)
     finally:
         ctx.close()
 
 
-def test_a_failed_sharp_capture_falls_back_to_the_plain_screenshot(local):
+def test_white_margins_are_trimmed_when_the_shot_is_saved():
+    """Окно больше страницы (9943): справа и снизу белое — срезается уже при чтении."""
+    import io
+
+    from PIL import Image
+
+    png = _png_in_white(2000, 1100, 1000, 560, GREEN)
+    out = Image.open(io.BytesIO(sp._crop_shot(png, {"width": 2000, "height": 1100, "dpr": 1})))
+    pad = round(2000 / 200)
+    assert out.size == (1000 + pad, 560 + pad)
+    assert out.getpixel((2, 2)) == GREEN
+    # Белый снимок целиком не схлопывается.
+    blank = _png(300, 200, (255, 255, 255))
+    assert Image.open(io.BytesIO(sp._crop_shot(blank, {"width": 300, "height": 200, "dpr": 1}))).size == (300, 200)
+
+
+# ── экран профиля не трогаем (ревью PR #530, B2) ─────────────────────────
+
+#: Подмены, которые держит чужая сессия: экран и DPR (отпечаток профиля) и
+#: размер области (замер ACL-1532 на 9943 03.10: `page.screenshot` снял её —
+#: страница из 1919 стала 3837 px и так и осталась). Один размер области
+#: headless Chromium 149 при `page.screenshot` не сбрасывает (живой сброс тут
+#: не воспроизводится), поэтому он идёт вместе с DPR и экраном — так
+#: контроль в конце видит сброс, и проверка не пустая.
+_FOREIGN_OVERRIDES = {
+    "screen_and_dpr": ({"width": 0, "height": 0, "deviceScaleFactor": 1.5, "mobile": False,
+                        "screenWidth": 1920, "screenHeight": 1080},
+                       lambda v: v[2] == 1.5 and v[4:6] == [1920, 1080] and v[8] is True),
+    "viewport_size": ({"width": 640, "height": 400, "deviceScaleFactor": 1.5, "mobile": False,
+                       "screenWidth": 1280, "screenHeight": 800},
+                      lambda v: v[0:2] == [640, 400] and v[2] == 1.5 and v[4:6] == [1280, 800]),
+}
+
+
+@pytest.mark.parametrize("override", list(_FOREIGN_OVERRIDES))
+def test_a_foreign_device_metrics_override_survives_the_capture(browser, local, telemetry, override):
+    """Подмену метрик держит чужая CDP-сессия (как профиль Multilogin) — после
+    снимка размеры, экран, DPR и медиазапросы разрешения те же. Контроль в
+    конце: прежний `page.screenshot` эту же подмену сбрасывает, т.е. проверка
+    не пустая."""
+    params, held = _FOREIGN_OVERRIDES[override]
+    ctx = browser.new_context(no_viewport=True)
+    try:
+        page = ctx.new_page()
+        page.set_content(_FIXTURE)
+        holder = ctx.new_cdp_session(page)
+        holder.send("Emulation.setDeviceMetricsOverride", params)
+        before = page.evaluate(_SCREEN_PROBE)
+        assert held(before), before
+        for _ in range(3):
+            shot_id, _at = sp._status_shot(page, "FacebookExample - Owner")
+            assert shot_id
+            assert page.evaluate(_SCREEN_PROBE) == before, "снимок сбросил подмену экрана профиля"
+        assert _paths(telemetry) == [("full", "")] * 3
+
+        page.screenshot(full_page=False)
+        assert page.evaluate(_SCREEN_PROBE) != before, "контроль: page.screenshot должен был сбросить подмену"
+    finally:
+        ctx.close()
+
+
+# ── не виснуть: скрытая страница, тайм-аут, отказ (ревью PR #530, B1) ────
+
+def _spy_session(ctx, monkeypatch, send=None):
+    """Настоящая CDP-сессия, у которой подменён `send` реализации; считает detach."""
+    seen = {"send": [], "detach": 0}
+    real = ctx.new_cdp_session
+
+    def make(page):
+        s = real(page)
+        impl = s._impl_obj
+        orig_send, orig_detach = impl.send, impl.detach
+
+        async def spy_send(method, params=None):
+            seen["send"].append(method)
+            if send is not None:
+                return await send(method, params)
+            return await orig_send(method, params)
+
+        async def spy_detach():
+            seen["detach"] += 1
+            return await orig_detach()
+
+        impl.send, impl.detach = spy_send, spy_detach
+        return s
+
+    monkeypatch.setattr(ctx, "new_cdp_session", make)
+    return seen
+
+
+def test_a_capture_that_never_answers_is_abandoned(browser, local, telemetry, monkeypatch):
+    import asyncio
+    import time
+
+    async def never(_m, _p):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(sp, "_SHOT_DEADLINE_S", 1.0)
+    ctx = browser.new_context(viewport={"width": VW, "height": VH})
+    try:
+        page = ctx.new_page()
+        page.set_content(_FIXTURE)
+        seen = _spy_session(ctx, monkeypatch, send=never)
+        t0 = time.monotonic()
+        assert sp._status_shot(page, "FacebookExample - Owner") == ("", "")
+        assert time.monotonic() - t0 < 6, "снимок ждал дольше срока"
+        assert seen["send"] == ["Page.captureScreenshot"] and seen["detach"] == 1
+        assert _paths(telemetry) == [("none", "timeout")]
+        assert not list((local / "spend_shots").glob("*.png"))
+        assert page.evaluate("1 + 1") == 2, "страница после брошенного снимка не отвечает"
+    finally:
+        ctx.close()
+
+
+def test_a_capture_that_fails_leaves_no_shot_and_detaches(browser, local, telemetry, monkeypatch):
+    async def boom(_m, _p):
+        raise RuntimeError("Target closed")
+
+    ctx = browser.new_context(viewport={"width": VW, "height": VH})
+    try:
+        page = ctx.new_page()
+        page.set_content(_FIXTURE)
+        seen = _spy_session(ctx, monkeypatch, send=boom)
+        assert sp._status_shot(page, "FacebookExample - Owner") == ("", "")
+        assert seen["detach"] == 1, "CDP-сессия не отцеплена после отказа"
+        assert _paths(telemetry) == [("none", "error")]
+    finally:
+        ctx.close()
+
+
+def test_a_hidden_page_is_not_captured(browser, local, telemetry, monkeypatch):
+    """Свёрнутое окно: кадра может не быть никогда — даже не пробуем."""
+    ctx = browser.new_context(viewport={"width": VW, "height": VH})
+    try:
+        ctx.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'});")
+        page = ctx.new_page()
+        page.set_content(_FIXTURE)
+        seen = _spy_session(ctx, monkeypatch)
+        assert sp._status_shot(page, "FacebookExample - Owner") == ("", "")
+        assert seen["send"] == [], "у скрытой страницы снимок всё равно запрошен"
+        assert _paths(telemetry) == [("none", "hidden")]
+    finally:
+        ctx.close()
+
+
+def _fake_page(session):
+    def no_plain(**_k):
+        pytest.fail("после отказа CDP старый page.screenshot не зовётся")
+
+    return NS(context=NS(new_cdp_session=lambda _p: session),
+              evaluate=lambda js, arg=None: {"visible": True, "dpr": 1, "width": 100, "height": 50},
+              screenshot=no_plain)
+
+
+def test_a_blocking_send_outside_playwright_is_bounded_too(local, telemetry, monkeypatch):
+    import threading
+    import time
+
+    gate = threading.Event()
+    detached = []
+    session = NS(send=lambda *a: gate.wait(30), detach=lambda: detached.append(1))
+    monkeypatch.setattr(sp, "_SHOT_DEADLINE_S", 0.5)
+    t0 = time.monotonic()
+    try:
+        assert sp._status_shot(_fake_page(session), "FacebookExample - Owner") == ("", "")
+        assert time.monotonic() - t0 < 5
+        assert detached == [1]
+        assert _paths(telemetry) == [("none", "timeout")]
+    finally:
+        gate.set()
+
+
+def test_detach_runs_even_when_send_raises(local, telemetry):
+    """Ревью N2: `session.detach()` — в `finally`."""
+    detached = []
+
+    def boom(*_a):
+        raise RuntimeError("Protocol error")
+
+    session = NS(send=boom, detach=lambda: detached.append(1))
+    assert sp._status_shot(_fake_page(session), "FacebookExample - Owner") == ("", "")
+    assert detached == [1]
+    assert _paths(telemetry) == [("none", "error")]
+
+
+def test_without_cdp_the_plain_screenshot_is_taken(local, telemetry):
+    """Не Chromium (CDP нет вовсе) — прежний `page.screenshot`."""
     shots = []
-
-    def refuse(_page):
-        raise RuntimeError("no CDP")
-
-    page = NS(context=NS(new_cdp_session=refuse),
-              evaluate=lambda js, arg=None: {"x": 0, "y": 0, "width": 100, "height": 50},
+    page = NS(context=NS(),
               screenshot=lambda path, full_page=False: (shots.append(full_page), Path(path).write_bytes(PNG)))
     shot_id, _at = sp._status_shot(page, "FacebookExample - Owner")
     assert shot_id and shots == [False]
     assert sp.status_shot_path(shot_id).read_bytes() == PNG
+    assert _paths(telemetry) == [("fallback", "")]
+
+
+def test_a_failed_capture_is_reported_once_per_account_and_scrubbed(local, telemetry, monkeypatch):
+    import contextlib
+
+    from src import acl_sentry
+
+    sent: list[dict] = []
+
+    class Scope:
+        def __init__(self):
+            self.tags, self.ctx, self.fingerprint = {}, {}, None
+
+        def set_tag(self, k, v):
+            self.tags[k] = v
+
+        def set_context(self, k, v):
+            self.ctx[k] = v
+
+    current: list[Scope] = []
+
+    @contextlib.contextmanager
+    def new_scope():
+        current.append(Scope())
+        yield current[-1]
+
+    def capture_message(msg, level=None):
+        s = current[-1]
+        sent.append({"fp": s.fingerprint, "tags": s.tags, "ctx": s.ctx, "msg": msg, "level": level})
+
+    monkeypatch.setitem(sys.modules, "sentry_sdk", NS(new_scope=new_scope, capture_message=capture_message))
+    monkeypatch.setattr(acl_sentry, "init", lambda: True)
+    monkeypatch.setattr(sp, "_shot_warned", {})
+
+    def boom(*_a):
+        raise RuntimeError("failed at https://adsmanager.facebook.com/adsmanager?act=123456789 token EAA"
+                           + "x" * 30 + " act_987654321")
+
+    session = NS(send=boom, detach=lambda: None)
+    for _ in range(3):
+        sp._status_shot(_fake_page(session), "FacebookExample - Owner")
+    sp._status_shot(_fake_page(session), "FacebookOther - Owner")
+    assert len(sent) == 2, "предупреждение не ограничено одним на кабинет"
+    first = sent[0]
+    assert first["level"] == "warning" and first["msg"] == "status_shot: error"
+    assert first["tags"]["account"] == "FacebookExample", "в теге имя персоны"
+    detail = first["ctx"]["status_shot"]["detail"]
+    for secret in ("adsmanager.facebook.com", "123456789", "987654321", "EAAx"):
+        assert secret not in detail
+    assert len(_paths(telemetry)) == 4
 
 
 def test_the_status_shot_is_taken_before_scrolling_to_the_totals(local, monkeypatch):
