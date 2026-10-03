@@ -1,5 +1,25 @@
 # System history
 
+## Screenshot endpoint tests prove a path outside the folder is refused — ACL-1486
+
+The ACL-1430 review found that the tests for `/account-spend/status-shot/<id>`
+still passed with the path guards removed: no real `.png` existed outside
+`spend_shots`, so a naive lookup would have returned 404 too. Tests only; product
+code is unchanged (no escape was found).
+
+- `tests/test_status_screenshot.py` now puts real PNGs next to the screenshots
+  folder (parent, a sibling folder named like it, a folder elsewhere) and asks for
+  each through `..` segments, backslashes, an absolute path (both slash styles),
+  a subfolder walked back out, and URL-encoded / double-encoded forms, on both the
+  image and the `/view` page. Each case first asserts the file *would* be found
+  without guards.
+- The folder check is also tested on its own, with the name check loosened, and a
+  non-`status_*` PNG in the folder (a failed-read shot) and a folder named like a
+  shot are refused.
+- Mutation check: removing the name check, the folder check, the is-file check,
+  or both path checks each makes tests fail; with both path checks gone every
+  escape route fails at least one test.
+
 ## Parallel profiles start at 3.5 GB each and adapt to measured use — ACL-1424
 
 2026-10-01 four Multilogin profiles used 13.6 GB (about 3.4 GB each) and the laptop
