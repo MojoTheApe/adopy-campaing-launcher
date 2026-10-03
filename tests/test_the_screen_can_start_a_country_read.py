@@ -278,7 +278,9 @@ def test_the_pollers_hand_over_the_split_they_received():
     for caller in ("function amapPollSpend(", "async function amapAwaitReading("):
         body = PAGE.split(caller, 1)[1]
         body = body[:body.index(chr(10) + "}" + chr(10))]
-        assert "amapApplyReading(account, s, j.split)" in body, (
+        # ACL-1518: следом может идти четвёртый аргумент — строка ожидания
+        # тишины ввода (`j.waiting`); разбивка остаётся третьим.
+        assert re.search(r"amapApplyReading\(account, s, j\.split(?:, j\.waiting)?\)", body), (
             f"{caller.strip()} не передаёт разбивку, хотя получил её тем же ответом"
         )
 

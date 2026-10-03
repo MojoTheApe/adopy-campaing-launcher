@@ -1996,6 +1996,13 @@
        слияния кнопок ей негде было об этом сказать. Своей строкой под
        числом: спенд прочитан, страны — нет, и одно не отменяет другого. */
     .amap-split-bad { display: block; color: var(--danger); font-size: 0.66rem; font-style: normal; }
+    /* ACL-1518: окно профиля открыто руками — это не сбой, а что сделать:
+       предупреждающим цветом и целиком, без обрезки до 40 знаков. Строка
+       ожидания тишины ввода — приглушённо, своей строкой под числом. */
+    .amap-live-hand { display: block; color: var(--warn); font-size: 0.72rem; white-space: normal; max-width: 16rem; }
+    .amap-live-hand + .amap-live-old { display: block; margin-top: 0.1rem; }
+    .amap-hand-wait { display: block; color: var(--muted); font-size: 0.66rem; font-style: italic; white-space: normal; max-width: 16rem; }
+    .amap-split-bad.hand { color: var(--warn); white-space: normal; max-width: 16rem; }
 
     /* ── Что в аккаунте на самом деле (acl-113) ───────────────────────────
        Строки приходят из кабинета, не из книги: у книжных нет ни id, ни
@@ -6883,7 +6890,7 @@ function amapReadSpend(btn) {
    опрашивается тем же маршрутом, что и спенд: оба показания живут в одной
    клетке и снимаются за один период. */
 
-function amapSplitMark(account, why) {
+function amapSplitMark(account, why, code) {
   /* Неудача разбивки — в клетке, а не на кнопке: кнопка теперь общая, и
      «failed · retry» на ней читалось бы как «спенд не прочитан».
 
@@ -6896,8 +6903,9 @@ function amapSplitMark(account, why) {
     if (old) old.remove();
     if (!why) return;
     var mark = document.createElement('small');
-    mark.className = 'amap-split-bad';
-    mark.textContent = 'countries failed';
+    mark.className = code === 'open_by_hand' ? 'amap-split-bad hand' : 'amap-split-bad';
+    /* ACL-1518: окно открыто руками — это не сбой чтения, а что сделать. */
+    mark.textContent = code === 'open_by_hand' ? why : 'countries failed';
     mark.title = why + '. The spend reading is unaffected; read again to retry the countries.';
     cell.appendChild(mark);
   });
@@ -6941,7 +6949,7 @@ function amapRunSplit(account, btn, per) {
       amapSplitDone(btn);
       var bad = s.state === 'failed' ? (s.error || 'refused')
               : (s.state === 'ok' || s.state === 'empty') ? '' : 'Unknown country reading state';
-      amapSplitMark(account, bad);
+      amapSplitMark(account, bad, s.state === 'failed' ? s.error_code : '');
       /* Клетка называет сумму, которую объясняет разбивка: её только что
          сняли, и подсказка обязана говорить про новую, а не про прежнюю. */
       if (!bad) amapRefreshSplitNote(account, per);
@@ -6991,6 +6999,7 @@ function amapAwaitSplit(account, per, tries) {
           if (!j.ok) throw new Error(j.error || 'Could not read status');
           var s = j.split;
           if (!s) throw new Error('the reading disappeared before it finished');
+          if (typeof amapHandWait === 'function') amapHandWait(account, s.state === 'running' ? (j.waiting || '') : '');
           if (s.state !== 'running') { resolve(s); return; }
           if (tries > 120) throw new Error('no answer after six minutes — check the launcher window');
           resolve(amapAwaitSplit(account, per, tries + 1));
@@ -7279,7 +7288,32 @@ function amapStatusTail(account, s) {
   return out;
 }
 
-function amapApplyReading(account, s, split) {
+/* ACL-1518: окно профиля, открытое руками, чтение переоткрывает путём
+   Publish — ждёт тишины ввода на машине. Пока ждёт, строка аккаунта говорит
+   об этом; не дождалось — простой текст вместо «failed · retry». */
+/* Код отказа — строкой прямо в функциях (`'open_by_hand'`), а не общей
+   переменной: тестовые стенды вырезают функции по одной (ревью PR #519). */
+/* Чьи строки сейчас показывают ожидание — чтобы не искать его в каждой. */
+var amapHandWaitShown = {};
+function amapHandWait(account, note) {
+  if (!note && !amapHandWaitShown[account]) return;
+  amapHandWaitShown[account] = !!note;
+  document.querySelectorAll('.amap-live').forEach(function (cell) {
+    if (cell.dataset.account !== account) return;
+    var old = cell.querySelector('.amap-hand-wait');
+    if (!note) { if (old) old.remove(); return; }
+    if (!old) {
+      old = document.createElement('small');
+      old.className = 'amap-hand-wait';
+      cell.appendChild(old);
+    }
+    old.textContent = note;
+    old.title = 'The profile window was opened by hand. ACL closes and reopens it with automation '
+      + 'once the computer has been idle for a minute. Leave the mouse and keyboard alone.';
+  });
+}
+
+function amapApplyReading(account, s, split, waiting) {
   document.querySelectorAll('.amap-live').forEach(function (cell) {
     if (cell.dataset.account !== account) return;
     var row = cell.closest('tr');
@@ -7299,13 +7333,15 @@ function amapApplyReading(account, s, split) {
     if (s.state === 'running') {
       btn.disabled = true; btn.textContent = 'reading…'; return;
     }
-    if (s.state !== 'ok') { amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how); return; }
+    if (s.state !== 'ok') { amapSpendFailed(btn, cell, s.error || 'failed', s.shot, s.how, s.error_code); return; }
     cell.innerHTML = '<span class="amap-live-ok"></span>';
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
     cell.firstChild.title = amapReadTitle(s, split);
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read spend'; btn.title = 'Read spend again';
     amapPaintTree(row, s);
   });
+  /* ACL-1518: строка ожидания тишины ввода — только пока чтение идёт. */
+  if (typeof amapHandWait === 'function') amapHandWait(account, s.state === 'running' ? (waiting || '') : '');
   /* ACL-1504: Read spend мог погаснуть или включиться (идёт чтение, отказ) —
      Read again в дереве следует за ним, перерисовано дерево или нет. */
   amapRereadSync();
@@ -8294,7 +8330,7 @@ function amapPollSpend(account, cell, btn, tries, per, pressed) {
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'Could not read status');
         var s = j.reading || {};
-        amapApplyReading(account, s, j.split);
+        amapApplyReading(account, s, j.split, j.waiting);
         if (s.state === 'running') { amapPollSpend(account, cell, btn, tries + 1, per, pressed); return; }
         /* Разбивку спрашиваем только после удачного спенда и в той же сессии
            профиля. Упавший спенд значит, что кабинет не открылся, — отчёту
@@ -8486,7 +8522,7 @@ async function amapAwaitReading(account, per, tries) {
       + '&date_from=' + encodeURIComponent(per.from)
       + '&date_to=' + encodeURIComponent(per.to), {credentials: 'same-origin'});
     var s = j.reading || {};
-    amapApplyReading(account, s, j.split);
+    amapApplyReading(account, s, j.split, j.waiting);
     if (s.state !== 'running') {
       return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null};
     }
@@ -8494,10 +8530,13 @@ async function amapAwaitReading(account, per, tries) {
   throw new Error('no answer after six minutes — check the launcher window');
 }
 
-function amapSpendFailed(btn, cell, why, shot, how) {
+function amapSpendFailed(btn, cell, why, shot, how, code) {
+  var hand = code === 'open_by_hand';
   btn.disabled = !!amapReadAllBusy;
-  btn.className = 'amap-btn amap-read amap-live-bad';
-  btn.textContent = 'failed · retry';
+  /* ACL-1518: окно открыто руками — не сбой, а что сделать человеку: кнопка
+     остаётся обычной Read spend, текст — целиком в ячейке. */
+  btn.className = hand ? 'amap-btn amap-read' : 'amap-btn amap-read amap-live-bad';
+  btn.textContent = hand ? 'Read spend' : 'failed · retry';
   btn.title = why;
   /* Причина — в самой ячейке, а не только в подсказке к кнопке.
      8 сентября прогон упал, ячейка осталась прежней, и это читалось как «не
@@ -8511,11 +8550,11 @@ function amapSpendFailed(btn, cell, why, shot, how) {
     /* ACL-1282: отказ разбивки относится к этим же датам и переживает
        неудачу спенда — она его не опровергает. */
     var split = cell.querySelector('.amap-split-bad');
-    cell.innerHTML = '<span class="amap-live-bad"></span>';
+    cell.innerHTML = hand ? '<span class="amap-live-hand"></span>' : '<span class="amap-live-bad"></span>';
     if (old) cell.appendChild(old);
     if (split) cell.appendChild(split);
     var bad = cell.firstChild;
-    bad.textContent = why.length > 40 ? why.slice(0, 39) + '…' : why;
+    bad.textContent = hand || why.length <= 40 ? why : why.slice(0, 39) + '…';
     bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'screenshot: ' + shot : '');
   }
   /* Если прицепиться не к чему, «retry» ничего не изменит: сначала нужно
@@ -8539,9 +8578,29 @@ function amapOpenProfile(btn) {
   btn.textContent = 'opening…';
   var body = new FormData();
   body.append('account', account);
+  /* ACL-1518: окно, открытое руками, сервер переоткрывает после тишины ввода
+     (до двух минут) — пока запрос ждёт, строка говорит, чего ждём. */
+  var per = amapPeriod();
+  var watch = (per.from && per.span !== 'all') ? setInterval(function () {
+    fetch('/account-spend/status?account=' + encodeURIComponent(account)
+          + '&date_from=' + encodeURIComponent(per.from)
+          + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (watch && j && j.ok) amapHandWait(account, j.waiting || ''); })
+      .catch(function () { /* подсказка — не то, ради чего стоит рушить кнопку */ });
+  }, 3000) : null;
+  function stopWatch() { if (watch) { clearInterval(watch); watch = null; } amapHandWait(account, ''); }
   fetch('/account-spend/open-profile', { method: 'POST', body: body, credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (j) {
+      stopWatch();
+      if (!j.ok && j.code === 'open_by_hand' && read) {
+        btn.disabled = false;
+        btn.textContent = 'open profile';
+        btn.title = j.message || '';
+        amapSpendFailed(read, cell, j.message || 'open by hand', '', '', j.code);
+        return;
+      }
       if (j.ok) {
         btn.remove();
         if (read) {
@@ -8558,6 +8617,7 @@ function amapOpenProfile(btn) {
       }
     })
     .catch(function (e) {
+      stopWatch();
       btn.disabled = false;
       btn.textContent = 'open profile';
       alert('Could not open the profile: ' + (e && e.message || e));
