@@ -21,6 +21,9 @@ import pytest
 
 from scripts import acl_update_gate as gate
 
+# Отгружаемая стадия гейта — до того, как autouse-фикстура warn_stage её подменит.
+_SHIPPED = gate.GATE_ENFORCE
+
 CANDIDATE = "b" * 40
 RUN_URL = f"https://github.com/{gate.RELEASE_REPO}/actions/runs/12345"
 
@@ -484,5 +487,5 @@ def test_installer_gate_stage_matches_the_python_gate() -> None:
 
     text = (Path(gate.__file__).resolve().parents[1] / "Install ACL.bat").read_text(encoding="ascii")
     found = re.findall(r"(?m)^\$AclGateEnforce = \$(true|false)\r?$", text)
-    assert found == [str(gate.GATE_ENFORCE).lower()]
+    assert found == [str(_SHIPPED).lower()]
     assert "$enforce = $AclGateEnforce -or" in text

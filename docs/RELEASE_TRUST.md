@@ -118,7 +118,11 @@ or per machine with `ACL_RELEASE_SIGNATURES=enforce`.
 
 Limits: builds installed before this change have no verifier at all, and
 builds without a pinned key only warn. Protection starts with the first build
-that pins the key and becomes complete once enforcement is on. Windows
+that pins the key and becomes complete once enforcement is on. Even with a
+pinned key, two gaps remain: anyone who can write releases can still hold
+buyers on an older signed release that is newer than theirs (no expiry), and
+until enforcement is on a release whose `.sig` was deleted is still accepted
+with a warning. Windows
 Authenticode signing of the installer is still missing (separate task: needs a
 code-signing certificate or Azure Trusted Signing).
 
