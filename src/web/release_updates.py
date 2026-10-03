@@ -229,8 +229,14 @@ def fetch_latest(ch: Channel) -> tuple[dict, dict]:
     trust = verify_signature(release, raw, ch)
     manifest = parse_release(raw)
     # Подписанный release.json другого выпуска, подложенный в этот, — тоже подмена.
+    # Для подписанного манифеста tag обязателен: подпись без привязки к выпуску
+    # позволила бы переложить старый подписанный release.json в новый релиз.
     tag = release.get("tag_name")
-    if isinstance(tag, str) and tag and manifest.get("tag") and manifest["tag"] != tag:
+    if trust["status"] == release_signing.VALID:
+        if not isinstance(tag, str) or not tag or manifest.get("tag") != tag:
+            raise UntrustedRelease(
+                "The published release.json belongs to a different release; nothing was installed.")
+    elif isinstance(tag, str) and tag and manifest.get("tag") and manifest["tag"] != tag:
         raise UntrustedRelease("The published release.json belongs to a different release; nothing was installed.")
     release["_acl_signature"] = trust
     return manifest, release

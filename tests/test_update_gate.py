@@ -474,3 +474,15 @@ def test_enrollment_requires_exact_stable_commit(monkeypatch, api) -> None:
 
     assert ok is False
     assert "equal origin/main" in detail
+
+
+def test_installer_gate_stage_matches_the_python_gate() -> None:
+    # Install ACL.bat — самостоятельная копия гейта: включение enforce в
+    # acl_update_gate.py без такой же правки в установщике его не ужесточит.
+    import re
+    from pathlib import Path
+
+    text = (Path(gate.__file__).resolve().parents[1] / "Install ACL.bat").read_text(encoding="ascii")
+    found = re.findall(r"(?m)^\$AclGateEnforce = \$(true|false)\r?$", text)
+    assert found == [str(gate.GATE_ENFORCE).lower()]
+    assert "$enforce = $AclGateEnforce -or" in text

@@ -64,6 +64,7 @@ API_TIMEOUT_S = 20
 
 # Этап выкатки: False — «проверить нечем» решает текст тега + телеметрия;
 # True — такой выпуск не ставится. Переменная машины может только ужесточить.
+# Менять вместе с $AclGateEnforce в Install ACL.bat (тест сверяет оба).
 GATE_ENFORCE = False
 GATE_MODE_ENV = "ACL_UPDATE_GATE"
 

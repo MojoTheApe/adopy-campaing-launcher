@@ -36,9 +36,13 @@ def sign(manifest: Path, *, require: bool, env: dict[str, str] | None = None,
     env = os.environ if env is None else env
     pinned = rs.PINNED_PUBLIC_KEYS if pinned is None else pinned
     secret = (env.get(rs.SIGNING_KEY_ENV) or "").strip()
+    # Ключ закреплён — неподписанный выпуск больше не вариант: пропавший или
+    # удалённый секрет не должен молча отменять закрепление.
+    require = require or bool(pinned)
     if not secret:
         if require:
-            print(f"ERROR: {rs.SIGNING_KEY_ENV} is not set; this release must be signed.", file=sys.stderr)
+            print(f"ERROR: {rs.SIGNING_KEY_ENV} is not set; this release must be signed "
+                  "(a publisher key is pinned or --require was given).", file=sys.stderr)
             return 1
         print(f"WARNING: {rs.SIGNING_KEY_ENV} is not set - release.json is published UNSIGNED. "
               "Clients in warn mode accept it and report it.")

@@ -8,6 +8,10 @@ if not "%ACL_INSTALL_RC%"=="0" pause
 exit /b %ACL_INSTALL_RC%
 # ACL_POWERSHELL_BEGIN
 $ErrorActionPreference = 'Stop'
+# Rollout stage of the update gate; keep equal to GATE_ENFORCE in
+# scripts/acl_update_gate.py (a test compares them). $true refuses a release
+# whose CI run cannot be verified; ACL_UPDATE_GATE=enforce can only tighten.
+$AclGateEnforce = $false
 
 # Standalone bootstrap: this entire file can be sent to a new campaign manager.
 # No restart loop and no dependency on scripts from an unverified checkout.
@@ -202,7 +206,8 @@ function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
     # Same gate as scripts/acl_update_gate.py: exact promoted main head,
     # fast-forward, annotated release tag whose linked CI run the GitHub API
     # confirms. Nothing to verify with (no token, 401/403, offline) falls back
-    # to the tag's own record with a warning, unless ACL_UPDATE_GATE=enforce.
+    # to the tag's own record with a warning, unless $AclGateEnforce or
+    # ACL_UPDATE_GATE=enforce.
     $sha = Invoke-AclGit $Git $Target @('rev-parse', 'origin/main^{commit}')
     if ($sha -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve the production release.' }
     if (!$FreshInstall) {
@@ -210,7 +215,7 @@ function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
         if ($dirty) { throw 'Tracked local changes present. Save/review them before updating ACL.' }
         Invoke-AclGit $Git $Target @('merge-base', '--is-ancestor', 'HEAD', $sha) | Out-Null
     }
-    $enforce = ([string]$env:ACL_UPDATE_GATE).Trim() -eq 'enforce'
+    $enforce = $AclGateEnforce -or (([string]$env:ACL_UPDATE_GATE).Trim() -eq 'enforce')
     $problems = @()
     $runLink = 'https://github\.com/' + [regex]::Escape((Get-AclRepoName)) + '/actions/runs/(\d+)\b'
     $tags = (Invoke-AclGit $Git $Target @('tag', '--points-at', $sha, '--list', 'acl-release-*')) -split "`n"
