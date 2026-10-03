@@ -20,6 +20,93 @@ code is unchanged (no escape was found).
   or both path checks each makes tests fail; with both path checks gone every
   escape route fails at least one test.
 
+## Hidden accounts and targeting file locks never lose an update under load — ACL-1495
+
+`tests/test_hidden_accounts_review.py::test_processes_preserve_each_update` failed at
+random on CI with "OSError [Errno 36] Resource deadlock avoided". The ACL-1491
+investigation found two product bugs in the machine file lock used by
+`src/web/hidden_accounts.py` and `src/analysis_agent/targeting_registry.py`:
+
+1. `msvcrt.locking(LK_LOCK)` tries 10 times, once a second, and then raises EDEADLK.
+   A queue longer than 10 s under load is not a deadlock, but the update was lost.
+2. On first use every process that saw an empty `.lock` file wrote `b"0"` into it; when
+   another process already held byte 0, `flush()` raised PermissionError (Errno 13).
+
+Fix: one shared helper, `config.paths.machine_file_lock(path, timeout=None)`.
+
+- Waits with non-blocking attempts and a growing, jittered pause (5 ms to 100 ms).
+  EDEADLK, EACCES and EAGAIN mean "busy, try again". The wait is bounded by
+  `paths._LOCK_TIMEOUT` (120 s), after which it raises `TimeoutError` instead of
+  hanging the dashboard request.
+- The lock file is created by a single atomic `os.open(O_CREAT)` and is never
+  written. Windows allows locking a byte past the end of the file, and `flock` has
+  no byte ranges, so the file needs no content.
+- Both `_transaction()` functions now use it. Writes still go through
+  `paths._replace_when_free` (`_atomic_write` for hidden accounts, `_save_raw`
+  for targeting).
+- `tests/test_file_lock_races.py` reproduces both bugs deterministically (a fake
+  EDEADLK from the lock call, and an empty lock file whose byte 0 is held by another
+  handle). Both tests failed on the old code with the original errors. The file also
+  covers the bounded wait and checks that the lock file is never written.
+- `ad_text_registry.py`, `team_library.py` and `acl_log.py` still use the old
+  pattern. They are not changed here.
+
+## The dashboard stays responsive while the report is built — ACL-1399
+
+2026-09-30 after a restart the first page built the report inside the request
+handler: about a minute in which `/health` and the publish queue did not answer,
+and the owner's Publish on Facebook_1443 failed with "Failed to fetch".
+
+- Cold build faster: `config/analysis_rules.py` parsed its JSON file on every
+  workbook row (60 256 reads, 69 s of a 106 s profiled build); it is now read once
+  and re-checked by mtime at most every 2 s. The unknown-interest log no longer
+  rescans the workbook and re-reads its journal per code. Numbers are unchanged.
+- The report is never built on the event loop: GET / answers at once with a
+  "Loading the numbers…" page, builds in a background thread (report + the page's
+  period) and reloads itself when `/report/status` says ready. Every handler that
+  reads the report runs in its own thread pool; builds are single-flight. `/health`
+  no longer waits for git, `/acl/update/check` runs `git fetch` off the loop, and
+  preview / publish start build their drafts in a thread.
+- Stop no longer runs the RPA teardown on the server thread: `cancel_job` hands
+  `publisher.cancel()` to its own thread. On 2026-09-29 12:54:59 (local) that
+  teardown reset the event loop's running-loop mark and the dashboard died.
+- Publish that gets no answer (busy server, lost response) no longer freezes the
+  tab: the account shows "the server is busy — Retry", and Retry resends with the
+  same `request_id`, for which the server returns the job it already created.
+  Dismiss frees the account instead; its next Publish reuses that same
+  `request_id`, so a submission that did reach the server is not doubled.
+  Other accounts may keep publishing while one waits for Retry.
+## A failed read says "Campaigns not read", not "0 campaigns" — ACL-1504
+
+2026-10-02, Facebook_1443: Ads Manager did not open within 90 s, and the account
+map's expanded row said "IN THE ACCOUNT · 0 CAMPAIGNS · 0 ADS" above the raw
+`Page.goto` error, including the Ads Manager address with `act=`. It read as "this
+account has no campaigns".
+
+- `src/analysis_agent/account_spend.py`: a reading records whether the campaign list
+  itself was reached (`objects_read`; `_read_tree(..., reached=)`). An unparsed table
+  counts as not reached. Older records without the field are judged by themselves:
+  no rows plus an error means not read.
+- When the list was not reached, the reading sent to the screen carries
+  `objects_problem`: one short reason (for example "Ads Manager did not open in
+  90 s.") and what to do. As in ACL-1437, the reason comes from a local table of raw
+  errors. The campaign-card guides are unchanged. The tree error text is scrubbed
+  on output (`scrub_tree_error`: URLs, `act=`/`act_` ids, `run_telemetry.scrub`),
+  including in records saved before this change.
+- The last good tree for the account (any period, `objects_prev`) is kept with a
+  reading that did not reach the list. A second failure in a row does not erase it.
+- `report.html` (account tree): "campaigns not read · tried …", the reason, what to
+  do, and a **Read again** button that presses the row's existing Read spend.
+  There is no new reading path. The raw error is under a collapsed "Technical
+  details". The last good rows are shown under "last good read · … · read <date> ·
+  Meta numbers for …", without turn-off buttons, because their switches may have
+  changed. "0 campaigns · 0 ads" appears only when the list was read and was empty.
+- Review of PR #505:
+  - Read again follows the row's Read spend button whenever its state changes:
+    after Read all (`amapReadAllControls`) and after each reading
+    (`amapRereadSync`). Before, it stayed grey after Read all until a reload.
+  - Bare Meta tokens (`EAA…`) are scrubbed from the technical text too.
+  - A not-read attempt for other dates says "not the dates on screen".
 ## Parallel profiles start at 3.5 GB each and adapt to measured use — ACL-1424
 
 2026-10-01 four Multilogin profiles used 13.6 GB (about 3.4 GB each) and the laptop

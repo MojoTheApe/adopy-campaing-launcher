@@ -2147,6 +2147,14 @@
        число (ревью 22.09). Тогда источник остаётся только в подсказке. */
     body.cbd-open .amap-tree-num.res .amap-tree-src { display: none; }
     .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
+    /* ACL-1504: список кампаний не прочитан — причина, что делать, Read again. */
+    .amap-tree-notread { font-size: 0.78rem; margin-bottom: 0.5rem; }
+    .amap-tree-notread-why { color: var(--danger); font-weight: 600; }
+    .amap-tree-notread-do { color: var(--text); padding-top: 0.15rem; }
+    .amap-tree-notread-do .amap-tree-reread { margin-left: 0.4rem; }
+    .amap-tree-tech { padding-top: 0.3rem; color: var(--muted); font-size: 0.72rem; }
+    .amap-tree-tech summary { cursor: pointer; }
+    .amap-tree-tech-body { white-space: pre-wrap; word-break: break-word; padding-top: 0.2rem; }
     /* Включённая строка — кнопка: её можно выключить. Выключенная и
        «непонятно» остаются надписями, нажимать там нечего. */
     button.amap-tree-sw { cursor: pointer; font-family: inherit; }
@@ -2921,6 +2929,18 @@
     .cbd-q-ok { color: var(--good); }
     .cbd-q-bad { color: var(--bad); }
     .cbd-q-run { color: var(--accent); }
+    /* ACL-1399: сервер не ответил на Publish — повтор тем же ключом. */
+    .cbd-q-busy .cbd-q-run { color: var(--warn); }
+    .cbd-q-retry, .cb-retry-btn {
+      font: inherit; font-size: 0.7rem; padding: 0.05rem 0.5rem; margin-left: auto; cursor: pointer;
+      color: var(--text, inherit); background: transparent; border: 1px solid var(--warn); border-radius: 4px;
+    }
+    .cb-retry-btn { font-size: 0.78rem; padding: 0.3rem 0.9rem; margin-left: 0; }
+    .cbd-q-retry + .cbd-q-retry { margin-left: 0; }
+    .cb-dismiss-btn { font: inherit; font-size: 0.78rem; padding: 0.3rem 0.9rem; cursor: pointer;
+      color: var(--muted); background: transparent; border: 1px solid var(--line, var(--muted)); border-radius: 4px; }
+    .cbd-q-retry:hover, .cb-retry-btn:hover { background: color-mix(in srgb, var(--warn) 18%, transparent); }
+    .cb-status-busy .cb-status-title { color: var(--warn); }
 
     /* ── Форма аккаунта, гостящая в ящике ──────────────────────────────
        Переносится настоящая форма, а не копия: браузер собирает данные
@@ -5393,6 +5413,14 @@ window.cbTree = (function () {
       // проверяется, кто собирается, кто ждёт места в очереди профилей.
       p.live.forEach(function (x) {
         var q = x.queue || {};
+        // ACL-1399: сервер не ответил на отправку — ждём повтора человека.
+        if (x.stage === 'busy') {
+          lines.push('<div class="cbd-q-line cbd-q-busy"><span class="cbd-q-run">⚠</span> '
+            + aclEscHtml(x.account) + ' — the server is busy and did not answer; not sent twice '
+            + '<button type="button" class="cbd-q-retry" data-cb-retry="' + aclEscHtml(x.key || '') + '">Retry</button>'
+            + '<button type="button" class="cbd-q-retry" data-cb-dismiss="' + aclEscHtml(x.key || '') + '">Dismiss</button></div>');
+          return;
+        }
         var what = x.stage === 'checking' ? 'checking'
           : x.stage === 'queued'
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
@@ -5412,6 +5440,16 @@ window.cbTree = (function () {
         + ' <span class="cbd-q-why">' + p.at + ' of ' + p.of + '</span></div>');
     }
     box.innerHTML = lines.join('');
+    box.querySelectorAll('[data-cb-retry]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (window.CB_QUEUE && window.CB_QUEUE.retry) window.CB_QUEUE.retry(b.getAttribute('data-cb-retry'));
+      });
+    });
+    box.querySelectorAll('[data-cb-dismiss]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (window.CB_QUEUE && window.CB_QUEUE.dismiss) window.CB_QUEUE.dismiss(b.getAttribute('data-cb-dismiss'));
+      });
+    });
     // Аккаунт начал или кончил собираться — его галочки заперты или свободны.
     refreshTicks();
   }
@@ -7177,6 +7215,9 @@ function amapApplyReading(account, s, split) {
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read spend'; btn.title = 'Read spend again';
     amapPaintTree(row, s);
   });
+  /* ACL-1504: Read spend мог погаснуть или включиться (идёт чтение, отказ) —
+     Read again в дереве следует за ним, перерисовано дерево или нет. */
+  amapRereadSync();
   amapUpdateCountrySummaries();
 }
 
@@ -7236,7 +7277,9 @@ function amapTreeLine(o, adCount) {
      Перечитать аккаунт — и всё встанет на место. */
   /* Без id (новая таблица Ads Manager, Doc19 18.09) выключать нечем: turn_off
      откажет. Кнопку не рисуем, а в подсказке говорим почему. */
-  var canAct = o.switch === 'on' && !!o.id
+  /* ACL-1504: строки прежнего удачного чтения (`_stale`) — только для
+     показа: тумблер с тех пор мог смениться. */
+  var canAct = o.switch === 'on' && !!o.id && !o._stale
     && (o.level === 'campaign' || (o.level === 'ad' && o.parent_id));
   var live = canAct;
   var sw = document.createElement(live ? 'button' : 'span');
@@ -7616,6 +7659,66 @@ function amapEnsureCaret(row, onToggle) {
   return caret;
 }
 
+/* ACL-1504: список кампаний не прочитан. Причина и «что делать» приходят с
+   сервера готовыми (`tree_problem` в account_spend.py) — дешборд их только
+   рисует, как и проблемы кампании (ACL-1437). Read again — та же кнопка Read
+   spend этой строки, другого пути чтения нет. Сырой текст ошибки — свёрнут
+   и уже без act= и адресов (`scrub_tree_error`). */
+/* ACL-1504 (ревью M1): Read again повторяет состояние Read spend своей
+   строки. Скопировать его один раз при рисовании мало: Read all гасит
+   `.amap-read` и потом включает обратно (`amapReadAllControls`), а дерево
+   при этом не перерисовывается — Read again оставался серым до перезагрузки.
+   Поэтому сверяем заново всякий раз, когда меняется состояние Read spend. */
+function amapRereadSync() {
+  document.querySelectorAll('.amap-tree-reread').forEach(function (again) {
+    var tree = again.closest('tr.amap-tree');
+    var row = tree && tree.previousElementSibling;
+    var read = row && row.querySelector('.amap-read');
+    again.disabled = !read || read.disabled;
+  });
+}
+
+function amapTreeNotRead(row, s, problem) {
+  var box = document.createElement('div');
+  box.className = 'amap-tree-notread';
+  var why = document.createElement('div');
+  why.className = 'amap-tree-notread-why';
+  why.textContent = problem.reason || 'The campaign list was not reached.';
+  box.appendChild(why);
+
+  var todo = document.createElement('div');
+  todo.className = 'amap-tree-notread-do';
+  todo.textContent = '→ ' + (problem.action || 'Read again.') + ' ';
+  var again = document.createElement('button');
+  again.type = 'button';
+  again.className = 'amap-btn amap-tree-reread';
+  again.textContent = 'Read again';
+  again.title = 'Read spend and campaigns for this account again';
+  var read = row.querySelector('.amap-read');
+  again.disabled = !read || read.disabled;
+  again.addEventListener('click', function () {
+    var btn = row.querySelector('.amap-read');
+    if (!btn || btn.disabled) return;
+    again.disabled = true;
+    btn.click();
+  });
+  todo.appendChild(again);
+  box.appendChild(todo);
+
+  if (s.objects_error) {
+    var tech = document.createElement('details');
+    tech.className = 'amap-tree-tech';
+    var sum = document.createElement('summary');
+    sum.textContent = 'Technical details';
+    var body = document.createElement('div');
+    body.className = 'amap-tree-tech-body';
+    body.textContent = s.objects_error;
+    tech.appendChild(sum); tech.appendChild(body);
+    box.appendChild(tech);
+  }
+  return box;
+}
+
 function amapPaintTree(row, s) {
   /* Прежний блок снимается всегда: устаревшее состояние живого аккаунта —
      худшее, что здесь можно оставить на экране. Раскрытость при этом
@@ -7635,7 +7738,16 @@ function amapPaintTree(row, s) {
   }
 
   var objects = (s && s.objects) || [];
-  if (!objects.length && !(s && s.objects_error)) {
+  /* ACL-1504: чтение не дошло до списка кампаний (сервер сказал это в
+     `objects_problem`). Тогда «0 campaigns · 0 ads» — неправда: список не
+     пустой, его просто не видели. Пишем «campaigns not read», причину одной
+     фразой, что делать, Read again и свёрнутые технические подробности;
+     прежнее удачное дерево остаётся со своей датой. */
+  var problem = (s && s.objects_problem) || null;
+  var prev = (problem && s.objects_prev && s.objects_prev.objects) || [];
+  /* `objects_read === true` при пустом списке — список прочитан и пуст:
+     тогда «0 campaigns» — правда, и её показываем (ACL-1504). */
+  if (!objects.length && !(s && s.objects_error) && !problem && !(s && s.objects_read === true)) {
     row.classList.remove('amap-tree-open');
     return;
   }
@@ -7656,7 +7768,36 @@ function amapPaintTree(row, s) {
   /* ACL-1271: дерево из чтения за другие даты говорит об этом сразу — его
      числа Meta за те даты, не за период на экране. */
   var onScreen = typeof amapPeriod === 'function' ? amapPeriod() : null;
-  if (onScreen && onScreen.from && s.date_from
+  if (problem) {
+    head.textContent = 'in the account · campaigns not read · tried ' + (s.finished_at || '');
+    head.classList.add('amap-tree-notread-head');
+    /* ACL-1504 (ревью L2): попытка за другие даты (запасное чтение ACL-1271)
+       говорит об этом и здесь — иначе её примут за попытку за даты на экране. */
+    if (onScreen && onScreen.from && s.date_from
+        && (s.date_from !== onScreen.from || (s.date_to || s.date_from) !== onScreen.to)) {
+      head.textContent += ' · for ' + s.date_from
+        + (s.date_to && s.date_to !== s.date_from ? '…' + s.date_to : '')
+        + ', not the dates on screen';
+      head.classList.add('old');
+    }
+    box.appendChild(head);
+    box.appendChild(amapTreeNotRead(row, s, problem));
+    if (prev.length) {
+      /* Прежние строки — только для чтения: их тумблер мог с тех пор
+         смениться, и выключать по ним нельзя (см. `_stale` в amapTreeLine). */
+      var p = s.objects_prev;
+      var pSets = prev.filter(function (o) { return o.level !== 'ad'; }).length;
+      head = document.createElement('div');
+      head.className = 'amap-tree-head old amap-tree-prev-head';
+      head.textContent = 'last good read · ' + pSets + ' campaigns · ' + (prev.length - pSets)
+        + ' ads · read ' + (p.at || '') + (p.date_from ? ' · Meta numbers for ' + p.date_from
+        + (p.date_to && p.date_to !== p.date_from ? '…' + p.date_to : '') : '');
+      objects = prev.map(function (o) { return Object.assign({}, o, {_stale: true}); });
+    } else {
+      head = null;
+      objects = [];
+    }
+  } else if (onScreen && onScreen.from && s.date_from
       && (s.date_from !== onScreen.from || (s.date_to || s.date_from) !== onScreen.to)) {
     /* Колонки Meta в дереве — за даты чтения, колонки книги (ACL-1256) — за
        даты на экране; говорим это прямо, иначе рядом стоят числа за разное. */
@@ -7665,7 +7806,7 @@ function amapPaintTree(row, s) {
       + ', workbook numbers for the dates on screen';
     head.classList.add('old');
   }
-  box.appendChild(head);
+  if (head) box.appendChild(head);
 
   /* Объявления встают под свою кампанию, а не общим списком следом. Порядок
      задаёт `parent_id`, который чтение знает по построению: список
@@ -7724,7 +7865,10 @@ function amapPaintTree(row, s) {
   /* Оговорка идёт по каждому уровню отдельно: кампании могут сойтись копейка
      в копейку, а объявления нет — так и было на живом аккаунте. Общая фраза
      про «строки» заставила бы усомниться и в тех, что сходятся. */
+  /* ACL-1504: у прежнего дерева другие даты, чем у спенда этого чтения, —
+     сравнивать их суммы нельзя. */
   [['campaign', 'campaigns'], ['ad', 'ads']].forEach(function (pair) {
+    if (problem) return;
     var gap = amapCoverage(objects, pair[0], s.spend);
     if (!gap) return;
     var note = document.createElement('div');
@@ -7739,7 +7883,7 @@ function amapPaintTree(row, s) {
     box.appendChild(note);
   });
 
-  if (s.objects_error) {
+  if (s.objects_error && !problem) {  // ACL-1504: при `problem` — в Technical details
     var err = document.createElement('div');
     err.className = 'amap-tree-err';
     err.textContent = s.objects_error;
@@ -8155,6 +8299,7 @@ function amapReadAllControls(busy) {
     var cell = amapSpendCell(b);
     b.disabled = busy || !b.getAttribute('onclick') || !!(cell && cell.dataset.running === '1');
   });
+  amapRereadSync();  // ACL-1504: Read again — следом за Read spend
 }
 
 async function amapReadAll(btn) {
@@ -11732,6 +11877,40 @@ function cbSentCampaignNames(fd) {
  * Stop — только своё задание. Потерянный статус (дешборд перезапущен)
  * по-прежнему останавливает всю вкладку: неотправленные аккаунты не едут,
  * новые не принимаются, пока страницу не перезагрузят. */
+/* Ключ одной отправки Publish (ACL-1399) — см. start_job(request_id). */
+function cbRequestId() {
+  try {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') return 'pj-' + window.crypto.randomUUID();
+  } catch (err) { /* ниже — запасной */ }
+  return 'pj-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+}
+
+/* POST /publish-jobs. «Сервер не ответил» — отдельная ошибка (`cbBusy`):
+ * сетевой отказ, ответ не JSON (перезапуск, прокси) или нет ответа за
+ * CB_PUBLISH_TIMEOUT_MS. Ответ сервера с ошибкой — обычные данные. */
+var CB_PUBLISH_TIMEOUT_MS = 45000;
+function cbBusyError(why) {
+  var err = new Error(why);
+  err.cbBusy = true;
+  return err;
+}
+function cbPostPublish(fd) {
+  var ctl = (typeof AbortController === 'function' && typeof setTimeout === 'function')
+    ? new AbortController() : null;
+  var timer = ctl ? setTimeout(function () { ctl.abort(); }, CB_PUBLISH_TIMEOUT_MS) : null;
+  function done() { if (timer !== null && typeof clearTimeout === 'function') clearTimeout(timer); }
+  return fetch('/publish-jobs', ctl ? { method: 'POST', body: fd, signal: ctl.signal } : { method: 'POST', body: fd })
+    .then(function (r) {
+      done();
+      return r.json().catch(function () {
+        throw cbBusyError('The server answered ' + (r.status || '') + ' without a result');
+      });
+    }, function (err) {
+      done();
+      throw cbBusyError(err && err.name === 'AbortError' ? 'No answer from the server' : 'The server did not answer');
+    });
+}
+
 function cbNewRun(notify) {
   var batch = { active: true, uncertain: false, progress: null };
   var entries = [];        // {form, key, account, country, label, only, sent, panel, state, live, jobId}
@@ -11746,7 +11925,7 @@ function cbNewRun(notify) {
     p.of = entries.length;
     p.report = report;
     p.live = entries.filter(function (e) { return e.live; }).map(function (e) {
-      return { account: e.label, stage: e.live.stage, queue: e.live.queue || null };
+      return { account: e.label, stage: e.live.stage, queue: e.live.queue || null, key: e.key };
     });
     batch.progress = p;
     notify(p);
@@ -11820,17 +11999,28 @@ function cbNewRun(notify) {
     // hand_off: заполнить, оставить черновиком, окно не закрывать — Publish в Meta не нажимать
     fd.set('hand_off', '1');
     fd.set('user_confirmed', '1');
+    // ACL-1399: ключ отправки. Повтор после «сервер не ответил» идёт с тем
+    // же ключом, и сервер вернёт уже созданное задание, а не второе.
+    // Отложенная (Dismiss) отправка этой формы — тот же ключ: если первая
+    // всё же дошла до сервера, он вернёт её задание, а не заведёт второе.
+    if (!fd.get('request_id')) {
+      var held = window.CB_PENDING_KEYS && window.CB_PENDING_KEYS[e.key];
+      if (held) delete window.CB_PENDING_KEYS[e.key];
+      fd.set('request_id', held || cbRequestId());
+    }
     // Кампании, ушедшие в задание: у их строк в ящике встанет точка сборки.
     var sentNames = cbSentCampaignNames(fd);
+    post(e, fd, skipped, sentNames);
+  }
 
+  function post(e, fd, skipped, sentNames) {
     e.state = 'submitted';
     track(e, 'publishing');
     if (e.panel) {
       e.panel.style.display = 'block';
       e.panel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
     }
-    fetch('/publish-jobs', { method: 'POST', body: fd })
-      .then(function (r) { return r.json(); })
+    cbPostPublish(fd)
       .then(function (data) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
         if (data.error) {
@@ -11849,9 +12039,47 @@ function cbNewRun(notify) {
       })
       .catch(function (err) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
+        if (err && err.cbBusy) { offerRetry(e, fd, skipped, sentNames); return; }
         if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Request failed: ' + aclEscHtml(err.message) + '</span>';
         halt(e, { account: e.label, state: 'bad', why: 'Submission outcome unknown: ' + err.message });
       });
+  }
+
+  /* ACL-1399: сервер не ответил на отправку — занят (перезапуск, сборка
+   * отчёта) или ответ потерялся. 30.09 так пропал Publish владельца: страница
+   * написала «Failed to fetch» и остановила вкладку. Теперь аккаунт ждёт
+   * повтора: он по-прежнему занят (второго задания мимо повтора не будет), а
+   * повтор идёт с тем же ключом — создал ли сервер задание в первый раз или
+   * нет, заданий будет одно. */
+  function offerRetry(e, fd, skipped, sentNames) {
+    e.state = 'retry';
+    e.resend = function () {
+      if (window.CB_QUEUE !== batch || e.state !== 'retry') return false;
+      post(e, fd, skipped, sentNames);
+      return true;
+    };
+    e.dismiss = function () {
+      if (window.CB_QUEUE !== batch || e.state !== 'retry') return false;
+      (window.CB_PENDING_KEYS = window.CB_PENDING_KEYS || {})[e.key] = fd.get('request_id');
+      if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Not confirmed by the server — dismissed. '
+        + 'Publishing this account again reuses the same request, so no second job is created.</span>';
+      settle(e, { account: e.label, state: 'bad', skipped: skipped,
+                  why: 'Not confirmed by the server — dismissed; publishing again reuses the same request' });
+      return true;
+    };
+    track(e, 'busy');
+    if (!e.panel) return;
+    e.panel.style.display = 'block';
+    e.panel.innerHTML = '<div class="cb-status-busy">'
+      + '<div class="cb-status-title">The dashboard server is busy and did not answer — nothing was sent twice.</div>'
+      + '<div style="font-size:0.78rem;color:var(--muted);margin:0.25rem 0 0.4rem">'
+      + 'Press Retry in a few seconds. If the first attempt did reach the server, Retry picks up that same job.</div>'
+      + '<button type="button" class="cb-retry-btn">Retry</button> '
+      + '<button type="button" class="cb-dismiss-btn">Dismiss</button></div>';
+    var btn = e.panel.querySelector('.cb-retry-btn');
+    if (btn) btn.addEventListener('click', function () { e.resend(); });
+    var off = e.panel.querySelector('.cb-dismiss-btn');
+    if (off) off.addEventListener('click', function () { e.dismiss(); });
   }
 
   // Превью — по одному аккаунту за раз (оно быстрое); следующий аккаунт
@@ -11919,6 +12147,17 @@ function cbNewRun(notify) {
   };
   batch.jobIds = function () {
     return entries.map(function (e) { return e.jobId; }).filter(Boolean);
+  };
+  /* Повторить отправку, на которую сервер не ответил (ACL-1399). */
+  batch.retry = function (key) {
+    var e = entries.filter(function (x) { return x.state === 'retry' && x.key === key; })[0];
+    return e ? e.resend() : false;
+  };
+  /* Не ждать повтора: аккаунт свободен, а следующая его отправка пойдёт с
+     тем же ключом (ревью PR #408, R9). */
+  batch.dismiss = function (key) {
+    var e = entries.filter(function (x) { return x.state === 'retry' && x.key === key; })[0];
+    return e ? e.dismiss() : false;
   };
   /* Доложить аккаунты: каждый пройдёт превью и уйдёт своим заданием.
      `only` — какие карточки везти: одна (Publish у карточки), функция

@@ -170,6 +170,7 @@ function runQueue(accounts, opts = {}) {
   const events = [];
   const said = [];
   const pending = [];
+  const keys = [];
   const forms = accounts.map((a) => (Array.isArray(a) ? fakeForm(a[0], a[1]) : fakeForm(a)));
   const sandbox = {
     window: {},
@@ -185,9 +186,13 @@ function runQueue(accounts, opts = {}) {
     cbSkipByName: opts.skip || (() => ({ skip: {}, unchecked: 0, broken: 0 })),
     cbFormDataSkipping: opts.pack || (() => ({ body: new FormData(), kept: 1 })),
     cbPollJob: (jobId, panel, btn, done) => { events.push('poll'); pending.push(done); },
-    fetch: (url) => {
+    fetch: (url, init) => {
       events.push('POST');
-      if (opts.fail) return Promise.reject(new Error('network down'));
+      keys.push(init && init.body && init.body.get ? init.body.get('request_id') : null);
+      // ACL-1399: `fail` — сколько первых отправок сервер не отвечает.
+      if (opts.fail === true || (typeof opts.fail === 'number' && keys.length <= opts.fail)) {
+        return Promise.reject(new TypeError('Failed to fetch'));
+      }
       return Promise.resolve({ json: () => Promise.resolve({ job_id: 'j' + pending.length }) });
     },
     alert: (m) => { events.push('alert'); said.push(String(m)); },
@@ -199,7 +204,7 @@ function runQueue(accounts, opts = {}) {
     'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + busyCode + '\n' + queueCode,
     sandbox);
   sandbox.window.cbPublishAll(() => {});
-  return { events, said, pending, sandbox, forms };
+  return { events, said, pending, sandbox, forms, keys };
 }
 
 // Запрос уходит через микрозадачи — без этого проверка смотрит на «ещё
@@ -357,18 +362,53 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   assert.deepEqual(again.skipped, ['A']);
   assert.equal(posts(q), 1, 'a duplicate job was submitted');
 
-  // Ревью PR #363: оборванная отправка — исход неизвестен. Вкладка встаёт в
-  // «статус неизвестен», как при потерянном задании, а не просто пишет ошибку.
-  q = runQueue(['A', 'B'], { fail: true });
+  // ACL-1399 (было — ревью PR #363: «исход неизвестен, F5»): сервер не
+  // ответил на отправку. 30.09 так пропал Publish владельца — «Failed to
+  // fetch», и вкладка встала. Теперь аккаунт ждёт повтора: он занят (второго
+  // задания мимо повтора нет), повтор идёт с тем же ключом отправки — сервер
+  // по нему вернёт уже созданное задание, если первая попытка до него дошла.
+  q = runQueue(['A', 'B'], { fail: 2 });
   await flush();
-  assert.ok(q.sandbox.window.CB_QUEUE.uncertain, 'a failed submission was treated as a plain error');
-  assert.ok(!q.sandbox.window.CB_QUEUE.active);
-  assert.ok(/Submission outcome unknown/.test(q.sandbox.window.CB_QUEUE.progress.report[0].why));
-  const failedPosts = posts(q);
+  assert.equal(posts(q), 2);
+  assert.ok(!q.sandbox.window.CB_QUEUE.uncertain, 'a busy server froze the whole tab again');
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'the run closed with accounts still unsent');
+  assert.deepEqual(q.sandbox.window.CB_QUEUE.progress.live.map((x) => x.stage), ['busy', 'busy']);
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 0, 'an unsent account was reported as failed');
+  assert.ok(q.keys[0] && q.keys[1] && q.keys[0] !== q.keys[1], 'each account needs its own submission key');
+  // Publish all поверх — ничего не шлёт: оба аккаунта ждут своего повтора.
   q.sandbox.window.cbPublishAll(() => {});
   await flush();
-  assert.equal(posts(q), failedPosts, 'a new run started after an unknown submission outcome');
-  assert.ok(/Reload the page \(F5\)/.test(q.said.pop()));
+  assert.equal(posts(q), 2, 'a second job was sent past the pending retry');
+  assert.ok(/A, B are already being built/.test(q.said.pop()));
+  // Retry у A — тот же ключ; сервер ответил, за заданием следят.
+  assert.equal(q.sandbox.window.CB_QUEUE.retry('|A'), true);
+  await flush();
+  assert.equal(posts(q), 3);
+  assert.equal(q.keys[2], q.keys[0], 'retry used a new key: the server could start a second job');
+  assert.equal(q.pending.length, 1, 'the retried job is not being watched');
+  assert.equal(q.sandbox.window.CB_QUEUE.retry('|A'), false, 'retry fired twice');
+  q.pending[0]({ results: [{ publishable: true }] });
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'the run closed while B still waits for its retry');
+  q.sandbox.window.CB_QUEUE.retry('|B');
+  await flush();
+  assert.equal(q.keys[3], q.keys[1]);
+  q.pending[1]({ results: [{ publishable: true }] });
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.deepEqual(q.sandbox.window.CB_QUEUE.progress.report.map((r) => r.state), ['ok', 'ok']);
+
+  // Ревью PR #408, R9: Dismiss освобождает аккаунт, не дожидаясь повтора, —
+  // а следующая его отправка идёт с ТЕМ ЖЕ ключом: если первая всё же дошла,
+  // сервер вернёт её задание, второго не будет.
+  q = runQueue(['A', 'B'], { fail: 2 });
+  await flush();
+  assert.equal(q.sandbox.window.CB_QUEUE.dismiss('|B'), true);
+  assert.equal(q.sandbox.window.CB_QUEUE.dismiss('|B'), false, 'dismissed twice');
+  assert.ok(/dismissed/.test(q.sandbox.window.CB_QUEUE.progress.report[0].why));
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'A still waits for its retry');
+  q.sandbox.window.cbPublishAll(() => {});          // B свободен и уходит снова; A ждёт повтора
+  await flush();
+  assert.equal(posts(q), 3, 'the dismissed account could not be published again');
+  assert.equal(q.keys[2], q.keys[1], 'a dismissed account came back with a new key: possible double job');
 
   // Отказ на вопросе — ни одной работы.
   q = runQueue(['A'], { confirm: false });

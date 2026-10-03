@@ -155,17 +155,8 @@ def resolve_target_code(code: str) -> Optional[str]:
     return None
 
 
-def log_unknown_target(code: str, source: str = "") -> None:
-    """Записать неизвестный код таргета в output/unknown_targets.log.
-
-    Повторные записи одного и того же кода не дублируются.
-    Args:
-        code: код таргета, не найденный в KB
-        source: контекст (например, имя адсета или Excel-строка)
-    """
-    _UNKNOWN_LOG.parent.mkdir(parents=True, exist_ok=True)
-
-    # Read existing entries to avoid duplicates
+def logged_unknown_targets() -> set:
+    """Коды, уже записанные в output/unknown_targets.log."""
     existing: set = set()
     if _UNKNOWN_LOG.is_file():
         try:
@@ -176,7 +167,22 @@ def log_unknown_target(code: str, source: str = "") -> None:
                         existing.add(parts[0].strip())
         except OSError:
             pass
+    return existing
 
+
+def log_unknown_target(code: str, source: str = "", *, known: Optional[set] = None) -> None:
+    """Записать неизвестный код таргета в output/unknown_targets.log.
+
+    Повторные записи одного и того же кода не дублируются.
+    Args:
+        code: код таргета, не найденный в KB
+        source: контекст (например, имя адсета или Excel-строка)
+        known: уже прочитанные коды журнала — чтобы сборка отчёта не читала
+            файл заново на каждый из сотен кодов (ACL-1399)
+    """
+    _UNKNOWN_LOG.parent.mkdir(parents=True, exist_ok=True)
+
+    existing = known if known is not None else logged_unknown_targets()
     if code in existing:
         return
 
@@ -188,6 +194,8 @@ def log_unknown_target(code: str, source: str = "") -> None:
     # записи бесследно (замер 15.09).
     try:
         acl_log.append_line(_UNKNOWN_LOG, entry)
+        if known is not None:
+            known.add(code)
     except acl_log.JournalWriteError as exc:
         logging.getLogger(__name__).error("Unknown-target journal write failed (%s)", type(exc).__name__)
 

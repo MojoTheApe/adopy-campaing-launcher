@@ -71,28 +71,11 @@ _lock = threading.RLock()
 @contextmanager
 def _transaction():
     # Also protect a second dashboard/CLI process using the same config directory.
+    # ACL-1495: общий замок из paths — ограниченное ожидание вместо LK_LOCK
+    # (10 × 1 с и EDEADLK) и файл замка без гонки первой записи.
     with _lock:
-        p = _store().with_suffix(".lock")
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a+b") as f:
-            if f.tell() == 0:
-                f.write(b"0")
-                f.flush()
-            f.seek(0)
-            if os.name == "nt":
-                import msvcrt
-                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(f, fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                f.seek(0)
-                if os.name == "nt":
-                    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    fcntl.flock(f, fcntl.LOCK_UN)
+        with paths.machine_file_lock(_store().with_suffix(".lock")):
+            yield
 
 
 def _load_raw() -> dict:
