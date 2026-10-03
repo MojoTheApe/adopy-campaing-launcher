@@ -1,5 +1,30 @@
 # System history
 
+## Copy for group copies a sharp, cropped screenshot without the header band — ACL-1529
+
+Owner feedback on 2026-10-03 (Facebook_9943, Account Disabled): the red band from
+ACL-1520 covered the top of the picture, and the picture was small. The Multilogin
+window is larger than the rendered page, so at scale 1 Ads Manager sat in the top-left
+~1920×1080 of a 3837×2157 shot and the rest was white.
+
+- "Copy for group" copies the screenshot itself. No band and no 960 px canvas; the
+  account name and status stay on the dashboard row, the ad account number is in Ads
+  Manager's account selector inside the picture. `data-head` remains only as the title
+  of the fallback tab.
+- The status shot (`account_spend._status_shot`) is now taken through CDP
+  `Page.captureScreenshot` with `clip.scale = 2`: the visible area of the page, cut
+  below the last text of the top campaigns table plus 24 px. The top (account selector,
+  Meta's banner, table header) is never cut; without a table the whole visible area is
+  kept. Chromium applies the scale only for the capture and restores it itself, so no
+  device-metrics override is set or cleared, the window is not resized or raised. If
+  the sharp capture fails, the previous plain screenshot is taken.
+- Shots already stored are trimmed on copy: empty white columns on the right and rows at
+  the bottom are cut (`amapTrimShot`). Measured on the stored 9943 shot: 3837×2157 →
+  1938×1098; 6540: 2561×1331 → 1933×1011; Doc20: 2528×1314 → 1909×999.
+- Unchanged: the disabled button without a shot, the new-tab fallback ("Right-click →
+  Copy image", then the `/view` page), and nothing is sent or stored besides the
+  clipboard.
+
 ## Spend and country reads reopen a hand-opened profile like Publish does — ACL-1518
 
 On 2026-10-03 07:45 "Read spend" for Facebook_1443 and Facebook_6540 stopped at once

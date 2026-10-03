@@ -1875,6 +1875,98 @@ def _prune_status_shots(folder: Path, safe: str) -> None:
             pass
 
 
+# ── Чёткий обрезанный снимок (ACL-1529) ──────────────────────────────────
+#
+# Отзыв владельца 03.10 (9943, Account Disabled): снимок мелкий и нечитаемый.
+# Окно профиля больше отрисованной страницы, и при масштабе 1 Ads Manager
+# занимал левый верхний угол (~1920×1080 из 3837×2157), остальное — белое.
+# Теперь: рамка — видимая область страницы по DOM, снизу обрезанная по
+# последнему тексту таблицы; снимается в два раза крупнее.
+#
+# Почему clip.scale в `Page.captureScreenshot`, а не своя
+# `Emulation.setDeviceMetricsOverride`: Chromium сам ставит масштаб только на
+# время снимка и сам же возвращает прежний, а «вернуть» свою подмену можно
+# лишь `clearDeviceMetricsOverride` — это стёрло бы подмену экрана, которую
+# держит профиль Multilogin. Размер окна не меняется, окно не поднимается.
+# Проверено на headless Chromium: clip.scale=2 даёт байт-в-байт тот же PNG,
+# что страница с devicePixelRatio 2 — текст перерисован, а не растянут.
+
+#: Во сколько раз крупнее CSS-пикселей снимается проблемный кабинет.
+STATUS_SHOT_SCALE = 2
+#: Поле под последней строкой таблицы, CSS px.
+_SHOT_PAD = 24
+
+#: Рамка снимка в CSS px документа: видимая область, низ — последний текст
+#: верхней таблицы (строки, итоги) плюс поле. Верх не режем никогда: там
+#: выбор кабинета с номером, баннер Meta и заголовок таблицы. Таблицы нет
+#: (у отключённого кабинета бывает) — вся видимая высота.
+_SHOT_FRAME_JS = r"""
+(pad) => {
+  const de = document.documentElement;
+  const vv = window.visualViewport;
+  const w = Math.floor((vv && vv.width) || de.clientWidth || window.innerWidth);
+  const h = Math.floor((vv && vv.height) || de.clientHeight || window.innerHeight);
+  const x = (vv && vv.pageLeft) || window.scrollX || 0;
+  const y = (vv && vv.pageTop) || window.scrollY || 0;
+  const tables = Array.from(document.querySelectorAll('[role="table"], [role="grid"], table'))
+    .filter(t => t.getClientRects().length && !t.parentElement.closest('[role="table"], [role="grid"], table'));
+  let bottom = 0;
+  const range = document.createRange();
+  for (const t of tables) {
+    const walk = document.createTreeWalker(t, NodeFilter.SHOW_TEXT);
+    let n, seen = 0;
+    while ((n = walk.nextNode()) && seen < 20000) {
+      seen++;
+      if (!n.nodeValue.trim()) continue;
+      range.selectNodeContents(n);
+      const r = range.getBoundingClientRect();
+      if (r.width && r.height && r.top < h && r.bottom > 0) bottom = Math.max(bottom, r.bottom);
+    }
+  }
+  const cut = bottom ? Math.min(h, Math.ceil(bottom) + pad) : h;
+  return {x: x, y: y, width: w, height: Math.max(1, cut)};
+}
+"""
+
+
+def _sharp_shot(page, target: Path) -> bool:
+    """Снимок рамки `_SHOT_FRAME_JS` в масштабе 2. False — не вышло, снимать по-старому."""
+    context = getattr(page, "context", None)
+    if context is None or not hasattr(context, "new_cdp_session"):
+        return False
+    try:
+        frame = page.evaluate(_SHOT_FRAME_JS, _SHOT_PAD)
+        clip = {k: float(frame[k]) for k in ("x", "y", "width", "height")}
+        if clip["width"] < 1 or clip["height"] < 1:
+            return False
+    except Exception as exc:  # noqa: BLE001
+        log.debug("status shot: no frame: %s", exc)
+        return False
+    session = None
+    try:
+        import base64
+
+        session = context.new_cdp_session(page)
+        got = session.send("Page.captureScreenshot", {
+            "format": "png", "captureBeyondViewport": False,
+            "clip": dict(clip, scale=STATUS_SHOT_SCALE),
+        })
+        data = base64.b64decode((got or {}).get("data") or "")
+        if not data.startswith(b"\x89PNG"):
+            return False
+        target.write_bytes(data)
+        return True
+    except Exception as exc:  # noqa: BLE001 — снимок по-старому лучше, чем никакого
+        log.debug("status shot: sharp capture failed: %s", exc)
+        return False
+    finally:
+        if session is not None:
+            try:
+                session.detach()
+            except Exception:
+                pass
+
+
 def _status_shot(page, account: str) -> tuple[str, str]:
     """Снять видимую часть страницы. (id, время) или ("", "") при неудаче."""
     try:
@@ -1885,7 +1977,9 @@ def _status_shot(page, account: str) -> tuple[str, str]:
         shot_id, n = stem, 1
         while (folder / f"{shot_id}.png").exists() and n < 1000:
             shot_id, n = f"{stem}-{n}", n + 1
-        page.screenshot(path=str(folder / f"{shot_id}.png"), full_page=False)
+        target = folder / f"{shot_id}.png"
+        if not _sharp_shot(page, target):
+            page.screenshot(path=str(target), full_page=False)
         at = _now()
         _prune_status_shots(folder, safe)
         return shot_id, at
