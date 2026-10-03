@@ -4133,22 +4133,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "543": {
-        "actor": "Worker-D1543W",
-        "session": "run_d1543w_1004",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1543-instant-form",
-        "worktree": "C:\\acl-1543-instant-form",
-        "id": "3d6680216cb54aeaa17894864cb1628b",
-        "issue": 543,
-        "state": "handoff",
-        "started_at": "2026-10-03T21:22:24+00:00",
-        "from_status": "status:idea",
-        "pr": 545,
-        "report": "# ACL-1543 handoff \u2014 Worker-D1543W (run_d1543w_1004)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/545 (base `stage`)\nBranch: `codex/acl-1543-instant-form` (worktree `C:\\acl-1543-instant-form`), head `ce75e6853b5a7b431a7f55aeba89712066f51bf2`\n\n## Root cause\nMeta's single-screen editor virtualises ad sections that are off screen. `#adgroupAdDestinationGeneric` sits inside a `data-virtualized=\"true\"` wrapper and gets `display: none !important`. In the 04509d5eed75/05 capture every ad section was hidden this way, and 0e86c42023da/12 was the same.\n\n`set_ad_destination_website` removed the `display: none` once, at the start of the step. While the wrapper stayed off screen, Meta hid the section again. The Website URL field then had no box, the CDP click and DOM focus both failed, and the step stopped with `url_field_not_focused`. The diag showed `section_shown: false`, `url_fields: 0`, `addon: instant_form`.\n\nThe Browser add-ons readers only see visible elements (offsetParent), so `browser_addon_repair` could not see the add-ons either (`none_checked: null`). The ad stayed on \"Instant form (suggested)\", with the Lead Ads Terms card and Lead Gen error #100. The end-of-campaign sweep only re-fixes the ad that is open, so the failure on ad 1 stayed blocking, with a generic reason.\n\n## What changed\n- `src/fb_ads_rpa/meta_dom.py`\n  - `_show_destination_section`: scrolls the wrapper into view and re-forces display, twice. It runs at the start, after the Instant form switch, and once more if the URL field does not take focus.\n  - `_switch_off_instant_form`: if the opt-in \"Instant form\" switch is on, turns it off (marked switch, press guard, CDP click, Space as fallback). Then, if the add-on is still `instant_form`, runs `_select_browser_addon_none`. Records telemetry `destination_instant_form_off` (ok, note `switched_to_website`/`instant_form_kept`, diag `before`/`after` {dest_type, addon, opt_in, url_fields}, `via`). The URL is never recorded.\n  - `destination_state` now also returns `opt_in` (on/off/\"\").\n  - `_destination_failed`: field-level reasons with Instant form still on become `instant_form_not_switched`. The original reason is kept as `field_why`, along with `instant_form_before/after/via`.\n  - `destination_soft_fail(tag, ad)`: builds `<tag>_destination:instant_form_not_switched - <ad>: <sentence>`, or the plain `<tag>_destination` as before. Used for ad 1 and for ads 2+. The base step name is unchanged, so the sweep clearing and retry_policy still match it.\n  - `_PRESS_GUARD_JS`: refuses presses inside `pce_website_extension_instant_form_field` and on buttons named View terms / Accept / Accept terms / I accept / Create form / Create new form (`click_refused`, note `lead_terms`).\n- `src/fb_ads_rpa/simple_create.py`: `destination_why_text()` holds the English sentence.\n- `src/fb_ads_rpa/failure_policy.py`: `PER_AD_DETAIL` / `_detail()`. `reason()` and `problem()` for `<tag>_destination:instant_form_not_switched` say \"Ad destination - Instant form\". It stays BLOCKING.\n- Bench: `tests/fixtures/ads_manager/ad_destination_instant_form_2026_10_03.html` (fragments `simple_create_instant_form_terms`, `errors_lead_gen`; cut with `capture_to_fixture.py` from a scratchpad copy of the capture, with no names, ids or URLs). Also updated: the README row, `tests/bench/catalogue.json` and CATALOGUE.md (`--check` OK).\n- Tests: new `tests/test_bench_destination_instant_form.py` (11). Updated expectations in `tests/test_bench_ad_destination.py` and `tests/test_destination_and_ad_name_say_why.py`: where Instant form is still on, the reason is now `instant_form_not_switched` plus `field_why`.\n- `docs/system/CHANGELOG.md` entry.\n\n## Tests (headless, ACL_LIBRARY_* empty)\n- The new file has 11 tests, all passing. The main test (Instant form \u2192 Website \u2192 URL filled) was red on the old code.\n- Affected suites: 266 passed in total, 0 failed. Suites run: test_bench_destination_instant_form, test_bench_ad_destination, test_destination_and_ad_name_say_why, test_failure_policy, test_lead_terms_banner_with_instant_form, test_no_press_lands_on_publish, test_readable_problems(+_browser), test_simple_create_reload_guard, test_single_screen_editor_failures_are_named, test_the_single_screen_editor_flow, test_the_single_screen_editor_is_walked, test_simple_create_more_ads, test_bench_catalogue, test_recorded_retry_contract.\n- `scripts/acl_scan_secrets.py`: clean.\n\n## Bench limits\nMeta's CSS and JS are not in the bench. The test models three things: virtualisation (the section is hidden again while its wrapper is off screen), the add-on radios (a click checks one; leaving Instant form removes the terms card and the Lead Gen error), and the opt-in switch. Meta's re-render timing in the live editor is not proven.\n\n## Remaining: live check\n- A Facebook_1443 run where Meta suggests Instant form should end with Website and URL on every ad, with no `ad_destination` soft fail.\n- Check telemetry for `destination_instant_form_off` ok=True with `via:[\"addon_none\"]`, before `addon: instant_form`, after `addon: none`.\n- No `click_refused` with note `lead_terms` should appear in normal flow. If one does, a press was aimed at the terms card.\n- If it still fails, the row should read `instant_form_not_switched`. Check `field_why` and `section_shown` in the `fail_ad_destination` diag.\n- The opt-in switch path (switch on) was not seen live. Only the bench covers it."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -5672,9 +5657,25 @@
             "session": "run_d1543w_1004"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-D1543W",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-D1543W",
+          "session": "run_d1543w_1004",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1543-instant-form",
+          "worktree": "C:\\acl-1543-instant-form",
+          "id": "3d6680216cb54aeaa17894864cb1628b",
+          "issue": 543,
+          "state": "handoff",
+          "started_at": "2026-10-03T21:22:24+00:00",
+          "from_status": "status:idea",
+          "pr": 545,
+          "report": "# ACL-1543 handoff \u2014 Worker-D1543W (run_d1543w_1004)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/545 (base `stage`)\nBranch: `codex/acl-1543-instant-form` (worktree `C:\\acl-1543-instant-form`), head `ce75e6853b5a7b431a7f55aeba89712066f51bf2`\n\n## Root cause\nMeta's single-screen editor virtualises ad sections that are off screen. `#adgroupAdDestinationGeneric` sits inside a `data-virtualized=\"true\"` wrapper and gets `display: none !important`. In the 04509d5eed75/05 capture every ad section was hidden this way, and 0e86c42023da/12 was the same.\n\n`set_ad_destination_website` removed the `display: none` once, at the start of the step. While the wrapper stayed off screen, Meta hid the section again. The Website URL field then had no box, the CDP click and DOM focus both failed, and the step stopped with `url_field_not_focused`. The diag showed `section_shown: false`, `url_fields: 0`, `addon: instant_form`.\n\nThe Browser add-ons readers only see visible elements (offsetParent), so `browser_addon_repair` could not see the add-ons either (`none_checked: null`). The ad stayed on \"Instant form (suggested)\", with the Lead Ads Terms card and Lead Gen error #100. The end-of-campaign sweep only re-fixes the ad that is open, so the failure on ad 1 stayed blocking, with a generic reason.\n\n## What changed\n- `src/fb_ads_rpa/meta_dom.py`\n  - `_show_destination_section`: scrolls the wrapper into view and re-forces display, twice. It runs at the start, after the Instant form switch, and once more if the URL field does not take focus.\n  - `_switch_off_instant_form`: if the opt-in \"Instant form\" switch is on, turns it off (marked switch, press guard, CDP click, Space as fallback). Then, if the add-on is still `instant_form`, runs `_select_browser_addon_none`. Records telemetry `destination_instant_form_off` (ok, note `switched_to_website`/`instant_form_kept`, diag `before`/`after` {dest_type, addon, opt_in, url_fields}, `via`). The URL is never recorded.\n  - `destination_state` now also returns `opt_in` (on/off/\"\").\n  - `_destination_failed`: field-level reasons with Instant form still on become `instant_form_not_switched`. The original reason is kept as `field_why`, along with `instant_form_before/after/via`.\n  - `destination_soft_fail(tag, ad)`: builds `<tag>_destination:instant_form_not_switched - <ad>: <sentence>`, or the plain `<tag>_destination` as before. Used for ad 1 and for ads 2+. The base step name is unchanged, so the sweep clearing and retry_policy still match it.\n  - `_PRESS_GUARD_JS`: refuses presses inside `pce_website_extension_instant_form_field` and on buttons named View terms / Accept / Accept terms / I accept / Create form / Create new form (`click_refused`, note `lead_terms`).\n- `src/fb_ads_rpa/simple_create.py`: `destination_why_text()` holds the English sentence.\n- `src/fb_ads_rpa/failure_policy.py`: `PER_AD_DETAIL` / `_detail()`. `reason()` and `problem()` for `<tag>_destination:instant_form_not_switched` say \"Ad destination - Instant form\". It stays BLOCKING.\n- Bench: `tests/fixtures/ads_manager/ad_destination_instant_form_2026_10_03.html` (fragments `simple_create_instant_form_terms`, `errors_lead_gen`; cut with `capture_to_fixture.py` from a scratchpad copy of the capture, with no names, ids or URLs). Also updated: the README row, `tests/bench/catalogue.json` and CATALOGUE.md (`--check` OK).\n- Tests: new `tests/test_bench_destination_instant_form.py` (11). Updated expectations in `tests/test_bench_ad_destination.py` and `tests/test_destination_and_ad_name_say_why.py`: where Instant form is still on, the reason is now `instant_form_not_switched` plus `field_why`.\n- `docs/system/CHANGELOG.md` entry.\n\n## Tests (headless, ACL_LIBRARY_* empty)\n- The new file has 11 tests, all passing. The main test (Instant form \u2192 Website \u2192 URL filled) was red on the old code.\n- Affected suites: 266 passed in total, 0 failed. Suites run: test_bench_destination_instant_form, test_bench_ad_destination, test_destination_and_ad_name_say_why, test_failure_policy, test_lead_terms_banner_with_instant_form, test_no_press_lands_on_publish, test_readable_problems(+_browser), test_simple_create_reload_guard, test_single_screen_editor_failures_are_named, test_the_single_screen_editor_flow, test_the_single_screen_editor_is_walked, test_simple_create_more_ads, test_bench_catalogue, test_recorded_retry_contract.\n- `scripts/acl_scan_secrets.py`: clean.\n\n## Bench limits\nMeta's CSS and JS are not in the bench. The test models three things: virtualisation (the section is hidden again while its wrapper is off screen), the add-on radios (a click checks one; leaving Instant form removes the terms card and the Lead Gen error), and the opt-in switch. Meta's re-render timing in the live editor is not proven.\n\n## Remaining: live check\n- A Facebook_1443 run where Meta suggests Instant form should end with Website and URL on every ad, with no `ad_destination` soft fail.\n- Check telemetry for `destination_instant_form_off` ok=True with `via:[\"addon_none\"]`, before `addon: instant_form`, after `addon: none`.\n- No `click_refused` with note `lead_terms` should appear in normal flow. If one does, a press was aimed at the terms card.\n- If it still fails, the row should read `instant_form_not_switched`. Check `field_why` and `section_shown` in the `fail_ad_destination` diag.\n- The opt-in switch path (switch on) was not seen live. Only the bench covers it."
+        },
+        "pr": 545,
+        "queued_at": "2026-10-03T21:42:03+00:00"
       }
     },
     "actors": {
@@ -7134,7 +7135,8 @@
       433,
       526,
       532,
-      529
+      529,
+      543
     ],
     "review": null,
     "history": [
@@ -10304,6 +10306,13 @@
         "at": "2026-10-03T21:22:24+00:00",
         "issue": 543,
         "claim": "3d6680216cb54aeaa17894864cb1628b",
+        "actor": "Worker-D1543W"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-03T21:42:03+00:00",
+        "issue": 543,
+        "pr": 545,
         "actor": "Worker-D1543W"
       }
     ],
