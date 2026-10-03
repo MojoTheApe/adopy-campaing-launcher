@@ -5541,7 +5541,7 @@
             "session": "run_k1533c_1003"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-K1533C",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -5559,7 +5559,8 @@
           "report": "# ACL-1533 handoff \u2014 Worker-K1533C (run_k1533c_1003)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/537 (into stage), branch `codex/acl-1533-crop-live-fixes`, head 371b2d45.\n\n## Root causes\n1. `crop_square_changed` (live 03.10 runs d54d68303e57, f35a2b31f7d8, 2e98a75f252d, a39407b72507): the Crop cards show video as a `blob:` URL. Meta makes a new one each time it redraws the step, so after Replace both cards had new srcs. The readback compared raw srcs and blocked. Telemetry `after` shows Square unchanged: Original, 1:1 disabled, no thumbnail ids.\n2. `crop_replace_picker_not_closed`: in the in-wizard picker, the step-row \"Crop\" is `aria-current=step`, so pressing it does nothing. The picker's own footer Save (primary slot, after \"Search media\") is the control that returned to Crop after a pick live.\n\n## Changes\n- `src/fb_ads_rpa/crop_step.py`:\n  - `media_key()`, `_ratios()` and `square_changed()` (positive evidence only);\n  - PICKER_JS: in-wizard confirm/back press only the footer \"Save\" (`own_save`), never the row, header Save, Close or Next;\n  - `crop_vertical_changed_without_story` fail-safe after a Save with nothing picked.\n- Fixtures: `tests/fixtures/ads_manager/crop_step_pair_video_2026_10_03.html` and `crop_replace_in_wizard_picker_2026_10_03.html` (scrubbed, README, catalogue.json, CATALOGUE.md).\n- Tests:\n  - `tests/test_bench_crop_live_1003.py` (11 tests);\n  - `tests/test_story_not_placed_is_a_warning.py` in-wizard tests now use the live way back.\n- CHANGELOG entry.\n\n## Checks\n- Ran the affected suites headless (crop, crop gate, story_not_placed, creative wizard, bench_catalogue, failure_policy, readable_problems, wizard capture): all pass.\n- Broke each fix once (raw src compare; the row's Crop as the way back) and confirmed the tests fail.\n- `acl_scan_secrets.py` is clean.\n\n## Open\n- Live acceptance: a 1443 video pair with the story on Vertical and the post on Square.\n- Not verified live: Save with nothing picked returning to Crop. It is enabled in the capture. If it does nothing, the step falls back to Close plus `crop_replace_picker_not_closed`; if it changes Vertical, the step blocks.\n- `crop_vertical_not_replaced` still compares raw srcs, so blob churn always satisfies it. Identity comes from thumbnails, which are \"unconfirmed\" when absent."
         },
         "pr": 537,
-        "queued_at": "2026-10-03T15:20:38+00:00"
+        "queued_at": "2026-10-03T15:20:38+00:00",
+        "reviewer": "Reviewer-R1533S"
       },
       "535": {
         "implementers": [
@@ -5974,6 +5975,10 @@
       },
       "Reviewer-R1535S": {
         "session": "rev_r1535s_1003",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1533S": {
+        "session": "rev_r1533s_1003",
         "role": "Reviewer"
       }
     },
@@ -7020,10 +7025,20 @@
       433,
       526,
       532,
-      529,
-      533
+      529
     ],
-    "review": null,
+    "review": {
+      "id": "7fad169490c242aa80bfd2648efda37f",
+      "pr": 537,
+      "issues": [
+        533
+      ],
+      "actor": "Reviewer-R1533S",
+      "session": "rev_r1533s_1003",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-03T16:45:18+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -10159,6 +10174,13 @@
         "prs": [
           539
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-03T16:45:18+00:00",
+        "pr": 537,
+        "lane": "7fad169490c242aa80bfd2648efda37f",
+        "actor": "Reviewer-R1533S"
       }
     ],
     "policy": {
