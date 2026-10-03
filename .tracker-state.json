@@ -3982,9 +3982,11 @@
         "worktree": "C:\\acl-1529-sharpshot",
         "id": "7b61df72713d4151a7b545739c0a08fa",
         "issue": 529,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-03T13:37:11+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 530,
+        "report": "# ACL-1529 handoff \u2014 Worker-S1529C\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/530 (into stage)\nBranch: codex/acl-1529-sharp-shot, head af9de98a, worktree C:\\acl-1529-sharpshot\n\n## Changed\n- src/web/templates/report.html: `amapCopyGroup` copies the stored status shot itself \u2014 no red band, no 960 px canvas (`amapComposeGroup` removed). New `amapTrimShot` (called behind `typeof`) cuts empty white right/bottom margins of old shots on copy. Fallback tab (\"Right-click \u2192 Copy image\", then /view), disabled state, nothing sent/stored unchanged. Button title: \"Copies the screenshot taken \u2026\". `amapApplyReading` untouched.\n- src/web/templates/_account_map_country.html: same title, comment.\n- src/analysis_agent/account_spend.py: `_sharp_shot` \u2014 CDP `Page.captureScreenshot` with `clip.scale = STATUS_SHOT_SCALE (2)`; frame from DOM (`_SHOT_FRAME_JS`): visible area at the scroll offset, cut `_SHOT_PAD` (24 px) below the last text of the top table; no table \u2192 whole view. Chromium restores the scale after the capture; no setDeviceMetricsOverride/clear (clear would wipe the profile's screen emulation); window not resized/raised; session detached in finally. Any failure \u2192 previous `page.screenshot(full_page=False)`.\n- tests/test_copy_for_group.py: rewritten band tests + fixture capture tests.\n- docs/system/CHANGELOG.md: entry.\n\n## Measured (real stored shots, read-only)\nTrim on copy: 9943 3837\u00d72157 \u2192 1938\u00d71098; 6540 2561\u00d71331 \u2192 1933\u00d71011; Doc20 2528\u00d71314 \u2192 1909\u00d7999.\nHeadless check: clip.scale=2 output byte-identical to a DPR-2 render.\n\n## Tests\nAffected set 165 passed (copy_for_group 15, copy_status_text, status_screenshot, read_fallback, reads_reopen_a_hand_opened_profile, report_scripts_parse, screens_are_in_english, review_ui_regressions, bench_catalogue). acl_scan_secrets clean.\n\n## Open\n- Live 2\u00d7 capture inside Multilogin not run (rules: no Meta/Multilogin). Unknown: whether `visualViewport.width` in the oversized Multilogin window reports ~1920 (page) or ~3837; either way the copy-time trim removes leftover white margins.\n- Owner acceptance: paste a fresh 9943 / Doc20 / 6540 picture after a new Read."
       }
     },
     "tasks": {
