@@ -666,7 +666,14 @@ def test_capture_of_a_failed_step_remembers_its_section(tmp_path, monkeypatch):
 
 class _HungPage:
     """Вкладка, у которой голый `evaluate` висит, а ограниченный вызов
-    честно кончается таймаутом через свой `timeout`."""
+    честно кончается таймаутом через свой `timeout`.
+
+    ACL-1491: «висит» — `HANG_S`, а граница теста — его половина. Прежде
+    висели 1.5 с при границе 1.0 с, и честный путь на нагруженном раннере
+    шёл 1.02–1.14 с. Разрыв между «не ждали» и «ждали» теперь в секундах,
+    а не в десятых; дольше `HANG_S` сломанный код тест не держит."""
+
+    HANG_S = 10.0
 
     def __init__(self):
         self.evaluate_calls = 0
@@ -676,7 +683,7 @@ class _HungPage:
         import time
 
         self.evaluate_calls += 1
-        time.sleep(1.5)  # «повисла»; дольше в тесте не ждём
+        time.sleep(self.HANG_S)  # «повисла»; дольше в тесте не ждём
         return [{"name": "audience", "html": "<div>too late</div>"}]
 
     def wait_for_function(self, _expr, *, arg=None, timeout=None):
@@ -692,7 +699,7 @@ def test_a_hung_tab_gives_no_section_within_the_bound():
     hung = _HungPage()
     started = time.monotonic()
     assert pc.remember_section(hung, step="audience_location", run_id="r1", campaign=CAMPAIGN) is False
-    assert time.monotonic() - started < 1.0
+    assert time.monotonic() - started < _HungPage.HANG_S / 2
     assert hung.evaluate_calls == 0, "раздел снимался неограниченным evaluate"
     assert hung.timeouts == [int(pc.SECTION_EVAL_TIMEOUT_S * 1000)] == [5000]
     assert pc.section_attachment("audience_location", "r1", campaign=CAMPAIGN) is None
@@ -717,7 +724,7 @@ def test_capture_on_a_tab_that_hangs_after_inner_html_does_not_hang(tmp_path, mo
     page = _Page()
     started = time.monotonic()
     assert pc.capture(page, step="stall_objective_wait", run_id="r9", campaign=CAMPAIGN)
-    assert time.monotonic() - started < 1.0
+    assert time.monotonic() - started < _HungPage.HANG_S / 2
     assert page.evaluate_calls == 0
     assert pc.section_attachment("stall_objective_wait", "r9", campaign=CAMPAIGN) is None
 

@@ -41,6 +41,8 @@ class MachineConfigTests(unittest.TestCase):
             self.assertIn("KEEP_ME=unchanged", env)
             self.assertIn('FB_RPA_ENGINE="recorded_flow"', env)
             self.assertIn('FB_BROWSER_PROVIDER="multilogin_attach"', env)
+            # ACL-1447: имя менеджера — и подпись событий Sentry этой машины.
+            self.assertIn('ACL_MACHINE_LABEL="Anna Smith"', env)
             # ACL-1303: мастер больше не получает токен — его сохраняет
             # дешборд, когда человек входит в Multilogin. Повторный проход
             # установки обязан оставить эту строку в покое: затерев её, мы

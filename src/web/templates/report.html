@@ -1151,22 +1151,22 @@
       display: inline-block;
     }
     .cb-add-btn-sm:hover { color: var(--accent); border-color: var(--accent); }
-    /* Duplication lives on the cards themselves: ⧉ on each ad row
-       (acl-705) and on each campaign slot's header (acl-706) — a bottom
-       button could not say which item it would take. */
-    .cb-dup-slot-btn {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      width: 1.4rem; height: 1.4rem;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      line-height: 1;
-      padding: 0;
-      font-family: inherit;
+    /* Дублирование — на самих карточках: «Duplicate» у объявления
+       (acl-705) и «⧉ Duplicate campaign» под объявлениями кампании. Кнопка
+       внизу формы не могла сказать, что именно копирует (acl-706); значок в
+       шапке слота ящик прятал вместе с шапкой (ACL-1459). Видом — ссылкой,
+       как остальные второстепенные кнопки (ACL-1455). */
+    .cb-dup-slot-btn, .cb-dup-ad-btn {
+      background: transparent; border: 1px solid transparent; border-radius: 4px;
+      color: var(--accent); font-weight: 500; font-family: inherit;
+      cursor: pointer; line-height: 1.4;
     }
-    .cb-dup-slot-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .cb-dup-slot-btn { display: block; margin-top: 0.6rem; padding: 0.2rem 0.4rem; font-size: 0.78rem; }
+    .cb-dup-slot-btn:hover, .cb-dup-ad-btn:hover { background: var(--accent-soft); }
+    .cb-dup-slot-btn:focus-visible, .cb-dup-ad-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+    /* В ящике кампанию добавляет его «+ Campaign» у аккаунта; кнопка формы
+       была второй дорогой туда же. На странице страны она остаётся. */
+    .cbd-host .cb-add-btn { display: none; }
 
     /* "Send to Builder" trigger + popup */
     /* Landing-page chips: second line under the adset name in the CM drill —
@@ -1259,21 +1259,7 @@
     }
     .cb-ad-row:hover .cb-remove-ad-btn { opacity: 1; }
     .cb-remove-ad-btn:hover { color: var(--bad); border-color: var(--bad); opacity: 1; }
-    .cb-dup-ad-btn {
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--muted);
-      width: 1.2rem; height: 1.2rem;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 0.8rem;
-      line-height: 1;
-      padding: 0;
-      font-family: inherit;
-      opacity: 0.5;
-    }
-    .cb-ad-row:hover .cb-dup-ad-btn { opacity: 1; }
-    .cb-dup-ad-btn:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
+    .cb-dup-ad-btn { padding: 0.05rem 0.35rem; font-size: 0.72rem; margin-left: auto; }
     .cb-ad-fields {
       display: grid;
       grid-template-columns: 7rem 1fr;
@@ -1478,6 +1464,40 @@
       border-radius: var(--radius-sm);
       color: var(--text); font-size: 0.78rem; line-height: 1.45;
     }
+    /* ACL-1437: проблемы кампании — коротким списком, а не абзацем.
+       Красный — блокирует, жёлтый — предупреждение (публиковать можно). */
+    .cb-problems {
+      margin: 0.35rem 0 0.2rem; padding: 0.5rem 0.65rem;
+      border: 1px solid var(--bad); border-left-width: 3px;
+      border-radius: var(--radius-sm); background: var(--bad-soft);
+      color: var(--text); line-height: 1.4;
+    }
+    .cb-problems--warning { border-color: var(--warn); background: var(--warn-soft); }
+    .cb-problems-head { font-weight: 600; color: var(--bad); word-break: break-word; }
+    .cb-problems--warning .cb-problems-head { color: var(--warn); }
+    .cb-problems-sub { color: var(--muted); font-size: 0.72rem; margin: 0.1rem 0 0.35rem 1.4rem; }
+    .cb-problems ol { margin: 0 0 0 1.4rem; padding: 0 0 0 1.1rem; }
+    .cb-problem { margin: 0 0 0.4rem; padding-left: 0.4rem; border-left: 2px solid var(--bad); }
+    .cb-problem--warning { border-left-color: var(--warn); }
+    .cb-problem-title { font-weight: 600; word-break: break-word; }
+    .cb-problem-impact { font-size: 0.74rem; }
+    .cb-problem-action { font-size: 0.74rem; color: var(--accent); }
+    .cb-problems-tech { margin: 0.2rem 0 0 1.4rem; font-size: 0.7rem; color: var(--muted); }
+    .cb-problems-tech > summary { cursor: pointer; }
+    .cb-problems-tech-body { font-family: monospace; word-break: break-all; margin-top: 0.2rem; }
+    .cb-problems-tech-body div { margin: 0.1rem 0; }
+    .cb-problems-tech-body .cb-problems-error { white-space: pre-wrap; }
+    .cb-problems-teach { margin: 0.1rem 0 0.2rem 1.4rem; font-size: 0.74rem; font-weight: 600; }
+    /* ACL-1444: «Close profile» на панели закончившегося задания. */
+    .cb-close-profile { margin: 0.5rem 0 0.2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+    .cb-close-profile-btn {
+      padding: 0.3rem 0.8rem; font-size: 0.76rem; cursor: pointer;
+      background: transparent; color: var(--text);
+      border: 1px solid var(--muted); border-radius: var(--radius-sm);
+    }
+    .cb-close-profile-btn:disabled { opacity: 0.6; cursor: default; }
+    .cb-close-profile-msg { font-size: 0.7rem; color: var(--muted); }
+    .cb-close-profile-msg.cb-close-profile-bad { color: var(--bad); }
 
     /* ── §6 Creative Brief ── */
     .brief-details { margin-top: 1.5rem; }
@@ -1720,6 +1740,15 @@
     .amap-st.bad {
       background: var(--danger); color: var(--on-danger); font-weight: 500;
     }
+    .amap-st-at { display: block; font-size: 0.62rem; color: var(--muted); margin-top: 0.1rem; }
+    .amap-st-at.stale { color: var(--warn); font-weight: 500; }
+    .amap-shot {
+      font-size: 0.62rem; padding: 0 0.3rem; margin-left: 0.2rem; border: 1px solid var(--border);
+      border-radius: 3px; background: var(--bg-subtle); color: var(--muted); cursor: pointer; white-space: nowrap;
+    }
+    .amap-shot:hover { color: inherit; }
+    .amap-shot:disabled { cursor: not-allowed; opacity: 0.55; }
+    .amap-shot:disabled:hover { color: var(--muted); }
     .amap td { padding: 0.42rem 0.85rem; border-bottom: 1px solid var(--border); }
     .amap tbody tr:last-child td { border-bottom: 0; }
     .amap tbody tr:hover { background: var(--bg-hover); }
@@ -1934,6 +1963,10 @@
     .amap-btn.primary:hover {
       background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent);
     }
+    /* Сообщение поставщику (acl-132): кнопка и подсказка под плохим статусом. */
+    .amap-st-report { margin-top: 0.2rem; white-space: normal; }
+    .amap-st-report .amap-copy-text { font-size: 0.68rem; padding: 0.05rem 0.35rem; }
+    .amap-st-hint { display: block; font-size: 0.62rem; color: var(--muted); line-height: 1.3; margin-top: 0.1rem; }
 
     /* Состояние Multilogin внутри формы подключения: строка всегда, поля
        входа — только когда токена нет (ACL-1130). */
@@ -2060,6 +2093,13 @@
       flex: 0 0 4.6rem; color: var(--muted); font-size: 0.7rem;
       text-transform: uppercase; letter-spacing: 0.04em;
     }
+    /* ACL-1395: у объявлений с одним именем числа книги общие. Тихая пометка
+       в строке уровня, как «not in the workbook» у аккаунта; объяснение — в
+       подсказке. */
+    .amap-tree-shared {
+      margin-left: 0.35rem; color: var(--muted); text-transform: none;
+      letter-spacing: 0; cursor: help; border-bottom: 1px dotted var(--border);
+    }
     /* Стрелка кампании. Пустое место вместо неё держит ту же ширину, иначе
        строки без объявлений разъезжаются относительно остальных. */
     .amap-tree-caret, .amap-tree-caret-off {
@@ -2107,6 +2147,14 @@
        число (ревью 22.09). Тогда источник остаётся только в подсказке. */
     body.cbd-open .amap-tree-num.res .amap-tree-src { display: none; }
     .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
+    /* ACL-1504: список кампаний не прочитан — причина, что делать, Read again. */
+    .amap-tree-notread { font-size: 0.78rem; margin-bottom: 0.5rem; }
+    .amap-tree-notread-why { color: var(--danger); font-weight: 600; }
+    .amap-tree-notread-do { color: var(--text); padding-top: 0.15rem; }
+    .amap-tree-notread-do .amap-tree-reread { margin-left: 0.4rem; }
+    .amap-tree-tech { padding-top: 0.3rem; color: var(--muted); font-size: 0.72rem; }
+    .amap-tree-tech summary { cursor: pointer; }
+    .amap-tree-tech-body { white-space: pre-wrap; word-break: break-word; padding-top: 0.2rem; }
     /* Включённая строка — кнопка: её можно выключить. Выключенная и
        «непонятно» остаются надписями, нажимать там нечего. */
     button.amap-tree-sw { cursor: pointer; font-family: inherit; }
@@ -2978,6 +3026,31 @@
     @media (prefers-reduced-motion: reduce) {
       .cbd-root, .cbd-handle-arrow { transition: none; }
     }
+    /* ── Второстепенные кнопки — ссылками (ACL-1455, вариант C 01.10) ──────
+       Были нарисованы рамкой полей (--field-border), почти тем же фоном и
+       серым текстом подсказки: глаз не отличал, куда писать, а что нажимать.
+       Рамка теперь значит «поле»; кнопка — синий текст без рамки. Правила в
+       одном месте и сильнее разбросанных выше; рамка остаётся прозрачной
+       шириной 1px, чтобы строки таблицы не прыгали. */
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn) {
+      background: transparent; border: 1px solid transparent;
+      color: var(--accent); font-weight: 500;
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):hover:not(:disabled) {
+      background: var(--accent-soft); border-color: transparent; color: var(--accent);
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):focus-visible {
+      outline: 2px solid var(--focus-ring); outline-offset: 1px;
+    }
+    :is(.amap-btn:not(.primary), .amap .amap-x, .acc-btn):disabled {
+      color: var(--muted); background: transparent; cursor: not-allowed;
+    }
+    :is(.amap-btn.danger, .amap .amap-x, .acc-btn.danger, .amap-btn.amap-live-bad) {
+      color: var(--bad); border-color: transparent;
+    }
+    :is(.amap-btn.danger, .amap .amap-x, .acc-btn.danger, .amap-btn.amap-live-bad):hover:not(:disabled) {
+      background: var(--bad-soft); color: var(--bad);
+    }
   </style>
 </head>
 <body>
@@ -3057,6 +3130,8 @@
     </button>
   </div>
   <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
+    {#- ACL-1434: здоровье робота — отдельная страница, только чтение телеметрии. -#}
+    <a href="/robot-health" id="robot-health-link" title="Success rate of every robot step per account and build" style="font-size:0.85rem;color:var(--muted);text-decoration:none;">Robot health</a>
     {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
         с Refresh намеренно: беда случается на экране, и идти за ней в другое
         место человек не станет. -#}
@@ -3391,6 +3466,11 @@ async function dashRefresh(ev) {
     <h3>This computer</h3>
     <p class="acc-sub">Where ACL reads your stats and looks for creatives. Paste a path from Explorer (Shift + right-click → Copy as path).</p>
     <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:70ch">
+      {#- ACL-1447: имя менеджера — тег `manager` у событий Sentry этой машины. -#}
+      <label>
+        <div style="font-size:0.75rem;color:var(--muted)">Your name (run reports from this computer are labelled with it)</div>
+        <input id="mp-manager" type="text" style="width:100%" autocomplete="off" maxlength="60">
+      </label>
       <label>
         <div style="font-size:0.75rem;color:var(--muted)">Stats workbook (Excel)</div>
         <input id="mp-stats" type="text" style="width:100%" autocomplete="off">
@@ -3554,7 +3634,7 @@ async function dashRefresh(ev) {
       </label>
     </div>
     <label style="display:block;margin-top:0.6rem">
-      <div style="font-size:0.75rem;color:var(--muted)">Body — переносы строк сохраняются как есть</div>
+      <div style="font-size:0.75rem;color:var(--muted)">Body — line breaks are kept as typed</div>
       <textarea id="at-body" rows="5" style="width:100%;font-family:inherit;line-height:1.45"></textarea>
     </label>
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-top:0.6rem">
@@ -4323,7 +4403,11 @@ async function dashRefresh(ev) {
   }
 
   var h = '<div class="goals-panel">';
-  h += '<div class="goals-title">Evgeni — Goals Progress · FTDs / CPA / CR / Leads per Day</div>';
+  /* Имя — того, чьи цели на экране. Было вписано «Evgeni» у всех (ACL-1452).
+     Экранировано для HTML до того, как стать строкой JS: имя приходит из
+     настроек, а не из кода (урок S01). */
+  var GOALS_WHO = {{ (gv.cm or '') | e | tojson }};
+  h += '<div class="goals-title">' + (GOALS_WHO ? GOALS_WHO + ' — ' : '') + 'Goals Progress · FTDs / CPA / CR / Leads per Day</div>';
   var totalDep = 0;
   for (var i = 0; i < ACT_RAW.length; i++) totalDep += ACT_RAW[i].dep;
   var totalPct = GRAND_FTD ? Math.min(100, Math.round(totalDep / GRAND_FTD * 100)) : 0;
@@ -5207,18 +5291,15 @@ window.cbTree = (function () {
   host.className = 'cbd-camp-body cbd-host';
   var BORROWED = null;
 
-  /* Дублирование кампании. Своё, а не спрятанное: шапка карточки с
-     кнопкой `⧉` в ящике скрыта — имя кампании и так стоит строкой выше, в
-     дереве, — и вместе с ней пропала возможность скопировать кампанию.
-     Здесь она возвращается внизу, где её и ищут: рядом с «+ Add Campaign».
-
-     Копирует та же функция, что и прежняя кнопка: она обходит все поля
-     слота, а не список, записанный руками. Список однажды отстал — язык
-     добавили в форму позже, и копия молча уходила без него. */
-  var tools = document.createElement('div');
-  tools.className = 'cbd-tools';
-  tools.innerHTML = '<button type="button" class="cbd-add" data-act="duplicate">'
-    + '⧉ Duplicate campaign</button>';
+  /* Дублирование кампании живёт в её карточке (ACL-1459). Ящик отвечает за
+     то, что после копии: раскрыть её, ведь её и пришли править — тем одним
+     полем, ради которого копировали. */
+  window.cbdDuplicateOpen = function (source) {
+    window.cbDuplicateSlot(source);
+    var copy = source.nextElementSibling;
+    if (copy && copy.classList.contains('cb-slot')) openCampaign(slotId(copy));
+    else paint();
+  };
 
   /* ── подключить аккаунт, не уходя из ящика ─────────────────────────────
      Третьей копии формы подключения здесь нет и не будет: их было две,
@@ -5276,7 +5357,6 @@ window.cbTree = (function () {
     form.parentNode.insertBefore(mark, form);
     BORROWED = { row: row, form: form, mark: mark };
     host.appendChild(form);
-    host.appendChild(tools);   // вне формы: кнопка внутри неё уходила бы на сервер
     showOnly(form, only);
   }
 
@@ -5431,19 +5511,6 @@ window.cbTree = (function () {
       paint();
     } else if (act === 'add-here') {
       addCampaign(hit.dataset.country, hit.dataset.account);
-    } else if (act === 'duplicate') {
-      var open = findCampaign(openId);
-      if (!open) return;
-      var source = open.camp.slot;
-      window.cbDuplicateSlot(source);
-      var copy = source.nextElementSibling;
-      if (copy && copy.classList.contains('cb-slot')) {
-        /* Копию сразу раскрываем: её и пришли править — тем одним полем,
-           ради которого копировали. */
-        openCampaign(slotId(copy));
-      } else {
-        paint();
-      }
     } else if (act === 'connect' || act === 'connect-picked') {
       var picked = foot.querySelector('.cbd-pick-country');
       var country = act === 'connect-picked' ? (picked && picked.value) : hit.dataset.country;
@@ -5956,6 +6023,13 @@ window.cbBuild = (function () {
     if (q.reason === 'profile') {
       return { state: 'build-wait', sign: '',
                why: 'Waiting for the Multilogin profile — another run is using it' };
+    }
+    // ACL-1424: мало памяти — сколько свободно и сколько берёт профиль.
+    var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+    if (q.hold === 'memory_low' && q.available_mb != null && q.profile_mb) {
+      return { state: 'build-wait', sign: '',
+               why: 'Waiting: ' + gb(q.available_mb) + ' GB free, a profile uses ~' + gb(q.profile_mb) + ' GB'
+                    + (ahead ? ' (' + ahead + ' ahead)' : '') };
     }
     return { state: 'build-wait', sign: '',
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
@@ -7053,6 +7127,67 @@ function amapReadTitle(s, split) {
   return when + ' · read ' + s.finished_at + ' · ' + s.how + amapSplitNote(s, split);
 }
 
+/* ACL-1430 copy-shot { */
+/* Снимок проблемного состояния — в буфер обмена картинкой. ClipboardItem
+   получает обещание, а не готовый blob: так Chrome и Safari засчитывают
+   клик как жест пользователя, хотя файл ещё качается. Браузер отказал
+   (нет ClipboardItem, нет прав) — открываем картинку во вкладке с
+   подсказкой «Right-click → Copy image». */
+function amapCopyShot(btn) {
+  var id = btn.dataset.shot;
+  if (!id) return;
+  var url = '/account-spend/status-shot/' + encodeURIComponent(id);
+  var label = 'Copy screenshot';
+  function fallback() {
+    window.open(url + '/view', '_blank');
+    btn.textContent = label;
+  }
+  if (!(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)) { fallback(); return; }
+  btn.textContent = 'Copying…';
+  var png = fetch(url).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.blob();
+  }).then(function (b) { return b.type === 'image/png' ? b : new Blob([b], {type: 'image/png'}); });
+  var item;
+  try { item = new ClipboardItem({'image/png': png}); } catch (e) { fallback(); return; }
+  navigator.clipboard.write([item]).then(function () {
+    btn.textContent = 'Copied';
+    setTimeout(function () { btn.textContent = label; }, 2000);
+  }, fallback);
+}
+/* } ACL-1430 copy-shot */
+
+/* Хвост ячейки статуса после живого Read — та же разметка, что рисует
+   _account_map_country.html (acl-132): Copy screenshot (выключенная, если
+   снимка нет) и для плохих статусов Copy text с подсказкой. Строкой, а не
+   createElement: ячейка собирается одним innerHTML, обработчики — атрибутами,
+   как в шаблоне. Без этого после Read кнопка пропадала ровно тогда, когда
+   чтение нашло проблему. */
+var AMAP_STATUS_WORDS = {disabled: 'Account Disabled', restricted: 'Account Restricted',
+                         blocked: 'Account Blocked', review: 'Account Under Review'};
+function amapStatusTail(account, s) {
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+  var out = '';
+  if (s.status !== 'clear' && (s.status_shot || s.status !== 'unknown')) {
+    out += s.status_shot
+      ? ' <button type="button" class="amap-shot" data-shot="' + esc(s.status_shot) + '" title="Screenshot taken '
+        + esc(s.status_shot_at) + '. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>'
+      : ' <button type="button" class="amap-shot" disabled title="No screenshot on the last read — read the account again">Copy screenshot</button>';
+  }
+  var word = AMAP_STATUS_WORDS[s.status];
+  if (word) {
+    var line = String(account || '').split(' - ')[0] + ' - ' + word;
+    out += '<div class="amap-st-report"><button type="button" class="amap-btn amap-copy-text" data-copy="' + esc(line)
+      + '" title="Copies: ' + esc(line) + '" onclick="amapCopyText(this)">Copy text</button>'
+      + '<small class="amap-st-hint">Copy screenshot and account number to send in the group</small></div>';
+  }
+  return out;
+}
+
 function amapApplyReading(account, s, split) {
   document.querySelectorAll('.amap-live').forEach(function (cell) {
     if (cell.dataset.account !== account) return;
@@ -7064,7 +7199,7 @@ function amapApplyReading(account, s, split) {
     cell.dataset.readCurrency = s.currency || '';
     if (s.status) {
       var status = row.querySelector('.amap-status');
-      status.innerHTML = '<span></span>';
+      status.innerHTML = '<span></span>' + amapStatusTail(account, s);
       var label = status.firstChild;
       label.className = 'amap-st ' + (s.status === 'clear' ? 'ok' : s.status === 'unknown' ? 'dim' : 'bad');
       label.textContent = s.status === 'clear' ? 'no warning' : s.status === 'unknown' ? 'unreadable' : s.status;
@@ -7080,6 +7215,9 @@ function amapApplyReading(account, s, split) {
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read spend'; btn.title = 'Read spend again';
     amapPaintTree(row, s);
   });
+  /* ACL-1504: Read spend мог погаснуть или включиться (идёт чтение, отказ) —
+     Read again в дереве следует за ним, перерисовано дерево или нет. */
+  amapRereadSync();
   amapUpdateCountrySummaries();
 }
 
@@ -7113,7 +7251,7 @@ function amapTreeLine(o, adCount) {
     caret.type = 'button';
     caret.className = 'amap-tree-caret';
     caret.textContent = '▸';
-    caret.setAttribute('aria-label', adCount + ' ads in ' + (o.name || 'this campaign'));
+    caret.setAttribute('aria-label', adCount + ' ads in ' + (amapTreeName(o.name) || 'this campaign'));
     who.appendChild(caret);
   } else {
     var gap = document.createElement('span');
@@ -7139,7 +7277,9 @@ function amapTreeLine(o, adCount) {
      Перечитать аккаунт — и всё встанет на место. */
   /* Без id (новая таблица Ads Manager, Doc19 18.09) выключать нечем: turn_off
      откажет. Кнопку не рисуем, а в подсказке говорим почему. */
-  var canAct = o.switch === 'on' && !!o.id
+  /* ACL-1504: строки прежнего удачного чтения (`_stale`) — только для
+     показа: тумблер с тех пор мог смениться. */
+  var canAct = o.switch === 'on' && !!o.id && !o._stale
     && (o.level === 'campaign' || (o.level === 'ad' && o.parent_id));
   var live = canAct;
   var sw = document.createElement(live ? 'button' : 'span');
@@ -7160,13 +7300,15 @@ function amapTreeLine(o, adCount) {
     sw.dataset.level = o.level;
     sw.dataset.objectId = o.id || '';
     sw.dataset.parentId = o.parent_id || '';
-    sw.dataset.name = o.name || '';
+    sw.dataset.name = amapTreeName(o.name);
   }
 
   var name = document.createElement('span');
   name.className = 'amap-tree-name';
-  name.textContent = o.name || '(no name)';
-  name.title = (o.name || '') + (o.id ? '  ·  ' + o.id : '');
+  /* Имя — без надписей Meta, как его сопоставляет книга (ACL-1395). */
+  var shownName = amapTreeName(o.name);
+  name.textContent = shownName || '(no name)';
+  name.title = shownName + (o.id ? '  ·  ' + o.id : '');
 
   var del = document.createElement('span');
   var stopped = /off|review|reject|not deliver|error/i.test(o.delivery || '');
@@ -7249,11 +7391,35 @@ function amapAttrCell(field) {
    «Adset Name» книги, объявление — «Ad Title» под ним. Считает сервер той
    же формулой и форматирует тем же `fmt_usd`, что и строку аккаунта.
 
-   Совпадение — по имени, и только однозначное. Две кампании с одним именем
-   (или два объявления с одним именем в кампании) по имени не различить:
-   такие строки получают прочерк с объяснением, а не угаданные числа. Нет
-   строк в книге — прочерк, а не ноль: «не нашли» и «ноль» — разные ответы. */
-function amapTreeName(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+   Совпадение — по имени. Две кампании с одним именем по имени не различить:
+   такие строки получают прочерк с объяснением, а не угаданные числа.
+   Несколько объявлений с одним именем в одной кампании (ACL-1395, решение
+   владельца 30.09) получают каждое итог книги по этому имени — один раз, не
+   умноженный — и пометку «shared by N ads»: делить итог между ними нечем.
+   Нет строк в книге — прочерк, а не ноль: «не нашли» и «ноль» — разные ответы. */
+
+/* Надписи Meta из ячейки имени (ACL-1395): «1741 - Pro Bancolombia Unpublished
+   edits Unpublished edits». Чтение их теперь снимает само; здесь — для
+   чтений, сохранённых раньше. Копия `META_NAME_LABELS` из
+   `src/analysis_agent/account_spend.py`, тест держит их равными. Снимаются
+   только с конца имени и только если перед ними есть имя. */
+var AMAP_META_NAME_LABELS = ['Unpublished edits', 'In draft', 'In review', 'Draft'];
+
+function amapTreeName(s) {
+  var text = String(s || '').replace(/\s+/g, ' ').trim();
+  for (;;) {
+    var hit = null;
+    for (var i = 0; i < AMAP_META_NAME_LABELS.length; i++) {
+      var l = ' ' + AMAP_META_NAME_LABELS[i];
+      if (text.length > l.length && text.slice(-l.length) === l) { hit = l; break; }
+    }
+    if (!hit) return text;
+    text = text.slice(0, -hit.length).trim();
+  }
+}
+
+var AMAP_SHARED_TIP = 'The workbook cannot tell ads with the same name apart; '
+                    + 'these are the totals for all of them';
 
 function amapOwn(obj, key) {
   return obj && Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null;
@@ -7282,7 +7448,11 @@ function amapFillAttribution(box, objects, data) {
   lines.forEach(function (line, i) {
     var o = line._amapObject;
     if (!o) return;
-    var got = null, why = '';
+    var got = null, why = '', shared = 0;
+    /* Ответ может прийти второй раз (перечитали период) — прежняя пометка
+       снимается, новая ставится по новому ответу. */
+    var oldMark = line.querySelector('.amap-tree-shared');
+    if (oldMark) oldMark.remove();
     if (!data || !data.ok) {
       why = (data && data.error) || 'Workbook numbers are not available';
     } else if (o.level === 'ad') {
@@ -7290,8 +7460,10 @@ function amapFillAttribution(box, objects, data) {
       var n = amapTreeName(o.name);
       if (!camp) why = 'The campaign of this ad is not known';
       else if (keys.campCount[camp] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
-      else if (keys.adCount[camp + '\u0001' + n] > 1) why = 'Several ads in this campaign share this name — the workbook cannot tell them apart';
-      else got = amapOwn(amapOwn(data.ads, camp), n);
+      else {
+        got = amapOwn(amapOwn(data.ads, camp), n);
+        shared = keys.adCount[camp + '\u0001' + n] || 0;
+      }
       if (!got && !why) why = 'No rows for this ad in the stats workbook for these dates';
     } else {
       var cn = amapTreeName(o.name);
@@ -7307,8 +7479,21 @@ function amapFillAttribution(box, objects, data) {
       var has = text !== '';
       cell.textContent = has ? text : '—';
       cell.classList.toggle('nodata', !has);
-      cell.title = got ? 'From the stats workbook' : why;
+      cell.title = got ? (shared > 1 ? AMAP_SHARED_TIP : 'From the stats workbook') : why;
     });
+    /* Пометка — только над числами: над прочерком «общие числа» ничего не
+       значат. Стоит в мелкой строке уровня над именем («ad»), чтобы не
+       отнимать ширину у самого имени. */
+    if (got && shared > 1) {
+      var kind = line.querySelector('.amap-tree-kind');
+      if (kind) {
+        var mark = document.createElement('span');
+        mark.className = 'amap-tree-shared';
+        mark.textContent = 'shared by ' + shared + ' ads';
+        mark.title = AMAP_SHARED_TIP;
+        kind.appendChild(mark);
+      }
+    }
   });
   /* Прочерки в узкой раскладке спрятаны, и «книга не прочиталась» выглядело
      бы там ровно как «в книге нет строк» — то есть никак. Поломку говорим
@@ -7474,6 +7659,66 @@ function amapEnsureCaret(row, onToggle) {
   return caret;
 }
 
+/* ACL-1504: список кампаний не прочитан. Причина и «что делать» приходят с
+   сервера готовыми (`tree_problem` в account_spend.py) — дешборд их только
+   рисует, как и проблемы кампании (ACL-1437). Read again — та же кнопка Read
+   spend этой строки, другого пути чтения нет. Сырой текст ошибки — свёрнут
+   и уже без act= и адресов (`scrub_tree_error`). */
+/* ACL-1504 (ревью M1): Read again повторяет состояние Read spend своей
+   строки. Скопировать его один раз при рисовании мало: Read all гасит
+   `.amap-read` и потом включает обратно (`amapReadAllControls`), а дерево
+   при этом не перерисовывается — Read again оставался серым до перезагрузки.
+   Поэтому сверяем заново всякий раз, когда меняется состояние Read spend. */
+function amapRereadSync() {
+  document.querySelectorAll('.amap-tree-reread').forEach(function (again) {
+    var tree = again.closest('tr.amap-tree');
+    var row = tree && tree.previousElementSibling;
+    var read = row && row.querySelector('.amap-read');
+    again.disabled = !read || read.disabled;
+  });
+}
+
+function amapTreeNotRead(row, s, problem) {
+  var box = document.createElement('div');
+  box.className = 'amap-tree-notread';
+  var why = document.createElement('div');
+  why.className = 'amap-tree-notread-why';
+  why.textContent = problem.reason || 'The campaign list was not reached.';
+  box.appendChild(why);
+
+  var todo = document.createElement('div');
+  todo.className = 'amap-tree-notread-do';
+  todo.textContent = '→ ' + (problem.action || 'Read again.') + ' ';
+  var again = document.createElement('button');
+  again.type = 'button';
+  again.className = 'amap-btn amap-tree-reread';
+  again.textContent = 'Read again';
+  again.title = 'Read spend and campaigns for this account again';
+  var read = row.querySelector('.amap-read');
+  again.disabled = !read || read.disabled;
+  again.addEventListener('click', function () {
+    var btn = row.querySelector('.amap-read');
+    if (!btn || btn.disabled) return;
+    again.disabled = true;
+    btn.click();
+  });
+  todo.appendChild(again);
+  box.appendChild(todo);
+
+  if (s.objects_error) {
+    var tech = document.createElement('details');
+    tech.className = 'amap-tree-tech';
+    var sum = document.createElement('summary');
+    sum.textContent = 'Technical details';
+    var body = document.createElement('div');
+    body.className = 'amap-tree-tech-body';
+    body.textContent = s.objects_error;
+    tech.appendChild(sum); tech.appendChild(body);
+    box.appendChild(tech);
+  }
+  return box;
+}
+
 function amapPaintTree(row, s) {
   /* Прежний блок снимается всегда: устаревшее состояние живого аккаунта —
      худшее, что здесь можно оставить на экране. Раскрытость при этом
@@ -7493,7 +7738,16 @@ function amapPaintTree(row, s) {
   }
 
   var objects = (s && s.objects) || [];
-  if (!objects.length && !(s && s.objects_error)) {
+  /* ACL-1504: чтение не дошло до списка кампаний (сервер сказал это в
+     `objects_problem`). Тогда «0 campaigns · 0 ads» — неправда: список не
+     пустой, его просто не видели. Пишем «campaigns not read», причину одной
+     фразой, что делать, Read again и свёрнутые технические подробности;
+     прежнее удачное дерево остаётся со своей датой. */
+  var problem = (s && s.objects_problem) || null;
+  var prev = (problem && s.objects_prev && s.objects_prev.objects) || [];
+  /* `objects_read === true` при пустом списке — список прочитан и пуст:
+     тогда «0 campaigns» — правда, и её показываем (ACL-1504). */
+  if (!objects.length && !(s && s.objects_error) && !problem && !(s && s.objects_read === true)) {
     row.classList.remove('amap-tree-open');
     return;
   }
@@ -7514,7 +7768,36 @@ function amapPaintTree(row, s) {
   /* ACL-1271: дерево из чтения за другие даты говорит об этом сразу — его
      числа Meta за те даты, не за период на экране. */
   var onScreen = typeof amapPeriod === 'function' ? amapPeriod() : null;
-  if (onScreen && onScreen.from && s.date_from
+  if (problem) {
+    head.textContent = 'in the account · campaigns not read · tried ' + (s.finished_at || '');
+    head.classList.add('amap-tree-notread-head');
+    /* ACL-1504 (ревью L2): попытка за другие даты (запасное чтение ACL-1271)
+       говорит об этом и здесь — иначе её примут за попытку за даты на экране. */
+    if (onScreen && onScreen.from && s.date_from
+        && (s.date_from !== onScreen.from || (s.date_to || s.date_from) !== onScreen.to)) {
+      head.textContent += ' · for ' + s.date_from
+        + (s.date_to && s.date_to !== s.date_from ? '…' + s.date_to : '')
+        + ', not the dates on screen';
+      head.classList.add('old');
+    }
+    box.appendChild(head);
+    box.appendChild(amapTreeNotRead(row, s, problem));
+    if (prev.length) {
+      /* Прежние строки — только для чтения: их тумблер мог с тех пор
+         смениться, и выключать по ним нельзя (см. `_stale` в amapTreeLine). */
+      var p = s.objects_prev;
+      var pSets = prev.filter(function (o) { return o.level !== 'ad'; }).length;
+      head = document.createElement('div');
+      head.className = 'amap-tree-head old amap-tree-prev-head';
+      head.textContent = 'last good read · ' + pSets + ' campaigns · ' + (prev.length - pSets)
+        + ' ads · read ' + (p.at || '') + (p.date_from ? ' · Meta numbers for ' + p.date_from
+        + (p.date_to && p.date_to !== p.date_from ? '…' + p.date_to : '') : '');
+      objects = prev.map(function (o) { return Object.assign({}, o, {_stale: true}); });
+    } else {
+      head = null;
+      objects = [];
+    }
+  } else if (onScreen && onScreen.from && s.date_from
       && (s.date_from !== onScreen.from || (s.date_to || s.date_from) !== onScreen.to)) {
     /* Колонки Meta в дереве — за даты чтения, колонки книги (ACL-1256) — за
        даты на экране; говорим это прямо, иначе рядом стоят числа за разное. */
@@ -7523,7 +7806,7 @@ function amapPaintTree(row, s) {
       + ', workbook numbers for the dates on screen';
     head.classList.add('old');
   }
-  box.appendChild(head);
+  if (head) box.appendChild(head);
 
   /* Объявления встают под свою кампанию, а не общим списком следом. Порядок
      задаёт `parent_id`, который чтение знает по построению: список
@@ -7582,7 +7865,10 @@ function amapPaintTree(row, s) {
   /* Оговорка идёт по каждому уровню отдельно: кампании могут сойтись копейка
      в копейку, а объявления нет — так и было на живом аккаунте. Общая фраза
      про «строки» заставила бы усомниться и в тех, что сходятся. */
+  /* ACL-1504: у прежнего дерева другие даты, чем у спенда этого чтения, —
+     сравнивать их суммы нельзя. */
   [['campaign', 'campaigns'], ['ad', 'ads']].forEach(function (pair) {
+    if (problem) return;
     var gap = amapCoverage(objects, pair[0], s.spend);
     if (!gap) return;
     var note = document.createElement('div');
@@ -7597,7 +7883,7 @@ function amapPaintTree(row, s) {
     box.appendChild(note);
   });
 
-  if (s.objects_error) {
+  if (s.objects_error && !problem) {  // ACL-1504: при `problem` — в Technical details
     var err = document.createElement('div');
     err.className = 'amap-tree-err';
     err.textContent = s.objects_error;
@@ -8013,6 +8299,7 @@ function amapReadAllControls(busy) {
     var cell = amapSpendCell(b);
     b.disabled = busy || !b.getAttribute('onclick') || !!(cell && cell.dataset.running === '1');
   });
+  amapRereadSync();  // ACL-1504: Read again — следом за Read spend
 }
 
 async function amapReadAll(btn) {
@@ -8138,7 +8425,7 @@ function amapSpendFailed(btn, cell, why, shot, how) {
     if (split) cell.appendChild(split);
     var bad = cell.firstChild;
     bad.textContent = why.length > 40 ? why.slice(0, 39) + '…' : why;
-    bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'снимок: ' + shot : '');
+    bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'screenshot: ' + shot : '');
   }
   /* Если прицепиться не к чему, «retry» ничего не изменит: сначала нужно
      поднять профиль автоматизацией. Кнопка появляется ровно в этом случае. */
@@ -8588,6 +8875,27 @@ function amapFind(btn) {
   return amapFilter(btn.closest('.amap-add').querySelector('.amap-find'), true);
 }
 
+/* Строка для группы поставщика (acl-132). Clipboard API на localhost
+   доступен; запасной путь — скрытое поле и execCommand, если браузер
+   откажет. Ничего не отправляется: человек вставляет и жмёт Send сам. */
+async function amapCopyText(btn) {
+  var text = btn.getAttribute('data-copy') || '';
+  var done = false;
+  try { await navigator.clipboard.writeText(text); done = true; } catch (e) {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'absolute'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select();
+    try { done = document.execCommand('copy'); } catch (e2) { done = false; }
+    ta.remove();
+  }
+  /* Подпись запоминается один раз: второй клик за 1,5 с иначе запомнил бы
+     «Copied» и оставил бы её на кнопке навсегда (ревью #465). */
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+  btn.textContent = done ? 'Copied' : 'Copy failed';
+  clearTimeout(btn._amapCopyTimer);
+  btn._amapCopyTimer = setTimeout(function () { btn.textContent = btn.dataset.label; }, 1500);
+}
+
 /* Один рисовальщик на оба пути — и на кнопку, и на ввод. Две копии этой
    разметки разошлись бы, и заметил бы это тот, кто поверил не той. */
 function amapRenderHits(box, hits, profiles, inst) {
@@ -8598,25 +8906,16 @@ function amapRenderHits(box, hits, profiles, inst) {
     row.className = 'amap-hit';
     row.innerHTML = '<b>' + aclEscHtml(p.name || '(unnamed)') + '</b>'
       + '<span class="amap-hint">checking this machine…</span>';
-    /* Открыть можно до подключения. Так человек и работает: нашёл профиль,
-       открыл, посмотрел в самом кабинете что нужно, подключил. Раньше открыть
-       предлагалось только уже подключённому аккаунту, а для подключения
-       требовался номер кабинета, который знает открытый профиль. */
-    var btnOpen = document.createElement('button');
-    btnOpen.type = 'button'; btnOpen.className = 'amap-btn';
-    btnOpen.textContent = 'Open';
-    btnOpen.title = 'Start this profile in Multilogin and leave the window open';
-    btnOpen.onclick = function () {
-      if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
-      amapOpenFoundProfile(box, p, inst, btnOpen, row);
-    };
-    row.appendChild(btnOpen);
-
+    /* Одна кнопка вместо Open и Connect (ACL-1457). Номер кабинета знает
+       только профиль, открытый автоматизацией, поэтому раньше надо было нажать
+       Open, потом Connect — и именно в этом порядке. Connect сам открывает
+       профиль тем же путём и подключает. */
     var btnAdd = document.createElement('button');
     btnAdd.type = 'button'; btnAdd.className = 'amap-btn'; btnAdd.textContent = 'Connect';
+    btnAdd.title = 'Open this profile in Multilogin, read its ad account and connect it here';
     btnAdd.onclick = function () {
       if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
-      amapConnect(box, p, inst, btnAdd);
+      amapOpenAndConnect(box, p, inst, btnAdd, row);
     };
     row.appendChild(btnAdd);
     hits.appendChild(row);
@@ -8652,11 +8951,13 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
     var r = await fetch('/mlx-profile-open', { method: 'POST', body: body, credentials: 'same-origin' });
     d = await r.json();
   } catch (e) { d = { ok: false, message: String(e && e.message || e) }; }
-  btn.disabled = false;
-  if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
+  /* Кнопку не включать здесь: впереди ещё /mlx-profile-details и подключение,
+     и второе нажатие в этом окне начало бы второе открытие (ревью ACL-1457).
+     Включает её только amapOpenAndConnect, когда всё закончилось. */
+  if ((box.querySelector('.amap-inst').value || 'A') !== inst) return false;
   msg.textContent = (d && (d.message || d.error)) || '';
   msg.className = 'amap-msg' + (d && d.ok ? '' : ' bad');
-  if (!d || !d.ok) return;
+  if (!d || !d.ok) return false;
   delete p._details;
   try {
     var det = await fetch('/mlx-profile-details?profile_id=' + encodeURIComponent(p.profile_id)
@@ -8664,6 +8965,22 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
     p._details = det;
     amapHint(row, det);
   } catch (e) { /* открыть удалось — это главное; подсказка обновится позже */ }
+  return true;
+}
+
+/* Открыть и подключить одним нажатием. Неудача открытия подключение не
+   отменяет: окно, открытое руками, робот не перезапускает (так разлогинился
+   x01), и тогда номер вписывают сами или оставляют на потом. */
+async function amapOpenAndConnect(box, p, inst, btn, row) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    var opened = await amapOpenFoundProfile(box, p, inst, btn, row);
+    if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
+    await amapConnect(box, p, inst, btn, opened);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* One credential form is mounted beside the account being connected. No
@@ -8691,6 +9008,7 @@ function amapMlPaint(block) {
     state.reason === 'expired' ? 'token expired' : state.has_token ? 'token could not be verified' : 'not connected';
   line.appendChild(mark);
   if (alive && state.email) line.appendChild(document.createTextNode(' · ' + state.email));
+  if (alive && state.workspace) line.appendChild(document.createTextNode(' · workspace ' + state.workspace));
   if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
   ml.querySelector('.amap-ml-open').hidden = !state || alive;
   var signin = ml.querySelector('.amap-ml-signin');
@@ -8744,6 +9062,10 @@ async function amapMlSubmit(btn, paste) {
   var data = paste ? {token: token.value.trim(), instance: inst} : {
     email: form.querySelector('.amap-ml-email').value.trim(), password: pass.value, save_token: true, instance: inst
   };
+  /* ACL-1441: выбор рабочего пространства из пикера — тем же запросом. */
+  var picker = form.querySelector('.amap-ml-ws');
+  if (!paste && picker) data.workspace_id = picker.querySelector('select').value;
+  var keepPass = false;
   if (paste ? !data.token : !data.email || !data.password) {
     amapMlSay(block, paste ? 'Paste the token first' : 'Email and password, please', true); return;
   }
@@ -8758,6 +9080,16 @@ async function amapMlSubmit(btn, paste) {
     });
     var j = await response.json();
     if (!response.ok || !j || !j.ok) throw new Error((j && j.error) || 'Connection failed');
+    /* ACL-1441: у логина несколько пространств, и какое с профилями — знает
+       человек. Пароль остаётся в поле до выбора (на сервере он не хранится),
+       Continue шлёт тот же вход с workspace_id. С выбранным не вышло — пикер
+       остаётся с причиной, чтобы выбрать другое. */
+    if (!paste && !j.token_saved && j.workspaces && j.workspaces.length > 1) {
+      amapMlWorkspacePicker(form, j.workspaces, data.workspace_id);
+      keepPass = true;
+      amapMlSay(block, j.token_error || 'This login has several Multilogin workspaces — choose the one with your profiles.', !!j.token_error);
+      return;
+    }
     if (!paste && !j.token_saved) throw new Error(j.token_error || 'Signed in, but no automation token was saved. Ask the workspace owner for a token.');
     /* A new workspace token invalidates both cached profiles and in-flight
        results. Ключ кэша теперь «инстанс + набранное», поэтому чистим ВСЕ
@@ -8779,17 +9111,44 @@ async function amapMlSubmit(btn, paste) {
     token.value = '';
     amapMlSay(block, 'Token saved; checking connection…');
     var state = await amapMlRefresh(inst, true);
-    amapMlSay(block, state && state.alive ? 'Connected. Reload to search profiles.' :
+    amapMlSay(block, state && state.alive ? 'Connected' + (j.workspace ? ' to workspace ' + j.workspace : '') + '. Reload to search profiles.' :
       'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
   } catch (e) { amapMlSay(block, String(e.message || e), true); }
   finally {
-    pass.value = '';
+    if (!keepPass) pass.value = '';
     delete form.dataset.busy;
     selector.disabled = false;
     form.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
   }
 }
 function amapMlSignin(btn) { return amapMlSubmit(btn, false); }
+/* ACL-1441: пикер пространства — имя и роль; без автоматизации видно сразу. */
+function amapMlWorkspacePicker(form, workspaces, chosen) {
+  var box = form.querySelector('.amap-ml-ws');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'amap-ml-ws';
+    var label = document.createElement('span');
+    label.textContent = 'Workspace: ';
+    var sel = document.createElement('select');
+    var go = document.createElement('button');
+    go.type = 'button'; go.className = 'amap-btn'; go.textContent = 'Continue';
+    go.onclick = function () { amapMlSubmit(go, false); };
+    box.append(label, sel, go);
+    form.appendChild(box);
+  }
+  var select = box.querySelector('select');
+  select.replaceChildren();
+  workspaces.forEach(function (w) {
+    var o = document.createElement('option');
+    o.value = w.workspace_id;
+    o.textContent = w.name + ' \u2014 ' + (w.role || 'member') + (w.automation === false ? ' \u00b7 no automation' : '');
+    select.appendChild(o);
+  });
+  var pick = chosen && workspaces.some(function (w) { return w.workspace_id === chosen && w.automation !== false; })
+    ? chosen : ((workspaces.filter(function (w) { return w.automation !== false; })[0] || workspaces[0]).workspace_id);
+  select.value = pick;
+}
 function amapMlSaveToken(btn) { return amapMlSubmit(btn, true); }
 function amapMlBoot() {
   var wanted = {};
@@ -8806,7 +9165,7 @@ function amapHint(row, d) {
   else hint.textContent = 'never opened here — the ad account will be read from it';
 }
 
-async function amapConnect(box, profile, instance, btn) {
+async function amapConnect(box, profile, instance, btn, opened) {
   var country = box.getAttribute('data-amap-country');
   var msg = box.querySelector('.amap-msg');
   var d = profile._details || {};
@@ -8856,9 +9215,10 @@ async function amapConnect(box, profile, instance, btn) {
          впервые видит новый профиль: номер знает открытый профиль, а открыть
          его дешборд соглашался только у подключённого аккаунта. */
       head = 'Could not read it from the profile:\n' + ((found && found.error) || 'unknown')
-        + '\n\nPress Open next to the profile and try again, paste the Ads Manager '
-        + 'link or the account number — or leave this empty to connect now and '
-        + 'fill the number in later:';
+        + (opened === false ? '\n\nThe profile did not open with automation. If its window '
+            + 'is open by hand, close it in Multilogin and press Connect again.' : '')
+        + '\n\nPaste the Ads Manager link or the account number — or leave this '
+        + 'empty to connect now and fill the number in later:';
       seed = '';
     }
     var typed = prompt(head, seed);
@@ -9764,13 +10124,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var vidRadio = row.querySelector('input[type="radio"][value="Video"]');
       var isVideo = !!(vidRadio && vidRadio.checked);
 
-      var media;
+      var media, story = '';
       if (fileVal) {
         var cr = CREATIVES.find(function(f) {
           return f.filename === fileVal || f.rel_path === fileVal;
         });
         var path = cr ? (cr.rel_path || cr.filename) : fileVal;
         var url = '/creative-file?path=' + encodeURIComponent(path);
+        // ACL-1426: what the robot puts on the Vertical (story) card.
+        if (cr && cr.story_label) {
+          story = cr.story_label + (cr.square_file ? ' · Post: ' + cr.square_file : '');
+        }
         if (isVideo || (cr && cr.type === 'Video') || /\.(mp4|mov|webm)$/i.test(path)) {
           media = '<video class="cbp-media" src="' + cbpEsc(url) + '" preload="metadata" muted controls></video>';
         } else {
@@ -9791,6 +10155,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       cards.push(
         '<div class="cbp-item">' +
         '<div class="cbp-adlabel">Ad ' + (i + 1) + '</div>' +
+        (story ? '<div class="cbp-story" data-cbp-story style="font-size:0.7rem;opacity:0.75">' + cbpEsc(story) + '</div>' : '') +
         '<div class="cbp-card">' +
           '<div class="cbp-head"><span class="cbp-avatar"></span>' +
             '<span><div class="cbp-pagename">Page name</div><div class="cbp-sub">Sponsored</div></span></div>' +
@@ -10296,7 +10661,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return '<div class="cb-ad-row" data-ad-idx="' + aIdx + '">' +
       '<div class="cb-ad-row-header">' +
       '<span class="cb-ad-row-label">Ad ' + (aIdx + 1) + '</span>' +
-      '<button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">⧉</button>' +
+      '<button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">Duplicate</button>' +
       '<button type="button" class="cb-remove-ad-btn" onclick="cbRemoveAd(this)" title="Remove ad">×</button>' +
       '</div>' +
       '<div class="cb-ad-fields">' +
@@ -10426,6 +10791,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // right under its source and the slots renumber. It used to be one
   // form-bottom button that silently took the last slot — with several
   // campaigns on screen nothing said which one it meant (acl-706).
+  /* Кнопка в карточке. В ящике копию надо ещё и раскрыть — этим заведует
+     ящик; на странице страны достаточно самой копии. */
+  window.cbDuplicateCampaign = function(btn) {
+    var slot = btn.closest('.cb-slot');
+    if (slot && btn.closest('.cbd-host') && window.cbdDuplicateOpen) return window.cbdDuplicateOpen(slot);
+    return window.cbDuplicateSlot(btn);
+  };
+
   window.cbDuplicateSlot = function(btn) {
     var srcSlot = btn.closest('.cb-slot');
     var form = btn.closest('form');
@@ -10609,7 +10982,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return '<div class="cb-slot" data-idx="' + idx + '">' +
       '<div class="cb-slot-header">' +
       '<span class="cb-slot-label">Campaign ' + (idx + 1) + '</span>' +
-      '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateSlot(this)" title="Duplicate this campaign (including its ads)">⧉</button>' +
       '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>' +
       '</div>' +
       '<div class="cb-slot-name" data-name-display></div>' +
@@ -10643,8 +11015,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-ads-divider">Ads</div>' +
       '<div class="cb-ad-rows">' + buildAdRowHTML(idx, 0) + '</div>' +
       '<input type="hidden" name="camp_' + idx + '_ad_count" class="cb-ad-count" value="1">' +
-      '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Add ad</button>' +
+      '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Ad</button>' +
       '</div>' +
+      /* Дублирование кампании — внутри её карточки, под объявлениями
+         (ACL-1459): раньше значок в шапке, которую ящик прячет, и запасная
+         кнопка внизу ящика, вдали от того, что она копирует. */
+      '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateCampaign(this)" title="Duplicate this campaign with its ads">⧉ Duplicate campaign</button>' +
       '</div>' +
       '<div class="cb-preview-col" data-preview-col></div>' +
       '</div>' +
@@ -11440,8 +11816,8 @@ window.cbPublishAll = function (onProgress, picked) {
     + 'as many at once as this computer has memory for; the rest wait as queued and start on their own. '
     + 'Two jobs on one profile queue. '
     + 'A campaign whose preview shows an error is skipped; the rest of its account still go.</span><br>'
-    + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
-    + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
+    + '<span style="color:var(--warn);font-size:0.85rem">Do not lock the screen while the build runs — '
+    + 'creative uploads stall on a locked screen.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook</span>',
     function () {
@@ -12154,16 +12530,16 @@ window.cbTrackingWarning = function(form) {
   var pf = (typeof ACCOUNT_PREFLIGHT !== 'undefined' && ACCOUNT_PREFLIGHT[acc]) || {};
   var saved = (pf.link || '').trim();
 
-  if (!typed) return { field: input, text: 'Трекинговой ссылки нет. Кампания соберётся, но клики считать будет нечем.' };
+  if (!typed) return { field: input, text: 'No tracking link. The campaign will build, but clicks will not be counted.' };
   if (typed !== saved) {
-    return { field: input, text: 'Ссылка не сохранена для следующих сборок — нажмите Save. В этой сборке будет использована: '
+    return { field: input, text: 'The link is not saved for future builds — press Save. This build will use: '
       + typed + '.' };
   }
   if (pf.link_status === 'jira') {
-    return { field: input, text: 'В поле адрес задачи Jira, а не трекер. Клики по нему не считаются.' };
+    return { field: input, text: 'This is a Jira task link, not a tracker. Clicks on it are not counted.' };
   }
   if (pf.link_status !== 'tracking') {
-    return { field: input, text: 'Ссылка не похожа на трекинговую. Проверьте её перед сборкой.' };
+    return { field: input, text: 'This does not look like a tracking link. Check it before building.' };
   }
   return null;
 };
@@ -12281,8 +12657,8 @@ window.cbPublish = function(form) {
     // загрузка встаёт. 10 сентября так вышло 42 минуты на файл, который
     // соседнее объявление приняло за 74 секунды. Снять блокировку мы не
     // можем — это настройка машины; сказать о ней вовремя можем.
-    + '<span style="color:var(--warn);font-size:0.85rem">Не блокируйте экран, пока идёт сборка — '
-    + 'на заблокированном экране загрузка креативов встаёт.</span><br><br>'
+    + '<span style="color:var(--warn);font-size:0.85rem">Do not lock the screen while the build runs — '
+    + 'creative uploads stall on a locked screen.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
 
@@ -12307,15 +12683,15 @@ window.cbPublish = function(form) {
   if (warn) {
     window.cbHighlightField(warn.field);
     bodyHtml = '<div class="cb-warn-block">⚠ ' + aclEscHtml(warn.text)
-      + '<br><span style="opacity:.75">Собрать всё равно можно — ссылку добавляют и позже.</span></div>'
+      + '<br><span style="opacity:.75">You can still build — the link can be added later.</span></div>'
       + bodyHtml;
   }
 
   if (lostTargeting.length) {
     var names = lostTargeting.map(aclEscHtml).join(', ');
-    bodyHtml = '<div class="cb-warn-block">⚠ Таргетинг не выбран: <b>' + names + '</b>'
-      + '<br><span style="opacity:.75">Набранное не совпало ни с одним кодом. Кампания уйдёт '
-      + 'без детального таргетинга, а имя всё равно будет с этим словом — выберите строку из списка.</span></div>'
+    bodyHtml = '<div class="cb-warn-block">⚠ Targeting not selected: <b>' + names + '</b>'
+      + '<br><span style="opacity:.75">What you typed matches no code. The campaign will go '
+      + 'without detailed targeting, yet its name will still carry this word — pick a row from the list.</span></div>'
       + bodyHtml;
   }
 
@@ -12325,7 +12701,7 @@ window.cbPublish = function(form) {
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     }
     else _doCbPublish(form);
-  }, { confirmLabel: (warn || lostTargeting.length) ? 'Собрать с предупреждением' : 'Publish → draft' });
+  }, { confirmLabel: (warn || lostTargeting.length) ? 'Build anyway' : 'Publish → draft' });
 };
 
 // Весь аккаунт без превью — кнопка Publish на странице страны. Идёт через
@@ -12337,6 +12713,150 @@ function _doCbPublish(form) {
   if (!run) return;
   var got = run.direct(form, cbCollectFormData(form));
   if (got.skipped.length) cbSayAlreadyBuilding(got.skipped);
+}
+
+// ACL-1437: часть `r.error`, которой нет в списке проблем ('' — нечего
+// добавить). Абзац «DO NOT PUBLISH AS IS … Check the draft in Ads Manager
+// first.» (ads_manager_flow) и заметки хэндоффа (rpa_publisher) — повтор.
+function cbErrorBeyondProblems(err) {
+  var s = String(err || '');
+  var head = 'DO NOT PUBLISH AS IS';
+  var tail = 'Check the draft in Ads Manager first.';
+  var i = s.indexOf(head);
+  if (i !== -1) {
+    var end = s.indexOf(tail, i);
+    s = s.slice(0, i) + (end === -1 ? '' : s.slice(end + tail.length));
+  }
+  [
+    'Browser left open for manual review; this draft is NOT publishable.',
+    'Draft ready — browser left open, Meta Publish was not clicked'
+  ].forEach(function(note) { s = s.split(note).join(''); });
+  return s.replace(/^[\s|]+|[\s|]+$/g, '');
+}
+
+// Метки режима обучения по шагам: «ждёт клика Website» / «локатор снят».
+// '' — меток нет. Одна функция для старой и новой отрисовки (ревью F3).
+function cbTeachMarkerHtml(steps, cls) {
+  steps = steps || [];
+  var waiting = steps.indexOf('teach_mode_website_waiting') !== -1
+    && steps.indexOf('conversion_location_website_teach') === -1
+    && steps.indexOf('teach_mode_website_still_failed') === -1;
+  var captured = steps.indexOf('teach_website_captured') !== -1;
+  var c = cls ? ' class="' + cls + '"' : '';
+  var tag = cls ? 'div' : 'span';
+  if (waiting) return ' <' + tag + c + ' style="color:#3b82f6;font-weight:600">⏸ waiting for a Website click</' + tag + '>';
+  if (captured) return ' <' + tag + c + ' style="color:#22c55e">✓ Website locator captured</' + tag + '>';
+  return '';
+}
+
+// ACL-1437: проблемы кампании — заголовок с вердиктом, число, пронумерованный
+// список (что сломалось, чем грозит, «→ что делать») и свёрнутые технические
+// подробности. Данные — `r.problems` от робота (failure_policy.problems);
+// дешборд их только рисует. '' — старая запись без списка или чистый итог:
+// тогда работает прежний текстовый вывод.
+function cbProblemsHtml(r) {
+  var items = r && Array.isArray(r.problems) ? r.problems : null;
+  if (!items || !items.length) return '';
+  var nBlock = items.filter(function(p) { return p.severity !== 'warning'; }).length;
+  var nWarn = items.length - nBlock;
+  var built = r.success === true;
+  var verdict = !built ? ['❌', 'not built', 'blocking']
+    : (nBlock ? ['⛔', 'do not publish as is', 'blocking']
+      : ['⚠️', 'ready to publish (with warnings)', 'warning']);
+  var plural = function(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); };
+  var counts = [];
+  if (nBlock) counts.push(plural(nBlock, 'problem'));
+  if (nWarn) counts.push(plural(nWarn, 'warning'));
+  counts.push(built ? 'draft saved, browser left open' : 'no complete draft, check Ads Manager');
+  var h = '<div class="cb-problems cb-problems--' + verdict[2] + '">'
+    + '<div class="cb-problems-head">' + verdict[0] + ' '
+    + aclEscHtml(r.campaign_name || '?') + ' — ' + verdict[1] + '</div>'
+    + '<div class="cb-problems-sub">' + counts.join(' · ') + '</div><ol>';
+  items.forEach(function(p) {
+    var sev = p.severity === 'warning' ? 'warning' : 'blocking';
+    var title = String(p.title || p.step || '?');
+    if (p.ad_index) {
+      title += ' — ad ' + p.ad_index + (p.ad_name ? ' "' + p.ad_name + '"' : '');
+    }
+    h += '<li class="cb-problem cb-problem--' + sev + '">'
+      + '<div class="cb-problem-title">' + aclEscHtml(title) + '</div>'
+      + (p.impact ? '<div class="cb-problem-impact">' + aclEscHtml(p.impact) + '</div>' : '')
+      + (p.action ? '<div class="cb-problem-action">→ ' + aclEscHtml(p.action) + '</div>' : '')
+      + '</li>';
+  });
+  h += '</ol>';
+  h += cbTeachMarkerHtml(r.steps_completed, 'cb-problems-teach');
+  var tech = [];
+  // ACL-1437 (ревью F2): в `error` бывает то, чего нет в списке — подробность
+  // остановки профиля, «Recorded flow failed at: …», текст исключения.
+  // Стандартный абзац «DO NOT PUBLISH AS IS» и заметку хэндоффа выкидываем:
+  // они повторяют список.
+  var extraError = cbErrorBeyondProblems(r.error);
+  if (extraError) {
+    tech.push('<div class="cb-problems-error">error: ' + aclEscHtml(extraError) + '</div>');
+  }
+  items.forEach(function(p) {
+    tech.push('<div>' + aclEscHtml(p.raw || p.step || '') + '</div>');
+  });
+  if (r.run_id) tech.push('<div>run id: ' + aclEscHtml(r.run_id) + '</div>');
+  if (r.campaign_id) tech.push('<div>campaign_id: ' + aclEscHtml(r.campaign_id) + '</div>');
+  (r.screenshots || []).forEach(function(s) {
+    tech.push('<div>capture: ' + aclEscHtml(s) + '</div>');
+  });
+  if (r.steps_completed && r.steps_completed.length) {
+    tech.push('<div>steps: ' + r.steps_completed.map(aclEscHtml).join(' → ') + '</div>');
+  }
+  h += '<details class="cb-problems-tech"><summary>Technical details '
+    + '<span>(step codes, run id)</span></summary>'
+    + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
+  return h + '</div>';
+}
+
+// ACL-1444: «Close profile» на панели закончившегося задания. Чистое задание
+// закрывает профиль само; остальные окна (есть что проверить) человек
+// закрывает отсюда. Сервер закрывает мягко, через MLX API, и отказывает
+// (409), пока на профиле идёт работа. Кнопки нет, пока задание идёт и когда
+// профиль уже закрыт (`job.profile_closed`).
+function cbCloseProfileHtml(job) {
+  if (!job || job.profile_closed) return '';
+  return '<div class="cb-close-profile">'
+    + '<button type="button" class="cb-close-profile-btn">Close profile</button>'
+    + '<span class="cb-close-profile-msg">closes the Multilogin window of this account to free memory (also a window opened by hand)</span>'
+    + '</div>';
+}
+
+function cbBindCloseProfile(panel, jobId) {
+  var btn = panel && panel.querySelector('.cb-close-profile-btn');
+  if (!btn || btn._bound) return;
+  btn._bound = true;
+  var msg = panel.querySelector('.cb-close-profile-msg');
+  function say(text, bad) {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.classList.toggle('cb-close-profile-bad', !!bad);
+  }
+  btn.addEventListener('click', function() {
+    btn.disabled = true;
+    btn.textContent = 'Closing…';
+    say('');
+    fetch('/publish-jobs/' + encodeURIComponent(jobId) + '/close-profile', { method: 'POST' })
+      .then(function(r) { return r.json().catch(function() { return { ok: false, error: 'HTTP ' + r.status }; }); })
+      .then(function(data) {
+        if (data && data.ok) {
+          btn.textContent = '✓ Profile closed';
+          say('the Multilogin window is closed');
+        } else {
+          btn.textContent = 'Close profile';
+          btn.disabled = false;
+          say((data && data.error) || 'Could not close the profile', true);
+        }
+      })
+      .catch(function(e) {
+        btn.textContent = 'Close profile';
+        btn.disabled = false;
+        say(e.message, true);
+      });
+  });
 }
 
 // `done` — необязательный: зовётся один раз, когда работа кончилась любым
@@ -12376,9 +12896,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';
     // An observed lock is context, not proof that it caused every failure.
     if (job.screen_was_locked === true && !jobPublishable && job.status === 'done') {
-      html += '<div class="cb-status-cause">🔒 Во время сборки экран был заблокирован. '
-        + 'Это могло замедлить или остановить загрузку. Проверьте ошибки ниже '
-        + 'и состояние черновика в Ads Manager перед повтором.</div>';
+      html += '<div class="cb-status-cause">🔒 The screen was locked during the build. '
+        + 'This may have slowed or stopped the uploads. Check the errors below '
+        + 'and the draft in Ads Manager before retrying.</div>';
     }
     if (isRunning && !isCancelling) {
       html += '<div style="margin:0.5rem 0">'
@@ -12393,6 +12913,10 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       html += '<div class="cb-status-cause">' + aclEscHtml(note) + '</div>';
     });
     (job.results || []).forEach(function(r) {
+      // ACL-1437: a result with a structured problem list renders as one
+      // block; older records (no `problems`) keep the text rendering below.
+      var structured = cbProblemsHtml(r);
+      if (structured) { html += structured; return; }
       // Three states, not two. `success` only says the automation reached the
       // end and a draft exists; `publishable` says a human may send it out.
       // This used to pick the checkmark from `success` alone and then render
@@ -12431,13 +12955,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       }
       if (r.steps_completed && r.steps_completed.length) {
         var stepsHtml = r.steps_completed.map(aclEscHtml).join(' → ');
-        var teachWaiting = r.steps_completed.indexOf('teach_mode_website_waiting') !== -1
-          && r.steps_completed.indexOf('conversion_location_website_teach') === -1
-          && r.steps_completed.indexOf('teach_mode_website_still_failed') === -1;
-        var teachCapture = r.steps_completed.indexOf('teach_website_captured') !== -1;
-        var extra = teachWaiting
-          ? ' <span style="color:#3b82f6;font-weight:600">⏸ waiting for a Website click</span>'
-          : (teachCapture ? ' <span style="color:#22c55e">✓ Website locator captured</span>' : '');
+        var extra = cbTeachMarkerHtml(r.steps_completed, '');
         html += '<div class="cb-status-steps" style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem">'
           + 'Steps: ' + stepsHtml + extra + '</div>';
       }
@@ -12445,6 +12963,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     (job.errors || []).forEach(function(e) {
       html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e) + '</div>';
     });
+    if (!isRunning) html += cbCloseProfileHtml(job);
     return html;
   }
 
@@ -12542,6 +13061,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         if (job === null) return;
         statusPanel.innerHTML = renderStatus(job);
         bindStopButton();
+        cbBindCloseProfile(statusPanel, jobId);
         if (onTick) { try { onTick(job); } catch (e) { /* список очереди подождёт */ } }
         if (!scrolledToStatus) {
           scrolledToStatus = true;
@@ -13314,7 +13834,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   function el(id) { return document.getElementById(id); }
   function say(text, error) { el('mp-msg').textContent = text || ''; el('mp-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
   function show(d) {
-    loaded = {stats: d.stats_workbook || '', creatives: d.creatives_folder || ''};
+    loaded = {stats: d.stats_workbook || '', creatives: d.creatives_folder || '', manager: d.manager_name || ''};
+    el('mp-manager').value = loaded.manager;
     el('mp-stats').value = loaded.stats;
     el('mp-creatives').value = loaded.creatives;
     var missing = [];
@@ -13334,6 +13855,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var body = {};
     if (el('mp-stats').value !== loaded.stats) body.stats_workbook = el('mp-stats').value;
     if (el('mp-creatives').value !== loaded.creatives) body.creatives_folder = el('mp-creatives').value;
+    if (el('mp-manager').value !== loaded.manager) body.manager_name = el('mp-manager').value;
     if (!Object.keys(body).length) { say('Nothing changed.'); return; }
     pending = true; el('mp-save').disabled = true; say('Saving…');
     try {
