@@ -4,10 +4,13 @@ Code is updated/re-cloned; account maps, tokens and operator settings are not.
 All writers therefore target the OS-local ACL directory and use atomic file
 replacement.  Checkout-local files are read only as a one-time legacy source.
 """
+import contextlib
 import csv
+import errno
 import io
 import json
 import os
+import random
 import re
 import shutil
 import time
@@ -153,6 +156,92 @@ def _replace_when_free(temp: Path, target: Path) -> None:
             if attempt == _REPLACE_ATTEMPTS - 1:
                 raise
             time.sleep(_REPLACE_PAUSE)
+
+
+#: ACL-1495: межпроцессный замок для машинных файлов (спрятанные аккаунты,
+#: реестр таргетов).
+#:
+#: Прежний шаблон падал под нагрузкой двумя способами:
+#:
+#: * `msvcrt.locking(LK_LOCK)` — это не «ждать сколько нужно», а десять
+#:   попыток раз в секунду, после чего EDEADLK («Resource deadlock
+#:   avoided»). Взаимной блокировки нет — просто очередь длиннее десяти
+#:   секунд. Здесь ждём сами: неблокирующая попытка в цикле, EDEADLK/EACCES
+#:   — повод попробовать снова, предел — `_LOCK_TIMEOUT`.
+#: * Первое использование: файл открывали в `a+b` и, увидев пустой, писали
+#:   туда `b"0"`. Если байт 0 уже держит соседний процесс, запись в
+#:   заблокированную область падает PermissionError на flush. Содержимое
+#:   замку не нужно: Windows разрешает блокировать байт за концом файла,
+#:   `flock` байтов не знает вовсе. Поэтому файл создаётся одним атомарным
+#:   `os.open(O_CREAT)` и не пишется никогда.
+_LOCK_TIMEOUT = 120.0
+_LOCK_PAUSE_MIN = 0.005
+_LOCK_PAUSE_MAX = 0.1
+_LOCK_RETRY_ERRNOS = frozenset(
+    e for e in (errno.EACCES, errno.EAGAIN, errno.EDEADLK, getattr(errno, "EWOULDBLOCK", None),
+                errno.EINTR)
+    if e is not None
+)
+
+
+def _try_lock(fd: int) -> bool:
+    """Одна неблокирующая попытка. False — замок занят, пробовать ещё."""
+    try:
+        if os.name == "nt":
+            import msvcrt
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError as exc:
+        if exc.errno in _LOCK_RETRY_ERRNOS:
+            return False
+        raise
+
+
+def _unlock(fd: int) -> None:
+    if os.name == "nt":
+        import msvcrt
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def machine_file_lock(lock_path: str | Path, timeout: float | None = None):
+    """Эксклюзивный замок между процессами этой машины на время блока.
+
+    Ждёт с растущей паузой (5 мс → 100 мс, с разбросом, чтобы очередь не
+    шагала в ногу) не дольше `timeout` (по умолчанию `_LOCK_TIMEOUT`), затем
+    бросает TimeoutError. Внутрипроцессную очередь потоков вызывающий держит
+    сам (RLock модуля) — этот замок про соседние процессы.
+    """
+    path = Path(lock_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Создать-или-открыть — одна атомарная операция ОС; в файл не пишем.
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o666)
+    try:
+        limit = _LOCK_TIMEOUT if timeout is None else timeout
+        deadline = time.monotonic() + limit
+        pause = _LOCK_PAUSE_MIN
+        while not _try_lock(fd):
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError(
+                    f"Another ACL process kept {path.name} busy for {limit:g} s; try again."
+                )
+            time.sleep(min(left, pause * random.uniform(0.5, 1.5)))
+            pause = min(pause * 2, _LOCK_PAUSE_MAX)
+        try:
+            yield
+        finally:
+            _unlock(fd)
+    finally:
+        os.close(fd)
 
 
 def _atomic_write(path: str | Path, data: bytes) -> None:
