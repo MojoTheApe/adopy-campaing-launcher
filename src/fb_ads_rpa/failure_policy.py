@@ -463,6 +463,37 @@ _PER_AD_NAME = re.compile(
 )
 
 
+# ── Per-ad details that change the explanation, not the verdict ────────────
+#
+# (per-ad step, reason at the start of the note) -> (why, title, impact, action).
+# ACL-1543: `<tag>_destination:instant_form_not_switched - <ad>: ...` — Meta kept
+# the ad on "Instant form (suggested)"; still BLOCKING, but the operator reads
+# that it is Instant form, not a generic "destination not verified".
+PER_AD_DETAIL: dict[tuple[str, str], tuple[str, str, str, str]] = {
+    ("destination", "instant_form_not_switched"): (
+        "Meta kept the ad on Instant form (suggested) and the robot could not switch it "
+        "back to Website, so the website URL is not set; the robot never accepts Lead Ads "
+        "Terms or creates an instant form",
+        "Ad destination - Instant form",
+        "Meta kept this ad on Instant form (suggested); the website URL is not set.",
+        "Open the ad, select Website (Browser add-ons: None) and enter the URL. "
+        "Do not accept Lead Ads Terms or create a form for it.",
+    ),
+}
+
+
+def _detail(failure: str) -> tuple[str, str, str, str] | None:
+    raw = str(failure or "")
+    per_ad = _PER_AD_NAME.fullmatch(base_name(raw))
+    if not per_ad or ":" not in raw:
+        return None
+    note = raw.split(":", 1)[1].strip()
+    for (step, why), entry in PER_AD_DETAIL.items():
+        if per_ad.group(1) == step and (note == why or note.startswith(why + " ")):
+            return entry
+    return None
+
+
 def _lookup(name: str) -> tuple[str, str] | None:
     known = POLICY.get(name)
     if known:
@@ -497,6 +528,9 @@ def severity(failure: str) -> str:
 def reason(failure: str) -> str:
     """Why this failure has the severity it has — for the operator, not a log."""
     name = base_name(failure)
+    detail = _detail(failure)
+    if detail:
+        return detail[0]
     known = _lookup(name)
     if known:
         return known[1]
@@ -577,6 +611,9 @@ def problem(failure: str) -> dict:
         label = (found.group("name") or found.group("name2") or "").strip() if found else ""
         if label and not _TAG_ONLY.match(label):
             ad_name = label
+    detail = _detail(raw)
+    if detail:
+        guide = detail[1:]
     title, impact, action = guide
     return {
         "step": name,

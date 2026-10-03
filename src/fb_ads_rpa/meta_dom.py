@@ -2096,6 +2096,7 @@ def _drop_cdp_input_session(page: Page) -> None:
 _PRESS_GUARD_JS = r"""([x, y, token, strict]) => {
   const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
   const pub = /^(publish|review and publish( \(\d+\))?|publicar|revisar y publicar)$/i;
+  const leadTerms = /^(view terms|accept|accept terms|i accept|create form|create new form)$/i;
   const target = token ? document.querySelector('[data-acl-press-target="' + token + '"]') : null;
   if (target) target.removeAttribute('data-acl-press-target');
   const at = document.elementFromPoint(x, y);
@@ -2112,6 +2113,16 @@ _PRESS_GUARD_JS = r"""([x, y, token, strict]) => {
     // содержит, но её текст длинный.
     if (n.querySelector('[data-surface*="syd_simple_create_publish"]') && norm(n.textContent).length < 400) {
       return {ok: false, why: 'editor_footer'};
+    }
+    // ACL-1543: условия Lead Ads принимает человек, форму робот не создаёт —
+    // карточка Instant form add-on (View terms / Close / Create form) и
+    // кнопки условий не нажимаются никогда.
+    if (surface.indexOf('pce_website_extension_instant_form_field') !== -1) {
+      return {ok: false, why: 'lead_terms'};
+    }
+    if (n.matches('button, [role=button], a, [role=link]')
+        && leadTerms.test(norm(n.textContent) || norm(n.getAttribute('aria-label')))) {
+      return {ok: false, why: 'lead_terms'};
     }
   }
   if (strict && target && target.isConnected && !(target.contains(at) || at.contains(target))) {
@@ -5999,7 +6010,7 @@ def run_recorded_campaign_flow(
                     # ACL-1371: причина — в note строки (a90d704c892a: «silent»).
                     _shot("fail_ad_destination", last_destination_diag(),
                           note=last_destination_why() or "destination_not_set")
-                    ad_level_fails.append("ad_destination")
+                    ad_level_fails.append(destination_soft_fail("ad", ad_name or "ad 1"))
                 else:
                     _shot("after_ad_destination")
             except Exception as exc:
@@ -6233,7 +6244,7 @@ def run_recorded_campaign_flow(
                             if not set_ad_destination_website(page, destination_url):
                                 _shot(f"fail_{tag}_destination", last_destination_diag(),
                                       note=last_destination_why() or "destination_not_set")
-                                ad_level_fails.append(f"{tag}_destination")
+                                ad_level_fails.append(destination_soft_fail(tag, extra_name or tag))
                             else:
                                 _shot(f"after_{tag}_destination")
                         except Exception as exc:
@@ -14034,7 +14045,11 @@ def destination_url_box(page: Page):
 # сказать. Теперь каждый выход шага называет себя (`last_destination_why`), и
 # строка `fail_ad_destination` несёт это имя в note.
 
-_last_destination: dict = {"why": "", "diag": {}}
+_last_destination: dict = {"why": "", "diag": {}, "instant_form": {}}
+
+#: ACL-1543: Meta оставила объявление на Instant form (add-on «Instant form
+#: (suggested)» или переключатель «Instant form»), вернуть Website не вышло.
+INSTANT_FORM_NOT_SWITCHED = "instant_form_not_switched"
 
 #: Причины, которые говорят о поле/переключателях внутри Website. Если тип
 #: назначения при этом не Website или раздела нет вовсе — причина в этом.
@@ -14072,11 +14087,15 @@ _DESTINATION_STATE_JS = r"""([want, full]) => {
     const v = (fields[0].value || '').trim();
     url = !v ? 'empty' : (v === (want || '').trim() ? 'match' : 'other');
   }
+  // ACL-1543: переключатель «Instant form» (opt-in) нового редактора.
+  const sw = sec.querySelector('[data-surface$="/pce_lead_gen_instant_form_opt_in_field"] [role=switch], '
+    + '[data-surface$="/pce_lead_gen_instant_form_opt_in_field"] input[type=checkbox]');
   const out = {
     section: true,
     section_shown: seen(sec),
     dest_type: typeOn ? (typeOn.getAttribute('value') || 'unnamed') : '',
     addon: addonOn ? (addonOn.getAttribute('value') || 'unnamed') : '',
+    opt_in: sw ? (on(sw) ? 'on' : 'off') : '',
     url_fields: fields.length,
     url: url,
   };
@@ -14158,11 +14177,18 @@ def _destination_failed(page: Page, why: str, destination_url: str = "", **extra
                 why = "destination_section_missing"
             elif kind and kind != "external":
                 why = "destination_not_website"
+            elif state.get("addon") == "instant_form" or state.get("opt_in") == "on":
+                # ACL-1543: поле/add-ons не встали, а Instant form так и
+                # включён — причина в нём, а не в «поле без фокуса».
+                extra = {"field_why": why, **extra}
+                why = INSTANT_FORM_NOT_SWITCHED
             elif why == "url_field_missing" and int(state.get("url_fields") or 0) > 1:
                 why = "url_field_duplicated"
             elif why == "url_field_missing" and state.get("section_shown") is False:
                 why = "destination_section_hidden"
     diag = {**state, **extra}
+    if _last_destination.get("instant_form"):
+        diag.update(_last_destination["instant_form"])
     _last_destination.update(why=why, diag=diag)
     return False
 
@@ -14253,6 +14279,163 @@ def _ensure_destination_website(page: Page) -> tuple[str, dict]:
     return _stop("destination_not_website")
 
 
+# ── ACL-1543: раздел за виртуализацией и Instant form ─────────────────────
+#
+# 04509d5eed75 (03.10, 1443, ad 1) и 0e86c42023da (ad 2): `url_field_not_focused`
+# при `addon: instant_form`, `section_shown: false`, `url_fields: 0`. В снимке
+# раздел `#adgroupAdDestinationGeneric` — `display: none !important` внутри
+# обёртки Meta `data-virtualized="true"` (min-height держит место); так спрятан
+# каждый раздел объявления, который не на экране. Робот снимал `display: none`
+# один раз в начале шага, но пока обёртка вне экрана, Meta прячет раздел
+# заново при следующей перерисовке — к нажатию на поле URL у него не было
+# прямоугольника, фокус не встал. Невидимыми были и Browser add-ons:
+# `browser_addon_repair` их не нашёл (`none_checked: null`). Теперь раздел
+# сперва прокручивается на экран (обёртка — `scrollIntoView`), затем Instant
+# form выключается (add-on «None», переключатель opt-in), и только потом поле.
+# «View terms», «Create form», «Close» карточки условий Lead Ads робот не
+# нажимает никогда (`_PRESS_GUARD_JS`: `lead_terms`).
+
+_SHOW_DESTINATION_JS = r"""() => {
+  const sec = document.getElementById('adgroupAdDestinationGeneric');
+  if (!sec) return null;
+  const wrap = sec.closest('[data-virtualized]') || sec.parentElement || sec;
+  wrap.scrollIntoView({block: 'start', behavior: 'instant'});
+  sec.style.setProperty('display', 'block', 'important');
+  const r = sec.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}"""
+
+
+def _show_destination_section(page: Page) -> bool | None:
+    """Раздел Destination на экране и не спрятан; None — раздела нет / не прочитать."""
+    shown = None
+    for _ in range(2):
+        try:
+            shown = _eval_bounded(page, _SHOW_DESTINATION_JS)
+        except Exception:
+            return None
+        if shown is None:
+            return None
+        # Meta перерисовывает раздел после прокрутки — дать ей это сделать
+        # и снять `display: none` ещё раз уже на экране.
+        _sleep_h(0.4)
+    return bool(shown)
+
+
+#: Переключатель «Instant form» (opt-in) раздела: пометить и дать точку.
+_MARK_INSTANT_FORM_SWITCH_JS = r"""() => {
+  const host = document.querySelector('[data-surface$="/pce_lead_gen_instant_form_opt_in_field"]');
+  if (!host) return null;
+  const sw = host.querySelector('[role=switch], input[type=checkbox]');
+  if (!sw) return null;
+  for (const old of document.querySelectorAll('[data-rpa-field="dest_instant_form_switch"]')) {
+    old.removeAttribute('data-rpa-field');
+  }
+  sw.setAttribute('data-rpa-field', 'dest_instant_form_switch');
+  sw.scrollIntoView({block: 'center', behavior: 'instant'});
+  let r = sw.getBoundingClientRect();
+  if (!(r.width > 0 && r.height > 0)) {
+    const box = sw.parentElement;
+    if (!box) return null;
+    r = box.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return null;
+  }
+  return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+}"""
+
+_FOCUS_INSTANT_FORM_SWITCH_JS = r"""() => {
+  const el = document.querySelector('[data-rpa-field="dest_instant_form_switch"]');
+  if (!el) return false;
+  el.focus();
+  return document.activeElement === el;
+}"""
+
+
+def _brief_destination(state: dict) -> dict:
+    """Тип, add-on, opt-in и число полей URL — для строки телеметрии (без URL)."""
+    return {k: state.get(k) for k in ("dest_type", "addon", "opt_in", "url_fields") if k in state}
+
+
+def _instant_form_on(state: dict) -> bool:
+    return state.get("addon") == "instant_form" or state.get("opt_in") == "on"
+
+
+def _turn_off_instant_form_switch(page: Page) -> bool:
+    """Выключить переключатель «Instant form»; True — выключен."""
+    for how in ("click", "space"):
+        try:
+            point = _eval_bounded(page, _MARK_INSTANT_FORM_SWITCH_JS)
+        except Exception:
+            point = None
+        if not isinstance(point, dict):
+            return False
+        if how == "click":
+            try:
+                handle = page.locator('[data-rpa-field="dest_instant_form_switch"]').first.element_handle(
+                    timeout=2000)
+                if handle is not None:
+                    _mark_press_target(page, handle)
+                _cdp_mouse_click(page, point["x"], point["y"])
+            except Exception:
+                pass
+        else:
+            try:
+                focused = bool(_eval_bounded(page, _FOCUS_INSTANT_FORM_SWITCH_JS))
+            except Exception:
+                focused = False
+            if not focused:
+                return False
+            try:
+                page.keyboard.press("Space")
+            except Exception:
+                pass
+        _sleep_h(0.8)
+        if destination_state(page).get("opt_in") != "on":
+            return True
+    return False
+
+
+def _switch_off_instant_form(page: Page) -> dict:
+    """Вернуть объявление с Instant form на Website; {} — Instant form не было.
+
+    Только переключатель opt-in «Instant form» и радио «None» Browser add-ons.
+    Условия Lead Ads не принимаются, форма не создаётся: кнопки карточки
+    («View terms», «Create form», «Close») не нажимаются (охрана нажатий).
+    Строка `destination_instant_form_off`: каким элементом, что было и что стало.
+    """
+    before = destination_state(page)
+    if not _instant_form_on(before):
+        return {}
+    via: list[str] = []
+    if before.get("opt_in") == "on":
+        via.append("opt_in_switch")
+        _turn_off_instant_form_switch(page)
+    if destination_state(page).get("addon") == "instant_form":
+        via.append("addon_none")
+        _select_browser_addon_none(page)
+    after = destination_state(page)
+    ok = not _instant_form_on(after)
+    report = {"before": _brief_destination(before), "after": _brief_destination(after), "via": via}
+    _telemetry.record("destination_instant_form_off", ok,
+                      note="switched_to_website" if ok else "instant_form_kept", diag=report)
+    return {"instant_form_before": report["before"], "instant_form_after": report["after"],
+            "instant_form_via": via}
+
+
+def destination_soft_fail(tag: str, ad_label: str) -> str:
+    """Строка мягкого отказа назначения объявления `tag` (ACL-1543).
+
+    Instant form не выключился — `<tag>_destination:instant_form_not_switched
+    - <объявление>: <фраза>`; иначе — прежняя `<tag>_destination`. Имя шага
+    то же: обход и `failure_policy` узнают его как раньше.
+    """
+    why = last_destination_why()
+    base = f"{tag}_destination"
+    if why == INSTANT_FORM_NOT_SWITCHED:
+        return f"{base}:{why} - {ad_label}: {_simple.destination_why_text(why)}"
+    return base
+
+
 def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     """Set the ad's destination to Website + Browser add-ons: None, with the
     real account tracking link — instead of the Instant Form Meta suggests
@@ -14271,7 +14454,7 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     page's Destination section underneath. Close it first if still open
     via the shared `_close_creative_setup_modal()` helper.
     """
-    _last_destination.update(why="", diag={})
+    _last_destination.update(why="", diag={}, instant_form={})
     _close_creative_setup_modal(page)
 
     # Confirmed live (2026-07-27): the Destination section's container
@@ -14279,19 +14462,21 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     # `display: none !important` Meta applies to the Ad creative section's
     # `#creativeEditorComponent` — same underlying quirk, different section.
     # Force it visible the same way before touching "None"/the URL field.
-    try:
-        page.evaluate(
-            "() => { const el = document.getElementById('adgroupAdDestinationGeneric');"
-            " if (el) el.style.setProperty('display', 'block', 'important'); }"
-        )
-    except Exception:
-        pass
+    # ACL-1543: и прокрутить к нему — вне экрана Meta прячет раздел снова.
+    _show_destination_section(page)
 
     # ACL-1371: при типе «Instant Experience» поля URL и Browser add-ons нет —
     # сначала вернуть тип Website.
     website_why, website_diag = _ensure_destination_website(page)
     if website_why:
         return _destination_failed(page, website_why, destination_url, **website_diag)
+
+    # ACL-1543: Instant form (add-on «Instant form (suggested)» или переключатель
+    # opt-in) выключить до поля URL: пока он включён, Meta держит карточку
+    # условий Lead Ads и ошибку Lead Gen. «None» ставится ещё раз после URL —
+    # см. порядок ниже.
+    _last_destination["instant_form"] = _switch_off_instant_form(page)
+    _show_destination_section(page)
 
     # ORDER MATTERS — URL first, "None" LAST. Confirmed live 2026-07-30
     # after a day of chasing "the radio keeps reverting": editing the
@@ -14324,6 +14509,9 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
         if not url_box.count():
             return _destination_failed(page, "url_field_missing", destination_url)
         url_handle = _focus_via_cdp_click(page, url_box)
+        if (url_handle is None or not _holds_focus(url_handle)) and _show_destination_section(page):
+            # ACL-1543: раздел спрятали между пометкой и нажатием — ещё раз.
+            url_handle = _focus_via_cdp_click(page, url_box)
         if url_handle is None or not _holds_focus(url_handle):
             # ACL-1371: без фокуса `insert_text` ушёл бы в то, что в фокусе
             # сейчас, — в чужое поле; назначение осталось бы пустым (7e5f7abec777).

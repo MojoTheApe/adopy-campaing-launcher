@@ -270,10 +270,12 @@ def test_a_sweep_that_raised_is_named(monkeypatch):
 
 
 def test_instant_form_that_does_not_let_go_is_named(page):
+    """ACL-1543: причина называет Instant form; полевая — в `field_why`."""
     _open(page, DEST["website_instant_form"])
     assert md.set_ad_destination_website(page, URL) is False
     diag = md.last_destination_diag()
-    assert diag["why"] == "addon_none_not_set", diag
+    assert diag["why"] == "instant_form_not_switched", diag
+    assert diag["field_why"] == "addon_none_not_set"
     assert diag["dest_type"] == "external"
     assert diag["addon"] == "instant_form"
     assert diag["lead_terms"] is True
@@ -285,7 +287,8 @@ def test_instant_form_back_after_the_save_is_named(page, monkeypatch):
     monkeypatch.setattr(md, "_select_browser_addon_none", lambda p: True)
     assert md.set_ad_destination_website(page, URL) is False
     diag = md.last_destination_diag()
-    assert diag["why"] == "addon_not_none", diag
+    assert diag["why"] == "instant_form_not_switched", diag
+    assert diag["field_why"] == "addon_not_none"
     assert diag["url"] == "match" and diag["addon"] == "instant_form"
 
 
@@ -305,7 +308,9 @@ def test_the_url_is_not_typed_into_a_field_without_focus(page, monkeypatch):
     _open(page, DEST["website_instant_form"])
     monkeypatch.setattr(md, "_holds_focus", lambda h: False)
     assert md.set_ad_destination_website(page, URL) is False
-    assert md.last_destination_why() == "url_field_not_focused"
+    # ACL-1543: add-on здесь так и остался «Instant form» — он и назван.
+    assert md.last_destination_why() == "instant_form_not_switched"
+    assert md.last_destination_diag()["field_why"] == "url_field_not_focused"
     assert page.locator('[data-surface$="/pce_website_url_field"] input').input_value() == ""
 
 

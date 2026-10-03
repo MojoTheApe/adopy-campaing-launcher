@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**20 robot steps × 83 layouts, 49 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**20 robot steps × 84 layouts, 50 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -28,7 +28,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | ad_creative (media) | 5 | 5 | 0 | 0 |
 | creative_wizard | 10 | 10 | 0 | 0 |
 | ad_copy | 7 | 7 | 0 | 0 |
-| ad_destination / destination_sweep | 9 | 8 | 0 | 1 |
+| ad_destination / destination_sweep | 10 | 9 | 0 | 1 |
 | ads 2-3 (single-screen editor) | 2 | 2 | 0 | 0 |
 | editor gone under the robot | 1 | 1 | 0 | 0 |
 | banners and blocks (any step) | 2 | 2 | 0 | 0 |
@@ -224,9 +224,10 @@ Robot: set_ad_destination_website (destination_state, _destination_failed, _ensu
 | Instant Experience selected | a90d704c892a/01_ad_destination | `ad_destination_types_2026_09_28.html` · instant_experience | `tests/test_destination_and_ad_name_say_why.py` | switched to Website | pass |
 | Website + Instant form (suggested) add-on, Lead Ads Terms | 7e5f7abec777/02_ad_destination | `ad_destination_types_2026_09_28.html` · website_instant_form | `tests/test_destination_and_ad_name_say_why.py` | reason named | pass |
 | Facebook event selected | cc8fcfa17ae9/07_ad_destination | `ad_destination_layouts_2026_10_01.html` · event_type | `tests/test_bench_ad_destination.py` | dest_type event; why destination_not_website (as live) | pass |
-| Website + Instant form add-on + Lead Gen error + Lead Ads Terms | 5465ca61895f/01_ad_destination | `ad_destination_layouts_2026_10_01.html` · instant_form_terms | `tests/test_bench_ad_destination.py` | state as live; why addon_none_not_set | pass |
+| Website + Instant form add-on + Lead Gen error + Lead Ads Terms | 5465ca61895f/01_ad_destination | `ad_destination_layouts_2026_10_01.html` · instant_form_terms | `tests/test_bench_ad_destination.py` | state as live; why instant_form_not_switched (live: addon_none_not_set, kept as field_why) | pass |
 | WhatsApp add-on selected (single-screen editor) | cb854b07857b/03_ad_destination | `ad_destination_layouts_2026_10_01.html` · whatsapp_addon | `tests/test_bench_ad_destination.py` | addon whatsapp; why addon_none_not_set | pass |
-| Single-screen editor Instant form add-on + Lead Gen error | d66a22d0fa30/01_ad_destination, 3100d06ad51e/03_ad_destination | `ad_destination_layouts_2026_10_01.html` · simple_create_instant_form | `tests/test_bench_ad_destination.py` | state as live; why url_field_not_focused | pass |
+| Single-screen editor Instant form add-on + Lead Gen error | d66a22d0fa30/01_ad_destination, 3100d06ad51e/03_ad_destination | `ad_destination_layouts_2026_10_01.html` · simple_create_instant_form | `tests/test_bench_ad_destination.py` | state as live; why instant_form_not_switched (live: url_field_not_focused, kept as field_why) | pass |
+| Single-screen editor, section virtualised off screen (display none), Instant form opt-in switch, add-on Instant form (suggested) + Lead Ads Terms card (View terms / Close / Create form) + Lead Gen error | 04509d5eed75/05_ad_destination, 0e86c42023da/12_ad2_destination | `ad_destination_instant_form_2026_10_03.html` · simple_create_instant_form_terms, errors_lead_gen | `tests/test_bench_destination_instant_form.py` | section scrolled on screen, add-on None (opt-in switch off when on), URL filled and read back; telemetry before/after; Instant form that comes back -> instant_form_not_switched, blocking, named in the problem; View terms / Create form / Close never pressed (press guard lead_terms) | pass |
 | Add-on None already set (sweep) | 3100d06ad51e/04_destination_sweep | `ad_destination_layouts_2026_10_01.html` · sweep_addon_none | `tests/test_bench_ad_destination.py` | addon none; why url_field_not_focused | pass |
 | Single-screen editor ads 2-3: no ad form in the DOM, only the preview's Ad / Destination tabs | 0bd520418dbe/02,04,05, d7b470f4c983/11,18,19, 04c8c214d2ba/03,04, 4121938e6dc3/12, d1755a59e139/02 | — | `tests/test_bench_ad_destination.py` | section false; why destination_section_missing (as live); the capture does not show why the form is not mounted | reference |
 

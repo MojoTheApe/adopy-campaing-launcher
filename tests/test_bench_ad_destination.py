@@ -32,7 +32,11 @@ from tests.bench_support import FIXTURES, browser, fragment, offline_page  # noq
 
 FIXTURE = FIXTURES / "ad_destination_layouts_2026_10_01.html"
 
-#: fragment -> (live diag subset, raw why passed to `_destination_failed`, live why)
+#: fragment -> (live diag subset, raw why passed to `_destination_failed`, why named)
+#:
+#: ACL-1543: where Instant form is still on (add-on «Instant form»), the step
+#: names it — `instant_form_not_switched` — instead of the field-level reason
+#: it reported live (kept in diag as `field_why`).
 CASES = {
     "event_type": (
         {"section": True, "dest_type": "event", "addon": "", "lead_gen_error": False, "lead_terms": False},
@@ -40,7 +44,7 @@ CASES = {
     "instant_form_terms": (
         {"section": True, "dest_type": "external", "addon": "instant_form", "lead_gen_error": True,
          "lead_terms": True},
-        "addon_none_not_set", "addon_none_not_set"),
+        "addon_none_not_set", "instant_form_not_switched"),
     "whatsapp_addon": (
         {"section": True, "dest_type": "external", "addon": "whatsapp", "lead_gen_error": False,
          "lead_terms": False},
@@ -48,7 +52,7 @@ CASES = {
     "simple_create_instant_form": (
         {"section": True, "dest_type": "external", "addon": "instant_form", "lead_gen_error": True,
          "lead_terms": False},
-        "url_field_not_focused", "url_field_not_focused"),
+        "url_field_not_focused", "instant_form_not_switched"),
     "sweep_addon_none": (
         {"section": True, "dest_type": "external", "addon": "none", "lead_gen_error": False,
          "lead_terms": False},
@@ -86,6 +90,8 @@ def test_the_step_names_the_live_reason(offline_page, name, monkeypatch):
     _load(offline_page, name)
     assert md._destination_failed(offline_page, raw) is False
     assert md.last_destination_why() == live
+    if live == "instant_form_not_switched":
+        assert md.last_destination_diag()["field_why"] == raw
 
 
 def test_without_the_section_the_reason_is_section_missing(offline_page, monkeypatch):
