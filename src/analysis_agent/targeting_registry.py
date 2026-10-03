@@ -123,7 +123,7 @@ def _load_raw() -> dict:
             raise ValueError("invalid renamed section")
         return data
     except Exception as exc:
-        raise TargetingError("Не удалось прочитать реестр таргетов. Файл сохранён без изменений; восстановите его из резервной копии.") from exc
+        raise TargetingError("Could not read the targeting registry. The file was left unchanged; restore it from the backup copy.") from exc
 
 
 def _save_raw(data: dict) -> None:

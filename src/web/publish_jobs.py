@@ -319,14 +319,9 @@ def _run_job(
         with _jobs_lock:
             job = _jobs.get(job_id)
             if job is not None:
-                job["queue"] = {
-                    # «profile» — ждёт свой профиль; иначе — свободное место.
-                    "reason": "profile" if verdict.get("reason") == "profile" else "slot",
-                    "ahead": int(verdict.get("ahead") or 0),
-                    "limit": verdict.get("limit"),
-                    "running": verdict.get("running"),
-                    "available_mb": verdict.get("available_mb"),
-                }
+                job["queue"] = _queue_view(verdict)
+        # ACL-1424: каждое решение «ждать» — в телеметрию (свободно, замер, итог).
+        _record_slot_decision(_rt, first_campaign, account_label, verdict)
 
     profile = profile_key_for(account_label)
     grant = _slots.acquire(
@@ -349,8 +344,10 @@ def _run_job(
             try:
                 _rt.record("job_phase", True, campaign=first_campaign, note="slot_queue",
                            duration_s=float(grant["waited_s"]),
-                           diag={"account": account_label, "decision": grant["decision"],
-                                 "first_hold": grant["first_hold"]})
+                           diag={"account": account_label,
+                                 "decision": _decision_for_telemetry(grant["decision"]),
+                                 "first_hold": (_decision_for_telemetry(grant["first_hold"])
+                                                if grant["first_hold"] else None)})
             except Exception:
                 pass
         with _publish_serial(profile):
@@ -383,6 +380,40 @@ def _run_job(
                 )
     finally:
         _slots.release(job_id)
+
+
+def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
+    """Что о месте в очереди видит дешборд (ACL-1321, ACL-1424)."""
+    return {
+        # «profile» — ждёт свой профиль; иначе — свободное место.
+        "reason": "profile" if verdict.get("reason") == "profile" else "slot",
+        # Почему нет места: memory_low / ceiling / order / override_full …
+        "hold": verdict.get("reason"),
+        "ahead": int(verdict.get("ahead") or 0),
+        "limit": verdict.get("limit"),
+        "running": verdict.get("running"),
+        "available_mb": verdict.get("available_mb"),
+        "profile_mb": verdict.get("profile_mb"),
+        "profile_mb_source": verdict.get("profile_mb_source"),
+    }
+
+
+def _decision_for_telemetry(verdict: dict[str, Any] | None) -> dict[str, Any]:
+    """Решение очереди без словарей: ключи словаря `scrub_diag` не чистит, а
+    там мог бы оказаться id профиля Multilogin (ревью #425). Числа, строки и
+    списки чисел проходят, вложенные словари — нет."""
+    return {k: v for k, v in dict(verdict or {}).items() if not isinstance(v, dict)}
+
+
+def _record_slot_decision(rt: Any, campaign: str, account: str, verdict: dict[str, Any]) -> None:
+    """Строка телеметрии на решение очереди — для подбора чисел потом."""
+    if rt is None:
+        return
+    try:
+        rt.record("job_phase", True, campaign=campaign, note="slot_decision",
+                  diag={"account": account, "decision": _decision_for_telemetry(verdict)})
+    except Exception:
+        pass
 
 
 def _append_result(job_id: str, res: dict[str, Any]) -> None:
@@ -575,7 +606,7 @@ def _run_rpa(
 
     if _is_cancelled(job_id):
         with _jobs_lock:
-            _jobs[job_id]["errors"].append("Остановлено пользователем")
+            _jobs[job_id]["errors"].append("Stopped by the user")
         # Never stop Multilogin — user needs the window to verify FB login.
         publisher.close(force=False)
         _finish(job_id, cancelled=True)
@@ -598,7 +629,7 @@ def _run_rpa(
         if _is_cancelled(job_id):
             cancelled = True
             with _jobs_lock:
-                _jobs[job_id]["errors"].append("Остановлено пользователем")
+                _jobs[job_id]["errors"].append("Stopped by the user")
         else:
             with _jobs_lock:
                 _jobs[job_id]["errors"].append(f"RPA error: {e}")

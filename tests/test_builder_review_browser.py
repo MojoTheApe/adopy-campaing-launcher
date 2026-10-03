@@ -53,7 +53,7 @@ def test_changing_selected_targeting_never_submits_previous_interests(page):
     assert page.locator('.cb-targeting-hidden').first.input_value() == ''
     page.evaluate('cbPublish(document.querySelector("form"))')
     assert 'Tradin' in page.evaluate('confirmation.body')
-    assert 'Таргетинг не выбран' in page.evaluate('confirmation.body')
+    assert 'Targeting not selected' in page.evaluate('confirmation.body')
     inp.fill('Trading')
     data = page.evaluate('Object.fromEntries(cbCollectFormData(document.querySelector("form")))')
     assert data['camp_0_targeting'] == 'Trading'
@@ -90,7 +90,7 @@ def test_duplicate_copies_actual_slot_and_ad_fields_and_keeps_the_next_slot(page
 
 def test_publish_warning_and_creative_size_use_the_actual_handlers(page):
     page.evaluate('cbPublish(document.querySelector("form"))')
-    assert 'Не блокируйте экран' in page.evaluate('confirmation.body')
+    assert 'Do not lock the screen' in page.evaluate('confirmation.body')
     assert '1.5 GB' in page.evaluate('cbSizeTag(1500000000)')
     assert 'warn' in page.evaluate('cbSizeTag(1500000000)')
     assert page.evaluate('cbSizeTag(0)') == ''
