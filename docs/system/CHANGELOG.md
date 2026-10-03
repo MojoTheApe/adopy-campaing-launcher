@@ -1,5 +1,91 @@
 # System history
 
+## The country is retried in place and once more at the end of the campaign — ACL-1390
+
+2026-09-30 07:36 UTC (FacebookDoc19, SA_arc_All_Image_PF_35_30.09, run 64cc3d5510b2):
+Meta's location search showed no suggestions for "Saudi Arabia" twice, the campaign
+ended "the country was not set", although the same account had set Saudi Arabia 25
+minutes earlier. Owner decision 2026-09-30: retry in place and once more at the end.
+
+- In place: up to 4 attempts. The first is the text already typed with the old 6 s
+  wait (no slowdown when suggestions appear at once); then click back into the field,
+  clear it and type slower (8 s); the first word / a shorter prefix (10 s); the full
+  name typed slowest with the longest wait (15 s). Only the "<country> (Country)"
+  option or the bare country name is picked — a region or city of the same name never
+  is (the old "first option" fallback is gone; with no `role=option` rows but an open
+  list, Enter stays as before and the rows check decides). Every attempt after a failed
+  first one is a telemetry row `audience_location_attempt` (attempt, typed, options,
+  outcome). On give-up the search field is left empty.
+- Second pass: if `audience_location` still failed, after the rest of the campaign
+  (ads and the destination sweep) the robot returns to the same ad set — the ad-set row
+  of the left tree in the classic editor, the ad-set section and Audience card in the
+  single-screen editor — reads Locations, and runs the location step once more (same
+  default-country removal), then reads Locations back. Fixed → the blocking
+  `audience_location` is replaced by the warning `audience_location_second_pass`
+  shown on the job card; not fixed → the same `audience_location` stop as before.
+  Telemetry `audience_location_second_pass` (listed_before / listed_after). No campaign
+  replay, no second draft, no Publish.
+- Review of PR #393: in the single-screen editor after ads 2+ the second pass runs under
+  ACL-1353's `hold_open_ad("simple_create_open_ad_n")` (no reload, no tree open); an
+  empty search field is retyped on attempt 1 and the attempt row records what was
+  really in the field; keys are sent only when the location search has focus; the
+  read-back requires row names equal to the country ("Riyadh, Saudi Arabia" is not).
+- Review round 2: the job panel titles the warning "Country set on the second pass"
+  (`failure_policy.GUIDE`); a miss opening the ad-set row is recorded on the
+  `audience_location_second_pass` row as `open:<why>`, so Robot health does not count
+  it as a failed step.
+
+## Screenshot endpoint tests prove a path outside the folder is refused — ACL-1486
+
+The ACL-1430 review found that the tests for `/account-spend/status-shot/<id>`
+still passed with the path guards removed: no real `.png` existed outside
+`spend_shots`, so a naive lookup would have returned 404 too. Tests only; product
+code is unchanged (no escape was found).
+
+- `tests/test_status_screenshot.py` now puts real PNGs next to the screenshots
+  folder (parent, a sibling folder named like it, a folder elsewhere) and asks for
+  each through `..` segments, backslashes, an absolute path (both slash styles),
+  a subfolder walked back out, and URL-encoded / double-encoded forms, on both the
+  image and the `/view` page. Each case first asserts the file *would* be found
+  without guards.
+- The folder check is also tested on its own, with the name check loosened, and a
+  non-`status_*` PNG in the folder (a failed-read shot) and a folder named like a
+  shot are refused.
+- Mutation check: removing the name check, the folder check, the is-file check,
+  or both path checks each makes tests fail; with both path checks gone every
+  escape route fails at least one test.
+
+## Hidden accounts and targeting file locks never lose an update under load — ACL-1495
+
+`tests/test_hidden_accounts_review.py::test_processes_preserve_each_update` failed at
+random on CI with "OSError [Errno 36] Resource deadlock avoided". The ACL-1491
+investigation found two product bugs in the machine file lock used by
+`src/web/hidden_accounts.py` and `src/analysis_agent/targeting_registry.py`:
+
+1. `msvcrt.locking(LK_LOCK)` tries 10 times, once a second, and then raises EDEADLK.
+   A queue longer than 10 s under load is not a deadlock, but the update was lost.
+2. On first use every process that saw an empty `.lock` file wrote `b"0"` into it; when
+   another process already held byte 0, `flush()` raised PermissionError (Errno 13).
+
+Fix: one shared helper, `config.paths.machine_file_lock(path, timeout=None)`.
+
+- Waits with non-blocking attempts and a growing, jittered pause (5 ms to 100 ms).
+  EDEADLK, EACCES and EAGAIN mean "busy, try again". The wait is bounded by
+  `paths._LOCK_TIMEOUT` (120 s), after which it raises `TimeoutError` instead of
+  hanging the dashboard request.
+- The lock file is created by a single atomic `os.open(O_CREAT)` and is never
+  written. Windows allows locking a byte past the end of the file, and `flock` has
+  no byte ranges, so the file needs no content.
+- Both `_transaction()` functions now use it. Writes still go through
+  `paths._replace_when_free` (`_atomic_write` for hidden accounts, `_save_raw`
+  for targeting).
+- `tests/test_file_lock_races.py` reproduces both bugs deterministically (a fake
+  EDEADLK from the lock call, and an empty lock file whose byte 0 is held by another
+  handle). Both tests failed on the old code with the original errors. The file also
+  covers the bounded wait and checks that the lock file is never written.
+- `ad_text_registry.py`, `team_library.py` and `acl_log.py` still use the old
+  pattern. They are not changed here.
+
 ## The dashboard stays responsive while the report is built — ACL-1399
 
 2026-09-30 after a restart the first page built the report inside the request
