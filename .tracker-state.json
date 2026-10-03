@@ -1468,7 +1468,7 @@
       "source_sha": "cd6505e2565a17452d4e66ebc8c93efe09cf3aaa",
       "main_tree": "708d16c7afa2614faab02d5f3126250c7cb2b09b",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-03T15:38:57+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -2360,6 +2360,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-03T14:08:39+00:00"
+      },
+      "535": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 539,
+            "merge_sha": "77fd77cea053fc0f37353bce15ceaf8a366a7653",
+            "tree_sha": "c9607b81258da6d055263905d7630cd89ec1d17a"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-03T16:16:12+00:00"
       }
     },
     "promotions": {
@@ -4037,6 +4049,31 @@
           "report": "ACL-1512 stage verification: Git and installer checks green on the actual stage ccd4223. Independent review: scratchpad/review_528.md."
         },
         "verified_at": "2026-10-03T13:52:12+00:00"
+      },
+      "539": {
+        "pr": 536,
+        "issues": [
+          535
+        ],
+        "tree_sha": "c9607b81258da6d055263905d7630cd89ec1d17a",
+        "source_sha": "cd6505e2565a17452d4e66ebc8c93efe09cf3aaa",
+        "main_tree": "708d16c7afa2614faab02d5f3126250c7cb2b09b",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-03T15:38:57+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "cd6505e2565a17452d4e66ebc8c93efe09cf3aaa",
+          "tree_sha": "c9607b81258da6d055263905d7630cd89ec1d17a",
+          "checks": [
+            "Git checks on actual stage cd6505e: CI run 37133953202 success (sharded, Python 3.11/3.13)",
+            "Windows installer run 37133953116 success"
+          ],
+          "report": "ACL-1535 stage verification: Git and installer checks green on the actual stage cd6505e. Independent review: scratchpad/review_536.md."
+        },
+        "verified_at": "2026-10-03T15:56:58+00:00"
       }
     }
   },
