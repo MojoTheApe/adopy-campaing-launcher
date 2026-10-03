@@ -91,7 +91,9 @@ def main() -> int:
 
     provider = MultiloginAttachOnlyProvider()
     print(f"[record] Opening MLX profile for {args.label!r} with automation…")
-    conn = provider.open(entry, args.label)
+    # ACL-1388 (ревью PR #396, F3): запись разработчика окно, открытое руками,
+    # не закрывает — только публикация.
+    conn = provider.open(entry, args.label, allow_kill=False)
     page = conn.page
 
     start_url = args.url or _campaigns_url(entry)

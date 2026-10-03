@@ -1,5 +1,776 @@
 # System history
 
+## A failed read says "Campaigns not read", not "0 campaigns" — ACL-1504
+
+2026-10-02, Facebook_1443: Ads Manager did not open within 90 s, and the account
+map's expanded row said "IN THE ACCOUNT · 0 CAMPAIGNS · 0 ADS" above the raw
+`Page.goto` error, including the Ads Manager address with `act=`. It read as "this
+account has no campaigns".
+
+- `src/analysis_agent/account_spend.py`: a reading records whether the campaign list
+  itself was reached (`objects_read`; `_read_tree(..., reached=)`). An unparsed table
+  counts as not reached. Older records without the field are judged by themselves:
+  no rows plus an error means not read.
+- When the list was not reached, the reading sent to the screen carries
+  `objects_problem`: one short reason (for example "Ads Manager did not open in
+  90 s.") and what to do. As in ACL-1437, the reason comes from a local table of raw
+  errors. The campaign-card guides are unchanged. The tree error text is scrubbed
+  on output (`scrub_tree_error`: URLs, `act=`/`act_` ids, `run_telemetry.scrub`),
+  including in records saved before this change.
+- The last good tree for the account (any period, `objects_prev`) is kept with a
+  reading that did not reach the list. A second failure in a row does not erase it.
+- `report.html` (account tree): "campaigns not read · tried …", the reason, what to
+  do, and a **Read again** button that presses the row's existing Read spend.
+  There is no new reading path. The raw error is under a collapsed "Technical
+  details". The last good rows are shown under "last good read · … · read <date> ·
+  Meta numbers for …", without turn-off buttons, because their switches may have
+  changed. "0 campaigns · 0 ads" appears only when the list was read and was empty.
+- Review of PR #505:
+  - Read again follows the row's Read spend button whenever its state changes:
+    after Read all (`amapReadAllControls`) and after each reading
+    (`amapRereadSync`). Before, it stayed grey after Read all until a reload.
+  - Bare Meta tokens (`EAA…`) are scrubbed from the technical text too.
+  - A not-read attempt for other dates says "not the dates on screen".
+## Parallel profiles start at 3.5 GB each and adapt to measured use — ACL-1424
+
+2026-10-01 four Multilogin profiles used 13.6 GB (about 3.4 GB each) and the laptop
+was at 87 % memory, while the "Publish all" queue (ACL-1321) assumed 1.5 GB per
+profile. Owner decision: start from 3.5 GB and adapt to the free memory.
+
+- `src/web/profile_slots.py`: the per-profile estimate is 3.5 GB
+  (`ACL_PROFILE_MEMORY_GB`). Once a running profile has warmed up
+  (`ACL_PROFILE_WARMUP_S`, 90 s), the queue measures its Mimic process tree (root
+  `chrome.exe` under the Mimic folder with `--client-session-id=<profile id>`, plus
+  all its children; the person's own Chrome is never counted) and uses the average
+  of the measured profiles instead of the estimate, never below
+  `ACL_PROFILE_MEMORY_FLOOR_GB` (1.5). Free memory is read fresh at every decision,
+  so opening something heavy holds the next profile and closing it lets it start.
+  Ceiling (4) and floor (1) are unchanged; `ACL_MAX_PARALLEL_PROFILES` still skips
+  all of this.
+- The measurement runs in its own thread (`ProfileUsage`, read-only psutil); a
+  decision never waits for it. A probe that fails, hangs past 5 s, or does not find
+  the profile falls back to the 3.5 GB estimate.
+- Visible: the waiting campaign dot says e.g. "Waiting: 2.1 GB free, a profile uses
+  ~3.4 GB". Telemetry: every hold is a `job_phase` row with note `slot_decision`
+  (free memory, estimate or measured average, per-profile readings, decision); the
+  start keeps the existing `slot_queue` row. `GET /publish-jobs/slots` shows the same
+  fields under `next`.
+- Review of PR #425 (never overcommit): each running profile keeps its peak
+  reading, so a closing or shrinking profile does not pull the average down; a
+  profile younger than `ACL_PROFILE_SETTLE_S` (300 s) counts at least the estimate,
+  however small it measures; and the growth still ahead of measured profiles
+  (`growth_mb`, up to the per-profile figure) is added to what the next start needs.
+  Telemetry carries only a list of MB readings (`per_profile_mb`), never profile ids,
+  and nested dicts are dropped from the recorded decision. A probe hung for 4x its
+  timeout is abandoned and a new one starts, so adaptation does not stop.
+
+## On-screen messages are English — ACL-1462
+
+2026-10-01 the owner saw Russian text in the confirmation shown before Publish. Translated
+everything the dashboard shows that was still Russian: the Publish confirmation (locked-
+screen warning, tracking-link and targeting warnings, the "Build anyway" button), the
+locked-screen notice after a run, the ad-text library's Body hint, the read-failure
+tooltip's "screenshot:" label, "Stopped by the user", the targeting-library read error
+and the reasons in the "countries failed" tooltip. Code comments, Obsidian note
+generators and page-matching keywords stay Russian. A new test fails on any Cyrillic in
+the templates outside comments, except the two checks that recognise older stored
+errors.
+
+Review of PR #463: the "countries failed" reasons from setting the report period,
+the account-map miss, the period mismatch, the refused table and the pivot / section
+checks were still Russian; now English. `tests/test_country_split_reasons_are_english.py`
+tokenizes `country_split.py` and fails on Cyrillic in any string literal other than
+docstrings and `//` comments inside JS blocks.
+
+## One Connect button opens the found profile and connects it — ACL-1457
+
+Each profile found in Multilogin had two buttons, Open and Connect, and they had to be
+pressed in that order: only a profile opened by automation can tell the dashboard its
+ad account number. The owner asked for one button (2026-10-01). Connect now opens the
+profile through the same `/mlx-profile-open` path (attaching if it already runs with
+automation; a window opened by hand is still never restarted), reads the number, and
+connects. If opening fails, connecting continues and the prompt says to close a
+hand-opened window and press Connect again, or to type the number, or to leave it for
+later. The "open profile" button on already connected accounts is unchanged.
+The button stays disabled until the whole open-and-connect finishes, so a second
+click while the profile is still being read does not start a second open
+(review fix, `tests/test_one_connect_button.py`).
+
+## A new campaign manager no longer sees the owner's goals — ACL-1452
+
+2026-09-30 a test installation opened as Dan showed "Evgeni — Goals Progress" with
+the owner's seven countries and targets. The panel title had the owner's name written
+into the page, and a person without saved goals was given the owner's old template
+numbers as a start.
+
+- The title names the campaign manager whose goals are on screen.
+- A person without saved goals starts with **their own countries** — where they have
+  spend, leads or deposits in the workbook, plus countries they linked accounts to on
+  this machine's map — each with a target of 10 FTD and no other targets. With no
+  countries known, the strip is empty apart from "+ country".
+- The starting goals are shown, not written; the first edit saves them together with
+  the change, so editing one country does not drop the others. Saved goals are
+  untouched (the owner's own seven countries are saved on his machine).
+- The starting countries do not depend on the date picker: the panel and the first
+  save both take them from the whole workbook, so what is saved is what was shown.
+  Saving reads the workbook only while the person has no saved goals, and off the
+  request loop. When a team lead edits another manager's goals, that manager's own
+  numbers are used, and this machine's account map is not added to them.
+
+## A covered profile window is recorded and woken without the foreground — ACL-1402
+
+2026-09-30, Facebook_1443 (fba2c3f5): `website_selected` → `conversion_event` took
+5 minutes, and the build continued the moment the owner opened the account window,
+which was covered by other windows (not minimised). Telemetry had no visibility data
+after attach.
+
+- `src/fb_ads_rpa/window_visibility.py`: `visibility_diag` — `document.visibilityState`
+  and `document.hasFocus()` (bounded probe), the profile window as Windows sees it
+  (read-only Win32: `IsIconic`, `IsWindowVisible`, foreground, share on screen and not
+  covered by windows above it in z-order; the browser process is found by its CDP
+  port), and whether `_disable_background_throttling` succeeded on the tab
+  (`browser.THROTTLE_STATUS`). Recorded in every `window_bounds` row (attach and each
+  section) and in `stall_unstuck`.
+- "Hidden" means what Windows saw: the window is minimised (`minimized`) or its
+  on-screen part is covered by other windows (`covered`). A window parked off-screen
+  is the robot's normal home for a minimised profile (`offscreen`/`parked`) and is
+  not hidden; it only gets a silent keep-alive screencast if the tab has none. The
+  page's own `visibilityState == "hidden"` decides only when Windows cannot be read:
+  with the window on screen it is just a background tab (review of PR #420, F1/F2).
+- `wake_if_hidden`: when a wait runs long and the window is hidden, the CDP helper is
+  re-applied, a keep-alive screencast is started if the tab has none, and a minimised
+  window goes back to normal off-screen — never `bring_to_front` or any foreground
+  call. A tab that does not answer gets no CDP session on itself (ACL-1320); only
+  browser-level commands. At most once per 30 s per tab. "Woke" is claimed only when
+  an animation frame (`requestAnimationFrame`) arrives within 2 s after the wake (F4).
+  Telemetry `window_hidden_woken` (with `reason` and `frames`); job panel, by reason:
+  "The profile window was covered by other windows — the robot woke it", "… was
+  minimised — the robot restored it off-screen", "The profile tab was hidden — …";
+  no frames: "The profile window stayed hidden and did not wake — bring it to the
+  front".
+- Hooked before every "tab is frozen" decision: `meta_dom._tab_frozen`,
+  `browser.page_answers`, the unresponsive branch of `_unstick`, and
+  `simple_create._wait_new_ad` (after 20 s; the 120 s Meta-busy limit is unchanged).
+  While Meta's "Creating..." dialog is on screen and the page answers, the wait does
+  not wake (Meta is busy, F3); in that poll the page is not probed, Windows decides.
+- Per-tab state (`THROTTLE_STATUS`, keep-alive tabs, last wake, notices, "woken in
+  this run") holds a weak reference next to `id(page)`, so a recycled id in the
+  long-lived serve.py never matches a dead tab (F5). A failed browser-pid lookup is
+  retried after 15 s instead of disabling Win32 for the process (F6). `_unstick`
+  still reloads an unanswering list tab when it cannot be asked after the wake (F7).
+- Not done yet: the live experiment with real covered windows (which mechanism
+  actually unfreezes an occluded Chrome window) — planned in PR ACL-1402.
+
+## Robot health: success rate of every step per account and build — ACL-1434
+
+A new read-only page, `/robot-health`, linked as "Robot health" in the dashboard
+header, and a script, `scripts/robot_health.py`, show how healthy the robot is.
+They read only the local run log (`output/rpa_telemetry.jsonl`) and the dashboard
+logs: `output/serve*.log` on a hand-run checkout, and the launcher's
+`server.stdout.log` / `server.stderr.log` in `%LOCALAPPDATA%/ACL/logs` on an
+installed build. No account is opened. The page reads in the server's thread
+pool, so it does not hold up progress polling of running jobs.
+
+- Rows are robot steps and columns are accounts plus "all". Accounts are shown
+  by a short label only, never the full account name, also in `--json`. A cell is ok/total
+  over that column's last N runs (default 10), with the change in points against
+  the N runs before. Only wizard outcomes count. Rows with `ok = null`,
+  `job_phase`, window/tab/profile/browser state, retries and attempts, and
+  always-false diagnostics such as `click_target_covered` and
+  `advantage_plus_off` are left out. A retried step counts by its last record.
+  A run that stopped earlier does not count for steps it never reached. Steps
+  that are only written on failure (`objective_leads`) are marked with `*`.
+- A second table shows each step by build. A run's build is the
+  "RPA flow version" the dashboard log was under when it first named the run's
+  job (the log has times without dates). When stdout and stderr go to separate
+  files (`serveN.log` + `serveN.err.log`, or the launcher's pair), the file
+  with the job ids is matched to its pair launch by launch, counting from the
+  newest. A `build` field in telemetry takes precedence. Runs the log never named, started after the dashboard process
+  started, take that process's own build.
+- Highlights: a drop of 30 or more points (at least 2 attempts in both windows),
+  2 or more failures in a row inside the current window, and a 30-point drop
+  from one build to the next. Each links to the failing runs. A run page shows
+  the run's steps, its failures marked new / known / known elsewhere, and its
+  screenshots from `output/rpa_screenshots/<run>`.
+- `python scripts/robot_health.py --top 15` prints the same table as Markdown.
+  `--run <id>` prints one run's summary with its capture folders.
+
+## A hand-opened window waits for the computer to go idle — ACL-1427
+
+The Publish click itself resets the "60 s without input" timer of ACL-1388, so the
+gate checked a few seconds later almost never passed. Owner decision 2026-10-01:
+wait instead of stopping at once.
+
+- `hand_window.wait_until_safe`: when the ONLY failing gate is recent input, wait up
+  to 2 minutes (`IDLE_WAIT_S`, per-machine `FB_RPA_HAND_WINDOW_IDLE_WAIT_S`; `0` =
+  old immediate stop), re-checking all gates every 3 s. Idle for 60 s with the other
+  gates still passing: close and reopen as in ACL-1388. Input for the whole 2 minutes:
+  the old `profile_open_by_hand` stop. Any other gate failing (before or during the
+  wait) stops at once. The job keeps its profile slot while waiting.
+- Stop of the job interrupts the wait within half a second: `RpaPublisher` wraps the
+  browser open in `hand_window.watch_cancel`.
+- Visible: job panel line "Waiting for the computer to be idle to reopen <account>'s
+  hand-opened window — don't use the mouse or keyboard for a minute"; telemetry
+  `profile_hand_window` diag gains `waited_s` and `wait_outcome`
+  (`no_wait`/`idle`/`timeout`/`gate_failed`/`cancelled`; note `cancelled` on Stop).
+- Stop during the wait: the slot result adds "the job was stopped while waiting for the
+  computer to be idle", and no Sentry campaign-stop event is sent (it is not a failure).
+- With ACL-1444: a reopened window is the robot's profile now, so at the end of a clean
+  job it closes itself like any robot profile; while the wait runs, the job keeps the
+  profile's slot and "Close profile" answers 409 — Stop is the way out.
+
+## A new Sentry failure starts the triage routine in the cloud — ACL-1330
+
+2026-09-30 owner decision: no polling and no empty runs; the triage agent starts only
+when Sentry reports a new failure kind, runs in the cloud with the laptop closed, and
+asks the owner on the phone before any release.
+
+- `deploy/sentry-relay/worker.js`: a Cloudflare Worker (free plan) between Sentry and the
+  routine's API trigger, because Sentry's webhooks cannot send the `Authorization`
+  header `/fire` needs. It checks Sentry's HMAC signature and the event time inside
+  the signed body (older than an hour or undated = refused; the unsigned timestamp
+  header is only an extra check), passes only the rule "ACL - new failure kind" for
+  project `python` and blocking / campaign_stop / job_exception failures, fires once
+  per Sentry issue per 24 h, at most 20 times an hour and 30 a day, and sends only a
+  short scrubbed text (issue id, title, culprit, step, reason, release, machine, link). Tests: `worker.test.js` (Node, no packages), run from
+  `tests/test_sentry_relay.py`.
+- `docs/system/ROUTINE_SENTRY_PROMPT.md`: the routine's instructions — payload as data,
+  Sentry read-only, tracker from a clean `main` checkout via REST-only `gh`, fix branch
+  from `stage`, affected Linux tests, independent reviewer, PR into `stage`, never a
+  merge or release, final question "Выпустить для <buyer>?".
+- `docs/system/SENTRY_ROUTINE_SETUP.md`: the owner's ~10-minute setup, token rotation and
+  switch-off. `scripts/sentry_selftest_event.py` sends one synthetic failure to test the
+  chain (`relay_selftest`, listed as known in `config/sentry_triage_map.json`).
+- The laptop scheduled task `acl-sentry-triage` is paused (manual "Run now" only).
+  Nothing is live until the owner does the setup.
+
+## Copy text for the account provider's group — acl-132
+
+Owner's decision (2026-09-30): when the account map shows a problem status (disabled,
+restricted, blocked, under review), a "Copy text" button copies one line for the
+provider's WhatsApp group — the account's short name and its status, e.g.
+`FacebookDoc20 - Account Disabled` — with the hint "Copy screenshot and account number to
+send in the group". The screenshot itself is copied by ACL-1430's button. Nothing is
+sent by ACL. Healthy and unread statuses show neither.
+
+- Review fixes (2026-10-02): a problem status without a screenshot now shows "Copy
+  screenshot" disabled, with the tooltip "No screenshot on the last read — read the
+  account again", so the hint never points at a missing button (the map template and
+  the live Read path alike). After a live Read the status cell keeps "Copy text" and
+  the hint. A second click within 1.5 s no longer leaves the button stuck on "Copied".
+  Tests check that copying makes no request and stores nothing — only the clipboard.
+  After a Read the status cell is rebuilt as one markup string, the same markup as the
+  map template (fixes a CI regression in the spend-poll test).
+## Every campaign sends a run summary to Sentry, labelled with the manager — ACL-1447
+
+2026-10-01. Until now only blocking failures reached Sentry; how a run went on a
+buyer's machine (warnings, slow steps, what passed) stayed in the local
+`rpa_telemetry.jsonl`, and most events named only the computer (`LAPTOP-UA006`).
+
+- When a campaign finishes — clean, with warnings, do-not-publish, or stopped
+  (including a stop while connecting the profile) — `src/fb_ads_rpa/run_summary.py`
+  sends one event "Run summary: <result>" at info level (clean, warnings) or warning
+  level (do-not-publish, stopped), never error. Fingerprint
+  `acl-run-summary` + result: four issues for the whole fleet, not one per campaign.
+  Context `run_summary`: result, account, campaign, editor (classic / single-screen),
+  steps (step, ok, duration, reason), blocking failures, warnings, total duration,
+  number of ads, attempts, run id. Release and machine come from the existing tags.
+- Owner decision 2026-10-01: the account display name (short label, e.g.
+  FacebookDoc19) and the campaign name are sent, in the summary and as tags `account`
+  and `campaign`. Ad account ids, profile ids, Ads Manager URLs, tokens and e-mails
+  are still scrubbed (`run_telemetry.scrub` plus URL / e-mail / `act_` rules in the
+  summary). The page section attached to failures keeps its placeholders (ACL-1325).
+- Every Sentry event carries the tag `manager`: `ACL_MACHINE_LABEL`, else
+  `MY_CM_NAME`, else `unset`; read when the event is sent, so a change applies
+  without a restart. The setup wizard writes `ACL_MACHINE_LABEL` from the name it
+  already asks for; Accounts → This computer → "Your name" changes it.
+- Sending runs in a background thread and swallows every error; a run never waits
+  for the network. `ACL_SENTRY_RUN_SUMMARY=0` turns summaries off.
+- `python scripts/run_summaries.py --from-sentry [--period 7d] [--format json]` lists
+  machines with their manager, campaign count per result, last run and release
+  (Sentry Discover API, `SENTRY_AUTH_TOKEN` with event:read). `scripts/robot_health.py`
+  (ACL-1434) was not on main yet, so the reader is its own script with
+  `machines_from_sentry()` for the health table to call.
+- Review of PR #450: the `machine` and `machine_id` tags are now set on the global
+  scope and again in `before_send`. Before, they lived only in the scope of the
+  thread that called `init`, so every summary after the first (sent from a new
+  thread) had no machine and was listed as "unknown". `run_summaries` groups by
+  `machine_id` and shows the latest label, so two computers of one manager stay two
+  rows. The campaign name in the summary goes through the summary scrubber
+  (URL / e-mail / `act_`).
+
+## Campaign problems are shown as a short readable list — ACL-1437
+
+2026-10-01 the builder card of CO_bnc_All_Video_FX_Y_35_01.10 showed its most
+important message as one long paragraph ("DO NOT PUBLISH AS IS — these steps
+failed: conversion_event — optimising for the wrong event … Do not publish:
+conversion_event, ad_copy:…"), with the failed steps listed twice.
+
+- `failure_policy.py` now gives every step a short English title, one sentence of
+  impact and one "what to do" line (`GUIDE`, `PER_AD_GUIDE`); a test fails if a
+  step of `POLICY` / `PER_AD_POLICY` has none. Text only: severities and the robot's
+  behaviour are unchanged.
+- The job result carries `problems` (step, ad number and name for per-ad steps,
+  severity, title, impact, action, technical note, raw code; blocking first) and
+  the campaign's `run_id`. The old plain text in `error` stays for older readers
+  and Sentry.
+- The job panel renders one block: the verdict headline (do not publish as is /
+  ready to publish with warnings / not built), the count with "draft saved,
+  browser left open", numbered items with a "→" action line, red for blocking and
+  amber for warnings, and step codes, notes, run id, campaign id, capture paths
+  and the step trail collapsed under "Technical details". Job records without
+  `problems` render as before.
+- Review fixes: the ACL-1476 `story_not_placed` warning has its own text and
+  shows the ad name; a per-ad step without text falls back to the policy reason
+  instead of raising (a `KeyError` used to turn a publishable draft into a job
+  error). Any part of `error` the list does not repeat (profile stop detail,
+  "Recorded flow failed at: …") is shown under "Technical details"; the
+  teach-mode marker ("waiting for a Website click") stays visible.
+
+## A problem status on the account map comes with a screenshot and a Copy screenshot button — ACL-1430
+
+2026-10-01 the owner asked for proof to send to support when the map shows a problem
+status (FacebookDoc20 disabled, Facebook_6540 restricted). Until now a page screenshot
+was kept only when a spend read failed, as a file path in a tooltip.
+
+- When a read finds any status other than `clear`, it saves a viewport screenshot of
+  the same Ads Manager page it just read the status from — the tab inside the
+  account's Multilogin profile; there is no capture outside Multilogin. Files go to
+  `%LOCALAPPDATA%\ACL\spend_shots\status_<account>__<time>.png`, the last 5 per
+  account are kept. The shot id and time are stored in the account's status entry.
+  A clear read takes no screenshot and removes the button; a failed screenshot never
+  fails the read.
+- `GET /account-spend/status-shot/<id>` serves a screenshot only by its id (strict
+  name, only from that folder, local dashboard only); anything else is 404.
+  `/account-spend/status-shot/<id>/view` is the fallback page with the image and
+  "Right-click → Copy image".
+- On the account map a small "Copy screenshot" button sits next to a problem status;
+  its tooltip says when the screenshot was taken. It copies an `image/png` to the
+  clipboard; when the browser refuses, it opens the fallback page in a new tab. No
+  screenshot, no button.
+
+## Saving a target waits out a briefly held registry file — ACL-1419
+
+`test_multiple_processes_do_not_lose_writes` failed intermittently on Windows CI.
+Two causes. Product: `targeting_registry._save_raw` replaced `targeting_registry.json`
+with a bare `os.replace`, which Windows refuses (`PermissionError [WinError 5]`)
+while the file is open for a moment elsewhere (Defender, the indexer, the previous
+writer's handle); the add/edit/remove then failed with that error. Reproduced locally
+3 of 18 runs under parallel load. It now uses `config.paths._replace_when_free`, the
+same short wait the other machine files already have. Test: each `spawn` worker
+imported the test module and with it `src.web.app` (~3 s quiet, much more on a
+loaded runner), and the test read `exitcode` right after `terminate()` without
+joining, so a slow worker showed up as `assert None == 0`. The worker now lives in
+`tests/targeting_worker.py` (registry import only), all workers share one 120 s
+deadline and are joined before exit codes are checked; the assertion is unchanged
+(three clean exits, 24 targets). `test_save_waits_out_a_briefly_held_registry` pins the wait.
+## A brief file hold on Windows no longer loses a spend reading — ACL-1466
+
+The spend and status store (`account_spend.json`) was replaced with a bare `os.replace`.
+Windows briefly holds a file after the previous replace or while Defender or the indexer
+looks at it, and answered `WinError 5`; the Read result was lost. The concurrent-writes
+test caught it ten times since 2026-09-15. The store now replaces through
+`config.paths._replace_when_free`, as the account-links file does since ACL-1216; a hold
+that does not end still raises.
+## Builder: visible Duplicate on ads and campaigns, no repeated buttons — ACL-1459
+
+2026-10-01 the owner sent a screenshot of the builder drawer: duplicating an ad was a
+faint icon in the card's corner, duplicating a campaign was a separate button at the
+bottom of the drawer, and "+ Add Campaign" stood next to "+ Campaign" for the same
+account. Now each ad card has a visible "Duplicate"; "+ Add ad" reads "+ Ad"; "⧉
+Duplicate campaign" sits inside the campaign card under its ads and, in the drawer,
+opens the copy for editing, as the old bottom button did. Removed: the slot-header
+icon, the bottom-of-drawer button and, inside the drawer only, the form's "+ Add
+Campaign" (the country page keeps it). Duplication logic is unchanged.
+## Buttons no longer look like input fields — ACL-1455
+
+2026-10-01 the owner noted that small buttons and input fields look the same. The
+secondary buttons (`.amap-btn`, `.amap-x`, `.acc-btn`) were drawn with the fields'
+frame, nearly the same background and the placeholder's grey text. Owner's choice
+among three mockups: link-style buttons. They now have blue text and no frame, with
+a soft blue background on hover and a focus ring for the keyboard; delete and error
+states are red, disabled ones grey. Fields keep their frame — the frame now means
+"type here". Primary and other filled buttons are unchanged. One CSS block, both
+themes; no markup changes.
+## Video pairs keep the post file with a warning when the story cannot be placed — ACL-1476
+
+Owner decision 2026-10-01 (Issue #476) after ACL-1426 went live: two post/story pair
+cases no longer hold the campaign as "do not publish".
+
+- `crop_step` — a pair whose wizard showed no Crop step (the single-screen editor walks
+  Media → Text → Creative generation → Enhancements; runs e4fd79d26e63, bd7b2f…) and a
+  pair whose `_story` file is not in Meta's library (runs a88e3789f7ab, 362762a797c3)
+  are warnings `story_not_placed:no_crop_step` / `story_not_placed:not_in_library`
+  (`crop_step.warning()`, telemetry `ad_creative_crop` ok=None). The ad keeps the post
+  file. In the not-in-library case Original on both cards and Meta AI expansion off are
+  still applied and read back; only Replace is skipped.
+- Meta's "Replace media for Stories, Status, Reels" opens inside the wizard dialog (step
+  row, Close, Save; no Cancel). The way back to Crop is the step row's "Crop", not the
+  wizard's Close (which closed the wizard in a88e3789f7ab). If Crop does not come back,
+  the step blocks with `crop_replace_picker_not_closed`.
+- `meta_dom` — a successful creative step with such a warning adds the ad's warning row
+  `<ad>_story_not_placed:<reason> - <ad>: <English line>` (`simple_create.creative_why_text`:
+  "Story placement uses the post file: …"); `failure_policy` classifies
+  `story_not_placed` as WARNING, so the campaign stays publishable.
+- Still blocking: Meta AI expansion left on, `crop_unknown_toggle_on`,
+  `crop_vertical_not_story`, `crop_square_changed`, `crop_replace_picker_unscoped`,
+  Original not set, `crop_replace_off`.
+
+## Post and Story get the right file in the Crop step — ACL-1426
+
+Owner rules 2026-10-01 (Issue #426): the creative number pairs `_post`/`_square` with
+`_story`; the Square card gets the post, the Vertical card the story (Replace) or, without
+a pair, the same file; Original on both cards; "Crop and expand (Meta AI)" off.
+
+- `src/fb_ads_rpa/creative_pairing.py` — the table (pair by number regardless of the
+  prefix, same media kind, same folder; same prefix wins). A `_story` chosen in the
+  Builder with a `_post` sibling puts the post on Square (the ad's media).
+- `src/fb_ads_rpa/crop_step.py` — on the Crop step, before the walk's Next: Original on
+  each card, expansion unchecked, Replace on Vertical for a pair (library search, tile,
+  the picker's own confirm), read-back. Mismatch → named reason (`crop_*`, e.g.
+  `crop_vertical_not_original`, `crop_story_not_in_library`, `crop_step_not_shown`), the
+  creative step fails with it, no retry, the ad is held for review. Telemetry
+  `ad_creative_pair`, `ad_creative_crop`. Switches: `FB_RPA_CROP_STEP=0` (old
+  behaviour), `FB_RPA_CROP_REPLACE=0` (pairs blocked with `crop_replace_off`).
+- Ads 2–3 in the single-screen editor: the new ad's form gone after the wizard (empty
+  Ad section, "Verifying your changes" with the `#100 lead_gen_form_id` preflight
+  error) is named `ad_form_gone_after_media` after 30 s instead of 150 polls, and the
+  retry loop neither checks again nor opens a second wizard (was ~3 + 3 + 2 min per ad).
+- Builder: `/api/creatives` carries `story_label` ("Story: <file>" / "Story: same file,
+  Original"), printed under "Ad N" on the preview card. `serve.py` restart needed.
+- Review of PR #440 (round 2):
+  - H1: every success return of the creative step (`upload` True, the retry loop's
+    media check, the three known-file "media already on ad" returns, the known-file
+    reuse) first asks `crop_step.outcome()` through `meta_dom._crop_gate`. A Crop
+    failure stored by the retry or give-up close-walk, or a pair whose wizard never
+    showed Crop (`crop_step_not_shown`), fails the step with that reason (telemetry
+    `ad_creative_upload` with `where`) instead of being erased by `set_plan(None)`.
+  - M1: the walk recognises the Crop step by its heading "Select media crop for
+    placements" as well as by the step row; a single file whose Crop step was never
+    handled gets one warning row `ad_creative_crop` / `crop_step_not_shown`.
+  - M2: Meta AI expansion fails closed — "AI expansion"/"generative" labels count as
+    expansion, a box outside the cards is switched off (`shared:expand_off`), and any
+    other checked box or switch on the step blocks with `crop_unknown_toggle_on`.
+  - M3: Replace is proven by the picked tile's thumbnail ids on the Vertical card
+    (mismatch → `crop_vertical_not_story`; no ids on either side → warning row
+    `as_planned_thumb_unconfirmed`, as on the library-pick path).
+  - L1: the picker's Done/Select/... is pressed only inside the picker's own dialog;
+    without one (or inside the wizard's) → `crop_replace_picker_unscoped`.
+  - L4: `ad_form_gone_after_media` and `crop_*` reasons carry an English sentence
+    (`simple_create.creative_why_text`) in the step diag `text`.
+
+## Every step of the creative wizard is captured, read-only — ACL-1426 (phase A)
+
+Live runs 04c8c214d2ba and 0bd520418dbe (Facebook_1443, 2026-10-01): after a
+library pick the robot walks the Trim → Crop → Text → Image generation →
+Enhancements → Translation wizard with its forward button, so the Crop step keeps
+Meta's defaults (Vertical 9:16 with "Crop and expand (Meta AI)"), and no capture of
+any step after Media existed (the editor page is cut at 4 MB before the wizard).
+
+- While `_walk_creative_wizard` sees the wizard after a library pick or an upload
+  (both editors, all ads), each new step is captured before the forward press:
+  the scrubbed wizard block in `output/rpa_pages/<run>/NN_wizard_<step>`
+  (`wizard_trim`, `wizard_crop`, `wizard_text`, `wizard_image_generation`, …), the
+  read step state (step row, current step, headings, buttons, checkbox/radio
+  states) in `context.json`. At most 18 per run, on their own quota — the
+  failure-capture limit is untouched; no Sentry section is remembered for them.
+- One telemetry row per walk, `ad_creative_wizard` (note `<origin>:closed|left_open`,
+  diag `sequence`, per-step `at_s`/`s`/`pressed`).
+- Read-only: no presses, scrolls or waits added; the press sequence is the same with
+  capture on and off, and capture failures never reach the walk
+  (`src/fb_ads_rpa/wizard_capture.py`). Machine switch `FB_RPA_WIZARD_CAPTURE=0`
+  turns the captures off (the telemetry row stays).
+
+## Ads 2-3 in the single-screen editor: media found, Creating... waited out — ACL-1412
+
+Live run d1755a59e139 (Facebook_1443, 2026-09-30) left ad 2 without media, link
+and text and stopped ad 3 at `dialog_open`.
+
+- Before opening the creative, checking the media or setting the destination of
+  ads 2+, the robot scrolls the new ad's Media block back on screen (the editor had
+  unmounted the ad form, so "Set up creative", the attached media and Destination
+  were not in the page). Only scrolling: no presses, no reloads, still inside
+  `hold_open_ad`. The media entry used is logged: `ad_creative_upload` note
+  `media_entry:<set_up_creative|picker_open|media_on_ad|media_block_*>`.
+- Meta's "Creating..." dialog after Create ad is waited out for up to 120 s
+  (`META_BUSY_WAIT_S`) whether or not the page answers; any other dialog stops the
+  ad at once (`adN_create:dialog_open`). Meta's media picker left over the new ad
+  is closed with its own Cancel. `simple_create_more_ads` telemetry gains
+  `progress_s`, `dialog.open_s`, `dialog_kind` and `media_picker`.
+## Placements pass when Meta no longer offers a placement, and in the single-screen editor — ACL-1445
+
+2026-10-01 campaigns ended "do not publish: placements" on Doc19 and on the tester's
+machine although the placements were right. Three causes, each now a bench test
+(`tests/test_bench_placements.py`).
+
+- Meta stopped offering "Messenger Stories" on some accounts during the day. The robot
+  has to switch it off, and it treated the placement's absence as a failure. Rule
+  (`fill_placements`, `_settle_category`, `_CATEGORY_END_JS`): a placement to switch OFF
+  that is absent counts as "not offered" only when all of these hold:
+  - all five categories are present;
+  - its own category (`_SUBITEMS_BY_CATEGORY`) is open;
+  - the category's list is scrolled to a proven end: the last row is shown, no row of
+    the category is hidden, the inner scroll is at the bottom, nothing is loading, and
+    the next category is shown;
+  - the list and that proof have not changed for 1.5 s (polled for up to 6 s while
+    the end is unproven; rows that appear meanwhile are set at once);
+  - every placement to switch ON in that category was rendered;
+  - the placement never appeared anywhere in the step (`subitems_seen`).
+
+  Otherwise the absence stays a failure, as before. A tail that never mounted is never
+  judged; 8e9acb2 / ACL-1220 recorded "Threads feed" and "Facebook Notifications"
+  mounting only after scrolling. A placement to switch ON is never "not offered". The
+  step's telemetry line names the not-offered placements (`subitems_not_offered`, note
+  "not offered: …"). Read-back still checks every offered placement.
+- Single-screen editor (cb854b07857b, 30.09): the open Placements card showed only a
+  "Loading..." progressbar, with no "Account controls" to anchor on, and the step
+  reported `placements_card_not_found`. The card is now found by its own anchor
+  (`data-surface` ending in `adset_placement_static_pgd_section`). Its body is waited
+  for (20 s), the card is tagged again once it has loaded, and placements are then set
+  and read back there as in the classic editor. A body that never loads is reported as
+  `placements_card_loading`.
+- Single-screen editor (SA_ARC_All_Video_IPO_35_01.10, tester): the placements list was
+  collapsed to "Placements · Included: 7 · Allowed with limited spend: 0 · Excluded:
+  13". The counts are not proof of which placements are included, so the summary is not
+  accepted. The step opens it and reads the rows back; if it cannot open it, the step
+  fails and reports the counts (`placements_summary`). The fixture was rebuilt from the
+  screenshot text, as there is no capture.
+## The robot finds Meta's "Add text option" next to the text generation section — ACL-1344
+
+28.09–01.10 the second primary text was not added on most video ads
+(`ad_copy_second_text: add_control_not_found`, Doc21 four runs in a row, the
+tester's machine 01.10 twice). Every live capture of the block has the control:
+`#add-bodies-option-button` > `div[role=button]` with `data-surface`
+`.../message_field/lib:dco-add-asset-button`, text "Add text option" — the
+same in the classic and the single-screen editor (bench captures
+cc8fcfa17ae9 01.10 and 3100d06ad51e 30.09). The old finder looked for it by
+text only and dropped anything inside a "text generation zone"; when Meta
+draws "Advantage+ creative text generation" in the same `message_field`, the
+zone grew from that heading up to the parent it shares with the button and
+swallowed it. Every failure on 01.10 had `zones 3–7` and the generation
+section on the page; every success had no section.
+
+- The button is taken by its `data-surface` (in Meta's slot), and a
+  generation zone stops below anything that holds our field's controls.
+  Nothing inside Meta's generation section is pressed or counted as ours.
+- If Meta redraws the new option box right after the robot marks it, the box
+  is taken again instead of failing with `option_box_not_focused` (29.09–30.09
+  live, up to two retries; `reclaims` in telemetry).
+- Not found still means a warning, not a blocked ad (owner decision); the ad
+  creative block is captured once per ad for the next diagnosis.
+- Tests: `tests/test_bench_add_text_option.py` on both real pages, as captured
+  and with the real 29.09 generation section in place — find, press, type
+  text 2, read both texts back. Meta's new box itself is still emulated.
+
+## Finished clean profiles close themselves; a Close profile button for the rest — ACL-1444
+
+2026-10-01. With "Publish all", every finished account left its Multilogin
+window open ("Browser left open for manual review"), 0.6–1.5 GB each; on a
+tester's laptop 4 of 6 windows were idle, memory 92 %, and waiting accounts
+could not start.
+
+- End of a job (`publish_jobs._let_go_of_profile` → `RpaPublisher.finish_job`):
+  when every campaign is publishable, the job has no errors, it was not
+  stopped, no other job is waiting for the same profile, and the draft is
+  saved (fail closed: anywhere but the campaign list — classic `/edit`,
+  single-screen `simple_create`, any other page — Meta's autosave settles and
+  "All edits saved" must show), the robot stops
+  the profile gracefully through the MLX API — `allow_kill=False`, this
+  profile only. Only a profile the robot started or attached to over its
+  automation port and that still runs the same process (ACL-1320/1388
+  markers); a hand-opened window is never closed. Any problem keeps the window
+  open as before. The job panel says "Closed the profile — all campaigns are
+  ready"; telemetry `profile_closed_after_job` (ok True = closed, False = the
+  MLX stop failed, None = kept on purpose; note = why: `kept_problem`,
+  `kept_switch`, `kept_unsaved`, `hand_opened`, …).
+- Per-machine switch `FB_RPA_KEEP_PROFILES_OPEN=1` keeps every window open
+  (old behaviour).
+- Dashboard: "Close profile" on a finished job's panel →
+  `POST /publish-jobs/{job_id}/close-profile`, the same graceful MLX stop.
+  Refused (409) while any job of that profile is pending/queued/running or a
+  read holds the profile lock; the lock is held during the stop.
+- Profile queue: slots count jobs, released when the job ends (unchanged); the
+  memory decision now sees the freed memory once the job releases its slot.
+- Tests: `tests/test_a_finished_clean_profile_closes_itself.py` (46);
+  `tests/conftest.py` sets `FB_RPA_KEEP_PROFILES_OPEN=1` for all other tests.
+
+## Connect Multilogin issues the token in the right workspace — ACL-1441
+
+2026-10-01. "Connect Multilogin" (Accounts → Connect) asked for the automation
+token in the login's default workspace. For a team member whose default is
+their own Free workspace, Multilogin answered "403 Request is not allowed",
+although the same login may issue tokens in the team workspace that holds the
+profiles (seen live: ndays6443 → own Free workspace; KLD profiles in
+1ejadmedia, role `user`).
+
+- `src/web/multilogin_auth.py` `sign_in()` now: `POST /user/signin` →
+  `GET /user/workspaces` (`workspace_id`, `name`, `role`) → switch with
+  `POST /user/refresh_token {email, refresh_token, workspace_id}` →
+  `GET /workspace/automation_token?expiration_period=1mo` in that workspace.
+  Field names checked against the Multilogin X API documentation (Postman
+  collection 28533318/2s946h9Cv9).
+- Which workspace: the one the person picked → the slot's remembered one →
+  the only one → the only one whose plan has automation
+  (`GET /workspace/restrictions` → `automation_available`). Otherwise the
+  form shows a picker (name, role, "no automation") and Continue re-sends the
+  sign-in with the choice. No token is issued before the choice.
+- The slot remembers the workspace in machine settings
+  (`MULTILOGIN_WORKSPACE_<slot>`, `MULTILOGIN_WORKSPACE_ID_<slot>`); the
+  connection line shows it. The password is still never stored.
+- Named errors: "This workspace's plan has no automation — choose the
+  workspace with your profiles"; "Your role in this workspace cannot issue
+  tokens — ask the workspace owner"; a failed switch names the workspace.
+- Every Multilogin call from the sign-in carries a normal browser
+  User-Agent (Cloudflare answers 1010 to the python-requests one).
+- If the workspace list is unavailable, the old behaviour stays: token in the
+  default workspace.
+
+## Ads in the account tree get their workbook numbers — ACL-1395
+
+2026-09-30 on Facebook_6540 (CO_bnc_All_Video_FX_Y_35_28.09) the campaign row had
+its workbook numbers and both ads under it showed only dashes. Two causes.
+
+- The account read took the name cell's whole text, so Meta's label came with the
+  name: "1741 - Pro Bancolombia Unpublished edits Unpublished edits". Nothing in the
+  workbook matched it. The read now takes the name from the cell's own tooltip
+  (`data-tooltip-content`, present on every row in the captured Ads Manager pages)
+  and strips trailing labels by one list, `META_NAME_LABELS` in
+  `src/analysis_agent/account_spend.py`: "Unpublished edits", "In draft", "In
+  review", "Draft" — only at the end of a name, whole and exact, never leaving it
+  empty. The turn-off lookup compares names the same way. The tree applies the same
+  list to readings saved before the fix (`amapTreeName`, a copy kept equal by test).
+- Several ads with one name in one campaign used to get a dash. Owner decision
+  2026-09-30: each shows the workbook totals for that name once (not multiplied),
+  with a quiet "shared by N ads" mark and the tooltip "The workbook cannot tell ads
+  with the same name apart; these are the totals for all of them". Campaign rows are
+  unchanged; two campaigns with one name keep the dash.
+
+## Every Meta layout the robot has met is an offline test — ACL-1433
+
+2026-10-01 Doc19 placements failed on code that passed the same morning: a Meta
+variation, learned only on the next live run. The bench now holds every layout
+the robot has met, so a robot change is checked against all of them before merge.
+
+- `tests/bench/CATALOGUE.md` (from `tests/bench/catalogue.json`,
+  `scripts/bench_catalogue.py --write`): per robot step every layout seen live,
+  with its fixture, test, expected result and status; captures seen but not cut
+  are listed with the reason. `tests/test_bench_catalogue.py` fails when a
+  fixture is not catalogued, a named fixture/fragment/test is missing or the
+  Markdown is stale.
+- `scripts/capture_to_fixture.py`: a live capture folder (`page.html`, possibly
+  truncated at 4 MB, or `block_*.html`, plus `context.json`) becomes a scrubbed,
+  trimmed fixture (named blocks only; ids, `act=`, URLs, e-mails, phones,
+  tokens, media file names, campaign and profile names replaced; render ids to
+  `syn_N`) checked with the secret scanner's rules, plus an optional test stub.
+  Documented in `tests/fixtures/ads_manager/README.md`.
+- Harvest of 29.09–01.10 captures: 10 new fixtures (wizard steps of five step
+  rows incl. Trim/Crop, Doc19 and single-screen placements, five destination
+  layouts and the ad error block, editor gone under the robot, languages chips,
+  ad copy without Headline with the first real "Add text option", conversion
+  card with a heading button group, default-only Locations, single-screen
+  Audience Advantage+ on). Each test runs the robot's own step or reader.
+- Live bugs found, kept as strict xfail for the RPA track: Doc19 fails
+  placements because Meta no longer offers "Messenger Stories"; the
+  single-screen Placements card is not found (anchored on "Account controls").
+- Review checklist (`.github/pull_request_template.md`,
+  `docs/system/AGENT_CONTEXT.md`): every robot fix adds its live capture to the bench.
+
+No robot code changed.
+
+## The test suite runs in parallel — ACL-1397
+
+2026-09-30. The full suite (3800+ tests) ran one test at a time: 82 min on the
+owner's laptop while other sessions shared it, 22–23 min for the test step in CI
+per Python version. It now runs with pytest-xdist:
+`python -m pytest tests/ -q -n auto --dist loadfile` (CI and
+docs/repository/WORKFLOW.md). Locally on the same laptop: 20 min with 8 workers.
+
+- `--dist loadfile`: each test file stays on one worker, so the 80+ files that
+  start their own Chromium start it once, not once per worker.
+- CI: the hosted Windows runner (private repository) has 2 CPUs, and xdist
+  alone left CI at 23–31 min. The suite is now also split into 3 jobs per
+  Python version by `scripts/acl_test_shard.py` (every test file in exactly one
+  shard, checked by `tests/test_acl_test_shard.py`).
+- `test_a_stopped_profile_never_spins_the_robot` reserved a "free" port and
+  released it before Chromium took it; under parallel runs another worker got
+  it first (ECONNREFUSED, CI 3.13). Chromium now picks the port itself
+  (`--remote-debugging-port=0`) and the test reads it from `DevToolsActivePort`.
+- `tests/conftest.py` sets `ACL_LIBRARY_REPO/TOKEN/BRANCH` to empty strings in
+  every worker, so a machine `.env` with the live team library can never be
+  picked up by a test run.
+- Fixed waits replaced with waits for the event itself: the build-percent
+  layout check (`test_campaign_build_percent_browser`, a known flake) reads both
+  boxes in one settled frame; the drawer tests wait for the intercepted preview
+  request instead of sleeping 100–500 ms; a publish log in
+  `test_meta_campaign_agent` goes to `tmp_path`, not the repository `output/`.
+- No product code changed; no test is serial-only.
+## A disabled ad account no longer shows as "no warning" — ACL-1391
+
+2026-09-30 the account map showed "no warning" for FacebookDoc20 while Ads Manager
+wrote "Account disabled" in the Delivery column of its campaign. Two causes:
+
+- The status read looked only for banner sentences. A disabled account can have no
+  banner at all, only the Delivery cell. The robot already recognised that shape
+  before publishing (ACL-1313) with its own list of signs, and the two lists had
+  drifted apart. The status read now also asks the robot's detector: "Account
+  disabled" as a whole Delivery cell reads as `disabled`, "Verification required
+  to advertise" as `restricted`. A test fails if the robot learns a kind of block
+  the status column has no word for. The help link "Why is my ad account
+  disabled?" still reads as nothing. Every sign in every frame is weighed, not
+  the first one on the page: a verification banner above an "Account disabled"
+  cell reads as `disabled`. Meta's lines come out space-joined, and a broken
+  link to the robot's detector is logged once instead of passing silently.
+- The last successful status stayed on screen after later reads failed: Doc20's
+  "no warning" was from 22.09, and every read after it had failed. The map now
+  prints the read date (dd.mm.yy) under the status, and a status followed by a failed read
+  is greyed out and marked "not refreshed", with the failed attempt in its tooltip.
+
+No new visits to accounts: the fix applies on the next Read a person asks for.
+
+## The robot closes and reopens a hand-opened profile window when it is safe — ACL-1388
+
+2026-09-30 06:49 UTC a "Publish all" run stopped Facebook_6540 at the start with
+`profile_open_by_hand`: its Multilogin window had been opened by hand, and since
+ACL-1320 the robot never stops such a window (stopping one once lost a Facebook
+session Multilogin had not saved yet). Owner decision: close it automatically, but
+only when it is safe.
+
+- `src/fb_ads_rpa/hand_window.py` decides. All must hold: the profile's browser has
+  been running at least 15 minutes (`MIN_AGE_S`, the youngest main process decides),
+  the profile window is not the foreground window, and there was no keyboard/mouse
+  input on the machine for 60 seconds (`MIN_IDLE_S`, `GetLastInputInfo`). Any failed
+  read, no process, or not Windows means "not safe". Per-machine overrides:
+  `FB_RPA_HAND_WINDOW_MIN_AGE_S`, `FB_RPA_HAND_WINDOW_MIN_IDLE_S`;
+  `FB_RPA_REOPEN_HAND_WINDOW=0` restores the old always-stop behaviour.
+- `browser.py` applies it at all three hand-opened places (`no_automation_port`,
+  `unowned_port`, `mlx_lock`), only when publishing (spend reading keeps the stop).
+  Safe: graceful MLX API stop of only this profile (no kill — a failed API stop keeps
+  the old stop and closes nothing), wait for its processes to exit, start with
+  automation. A start that fails after the close is `profile_restart_failed`. The
+  existing login check on the way to the campaigns list stops a logged-out profile
+  with `profile_logged_out`, without retries. Not safe: the same
+  `profile_open_by_hand` stop and message as before.
+- Visible: job panel line "Closed the hand-opened window of <account> and reopened
+  it for the robot", telemetry `profile_hand_window` (note = outcome or refusal
+  reason, diag = where, age_s, idle_s) and a Sentry breadcrumb with the same data.
+
+## Ads 2-3 in the single-screen editor: media found, Creating... waited out — ACL-1412
+
+Live run d1755a59e139 (Facebook_1443, 2026-09-30) left ad 2 without media, link
+and text and stopped ad 3 at `dialog_open`.
+
+- Before opening the creative, checking the media or setting the destination of
+  ads 2+, the robot scrolls the new ad's Media block back on screen (the editor had
+  unmounted the ad form, so "Set up creative", the attached media and Destination
+  were not in the page). Only scrolling: no presses, no reloads, still inside
+  `hold_open_ad`. The media entry used is logged: `ad_creative_upload` note
+  `media_entry:<set_up_creative|picker_open|media_on_ad|media_block_*>`.
+- Meta's "Creating..." dialog after Create ad is waited out for up to 120 s
+  (`META_BUSY_WAIT_S`) whether or not the page answers; any other dialog stops the
+  ad at once (`adN_create:dialog_open`). Meta's media picker left over the new ad
+  is closed with its own Cancel. `simple_create_more_ads` telemetry gains
+  `progress_s`, `dialog.open_s`, `dialog_kind` and `media_picker`.
+
 ## Updates install only what CI and the publisher vouch for — ACL-1357
 
 Audit S06: the git update gate (`scripts/acl_update_gate.py`, and its PowerShell

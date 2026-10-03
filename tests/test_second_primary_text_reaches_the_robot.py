@@ -103,7 +103,7 @@ def test_enrich_takes_the_body_of_the_second_entry(enrich):
     d = enrich(AdDraft(copy_name="Text6", copy2_name="Text7"), AdDraft(copy_name="Text6"))
     first, second = d.ad_sets[0].ads
     assert first.ad_body == "Texto uno\nlínea dos"
-    assert first.ad_body2 == "Texto dos\n\nlínea final", "переносы строк сохраняются"
+    assert first.ad_body2 == "Texto dos\n\nlínea final", "line breaks are kept"
     assert first.ad_title == "Regístrate", "заголовок остаётся от первой записи"
     assert second.ad_body2 == ""
     assert not [e for e in d.errors if "text" in e.lower()], d.errors

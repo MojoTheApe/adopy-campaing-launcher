@@ -22,6 +22,8 @@ external telemetry, confirmed success vs unknown external outcome.
   actual authorization; a stored OAuth client or token is not evidence of a send.
 - Define behavior for duplicate requests, retries, concurrent actions, timeouts and
   partial success. Do not blindly retry an uncertain external write.
+- Every robot (RPA) fix adds the live capture that motivated it to the offline bench
+  (`scripts/capture_to_fixture.py`, `tests/bench/CATALOGUE.md`); review checks it.
 - Test observable behavior and affected callers, not merely matching source strings.
   Useful regressions should fail on the original bug when practical. Do not weaken
   expectations to hide a failure. Text-only changes need no artificial product tests.

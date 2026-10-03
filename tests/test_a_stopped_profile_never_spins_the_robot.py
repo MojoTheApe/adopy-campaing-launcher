@@ -24,7 +24,6 @@
 from __future__ import annotations
 
 import os
-import socket
 import subprocess
 import sys
 import tempfile
@@ -79,12 +78,56 @@ class _Counter:
         return (self.n - n0) / (time.perf_counter() - t0)
 
 
-def _free_port() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+def _devtools_port(udd: Path, proc, timeout_s: float = 60.0) -> int:
+    """Порт отладки, который Chromium выбрал сам (`--remote-debugging-port=0`).
+
+    ACL-1397: прежде порт брали заранее (bind на 0, закрыть, отдать браузеру).
+    При параллельном прогоне между закрытием и запуском браузера этот порт
+    успевал занять соседний воркер, и подключение падало с ECONNREFUSED (CI
+    3.13, 30.09). Chromium пишет выбранный порт первой строкой файла
+    `DevToolsActivePort` в своей папке профиля — гонки нет."""
+    marker = udd / "DevToolsActivePort"
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            first = marker.read_text(encoding="utf-8").splitlines()[0].strip()
+            if first.isdigit():
+                return int(first)
+        except (OSError, IndexError):
+            pass
+        if proc.poll() is not None:
+            raise RuntimeError(f"Chromium exited with {proc.returncode} before opening DevTools")
+        time.sleep(0.1)
+    raise TimeoutError(f"no DevToolsActivePort in {udd} after {timeout_s:.0f} s")
+
+
+def _kill(proc) -> None:
+    # Весь процесс Chromium с детьми; ждать его выхода тесту не нужно.
+    subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+    try:
+        proc.wait(30)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def _start_chromium(exe: str):
+    """Chromium с отладкой по CDP: `(процесс, порт)`.
+
+    ACL-1491: на нагруженном раннере Chromium однажды не написал
+    `DevToolsActivePort` за 60 с. Это сбой запуска, а не поведения под
+    проверкой, — один повтор с новой папкой профиля; второй отказ падает."""
+    for attempt in (1, 2):
+        udd = Path(tempfile.mkdtemp(prefix='acl1320_'))
+        proc = subprocess.Popen(
+            [exe, "--headless=new", "--remote-debugging-port=0",
+             f"--user-data-dir={udd}", "about:blank"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            return proc, _devtools_port(udd, proc)
+        except (TimeoutError, RuntimeError):
+            _kill(proc)
+            if attempt == 2:
+                raise
 
 
 @pytest.fixture
@@ -99,12 +142,8 @@ def stopped_profile_page():
     до того проба честно отвечает таймаутом (это «не отвечает», не спин).
     """
     with sync_playwright() as pw:
-        port = _free_port()
         exe = os.environ.get("ACL_BROWSER_EXECUTABLE") or pw.chromium.executable_path
-        proc = subprocess.Popen(
-            [exe, "--headless=new", f"--remote-debugging-port={port}",
-             f"--user-data-dir={tempfile.mkdtemp(prefix='acl1320_')}", "about:blank"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        proc, port = _start_chromium(exe)
         try:
             attached = None
             deadline = time.time() + 20
@@ -129,40 +168,52 @@ def stopped_profile_page():
             assert attached.is_connected() is False
             yield page
         finally:
-            # Весь процесс Chromium с детьми; ждать его выхода тесту не нужно.
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
-            try:
-                proc.wait(30)
-            except subprocess.TimeoutExpired:
-                pass
+            _kill(proc)
+
+
+# ACL-1491: границы — доля медленного пути, а не абсолютные секунды. На
+# остановленном профиле честный путь возвращается сразу (замер: проба —
+# доли миллисекунды, окно цели — 0.8–1.0 с, открытие — 0.1–0.4 с), а
+# сломанный ждёт весь свой таймаут: пробу — `PROBE_S`, окно цели — до
+# `idle_s`, открытие — весь `CAMPAIGN_OPEN_BUDGET_S`. Таймауты взяты
+# длиннее прежних, чтобы четверть каждого выдерживала нагруженный раннер.
+PROBE_S = 10.0
+IDLE_S = 24.0
+OPEN_BUDGET_S = 30.0
 
 
 def test_the_probe_and_the_waits_on_a_stopped_profile_return_at_once(stopped_profile_page, monkeypatch):
     page = stopped_profile_page
     with _Counter() as counter:
         base = counter.baseline()
-        got, rate, dt = counter.rate_over(lambda: md._page_responsive(page, 3.0))
+        got, rate, dt = counter.rate_over(lambda: md._page_responsive(page, PROBE_S))
         assert got is None
-        assert dt < 1.0, dt
+        assert dt < PROBE_S / 4, dt
 
         out: dict = {}
         found, rate, dt = counter.rate_over(lambda: md._wait_objective_dialog(
-            page, first_s=8.0, idle_s=6.0, loading_max_s=10.0, out=out))
+            page, first_s=IDLE_S + 6, idle_s=IDLE_S,
+            loading_max_s=IDLE_S + 16, out=out))
         assert found is False
         assert out.get("outcome") == "gone", out
-        assert dt < 3.0, f"ожидание окна цели на остановленном профиле шло {dt:.1f} с"
+        assert dt < IDLE_S / 4, f"ожидание окна цели на остановленном профиле шло {dt:.1f} с"
         # Ревью PR #323 (F12): запас на шум полного прогона (0.49 против 0.5
         # однажды); горячий цикл отдаёт соседу меньше — главное здесь время.
+        # ACL-1491: под нагрузкой раннера опорная скорость до вызова бывала
+        # выше, чем стала к нему (соседний воркер поднимал свой Chromium).
+        # Сравниваем с меньшей из опор до и после — при той же нагрузке.
+        if rate <= 0.25 * base:
+            base = min(base, counter.baseline())
         assert rate > 0.25 * base, (rate, base)
 
-        monkeypatch.setattr(md, "CAMPAIGN_OPEN_BUDGET_S", 10.0)
+        monkeypatch.setattr(md, "CAMPAIGN_OPEN_BUDGET_S", OPEN_BUDGET_S)
         pressed: list[str] = []
         opened, rate, dt = counter.rate_over(lambda: md._open_campaign(
             page, LIST_URL, press=lambda p, where: pressed.append(where) or False,
             shot=lambda label: None))
         assert opened == "browser_closed"
         assert pressed == [], "Create жали в ушедшую вкладку"
-        assert dt < 3.0, f"открытие кампании на остановленном профиле шло {dt:.1f} с"
+        assert dt < OPEN_BUDGET_S / 4, f"открытие кампании на остановленном профиле шло {dt:.1f} с"
 
 
 class _DeadDriverPage:

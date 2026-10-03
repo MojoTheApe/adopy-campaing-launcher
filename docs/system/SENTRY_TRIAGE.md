@@ -110,17 +110,73 @@ When a task is filed for a new kind, add a row to `config/sentry_triage_map.json
 (`step`, `reason` — fnmatch patterns — `task`, `note`); remove it when the task is
 closed so a recurrence shows up as new again.
 
-## 3. The routine (what the owner's Claude session does)
+## 3. The routine (what the triage session does)
 
-Trigger — whichever comes first:
+Trigger (ACL-1330, owner decision 2026-09-30: no polling, no empty runs):
 
-- **Sentry alert** "a new issue is created" / "issue regressed" → e-mail (and
-  optionally a webhook) to the owner, who opens the Claude chat; or
-- **Claude desktop scheduled task** every 10 minutes during working hours, which runs
-  the script and stays silent when nothing is new.
+- **Sentry alert** "ACL - new failure kind" (rule 1303794: a new issue, or an issue
+  that changed from resolved to unresolved) → a signed webhook to the relay
+  `deploy/sentry-relay/worker.js` → `POST /fire` of the **cloud Claude Code routine**
+  `ACL Sentry triage` with a short scrubbed text of the alert. One run per Sentry issue
+  per 24 h; the owner's laptop can be closed. The routine follows
+  [ROUTINE_SENTRY_PROMPT.md](ROUTINE_SENTRY_PROMPT.md) and ends by asking the owner in
+  the Claude app "Выпустить для <buyer>?". Setup: [SENTRY_ROUTINE_SETUP.md](SENTRY_ROUTINE_SETUP.md).
+- The same rule still **e-mails** the owner (fallback when no phone push arrives).
+- The laptop's Claude desktop scheduled task `acl-sentry-triage` is **paused**: manual
+  "Run now" only, never re-enabled on a schedule. It is the fallback when the cloud path
+  is down.
+
+### 3.1 The relay and why it is a Cloudflare Worker
+
+The routine's API trigger needs `Authorization: Bearer <routine token>` plus the header
+`anthropic-beta: experimental-cc-routine-2026-04-01` and a JSON body `{"text": "..."}`
+(https://code.claude.com/docs/en/routines.md). Sentry cannot send that: an Internal
+Integration's webhook (alert action) and the legacy WebHooks plugin post to a URL with
+Sentry's own headers only (`Sentry-Hook-Resource`, `Sentry-Hook-Timestamp`,
+`Sentry-Hook-Signature`), no custom header, and the routine token cannot go into the URL.
+So a relay is needed. Candidates compared:
+
+| Host | Verdict |
+| --- | --- |
+| **Cloudflare Worker (free plan)** | **Chosen.** No card, set up in the dashboard by pasting one file (no CLI, no build), secrets stored encrypted, KV for dedupe, `waitUntil` lets it answer Sentry within its 1-second limit and call `/fire` afterwards. |
+| GitHub Actions `repository_dispatch` | Same problem: GitHub's dispatch API also needs an `Authorization` header, which Sentry cannot send. A workflow would also start ~20–60 s later and need the routine token as a repository secret. |
+| Google Apps Script web app | Anonymous web apps are closed by the Adopy Google Workspace policy. |
+| Vercel / Netlify functions | Work, but need a project deploy from a repository and more clicks; nothing gained over a Worker. |
+
+What the relay does (`deploy/sentry-relay/worker.js`, tests `worker.test.js`):
+verifies `Sentry-Hook-Signature` (HMAC-SHA256 of the raw body with the integration's
+client secret; constant-time compare) and, because Sentry signs only the body and not
+the `Sentry-Hook-Timestamp` header, takes the event time from the signed body (Sentry's
+`received`, else `datetime` / `timestamp`) and refuses an event older than one hour,
+more than 15 minutes in the future, or without a time (the header, when present, must
+also be within 15 minutes); a replay inside the hour hits the per-issue dedupe below;
+accepts only `event_alert` for the rule `ACL - new failure kind`, project `python` and
+`failure_kind` blocking / campaign_stop / job_exception; fires once per Sentry issue
+within `DEDUPE_HOURS` (24) — a "pending" mark is written before the call so a second
+alert a second later does not start a parallel run, and removed if `/fire` fails so the
+next alert can retry; at most `MAX_FIRES_PER_HOUR` (20) fires per hour, below the
+routine's 30/hour and the account's 100/hour limits, and `MAX_FIRES_PER_DAY` (30) a day
+(the DSN ships with every install, so a flood of made-up issues is capped); without the KV binding or the
+routine settings it fires nothing. The text it sends carries only the Sentry issue id,
+title, culprit, the tags `failure_kind`, `step`, `reason`, `release`, `server_name`,
+`machine`, `account`, `environment`, the rule name and the issue link; every value is
+scrubbed (URLs with or without a scheme, e-mails, `act=` / `*_id=` values, tokens
+including Meta `EAA…` access tokens, uuids, long digit runs, phone
+numbers; `<`/`>` removed so the text cannot close the routine's payload block) and cut
+to 200 characters, the whole text to 2 000. The event's user, contexts, request and the
+page section never leave Sentry through the relay — the routine reads them with the
+read-only Sentry tools. KV is eventually consistent across Cloudflare locations; two
+deliveries of the same alert through different locations within a few seconds could in
+theory both fire — Sentry's 5-minute action interval per issue makes that unlikely.
+
+Self-test: `python scripts/sentry_selftest_event.py` sends one synthetic failure
+(`step=relay_selftest`, a new `reason` each time, so a new issue and a real alert). The
+routine recognises the step and only answers that the chain works;
+`config/sentry_triage_map.json` lists the step as known (ACL-1330) so the laptop digest
+does not report it as a new kind.
 
 For each group marked NEW KIND (or a known kind that regressed after its task was
-closed), the session:
+closed), the session (cloud routine: see the prompt for the cloud-specific commands):
 
 1. Reads the evidence: the digest (with the outline of the section snapshot), the
    event tags (release, machine, account label) — or the same via the Sentry MCP tools
@@ -188,7 +244,19 @@ Security & Privacy → Attachments Access**; the owner's role must be at or abov
 (Sentry's newer "Monitors & Alerts" UI has the same triggers under **Alerts → Create
 Alert → Issue alert**; the wording of the conditions is the same.)
 
-### 4.3 Claude routine (desktop scheduled task)
+### 4.3 Cloud routine and relay (ACL-1330)
+
+Step by step, about 10 minutes: [SENTRY_ROUTINE_SETUP.md](SENTRY_ROUTINE_SETUP.md)
+(routine with an API trigger, the Cloudflare relay, the Sentry internal integration as a
+second action of rule 1303794, a self-test, the phone; how to rotate the tokens and how
+to switch it off).
+
+### 4.4 Laptop fallback: desktop scheduled task (paused)
+
+Since 2026-09-30 the task `acl-sentry-triage` below is **paused** and is run by hand
+only ("Run now"), e.g. when the cloud path is down. Do not put it back on a schedule.
+The text below is how it was created.
+
 
 Open the Claude desktop app in the `C:\fb_agents` project (the chat where the digest
 should arrive — completion notices of a scheduled task go to the session that created
@@ -212,6 +280,14 @@ routine has no access to the machine `.env` or local snapshots — give it the S
 MCP tools and the repository instead of the script.
 
 ## 5. Tests
+
+- `deploy/sentry-relay/worker.test.js` (`node --test deploy/sentry-relay/worker.test.js`,
+  Node 20+, no packages; run from pytest by `tests/test_sentry_relay.py`) — signature
+  and replay checks, filtering by resource / rule / project / failure kind, one fire per
+  issue (also while the first fire is in flight), the hourly cap, retry after a failed
+  fire, nothing fires without KV or routine settings, scrubbing of titles, culprits and
+  tags, the `/fire` request shape. `tests/test_sentry_relay.py` also checks the
+  self-test sender and its map row.
 
 - `tests/test_sentry_page_snapshot.py` — scrubbing on every recorded fixture seeded
   with names/ids/urls/e-mails/phones/tokens/scripts, the 200 KB cap with closed tags,
