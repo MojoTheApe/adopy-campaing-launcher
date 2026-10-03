@@ -3558,6 +3558,18 @@
         "state": "implementing",
         "started_at": "2026-10-03T00:03:55+00:00",
         "from_status": "status:backlog"
+      },
+      "486": {
+        "actor": "Worker-P1486T",
+        "session": "run_p1486t_1003",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1486-shot-path-tests",
+        "worktree": "C:\\acl-1486-shotpath",
+        "id": "576cb14d170a4e1d90b9a042ebc765b8",
+        "issue": 486,
+        "state": "implementing",
+        "started_at": "2026-10-03T00:04:23+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -4778,6 +4790,17 @@
         "state": "implementing",
         "worker": "Worker-L1495K",
         "coordinator": "Coordinator-C0930A"
+      },
+      "486": {
+        "implementers": [
+          {
+            "actor": "Worker-P1486T",
+            "session": "run_p1486t_1003"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-P1486T",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -5083,6 +5106,10 @@
       },
       "Worker-L1495K": {
         "session": "run_l1495k_1003",
+        "role": "Worker"
+      },
+      "Worker-P1486T": {
+        "session": "run_p1486t_1003",
         "role": "Worker"
       }
     },
@@ -8418,6 +8445,13 @@
         "issue": 495,
         "claim": "60719da0337f4545bb3c840149591d36",
         "actor": "Worker-L1495K"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-03T00:04:23+00:00",
+        "issue": 486,
+        "claim": "576cb14d170a4e1d90b9a042ebc765b8",
+        "actor": "Worker-P1486T"
       }
     ],
     "policy": {
