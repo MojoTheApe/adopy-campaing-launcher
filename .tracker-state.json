@@ -4133,7 +4133,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "543": {
+        "actor": "Worker-D1543W",
+        "session": "run_d1543w_1004",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1543-instant-form",
+        "worktree": "C:\\acl-1543-instant-form",
+        "id": "3d6680216cb54aeaa17894864cb1628b",
+        "issue": 543,
+        "state": "implementing",
+        "started_at": "2026-10-03T21:22:24+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -5649,6 +5662,17 @@
         "queued_at": "2026-10-03T15:20:26+00:00",
         "review_report": "# PR #536 (ACL-1535) returned by the coordinator before review \u2014 scope gap\n\nThe worker's own open item 1: `_shoot` in `src/analysis_agent/account_spend.py` still calls `page.screenshot` when a spend read fails (grid timeout, wrong period, no totals row). It is the same capture method ACL-1532 measured resetting the profile's viewport. Owner intent (2026-10-03): no capture that can touch the profile. Gate `_shoot` behind the same `ACL_STATUS_SHOT=1` flag (or a sibling flag documented together), keep the HTML/JSON diagnostics that do not capture an image, and add a spy test that a failed read makes no screenshot call by default. Also grep the dashboard read paths (account_spend, country_split, account status read, open-profile) for any other `page.screenshot` / `captureScreenshot` call and gate or list them.",
         "reviewer": "Reviewer-R1535S"
+      },
+      "543": {
+        "implementers": [
+          {
+            "actor": "Worker-D1543W",
+            "session": "run_d1543w_1004"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-D1543W",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -6035,6 +6059,10 @@
       "Reviewer-R1533S": {
         "session": "rev_r1533s_1003",
         "role": "Reviewer"
+      },
+      "Worker-D1543W": {
+        "session": "run_d1543w_1004",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -10268,6 +10296,13 @@
         "prs": [
           542
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-03T21:22:24+00:00",
+        "issue": 543,
+        "claim": "3d6680216cb54aeaa17894864cb1628b",
+        "actor": "Worker-D1543W"
       }
     ],
     "policy": {
