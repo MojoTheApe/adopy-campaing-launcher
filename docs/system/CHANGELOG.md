@@ -12,12 +12,18 @@ stayed there. Window size is part of the browser fingerprint.
   `paths.load_env`; for controlled tests only). Otherwise the read makes no
   `page.screenshot` and no CDP call, and the reading carries the account's last stored
   shot (if it is still on disk), so the row and Copy for group keep working after a Read.
-  `_status_shot` itself is untouched (ACL-1529 rewrites it). Failure captures are
-  unchanged: `page_capture` HTML, and the `_shoot` PNG taken only when a read fails.
+  `_status_shot` itself is untouched (ACL-1529 rewrites it).
+- The PNG on a failed read (`_shoot`: grid timeout, wrong period, no totals row; also
+  used by `country_split`) is behind the same flag and returns "" without it. The
+  HTML/JSON diagnostics (`page_capture`, which never takes an image) are unchanged.
+  A grep of the dashboard read paths (spend, country split, status read, open-profile in
+  `fb_ads_rpa/browser.py`, turn-off) found no other `page.screenshot` or
+  `Page.captureScreenshot` call.
 - Map row and live Read: with no stored shot, Copy for group stays disabled; its tooltip
   now reads "Screenshots are switched off for safety".
 - Tests: `tests/test_status_screenshot.py` checks with a page spy that a default read
-  calls neither `screenshot` nor `new_cdp_session`, that `ACL_STATUS_SHOT=1` brings the
+  calls neither `screenshot` nor `new_cdp_session` (successful and failed reads, and
+  the `country_split` failure shot), that `ACL_STATUS_SHOT=1` brings the
   old behaviour back, and that the last stored shot is kept.
 
 ## Journal, ad-text and team-library file locks use the shared safe lock — ACL-1512

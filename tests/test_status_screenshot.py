@@ -136,7 +136,7 @@ def test_a_failed_screenshot_does_not_break_the_read(local, monkeypatch):
 # (1919×1079 → 3837×2157), а размер окна — часть отпечатка. Без
 # `ACL_STATUS_SHOT=1` чтение страницу не снимает ни Playwright, ни CDP.
 
-def _spy_read(monkeypatch, status, *, env=None):
+def _spy_read(monkeypatch, status, *, env=None, **fakes):
     if env is None:
         monkeypatch.delenv("ACL_STATUS_SHOT", raising=False)
     else:
@@ -163,6 +163,8 @@ def _spy_read(monkeypatch, status, *, env=None):
     monkeypatch.setattr(sp, "_shown_period", lambda _: DAY)
     monkeypatch.setattr(sp, "_read_total", lambda _: (7.0, "test"))
     monkeypatch.setattr(sp, "_read_tree", lambda *a, **k: ([], "", ""))
+    for name, value in fakes.items():
+        monkeypatch.setattr(sp, name, value)
     return sp.read_via_rpa(ACC, DAY, DAY), calls
 
 
@@ -201,6 +203,38 @@ def test_a_read_without_any_stored_shot_has_none(local, monkeypatch):
     assert calls == [] and out.status_shot == ""
     sp._put(out)
     assert sp.get_status(ACC)["shot_id"] == ""
+
+
+@pytest.mark.parametrize("failure", ["grid", "period", "total"])
+def test_by_default_a_failed_read_takes_no_screenshot(local, monkeypatch, failure):
+    """Снимок неудачи (`_shoot`) — тот же `page.screenshot`; по умолчанию его нет."""
+    fakes = {
+        "grid": {"_wait_for_grid": lambda _: False},
+        "period": {"_shown_period": lambda _: "2026-01-01"},
+        "total": {"_read_total": lambda _: (None, "no totals row")},
+    }[failure]
+    out, calls = _spy_read(monkeypatch, ("disabled", "Account disabled"), **fakes)
+    assert out.state == "failed" and out.error
+    assert calls == [], "снимок или CDP при неудачном чтении"
+    assert out.shot == "" and out.status_shot == ""
+
+
+def test_with_the_switch_on_a_failed_read_is_shot_as_before(local, monkeypatch):
+    monkeypatch.setenv("ACL_STATUS_SHOT", "1")
+    shots = []
+    page = NS(screenshot=lambda path, full_page=False: (shots.append(path), Path(path).write_bytes(PNG)))
+    assert sp._shoot(page, ACC, DAY) and len(shots) == 1
+
+
+def test_country_split_failure_shot_is_gated_too(local, monkeypatch):
+    """`country_split` берёт `_shoot` из account_spend — выключатель общий."""
+    from src.analysis_agent import country_split as cs
+
+    monkeypatch.delenv("ACL_STATUS_SHOT", raising=False)
+    calls = []
+    page = NS(screenshot=lambda *a, **k: calls.append("screenshot"),
+              new_cdp_session=lambda *a, **k: calls.append("new_cdp_session"))
+    assert cs._shoot(page, ACC, DAY) == "" and calls == []
 
 
 def test_only_the_last_few_shots_per_account_are_kept(local, monkeypatch):

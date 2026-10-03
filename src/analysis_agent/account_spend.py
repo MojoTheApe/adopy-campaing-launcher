@@ -1805,7 +1805,14 @@ def _safe_name(account: str) -> str:
 
 
 def _shoot(page, account: str, day: str) -> str:
-    """Снимок при неудаче: первый живой прогон стоит тестового аккаунта."""
+    """Снимок при неудаче: первый живой прогон стоит тестового аккаунта.
+
+    ACL-1535: тот же `page.screenshot`, что сбрасывал вьюпорт профиля
+    (ACL-1532), — поэтому только при `ACL_STATUS_SHOT=1`. Без него "" и
+    страница не трогается; HTML-снимки `page_capture` остаются как были.
+    """
+    if not status_shot_enabled():
+        return ""
     try:
         out = _shots_dir()
         out.mkdir(parents=True, exist_ok=True)
