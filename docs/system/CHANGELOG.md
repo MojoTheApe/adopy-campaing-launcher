@@ -30,6 +30,10 @@ minutes earlier. Owner decision 2026-09-30: retry in place and once more at the 
   empty search field is retyped on attempt 1 and the attempt row records what was
   really in the field; keys are sent only when the location search has focus; the
   read-back requires row names equal to the country ("Riyadh, Saudi Arabia" is not).
+- Review round 2: the job panel titles the warning "Country set on the second pass"
+  (`failure_policy.GUIDE`); a miss opening the ad-set row is recorded on the
+  `audience_location_second_pass` row as `open:<why>`, so Robot health does not count
+  it as a failed step.
 
 ## A failed read says "Campaigns not read", not "0 campaigns" — ACL-1504
 

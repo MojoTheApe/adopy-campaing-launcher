@@ -18062,17 +18062,22 @@ _TREE_ADSET_JS = r"""
 """Точка клика по строке группы объявлений в дереве прежнего редактора."""
 
 
-def _open_tree_adset(page: Page, adset_name: str) -> bool:
+def _open_tree_adset(page: Page, adset_name: str, miss: list[str] | None = None) -> bool:
     """Открыть группу объявлений кликом по её строке в дереве слева.
 
     Успех — видимое поле имени группы: редактор действительно на ней.
+    Промах не пишется отдельной строкой телеметрии (ревью PR #393, m1:
+    `*_open` без диагностического суффикса Robot health считал бы исходом
+    шага): причина кладётся в `miss`, и вызывающий пишет её в строку
+    `audience_location_second_pass` как `open:<why>`.
     """
     try:
         pt = page.evaluate(_TREE_ADSET_JS, adset_name or "") or {}
     except Exception as exc:
         pt = {"why": "error:" + type(exc).__name__}
     if "x" not in pt:
-        _telemetry.record("audience_location_second_pass_open", False, note=str(pt.get("why") or "not_found"))
+        if miss is not None:
+            miss.append(str(pt.get("why") or "not_found"))
         return False
     _cdp_mouse_click(page, pt["x"], pt["y"])
     _sleep_h(1.5)
@@ -18081,7 +18086,8 @@ def _open_tree_adset(page: Page, adset_name: str) -> bool:
         page.get_by_placeholder(_simple.NAME_FIELDS["adset"]).first.wait_for(state="visible", timeout=8000)
         return True
     except Exception:
-        _telemetry.record("audience_location_second_pass_open", False, note="adset_name_field_hidden")
+        if miss is not None:
+            miss.append("adset_name_field_hidden")
         return False
 
 
@@ -18114,14 +18120,16 @@ def _location_second_pass(page: Page, country: str, *, simple: bool, adset_name:
     и проверка перечитыванием карточки.
     """
     term = _country_search_term(country)
+    miss: list[str] = []
     if simple:
         reached = bool(_simple.scroll_to_level(page, "adset").get("ok"))
         if reached:
             _simple.open_card(page, "Audience")
     else:
-        reached = _open_tree_adset(page, adset_name)
+        reached = _open_tree_adset(page, adset_name, miss)
     if not reached:
-        _telemetry.record("audience_location_second_pass", False, note="adset_not_reached",
+        _telemetry.record("audience_location_second_pass", False,
+                          note=("open:" + miss[0]) if miss else "adset_not_reached",
                           diag={"keep": term, "simple": simple})
         return False
     _close_open_listboxes(page, "before_audience_location_second_pass")
