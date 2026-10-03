@@ -2929,6 +2929,18 @@
     .cbd-q-ok { color: var(--good); }
     .cbd-q-bad { color: var(--bad); }
     .cbd-q-run { color: var(--accent); }
+    /* ACL-1399: сервер не ответил на Publish — повтор тем же ключом. */
+    .cbd-q-busy .cbd-q-run { color: var(--warn); }
+    .cbd-q-retry, .cb-retry-btn {
+      font: inherit; font-size: 0.7rem; padding: 0.05rem 0.5rem; margin-left: auto; cursor: pointer;
+      color: var(--text, inherit); background: transparent; border: 1px solid var(--warn); border-radius: 4px;
+    }
+    .cb-retry-btn { font-size: 0.78rem; padding: 0.3rem 0.9rem; margin-left: 0; }
+    .cbd-q-retry + .cbd-q-retry { margin-left: 0; }
+    .cb-dismiss-btn { font: inherit; font-size: 0.78rem; padding: 0.3rem 0.9rem; cursor: pointer;
+      color: var(--muted); background: transparent; border: 1px solid var(--line, var(--muted)); border-radius: 4px; }
+    .cbd-q-retry:hover, .cb-retry-btn:hover { background: color-mix(in srgb, var(--warn) 18%, transparent); }
+    .cb-status-busy .cb-status-title { color: var(--warn); }
 
     /* ── Форма аккаунта, гостящая в ящике ──────────────────────────────
        Переносится настоящая форма, а не копия: браузер собирает данные
@@ -5401,6 +5413,14 @@ window.cbTree = (function () {
       // проверяется, кто собирается, кто ждёт места в очереди профилей.
       p.live.forEach(function (x) {
         var q = x.queue || {};
+        // ACL-1399: сервер не ответил на отправку — ждём повтора человека.
+        if (x.stage === 'busy') {
+          lines.push('<div class="cbd-q-line cbd-q-busy"><span class="cbd-q-run">⚠</span> '
+            + aclEscHtml(x.account) + ' — the server is busy and did not answer; not sent twice '
+            + '<button type="button" class="cbd-q-retry" data-cb-retry="' + aclEscHtml(x.key || '') + '">Retry</button>'
+            + '<button type="button" class="cbd-q-retry" data-cb-dismiss="' + aclEscHtml(x.key || '') + '">Dismiss</button></div>');
+          return;
+        }
         var what = x.stage === 'checking' ? 'checking'
           : x.stage === 'queued'
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
@@ -5420,6 +5440,16 @@ window.cbTree = (function () {
         + ' <span class="cbd-q-why">' + p.at + ' of ' + p.of + '</span></div>');
     }
     box.innerHTML = lines.join('');
+    box.querySelectorAll('[data-cb-retry]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (window.CB_QUEUE && window.CB_QUEUE.retry) window.CB_QUEUE.retry(b.getAttribute('data-cb-retry'));
+      });
+    });
+    box.querySelectorAll('[data-cb-dismiss]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (window.CB_QUEUE && window.CB_QUEUE.dismiss) window.CB_QUEUE.dismiss(b.getAttribute('data-cb-dismiss'));
+      });
+    });
     // Аккаунт начал или кончил собираться — его галочки заперты или свободны.
     refreshTicks();
   }
@@ -11847,6 +11877,40 @@ function cbSentCampaignNames(fd) {
  * Stop — только своё задание. Потерянный статус (дешборд перезапущен)
  * по-прежнему останавливает всю вкладку: неотправленные аккаунты не едут,
  * новые не принимаются, пока страницу не перезагрузят. */
+/* Ключ одной отправки Publish (ACL-1399) — см. start_job(request_id). */
+function cbRequestId() {
+  try {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') return 'pj-' + window.crypto.randomUUID();
+  } catch (err) { /* ниже — запасной */ }
+  return 'pj-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+}
+
+/* POST /publish-jobs. «Сервер не ответил» — отдельная ошибка (`cbBusy`):
+ * сетевой отказ, ответ не JSON (перезапуск, прокси) или нет ответа за
+ * CB_PUBLISH_TIMEOUT_MS. Ответ сервера с ошибкой — обычные данные. */
+var CB_PUBLISH_TIMEOUT_MS = 45000;
+function cbBusyError(why) {
+  var err = new Error(why);
+  err.cbBusy = true;
+  return err;
+}
+function cbPostPublish(fd) {
+  var ctl = (typeof AbortController === 'function' && typeof setTimeout === 'function')
+    ? new AbortController() : null;
+  var timer = ctl ? setTimeout(function () { ctl.abort(); }, CB_PUBLISH_TIMEOUT_MS) : null;
+  function done() { if (timer !== null && typeof clearTimeout === 'function') clearTimeout(timer); }
+  return fetch('/publish-jobs', ctl ? { method: 'POST', body: fd, signal: ctl.signal } : { method: 'POST', body: fd })
+    .then(function (r) {
+      done();
+      return r.json().catch(function () {
+        throw cbBusyError('The server answered ' + (r.status || '') + ' without a result');
+      });
+    }, function (err) {
+      done();
+      throw cbBusyError(err && err.name === 'AbortError' ? 'No answer from the server' : 'The server did not answer');
+    });
+}
+
 function cbNewRun(notify) {
   var batch = { active: true, uncertain: false, progress: null };
   var entries = [];        // {form, key, account, country, label, only, sent, panel, state, live, jobId}
@@ -11861,7 +11925,7 @@ function cbNewRun(notify) {
     p.of = entries.length;
     p.report = report;
     p.live = entries.filter(function (e) { return e.live; }).map(function (e) {
-      return { account: e.label, stage: e.live.stage, queue: e.live.queue || null };
+      return { account: e.label, stage: e.live.stage, queue: e.live.queue || null, key: e.key };
     });
     batch.progress = p;
     notify(p);
@@ -11935,17 +11999,28 @@ function cbNewRun(notify) {
     // hand_off: заполнить, оставить черновиком, окно не закрывать — Publish в Meta не нажимать
     fd.set('hand_off', '1');
     fd.set('user_confirmed', '1');
+    // ACL-1399: ключ отправки. Повтор после «сервер не ответил» идёт с тем
+    // же ключом, и сервер вернёт уже созданное задание, а не второе.
+    // Отложенная (Dismiss) отправка этой формы — тот же ключ: если первая
+    // всё же дошла до сервера, он вернёт её задание, а не заведёт второе.
+    if (!fd.get('request_id')) {
+      var held = window.CB_PENDING_KEYS && window.CB_PENDING_KEYS[e.key];
+      if (held) delete window.CB_PENDING_KEYS[e.key];
+      fd.set('request_id', held || cbRequestId());
+    }
     // Кампании, ушедшие в задание: у их строк в ящике встанет точка сборки.
     var sentNames = cbSentCampaignNames(fd);
+    post(e, fd, skipped, sentNames);
+  }
 
+  function post(e, fd, skipped, sentNames) {
     e.state = 'submitted';
     track(e, 'publishing');
     if (e.panel) {
       e.panel.style.display = 'block';
       e.panel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
     }
-    fetch('/publish-jobs', { method: 'POST', body: fd })
-      .then(function (r) { return r.json(); })
+    cbPostPublish(fd)
       .then(function (data) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
         if (data.error) {
@@ -11964,9 +12039,47 @@ function cbNewRun(notify) {
       })
       .catch(function (err) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
+        if (err && err.cbBusy) { offerRetry(e, fd, skipped, sentNames); return; }
         if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Request failed: ' + aclEscHtml(err.message) + '</span>';
         halt(e, { account: e.label, state: 'bad', why: 'Submission outcome unknown: ' + err.message });
       });
+  }
+
+  /* ACL-1399: сервер не ответил на отправку — занят (перезапуск, сборка
+   * отчёта) или ответ потерялся. 30.09 так пропал Publish владельца: страница
+   * написала «Failed to fetch» и остановила вкладку. Теперь аккаунт ждёт
+   * повтора: он по-прежнему занят (второго задания мимо повтора не будет), а
+   * повтор идёт с тем же ключом — создал ли сервер задание в первый раз или
+   * нет, заданий будет одно. */
+  function offerRetry(e, fd, skipped, sentNames) {
+    e.state = 'retry';
+    e.resend = function () {
+      if (window.CB_QUEUE !== batch || e.state !== 'retry') return false;
+      post(e, fd, skipped, sentNames);
+      return true;
+    };
+    e.dismiss = function () {
+      if (window.CB_QUEUE !== batch || e.state !== 'retry') return false;
+      (window.CB_PENDING_KEYS = window.CB_PENDING_KEYS || {})[e.key] = fd.get('request_id');
+      if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Not confirmed by the server — dismissed. '
+        + 'Publishing this account again reuses the same request, so no second job is created.</span>';
+      settle(e, { account: e.label, state: 'bad', skipped: skipped,
+                  why: 'Not confirmed by the server — dismissed; publishing again reuses the same request' });
+      return true;
+    };
+    track(e, 'busy');
+    if (!e.panel) return;
+    e.panel.style.display = 'block';
+    e.panel.innerHTML = '<div class="cb-status-busy">'
+      + '<div class="cb-status-title">The dashboard server is busy and did not answer — nothing was sent twice.</div>'
+      + '<div style="font-size:0.78rem;color:var(--muted);margin:0.25rem 0 0.4rem">'
+      + 'Press Retry in a few seconds. If the first attempt did reach the server, Retry picks up that same job.</div>'
+      + '<button type="button" class="cb-retry-btn">Retry</button> '
+      + '<button type="button" class="cb-dismiss-btn">Dismiss</button></div>';
+    var btn = e.panel.querySelector('.cb-retry-btn');
+    if (btn) btn.addEventListener('click', function () { e.resend(); });
+    var off = e.panel.querySelector('.cb-dismiss-btn');
+    if (off) off.addEventListener('click', function () { e.dismiss(); });
   }
 
   // Превью — по одному аккаунту за раз (оно быстрое); следующий аккаунт
@@ -12034,6 +12147,17 @@ function cbNewRun(notify) {
   };
   batch.jobIds = function () {
     return entries.map(function (e) { return e.jobId; }).filter(Boolean);
+  };
+  /* Повторить отправку, на которую сервер не ответил (ACL-1399). */
+  batch.retry = function (key) {
+    var e = entries.filter(function (x) { return x.state === 'retry' && x.key === key; })[0];
+    return e ? e.resend() : false;
+  };
+  /* Не ждать повтора: аккаунт свободен, а следующая его отправка пойдёт с
+     тем же ключом (ревью PR #408, R9). */
+  batch.dismiss = function (key) {
+    var e = entries.filter(function (x) { return x.state === 'retry' && x.key === key; })[0];
+    return e ? e.dismiss() : false;
   };
   /* Доложить аккаунты: каждый пройдёт превью и уйдёт своим заданием.
      `only` — какие карточки везти: одна (Publish у карточки), функция

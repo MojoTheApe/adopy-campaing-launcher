@@ -37,6 +37,13 @@ _active_publishers: dict[str, RpaPublisher] = {}
 # Сколько профилей публикуют разом — по свободной памяти машины (ACL-1321).
 # Задания сверх решения ждут в «queued» в порядке отправки; см. profile_slots.
 _slots = ProfileSlots()
+# ACL-1399: ключ отправки со страницы → задание. Publish, чей ответ потерялся
+# (сервер был занят, «Failed to fetch»), страница повторяет с тем же ключом —
+# и получает то же задание, а не второе на тот же аккаунт.
+_request_jobs: dict[str, str] = {}
+_request_locks: dict[str, threading.Lock] = {}
+_request_lock = threading.Lock()
+_REQUEST_KEYS_MAX = 500
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -128,12 +135,27 @@ def cancel_job(job_id: str) -> dict[str, Any]:
     _slots.wake()
 
     if publisher is not None:
-        try:
-            publisher.cancel()
-        except Exception:
-            pass
+        # ACL-1399: не в потоке вызывающего. Отмена рвёт CDP-соединение
+        # задания: трогает его sync-Playwright из чужого потока и в конце
+        # сбрасывает у ТЕКУЩЕГО потока отметку «идущий цикл asyncio»
+        # (browser._reset_asyncio_running_loop). Вызванная из обработчика
+        # запроса, она ломала сам цикл сервера — 29.09 12:54:59 лог полон
+        # «loop … is not the running loop», и дешборд перестал отвечать.
+        # Свой короткий поток: ответ «останавливаю» уходит сразу, что бы ни
+        # делала отмена и сколько бы она ни ждала браузер.
+        threading.Thread(
+            target=_cancel_publisher, args=(publisher,), daemon=True,
+            name=f"cancel-{job_id[:8]}",
+        ).start()
 
     return {"ok": True, "job_id": job_id}
+
+
+def _cancel_publisher(publisher: RpaPublisher) -> None:
+    try:
+        publisher.cancel()
+    except Exception:
+        pass
 
 
 def slots_snapshot() -> dict[str, Any]:
@@ -764,8 +786,58 @@ def start_job(
     activate: bool = False,
     dry_run: bool = False,
     hand_off: bool = False,
+    request_id: str = "",
 ) -> str:
-    """Create a job and launch it in a background daemon thread. Returns job_id."""
+    """Create a job and launch it in a background daemon thread. Returns job_id.
+
+    `request_id` — ключ отправки со страницы (ACL-1399): повтор с тем же
+    ключом возвращает уже созданное задание, второго не будет.
+    """
+    request_id = (request_id or "").strip()[:100]
+    if not request_id:
+        return _start_job(account_label, country, slots, via_multilogin=via_multilogin,
+                          activate=activate, dry_run=dry_run, hand_off=hand_off)
+    # Под замком этого ключа целиком: исходный запрос и его повтор могут
+    # прийти почти разом (первый ещё собирает черновики), и проверить-потом-
+    # создать раздельно значило бы два задания. Замок — на ключ, а не общий:
+    # «Publish all» шлёт аккаунты разом, и они не должны ждать друг друга.
+    with _request_lock:
+        key_lock = _request_locks.setdefault(request_id, threading.Lock())
+    try:
+        with key_lock:
+            with _request_lock:
+                known = _request_jobs.get(request_id)
+            if known is not None:
+                with _jobs_lock:
+                    if known in _jobs:
+                        return known
+            job_id = _start_job(account_label, country, slots, via_multilogin=via_multilogin,
+                                activate=activate, dry_run=dry_run, hand_off=hand_off)
+            with _request_lock:
+                while len(_request_jobs) >= _REQUEST_KEYS_MAX:
+                    _request_jobs.pop(next(iter(_request_jobs)))
+                _request_jobs[request_id] = job_id
+            return job_id
+    finally:
+        # Замок ключа нужен только на время запуска (ревью PR #408, R7): и
+        # после удачи, и после отказа он больше не держится. Повтор, пришедший
+        # позже, найдёт задание в _request_jobs; ждущий этот же замок держит
+        # на него ссылку и дождётся.
+        with _request_lock:
+            if _request_locks.get(request_id) is key_lock and not key_lock.locked():
+                _request_locks.pop(request_id, None)
+
+
+def _start_job(
+    account_label: str,
+    country: str,
+    slots: list[dict[str, Any]],
+    *,
+    via_multilogin: bool,
+    activate: bool,
+    dry_run: bool,
+    hand_off: bool,
+) -> str:
     if activate:
         raise ValueError("ACL is draft-only: live activation is disabled")
     if not use_rpa_publish():
