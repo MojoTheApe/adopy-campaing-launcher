@@ -4715,7 +4715,7 @@
             "session": "run_n1504r_1002"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-N1504R",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -4734,7 +4734,8 @@
         },
         "pr": 505,
         "queued_at": "2026-10-02T22:04:41+00:00",
-        "review_report": "# Review of PR #505 [ACL-1504] (Issue #504): request changes\n\nReviewer: Reviewer-R1504S (rev_r1504s_1002). Implementer: Worker-N1504R.\nHead: 0d3f5eaee2c156b3cdf922be0b0ce07871c04aed. Base (work/stage): c60b56d98ae0a00368be0d99ee9af2303167492f. Tree: 8a8ff3db4191a4ebc869ae4d6a4683f260a155bd.\n\n## Findings\n**M1 (medium, blocking). src/web/templates/report.html:7644.** `again.disabled = !read || read.disabled` copies the Read spend button's state once, when the tree is painted. During Read all, `amapApplyReading` sets `.amap-read` disabled (because `amapReadAllBusy`) before it calls `amapPaintTree`. When the queue ends, `amapReadAllControls(false)` (line 8233) turns the `.amap-read` buttons back on but leaves `.amap-tree-reread` alone. Result: after a Read all, every row whose campaigns were not read has a greyed-out Read again until the page reloads.\n- Reproduced headless: paint while Read spend is disabled, then enable Read spend. Result: `{'read': False, 'again': True}`.\n- Fix: check the state on click only, which the handler already does. Or have `amapReadAllControls` update `.amap-tree-reread` too. Add a test for this.\n\n**L1 (low). src/analysis_agent/account_spend.py:237 `scrub_tree_error`.** URLs, `act=`, `act_`, `access_token=` and long digit runs are removed. A bare Meta token (`EAAB\u2026`) outside a URL or `key=` survives, because `run_telemetry.scrub` does not catch it. This is unlikely in Playwright errors, since tokens arrive inside URLs, and those are removed.\n\n**L2 (low). report.html:7718.** The not-read branch takes the place of the ACL-1271 \"other dates\" head. A fallback reading from other dates that did not reach the list shows only \"tried <time>\", without saying that those dates are not the dates on screen. This is informational only.\n\n## Checks against the core risks\n- An empty account that was read still shows \"0 campaigns \u00b7 0 ads\": `objects_read=True`. Mutation M6 fails the test.\n- A failed read keeps the last good list. `_put` attaches `objects_prev` from the newest good tree of this account, and it survives repeated failures. Mutation M5 fails the test. The date is shown, so the list is not misattributed.\n- Old saved records (`objects_read=None`) count as not read when they have no rows and have an error. Readings pass through `_restore_reading` \u2192 `to_dict`, so old records get `objects_problem` too. Mutation M9 fails the test. The stored scrubbed error still yields \"did not open in 90 s\" after reload (checked).\n- Scrubbing is checked by mutation M3, which fails 2 tests.\n- Read again does `.click()` on the row's own `.amap-read`. There is no new path and no timer. Mutation M8 fails the test.\n- The last good rows have no turn-off buttons (`_stale`). Mutation M1, which removes `_stale`, fails the test.\n- Stage features are intact.\n  - The two-dot and three-dot diffs against work/stage are identical: 5 files, +453/\u22128.\n  - Nothing from 132 Copy text, 1430 screenshot or the 1455 CSS is removed.\n  - 1457 is not in stage yet.\n- `git merge-tree --write-tree work/stage HEAD` is clean and gives the head tree. The head already contains stage.\n\n## Tests\n- Headless, with the ACL_LIBRARY_* variables empty: 323 passed. Files run:\n  - tests/test_tree_campaigns_not_read.py\n  - test_the_account_tree_on_screen, test_read_the_account_tree, test_account_spend\n  - test_report_scripts_parse, test_bench_catalogue, test_review_ui_regressions\n  - test_copy_status_text, test_status_screenshot\n- Mutations: M1, M3\u2013M9 each turned their target test red. M2 (`problem=null`) turned 5 tests red.\n- scripts/acl_scan_secrets.py: clean.\n\n## CI (PR #505 at 0d3f5eae)\nAll checks passed: test 3.11/3.13 \u00d73 shards, installer build/install/repair/uninstall, tooling, descriptor, tracker-link and ACL verification. No failures, so nothing to classify.\n\n## Issue #504 boxes mapped to tests\n- Box 1, failed before the list \u2192 \"Campaigns not read\", no \"0 campaigns\": test_failed_before_the_list_says_campaigns_not_read, test_a_navigation_failure_did_not_reach_the_list, test_an_unparsed_table_is_not_an_empty_list, test_not_read_carries_a_readable_reason.\n- Box 1, a read empty list \u2192 \"0 campaigns\": test_a_read_empty_list_says_zero_campaigns, test_an_empty_list_that_was_read_is_read, test_an_empty_read_list_is_not_a_problem.\n- Box 1, the raw error is collapsed and scrubbed: test_the_raw_error_is_collapsed_and_scrubbed, test_the_technical_text_has_no_account_ids_or_urls.\n- Box 1, Read again is present: test_read_again_presses_the_existing_read_spend, test_read_again_waits_while_reading. The case after Read all is not covered (M1).\n- Spec 3, last numbers with their date: test_the_last_good_tree_stays_with_its_date, test_the_last_good_numbers_stay_with_their_read_date.\n- Old records: test_an_old_record_without_the_flag_is_judged_by_itself, test_a_failed_spend_read_is_not_a_tree_problem.\n- Box 2, owner checks the 1443 row: still open. This is a manual check after `serve.py` is restarted."
+        "review_report": "# Review of PR #505 [ACL-1504] (Issue #504): request changes\n\nReviewer: Reviewer-R1504S (rev_r1504s_1002). Implementer: Worker-N1504R.\nHead: 0d3f5eaee2c156b3cdf922be0b0ce07871c04aed. Base (work/stage): c60b56d98ae0a00368be0d99ee9af2303167492f. Tree: 8a8ff3db4191a4ebc869ae4d6a4683f260a155bd.\n\n## Findings\n**M1 (medium, blocking). src/web/templates/report.html:7644.** `again.disabled = !read || read.disabled` copies the Read spend button's state once, when the tree is painted. During Read all, `amapApplyReading` sets `.amap-read` disabled (because `amapReadAllBusy`) before it calls `amapPaintTree`. When the queue ends, `amapReadAllControls(false)` (line 8233) turns the `.amap-read` buttons back on but leaves `.amap-tree-reread` alone. Result: after a Read all, every row whose campaigns were not read has a greyed-out Read again until the page reloads.\n- Reproduced headless: paint while Read spend is disabled, then enable Read spend. Result: `{'read': False, 'again': True}`.\n- Fix: check the state on click only, which the handler already does. Or have `amapReadAllControls` update `.amap-tree-reread` too. Add a test for this.\n\n**L1 (low). src/analysis_agent/account_spend.py:237 `scrub_tree_error`.** URLs, `act=`, `act_`, `access_token=` and long digit runs are removed. A bare Meta token (`EAAB\u2026`) outside a URL or `key=` survives, because `run_telemetry.scrub` does not catch it. This is unlikely in Playwright errors, since tokens arrive inside URLs, and those are removed.\n\n**L2 (low). report.html:7718.** The not-read branch takes the place of the ACL-1271 \"other dates\" head. A fallback reading from other dates that did not reach the list shows only \"tried <time>\", without saying that those dates are not the dates on screen. This is informational only.\n\n## Checks against the core risks\n- An empty account that was read still shows \"0 campaigns \u00b7 0 ads\": `objects_read=True`. Mutation M6 fails the test.\n- A failed read keeps the last good list. `_put` attaches `objects_prev` from the newest good tree of this account, and it survives repeated failures. Mutation M5 fails the test. The date is shown, so the list is not misattributed.\n- Old saved records (`objects_read=None`) count as not read when they have no rows and have an error. Readings pass through `_restore_reading` \u2192 `to_dict`, so old records get `objects_problem` too. Mutation M9 fails the test. The stored scrubbed error still yields \"did not open in 90 s\" after reload (checked).\n- Scrubbing is checked by mutation M3, which fails 2 tests.\n- Read again does `.click()` on the row's own `.amap-read`. There is no new path and no timer. Mutation M8 fails the test.\n- The last good rows have no turn-off buttons (`_stale`). Mutation M1, which removes `_stale`, fails the test.\n- Stage features are intact.\n  - The two-dot and three-dot diffs against work/stage are identical: 5 files, +453/\u22128.\n  - Nothing from 132 Copy text, 1430 screenshot or the 1455 CSS is removed.\n  - 1457 is not in stage yet.\n- `git merge-tree --write-tree work/stage HEAD` is clean and gives the head tree. The head already contains stage.\n\n## Tests\n- Headless, with the ACL_LIBRARY_* variables empty: 323 passed. Files run:\n  - tests/test_tree_campaigns_not_read.py\n  - test_the_account_tree_on_screen, test_read_the_account_tree, test_account_spend\n  - test_report_scripts_parse, test_bench_catalogue, test_review_ui_regressions\n  - test_copy_status_text, test_status_screenshot\n- Mutations: M1, M3\u2013M9 each turned their target test red. M2 (`problem=null`) turned 5 tests red.\n- scripts/acl_scan_secrets.py: clean.\n\n## CI (PR #505 at 0d3f5eae)\nAll checks passed: test 3.11/3.13 \u00d73 shards, installer build/install/repair/uninstall, tooling, descriptor, tracker-link and ACL verification. No failures, so nothing to classify.\n\n## Issue #504 boxes mapped to tests\n- Box 1, failed before the list \u2192 \"Campaigns not read\", no \"0 campaigns\": test_failed_before_the_list_says_campaigns_not_read, test_a_navigation_failure_did_not_reach_the_list, test_an_unparsed_table_is_not_an_empty_list, test_not_read_carries_a_readable_reason.\n- Box 1, a read empty list \u2192 \"0 campaigns\": test_a_read_empty_list_says_zero_campaigns, test_an_empty_list_that_was_read_is_read, test_an_empty_read_list_is_not_a_problem.\n- Box 1, the raw error is collapsed and scrubbed: test_the_raw_error_is_collapsed_and_scrubbed, test_the_technical_text_has_no_account_ids_or_urls.\n- Box 1, Read again is present: test_read_again_presses_the_existing_read_spend, test_read_again_waits_while_reading. The case after Read all is not covered (M1).\n- Spec 3, last numbers with their date: test_the_last_good_tree_stays_with_its_date, test_the_last_good_numbers_stay_with_their_read_date.\n- Old records: test_an_old_record_without_the_flag_is_judged_by_itself, test_a_failed_spend_read_is_not_a_tree_problem.\n- Box 2, owner checks the 1443 row: still open. This is a manual check after `serve.py` is restarted.",
+        "reviewer": "Reviewer-R1504S"
       }
     },
     "actors": {
@@ -5842,10 +5843,20 @@
       357,
       390,
       399,
-      433,
-      504
+      433
     ],
-    "review": null,
+    "review": {
+      "id": "214218ba36504160bf26dd94d9f15bc9",
+      "pr": 505,
+      "issues": [
+        504
+      ],
+      "actor": "Reviewer-R1504S",
+      "session": "rev_r1504s_1002",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-03T00:00:56+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -8347,6 +8358,13 @@
         "prs": [
           508
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-03T00:00:56+00:00",
+        "pr": 505,
+        "lane": "214218ba36504160bf26dd94d9f15bc9",
+        "actor": "Reviewer-R1504S"
       }
     ],
     "policy": {
