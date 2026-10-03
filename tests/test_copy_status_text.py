@@ -91,7 +91,7 @@ def test_without_a_screenshot_the_button_is_disabled_and_says_why():
                                                      "shot_id": "", "shot_at": ""})
     btn = _group(cell)
     assert " disabled" in btn and "onclick" not in btn and "data-shot" not in btn
-    assert 'title="No screenshot on the last read — read the account again"' in btn
+    assert 'title="Screenshots are switched off for safety"' in btn
     assert HINT in cell
 
 
@@ -158,7 +158,7 @@ def test_a_live_read_that_finds_a_problem_offers_copy_for_group(shot):
             assert p.evaluate("window.__group") == "FacebookDoc20 — Account Disabled · 2026-10-02 10:00:00"
             assert btn.get_attribute("data-shot") == shot
         else:
-            assert btn.get_attribute("title") == "No screenshot on the last read — read the account again"
+            assert btn.get_attribute("title") == "Screenshots are switched off for safety"
         assert sent == []
         b.close()
 

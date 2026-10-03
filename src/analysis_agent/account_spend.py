@@ -1894,10 +1894,40 @@ def _status_shot(page, account: str) -> tuple[str, str]:
         return "", ""
 
 
+def status_shot_enabled() -> bool:
+    """Снимать ли состояние (ACL-1535). По умолчанию — нет.
+
+    ACL-1532 измерил вживую: `page.screenshot` сбрасывал чужой (Multilogin)
+    override вьюпорта — 1919×1079 → 3837×2157 и так и оставалось, а размер окна
+    входит в отпечаток браузера. Решение владельца 03.10: выключить, пока способ
+    снимка не доказан безопасным. `ACL_STATUS_SHOT=1` в машинном .env
+    (serve.py грузит его через `paths.load_env`) — только для контролируемых
+    проверок.
+    """
+    return (os.environ.get("ACL_STATUS_SHOT") or "").strip() == "1"
+
+
+def _last_status_shot(account: str) -> tuple[str, str]:
+    """Последний сохранённый снимок аккаунта, если он ещё на диске."""
+    try:
+        got = get_status(account)
+    except Exception:  # noqa: BLE001 — без старого снимка чтение не хуже
+        return "", ""
+    return got.get("shot_id", ""), got.get("shot_at", "")
+
+
 def _shoot_status(page, out: "SpendReading") -> None:
-    """Снимок, если состояние — не «чисто». Чистая страница не снимается."""
+    """Снимок, если состояние — не «чисто». Чистая страница не снимается.
+
+    Без `ACL_STATUS_SHOT=1` страницу не трогаем вовсе (ACL-1535): ни
+    `page.screenshot`, ни CDP. Строке и Copy for group остаётся последний
+    сохранённый снимок, если он есть.
+    """
     if out.status and out.status != "clear":
-        out.status_shot, out.status_shot_at = _status_shot(page, out.account)
+        if status_shot_enabled():
+            out.status_shot, out.status_shot_at = _status_shot(page, out.account)
+        else:
+            out.status_shot, out.status_shot_at = _last_status_shot(out.account)
 
 
 # ══ Дерево аккаунта: кампании и объявления ════════════════════════════════
