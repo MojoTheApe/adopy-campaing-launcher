@@ -3480,6 +3480,11 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     # to_thread, а не starlette: свежая установка не должна зависеть от
     # пакета, которого нет в requirements.txt
     ok, message = await asyncio.to_thread(account_spend.open_for_automation, account)
+    # ACL-1518: окно, открытое руками, теперь переоткрывается путём Publish.
+    # Не дождались тишины / окно на переднем плане — это не конфликт, а
+    # простой ответ строке, как у чтения: не 409.
+    if not ok and message == account_spend.HAND_OPEN_MESSAGE:
+        return JSONResponse({"ok": False, "message": message, "code": account_spend.HAND_OPEN_CODE})
     return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
 
 
@@ -3553,6 +3558,9 @@ async def account_spend_status(
             "ok": True,
             "reading": reading.to_dict(),
             "split": country_split.get_split(account.strip(), date_from, date_to),
+            # ACL-1518: ждём тишины ввода, чтобы переоткрыть окно, открытое
+            # руками (чтение спенда, стран или «open profile»). Пусто — не ждём.
+            "waiting": account_spend.hand_wait_note(account.strip()),
         }
         # ACL-1288: решение о странах едет вместе с готовым чтением — по нему
         # его и принимают. Пока чтение идёт, решать не по чему: у записи

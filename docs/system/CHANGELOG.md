@@ -1,5 +1,36 @@
 # System history
 
+## Spend and country reads reopen a hand-opened profile like Publish does — ACL-1518
+
+On 2026-10-03 07:45 "Read spend" for Facebook_1443 and Facebook_6540 stopped at once
+with `profile_open_by_hand (no_automation_port)`, and the row's "open profile"
+returned 409, while a Publish on 1443 two minutes later waited for idle and reopened
+the window (ACL-1388/1427). The read paths now use the same path.
+
+- `MultiloginAttachOnlyProvider.open` takes `reopen_hand_window=True`: a hand-opened
+  window is closed and reopened with an automation port through
+  `_reopen_hand_opened`, even with `allow_kill=False`. Same gates (window age, not in
+  front, idle), same idle wait (`hand_window.wait_until_safe`, up to 2 minutes), graceful
+  MLX API stop only, never kill. `on_hand_wait` is called once when the wait starts.
+  Without the flag nothing changes (`allow_kill` decides, as before).
+- `account_spend.reopening_by_hand()` turns this on for `_attach_only`; it wraps the
+  spend read (`/account-spend/read`, Read all) and the country read
+  (`/account-spend/read-countries`). Turn-off and the account probe are unchanged.
+- `/account-spend/open-profile` reopens a hand-opened window the same way instead of
+  answering 409. If the window stays open by hand, it answers 200 with
+  `ok: false, code: "open_by_hand"`. `/mlx-profile-open` (connecting a new profile)
+  is unchanged.
+- While waiting, `/account-spend/status?account=…` returns `waiting` and the
+  account-map row says "Waiting for the computer to be idle to reopen the profile…".
+  If the wait ends without idle, or the window is in front, the reading or country
+  split fails with `error_code: "open_by_hand"` and the row says "The profile is open
+  by hand — close its window in Multilogin, then Read again" (not "failed · retry" or
+  "countries failed"). The ACL-1504 "Campaigns not read" block is untouched.
+- Read all reads accounts one after another as before; a waiting account holds only
+  its own profile lock, so other reads are not blocked.
+- Tests: `tests/test_reads_reopen_a_hand_opened_profile.py` (stubbed clock, Win32,
+  processes and MLX; no real Multilogin).
+
 ## Screenshot endpoint tests prove a path outside the folder is refused — ACL-1486
 
 The ACL-1430 review found that the tests for `/account-spend/status-shot/<id>`
