@@ -29,6 +29,7 @@ from config.paths import get_excel_path
 from src.knowledge_agent.knowledge_base import (
     resolve_targeting_text,
     log_unknown_target,
+    logged_unknown_targets,
 )
 from src.analysis_agent.report_markdown import build_full_report_markdown
 
@@ -358,17 +359,22 @@ def _log_unknown_interests(df: pd.DataFrame) -> None:
     if "Interest" not in df.columns or "Adset Name" not in df.columns:
         return
     skip_values = {"", "nan", "none", "wide"}
-    unique_interests = (
-        df["Interest"].dropna().astype(str).str.strip().unique()
+    # ACL-1399: раньше на каждый неизвестный код заново резалась вся книга
+    # (astype+strip по 70 тысячам строк) и заново читался журнал — ~15 с на
+    # холодной сборке. Пример адсета и журнал берутся один раз.
+    present = df["Interest"].notna()
+    interests = df.loc[present, "Interest"].astype(str).str.strip()
+    first_adset = (
+        df.loc[present, "Adset Name"].groupby(interests.values, sort=False).first()
     )
-    for interest in unique_interests:
-        if interest.lower() in skip_values:
+    known = logged_unknown_targets()
+    for interest in interests.unique():
+        if interest.lower() in skip_values or interest in known:
             continue
         if resolve_targeting_text(interest) is None:
-            # Find an example adset name for context
-            example_rows = df[df["Interest"].astype(str).str.strip() == interest]["Adset Name"]
-            source = str(example_rows.iloc[0]) if not example_rows.empty else ""
-            log_unknown_target(interest, source=source)
+            example = first_adset.get(interest)
+            source = "" if example is None or pd.isna(example) else str(example)
+            log_unknown_target(interest, source=source, known=known)
 
 
 def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
