@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="/favicon.ico?v=acl" sizes="32x32">
+  <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+  <title>Adopy Campaigns Launcher — loading</title>
+  {#- ACL-1399: холодный отчёт собирается в фоне; эта страница отвечает
+      сразу и сама перезагружается, когда цифры готовы. Сервер при этом
+      отвечает на всё остальное — задания публикации, Stop, /health. #}
+  <script>
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem('acl.theme'); } catch (e) {}
+      var dark = saved === 'dark' || (saved !== 'light' && typeof matchMedia === 'function'
+        && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    })();
+  </script>
+  <style>
+    :root { --bg: #f6f7f9; --fg: #1f2328; --muted: #656d76; --accent: #2f6feb; --line: #d0d7de; }
+    :root[data-theme="dark"] { --bg: #0e1116; --fg: #d8dde3; --muted: #8b949e; --accent: #58a6ff; --line: #30363d; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+                 font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 34rem; margin: 18vh auto 0; padding: 0 1rem; }
+    h1 { font-size: 1.15rem; font-weight: 600; margin: 0 0 0.6rem; display: flex; align-items: center; gap: 0.6rem; }
+    p { color: var(--muted); font-size: 0.9rem; line-height: 1.5; margin: 0.4rem 0; }
+    .spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.9s linear infinite; flex: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+    #report-loading-error { color: #cf222e; display: none; }
+  </style>
+</head>
+<body>
+  <main id="report-loading" role="status" aria-live="polite">
+    <h1><span class="spin" aria-hidden="true"></span>Loading the numbers…</h1>
+    <p>The dashboard is reading the stats workbook. After a restart this takes about a minute;
+      the page opens by itself when it is ready.</p>
+    <p>Publishing jobs keep running meanwhile, and Stop still works.</p>
+    <p id="report-loading-elapsed"></p>
+    <p id="report-loading-error"></p>
+  </main>
+  <script>
+    (function () {
+      var started = Date.now();
+      var elapsed = document.getElementById('report-loading-elapsed');
+      var failed = document.getElementById('report-loading-error');
+      function tick() {
+        var s = Math.round((Date.now() - started) / 1000);
+        elapsed.textContent = s >= 5 ? 'Waiting ' + s + ' s.' : '';
+      }
+      function poll() {
+        fetch('/report/status' + location.search, { cache: 'no-store' })
+          .then(function (r) { return r.json(); })
+          .then(function (st) {
+            // Готово — или сборка упала: обычная страница покажет ошибку сама.
+            if (st.ready || st.error) { location.reload(); return; }
+            setTimeout(poll, 1500);
+          })
+          .catch(function () {
+            failed.style.display = 'block';
+            failed.textContent = 'The dashboard is not answering right now. Still trying…';
+            setTimeout(function () { failed.style.display = 'none'; poll(); }, 3000);
+          });
+      }
+      setInterval(tick, 1000);
+      setTimeout(poll, 800);
+    })();
+  </script>
+</body>
+</html>

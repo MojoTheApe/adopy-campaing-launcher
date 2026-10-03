@@ -35,6 +35,82 @@ minutes earlier. Owner decision 2026-09-30: retry in place and once more at the 
   `audience_location_second_pass` row as `open:<why>`, so Robot health does not count
   it as a failed step.
 
+## Screenshot endpoint tests prove a path outside the folder is refused — ACL-1486
+
+The ACL-1430 review found that the tests for `/account-spend/status-shot/<id>`
+still passed with the path guards removed: no real `.png` existed outside
+`spend_shots`, so a naive lookup would have returned 404 too. Tests only; product
+code is unchanged (no escape was found).
+
+- `tests/test_status_screenshot.py` now puts real PNGs next to the screenshots
+  folder (parent, a sibling folder named like it, a folder elsewhere) and asks for
+  each through `..` segments, backslashes, an absolute path (both slash styles),
+  a subfolder walked back out, and URL-encoded / double-encoded forms, on both the
+  image and the `/view` page. Each case first asserts the file *would* be found
+  without guards.
+- The folder check is also tested on its own, with the name check loosened, and a
+  non-`status_*` PNG in the folder (a failed-read shot) and a folder named like a
+  shot are refused.
+- Mutation check: removing the name check, the folder check, the is-file check,
+  or both path checks each makes tests fail; with both path checks gone every
+  escape route fails at least one test.
+
+## Hidden accounts and targeting file locks never lose an update under load — ACL-1495
+
+`tests/test_hidden_accounts_review.py::test_processes_preserve_each_update` failed at
+random on CI with "OSError [Errno 36] Resource deadlock avoided". The ACL-1491
+investigation found two product bugs in the machine file lock used by
+`src/web/hidden_accounts.py` and `src/analysis_agent/targeting_registry.py`:
+
+1. `msvcrt.locking(LK_LOCK)` tries 10 times, once a second, and then raises EDEADLK.
+   A queue longer than 10 s under load is not a deadlock, but the update was lost.
+2. On first use every process that saw an empty `.lock` file wrote `b"0"` into it; when
+   another process already held byte 0, `flush()` raised PermissionError (Errno 13).
+
+Fix: one shared helper, `config.paths.machine_file_lock(path, timeout=None)`.
+
+- Waits with non-blocking attempts and a growing, jittered pause (5 ms to 100 ms).
+  EDEADLK, EACCES and EAGAIN mean "busy, try again". The wait is bounded by
+  `paths._LOCK_TIMEOUT` (120 s), after which it raises `TimeoutError` instead of
+  hanging the dashboard request.
+- The lock file is created by a single atomic `os.open(O_CREAT)` and is never
+  written. Windows allows locking a byte past the end of the file, and `flock` has
+  no byte ranges, so the file needs no content.
+- Both `_transaction()` functions now use it. Writes still go through
+  `paths._replace_when_free` (`_atomic_write` for hidden accounts, `_save_raw`
+  for targeting).
+- `tests/test_file_lock_races.py` reproduces both bugs deterministically (a fake
+  EDEADLK from the lock call, and an empty lock file whose byte 0 is held by another
+  handle). Both tests failed on the old code with the original errors. The file also
+  covers the bounded wait and checks that the lock file is never written.
+- `ad_text_registry.py`, `team_library.py` and `acl_log.py` still use the old
+  pattern. They are not changed here.
+
+## The dashboard stays responsive while the report is built — ACL-1399
+
+2026-09-30 after a restart the first page built the report inside the request
+handler: about a minute in which `/health` and the publish queue did not answer,
+and the owner's Publish on Facebook_1443 failed with "Failed to fetch".
+
+- Cold build faster: `config/analysis_rules.py` parsed its JSON file on every
+  workbook row (60 256 reads, 69 s of a 106 s profiled build); it is now read once
+  and re-checked by mtime at most every 2 s. The unknown-interest log no longer
+  rescans the workbook and re-reads its journal per code. Numbers are unchanged.
+- The report is never built on the event loop: GET / answers at once with a
+  "Loading the numbers…" page, builds in a background thread (report + the page's
+  period) and reloads itself when `/report/status` says ready. Every handler that
+  reads the report runs in its own thread pool; builds are single-flight. `/health`
+  no longer waits for git, `/acl/update/check` runs `git fetch` off the loop, and
+  preview / publish start build their drafts in a thread.
+- Stop no longer runs the RPA teardown on the server thread: `cancel_job` hands
+  `publisher.cancel()` to its own thread. On 2026-09-29 12:54:59 (local) that
+  teardown reset the event loop's running-loop mark and the dashboard died.
+- Publish that gets no answer (busy server, lost response) no longer freezes the
+  tab: the account shows "the server is busy — Retry", and Retry resends with the
+  same `request_id`, for which the server returns the job it already created.
+  Dismiss frees the account instead; its next Publish reuses that same
+  `request_id`, so a submission that did reach the server is not doubled.
+  Other accounts may keep publishing while one waits for Retry.
 ## A failed read says "Campaigns not read", not "0 campaigns" — ACL-1504
 
 2026-10-02, Facebook_1443: Ads Manager did not open within 90 s, and the account

@@ -197,6 +197,113 @@ def test_the_endpoint_refuses_unknown_ids_and_paths(local, client, bad):
     assert b"secret" not in r.content
 
 
+# ── настоящий PNG за пределами папки (ACL-1486) ──────────────────────────
+#
+# Тесты выше прошли бы и без защит: за пределами `spend_shots` в них не было
+# ни одного .png, так что «наивная» отдача тоже вернула бы 404. Здесь рядом с
+# папкой лежат настоящие снимки, и каждый маршрут сначала проверяет, что без
+# защит файл БЫЛ БЫ найден (`_naive`), — иначе тест ничего не доказывает.
+
+BS = "\\"
+OTHER_PNG = PNG + b"outside"  # отличимые байты: в ответе их быть не должно
+
+
+def _outside(local: Path) -> dict[str, str]:
+    """Разложить настоящие PNG вне папки снимков; вернуть id-маршрут → id."""
+    (local / "spend_shots").mkdir(exist_ok=True)
+    (local / "escape.png").write_bytes(OTHER_PNG)                       # родитель
+    (local / "spend_shots_evil").mkdir(exist_ok=True)                   # сосед с похожим именем
+    (local / "spend_shots_evil" / "status_x.png").write_bytes(OTHER_PNG)
+    far = local.parent / f"{local.name}-elsewhere"                      # совсем другая папка
+    far.mkdir(exist_ok=True)
+    (far / "escape.png").write_bytes(OTHER_PNG)
+    far_id = str(far / "escape")
+    return {
+        "parent": "../escape",
+        "parent-backslash": ".." + BS + "escape",
+        "parent-through-subdir": "status_x/../../escape",
+        "parent-through-subdir-backslash": "status_x" + BS + ".." + BS + ".." + BS + "escape",
+        "sibling": "../spend_shots_evil/status_x",
+        "sibling-backslash": ".." + BS + "spend_shots_evil" + BS + "status_x",
+        "absolute": far_id,
+        "absolute-forward-slashes": far_id.replace(BS, "/"),
+    }
+
+
+ROUTES = [
+    "parent", "parent-backslash", "parent-through-subdir", "parent-through-subdir-backslash",
+    "sibling", "sibling-backslash", "absolute", "absolute-forward-slashes",
+]
+
+
+def _naive(local: Path, shot_id: str) -> Path:
+    """Что отдал бы `status_shot_path` без единой защиты."""
+    return (local / "spend_shots" / f"{shot_id}.png").resolve()
+
+
+def _loose_names(monkeypatch):
+    """Ослабить проверку имени: так видно, держит ли вторая защита (папка) сама."""
+    monkeypatch.setattr(sp, "_STATUS_SHOT_ID", re.compile(r".+", re.S))
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_a_real_png_outside_the_folder_is_not_reachable_by_id(local, route):
+    shot_id = _outside(local)[route]
+    assert _naive(local, shot_id).read_bytes() == OTHER_PNG, "без защит файл нашёлся бы"
+    assert sp.status_shot_path(shot_id) is None
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_the_folder_check_holds_even_if_the_name_check_lets_a_path_through(local, monkeypatch, route):
+    shot_id = _outside(local)[route]
+    assert _naive(local, shot_id).read_bytes() == OTHER_PNG, "без защит файл нашёлся бы"
+    _loose_names(monkeypatch)
+    assert sp.status_shot_path(shot_id) is None
+    # контроль: ослабленная проверка имени не ломает законный снимок
+    (local / "spend_shots" / "status_ok__20261001-120000.png").write_bytes(PNG)
+    assert sp.status_shot_path("status_ok__20261001-120000") is not None
+
+
+def _encodings(shot_id: str) -> list[str]:
+    from urllib.parse import quote
+
+    once = quote(shot_id, safe="")
+    return [shot_id, once, quote(once, safe="")]
+
+
+@pytest.mark.parametrize("loose", [False, True], ids=["strict-names", "loose-names"])
+@pytest.mark.parametrize("tail", ["", "/view"], ids=["image", "view"])
+@pytest.mark.parametrize("route", ROUTES)
+def test_the_endpoint_refuses_a_real_png_outside_the_folder(local, client, monkeypatch, route, tail, loose):
+    shot_id = _outside(local)[route]
+    assert _naive(local, shot_id).read_bytes() == OTHER_PNG, "без защит файл нашёлся бы"
+    if loose:
+        _loose_names(monkeypatch)
+    # как есть, URL-кодированный (%2F, %5C, %3A) и кодированный дважды
+    for sent in _encodings(shot_id):
+        r = client.get(f"/account-spend/status-shot/{sent}{tail}")
+        assert r.status_code == 404, (sent, r.status_code)
+        assert b"outside" not in r.content, sent
+
+
+@pytest.mark.parametrize("name", ["escape", "FacebookDoc20_2026-09-30"])
+def test_a_png_in_the_folder_that_is_not_a_status_shot_is_refused(local, client, name):
+    # Папка общая со снимками неудачного чтения (`_shoot`): отдаём только status_*.
+    folder = local / "spend_shots"
+    folder.mkdir()
+    (folder / f"{name}.png").write_bytes(OTHER_PNG)
+    assert _naive(local, name).is_file()
+    assert sp.status_shot_path(name) is None
+    r = client.get(f"/account-spend/status-shot/{name}")
+    assert r.status_code == 404 and b"outside" not in r.content
+
+
+def test_a_folder_named_like_a_shot_is_not_a_shot(local, client):
+    (local / "spend_shots" / "status_dir__20261001-120000.png").mkdir(parents=True)
+    assert sp.status_shot_path("status_dir__20261001-120000") is None
+    assert client.get("/account-spend/status-shot/status_dir__20261001-120000").status_code == 404
+
+
 def test_the_fallback_page_shows_the_image_and_how_to_copy_it(local, client):
     page = NS(screenshot=lambda path, full_page=False: Path(path).write_bytes(PNG))
     shot_id, _at = sp._status_shot(page, ACC)
