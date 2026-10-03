@@ -3546,22 +3546,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "495": {
-        "actor": "Worker-L1495K",
-        "session": "run_l1495k_1003",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1495-file-locks",
-        "worktree": "C:\\acl-1495-locks",
-        "id": "60719da0337f4545bb3c840149591d36",
-        "issue": 495,
-        "state": "handoff",
-        "started_at": "2026-10-03T00:03:55+00:00",
-        "from_status": "status:backlog",
-        "pr": 511,
-        "report": "# ACL-1495 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/511 (into stage), head 588e8da0, branch codex/acl-1495-file-locks\n\n## What\n`test_processes_preserve_each_update` failed at random on CI with \"Resource deadlock avoided\". The cause was two real bugs in the machine file lock used by hidden accounts and the targeting registry:\n\n1. `msvcrt.locking(LK_LOCK)` tries 10 times, once a second, then raises EDEADLK. Under load the queue is longer than that and the update was lost.\n2. On first use, `.lock` files got `b\"0\"` written into them. When another process already held byte 0, `flush()` raised PermissionError (Errno 13).\n\n## Fix\n- New shared helper `config.paths.machine_file_lock(path, timeout=None)`:\n  - Lock attempts are non-blocking and retried with a jittered pause that grows from 5 ms to 100 ms. EDEADLK, EACCES and EAGAIN all count as \"busy\".\n  - The wait is bounded (`_LOCK_TIMEOUT` = 120 s). After that it raises `TimeoutError` instead of hanging the request.\n  - The lock file is created once with an atomic `os.open(O_CREAT)` and is never written.\n- `src/web/hidden_accounts.py` and `src/analysis_agent/targeting_registry.py` now call the helper from `_transaction()`. Writes still go through `paths._replace_when_free`.\n- CHANGELOG entry added.\n\n## Tests\n- New `tests/test_file_lock_races.py` (8 tests):\n  - Both bugs are reproduced deterministically: a fake EDEADLK, and an empty lock file whose byte 0 is held by another handle.\n  - Run against the old code, all 8 fail. The two bug repros fail with the original errors (`OSError [Errno 36]` and `PermissionError(13)`).\n- Mutation checks: each mutation makes the tests fail.\n  - EDEADLK made non-retryable: 3 tests fail.\n  - `b\"0\"` written into the lock file: 3 tests fail.\n  - Deadline removed: 2 tests fail.\n- `test_processes_preserve_each_update` passed 30/30 in a loop with no load, and 30/30 with 28 busy CPU-burner processes on a 14-core machine.\n- Affected tests pass:\n  - test_file_lock_races, test_hidden_accounts_review, test_targeting_registry, test_machine_paths and test_bench_catalogue (60 tests).\n  - 8 neighbouring files: available accounts, hiding accounts, settings on a busy file, targeting integration, targeting reaches the campaign, team library, upload without a workbook, RPA job start (127 tests).\n  - test_hidden_accounts_browser, headless.\n- `scripts/acl_scan_secrets.py` is clean.\n\n## Not in scope\n`ad_text_registry.py`, `team_library.py` and `acl_log.py` still use the old LK_LOCK pattern. They can move to `machine_file_lock` in a follow-up."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -4777,9 +4762,25 @@
             "session": "run_l1495k_1003"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L1495K",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-L1495K",
+          "session": "run_l1495k_1003",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1495-file-locks",
+          "worktree": "C:\\acl-1495-locks",
+          "id": "60719da0337f4545bb3c840149591d36",
+          "issue": 495,
+          "state": "handoff",
+          "started_at": "2026-10-03T00:03:55+00:00",
+          "from_status": "status:backlog",
+          "pr": 511,
+          "report": "# ACL-1495 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/511 (into stage), head 588e8da0, branch codex/acl-1495-file-locks\n\n## What\n`test_processes_preserve_each_update` failed at random on CI with \"Resource deadlock avoided\". The cause was two real bugs in the machine file lock used by hidden accounts and the targeting registry:\n\n1. `msvcrt.locking(LK_LOCK)` tries 10 times, once a second, then raises EDEADLK. Under load the queue is longer than that and the update was lost.\n2. On first use, `.lock` files got `b\"0\"` written into them. When another process already held byte 0, `flush()` raised PermissionError (Errno 13).\n\n## Fix\n- New shared helper `config.paths.machine_file_lock(path, timeout=None)`:\n  - Lock attempts are non-blocking and retried with a jittered pause that grows from 5 ms to 100 ms. EDEADLK, EACCES and EAGAIN all count as \"busy\".\n  - The wait is bounded (`_LOCK_TIMEOUT` = 120 s). After that it raises `TimeoutError` instead of hanging the request.\n  - The lock file is created once with an atomic `os.open(O_CREAT)` and is never written.\n- `src/web/hidden_accounts.py` and `src/analysis_agent/targeting_registry.py` now call the helper from `_transaction()`. Writes still go through `paths._replace_when_free`.\n- CHANGELOG entry added.\n\n## Tests\n- New `tests/test_file_lock_races.py` (8 tests):\n  - Both bugs are reproduced deterministically: a fake EDEADLK, and an empty lock file whose byte 0 is held by another handle.\n  - Run against the old code, all 8 fail. The two bug repros fail with the original errors (`OSError [Errno 36]` and `PermissionError(13)`).\n- Mutation checks: each mutation makes the tests fail.\n  - EDEADLK made non-retryable: 3 tests fail.\n  - `b\"0\"` written into the lock file: 3 tests fail.\n  - Deadline removed: 2 tests fail.\n- `test_processes_preserve_each_update` passed 30/30 in a loop with no load, and 30/30 with 28 busy CPU-burner processes on a 14-core machine.\n- Affected tests pass:\n  - test_file_lock_races, test_hidden_accounts_review, test_targeting_registry, test_machine_paths and test_bench_catalogue (60 tests).\n  - 8 neighbouring files: available accounts, hiding accounts, settings on a busy file, targeting integration, targeting reaches the campaign, team library, upload without a workbook, RPA job start (127 tests).\n  - test_hidden_accounts_browser, headless.\n- `scripts/acl_scan_secrets.py` is clean.\n\n## Not in scope\n`ad_text_registry.py`, `team_library.py` and `acl_log.py` still use the old LK_LOCK pattern. They can move to `machine_file_lock` in a follow-up."
+        },
+        "pr": 511,
+        "queued_at": "2026-10-03T00:41:51+00:00"
       },
       "486": {
         "implementers": [
@@ -5923,7 +5924,8 @@
       390,
       399,
       433,
-      486
+      486,
+      495
     ],
     "review": {
       "id": "214218ba36504160bf26dd94d9f15bc9",
@@ -8466,6 +8468,13 @@
         "issue": 486,
         "pr": 509,
         "actor": "Worker-P1486T"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-03T00:41:51+00:00",
+        "issue": 495,
+        "pr": 511,
+        "actor": "Worker-L1495K"
       }
     ],
     "policy": {
