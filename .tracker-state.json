@@ -3592,9 +3592,11 @@
         "worktree": "C:\\acl-1390-location",
         "id": "6972fb65213c417f918910099f926b1c",
         "issue": 390,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-03T01:10:48+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 393,
+        "report": "# ACL-1390 \u2014 review round 2 fixes (PR #393)\n\nWorker-G1390C, session run_g1390c_0930. Head 434ae22e, pushed to work/codex/acl-1390-location-retry.\n\n## B2 \u2014 base updated\n- Merged work/stage 91b0a27 (ACL-1504) \u2192 809cf955. Only conflict: docs/system/CHANGELOG.md, both sides kept (ACL-1390 entry, then ACL-1504 and the rest of stage).\n- Merged work/main 6733c85 \u2192 6b418545 (no content change; main already in stage).\n\n## B1 \u2014 GUIDE entry\n- `src/fb_ads_rpa/failure_policy.py` GUIDE[\"audience_location_second_pass\"] = (\"Country set on the second pass\", \"Meta's location search stalled; the robot set the country at the end of the campaign and read it back.\", \"Check \\\"Locations\\\" on the ad set before publishing.\").\n- Test `test_the_job_panel_says_the_country_was_set_on_the_second_pass`: problem() \u2192 WARNING, that title, \u226460 chars, impact and action present. test_readable_problems GUIDE completeness is green.\n\n## m1 \u2014 tree miss no longer an outcome step\n- `_open_tree_adset(page, name, miss=None)` no longer records `audience_location_second_pass_open`; it appends the reason to `miss`. `_location_second_pass` writes one row `audience_location_second_pass` False with note `open:<why>` (fallback `adset_not_reached`). `_second_pass` is a diagnostic suffix in robot_health.\n- Tests: `test_the_ad_set_that_cannot_be_reached_keeps_the_stop` now asserts the single row with `open:not_found` (the old lambda would have raised TypeError on the new signature); new `test_a_tree_miss_is_not_an_outcome_step_in_robot_health` (real page without a tree \u2192 `open:` note, no outcome step).\n- CHANGELOG: \"Review round 2\" bullet in the ACL-1390 entry.\n- Note: the B1 commit (25aa75ae) also carries the m1 test edits; the branch head is consistent.\n\n## Tests (headless, ACL_LIBRARY_*= empty)\nlocation_retry_and_second_pass, readable_problems, bench_catalogue, failure_policy, robot_health, default_location_is_really_removed, build_progress_model, readable_problems_browser, simple_create_location_summary, simple_create_reload_guard, simple_create_more_ads \u2192 216 passed.\nreport.html not changed. scripts/acl_scan_secrets.py: clean.\n\n## Still open\nIssue box \"one live run, country set, normal path not slowed\" needs a live run (not done; no Meta/Multilogin touched)."
       },
       "357": {
         "actor": "Worker-T1357N",
