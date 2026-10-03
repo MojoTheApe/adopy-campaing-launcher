@@ -575,6 +575,21 @@ _CREATIVE_WHY_TEXT = {
 }
 
 
+#: Причины отказа шага назначения — для человека (итог кампании, English).
+#: ACL-1543: Meta оставила объявление на «Instant form (suggested)».
+_DESTINATION_WHY_TEXT = {
+    "instant_form_not_switched": ("Meta kept this ad on Instant form (suggested) and the robot could "
+                                  "not switch it back to Website, so the website URL is not set. The "
+                                  "robot never accepts Lead Ads Terms or creates an instant form - "
+                                  "select Website (Browser add-ons: None) and enter the URL by hand."),
+}
+
+
+def destination_why_text(why: str) -> str:
+    """Причина отказа шага назначения одной фразой; "" — фразы для неё нет."""
+    return _DESTINATION_WHY_TEXT.get(why or "", "")
+
+
 def creative_why_text(why: str) -> str:
     """Причина отказа шага креатива одной фразой; "" — фразы для неё нет."""
     why = why or ""
