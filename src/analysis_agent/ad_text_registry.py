@@ -92,28 +92,11 @@ _lock = threading.RLock()
 @contextmanager
 def _transaction():
     # Второй процесс дешборда работает с тем же каталогом конфигурации.
+    # ACL-1512: общий замок из paths (ACL-1495) — ограниченное ожидание вместо
+    # LK_LOCK (10 × 1 с и EDEADLK) и файл замка без гонки первой записи.
     with _lock:
-        p = _store().with_suffix(".lock")
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a+b") as f:
-            if f.tell() == 0:
-                f.write(b"0")
-                f.flush()
-            f.seek(0)
-            if os.name == "nt":
-                import msvcrt
-                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(f, fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                f.seek(0)
-                if os.name == "nt":
-                    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    fcntl.flock(f, fcntl.LOCK_UN)
+        with paths.machine_file_lock(_store().with_suffix(".lock")):
+            yield
 
 
 def _load_raw() -> dict:
@@ -159,7 +142,11 @@ def _save_raw(data: dict) -> None:
             json.dump(data, f, ensure_ascii=False, indent=2)
             f.flush()
             os.fsync(f.fileno())
-        tmp.replace(p)
+        # ACL-1512: under load Windows refuses the replace (WinError 5) while
+        # the target is open for a moment elsewhere — the previous writer's
+        # handle, Defender, the indexer. Wait it out like targeting does
+        # (ACL-1419); failing here lost the edit.
+        paths._replace_when_free(tmp, p)
     finally:
         if tmp is not None:
             tmp.unlink(missing_ok=True)
