@@ -156,14 +156,24 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
                   кнопка есть, но выключена и говорит почему (acl-132): под ней
                   подсказка «Copy screenshot …», и она не должна указывать на
                   кнопку, которой нет. -#}
-              {%- if st.shot_id and st.status != 'clear' %} <button type="button" class="amap-shot" data-shot="{{ st.shot_id }}" title="Screenshot taken {{ st.shot_at }}. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>
-              {%- elif st.status not in ('clear', 'unknown') %} <button type="button" class="amap-shot" disabled title="No screenshot on the last read — read the account again">Copy screenshot</button>{% endif -%}
+              {#- У «unreadable» со снимком кнопка снимка остаётся как была: строки
+                  «Account <Status>» для группы у него нет. Проблемные статусы
+                  получают одну кнопку Copy for group ниже (ACL-1520). -#}
+              {%- if st.shot_id and st.status == 'unknown' %} <button type="button" class="amap-shot" data-shot="{{ st.shot_id }}" title="Screenshot taken {{ st.shot_at }}. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>{% endif -%}
               {%- if st.at_short %}<small class="amap-st-at{{ ' stale' if st.stale }}">{{ st.at_short }}{% if st.stale %} · not refreshed{% endif %}</small>{% endif -%}
-              {#- Сообщение поставщику аккаунтов (acl-132): одна строка «имя -
-                  статус», вставляется в группу WhatsApp вместе со снимком.
-                  Имя — до « - », как его называют вслух. -#}
+              {#- Одна картинка для группы поставщика (ACL-1520, решение владельца
+                  03.10): сверху полоса «<имя> — Account <Status> · <время
+                  чтения>», под ней снимок. Собирается в браузере из снимка
+                  ACL-1430; заменяет Copy text (acl-132) и Copy screenshot.
+                  Имя — до « - », как его называют вслух. Снимка нет — кнопка
+                  есть, но выключена и говорит почему. -#}
               {%- set st_word = {'disabled': 'Account Disabled', 'restricted': 'Account Restricted', 'blocked': 'Account Blocked', 'review': 'Account Under Review'}.get(st.status) -%}
-              {%- if st_word %}<div class="amap-st-report"><button type="button" class="amap-btn amap-copy-text" data-copy="{{ r.account.split(' - ')[0] }} - {{ st_word }}" title="Copies: {{ r.account.split(' - ')[0] }} - {{ st_word }}" onclick="amapCopyText(this)">Copy text</button><small class="amap-st-hint">Copy screenshot and account number to send in the group</small></div>{% endif -%}
+              {%- if st_word -%}
+              {%- set group_head = r.account.split(' - ')[0] ~ ' — ' ~ st_word ~ ((' · ' ~ st.at) if st.at else '') -%}
+              <div class="amap-st-report">
+              {%- if st.shot_id %}<button type="button" class="amap-btn amap-copy-group" data-shot="{{ st.shot_id }}" data-head="{{ group_head }}" title="Copies one image: {{ group_head }}, above the screenshot taken {{ st.shot_at }}" onclick="amapCopyGroup(this)">Copy for group</button>
+              {%- else %}<button type="button" class="amap-btn amap-copy-group" disabled title="No screenshot on the last read — read the account again">Copy for group</button>{% endif -%}
+              <small class="amap-st-hint">Copy for group — paste it into the provider's group</small></div>{% endif -%}
               {%- endif -%}
             </td>
             {#- Не готов — пишем чем именно. `to_do` для неготового аккаунта и

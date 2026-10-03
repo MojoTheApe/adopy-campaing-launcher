@@ -1965,7 +1965,7 @@
     }
     /* Сообщение поставщику (acl-132): кнопка и подсказка под плохим статусом. */
     .amap-st-report { margin-top: 0.2rem; white-space: normal; }
-    .amap-st-report .amap-copy-text { font-size: 0.68rem; padding: 0.05rem 0.35rem; }
+    .amap-st-report .amap-copy-group { font-size: 0.68rem; padding: 0.05rem 0.35rem; }
     .amap-st-hint { display: block; font-size: 0.62rem; color: var(--muted); line-height: 1.3; margin-top: 0.1rem; }
 
     /* Состояние Multilogin внутри формы подключения: строка всегда, поля
@@ -7157,12 +7157,100 @@ function amapCopyShot(btn) {
 }
 /* } ACL-1430 copy-shot */
 
+/* ACL-1520 copy-group { */
+/* Одна картинка для группы поставщика: полоса с «<имя> — Account <Status> ·
+   <время чтения>» и под ней снимок ACL-1430. Собирается здесь, на canvas, из
+   уже сохранённого PNG; наружу ничего не уходит и нигде не сохраняется —
+   только буфер обмена. Как и у Copy screenshot, ClipboardItem получает
+   обещание, а не готовый blob: клик засчитывается жестом, пока картинка
+   качается и рисуется. Браузер отказал — собранная картинка открывается во
+   вкладке с подсказкой «Right-click → Copy image»; не открылась вкладка или
+   не собралась картинка — прежняя страница снимка /view. */
+function amapComposeGroup(blob, head) {
+  return new Promise(function (resolve, reject) {
+    var src = URL.createObjectURL(blob);
+    var img = new Image();
+    img.onerror = function () { URL.revokeObjectURL(src); reject(new Error('the screenshot did not load')); };
+    img.onload = function () {
+      URL.revokeObjectURL(src);
+      /* Ширина не уже 960: на узком снимке строка иначе нечитаема. Шрифт —
+         от ширины, чтобы в группе на телефоне текст был крупным. */
+      var w = Math.max(img.naturalWidth, 960), h = img.naturalHeight;
+      var size = Math.max(28, Math.round(w / 40)), pad = Math.round(size * 0.6);
+      var band = Math.round(size * 2.2);
+      var c = document.createElement('canvas');
+      c.width = w; c.height = band + h;
+      var g = c.getContext('2d');
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, c.height);
+      g.fillStyle = '#b3261e'; g.fillRect(0, 0, w, band);
+      g.fillStyle = '#ffffff'; g.textBaseline = 'middle';
+      g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
+      while (size > 12 && g.measureText(head).width > w - 2 * pad) {
+        size -= 2; g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
+      }
+      g.fillText(head, pad, band / 2);
+      g.drawImage(img, 0, band);
+      c.toBlob(function (b) { if (b) resolve(b); else reject(new Error('the image was not composed')); }, 'image/png');
+    };
+    img.src = src;
+  });
+}
+
+/* Собранная картинка во вкладке. Вкладка about:blank — того же источника,
+   поэтому blob-ссылка из этой страницы в ней открывается. false — браузер
+   вкладку не дал. */
+function amapOpenGroupImage(blob, head) {
+  var w = window.open('', '_blank');
+  if (!w) return false;
+  var d = w.document;
+  d.title = head;
+  var p = d.createElement('p');
+  p.textContent = 'Right-click → Copy image';
+  p.style.font = '16px Arial, sans-serif';
+  var img = d.createElement('img');
+  img.alt = head;
+  img.style.maxWidth = '100%';
+  img.src = URL.createObjectURL(blob);
+  d.body.appendChild(p);
+  d.body.appendChild(img);
+  return true;
+}
+
+function amapCopyGroup(btn) {
+  var id = btn.dataset.shot;
+  if (!id) return;
+  var url = '/account-spend/status-shot/' + encodeURIComponent(id);
+  var head = btn.dataset.head || '';
+  var label = 'Copy for group';
+  var composed = fetch(url).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.blob();
+  }).then(function (b) { return amapComposeGroup(b, head); });
+  composed.catch(function () {});
+  function fallback() {
+    btn.textContent = label;
+    composed.then(function (b) {
+      if (!amapOpenGroupImage(b, head)) window.open(url + '/view', '_blank');
+    }, function () { window.open(url + '/view', '_blank'); });
+  }
+  if (!(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)) { fallback(); return; }
+  btn.textContent = 'Copying…';
+  var item;
+  try { item = new ClipboardItem({'image/png': composed}); } catch (e) { fallback(); return; }
+  navigator.clipboard.write([item]).then(function () {
+    btn.textContent = 'Copied';
+    clearTimeout(btn._amapCopyTimer);
+    btn._amapCopyTimer = setTimeout(function () { btn.textContent = label; }, 2000);
+  }, fallback);
+}
+/* } ACL-1520 copy-group */
+
 /* Хвост ячейки статуса после живого Read — та же разметка, что рисует
-   _account_map_country.html (acl-132): Copy screenshot (выключенная, если
-   снимка нет) и для плохих статусов Copy text с подсказкой. Строкой, а не
-   createElement: ячейка собирается одним innerHTML, обработчики — атрибутами,
-   как в шаблоне. Без этого после Read кнопка пропадала ровно тогда, когда
-   чтение нашло проблему. */
+   _account_map_country.html: у проблемного статуса одна кнопка Copy for group
+   (ACL-1520; выключенная, если снимка нет) с подсказкой, у «unreadable» со
+   снимком — прежняя Copy screenshot. Строкой, а не createElement: ячейка
+   собирается одним innerHTML, обработчики — атрибутами, как в шаблоне. Без
+   этого после Read кнопка пропадала ровно тогда, когда чтение нашло проблему. */
 var AMAP_STATUS_WORDS = {disabled: 'Account Disabled', restricted: 'Account Restricted',
                          blocked: 'Account Blocked', review: 'Account Under Review'};
 function amapStatusTail(account, s) {
@@ -7172,18 +7260,21 @@ function amapStatusTail(account, s) {
     });
   }
   var out = '';
-  if (s.status !== 'clear' && (s.status_shot || s.status !== 'unknown')) {
-    out += s.status_shot
-      ? ' <button type="button" class="amap-shot" data-shot="' + esc(s.status_shot) + '" title="Screenshot taken '
-        + esc(s.status_shot_at) + '. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>'
-      : ' <button type="button" class="amap-shot" disabled title="No screenshot on the last read — read the account again">Copy screenshot</button>';
+  if (s.status === 'unknown' && s.status_shot) {
+    out += ' <button type="button" class="amap-shot" data-shot="' + esc(s.status_shot) + '" title="Screenshot taken '
+      + esc(s.status_shot_at) + '. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>';
   }
   var word = AMAP_STATUS_WORDS[s.status];
   if (word) {
-    var line = String(account || '').split(' - ')[0] + ' - ' + word;
-    out += '<div class="amap-st-report"><button type="button" class="amap-btn amap-copy-text" data-copy="' + esc(line)
-      + '" title="Copies: ' + esc(line) + '" onclick="amapCopyText(this)">Copy text</button>'
-      + '<small class="amap-st-hint">Copy screenshot and account number to send in the group</small></div>';
+    /* Время в полосе — время чтения, как в шаблоне (st.at). */
+    var at = s.finished_at || s.status_shot_at || '';
+    var head = String(account || '').split(' - ')[0] + ' — ' + word + (at ? ' · ' + at : '');
+    out += '<div class="amap-st-report">' + (s.status_shot
+      ? '<button type="button" class="amap-btn amap-copy-group" data-shot="' + esc(s.status_shot) + '" data-head="'
+        + esc(head) + '" title="Copies one image: ' + esc(head) + ', above the screenshot taken '
+        + esc(s.status_shot_at) + '" onclick="amapCopyGroup(this)">Copy for group</button>'
+      : '<button type="button" class="amap-btn amap-copy-group" disabled title="No screenshot on the last read — read the account again">Copy for group</button>')
+      + '<small class="amap-st-hint">Copy for group — paste it into the provider&#39;s group</small></div>';
   }
   return out;
 }
@@ -8873,27 +8964,6 @@ function amapFilter(input, reload) {
 
 function amapFind(btn) {
   return amapFilter(btn.closest('.amap-add').querySelector('.amap-find'), true);
-}
-
-/* Строка для группы поставщика (acl-132). Clipboard API на localhost
-   доступен; запасной путь — скрытое поле и execCommand, если браузер
-   откажет. Ничего не отправляется: человек вставляет и жмёт Send сам. */
-async function amapCopyText(btn) {
-  var text = btn.getAttribute('data-copy') || '';
-  var done = false;
-  try { await navigator.clipboard.writeText(text); done = true; } catch (e) {
-    var ta = document.createElement('textarea');
-    ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'absolute'; ta.style.left = '-9999px';
-    document.body.appendChild(ta); ta.select();
-    try { done = document.execCommand('copy'); } catch (e2) { done = false; }
-    ta.remove();
-  }
-  /* Подпись запоминается один раз: второй клик за 1,5 с иначе запомнил бы
-     «Copied» и оставил бы её на кнопке навсегда (ревью #465). */
-  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
-  btn.textContent = done ? 'Copied' : 'Copy failed';
-  clearTimeout(btn._amapCopyTimer);
-  btn._amapCopyTimer = setTimeout(function () { btn.textContent = btn.dataset.label; }, 1500);
 }
 
 /* Один рисовальщик на оба пути — и на кнопку, и на ввод. Две копии этой

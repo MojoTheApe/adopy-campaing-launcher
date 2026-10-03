@@ -1,5 +1,35 @@
 # System history
 
+## One Copy for group button: account and status on the screenshot — ACL-1520
+
+Owner decision 2026-10-03: the provider's group gets one paste, not a line and a
+picture separately.
+
+- Under a problem status (disabled, restricted, blocked, review) the account map has one
+  button **Copy for group** instead of **Copy text** (acl-132) and **Copy screenshot**
+  (ACL-1430), with the hint "Copy for group — paste it into the provider's group". The
+  same markup is drawn by the template and after a live Read (`amapStatusTail`).
+- The button puts one PNG on the clipboard: a red header band with large white text
+  `<short name> — Account <Status> · <read time>` and the status screenshot below it. The
+  image is composed in the browser on a canvas from the stored PNG
+  (`/account-spend/status-shot/<id>`); nothing else is requested, sent or stored.
+- No screenshot on the last read: the button is disabled with "No screenshot on the last
+  read — read the account again". If the clipboard refuses an image, the composed image
+  opens in a new tab with "Right-click → Copy image"; if the tab or the image itself
+  fails, the old `/view` page of the raw screenshot opens.
+- "unreadable" with a screenshot keeps the old Copy screenshot button (there is no
+  "Account <Status>" line for it).
+- Capture area (point 5): the status screenshot is the whole visible window
+  (`full_page=False`, no clip), taken right after the status read and before scrolling to
+  the totals. Checked against real captures inside the Multilogin profile: 6540
+  (restricted) — Meta's red "We restricted your ad account" banner is above the table and
+  is in the shot; Doc20 (disabled) shows no banner, "Account disabled" is in the Delivery
+  column. No capture change was needed; a fixture test with a banner page and an order
+  test (shot before scroll) now hold it.
+- Tests: `test_copy_for_group.py` (composed PNG pixels and header text, narrow shot,
+  disabled, fallback tab, /view fallback, nothing sent or stored, banner capture, shot
+  before scroll); `test_copy_status_text.py` and `test_status_screenshot.py` updated.
+
 ## The country is retried in place and once more at the end of the campaign — ACL-1390
 
 2026-09-30 07:36 UTC (FacebookDoc19, SA_arc_All_Image_PF_35_30.09, run 64cc3d5510b2):
