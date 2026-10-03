@@ -1439,6 +1439,24 @@
           512
         ],
         "recorded_at": "2026-10-03T13:18:21+00:00"
+      },
+      "536": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1535S",
+        "review_session": "rev_r1535s_1003",
+        "execution_lane": "5fec62e8a6d34e02ba21de4177737898",
+        "implementer": "Worker-O1535F",
+        "head_sha": "4ebf1fc628fa79f5bcbc8446236395678a8311f9",
+        "base_sha": "ccd42230ab7debc0a54b549bd62ea1ace8c77fbb",
+        "tree_sha": "c9607b81258da6d055263905d7630cd89ec1d17a",
+        "report": "# Review of PR #536 (ACL-1535): APPROVED\n\nReviewer-R1535S, rev_r1535s_1003. Head 4ebf1fc628fa79f5bcbc8446236395678a8311f9, base work/stage ccd42230ab7debc0a54b549bd62ea1ace8c77fbb, tree c9607b81258da6d055263905d7630cd89ec1d17a.\n\n## Findings\n- Gate: `status_shot_enabled()` reads `os.environ[\"ACL_STATUS_SHOT\"] == \"1\"` at call time. serve.py calls `config.paths.load_env()` at import, so the machine .env value is picked up. Only an exact \"1\" counts (\"true\" stays off, and a test covers that).\n- `_shoot_status`: with the flag off, `_status_shot` is never called. The reading gets `_last_status_shot` (from `get_status`, which returns a shot only when the status is not clear and the PNG is still on disk), so `_put` re-stores the old shot instead of blanking it. Row and Copy for group keep it.\n- `_shoot` (grid timeout, wrong period, no totals; also imported by country_split at line 1356) returns \"\" with the flag off.\n- Grep of src/analysis_agent, src/web, upload/knowledge agents, serve.py, fb_ads_rpa/{browser,operations,page_capture}.py: no other `.screenshot(` or `captureScreenshot`. The `new_cdp_session` calls in browser.py are not captures. Remaining capture callers are RPA publish and lab code (screenshots.py, intent_runner, llm_agent, ai_website_recovery, website_click_lab, fb_publish_agent/runner) and fall outside dashboard reads.\n- page_capture: not touched by the diff.\n- Tooltip: \"Screenshots are switched off for safety\", in English, in both the Jinja template and the live-Read JS. The Issue allowed this wording.\n- Nothing else changes behaviour. The diff is 7 files: account_spend.py (gate plus helpers), 2 tooltip strings, CHANGELOG, tests. `_status_shot` internals are untouched.\n- Tests: 297 passed headless (10 listed files). acl_scan_secrets rc 0, clean.\n- Mutation checks on test_status_screenshot.py:\n  - Removing the `_shoot_status` gate: 17 failed.\n  - Removing the `_shoot` gate: 4 failed.\n  - Removing the last-shot fallback: 1 failed.\n  - The file was restored afterwards and the worktree is clean.\n- `git merge-tree --write-tree work/stage HEAD`: clean (merge-base = work/stage tip).\n\n## Non-blocking notes\n1. When the last stored shot is reused, Copy for group puts the *new* status word and time (`st.at`) above an *older* image. The tooltip names the shot time, but the composed image does not. This is acceptable for the hotfix; consider labelling the shot date in the band later.\n2. With ACL_STATUS_SHOT=1 and a failed capture, the disabled tooltip still says \"switched off for safety\". Minor.\n3. Live acceptance (\"inner size unchanged after a Read\") is not done. It needs a controlled live check by the owner after release.\n",
+        "main_sha": "5e1539be3a97d1901dff36118136197e563774c5",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          535
+        ],
+        "recorded_at": "2026-10-03T15:29:43+00:00"
       }
     },
     "stage": {
