@@ -1,5 +1,31 @@
 # System history
 
+## Status screenshot is off by default: it resets the profile's viewport — ACL-1535
+
+ACL-1532 measured live (2026-10-03): the status screenshot taken on every account read
+(`page.screenshot` in `account_spend._status_shot`, ACL-1430) cleared the viewport
+override held by Multilogin; the page went from ~1919×1079 to ~3837×2157 device px and
+stayed there. Window size is part of the browser fingerprint.
+
+- `src/analysis_agent/account_spend.py`: `_shoot_status` calls `_status_shot` only when
+  `ACL_STATUS_SHOT=1` is set (machine `.env`, loaded by `serve.py` through
+  `paths.load_env`; for controlled tests only). Otherwise the read makes no
+  `page.screenshot` and no CDP call, and the reading carries the account's last stored
+  shot (if it is still on disk), so the row and Copy for group keep working after a Read.
+  `_status_shot` itself is untouched (ACL-1529 rewrites it).
+- The PNG on a failed read (`_shoot`: grid timeout, wrong period, no totals row; also
+  used by `country_split`) is behind the same flag and returns "" without it. The
+  HTML/JSON diagnostics (`page_capture`, which never takes an image) are unchanged.
+  A grep of the dashboard read paths (spend, country split, status read, open-profile in
+  `fb_ads_rpa/browser.py`, turn-off) found no other `page.screenshot` or
+  `Page.captureScreenshot` call.
+- Map row and live Read: with no stored shot, Copy for group stays disabled; its tooltip
+  now reads "Screenshots are switched off for safety".
+- Tests: `tests/test_status_screenshot.py` checks with a page spy that a default read
+  calls neither `screenshot` nor `new_cdp_session` (successful and failed reads, and
+  the `country_split` failure shot), that `ACL_STATUS_SHOT=1` brings the
+  old behaviour back, and that the last stored shot is kept.
+
 ## Journal, ad-text and team-library file locks use the shared safe lock — ACL-1512
 
 ACL-1495 moved hidden accounts and the targeting registry to
