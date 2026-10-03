@@ -87,9 +87,30 @@ def execution_state(state, config):
     return section
 
 
+def file_bytes(request, root, row):
+    """Decode a contents-API file row; files over 1 MB come back without inline content."""
+    if not isinstance(row, dict) or row.get("type", "file") != "file":
+        raise ValueError("Expected a repository file")
+    content, encoding = row.get("content"), row.get("encoding")
+    if content and encoding in ("base64", None):
+        return base64.b64decode(content, validate=False)
+    # GitHub returns encoding "none" and empty content for 1–100 MB files; the Git blob API still serves them.
+    sha = row.get("sha")
+    if not isinstance(sha, str) or not SHA.fullmatch(sha):
+        raise ValueError("Cannot establish repository file revision")
+    blob = request(root + "/git/blobs/" + sha)
+    if not isinstance(blob, dict) or blob.get("encoding") != "base64" or not isinstance(blob.get("content"), str):
+        raise ValueError("Unexpected repository blob response")
+    data = base64.b64decode(blob["content"], validate=False)
+    if isinstance(row.get("size"), int) and len(data) != row["size"]:
+        raise ValueError("Repository blob size does not match its file")
+    return data
+
+
 def read_full_state(request, repo):
-    row = request('repos/' + repo + '/contents/.tracker-state.json?ref=tracker-state')
-    state = json.loads(base64.b64decode(row['content'], validate=False))
+    root = 'repos/' + repo
+    row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
+    state = json.loads(file_bytes(request, root, row))
     if state.get('schema_version') not in (1, 2):
         raise ValueError('Invalid tracker state')
     return state

@@ -29,7 +29,7 @@
   },
   "tracker": {
     "repository": "MojoTheApe/task-tracker",
-    "revision": "a4ea3cfb0c1be1760ae0923c8232779532c25a7b",
+    "revision": "c89dd82289d2c6b3e27a85736729bbeaf7461a77",
     "workspace_id": "acl",
     "registration": "verified",
     "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248."

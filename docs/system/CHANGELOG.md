@@ -1,5 +1,21 @@
 # System history
 
+## Tracker engine re-pinned so shared state over 1 MB is readable — ACL-1526
+
+On 2026-10-03 every tracker command failed: `.tracker-state.json` on `tracker-state`
+grew past 1 MB (1,049,795 bytes), and GitHub's contents API returns empty content
+above 1 MB. Task Tracker TT-73 (PR #74) reads such files through the git blobs API.
+
+- `tracker/engine.json` and `delivery.json` (`tracker.revision`) pin Task Tracker
+  `c89dd82289d2c6b3e27a85736729bbeaf7461a77` (was `a4ea3cfb…`, TT-67); the step also
+  brings TT-70 (ACL five-worker fallback, engine-side only).
+- `.workflow/tools/tracker_delivery_policy.py` is the engine's
+  `tracker/delivery_policy.py` at that revision, so the `tracker-link` CI check reads
+  the state over 1 MB too (`file_bytes` falls back to `/git/blobs/<sha>`).
+- `docs/repository/TRACKER.md` names the new pin. `.workflow/template-base.json` keeps
+  the pristine Master Repo template baseline and `PARALLEL_EXECUTION.md` the
+  ACL-1383 history; neither is a live pin.
+
 ## Spend and country reads reopen a hand-opened profile like Publish does — ACL-1518
 
 On 2026-10-03 07:45 "Read spend" for Facebook_1443 and Facebook_6540 stopped at once

@@ -4,7 +4,7 @@ Issues remain in MojoTheApe/adopy-campaing-launcher; the existing board identity
 at https://tracker.team7.cloud/projects/acl/. Keep the six established modules,
 71 historical aliases and +1000 numbering. Never renumber Issues or start a second board.
 
-The candidate pins Task Tracker a4ea3cfb0c1be1760ae0923c8232779532c25a7b. Run
+The candidate pins Task Tracker c89dd82289d2c6b3e27a85736729bbeaf7461a77. Run
 `python scripts/task_tracker.py guide` for that guide; helpers live in .workflow/tools
 and existing scripts paths remain wrappers. The active client uses that exact
 clean shared engine. `.workflow/legacy` retains the original configs for audit and
