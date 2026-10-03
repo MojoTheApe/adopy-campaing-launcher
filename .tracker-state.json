@@ -5344,7 +5344,7 @@
             "session": "run_l1512m_1003"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-L1512M",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -5362,7 +5362,8 @@
           "report": "# ACL-1512 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/528 (into `stage`)\nBranch: `codex/acl-1512-shared-locks`, head e942c63, based on work/main 941882d.\n\n## Changed\n- `src/acl_log.py`: the OS lock is now `config.paths.machine_file_lock(<journal>.lock)`, replacing the `LK_LOCK`/`flock` `_grab`/`_release`. The thread lock stays. A timeout is an `OSError` and reaches the caller as `JournalWriteError`.\n- `src/analysis_agent/ad_text_registry.py`:\n  - `_transaction()` now holds the RLock and then `paths.machine_file_lock`.\n  - `_save_raw` now goes through `paths._replace_when_free`. The loaded test caught `PermissionError [WinError 5]` from a plain `os.replace`.\n- `src/analysis_agent/team_library.py`: `_sync_transaction()` now holds the pull RLock and then `paths.machine_file_lock`.\n- `tests/test_journal_keeps_every_line.py`: the control test now holds the shared lock, and its bypass patches `acl_log._os_lock`.\n- New `tests/test_shared_file_locks.py` (12 tests):\n  - an AST check for inline OS locks under `src/`, with a control test\n  - a spy that confirms all three stores use the helper\n  - EDEADLK reproductions for each store\n  - first-use PermissionError reproductions\n  - a replace-retry test\n  - three multi-process no-lost-update tests under CPU burners\n- `docs/system/CHANGELOG.md` entry.\n\n## Evidence\n- On the old code (scratch worktree): 8 of 11 tests fail, with `[Errno 36] Resource deadlock avoided` and `PermissionError(13)`. The multi-process tests failed in 2 of 7 runs.\n- On the new code before the replace fix, the multi-process tests passed 55/58. The captured failure was `WinError 5` in `ad_text_registry._save_raw`.\n- After the fix: 20/20 under load (burners on all 14 cores).\n- Affected tests: 228 passed, headless, `ACL_LIBRARY_*` empty. `test_bench_catalogue` is included.\n- `scripts/acl_scan_secrets.py` is clean.\n\n## Not done / notes\n- The comment above `machine_file_lock` in `config/paths.py` still lists only hidden accounts and targeting as users. It is a shared file and was left as it is.\n- Port 9090, the live checkouts, Meta and Multilogin were not touched."
         },
         "pr": 528,
-        "queued_at": "2026-10-03T12:57:24+00:00"
+        "queued_at": "2026-10-03T12:57:24+00:00",
+        "reviewer": "Reviewer-R1512Q"
       }
     },
     "actors": {
@@ -5717,6 +5718,10 @@
       "Worker-L1512M": {
         "session": "run_l1512m_1003",
         "role": "Worker"
+      },
+      "Reviewer-R1512Q": {
+        "session": "rev_r1512q_1003",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -6712,10 +6717,20 @@
     "review_queue": [
       406,
       433,
-      526,
-      512
+      526
     ],
-    "review": null,
+    "review": {
+      "id": "de9cda14b8194218bb67fdb547286b78",
+      "pr": 528,
+      "issues": [
+        512
+      ],
+      "actor": "Reviewer-R1512Q",
+      "session": "rev_r1512q_1003",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-03T13:13:07+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -9665,6 +9680,13 @@
         "prs": [
           525
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-03T13:13:07+00:00",
+        "pr": 528,
+        "lane": "de9cda14b8194218bb67fdb547286b78",
+        "actor": "Reviewer-R1512Q"
       }
     ],
     "policy": {
