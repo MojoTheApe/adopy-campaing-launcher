@@ -23,6 +23,14 @@ a39407b72507): every post/story pair ended "do not publish".
   does not come back, Close and `crop_replace_picker_not_closed` as before. If Save
   without a pick changed the Vertical card (media gone or other ratio radios), the step
   blocks with `crop_vertical_changed_without_story`.
+- Review round 2: the Vertical side of Replace needs positive evidence too
+  (`crop_step.vertical_replaced`, same rules as Square via `card_changed`: picked thumbnail
+  id, Vertical ids replaced, stable `media_key` changed, ratio radios changed - live the
+  story made "9:16 (recommended)" disabled). The raw-src check alone passed every video
+  Replace (`blob:` re-minted), so a Replace that left the post on Vertical read as "as
+  planned"; without evidence the step now blocks with `crop_vertical_replace_unconfirmed`
+  (English line in `simple_create.creative_why_text`; the creative step fails, blocking).
+  `crop_vertical_changed_without_story` uses the same evidence (thumbnail ids included).
 - Bench: `crop_step_pair_video_2026_10_03.html`, `crop_replace_in_wizard_picker_2026_10_03.html`
   (scrubbed, `tests/bench/catalogue.json`), `tests/test_bench_crop_live_1003.py`; the
   in-wizard tests of `tests/test_story_not_placed_is_a_warning.py` follow the live way back.

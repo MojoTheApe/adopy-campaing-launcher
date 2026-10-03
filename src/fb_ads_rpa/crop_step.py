@@ -26,9 +26,9 @@ What `apply` does on the Crop step, before the walk presses Next:
 4. read-back: Original on both cards, no expansion checked, no other checked
    box or switch on the step (fail closed, `crop_unknown_toggle_on`) and, for a
    pair, the Vertical card's media changed to the picked tile (thumbnail ids)
-   while the Square card's did not (ACL-1533: blocked only on positive
-   evidence - `square_changed`; a re-minted `blob:` src or missing ids are
-   not a change).
+   while the Square card's did not (ACL-1533: both by positive evidence -
+   `card_changed`; a re-minted `blob:` src or missing ids are not a change;
+   Vertical without evidence blocks with `crop_vertical_replace_unconfirmed`).
 
 ACL-1533: Meta's in-wizard Replace picker (live 03.10) is left through the
 picker's own Save after the "Search media" box - after a pick and, for a story
@@ -397,28 +397,44 @@ def _ratios(card: dict) -> tuple:
     return tuple((r.get("label"), bool(r.get("disabled"))) for r in card.get("radios") or ())
 
 
-def square_changed(before: dict, state: dict, picked: list[str] | None = None) -> str:
-    """Positive evidence that Replace changed the Square card; "" = none.
+def card_changed(before: dict, state: dict, name: str, picked: list[str] | None = None) -> str:
+    """Positive evidence that the card `name` shows another file now; "" = none.
 
     ACL-1533: only evidence counts - missing ids or a re-minted `blob:` src
-    are not a change. Evidence: the picked tile's thumbnail id appeared on
-    Square; Square's thumbnail ids replaced by others; its media's stable
-    identity (`media_key`) changed; its ratio radios changed (another shape).
+    are not a change. Evidence: the picked tile's thumbnail id appeared on the
+    card; the card's thumbnail ids replaced by others; its media's stable
+    identity (`media_key`) changed; its ratio radios changed (another shape -
+    live 03.10: the story on Vertical made "9:16 (recommended)" disabled).
     """
-    sq0, sq1 = _card(before, "Square"), _card(state, "Square")
+    c0, c1 = _card(before, name), _card(state, name)
     picked_set = set(picked or ())
-    t0, t1 = set(sq0.get("thumbs") or ()), set(sq1.get("thumbs") or ())
+    t0, t1 = set(c0.get("thumbs") or ()), set(c1.get("thumbs") or ())
     if picked_set & t1 and not picked_set & t0:
         return "picked_thumb"
     if t0 and t1 and not t0 & t1:
         return "thumbs"
-    k0, k1 = media_key(sq0.get("media")), media_key(sq1.get("media"))
+    k0, k1 = media_key(c0.get("media")), media_key(c1.get("media"))
     if k0 and k1 and k0 != k1:
         return "media"
-    r0, r1 = _ratios(sq0), _ratios(sq1)
+    r0, r1 = _ratios(c0), _ratios(c1)
     if r0 and r1 and r0 != r1:
         return "ratios"
     return ""
+
+
+def square_changed(before: dict, state: dict, picked: list[str] | None = None) -> str:
+    """Positive evidence that Replace changed the Square card; "" = none."""
+    return card_changed(before, state, "Square", picked)
+
+
+def vertical_replaced(before: dict, state: dict, picked: list[str] | None = None) -> str:
+    """Positive evidence that Replace put another file on Vertical; "" = none.
+
+    ACL-1533 review: the raw src comparison is vacuous for video (a `blob:`
+    src is re-minted on every redraw), so a Replace that left the post on
+    Vertical read like a success.
+    """
+    return card_changed(before, state, "Vertical", picked)
 
 
 def readback(state: dict, plan, before: dict | None = None, picked: list[str] | None = None) -> str:
@@ -450,6 +466,10 @@ def readback(state: dict, plan, before: dict | None = None, picked: list[str] | 
             # The Vertical card changed, but not to the tile we picked (another
             # tile of a multi-selection, a preselected post tile, ...).
             return "crop_vertical_not_story"
+        if not vertical_replaced(before, state, picked):
+            # Only a re-minted src (or nothing) says Vertical changed: the
+            # post may still be there - not reported as "as planned".
+            return "crop_vertical_replace_unconfirmed"
     return ""
 
 
@@ -645,12 +665,13 @@ def apply(page, plan) -> str:
                             state = read(page)
                             # ACL-1533: the way back may be the picker's Save
                             # with nothing picked - the Vertical card must
-                            # still show the same file (media there, same
-                            # ratio radios), or the step blocks.
+                            # still show the same file (media there, no
+                            # evidence of another file: ids, stable media
+                            # identity, ratio radios), or the step blocks.
                             v0, v1 = _card(before, "Vertical"), _card(state, "Vertical")
                             if state.get("found") and v0 and (
                                     (v0.get("media") and not v1.get("media"))
-                                    or _ratios(v0) != _ratios(v1)):
+                                    or vertical_replaced(before, state)):
                                 why = "crop_vertical_changed_without_story"
                         else:
                             why = "crop_replace_picker_not_closed"

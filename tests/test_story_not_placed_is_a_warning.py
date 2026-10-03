@@ -49,6 +49,8 @@ STILL_BLOCKING = (
     "crop_unknown_toggle_on",
     "crop_vertical_not_story",
     "crop_square_changed",
+    "crop_vertical_replace_unconfirmed",          # ACL-1533 review
+    "crop_vertical_changed_without_story",
     "crop_replace_picker_unscoped",
     "crop_square_not_original",
     "crop_vertical_not_original",

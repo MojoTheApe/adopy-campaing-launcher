@@ -118,7 +118,9 @@ _WIRE = r"""
       window.pressed.push('own Save');
       if (args.own_save === 'stuck') return;
       const picked = host.querySelector('[aria-label=grid] [aria-pressed=true]');
-      paintCrop(!!picked || args.own_save === 'changes_vertical');
+      // 'noop': Save returns to Crop, but Meta left the post on Vertical
+      // (only the blob: src re-minted, 9:16 still enabled).
+      paintCrop((!!picked && args.own_save !== 'noop') || args.own_save === 'changes_vertical');
       return;
     }
     if (label === 'Save') { window.pressed.push('header Save'); return; }
@@ -291,3 +293,54 @@ def test_a_picker_that_save_does_not_leave_blocks(page):
     crop_step.set_plan(MISSING)
     assert crop_step.apply(page, MISSING) == "crop_replace_picker_not_closed"
     assert page.evaluate("window.pressed") == ["Replace", "own Save", "Close"]
+
+
+# ── review round 2: the Vertical side needs evidence too ─────────────────
+
+def test_a_replace_that_left_the_post_on_vertical_blocks(page, tmp_path):
+    # Save after a pick returns to Crop, but Vertical shows the post: only its
+    # blob: src is new. Not "as planned".
+    _live(page, own_save="noop")
+    crop_step.set_plan(PAIR)
+    assert crop_step.apply(page, PAIR) == "crop_vertical_replace_unconfirmed"
+    assert page.evaluate("window.pressed") == ["Replace", "own Save"]
+    row = _rows(tmp_path)[-1]
+    assert (row["ok"], row["note"]) == (False, "crop_vertical_replace_unconfirmed")
+
+
+def test_the_live_evidence_of_the_story_on_vertical_passes(page):
+    # Live `after` (d54d68303e57, 2e98a75f252d): 9:16 disabled on Vertical.
+    _live(page)
+    before = crop_step.read(page)
+    page.evaluate(r"""() => { document.querySelectorAll('video').forEach((x, i) =>
+        x.setAttribute('src', 'blob:https://adsmanager.invalid/after-' + i));
+      for (const i of document.querySelectorAll('input[type=radio]'))
+        if (/9:16/.test(i.closest('label') ? i.closest('label').textContent : i.parentElement.textContent)) i.disabled = true; }""")
+    after = crop_step.read(page)
+    assert crop_step.vertical_replaced(before, after, [STORY_THUMB]) == "ratios"
+    # Only the blob re-minted: no evidence.
+    page.evaluate(r"""() => { for (const i of document.querySelectorAll('input[type=radio]')) i.disabled = false;
+      document.querySelectorAll('input[type=radio]').forEach(i => { if (/1:1/.test(i.closest('label') ? i.closest('label').textContent : '')) i.disabled = true; }); }""")
+    churn = crop_step.read(page)
+    assert crop_step.vertical_replaced(before, churn, [STORY_THUMB]) == ""
+    assert crop_step.readback(churn, PAIR, before, [STORY_THUMB]) == "crop_vertical_replace_unconfirmed"
+
+
+def test_vertical_evidence_by_ids_and_stable_media():
+    def st(v_media, v_thumbs=()):
+        return {"found": True, "cards": {
+            "Square": {"original": True, "expand": [], "other": [], "media": "blob:s", "thumbs": []},
+            "Vertical": {"original": True, "expand": [], "other": [], "media": v_media,
+                         "thumbs": list(v_thumbs)}}}
+    assert crop_step.vertical_replaced(st("blob:1"), st("blob:2", [STORY_THUMB]), [STORY_THUMB]) == "picked_thumb"
+    assert crop_step.readback(st("blob:2", [STORY_THUMB]), PAIR, st("blob:1"), [STORY_THUMB]) == ""
+    assert crop_step.vertical_replaced(st("https://x.invalid/a.jpg?x=1"), st("https://x.invalid/b.jpg?x=1")) == "media"
+    assert crop_step.vertical_replaced(st("https://x.invalid/a.jpg?x=1"), st("https://x.invalid/a.jpg?x=2")) == ""
+    assert crop_step.readback(st("https://x.invalid/a.jpg?x=1"), PAIR, st("https://x.invalid/a.jpg?x=2"),
+                              []) == "crop_vertical_replace_unconfirmed"
+
+
+def test_the_new_reason_has_an_english_line():
+    from src.fb_ads_rpa import simple_create
+    assert simple_create.creative_why_text("crop_vertical_replace_unconfirmed").startswith(
+        "The story file could not be confirmed on the Vertical crop")
