@@ -272,13 +272,16 @@ _CARD = """
 #: Shaped like the live picker (a88e3789f7ab, `03_wizard_crop_replace`): the
 #: picker replaces the Crop step inside the wizard dialog; the dialog keeps the
 #: step row (Media/Trim disabled, Crop enabled, ...), Close and Save; no Cancel.
+#: ACL-1533 (live 03.10, fixture `crop_replace_in_wizard_picker_2026_10_03`):
+#: the row's Crop is the current step and does nothing; the picker's own Save
+#: (footer, after "Search media") brings Crop back.
 _IN_WIZARD = """<!doctype html><html><body>
 <div role="dialog" id="wiz">
   <div id="row">
     <div role="button" aria-disabled="true">Creative setup</div>
     <div role="button" aria-disabled="true">Media</div>
     <div role="button" aria-disabled="true">Trim</div>
-    <div role="button" id="row_crop" onclick="%(crop_row)s">Crop</div>
+    <div role="button" id="row_crop" aria-current="step" onclick="window.pressed.push('Crop row')">Crop</div>
     <div role="button" aria-disabled="true">Text</div>
     <div role="button" aria-disabled="true">Creative generation</div>
     <div role="button" aria-disabled="true">Enhancements</div>
@@ -301,9 +304,11 @@ _IN_WIZARD = """<!doctype html><html><body>
     d.id = 'picker';
     d.innerHTML = '<div role="heading">Replace media for Stories, Status, Reels</div>'
       + '<input placeholder="Search media"><div id="count">0 selected</div>'
-      + '<div role="button" class="tile" style="width:90px;height:90px"><div><div>1_es_2292_post.mp4</div></div></div>';
+      + '<div role="button" class="tile" style="width:90px;height:90px"><div><div>1_es_2292_post.mp4</div></div></div>'
+      + '<button id="own_save" onclick="ownSave()">Save</button>';
     document.getElementById('body').appendChild(d);
   }
+  function ownSave() { window.pressed.push('own Save'); %(own_save)s }
   function backToCrop() {
     const d = document.getElementById('picker');
     if (d) d.remove();
@@ -312,7 +317,7 @@ _IN_WIZARD = """<!doctype html><html><body>
 </script></body></html>"""
 
 
-def _in_wizard(page, *, crop_row="window.pressed.push('Crop row'); backToCrop()", original_disabled=False,
+def _in_wizard(page, *, own_save="backToCrop()", original_disabled=False,
                expand=("checked", ""), extra=""):
     cards = "".join(_CARD % {
         "name": n, "orig": "" if n == "Vertical" else "checked",
@@ -321,22 +326,24 @@ def _in_wizard(page, *, crop_row="window.pressed.push('Crop row'); backToCrop()"
         "ratio_label": "9:16 (recommended)" if n == "Vertical" else "1:1",
         "expand": e,
     } for n, e in zip(("Square", "Vertical"), expand))
-    page.set_content(_IN_WIZARD % {"cards": cards, "crop_row": crop_row, "extra": extra})
+    page.set_content(_IN_WIZARD % {"cards": cards, "own_save": own_save, "extra": extra})
 
 
-def test_story_not_in_an_in_wizard_library_goes_back_through_the_step_row_never_close(page, tmp_path):
+def test_story_not_in_an_in_wizard_library_goes_back_through_the_pickers_own_save(page, tmp_path):
     _in_wizard(page)
     crop_step.set_plan(PAIR)
     assert crop_step.apply(page, PAIR) == ""
     assert crop_step.warning() == crop_step.NOT_IN_LIBRARY
-    assert page.evaluate("window.pressed") == ["Crop row"]          # never Close, Save or Next
+    # ACL-1533: the picker's own Save - never the row's Crop, the header
+    # Save, Close or Next.
+    assert page.evaluate("window.pressed") == ["own Save"]
     state = crop_step.read(page)
     assert state["cards"]["Vertical"]["original"] is True             # was 9:16
     assert not any(c["checked"] for c in state["cards"]["Square"]["expand"])
     assert state["cards"]["Vertical"]["media"].endswith("3_es_2403_post.mp4")
     row = _rows(tmp_path, "ad_creative_crop")[-1]
     assert (row["ok"], row["note"]) == (None, "story_not_placed:not_in_library")
-    assert row["diag"]["tiles"] == 0 and row["diag"]["picker_back"] == "Crop"
+    assert row["diag"]["tiles"] == 0 and row["diag"]["picker_back"] == "Save"
     assert crop_step.outcome() == ""
 
 
@@ -357,11 +364,11 @@ def test_story_not_in_library_with_an_unknown_toggle_on_still_blocks(page):
 
 
 def test_a_picker_that_cannot_be_left_still_blocks(page, tmp_path):
-    # The step row does not bring Crop back: the cards cannot be read back,
-    # so the step is blocked (and the picker closed the old way).
-    _in_wizard(page, crop_row="window.pressed.push('Crop row')")
+    # The picker's Save does not bring Crop back: the cards cannot be read
+    # back, so the step is blocked (and the picker closed the old way).
+    _in_wizard(page, own_save="")
     crop_step.set_plan(PAIR)
     assert crop_step.apply(page, PAIR) == "crop_replace_picker_not_closed"
     assert crop_step.warning() == ""
-    assert page.evaluate("window.pressed") == ["Crop row", "Close"]
+    assert page.evaluate("window.pressed") == ["own Save", "Close"]
     assert _rows(tmp_path, "ad_creative_crop")[-1]["ok"] is False

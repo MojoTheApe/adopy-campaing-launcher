@@ -26,7 +26,14 @@ What `apply` does on the Crop step, before the walk presses Next:
 4. read-back: Original on both cards, no expansion checked, no other checked
    box or switch on the step (fail closed, `crop_unknown_toggle_on`) and, for a
    pair, the Vertical card's media changed to the picked tile (thumbnail ids)
-   while the Square card's did not.
+   while the Square card's did not (ACL-1533: blocked only on positive
+   evidence - `square_changed`; a re-minted `blob:` src or missing ids are
+   not a change).
+
+ACL-1533: Meta's in-wizard Replace picker (live 03.10) is left through the
+picker's own Save after the "Search media" box - after a pick and, for a story
+not in the library, with nothing picked. The step row's "Crop" is the current
+step there and does nothing.
 
 The step is recognised by the step row's "Crop" or by its heading.
 
@@ -247,13 +254,26 @@ PICKER_JS = r"""
   // ACL-1476 (a88e3789f7ab): Meta's "Replace media for Stories, Status,
   // Reels" opens INSIDE the wizard dialog - its buttons are the wizard's step
   // row and the wizard's Close/Save, no Cancel. Close there closes the whole
-  // wizard; the way back is the step row's own "Crop".
+  // wizard.
   const labels = new Set(buttons.map(b => b.label));
   const inWizard = ['Media', 'Text', 'Crop'].every(l => labels.has(l));
   out.in_wizard = inWizard;
+  // ACL-1533 (live 03.10, runs d54d68303e57/2e98a75f252d): the step row's
+  // "Crop" there is the current step (aria-current=step) - pressing it is a
+  // no-op, the picker stayed. The control that brings Crop back is the
+  // picker's own Save: the footer's primary button (where Crop has Next),
+  // AFTER the "Search media" box in the dialog; the header's Save before the
+  // box is the wizard's. Only a button labelled exactly "Save" - never Next,
+  // Done or Publish in that slot.
+  const after = (b) => !!(search.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const ownSave = inWizard
+    ? (buttons.filter(b => b.label === 'Save' && !b.disabled && after(b)).pop() || null) : null;
+  out.own_save = !!ownSave;
   const target = !scoped ? null
+               : inWizard ? ((args.want === 'confirm' || args.want === 'cancel') ? ownSave
+                             : args.want === 'close' ? pick(['Close']) : null)
                : args.want === 'confirm' ? pick(args.confirm)
-               : args.want === 'cancel' ? pick(inWizard ? ['Cancel', 'Crop'] : ['Cancel', 'Close'])
+               : args.want === 'cancel' ? pick(['Cancel', 'Close'])
                : args.want === 'close' ? pick(['Close']) : null;
   if (target) {
     target.el.scrollIntoView({ block: 'center', behavior: 'instant' });
@@ -355,6 +375,52 @@ def thumb_match(state: dict, picked: list[str] | None) -> str:
     return "match" if shown & picked_set else "mismatch"
 
 
+def media_key(src: str | None) -> str:
+    """A card media's identity that survives Meta re-rendering the card.
+
+    ACL-1533 (live 03.10): the video cards' media is a `blob:` URL, re-minted
+    whenever the Crop step is drawn again - after Replace both cards had a new
+    `blob:` src while Square still showed the post. Such a URL says nothing
+    about which file is shown: "" (no identity). A CDN URL without its query
+    (signed, rotating parameters) is the file.
+    """
+    s = (src or "").strip()
+    if not s or s.lower().startswith(("blob:", "data:")):
+        return ""
+    return s.split("#", 1)[0].split("?", 1)[0]
+
+
+def _ratios(card: dict) -> tuple:
+    """The card's aspect-ratio radios (label, disabled): which ratios Meta
+    offers depends on the shown file's own shape (1:1 is disabled on Square
+    while a square file is there)."""
+    return tuple((r.get("label"), bool(r.get("disabled"))) for r in card.get("radios") or ())
+
+
+def square_changed(before: dict, state: dict, picked: list[str] | None = None) -> str:
+    """Positive evidence that Replace changed the Square card; "" = none.
+
+    ACL-1533: only evidence counts - missing ids or a re-minted `blob:` src
+    are not a change. Evidence: the picked tile's thumbnail id appeared on
+    Square; Square's thumbnail ids replaced by others; its media's stable
+    identity (`media_key`) changed; its ratio radios changed (another shape).
+    """
+    sq0, sq1 = _card(before, "Square"), _card(state, "Square")
+    picked_set = set(picked or ())
+    t0, t1 = set(sq0.get("thumbs") or ()), set(sq1.get("thumbs") or ())
+    if picked_set & t1 and not picked_set & t0:
+        return "picked_thumb"
+    if t0 and t1 and not t0 & t1:
+        return "thumbs"
+    k0, k1 = media_key(sq0.get("media")), media_key(sq1.get("media"))
+    if k0 and k1 and k0 != k1:
+        return "media"
+    r0, r1 = _ratios(sq0), _ratios(sq1)
+    if r0 and r1 and r0 != r1:
+        return "ratios"
+    return ""
+
+
 def readback(state: dict, plan, before: dict | None = None, picked: list[str] | None = None) -> str:
     """"" when the Crop step is as the plan says; otherwise the named reason."""
     if not state.get("found"):
@@ -375,20 +441,15 @@ def readback(state: dict, plan, before: dict | None = None, picked: list[str] | 
     if plan is not None and getattr(plan, "replace_vertical", False):
         if before is None:
             return "crop_replace_not_done"
-        sq0, sq1 = _card(before, "Square").get("media"), _card(state, "Square").get("media")
         v0, v1 = _card(before, "Vertical").get("media"), _card(state, "Vertical").get("media")
         if not v1 or v1 == v0:
             return "crop_vertical_not_replaced"
-        if sq0 and sq1 and sq0 != sq1:
+        if square_changed(before, state, picked):
             return "crop_square_changed"
         if thumb_match(state, picked) == "mismatch":
             # The Vertical card changed, but not to the tile we picked (another
             # tile of a multi-selection, a preselected post tile, ...).
             return "crop_vertical_not_story"
-        picked_set = set(picked or ())
-        if picked_set & set(_card(state, "Square").get("thumbs") or ()) \
-                and not picked_set & set(_card(before, "Square").get("thumbs") or ()):
-            return "crop_square_changed"
     return ""
 
 
@@ -411,8 +472,10 @@ def _cancel_picker(page) -> None:
 def _back_to_crop(page, log: dict) -> bool:
     """ACL-1476: leave the picker for the Crop step without closing the wizard.
 
-    Cancel, or inside the wizard its step row's "Crop" (never the wizard's
-    Close first). True = the picker is gone and the Crop step reads again.
+    Cancel, or inside the wizard the picker's own Save (ACL-1533: the step
+    row's "Crop" is the current step there and did nothing live; never the
+    wizard's Close first, never Next). True = the picker is gone and the Crop
+    step reads again.
     """
     got = _picker(page, "cancel")
     pt = got.get("point")
@@ -580,6 +643,15 @@ def apply(page, plan) -> str:
                             _tls.warning = NOT_IN_LIBRARY
                             why = ""
                             state = read(page)
+                            # ACL-1533: the way back may be the picker's Save
+                            # with nothing picked - the Vertical card must
+                            # still show the same file (media there, same
+                            # ratio radios), or the step blocks.
+                            v0, v1 = _card(before, "Vertical"), _card(state, "Vertical")
+                            if state.get("found") and v0 and (
+                                    (v0.get("media") and not v1.get("media"))
+                                    or _ratios(v0) != _ratios(v1)):
+                                why = "crop_vertical_changed_without_story"
                         else:
                             why = "crop_replace_picker_not_closed"
                     elif not why:

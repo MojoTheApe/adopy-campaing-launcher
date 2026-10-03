@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**20 robot steps × 81 layouts, 47 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**20 robot steps × 83 layouts, 49 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -26,7 +26,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 5 | 5 | 0 | 0 |
-| creative_wizard | 8 | 8 | 0 | 0 |
+| creative_wizard | 10 | 10 | 0 | 0 |
 | ad_copy | 7 | 7 | 0 | 0 |
 | ad_destination / destination_sweep | 9 | 8 | 0 | 1 |
 | ads 2-3 (single-screen editor) | 2 | 2 | 0 | 0 |
@@ -197,6 +197,8 @@ Robot: _creative_wizard_open, _wizard_media_step, _WIZARD_FORWARD_JS (walk), _cr
 | Video, Text before Crop: Creative setup . Media . Text . Crop . Image generation . Enhancements . Translation | cc8fcfa17ae9/03-12_wizard_* | `creative_wizard_steps_2026_10_01.html` · text_first_text, text_first_crop | `tests/test_bench_creative_wizard_steps.py` | row read in this order; forward Next | pass |
 | Crop step, video in the single-screen editor: cards Square and Vertical, Original already checked on both, Crop and Replace; no 'Crop and expand (Meta AI)' box | 4121938e6dc3/07_wizard_crop | `crop_step_video_simple_create_2026_10_01.html` · crop_step | `tests/test_crop_step_original_and_story.py` | both cards read as Original; apply makes no clicks; read-back clean (ACL-1426) | pass |
 | Crop step, image in the classic editor: Square Original, Vertical on Meta's default 9:16 (recommended) | 5edc0e7cca0a/05_wizard_crop | `crop_step_image_classic_2026_10_01.html` · crop_step | `tests/test_crop_step_original_and_story.py` | one guarded click moves Vertical to Original before the walk's Next; read-back clean (ACL-1426) | pass |
+| Crop step, video post/story pair (03.10): both cards Original, `blob:` video media, no thumbnail ids; Square 1:1 disabled | 2e98a75f252d/06_wizard_crop, d54d68303e57/06_wizard_crop, f35a2b31f7d8/07_wizard_crop, a39407b72507/05_wizard_crop | `crop_step_pair_video_2026_10_03.html` · crop_step | `tests/test_bench_crop_live_1003.py` | a re-minted blob src or missing ids on Square is not crop_square_changed; the picked story id on Square is (ACL-1533) | pass |
+| Replace picker inside the wizard dialog: step row (Crop current), header Close/Save, Search media, tiles, footer Save; no Cancel | 2e98a75f252d/02_wizard_crop_replace, 2e98a75f252d/07_wizard_crop_replace, d54d68303e57/07_wizard_crop_replace, a39407b72507/02_wizard_crop_replace | `crop_replace_in_wizard_picker_2026_10_03.html` · in_wizard_picker | `tests/test_bench_crop_live_1003.py` | after a pick and with nothing picked the picker is left through its own footer Save (never the row's Crop, the header Save, Close or Next) (ACL-1533) | pass |
 
 ## ad_copy
 
