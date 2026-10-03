@@ -189,12 +189,12 @@ def test_a_narrow_screenshot_gets_a_readable_band(browser):
 
 def test_without_a_shot_the_button_is_disabled_and_does_nothing(browser):
     btn = ('<button type="button" class="amap-btn amap-copy-group" disabled '
-           'title="No screenshot on the last read — read the account again">Copy for group</button>')
+           'title="Screenshots are switched off for safety">Copy for group</button>')
     ctx, page, sent = _page(browser, clipboard="ok", button=btn)
     try:
         b = page.locator(".amap-copy-group")
         assert b.is_disabled()
-        assert b.get_attribute("title") == "No screenshot on the last read — read the account again"
+        assert b.get_attribute("title") == "Screenshots are switched off for safety"
         b.click(force=True)
         page.wait_for_timeout(300)
         assert page.evaluate("window.__copied") == []
@@ -314,6 +314,7 @@ def test_the_status_capture_includes_the_account_banner(browser, local):
 
 def test_the_status_shot_is_taken_before_scrolling_to_the_totals(local, monkeypatch):
     """Прокрутка к итогам (`_read_total`) увела бы баннер из кадра."""
+    monkeypatch.setenv("ACL_STATUS_SHOT", "1")  # ACL-1535: по умолчанию снимка нет
     order: list[str] = []
     page = NS(url="https://adsmanager.facebook.com/?act=111", goto=lambda *a, **k: None, close=lambda: None,
               screenshot=lambda path, full_page=False: (order.append("shot"), Path(path).write_bytes(PNG)))
