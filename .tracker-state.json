@@ -5522,7 +5522,7 @@
             "session": "run_o1535f_1003"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-O1535F",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -5540,7 +5540,8 @@
           "report": "# ACL-1535 handoff\n\n2026-10-03, Worker-O1535F (run_o1535f_1003): PR #536 into stage, head 387e361f.\n- `_shoot_status` (call site) captures only with `ACL_STATUS_SHOT=1`; by default no `page.screenshot`, no CDP. The reading carries the last stored shot (if still on disk), so the row and Copy for group keep it; `_status_shot` internals untouched (merges with #530 / ACL-1529).\n- No stored shot: Copy for group disabled, tooltip \"Screenshots are switched off for safety\" (template + live Read JS).\n- `page_capture` unchanged. Note: `_shoot` (PNG on a *failed* read: grid timeout, wrong period, no totals) still calls `page.screenshot` \u2014 out of this scope, may need the same gate.\n- Tests (headless): 239 passed across test_status_screenshot, test_copy_for_group, test_copy_status_text, test_account_spend, test_account_status_read, test_reads_reopen_a_hand_opened_profile, test_report_scripts_parse, test_screens_are_in_english, test_bench_catalogue. acl_scan_secrets clean.\n- Live acceptance (inner size unchanged after a Read) not run: worker must not touch Multilogin/Meta."
         },
         "pr": 536,
-        "queued_at": "2026-10-03T15:12:58+00:00"
+        "queued_at": "2026-10-03T15:12:58+00:00",
+        "reviewer": "Reviewer-R1535S"
       }
     },
     "actors": {
@@ -5919,6 +5920,10 @@
       "Worker-O1535F": {
         "session": "run_o1535f_1003",
         "role": "Worker"
+      },
+      "Reviewer-R1535S": {
+        "session": "rev_r1535s_1003",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -6939,10 +6944,20 @@
       406,
       433,
       526,
-      532,
-      535
+      532
     ],
-    "review": null,
+    "review": {
+      "id": "80520cc3e0014df192bf7d91e1bccf65",
+      "pr": 536,
+      "issues": [
+        535
+      ],
+      "actor": "Reviewer-R1535S",
+      "session": "rev_r1535s_1003",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-03T15:14:08+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -9999,6 +10014,13 @@
         "issue": 535,
         "pr": 536,
         "actor": "Worker-O1535F"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-03T15:14:08+00:00",
+        "pr": 536,
+        "lane": "80520cc3e0014df192bf7d91e1bccf65",
+        "actor": "Reviewer-R1535S"
       }
     ],
     "policy": {
