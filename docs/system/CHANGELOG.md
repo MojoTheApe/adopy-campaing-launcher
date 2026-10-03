@@ -25,6 +25,32 @@ window is larger than the rendered page, so at scale 1 Ads Manager sat in the to
   Copy image", then the `/view` page), and nothing is sent or stored besides the
   clipboard.
 
+## Journal, ad-text and team-library file locks use the shared safe lock — ACL-1512
+
+ACL-1495 moved hidden accounts and the targeting registry to
+`config.paths.machine_file_lock`. Three more places still had the old pattern
+(`msvcrt.locking(LK_LOCK)`, which gives up after 10 x 1 s with EDEADLK, and a `.lock`
+file that got `b"0"` written into it on first use):
+
+- `src/acl_log.py` (`append_line`, all run journals): the OS lock is now
+  `machine_file_lock(<journal>.lock)`; the per-path thread lock stays. A lock timeout
+  surfaces as `JournalWriteError`, like any other write failure.
+- `src/analysis_agent/ad_text_registry.py` `_transaction()`: same shape as
+  `targeting_registry` (module RLock + shared lock on `ad_text_registry.lock`).
+  Its `_save_raw` now replaces the file through `paths._replace_when_free`, like
+  targeting (ACL-1419): the multi-process tests below failed in 3 of 58 loaded
+  runs before this; the captured failure was `PermissionError [WinError 5]` from a
+  plain `os.replace` in an ad-text writer.
+- `src/analysis_agent/team_library.py` `_sync_transaction()`: shared lock on
+  `team_library_<kind>.lock`.
+- `tests/test_shared_file_locks.py`: an AST check that nothing under `src/` calls
+  `msvcrt.locking`, `fcntl.flock`/`lockf` or uses `LK_*`/`LOCK_EX` directly; EDEADLK
+  and first-use PermissionError reproductions for each store (they fail on the old code
+  with the original errors); and one multi-process no-lost-update test per store with
+  every core kept busy by burner processes.
+- `tests/test_journal_keeps_every_line.py`: the parent-holds-the-lock control test
+  now holds the shared lock.
+
 ## Spend and country reads reopen a hand-opened profile like Publish does — ACL-1518
 
 On 2026-10-03 07:45 "Read spend" for Facebook_1443 and Facebook_6540 stopped at once
