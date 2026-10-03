@@ -398,7 +398,10 @@ def test_the_listeners_are_the_arrows_and_the_off_button():
     assert block.count("document.addEventListener('acl:builder-drawer'") == 1, (
         "билдер слушается не один раз"
     )
-    assert block.count("addEventListener") == 7, "появился восьмой обработчик"
+    # Восьмой (ACL-1504) — Read again у непрочитанного списка кампаний: он
+    # только нажимает Read spend той же строки, своего чтения у него нет.
+    assert block.count("again.addEventListener('click'") == 1, "Read again слушает не одно нажатие"
+    assert block.count("addEventListener") == 8, "появился девятый обработчик"
 
 
 # ── покрывают ли строки спенд аккаунта ────────────────────────────────────

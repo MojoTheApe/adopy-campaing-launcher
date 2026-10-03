@@ -168,7 +168,7 @@ _LIVE_ROW = (
 _LIVE_STUBS = (
     "var amapReadAllBusy=false;function amapMoney(v,c){return v+' '+c}function amapReadTitle(){return ''}"
     "function amapPaintTree(){}function amapUpdateCountrySummaries(){}function amapSpendFailed(){}"
-    "function amapCopyShot(){}"
+    "function amapCopyShot(){}function amapRereadSync(){}"
 )
 
 
