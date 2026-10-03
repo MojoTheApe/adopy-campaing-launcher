@@ -3969,20 +3969,6 @@
   },
   "execution": {
     "claims": {
-      "526": {
-        "actor": "Worker-P1526E",
-        "session": "run_p1526e_1003",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1526-repin-engine",
-        "worktree": "C:\\acl-1526-repin",
-        "id": "f74179c0fee4434f9dea0f2c86f32eac",
-        "issue": 526,
-        "state": "handoff",
-        "started_at": "2026-10-03T11:59:01+00:00",
-        "from_status": "status:backlog",
-        "pr": 527,
-        "report": "# ACL-1526 handoff \u2014 Worker-P1526E\n\nPR #527 (codex/acl-1526-repin-engine -> stage), head 471e2c62.\n\n## Changed\n- tracker/engine.json: revision c89dd82289d2c6b3e27a85736729bbeaf7461a77 (TT-73, PR #74; includes TT-70).\n- delivery.json: tracker.revision same pin.\n- .workflow/tools/tracker_delivery_policy.py: replaced with engine tracker/delivery_policy.py at c89dd82 (old copy was byte-identical to a4ea3cfb). tracker-link CI imports it; read_full_state now uses file_bytes with /git/blobs fallback for state > 1 MB.\n- docs/repository/TRACKER.md: names the new pin.\n- docs/system/CHANGELOG.md: entry.\n- Not changed: .workflow/template-base.json (pristine Master Repo template baseline), docs/repository/PARALLEL_EXECUTION.md (ACL-1383 history).\n\n## Verification\n- `scripts/task_tracker.py execution show ACL-1526` from the worktree: OK, reads the >1 MB state.\n- `scripts/task_tracker.py check-pr 527` and `scripts/acl_pr_check.py --pr 527`: read the state; only fail on \"move it to Review\" before handoff (expected).\n- pytest tests/test_acl_ci_scope.py tests/test_acl_tracker.py tests/test_bench_catalogue.py tests/test_master_adoption.py tests/test_tracker_v2.py: 72 passed, 2 skipped.\n- scripts/acl_scan_secrets.py: clean.\n\n## For review\n- Acceptance \"first tracker write after the re-pin succeeds\" is exercised by this handoff (CAS write).\n- tracker-link on #527 should go green after handoff (vendored policy reads >1 MB)."
-      },
       "512": {
         "actor": "Worker-L1512M",
         "session": "run_l1512m_1003",
@@ -5344,9 +5330,25 @@
             "session": "run_p1526e_1003"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P1526E",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-P1526E",
+          "session": "run_p1526e_1003",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1526-repin-engine",
+          "worktree": "C:\\acl-1526-repin",
+          "id": "f74179c0fee4434f9dea0f2c86f32eac",
+          "issue": 526,
+          "state": "handoff",
+          "started_at": "2026-10-03T11:59:01+00:00",
+          "from_status": "status:backlog",
+          "pr": 527,
+          "report": "# ACL-1526 handoff \u2014 Worker-P1526E\n\nPR #527 (codex/acl-1526-repin-engine -> stage), head 471e2c62.\n\n## Changed\n- tracker/engine.json: revision c89dd82289d2c6b3e27a85736729bbeaf7461a77 (TT-73, PR #74; includes TT-70).\n- delivery.json: tracker.revision same pin.\n- .workflow/tools/tracker_delivery_policy.py: replaced with engine tracker/delivery_policy.py at c89dd82 (old copy was byte-identical to a4ea3cfb). tracker-link CI imports it; read_full_state now uses file_bytes with /git/blobs fallback for state > 1 MB.\n- docs/repository/TRACKER.md: names the new pin.\n- docs/system/CHANGELOG.md: entry.\n- Not changed: .workflow/template-base.json (pristine Master Repo template baseline), docs/repository/PARALLEL_EXECUTION.md (ACL-1383 history).\n\n## Verification\n- `scripts/task_tracker.py execution show ACL-1526` from the worktree: OK, reads the >1 MB state.\n- `scripts/task_tracker.py check-pr 527` and `scripts/acl_pr_check.py --pr 527`: read the state; only fail on \"move it to Review\" before handoff (expected).\n- pytest tests/test_acl_ci_scope.py tests/test_acl_tracker.py tests/test_bench_catalogue.py tests/test_master_adoption.py tests/test_tracker_v2.py: 72 passed, 2 skipped.\n- scripts/acl_scan_secrets.py: clean.\n\n## For review\n- Acceptance \"first tracker write after the re-pin succeeds\" is exercised by this handoff (CAS write).\n- tracker-link on #527 should go green after handoff (vendored policy reads >1 MB)."
+        },
+        "pr": 527,
+        "queued_at": "2026-10-03T12:04:16+00:00"
       },
       "512": {
         "implementers": [
@@ -6682,7 +6684,8 @@
     },
     "review_queue": [
       406,
-      433
+      433,
+      526
     ],
     "review": {
       "id": "f104d038d0fc401397a643008b0994dd",
@@ -9612,6 +9615,13 @@
         "issue": 512,
         "claim": "103a2c918f9845858a3ca81d6522884e",
         "actor": "Worker-L1512M"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-03T12:04:16+00:00",
+        "issue": 526,
+        "pr": 527,
+        "actor": "Worker-P1526E"
       }
     ],
     "policy": {
