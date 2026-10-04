@@ -5740,7 +5740,7 @@
             "session": "run_v1544a_1004"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-V1544A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -5758,7 +5758,8 @@
           "report": "# ACL-1544 handoff (Worker-V1544A, run_v1544a_1004)\n\nPR: MojoTheApe/adopy-campaing-launcher#548 -> stage, head cfae18c6b8aa631e1f0b54f1036e9d42acdf145d\nBranch: codex/acl-1544-advplus, worktree C:\\acl-1544-advplus, claim 6718dac6a71b4c9cabafc84fc33792fe\n\n## What the captures show\n- Before the age step, the \"Advantage+ on\" badge on the 1443 Audience card is expected. Meta clears it only after the age becomes a hard condition. The final step `advantage_plus_audience` checks this after the age: 252 of 258 live rows read off, and in job 04334d4b both campaigns read off. The pre-age step `advantage_plus_off` has never passed in any live build: 417 of 417 rows are still_on, so its failure was a false alarm.\n- Both 03.10 captures show the card in controls mode: Locations, Age with Minimum/Maximum, Gender, Detailed targeting, Languages, and \"Switch to recommended setup\". There is no \"Further limit the reach of your ads\" row. That is the positive signal.\n- SIDE EFFECT FOUND: `flipped_switch: true` meant the robot pressed the editor header's \"Campaign toggle\" (\"In draft\"). The old `_turn_off_advantage_plus_leads` climbed 5 levels from the Campaign score panel and clicked the first checked switch.\n  - Runs where it fired: the toggle is aria-checked=true in captures before the step (b3a333ff43ab/00_stall_campaign_name, cb854b07857b/00_stall_campaign_name) and false after it.\n  - Runs with flipped_switch=false (e5beb2079e39, 0131b6fa3476, df5344da3a17): the toggle stayed true.\n  - Live builds show 64 flipped_switch:true rows; 18 of them are in 03c.\n  - Campaigns from those runs were probably saved or published with the campaign toggle Off.\n\n## Changes\n- `src/fb_ads_rpa/meta_dom.py`:\n  - New `_audience_mode` reports controls, recommended or None.\n  - `_ensure_manual_audience` handles three cases:\n    - Controls mode: ok, note `controls_mode`, no clicks.\n    - Recommended setup after the fallbacks: ok false, `still_on`, returns True.\n    - Neither readable: ok null, `unconfirmed`, plus a capture `advantage_plus_unconfirmed`.\n  - `_turn_off_advantage_plus_leads` is scoped to the label's own row (at most 80 characters of text) and never presses a switch with another aria-label.\n  - `run_recorded_campaign_flow` calls the switch-off itself and adds the blocking soft fail `advantage_plus_off:recommended setup, no audience controls`. It then calls `fill_audience_age(..., ensure_manual=False)`; the new kwarg defaults to True for the other callers.\n- `src/fb_ads_rpa/failure_policy.py`: `advantage_plus_off` is BLOCKING, with an English reason and a GUIDE entry.\n- Bench:\n  - New fixture `tests/fixtures/ads_manager/audience_controls_badge_on_2026_10_03.html` with fragments card_run_a, card_run_b, campaign_toggle and leads_row.\n  - New test `tests/test_bench_audience_controls_badge_on.py`.\n  - Catalogue, README and CHANGELOG updated.\n- `tests/test_age_is_set_only_with_advantage_plus_off.py`: the synthetic page with no mode markers now expects `unconfirmed`.\n\n## Checks\n- Affected tests, headless, ACL_LIBRARY_* blank: 272 passed. That covers the new bench, the age/audience suites, suggest layout, build_progress_model, failure_policy, readable_problems(+browser), single-screen flow, recorded retry, robot_health and run_telemetry.\n- `scripts/acl_scan_secrets.py`: clean.\n- `scripts/bench_catalogue.py --check`: OK.\n- No new telemetry step names. `controls_mode` and `unconfirmed` are notes on the existing `advantage_plus_off` step.\n\n## Live check still needed\n- Run 1443 once with a non-default age. Each campaign should show `advantage_plus_off` ok=true with note `controls_mode` and no flipped_switch, then `advantage_plus_audience` with note `off`.\n- In that run the Campaign toggle must still be On after the audience steps. Check the header switch in any later capture: it should read aria-checked=true.\n- Read-only: check the 03.10 drafts and campaigns from runs with flipped_switch=true to see whether their campaign toggle is Off.\n- `src/web/robot_health.py` (dashboard track) still lists `advantage_plus_off` as diagnostic-only. Now that ok=true/false are real outcomes, the dashboard track can decide whether to count it."
         },
         "pr": 548,
-        "queued_at": "2026-10-04T01:28:41+00:00"
+        "queued_at": "2026-10-04T01:28:41+00:00",
+        "reviewer": "Reviewer-R1544K"
       }
     },
     "actors": {
@@ -6157,6 +6158,10 @@
       "Worker-V1544A": {
         "session": "run_v1544a_1004",
         "role": "Worker"
+      },
+      "Reviewer-R1544K": {
+        "session": "rev_r1544k_1004",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -7250,10 +7255,20 @@
       433,
       526,
       532,
-      529,
-      544
+      529
     ],
-    "review": null,
+    "review": {
+      "id": "3f16ce82096448afb2eda171fb1a5cf2",
+      "pr": 548,
+      "issues": [
+        544
+      ],
+      "actor": "Reviewer-R1544K",
+      "session": "rev_r1544k_1004",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-04T02:19:56+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -10469,6 +10484,13 @@
         "issue": 544,
         "pr": 548,
         "actor": "Worker-V1544A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-04T02:19:56+00:00",
+        "pr": 548,
+        "lane": "3f16ce82096448afb2eda171fb1a5cf2",
+        "actor": "Reviewer-R1544K"
       }
     ],
     "policy": {
