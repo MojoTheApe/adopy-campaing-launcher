@@ -3,14 +3,15 @@
 
 03.10 07:45 «Read spend» у Facebook_1443 и Facebook_6540 сразу кончался
 `profile_open_by_hand (no_automation_port)`, а «open profile» отвечал 409, хотя
-Publish на 1443 через две минуты дождался тишины ввода и переоткрыл окно
-(ACL-1388/1427). Теперь чтения идут тем же путём: те же условия (возраст окна,
-не на переднем плане, тишина ввода), ожидание тишины до 2 минут, только мягкая
-остановка через MLX API — никакого kill. Пока ждём — строка на карте; не
-дождались — простой текст вместо «failed · retry».
+Publish на 1443 переоткрыл окно (ACL-1388/1427). Теперь чтения идут тем же
+путём: только мягкая остановка через MLX API — никакого kill.
 
-Часы, сон, Win32, процессы и MLX подменены (фикстуры ACL-1427); настоящий
-Multilogin не трогается.
+ACL-1562 (решение владельца 04.10): без условий и без ожидания тишины ввода —
+сразу. Пока переоткрываем — строка на карте; мягкая остановка не прошла —
+простой текст вместо «failed · retry».
+
+Процессы и MLX подменены (фикстуры ACL-1562); настоящий Multilogin не
+трогается.
 """
 from __future__ import annotations
 
@@ -28,21 +29,18 @@ sys.path.insert(0, str(ROOT))
 from src.analysis_agent import account_spend as sp  # noqa: E402
 from src.analysis_agent import country_split as cs  # noqa: E402
 from src.fb_ads_rpa import browser as br  # noqa: E402
-from src.fb_ads_rpa import hand_window as hw  # noqa: E402
 from src.fb_ads_rpa import profile_trouble as pt  # noqa: E402
 
-# Машина и мир ACL-1427: окно открыто руками (процесс 4242), порта нет.
-from tests.test_a_hand_opened_window_waits_for_idle import (  # noqa: E402,F401
-    HAND_PID,
+# Машина и мир ACL-1562: два окна открыты руками, порта автоматизации нет.
+from tests.test_a_hand_opened_window_is_reopened_at_once import (  # noqa: E402,F401
+    ACCOUNT,
+    OTHER,
+    OTHER_PROFILE,
     PROFILE,
     machine,
     world,
 )
 
-ACCOUNT = "Facebook_1443"
-OTHER = "Facebook_6540"
-OTHER_PID = 4343
-OTHER_PROFILE = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 PAGE = ROOT / "src" / "web" / "templates" / "report.html"
 ROW = ROOT / "src" / "web" / "templates" / "_account_map_country.html"
 
@@ -57,7 +55,7 @@ class _Direct:
         return None
 
     def profile_is_running(self, user_data_dir, profile_id=""):
-        return bool(self.world.pids)
+        return bool(self.world.running.get(profile_id))
 
 
 @pytest.fixture
@@ -76,16 +74,6 @@ def reads(world, monkeypatch, tmp_path):
     monkeypatch.setattr(cs, "_entry_for", entries.get)
     monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "country_splits.json")
     monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
-
-    # Что строка аккаунта видела, пока шло ожидание.
-    world.seen_notes = []
-    real_sleep = hw._sleep
-
-    def sleep(s):
-        world.seen_notes.append(sp.hand_wait_note(ACCOUNT))
-        real_sleep(s)
-
-    monkeypatch.setattr(hw, "_sleep", sleep)
     return world
 
 
@@ -94,34 +82,21 @@ def _attach(account=ACCOUNT):
         return sp._attach_only(sp._entry_for(account), account)
 
 
-# ── hand-opened + idle → переоткрыто и прочитано ───────────────────────────
+# ── hand-opened → переоткрыто сразу и прочитано ───────────────────────────
 
-def test_hand_opened_and_idle_is_reopened_for_the_read(reads, monkeypatch):
-    reads.m.input_until = 30.0
-    # Ревью PR #519 (M12): ни остановка, ни подъём не просят права убить.
-    kills: list = []
-    real_stop, real_start = reads.prov._stop_profile, reads.prov._start_via_mlx_api
-
-    def stop(*a, **kw):
-        kills.append(("stop", kw.get("allow_kill", True)))
-        return real_stop(*a, **kw)
-
-    def start(*a, **kw):
-        kills.append(("start", kw.get("allow_kill", True)))
-        return real_start(*a, **kw)
-
-    monkeypatch.setattr(reads.prov, "_stop_profile", stop)
-    monkeypatch.setattr(reads.prov, "_start_via_mlx_api", start)
+def test_a_hand_opened_window_is_reopened_for_the_read(reads):
     conn = _attach()
-    assert kills == [("stop", False), ("start", False)], kills
+    # Ревью PR #519 (M12): ни остановка, ни подъём не просят права убить.
+    assert reads.kill_flags == [("stop", False), ("start", False)], reads.kill_flags
     assert conn.page == "reopened-page"
-    assert reads.ev == [("stop", PROFILE), "start", "connect"]
+    assert reads.ev == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)]
     assert "kill" not in reads.ev, "чтение убило окно человека"
-    # Пока ждали — строка на карте; после — её нет.
-    assert sp.HAND_WAIT_NOTE in reads.seen_notes
+    # Пока переоткрывали — строка на карте; после — её нет.
+    assert reads.row_notes == [sp.hand_note(ACCOUNT)]
     assert sp.hand_wait_note(ACCOUNT) == ""
     step, ok, kw = [r for r in reads.rows if r[0] == "profile_hand_window"][-1]
-    assert (ok, kw["note"], kw["diag"]["wait_outcome"]) == (True, "reopened", hw.WAIT_IDLE)
+    assert (ok, kw["note"]) == (True, "reopened")
+    assert "wait_outcome" not in kw["diag"]
 
 
 def test_the_spend_read_asks_for_the_publish_reopen(monkeypatch):
@@ -143,7 +118,6 @@ def test_the_spend_read_asks_for_the_publish_reopen(monkeypatch):
 
 def test_the_spend_read_reaches_the_page_after_the_reopen(reads, monkeypatch):
     """Полный путь `read_via_rpa`: после переоткрытия чтение идёт в Ads Manager."""
-    reads.m.input_until = 30.0
     visited = []
 
     class Page:
@@ -155,40 +129,39 @@ def test_the_spend_read_reaches_the_page_after_the_reopen(reads, monkeypatch):
             pass
 
     monkeypatch.setattr(reads.prov, "_connect_started",
-                        lambda started, pid: reads.ev.append("connect") or SimpleNamespace(
+                        lambda started, pid: reads.ev.append(("connect", pid)) or SimpleNamespace(
                             page=Page(), close=lambda **kw: None))
     with pytest.raises(RuntimeError, match="stop here"):
         sp.read_via_rpa(ACCOUNT, "2026-10-01", "2026-10-01")
-    assert reads.ev == [("stop", PROFILE), "start", "connect"]
+    assert reads.ev == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)]
     assert visited and "act=123" in visited[0]
 
 
-# ── ввод продолжается → простой текст ─────────────────────────────────────
+# ── мягкая остановка не прошла → простой текст ────────────────────────────
 
-def test_input_that_continues_ends_with_the_plain_message(reads):
-    reads.m.input_until = 10_000.0
+def test_a_failed_graceful_stop_ends_with_the_plain_message(reads):
+    reads.stop_fails = True
     out = sp.read_via_rpa(ACCOUNT, "2026-10-01", "2026-10-01")
     assert out.state == "failed"
     assert out.error == sp.HAND_OPEN_MESSAGE
     assert out.error_code == sp.HAND_OPEN_CODE
-    assert reads.ev == [], "окно тронули, хотя ввод не прекращался"
-    assert sp.HAND_WAIT_NOTE in reads.seen_notes
+    assert reads.ev == [("stop", PROFILE)] and "kill" not in reads.ev
+    assert reads.row_notes == [sp.hand_note(ACCOUNT)]
     assert sp.hand_wait_note(ACCOUNT) == ""
     kw = [r for r in reads.rows if r[0] == "profile_hand_window"][-1][2]
-    assert kw["diag"]["wait_outcome"] == hw.WAIT_TIMEOUT
+    assert kw["note"] == "mlx_stop_failed"
 
 
 def test_the_country_read_gives_the_same_plain_message(reads):
-    reads.m.input_until = 10_000.0
+    reads.stop_fails = True
     out = cs.read_country_split(ACCOUNT, "2026-10-01")
     assert out.state == "failed"
     assert out.error == sp.HAND_OPEN_MESSAGE and out.error_code == sp.HAND_OPEN_CODE
     assert cs.get_split(ACCOUNT, "2026-10-01", "2026-10-01")["error_code"] == sp.HAND_OPEN_CODE
-    assert reads.ev == []
+    assert reads.ev == [("stop", PROFILE)]
 
 
-def test_the_country_read_reopens_after_idle(reads, monkeypatch):
-    reads.m.input_until = 30.0
+def test_the_country_read_reopens_at_once(reads, monkeypatch):
     seen = []
     real = cs._attach_only
 
@@ -199,23 +172,11 @@ def test_the_country_read_reopens_after_idle(reads, monkeypatch):
     monkeypatch.setattr(cs, "_attach_only", attach)
     cs.read_country_split(ACCOUNT, "2026-10-01")  # дальше страница-заглушка, итог не важен
     assert seen == [True]
-    assert reads.ev[:3] == [("stop", PROFILE), "start", "connect"]
-
-
-# ── окно на переднем плане → сразу простой текст ───────────────────────────
-
-def test_a_window_in_front_gives_the_plain_message_at_once(reads):
-    reads.m.input_until = 10_000.0
-    reads.m.fg = HAND_PID
-    out = sp.read_via_rpa(ACCOUNT, "2026-10-01", "2026-10-01")
-    assert out.error == sp.HAND_OPEN_MESSAGE and out.error_code == sp.HAND_OPEN_CODE
-    assert reads.ev == [] and reads.m.sleeps == [], "ждали, хотя окно было впереди"
-    assert sp.HAND_WAIT_NOTE not in reads.seen_notes
+    assert reads.ev[:3] == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)]
 
 
 def test_without_the_read_flag_nothing_changes(reads):
     """Прочие пользователи `_attach_only` (выключение, проба кабинета) окно не трогают."""
-    reads.m.t = 500.0  # давно тихо — переоткрыть было бы можно
     with pytest.raises(sp.ProfileNotAttachable) as exc:
         sp._attach_only(sp._entry_for(ACCOUNT), ACCOUNT)
     assert exc.value.code == ""
@@ -224,28 +185,12 @@ def test_without_the_read_flag_nothing_changes(reads):
 
 def test_the_provider_reopens_for_a_read_only_when_asked(reads):
     """`allow_kill=False` без `reopen_hand_window` — прежняя остановка (ACL-1388)."""
-    reads.m.t = 500.0
     with pytest.raises(pt.ProfileStop):
         reads.prov.open(sp._entry_for(ACCOUNT), ACCOUNT, allow_restart=True, allow_kill=False)
     assert reads.ev == []
     conn = reads.prov.open(sp._entry_for(ACCOUNT), ACCOUNT, allow_restart=True, allow_kill=False,
                            reopen_hand_window=True)
     assert conn.page == "reopened-page" and "kill" not in reads.ev
-
-
-# ── Read all: два окна, открытых руками ────────────────────────────────────
-
-def test_read_all_reopens_two_hand_opened_profiles_one_after_another(reads):
-    reads.m.input_until = reads.m.t + 30.0
-    assert _attach(ACCOUNT).page == "reopened-page"
-    reads.pids = frozenset({OTHER_PID})      # второе окно, тоже руками
-    reads.m.input_until = reads.m.t + 20.0    # человек снова шевельнул мышью
-    assert _attach(OTHER).page == "reopened-page"
-    assert reads.ev == [("stop", PROFILE), "start", "connect",
-                        ("stop", OTHER_PROFILE), "start", "connect"]
-    assert "kill" not in reads.ev
-    notes = [r[2]["note"] for r in reads.rows if r[0] == "profile_hand_window"]
-    assert notes == ["reopened", "reopened"]
 
 
 def _wait_for(predicate, seconds=5.0):
@@ -256,8 +201,8 @@ def _wait_for(predicate, seconds=5.0):
     return predicate()
 
 
-def test_a_waiting_read_does_not_block_another_account(monkeypatch, tmp_path):
-    """Read all: пока один аккаунт ждёт тишины ввода, чтение другого не стоит.
+def test_a_reopening_read_does_not_block_another_account(monkeypatch, tmp_path):
+    """Read all: пока один аккаунт переоткрывается, чтение другого не стоит.
 
     Ревью PR #519 (F3): через настоящий `read_via_rpa` и его замок профиля
     (`serialized_browser(key=_profile_key, reading=True)`), а не подменённое
@@ -277,8 +222,8 @@ def test_a_waiting_read_does_not_block_another_account(monkeypatch, tmp_path):
         attached.append(label)
         assert sp._REOPEN_BY_HAND.get() is True
         if label == ACCOUNT:
-            # Так выглядит ожидание тишины ввода изнутри: строка на карте и
-            # поток, который держит замок своего профиля.
+            # Так выглядит переоткрытие изнутри: строка на карте и поток,
+            # который держит замок своего профиля.
             sp._set_hand_wait(label, True)
             waiting.set()
             release.wait(10)
@@ -294,11 +239,11 @@ def test_a_waiting_read_does_not_block_another_account(monkeypatch, tmp_path):
     sp.start_read(same, day, day)
     assert _wait_for(lambda: sp.get_reading(OTHER, day, day).state != "running")
     assert sp.get_reading(OTHER, day, day).error.endswith("the profile is not open.")
-    # Тот же профиль стоит за ждущим чтением — до его конца.
+    # Тот же профиль стоит за переоткрывающимся чтением — до его конца.
     assert sp.get_reading(ACCOUNT, day, day).state == "running"
     assert sp.get_reading(same, day, day).state == "running"
     assert same not in attached
-    assert sp.hand_wait_note(ACCOUNT) == sp.HAND_WAIT_NOTE
+    assert sp.hand_wait_note(ACCOUNT) == sp.hand_note(ACCOUNT)
     release.set()
     assert _wait_for(lambda: sp.get_reading(same, day, day).state != "running")
     first = sp.get_reading(ACCOUNT, day, day)
@@ -336,43 +281,42 @@ def _get(path, params):
 
 
 def test_open_profile_on_a_hand_opened_profile_reopens_instead_of_409(reads):
-    reads.m.input_until = 30.0
     r = _post("/account-spend/open-profile", {"account": ACCOUNT})
     assert r.status_code == 200, r.text
     assert r.json()["ok"] is True
-    assert reads.ev == [("stop", PROFILE), "start", "connect"]
-    assert sp.HAND_WAIT_NOTE in reads.seen_notes
+    assert reads.ev == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)]
+    assert reads.row_notes == [sp.hand_note(ACCOUNT)]
 
 
 def test_open_profile_that_cannot_reopen_gives_the_plain_message_not_409(reads):
-    reads.m.input_until = 10_000.0
+    reads.stop_fails = True
     r = _post("/account-spend/open-profile", {"account": ACCOUNT})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is False and body["message"] == sp.HAND_OPEN_MESSAGE
     assert body["code"] == sp.HAND_OPEN_CODE
-    assert reads.ev == []
+    assert reads.ev == [("stop", PROFILE)] and "kill" not in reads.ev
     # Ревью PR #519 (F6): маршрут решает по коду, а не по тексту.
     ok, message = sp.open_for_automation(ACCOUNT)
     assert not ok and message.code == sp.HAND_OPEN_CODE and message == sp.HAND_OPEN_MESSAGE
 
 
 def test_connecting_a_new_profile_still_leaves_a_hand_opened_window_alone(reads):
-    """`/mlx-profile-open` (подключение нового профиля) в задачу не входит."""
-    reads.m.t = 500.0
+    """`/mlx-profile-open` (подключение нового профиля) в задачу не входит
+    (ACL-1518; ACL-1562 оставил так: подключение — не действие над аккаунтом)."""
     ok, message = sp.open_profile_for_automation(PROFILE, "f-1", "A", "DQ438")
     assert not ok and "opened manually" in message
     assert reads.ev == []
 
 
-def test_the_status_poll_carries_the_waiting_note(monkeypatch, tmp_path):
+def test_the_status_poll_carries_the_reopen_note(monkeypatch, tmp_path):
     monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
     monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "country_splits.json")
     sp._set_hand_wait(ACCOUNT, True)
     try:
         r = _get("/account-spend/status", {"account": ACCOUNT, "date_from": "2026-10-01",
                                            "date_to": "2026-10-01"})
-        assert r.status_code == 200 and r.json()["waiting"] == sp.HAND_WAIT_NOTE
+        assert r.status_code == 200 and r.json()["waiting"] == sp.hand_note(ACCOUNT)
     finally:
         sp._set_hand_wait(ACCOUNT, False)
     r = _get("/account-spend/status", {"account": ACCOUNT, "date_from": "2026-10-01",
@@ -383,11 +327,12 @@ def test_the_status_poll_carries_the_waiting_note(monkeypatch, tmp_path):
 # ── строка карты: по-английски и без «failed · retry» ─────────────────────
 
 def test_the_row_texts_are_english():
-    for text in (sp.HAND_WAIT_NOTE, sp.HAND_OPEN_MESSAGE):
+    for text in (sp.hand_note(ACCOUNT), sp.HAND_OPEN_MESSAGE):
         assert not any("Ѐ" <= ch <= "ӿ" for ch in text), text
-    assert sp.HAND_WAIT_NOTE == "Waiting for the computer to be idle to reopen the profile…"
-    assert sp.HAND_OPEN_MESSAGE == ("The profile is open by hand — close its window in Multilogin, "
-                                    "then Read again")
+    assert sp.hand_note("Facebook_9943") == ("The Facebook_9943 window was opened by hand "
+                                             "— reopening it with automation")
+    assert sp.HAND_OPEN_MESSAGE == ("Multilogin did not close the hand-opened profile window — "
+                                    "close it in Multilogin, then Read again")
 
 
 def test_the_row_shows_the_wait_and_the_plain_message():
@@ -396,7 +341,7 @@ def test_the_row_shows_the_wait_and_the_plain_message():
     assert "AMAP_HAND_CODE" not in js
     assert js.count("typeof amapHandWait === 'function'") >= 2
     assert "function amapHandWait(account, note)" in js
-    # Ожидание — из опроса состояния, в спенде, в странах и в «open profile».
+    # Строка переоткрытия — из опроса состояния, в спенде, в странах и в «open profile».
     assert js.count("j.waiting") >= 4
     # Отказ «открыт руками» — не «failed · retry» и не «countries failed».
     assert "btn.textContent = hand ? 'Read spend' : 'failed · retry';" in js
@@ -442,14 +387,14 @@ const ctx = {document: {querySelectorAll: s => s === '.amap-live' ? [cell] : [],
   amapPaintTree() {}, amapMoney: () => '1', amapReadTitle: () => '', amapOpenProfile() {}, String: String};
 vm.createContext(ctx);
 vm.runInContext(__SCRIPT__, ctx);
-// Пока ждём тишины — строка в ячейке.
+// Пока переоткрываем окно — строка в ячейке.
 ctx.amapApplyReading('Acc', {state: 'running'}, null, __WAIT__);
 assert.equal(cell.querySelector('.amap-hand-wait').textContent, __WAIT__);
 assert.equal(btn.textContent, 'reading…');
-// Дождались и читаем дальше — строки больше нет.
+// Переоткрыли и читаем дальше — строки больше нет.
 ctx.amapApplyReading('Acc', {state: 'running'}, null, '');
 assert.equal(cell.querySelector('.amap-hand-wait'), null);
-// Не дождались — простой текст целиком, кнопка обычная, не «failed · retry».
+// Не вышло — простой текст целиком, кнопка обычная, не «failed · retry».
 ctx.amapApplyReading('Acc', {state: 'running'}, null, __WAIT__);
 ctx.amapApplyReading('Acc', {state: 'failed', error: __MSG__, error_code: 'open_by_hand'}, null, '');
 assert.equal(cell.querySelector('.amap-hand-wait'), null);
@@ -486,7 +431,7 @@ def test_the_row_paints_the_wait_and_the_plain_message_in_node(tmp_path):
         cut("function amapSplitMark(", "function amapSplitBusy("),
     ])
     # Сам скрипт подставляется последним: в нём могут встретиться метки.
-    source = (_ROW_HARNESS.replace("__WAIT__", json.dumps(sp.HAND_WAIT_NOTE))
+    source = (_ROW_HARNESS.replace("__WAIT__", json.dumps(sp.hand_note("Acc")))
               .replace("__MSG__", json.dumps(sp.HAND_OPEN_MESSAGE))
               .replace("__SCRIPT__", json.dumps(script)))
     path = tmp_path / "row.cjs"

@@ -647,25 +647,38 @@ class ProfileNotAttachable(RuntimeError):
 # Read у 1443/6540 сразу кончался «open by hand», а open-profile отвечал 409,
 # хотя Publish на 1443 через две минуты дождался тишины и переоткрыл окно.
 # Теперь эти пути просят у провайдера тот же путь (`reopen_hand_window`):
-# те же условия, никакого kill, окно на переднем плане не трогается.
+# только мягкая остановка через MLX API, никакого kill.
+#
+# ACL-1562 (решение владельца 04.10): без условий и без ожидания — окно,
+# открытое руками, переоткрывается сразу. Строка аккаунта говорит, почему
+# окно закрылось, пока идёт мягкая остановка и подъём.
 
 #: Код отказа, когда окно так и осталось открытым руками.
 HAND_OPEN_CODE = "open_by_hand"
 
-#: Строка на карте, пока ждём тишины ввода на машине.
-HAND_WAIT_NOTE = "Waiting for the computer to be idle to reopen the profile…"
+#: Строка на карте, пока окно, открытое руками, переоткрывается
+#: (тот же текст, что в панели задания Publish — `browser.HAND_WINDOW_NOTICE`).
+HAND_NOTE = "The {account} window was opened by hand — reopening it with automation"
 
 #: Простой текст отказа — вместо «failed · retry» / «countries failed».
-HAND_OPEN_MESSAGE = "The profile is open by hand — close its window in Multilogin, then Read again"
+#: После ACL-1562 так кончается только отказ мягкой остановки (или
+#: переоткрытие, выключенное на этой машине) — ничего не убивали.
+HAND_OPEN_MESSAGE = ("Multilogin did not close the hand-opened profile window — "
+                     "close it in Multilogin, then Read again")
 
-#: Аккаунт → строка ожидания. Живёт только в памяти и только пока ждём:
-#: опрос `/account-spend/status` отдаёт её строке аккаунта.
+#: Аккаунт → строка переоткрытия. Живёт только в памяти и только пока окно
+#: переоткрывается: опрос `/account-spend/status` отдаёт её строке аккаунта.
 _HAND_WAIT: dict[str, str] = {}
 _HAND_WAIT_LOCK = threading.Lock()
 
 
+def hand_note(account: str) -> str:
+    """Строка «окно открыто руками — переоткрываем» для этого аккаунта."""
+    return HAND_NOTE.format(account=str(account or "") or "profile")
+
+
 def hand_wait_note(account: str) -> str:
-    """Ждёт ли сейчас чтение этого аккаунта тишины ввода — строкой для экрана."""
+    """Переоткрывается ли сейчас окно этого аккаунта — строкой для экрана."""
     with _HAND_WAIT_LOCK:
         return _HAND_WAIT.get(str(account or ""), "")
 
@@ -673,7 +686,7 @@ def hand_wait_note(account: str) -> str:
 def _set_hand_wait(account: str, waiting: bool) -> None:
     with _HAND_WAIT_LOCK:
         if waiting:
-            _HAND_WAIT[str(account or "")] = HAND_WAIT_NOTE
+            _HAND_WAIT[str(account or "")] = hand_note(account)
         else:
             _HAND_WAIT.pop(str(account or ""), None)
 
@@ -813,8 +826,8 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
 
     ACL-1518: `reopen_by_hand=True` (или блок `reopening_by_hand()` — так
     читают спенд и страны) — окно, открытое руками, переоткрывается путём
-    Publish: условия и ожидание тишины ввода `hand_window`, мягкая остановка,
-    без kill. Не вышло — отказ с кодом `HAND_OPEN_CODE` и простым текстом.
+    Publish: сразу (ACL-1562), мягкая остановка, без kill. Не вышло — отказ
+    с кодом `HAND_OPEN_CODE` и простым текстом.
     """
     if reopen_by_hand is None:
         reopen_by_hand = _REOPEN_BY_HAND.get()
@@ -856,7 +869,7 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
         options: dict[str, Any] = {"allow_restart": True, "allow_kill": False}
         if reopen_by_hand:
             options["reopen_hand_window"] = True
-            options["on_hand_wait"] = lambda: _set_hand_wait(account_label, True)
+            options["on_hand_reopen"] = lambda: _set_hand_wait(account_label, True)
         try:
             conn = rpa_browser.get_browser_provider("multilogin_attach").open(
                 entry, account_label, **options)
@@ -1032,7 +1045,7 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
 
     ACL-1518: `reopen_by_hand=True` (кнопка «open profile» на строке карты) —
     окно, открытое руками, переоткрывается путём Publish (`_attach_only`):
-    те же условия и ожидание тишины ввода, без kill. Не вышло — `(False,
+    сразу (ACL-1562), только мягкая остановка, без kill. Не вышло — `(False,
     HAND_OPEN_MESSAGE)`. Подключение нового профиля (`/mlx-profile-open`)
     по-прежнему такое окно не трогает.
     """

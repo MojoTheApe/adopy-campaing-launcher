@@ -75,9 +75,9 @@ POLICY: dict[str, tuple[str, str]] = {
     ),
     _profile.OPEN_BY_HAND: (
         BLOCKING,
-        "the account's Multilogin profile was open by hand (without automation), and the "
-        "robot does not close such a window - it may hold a Facebook session Multilogin has "
-        "not saved yet; no draft was created - " + _profile.MESSAGES[_profile.OPEN_BY_HAND],
+        "the account's Multilogin profile was open by hand (without automation), and "
+        "Multilogin did not close it when the robot asked (nothing was killed); no draft was "
+        "created - " + _profile.MESSAGES[_profile.OPEN_BY_HAND],
     ),
     _profile.RESTART_FAILED: (
         BLOCKING,
@@ -306,7 +306,7 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     ),
     _profile.OPEN_BY_HAND: (
         "Profile window open by hand",
-        "The robot does not close a hand-opened window, so no draft was created.",
+        "Multilogin did not close the hand-opened window, so no draft was created.",
         "Close the profile window so Multilogin saves the session, then publish again.",
     ),
     _profile.RESTART_FAILED: (
