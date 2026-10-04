@@ -496,12 +496,14 @@ _SUMMARY_LEVELS = {"clean": "info", "warnings": "info",
                    "do-not-publish": "warning", "stopped": "warning"}
 
 
-def report_run_summary(summary: dict) -> str:
+def report_run_summary(summary: dict, *, attachment: dict | None = None) -> str:
     """Итог одной кампании (ACL-1447) — собирает `run_summary.build`.
 
     Отпечаток — только вид итога: четыре тикета на весь парк машин, события
     внутри них. Имена аккаунта и кампании — тегами (решение владельца 01.10,
     см. докстроку модуля); всё событие проходит тот же `before_send`.
+    ACL-1554: `attachment` — строки телеметрии прогона
+    (`run_summary.telemetry_attachment`), уже вычищенные и ограниченные.
     """
     if not init():
         return ""
@@ -520,10 +522,37 @@ def report_run_summary(summary: dict) -> str:
         ctx = dict(summary)
         if ctx.get("run_id"):
             ctx["run_id"] = str(ctx["run_id"]).replace("-", "")
+        if attachment and not _attach_telemetry(scope, attachment):
+            ctx["telemetry_attachment"] = "error"
         scope.set_context("run_summary", ctx)
         return sentry_sdk.capture_message(
             f"Run summary: {result}", level=_SUMMARY_LEVELS.get(result, "info")
         ) or ""
+
+
+def _attach_telemetry(scope, attachment: dict) -> bool:
+    """Приложить строки телеметрии прогона (ACL-1554). Вернуть, приложилось ли.
+
+    Как и у `_attach_section`: `before_send` вложения не видит, поэтому
+    второй потолок стоит здесь, и не приложилось — итог уходит без вложения.
+    Только `.jsonl`: скриншот сюда не пролезет даже по ошибке.
+    """
+    try:
+        from src.fb_ads_rpa.run_summary import TELEMETRY_MAX_BYTES
+
+        payload = attachment.get("bytes") or b""
+        filename = str(attachment.get("filename") or "")
+        if (not isinstance(payload, (bytes, bytearray)) or not payload
+                or len(payload) > TELEMETRY_MAX_BYTES or not filename.endswith(".jsonl")):
+            return False
+        scope.add_attachment(
+            bytes=bytes(payload),
+            filename=filename,
+            content_type=str(attachment.get("content_type") or "application/x-ndjson"),
+        )
+        return True
+    except Exception:
+        return False
 
 
 def report_problem(text: str, *, context: dict | None = None) -> str:
