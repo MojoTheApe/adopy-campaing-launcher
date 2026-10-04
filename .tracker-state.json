@@ -1511,6 +1511,24 @@
           544
         ],
         "recorded_at": "2026-10-04T02:20:42+00:00"
+      },
+      "552": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1551B",
+        "review_session": "rev_r1551b_1004",
+        "execution_lane": "7c1e9a1779c644ab801169cb2690bc16",
+        "implementer": "Worker-W1551E",
+        "head_sha": "b5962390cd49eeb777194ea3fd9e581cef6fc392",
+        "base_sha": "a474b67478077623d59a6365823e8cf194affaa4",
+        "tree_sha": "b526cbf4469ffd0a6e71bceb6689282f31ddc1a5",
+        "report": "# Independent review \u2014 PR #552 (ACL-1551), round 2 \u2014 Reviewer-R1551B, session rev_r1551b_1004\n\nHead 70a088fe71a19e9748aa11c59a6fab6db9c9e594 \u00b7 base work/stage a474b67478077623d59a6365823e8cf194affaa4 \u00b7 tree b526cbf4469ffd0a6e71bceb6689282f31ddc1a5\nImplementer: Worker-W1551E. Round 1 (head 3d459ead) asked for changes on F1 and F2.\n\n## Verdict: APPROVED\n\n### F1 \u2014 fixed\n`_WIZARD_EXIT_JS` now takes {want, skip}, and the skipped labels are filtered in the page before any click. `_leave_wizard` passes `(skip,)`; empty labels are dropped. My round-1 reproduction (Crop footer reads Save from the start, Save does nothing) now gives ['Save', 'Close'] (was ['Save', 'Save', 'Close']), with outcome crop_wizard_stuck. The new tests cover this: test_a_footer_save_already_pressed_as_forward_is_not_pressed_again and test_the_exit_lookup_never_offers_a_skipped_label. Two mutations confirm it: dropping the JS filter (M14) and not passing skip (M15) are both caught.\n\n### F2 \u2014 fixed\nThe `crop_refused` branch is removed. This is safe:\n- `_crop_refusal` calls `_creative_why(<crop reason>)` first, and `_creative_why` keeps the first reason named, so the later \"reuse_left_selection\" does not overwrite it.\n- The retry wrapper's `media_refused_on_ad` branch sets the upload reason to `_refused_why()` = the crop reason.\n- The stuck-wizard test now asserts `last_upload_diag()` why/text and `last_upload_why()`.\n- Mutation M7 (`_refused_why` \u2192 generic) is caught.\n\n### AC1 wording\nThe PR body and CHANGELOG now state that the 04.10 Crop has no Save of its own (footer Cancel / Next). The live success path is the picker's footer Save, then one Next.\n\n## Checks carried over from round 1 (code unchanged except the above)\nThese still hold:\n- Lookups are scoped to the wizard dialog. Live captures from 03.10 and 04.10 show no editor or tree false positive.\n- Stage's lookup picked the editor footer's \"Done\" on the bench; the head does not.\n- The busy wait is bounded.\n- Close makes the ad blocking through the crop gate, the retry wrapper (no second upload), `creative_soft_fail`, failure_policy and ad_level_summary.\n- Save/Done is still followed by the media/identity verification.\n- The normal-path step labels on all live success captures are unchanged.\n- The leftover-wizard Close is limited to the wizard's header.\n- The fixture is scrubbed.\n\n## Evidence\n- `git merge-tree --write-tree work/stage HEAD` gives b526cbf4469ffd0a6e71bceb6689282f31ddc1a5, the head tree, so the merge is clean. work/stage is an ancestor of the head.\n- Mutations: 15 of 15 are caught (M1\u2013M15, including F1: M14/M15 and F2: M7).\n- Affected tests, headless, ACL_LIBRARY_* blank, 24 files by name: 410 passed.\n- `scripts/acl_scan_secrets.py`: clean.\n- CI on 70a088fe: all checks pass, including tracker-link (green without a rerun), tests on 3.11 and 3.13 \u00d73, and the installer jobs.\n\n## Issue #551 checkbox map\n- [x] AC1 Bench (as reworded in the PR): story missing \u2192 picker Save + one Next closes the wizard, post kept, warning only. A constructed footer Save is also covered. The 04.10 Crop itself has no own Save.\n- [x] AC2 Test: wizard does not close \u2192 Close, ad blocking with a clear reason, no dialog left, the next ads are still created.\n- [ ] AC3 Live: a 1443 campaign with a pair whose story is not in the library builds all its ads (open).\n\n\n## Re-pin\nHead b5962390cd49eeb777194ea3fd9e581cef6fc392 (prep merged work/main): patch-id against work/stage a474b674 is 361787b546cfb884d82ebf992c6eb98d96837020, identical to the approved 70a088fe; tree unchanged; merge-tree clean.\n",
+        "main_sha": "c1f0e5077524aa3ef246108494aa25c491d600e8",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          551
+        ],
+        "recorded_at": "2026-10-04T09:41:46+00:00"
       }
     },
     "stage": {
