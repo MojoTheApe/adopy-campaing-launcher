@@ -4358,22 +4358,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "565": {
-        "actor": "Worker-C1565R",
-        "session": "run_c1565r_1004",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "codex/acl-1565-ci-reuse",
-        "worktree": "C:\\acl-1565-ci-reuse",
-        "id": "ec4a548a316242859501b97805511204",
-        "issue": 565,
-        "state": "handoff",
-        "started_at": "2026-10-04T12:33:20+00:00",
-        "from_status": "status:idea",
-        "pr": 567,
-        "report": "# ACL-1565 handoff (Worker-C1565R, run_c1565r_1004)\n\nPR #567 (codex/acl-1565-ci-reuse -> stage), head b805e288.\n\n## What changed\n- New `scripts/acl_ci_reuse.py`, called from `scripts/acl_ci_scope.py` (new `decide()`, `--workflow`, `reused_from` output, step summary).\n- `ci.yml` and `windows-installer.yml`: `actions: read`; the scope step gets `GITHUB_TOKEN` and `--workflow`; the scope output `reused_from` is echoed by the admission jobs; the scope job's pytest list adds `tests/test_acl_ci_reuse.py`.\n- `scripts/acl_publish_release.py` `verify_promotion`: when the main run's test matrix did not run, the release is accepted only with a provable full run of the same tree.\n- Docs: CHANGELOG entry, `docs/repository/WORKFLOW.md` (stage/main full-check rule), `docs/runtime/DELIVERY.md` (release gate).\n\n## Proof rules\n- The tree is computed by git (`HEAD^{tree}`; candidates come from `git log --all` and are re-checked with `rev-parse`).\n- The candidate run must be a `push`/`workflow_dispatch` run of the same workflow path in this repo, `completed`/`success`, with every required job of its latest attempt succeeded.\n- Release tags, `workflow_dispatch`, a missing token, API or git errors, and no match all run in full.\n\n## Tests\nRun locally (ACL_LIBRARY_* empty): `pytest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_publish_release.py -q`, 85 passed. `tests/test_acl_ci_reuse.py` also passed with `--noconftest`, which is how the CI scope job runs it. The secret scan is clean.\n\n## Gates\n- `verify_promotion`: changed, with tests.\n- Tracker `check-merge` reads only the aggregate required checks, and `verify-stage` reads no checks. Neither needed a change, and the pinned engine is untouched.\n\n## Open\n- The last acceptance item (a real stage->main PR and main push show \"reused\") is left for the coordinator.\n- The stage push still runs in full by design: a PR run's merge-commit tree cannot be proven afterwards."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -6064,9 +6049,25 @@
             "session": "run_c1565r_1004"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-C1565R",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-C1565R",
+          "session": "run_c1565r_1004",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "codex/acl-1565-ci-reuse",
+          "worktree": "C:\\acl-1565-ci-reuse",
+          "id": "ec4a548a316242859501b97805511204",
+          "issue": 565,
+          "state": "handoff",
+          "started_at": "2026-10-04T12:33:20+00:00",
+          "from_status": "status:idea",
+          "pr": 567,
+          "report": "# ACL-1565 handoff (Worker-C1565R, run_c1565r_1004)\n\nPR #567 (codex/acl-1565-ci-reuse -> stage), head b805e288.\n\n## What changed\n- New `scripts/acl_ci_reuse.py`, called from `scripts/acl_ci_scope.py` (new `decide()`, `--workflow`, `reused_from` output, step summary).\n- `ci.yml` and `windows-installer.yml`: `actions: read`; the scope step gets `GITHUB_TOKEN` and `--workflow`; the scope output `reused_from` is echoed by the admission jobs; the scope job's pytest list adds `tests/test_acl_ci_reuse.py`.\n- `scripts/acl_publish_release.py` `verify_promotion`: when the main run's test matrix did not run, the release is accepted only with a provable full run of the same tree.\n- Docs: CHANGELOG entry, `docs/repository/WORKFLOW.md` (stage/main full-check rule), `docs/runtime/DELIVERY.md` (release gate).\n\n## Proof rules\n- The tree is computed by git (`HEAD^{tree}`; candidates come from `git log --all` and are re-checked with `rev-parse`).\n- The candidate run must be a `push`/`workflow_dispatch` run of the same workflow path in this repo, `completed`/`success`, with every required job of its latest attempt succeeded.\n- Release tags, `workflow_dispatch`, a missing token, API or git errors, and no match all run in full.\n\n## Tests\nRun locally (ACL_LIBRARY_* empty): `pytest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_publish_release.py -q`, 85 passed. `tests/test_acl_ci_reuse.py` also passed with `--noconftest`, which is how the CI scope job runs it. The secret scan is clean.\n\n## Gates\n- `verify_promotion`: changed, with tests.\n- Tracker `check-merge` reads only the aggregate required checks, and `verify-stage` reads no checks. Neither needed a change, and the pinned engine is untouched.\n\n## Open\n- The last acceptance item (a real stage->main PR and main push show \"reused\") is left for the coordinator.\n- The stage push still runs in full by design: a PR run's merge-commit tree cannot be proven afterwards."
+        },
+        "pr": 567,
+        "queued_at": "2026-10-04T12:53:56+00:00"
       }
     },
     "actors": {
@@ -7667,7 +7668,8 @@
       526,
       532,
       529,
-      562
+      562,
+      565
     ],
     "review": {
       "id": "1a8946678895491cb84cf2893cb5e70b",
@@ -11043,6 +11045,13 @@
         "at": "2026-10-04T12:33:20+00:00",
         "issue": 565,
         "claim": "ec4a548a316242859501b97805511204",
+        "actor": "Worker-C1565R"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-04T12:53:56+00:00",
+        "issue": 565,
+        "pr": 567,
         "actor": "Worker-C1565R"
       }
     ],
