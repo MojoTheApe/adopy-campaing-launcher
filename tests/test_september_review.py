@@ -93,8 +93,8 @@ def test_unknown_child_branch_is_not_inferred_from_only_one_sibling():
 
 def test_short_named_manual_profile_is_not_started_again(monkeypatch):
     """ACL-1518: окно, открытое руками (видно по короткому имени папки), не
-    поднимается вторым запуском — только путём Publish: те же условия и
-    ожидание тишины ввода, без kill. Не вышло — простой текст, не 409."""
+    поднимается вторым запуском — только путём Publish (ACL-1562: сразу, без
+    условий), без kill. Мягкая остановка не закрыла окно — простой текст, не 409."""
     from src.fb_ads_rpa import browser, profile_trouble
     from pathlib import Path
     calls = []
@@ -104,7 +104,8 @@ def test_short_named_manual_profile_is_not_started_again(monkeypatch):
 
     def gated_open(entry, label, **options):
         calls.append(options)
-        raise profile_trouble.ProfileStop(profile_trouble.OPEN_BY_HAND, "no_automation_port")
+        raise profile_trouble.ProfileStop(profile_trouble.OPEN_BY_HAND,
+                                          f"no_automation_port; {browser.HAND_WINDOW_STOP_FAILED}: 500")
 
     monkeypatch.setattr(spend, "_entry_for", lambda a: NS(profile_id="demo", folder_id="folder"))
     monkeypatch.setattr(spend, "_mlx_profile_dir", lambda *a: Path("LONG"))
