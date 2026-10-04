@@ -4248,7 +4248,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "554": {
+        "actor": "Worker-W1554T",
+        "session": "run_w1554t_1004",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "codex/acl-1554-telemetry-attach",
+        "worktree": "C:\\acl-1554-telemetry-attach",
+        "id": "88bf8f298fbe41828f41b6ec043ac0fe",
+        "issue": 554,
+        "state": "implementing",
+        "started_at": "2026-10-04T10:11:18+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -5848,6 +5861,17 @@
         "pr": 552,
         "queued_at": "2026-10-04T08:38:23+00:00",
         "reviewer": "Reviewer-R1551B"
+      },
+      "554": {
+        "implementers": [
+          {
+            "actor": "Worker-W1554T",
+            "session": "run_w1554t_1004"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1554T",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -6258,6 +6282,10 @@
       "Reviewer-R1551B": {
         "session": "rev_r1551b_1004",
         "role": "Reviewer"
+      },
+      "Worker-W1554T": {
+        "session": "run_w1554t_1004",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -10651,6 +10679,13 @@
         "pr": 552,
         "lane": "7c1e9a1779c644ab801169cb2690bc16",
         "actor": "Reviewer-R1551B"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-04T10:11:18+00:00",
+        "issue": 554,
+        "claim": "88bf8f298fbe41828f41b6ec043ac0fe",
+        "actor": "Worker-W1554T"
       }
     ],
     "policy": {
