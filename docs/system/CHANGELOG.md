@@ -1,5 +1,39 @@
 # System history
 
+## Run summary carries the run's telemetry as a scrubbed Sentry attachment — ACL-1554
+
+To read a manager's run we had to ask them for `output\rpa_telemetry.jsonl` by hand.
+The "Run summary" event (ACL-1447) now carries that run's own step log.
+
+- `run_summary._deliver` (the background send thread, never the run itself) reads the
+  journal and attaches `run_telemetry_<run_id>.jsonl` with only the rows of that
+  `run_id`. Lines without the run id are not parsed; an unparsable line is skipped.
+- Each row goes through `run_telemetry.scrub_diag` and then the summary's own scrub
+  (`_EXTRA_SCRUB`: Ads Manager URLs, emails, `act_` ids) on every string at any depth.
+  New in `_EXTRA_SCRUB`: the user name in a path (`C:\Users\<name>`, UNC
+  `\\srv\Users\<name>`, `/Users/<name>`, `/home/<name>`) becomes `<user>`, up to the next
+  path separator, so a name with a space ("Ivan Petrov") goes too; the summary text is
+  scrubbed of it as well. In the attachment only, dict keys are scrubbed too (account
+  ids, `act_` ids, emails as keys); colliding keys get a `#2` suffix. `run_id` stays as
+  is; `job` loses its dashes, like in `acl_sentry.report_step_failure`.
+- With no Sentry DSN the journal is not read at all.
+- Cap `run_summary.TELEMETRY_MAX_BYTES` = 256 KB. Over it the oldest rows are dropped
+  and a final row `{"step": "telemetry_truncated", "dropped_rows": N, ...}` says how many.
+  `acl_sentry._attach_telemetry` checks the cap again (before_send does not see
+  attachments) and accepts only a `.jsonl` file: screenshots are never attached.
+- Context `run_summary.telemetry_attachment`: `ok`, `truncated`, `missing` (no run id,
+  no journal, no rows of this run) or `error` (journal unreadable, a row did not scrub,
+  or `add_attachment` failed). On `missing`/`error` the summary is sent without the
+  attachment.
+- Sentry attachment quota for `adopy-7t` was not readable: the stored
+  `SENTRY_AUTH_TOKEN` gets 403 on `stats_v2` and on the organization endpoint. Sentry
+  rate-limits attachments as their own category and drops only the attachment item
+  over quota, so the event itself still arrives.
+- Tests: `tests/test_run_summary_telemetry_attachment.py` (real `sentry_sdk`, in-memory
+  transport, synthetic rows with a fake account id, Ads Manager URL, email, token and
+  user path).
+- Live check left: a run on the owner's machine shows the attachment on its Run summary.
+
 ## Story not in the library: the media wizard is left with its own control, the other ads are still built — ACL-1551
 
 Live run on Facebook_1443 on 2026-10-04 (232d398471bd, build c1f0e507): ad 1 of
