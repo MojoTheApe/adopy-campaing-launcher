@@ -5989,7 +5989,7 @@
             "session": "run_p1559m_1004"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-P1559M",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -6007,7 +6007,8 @@
           "report": "# ACL-1559 handoff (Worker-P1559M, run_p1559m_1004)\n\n- Claim: 7f9e87cda7d54a1fad448256d0fc6c55\n- Branch: codex/acl-1559-media-wait (worktree C:\\acl-1559-media-wait, from work/stage 884aec15)\n- PR: MojoTheApe/adopy-campaing-launcher#561 into stage. Head is 21781ded61040fd94136ba33ecd21a4e0264fca6.\n- Commits: e2fb9bab (tests and fixture, red first), 21781ded (fix).\n\n## What changed\n- `src/fb_ads_rpa/meta_dom.py`\n  - New read-only `_WIZARD_MEDIA_PICKER_JS`. It reads inside the `_WIZARD_ROOT_JS` dialog (or the document if there is none), in the `AdsWizardMediaPickerContainer` surface when present. It reports loading and skeletons (`role=progressbar aria-busy=true` or `data-is-placeholder`), upload (text \"Upload\" or the asset-picker data-surface), search (\"Search media\") and tiles (`[aria-label=grid] [role=button]`).\n  - New `_media_picker`, `_wait_media_picker`, `MEDIA_PICKER_LOAD_S` = 45 and `_MEDIA_PICKER_POLL_S` = 0.25. The wait only reads; it never clicks.\n  - In the advance loop of `upload_ad_creative`: if `current == \"Media\"`, there is no step click and no Next. The robot waits for the picker. If the picker is still loading at the timeout, `blocked = media_picker_loading`. The 8 s Upload wait is skipped. The failure row carries `picker`, `skeletons` and `waited_s`.\n  - Telemetry: a row `ad_creative_upload` with note `media_picker:ready|loading|empty`, the picker state and `since_open_s`. There is a `media_picker` phase, and `_diag[\"picker\"]` is in the upload trail.\n  - `media_picker_loading` is added to `_NAVIGATION_WHYS`, so the file is not remembered as failed. `creative_soft_fail` names it.\n- `simple_create._CREATIVE_WHY_TEXT`, `failure_policy.PER_AD_DETAIL` and `config/sentry_triage_map.json` cover the new reason. All text is English.\n- Fixture `tests/fixtures/ads_manager/wizard_media_picker_2026_10_04.html` has the fragments `loading` and `loaded`. It was cut from scratch copies with `capture_to_fixture.py`. The README section, `catalogue.json` and `CATALOGUE.md` are updated. `bench_catalogue.py --check` passes.\n- CHANGELOG entry added.\n\n## Tests\n- New bench file `tests/test_bench_wizard_media_picker_1004.py`, 10 tests.\n- 6 new or extended tests in `tests/test_media_step_reached_or_named.py`:\n  - loads during the wait;\n  - never loads;\n  - Creative setup / Text regression, x2;\n  - the file is not condemned;\n  - readable problem;\n  - the triage map test is extended.\n- I ran 27 affected test files headless with ACL_LIBRARY_* blank: 453 passed.\n- `scripts/acl_scan_secrets.py` is clean.\n- `report.html` cb-build-model was not touched because there are no new telemetry step names. `tests/test_build_progress_model.py` is green.\n\n## Notes and leftovers\n- Optional ACL-1551 busy-check change: not done on purpose. The 1551 bench (`wizard_crop_story_missing \u00b7 media_busy`, catalogue: \"the walk waits while the wizard is busy\") pins the after-pick Media state as busy. That was the live 232d behaviour: Meta moved to Crop on its own. The walk does not run on Media before the pick.\n- The capture script drops `data-non-int-surface` and `data-is-placeholder`. So the bench tests the reader's fallback (progressbars and controls inside the wizard root). The live surface selector is not tested on real markup.\n- The `loaded` fragment comes from the same capture as the 1551 `media_busy` fragment, which is a small duplication.\n- Optional hardening of the Upload click itself (data-surface when the label is missing) is not done. Only the picker reader accepts the data-surface.\n- The 45 s wait runs per attempt. With the single reopen, the worst case is about 90 s plus the existing media check between attempts.\n\n## Live check (separate task)\nOne Facebook_1443 run where the wizard opens on Media. Expect each ad's media to be uploaded or picked from the library. If Meta never loads the picker, expect `media_picker_loading` with `waited_s` around 45 and `media_picker:loading` rows. Record whether the skeleton clears without clicks, using the `media_picker:*` rows (`waited_s`, `since_open_s`)."
         },
         "pr": 561,
-        "queued_at": "2026-10-04T11:37:29+00:00"
+        "queued_at": "2026-10-04T11:37:29+00:00",
+        "reviewer": "Reviewer-R1559Q"
       },
       "562": {
         "implementers": [
@@ -6461,6 +6462,10 @@
       "Worker-H1562R": {
         "session": "run_h1562r_1004",
         "role": "Worker"
+      },
+      "Reviewer-R1559Q": {
+        "session": "rev_r1559q_1004",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -7627,10 +7632,20 @@
       526,
       532,
       529,
-      559,
       562
     ],
-    "review": null,
+    "review": {
+      "id": "1a8946678895491cb84cf2893cb5e70b",
+      "pr": 561,
+      "issues": [
+        559
+      ],
+      "actor": "Reviewer-R1559Q",
+      "session": "rev_r1559q_1004",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-04T12:25:45+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -10980,6 +10995,13 @@
         "issue": 562,
         "pr": 563,
         "actor": "Worker-H1562R"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-04T12:25:45+00:00",
+        "pr": 561,
+        "lane": "1a8946678895491cb84cf2893cb5e70b",
+        "actor": "Reviewer-R1559Q"
       }
     ],
     "policy": {
