@@ -10824,8 +10824,12 @@ _WIZARD_BUSY_JS = r"""
 #: открытом выборе медиа (там Save подвала — выбор, а не мастер, ACL-1533).
 #: `close` — Close шапки (до первого заголовка шага). Ничего вне мастера, ни
 #: Next, ни Publish. Найденное помечается `data-acl-wizard-exit`.
+#: Аргумент — `want` или {want, skip}: подписи из `skip` (уже нажатые «вперёд»
+#: на этом шаге) не предлагаются вовсе — решение до нажатия (ревью F1).
 _WIZARD_EXIT_JS = r"""
-(want) => {
+(arg) => {
+  const want = typeof arg === 'string' ? arg : (arg && arg.want) || '';
+  const skip = (arg && typeof arg === 'object' && arg.skip) || [];
   document.querySelectorAll('[data-acl-wizard-exit]').forEach(e => e.removeAttribute('data-acl-wizard-exit'));
   const root = (%ROOT%)();
   if (!root) return null;
@@ -10843,7 +10847,8 @@ _WIZARD_EXIT_JS = r"""
       /search media/i.test(i.getAttribute('placeholder') || i.getAttribute('aria-label') || ''));
     if (picker) return { refused: 'picker_open' };
     const last = heads[heads.length - 1];
-    el = btns.filter(b => ['Save', 'Done'].includes(norm(b.textContent)) && after(last, b)).pop() || null;
+    el = btns.filter(b => ['Save', 'Done'].includes(norm(b.textContent)) && !skip.includes(norm(b.textContent))
+                          && after(last, b)).pop() || null;
   } else if (want === 'close') {
     const first = heads[0];
     el = btns.find(b => (norm(b.textContent) === 'Close' || norm(b.getAttribute('aria-label')) === 'Close')
@@ -10928,11 +10933,12 @@ def _open_dialog_count(page: Page) -> int | None:
     return got if isinstance(got, int) else None
 
 
-def _press_wizard_exit(page: Page, want: str) -> str | None:
+def _press_wizard_exit(page: Page, want: str, skip: tuple[str, ...] = ()) -> str | None:
     """Нажать свою кнопку мастера: `complete` (Save/Done подвала) или `close`
-    (Close шапки). Подпись нажатой или None (нет такой / охрана не пустила)."""
+    (Close шапки). Подписи из `skip` не нажимаются (выбор — до клика).
+    Подпись нажатой или None (нет такой / охрана не пустила)."""
     try:
-        got = page.evaluate(_WIZARD_EXIT_JS, want)
+        got = page.evaluate(_WIZARD_EXIT_JS, {"want": want, "skip": [x for x in skip if x]})
     except Exception:
         return None
     if not isinstance(got, dict) or not got.get("label"):
@@ -10972,13 +10978,13 @@ def _leave_wizard(page: Page, *, allow_complete: bool = True, skip: str = "") ->
     """
     out: dict[str, Any] = {"closed_by": None, "closed": False, "dialog_left": None, "tried": []}
     if allow_complete:
-        label = _press_wizard_exit(page, "complete")
-        if label and label != skip:
+        # Ревью F1: подпись, уже нажатая «вперёд», отсеивается в самой странице —
+        # до клика, а не после.
+        label = _press_wizard_exit(page, "complete", (skip,))
+        if label:
             out["tried"].append(label)
             if _wait_wizard_gone(page):
                 out.update(closed_by=label, closed=True)
-        elif label:
-            out["tried"].append(label)
     if not out["closed"]:
         label = _press_wizard_exit(page, "close")
         if label:
@@ -11841,15 +11847,12 @@ def upload_ad_creative(
     phase_t = time.time()
     verdict = reuse_before_upload(page, creative_path)
     _creative_phase("reuse", phase_t, verdict=verdict)
-    # ACL-1551: отказ шага Crop (в т.ч. `crop_wizard_stuck`) уже назван внутри
-    # выбора — не затирать его общим «выбор не снялся».
-    crop_refused = (media_refused_on_ad() or "").startswith("crop_")
-    if verdict is False and not crop_refused:
+    if verdict is False:
         _creative_why("reuse_left_selection")
     if verdict is not None:
         if verdict is False:
             # Выбор в медиатеке не снялся (запись с подробностями — внутри).
-            _set_upload_why(media_refused_on_ad() if crop_refused else "library_pick_left_selection")
+            _set_upload_why("library_pick_left_selection")
         return verdict
     if reuse_only:
         # Память прогона говорит, что файл уже уходил наверх: второй раз Meta

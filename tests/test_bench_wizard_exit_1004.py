@@ -76,10 +76,12 @@ _WIRE = r"""
     }
     for (const t of host.querySelectorAll('[aria-label=grid] [role=button]'))
       t.style.cssText = 'width:96px;height:40px;display:inline-block';
-    if (state === 'crop' && window.stayed && args.footer_after_stay) {
+    const relabel = (state === 'crop' && window.stayed && args.footer_after_stay) ? args.footer_after_stay
+                  : (state === 'crop' && args.footer_from_start) ? args.footer_from_start : '';
+    if (relabel) {
       // Constructed (not seen live): the footer's primary slot reads Save.
       const next = [...host.querySelectorAll('[role=button]')].filter(b => norm(b.textContent) === 'Next').pop();
-      if (next) next.querySelector('div div div').textContent = args.footer_after_stay;
+      if (next) next.querySelector('div div div').textContent = relabel;
     }
   };
   window.paint = paint;
@@ -121,7 +123,9 @@ _WIRE = r"""
       return;                                     // 'busy_forever': stays busy
     }
     if (st === 'crop' && (label === 'Save' || label === 'Done')) {
-      window.pressed.push(label); paint('closed'); return;
+      window.pressed.push(label);
+      if (args.save !== 'noop') paint('closed');
+      return;
     }
     window.pressed.push(label);
   }, true);
@@ -169,7 +173,8 @@ def page(browser, monkeypatch, tmp_path):  # noqa: F811
 def _live(page, **args):
     page.set_content(_PAGE)
     page.evaluate(_WIRE, {"frags": FRAGS, "next": "stays", "busy_ms": 600, "close": "ok",
-                          "start": "crop", "media_ms": 800, "footer_after_stay": "", **args})
+                          "start": "crop", "media_ms": 800, "footer_after_stay": "", "footer_from_start": "",
+                          "save": "closes", **args})
 
 
 def _pressed(page) -> list[str]:
@@ -249,6 +254,26 @@ def test_constructed_footer_save_after_next_closes_the_wizard_warning_only(page,
     row = _rows(tmp_path, "ad_creative_wizard")[-1]
     assert row["diag"]["closed_by"] == "Save" and row["diag"]["exit"]["closed_by"] == "Save"
     assert row["diag"]["dialog_left"] is False
+
+
+def test_a_footer_save_already_pressed_as_forward_is_not_pressed_again(page, tmp_path):
+    """Review F1 (constructed): Crop's footer reads Save from the start and does
+    nothing. Save is the forward press; the exit must not press it a second
+    time - straight to the wizard's Close."""
+    _live(page, footer_from_start="Save", save="noop")
+    assert md._walk_creative_wizard(page) is True
+    pressed = _pressed(page)
+    assert pressed == ["Save", "Close"], pressed
+    _never_pressed_outside(pressed)
+    assert crop_step.outcome() == crop_step.WIZARD_STUCK
+    row = _rows(tmp_path, "ad_creative_wizard")[-1]
+    assert row["diag"]["exit"]["tried"] == ["Close"] and row["diag"]["closed_by"] == "Close"
+
+
+def test_the_exit_lookup_never_offers_a_skipped_label(page):
+    _live(page, footer_from_start="Save")
+    assert page.evaluate(md._WIZARD_EXIT_JS, {"want": "complete", "skip": ["Save"]}) is None
+    assert page.evaluate(md._WIZARD_EXIT_JS, {"want": "complete", "skip": []})["label"] == "Save"
 
 
 def test_a_busy_media_step_is_waited_out_not_abandoned(page, tmp_path):
@@ -369,6 +394,11 @@ def test_a_stuck_wizard_blocks_only_this_ad_with_a_clear_reason(page, monkeypatc
     assert md.upload_ad_creative_with_retry(page, "video", path) is False
     assert calls == ["sample_media_04.mp4"], "no second attempt - it would press Next again"
     assert md.last_upload_why() == crop_step.WIZARD_STUCK
+    # Review F2: the reason named by the Crop step is the step's reason (the
+    # retry wrapper names it; `_creative_why` keeps the first one named).
+    diag = md.last_upload_diag()
+    assert diag["why"] == crop_step.WIZARD_STUCK
+    assert diag["text"] == simple_create.creative_why_text(crop_step.WIZARD_STUCK)
     assert md.last_crop_warning() == ""
     assert page.evaluate(md._OPEN_DIALOGS_JS) == 0
     assert _pressed(page).count("Next") == 1

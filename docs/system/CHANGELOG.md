@@ -44,6 +44,14 @@ not open under it, and ads 2-3 were never created (`ad2_create action_menu_not_o
 - Bench: `wizard_crop_story_missing_2026_10_04.html` (crop_step, crop_busy,
   in_wizard_picker, media_busy), `tests/test_bench_wizard_exit_1004.py`,
   `tests/test_more_ads_after_a_stuck_wizard.py`.
+- Review round 2: a Save/Done already pressed as Crop's forward button is filtered out in
+  the page before any click (`_WIZARD_EXIT_JS` takes `{want, skip}`), so it is never
+  pressed twice before Close. The `crop_refused` branch in `upload_ad_creative` is removed:
+  the retry wrapper already names the Crop reason (`media_refused_on_ad`), and
+  `_creative_why` keeps the first reason named.
+- The Issue's acceptance criterion "closed by its own Save" assumes Crop has its own Save;
+  the 04.10 Crop does not (footer Cancel / Next). The live success path is the picker's
+  footer Save, then one Next that closes the wizard.
 - Live check left: a 1443 campaign with a pair whose story is not in the library builds
   all its ads.
 
