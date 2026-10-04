@@ -204,6 +204,12 @@ POLICY: dict[str, tuple[str, str]] = {
         "the requested manual placements were not verified; leaving Advantage+ "
         "changes where budget can be spent",
     ),
+    "advantage_plus_off": (
+        BLOCKING,
+        "the Audience card stayed on the Advantage+ recommended setup before the age "
+        "step (no audience controls, 'Further limit the reach of your ads' still "
+        "offered): age, gender and languages are not applied as controls",
+    ),
     "advantage_plus_audience": (
         BLOCKING,
         "the Audience card still reads 'Advantage+ on': the age range is only a "
@@ -404,6 +410,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Placements — not verified",
         "Budget may be spent on placements that were not requested.",
         "Check \"Placements\" on the ad set.",
+    ),
+    "advantage_plus_off": (
+        "Advantage+ audience — still on recommended setup",
+        "Age, gender and languages are not applied as controls, so Meta may deliver outside them.",
+        "Open the ad set audience, choose \"Further limit the reach of your ads\" and check Age.",
     ),
     "advantage_plus_audience": (
         "Advantage+ audience still on",

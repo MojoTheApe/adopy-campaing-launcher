@@ -1,5 +1,42 @@
 # System history
 
+## Advantage+ audience before the age: verified by controls mode, the Campaign toggle never touched — ACL-1544
+
+Live runs on Facebook_1443 on 2026-10-03 (04509d5eed75, 0e86c42023da): every campaign logged
+`advantage_plus_off` ok false `still_on` (`flipped_switch: true`, badge "on" before and after).
+
+- Finding: before the age step the Audience card badge reads "Advantage+ on" by design. Meta
+  clears it only when the audience gets a hard condition (age without "Use as a suggestion"),
+  which the final step `advantage_plus_audience` checks after the age. The pre-age step never
+  passed in any live build (about 257 unique rows, all `still_on`; the acl-live-* telemetry
+  files are cumulative copies), so its failure was a false alarm. The captured card was already in controls mode: Locations, Age
+  (Minimum/Maximum), Gender, Detailed targeting, Languages and "Switch to recommended setup",
+  with no "Further limit the reach of your ads" row.
+- Finding: `flipped_switch: true` was a click on the editor header's **Campaign toggle**
+  ("In draft"). `_turn_off_advantage_plus_leads` started from the first element whose text
+  contained "Advantage+ leads", climbed five levels from the Campaign score panel and clicked
+  the first checked switch inside. Captures of the same runs show the toggle on before the
+  step and off after (b3a333ff43ab, cb854b07857b); with `flipped_switch: false` it stayed on.
+  37 unique runs (28.09-03.10) pressed it.
+  It now looks for the label itself, stays inside its row (at most 80 characters of text) and
+  never presses a switch named something other than Advantage+ (aria-label "Campaign toggle").
+- The pre-age step reads the Audience card mode (`_audience_mode`): controls mode -> ok,
+  note `controls_mode`, nothing clicked; recommended setup ("Further limit" row, no controls,
+  no "Switch to recommended setup") after the fallbacks -> ok false `still_on`, and the
+  recorded flow adds the blocking failure `advantage_plus_off` ("Advantage+ audience - still on
+  recommended setup"); neither readable -> ok null, note `unconfirmed`, not blocking (the final
+  check after the age still decides). The flow calls the switch-off itself and runs
+  `fill_audience_age(..., ensure_manual=False)`.
+- Review round 2: the card boundary counts only aria-level 3 card headings (on 1443 the
+  rows Locations … Languages are level-4 headings inside the card), and the mode markers
+  ("Further limit", "Switch to recommended setup") are read in the collapsed `hidden` body too.
+  On the live captures: 57 of 57 `advantage_plus_still_on` read controls, 8 of 8
+  recommended-state captures read recommended (before: all 8 unconfirmed). Controls still
+  require "Switch to recommended setup": the recommended summary carries the same five labels.
+- Bench: `audience_controls_badge_on_2026_10_03.html` (scrubbed cards of both runs, the
+  Campaign toggle, the leads row and the collapsed recommended card of b3a333ff43ab/00),
+  `tests/test_bench_audience_controls_badge_on.py`.
+
 ## Single-screen editor: "Instant form (suggested)" goes back to Website — ACL-1543
 
 Live runs on Facebook_1443 on 2026-10-03 (04509d5eed75 ad 1, 0e86c42023da ad 2): one ad
