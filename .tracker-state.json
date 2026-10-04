@@ -1565,6 +1565,24 @@
           559
         ],
         "recorded_at": "2026-10-04T12:26:40+00:00"
+      },
+      "563": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1562G",
+        "review_session": "rev_r1562g_1004",
+        "execution_lane": "1e7dfe5c5e0640249814040afd455b45",
+        "implementer": "Worker-H1562R",
+        "head_sha": "d937b94da6960b9be9161a26b47f34e9ff1227d5",
+        "base_sha": "cce94e1ed6ad6128a4d85ffe3379d083b8a58cc3",
+        "tree_sha": "b5f47f5b23f544c828b28525d5c602f9767ad36e",
+        "report": "# Review of PR #563 (ACL-1562, Issue #562), final check: approved\n\nReviewer: Reviewer-R1562G (rev_r1562g_1004). Implementer: Worker-H1562R.\n- Head 879b839eba33372136103c754036357702f13d3d. This is a merge of work/stage cce94e1e into 3ac531ae.\n- Base: current work/stage, cce94e1ed6ad6128a4d85ffe3379d083b8a58cc3.\n- Tree b5f47f5b23f544c828b28525d5c602f9767ad36e.\n\n## Checks\n1. **The patch is unchanged except for the CHANGELOG merge.**\n   - Outside `docs/system/CHANGELOG.md`, the diff `git diff work/stage HEAD` is identical to the reviewed patch `git diff 884aec15 3ac531ae`. The only difference is the blob-index line of failure_policy.py, which is expected because the base changed.\n   - The CHANGELOG lines the PR adds are identical to those in 3ac531ae. The PR removes no CHANGELOG lines.\n   - `git diff 3ac531ae HEAD` is exactly the ACL-1559 commit: 11 files, +479/\u22124, the same as `git diff 884aec15 cce94e1e`.\n2. **failure_policy.py is correct.**\n   - The ACL-1559 entry `(\"creative_upload\", \"media_picker_loading\")` is kept.\n   - The ACL-1562 OPEN_BY_HAND texts in POLICY and GUIDE are kept.\n   - An AST scan found no duplicate keys in POLICY (29), GUIDE (29), PER_AD_POLICY (8), PER_AD_GUIDE (8) or PER_AD_DETAIL (4).\n3. **merge-tree is clean.** `git merge-tree --write-tree work/stage HEAD` returns rc=0, and its tree equals the head tree. GitHub shows the PR as MERGEABLE.\n4. **CI is green on 879b839e.**\n   - test 3.11 and 3.13, shards 1 to 3\n   - tracker-link\n   - ACL verification\n   - Windows installer (build, install, repair, uninstall; verification)\n   - descriptor\n   - tooling\n\n   Nothing needed a rerun.\n\n## Earlier rounds\n- **F1** (non-hermetic test turned CI red): fixed in round 2.\n- **F2** (Stop during the open): fixed in round 2. In round 3 the test was made to hold \"disconnect only\" in place: `keep_browser_open=True` and no second stop. Each of these mutations now makes a test fail:\n  - `keep_browser_open=False`;\n  - an extra `_stop_profile` after Stop;\n  - the Stop check removed.\n- **F3** (texts): fixed in round 2.\n- **F4** (comment): fixed in round 2.\n\nThe mandatory rules, verified by reading the code and by mutation in rounds 1 and 2, still hold:\n- graceful Multilogin API stop of that one profile only (`allow_kill=False`);\n- no kill;\n- no other profile touched;\n- no plain browser;\n- the login check after the reopen is unchanged (`profile_logged_out`, no retries);\n- `/mlx-profile-open` still leaves a hand-opened window alone.\n\n## Runs\n- Hand-window, september, failure_policy, readable_problems, ACL-1559 media-step and publisher-gates tests, headless, with `ACL_LIBRARY_*` blank: **157 passed.**\n- `scripts/acl_scan_secrets.py`: clean.\n\n## Issue #562 checkboxes\n- [x] **Tests.** A fresh, foreground, recently-typed-in window is reopened at once on Publish, Read spend and open profile; graceful stop only; the notice is shown; a failed graceful stop gives a clear reason with no kill. CI is green.\n- [x] **Removed conditions and the wait are gone from code and texts; CHANGELOG updated.**\n- [ ] **Live \"open profile\" on the hand-opened Facebook_9943 window.** Still to do as a live check after the merge. Confirm the row notice and the `profile_hand_window` telemetry row `reopened` with `stop_s`.\n\n\n## Re-pin\nHead d937b94d (prep merged work/main), tree b5f47f5b unchanged. Patch-id against work/stage cce94e1e (afd518d7) is identical to approved 879b839e. merge-tree is clean.\n",
+        "main_sha": "45cc05a5e136c76888ceb7ca740f1f910c5fc0b1",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          562
+        ],
+        "recorded_at": "2026-10-04T14:45:02+00:00"
       }
     },
     "stage": {
