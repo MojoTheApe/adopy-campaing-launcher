@@ -228,6 +228,17 @@ Re-built by `page_capture.scrub_section_html` (whitelisted tags and attributes: 
 | crop_step_image_classic_2026_10_01.html | 5edc0e7cca0a/05_wizard_crop/block_creative_wizard.html (Doc19, classic editor, ad 1, image upload) — Square Original checked, Vertical 9:16 (recommended) checked (Meta's default) | Same; the Replace picker was never captured (synthetic in the tests) |
 | ad_form_gone_verifying_2026_10_01.html | 4121938e6dc3/11_ad2_creative_upload/page.html (ad 2 after the library pick and the wizard) — Ad heading with an empty `/am/editor:ad` surface (no name field, no Media block) and the "Verifying your changes" card with the preflight error `#100 lead_gen_form_id` | The right-column preview is not in the fragment |
 
+## ACL-1551 fragments (live run 2026-10-04, Facebook_1443)
+
+Cut by `scripts/capture_to_fixture.py` from the read-only captures of run 232d398471bd (live build c1f0e507; block captures, not truncated). Media file names → `sample_media_NN` (numbered per fragment: in `in_wizard_picker` the post of ad 1 is `sample_media_04.mp4`, in `media_busy` it is `sample_media_01.mp4`), videos and icons → `<i>`, render ids → `syn_N`; no names, ids or URLs. UI language: English. Browser: Multilogin Chrome, version not recorded.
+
+| Fixture · fragments | Source / capture state | Coverage limit |
+| --- | --- | --- |
+| wizard_crop_story_missing_2026_10_04.html · crop_step | 232d398471bd/02_wizard_crop/block_creative_wizard.html — the wizard on Crop for a post/story pair after the first Next came back: step row Media ✓ · Trim (skipped) · Crop (`aria-current=step`) · …, header Close, cards Vertical/Square (Original checked), footer Cancel / Next (enabled). No Save on this step | No Meta runtime: Next -> busy -> the same Crop, and Close -> wizard gone, are wired by the test as seen live |
+| … · crop_busy | 232d398471bd/04_ad_creative_upload/block_creative_wizard.html (same as 05_simple_create_more_ads/block_dialog.html) — the same Crop with Next and Cancel `aria-disabled` (Meta busy for over a minute after the second Next) | The page around it (editor, tree) is not in the fragment; `tests/test_more_ads_after_a_stuck_wizard.py` puts it over the 30.09 tree |
+| … · in_wizard_picker | 232d398471bd/01_wizard_crop_replace/block_picker.html — "Replace media for Stories, Status, Reels, In-stream for Reels" inside the wizard: header Close/Save, Search media, six tiles without the story file, footer Save | As the 03.10 picker (ACL-1533) |
+| … · media_busy | 232d398471bd/00_wizard_media/block_creative_wizard.html — Media step right after the library pick: "1 selected", Next and Cancel `aria-disabled` | Meta moved to Crop by itself later; the moment is wired by the test |
+
 ## ACL-1533 fragments (live runs 2026-10-03, Facebook_1443)
 
 Cut by `scripts/capture_to_fixture.py` from the read-only captures of run 2e98a75f252d (same layout in d54d68303e57, f35a2b31f7d8, a39407b72507). Media file names → `sample_media_NN`, videos and thumbnails → `<i>`, render ids → `syn_N`. UI language: English. Meta build identifier: not recorded. Browser: Multilogin Chrome, version not recorded.

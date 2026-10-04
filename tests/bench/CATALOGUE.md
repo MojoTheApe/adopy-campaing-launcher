@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**20 robot steps × 89 layouts, 51 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**20 robot steps × 93 layouts, 52 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -26,10 +26,10 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 5 | 5 | 0 | 0 |
-| creative_wizard | 10 | 10 | 0 | 0 |
+| creative_wizard | 13 | 13 | 0 | 0 |
 | ad_copy | 7 | 7 | 0 | 0 |
 | ad_destination / destination_sweep | 10 | 9 | 0 | 1 |
-| ads 2-3 (single-screen editor) | 2 | 2 | 0 | 0 |
+| ads 2-3 (single-screen editor) | 3 | 3 | 0 | 0 |
 | editor gone under the robot | 1 | 1 | 0 | 0 |
 | banners and blocks (any step) | 2 | 2 | 0 | 0 |
 
@@ -204,6 +204,9 @@ Robot: _creative_wizard_open, _wizard_media_step, _WIZARD_FORWARD_JS (walk), _cr
 | Crop step, image in the classic editor: Square Original, Vertical on Meta's default 9:16 (recommended) | 5edc0e7cca0a/05_wizard_crop | `crop_step_image_classic_2026_10_01.html` · crop_step | `tests/test_crop_step_original_and_story.py` | one guarded click moves Vertical to Original before the walk's Next; read-back clean (ACL-1426) | pass |
 | Crop step, video post/story pair (03.10): both cards Original, `blob:` video media, no thumbnail ids; Square 1:1 disabled | 2e98a75f252d/06_wizard_crop, d54d68303e57/06_wizard_crop, f35a2b31f7d8/07_wizard_crop, a39407b72507/05_wizard_crop | `crop_step_pair_video_2026_10_03.html` · crop_step | `tests/test_bench_crop_live_1003.py` | a re-minted blob src or missing ids on Square is not crop_square_changed; the picked story id on Square is (ACL-1533) | pass |
 | Replace picker inside the wizard dialog: step row (Crop current), header Close/Save, Search media, tiles, footer Save; no Cancel | 2e98a75f252d/02_wizard_crop_replace, 2e98a75f252d/07_wizard_crop_replace, d54d68303e57/07_wizard_crop_replace, a39407b72507/02_wizard_crop_replace | `crop_replace_in_wizard_picker_2026_10_03.html` · in_wizard_picker | `tests/test_bench_crop_live_1003.py` | after a pick and with nothing picked the picker is left through its own footer Save (never the row's Crop, the header Save, Close or Next) (ACL-1533) | pass |
+| Crop step, story not in the library (04.10): footer Cancel/Next only, header Close; busy state after Next - Next and Cancel aria-disabled; the same Crop again after the busy state | 232d398471bd/02_wizard_crop, 232d398471bd/04_ad_creative_upload, 232d398471bd/05_simple_create_more_ads | `wizard_crop_story_missing_2026_10_04.html` · crop_step, crop_busy | `tests/test_bench_wizard_exit_1004.py` | Next pressed once on Crop; busy waited out; Crop again or busy past the limit -> the wizard's own footer Save/Done if it has one, else its own Close; Close -> crop_wizard_stuck (blocking), no dialog left; never Publish or the editor footer (ACL-1551) | pass |
+| Replace picker inside the wizard (04.10), story not among the tiles | 232d398471bd/01_wizard_crop_replace, 232d398471bd/03_wizard_crop_replace | `wizard_crop_story_missing_2026_10_04.html` · in_wizard_picker | `tests/test_bench_wizard_exit_1004.py` | left through the picker's own footer Save, back on Crop; post kept with story_not_placed:not_in_library when the wizard then closes (ACL-1551) | pass |
+| Media step busy after the library pick (04.10): '1 selected', Next and Cancel aria-disabled | 232d398471bd/00_wizard_media | `wizard_crop_story_missing_2026_10_04.html` · media_busy | `tests/test_bench_wizard_exit_1004.py` | the walk waits while the wizard is busy (bounded) instead of four quick misses (ACL-1551) | pass |
 
 ## ad_copy
 
@@ -242,6 +245,7 @@ Robot: simple_create.create_next_ad
 
 | Layout | Seen live | Fixture · fragment | Test | Expected | Status |
 | --- | --- | --- | --- | --- | --- |
+| Media wizard of the previous ad left open on Crop (Next/Cancel locked) over the editor | 232d398471bd/05_simple_create_more_ads, 232d398471bd/06_ad2_create | `wizard_crop_story_missing_2026_10_04.html` · crop_busy | `tests/test_more_ads_after_a_stuck_wizard.py` | closed with the wizard's own Close before the ad set's Action menu; ads 2-3 created; Close that does not close -> creative_wizard_left_open (ACL-1551) | pass |
 | Tree before, ad set Action menu, tree after Create ad, new ad name/media | f9b9fc8d7bb3/01-03, 8ce1b9985046/02-04, b3a333ff43ab/03-04, d1755a59e139/03-04, d66a22d0fa30/02-03, df5344da3a17/02 | `simple_create_more_ads_2026_09_30.html` · tree_before, adset_menu, tree_after_create, ad1_name, new_ad_name, new_ad_media | `tests/test_simple_create_more_ads.py` | Create ad from the ad set menu opens the new ad; 'Creating...' dialog waited out | pass |
 | New ad's form gone after the media wizard: Ad heading with an empty /am/editor:ad surface (no name field, no Media block) and 'Verifying your changes' with the #100 lead_gen_form_id preflight error | 4121938e6dc3/11_ad2_creative_upload, 04c8c214d2ba/01_ad2_creative_upload, 0bd520418dbe/01_ad2_creative_upload | `ad_form_gone_verifying_2026_10_01.html` · ad_form_gone_verifying | `tests/test_ad_form_gone_after_media.py` | named ad_form_gone_after_media after 30 s; no second media check or wizard (ACL-1426) | pass |
 

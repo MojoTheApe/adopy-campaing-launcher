@@ -78,6 +78,11 @@ NO_CROP_STEP = "story_not_placed:no_crop_step"
 NOT_IN_LIBRARY = "story_not_placed:not_in_library"
 WARNINGS = (NO_CROP_STEP, NOT_IN_LIBRARY)
 
+#: ACL-1551 (live 04.10, 232d398471bd): Next on Crop did not take the wizard
+#: further (Meta busy, then the same Crop again), so the wizard was left with
+#: its own Close - the ad's creative is not confirmed; blocking.
+WIZARD_STUCK = "crop_wizard_stuck"
+
 #: Library picker's confirm labels, in order. Publish is never among them.
 _CONFIRM_LABELS = ("Done", "Select", "Confirm", "Next", "Save", "Continue")
 
@@ -303,6 +308,31 @@ def set_plan(plan) -> None:
     _tls.done = False
     _tls.unseen_said = False
     _tls.warning = ""
+    # ACL-1551: per ad, not per attempt - a Crop whose Next did not advance
+    # is not pressed again by a later walk of the same ad.
+    _tls.forward_stuck = False
+
+
+def note_forward_stuck() -> None:
+    """ACL-1551: Next on this ad's Crop did not move the wizard on."""
+    _tls.forward_stuck = True
+
+
+def forward_stuck() -> bool:
+    """Next on this ad's Crop already failed to move the wizard on."""
+    return bool(getattr(_tls, "forward_stuck", False))
+
+
+def mark_wizard_stuck() -> None:
+    """ACL-1551: the wizard was left on Crop with its own Close (or not at all).
+
+    A Crop failure named earlier stays (it is the more specific reason);
+    otherwise `WIZARD_STUCK`. The story warning is dropped - the ad blocks.
+    """
+    if not getattr(_tls, "failure", None):
+        _tls.failure = WIZARD_STUCK
+    _tls.warning = ""
+    _tls.done = True
 
 
 def current_plan():

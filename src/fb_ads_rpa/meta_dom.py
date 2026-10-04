@@ -6012,7 +6012,7 @@ def run_recorded_campaign_flow(
                     # ACL-1348: причина — в строке ЭТОГО шага, иначе Sentry берёт
                     # её из строки помощника, которую перепишет объявление 2.
                     _shot("fail_ad_creative_upload", last_upload_diag(), note=last_upload_why())
-                    ad_level_fails.append("ad_creative_upload")
+                    ad_level_fails.append(creative_soft_fail("ad", ad_name or "ad 1"))
                     # ACL-1354 (a71e4fc14aa1): после отказа креатива на
                     # закрытой вкладке назначение, текст и обход назначений
                     # отказывали по очереди, каждый молча.
@@ -6247,7 +6247,7 @@ def run_recorded_campaign_flow(
                                 # PYTHON-14 `ad2_creative_upload: silent`.
                                 _shot(f"fail_{tag}_creative_upload", last_upload_diag(),
                                       note=last_upload_why())
-                                ad_level_fails.append(f"{tag}_creative_upload")
+                                ad_level_fails.append(creative_soft_fail(tag, extra_name or tag))
                                 no_creative = True
                             else:
                                 _shot(f"after_{tag}_creative_upload")
@@ -10685,6 +10685,28 @@ def _creative_post_media_step(page: Page) -> bool:
 _WIZARD_ADVANCE_LABELS = ("Done", "Save", "Next", "Skip and continue", "Continue", "Skip")
 
 
+#: ACL-1551: корень мастера — видимый `role=dialog`, в котором три и больше
+#: подписей строки шагов (листья с ровно такой подписью). Нет такого — null:
+#: прежние формы мастера без `role=dialog` ищутся по документу, как раньше.
+_WIZARD_ROOT_JS = r"""() => {
+  const STEPS = ['Creative setup', 'Media', 'Trim', 'Crop', 'Text', 'Image generation',
+                 'Creative generation', 'Enhancements', 'Translation'];
+  const n = (s) => (s || '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
+  for (const d of document.querySelectorAll('[role=dialog]')) {
+    const r = d.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;
+    const seen = new Set();
+    for (const e of d.querySelectorAll('*')) {
+      if (e.children.length) continue;
+      const t = n(e.textContent);
+      if (STEPS.includes(t)) seen.add(t);
+      if (seen.size >= 3) return d;
+    }
+  }
+  return null;
+}"""
+
+
 #: Кнопка «вперёд» мастера — одним вызовом страницы (ACL-1313).
 #:
 #: Было: по одному `_click_xpath` на каждую подпись из шести, и каждый —
@@ -10705,7 +10727,12 @@ _WIZARD_FORWARD_JS = r"""
     }
     return true;
   };
-  const cands = [...document.querySelectorAll('[role=button],button')]
+  // ACL-1551: мастер — role=dialog со строкой шагов; кнопки ищутся только в
+  // нём. По всему документу «Next»/«Save» футера редактора (рядом с Publish)
+  // находились наравне с кнопками мастера, а пока Next мастера заперт (Meta
+  // занята, живьём 04.10), других кандидатов не было бы вовсе.
+  const root = (%ROOT%)() || document;
+  const cands = [...root.querySelectorAll('[role=button],button')]
     .filter(e => e.getAttribute('aria-disabled') !== 'true');
   for (const label of labels) {
     let best = null, bestArea = Infinity;
@@ -10725,7 +10752,7 @@ _WIZARD_FORWARD_JS = r"""
   }
   return null;
 }
-"""
+""".replace("%ROOT%", _WIZARD_ROOT_JS)
 
 #: Сколько после нажатия «вперёд» ждать следующего шага. Прежняя пауза
 #: 1,4 с сохранена как потолок; мастер, закрывшийся раньше, замечается
@@ -10749,6 +10776,240 @@ def _press_wizard_forward(page: Page) -> str | None:
     return pt.get("label") or ""
 
 
+# ── ACL-1551: занятый мастер и выход из него своей кнопкой ─────────────────
+#
+# Живьём 04.10 (Facebook_1443, прогон 232d398471bd, пара post/story, story нет
+# в медиатеке): после Next мастер «занят» — Next и Cancel в подвале с
+# aria-disabled, — и обход считал это промахом: четыре круга (~4 с) и выход.
+# Так он бросил мастер на Media (Meta сама перешла на Crop позже), а на Crop
+# Next не довёл мастер дальше: занятость кончилась возвратом на тот же Crop
+# (снимок 02_wizard_crop, Next снова доступен), второй Next завис дольше минуты
+# (04_ad_creative_upload, 05_simple_create_more_ads). Запасной выход искал
+# угловой значок у подписи «Creative setup», которой в этой строке шагов нет
+# (Media · Trim · Crop · Text · …), — не нажималось ничего, окно оставалось, и
+# Action menu группы для объявлений 2–3 не открылось.
+
+#: Сколько за один обход ждать «занятый» мастер (Next/Cancel заперты).
+_WIZARD_BUSY_WAIT_S = 30.0
+#: После Next на Crop: сколько ждать смены шага или закрытия мастера.
+_CROP_ADVANCE_WAIT_S = 25.0
+#: Crop снова доступен (не занят), а шаг тот же — «Next не сработал», но не
+#: раньше этого (шаг Meta отрисовывает не мгновенно).
+_CROP_IDLE_GRACE_S = 6.0
+#: Сколько ждать закрытия мастера после его Save/Done или Close.
+_WIZARD_EXIT_WAIT_S = 6.0
+#: Кнопки мастера, которые его завершают (подвал). Не Next и не Publish.
+_WIZARD_COMPLETE_LABELS = ("Save", "Done")
+
+#: Подвал мастера: есть ли кнопки «вперёд», доступны ли, Cancel. «Занят» —
+#: все «вперёд» и Cancel заперты (снимки 00_wizard_media, 04_ad_creative_upload).
+_WIZARD_BUSY_JS = r"""
+(labels) => {
+  const root = (%ROOT%)();
+  if (!root) return { root: false, busy: false };
+  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  const box = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const dis = (b) => b.getAttribute('aria-disabled') === 'true' || b.disabled === true;
+  const btns = [...root.querySelectorAll('[role=button],button')].filter(box);
+  const fwd = btns.filter(b => labels.includes(norm(b.textContent)));
+  const cancel = btns.find(b => norm(b.textContent) === 'Cancel');
+  return { root: true, forward: fwd.length, forward_enabled: fwd.filter(b => !dis(b)).length,
+           cancel: cancel ? (dis(cancel) ? 'disabled' : 'enabled') : 'none',
+           busy: fwd.length > 0 && fwd.every(dis) && !!cancel && dis(cancel) };
+}
+""".replace("%ROOT%", _WIZARD_ROOT_JS)
+
+#: Своя кнопка выхода мастера, только внутри его `role=dialog`.
+#: `complete` — Save/Done подвала (после последнего заголовка шага); не при
+#: открытом выборе медиа (там Save подвала — выбор, а не мастер, ACL-1533).
+#: `close` — Close шапки (до первого заголовка шага). Ничего вне мастера, ни
+#: Next, ни Publish. Найденное помечается `data-acl-wizard-exit`.
+_WIZARD_EXIT_JS = r"""
+(want) => {
+  document.querySelectorAll('[data-acl-wizard-exit]').forEach(e => e.removeAttribute('data-acl-wizard-exit'));
+  const root = (%ROOT%)();
+  if (!root) return null;
+  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  const box = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const dis = (b) => b.getAttribute('aria-disabled') === 'true' || b.disabled === true;
+  const heads = [...root.querySelectorAll('[role=heading],h1,h2,h3')].filter(box);
+  if (!heads.length) return null;
+  const after = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const btns = [...root.querySelectorAll('[role=button],button')].filter(b => box(b) && !dis(b));
+  const own = (b) => norm(b.textContent) || norm(b.getAttribute('aria-label'));
+  let el = null;
+  if (want === 'complete') {
+    const picker = [...root.querySelectorAll('input')].some(i =>
+      /search media/i.test(i.getAttribute('placeholder') || i.getAttribute('aria-label') || ''));
+    if (picker) return { refused: 'picker_open' };
+    const last = heads[heads.length - 1];
+    el = btns.filter(b => ['Save', 'Done'].includes(norm(b.textContent)) && after(last, b)).pop() || null;
+  } else if (want === 'close') {
+    const first = heads[0];
+    el = btns.find(b => (norm(b.textContent) === 'Close' || norm(b.getAttribute('aria-label')) === 'Close')
+                        && after(b, first)) || null;
+  }
+  if (!el) return null;
+  el.setAttribute('data-acl-wizard-exit', want);
+  el.scrollIntoView({ block: 'center', behavior: 'instant' });
+  const r = el.getBoundingClientRect();
+  return { label: own(el), x: r.x + r.width / 2, y: r.y + r.height / 2 };
+}
+""".replace("%ROOT%", _WIZARD_ROOT_JS)
+
+#: Сколько окон на экране (role=dialog / aria-modal, кроме уведомлений).
+_OPEN_DIALOGS_JS = r"""
+() => [...document.querySelectorAll('[role=dialog],[aria-modal=true]')].filter(e => {
+  const r = e.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && !/^notifications/i.test((e.textContent || '').trim());
+}).length
+"""
+
+
+def _wizard_foot(page: Page) -> dict:
+    """Подвал мастера-диалога (`_WIZARD_BUSY_JS`); {} — не прочитался."""
+    try:
+        got = page.evaluate(_WIZARD_BUSY_JS, list(_WIZARD_ADVANCE_LABELS))
+    except Exception:
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def _wizard_busy(page: Page) -> bool:
+    """Мастер «занят»: его кнопки «вперёд» и Cancel заперты (живьём 04.10)."""
+    return bool(_wizard_foot(page).get("busy"))
+
+
+def _wait_wizard_busy(page: Page, limit_s: float) -> str:
+    """Ждать, пока мастер занят. "closed" / "idle" (снова доступен) / "busy"."""
+    start = time.time()
+    while True:
+        if not _creative_wizard_open(page):
+            return "closed"
+        if not _wizard_busy(page):
+            return "idle"
+        if time.time() - start >= limit_s:
+            return "busy"
+        time.sleep(_WIZARD_CLOSE_POLL_S)   # опрос, не действие
+
+
+def _on_crop_step_now(page: Page, name: str | None) -> bool:
+    """Мастер на шаге Crop: по имени шага из строки, без имени — по заголовку."""
+    if _crop.step_is_crop(name):
+        return True
+    if name and name in _wizard_capture.STEP_NAMES:
+        return False
+    return _crop.on_crop_step(page, name)
+
+
+def _await_crop_advance(page: Page) -> str:
+    """После Next на Crop: "closed" / "advanced" / "stayed" (тот же Crop,
+    снова доступен) / "busy" (занят дольше `_CROP_ADVANCE_WAIT_S`)."""
+    start = time.time()
+    while True:
+        time.sleep(_WIZARD_CLOSE_POLL_S)   # опрос, не действие
+        if not _creative_wizard_open(page):
+            return "closed"
+        if not _crop.read(page).get("found"):
+            return "advanced"
+        busy = _wizard_busy(page)
+        waited = time.time() - start
+        if not busy and waited >= _CROP_IDLE_GRACE_S:
+            return "stayed"
+        if waited >= _CROP_ADVANCE_WAIT_S:
+            return "busy" if busy else "stayed"
+
+
+def _open_dialog_count(page: Page) -> int | None:
+    try:
+        got = page.evaluate(_OPEN_DIALOGS_JS)
+    except Exception:
+        return None
+    return got if isinstance(got, int) else None
+
+
+def _press_wizard_exit(page: Page, want: str) -> str | None:
+    """Нажать свою кнопку мастера: `complete` (Save/Done подвала) или `close`
+    (Close шапки). Подпись нажатой или None (нет такой / охрана не пустила)."""
+    try:
+        got = page.evaluate(_WIZARD_EXIT_JS, want)
+    except Exception:
+        return None
+    if not isinstance(got, dict) or not got.get("label"):
+        return None
+    try:
+        handle = page.query_selector(f'[data-acl-wizard-exit="{want}"]')
+        if handle is not None:
+            _mark_press_target(page, handle)
+    except Exception:
+        pass
+    try:
+        clicked = _cdp_mouse_click(page, float(got["x"]), float(got["y"]))
+    except Exception:
+        return None
+    if not clicked:   # False — охрана не пустила; None — вкладка не ответила
+        return None
+    return str(got["label"])
+
+
+def _wait_wizard_gone(page: Page, wait_s: float = _WIZARD_EXIT_WAIT_S) -> bool:
+    deadline = time.time() + wait_s
+    while True:
+        if not _creative_wizard_open(page):
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(_WIZARD_CLOSE_POLL_S)   # опрос, не действие
+
+
+def _leave_wizard(page: Page, *, allow_complete: bool = True, skip: str = "") -> dict:
+    """Выйти из мастера его собственной кнопкой (ACL-1551).
+
+    Сначала — завершающая кнопка подвала мастера (Save/Done; `skip` — подпись,
+    уже нажатая «вперёд» на этом шаге, второй раз не жмётся), затем — его Close.
+    Никогда Next, Publish или что-либо вне мастера. Возвращает
+    {"closed_by", "closed", "dialog_left", "tried"}.
+    """
+    out: dict[str, Any] = {"closed_by": None, "closed": False, "dialog_left": None, "tried": []}
+    if allow_complete:
+        label = _press_wizard_exit(page, "complete")
+        if label and label != skip:
+            out["tried"].append(label)
+            if _wait_wizard_gone(page):
+                out.update(closed_by=label, closed=True)
+        elif label:
+            out["tried"].append(label)
+    if not out["closed"]:
+        label = _press_wizard_exit(page, "close")
+        if label:
+            out["tried"].append(label)
+            if _wait_wizard_gone(page):
+                out.update(closed_by=label, closed=True)
+    left = _open_dialog_count(page)
+    out["dialog_left"] = None if left is None else left > 0
+    return out
+
+
+def _leave_stuck_wizard(page: Page, trail, why: str, presses: int, pressed: str = "") -> bool:
+    """Next на Crop не довёл мастер дальше: выйти своей кнопкой мастера.
+
+    Save/Done мастера — мастер завершён, как обычным обходом. Только Close
+    (или ничего не закрыло) — объявление блокирующее: `crop_wizard_stuck`
+    (`crop_step.mark_wizard_stuck`), предупреждение о story снимается.
+    True — мастера на экране нет.
+    """
+    out = _leave_wizard(page, skip=pressed if pressed in _WIZARD_COMPLETE_LABELS else "")
+    out.update({"why": why, "step": "Crop", "next_presses": presses})
+    completed = bool(out["closed"]) and out["closed_by"] in _WIZARD_COMPLETE_LABELS
+    if not completed:
+        _crop.mark_wizard_stuck()
+    try:
+        trail.exited(out)
+    except Exception:
+        pass
+    return bool(out["closed"])
+
+
 def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
     """Press the wizard forward until it closes. True when it is gone.
 
@@ -10767,36 +11028,72 @@ def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
         closed = _walk_creative_wizard_rounds(page, rounds, trail)
         return closed
     finally:
+        # ACL-1551: осталось ли на экране окно — в ту же строку телеметрии.
+        if not closed or trail.exit:
+            left = _open_dialog_count(page)
+            trail.dialog_left = None if left is None else left > 0
+        else:
+            trail.dialog_left = False
         trail.finish(closed)
 
 
 def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
     misses = 0
+    # ACL-1551: ожидание «занятого» мастера — не промах, но в пределах срока.
+    busy_left = _WIZARD_BUSY_WAIT_S
+    crop_next = 0   # нажатий «вперёд» на Crop в этом обходе
     for _ in range(rounds):
         if not _creative_wizard_open(page):
             return True
         trail.see(page)
+        on_crop = _on_crop_step_now(page, trail.current)
+        if on_crop and (crop_next or _crop.forward_stuck()):
+            # ACL-1551: Next на Crop уже нажимали, а мастер с Crop не ушёл —
+            # второй раз Next не жмём (живьём 04.10 он завис больше минуты).
+            return _leave_stuck_wizard(page, trail, "next_did_not_advance", crop_next)
         # ACL-1426: на шаге Crop — Original на обеих карточках, без «Crop and
         # expand (Meta AI)», для пары — Replace на Vertical; до нажатия Next.
         # Расхождение — названная причина (`crop_step.take_failure`), её
         # забирает вызывающий; обход идёт дальше, чтобы мастер закрылся.
         plan = _crop.current_plan()
-        if plan is not None and not _crop.applied() and _crop.on_crop_step(page, trail.current):
+        if plan is not None and not _crop.applied() and on_crop:
             _crop.apply(page, plan)
         pressed = _press_wizard_forward(page)
         trail.pressed(pressed)
         if pressed is None:
+            if busy_left > 0 and _wizard_busy(page):
+                # Meta обрабатывает прошлое нажатие (Next и Cancel заперты).
+                t0 = time.time()
+                got = _wait_wizard_busy(page, busy_left)
+                busy_left -= max(time.time() - t0, _WIZARD_CLOSE_POLL_S)
+                trail.busy(round(time.time() - t0, 1))
+                if got == "closed":
+                    return True
+                if got == "idle":
+                    continue
             misses += 1
             if misses >= 4:
                 break
             _sleep_h(1.2)
             continue
         misses = 0
+        if on_crop:
+            crop_next += 1
+            got = _await_crop_advance(page)
+            if got == "closed":
+                trail.closed_by = pressed
+                return True
+            if got == "advanced":
+                continue
+            _crop.note_forward_stuck()
+            return _leave_stuck_wizard(page, trail, "busy" if got == "busy" else "next_did_not_advance",
+                                       crop_next, pressed)
         # Следующий шаг отрисовывается до 1,4 с; закрытие видно раньше.
         settle_until = time.time() + _WIZARD_STEP_SETTLE_S
         while time.time() < settle_until:
             time.sleep(_WIZARD_CLOSE_POLL_S)   # опрос, не действие: без «человеческой» паузы
             if not _creative_wizard_open(page):
+                trail.closed_by = pressed
                 return True
     return not _creative_wizard_open(page)
 
@@ -11002,6 +11299,17 @@ def _close_creative_setup_modal(page: Page) -> bool:
         return False
     if _walk_creative_wizard(page):
         return True
+    # ACL-1551: мастер-диалог закрывается своим Close в шапке. Угловой значок
+    # ниже ищется у подписи «Creative setup», а в строке шагов 04.10 (Media ·
+    # Trim · Crop · …) её нет — не нажималось ничего, окно оставалось.
+    if _creative_wizard_open(page):
+        out = _leave_wizard(page, allow_complete=False)
+        if out.get("tried"):
+            _telemetry.record("ad_creative_wizard", None,
+                              note="force_close:" + ("closed_by_close" if out["closed"] else "left_open"),
+                              diag=out)
+        if out["closed"]:
+            return True
     # Walking did not get it closed — the step shows a button we do not know.
     # The corner icon is the way out that keeps the media; the step row's
     # first label anchors the search since the heading is gone.
@@ -11533,12 +11841,15 @@ def upload_ad_creative(
     phase_t = time.time()
     verdict = reuse_before_upload(page, creative_path)
     _creative_phase("reuse", phase_t, verdict=verdict)
-    if verdict is False:
+    # ACL-1551: отказ шага Crop (в т.ч. `crop_wizard_stuck`) уже назван внутри
+    # выбора — не затирать его общим «выбор не снялся».
+    crop_refused = (media_refused_on_ad() or "").startswith("crop_")
+    if verdict is False and not crop_refused:
         _creative_why("reuse_left_selection")
     if verdict is not None:
         if verdict is False:
             # Выбор в медиатеке не снялся (запись с подробностями — внутри).
-            _set_upload_why("library_pick_left_selection")
+            _set_upload_why(media_refused_on_ad() if crop_refused else "library_pick_left_selection")
         return verdict
     if reuse_only:
         # Память прогона говорит, что файл уже уходил наверх: второй раз Meta
@@ -14457,6 +14768,20 @@ def _switch_off_instant_form(page: Page) -> dict:
                       note="switched_to_website" if ok else "instant_form_kept", diag=report)
     return {"instant_form_before": report["before"], "instant_form_after": report["after"],
             "instant_form_via": via}
+
+
+def creative_soft_fail(tag: str, ad_label: str) -> str:
+    """Строка отказа креатива объявления `tag` (ACL-1551).
+
+    Мастер медиа застрял на Crop и закрыт своим Close —
+    `<tag>_creative_upload:crop_wizard_stuck - <объявление>: <фраза>`;
+    иначе — прежняя `<tag>_creative_upload`. Имя шага то же (блокирующий).
+    """
+    why = last_upload_why()
+    base = f"{tag}_creative_upload"
+    if why == _crop.WIZARD_STUCK:
+        return f"{base}:{why} - {ad_label}: {_simple.creative_why_text(why)}"
+    return base
 
 
 def destination_soft_fail(tag: str, ad_label: str) -> str:

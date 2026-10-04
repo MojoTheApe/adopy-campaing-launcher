@@ -1,5 +1,52 @@
 # System history
 
+## Story not in the library: the media wizard is left with its own control, the other ads are still built — ACL-1551
+
+Live run on Facebook_1443 on 2026-10-04 (232d398471bd, build c1f0e507): ad 1 of
+CO_bnc_All_Video_GMBL|TradingYB_35_04.10 was a video post/story pair whose story file is
+not in Meta's library. The media wizard stayed open on Crop, the ad set's Action menu did
+not open under it, and ads 2-3 were never created (`ad2_create action_menu_not_opened`,
+`ad3_create not_tried`).
+
+- Root cause, from the captures: (1) after Next Meta keeps the wizard "busy" - Next and
+  Cancel `aria-disabled` (00_wizard_media, 04_ad_creative_upload). The walk counted that
+  as four misses (~4 s) and gave up, so it left the wizard on Media; (2) on Crop the
+  picker's own footer Save (ACL-1533) did bring Crop back, but Next did not move the
+  wizard on: busy, then the same Crop with Next enabled again (02_wizard_crop). Each
+  later walk (reuse, retry, force-close) pressed Next again and the second one hung for
+  over a minute; (3) the fallback close looked for the corner icon next to "Creative
+  setup", which this step row (Media · Trim · Crop · …) does not have, so nothing was
+  pressed and the dialog stayed. On 03.10 the same pair passed because Next on Crop
+  advanced within about 2.5 s. The 04.10 Crop layout has no Save of its own (footer
+  Cancel / Next); the only Save is in the in-wizard Replace picker.
+- The walk now waits while the wizard is busy (at most 30 s per walk, it is not counted
+  as a miss) and looks for its forward button only inside the wizard's own `role=dialog`.
+  Before, the editor footer's Done/Save/Next were candidates too.
+- Crop: Next is pressed once per ad. Busy, then the same Crop (or still busy after 25 s)
+  means Next did not advance. The robot then never presses Next again. It leaves the
+  wizard with its own control: a Save/Done in the wizard footer if Meta shows one (the
+  wizard is complete, the story warning stays), otherwise the wizard's own Close in its
+  header. Close means the ad is blocking with `crop_wizard_stuck` and the line
+  `ad_creative_upload:crop_wizard_stuck - <ad>: Meta's media wizard stayed on its Crop
+  step ...`. There is no second upload attempt. Publish, Next and anything outside the
+  wizard are never pressed.
+- The force-close (`_close_creative_setup_modal`) presses the wizard's own Close before
+  the old corner-icon fallback.
+- `simple_create.create_next_ad` closes a leftover media wizard with its own Close before
+  the ad set's Action menu (`wizard_cleared` in `simple_create_more_ads`). If Close does
+  not close it, the reason is `creative_wizard_left_open` ("Meta's media wizard of the
+  previous ad stayed open ...").
+- Telemetry `ad_creative_wizard`: `closed_by` (the control that closed the wizard),
+  `dialog_left`, `exit` (`why`, `tried`, `next_presses`), `busy_s`; note
+  `<origin>:closed_by_close` when Close closed it. No new step names.
+- `failure_policy.PER_AD_DETAIL`: readable problems "Ad media - Meta's media wizard stuck
+  on Crop" and "Ad not created - media wizard left open" (both blocking).
+- Bench: `wizard_crop_story_missing_2026_10_04.html` (crop_step, crop_busy,
+  in_wizard_picker, media_busy), `tests/test_bench_wizard_exit_1004.py`,
+  `tests/test_more_ads_after_a_stuck_wizard.py`.
+- Live check left: a 1443 campaign with a pair whose story is not in the library builds
+  all its ads.
+
 ## Advantage+ audience before the age: verified by controls mode, the Campaign toggle never touched — ACL-1544
 
 Live runs on Facebook_1443 on 2026-10-03 (04509d5eed75, 0e86c42023da): every campaign logged
