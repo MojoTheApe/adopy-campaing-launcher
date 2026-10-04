@@ -490,6 +490,25 @@ PER_AD_DETAIL: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Open the ad, select Website (Browser add-ons: None) and enter the URL. "
         "Do not accept Lead Ads Terms or create a form for it.",
     ),
+    # ACL-1551 (live 04.10, 232d398471bd): Meta's media wizard stayed on its
+    # Crop step after Next; the robot left it with the wizard's own Close and
+    # went on with the other ads. Still BLOCKING: the creative is not confirmed.
+    ("creative_upload", "crop_wizard_stuck"): (
+        "Meta's media wizard stayed on its Crop step (Next did not move it on), so the robot "
+        "closed the wizard with its own Close; the ad's media is not confirmed",
+        "Ad media - Meta's media wizard stuck on Crop",
+        "The media wizard did not finish, so this ad's media and crops are not confirmed.",
+        "Open the ad in Ads Manager, check its media (and the Stories/Reels file) and fix it by hand.",
+    ),
+    # ACL-1551: the wizard of the previous ad was still open and its own Close
+    # did not close it, so the ad set's Action menu could not be used.
+    ("create", "creative_wizard_left_open"): (
+        "Meta's media wizard of the previous ad stayed open and its own Close did not close it, "
+        "so the ad set's Action menu could not be used to create this ad",
+        "Ad not created - media wizard left open",
+        "The media wizard of the previous ad stayed on screen, so this ad was not created.",
+        "Close the media wizard in Ads Manager, then add the missing ad by hand.",
+    ),
 }
 
 

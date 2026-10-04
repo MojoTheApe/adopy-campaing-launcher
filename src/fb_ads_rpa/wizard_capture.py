@@ -195,6 +195,12 @@ class Trail:
         self.captured: dict[str, str] = {}
         #: The step on screen at the last `see` ("" when unread).
         self.current = ""
+        #: ACL-1551: чем мастер закрыт (подпись нажатой кнопки), остался ли
+        #: на экране диалог, выход своей кнопкой мастера и ожидания «занят».
+        self.closed_by: str | None = None
+        self.dialog_left: bool | None = None
+        self.exit: dict[str, Any] | None = None
+        self.busy_waits: list[float] = []
 
     def see(self, page) -> None:
         """Прочитать текущий шаг и, если он новый для обхода, снять его."""
@@ -226,6 +232,24 @@ class Trail:
         except Exception:
             return
 
+    def exited(self, out: dict[str, Any]) -> None:
+        """ACL-1551: мастер покинут своей кнопкой (Save/Done или Close)."""
+        try:
+            self.exit = {k: out.get(k) for k in ("closed_by", "closed", "dialog_left", "tried",
+                                                   "why", "step", "next_presses")}
+            if out.get("closed"):
+                self.closed_by = out.get("closed_by")
+        except Exception:
+            return
+
+    def busy(self, seconds: float) -> None:
+        """ACL-1551: сколько ждали, пока мастер «занят» (Next/Cancel заперты)."""
+        try:
+            if len(self.busy_waits) < 6:
+                self.busy_waits.append(seconds)
+        except Exception:
+            return
+
     def finish(self, closed: bool) -> None:
         """Одна строка телеметрии `ad_creative_wizard`, если мастер был виден."""
         try:
@@ -236,14 +260,23 @@ class Trail:
             for i, entry in enumerate(self.seen):
                 nxt = self.seen[i + 1]["at_s"] if i + 1 < len(self.seen) else end
                 steps.append({**entry, "s": round(max(0.0, nxt - entry["at_s"]), 1)})
+            # ACL-1551: закрыт его Close (не завершён) — так и сказано в note.
+            by_close = bool(closed) and self.closed_by == "Close"
+            diag = {"origin": self.origin or "other", "file": self.file,
+                    "sequence": [s["step"] for s in steps], "steps": steps,
+                    "closed": bool(closed), "closed_by": self.closed_by if closed else None,
+                    "dialog_left": self.dialog_left,
+                    "captures": {k: bool(v) for k, v in self.captured.items()}}
+            if self.exit:
+                diag["exit"] = self.exit
+            if self.busy_waits:
+                diag["busy_s"] = self.busy_waits
             _telemetry.record(
                 "ad_creative_wizard", None,
-                note=(self.origin or "other") + (":closed" if closed else ":left_open"),
+                note=(self.origin or "other") + (":closed_by_close" if by_close
+                                                  else ":closed" if closed else ":left_open"),
                 duration_s=end,
-                diag={"origin": self.origin or "other", "file": self.file,
-                      "sequence": [s["step"] for s in steps], "steps": steps,
-                      "closed": bool(closed),
-                      "captures": {k: bool(v) for k, v in self.captured.items()}},
+                diag=diag,
             )
         except Exception:
             return
