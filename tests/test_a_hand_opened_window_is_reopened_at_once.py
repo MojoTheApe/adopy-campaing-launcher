@@ -93,7 +93,7 @@ def world(machine, monkeypatch):
     import src.meta_campaign_agent.multilogin_launcher as launcher_mod
     from src.fb_ads_rpa import run_telemetry as rt
 
-    w = SimpleNamespace(br_sleeps=[], ev=[], rows=[], crumbs=[], notices=[], row_notes=[], stop_fails=False,
+    w = SimpleNamespace(closes=[], br_sleeps=[], ev=[], rows=[], crumbs=[], notices=[], row_notes=[], stop_fails=False,
                         m=machine, account_of={PROFILE: ACCOUNT, OTHER_PROFILE: OTHER},
                         running={PROFILE: frozenset({HAND_PID}), OTHER_PROFILE: frozenset({OTHER_PID})})
     monkeypatch.setattr(br, "_ROBOT_PROFILES", {})
@@ -120,7 +120,7 @@ def world(machine, monkeypatch):
                         lambda udd, pid: bool(w.running.get(pid)))
     monkeypatch.setattr(prov, "_connect_started",
                         lambda started, pid: w.ev.append(("connect", pid)) or SimpleNamespace(
-                            page="reopened-page", close=lambda **kw: None))
+                            page="reopened-page", close=lambda **kw: w.closes.append(kw)))
     # Ни остановка, ни подъём не просят права убить.
     w.kill_flags = []
     real_stop, real_start = prov._stop_profile, prov._start_via_mlx_api
@@ -426,6 +426,10 @@ def test_stop_pressed_during_the_reopen_does_not_start_the_campaign(world, monke
     assert "Stopped by the user" in (result.error or "")
     assert flows == []
     assert "kill" not in world.ev
+    # Ревью PR #563 (раунд 3): только отключение от CDP — окно человека
+    # остаётся открытым, и второй остановки профиля нет.
+    assert world.closes == [{"keep_browser_open": True}], world.closes
+    assert world.ev == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)], world.ev
 
 
 # ── Ревью PR #563 (F3): текст отказа говорит правду о причине ─────────────
