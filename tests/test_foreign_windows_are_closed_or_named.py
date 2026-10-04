@@ -409,3 +409,91 @@ def test_titles_lose_ids_urls_and_the_campaign_name(monkeypatch):
     t = fw.clean_title("Ad 120250775108750465 of GT_Sample_35_04.10 at https://x.example.com/a?act=123")
     assert "120250775108750465" not in t and "GT_Sample" not in t and "https" not in t
     assert fw.stop_reason("") == "Unknown Meta window blocked the step: untitled window"
+
+
+# ── ревью PR #575: каждое закрытие на своём месте ───────────────────────────
+
+def test_a_window_over_the_open_menu_is_closed_between_strategies(page, monkeypatch, rows):
+    """Меню осталось открытым, но поверх встало окно: закрывает только проверка между способами."""
+    naming = """
+    <div role="dialog" id="naming" class="modal"><div><span>Ad set name</span></div>
+      <div>Name your ad sets consistently by creating a template based on your naming convention.</div>
+      <div><div role="button">Add component</div></div>
+      <div><div role="button">Cancel</div><div role="button" aria-disabled="true">Save</div></div></div>
+    """
+    page.set_content(_doc21())
+
+    def _opens_dialog(p) -> bool:
+        p.evaluate("(h) => document.body.insertAdjacentHTML('beforeend', h)", naming)
+        return False
+
+    def _clicks_website_unless_covered(p) -> bool:
+        if p.locator(".modal").count():
+            return False
+        return _clicks_website(p)
+
+    calls = _fake_methods(monkeypatch, _opens_dialog, _clicks_website_unless_covered)
+    assert md._pick_website_from_open_menu(page) is True
+    assert calls[1] == ("_click_website_via_cdp", True)
+    step, ok, kw = [r for r in rows if r[0] == "conversion_website_pick"][-1]
+    assert kw["diag"]["reopened"] == 1, "меню закрывать не пришлось — окно закрыто между способами"
+    assert any(c.startswith("naming_template:") for c in kw["diag"]["windows_closed"])
+
+
+def test_a_window_that_appears_right_before_the_trigger_click_is_closed_there(page, monkeypatch, rows):
+    """Окно встаёт между проверкой способа и нажатием на триггер — закрывает проверка перед нажатием,
+    без запасного хода сторожа."""
+    page.set_content(_doc21())
+    fired = []
+
+    def _panel_now(p) -> bool:
+        # Вызов 1 — в начале выбора, вызов 2 — внутри открытия меню, прямо
+        # перед нажатием на триггер: тогда и встаёт панель.
+        fired.append(1)
+        if len(fired) == 2:
+            p.evaluate("openPanel()")
+        return False
+
+    monkeypatch.setattr(md, "dismiss_publish_draft_dialog", _panel_now)
+    _fake_methods(monkeypatch, _clicks_website)
+    assert md._pick_website_from_open_menu(page) is True
+    step, ok, kw = [r for r in rows if r[0] == "conversion_website_pick"][-1]
+    assert "notifications:escape" in kw["diag"]["windows_closed"]
+    assert "fallback" not in kw["diag"]["windows_closed"]
+    assert kw["diag"]["reopen_failed"] == 0
+    assert len(fired) >= 2
+
+
+# ── ревью PR #575 (B2): мастер креатива и окно Replace — «свои» ──────────────
+
+WIZARD_BLOCKS = [
+    ("creative_wizard_steps_2026_10_01.html", "image_creative_setup"),
+    ("creative_wizard_steps_2026_10_01.html", "image_crop"),
+    ("creative_wizard_steps_2026_10_01.html", "image_text"),
+    ("creative_wizard_steps_2026_10_01.html", "image_enhancements"),
+    ("creative_wizard_steps_2026_10_01.html", "video_trim"),
+    ("creative_wizard_steps_2026_10_01.html", "video_text"),
+    ("creative_wizard_steps_2026_10_01.html", "video_creative_generation"),
+    ("creative_wizard_steps_2026_10_01.html", "pick_media_library"),
+    ("crop_replace_in_wizard_picker_2026_10_03.html", "in_wizard_picker"),
+    ("wizard_crop_story_missing_2026_10_04.html", "crop_busy"),
+    ("wizard_crop_story_missing_2026_10_04.html", "in_wizard_picker"),
+    ("wizard_media_picker_2026_10_04.html", "loaded"),
+]
+
+
+@pytest.mark.parametrize("fixture,name", WIZARD_BLOCKS)
+def test_the_robots_own_media_wizard_is_owned_and_untouched(page, rows, reported, fixture, name):
+    block = fragment(FIXTURES / fixture, name)
+    page.set_content(_doc21(
+        "<div style='position:fixed;top:0;left:0;width:1400px;height:900px;overflow:auto;"
+        f"background:#fff;z-index:80'>{block}</div>"))
+    wins = fw.scan(page)
+    assert wins, "окно мастера не прочитано — тест ничего не проверил бы"
+    assert all(w.owned and w.kind == "creative_wizard" for w in wins), [(w.kind, w.title) for w in wins]
+    assert fw.before_step(page, "ad2_name") == []
+    assert fw.after_failure(page, "ad2_name") is False
+    assert fw.blocked() is None
+    assert page.evaluate("window.clicked") == [] and page.evaluate("window.keys") == []
+    assert reported["sentry"] == [] and reported["captures"] == []
+    assert _fw_rows(rows) == []

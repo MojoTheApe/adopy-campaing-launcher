@@ -106,7 +106,10 @@ KNOWN: tuple[WindowKind, ...] = (
                r"|take (a|our) (quick |short )?survey|share your feedback|give (us )?feedback"
                r"|tell us what you think", closer="safe"),
     # «Свои» окна шагов: их открывает сам поток.
-    WindowKind("creative_wizard", text=r"Set up your creative|Creative setup|Media library",
+    # Ревью PR #575 (B2): узнаётся прежде всего по устройству (строка шагов,
+    # раздел медиа объявления — см. _SCAN_JS); текст — запасной признак.
+    WindowKind("creative_wizard", text=r"Set up your creative|Creative setup|Media library"
+               r"|Replace media for|Select media",
                owned=True, note="the ad's media wizard, owned by the media steps"),
     WindowKind("objective", text=r"Choose a campaign objective|Create new campaign|campaign objective",
                owned=True, note="the Create window, owned by the campaign-open step"),
@@ -178,7 +181,24 @@ _SCAN_JS = r"""
     const text = leaves.join(' ').slice(0, 600);
     const title = (heading || label || text).slice(0, 80);
     let kind = 'unknown', owned = false;
-    for (const k of kinds) {
+    // Ревью PR #575 (B2): мастер креатива и его окно Replace узнаются по
+    // устройству, а не по заголовку экрана (Text, Trim video, Select media
+    // crop…, Advantage+ creative enhancements, Replace media for…): строка
+    // шагов мастера (aria-current="step" / подписи шагов) или раздел медиа
+    // объявления. «Свои» виды — ПЕРВЫМИ: их не перехватит вид реестра.
+    const STEP = /^(Media|Trim|Crop|Text|Creative generation|Image generation|Creative setup|Enhancements|Translation)$/i;
+    const steps = new Set([...d.querySelectorAll('[role=button], [role=listitem], [aria-current="step"]')]
+      .map((e) => norm(e.textContent)).filter((t) => STEP.test(t)).map((t) => t.toLowerCase()));
+    const MEDIA_SURFACE = /ad_image_video_selector_section|creative-tool-asset/;
+    const hostEl = d.closest('[data-surface]');
+    const hostSurface = hostEl ? (hostEl.getAttribute('data-surface') || '') : '';
+    const mediaSurface = MEDIA_SURFACE.test(hostSurface)
+      || [...d.querySelectorAll('[data-surface]')].some((e) => MEDIA_SURFACE.test(e.getAttribute('data-surface') || ''));
+    const wizard = (steps.size >= 3) || (steps.size >= 2 && !!d.querySelector('[aria-current="step"]'))
+      || mediaSurface || /^(Replace media for|Select media)/i.test(title);
+    if (wizard) { kind = 'creative_wizard'; owned = true; }
+    const ordered = [...kinds.filter((k) => k.owned), ...kinds.filter((k) => !k.owned)];
+    for (const k of (owned ? [] : ordered)) {
       const tOk = k.title ? new RegExp(k.title, 'i').test(title) : null;
       const xOk = k.text ? (new RegExp(k.text, 'i').test(text) || leaves.some((l) => new RegExp(k.text, 'i').test(l))) : null;
       const ok = (tOk === null || tOk) && (xOk === null || xOk) && (tOk !== null || xOk !== null);
@@ -454,6 +474,9 @@ def _settle() -> None:
 
 def _close_safely(page, w: Window) -> str:
     """Своя Close / Not now / Dismiss / Cancel / ×, иначе Escape. Чем закрыли или ""."""
+    if w.owned:
+        # Окно шага (мастер креатива, окно цели, загрузка) — никогда.
+        return ""
     if _press_own_close(page, w):
         _settle()
         if _gone(page, w):

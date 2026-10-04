@@ -152,8 +152,13 @@ def test_the_flow_click_and_fill_retries_are_watched():
     flow = next(n for n in ast.parse(src).body
                 if isinstance(n, ast.FunctionDef) and n.name == "run_recorded_campaign_flow")
     inner = {n.name: ast.get_source_segment(src, n) for n in flow.body if isinstance(n, ast.FunctionDef)}
-    for name in ("_click", "_fill"):
+    # ACL-1573: повторы нажатия и ввода живут в `_click_tries` / `_fill_tries`
+    # (снаружи — сторож чужих окон `foreign_windows.guarded`); сторож застоя
+    # должен остаться именно в повторах, и `_click` / `_fill` должны их звать.
+    for name in ("_click_tries", "_fill_tries"):
         assert "watch = _watch(where)" in inner[name] and "watch.check()" in inner[name], name
+    assert "_click_tries(" in inner["_click"] and "_windows.guarded(" in inner["_click"]
+    assert "_fill_tries(" in inner["_fill"] and "_windows.guarded(" in inner["_fill"]
 
 
 # ── повторное ревью PR #314: ключ — шаг; на ad2+ только будим ────────────

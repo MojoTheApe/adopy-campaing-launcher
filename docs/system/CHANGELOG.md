@@ -17,7 +17,13 @@ Notifications panel named in ACL-1572 is Meta's pre-rendered, hidden flyout
   network toast. The existing handlers (`_close_ad_blocker_modal`, `_close_onboarding_tour`,
   `_cancel_naming_template_dialog`, `dismiss_publish_draft_dialog`,
   `_cancel_site_links_modal`) are called from the registry unchanged. Windows a step opens
-  (media wizard, objective window, loading) are `owned` and never touched. Hidden windows
+  (media wizard, objective window, loading) are `owned` and never touched. The media wizard
+  and its Replace picker are recognised by structure, not by the title of their current
+  screen: the step row (Media / Trim / Crop / Text / Creative generation / Enhancements /
+  Translation, `aria-current="step"`) or the ad's `ad_image_video_selector_section` /
+  `creative-tool-asset` surface. Owned kinds are checked first, and an owned window is never
+  closed by the fallback. A replay over the captures under C:cl-live-* gives 419 wizard and
+  picker windows, all owned, none unknown. Hidden windows
   (`toggleTargetClosed`, `display:none`, `hidden`, zero size) are not windows.
 - Before every `_click` / `_fill` of the recorded flow, before the Conversion location menu is
   opened and between the eight Website pick strategies, registry windows are closed. A
