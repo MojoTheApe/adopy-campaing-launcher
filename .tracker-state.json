@@ -4243,7 +4243,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "551": {
+        "actor": "Worker-W1551E",
+        "session": "run_w1551e_1004",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1551-wizard-exit",
+        "worktree": "C:\\acl-1551-wizard-exit",
+        "id": "a977cefdb0bf4a20a53287f5ab94204d",
+        "issue": 551,
+        "state": "implementing",
+        "started_at": "2026-10-04T07:55:38+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -5815,6 +5828,17 @@
         "pr": 548,
         "queued_at": "2026-10-04T01:28:41+00:00",
         "reviewer": "Reviewer-R1544K"
+      },
+      "551": {
+        "implementers": [
+          {
+            "actor": "Worker-W1551E",
+            "session": "run_w1551e_1004"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1551E",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -6217,6 +6241,10 @@
       "Reviewer-R1544K": {
         "session": "rev_r1544k_1004",
         "role": "Reviewer"
+      },
+      "Worker-W1551E": {
+        "session": "run_w1551e_1004",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -10578,6 +10606,13 @@
         "prs": [
           550
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-04T07:55:38+00:00",
+        "issue": 551,
+        "claim": "a977cefdb0bf4a20a53287f5ab94204d",
+        "actor": "Worker-W1551E"
       }
     ],
     "policy": {
