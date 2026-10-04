@@ -4482,7 +4482,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "573": {
+        "actor": "Worker-F1573A",
+        "session": "run_f1573a_1004",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1573-windows",
+        "worktree": "C:\\acl-1573-windows",
+        "id": "0f3f7dbb576945c5b10f4f1754e09569",
+        "issue": 573,
+        "state": "implementing",
+        "started_at": "2026-10-04T17:11:03+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -6194,6 +6207,17 @@
         "pr": 567,
         "queued_at": "2026-10-04T12:53:56+00:00",
         "reviewer": "Reviewer-R1565Q"
+      },
+      "573": {
+        "implementers": [
+          {
+            "actor": "Worker-F1573A",
+            "session": "run_f1573a_1004"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-F1573A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -6636,6 +6660,10 @@
       "Reviewer-R1565Q": {
         "session": "rev_r1565q_1004",
         "role": "Reviewer"
+      },
+      "Worker-F1573A": {
+        "session": "run_f1573a_1004",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -11285,6 +11313,13 @@
         "pr": 567,
         "lane": "3b215c2d76d64844a4ce552359944d8f",
         "actor": "Reviewer-R1565Q"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-04T17:11:03+00:00",
+        "issue": 573,
+        "claim": "0f3f7dbb576945c5b10f4f1754e09569",
+        "actor": "Worker-F1573A"
       }
     ],
     "policy": {
