@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**21 robot steps × 101 layouts, 55 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**21 robot steps × 104 layouts, 55 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -32,7 +32,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | ads 2-3 (single-screen editor) | 3 | 3 | 0 | 0 |
 | editor gone under the robot | 1 | 1 | 0 | 0 |
 | banners and blocks (any step) | 2 | 2 | 0 | 0 |
-| foreign windows (any step, ACL-1573) | 6 | 6 | 0 | 0 |
+| foreign windows (any step, ACL-1573) | 9 | 9 | 0 | 0 |
 
 ## objective
 
@@ -279,7 +279,10 @@ Robot: window guard before each step and after a failed one (foreign_windows.bef
 | Same page with the Notifications panel shown over the conversion menu (open state synthetic) | 254ee3b3e0c7/00_conversion_website | `foreign_windows_doc21_2026_10_04.html` · notifications_flyout, conversion_section | `tests/test_foreign_windows_are_closed_or_named.py` | panel closed with Escape before the menu and between pick strategies; menu reopened; Website picked | pass |
 | 'Ad set name - Template' naming dialog over Conversion location (ACL-1572; dialog portal past the 4 MB cut, markup synthetic from screenshots) | 308c4f7c8a5a/00_conversion_website, 254ee3b3e0c7/00_conversion_website | `foreign_windows_doc21_2026_10_04.html` · adset_name_section, conversion_section | `tests/test_foreign_windows_are_closed_or_named.py` | Cancel pressed (never Save) before the menu; Website picked | pass |
 | 'Your internet connection was lost' toast with an unlabelled x | 20583efb8c41/00_stall_objective_wait | `network_toast_2026_10_01.html` · network_toast | `tests/test_foreign_windows_are_closed_or_named.py` | closed by its own x | pass |
-| The robot's own media wizard on any screen (Creative setup, Crop, Text, Trim, Enhancements, Creative generation, media library) and its Replace picker | 5edc0e7cca0a/04-08, 1125a87e6b51/02-11, b47bc815bb3c/05_wizard_media, 2e98a75f252d/07_wizard_crop_replace, 232d398471bd/01,04, 2f140fa687fa/00 | `creative_wizard_steps_2026_10_01.html` · image_creative_setup, image_crop, image_text, image_enhancements, video_trim, video_text, video_creative_generation, pick_media_library (+ crop_replace_in_wizard_picker_2026_10_03, wizard_crop_story_missing_2026_10_04, wizard_media_picker_2026_10_04) | `tests/test_foreign_windows_are_closed_or_named.py` | owned (step row / media surface): never closed, no Sentry event, no capture | pass |
+| The robot's own media wizard on any screen (Creative setup, Crop, Text, Trim, Enhancements, Creative generation, media library) | 5edc0e7cca0a/04-08, 1125a87e6b51/02-11, b47bc815bb3c/05_wizard_media | `creative_wizard_steps_2026_10_01.html` · image_creative_setup, image_crop, image_text, image_enhancements, video_trim, video_text, video_creative_generation, pick_media_library | `tests/test_foreign_windows_are_closed_or_named.py` | owned (step row / media surface): never closed, no Sentry event, no capture | pass |
+| The wizard's Replace picker (Replace media for Stories, Status, Reels...) | 2e98a75f252d/07_wizard_crop_replace | `crop_replace_in_wizard_picker_2026_10_03.html` · in_wizard_picker | `tests/test_foreign_windows_are_closed_or_named.py` | owned (step row / media surface): never closed, no Sentry event, no capture | pass |
+| Media wizard stuck on Crop and its Replace picker | 232d398471bd/01_wizard_crop_replace, 232d398471bd/04_ad_creative_upload | `wizard_crop_story_missing_2026_10_04.html` · crop_busy, in_wizard_picker | `tests/test_foreign_windows_are_closed_or_named.py` | owned (step row / media surface): never closed, no Sentry event, no capture | pass |
+| Media wizard on its Media step (picker loaded) | 232d398471bd/00_wizard_media | `wizard_media_picker_2026_10_04.html` · loaded | `tests/test_foreign_windows_are_closed_or_named.py` | owned (step row / media surface): never closed, no Sentry event, no capture | pass |
 | Unknown dialogs over the Doc21 editor (unsafe-only buttons; safe Not now; footer-surface Close inside; Publish footer of the single-screen editor) | synthetic | `foreign_windows_doc21_2026_10_04.html` · editor_footer | `tests/test_foreign_windows_are_closed_or_named.py` | Publish/Confirm/Continue and footers never pressed; captured + Sentry + 'Unknown Meta window blocked the step: <title>'; a safe Not now closes it and the step is retried once | pass |
 
 ## Seen but not cut

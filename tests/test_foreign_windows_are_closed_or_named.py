@@ -497,3 +497,76 @@ def test_the_robots_own_media_wizard_is_owned_and_untouched(page, rows, reported
     assert page.evaluate("window.clicked") == [] and page.evaluate("window.keys") == []
     assert reported["sentry"] == [] and reported["captures"] == []
     assert _fw_rows(rows) == []
+
+
+# ── ревью PR #575, R2-3: «свои» виды по тексту не забирают окна реестра ──────
+
+_NAMING_LOADING = """
+<div role="dialog" id="naming" class="modal"><div><span>Ad set name</span></div>
+  <div>Name your ad sets consistently by creating a template based on your naming convention.</div>
+  <div>Loading...</div>
+  <div><div role="button">Add component</div></div>
+  <div><div role="button">Cancel</div><div role="button" aria-disabled="true">Save</div></div></div>
+"""
+
+
+def test_a_naming_dialog_with_a_loading_line_keeps_its_kind_and_is_cancelled(page, rows, reported):
+    page.set_content(_doc21(_NAMING_LOADING))
+    (w,) = fw.scan(page)
+    assert (w.kind, w.owned) == ("naming_template", False)
+    closed = fw.before_step(page, "conversion_location_open")
+    assert closed and closed[0].startswith("naming_template:")
+    assert page.locator("#naming").count() == 0
+    assert "Cancel" in page.evaluate("window.clicked") and "Save" not in page.evaluate("window.clicked")
+
+
+def test_a_notifications_panel_with_a_loading_line_is_still_closed(page, rows):
+    page.set_content(_doc21())
+    page.evaluate("openPanel(); document.getElementById('fbNotificationsFlyout')"
+                  ".insertAdjacentHTML('beforeend', '<div>Loading...</div>')")
+    (w,) = fw.scan(page)
+    assert (w.kind, w.owned) == ("notifications", False)
+    assert fw.before_step(page, "adset") == ["notifications:escape"]
+
+
+def test_create_new_campaigns_in_a_survey_does_not_make_it_the_objective_window(page, rows):
+    survey = """
+    <div role="dialog" class="modal" id="survey"><div role="heading">How satisfied are you with Ads Manager?</div>
+      <div>Create new campaigns faster with our latest tools.</div>
+      <div role="button">Submit</div><div role="button">Not now</div></div>
+    """
+    page.set_content(_doc21(survey))
+    (w,) = fw.scan(page)
+    assert (w.kind, w.owned) == ("survey", False)
+    assert fw.before_step(page, "adset") == ["survey:own_close"]
+    assert page.evaluate("window.clicked") == ["Not now"]
+
+
+def test_the_wizard_structure_wins_over_registry_text_inside_it(page, rows, reported):
+    """Устройство мастера проверяется ПЕРВЫМ: текст опроса внутри мастера его не делает опросом."""
+    block = fragment(FIXTURES / "creative_wizard_steps_2026_10_01.html", "image_text")
+    page.set_content(_doc21(
+        "<div style='position:fixed;top:0;left:0;width:1400px;height:900px;overflow:auto;"
+        f"background:#fff;z-index:80'>{block}</div>"))
+    page.evaluate("document.querySelectorAll('[role=dialog]').forEach((d) => d.insertAdjacentHTML("
+                  "'afterbegin', '<div>How satisfied are you with the new creative tools?</div>'))")
+    wins = fw.scan(page)
+    assert wins and all(w.kind == "creative_wizard" and w.owned for w in wins)
+    assert fw.before_step(page, "ad_copy") == []
+    assert page.evaluate("window.clicked") == [] and page.evaluate("window.keys") == []
+
+
+def test_close_safely_refuses_an_owned_window(page):
+    page.set_content(_doc21(_UNSAFE_ONLY.replace("Publish", "Close")))
+    (w,) = fw.scan(page)
+    w.owned = True
+    assert fw._close_safely(page, w) == ""
+    assert page.evaluate("window.clicked") == [] and page.evaluate("window.keys") == []
+    assert page.locator("#unknown").count() == 1
+
+
+def test_the_hidden_panel_is_skipped_by_its_class_even_without_metas_css(page):
+    """Без правила `.toggleTargetClosed{display:none}` панель видна — пропускает её сама проверка класса."""
+    page.set_content(_doc21().replace(".toggleTargetClosed { display: none }", ""))
+    assert page.is_visible("#fbNotificationsFlyout")
+    assert fw.scan(page) == []

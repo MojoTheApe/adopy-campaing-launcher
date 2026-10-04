@@ -14,7 +14,7 @@ Conversion location ПОСЛЕ единственной проверки `_cance
 * **реестр** `KNOWN` — вид окна, как его узнать и чем закрыть: своим Close /
   Cancel / крестиком или Escape (а для окон, которые уже умел закрывать
   `meta_dom`, — тем же обработчиком, без изменений: ad blocker, экскурсия,
-  шаблон имени, черновики, Site links);
+  шаблон имени, черновики);
 * **«свои» окна** (`OWNED`) — мастер креатива, окно цели, загрузка: их
   открывает сам шаг, сторож их не трогает никогда;
 * **незнакомое окно** — снимок страницы, строка `foreign_window`, событие
@@ -99,8 +99,10 @@ KNOWN: tuple[WindowKind, ...] = (
     # «Publish draft items?» / «Review draft items» / «Discard drafts?» — Cancel/Close.
     WindowKind("draft_review", text=r"Publish draft|Review draft|draft items|Discard drafts",
                closer="dismiss_publish_draft_dialog"),
-    # 21.09: «Creative setup → Extensions / Site links» — Cancel, не Save.
-    WindowKind("site_links", text=r"^(Site links|Extensions)\b", closer="_cancel_site_links_modal"),
+    # «Creative setup → Extensions / Site links» (21.09) в реестре нет: это
+    # экран мастера креатива, его узнаёт проверка устройства (строка шагов) и
+    # считает «своим»; закрывает его по-прежнему шаг текста объявления
+    # (`meta_dom._cancel_site_links_modal`, Cancel, не Save). Ревью PR #575.
     # Опросы Meta: только Close / Not now / Dismiss / × — никогда «Submit».
     WindowKind("survey", text=r"how (satisfied|likely|easy|would you rate)|rate your experience"
                r"|take (a|our) (quick |short )?survey|share your feedback|give (us )?feedback"
@@ -111,9 +113,13 @@ KNOWN: tuple[WindowKind, ...] = (
     WindowKind("creative_wizard", text=r"Set up your creative|Creative setup|Media library"
                r"|Replace media for|Select media",
                owned=True, note="the ad's media wizard, owned by the media steps"),
-    WindowKind("objective", text=r"Choose a campaign objective|Create new campaign|campaign objective",
+    # Ревью PR #575 (R2-3): только по ЗАГОЛОВКУ окна, не по любой строке в
+    # нём, и после видов реестра — иначе строка «Loading...» в диалоге
+    # шаблона имени делала его «своим», и ACL-1572 возвращался молча.
+    WindowKind("objective", title=r"^(Choose a campaign objective|Create new campaign)\b",
                owned=True, note="the Create window, owned by the campaign-open step"),
-    WindowKind("loading", text=r"^Loading", owned=True, note="Meta's loading modal; waited for, not closed"),
+    WindowKind("loading", title=r"^Loading\b", owned=True,
+               note="Meta's loading modal; waited for, not closed"),
 )
 
 #: Тост сети — не диалог: строка текста со своим «×» (снимок 20583efb8c41).
@@ -197,7 +203,9 @@ _SCAN_JS = r"""
     const wizard = (steps.size >= 3) || (steps.size >= 2 && !!d.querySelector('[aria-current="step"]'))
       || mediaSurface || /^(Replace media for|Select media)/i.test(title);
     if (wizard) { kind = 'creative_wizard'; owned = true; }
-    const ordered = [...kinds.filter((k) => k.owned), ...kinds.filter((k) => !k.owned)];
+    // Порядок (ревью PR #575, R2-3): устройство мастера (выше) — первым;
+    // затем виды реестра; «свои» виды по тексту/заголовку — последними.
+    const ordered = [...kinds.filter((k) => !k.owned), ...kinds.filter((k) => k.owned)];
     for (const k of (owned ? [] : ordered)) {
       const tOk = k.title ? new RegExp(k.title, 'i').test(title) : null;
       const xOk = k.text ? (new RegExp(k.text, 'i').test(text) || leaves.some((l) => new RegExp(k.text, 'i').test(l))) : null;
