@@ -4371,7 +4371,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "565": {
+        "actor": "Worker-C1565R",
+        "session": "run_c1565r_1004",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "codex/acl-1565-ci-reuse",
+        "worktree": "C:\\acl-1565-ci-reuse",
+        "id": "ec4a548a316242859501b97805511204",
+        "issue": 565,
+        "state": "implementing",
+        "started_at": "2026-10-04T12:33:20+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -6054,6 +6067,17 @@
         },
         "pr": 563,
         "queued_at": "2026-10-04T12:18:12+00:00"
+      },
+      "565": {
+        "implementers": [
+          {
+            "actor": "Worker-C1565R",
+            "session": "run_c1565r_1004"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-C1565R",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -6484,6 +6508,10 @@
       "Reviewer-R1559Q": {
         "session": "rev_r1559q_1004",
         "role": "Reviewer"
+      },
+      "Worker-C1565R": {
+        "session": "run_c1565r_1004",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -11020,6 +11048,13 @@
         "pr": 561,
         "lane": "1a8946678895491cb84cf2893cb5e70b",
         "actor": "Reviewer-R1559Q"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-04T12:33:20+00:00",
+        "issue": 565,
+        "claim": "ec4a548a316242859501b97805511204",
+        "actor": "Worker-C1565R"
       }
     ],
     "policy": {
