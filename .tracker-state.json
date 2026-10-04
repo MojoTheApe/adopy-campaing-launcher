@@ -5906,7 +5906,7 @@
             "session": "run_w1554t_1004"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1554T",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -5924,7 +5924,8 @@
           "report": "# ACL-1554 handoff (Worker-W1554T, run_w1554t_1004)\n\nPR #556 (base stage), head 14d35c9e24b57a17d5b17bbc2634638ab2c1472d, branch codex/acl-1554-telemetry-attach.\n\n## What changed\n- src/fb_ads_rpa/run_summary.py: `telemetry_attachment(run_id)` builds `run_telemetry_<run_id>.jsonl` from only that run's journal rows. Each row goes through scrub_diag and `_EXTRA_SCRUB` (which now also scrubs user names in paths). Cap 256 KB: the oldest rows are dropped and a `telemetry_truncated` marker is added. Statuses: ok/truncated/missing/error. It runs in `_deliver` (the background thread).\n- src/acl_sentry.py: `report_run_summary(summary, *, attachment=None)` and `_attach_telemetry`, which checks the cap again and accepts only .jsonl. If the attach fails, the context is set to \"error\" and the event is still sent.\n- tests/test_run_summary_telemetry_attachment.py (12 tests), docs/system/CHANGELOG.md entry.\n\n## Tests run (local, affected files only)\n- test_run_summary_telemetry_attachment, test_run_summary_reaches_sentry, test_sentry_page_snapshot, test_run_summaries_from_sentry: 125 passed\n- test_the_scrubber_catches_every_secret_shape, test_tests_do_not_write_live_telemetry: 53 passed\n- scripts/acl_scan_secrets.py: clean\n\n## Quota\nSENTRY_AUTH_TOKEN gets 403 on stats_v2 and on the org endpoint for adopy-7t, so the quota is not checked. This is noted in the PR.\n\n## Open\n- Live acceptance checkbox, left unchecked.\n- Quota check needs a token with org stats access."
         },
         "pr": 556,
-        "queued_at": "2026-10-04T10:18:28+00:00"
+        "queued_at": "2026-10-04T10:18:28+00:00",
+        "reviewer": "Reviewer-R1554V"
       }
     },
     "actors": {
@@ -6339,6 +6340,10 @@
       "Worker-W1554T": {
         "session": "run_w1554t_1004",
         "role": "Worker"
+      },
+      "Reviewer-R1554V": {
+        "session": "rev_r1554v_1004",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -7480,10 +7485,20 @@
       433,
       526,
       532,
-      529,
-      554
+      529
     ],
-    "review": null,
+    "review": {
+      "id": "cb5de40fb3204250b045458ad3abffa4",
+      "pr": 556,
+      "issues": [
+        554
+      ],
+      "actor": "Reviewer-R1554V",
+      "session": "rev_r1554v_1004",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-04T10:47:31+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -10779,6 +10794,13 @@
         "prs": [
           555
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-04T10:47:31+00:00",
+        "pr": 556,
+        "lane": "cb5de40fb3204250b045458ad3abffa4",
+        "actor": "Reviewer-R1554V"
       }
     ],
     "policy": {
