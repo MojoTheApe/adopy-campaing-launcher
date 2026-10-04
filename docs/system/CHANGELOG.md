@@ -23,11 +23,15 @@ push. The stage→main promotion alone took about an hour of a task's delivery t
 - Always in full: `workflow_dispatch`, release tags, a missing token, any API or git
   error, no matching run. In practice the PR and the stage push (a squash makes a new
   tree) run in full; the stage→main PR and the main push reuse the stage push run.
-- Workflows get `actions: read` (the job's own `GITHUB_TOKEN`, no new secrets).
+- Only the scope/classify job gets `actions: read` (the job's own `GITHUB_TOKEN`, no new
+  secrets); the Windows jobs that run PR code keep `contents: read`. The reused run URL
+  must be exactly `https://github.com/<repo>/actions/runs/<id>` of that run before it is
+  written to `GITHUB_OUTPUT` or the summary.
 - Release gate: `verify_promotion` in `scripts/acl_publish_release.py` now checks the
   jobs of the main run named in the tag. If its test matrix did not run, it accepts the
   release only with a provable full run of the release tree (same rules as above),
-  otherwise it refuses. Tracker `check-merge` reads only the aggregate required checks
+  otherwise it refuses (an API error while proving counts as no proof). It prints which
+  run really tested the tree, so the release log links it. Tracker `check-merge` reads only the aggregate required checks
   and `verify-stage` reads no checks, so the pinned Tracker needed no change.
 
 ## Media step: wait for Meta's media picker to load, name the stall — ACL-1559

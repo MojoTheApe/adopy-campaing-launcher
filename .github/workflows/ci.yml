@@ -21,9 +21,6 @@ on:
 
 permissions:
   contents: read
-  # ACL-1565: the scope job reads earlier runs of this workflow to reuse a full
-  # green run of the exact same git tree (scripts/acl_ci_reuse.py).
-  actions: read
 
 concurrency:
   group: acl-ci-${{ github.event.pull_request.number || github.ref }}
@@ -34,6 +31,11 @@ jobs:
     name: Classify and check project tooling
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # ACL-1565: only this job reads earlier runs of the workflow, to reuse a full
+    # green run of the exact same git tree (scripts/acl_ci_reuse.py).
+    permissions:
+      contents: read
+      actions: read
     outputs:
       windows: ${{ steps.scope.outputs.windows }}
       reused_from: ${{ steps.scope.outputs.reused_from }}

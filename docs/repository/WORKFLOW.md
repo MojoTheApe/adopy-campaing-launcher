@@ -125,7 +125,8 @@ Required admission names: `descriptor`, `tracker-link`, `ACL verification`,
 `Installer verification`. Aggregates require all applicable underlying jobs; a
 metadata-only PR may skip Windows only through the existing closed classification.
 Stage/main pushes and manual runs execute the full checks, except that a push or PR
-whose exact git tree already passed a full push run of the same workflow reuses it
+whose exact git tree already passed a full push or workflow_dispatch run of the same
+workflow reuses it
 (ACL-1565, `scripts/acl_ci_reuse.py`; the run summary links the reused run). Manual
 runs and any doubt about that proof run in full. The private pinned Master
 Action's access must be verified in a real consumer run. Draft descriptor success

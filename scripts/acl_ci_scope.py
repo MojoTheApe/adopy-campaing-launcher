@@ -62,6 +62,9 @@ def decide(root, event_name, event, *, ref="", workflow="ci.yml", repo="", api=N
         return dict(result, reuse="lookup-failed-run-full")
     if not proof:
         return dict(result, reuse="no-proven-full-run")
+    # Ссылка уходит в GITHUB_OUTPUT и сводку: только точный URL запуска этого репозитория.
+    if not reuse.valid_run_url(proof.get("run_url"), repo, proof.get("run_id")):
+        return dict(result, reuse="invalid-run-url-run-full")
     return {"windows": False, "reason": "reused-green-full-run-of-same-tree",
             "reused_from": proof["run_url"], "tree": proof["tree"], "commit": proof["commit"]}
 

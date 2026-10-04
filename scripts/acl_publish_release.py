@@ -25,7 +25,7 @@ def _api(path: str) -> dict:
     return json.loads(_gh("api", path))
 
 
-def verify_promotion(tag: str, source_repo: str) -> str:
+def verify_promotion(tag: str, source_repo: str, report=print) -> str:
     if not re.fullmatch(r"acl-release-[0-9A-Za-z][0-9A-Za-z._-]{0,63}", tag):
         raise ValueError("Expected an acl-release-* tag")
     ref = f"refs/tags/{tag}"
@@ -48,11 +48,22 @@ def verify_promotion(tag: str, source_repo: str) -> str:
     # ACL-1565: main-прогон может переиспользовать полный зелёный прогон того же
     # дерева (тесты пропущены). Принимаем его, только если полный прогон доказуем.
     run = dict(run, id=int(match[1]))
-    if not reuse.full_jobs_passed(_api, source_repo, run, "ci.yml"):
-        tree = _git("rev-parse", f"{sha}^{{tree}}")
-        if not reuse.find_reuse(Path.cwd(), _api, source_repo, "ci.yml", tree, exclude_run_id=run["id"]):
-            raise ValueError("Recorded main CI neither ran the full test matrix nor reused "
-                             "a provable successful full run of the same tree")
+    main_url = f"https://github.com/{source_repo}/actions/runs/{run['id']}"
+    # Ошибка API на заданиях самого main-прогона не глотается: релиз останавливается.
+    if reuse.full_jobs_passed(_api, source_repo, run, "ci.yml"):
+        report(f"Full test matrix ran in the recorded main run {main_url}")
+        return sha
+    tree = _git("rev-parse", f"{sha}^{{tree}}")
+    try:
+        proof = reuse.find_reuse(Path.cwd(), _api, source_repo, "ci.yml", tree, exclude_run_id=run["id"])
+    except Exception as error:  # noqa: BLE001 — недоказанный прогон = отказ
+        raise ValueError("Recorded main CI reused a run that could not be proven: " + type(error).__name__) from error
+    if not proof:
+        raise ValueError("Recorded main CI neither ran the full test matrix nor reused "
+                         "a provable successful full run of the same tree")
+    # В журнал релиза — запуск, который на самом деле прогнал тесты этого дерева.
+    report(f"Main run {main_url} reused full results of run {proof['run_url']} "
+           f"(commit {proof['commit']}, same tree {tree})")
     return sha
 
 

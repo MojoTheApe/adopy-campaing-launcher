@@ -173,5 +173,45 @@ def test_reuse_lookup_api_error_refuses_the_release(reused_release, monkeypatch)
         return reused_release_gh(*args)
     reused_release_gh = pub._gh
     monkeypatch.setattr(pub, "_gh", broken)
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(ValueError, match="could not be proven"):
         pub.verify_promotion("acl-release-2026-10-04", "test/source")
+
+
+# --- review M1/M2 ------------------------------------------------------------------------------
+
+def test_jobs_api_error_on_the_recorded_main_run_stops_the_release(promotion, monkeypatch):
+    # A mutant that swallows this error and returns the sha must fail here.
+    ok = pub._gh
+    def broken(*args):
+        if "/jobs?" in args[1]:
+            raise subprocess.CalledProcessError(1, "gh")
+        return ok(*args)
+    monkeypatch.setattr(pub, "_gh", broken)
+    with pytest.raises(subprocess.CalledProcessError):
+        pub.verify_promotion("acl-release-2026-09-19", "test/source")
+
+
+def test_jobs_api_error_on_the_candidate_proof_run_means_no_proof(reused_release, monkeypatch):
+    ok = pub._gh
+    def broken(*args):
+        if args[1].startswith("repos/test/source/actions/runs/41/jobs"):
+            raise subprocess.CalledProcessError(1, "gh")
+        return ok(*args)
+    monkeypatch.setattr(pub, "_gh", broken)
+    with pytest.raises(ValueError, match="could not be proven"):
+        pub.verify_promotion("acl-release-2026-10-04", "test/source")
+
+
+def test_reused_release_names_the_run_that_really_tested_the_tree(reused_release):
+    lines = []
+    pub.verify_promotion("acl-release-2026-10-04", "test/source", report=lines.append)
+    tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
+    assert lines == [f"Main run https://github.com/test/source/actions/runs/42 reused full results of run "
+                     f"https://github.com/test/source/actions/runs/41 (commit {reused_release['stage']}, "
+                     f"same tree {tree})"]
+
+
+def test_full_release_names_the_main_run(promotion):
+    lines = []
+    pub.verify_promotion("acl-release-2026-09-19", "test/source", report=lines.append)
+    assert lines == ["Full test matrix ran in the recorded main run https://github.com/test/source/actions/runs/42"]

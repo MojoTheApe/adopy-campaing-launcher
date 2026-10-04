@@ -25,6 +25,8 @@ import urllib.parse
 import urllib.request
 
 SHA = re.compile(r"[0-9a-f]{40}")
+# owner/repo GitHub: без «..», пробелов и лишних сегментов пути.
+REPO = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_-][A-Za-z0-9_.-]*")
 # События, у которых проверенный коммит — это head_sha запуска.
 PROVABLE_EVENTS = {"push", "workflow_dispatch"}
 # Сколько последних коммитов с тем же деревом проверяем: продвижение даёт 2-3.
@@ -84,6 +86,15 @@ def full_jobs_passed(api, repo, run, workflow):
     return True
 
 
+def valid_run_url(url, repo, run_id=None):
+    """Только ссылка вида https://github.com/<owner>/<repo>/actions/runs/<id> этого репозитория
+    (и этого запуска, если id известен): она уходит в GITHUB_OUTPUT и в сводку."""
+    if not isinstance(url, str) or not REPO.fullmatch(repo or ""):
+        return False
+    match = re.fullmatch(r"https://github\.com/" + re.escape(repo) + r"/actions/runs/(\d+)", url)
+    return bool(match) and (run_id is None or match[1] == str(run_id))
+
+
 def proven_run(api, repo, workflow, commit, exclude_run_id=None):
     """Успешный полный запуск ``workflow`` на ``commit`` или None."""
     if not SHA.fullmatch(commit or ""):
@@ -99,7 +110,7 @@ def proven_run(api, repo, workflow, commit, exclude_run_id=None):
                 or run.get("status") != "completed" or run.get("conclusion") != "success"
                 or (run.get("repository") or {}).get("full_name") != repo
                 or (run.get("head_repository") or {}).get("full_name") != repo
-                or not str(run.get("html_url", "")).startswith("https://")):
+                or not valid_run_url(run.get("html_url"), repo, run["id"])):
             continue
         if full_jobs_passed(api, repo, run, workflow):
             return run
@@ -110,7 +121,7 @@ def find_reuse(root, api, repo, workflow, tree, exclude_run_id=None):
     """Ссылка на полный зелёный прогон того же дерева или None.
 
     Исключения API/git не глотаются здесь: вызывающий решает «полный прогон»."""
-    if workflow not in REQUIRED_JOBS or not re.fullmatch(r"[\w.-]+/[\w.-]+", repo or ""):
+    if workflow not in REQUIRED_JOBS or not REPO.fullmatch(repo or ""):
         return None
     for commit in same_tree_commits(root, tree):
         # Повторная проверка дерева кандидата отдельной командой git.

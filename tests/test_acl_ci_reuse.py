@@ -166,6 +166,11 @@ def test_a_green_run_of_a_different_tree_is_never_reused(promotion):
     ("status", "in_progress"), ("path", ".github/workflows/release.yml"),
     ("repository", {"full_name": "someone/fork"}), ("head_repository", {"full_name": "someone/fork"}),
     ("head_sha", LIE), ("html_url", "http://example.invalid/run"),
+    ("id", "37197547291"),                                                  # R11: id must be an int
+    ("html_url", "https://github.com/someone/fork/actions/runs/37197547291"),
+    ("html_url", "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/1"),  # another run
+    ("html_url", "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/37197547291\nwindows=true"),
+    ("html_url", None),
 ])
 def test_untrustworthy_candidate_run_is_refused(promotion, field, value):
     api, push = green_api(promotion["stage"])
@@ -180,6 +185,7 @@ def test_untrustworthy_candidate_run_is_refused(promotion, field, value):
     lambda jobs: jobs[2].update(conclusion="cancelled"),
     lambda jobs: jobs[3].update(conclusion="failure"),
     lambda jobs: jobs[4].update(status="in_progress", conclusion=None),
+    lambda jobs: jobs[4].update(status="queued"),                         # R15: success but not completed
     lambda jobs: jobs[-1].update(conclusion="skipped"),                   # ACL verification
     lambda jobs: jobs[1].update(run_id=1),                                # a job of another run
     lambda jobs: jobs.append(dict(jobs[1], conclusion="failure")),        # duplicate name failed
@@ -266,8 +272,11 @@ def test_required_installer_jobs_match_the_real_workflow():
 @pytest.mark.parametrize("name,flag", [("ci.yml", "ci.yml"), ("windows-installer.yml", "windows-installer.yml")])
 def test_scope_jobs_read_actions_and_publish_the_reused_run(name, flag):
     data = workflow(name)
-    assert data["permissions"] == {"contents": "read", "actions": "read"}
+    # Только задание scope читает Actions; остальные (код PR на Windows) — нет.
+    assert data["permissions"] == {"contents": "read"}
     job = data["jobs"]["scope"]
+    assert job["permissions"] == {"contents": "read", "actions": "read"}
+    assert all("permissions" not in other for key, other in data["jobs"].items() if key != "scope")
     assert job["outputs"]["reused_from"] == "${{ steps.scope.outputs.reused_from }}"
     step = next(s for s in job["steps"] if s.get("id") == "scope")
     assert step["run"] == f"python3 scripts/acl_ci_scope.py --workflow {flag}"
@@ -275,3 +284,55 @@ def test_scope_jobs_read_actions_and_publish_the_reused_run(name, flag):
     # Release tags and manual runs never get here as a reuse (classify keeps them full).
     triggers = data[True]
     assert "tags" not in (triggers.get("push") or {})
+
+
+# --- review L1/L3: the remaining guards ------------------------------------------------------------
+
+@pytest.mark.parametrize("commit", ["", None, "abc", "F" * 40, "g" * 40, "a" * 39])
+def test_candidate_commit_must_be_an_exact_sha_before_any_api_call(commit):
+    api = FakeApi(error=AssertionError("must not be called"))
+    assert reuse.proven_run(api, REPO, "ci.yml", commit) is None and api.calls == []
+
+
+@pytest.mark.parametrize("repo", ["", None, "owner", "owner/repo/extra", "own er/repo", "owner/re po", "../x"])
+def test_malformed_repository_is_never_queried(promotion, repo):
+    api = FakeApi(error=AssertionError("must not be called"))
+    assert reuse.find_reuse(promotion["root"], api, repo, "ci.yml", promotion["tree"]) is None
+    assert api.calls == []
+
+
+@pytest.mark.parametrize("tree", ["", None, "abc", "z" * 40, "A" * 40])
+def test_tree_must_be_an_exact_sha(promotion, tree):
+    with pytest.raises(ValueError, match="exact tree sha"):
+        reuse.same_tree_commits(promotion["root"], tree)
+
+
+@pytest.mark.parametrize("url,ok", [
+    ("https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/37197547291", True),
+    ("https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/37197547291/", False),
+    ("https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/37197547291\n", False),
+    ("https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/123", False),
+    ("https://github.com.evil/MojoTheApe/adopy-campaing-launcher/actions/runs/37197547291", False),
+    ("http://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/37197547291", False),
+    ("https://github.com/MojoTheApe/other/actions/runs/37197547291", False),
+])
+def test_run_url_must_be_this_repositorys_exact_run(url, ok):
+    assert reuse.valid_run_url(url, REPO, 37197547291) is ok
+
+
+def test_an_invalid_reused_url_is_never_written_to_outputs(promotion, monkeypatch, tmp_path):
+    # Даже если find_reuse вернул доказательство, кривой URL не уходит в GITHUB_OUTPUT.
+    bad = "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/1\nwindows=false"
+    monkeypatch.setattr(scope.reuse, "find_reuse", lambda *a, **k: {
+        "run_id": 1, "run_url": bad, "commit": promotion["stage"], "tree": promotion["tree"]})
+    real_decide = scope.decide
+    monkeypatch.setattr(scope.reuse, "github_api", lambda token, base: FakeApi())
+    monkeypatch.setattr(scope, "decide", lambda root, *a, **k: real_decide(promotion["root"], *a, **k))
+    for key, value in {"GITHUB_TOKEN": "test-token", "GITHUB_REPOSITORY": REPO, "GITHUB_RUN_ID": "999",
+                       "GITHUB_REF": "refs/heads/main", "GITHUB_OUTPUT": str(tmp_path / "o"),
+                       "GITHUB_STEP_SUMMARY": str(tmp_path / "s")}.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr("sys.argv", ["acl_ci_scope.py", "--event-name", "push", "--event-file", str(tmp_path / "x")])
+    scope.main()
+    assert (tmp_path / "o").read_text(encoding="utf-8") == "windows=true\nreused_from=\n"
+    assert "runs/1" not in (tmp_path / "s").read_text(encoding="utf-8")
