@@ -2396,28 +2396,42 @@ def _scroll_website_option_into_view(page: Page) -> bool:
 
 
 def _turn_off_advantage_plus_leads(page: Page) -> bool:
-    """Turn off 'Advantage+ leads campaign' if it is On — can block manual location picks."""
+    """Turn off 'Advantage+ leads campaign' if it is On — can block manual location picks.
+
+    Only a switch inside the label's own row counts. ACL-1544 (03.10,
+    Facebook_1443): the old search started from the first element whose text
+    merely contained the label, climbed five levels from the Campaign score
+    panel and clicked the first checked switch inside, which was the editor
+    header's **Campaign toggle** ("In draft"). `flipped_switch: true` meant
+    "turned the campaign off" (b3a333ff43ab, cb854b07857b: toggle on before
+    the step, off after). On the single-screen editor the leads row has no
+    switch at all: it is a button that opens a checklist.
+    """
+    # ACL-1544: ищем саму подпись (весь текст элемента = подпись) и
+    # поднимаемся только в пределах её строки — не шире 80 символов текста.
+    # Переключатель с чужим aria-label («Campaign toggle») — не наш.
     script = """
     () => {
       const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-      for (const el of document.querySelectorAll('*')) {
-        if (!el.offsetParent) continue;
-        const t = norm(el.textContent || '').slice(0, 80);
-        if (!t.includes('advantage+ leads') && !t.includes('advantage+ lead')) continue;
-        // Find nearby toggle/switch
-        let node = el;
-        for (let i = 0; i < 6 && node; i++, node = node.parentElement) {
-          const sw = node.querySelector(
-            '[role=switch], input[type=checkbox], [aria-checked]'
-          );
-          if (!sw || !sw.offsetParent) continue;
-          const checked = sw.getAttribute('aria-checked') === 'true'
-            || sw.checked === true;
-          if (checked) {
-            sw.click();
-            return true;
-          }
-          return false; // already off
+      const visible = (e) => {
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+      const labels = [...document.querySelectorAll('*')].filter(el =>
+        /^advantage\\+ leads?( campaign)?$/.test(norm(el.textContent)) && visible(el));
+      for (const label of labels) {
+        let node = label;
+        for (let i = 0; i < 4 && node; i++, node = node.parentElement) {
+          if (norm(node.textContent).length > 80) break;
+          const sw = node.querySelector('[role=switch], input[type=checkbox], [aria-checked]');
+          if (!sw) continue;
+          if (!visible(sw)) break;
+          const named = norm(sw.getAttribute('aria-label'));
+          if (named && !named.includes('advantage')) break;
+          const checked = sw.getAttribute('aria-checked') === 'true' || sw.checked === true;
+          if (!checked) return false; // already off
+          sw.click();
+          return true;
         }
       }
       return false;
@@ -2439,6 +2453,11 @@ def _turn_off_advantage_plus_leads(page: Page) -> bool:
             row = label.locator("xpath=ancestor::*[self::div or self::section][1]")
             sw = row.get_by_role("switch").first
             if sw.is_visible(timeout=800):
+                # ACL-1544: тумблер кампании и прочие подписанные чужим
+                # именем переключатели не трогаем.
+                named = (sw.get_attribute("aria-label") or "").strip().lower()
+                if named and "advantage" not in named:
+                    continue
                 checked = sw.get_attribute("aria-checked")
                 if checked == "true":
                     sw.click(timeout=3000, force=True)
@@ -5685,8 +5704,19 @@ def run_recorded_campaign_flow(
     # made this worse (scrolled past Age entirely), so the working
     # hypothesis is layout-order, not Age's own mechanics: fill Age first,
     # while the page is still in its simpler pre-Locations-expansion state.
+    # ACL-1544: выключение Advantage+ до возраста — своим вызовом, чтобы его
+    # исход дошёл до soft_fails. «on» здесь — карточка в рекомендованном
+    # режиме без контролов (Further limit не применился): возраст, пол и
+    # языки не встанут условиями. `unconfirmed` не блокирует — итог после
+    # возраста проверяет `verify_audience_advantage_off`.
     try:
-        if not fill_audience_age(page, age_min, age_max):
+        if _ensure_manual_audience(page) is True:
+            _shot("fail_advantage_plus_off")
+            soft_fails.append("advantage_plus_off:recommended setup, no audience controls")
+    except Exception as exc:
+        soft_fails.append(f"advantage_plus_off:{str(exc)[:60]}")
+    try:
+        if not fill_audience_age(page, age_min, age_max, ensure_manual=False):
             _shot("fail_audience_age")
             soft_fails.append("audience_age")
         else:
@@ -18447,8 +18477,9 @@ def _advantage_plus_audience_on(page: Page) -> bool | None:
 def _ensure_manual_audience(page: Page) -> bool | None:
     """Leave Advantage+ audience mode before touching the age controls.
 
-    Returns the state AFTER: False = manual, True = still Advantage+, None =
-    could not tell. Records its own telemetry row either way, so a run where
+    Returns the state AFTER: False = manual (badge off, or the card in
+    controls mode, ACL-1544), True = still Advantage+ recommended setup (no
+    audience controls on the card), None = could not tell (`unconfirmed`). Records its own telemetry row either way, so a run where
     the switch-off did not hold can be told from one where it was never
     attempted — until 2026-09-16 nothing recorded either.
 
@@ -18469,6 +18500,19 @@ def _ensure_manual_audience(page: Page) -> bool | None:
                           note="already_off" if before is False else "badge_not_found",
                           diag={"badge": badge})
         return before
+    # ACL-1544 (03.10, Facebook_1443): до возраста бейдж «on» — норма. Его
+    # снимает только жёсткий возраст (итог — `verify_audience_advantage_off`);
+    # 417 записей из 417 этого шага были still_on, хотя итог после возраста
+    # в 252 из 258 — «off». Положительный признак готовности здесь — режим
+    # контролов карточки Audience (после Further limit): живые Locations /
+    # Age / Gender / Detailed targeting / Languages и «Switch to recommended
+    # setup». Тогда не кликаем ничего.
+    mode = _audience_mode(page)
+    if mode["mode"] == "controls":
+        _telemetry.record("advantage_plus_off", True, note="controls_mode",
+                          diag={"badge": badge, "mode": "controls",
+                                "controls": mode["controls"]})
+        return False
     flipped = _turn_off_advantage_plus_leads(page)
     picked = False
     if not flipped:
@@ -18487,20 +18531,116 @@ def _ensure_manual_audience(page: Page) -> bool | None:
         )
     _sleep_h(0.8)
     after = _audience_badge_on(page)
-    if after is True:
-        # Разметка до и после клика снималась на каждом прогоне (ACL-1313 —
-        # теперь только с FB_RPA_SHOT_ALL=1); отказу снимок остаётся.
-        try:
-            from src.fb_ads_rpa import page_capture as _pc
+    diag = {"flipped_switch": flipped, "picked_off": picked,
+            "badge": badge, "badge_after": {True: "on", False: "off"}.get(after)}
+    if after is not True:
+        _telemetry.record("advantage_plus_off", True, note="switched", diag=diag)
+        return after
+    # ACL-1544: бейдж всё ещё «on» — решает режим карточки. Контролы на
+    # месте — готово; рекомендованный режим (строка Further limit, ни
+    # контролов, ни «Switch to recommended setup») — по-настоящему «on»;
+    # ни того ни другого не прочитать — не гадаем, `unconfirmed`.
+    mode = _audience_mode(page)
+    diag["mode"] = mode["mode"]
+    diag["controls"] = mode["controls"]
+    if mode["mode"] == "controls":
+        _telemetry.record("advantage_plus_off", True, note="controls_mode", diag=diag)
+        return False
+    # Разметка до и после клика снималась на каждом прогоне (ACL-1313 —
+    # теперь только с FB_RPA_SHOT_ALL=1); отказу снимок остаётся.
+    try:
+        from src.fb_ads_rpa import page_capture as _pc
 
-            _pc.capture(page, step="advantage_plus_still_on")
+        _pc.capture(page, step="advantage_plus_still_on" if mode["mode"] else "advantage_plus_unconfirmed")
+    except Exception:
+        pass
+    if mode["mode"] == "recommended":
+        _telemetry.record("advantage_plus_off", False, note="still_on", diag=diag)
+        return True
+    _telemetry.record("advantage_plus_off", None, note="unconfirmed", diag=diag)
+    return None
+
+
+#: ACL-1544: подписи контролов карточки Audience в режиме контролов
+#: (снимки 0e86c42023da/00, 04509d5eed75/00).
+_AUDIENCE_CONTROL_LABELS = ("Locations", "Age", "Gender", "Detailed targeting", "Languages")
+
+_AUDIENCE_MODE_JS = r"""
+(labels) => {
+  const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+  const visible = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const h = document.getElementById('advantage-state-audience-section-header');
+  if (!h) return null;
+  // Карточка — самый широкий предок заголовка, в котором ещё нет другой
+  // карточки: её бейджа (`advantage-state-placement-section-header`) или
+  // заголовка третьего уровня с именем другой карточки. Внутри Audience свои
+  // заголовки третьего уровня («Controls», «Suggest an audience») — не
+  // граница; строки карточки на 1443 — заголовки четвёртого уровня
+  // (Locations … Languages, b3a333ff43ab/00), и они тоже не граница.
+  const others = /^(placements|budget|budget & schedule|conversion|ad set name|dynamic creative|live video ad|campaign score|campaign details|special ad categories|ad name|identity|ad setup|ad creative|destination|languages|tracking)$/i;
+  let card = h;
+  for (let el = h.parentElement; el && el !== document.body; el = el.parentElement) {
+    const badge = [...el.querySelectorAll('[id^="advantage-state-"]')]
+      .some(x => x.id !== 'advantage-state-audience-section-header');
+    const heading = [...el.querySelectorAll('[role=heading][aria-level="3"]')]
+      .some(x => others.test(norm(x.textContent)));
+    if (badge || heading) break;
+    card = el;
+  }
+  // Контролы — по видимым подписям. Признаки режима — по всему телу
+  // карточки, и по свёрнутому (`hidden`) тоже: на 1443 свёрнутая карточка в
+  // рекомендованном режиме показывает сводку с теми же подписями Locations …
+  // Languages, а строка «Further limit» лежит в скрытом теле (b3a333ff43ab/00).
+  const leaves = new Set();
+  const anyLeaves = new Set();
+  for (const e of card.querySelectorAll('*')) {
+    if (e.children.length || e.closest('[role=dialog]')) continue;
+    const t = norm(e.textContent);
+    if (!t) continue;
+    anyLeaves.add(t);
+    if (visible(e)) leaves.add(t);
+  }
+  return {
+    controls: labels.filter(l => leaves.has(l)),
+    switch_back: anyLeaves.has('Switch to recommended setup'),
+    further_limit: [...anyLeaves].some(t => /^further limit the reach of your ads$/i.test(t)),
+  };
+}
+"""
+
+
+def _audience_mode(page: Page) -> dict:
+    """Режим карточки Audience: `controls`, `recommended` или None (ACL-1544).
+
+    `controls` — тело карточки показывает контролы аудитории (не меньше двух
+    из Locations/Age/Gender/Detailed targeting/Languages) и ссылку «Switch to
+    recommended setup», а строки «Further limit the reach of your ads» нет.
+    Так выглядит карточка после шага Further limit, даже при бейдже
+    «Advantage+ on» (бейдж снимает только жёсткий возраст).
+    `recommended` — строка Further limit на месте, «Switch to recommended
+    setup» нет: аудитория в рекомендованном режиме, по-настоящему «on».
+    None — карточки нет или признаки противоречат друг другу.
+    """
+    got = None
+    for root in _roots(page):
+        try:
+            got = root.evaluate(_AUDIENCE_MODE_JS, list(_AUDIENCE_CONTROL_LABELS))
         except Exception:
-            pass
-    _telemetry.record("advantage_plus_off", after is not True,
-                      note="switched" if after is not True else "still_on",
-                      diag={"flipped_switch": flipped, "picked_off": picked,
-                            "badge": badge, "badge_after": {True: "on", False: "off"}.get(after)})
-    return after
+            continue
+        if got is not None:
+            break
+    if not got:
+        return {"mode": None, "controls": [], "switch_back": False, "further_limit": False}
+    controls = list(got.get("controls") or [])
+    switch_back = bool(got.get("switch_back"))
+    further = bool(got.get("further_limit"))
+    mode = None
+    if switch_back and not further and len(controls) >= 2:
+        mode = "controls"
+    elif further and not switch_back:
+        mode = "recommended"
+    return {"mode": mode, "controls": controls, "switch_back": switch_back,
+            "further_limit": further}
 
 
 def _audience_badge_on(page: Page) -> bool | None:
@@ -18952,7 +19092,8 @@ def _mark_age_trigger(root, value: str) -> bool:
         time.sleep(0.3)
 
 
-def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
+def fill_audience_age(page: Page, age_min: int, age_max: int, *,
+                      ensure_manual: bool = True) -> bool:
     """Set the audience age range, and only say so when the page shows it.
 
     Three parts since 2026-09-16, each answering a question the old single
@@ -18976,7 +19117,10 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     # Gating on it refused a settable age in every run of the evening, where
     # the old code had set it in three runs of four. The read-back below is
     # the real check of whether the age took.
-    _ensure_manual_audience(page)
+    # ACL-1544: `ensure_manual=False` — выключение уже сделал и записал
+    # вызывающий (поток новой записи кладёт его «on» в soft_fails).
+    if ensure_manual:
+        _ensure_manual_audience(page)
     _cancel_dynamic_creative_dialog(page)
     if not _fill_audience_age_controls(page, age_min, age_max):
         return False

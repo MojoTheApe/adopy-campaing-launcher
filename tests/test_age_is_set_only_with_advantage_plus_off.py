@@ -234,7 +234,10 @@ def test_a_switch_that_stays_on_does_not_block_settable_age_controls(page, tmp_p
     assert meta_dom.fill_audience_age(page, 35, 65) is True
     assert touched == [(35, 65)]
     rows = [r for r in _rows(tmp_path) if r["step"] == "advantage_plus_off"]
-    assert rows and rows[-1]["note"] == "still_on", "попытка выключить всё равно записана"
+    # ACL-1544: на синтетической странице нет ни контролов, ни строки Further
+    # limit — режим карточки не прочитать, и шаг не гадает: `unconfirmed`.
+    assert rows and rows[-1]["note"] == "unconfirmed", "попытка выключить всё равно записана"
+    assert rows[-1]["ok"] is None
 
 
 def test_clicked_35_is_not_the_same_as_shows_35(page, tmp_path, monkeypatch):
