@@ -1,5 +1,40 @@
 # System history
 
+## Single-screen editor: "Instant form (suggested)" goes back to Website — ACL-1543
+
+Live runs on Facebook_1443 on 2026-10-03 (04509d5eed75 ad 1, 0e86c42023da ad 2): one ad
+per campaign stopped on `ad_destination` with `url_field_not_focused` (Website selected,
+Browser add-ons on "Instant form (suggested)", Lead Ads Terms card, Lead Gen error #100,
+`section_shown: false`), and the campaign ended "do not publish" without saying why.
+
+- Root cause: Meta virtualises off-screen sections of the single-screen editor
+  (`display: none !important` inside a `data-virtualized` wrapper). The robot removed
+  the `display: none` once at the start of the step, but while the section was off
+  screen Meta hid it again, so the Website URL field had no box and never took focus;
+  the hidden Browser add-ons could not be read either (`browser_addon_repair`:
+  `none_checked: null`).
+- The destination step now scrolls the section's wrapper on screen first, then turns
+  Instant form off - the "Instant form" opt-in switch when it is on, then Browser
+  add-ons "None" - and only then fills and verifies the Website URL (None is set again
+  after the URL, as before). Telemetry `destination_instant_form_off` records the
+  controls used and the before/after destination state (type, add-on, opt-in; no URL).
+- The robot never accepts Lead Ads Terms and never creates an instant form: the press
+  guard refuses any press inside the Instant form add-on card and on "View terms",
+  "Accept", "Create form" (`click_refused`, note `lead_terms`).
+- If Instant form stays on, the reason is `instant_form_not_switched` (the field-level
+  reason stays in diag as `field_why`), the ad row reads
+  `<tag>_destination:instant_form_not_switched - <ad>: <sentence>` and stays blocking;
+  the dashboard problem is titled "Ad destination - Instant form".
+- Review round 2: an "Instant form" opt-in switch that stays on is not success - the
+  final check, its retry and the classic sweep's read-back refuse it
+  (`instant_form_not_switched`, `field_why: instant_form_switch_on`). The press guard
+  checks the Instant form card with `closest()` (live "View terms" sits 16 levels below
+  it) and tests both the text and the aria-label of a button. The switch is looked up
+  inside the destination section only. The new step `destination_instant_form_off` has
+  its build-progress rule (ad stage).
+- Bench: `ad_destination_instant_form_2026_10_03.html` (scrubbed 04509d5eed75 capture),
+  `tests/test_bench_destination_instant_form.py`.
+
 ## Crop step: no false "Square changed", the in-wizard Replace picker left through its Save — ACL-1533
 
 Live runs on Facebook_1443 on 2026-10-03 (d54d68303e57, f35a2b31f7d8, 2e98a75f252d,
