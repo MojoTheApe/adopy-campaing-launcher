@@ -69,11 +69,13 @@ _EXTRA_SCRUB = (
     (re.compile(r"https?://[^\s\"'<>]*(?:facebook|fb)\.com[^\s\"'<>]*", re.I), "<ads-manager-url>"),
     (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "<email>"),
     (re.compile(r"\bact_\d+\b"), "act_<hidden>"),
-    # ACL-1554: имя пользователя Windows в пути (`C:\Users\ivan.petrov\…`,
-    # и короткое 8.3 `EVGENI~1`) — по нему опознаётся человек. Сам путь
-    # остаётся: «AppData\Local\ACL\…» полезен для разбора.
-    (re.compile(r"(?i)(\b[A-Z]:[\\/]+(?:Users|Documents and Settings)[\\/]+|(?<![\w.])/(?:Users|home)/)"
-                r"[^\\/\s\"'<>]+"), r"\1<user>"),
+    # ACL-1554: имя пользователя в пути (`C:\Users\ivan.petrov\…`, короткое
+    # 8.3 `EVGENI~1`, UNC `\\srv\Users\…`, `/Users/…`, `/home/…`) — по нему
+    # опознаётся человек. Имя берётся до следующего разделителя пути, а не до
+    # пробела: локальная учётка Windows часто «Имя Фамилия» (ревью PR #556,
+    # F1). Сам путь остаётся: «AppData\Local\ACL\…» полезен для разбора.
+    (re.compile(r"(?i)([\\/](?:Users|Documents and Settings|home)[\\/]+)"
+                r"[^\\/\"'<>\r\n]+"), r"\1<user>"),
 )
 
 #: ACL-1554: строки телеметрии прогона — вложением к итогу.
@@ -192,7 +194,19 @@ def _scrub_strings(value: Any) -> Any:
     """Адреса, почта, `act_`-номера и пути с именем — в каждой строке, на любой
     глубине. Без обрезки `MAX_TEXT`: это журнал, его потолок — весь файл."""
     if isinstance(value, dict):
-        return {key: _scrub_strings(item) for key, item in value.items()}
+        # Ключи тоже (ревью PR #556, F3): диагностика бывает словарём «номер
+        # кабинета → состояние». Только во вложении — общий `scrub_diag` не
+        # трогаем. Совпавшие после вычистки ключи не затирают друг друга.
+        out_dict: dict[Any, Any] = {}
+        for key, item in value.items():
+            clean_key = _scrub_strings(key) if isinstance(key, str) else key
+            if clean_key in out_dict:
+                n = 2
+                while f"{clean_key}#{n}" in out_dict:
+                    n += 1
+                clean_key = f"{clean_key}#{n}"
+            out_dict[clean_key] = _scrub_strings(item)
+        return out_dict
     if isinstance(value, (list, tuple)):
         return [_scrub_strings(item) for item in value]
     if isinstance(value, str):
@@ -298,6 +312,15 @@ def _deliver(summary: dict[str, Any]) -> str:
     # пути прогона. Любой отказ — итог уходит без вложения, со статусом.
     attachment: dict[str, Any] | None = None
     status = TELEMETRY_ERROR
+    try:
+        from src import acl_sentry
+
+        # Sentry выключен (нет адреса) — итог никуда не уйдёт, журнал не
+        # читаем зря (ревью PR #556, F5).
+        if not acl_sentry.dsn():
+            return ""
+    except Exception:
+        return ""
     try:
         attachment, status = telemetry_attachment(str(summary.get("run_id") or ""))
     except Exception:

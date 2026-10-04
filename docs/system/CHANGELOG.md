@@ -10,9 +10,13 @@ The "Run summary" event (ACL-1447) now carries that run's own step log.
   `run_id`. Lines without the run id are not parsed; an unparsable line is skipped.
 - Each row goes through `run_telemetry.scrub_diag` and then the summary's own scrub
   (`_EXTRA_SCRUB`: Ads Manager URLs, emails, `act_` ids) on every string at any depth.
-  New in `_EXTRA_SCRUB`: the user name in a path (`C:\Users\<name>`, `/Users/<name>`,
-  `/home/<name>`) becomes `<user>`, so the summary text is scrubbed of it too. `run_id`
-  stays as is; `job` loses its dashes, like in `acl_sentry.report_step_failure`.
+  New in `_EXTRA_SCRUB`: the user name in a path (`C:\Users\<name>`, UNC
+  `\\srv\Users\<name>`, `/Users/<name>`, `/home/<name>`) becomes `<user>`, up to the next
+  path separator, so a name with a space ("Ivan Petrov") goes too; the summary text is
+  scrubbed of it as well. In the attachment only, dict keys are scrubbed too (account
+  ids, `act_` ids, emails as keys); colliding keys get a `#2` suffix. `run_id` stays as
+  is; `job` loses its dashes, like in `acl_sentry.report_step_failure`.
+- With no Sentry DSN the journal is not read at all.
 - Cap `run_summary.TELEMETRY_MAX_BYTES` = 256 KB. Over it the oldest rows are dropped
   and a final row `{"step": "telemetry_truncated", "dropped_rows": N, ...}` says how many.
   `acl_sentry._attach_telemetry` checks the cap again (before_send does not see

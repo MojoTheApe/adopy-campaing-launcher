@@ -299,3 +299,102 @@ def test_the_background_send_attaches_too(sentry, journal):
     worker.join(10)
     assert _summary_event(sentry)["contexts"]["run_summary"]["telemetry_attachment"] == "ok"
     assert len(sentry.attachments) == 1
+
+
+# ── ревью PR #556 ─────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("path, name", [
+    (r"C:\Users\Ivan Petrov\AppData\Local\ACL\shot.png", "Petrov"),        # F1: пробел в имени
+    ("C:/Users/Ivan Petrov/AppData/Local/ACL/shot.png", "Petrov"),
+    (r"\srv\Users\ivan.petrov\share\run.log", "ivan.petrov"),             # UNC
+    ("/Users/ivan.petrov/Library/ACL/run.log", "ivan.petrov"),             # M3b: macOS
+    ("/home/ivan.petrov/acl/run.log", "ivan.petrov"),                      # M3b: Linux
+])
+def test_user_names_in_every_path_form_do_not_survive(sentry, journal, path, name):
+    _write(journal, [_row(RUN, "ad_copy", False, note=f"saved to {path} ok",
+                          diag={"file": path, "files": [path]})])
+    _send()
+    (att,) = sentry.attachments
+    text = att["bytes"].decode("utf-8")
+    assert name not in text and "Ivan" not in text, text
+    (row,) = _lines(att)
+    assert "<user>" in row["diag"]["file"]
+    assert row["diag"]["file"].endswith(path[-8:])  # хвост пути остаётся
+    assert row["note"].endswith(" ok")
+
+
+def test_ids_and_emails_in_dict_keys_do_not_survive(sentry, journal):
+    _write(journal, [_row(RUN, "account_status", True, diag={
+        "accounts": {ACT_ID: "active", SHORT_ACT: "disabled", EMAIL: "admin",
+                     BIZ_ID: "biz", "plain": "kept"},
+    })])
+    _send()
+    (att,) = sentry.attachments
+    text = att["bytes"].decode("utf-8")
+    for secret in (ACT_ID, SHORT_ACT, EMAIL, BIZ_ID):
+        assert secret not in text, secret
+    (row,) = _lines(att)
+    accounts = row["diag"]["accounts"]
+    # Два номера стали `<digits>` — оба значения на месте, ни одно не затёрто.
+    assert sorted(accounts.values()) == sorted(["active", "disabled", "admin", "biz", "kept"])
+    assert accounts["plain"] == "kept"
+
+
+def test_another_runs_row_that_mentions_this_run_is_not_attached(sentry, journal):
+    _write(journal, [
+        _row(OTHER, "retry_of", True, note=f"retrying \"{RUN}\"", diag={"previous": RUN}),
+        _row(RUN, "ad_copy", True),
+    ])
+    _send()
+    (att,) = sentry.attachments
+    rows = _lines(att)
+    assert [r["step"] for r in rows] == ["ad_copy"]
+
+
+def test_sentry_off_does_not_read_the_journal(journal, monkeypatch):
+    monkeypatch.setenv("ACL_SENTRY_DSN", "")
+    monkeypatch.setenv("ACL_SENTRY_RUN_SUMMARY", "1")
+    monkeypatch.setattr(acl_sentry, "_started", False)
+    _write(journal, [_row(RUN, "ad_copy", True)])
+    reads = []
+    monkeypatch.setattr(run_summary, "telemetry_attachment",
+                        lambda *a, **k: reads.append(a) or (None, "ok"))
+    monkeypatch.setattr(run_summary, "_run_rows", lambda *a, **k: reads.append(a) or [])
+    assert _send() is None
+    assert run_summary._deliver({"run_id": RUN, "result": "clean"}) == ""
+    assert reads == []
+
+
+class _Scope:
+    def __init__(self):
+        self.attachments: list[dict] = []
+
+    def add_attachment(self, **kw):
+        self.attachments.append(kw)
+
+
+def test_acl_sentry_refuses_an_attachment_over_the_cap(monkeypatch):
+    monkeypatch.setattr(run_summary, "TELEMETRY_MAX_BYTES", 100)
+    scope = _Scope()
+    big = {"bytes": b"x" * 101, "filename": f"run_telemetry_{RUN}.jsonl"}
+    assert acl_sentry._attach_telemetry(scope, big) is False
+    fits = {"bytes": b"x" * 100, "filename": f"run_telemetry_{RUN}.jsonl"}
+    assert acl_sentry._attach_telemetry(scope, fits) is True
+    assert [a["bytes"] for a in scope.attachments] == [b"x" * 100]
+
+
+def test_an_oversized_attachment_reaching_sentry_is_dropped_as_error(sentry):
+    big = {"bytes": b"{}\n" * (run_summary.TELEMETRY_MAX_BYTES // 3 + 1),
+           "filename": f"run_telemetry_{RUN}.jsonl"}
+    acl_sentry.report_run_summary({"result": "clean", "run_id": RUN,
+                                   "telemetry_attachment": "ok"}, attachment=big)
+    assert _summary_event(sentry)["contexts"]["run_summary"]["telemetry_attachment"] == "error"
+    assert sentry.attachments == []
+
+
+@pytest.mark.parametrize("filename", ["shot.png", "run_telemetry.jsonl.png", "page.html", ""])
+def test_acl_sentry_attaches_only_jsonl(filename):
+    scope = _Scope()
+    att = {"bytes": b"{}\n", "filename": filename, "content_type": "application/x-ndjson"}
+    assert acl_sentry._attach_telemetry(scope, att) is False
+    assert scope.attachments == []
