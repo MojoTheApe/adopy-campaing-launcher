@@ -18573,28 +18573,37 @@ _AUDIENCE_MODE_JS = r"""
   if (!h) return null;
   // Карточка — самый широкий предок заголовка, в котором ещё нет другой
   // карточки: её бейджа (`advantage-state-placement-section-header`) или
-  // заголовка с именем другой карточки. Внутри Audience свои заголовки
-  // третьего уровня («Controls», «Suggest an audience») — не граница.
+  // заголовка третьего уровня с именем другой карточки. Внутри Audience свои
+  // заголовки третьего уровня («Controls», «Suggest an audience») — не
+  // граница; строки карточки на 1443 — заголовки четвёртого уровня
+  // (Locations … Languages, b3a333ff43ab/00), и они тоже не граница.
   const others = /^(placements|budget|budget & schedule|conversion|ad set name|dynamic creative|live video ad|campaign score|campaign details|special ad categories|ad name|identity|ad setup|ad creative|destination|languages|tracking)$/i;
   let card = h;
   for (let el = h.parentElement; el && el !== document.body; el = el.parentElement) {
     const badge = [...el.querySelectorAll('[id^="advantage-state-"]')]
       .some(x => x.id !== 'advantage-state-audience-section-header');
-    const heading = [...el.querySelectorAll('[role=heading]')]
+    const heading = [...el.querySelectorAll('[role=heading][aria-level="3"]')]
       .some(x => others.test(norm(x.textContent)));
     if (badge || heading) break;
     card = el;
   }
+  // Контролы — по видимым подписям. Признаки режима — по всему телу
+  // карточки, и по свёрнутому (`hidden`) тоже: на 1443 свёрнутая карточка в
+  // рекомендованном режиме показывает сводку с теми же подписями Locations …
+  // Languages, а строка «Further limit» лежит в скрытом теле (b3a333ff43ab/00).
   const leaves = new Set();
+  const anyLeaves = new Set();
   for (const e of card.querySelectorAll('*')) {
-    if (e.children.length || !visible(e) || e.closest('[role=dialog]')) continue;
+    if (e.children.length || e.closest('[role=dialog]')) continue;
     const t = norm(e.textContent);
-    if (t) leaves.add(t);
+    if (!t) continue;
+    anyLeaves.add(t);
+    if (visible(e)) leaves.add(t);
   }
   return {
     controls: labels.filter(l => leaves.has(l)),
-    switch_back: leaves.has('Switch to recommended setup'),
-    further_limit: [...leaves].some(t => /^further limit the reach of your ads$/i.test(t)),
+    switch_back: anyLeaves.has('Switch to recommended setup'),
+    further_limit: [...anyLeaves].some(t => /^further limit the reach of your ads$/i.test(t)),
   };
 }
 """

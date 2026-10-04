@@ -133,6 +133,31 @@ def test_a_badge_without_the_card_body_has_no_mode(page):
     assert md._audience_mode(page)["mode"] is None
 
 
+def test_the_1443_recommended_card_reads_recommended(page):
+    """b3a333ff43ab/00 (29.09, 1443): свёрнутая карточка в рекомендованном
+    режиме. Сводка показывает те же подписи, что и режим контролов (Locations,
+    Age, Gender, Detailed targeting, Languages — заголовки четвёртого уровня
+    внутри карточки), строка «Further limit» — в скрытом теле."""
+    page.set_content(_editor(fragment(FIXTURE, "card_recommended_collapsed")))
+    assert md._audience_badge_on(page) is True
+    mode = md._audience_mode(page)
+    assert {"Locations", "Age", "Gender", "Detailed targeting", "Languages"} <= set(mode["controls"])
+    assert mode["mode"] == "recommended"
+    assert mode["further_limit"] is True and mode["switch_back"] is False
+
+
+def test_the_same_labels_without_switch_back_are_never_controls(page):
+    """Единственная защита от ложного «off»: без «Switch to recommended setup»
+    подписи контролов ничего не доказывают. Тело карточки убрано — остаётся
+    только сводка с пятью подписями."""
+    page.set_content(_editor(fragment(FIXTURE, "card_recommended_collapsed")))
+    page.evaluate("() => document.querySelectorAll('main [hidden]').forEach(e => e.remove())")
+    mode = md._audience_mode(page)
+    assert {"Locations", "Age", "Gender", "Detailed targeting", "Languages"} <= set(mode["controls"])
+    assert mode["further_limit"] is False and mode["switch_back"] is False
+    assert mode["mode"] is None
+
+
 # ── шаг до возраста ───────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("name", ["card_run_a", "card_run_b"])
@@ -173,6 +198,28 @@ def test_a_switch_in_the_leads_row_itself_is_still_turned_off(page):
     assert page.evaluate("window.toggled") == []
 
 
+def test_a_foreign_named_switch_in_the_leads_row_is_not_pressed(page):
+    """Строка подписи короткая, но переключатель в ней — «Campaign toggle»."""
+    page.set_content(
+        "<div><div>Advantage+ leads campaign</div>"
+        "<input type='checkbox' role='switch' aria-label='Campaign toggle' aria-checked='true' checked></div>")
+    page.evaluate(_SPY)
+    assert md._turn_off_advantage_plus_leads(page) is False
+    assert page.evaluate("window.toggled") == []
+
+
+def test_a_switch_beyond_the_label_row_is_not_pressed(page):
+    """Безымянный переключатель в трёх уровнях от подписи, но за пределами её
+    строки (текст предка длиннее 80 символов) — не наш."""
+    page.set_content(
+        "<div><div>Campaign score: you're using our recommended setup for budget, audience "
+        "and placements.</div><div><span>Advantage+ leads campaign</span></div>"
+        "<div id='other' role='switch' aria-checked='true' "
+        "onclick=\"this.setAttribute('aria-checked','false')\">x</div></div>")
+    assert md._turn_off_advantage_plus_leads(page) is False
+    assert page.get_attribute("#other", "aria-checked") == "true"
+
+
 def test_really_still_on_is_a_failure_with_its_mode(page, tmp_path, monkeypatch):
     """Рекомендованный режим (строка Further limit на месте) — настоящий «on»."""
     calls = _no_fallback_clicks(monkeypatch)
@@ -182,6 +229,16 @@ def test_really_still_on_is_a_failure_with_its_mode(page, tmp_path, monkeypatch)
     row = _rows(tmp_path)[-1]
     assert row["ok"] is False and row["note"] == "still_on"
     assert row["diag"]["mode"] == "recommended"
+
+
+def test_the_1443_recommended_card_is_still_on_and_fails(page, tmp_path, monkeypatch):
+    calls = _no_fallback_clicks(monkeypatch)
+    page.set_content(_editor(fragment(FIXTURE, "card_recommended_collapsed")))
+    assert md._ensure_manual_audience(page) is True
+    assert calls[:1] == ["switch"]
+    row = _rows(tmp_path)[-1]
+    assert row["ok"] is False and row["note"] == "still_on"
+    assert row["diag"]["mode"] == "recommended" and row["diag"]["badge_after"] == "on"
 
 
 def test_an_unreadable_card_is_unconfirmed_not_failed(page, tmp_path, monkeypatch):
@@ -226,8 +283,16 @@ def test_the_recorded_flow_blocks_on_still_on_before_the_age():
     assert ensure and age and min(ensure) < min(n.lineno for n in age)
     assert all(any(k.arg == "ensure_manual" and isinstance(k.value, ast.Constant)
                    and k.value.value is False for k in n.keywords) for n in age)
-    body = ast.get_source_segment(src, fn)
-    assert '"advantage_plus_off:' in body or "'advantage_plus_off:" in body
+    # Ветка `if _ensure_manual_audience(page) is True:` кладёт ровно эту строку.
+    guard = [n for n in ast.walk(fn) if isinstance(n, ast.If)
+             and isinstance(n.test, ast.Compare) and isinstance(n.test.left, ast.Call)
+             and getattr(n.test.left.func, "id", "") == "_ensure_manual_audience"]
+    assert len(guard) == 1
+    appended = [c.args[0].value for st in guard[0].body for c in ast.walk(st)
+                if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                and c.func.attr == "append" and getattr(c.func.value, "id", "") == "soft_fails"
+                and c.args and isinstance(c.args[0], ast.Constant)]
+    assert appended == ["advantage_plus_off:recommended setup, no audience controls"]
 
 
 def test_fill_audience_age_can_skip_the_switch_off(page, monkeypatch):

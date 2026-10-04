@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**20 robot steps × 88 layouts, 51 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**20 robot steps × 89 layouts, 51 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -16,7 +16,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | simple_create_layout | 2 | 2 | 0 | 0 |
 | campaign_name / budget / adset_name | 1 | 1 | 0 | 0 |
 | conversion_event | 3 | 3 | 0 | 0 |
-| advantage_plus_audience | 7 | 7 | 0 | 0 |
+| advantage_plus_audience | 8 | 8 | 0 | 0 |
 | further_limit_reach (Suggest an audience) | 5 | 5 | 0 | 0 |
 | audience_location | 4 | 4 | 0 | 0 |
 | audience_age | 4 | 4 | 0 | 0 |
@@ -85,6 +85,7 @@ Robot: turn_off_advantage_plus / _audience_badge_on / _advantage_plus_audience_o
 | Same card, second run | 04509d5eed75/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · card_run_b | `tests/test_bench_audience_controls_badge_on.py` | controls mode; advantage_plus_off ok (controls_mode), nothing clicked | pass |
 | Editor header Campaign toggle (In draft) beside the Campaign score panel | 0e86c42023da/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · campaign_toggle | `tests/test_bench_audience_controls_badge_on.py` | never taken for the Advantage+ leads switch | pass |
 | Campaign score row 'Advantage+ leads campaign · On' (button, no switch) | 0e86c42023da/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · leads_row | `tests/test_bench_audience_controls_badge_on.py` | no switch in the row, nothing clicked | pass |
+| Single-screen editor (1443): collapsed Audience card in recommended setup (summary shows Locations/Age/Gender/Detailed targeting/Languages, Further limit row in the hidden body) | b3a333ff43ab/00_stall_campaign_name, 393e372f86b3/00, cb854b07857b/00, b47bc815bb3c/02, f35a2b31f7d8/00 | `audience_controls_badge_on_2026_10_03.html` · card_recommended_collapsed | `tests/test_bench_audience_controls_badge_on.py` | reads recommended, never controls; advantage_plus_off still_on (blocking) | pass |
 
 ## further_limit_reach (Suggest an audience)
 
