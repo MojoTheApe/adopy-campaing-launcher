@@ -7288,12 +7288,12 @@ function amapStatusTail(account, s) {
   return out;
 }
 
-/* ACL-1518: окно профиля, открытое руками, чтение переоткрывает путём
-   Publish — ждёт тишины ввода на машине. Пока ждёт, строка аккаунта говорит
-   об этом; не дождалось — простой текст вместо «failed · retry». */
+/* ACL-1518/1562: окно профиля, открытое руками, чтение переоткрывает путём
+   Publish — сразу, без условий. Пока переоткрывает, строка аккаунта говорит
+   почему окно закрылось; не вышло — простой текст вместо «failed · retry». */
 /* Код отказа — строкой прямо в функциях (`'open_by_hand'`), а не общей
    переменной: тестовые стенды вырезают функции по одной (ревью PR #519). */
-/* Чьи строки сейчас показывают ожидание — чтобы не искать его в каждой. */
+/* Чьи строки сейчас показывают переоткрытие — чтобы не искать его в каждой. */
 var amapHandWaitShown = {};
 function amapHandWait(account, note) {
   if (!note && !amapHandWaitShown[account]) return;
@@ -7308,8 +7308,8 @@ function amapHandWait(account, note) {
       cell.appendChild(old);
     }
     old.textContent = note;
-    old.title = 'The profile window was opened by hand. ACL closes and reopens it with automation '
-      + 'once the computer has been idle for a minute. Leave the mouse and keyboard alone.';
+    old.title = 'The profile window was opened by hand. ACL closes it through Multilogin '
+      + '(nothing is killed) and reopens it with automation.';
   });
 }
 
@@ -8578,8 +8578,8 @@ function amapOpenProfile(btn) {
   btn.textContent = 'opening…';
   var body = new FormData();
   body.append('account', account);
-  /* ACL-1518: окно, открытое руками, сервер переоткрывает после тишины ввода
-     (до двух минут) — пока запрос ждёт, строка говорит, чего ждём. */
+  /* ACL-1518/1562: окно, открытое руками, сервер переоткрывает сразу — пока
+     запрос идёт, строка говорит, почему окно закрылось. */
   var per = amapPeriod();
   var watch = (per.from && per.span !== 'all') ? setInterval(function () {
     fetch('/account-spend/status?account=' + encodeURIComponent(account)
@@ -12780,8 +12780,8 @@ window.cbPublish = function(form) {
       : '<br>')
     + '<br>'
     + '<span style="color:var(--muted);font-size:0.85rem">The RPA attaches to the Multilogin profile through MLX automation '
-    + '(no need to open the profile first; if it is open by hand, close its window first — '
-    + 'the robot will not close it for you).</span><br>'
+    + '(no need to open the profile first; a window opened by hand is closed through Multilogin '
+    + 'and reopened with automation).</span><br>'
     // Заблокированный экран останавливает страницу так же, как свёрнутое
     // окно, только сильнее: система уходит на защищённый рабочий стол, и
     // загрузка встаёт. 10 сентября так вышло 42 минуты на файл, который

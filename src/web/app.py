@@ -3481,8 +3481,8 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     # пакета, которого нет в requirements.txt
     ok, message = await asyncio.to_thread(account_spend.open_for_automation, account)
     # ACL-1518: окно, открытое руками, теперь переоткрывается путём Publish.
-    # Не дождались тишины / окно на переднем плане — это не конфликт, а
-    # простой ответ строке, как у чтения: не 409.
+    # ACL-1562: сразу, без условий. Мягкая остановка не закрыла окно — это
+    # не конфликт, а простой ответ строке, как у чтения: не 409.
     if not ok and getattr(message, "code", "") == account_spend.HAND_OPEN_CODE:
         return JSONResponse({"ok": False, "message": str(message), "code": account_spend.HAND_OPEN_CODE})
     return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
@@ -3558,8 +3558,9 @@ async def account_spend_status(
             "ok": True,
             "reading": reading.to_dict(),
             "split": country_split.get_split(account.strip(), date_from, date_to),
-            # ACL-1518: ждём тишины ввода, чтобы переоткрыть окно, открытое
-            # руками (чтение спенда, стран или «open profile»). Пусто — не ждём.
+            # ACL-1518/1562: строка «окно открыто руками — переоткрываем», пока
+            # оно переоткрывается (чтение спенда, стран или «open profile»).
+            # Пусто — не переоткрываем. Ключ прежний, его читает страница.
             "waiting": account_spend.hand_wait_note(account.strip()),
         }
         # ACL-1288: решение о странах едет вместе с готовым чтением — по нему

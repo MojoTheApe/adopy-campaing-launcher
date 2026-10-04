@@ -1960,12 +1960,12 @@ def _open_by_hand(profile_id: str, account_label: str, where: str,
                   verdict: "hand_window.Verdict | None" = None) -> profile_trouble.ProfileStop:
     """Профиль открыт руками — не останавливаем, говорим человеку (ACL-1320).
 
-    ACL-1388: сюда же — когда закрыть окно самому было небезопасно
-    (`verdict` — почему); текст остановки для человека прежний.
+    ACL-1562: сюда же — когда переоткрытие выключено на машине или мягкая
+    остановка через MLX API окно не закрыла (`verdict`/`where` — почему).
     """
     why = f" ({verdict.reason})" if verdict is not None else ""
     log.warning(
-        "%s: profile %s is open by hand (no automation port) - not stopping it%s; "
+        "%s: profile %s is open by hand (no automation port) - not reopened%s; "
         "the job stops with %s (%s)", account_label, profile_id, why, profile_trouble.OPEN_BY_HAND, where)
     return profile_trouble.ProfileStop(profile_trouble.OPEN_BY_HAND, where)
 
@@ -1974,30 +1974,35 @@ def _open_by_hand(profile_id: str, account_label: str, where: str,
 #: MLX API, действительно закроется, прежде чем поднимать профиль заново.
 HAND_WINDOW_EXIT_WAIT_S = 20
 
-#: Строка для человека в панели задания, когда робот сам закрыл окно.
-HAND_WINDOW_NOTICE = "Closed the hand-opened window of {account} and reopened it for the robot"
+#: ACL-1562: строка для человека в панели задания (и на строке аккаунта
+#: карты), когда робот закрывает окно, открытое руками, и поднимает профиль
+#: заново. Говорится ДО остановки: человек видит, почему окно закрылось.
+HAND_WINDOW_NOTICE = "The {account} window was opened by hand — reopening it with automation"
 
-#: ACL-1427, ревью PR #428 (F3): хвост причины остановки, когда ожидание
-#: тишины ввода прервал Stop задания.
-HAND_WINDOW_WAIT_STOPPED = "the job was stopped while waiting for the computer to be idle"
+#: ACL-1562: хвост причины остановки, когда мягкая остановка через MLX API не
+#: закрыла окно. Окно остаётся как было — ничего не убиваем.
+HAND_WINDOW_STOP_FAILED = "Multilogin did not close the hand-opened window"
 
-#: ACL-1427: строка в панели, пока робот ждёт тишины ввода на машине.
-HAND_WINDOW_WAIT_NOTICE = ("Waiting for the computer to be idle to reopen {account}'s hand-opened "
-                           "window — don't use the mouse or keyboard for a minute")
+
+def _stop_clock() -> float:
+    """Часы для длительности мягкой остановки (тесты подменяют)."""
+    return time.monotonic()
 
 
 def _record_hand_window(entry: AccountMapEntry, *, ok: bool, where: str, note: str,
                         verdict: "hand_window.Verdict", error: str = "",
-                        wait: "hand_window.Wait | None" = None) -> None:
+                        stop_s: float | None = None) -> None:
     """Строка телеметрии `profile_hand_window` и крошка Sentry (ACL-1388).
 
-    `note` — чем кончилось (`reopened`, причина отказа, `mlx_stop_failed`…),
-    в `diag` — где и что намерили (возраст окна, тишина ввода). Без id
-    профиля, как у `_record_profile_restart`. ACL-1427: `wait` — сколько
-    ждали тишины ввода и чем кончилось (`waited_s`, `wait_outcome`).
+    `note` — чем кончилось (`reopened`, `disabled`, `mlx_stop_failed`…), в
+    `diag` — где это было. Без id профиля, как у `_record_profile_restart`.
+    ACL-1562: `stop_s` — сколько шла мягкая остановка через MLX API (вместе
+    с ожиданием, пока процессы окна закроются).
     """
     diag = {"where": where, "workspace": (getattr(entry, "multilogin_instance", "") or "A"),
-            **verdict.diag(), **(wait.diag() if wait is not None else {})}
+            **verdict.diag()}
+    if stop_s is not None:
+        diag["stop_s"] = round(stop_s, 1)
     if error:
         diag["error"] = error[:160]
     try:
@@ -2052,10 +2057,12 @@ class MultiloginAttachOnlyProvider:
     automation port) in this process is stopped and restarted through the
     MLX API when it has no debug port.
 
-    ACL-1388: when publishing, a hand-opened window IS closed (graceful MLX
-    API stop of that profile only) and reopened with automation - but only
-    when `hand_window.assess` finds it safe (running >= 15 min, not in the
-    foreground, no input on the machine for 60 s). Otherwise the stop above.
+    ACL-1388/1562: when publishing (and, with `reopen_hand_window=True`, when
+    reading spend/countries or pressing "open profile"), a hand-opened window
+    IS closed at once - graceful MLX API stop of that profile only, never a
+    kill, no other profile touched - and reopened with automation. No age,
+    foreground or input-silence conditions and no wait (ACL-1562). If the
+    graceful stop fails, the stop above with the reason; nothing is killed.
     """
 
     def __init__(self) -> None:
@@ -2177,15 +2184,15 @@ class MultiloginAttachOnlyProvider:
     def open(self, entry: AccountMapEntry, account_label: str, *,
              allow_missing_dir: bool = False, allow_restart: bool = True,
              allow_kill: bool = True, reopen_hand_window: bool | None = None,
-             on_hand_wait: "Callable[[], None] | None" = None) -> BrowserConnection:
+             on_hand_reopen: "Callable[[], None] | None" = None) -> BrowserConnection:
         """Открыть профиль для робота.
 
         ACL-1518: `reopen_hand_window=True` — окно, открытое руками, закрыть и
-        поднять заново тем же путём, что у Publish (ACL-1388/1427: те же
-        условия, ожидание тишины ввода, только мягкая остановка через MLX API),
-        даже при `allow_kill=False`. Так читают спенд и страны. `None` — как
-        прежде: решает `allow_kill`. `on_hand_wait` зовётся один раз, когда
-        начинается ожидание тишины ввода (строка на дешборде).
+        поднять заново тем же путём, что у Publish (только мягкая остановка
+        через MLX API), даже при `allow_kill=False`. Так читают спенд и
+        страны и так работает «open profile». `None` — как прежде: решает
+        `allow_kill`. ACL-1562: без условий и без ожидания; `on_hand_reopen`
+        зовётся один раз прямо перед мягкой остановкой (строка на карте).
         """
         profile_id = entry.profile_id
         if not profile_id:
@@ -2215,12 +2222,12 @@ class MultiloginAttachOnlyProvider:
         # (старый DevToolsActivePort, общий 19222). Профилем робота считаем
         # его только если порт слушает процесс именно этого профиля.
         owned = self._owns_port(udd)
-        # ACL-1388: окно, открытое руками, робот закрывает и поднимает заново
-        # сам, когда это безопасно (`hand_window.assess`), — но только при
-        # публикации. Чтение спенда (`allow_kill=False`) окно человека не
-        # закрывает никогда и останавливается, как раньше.
-        # ACL-1518: чтение просит того же явно (`reopen_hand_window=True`) —
-        # убивать ему по-прежнему нельзя, а мягкая остановка не убивает.
+        # ACL-1388/1562: окно, открытое руками, робот закрывает и поднимает
+        # заново сам и сразу — при публикации. Чтение спенда без явной просьбы
+        # (`allow_kill=False`) окно человека не закрывает и останавливается.
+        # ACL-1518: чтение и «open profile» просят того же явно
+        # (`reopen_hand_window=True`) — убивать им по-прежнему нельзя, а мягкая
+        # остановка не убивает.
         reopen_by_hand = allow_restart and (allow_kill if reopen_hand_window is None
                                             else bool(reopen_hand_window))
         if reused is not None:
@@ -2231,11 +2238,10 @@ class MultiloginAttachOnlyProvider:
         if unresponsive:
             if not owned:
                 # Порт не доказан как порт этого профиля — окно могло быть
-                # открыто руками; останавливать его вправе только когда
-                # безопасно (ACL-1388).
+                # открыто руками: тот же путь переоткрытия (ACL-1388/1562).
                 if reopen_by_hand:
                     return self._reopen_hand_opened(entry, account_label, profile_id, udd, "unowned_port",
-                                                    on_wait=on_hand_wait)
+                                                    on_reopen=on_hand_reopen)
                 raise _open_by_hand(profile_id, account_label, "unowned_port")
             # У него есть свой порт автоматизации — это профиль робота.
             _mark_robot_profile(profile_id, udd)
@@ -2253,7 +2259,7 @@ class MultiloginAttachOnlyProvider:
             if not _robot_profile(profile_id, udd):
                 if reopen_by_hand:
                     return self._reopen_hand_opened(entry, account_label, profile_id, udd,
-                                                    "no_automation_port", on_wait=on_hand_wait)
+                                                    "no_automation_port", on_reopen=on_hand_reopen)
                 raise _open_by_hand(profile_id, account_label, "no_automation_port")
             log.info(
                 "Profile %s (started by the robot earlier) has no CDP port. Will restart it via "
@@ -2270,7 +2276,7 @@ class MultiloginAttachOnlyProvider:
                 if (reopen_by_hand and stop.code == profile_trouble.OPEN_BY_HAND
                         and stop.detail == "mlx_lock"):
                     return self._reopen_hand_opened(entry, account_label, profile_id, udd, "mlx_lock",
-                                                    on_wait=on_hand_wait)
+                                                    on_reopen=on_hand_reopen)
                 raise
             return self._connect_started(started, profile_id)
         # Ревью PR #323 (F7): робот сам остановил не отвечавший профиль — не
@@ -2318,59 +2324,58 @@ class MultiloginAttachOnlyProvider:
 
     def _reopen_hand_opened(self, entry: AccountMapEntry, account_label: str, profile_id: str,
                             udd: str, where: str, *,
-                            on_wait: "Callable[[], None] | None" = None) -> BrowserConnection:
+                            on_reopen: "Callable[[], None] | None" = None) -> BrowserConnection:
         """Закрыть окно, открытое руками, и поднять профиль для робота (ACL-1388).
 
-        Только когда безопасно (`hand_window.assess`: окну не меньше 15 минут,
-        оно не на переднем плане, минуту не было ввода); иначе — прежняя
-        остановка `profile_open_by_hand`. Закрытие — только мягкая остановка
-        этого профиля через MLX API: не убиваем процесс, не трогаем другие
-        профили, простой браузер не открываем. Вход в Facebook проверяет
-        обычный путь к списку кампаний: разлогинен — `profile_logged_out`,
-        без повторов.
+        ACL-1562 (решение владельца 04.10): сразу, без условий — возраст окна,
+        передний план и тишина ввода больше не проверяются, ожидания нет.
+        Остался только машинный выключатель (`hand_window.enabled`).
 
-        ACL-1427: если не прошла только тишина ввода (щелчок Publish сам её
-        сбрасывает), ждём её до 2 минут (`hand_window.wait_until_safe`) с
-        перепроверкой всех условий и строкой в панели; Stop задания
-        прерывает ожидание. Место профиля задание при этом держит.
+        Обязательно и неизменно: закрытие — только мягкая остановка ЭТОГО
+        профиля через MLX API (`allow_kill=False`): процесс не убиваем, другие
+        профили не трогаем, простой браузер не открываем. Остановка не прошла
+        или окно не закрылось — `profile_open_by_hand` с причиной, окно
+        остаётся как было. Вход в Facebook проверяет обычный путь к списку
+        кампаний: разлогинен — `profile_logged_out`, без повторов.
         """
-        pids = _profile_pids(udd, profile_id)
-
-        def waiting(_verdict: "hand_window.Verdict") -> None:
-            _tell_job(HAND_WINDOW_WAIT_NOTICE.format(account=account_label))
-            # ACL-1518: у чтения нет панели задания — строку пишет сама строка
-            # аккаунта на карте, по этому сигналу.
-            if on_wait is not None:
-                try:
-                    on_wait()
-                except Exception:
-                    pass
-
-        wait = hand_window.wait_until_safe(pids, on_wait=waiting)
-        verdict = wait.verdict
+        verdict = hand_window.assess()
         if not verdict.safe:
-            cancelled = wait.outcome == hand_window.WAIT_CANCELLED
-            note = "cancelled" if cancelled else verdict.reason
-            _record_hand_window(entry, ok=False, where=where, note=note, verdict=verdict, wait=wait)
-            # Ревью PR #428 (F3): Stop во время ожидания — в итоге слота видно,
-            # что задание остановил человек, а не только «открыт руками».
-            raise _open_by_hand(profile_id, account_label,
-                                f"{where}; {HAND_WINDOW_WAIT_STOPPED}" if cancelled else where, verdict)
-        log.warning(
-            "%s: profile %s is open by hand, but its window is %.0f s old and the machine has been "
-            "idle for %.0f s - closing it through the MLX API and reopening it for the robot",
-            account_label, profile_id, verdict.age_s or 0.0, verdict.idle_s or 0.0)
+            _record_hand_window(entry, ok=False, where=where, note=verdict.reason, verdict=verdict)
+            raise _open_by_hand(profile_id, account_label, where, verdict)
+        pids = _profile_pids(udd, profile_id)
+        log.warning("%s: profile %s is open by hand - closing it through the MLX API and reopening "
+                    "it for the robot (%s)", account_label, profile_id, where)
+        # Строка для человека — до остановки: он видит, почему окно закрылось.
+        _tell_job(HAND_WINDOW_NOTICE.format(account=account_label))
+        if on_reopen is not None:
+            try:
+                on_reopen()
+            except Exception:
+                pass
+        started_at = _stop_clock()
         try:
             self._stop_profile(entry, account_label, profile_id, udd, allow_kill=False)
         except Exception as exc:
             # Не закрылось через API — окно человека остаётся как было.
+            detail = _exc_text(exc)
             _record_hand_window(entry, ok=False, where=where, note="mlx_stop_failed", verdict=verdict,
-                                wait=wait, error=_exc_text(exc))
-            raise _open_by_hand(profile_id, account_label, where, verdict) from exc
-        if not _hand_window_gone(udd, profile_id, pids):
+                                error=detail, stop_s=_stop_clock() - started_at)
+            raise _open_by_hand(profile_id, account_label,
+                                f"{where}; {HAND_WINDOW_STOP_FAILED}: {detail}", verdict) from exc
+        # Ревью PR #563 (F4): если процессы окна прочитать не удалось (`pids`
+        # пусто — psutil не ответил, или окно держит только замок MLX), это
+        # ожидание проходит сразу, и запуск может опередить освобождение
+        # профиля в Multilogin. Страхует пауза 3 с в `_stop_profile`; не
+        # хватило — запуск (`allow_kill=False`) кончается остановкой
+        # `profile_restart_failed` с причиной. Убийства нет ни в одной ветке.
+        gone = _hand_window_gone(udd, profile_id, pids)
+        stop_s = _stop_clock() - started_at
+        if not gone:
             _record_hand_window(entry, ok=False, where=where, note="still_running", verdict=verdict,
-                                wait=wait)
-            raise _open_by_hand(profile_id, account_label, where, verdict)
+                                stop_s=stop_s)
+            raise _open_by_hand(profile_id, account_label,
+                                f"{where}; {HAND_WINDOW_STOP_FAILED} within "
+                                f"{HAND_WINDOW_EXIT_WAIT_S} s", verdict)
         # Окно уже закрыто: не поднялось — это отказ перезапуска, профиль
         # может остаться закрытым (как у `restart_unresponsive`).
         try:
@@ -2379,10 +2384,9 @@ class MultiloginAttachOnlyProvider:
         except Exception as exc:
             detail = _exc_text(exc)
             _record_hand_window(entry, ok=False, where=where, note="restart_failed", verdict=verdict,
-                                wait=wait, error=detail)
+                                error=detail, stop_s=stop_s)
             raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
-        _record_hand_window(entry, ok=True, where=where, note="reopened", verdict=verdict, wait=wait)
-        _tell_job(HAND_WINDOW_NOTICE.format(account=account_label))
+        _record_hand_window(entry, ok=True, where=where, note="reopened", verdict=verdict, stop_s=stop_s)
         return conn
 
     def _stop_profile(self, entry: AccountMapEntry, account_label: str, profile_id: str, udd: str,
