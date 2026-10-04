@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**20 robot steps × 84 layouts, 50 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**20 robot steps × 88 layouts, 51 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -16,7 +16,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | simple_create_layout | 2 | 2 | 0 | 0 |
 | campaign_name / budget / adset_name | 1 | 1 | 0 | 0 |
 | conversion_event | 3 | 3 | 0 | 0 |
-| advantage_plus_audience | 3 | 3 | 0 | 0 |
+| advantage_plus_audience | 7 | 7 | 0 | 0 |
 | further_limit_reach (Suggest an audience) | 5 | 5 | 0 | 0 |
 | audience_location | 4 | 4 | 0 | 0 |
 | audience_age | 4 | 4 | 0 | 0 |
@@ -81,6 +81,10 @@ Robot: turn_off_advantage_plus / _audience_badge_on / _advantage_plus_audience_o
 | Audience and Placements badges both 'Advantage+ on' | b30c3b2b6be9/00_advantage_plus_before, every NN_advantage_plus_still_on of 29.09-01.10 | `audience_advantage_on_2026_09_24.html` | `tests/test_audience_advantage_badge.py` | audience reads on; switched off or a named failure | pass |
 | Audience off, Placements on | 8587f7668f86/02_languages | `audience_off_placements_on_2026_09_24.html` | `tests/test_audience_advantage_badge.py` | placements badge does not make the audience on | pass |
 | Single-screen editor Audience 'Advantage+ on' with 'Your suggestion' targeting | 3100d06ad51e/02_advantage_plus_audience | `audience_simple_create_advantage_on_2026_09_30.html` · suggestion_step | `tests/test_bench_audience_simple_create.py` | reads on (as live: the step failed with Advantage+ still on) | pass |
+| Single-screen editor (1443): Audience controls mode with the badge still on, before the age | 0e86c42023da/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · card_run_a | `tests/test_bench_audience_controls_badge_on.py` | controls mode; advantage_plus_off ok (controls_mode), nothing clicked | pass |
+| Same card, second run | 04509d5eed75/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · card_run_b | `tests/test_bench_audience_controls_badge_on.py` | controls mode; advantage_plus_off ok (controls_mode), nothing clicked | pass |
+| Editor header Campaign toggle (In draft) beside the Campaign score panel | 0e86c42023da/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · campaign_toggle | `tests/test_bench_audience_controls_badge_on.py` | never taken for the Advantage+ leads switch | pass |
+| Campaign score row 'Advantage+ leads campaign · On' (button, no switch) | 0e86c42023da/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · leads_row | `tests/test_bench_audience_controls_badge_on.py` | no switch in the row, nothing clicked | pass |
 
 ## further_limit_reach (Suggest an audience)
 
@@ -265,7 +269,7 @@ Robot: _close_banners, _account_blocked_text, _review_errors_visible
 | NN_ad_creative_reuse_pick in 5edc0e7cca0a, dc8cdd6a02ba, e23d7c6f196b, df5344da3a17, 0afc79a410c6, 64cc3d5510b2, 7afe35363ffa | the media library portal is past the 4 MB cut in every page (no 'Search media'/'Account images' in the file); the tile itself is covered by library_tile_2026_09_24 |
 | 287b6cf6beec/01_next_to_ad | classic ad set editor with Back/Next present; the press failed, not the lookup — nothing to read offline |
 | no_run/00_tree_ad_ambiguous_parents (three folders) | dashboard track (src/analysis_agent/account_spend.py), not a robot step |
-| NN_advantage_plus_still_on (first capture of almost every run) | same badge layouts as audience_advantage_on_2026_09_24 / audience_suggest_layout_2026_09_26 / audience_simple_create_advantage_on_2026_09_30 |
+| NN_advantage_plus_still_on (first capture of almost every run) | same badge layouts as audience_advantage_on_2026_09_24 / audience_suggest_layout_2026_09_26 / audience_simple_create_advantage_on_2026_09_30; the 03.10 pair is cut as audience_controls_badge_on_2026_10_03 |
 
 ## Adding a layout
 
