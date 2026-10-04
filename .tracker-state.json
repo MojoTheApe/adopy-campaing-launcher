@@ -1583,6 +1583,25 @@
           562
         ],
         "recorded_at": "2026-10-04T14:45:02+00:00"
+      },
+      "567": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1565Q",
+        "review_session": "rev_r1565q_1004",
+        "execution_lane": "3b215c2d76d64844a4ce552359944d8f",
+        "implementer": "Worker-C1565R",
+        "head_sha": "02476e61cf3e3eb691fed2b39553c96bffbb65ed",
+        "base_sha": "c280c13469e686c77ad033ea14eefa9ddd5b7d67",
+        "tree_sha": "ac201bad33b92cbed0459818266c560ac8dc53b3",
+        "tree_sha_note": "PR head tree after prep.sh merged work/stage (c280c134) and work/main (d91d580e); rebind of the approval given on be06f74a",
+        "report": "C:/acl-tools/evidence/review_567.md",
+        "main_sha": "d91d580e8169368bbdc0eb0b76a1086b4320774b",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          565
+        ],
+        "recorded_at": "2026-10-04T16:00:48+00:00"
       }
     },
     "stage": {
