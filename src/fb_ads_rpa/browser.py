@@ -2362,6 +2362,12 @@ class MultiloginAttachOnlyProvider:
                                 error=detail, stop_s=_stop_clock() - started_at)
             raise _open_by_hand(profile_id, account_label,
                                 f"{where}; {HAND_WINDOW_STOP_FAILED}: {detail}", verdict) from exc
+        # Ревью PR #563 (F4): если процессы окна прочитать не удалось (`pids`
+        # пусто — psutil не ответил, или окно держит только замок MLX), это
+        # ожидание проходит сразу, и запуск может опередить освобождение
+        # профиля в Multilogin. Страхует пауза 3 с в `_stop_profile`; не
+        # хватило — запуск (`allow_kill=False`) кончается остановкой
+        # `profile_restart_failed` с причиной. Убийства нет ни в одной ветке.
         gone = _hand_window_gone(udd, profile_id, pids)
         stop_s = _stop_clock() - started_at
         if not gone:

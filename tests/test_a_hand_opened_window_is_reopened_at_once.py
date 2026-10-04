@@ -106,9 +106,16 @@ def world(machine, monkeypatch):
     monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: w.rows.append((step, ok, kw)))
     import sentry_sdk
     monkeypatch.setattr(sentry_sdk, "add_breadcrumb", lambda **kw: w.crumbs.append(kw))
+    # Ревью PR #563 (F1): тест не читает процессы раннера. Любой обход
+    # psutil — промах подмены (на CI он ещё и спал через `br.time.sleep`).
+    import psutil
+    w.process_reads = []
+    monkeypatch.setattr(psutil, "process_iter",
+                        lambda *a, **kw: w.process_reads.append(a) or iter(()))
 
     prov = br.MultiloginAttachOnlyProvider()
     monkeypatch.setattr(prov._direct, "_try_attach_existing", lambda *a, **kw: None)
+    monkeypatch.setattr(prov._direct, "_discover_owned_debug_port", lambda udd: None)
     monkeypatch.setattr(prov._direct, "_profile_process_running",
                         lambda udd, pid: bool(w.running.get(pid)))
     monkeypatch.setattr(prov, "_connect_started",
@@ -150,6 +157,7 @@ def _no_wait(world):
     stops = sum(1 for e in world.ev if isinstance(e, tuple) and e[0] == "stop")
     assert world.br_sleeps == [3] * stops, world.br_sleeps
     assert world.m.win32_reads == [], "читали окно/ввод машины"
+    assert world.process_reads == [], "читали процессы машины"
 
 
 def _hand_row(world):
@@ -384,3 +392,58 @@ def test_publish_draft_passes_the_job_stop_to_the_report(monkeypatch):
     result = pub.publish_draft(draft)
     assert result.success is False
     assert sent == []
+
+
+def test_stop_pressed_during_the_reopen_does_not_start_the_campaign(world, monkeypatch):
+    """Ревью PR #563 (F2): ожидания больше нет, но само переоткрытие идёт
+    секунды. Stop, нажатый в это время, не должен пустить первую кампанию."""
+    from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+    import src.fb_ads_rpa.rpa_publisher as pub_mod
+
+    monkeypatch.setattr(pub_mod, "get_mlx_attach_only", lambda: True)
+    pub = RpaPublisher.__new__(RpaPublisher)
+    pub.hand_off = pub.dry_run = False
+    pub.selectors_path = None
+    pub._conn = None
+    pub._entry = None
+    pub._built_at = None
+    pub._cancelled = False
+    pub._provider = world.prov
+    monkeypatch.setattr(pub, "_resolve_entry", lambda label: _entry())
+    real_stop = world.prov._stop_profile
+
+    def stop_then_press_stop(*a, **kw):
+        real_stop(*a, **kw)
+        pub._cancelled = True   # человек нажал Stop, пока окно переоткрывалось
+
+    monkeypatch.setattr(world.prov, "_stop_profile", stop_then_press_stop)
+    flows = []
+    monkeypatch.setattr(pub, "_flow", lambda conn, label: flows.append(label) or SimpleNamespace(
+        publish_campaign=lambda draft, dry_run=False: pytest.fail("кампания пошла после Stop")))
+    draft = SimpleNamespace(status="DRAFT", errors=[], name="C1", account_label=ACCOUNT)
+    result = pub.publish_draft(draft)
+    assert result.success is False
+    assert "Stopped by the user" in (result.error or "")
+    assert flows == []
+    assert "kill" not in world.ev
+
+
+# ── Ревью PR #563 (F3): текст отказа говорит правду о причине ─────────────
+
+def test_a_read_with_reopening_switched_off_does_not_blame_multilogin(reads, monkeypatch):
+    monkeypatch.setenv(hw.ENV_ENABLED, "0")
+    out = sp.read_via_rpa(ACCOUNT, "2026-10-04", "2026-10-04")
+    assert out.state == "failed" and out.error_code == sp.HAND_OPEN_CODE
+    assert out.error == sp.HAND_OFF_MESSAGE
+    assert "Multilogin did not close" not in out.error
+    assert "switched off" in out.error
+    assert reads.ev == [], "при выключенном переоткрытии окно тронули"
+
+
+def test_the_publish_failure_texts_name_both_causes():
+    """Publish кончается «открыт руками» и при отказе мягкой остановки, и при
+    выключенном переоткрытии — текст не должен валить всё на Multilogin."""
+    src = (ROOT / "src" / "fb_ads_rpa" / "failure_policy.py").read_text(encoding="utf-8")
+    assert "Multilogin did not close it when the robot asked" not in src
+    assert "Multilogin did not close the hand-opened window, so" not in src
+    assert "switched off on this computer" in src

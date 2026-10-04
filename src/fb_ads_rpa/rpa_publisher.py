@@ -603,6 +603,15 @@ class RpaPublisher:
             self._report_profile_stop(stop, campaign_name, draft.account_label, "attach",
                                       cancelled=bool(getattr(self, "_cancelled", False)))
             return self._profile_stop_result(campaign_name, stop)
+        if getattr(self, "_cancelled", False):
+            # Ревью PR #563 (F2): Stop нажали, пока открывался браузер
+            # (переоткрытие окна, открытого руками, идёт секунды и не
+            # прерывается — ACL-1562). Кампанию не начинаем; окно остаётся
+            # открытым, отключаемся только от CDP.
+            self._reset_browser(keep_browser_open=True)
+            return RpaPublishResult(campaign_name=campaign_name, success=False,
+                                    error="Stopped by the user before the campaign started",
+                                    steps_completed=["cancelled_before_campaign"])
         flow = self._flow(conn, draft.account_label)
         try:
             result = flow.publish_campaign(draft, dry_run=self.dry_run)

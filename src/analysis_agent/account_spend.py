@@ -661,10 +661,14 @@ HAND_OPEN_CODE = "open_by_hand"
 HAND_NOTE = "The {account} window was opened by hand — reopening it with automation"
 
 #: Простой текст отказа — вместо «failed · retry» / «countries failed».
-#: После ACL-1562 так кончается только отказ мягкой остановки (или
-#: переоткрытие, выключенное на этой машине) — ничего не убивали.
+#: ACL-1562: мягкая остановка через MLX API окно не закрыла — ничего не убивали.
 HAND_OPEN_MESSAGE = ("Multilogin did not close the hand-opened profile window — "
                      "close it in Multilogin, then Read again")
+
+#: Ревью PR #563 (F3): переоткрытие выключено на этой машине
+#: (`FB_RPA_REOPEN_HAND_WINDOW=0`) — Multilogin тут ни при чём.
+HAND_OFF_MESSAGE = ("The profile is open by hand and reopening it with automation is switched "
+                    "off on this computer — close its window in Multilogin, then Read again")
 
 #: Аккаунт → строка переоткрытия. Живёт только в памяти и только пока окно
 #: переоткрывается: опрос `/account-spend/status` отдаёт её строке аккаунта.
@@ -705,6 +709,20 @@ def reopening_by_hand():
         yield
     finally:
         _REOPEN_BY_HAND.reset(token)
+
+
+def _hand_open_message(exc: BaseException) -> str:
+    """Текст отказа «открыт руками» по причине (ревью PR #563, F3).
+
+    Мягкая остановка не закрыла окно — в `detail` остановки хвост
+    `browser.HAND_WINDOW_STOP_FAILED`; иначе переоткрытие выключено на машине.
+    """
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    detail = str(getattr(exc, "detail", "") or "")
+    if rpa_browser.HAND_WINDOW_STOP_FAILED in detail:
+        return HAND_OPEN_MESSAGE
+    return HAND_OFF_MESSAGE
 
 
 def _is_open_by_hand(exc: BaseException) -> bool:
@@ -875,7 +893,7 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
                 entry, account_label, **options)
         except Exception as exc:  # noqa: BLE001
             if reopen_by_hand and _is_open_by_hand(exc):
-                raise ProfileNotAttachable(HAND_OPEN_MESSAGE, code=HAND_OPEN_CODE) from exc
+                raise ProfileNotAttachable(_hand_open_message(exc), code=HAND_OPEN_CODE) from exc
             raise ProfileNotAttachable(
                 f"{account_label}: the profile is open in MLX Desktop and could not be reopened "
                 f"with automation: {exc}"

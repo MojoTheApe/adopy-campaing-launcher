@@ -33,7 +33,12 @@ decision: drop them.
   `profile_open_by_hand` and the reason in its detail ("Multilogin did not close the
   hand-opened window: …"); nothing is killed. Reads and "open profile" answer
   "Multilogin did not close the hand-opened profile window — close it in Multilogin,
-  then Read again" (`code: "open_by_hand"`, still not 409).
+  then Read again" (`code: "open_by_hand"`, still not 409). With reopening switched off on
+  the machine they say so instead ("…reopening it with automation is switched off on this
+  computer…", `account_spend.HAND_OFF_MESSAGE`); the Publish failure texts name both causes.
+- Stop pressed while the profile is being (re)opened no longer lets the first campaign
+  start: `publish_draft` checks the job's Stop right after attaching and returns "Stopped
+  by the user before the campaign started" (window left open).
 - `/mlx-profile-open` (connecting a new profile from search) still leaves a hand-opened
   window alone: it is not an action on a connected account.
 
