@@ -31,14 +31,24 @@ jobs:
     name: Classify and check project tooling
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # ACL-1565: only this job reads earlier runs of the workflow, to reuse a full
+    # green run of the exact same git tree (scripts/acl_ci_reuse.py).
+    permissions:
+      contents: read
+      actions: read
     outputs:
       windows: ${{ steps.scope.outputs.windows }}
+      reused_from: ${{ steps.scope.outputs.reused_from }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # windows=false also when this exact tree already passed a full push run
+      # (promotion stage -> main); release tags and manual runs always run in full.
       - id: scope
-        run: python3 scripts/acl_ci_scope.py
+        run: python3 scripts/acl_ci_scope.py --workflow ci.yml
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Scan all tracked inputs
         run: python3 scripts/acl_scan_secrets.py
       - name: Install lightweight test dependencies
@@ -47,7 +57,7 @@ jobs:
         run: |
           python3 -m json.tool tracker/config.json > /dev/null
           python3 -m json.tool tracker/engine.json > /dev/null
-          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py -q
+          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py -q
   test:
     needs: scope
     if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.windows != 'false') }}
@@ -131,9 +141,11 @@ jobs:
         env:
           SCOPE: ${{ needs.scope.result }}
           WINDOWS: ${{ needs.scope.outputs.windows }}
+          REUSED: ${{ needs.scope.outputs.reused_from }}
           TESTS: ${{ needs.test.result }}
         run: |
           test "$SCOPE" = success
+          if test -n "$REUSED"; then echo "Reused full results of run $REUSED (same tree)"; fi
           if test "$WINDOWS" = false; then
             test "$TESTS" = skipped
           else
