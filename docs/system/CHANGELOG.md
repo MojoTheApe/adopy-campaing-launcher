@@ -1,5 +1,24 @@
 # System history
 
+## Screen-values probe: viewport-reset captures are opt-in — ACL-1532
+
+`scripts/probe_screen_values.py` measures whether our captures change a running
+Multilogin profile's screen values. The live run on 9943 (03.10) showed that captures
+(a) `page.screenshot` and (b) `screenshots.capture` reset the profile's viewport
+(1919x1079 to 3837x2157 device px). After review:
+
+- (a) and (b) run only with `--allow-viewport-reset` (off by default). The docstring and
+  `--help` say they are known to reset the viewport. By default the probe runs only the
+  reads plus (c) and (d), CDP `Page.captureScreenshot` with and without clip, skipped
+  when the window is minimised.
+- (c) and (d) are bounded: they run on their own async connection with a 20 s ceiling;
+  a hang aborts the capture and detaches the CDP session.
+- `--out` warns that the PNGs carry account data. A folder inside the repository is
+  refused unless it is under `output/`. The docstring example uses `output/acl1532_probe`.
+- Open tabs are printed as hosts only (Meta paths can carry ids and names). No open tabs
+  stops cleanly instead of raising IndexError.
+- `tests/test_probe_screen_values.py`: offline, with a fake page and context.
+
 ## Journal, ad-text and team-library file locks use the shared safe lock — ACL-1512
 
 ACL-1495 moved hidden accounts and the targeting registry to
