@@ -4353,7 +4353,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "562": {
+        "actor": "Worker-H1562R",
+        "session": "run_h1562r_1004",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1562-hand-reopen",
+        "worktree": "C:\\acl-1562-hand-reopen",
+        "id": "c21fd1d079804e519bdf704534956c9b",
+        "issue": 562,
+        "state": "implementing",
+        "started_at": "2026-10-04T12:06:10+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -6008,6 +6021,17 @@
         },
         "pr": 561,
         "queued_at": "2026-10-04T11:37:29+00:00"
+      },
+      "562": {
+        "implementers": [
+          {
+            "actor": "Worker-H1562R",
+            "session": "run_h1562r_1004"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-H1562R",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -6429,6 +6453,10 @@
       },
       "Worker-P1559M": {
         "session": "run_p1559m_1004",
+        "role": "Worker"
+      },
+      "Worker-H1562R": {
+        "session": "run_h1562r_1004",
         "role": "Worker"
       }
     },
@@ -10934,6 +10962,13 @@
         "prs": [
           560
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-04T12:06:10+00:00",
+        "issue": 562,
+        "claim": "c21fd1d079804e519bdf704534956c9b",
+        "actor": "Worker-H1562R"
       }
     ],
     "policy": {
