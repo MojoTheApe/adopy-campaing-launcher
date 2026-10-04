@@ -578,3 +578,115 @@ def test_the_triage_map_knows_these_kinds():
                          ("ad_creative_upload", "upload-button-missing")):
         assert (st.known_task(step, reason, rows) or {}).get("task") == "ACL-1348", (step, reason)
     assert st.known_task("ad_copy", "copy-fields-not-revealed", rows) is None
+    # ACL-1559: выбор медиа шага Media так и не догрузился.
+    got = st.known_task("ad_creative_upload", "media-picker-loading", rows)
+    assert (got or {}).get("task") == "ACL-1559", got
+    from src import acl_sentry
+    assert acl_sentry.failure_reason("ad2_creative_upload", "media_picker_loading") == "media-picker-loading"
+
+
+# ── ACL-1559: Media уже текущий шаг, выбор медиа ещё грузится ─────────────
+#
+# Живьём 04.10 (Facebook_1443, 2f140fa687fa): мастер открылся сразу на Media,
+# а выбор медиа под ним показывал только «Loading...». Робот дважды кликнул
+# по текущему шагу Media, четырежды пробовал запертый Next и через ~20 с
+# сдался с общим `upload_button_missing`. Теперь: не кликать, не жать Next,
+# читать выбор медиа (только чтение) до ~45 с, потом — прежний путь.
+# Настоящая разметка — tests/test_bench_wizard_media_picker_1004.py; здесь —
+# синтетическая строка шагов из начала файла.
+
+_SKELETON = ("<div><span>Media</span></div><div id='picker'>"
+             + "<div role='progressbar' aria-busy='true' aria-valuetext='Loading...'></div>" * 3
+             + "</div>")
+
+
+def _loading_media(order: list[str], loads_after_ms: int | None) -> str:
+    """Мастер на Media с заглушками выбора медиа; через `loads_after_ms` —
+    обычное тело Media с Upload (None — не догружается никогда)."""
+    then = ("" if loads_after_ms is None
+            else f"setTimeout(() => show('Media'), {loads_after_ms});")
+    return _wizard(order, "Media") + (
+        "<script>document.getElementById('body').innerHTML = " + json.dumps(_SKELETON) + ";"
+        + then + "</script>")
+
+
+@pytest.fixture
+def quick_picker(monkeypatch):
+    monkeypatch.setattr(md, "MEDIA_PICKER_LOAD_S", 1.5)
+    monkeypatch.setattr(md, "_MEDIA_PICKER_POLL_S", 0.05)
+
+
+def test_a_current_media_step_that_loads_is_waited_for_not_clicked(page, wizard_opens, tmp_path,
+                                                                   quick_picker, monkeypatch):
+    monkeypatch.setattr(md, "MEDIA_PICKER_LOAD_S", 10.0)
+    wizard_opens["html"] = _loading_media(ORDER_08CA, 500)
+    assert md.upload_ad_creative(page, "Video", "C:/media/2012.mp4", reuse_only=True) is True
+    assert wizard_opens["reuse"] == [1], "до медиатеки не дошли"
+    assert page.evaluate("window.mediaClicks") == 0, "кликнули по текущему шагу Media"
+    assert page.evaluate("window.nextClicks") == 0, "жали Next на шаге Media"
+    row = [r for r in _rows(tmp_path) if r.get("note") == "media_picker:ready"]
+    assert row and row[-1]["diag"]["skeletons_at_start"] == 3, _rows(tmp_path)
+    assert row[-1]["diag"]["waited_s"] >= 0.4
+
+
+def test_a_current_media_step_that_never_loads_is_named(page, wizard_opens, tmp_path, quick_picker):
+    wizard_opens["html"] = _loading_media(ORDER_08CA, None)
+    assert md.upload_ad_creative(page, "Video", "C:/media/2012.mp4") is False
+    assert wizard_opens["reuse"] == []
+    assert page.evaluate("window.mediaClicks") == 0
+    assert page.evaluate("window.nextClicks") == 0
+    row = _rows(tmp_path)[-1]
+    assert row["ok"] is False and row["note"] == "media_picker_loading", row
+    assert row["diag"]["skeletons"] == 3 and row["diag"]["waited_s"] >= 1.4
+    assert row["diag"]["picker"]["upload"] is False
+    assert row["diag"]["media_step"]["current"] == "Media"
+    assert md.last_upload_why() == "media_picker_loading"
+
+
+@pytest.mark.parametrize("start", ["Creative setup", "Text"])
+def test_media_is_still_clicked_when_another_step_is_current(page, wizard_opens, start):
+    """Регрессия ACL-1348: текущий шаг — Creative setup или Text, Media кликабелен —
+    робот по-прежнему кликает Media (и не ждёт выбор медиа впустую)."""
+    wizard_opens["html"] = _wizard(ORDER_956D, start)
+    assert md.upload_ad_creative(page, "Video", "C:/media/2012.mp4", reuse_only=True) is True
+    assert wizard_opens["reuse"] == [1]
+    assert page.evaluate("window.mediaClicks") == 1
+    assert page.evaluate("window.nextClicks") == 0
+
+
+def test_a_picker_that_never_loaded_does_not_condemn_the_file(monkeypatch, memo):
+    """`media_picker_loading` — про мастер, не про файл: файл Meta не подавали,
+    следующему объявлению — полная попытка; одна свежая переоткрывка остаётся."""
+    tries: list[dict] = []
+
+    def upload(*a, **k):
+        tries.append(k)
+        md._set_upload_why("media_picker_loading")
+        return False
+
+    monkeypatch.setattr(md, "upload_ad_creative", upload)
+    assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
+    assert len(tries) == 2, "одна свежая переоткрывка мастера"
+    assert md.upload_already_failed(FILE) is False
+    assert md.last_upload_why() == "media_picker_loading"
+    assert "media_picker_loading" in md._NAVIGATION_WHYS
+
+
+def test_media_picker_loading_reads_as_a_blocking_named_problem():
+    from src.fb_ads_rpa import failure_policy as fp
+    from src.fb_ads_rpa import simple_create as sc
+
+    text = sc.creative_why_text("media_picker_loading")
+    assert text and "loading" in text.lower()
+    md._set_upload_why("media_picker_loading")
+    try:
+        fail = md.creative_soft_fail("ad2", "ad 2")
+    finally:
+        md._set_upload_why(None)
+    assert fail == "ad2_creative_upload:media_picker_loading - ad 2: " + text
+    assert fp.severity(fail) == fp.BLOCKING
+    prob = fp.problem(fail)
+    assert prob["ad_index"] == 2
+    assert "picker" in prob["title"].lower() or "loading" in prob["title"].lower(), prob
+    assert "loading" in fp.reason(fail).lower()
+    json.dumps(fp.problems([fail]))

@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**20 robot steps × 81 layouts, 47 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**20 robot steps × 95 layouts, 53 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -16,7 +16,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | simple_create_layout | 2 | 2 | 0 | 0 |
 | campaign_name / budget / adset_name | 1 | 1 | 0 | 0 |
 | conversion_event | 3 | 3 | 0 | 0 |
-| advantage_plus_audience | 3 | 3 | 0 | 0 |
+| advantage_plus_audience | 8 | 8 | 0 | 0 |
 | further_limit_reach (Suggest an audience) | 5 | 5 | 0 | 0 |
 | audience_location | 4 | 4 | 0 | 0 |
 | audience_age | 4 | 4 | 0 | 0 |
@@ -26,10 +26,10 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 5 | 5 | 0 | 0 |
-| creative_wizard | 8 | 8 | 0 | 0 |
+| creative_wizard | 15 | 15 | 0 | 0 |
 | ad_copy | 7 | 7 | 0 | 0 |
-| ad_destination / destination_sweep | 9 | 8 | 0 | 1 |
-| ads 2-3 (single-screen editor) | 2 | 2 | 0 | 0 |
+| ad_destination / destination_sweep | 10 | 9 | 0 | 1 |
+| ads 2-3 (single-screen editor) | 3 | 3 | 0 | 0 |
 | editor gone under the robot | 1 | 1 | 0 | 0 |
 | banners and blocks (any step) | 2 | 2 | 0 | 0 |
 
@@ -81,6 +81,11 @@ Robot: turn_off_advantage_plus / _audience_badge_on / _advantage_plus_audience_o
 | Audience and Placements badges both 'Advantage+ on' | b30c3b2b6be9/00_advantage_plus_before, every NN_advantage_plus_still_on of 29.09-01.10 | `audience_advantage_on_2026_09_24.html` | `tests/test_audience_advantage_badge.py` | audience reads on; switched off or a named failure | pass |
 | Audience off, Placements on | 8587f7668f86/02_languages | `audience_off_placements_on_2026_09_24.html` | `tests/test_audience_advantage_badge.py` | placements badge does not make the audience on | pass |
 | Single-screen editor Audience 'Advantage+ on' with 'Your suggestion' targeting | 3100d06ad51e/02_advantage_plus_audience | `audience_simple_create_advantage_on_2026_09_30.html` · suggestion_step | `tests/test_bench_audience_simple_create.py` | reads on (as live: the step failed with Advantage+ still on) | pass |
+| Single-screen editor (1443): Audience controls mode with the badge still on, before the age | 0e86c42023da/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · card_run_a | `tests/test_bench_audience_controls_badge_on.py` | controls mode; advantage_plus_off ok (controls_mode), nothing clicked | pass |
+| Same card, second run | 04509d5eed75/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · card_run_b | `tests/test_bench_audience_controls_badge_on.py` | controls mode; advantage_plus_off ok (controls_mode), nothing clicked | pass |
+| Editor header Campaign toggle (In draft) beside the Campaign score panel | 0e86c42023da/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · campaign_toggle | `tests/test_bench_audience_controls_badge_on.py` | never taken for the Advantage+ leads switch | pass |
+| Campaign score row 'Advantage+ leads campaign · On' (button, no switch) | 0e86c42023da/00_advantage_plus_still_on | `audience_controls_badge_on_2026_10_03.html` · leads_row | `tests/test_bench_audience_controls_badge_on.py` | no switch in the row, nothing clicked | pass |
+| Single-screen editor (1443): collapsed Audience card in recommended setup (summary shows Locations/Age/Gender/Detailed targeting/Languages, Further limit row in the hidden body) | b3a333ff43ab/00_stall_campaign_name, 393e372f86b3/00, cb854b07857b/00, b47bc815bb3c/02, f35a2b31f7d8/00 | `audience_controls_badge_on_2026_10_03.html` · card_recommended_collapsed | `tests/test_bench_audience_controls_badge_on.py` | reads recommended, never controls; advantage_plus_off still_on (blocking) | pass |
 
 ## further_limit_reach (Suggest an audience)
 
@@ -197,6 +202,13 @@ Robot: _creative_wizard_open, _wizard_media_step, _WIZARD_FORWARD_JS (walk), _cr
 | Video, Text before Crop: Creative setup . Media . Text . Crop . Image generation . Enhancements . Translation | cc8fcfa17ae9/03-12_wizard_* | `creative_wizard_steps_2026_10_01.html` · text_first_text, text_first_crop | `tests/test_bench_creative_wizard_steps.py` | row read in this order; forward Next | pass |
 | Crop step, video in the single-screen editor: cards Square and Vertical, Original already checked on both, Crop and Replace; no 'Crop and expand (Meta AI)' box | 4121938e6dc3/07_wizard_crop | `crop_step_video_simple_create_2026_10_01.html` · crop_step | `tests/test_crop_step_original_and_story.py` | both cards read as Original; apply makes no clicks; read-back clean (ACL-1426) | pass |
 | Crop step, image in the classic editor: Square Original, Vertical on Meta's default 9:16 (recommended) | 5edc0e7cca0a/05_wizard_crop | `crop_step_image_classic_2026_10_01.html` · crop_step | `tests/test_crop_step_original_and_story.py` | one guarded click moves Vertical to Original before the walk's Next; read-back clean (ACL-1426) | pass |
+| Crop step, video post/story pair (03.10): both cards Original, `blob:` video media, no thumbnail ids; Square 1:1 disabled | 2e98a75f252d/06_wizard_crop, d54d68303e57/06_wizard_crop, f35a2b31f7d8/07_wizard_crop, a39407b72507/05_wizard_crop | `crop_step_pair_video_2026_10_03.html` · crop_step | `tests/test_bench_crop_live_1003.py` | a re-minted blob src or missing ids on Square is not crop_square_changed; the picked story id on Square is (ACL-1533) | pass |
+| Replace picker inside the wizard dialog: step row (Crop current), header Close/Save, Search media, tiles, footer Save; no Cancel | 2e98a75f252d/02_wizard_crop_replace, 2e98a75f252d/07_wizard_crop_replace, d54d68303e57/07_wizard_crop_replace, a39407b72507/02_wizard_crop_replace | `crop_replace_in_wizard_picker_2026_10_03.html` · in_wizard_picker | `tests/test_bench_crop_live_1003.py` | after a pick and with nothing picked the picker is left through its own footer Save (never the row's Crop, the header Save, Close or Next) (ACL-1533) | pass |
+| Crop step, story not in the library (04.10): footer Cancel/Next only, header Close; busy state after Next - Next and Cancel aria-disabled; the same Crop again after the busy state | 232d398471bd/02_wizard_crop, 232d398471bd/04_ad_creative_upload, 232d398471bd/05_simple_create_more_ads | `wizard_crop_story_missing_2026_10_04.html` · crop_step, crop_busy | `tests/test_bench_wizard_exit_1004.py` | Next pressed once on Crop; busy waited out; Crop again or busy past the limit -> the wizard's own footer Save/Done if it has one, else its own Close; Close -> crop_wizard_stuck (blocking), no dialog left; never Publish or the editor footer (ACL-1551) | pass |
+| Replace picker inside the wizard (04.10), story not among the tiles | 232d398471bd/01_wizard_crop_replace, 232d398471bd/03_wizard_crop_replace | `wizard_crop_story_missing_2026_10_04.html` · in_wizard_picker | `tests/test_bench_wizard_exit_1004.py` | left through the picker's own footer Save, back on Crop; post kept with story_not_placed:not_in_library when the wizard then closes (ACL-1551) | pass |
+| Media step busy after the library pick (04.10): '1 selected', Next and Cancel aria-disabled | 232d398471bd/00_wizard_media | `wizard_crop_story_missing_2026_10_04.html` · media_busy | `tests/test_bench_wizard_exit_1004.py` | the walk waits while the wizard is busy (bounded) instead of four quick misses (ACL-1551) | pass |
+| Media-first wizard opened on Media (04.10) with the media picker still loading: three 'Loading...' progressbars, no Upload/tabs/Search media/grid; footer Next aria-disabled, Cancel enabled | 2f140fa687fa/00_ad_creative_media_step, 2f140fa687fa/02_ad_creative_media_step | `wizard_media_picker_2026_10_04.html` · loading | `tests/test_bench_wizard_media_picker_1004.py` | picker read as loading (3 placeholders); the current Media step is not clicked and Next is not pressed; read-only wait, then media_picker_loading (not upload_button_missing); picker that loads during the wait goes on to the library (ACL-1559) | pass |
+| The same Media step loaded (04.10): tabs Account/Video URL/Page, Search media, Filters 1, Upload (role=button, asset-picker data-surface), drop zone, library grid with 2 tiles | 232d398471bd/00_wizard_media | `wizard_media_picker_2026_10_04.html` · loaded | `tests/test_bench_wizard_media_picker_1004.py` | picker read as loaded (upload, search, 2 tiles); exactly one Upload, inside the wizard dialog; the step goes straight to library reuse without clicks (ACL-1559) | pass |
 
 ## ad_copy
 
@@ -222,9 +234,10 @@ Robot: set_ad_destination_website (destination_state, _destination_failed, _ensu
 | Instant Experience selected | a90d704c892a/01_ad_destination | `ad_destination_types_2026_09_28.html` · instant_experience | `tests/test_destination_and_ad_name_say_why.py` | switched to Website | pass |
 | Website + Instant form (suggested) add-on, Lead Ads Terms | 7e5f7abec777/02_ad_destination | `ad_destination_types_2026_09_28.html` · website_instant_form | `tests/test_destination_and_ad_name_say_why.py` | reason named | pass |
 | Facebook event selected | cc8fcfa17ae9/07_ad_destination | `ad_destination_layouts_2026_10_01.html` · event_type | `tests/test_bench_ad_destination.py` | dest_type event; why destination_not_website (as live) | pass |
-| Website + Instant form add-on + Lead Gen error + Lead Ads Terms | 5465ca61895f/01_ad_destination | `ad_destination_layouts_2026_10_01.html` · instant_form_terms | `tests/test_bench_ad_destination.py` | state as live; why addon_none_not_set | pass |
+| Website + Instant form add-on + Lead Gen error + Lead Ads Terms | 5465ca61895f/01_ad_destination | `ad_destination_layouts_2026_10_01.html` · instant_form_terms | `tests/test_bench_ad_destination.py` | state as live; why instant_form_not_switched (live: addon_none_not_set, kept as field_why) | pass |
 | WhatsApp add-on selected (single-screen editor) | cb854b07857b/03_ad_destination | `ad_destination_layouts_2026_10_01.html` · whatsapp_addon | `tests/test_bench_ad_destination.py` | addon whatsapp; why addon_none_not_set | pass |
-| Single-screen editor Instant form add-on + Lead Gen error | d66a22d0fa30/01_ad_destination, 3100d06ad51e/03_ad_destination | `ad_destination_layouts_2026_10_01.html` · simple_create_instant_form | `tests/test_bench_ad_destination.py` | state as live; why url_field_not_focused | pass |
+| Single-screen editor Instant form add-on + Lead Gen error | d66a22d0fa30/01_ad_destination, 3100d06ad51e/03_ad_destination | `ad_destination_layouts_2026_10_01.html` · simple_create_instant_form | `tests/test_bench_ad_destination.py` | state as live; why instant_form_not_switched (live: url_field_not_focused, kept as field_why) | pass |
+| Single-screen editor, section virtualised off screen (display none), Instant form opt-in switch, add-on Instant form (suggested) + Lead Ads Terms card (View terms / Close / Create form) + Lead Gen error | 04509d5eed75/05_ad_destination, 0e86c42023da/12_ad2_destination | `ad_destination_instant_form_2026_10_03.html` · simple_create_instant_form_terms, errors_lead_gen | `tests/test_bench_destination_instant_form.py` | section scrolled on screen, add-on None (opt-in switch off when on), URL filled and read back; telemetry before/after; Instant form that comes back -> instant_form_not_switched, blocking, named in the problem; View terms / Create form / Close never pressed (press guard lead_terms) | pass |
 | Add-on None already set (sweep) | 3100d06ad51e/04_destination_sweep | `ad_destination_layouts_2026_10_01.html` · sweep_addon_none | `tests/test_bench_ad_destination.py` | addon none; why url_field_not_focused | pass |
 | Single-screen editor ads 2-3: no ad form in the DOM, only the preview's Ad / Destination tabs | 0bd520418dbe/02,04,05, d7b470f4c983/11,18,19, 04c8c214d2ba/03,04, 4121938e6dc3/12, d1755a59e139/02 | — | `tests/test_bench_ad_destination.py` | section false; why destination_section_missing (as live); the capture does not show why the form is not mounted | reference |
 
@@ -234,6 +247,7 @@ Robot: simple_create.create_next_ad
 
 | Layout | Seen live | Fixture · fragment | Test | Expected | Status |
 | --- | --- | --- | --- | --- | --- |
+| Media wizard of the previous ad left open on Crop (Next/Cancel locked) over the editor | 232d398471bd/05_simple_create_more_ads, 232d398471bd/06_ad2_create | `wizard_crop_story_missing_2026_10_04.html` · crop_busy | `tests/test_more_ads_after_a_stuck_wizard.py` | closed with the wizard's own Close before the ad set's Action menu; ads 2-3 created; Close that does not close -> creative_wizard_left_open (ACL-1551) | pass |
 | Tree before, ad set Action menu, tree after Create ad, new ad name/media | f9b9fc8d7bb3/01-03, 8ce1b9985046/02-04, b3a333ff43ab/03-04, d1755a59e139/03-04, d66a22d0fa30/02-03, df5344da3a17/02 | `simple_create_more_ads_2026_09_30.html` · tree_before, adset_menu, tree_after_create, ad1_name, new_ad_name, new_ad_media | `tests/test_simple_create_more_ads.py` | Create ad from the ad set menu opens the new ad; 'Creating...' dialog waited out | pass |
 | New ad's form gone after the media wizard: Ad heading with an empty /am/editor:ad surface (no name field, no Media block) and 'Verifying your changes' with the #100 lead_gen_form_id preflight error | 4121938e6dc3/11_ad2_creative_upload, 04c8c214d2ba/01_ad2_creative_upload, 0bd520418dbe/01_ad2_creative_upload | `ad_form_gone_verifying_2026_10_01.html` · ad_form_gone_verifying | `tests/test_ad_form_gone_after_media.py` | named ad_form_gone_after_media after 30 s; no second media check or wizard (ACL-1426) | pass |
 
@@ -262,7 +276,7 @@ Robot: _close_banners, _account_blocked_text, _review_errors_visible
 | NN_ad_creative_reuse_pick in 5edc0e7cca0a, dc8cdd6a02ba, e23d7c6f196b, df5344da3a17, 0afc79a410c6, 64cc3d5510b2, 7afe35363ffa | the media library portal is past the 4 MB cut in every page (no 'Search media'/'Account images' in the file); the tile itself is covered by library_tile_2026_09_24 |
 | 287b6cf6beec/01_next_to_ad | classic ad set editor with Back/Next present; the press failed, not the lookup — nothing to read offline |
 | no_run/00_tree_ad_ambiguous_parents (three folders) | dashboard track (src/analysis_agent/account_spend.py), not a robot step |
-| NN_advantage_plus_still_on (first capture of almost every run) | same badge layouts as audience_advantage_on_2026_09_24 / audience_suggest_layout_2026_09_26 / audience_simple_create_advantage_on_2026_09_30 |
+| NN_advantage_plus_still_on (first capture of almost every run) | same badge layouts as audience_advantage_on_2026_09_24 / audience_suggest_layout_2026_09_26 / audience_simple_create_advantage_on_2026_09_30; the 03.10 pair is cut as audience_controls_badge_on_2026_10_03 |
 
 ## Adding a layout
 

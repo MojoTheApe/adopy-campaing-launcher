@@ -325,7 +325,13 @@ def _file_was_offered() -> bool:
 _NAVIGATION_WHYS = frozenset({
     "wizard_not_opened", "upload_button_missing",
     "media_step_locked", "media_step_unreachable", "media_step_covered",
+    # ACL-1559: выбор медиа шага Media так и не догрузился — файл не подавали.
+    "media_picker_loading",
 })
+
+#: ACL-1559: мастер стоит на Media, а выбор медиа под ним (Upload, медиатека)
+#: за `MEDIA_PICKER_LOAD_S` так и не вышел из заглушек «Loading...».
+MEDIA_PICKER_LOADING = "media_picker_loading"
 from src.fb_ads_rpa.config import get_reuse_library_media
 
 PageLike = Page | Frame
@@ -2096,10 +2102,18 @@ def _drop_cdp_input_session(page: Page) -> None:
 _PRESS_GUARD_JS = r"""([x, y, token, strict]) => {
   const norm = (s) => (s || '').replace(/[\s\u200b]+/g, ' ').trim();
   const pub = /^(publish|review and publish( \(\d+\))?|publicar|revisar y publicar)$/i;
+  const leadTerms = /^(view terms|accept|accept terms|i accept|create form|create new form)$/i;
   const target = token ? document.querySelector('[data-acl-press-target="' + token + '"]') : null;
   if (target) target.removeAttribute('data-acl-press-target');
   const at = document.elementFromPoint(x, y);
   if (!at) return {ok: true};
+  // ACL-1543: условия Lead Ads принимает человек, форму робот не создаёт —
+  // в карточке Instant form add-on (View terms / Close / Create form) не
+  // нажимается ничего. `closest`, а не обход на 12 узлов: живьём «View terms»
+  // на 16 уровней ниже карточки (ревью PR #545).
+  if (at.closest && at.closest('[data-surface*="pce_website_extension_instant_form_field"]')) {
+    return {ok: false, why: 'lead_terms'};
+  }
   for (let n = at, i = 0; n && n.nodeType === 1 && i < 12; n = n.parentElement, i++) {
     const surface = n.getAttribute('data-surface') || '';
     if (surface.indexOf('syd_simple_create_publish') !== -1) return {ok: false, why: 'publish'};
@@ -2112,6 +2126,12 @@ _PRESS_GUARD_JS = r"""([x, y, token, strict]) => {
     // содержит, но её текст длинный.
     if (n.querySelector('[data-surface*="syd_simple_create_publish"]') && norm(n.textContent).length < 400) {
       return {ok: false, why: 'editor_footer'};
+    }
+    // ACL-1543: кнопки условий Lead Ads и создания формы — ни по тексту, ни
+    // по aria-label (иконка с подписью «Accept» тоже).
+    if (n.matches('button, [role=button], a, [role=link]')
+        && (leadTerms.test(norm(n.textContent)) || leadTerms.test(norm(n.getAttribute('aria-label'))))) {
+      return {ok: false, why: 'lead_terms'};
     }
   }
   if (strict && target && target.isConnected && !(target.contains(at) || at.contains(target))) {
@@ -2382,28 +2402,42 @@ def _scroll_website_option_into_view(page: Page) -> bool:
 
 
 def _turn_off_advantage_plus_leads(page: Page) -> bool:
-    """Turn off 'Advantage+ leads campaign' if it is On — can block manual location picks."""
+    """Turn off 'Advantage+ leads campaign' if it is On — can block manual location picks.
+
+    Only a switch inside the label's own row counts. ACL-1544 (03.10,
+    Facebook_1443): the old search started from the first element whose text
+    merely contained the label, climbed five levels from the Campaign score
+    panel and clicked the first checked switch inside, which was the editor
+    header's **Campaign toggle** ("In draft"). `flipped_switch: true` meant
+    "turned the campaign off" (b3a333ff43ab, cb854b07857b: toggle on before
+    the step, off after). On the single-screen editor the leads row has no
+    switch at all: it is a button that opens a checklist.
+    """
+    # ACL-1544: ищем саму подпись (весь текст элемента = подпись) и
+    # поднимаемся только в пределах её строки — не шире 80 символов текста.
+    # Переключатель с чужим aria-label («Campaign toggle») — не наш.
     script = """
     () => {
       const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-      for (const el of document.querySelectorAll('*')) {
-        if (!el.offsetParent) continue;
-        const t = norm(el.textContent || '').slice(0, 80);
-        if (!t.includes('advantage+ leads') && !t.includes('advantage+ lead')) continue;
-        // Find nearby toggle/switch
-        let node = el;
-        for (let i = 0; i < 6 && node; i++, node = node.parentElement) {
-          const sw = node.querySelector(
-            '[role=switch], input[type=checkbox], [aria-checked]'
-          );
-          if (!sw || !sw.offsetParent) continue;
-          const checked = sw.getAttribute('aria-checked') === 'true'
-            || sw.checked === true;
-          if (checked) {
-            sw.click();
-            return true;
-          }
-          return false; // already off
+      const visible = (e) => {
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+      const labels = [...document.querySelectorAll('*')].filter(el =>
+        /^advantage\\+ leads?( campaign)?$/.test(norm(el.textContent)) && visible(el));
+      for (const label of labels) {
+        let node = label;
+        for (let i = 0; i < 4 && node; i++, node = node.parentElement) {
+          if (norm(node.textContent).length > 80) break;
+          const sw = node.querySelector('[role=switch], input[type=checkbox], [aria-checked]');
+          if (!sw) continue;
+          if (!visible(sw)) break;
+          const named = norm(sw.getAttribute('aria-label'));
+          if (named && !named.includes('advantage')) break;
+          const checked = sw.getAttribute('aria-checked') === 'true' || sw.checked === true;
+          if (!checked) return false; // already off
+          sw.click();
+          return true;
         }
       }
       return false;
@@ -2425,6 +2459,11 @@ def _turn_off_advantage_plus_leads(page: Page) -> bool:
             row = label.locator("xpath=ancestor::*[self::div or self::section][1]")
             sw = row.get_by_role("switch").first
             if sw.is_visible(timeout=800):
+                # ACL-1544: тумблер кампании и прочие подписанные чужим
+                # именем переключатели не трогаем.
+                named = (sw.get_attribute("aria-label") or "").strip().lower()
+                if named and "advantage" not in named:
+                    continue
                 checked = sw.get_attribute("aria-checked")
                 if checked == "true":
                     sw.click(timeout=3000, force=True)
@@ -5671,8 +5710,19 @@ def run_recorded_campaign_flow(
     # made this worse (scrolled past Age entirely), so the working
     # hypothesis is layout-order, not Age's own mechanics: fill Age first,
     # while the page is still in its simpler pre-Locations-expansion state.
+    # ACL-1544: выключение Advantage+ до возраста — своим вызовом, чтобы его
+    # исход дошёл до soft_fails. «on» здесь — карточка в рекомендованном
+    # режиме без контролов (Further limit не применился): возраст, пол и
+    # языки не встанут условиями. `unconfirmed` не блокирует — итог после
+    # возраста проверяет `verify_audience_advantage_off`.
     try:
-        if not fill_audience_age(page, age_min, age_max):
+        if _ensure_manual_audience(page) is True:
+            _shot("fail_advantage_plus_off")
+            soft_fails.append("advantage_plus_off:recommended setup, no audience controls")
+    except Exception as exc:
+        soft_fails.append(f"advantage_plus_off:{str(exc)[:60]}")
+    try:
+        if not fill_audience_age(page, age_min, age_max, ensure_manual=False):
             _shot("fail_audience_age")
             soft_fails.append("audience_age")
         else:
@@ -5968,7 +6018,7 @@ def run_recorded_campaign_flow(
                     # ACL-1348: причина — в строке ЭТОГО шага, иначе Sentry берёт
                     # её из строки помощника, которую перепишет объявление 2.
                     _shot("fail_ad_creative_upload", last_upload_diag(), note=last_upload_why())
-                    ad_level_fails.append("ad_creative_upload")
+                    ad_level_fails.append(creative_soft_fail("ad", ad_name or "ad 1"))
                     # ACL-1354 (a71e4fc14aa1): после отказа креатива на
                     # закрытой вкладке назначение, текст и обход назначений
                     # отказывали по очереди, каждый молча.
@@ -5999,7 +6049,7 @@ def run_recorded_campaign_flow(
                     # ACL-1371: причина — в note строки (a90d704c892a: «silent»).
                     _shot("fail_ad_destination", last_destination_diag(),
                           note=last_destination_why() or "destination_not_set")
-                    ad_level_fails.append("ad_destination")
+                    ad_level_fails.append(destination_soft_fail("ad", ad_name or "ad 1"))
                 else:
                     _shot("after_ad_destination")
             except Exception as exc:
@@ -6203,7 +6253,7 @@ def run_recorded_campaign_flow(
                                 # PYTHON-14 `ad2_creative_upload: silent`.
                                 _shot(f"fail_{tag}_creative_upload", last_upload_diag(),
                                       note=last_upload_why())
-                                ad_level_fails.append(f"{tag}_creative_upload")
+                                ad_level_fails.append(creative_soft_fail(tag, extra_name or tag))
                                 no_creative = True
                             else:
                                 _shot(f"after_{tag}_creative_upload")
@@ -6233,7 +6283,7 @@ def run_recorded_campaign_flow(
                             if not set_ad_destination_website(page, destination_url):
                                 _shot(f"fail_{tag}_destination", last_destination_diag(),
                                       note=last_destination_why() or "destination_not_set")
-                                ad_level_fails.append(f"{tag}_destination")
+                                ad_level_fails.append(destination_soft_fail(tag, extra_name or tag))
                             else:
                                 _shot(f"after_{tag}_destination")
                         except Exception as exc:
@@ -10641,6 +10691,28 @@ def _creative_post_media_step(page: Page) -> bool:
 _WIZARD_ADVANCE_LABELS = ("Done", "Save", "Next", "Skip and continue", "Continue", "Skip")
 
 
+#: ACL-1551: корень мастера — видимый `role=dialog`, в котором три и больше
+#: подписей строки шагов (листья с ровно такой подписью). Нет такого — null:
+#: прежние формы мастера без `role=dialog` ищутся по документу, как раньше.
+_WIZARD_ROOT_JS = r"""() => {
+  const STEPS = ['Creative setup', 'Media', 'Trim', 'Crop', 'Text', 'Image generation',
+                 'Creative generation', 'Enhancements', 'Translation'];
+  const n = (s) => (s || '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
+  for (const d of document.querySelectorAll('[role=dialog]')) {
+    const r = d.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;
+    const seen = new Set();
+    for (const e of d.querySelectorAll('*')) {
+      if (e.children.length) continue;
+      const t = n(e.textContent);
+      if (STEPS.includes(t)) seen.add(t);
+      if (seen.size >= 3) return d;
+    }
+  }
+  return null;
+}"""
+
+
 #: Кнопка «вперёд» мастера — одним вызовом страницы (ACL-1313).
 #:
 #: Было: по одному `_click_xpath` на каждую подпись из шести, и каждый —
@@ -10661,7 +10733,12 @@ _WIZARD_FORWARD_JS = r"""
     }
     return true;
   };
-  const cands = [...document.querySelectorAll('[role=button],button')]
+  // ACL-1551: мастер — role=dialog со строкой шагов; кнопки ищутся только в
+  // нём. По всему документу «Next»/«Save» футера редактора (рядом с Publish)
+  // находились наравне с кнопками мастера, а пока Next мастера заперт (Meta
+  // занята, живьём 04.10), других кандидатов не было бы вовсе.
+  const root = (%ROOT%)() || document;
+  const cands = [...root.querySelectorAll('[role=button],button')]
     .filter(e => e.getAttribute('aria-disabled') !== 'true');
   for (const label of labels) {
     let best = null, bestArea = Infinity;
@@ -10681,7 +10758,7 @@ _WIZARD_FORWARD_JS = r"""
   }
   return null;
 }
-"""
+""".replace("%ROOT%", _WIZARD_ROOT_JS)
 
 #: Сколько после нажатия «вперёд» ждать следующего шага. Прежняя пауза
 #: 1,4 с сохранена как потолок; мастер, закрывшийся раньше, замечается
@@ -10705,6 +10782,246 @@ def _press_wizard_forward(page: Page) -> str | None:
     return pt.get("label") or ""
 
 
+# ── ACL-1551: занятый мастер и выход из него своей кнопкой ─────────────────
+#
+# Живьём 04.10 (Facebook_1443, прогон 232d398471bd, пара post/story, story нет
+# в медиатеке): после Next мастер «занят» — Next и Cancel в подвале с
+# aria-disabled, — и обход считал это промахом: четыре круга (~4 с) и выход.
+# Так он бросил мастер на Media (Meta сама перешла на Crop позже), а на Crop
+# Next не довёл мастер дальше: занятость кончилась возвратом на тот же Crop
+# (снимок 02_wizard_crop, Next снова доступен), второй Next завис дольше минуты
+# (04_ad_creative_upload, 05_simple_create_more_ads). Запасной выход искал
+# угловой значок у подписи «Creative setup», которой в этой строке шагов нет
+# (Media · Trim · Crop · Text · …), — не нажималось ничего, окно оставалось, и
+# Action menu группы для объявлений 2–3 не открылось.
+
+#: Сколько за один обход ждать «занятый» мастер (Next/Cancel заперты).
+_WIZARD_BUSY_WAIT_S = 30.0
+#: После Next на Crop: сколько ждать смены шага или закрытия мастера.
+_CROP_ADVANCE_WAIT_S = 25.0
+#: Crop снова доступен (не занят), а шаг тот же — «Next не сработал», но не
+#: раньше этого (шаг Meta отрисовывает не мгновенно).
+_CROP_IDLE_GRACE_S = 6.0
+#: Сколько ждать закрытия мастера после его Save/Done или Close.
+_WIZARD_EXIT_WAIT_S = 6.0
+#: Кнопки мастера, которые его завершают (подвал). Не Next и не Publish.
+_WIZARD_COMPLETE_LABELS = ("Save", "Done")
+
+#: Подвал мастера: есть ли кнопки «вперёд», доступны ли, Cancel. «Занят» —
+#: все «вперёд» и Cancel заперты (снимки 00_wizard_media, 04_ad_creative_upload).
+_WIZARD_BUSY_JS = r"""
+(labels) => {
+  const root = (%ROOT%)();
+  if (!root) return { root: false, busy: false };
+  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  const box = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const dis = (b) => b.getAttribute('aria-disabled') === 'true' || b.disabled === true;
+  const btns = [...root.querySelectorAll('[role=button],button')].filter(box);
+  const fwd = btns.filter(b => labels.includes(norm(b.textContent)));
+  const cancel = btns.find(b => norm(b.textContent) === 'Cancel');
+  return { root: true, forward: fwd.length, forward_enabled: fwd.filter(b => !dis(b)).length,
+           cancel: cancel ? (dis(cancel) ? 'disabled' : 'enabled') : 'none',
+           busy: fwd.length > 0 && fwd.every(dis) && !!cancel && dis(cancel) };
+}
+""".replace("%ROOT%", _WIZARD_ROOT_JS)
+
+#: Своя кнопка выхода мастера, только внутри его `role=dialog`.
+#: `complete` — Save/Done подвала (после последнего заголовка шага); не при
+#: открытом выборе медиа (там Save подвала — выбор, а не мастер, ACL-1533).
+#: `close` — Close шапки (до первого заголовка шага). Ничего вне мастера, ни
+#: Next, ни Publish. Найденное помечается `data-acl-wizard-exit`.
+#: Аргумент — `want` или {want, skip}: подписи из `skip` (уже нажатые «вперёд»
+#: на этом шаге) не предлагаются вовсе — решение до нажатия (ревью F1).
+_WIZARD_EXIT_JS = r"""
+(arg) => {
+  const want = typeof arg === 'string' ? arg : (arg && arg.want) || '';
+  const skip = (arg && typeof arg === 'object' && arg.skip) || [];
+  document.querySelectorAll('[data-acl-wizard-exit]').forEach(e => e.removeAttribute('data-acl-wizard-exit'));
+  const root = (%ROOT%)();
+  if (!root) return null;
+  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  const box = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const dis = (b) => b.getAttribute('aria-disabled') === 'true' || b.disabled === true;
+  const heads = [...root.querySelectorAll('[role=heading],h1,h2,h3')].filter(box);
+  if (!heads.length) return null;
+  const after = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const btns = [...root.querySelectorAll('[role=button],button')].filter(b => box(b) && !dis(b));
+  const own = (b) => norm(b.textContent) || norm(b.getAttribute('aria-label'));
+  let el = null;
+  if (want === 'complete') {
+    const picker = [...root.querySelectorAll('input')].some(i =>
+      /search media/i.test(i.getAttribute('placeholder') || i.getAttribute('aria-label') || ''));
+    if (picker) return { refused: 'picker_open' };
+    const last = heads[heads.length - 1];
+    el = btns.filter(b => ['Save', 'Done'].includes(norm(b.textContent)) && !skip.includes(norm(b.textContent))
+                          && after(last, b)).pop() || null;
+  } else if (want === 'close') {
+    const first = heads[0];
+    el = btns.find(b => (norm(b.textContent) === 'Close' || norm(b.getAttribute('aria-label')) === 'Close')
+                        && after(b, first)) || null;
+  }
+  if (!el) return null;
+  el.setAttribute('data-acl-wizard-exit', want);
+  el.scrollIntoView({ block: 'center', behavior: 'instant' });
+  const r = el.getBoundingClientRect();
+  return { label: own(el), x: r.x + r.width / 2, y: r.y + r.height / 2 };
+}
+""".replace("%ROOT%", _WIZARD_ROOT_JS)
+
+#: Сколько окон на экране (role=dialog / aria-modal, кроме уведомлений).
+_OPEN_DIALOGS_JS = r"""
+() => [...document.querySelectorAll('[role=dialog],[aria-modal=true]')].filter(e => {
+  const r = e.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && !/^notifications/i.test((e.textContent || '').trim());
+}).length
+"""
+
+
+def _wizard_foot(page: Page) -> dict:
+    """Подвал мастера-диалога (`_WIZARD_BUSY_JS`); {} — не прочитался."""
+    try:
+        got = page.evaluate(_WIZARD_BUSY_JS, list(_WIZARD_ADVANCE_LABELS))
+    except Exception:
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def _wizard_busy(page: Page) -> bool:
+    """Мастер «занят»: его кнопки «вперёд» и Cancel заперты (живьём 04.10)."""
+    return bool(_wizard_foot(page).get("busy"))
+
+
+def _wait_wizard_busy(page: Page, limit_s: float) -> str:
+    """Ждать, пока мастер занят. "closed" / "idle" (снова доступен) / "busy"."""
+    start = time.time()
+    while True:
+        if not _creative_wizard_open(page):
+            return "closed"
+        if not _wizard_busy(page):
+            return "idle"
+        if time.time() - start >= limit_s:
+            return "busy"
+        time.sleep(_WIZARD_CLOSE_POLL_S)   # опрос, не действие
+
+
+def _on_crop_step_now(page: Page, name: str | None) -> bool:
+    """Мастер на шаге Crop: по имени шага из строки, без имени — по заголовку."""
+    if _crop.step_is_crop(name):
+        return True
+    if name and name in _wizard_capture.STEP_NAMES:
+        return False
+    return _crop.on_crop_step(page, name)
+
+
+def _await_crop_advance(page: Page) -> str:
+    """После Next на Crop: "closed" / "advanced" / "stayed" (тот же Crop,
+    снова доступен) / "busy" (занят дольше `_CROP_ADVANCE_WAIT_S`)."""
+    start = time.time()
+    while True:
+        time.sleep(_WIZARD_CLOSE_POLL_S)   # опрос, не действие
+        if not _creative_wizard_open(page):
+            return "closed"
+        if not _crop.read(page).get("found"):
+            return "advanced"
+        busy = _wizard_busy(page)
+        waited = time.time() - start
+        if not busy and waited >= _CROP_IDLE_GRACE_S:
+            return "stayed"
+        if waited >= _CROP_ADVANCE_WAIT_S:
+            return "busy" if busy else "stayed"
+
+
+def _open_dialog_count(page: Page) -> int | None:
+    try:
+        got = page.evaluate(_OPEN_DIALOGS_JS)
+    except Exception:
+        return None
+    return got if isinstance(got, int) else None
+
+
+def _press_wizard_exit(page: Page, want: str, skip: tuple[str, ...] = ()) -> str | None:
+    """Нажать свою кнопку мастера: `complete` (Save/Done подвала) или `close`
+    (Close шапки). Подписи из `skip` не нажимаются (выбор — до клика).
+    Подпись нажатой или None (нет такой / охрана не пустила)."""
+    try:
+        got = page.evaluate(_WIZARD_EXIT_JS, {"want": want, "skip": [x for x in skip if x]})
+    except Exception:
+        return None
+    if not isinstance(got, dict) or not got.get("label"):
+        return None
+    try:
+        handle = page.query_selector(f'[data-acl-wizard-exit="{want}"]')
+        if handle is not None:
+            _mark_press_target(page, handle)
+    except Exception:
+        pass
+    try:
+        clicked = _cdp_mouse_click(page, float(got["x"]), float(got["y"]))
+    except Exception:
+        return None
+    if not clicked:   # False — охрана не пустила; None — вкладка не ответила
+        return None
+    return str(got["label"])
+
+
+def _wait_wizard_gone(page: Page, wait_s: float = _WIZARD_EXIT_WAIT_S) -> bool:
+    deadline = time.time() + wait_s
+    while True:
+        if not _creative_wizard_open(page):
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(_WIZARD_CLOSE_POLL_S)   # опрос, не действие
+
+
+def _leave_wizard(page: Page, *, allow_complete: bool = True, skip: str = "") -> dict:
+    """Выйти из мастера его собственной кнопкой (ACL-1551).
+
+    Сначала — завершающая кнопка подвала мастера (Save/Done; `skip` — подпись,
+    уже нажатая «вперёд» на этом шаге, второй раз не жмётся), затем — его Close.
+    Никогда Next, Publish или что-либо вне мастера. Возвращает
+    {"closed_by", "closed", "dialog_left", "tried"}.
+    """
+    out: dict[str, Any] = {"closed_by": None, "closed": False, "dialog_left": None, "tried": []}
+    if allow_complete:
+        # Ревью F1: подпись, уже нажатая «вперёд», отсеивается в самой странице —
+        # до клика, а не после.
+        label = _press_wizard_exit(page, "complete", (skip,))
+        if label:
+            out["tried"].append(label)
+            if _wait_wizard_gone(page):
+                out.update(closed_by=label, closed=True)
+    if not out["closed"]:
+        label = _press_wizard_exit(page, "close")
+        if label:
+            out["tried"].append(label)
+            if _wait_wizard_gone(page):
+                out.update(closed_by=label, closed=True)
+    left = _open_dialog_count(page)
+    out["dialog_left"] = None if left is None else left > 0
+    return out
+
+
+def _leave_stuck_wizard(page: Page, trail, why: str, presses: int, pressed: str = "") -> bool:
+    """Next на Crop не довёл мастер дальше: выйти своей кнопкой мастера.
+
+    Save/Done мастера — мастер завершён, как обычным обходом. Только Close
+    (или ничего не закрыло) — объявление блокирующее: `crop_wizard_stuck`
+    (`crop_step.mark_wizard_stuck`), предупреждение о story снимается.
+    True — мастера на экране нет.
+    """
+    out = _leave_wizard(page, skip=pressed if pressed in _WIZARD_COMPLETE_LABELS else "")
+    out.update({"why": why, "step": "Crop", "next_presses": presses})
+    completed = bool(out["closed"]) and out["closed_by"] in _WIZARD_COMPLETE_LABELS
+    if not completed:
+        _crop.mark_wizard_stuck()
+    try:
+        trail.exited(out)
+    except Exception:
+        pass
+    return bool(out["closed"])
+
+
 def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
     """Press the wizard forward until it closes. True when it is gone.
 
@@ -10723,36 +11040,72 @@ def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
         closed = _walk_creative_wizard_rounds(page, rounds, trail)
         return closed
     finally:
+        # ACL-1551: осталось ли на экране окно — в ту же строку телеметрии.
+        if not closed or trail.exit:
+            left = _open_dialog_count(page)
+            trail.dialog_left = None if left is None else left > 0
+        else:
+            trail.dialog_left = False
         trail.finish(closed)
 
 
 def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
     misses = 0
+    # ACL-1551: ожидание «занятого» мастера — не промах, но в пределах срока.
+    busy_left = _WIZARD_BUSY_WAIT_S
+    crop_next = 0   # нажатий «вперёд» на Crop в этом обходе
     for _ in range(rounds):
         if not _creative_wizard_open(page):
             return True
         trail.see(page)
+        on_crop = _on_crop_step_now(page, trail.current)
+        if on_crop and (crop_next or _crop.forward_stuck()):
+            # ACL-1551: Next на Crop уже нажимали, а мастер с Crop не ушёл —
+            # второй раз Next не жмём (живьём 04.10 он завис больше минуты).
+            return _leave_stuck_wizard(page, trail, "next_did_not_advance", crop_next)
         # ACL-1426: на шаге Crop — Original на обеих карточках, без «Crop and
         # expand (Meta AI)», для пары — Replace на Vertical; до нажатия Next.
         # Расхождение — названная причина (`crop_step.take_failure`), её
         # забирает вызывающий; обход идёт дальше, чтобы мастер закрылся.
         plan = _crop.current_plan()
-        if plan is not None and not _crop.applied() and _crop.on_crop_step(page, trail.current):
+        if plan is not None and not _crop.applied() and on_crop:
             _crop.apply(page, plan)
         pressed = _press_wizard_forward(page)
         trail.pressed(pressed)
         if pressed is None:
+            if busy_left > 0 and _wizard_busy(page):
+                # Meta обрабатывает прошлое нажатие (Next и Cancel заперты).
+                t0 = time.time()
+                got = _wait_wizard_busy(page, busy_left)
+                busy_left -= max(time.time() - t0, _WIZARD_CLOSE_POLL_S)
+                trail.busy(round(time.time() - t0, 1))
+                if got == "closed":
+                    return True
+                if got == "idle":
+                    continue
             misses += 1
             if misses >= 4:
                 break
             _sleep_h(1.2)
             continue
         misses = 0
+        if on_crop:
+            crop_next += 1
+            got = _await_crop_advance(page)
+            if got == "closed":
+                trail.closed_by = pressed
+                return True
+            if got == "advanced":
+                continue
+            _crop.note_forward_stuck()
+            return _leave_stuck_wizard(page, trail, "busy" if got == "busy" else "next_did_not_advance",
+                                       crop_next, pressed)
         # Следующий шаг отрисовывается до 1,4 с; закрытие видно раньше.
         settle_until = time.time() + _WIZARD_STEP_SETTLE_S
         while time.time() < settle_until:
             time.sleep(_WIZARD_CLOSE_POLL_S)   # опрос, не действие: без «человеческой» паузы
             if not _creative_wizard_open(page):
+                trail.closed_by = pressed
                 return True
     return not _creative_wizard_open(page)
 
@@ -10958,6 +11311,17 @@ def _close_creative_setup_modal(page: Page) -> bool:
         return False
     if _walk_creative_wizard(page):
         return True
+    # ACL-1551: мастер-диалог закрывается своим Close в шапке. Угловой значок
+    # ниже ищется у подписи «Creative setup», а в строке шагов 04.10 (Media ·
+    # Trim · Crop · …) её нет — не нажималось ничего, окно оставалось.
+    if _creative_wizard_open(page):
+        out = _leave_wizard(page, allow_complete=False)
+        if out.get("tried"):
+            _telemetry.record("ad_creative_wizard", None,
+                              note="force_close:" + ("closed_by_close" if out["closed"] else "left_open"),
+                              diag=out)
+        if out["closed"]:
+            return True
     # Walking did not get it closed — the step shows a button we do not know.
     # The corner icon is the way out that keeps the media; the step row's
     # first label anchors the search since the heading is gone.
@@ -11289,6 +11653,78 @@ def _wizard_media_step(page: Page) -> dict | None:
     return found if isinstance(found, dict) else None
 
 
+#: ACL-1559: выбор медиа шага Media мастера — только чтение, ни одного клика.
+#:
+#: Живьём 04.10 (Facebook_1443, 2f140fa687fa): мастер открылся на Media, а
+#: область выбора медиа (`AdsWizardMediaPickerContainer`) держала только три
+#: заглушки `role=progressbar aria-busy=true` «Loading...» — ни Upload, ни
+#: вкладок, ни «Search media», ни сетки. Загруженный вид (232d398471bd,
+#: 07:36): вкладки Account / Video URL / Page, поле «Search media», Upload
+#: (`role=button`, data-surface `…creative-tool-asset-picker-upload-button`),
+#: сетка `aria-label="grid"` с плитками `role=button`.
+#:
+#: Ищется внутри мастера (`_WIZARD_ROOT_JS`), без него — по документу; в
+#: области выбора медиа, если она узнаётся по `data-non-int-surface`/
+#: `data-surface`, иначе по всему мастеру.
+_WIZARD_MEDIA_PICKER_JS = r"""
+() => {
+  const root = (%ROOT%)();
+  const scope = root || document;
+  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  const area = scope.querySelector('[data-non-int-surface*="AdsWizardMediaPickerContainer"],'
+    + '[data-surface*="AdsWizardMediaPickerContainer"]');
+  const box = area || scope;
+  const bars = new Set([...box.querySelectorAll(
+    '[role=progressbar][aria-busy=true],[data-is-placeholder=true]')]);
+  const upload = [...box.querySelectorAll('[role=button],button')].some(b =>
+    /^\+?\s*Upload$/i.test(norm(b.textContent)) || norm(b.getAttribute('aria-label')) === 'Upload'
+    || /creative-tool-asset-picker-upload-button$/.test(b.getAttribute('data-surface') || ''));
+  const search = [...box.querySelectorAll('input')].some(i =>
+    /search media/i.test(i.getAttribute('placeholder') || i.getAttribute('aria-label') || ''));
+  let tiles = 0;
+  for (const g of box.querySelectorAll('[aria-label=grid]')) tiles += g.querySelectorAll('[role=button]').length;
+  return { root: !!root, surface: !!area, loading: bars.size > 0, skeletons: bars.size,
+           upload, search, tiles };
+}
+""".replace("%ROOT%", _WIZARD_ROOT_JS)
+
+#: ACL-1559: сколько ждать выбор медиа шага Media (живьём 04.10 мастер с
+#: уже загруженным выбором открывался 22 с) и как часто его перечитывать.
+MEDIA_PICKER_LOAD_S = 45.0
+_MEDIA_PICKER_POLL_S = 0.25
+
+
+def _media_picker(page: Page) -> dict:
+    """Состояние выбора медиа (`_WIZARD_MEDIA_PICKER_JS`); {} — не прочиталось."""
+    try:
+        got = page.evaluate(_WIZARD_MEDIA_PICKER_JS)
+    except Exception:
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def _wait_media_picker(page: Page, limit_s: float) -> dict:
+    """Ждать, пока выбор медиа шага Media выйдет из заглушек. Только чтение.
+
+    `state`: "ready" — Upload на месте; "loading" — к сроку всё ещё заглушки;
+    "empty" — заглушек нет, но и Upload нет (дальше — прежнее ожидание Upload).
+    Клик по текущему шагу Media или Next здесь мог бы перезапустить загрузку
+    выбора (тот же урок, что у ACL-1354 с таргетингом) — поэтому только опрос.
+    """
+    start = time.time()
+    picker = _media_picker(page)
+    first = picker.get("skeletons", 0)
+    while picker.get("loading") and not picker.get("upload"):
+        if time.time() - start >= limit_s:
+            break
+        time.sleep(_MEDIA_PICKER_POLL_S)   # опрос, не действие
+        picker = _media_picker(page)
+    state = ("ready" if picker.get("upload")
+             else "loading" if picker.get("loading") else "empty")
+    return {**picker, "state": state, "skeletons_at_start": first,
+            "waited_s": round(time.time() - start, 1)}
+
+
 def _media_step_behind(step: dict | None) -> bool:
     """Media стоит в строке шагов ДО открытого шага — Next к нему не ведёт."""
     if not step or not step.get("found"):
@@ -11401,12 +11837,29 @@ def upload_ad_creative(
     media_state: dict | None = None
     media_clicks = next_clicks = 0
     blocked = ""
+    picker: dict | None = None
+    opened_at = time.time()
     for _ in range(6):
         if page.get_by_role("button", name="Upload").count() > 0:
             break
         step = _wizard_media_step(page)
         if step:
             media_state = step
+        if step and step.get("found") and step.get("current") == "Media":
+            # ACL-1559 (живьём 04.10, 2f140fa687fa): мастер уже на Media, а
+            # выбор медиа ещё грузится. Клик по текущему шагу и запертый Next
+            # ничего не дают (а клик может перезапустить загрузку) — ждём
+            # выбор медиа опросом, потом прежний путь: медиатека / Upload.
+            phase_t = time.time()
+            picker = _wait_media_picker(
+                page, max(0.0, min(MEDIA_PICKER_LOAD_S, _creative_left())))
+            picker["since_open_s"] = round(time.time() - opened_at, 1)
+            _creative_phase("media_picker", phase_t, state=picker["state"])
+            _telemetry.record("ad_creative_upload", None, note="media_picker:" + picker["state"],
+                              diag={"file": Path(creative_path).name, **picker})
+            if picker["state"] == "loading":
+                blocked = MEDIA_PICKER_LOADING
+            break
         behind = _media_step_behind(step)
         if step and step.get("found"):
             usable = not step.get("disabled") and not step.get("covered")
@@ -11453,6 +11906,11 @@ def upload_ad_creative(
                 "past_media": _wizard_past_media(page),
                 "media_step": shown or None,
                 "clicks": {"media": media_clicks, "next": next_clicks}}
+        if picker is not None:
+            # ACL-1559: что показывал выбор медиа и сколько его ждали.
+            diag["picker"] = picker
+            diag["skeletons"] = picker.get("skeletons", 0)
+            diag["waited_s"] = picker.get("waited_s", 0.0)
         # Снимок — пока мастер открыт: к строке шага объявления его уже
         # закроют, а в странице целиком он съедается обрезкой (ACL-1348).
         # Один на объявление: попыток до трёх, а снимков за прогон — MAX_PER_RUN,
@@ -11558,6 +12016,9 @@ def upload_ad_creative(
         "size_mb": 0.0,
         "attempts": [],
     }
+    if picker is not None:
+        # ACL-1559: ждали ли выбор медиа шага Media и сколько.
+        _diag["picker"] = picker
     # Тяжёлый ролик сжимается ДО того, как мы что-то решаем про пути загрузки
     # (acl-1189). Замер 15.09: 247 МБ уходят в Meta порциями 2.8 МБ в минуту,
     # то есть полтора часа при бюджете шага в девять минут. Тот же ролик в 24
@@ -14034,13 +14495,18 @@ def destination_url_box(page: Page):
 # сказать. Теперь каждый выход шага называет себя (`last_destination_why`), и
 # строка `fail_ad_destination` несёт это имя в note.
 
-_last_destination: dict = {"why": "", "diag": {}}
+_last_destination: dict = {"why": "", "diag": {}, "instant_form": {}}
+
+#: ACL-1543: Meta оставила объявление на Instant form (add-on «Instant form
+#: (suggested)» или переключатель «Instant form»), вернуть Website не вышло.
+INSTANT_FORM_NOT_SWITCHED = "instant_form_not_switched"
 
 #: Причины, которые говорят о поле/переключателях внутри Website. Если тип
 #: назначения при этом не Website или раздела нет вовсе — причина в этом.
 _DESTINATION_FIELD_WHYS = frozenset({
     "url_field_missing", "url_field_not_focused", "url_insert_error",
     "addon_none_not_set", "url_not_kept", "addon_not_none",
+    "instant_form_switch_on",
 })
 
 #: Состояние раздела Destination. URL в ответ не попадает (это ссылка
@@ -14072,11 +14538,15 @@ _DESTINATION_STATE_JS = r"""([want, full]) => {
     const v = (fields[0].value || '').trim();
     url = !v ? 'empty' : (v === (want || '').trim() ? 'match' : 'other');
   }
+  // ACL-1543: переключатель «Instant form» (opt-in) нового редактора.
+  const sw = sec.querySelector('[data-surface$="/pce_lead_gen_instant_form_opt_in_field"] [role=switch], '
+    + '[data-surface$="/pce_lead_gen_instant_form_opt_in_field"] input[type=checkbox]');
   const out = {
     section: true,
     section_shown: seen(sec),
     dest_type: typeOn ? (typeOn.getAttribute('value') || 'unnamed') : '',
     addon: addonOn ? (addonOn.getAttribute('value') || 'unnamed') : '',
+    opt_in: sw ? (on(sw) ? 'on' : 'off') : '',
     url_fields: fields.length,
     url: url,
   };
@@ -14158,11 +14628,18 @@ def _destination_failed(page: Page, why: str, destination_url: str = "", **extra
                 why = "destination_section_missing"
             elif kind and kind != "external":
                 why = "destination_not_website"
+            elif state.get("addon") == "instant_form" or state.get("opt_in") == "on":
+                # ACL-1543: поле/add-ons не встали, а Instant form так и
+                # включён — причина в нём, а не в «поле без фокуса».
+                extra = {"field_why": why, **extra}
+                why = INSTANT_FORM_NOT_SWITCHED
             elif why == "url_field_missing" and int(state.get("url_fields") or 0) > 1:
                 why = "url_field_duplicated"
             elif why == "url_field_missing" and state.get("section_shown") is False:
                 why = "destination_section_hidden"
     diag = {**state, **extra}
+    if _last_destination.get("instant_form"):
+        diag.update(_last_destination["instant_form"])
     _last_destination.update(why=why, diag=diag)
     return False
 
@@ -14253,6 +14730,181 @@ def _ensure_destination_website(page: Page) -> tuple[str, dict]:
     return _stop("destination_not_website")
 
 
+# ── ACL-1543: раздел за виртуализацией и Instant form ─────────────────────
+#
+# 04509d5eed75 (03.10, 1443, ad 1) и 0e86c42023da (ad 2): `url_field_not_focused`
+# при `addon: instant_form`, `section_shown: false`, `url_fields: 0`. В снимке
+# раздел `#adgroupAdDestinationGeneric` — `display: none !important` внутри
+# обёртки Meta `data-virtualized="true"` (min-height держит место); так спрятан
+# каждый раздел объявления, который не на экране. Робот снимал `display: none`
+# один раз в начале шага, но пока обёртка вне экрана, Meta прячет раздел
+# заново при следующей перерисовке — к нажатию на поле URL у него не было
+# прямоугольника, фокус не встал. Невидимыми были и Browser add-ons:
+# `browser_addon_repair` их не нашёл (`none_checked: null`). Теперь раздел
+# сперва прокручивается на экран (обёртка — `scrollIntoView`), затем Instant
+# form выключается (add-on «None», переключатель opt-in), и только потом поле.
+# «View terms», «Create form», «Close» карточки условий Lead Ads робот не
+# нажимает никогда (`_PRESS_GUARD_JS`: `lead_terms`).
+
+_SHOW_DESTINATION_JS = r"""() => {
+  const sec = document.getElementById('adgroupAdDestinationGeneric');
+  if (!sec) return null;
+  const wrap = sec.closest('[data-virtualized]') || sec.parentElement || sec;
+  wrap.scrollIntoView({block: 'start', behavior: 'instant'});
+  sec.style.setProperty('display', 'block', 'important');
+  const r = sec.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}"""
+
+
+def _show_destination_section(page: Page) -> bool | None:
+    """Раздел Destination на экране и не спрятан; None — раздела нет / не прочитать."""
+    shown = None
+    for _ in range(2):
+        try:
+            shown = _eval_bounded(page, _SHOW_DESTINATION_JS)
+        except Exception:
+            return None
+        if shown is None:
+            return None
+        # Meta перерисовывает раздел после прокрутки — дать ей это сделать
+        # и снять `display: none` ещё раз уже на экране.
+        _sleep_h(0.4)
+    return bool(shown)
+
+
+#: Переключатель «Instant form» (opt-in) раздела: пометить и дать точку.
+_MARK_INSTANT_FORM_SWITCH_JS = r"""() => {
+  const sec = document.getElementById('adgroupAdDestinationGeneric')
+    || document.querySelector('[data-surface$="/ad_destination_generic_section"]');
+  if (!sec) return null;
+  const host = sec.querySelector('[data-surface$="/pce_lead_gen_instant_form_opt_in_field"]');
+  if (!host) return null;
+  const sw = host.querySelector('[role=switch], input[type=checkbox]');
+  if (!sw) return null;
+  for (const old of document.querySelectorAll('[data-rpa-field="dest_instant_form_switch"]')) {
+    old.removeAttribute('data-rpa-field');
+  }
+  sw.setAttribute('data-rpa-field', 'dest_instant_form_switch');
+  sw.scrollIntoView({block: 'center', behavior: 'instant'});
+  let r = sw.getBoundingClientRect();
+  if (!(r.width > 0 && r.height > 0)) {
+    const box = sw.parentElement;
+    if (!box) return null;
+    r = box.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return null;
+  }
+  return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+}"""
+
+_FOCUS_INSTANT_FORM_SWITCH_JS = r"""() => {
+  const el = document.querySelector('[data-rpa-field="dest_instant_form_switch"]');
+  if (!el) return false;
+  el.focus();
+  return document.activeElement === el;
+}"""
+
+
+def _brief_destination(state: dict) -> dict:
+    """Тип, add-on, opt-in и число полей URL — для строки телеметрии (без URL)."""
+    return {k: state.get(k) for k in ("dest_type", "addon", "opt_in", "url_fields") if k in state}
+
+
+def _instant_form_on(state: dict) -> bool:
+    return state.get("addon") == "instant_form" or state.get("opt_in") == "on"
+
+
+def _turn_off_instant_form_switch(page: Page) -> bool:
+    """Выключить переключатель «Instant form»; True — выключен."""
+    for how in ("click", "space"):
+        try:
+            point = _eval_bounded(page, _MARK_INSTANT_FORM_SWITCH_JS)
+        except Exception:
+            point = None
+        if not isinstance(point, dict):
+            return False
+        if how == "click":
+            try:
+                handle = page.locator('[data-rpa-field="dest_instant_form_switch"]').first.element_handle(
+                    timeout=2000)
+                if handle is not None:
+                    _mark_press_target(page, handle)
+                _cdp_mouse_click(page, point["x"], point["y"])
+            except Exception:
+                pass
+        else:
+            try:
+                focused = bool(_eval_bounded(page, _FOCUS_INSTANT_FORM_SWITCH_JS))
+            except Exception:
+                focused = False
+            if not focused:
+                return False
+            try:
+                page.keyboard.press("Space")
+            except Exception:
+                pass
+        _sleep_h(0.8)
+        if destination_state(page).get("opt_in") != "on":
+            return True
+    return False
+
+
+def _switch_off_instant_form(page: Page) -> dict:
+    """Вернуть объявление с Instant form на Website; {} — Instant form не было.
+
+    Только переключатель opt-in «Instant form» и радио «None» Browser add-ons.
+    Условия Lead Ads не принимаются, форма не создаётся: кнопки карточки
+    («View terms», «Create form», «Close») не нажимаются (охрана нажатий).
+    Строка `destination_instant_form_off`: каким элементом, что было и что стало.
+    """
+    before = destination_state(page)
+    if not _instant_form_on(before):
+        return {}
+    via: list[str] = []
+    if before.get("opt_in") == "on":
+        via.append("opt_in_switch")
+        _turn_off_instant_form_switch(page)
+    if destination_state(page).get("addon") == "instant_form":
+        via.append("addon_none")
+        _select_browser_addon_none(page)
+    after = destination_state(page)
+    ok = not _instant_form_on(after)
+    report = {"before": _brief_destination(before), "after": _brief_destination(after), "via": via}
+    _telemetry.record("destination_instant_form_off", ok,
+                      note="switched_to_website" if ok else "instant_form_kept", diag=report)
+    return {"instant_form_before": report["before"], "instant_form_after": report["after"],
+            "instant_form_via": via}
+
+
+def creative_soft_fail(tag: str, ad_label: str) -> str:
+    """Строка отказа креатива объявления `tag` (ACL-1551).
+
+    Мастер медиа застрял на Crop и закрыт своим Close —
+    `<tag>_creative_upload:crop_wizard_stuck - <объявление>: <фраза>`;
+    иначе — прежняя `<tag>_creative_upload`. Имя шага то же (блокирующий).
+    """
+    why = last_upload_why()
+    base = f"{tag}_creative_upload"
+    if why in (_crop.WIZARD_STUCK, MEDIA_PICKER_LOADING):
+        # ACL-1559: выбор медиа шага Media не догрузился — тоже своим именем.
+        return f"{base}:{why} - {ad_label}: {_simple.creative_why_text(why)}"
+    return base
+
+
+def destination_soft_fail(tag: str, ad_label: str) -> str:
+    """Строка мягкого отказа назначения объявления `tag` (ACL-1543).
+
+    Instant form не выключился — `<tag>_destination:instant_form_not_switched
+    - <объявление>: <фраза>`; иначе — прежняя `<tag>_destination`. Имя шага
+    то же: обход и `failure_policy` узнают его как раньше.
+    """
+    why = last_destination_why()
+    base = f"{tag}_destination"
+    if why == INSTANT_FORM_NOT_SWITCHED:
+        return f"{base}:{why} - {ad_label}: {_simple.destination_why_text(why)}"
+    return base
+
+
 def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     """Set the ad's destination to Website + Browser add-ons: None, with the
     real account tracking link — instead of the Instant Form Meta suggests
@@ -14271,7 +14923,7 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     page's Destination section underneath. Close it first if still open
     via the shared `_close_creative_setup_modal()` helper.
     """
-    _last_destination.update(why="", diag={})
+    _last_destination.update(why="", diag={}, instant_form={})
     _close_creative_setup_modal(page)
 
     # Confirmed live (2026-07-27): the Destination section's container
@@ -14279,19 +14931,21 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     # `display: none !important` Meta applies to the Ad creative section's
     # `#creativeEditorComponent` — same underlying quirk, different section.
     # Force it visible the same way before touching "None"/the URL field.
-    try:
-        page.evaluate(
-            "() => { const el = document.getElementById('adgroupAdDestinationGeneric');"
-            " if (el) el.style.setProperty('display', 'block', 'important'); }"
-        )
-    except Exception:
-        pass
+    # ACL-1543: и прокрутить к нему — вне экрана Meta прячет раздел снова.
+    _show_destination_section(page)
 
     # ACL-1371: при типе «Instant Experience» поля URL и Browser add-ons нет —
     # сначала вернуть тип Website.
     website_why, website_diag = _ensure_destination_website(page)
     if website_why:
         return _destination_failed(page, website_why, destination_url, **website_diag)
+
+    # ACL-1543: Instant form (add-on «Instant form (suggested)» или переключатель
+    # opt-in) выключить до поля URL: пока он включён, Meta держит карточку
+    # условий Lead Ads и ошибку Lead Gen. «None» ставится ещё раз после URL —
+    # см. порядок ниже.
+    _last_destination["instant_form"] = _switch_off_instant_form(page)
+    _show_destination_section(page)
 
     # ORDER MATTERS — URL first, "None" LAST. Confirmed live 2026-07-30
     # after a day of chasing "the radio keeps reverting": editing the
@@ -14324,6 +14978,9 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
         if not url_box.count():
             return _destination_failed(page, "url_field_missing", destination_url)
         url_handle = _focus_via_cdp_click(page, url_box)
+        if (url_handle is None or not _holds_focus(url_handle)) and _show_destination_section(page):
+            # ACL-1543: раздел спрятали между пометкой и нажатием — ещё раз.
+            url_handle = _focus_via_cdp_click(page, url_box)
         if url_handle is None or not _holds_focus(url_handle):
             # ACL-1371: без фокуса `insert_text` ушёл бы в то, что в фокусе
             # сейчас, — в чужое поле; назначение осталось бы пустым (7e5f7abec777).
@@ -14371,8 +15028,15 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
         except Exception:
             return False
 
+    def _switch_on() -> bool:
+        # ACL-1543 (ревью PR #545, B2): переключатель «Instant form» так и
+        # включён — объявление не на Website, как бы ни стояли URL и add-on.
+        return destination_state(page).get("opt_in") == "on"
+
     def _both_ok() -> bool:
         if not _url_matches():
+            return False
+        if _switch_on():
             return False
         # None (unreadable state) must not fail the whole step — but a
         # definite False must, since that is the exact broken state seen
@@ -14383,6 +15047,8 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     if not _both_ok():
         for _ in range(2):
             try:
+                if _switch_on():
+                    _turn_off_instant_form_switch(page)
                 retry_box = destination_url_box(page)
                 if retry_box is not None and _focus_via_cdp_click(page, retry_box) is not None:
                     page.keyboard.press("Control+A")  # replace, never append
@@ -14398,8 +15064,15 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     if _both_ok():
         return True
     # ACL-1371: какая из двух половин не удержалась — это и есть причина.
-    return _destination_failed(page, "addon_not_none" if _url_matches() else "url_not_kept",
-                               destination_url)
+    # ACL-1543: переключатель «Instant form» включён — `instant_form_switch_on`
+    # (`_destination_failed` назовёт это `instant_form_not_switched`).
+    if not _url_matches():
+        field_why = "url_not_kept"
+    elif _switch_on():
+        field_why = "instant_form_switch_on"
+    else:
+        field_why = "addon_not_none"
+    return _destination_failed(page, field_why, destination_url)
 
 
 def _holds_focus(handle) -> bool:
@@ -14517,6 +15190,9 @@ def _ad_destination_persisted(page: Page, destination_url: str) -> bool:
             box = destination_url_box(page)
             if box is not None:
                 if (box.input_value(timeout=2000) or "").strip() == destination_url.strip():
+                    # ACL-1543: при включённом «Instant form» это не Website.
+                    if destination_state(page).get("opt_in") == "on":
+                        return False
                     return _browser_addon_none_checked(page) is not False
                 return False
         except Exception:
@@ -18233,8 +18909,9 @@ def _advantage_plus_audience_on(page: Page) -> bool | None:
 def _ensure_manual_audience(page: Page) -> bool | None:
     """Leave Advantage+ audience mode before touching the age controls.
 
-    Returns the state AFTER: False = manual, True = still Advantage+, None =
-    could not tell. Records its own telemetry row either way, so a run where
+    Returns the state AFTER: False = manual (badge off, or the card in
+    controls mode, ACL-1544), True = still Advantage+ recommended setup (no
+    audience controls on the card), None = could not tell (`unconfirmed`). Records its own telemetry row either way, so a run where
     the switch-off did not hold can be told from one where it was never
     attempted — until 2026-09-16 nothing recorded either.
 
@@ -18255,6 +18932,19 @@ def _ensure_manual_audience(page: Page) -> bool | None:
                           note="already_off" if before is False else "badge_not_found",
                           diag={"badge": badge})
         return before
+    # ACL-1544 (03.10, Facebook_1443): до возраста бейдж «on» — норма. Его
+    # снимает только жёсткий возраст (итог — `verify_audience_advantage_off`);
+    # 417 записей из 417 этого шага были still_on, хотя итог после возраста
+    # в 252 из 258 — «off». Положительный признак готовности здесь — режим
+    # контролов карточки Audience (после Further limit): живые Locations /
+    # Age / Gender / Detailed targeting / Languages и «Switch to recommended
+    # setup». Тогда не кликаем ничего.
+    mode = _audience_mode(page)
+    if mode["mode"] == "controls":
+        _telemetry.record("advantage_plus_off", True, note="controls_mode",
+                          diag={"badge": badge, "mode": "controls",
+                                "controls": mode["controls"]})
+        return False
     flipped = _turn_off_advantage_plus_leads(page)
     picked = False
     if not flipped:
@@ -18273,20 +18963,116 @@ def _ensure_manual_audience(page: Page) -> bool | None:
         )
     _sleep_h(0.8)
     after = _audience_badge_on(page)
-    if after is True:
-        # Разметка до и после клика снималась на каждом прогоне (ACL-1313 —
-        # теперь только с FB_RPA_SHOT_ALL=1); отказу снимок остаётся.
-        try:
-            from src.fb_ads_rpa import page_capture as _pc
+    diag = {"flipped_switch": flipped, "picked_off": picked,
+            "badge": badge, "badge_after": {True: "on", False: "off"}.get(after)}
+    if after is not True:
+        _telemetry.record("advantage_plus_off", True, note="switched", diag=diag)
+        return after
+    # ACL-1544: бейдж всё ещё «on» — решает режим карточки. Контролы на
+    # месте — готово; рекомендованный режим (строка Further limit, ни
+    # контролов, ни «Switch to recommended setup») — по-настоящему «on»;
+    # ни того ни другого не прочитать — не гадаем, `unconfirmed`.
+    mode = _audience_mode(page)
+    diag["mode"] = mode["mode"]
+    diag["controls"] = mode["controls"]
+    if mode["mode"] == "controls":
+        _telemetry.record("advantage_plus_off", True, note="controls_mode", diag=diag)
+        return False
+    # Разметка до и после клика снималась на каждом прогоне (ACL-1313 —
+    # теперь только с FB_RPA_SHOT_ALL=1); отказу снимок остаётся.
+    try:
+        from src.fb_ads_rpa import page_capture as _pc
 
-            _pc.capture(page, step="advantage_plus_still_on")
+        _pc.capture(page, step="advantage_plus_still_on" if mode["mode"] else "advantage_plus_unconfirmed")
+    except Exception:
+        pass
+    if mode["mode"] == "recommended":
+        _telemetry.record("advantage_plus_off", False, note="still_on", diag=diag)
+        return True
+    _telemetry.record("advantage_plus_off", None, note="unconfirmed", diag=diag)
+    return None
+
+
+#: ACL-1544: подписи контролов карточки Audience в режиме контролов
+#: (снимки 0e86c42023da/00, 04509d5eed75/00).
+_AUDIENCE_CONTROL_LABELS = ("Locations", "Age", "Gender", "Detailed targeting", "Languages")
+
+_AUDIENCE_MODE_JS = r"""
+(labels) => {
+  const norm = (s) => (s || '').replace(/[\s​]+/g, ' ').trim();
+  const visible = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const h = document.getElementById('advantage-state-audience-section-header');
+  if (!h) return null;
+  // Карточка — самый широкий предок заголовка, в котором ещё нет другой
+  // карточки: её бейджа (`advantage-state-placement-section-header`) или
+  // заголовка третьего уровня с именем другой карточки. Внутри Audience свои
+  // заголовки третьего уровня («Controls», «Suggest an audience») — не
+  // граница; строки карточки на 1443 — заголовки четвёртого уровня
+  // (Locations … Languages, b3a333ff43ab/00), и они тоже не граница.
+  const others = /^(placements|budget|budget & schedule|conversion|ad set name|dynamic creative|live video ad|campaign score|campaign details|special ad categories|ad name|identity|ad setup|ad creative|destination|languages|tracking)$/i;
+  let card = h;
+  for (let el = h.parentElement; el && el !== document.body; el = el.parentElement) {
+    const badge = [...el.querySelectorAll('[id^="advantage-state-"]')]
+      .some(x => x.id !== 'advantage-state-audience-section-header');
+    const heading = [...el.querySelectorAll('[role=heading][aria-level="3"]')]
+      .some(x => others.test(norm(x.textContent)));
+    if (badge || heading) break;
+    card = el;
+  }
+  // Контролы — по видимым подписям. Признаки режима — по всему телу
+  // карточки, и по свёрнутому (`hidden`) тоже: на 1443 свёрнутая карточка в
+  // рекомендованном режиме показывает сводку с теми же подписями Locations …
+  // Languages, а строка «Further limit» лежит в скрытом теле (b3a333ff43ab/00).
+  const leaves = new Set();
+  const anyLeaves = new Set();
+  for (const e of card.querySelectorAll('*')) {
+    if (e.children.length || e.closest('[role=dialog]')) continue;
+    const t = norm(e.textContent);
+    if (!t) continue;
+    anyLeaves.add(t);
+    if (visible(e)) leaves.add(t);
+  }
+  return {
+    controls: labels.filter(l => leaves.has(l)),
+    switch_back: anyLeaves.has('Switch to recommended setup'),
+    further_limit: [...anyLeaves].some(t => /^further limit the reach of your ads$/i.test(t)),
+  };
+}
+"""
+
+
+def _audience_mode(page: Page) -> dict:
+    """Режим карточки Audience: `controls`, `recommended` или None (ACL-1544).
+
+    `controls` — тело карточки показывает контролы аудитории (не меньше двух
+    из Locations/Age/Gender/Detailed targeting/Languages) и ссылку «Switch to
+    recommended setup», а строки «Further limit the reach of your ads» нет.
+    Так выглядит карточка после шага Further limit, даже при бейдже
+    «Advantage+ on» (бейдж снимает только жёсткий возраст).
+    `recommended` — строка Further limit на месте, «Switch to recommended
+    setup» нет: аудитория в рекомендованном режиме, по-настоящему «on».
+    None — карточки нет или признаки противоречат друг другу.
+    """
+    got = None
+    for root in _roots(page):
+        try:
+            got = root.evaluate(_AUDIENCE_MODE_JS, list(_AUDIENCE_CONTROL_LABELS))
         except Exception:
-            pass
-    _telemetry.record("advantage_plus_off", after is not True,
-                      note="switched" if after is not True else "still_on",
-                      diag={"flipped_switch": flipped, "picked_off": picked,
-                            "badge": badge, "badge_after": {True: "on", False: "off"}.get(after)})
-    return after
+            continue
+        if got is not None:
+            break
+    if not got:
+        return {"mode": None, "controls": [], "switch_back": False, "further_limit": False}
+    controls = list(got.get("controls") or [])
+    switch_back = bool(got.get("switch_back"))
+    further = bool(got.get("further_limit"))
+    mode = None
+    if switch_back and not further and len(controls) >= 2:
+        mode = "controls"
+    elif further and not switch_back:
+        mode = "recommended"
+    return {"mode": mode, "controls": controls, "switch_back": switch_back,
+            "further_limit": further}
 
 
 def _audience_badge_on(page: Page) -> bool | None:
@@ -18738,7 +19524,8 @@ def _mark_age_trigger(root, value: str) -> bool:
         time.sleep(0.3)
 
 
-def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
+def fill_audience_age(page: Page, age_min: int, age_max: int, *,
+                      ensure_manual: bool = True) -> bool:
     """Set the audience age range, and only say so when the page shows it.
 
     Three parts since 2026-09-16, each answering a question the old single
@@ -18762,7 +19549,10 @@ def fill_audience_age(page: Page, age_min: int, age_max: int) -> bool:
     # Gating on it refused a settable age in every run of the evening, where
     # the old code had set it in three runs of four. The read-back below is
     # the real check of whether the age took.
-    _ensure_manual_audience(page)
+    # ACL-1544: `ensure_manual=False` — выключение уже сделал и записал
+    # вызывающий (поток новой записи кладёт его «on» в soft_fails).
+    if ensure_manual:
+        _ensure_manual_audience(page)
     _cancel_dynamic_creative_dialog(page)
     if not _fill_audience_age_controls(page, age_min, age_max):
         return False

@@ -76,8 +76,9 @@ POLICY: dict[str, tuple[str, str]] = {
     _profile.OPEN_BY_HAND: (
         BLOCKING,
         "the account's Multilogin profile was open by hand (without automation), and the "
-        "robot does not close such a window - it may hold a Facebook session Multilogin has "
-        "not saved yet; no draft was created - " + _profile.MESSAGES[_profile.OPEN_BY_HAND],
+        "robot could not reopen it with automation - either the graceful Multilogin stop did "
+        "not close the window, or reopening is switched off on this computer; nothing was "
+        "killed and no draft was created - " + _profile.MESSAGES[_profile.OPEN_BY_HAND],
     ),
     _profile.RESTART_FAILED: (
         BLOCKING,
@@ -204,6 +205,12 @@ POLICY: dict[str, tuple[str, str]] = {
         "the requested manual placements were not verified; leaving Advantage+ "
         "changes where budget can be spent",
     ),
+    "advantage_plus_off": (
+        BLOCKING,
+        "the Audience card stayed on the Advantage+ recommended setup before the age "
+        "step (no audience controls, 'Further limit the reach of your ads' still "
+        "offered): age, gender and languages are not applied as controls",
+    ),
     "advantage_plus_audience": (
         BLOCKING,
         "the Audience card still reads 'Advantage+ on': the age range is only a "
@@ -300,7 +307,8 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     ),
     _profile.OPEN_BY_HAND: (
         "Profile window open by hand",
-        "The robot does not close a hand-opened window, so no draft was created.",
+        "The hand-opened window could not be reopened with automation (Multilogin did not "
+        "close it, or reopening is switched off on this computer), so no draft was created.",
         "Close the profile window so Multilogin saves the session, then publish again.",
     ),
     _profile.RESTART_FAILED: (
@@ -405,6 +413,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Budget may be spent on placements that were not requested.",
         "Check \"Placements\" on the ad set.",
     ),
+    "advantage_plus_off": (
+        "Advantage+ audience — still on recommended setup",
+        "Age, gender and languages are not applied as controls, so Meta may deliver outside them.",
+        "Open the ad set audience, choose \"Further limit the reach of your ads\" and check Age.",
+    ),
     "advantage_plus_audience": (
         "Advantage+ audience still on",
         "The age range is only a suggestion and Meta may deliver outside it.",
@@ -463,6 +476,68 @@ _PER_AD_NAME = re.compile(
 )
 
 
+# ── Per-ad details that change the explanation, not the verdict ────────────
+#
+# (per-ad step, reason at the start of the note) -> (why, title, impact, action).
+# ACL-1543: `<tag>_destination:instant_form_not_switched - <ad>: ...` — Meta kept
+# the ad on "Instant form (suggested)"; still BLOCKING, but the operator reads
+# that it is Instant form, not a generic "destination not verified".
+PER_AD_DETAIL: dict[tuple[str, str], tuple[str, str, str, str]] = {
+    ("destination", "instant_form_not_switched"): (
+        "Meta kept the ad on Instant form (suggested) and the robot could not switch it "
+        "back to Website, so the website URL is not set; the robot never accepts Lead Ads "
+        "Terms or creates an instant form",
+        "Ad destination - Instant form",
+        "Meta kept this ad on Instant form (suggested); the website URL is not set.",
+        "Open the ad, select Website (Browser add-ons: None) and enter the URL. "
+        "Do not accept Lead Ads Terms or create a form for it.",
+    ),
+    # ACL-1551 (live 04.10, 232d398471bd): Meta's media wizard stayed on its
+    # Crop step after Next; the robot left it with the wizard's own Close and
+    # went on with the other ads. Still BLOCKING: the creative is not confirmed.
+    ("creative_upload", "crop_wizard_stuck"): (
+        "Meta's media wizard stayed on its Crop step (Next did not move it on), so the robot "
+        "closed the wizard with its own Close; the ad's media is not confirmed",
+        "Ad media - Meta's media wizard stuck on Crop",
+        "The media wizard did not finish, so this ad's media and crops are not confirmed.",
+        "Open the ad in Ads Manager, check its media (and the Stories/Reels file) and fix it by hand.",
+    ),
+    # ACL-1559 (live 04.10, 2f140fa687fa): the wizard opened on its Media step and
+    # Meta's media picker never left its "Loading..." placeholders; the robot
+    # waited without clicking, reopened the wizard once, and gave up. Still
+    # BLOCKING: the ad has no media. The file itself is not blamed.
+    ("creative_upload", "media_picker_loading"): (
+        "Meta's media picker on the wizard's Media step kept loading (no Upload, no media "
+        "library), so the ad's media could not be attached",
+        "Ad media - Meta's media picker kept loading",
+        "Meta's media picker never finished loading, so this ad has no media.",
+        "Open the ad in Ads Manager, add its media by hand (Set up creative - Media), "
+        "or run the campaign again later.",
+    ),
+    # ACL-1551: the wizard of the previous ad was still open and its own Close
+    # did not close it, so the ad set's Action menu could not be used.
+    ("create", "creative_wizard_left_open"): (
+        "Meta's media wizard of the previous ad stayed open and its own Close did not close it, "
+        "so the ad set's Action menu could not be used to create this ad",
+        "Ad not created - media wizard left open",
+        "The media wizard of the previous ad stayed on screen, so this ad was not created.",
+        "Close the media wizard in Ads Manager, then add the missing ad by hand.",
+    ),
+}
+
+
+def _detail(failure: str) -> tuple[str, str, str, str] | None:
+    raw = str(failure or "")
+    per_ad = _PER_AD_NAME.fullmatch(base_name(raw))
+    if not per_ad or ":" not in raw:
+        return None
+    note = raw.split(":", 1)[1].strip()
+    for (step, why), entry in PER_AD_DETAIL.items():
+        if per_ad.group(1) == step and (note == why or note.startswith(why + " ")):
+            return entry
+    return None
+
+
 def _lookup(name: str) -> tuple[str, str] | None:
     known = POLICY.get(name)
     if known:
@@ -497,6 +572,9 @@ def severity(failure: str) -> str:
 def reason(failure: str) -> str:
     """Why this failure has the severity it has — for the operator, not a log."""
     name = base_name(failure)
+    detail = _detail(failure)
+    if detail:
+        return detail[0]
     known = _lookup(name)
     if known:
         return known[1]
@@ -577,6 +655,9 @@ def problem(failure: str) -> dict:
         label = (found.group("name") or found.group("name2") or "").strip() if found else ""
         if label and not _TAG_ONLY.match(label):
             ad_name = label
+    detail = _detail(raw)
+    if detail:
+        guide = detail[1:]
     title, impact, action = guide
     return {
         "step": name,

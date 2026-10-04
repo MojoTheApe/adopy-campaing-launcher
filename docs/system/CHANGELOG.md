@@ -19,6 +19,335 @@ Multilogin profile's screen values. The live run on 9943 (03.10) showed that cap
   stops cleanly instead of raising IndexError.
 - `tests/test_probe_screen_values.py`: offline, with a fake page and context.
 
+## CI reuses a full green run of the same tree on promotion — ACL-1565
+
+Every task ran the full Windows suite (6 shards) and the installer build three times
+on the same content: on the PR, on the stage push and PR stage→main, and on the main
+push. The stage→main promotion alone took about an hour of a task's delivery time.
+
+- `scripts/acl_ci_reuse.py`: the scope job of `ci.yml` and the classify job of
+  `windows-installer.yml` look for an earlier run of the same workflow whose commit has
+  the same git tree as `HEAD^{tree}`. Candidate commits come from `git log --all`; each
+  tree is computed by git, never taken from the API payload. Only a `push` or
+  `workflow_dispatch` run of this repository counts (a `pull_request` run tested a
+  temporary merge commit whose tree cannot be proven later). It must be `completed` /
+  `success`, and every required job of its latest attempt must have run and succeeded:
+  `test (3.11|3.13, 1..3)` + `ACL verification`, or `Verify build inputs` +
+  `Build, install, repair, and uninstall` + `Installer verification`. A run that itself
+  reused (tests skipped), or was partial, cancelled or failed, never counts.
+- Then the scope job outputs `windows=false` and `reused_from=<run url>`, the Windows jobs
+  are skipped, the required checks `ACL verification` / `Installer verification` still
+  conclude success, and the run summary says "Reused full results of run <url> (same
+  tree <sha>)".
+- Always in full: `workflow_dispatch`, release tags, a missing token, any API or git
+  error, no matching run. In practice the PR and the stage push (a squash makes a new
+  tree) run in full; the stage→main PR and the main push reuse the stage push run.
+- Only the scope/classify job gets `actions: read` (the job's own `GITHUB_TOKEN`, no new
+  secrets); the Windows jobs that run PR code keep `contents: read`. The reused run URL
+  must be exactly `https://github.com/<repo>/actions/runs/<id>` of that run before it is
+  written to `GITHUB_OUTPUT` or the summary.
+- Release gate: `verify_promotion` in `scripts/acl_publish_release.py` now checks the
+  jobs of the main run named in the tag. If its test matrix did not run, it accepts the
+  release only with a provable full run of the release tree (same rules as above),
+  otherwise it refuses (an API error while proving counts as no proof). It prints which
+  run really tested the tree, so the release log links it. Tracker `check-merge` reads only the aggregate required checks
+  and `verify-stage` reads no checks, so the pinned Tracker needed no change.
+## A hand-opened profile window is reopened at once, with no conditions — ACL-1562
+
+On 2026-10-04 the "open profile" button for Facebook_9943 answered "The profile is open
+by hand — close its window in Multilogin" right after the owner had restored the window:
+the ACL-1388/1427 conditions (window at least 15 minutes old, not in the foreground, a
+minute with no input, wait up to 2 minutes for that silence) did not pass. Owner's
+decision: drop them.
+
+- `hand_window.assess` has no conditions any more: it says "reopen" unless the machine
+  switch `FB_RPA_REOPEN_HAND_WINDOW=0` is set (old always-stop behaviour, kept for tests
+  and as an emergency opt-out). Removed: `MIN_AGE_S`, `MIN_IDLE_S`, `IDLE_WAIT_S`,
+  `wait_until_safe`, `watch_cancel`, the Win32/psutil reads, and the env variables
+  `FB_RPA_HAND_WINDOW_MIN_AGE_S`, `FB_RPA_HAND_WINDOW_MIN_IDLE_S`,
+  `FB_RPA_HAND_WINDOW_IDLE_WAIT_S`.
+- `browser.MultiloginAttachOnlyProvider._reopen_hand_opened` closes the window at once
+  on Publish, Read spend, Read all (spend and countries) and the row's "open profile"
+  button. Unchanged and mandatory: closing is only the graceful MLX API stop of that one
+  profile (`allow_kill=False`); no process is killed, no other profile is touched, no
+  plain browser is opened. The login check after the reopen is as before
+  (`profile_logged_out`, no retries).
+- Visible: before the stop, the job panel and the account-map row say "The <account>
+  window was opened by hand — reopening it with automation"
+  (`browser.HAND_WINDOW_NOTICE`, `account_spend.hand_note`; the status poll still uses
+  the `waiting` key). The "Waiting for the computer to be idle…" texts are gone. The
+  Publish hint no longer asks to close a hand-opened window first.
+- Telemetry `profile_hand_window` (same step name): `note` `reopened`, `disabled`,
+  `mlx_stop_failed`, `still_running` or `restart_failed`; `diag.stop_s` = how long the
+  graceful stop took (API call plus waiting for the window's processes to exit).
+  `age_s`, `idle_s`, `waited_s`, `wait_outcome` are no longer written.
+- If the graceful stop fails or the window outlives it, the action stops with
+  `profile_open_by_hand` and the reason in its detail ("Multilogin did not close the
+  hand-opened window: …"); nothing is killed. Reads and "open profile" answer
+  "Multilogin did not close the hand-opened profile window — close it in Multilogin,
+  then Read again" (`code: "open_by_hand"`, still not 409). With reopening switched off on
+  the machine they say so instead ("…reopening it with automation is switched off on this
+  computer…", `account_spend.HAND_OFF_MESSAGE`); the Publish failure texts name both causes.
+- Stop pressed while the profile is being (re)opened no longer lets the first campaign
+  start: `publish_draft` checks the job's Stop right after attaching and returns "Stopped
+  by the user before the campaign started" (window left open).
+- `/mlx-profile-open` (connecting a new profile from search) still leaves a hand-opened
+  window alone: it is not an action on a connected account.
+
+## Media step: wait for Meta's media picker to load, name the stall — ACL-1559
+
+Live 2026-10-04 (Facebook_1443, run 2f140fa687fa): Meta's media wizard opened on its
+Media step while the media picker still showed only "Loading..." placeholders. The
+robot clicked the already-current Media step twice, probed the disabled Next four
+times and gave up after ~20 s with the generic `upload_button_missing`.
+
+- `meta_dom.upload_ad_creative`: when the current wizard step is already Media, the
+  robot no longer clicks the step and does not press Next. It polls a read-only picker
+  check (`_WIZARD_MEDIA_PICKER_JS`, inside the wizard dialog: placeholder count, Upload
+  by text or data-surface, "Search media", grid tiles) every 0.25 s for up to
+  `MEDIA_PICKER_LOAD_S` = 45 s (capped by the creative step budget). Once Upload is
+  there, the existing library search / tile / Upload flow runs unchanged.
+- Still loading at the timeout: new reason `media_picker_loading` (diag: `picker`,
+  `skeletons`, `waited_s`). It is a navigation reason (`_NAVIGATION_WHYS`): the file is
+  not marked as failed for the run. The existing single fresh reopen of the wizard is
+  kept. The ad's step reads
+  `adN_creative_upload:media_picker_loading - <ad>: <sentence>`, BLOCKING, with its own
+  readable problem ("Ad media - Meta's media picker kept loading") and why-text.
+- Telemetry: an `ad_creative_upload` row `media_picker:ready|loading|empty` with the
+  picker state, `waited_s`, `skeletons_at_start` and `since_open_s`; a `media_picker`
+  phase; the picker in the upload trail. No new step names.
+- Regression kept: with Creative setup or Text as the current step, Media is still
+  clicked (ACL-1348).
+- Sentry triage map: `ad_creative_upload` / `media-picker-loading` → ACL-1559.
+- Bench: `wizard_media_picker_2026_10_04.html` (fragments `loading` from 2f140fa687fa,
+  `loaded` from 232d398471bd), `tests/test_bench_wizard_media_picker_1004.py`.
+- Not changed: ACL-1551's busy check still reads the loaded Media step right after a
+  pick (Next and Cancel disabled) as busy. The 1551 bench pins that on purpose
+  (`media_busy`: "the walk waits while the wizard is busy"), and the walk does not run
+  on Media before the pick.
+
+## Run summary carries the run's telemetry as a scrubbed Sentry attachment — ACL-1554
+
+To read a manager's run we had to ask them for `output\rpa_telemetry.jsonl` by hand.
+The "Run summary" event (ACL-1447) now carries that run's own step log.
+
+- `run_summary._deliver` (the background send thread, never the run itself) reads the
+  journal and attaches `run_telemetry_<run_id>.jsonl` with only the rows of that
+  `run_id`. Lines without the run id are not parsed; an unparsable line is skipped.
+- Each row goes through `run_telemetry.scrub_diag` and then the summary's own scrub
+  (`_EXTRA_SCRUB`: Ads Manager URLs, emails, `act_` ids) on every string at any depth.
+  New in `_EXTRA_SCRUB`: the user name in a path (`C:\Users\<name>`, UNC
+  `\\srv\Users\<name>`, `/Users/<name>`, `/home/<name>`) becomes `<user>`, up to the next
+  path separator, so a name with a space ("Ivan Petrov") goes too; the summary text is
+  scrubbed of it as well. In the attachment only, dict keys are scrubbed too (account
+  ids, `act_` ids, emails as keys); colliding keys get a `#2` suffix. `run_id` stays as
+  is; `job` loses its dashes, like in `acl_sentry.report_step_failure`.
+- With no Sentry DSN the journal is not read at all.
+- Cap `run_summary.TELEMETRY_MAX_BYTES` = 256 KB. Over it the oldest rows are dropped
+  and a final row `{"step": "telemetry_truncated", "dropped_rows": N, ...}` says how many.
+  `acl_sentry._attach_telemetry` checks the cap again (before_send does not see
+  attachments) and accepts only a `.jsonl` file: screenshots are never attached.
+- Context `run_summary.telemetry_attachment`: `ok`, `truncated`, `missing` (no run id,
+  no journal, no rows of this run) or `error` (journal unreadable, a row did not scrub,
+  or `add_attachment` failed). On `missing`/`error` the summary is sent without the
+  attachment.
+- Sentry attachment quota for `adopy-7t` was not readable: the stored
+  `SENTRY_AUTH_TOKEN` gets 403 on `stats_v2` and on the organization endpoint. Sentry
+  rate-limits attachments as their own category and drops only the attachment item
+  over quota, so the event itself still arrives.
+- Tests: `tests/test_run_summary_telemetry_attachment.py` (real `sentry_sdk`, in-memory
+  transport, synthetic rows with a fake account id, Ads Manager URL, email, token and
+  user path).
+- Live check left: a run on the owner's machine shows the attachment on its Run summary.
+
+## Story not in the library: the media wizard is left with its own control, the other ads are still built — ACL-1551
+
+Live run on Facebook_1443 on 2026-10-04 (232d398471bd, build c1f0e507): ad 1 of
+CO_bnc_All_Video_GMBL|TradingYB_35_04.10 was a video post/story pair whose story file is
+not in Meta's library. The media wizard stayed open on Crop, the ad set's Action menu did
+not open under it, and ads 2-3 were never created (`ad2_create action_menu_not_opened`,
+`ad3_create not_tried`).
+
+- Root cause, from the captures: (1) after Next Meta keeps the wizard "busy" - Next and
+  Cancel `aria-disabled` (00_wizard_media, 04_ad_creative_upload). The walk counted that
+  as four misses (~4 s) and gave up, so it left the wizard on Media; (2) on Crop the
+  picker's own footer Save (ACL-1533) did bring Crop back, but Next did not move the
+  wizard on: busy, then the same Crop with Next enabled again (02_wizard_crop). Each
+  later walk (reuse, retry, force-close) pressed Next again and the second one hung for
+  over a minute; (3) the fallback close looked for the corner icon next to "Creative
+  setup", which this step row (Media · Trim · Crop · …) does not have, so nothing was
+  pressed and the dialog stayed. On 03.10 the same pair passed because Next on Crop
+  advanced within about 2.5 s. The 04.10 Crop layout has no Save of its own (footer
+  Cancel / Next); the only Save is in the in-wizard Replace picker.
+- The walk now waits while the wizard is busy (at most 30 s per walk, it is not counted
+  as a miss) and looks for its forward button only inside the wizard's own `role=dialog`.
+  Before, the editor footer's Done/Save/Next were candidates too.
+- Crop: Next is pressed once per ad. Busy, then the same Crop (or still busy after 25 s)
+  means Next did not advance. The robot then never presses Next again. It leaves the
+  wizard with its own control: a Save/Done in the wizard footer if Meta shows one (the
+  wizard is complete, the story warning stays), otherwise the wizard's own Close in its
+  header. Close means the ad is blocking with `crop_wizard_stuck` and the line
+  `ad_creative_upload:crop_wizard_stuck - <ad>: Meta's media wizard stayed on its Crop
+  step ...`. There is no second upload attempt. Publish, Next and anything outside the
+  wizard are never pressed.
+- The force-close (`_close_creative_setup_modal`) presses the wizard's own Close before
+  the old corner-icon fallback.
+- `simple_create.create_next_ad` closes a leftover media wizard with its own Close before
+  the ad set's Action menu (`wizard_cleared` in `simple_create_more_ads`). If Close does
+  not close it, the reason is `creative_wizard_left_open` ("Meta's media wizard of the
+  previous ad stayed open ...").
+- Telemetry `ad_creative_wizard`: `closed_by` (the control that closed the wizard),
+  `dialog_left`, `exit` (`why`, `tried`, `next_presses`), `busy_s`; note
+  `<origin>:closed_by_close` when Close closed it. No new step names.
+- `failure_policy.PER_AD_DETAIL`: readable problems "Ad media - Meta's media wizard stuck
+  on Crop" and "Ad not created - media wizard left open" (both blocking).
+- Bench: `wizard_crop_story_missing_2026_10_04.html` (crop_step, crop_busy,
+  in_wizard_picker, media_busy), `tests/test_bench_wizard_exit_1004.py`,
+  `tests/test_more_ads_after_a_stuck_wizard.py`.
+- Review round 2: a Save/Done already pressed as Crop's forward button is filtered out in
+  the page before any click (`_WIZARD_EXIT_JS` takes `{want, skip}`), so it is never
+  pressed twice before Close. The `crop_refused` branch in `upload_ad_creative` is removed:
+  the retry wrapper already names the Crop reason (`media_refused_on_ad`), and
+  `_creative_why` keeps the first reason named.
+- The Issue's acceptance criterion "closed by its own Save" assumes Crop has its own Save;
+  the 04.10 Crop does not (footer Cancel / Next). The live success path is the picker's
+  footer Save, then one Next that closes the wizard.
+- Live check left: a 1443 campaign with a pair whose story is not in the library builds
+  all its ads.
+
+## Advantage+ audience before the age: verified by controls mode, the Campaign toggle never touched — ACL-1544
+
+Live runs on Facebook_1443 on 2026-10-03 (04509d5eed75, 0e86c42023da): every campaign logged
+`advantage_plus_off` ok false `still_on` (`flipped_switch: true`, badge "on" before and after).
+
+- Finding: before the age step the Audience card badge reads "Advantage+ on" by design. Meta
+  clears it only when the audience gets a hard condition (age without "Use as a suggestion"),
+  which the final step `advantage_plus_audience` checks after the age. The pre-age step never
+  passed in any live build (about 257 unique rows, all `still_on`; the acl-live-* telemetry
+  files are cumulative copies), so its failure was a false alarm. The captured card was already in controls mode: Locations, Age
+  (Minimum/Maximum), Gender, Detailed targeting, Languages and "Switch to recommended setup",
+  with no "Further limit the reach of your ads" row.
+- Finding: `flipped_switch: true` was a click on the editor header's **Campaign toggle**
+  ("In draft"). `_turn_off_advantage_plus_leads` started from the first element whose text
+  contained "Advantage+ leads", climbed five levels from the Campaign score panel and clicked
+  the first checked switch inside. Captures of the same runs show the toggle on before the
+  step and off after (b3a333ff43ab, cb854b07857b); with `flipped_switch: false` it stayed on.
+  37 unique runs (28.09-03.10) pressed it.
+  It now looks for the label itself, stays inside its row (at most 80 characters of text) and
+  never presses a switch named something other than Advantage+ (aria-label "Campaign toggle").
+- The pre-age step reads the Audience card mode (`_audience_mode`): controls mode -> ok,
+  note `controls_mode`, nothing clicked; recommended setup ("Further limit" row, no controls,
+  no "Switch to recommended setup") after the fallbacks -> ok false `still_on`, and the
+  recorded flow adds the blocking failure `advantage_plus_off` ("Advantage+ audience - still on
+  recommended setup"); neither readable -> ok null, note `unconfirmed`, not blocking (the final
+  check after the age still decides). The flow calls the switch-off itself and runs
+  `fill_audience_age(..., ensure_manual=False)`.
+- Review round 2: the card boundary counts only aria-level 3 card headings (on 1443 the
+  rows Locations … Languages are level-4 headings inside the card), and the mode markers
+  ("Further limit", "Switch to recommended setup") are read in the collapsed `hidden` body too.
+  On the live captures: 57 of 57 `advantage_plus_still_on` read controls, 8 of 8
+  recommended-state captures read recommended (before: all 8 unconfirmed). Controls still
+  require "Switch to recommended setup": the recommended summary carries the same five labels.
+- Bench: `audience_controls_badge_on_2026_10_03.html` (scrubbed cards of both runs, the
+  Campaign toggle, the leads row and the collapsed recommended card of b3a333ff43ab/00),
+  `tests/test_bench_audience_controls_badge_on.py`.
+
+## Single-screen editor: "Instant form (suggested)" goes back to Website — ACL-1543
+
+Live runs on Facebook_1443 on 2026-10-03 (04509d5eed75 ad 1, 0e86c42023da ad 2): one ad
+per campaign stopped on `ad_destination` with `url_field_not_focused` (Website selected,
+Browser add-ons on "Instant form (suggested)", Lead Ads Terms card, Lead Gen error #100,
+`section_shown: false`), and the campaign ended "do not publish" without saying why.
+
+- Root cause: Meta virtualises off-screen sections of the single-screen editor
+  (`display: none !important` inside a `data-virtualized` wrapper). The robot removed
+  the `display: none` once at the start of the step, but while the section was off
+  screen Meta hid it again, so the Website URL field had no box and never took focus;
+  the hidden Browser add-ons could not be read either (`browser_addon_repair`:
+  `none_checked: null`).
+- The destination step now scrolls the section's wrapper on screen first, then turns
+  Instant form off - the "Instant form" opt-in switch when it is on, then Browser
+  add-ons "None" - and only then fills and verifies the Website URL (None is set again
+  after the URL, as before). Telemetry `destination_instant_form_off` records the
+  controls used and the before/after destination state (type, add-on, opt-in; no URL).
+- The robot never accepts Lead Ads Terms and never creates an instant form: the press
+  guard refuses any press inside the Instant form add-on card and on "View terms",
+  "Accept", "Create form" (`click_refused`, note `lead_terms`).
+- If Instant form stays on, the reason is `instant_form_not_switched` (the field-level
+  reason stays in diag as `field_why`), the ad row reads
+  `<tag>_destination:instant_form_not_switched - <ad>: <sentence>` and stays blocking;
+  the dashboard problem is titled "Ad destination - Instant form".
+- Review round 2: an "Instant form" opt-in switch that stays on is not success - the
+  final check, its retry and the classic sweep's read-back refuse it
+  (`instant_form_not_switched`, `field_why: instant_form_switch_on`). The press guard
+  checks the Instant form card with `closest()` (live "View terms" sits 16 levels below
+  it) and tests both the text and the aria-label of a button. The switch is looked up
+  inside the destination section only. The new step `destination_instant_form_off` has
+  its build-progress rule (ad stage).
+- Bench: `ad_destination_instant_form_2026_10_03.html` (scrubbed 04509d5eed75 capture),
+  `tests/test_bench_destination_instant_form.py`.
+
+## Crop step: no false "Square changed", the in-wizard Replace picker left through its Save — ACL-1533
+
+Live runs on Facebook_1443 on 2026-10-03 (d54d68303e57, f35a2b31f7d8, 2e98a75f252d,
+a39407b72507): every post/story pair ended "do not publish".
+
+- `crop_square_changed` was a false positive. The Crop cards' video media is a `blob:`
+  URL that Meta re-mints whenever the step is drawn again; after Replace both cards had a
+  new one, so the src comparison said "Square changed" although Square was still on
+  Original with the post (1:1 still disabled, no thumbnail ids). `crop_step.square_changed`
+  now blocks only on positive evidence: the picked tile's thumbnail id appears on Square,
+  Square's ids are replaced by others, its stable media identity (`media_key`: a CDN path
+  without its signed query; `blob:`/`data:` have none) changed, or its ratio radios
+  changed (another shape).
+- `crop_replace_picker_not_closed`: in Meta's in-wizard "Replace media for Stories,
+  Status, Reels" the step row's "Crop" is the current step (`aria-current=step`) and
+  pressing it does nothing. The way back to Crop is the picker's own Save: the footer's
+  primary button after the "Search media" box (where Crop has Next), which already
+  brought Crop back after a pick live. It is now the only control pressed there, after a
+  pick and, for a story not in the library, with nothing picked; never the header Save,
+  Close, Next or Publish (a slot that reads anything but "Save" is not pressed). If Crop
+  does not come back, Close and `crop_replace_picker_not_closed` as before. If Save
+  without a pick changed the Vertical card (media gone or other ratio radios), the step
+  blocks with `crop_vertical_changed_without_story`.
+- Review round 2: the Vertical side of Replace needs positive evidence too
+  (`crop_step.vertical_replaced`, same rules as Square via `card_changed`: picked thumbnail
+  id, Vertical ids replaced, stable `media_key` changed, ratio radios changed - live the
+  story made "9:16 (recommended)" disabled). The raw-src check alone passed every video
+  Replace (`blob:` re-minted), so a Replace that left the post on Vertical read as "as
+  planned"; without evidence the step now blocks with `crop_vertical_replace_unconfirmed`
+  (English line in `simple_create.creative_why_text`; the creative step fails, blocking).
+  `crop_vertical_changed_without_story` uses the same evidence (thumbnail ids included).
+- Bench: `crop_step_pair_video_2026_10_03.html`, `crop_replace_in_wizard_picker_2026_10_03.html`
+  (scrubbed, `tests/bench/catalogue.json`), `tests/test_bench_crop_live_1003.py`; the
+  in-wizard tests of `tests/test_story_not_placed_is_a_warning.py` follow the live way back.
+
+## Status screenshot is off by default: it resets the profile's viewport — ACL-1535
+
+ACL-1532 measured live (2026-10-03): the status screenshot taken on every account read
+(`page.screenshot` in `account_spend._status_shot`, ACL-1430) cleared the viewport
+override held by Multilogin; the page went from ~1919×1079 to ~3837×2157 device px and
+stayed there. Window size is part of the browser fingerprint.
+
+- `src/analysis_agent/account_spend.py`: `_shoot_status` calls `_status_shot` only when
+  `ACL_STATUS_SHOT=1` is set (machine `.env`, loaded by `serve.py` through
+  `paths.load_env`; for controlled tests only). Otherwise the read makes no
+  `page.screenshot` and no CDP call, and the reading carries the account's last stored
+  shot (if it is still on disk), so the row and Copy for group keep working after a Read.
+  `_status_shot` itself is untouched (ACL-1529 rewrites it).
+- The PNG on a failed read (`_shoot`: grid timeout, wrong period, no totals row; also
+  used by `country_split`) is behind the same flag and returns "" without it. The
+  HTML/JSON diagnostics (`page_capture`, which never takes an image) are unchanged.
+  A grep of the dashboard read paths (spend, country split, status read, open-profile in
+  `fb_ads_rpa/browser.py`, turn-off) found no other `page.screenshot` or
+  `Page.captureScreenshot` call.
+- Map row and live Read: with no stored shot, Copy for group stays disabled; its tooltip
+  now reads "Screenshots are switched off for safety".
+- Tests: `tests/test_status_screenshot.py` checks with a page spy that a default read
+  calls neither `screenshot` nor `new_cdp_session` (successful and failed reads, and
+  the `country_split` failure shot), that `ACL_STATUS_SHOT=1` brings the
+  old behaviour back, and that the last stored shot is kept.
+
 ## Journal, ad-text and team-library file locks use the shared safe lock — ACL-1512
 
 ACL-1495 moved hidden accounts and the targeting registry to

@@ -178,7 +178,7 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
               {%- set group_head = r.account.split(' - ')[0] ~ ' — ' ~ st_word ~ ((' · ' ~ st.at) if st.at else '') -%}
               <div class="amap-st-report">
               {%- if st.shot_id %}<button type="button" class="amap-btn amap-copy-group" data-shot="{{ st.shot_id }}" data-head="{{ group_head }}" title="Copies one image: {{ group_head }}, above the screenshot taken {{ st.shot_at }}" onclick="amapCopyGroup(this)">Copy for group</button>
-              {%- else %}<button type="button" class="amap-btn amap-copy-group" disabled title="No screenshot on the last read — read the account again">Copy for group</button>{% endif -%}
+              {%- else %}<button type="button" class="amap-btn amap-copy-group" disabled title="Screenshots are switched off for safety">Copy for group</button>{% endif -%}
               <small class="amap-st-hint">Copy for group — paste it into the provider's group</small></div>{% endif -%}
               {%- endif -%}
             </td>

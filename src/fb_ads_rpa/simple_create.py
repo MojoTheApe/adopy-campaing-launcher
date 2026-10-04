@@ -552,6 +552,10 @@ _WHY_TEXT = {
     "dialog_open_media_picker": ("Meta's media picker opened over the new ad after Create ad and "
                                  "could not be closed with its Cancel, so the robot did not fill the "
                                  "new ad; close it and fill the new ad in the draft by hand"),
+    # ACL-1551 (live 04.10): мастер медиа прошлого объявления остался открыт.
+    "creative_wizard_left_open": ("Meta's media wizard of the previous ad stayed open and could not be "
+                                  "closed with its own Close, so the ad set's Action menu could not "
+                                  "be used"),
 }
 
 
@@ -566,7 +570,37 @@ _CREATIVE_WHY_TEXT = {
     "story_not_placed:not_in_library": ("Story placement uses the post file: the story file is not "
                                         "in Meta's media library, so Replace was skipped (Original "
                                         "and no Meta AI expansion are set)."),
+    # ACL-1533: Replace on Vertical without evidence that the story is there.
+    "crop_vertical_replace_unconfirmed": ("The story file could not be confirmed on the Vertical "
+                                          "crop after Replace (the post may still be there); the "
+                                          "ad is left in the draft for review."),
+    "crop_vertical_changed_without_story": ("The Vertical crop changed although no story file was "
+                                            "picked; the ad is left in the draft for review."),
+    # ACL-1551 (live 04.10): Next on Crop did not move Meta's wizard on.
+    "crop_wizard_stuck": ("Meta's media wizard stayed on its Crop step (Next did not move it on), "
+                          "so the robot closed the wizard with its own Close; the ad's media is not "
+                          "confirmed and the ad is left in the draft for review."),
+    # ACL-1559 (live 04.10, 2f140fa687fa): Meta's media picker stayed on "Loading...".
+    "media_picker_loading": ("Meta's media wizard opened on its Media step, but the media picker "
+                             "kept showing 'Loading...' (no Upload, no media library), so the "
+                             "robot could not attach this ad's media; the ad is left in the "
+                             "draft for review."),
 }
+
+
+#: Причины отказа шага назначения — для человека (итог кампании, English).
+#: ACL-1543: Meta оставила объявление на «Instant form (suggested)».
+_DESTINATION_WHY_TEXT = {
+    "instant_form_not_switched": ("Meta kept this ad on Instant form (suggested) and the robot could "
+                                  "not switch it back to Website, so the website URL is not set. The "
+                                  "robot never accepts Lead Ads Terms or creates an instant form - "
+                                  "select Website (Browser add-ons: None) and enter the URL by hand."),
+}
+
+
+def destination_why_text(why: str) -> str:
+    """Причина отказа шага назначения одной фразой; "" — фразы для неё нет."""
+    return _DESTINATION_WHY_TEXT.get(why or "", "")
 
 
 def creative_why_text(why: str) -> str:
@@ -1060,10 +1094,30 @@ def create_next_ad(page, *, tag: str, known_names: list[str],
                                           "extra_shells", "dialog", "dialog_kind", "dialog_last",
                                           "waited_s", "busy_s",
                                           "progress_s", "media_picker", "tree", "menu",
-                                          "capture", "text")})
+                                          "wizard_cleared", "capture", "text")})
     except Exception:
         pass
     return out
+
+
+def clear_leftover_wizard(page) -> dict | None:
+    """Мастер медиа прошлого объявления ещё на экране — закрыть его своим Close.
+
+    ACL-1551 (232d398471bd, 04.10): мастер объявления 1 остался открытым на
+    Crop, и «Action menu» группы не открылось — объявления 2 и 3 не созданы.
+    Перед «Action menu» мастер закрывается его собственным Close (шапка
+    мастера; ни Next, ни Save — в объявление 1 ничего не сохраняется).
+    None — мастера не было; иначе {"closed_by", "closed", "dialog_left", "tried"}.
+    """
+    md = _md()
+    try:
+        present = md._eval_bounded(page, md._WIZARD_ROOT_JS.replace("return d;", "return true;")
+                                   .replace("return null;", "return false;"))
+    except Exception:
+        return None
+    if not present:
+        return None
+    return md._leave_wizard(page, allow_complete=False)
 
 
 def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
@@ -1073,6 +1127,13 @@ def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
         md.wait_editor_saved(page)
     except Exception:
         pass
+    # ACL-1551: открытый мастер медиа прошлого объявления перекрывает дерево.
+    cleared = clear_leftover_wizard(page)
+    if cleared is not None:
+        out["wizard_cleared"] = cleared
+        if not cleared.get("closed"):
+            out["why"] = "creative_wizard_left_open"
+            return
     try:
         tree = md._eval_bounded(page, _MORE_ADS_TREE_JS, [CREATE_AD_RE, _ADSET_MENU_SURFACE]) or {}
     except Exception as exc:
