@@ -4519,22 +4519,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "573": {
-        "actor": "Worker-F1573A",
-        "session": "run_f1573a_1004",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1573-windows",
-        "worktree": "C:\\acl-1573-windows",
-        "id": "0f3f7dbb576945c5b10f4f1754e09569",
-        "issue": 573,
-        "state": "handoff",
-        "started_at": "2026-10-04T17:11:03+00:00",
-        "from_status": "status:idea",
-        "pr": 575,
-        "report": "# ACL-1573 slice A \u2014 handoff (Worker-F1573A, run_f1573a_1004)\n\n- PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/575 (base `stage`, head `codex/acl-1573-windows`, commit 19405855)\n- Worktree: C:\\acl-1573-windows, claim 0f3f7dbb576945c5b10f4f1754e09569\n- Tracker issues: ACL-1573 (1572 not claimed: the tracker accepted the 1573 claim with no objection)\n\n## Key finding on ACL-1572 (the root cause in #572 is wrong)\n- The \"Notifications panel open\" reading is a false lead. `#fbNotificationsFlyout` (role=dialog, \"Notifications \u00b7 Unread\") carries `toggleTargetClosed`, and it is in all 284 captures under C:\\acl-live-*\\output\\rpa_pages, successful steps included. It is Meta's pre-rendered, hidden panel. The catalogue had already met the same misreading once (\"List with only Meta's Notifications panel\").\n- The failure screenshots tell a different story:\n  - `rpa_screenshots/308c4f7c8a5a/20261001_202015_recorded_fail_conversion_website.png` and `254ee3b3e0c7/20261004_170139_\u2026` show the \"Ad set name \u2014 Template\" naming dialog (Add component / Choose existing template / Cancel / Save) over Conversion location.\n  - The portal is past the 4 MB page cut, so page.html cannot show it.\n  - `_cancel_naming_template_dialog` runs only once, right after the name field. The dialog appears later, and then all 8 strategies see `menu_closed`.\n  - The same failure happened on 25.09 (8dbafcecb31f).\n- 87d43d6202af's screenshot shows no window at all. Its ad set name combobox has `aria-expanded=true`. \"Advantage+ leads campaign: On\" is visible in all three screenshots.\n\n## Window registry (`src/fb_ads_rpa/foreign_windows.py`, `KNOWN`)\n| kind | recognised by | closed by |\n|---|---|---|\n| notifications | heading \"Notifications\" / #fbNotificationsFlyout / Unread switch, only when shown | Escape (focused into the panel), then its own toggle |\n| ad_blocker | \"Turn off ad blocker\" | existing `_clear_blocking_overlays(may_reload=False)` \u2192 `_close_ad_blocker_modal` (OK / x) |\n| onboarding | \"streamlined way to create\", \"1 of 3\", \u2026 | existing `_close_onboarding_tour` |\n| naming_template | \"Ad set/Campaign/Ad name\" + naming convention / template | existing `_cancel_naming_template_dialog` (Cancel, never Save) |\n| draft_review | Publish/Review draft items, Discard drafts | existing `dismiss_publish_draft_dialog` |\n| site_links | Site links / Extensions | existing `_cancel_site_links_modal` |\n| survey | how satisfied/likely, rate your experience, survey, feedback | own Close / Not now / Dismiss / \u00d7 or Escape |\n| network_toast | \"Your internet connection was lost\" line | its own \"\u00d7\" (no aria-label, which `_close_banners` never recognised) |\n| creative_wizard, objective, loading | \u2014 | owned: never touched |\n| unknown | anything else visible (dialog / alertdialog / aria-modal) | after a failure only: own safe button, or Escape; otherwise stop |\n\n## What changed\n- `foreign_windows.py`:\n  - `scan` (bounded JS read).\n  - `before_step`: closes registry windows; unknown windows get a \"seen\" row only.\n  - `after_failure`: runs once per step per campaign. An unknown window gets a page capture (quota 3) and a Sentry event with its title, then a safe close. If it cannot be closed, the step is marked `blocked`.\n  - `guarded`: closes registry windows, runs the attempt, then on failure runs the fallback and retries once.\n  - `attach_block` and `reset`.\n- `meta_dom.py`:\n  - `_click` / `_fill` of the recorded flow run under `guarded`. `conversion_location_open` runs under `guarded`.\n  - `_ensure_conversion_menu_open` closes registry windows before each trigger click.\n  - `_pick_website_from_open_menu` closes registry windows between strategies, and runs the fallback plus a reopen when the menu will not open. Its diag gains `windows_closed` and `reopen_failed`.\n  - `_clear_blocking_overlays` also closes notifications / survey / network_toast.\n  - `_under_flow_budget` resets the guard and attaches the stop reason.\n- Stop reason: `<step>:Unknown Meta window blocked the step: <title> (unknown_window)`. The base step name is unchanged, so retry_policy decisions are the same as today.\n- `failure_policy`: generic `(unknown_window)` detail with title / impact / action. `report.html`: `foreign_window$` is in the hold rule. `config/sentry_triage_map.json`: `foreign_window` and `*`/`unknown-window` map to ACL-1573.\n- Fixtures:\n  - `foreign_windows_doc21_2026_10_04.html`: notifications_flyout, adset_name_section, conversion_section, editor_footer.\n  - `network_toast_2026_10_01.html`.\n  - README and catalogue updated; `bench_catalogue.py --check` OK.\n- Docs: CHANGELOG entry.\n\n## Tests\n- New: `tests/test_foreign_windows_are_closed_or_named.py`, 15 tests.\n  - With the original meta_dom.py, 4 fail, and the Doc21 signature reproduces exactly (`menu_closed: 8`, `reopened: 0`, `not_selected`): Notifications before the menu, reopen between strategies, the naming dialog, and `_clear_blocking_overlays`.\n  - The guard-level tests (unsafe-only, safe close + retry once, footer / Publish, owned) are new API, so before the change they could only fail at import.\n- Affected suites: 34 files, 495 passed. Includes overlays, onboarding, naming, banners, conversion reopen, the flow / retry contract, failure policy, readable problems, build model, triage, bench catalogue and capture_to_fixture.\n- `acl_scan_secrets.py`: clean.\n\n## Open items / risks\n- Each `_click` / `_fill` now does one extra bounded DOM read (\u2264 2 s timeout; ~ms normally). Escape is used for the Notifications panel and as the last safe close for unknown windows.\n- Known-window closes before steps are not counted against the \"once per step\" bound. Only the fallback (close + retry) is bounded.\n- Live check: runs on 1443 and Doc21.\n  - Expect `foreign_window naming_template:cancel_naming_template_dialog` before the conversion menu on Doc21.\n  - Check `conversion_website_pick.diag.windows_closed`.\n  - Check any `foreign_window` Sentry events.\n  - If Doc21 still fails with nothing closed (the 87d43d6202af shape), check whether Advantage+ leads campaign \"On\" locks Conversion location.\n- Slice B (refresh and restore the editor to the same object) and slice C (checkpoints and resume) attach where `after_failure` returns False and the step is `blocked`."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -6254,9 +6239,25 @@
             "session": "run_f1573a_1004"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-F1573A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-F1573A",
+          "session": "run_f1573a_1004",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1573-windows",
+          "worktree": "C:\\acl-1573-windows",
+          "id": "0f3f7dbb576945c5b10f4f1754e09569",
+          "issue": 573,
+          "state": "handoff",
+          "started_at": "2026-10-04T17:11:03+00:00",
+          "from_status": "status:idea",
+          "pr": 575,
+          "report": "# ACL-1573 slice A \u2014 handoff (Worker-F1573A, run_f1573a_1004)\n\n- PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/575 (base `stage`, head `codex/acl-1573-windows`, commit 19405855)\n- Worktree: C:\\acl-1573-windows, claim 0f3f7dbb576945c5b10f4f1754e09569\n- Tracker issues: ACL-1573 (1572 not claimed: the tracker accepted the 1573 claim with no objection)\n\n## Key finding on ACL-1572 (the root cause in #572 is wrong)\n- The \"Notifications panel open\" reading is a false lead. `#fbNotificationsFlyout` (role=dialog, \"Notifications \u00b7 Unread\") carries `toggleTargetClosed`, and it is in all 284 captures under C:\\acl-live-*\\output\\rpa_pages, successful steps included. It is Meta's pre-rendered, hidden panel. The catalogue had already met the same misreading once (\"List with only Meta's Notifications panel\").\n- The failure screenshots tell a different story:\n  - `rpa_screenshots/308c4f7c8a5a/20261001_202015_recorded_fail_conversion_website.png` and `254ee3b3e0c7/20261004_170139_\u2026` show the \"Ad set name \u2014 Template\" naming dialog (Add component / Choose existing template / Cancel / Save) over Conversion location.\n  - The portal is past the 4 MB page cut, so page.html cannot show it.\n  - `_cancel_naming_template_dialog` runs only once, right after the name field. The dialog appears later, and then all 8 strategies see `menu_closed`.\n  - The same failure happened on 25.09 (8dbafcecb31f).\n- 87d43d6202af's screenshot shows no window at all. Its ad set name combobox has `aria-expanded=true`. \"Advantage+ leads campaign: On\" is visible in all three screenshots.\n\n## Window registry (`src/fb_ads_rpa/foreign_windows.py`, `KNOWN`)\n| kind | recognised by | closed by |\n|---|---|---|\n| notifications | heading \"Notifications\" / #fbNotificationsFlyout / Unread switch, only when shown | Escape (focused into the panel), then its own toggle |\n| ad_blocker | \"Turn off ad blocker\" | existing `_clear_blocking_overlays(may_reload=False)` \u2192 `_close_ad_blocker_modal` (OK / x) |\n| onboarding | \"streamlined way to create\", \"1 of 3\", \u2026 | existing `_close_onboarding_tour` |\n| naming_template | \"Ad set/Campaign/Ad name\" + naming convention / template | existing `_cancel_naming_template_dialog` (Cancel, never Save) |\n| draft_review | Publish/Review draft items, Discard drafts | existing `dismiss_publish_draft_dialog` |\n| site_links | Site links / Extensions | existing `_cancel_site_links_modal` |\n| survey | how satisfied/likely, rate your experience, survey, feedback | own Close / Not now / Dismiss / \u00d7 or Escape |\n| network_toast | \"Your internet connection was lost\" line | its own \"\u00d7\" (no aria-label, which `_close_banners` never recognised) |\n| creative_wizard, objective, loading | \u2014 | owned: never touched |\n| unknown | anything else visible (dialog / alertdialog / aria-modal) | after a failure only: own safe button, or Escape; otherwise stop |\n\n## What changed\n- `foreign_windows.py`:\n  - `scan` (bounded JS read).\n  - `before_step`: closes registry windows; unknown windows get a \"seen\" row only.\n  - `after_failure`: runs once per step per campaign. An unknown window gets a page capture (quota 3) and a Sentry event with its title, then a safe close. If it cannot be closed, the step is marked `blocked`.\n  - `guarded`: closes registry windows, runs the attempt, then on failure runs the fallback and retries once.\n  - `attach_block` and `reset`.\n- `meta_dom.py`:\n  - `_click` / `_fill` of the recorded flow run under `guarded`. `conversion_location_open` runs under `guarded`.\n  - `_ensure_conversion_menu_open` closes registry windows before each trigger click.\n  - `_pick_website_from_open_menu` closes registry windows between strategies, and runs the fallback plus a reopen when the menu will not open. Its diag gains `windows_closed` and `reopen_failed`.\n  - `_clear_blocking_overlays` also closes notifications / survey / network_toast.\n  - `_under_flow_budget` resets the guard and attaches the stop reason.\n- Stop reason: `<step>:Unknown Meta window blocked the step: <title> (unknown_window)`. The base step name is unchanged, so retry_policy decisions are the same as today.\n- `failure_policy`: generic `(unknown_window)` detail with title / impact / action. `report.html`: `foreign_window$` is in the hold rule. `config/sentry_triage_map.json`: `foreign_window` and `*`/`unknown-window` map to ACL-1573.\n- Fixtures:\n  - `foreign_windows_doc21_2026_10_04.html`: notifications_flyout, adset_name_section, conversion_section, editor_footer.\n  - `network_toast_2026_10_01.html`.\n  - README and catalogue updated; `bench_catalogue.py --check` OK.\n- Docs: CHANGELOG entry.\n\n## Tests\n- New: `tests/test_foreign_windows_are_closed_or_named.py`, 15 tests.\n  - With the original meta_dom.py, 4 fail, and the Doc21 signature reproduces exactly (`menu_closed: 8`, `reopened: 0`, `not_selected`): Notifications before the menu, reopen between strategies, the naming dialog, and `_clear_blocking_overlays`.\n  - The guard-level tests (unsafe-only, safe close + retry once, footer / Publish, owned) are new API, so before the change they could only fail at import.\n- Affected suites: 34 files, 495 passed. Includes overlays, onboarding, naming, banners, conversion reopen, the flow / retry contract, failure policy, readable problems, build model, triage, bench catalogue and capture_to_fixture.\n- `acl_scan_secrets.py`: clean.\n\n## Open items / risks\n- Each `_click` / `_fill` now does one extra bounded DOM read (\u2264 2 s timeout; ~ms normally). Escape is used for the Notifications panel and as the last safe close for unknown windows.\n- Known-window closes before steps are not counted against the \"once per step\" bound. Only the fallback (close + retry) is bounded.\n- Live check: runs on 1443 and Doc21.\n  - Expect `foreign_window naming_template:cancel_naming_template_dialog` before the conversion menu on Doc21.\n  - Check `conversion_website_pick.diag.windows_closed`.\n  - Check any `foreign_window` Sentry events.\n  - If Doc21 still fails with nothing closed (the 87d43d6202af shape), check whether Advantage+ leads campaign \"On\" locks Conversion location.\n- Slice B (refresh and restore the editor to the same object) and slice C (checkpoints and resume) attach where `after_failure` returns False and the step is `blocked`."
+        },
+        "pr": 575,
+        "queued_at": "2026-10-04T17:49:42+00:00"
       }
     },
     "actors": {
@@ -7940,7 +7941,8 @@
       433,
       526,
       532,
-      529
+      529,
+      573
     ],
     "review": null,
     "history": [
@@ -11391,6 +11393,13 @@
         "prs": [
           574
         ]
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-04T17:49:42+00:00",
+        "issue": 573,
+        "pr": 575,
+        "actor": "Worker-F1573A"
       }
     ],
     "policy": {
