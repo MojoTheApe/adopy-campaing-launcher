@@ -325,7 +325,13 @@ def _file_was_offered() -> bool:
 _NAVIGATION_WHYS = frozenset({
     "wizard_not_opened", "upload_button_missing",
     "media_step_locked", "media_step_unreachable", "media_step_covered",
+    # ACL-1559: выбор медиа шага Media так и не догрузился — файл не подавали.
+    "media_picker_loading",
 })
+
+#: ACL-1559: мастер стоит на Media, а выбор медиа под ним (Upload, медиатека)
+#: за `MEDIA_PICKER_LOAD_S` так и не вышел из заглушек «Loading...».
+MEDIA_PICKER_LOADING = "media_picker_loading"
 from src.fb_ads_rpa.config import get_reuse_library_media
 
 PageLike = Page | Frame
@@ -11647,6 +11653,78 @@ def _wizard_media_step(page: Page) -> dict | None:
     return found if isinstance(found, dict) else None
 
 
+#: ACL-1559: выбор медиа шага Media мастера — только чтение, ни одного клика.
+#:
+#: Живьём 04.10 (Facebook_1443, 2f140fa687fa): мастер открылся на Media, а
+#: область выбора медиа (`AdsWizardMediaPickerContainer`) держала только три
+#: заглушки `role=progressbar aria-busy=true` «Loading...» — ни Upload, ни
+#: вкладок, ни «Search media», ни сетки. Загруженный вид (232d398471bd,
+#: 07:36): вкладки Account / Video URL / Page, поле «Search media», Upload
+#: (`role=button`, data-surface `…creative-tool-asset-picker-upload-button`),
+#: сетка `aria-label="grid"` с плитками `role=button`.
+#:
+#: Ищется внутри мастера (`_WIZARD_ROOT_JS`), без него — по документу; в
+#: области выбора медиа, если она узнаётся по `data-non-int-surface`/
+#: `data-surface`, иначе по всему мастеру.
+_WIZARD_MEDIA_PICKER_JS = r"""
+() => {
+  const root = (%ROOT%)();
+  const scope = root || document;
+  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  const area = scope.querySelector('[data-non-int-surface*="AdsWizardMediaPickerContainer"],'
+    + '[data-surface*="AdsWizardMediaPickerContainer"]');
+  const box = area || scope;
+  const bars = new Set([...box.querySelectorAll(
+    '[role=progressbar][aria-busy=true],[data-is-placeholder=true]')]);
+  const upload = [...box.querySelectorAll('[role=button],button')].some(b =>
+    /^\+?\s*Upload$/i.test(norm(b.textContent)) || norm(b.getAttribute('aria-label')) === 'Upload'
+    || /creative-tool-asset-picker-upload-button$/.test(b.getAttribute('data-surface') || ''));
+  const search = [...box.querySelectorAll('input')].some(i =>
+    /search media/i.test(i.getAttribute('placeholder') || i.getAttribute('aria-label') || ''));
+  let tiles = 0;
+  for (const g of box.querySelectorAll('[aria-label=grid]')) tiles += g.querySelectorAll('[role=button]').length;
+  return { root: !!root, surface: !!area, loading: bars.size > 0, skeletons: bars.size,
+           upload, search, tiles };
+}
+""".replace("%ROOT%", _WIZARD_ROOT_JS)
+
+#: ACL-1559: сколько ждать выбор медиа шага Media (живьём 04.10 мастер с
+#: уже загруженным выбором открывался 22 с) и как часто его перечитывать.
+MEDIA_PICKER_LOAD_S = 45.0
+_MEDIA_PICKER_POLL_S = 0.25
+
+
+def _media_picker(page: Page) -> dict:
+    """Состояние выбора медиа (`_WIZARD_MEDIA_PICKER_JS`); {} — не прочиталось."""
+    try:
+        got = page.evaluate(_WIZARD_MEDIA_PICKER_JS)
+    except Exception:
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def _wait_media_picker(page: Page, limit_s: float) -> dict:
+    """Ждать, пока выбор медиа шага Media выйдет из заглушек. Только чтение.
+
+    `state`: "ready" — Upload на месте; "loading" — к сроку всё ещё заглушки;
+    "empty" — заглушек нет, но и Upload нет (дальше — прежнее ожидание Upload).
+    Клик по текущему шагу Media или Next здесь мог бы перезапустить загрузку
+    выбора (тот же урок, что у ACL-1354 с таргетингом) — поэтому только опрос.
+    """
+    start = time.time()
+    picker = _media_picker(page)
+    first = picker.get("skeletons", 0)
+    while picker.get("loading") and not picker.get("upload"):
+        if time.time() - start >= limit_s:
+            break
+        time.sleep(_MEDIA_PICKER_POLL_S)   # опрос, не действие
+        picker = _media_picker(page)
+    state = ("ready" if picker.get("upload")
+             else "loading" if picker.get("loading") else "empty")
+    return {**picker, "state": state, "skeletons_at_start": first,
+            "waited_s": round(time.time() - start, 1)}
+
+
 def _media_step_behind(step: dict | None) -> bool:
     """Media стоит в строке шагов ДО открытого шага — Next к нему не ведёт."""
     if not step or not step.get("found"):
@@ -11759,12 +11837,29 @@ def upload_ad_creative(
     media_state: dict | None = None
     media_clicks = next_clicks = 0
     blocked = ""
+    picker: dict | None = None
+    opened_at = time.time()
     for _ in range(6):
         if page.get_by_role("button", name="Upload").count() > 0:
             break
         step = _wizard_media_step(page)
         if step:
             media_state = step
+        if step and step.get("found") and step.get("current") == "Media":
+            # ACL-1559 (живьём 04.10, 2f140fa687fa): мастер уже на Media, а
+            # выбор медиа ещё грузится. Клик по текущему шагу и запертый Next
+            # ничего не дают (а клик может перезапустить загрузку) — ждём
+            # выбор медиа опросом, потом прежний путь: медиатека / Upload.
+            phase_t = time.time()
+            picker = _wait_media_picker(
+                page, max(0.0, min(MEDIA_PICKER_LOAD_S, _creative_left())))
+            picker["since_open_s"] = round(time.time() - opened_at, 1)
+            _creative_phase("media_picker", phase_t, state=picker["state"])
+            _telemetry.record("ad_creative_upload", None, note="media_picker:" + picker["state"],
+                              diag={"file": Path(creative_path).name, **picker})
+            if picker["state"] == "loading":
+                blocked = MEDIA_PICKER_LOADING
+            break
         behind = _media_step_behind(step)
         if step and step.get("found"):
             usable = not step.get("disabled") and not step.get("covered")
@@ -11811,6 +11906,11 @@ def upload_ad_creative(
                 "past_media": _wizard_past_media(page),
                 "media_step": shown or None,
                 "clicks": {"media": media_clicks, "next": next_clicks}}
+        if picker is not None:
+            # ACL-1559: что показывал выбор медиа и сколько его ждали.
+            diag["picker"] = picker
+            diag["skeletons"] = picker.get("skeletons", 0)
+            diag["waited_s"] = picker.get("waited_s", 0.0)
         # Снимок — пока мастер открыт: к строке шага объявления его уже
         # закроют, а в странице целиком он съедается обрезкой (ACL-1348).
         # Один на объявление: попыток до трёх, а снимков за прогон — MAX_PER_RUN,
@@ -11916,6 +12016,9 @@ def upload_ad_creative(
         "size_mb": 0.0,
         "attempts": [],
     }
+    if picker is not None:
+        # ACL-1559: ждали ли выбор медиа шага Media и сколько.
+        _diag["picker"] = picker
     # Тяжёлый ролик сжимается ДО того, как мы что-то решаем про пути загрузки
     # (acl-1189). Замер 15.09: 247 МБ уходят в Meta порциями 2.8 МБ в минуту,
     # то есть полтора часа при бюджете шага в девять минут. Тот же ролик в 24
@@ -14782,7 +14885,8 @@ def creative_soft_fail(tag: str, ad_label: str) -> str:
     """
     why = last_upload_why()
     base = f"{tag}_creative_upload"
-    if why == _crop.WIZARD_STUCK:
+    if why in (_crop.WIZARD_STUCK, MEDIA_PICKER_LOADING):
+        # ACL-1559: выбор медиа шага Media не догрузился — тоже своим именем.
         return f"{base}:{why} - {ad_label}: {_simple.creative_why_text(why)}"
     return base
 

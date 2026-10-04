@@ -502,6 +502,18 @@ PER_AD_DETAIL: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "The media wizard did not finish, so this ad's media and crops are not confirmed.",
         "Open the ad in Ads Manager, check its media (and the Stories/Reels file) and fix it by hand.",
     ),
+    # ACL-1559 (live 04.10, 2f140fa687fa): the wizard opened on its Media step and
+    # Meta's media picker never left its "Loading..." placeholders; the robot
+    # waited without clicking, reopened the wizard once, and gave up. Still
+    # BLOCKING: the ad has no media. The file itself is not blamed.
+    ("creative_upload", "media_picker_loading"): (
+        "Meta's media picker on the wizard's Media step kept loading (no Upload, no media "
+        "library), so the ad's media could not be attached",
+        "Ad media - Meta's media picker kept loading",
+        "Meta's media picker never finished loading, so this ad has no media.",
+        "Open the ad in Ads Manager, add its media by hand (Set up creative - Media), "
+        "or run the campaign again later.",
+    ),
     # ACL-1551: the wizard of the previous ad was still open and its own Close
     # did not close it, so the ad set's Action menu could not be used.
     ("create", "creative_wizard_left_open"): (

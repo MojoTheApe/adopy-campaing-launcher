@@ -239,6 +239,15 @@ Cut by `scripts/capture_to_fixture.py` from the read-only captures of run 232d39
 | … · in_wizard_picker | 232d398471bd/01_wizard_crop_replace/block_picker.html — "Replace media for Stories, Status, Reels, In-stream for Reels" inside the wizard: header Close/Save, Search media, six tiles without the story file, footer Save | As the 03.10 picker (ACL-1533) |
 | … · media_busy | 232d398471bd/00_wizard_media/block_creative_wizard.html — Media step right after the library pick: "1 selected", Next and Cancel `aria-disabled` | Meta moved to Crop by itself later; the moment is wired by the test |
 
+## ACL-1559 fragments (live runs 2026-10-04, Facebook_1443)
+
+`wizard_media_picker_2026_10_04.html` — two wizard dialogs (`role=dialog`, whole block captures, not truncated) of the Media-first step row Media · Trim · Crop · Text · Creative generation · Enhancements · Translation, Media current (`aria-current=step`) in both. Cut by `scripts/capture_to_fixture.py` from read-only copies of the captures: media file names → `sample_media_01.mp4`, icons → `<i>`, render ids → `syn_N`; the search box value is the scrubbed file name; no names, ids, URLs or tokens. `data-non-int-surface` (`AdsWizardMediaPickerContainer`) and `data-is-placeholder` are not kept by the script, so the bench checks the reader's fallback (progressbars and controls inside the wizard root); the live surface attributes are covered by the reader's selectors only. UI language: English. Meta build identifier and browser version: not recorded.
+
+| Fixture · fragment | Source / capture state | Coverage limit |
+| --- | --- | --- |
+| wizard_media_picker_2026_10_04.html · loading | 2f140fa687fa/00_ad_creative_media_step/block_creative_wizard.html (live build ec3cadd8, 11:02) — the Media step whose picker holds only three `role=progressbar aria-busy=true aria-valuetext="Loading..."` bars; no Upload, tabs, Search media or grid; footer Cancel enabled, Next (`lib:ads-omp-primary-button`) `aria-disabled`. Same layout in 02_ad_creative_media_step | No Meta runtime: whether the picker would load without clicks is unknown; the bench swaps in the `loaded` fragment to model it |
+| … · loaded | 232d398471bd/00_wizard_media/block_creative_wizard.html (live build c1f0e507, 07:36; the same capture as `wizard_crop_story_missing · media_busy`) — the loaded Media step right after the library pick: tabs Account / Video URL / Page, Search media (value = the picked file), Filters 1, Upload (`role=button`, data-surface `…/lib:creative-tool-asset-picker-upload-button`), drop zone, grid with two tiles, "1 selected"; Next and Cancel `aria-disabled` | Captured after the pick, not before it; no `input[type=file]` (Meta creates it on Upload) |
+
 ## ACL-1533 fragments (live runs 2026-10-03, Facebook_1443)
 
 Cut by `scripts/capture_to_fixture.py` from the read-only captures of run 2e98a75f252d (same layout in d54d68303e57, f35a2b31f7d8, a39407b72507). Media file names → `sample_media_NN`, videos and thumbnails → `<i>`, render ids → `syn_N`. UI language: English. Meta build identifier: not recorded. Browser: Multilogin Chrome, version not recorded.

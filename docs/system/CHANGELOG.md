@@ -42,6 +42,38 @@ decision: drop them.
 - `/mlx-profile-open` (connecting a new profile from search) still leaves a hand-opened
   window alone: it is not an action on a connected account.
 
+## Media step: wait for Meta's media picker to load, name the stall — ACL-1559
+
+Live 2026-10-04 (Facebook_1443, run 2f140fa687fa): Meta's media wizard opened on its
+Media step while the media picker still showed only "Loading..." placeholders. The
+robot clicked the already-current Media step twice, probed the disabled Next four
+times and gave up after ~20 s with the generic `upload_button_missing`.
+
+- `meta_dom.upload_ad_creative`: when the current wizard step is already Media, the
+  robot no longer clicks the step and does not press Next. It polls a read-only picker
+  check (`_WIZARD_MEDIA_PICKER_JS`, inside the wizard dialog: placeholder count, Upload
+  by text or data-surface, "Search media", grid tiles) every 0.25 s for up to
+  `MEDIA_PICKER_LOAD_S` = 45 s (capped by the creative step budget). Once Upload is
+  there, the existing library search / tile / Upload flow runs unchanged.
+- Still loading at the timeout: new reason `media_picker_loading` (diag: `picker`,
+  `skeletons`, `waited_s`). It is a navigation reason (`_NAVIGATION_WHYS`): the file is
+  not marked as failed for the run. The existing single fresh reopen of the wizard is
+  kept. The ad's step reads
+  `adN_creative_upload:media_picker_loading - <ad>: <sentence>`, BLOCKING, with its own
+  readable problem ("Ad media - Meta's media picker kept loading") and why-text.
+- Telemetry: an `ad_creative_upload` row `media_picker:ready|loading|empty` with the
+  picker state, `waited_s`, `skeletons_at_start` and `since_open_s`; a `media_picker`
+  phase; the picker in the upload trail. No new step names.
+- Regression kept: with Creative setup or Text as the current step, Media is still
+  clicked (ACL-1348).
+- Sentry triage map: `ad_creative_upload` / `media-picker-loading` → ACL-1559.
+- Bench: `wizard_media_picker_2026_10_04.html` (fragments `loading` from 2f140fa687fa,
+  `loaded` from 232d398471bd), `tests/test_bench_wizard_media_picker_1004.py`.
+- Not changed: ACL-1551's busy check still reads the loaded Media step right after a
+  pick (Next and Cancel disabled) as busy. The 1551 bench pins that on purpose
+  (`media_busy`: "the walk waits while the wizard is busy"), and the walk does not run
+  on Media before the pick.
+
 ## Run summary carries the run's telemetry as a scrubbed Sentry attachment — ACL-1554
 
 To read a manager's run we had to ask them for `output\rpa_telemetry.jsonl` by hand.
