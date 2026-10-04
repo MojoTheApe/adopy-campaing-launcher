@@ -1,5 +1,35 @@
 # System history
 
+## CI reuses a full green run of the same tree on promotion — ACL-1565
+
+Every task ran the full Windows suite (6 shards) and the installer build three times
+on the same content: on the PR, on the stage push and PR stage→main, and on the main
+push. The stage→main promotion alone took about an hour of a task's delivery time.
+
+- `scripts/acl_ci_reuse.py`: the scope job of `ci.yml` and the classify job of
+  `windows-installer.yml` look for an earlier run of the same workflow whose commit has
+  the same git tree as `HEAD^{tree}`. Candidate commits come from `git log --all`; each
+  tree is computed by git, never taken from the API payload. Only a `push` or
+  `workflow_dispatch` run of this repository counts (a `pull_request` run tested a
+  temporary merge commit whose tree cannot be proven later). It must be `completed` /
+  `success`, and every required job of its latest attempt must have run and succeeded:
+  `test (3.11|3.13, 1..3)` + `ACL verification`, or `Verify build inputs` +
+  `Build, install, repair, and uninstall` + `Installer verification`. A run that itself
+  reused (tests skipped), or was partial, cancelled or failed, never counts.
+- Then the scope job outputs `windows=false` and `reused_from=<run url>`, the Windows jobs
+  are skipped, the required checks `ACL verification` / `Installer verification` still
+  conclude success, and the run summary says "Reused full results of run <url> (same
+  tree <sha>)".
+- Always in full: `workflow_dispatch`, release tags, a missing token, any API or git
+  error, no matching run. In practice the PR and the stage push (a squash makes a new
+  tree) run in full; the stage→main PR and the main push reuse the stage push run.
+- Workflows get `actions: read` (the job's own `GITHUB_TOKEN`, no new secrets).
+- Release gate: `verify_promotion` in `scripts/acl_publish_release.py` now checks the
+  jobs of the main run named in the tag. If its test matrix did not run, it accepts the
+  release only with a provable full run of the release tree (same rules as above),
+  otherwise it refuses. Tracker `check-merge` reads only the aggregate required checks
+  and `verify-stage` reads no checks, so the pinned Tracker needed no change.
+
 ## Run summary carries the run's telemetry as a scrubbed Sentry attachment — ACL-1554
 
 To read a manager's run we had to ask them for `output\rpa_telemetry.jsonl` by hand.

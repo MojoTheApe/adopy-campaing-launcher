@@ -7,6 +7,11 @@ import re
 import subprocess
 from pathlib import Path
 
+try:
+    from scripts import acl_ci_reuse as reuse
+except ImportError:  # запуск как python scripts/acl_publish_release.py
+    import acl_ci_reuse as reuse
+
 
 def _git(*args: str) -> str:
     return subprocess.check_output(["git", *args], text=True).strip()
@@ -14,6 +19,10 @@ def _git(*args: str) -> str:
 
 def _gh(*args: str) -> str:
     return subprocess.check_output(["gh", *args], text=True).strip()
+
+
+def _api(path: str) -> dict:
+    return json.loads(_gh("api", path))
 
 
 def verify_promotion(tag: str, source_repo: str) -> str:
@@ -36,6 +45,14 @@ def verify_promotion(tag: str, source_repo: str) -> str:
             and run.get("conclusion") == "success" and run.get("path") == ".github/workflows/ci.yml"
             and run.get("head_branch") == "main" and run.get("event") in {"push", "workflow_dispatch"}):
         raise ValueError("Recorded CI must be a successful full main run on the exact release commit")
+    # ACL-1565: main-прогон может переиспользовать полный зелёный прогон того же
+    # дерева (тесты пропущены). Принимаем его, только если полный прогон доказуем.
+    run = dict(run, id=int(match[1]))
+    if not reuse.full_jobs_passed(_api, source_repo, run, "ci.yml"):
+        tree = _git("rev-parse", f"{sha}^{{tree}}")
+        if not reuse.find_reuse(Path.cwd(), _api, source_repo, "ci.yml", tree, exclude_run_id=run["id"]):
+            raise ValueError("Recorded main CI neither ran the full test matrix nor reused "
+                             "a provable successful full run of the same tree")
     return sha
 
 
