@@ -1,5 +1,47 @@
 # System history
 
+## A hand-opened profile window is reopened at once, with no conditions — ACL-1562
+
+On 2026-10-04 the "open profile" button for Facebook_9943 answered "The profile is open
+by hand — close its window in Multilogin" right after the owner had restored the window:
+the ACL-1388/1427 conditions (window at least 15 minutes old, not in the foreground, a
+minute with no input, wait up to 2 minutes for that silence) did not pass. Owner's
+decision: drop them.
+
+- `hand_window.assess` has no conditions any more: it says "reopen" unless the machine
+  switch `FB_RPA_REOPEN_HAND_WINDOW=0` is set (old always-stop behaviour, kept for tests
+  and as an emergency opt-out). Removed: `MIN_AGE_S`, `MIN_IDLE_S`, `IDLE_WAIT_S`,
+  `wait_until_safe`, `watch_cancel`, the Win32/psutil reads, and the env variables
+  `FB_RPA_HAND_WINDOW_MIN_AGE_S`, `FB_RPA_HAND_WINDOW_MIN_IDLE_S`,
+  `FB_RPA_HAND_WINDOW_IDLE_WAIT_S`.
+- `browser.MultiloginAttachOnlyProvider._reopen_hand_opened` closes the window at once
+  on Publish, Read spend, Read all (spend and countries) and the row's "open profile"
+  button. Unchanged and mandatory: closing is only the graceful MLX API stop of that one
+  profile (`allow_kill=False`); no process is killed, no other profile is touched, no
+  plain browser is opened. The login check after the reopen is as before
+  (`profile_logged_out`, no retries).
+- Visible: before the stop, the job panel and the account-map row say "The <account>
+  window was opened by hand — reopening it with automation"
+  (`browser.HAND_WINDOW_NOTICE`, `account_spend.hand_note`; the status poll still uses
+  the `waiting` key). The "Waiting for the computer to be idle…" texts are gone. The
+  Publish hint no longer asks to close a hand-opened window first.
+- Telemetry `profile_hand_window` (same step name): `note` `reopened`, `disabled`,
+  `mlx_stop_failed`, `still_running` or `restart_failed`; `diag.stop_s` = how long the
+  graceful stop took (API call plus waiting for the window's processes to exit).
+  `age_s`, `idle_s`, `waited_s`, `wait_outcome` are no longer written.
+- If the graceful stop fails or the window outlives it, the action stops with
+  `profile_open_by_hand` and the reason in its detail ("Multilogin did not close the
+  hand-opened window: …"); nothing is killed. Reads and "open profile" answer
+  "Multilogin did not close the hand-opened profile window — close it in Multilogin,
+  then Read again" (`code: "open_by_hand"`, still not 409). With reopening switched off on
+  the machine they say so instead ("…reopening it with automation is switched off on this
+  computer…", `account_spend.HAND_OFF_MESSAGE`); the Publish failure texts name both causes.
+- Stop pressed while the profile is being (re)opened no longer lets the first campaign
+  start: `publish_draft` checks the job's Stop right after attaching and returns "Stopped
+  by the user before the campaign started" (window left open).
+- `/mlx-profile-open` (connecting a new profile from search) still leaves a hand-opened
+  window alone: it is not an action on a connected account.
+
 ## Media step: wait for Meta's media picker to load, name the stall — ACL-1559
 
 Live 2026-10-04 (Facebook_1443, run 2f140fa687fa): Meta's media wizard opened on its
