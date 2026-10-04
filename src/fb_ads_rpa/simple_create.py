@@ -580,6 +580,11 @@ _CREATIVE_WHY_TEXT = {
     "crop_wizard_stuck": ("Meta's media wizard stayed on its Crop step (Next did not move it on), "
                           "so the robot closed the wizard with its own Close; the ad's media is not "
                           "confirmed and the ad is left in the draft for review."),
+    # ACL-1559 (live 04.10, 2f140fa687fa): Meta's media picker stayed on "Loading...".
+    "media_picker_loading": ("Meta's media wizard opened on its Media step, but the media picker "
+                             "kept showing 'Loading...' (no Upload, no media library), so the "
+                             "robot could not attach this ad's media; the ad is left in the "
+                             "draft for review."),
 }
 
 
