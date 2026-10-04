@@ -5823,7 +5823,7 @@
             "session": "run_w1551e_1004"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1551E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -5841,7 +5841,8 @@
           "report": "# ACL-1551 handoff (Worker-W1551E, run_w1551e_1004)\n\n- PR: MojoTheApe/adopy-campaing-launcher#552 into `stage`, head 3d459eadd69b4276ddc07a4cd812fd1c64133ce3\n- Branch: codex/acl-1551-wizard-exit (pushed to the `work` remote), worktree C:\\acl-1551-wizard-exit\n- Claim: a977cefdb0bf4a20a53287f5ab94204d\n\n## Root cause (232d398471bd, 04.10)\n1. After Next, Meta keeps the wizard \"busy\": Next and Cancel are `aria-disabled` (00_wizard_media, 04_ad_creative_upload). The walk counted that as 4 misses (~4 s) and quit, so it left the wizard on Media. Meta then moved to Crop by itself, which produced a spurious `no_crop_step` and `dirty_after_advance`.\n2. On Crop, the picker's own footer Save (ACL-1533) worked and Crop came back. Next then went busy and returned to the same Crop with Next enabled again (02_wizard_crop). Next did not advance. Each later walk (retry, reuse, force-close) pressed Next again, and the second press stayed busy for more than 60 s (04, 05).\n3. The fallback close anchored the corner icon on \"Creative setup\", which is absent from the 04.10 step row (Media \u00b7 Trim \u00b7 Crop \u00b7 \u2026). Nothing was pressed and the dialog stayed open, so the Action menu was blocked and ad2/ad3 were not created.\n4. The old forward lookup searched the whole document: the editor footer's Done/Save/Next were candidates too. The bench run on stage confirms it pressed the editor's \"Done\".\n- On 03.10 the same pair passed because Next on Crop advanced within about 2.5 s.\n- The 04.10 Crop layout has no Save of its own: its footer is Cancel / Next. The only Save is in the in-wizard Replace picker (header = wizard's, footer = picker's).\n\n## Fix\n- meta_dom: wizard root = a `role=dialog` with the step row. Forward, busy and exit lookups stay inside it.\n- Busy waits: at most 30 s per walk, not counted as misses.\n- Crop: Next is pressed once per ad (`crop_step.forward_stuck`). If Crop is still shown or still busy after 25 s, the robot presses the wizard's own footer Save/Done if one exists (the story warning stays). Otherwise it presses its own header Close, which sets `crop_wizard_stuck` (blocking) and drops the story warning. No second upload attempt.\n- The force-close uses the wizard's own Close before the old corner icon.\n- simple_create.create_next_ad: `clear_leftover_wizard` presses the wizard's Close before the Action menu. If the wizard does not close, the reason is `creative_wizard_left_open`.\n- Reason texts (English): simple_create `_CREATIVE_WHY_TEXT` / `_WHY_TEXT`, failure_policy `PER_AD_DETAIL` (readable problems). The flow line is `ad_creative_upload:crop_wizard_stuck - <ad>: <sentence>` (`creative_soft_fail`).\n- Telemetry `ad_creative_wizard`: `closed_by`, `dialog_left`, `exit`, `busy_s`; note `<origin>:closed_by_close`; `simple_create_more_ads.wizard_cleared`. No new step names, so no report.html change.\n- Bench: fixture wizard_crop_story_missing_2026_10_04.html (crop_step, crop_busy, in_wizard_picker, media_busy); README and catalogue updated (`--check` OK). CHANGELOG entry added.\n\n## Tests\n- New: tests/test_bench_wizard_exit_1004.py (13) and tests/test_more_ads_after_a_stuck_wizard.py (4). On stage all 13 bench tests fail, and 3 of the 4 more-ads tests fail.\n- Affected files plus test_build_progress_model, headless, with ACL_LIBRARY_* blank: 454 passed. The 2 catalogue failures came from running before the catalogue update; on rerun the catalogue, progress-model, readable-problems and failure_policy files gave 58 passed.\n- scripts/acl_scan_secrets.py: clean.\n\n## Left for live\n- Run a 1443 campaign with a pair whose story is not in the library: all ads should be built.\n- Check whether Meta ever shows a Save/Done on Crop. The constructed bench case covers it; the 04.10 capture had none.\n- If Next stays on Crop as on 04.10, that ad is blocking (`crop_wizard_stuck`) and ads 2-3 are still built."
         },
         "pr": 552,
-        "queued_at": "2026-10-04T08:38:23+00:00"
+        "queued_at": "2026-10-04T08:38:23+00:00",
+        "reviewer": "Reviewer-R1551B"
       }
     },
     "actors": {
@@ -6248,6 +6249,10 @@
       "Worker-W1551E": {
         "session": "run_w1551e_1004",
         "role": "Worker"
+      },
+      "Reviewer-R1551B": {
+        "session": "rev_r1551b_1004",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -7365,10 +7370,20 @@
       433,
       526,
       532,
-      529,
-      551
+      529
     ],
-    "review": null,
+    "review": {
+      "id": "7c1e9a1779c644ab801169cb2690bc16",
+      "pr": 552,
+      "issues": [
+        551
+      ],
+      "actor": "Reviewer-R1551B",
+      "session": "rev_r1551b_1004",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-04T09:40:46+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -10624,6 +10639,13 @@
         "issue": 551,
         "pr": 552,
         "actor": "Worker-W1551E"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-04T09:40:46+00:00",
+        "pr": 552,
+        "lane": "7c1e9a1779c644ab801169cb2690bc16",
+        "actor": "Reviewer-R1551B"
       }
     ],
     "policy": {
