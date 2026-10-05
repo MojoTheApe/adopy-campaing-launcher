@@ -1,5 +1,36 @@
 # System history
 
+## Reads open a closed profile themselves and close what they opened — ACL-1580
+
+"Read spend", "Read all" and the country read no longer refuse a closed Multilogin
+profile with "the profile is not open". Owner's decision (05.10): reads open what they
+need themselves.
+
+- A closed profile is started through the same safe path as "open profile":
+  `multilogin_attach.open(allow_restart=False, allow_kill=False)` — start only, an open
+  window is never restarted, no plain browser. A profile that is already open with
+  automation is attached to and left open. A hand-opened window is reopened as in
+  ACL-1562 and stays open.
+- The start takes a place in the same memory-aware profile queue as Publish
+  (ACL-1321/1424, `publish_jobs._slots`). While it waits, the account row says
+  "Waiting for a free profile slot"; while it starts, "Opening the {account} profile with
+  automation". A read whose profile already holds a Publish place shares it
+  (`ProfileSlots.acquire(share_profile=True)`) instead of queueing behind a Publish that
+  waits for the read's profile lock.
+- After the read, a profile the read itself started is closed with the graceful MLX stop
+  of that one profile (`stop_profile_on_request`, `allow_kill=False`) and its place is
+  released — also when the read failed. A successful "Read spend" waits
+  `CLOSE_GRACE_S` (30 s) first, so the country read that follows it (ACL-1282) takes
+  the profile over and closes it at its own end instead of opening it a second time.
+- A logged-out profile ends the read with "The {account} profile is logged out of
+  Facebook — log in inside Multilogin, then Read again" (`error_code`
+  `profile_logged_out`), shown as plain text on the row, no retry and no "open profile"
+  button.
+- Telemetry: `spend_profile_started` and `spend_profile_closed_after_read`, with
+  durations. `spend_profile_` steps are in the `cb-build-model` hold rule, and
+  `tests/test_build_progress_model.py` now also scans `src/analysis_agent`.
+- Tests: `tests/test_reads_open_a_closed_profile.py` (fakes only, no live Multilogin).
+
 ## Screen-values probe: reads only by default, every capture is opt-in — ACL-1532
 
 `scripts/probe_screen_values.py` measures whether our captures change a running

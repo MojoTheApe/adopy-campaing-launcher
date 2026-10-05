@@ -526,11 +526,20 @@ class ProfileSlots:
         *,
         cancelled: Callable[[], bool] = lambda: False,
         on_wait: Callable[[dict[str, Any]], None] | None = None,
+        share_profile: bool = False,
     ) -> dict[str, Any] | None:
         """Ждать места для задания. None — задание отменили, пока ждало.
 
         Ответ: `waited_s`, `decision` (что разрешило старт), `first_hold`
-        (почему пришлось ждать; None — не ждало).
+        (почему пришлось ждать; None — не ждало), `shared`.
+
+        ACL-1580: `share_profile=True` (чтение спенда запускает закрытый
+        профиль) — если место этого профиля уже держит другое задание, чтение
+        берёт его же место (`shared`, в «running» не встаёт, `release` ему
+        отпускать нечего). Память профиля уже учтена; а ждать в очереди
+        нельзя: Publish на этом профиле держит место и ждёт замок профиля,
+        который держит чтение, — ждали бы друг друга. Проверка — под замком
+        очереди, на каждом круге ожидания.
         """
         profile = str(profile or job_id)
         with self._cond:
@@ -542,13 +551,19 @@ class ProfileSlots:
                 while True:
                     if cancelled():
                         return None
+                    if share_profile and profile in self._busy_profiles():
+                        del self._waiting[job_id]
+                        self._cond.notify_all()
+                        return {"waited_s": round(self._clock() - enqueued, 1),
+                                "decision": {"allow": True, "reason": "shared_profile"},
+                                "first_hold": first_hold, "shared": True}
                     verdict = self._verdict(job_id)
                     if verdict.get("allow"):
                         del self._waiting[job_id]
                         self._running[job_id] = {"profile": profile, "started": self._clock()}
                         self._cond.notify_all()   # следующий в очереди — перепроверить
                         return {"waited_s": round(self._clock() - enqueued, 1),
-                                "decision": verdict, "first_hold": first_hold}
+                                "decision": verdict, "first_hold": first_hold, "shared": False}
                     if first_hold is None:
                         first_hold = verdict
                     note: tuple = (verdict.get("reason"), verdict.get("ahead"))

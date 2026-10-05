@@ -344,8 +344,10 @@ def test_the_row_shows_the_wait_and_the_plain_message():
     # Строка переоткрытия — из опроса состояния, в спенде, в странах и в «open profile».
     assert js.count("j.waiting") >= 4
     # Отказ «открыт руками» — не «failed · retry» и не «countries failed».
-    assert "btn.textContent = hand ? 'Read spend' : 'failed · retry';" in js
-    assert "mark.textContent = code === 'open_by_hand' ? why : 'countries failed';" in js
+    # ACL-1580: «разлогинен» (`out`) показан так же — простым текстом.
+    assert "btn.textContent = hand || out ? 'Read spend' : 'failed · retry';" in js
+    assert "var plain = code === 'open_by_hand' || code === 'profile_logged_out';" in js
+    assert "mark.textContent = plain ? why : 'countries failed';" in js
     assert "s.error_code" in js
     row = ROW.read_text(encoding="utf-8")
     assert "sr.error_code == 'open_by_hand'" in row

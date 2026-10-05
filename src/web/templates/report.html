@@ -5720,7 +5720,7 @@ window.cbTree = (function () {
   "derived": {"rows": 951, "attempts": 19, "until": "2026-09-28"},
   "stages": [["profile", 18], ["campaign", 57], ["adset", 178], ["ad", 175], ["final", 6]],
   "rules": [
-    ["^(window_|overlays_cleared$|stall_|tab_frozen$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
+    ["^(window_|overlays_cleared$|stall_|tab_frozen$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|spend_profile_|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
     ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error)", "profile"],
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
     ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad$|simple_ad_section$)", "adset"],
@@ -6903,9 +6903,11 @@ function amapSplitMark(account, why, code) {
     if (old) old.remove();
     if (!why) return;
     var mark = document.createElement('small');
-    mark.className = code === 'open_by_hand' ? 'amap-split-bad hand' : 'amap-split-bad';
-    /* ACL-1518: окно открыто руками — это не сбой чтения, а что сделать. */
-    mark.textContent = code === 'open_by_hand' ? why : 'countries failed';
+    /* ACL-1518: окно открыто руками — это не сбой чтения, а что сделать.
+       ACL-1580: разлогинен — тоже. */
+    var plain = code === 'open_by_hand' || code === 'profile_logged_out';
+    mark.className = plain ? 'amap-split-bad hand' : 'amap-split-bad';
+    mark.textContent = plain ? why : 'countries failed';
     mark.title = why + '. The spend reading is unaffected; read again to retry the countries.';
     cell.appendChild(mark);
   });
@@ -7308,8 +7310,16 @@ function amapHandWait(account, note) {
       cell.appendChild(old);
     }
     old.textContent = note;
-    old.title = 'The profile window was opened by hand. ACL closes it through Multilogin '
-      + '(nothing is killed) and reopens it with automation.';
+    /* ACL-1580: та же строка говорит и про очередь профилей, и про запуск
+       закрытого профиля — подсказка по тому, что сейчас происходит. */
+    old.title = /^Waiting for a free profile slot/.test(note)
+      ? 'Read all opens closed profiles one after another: this one waits until the '
+        + 'computer has memory for another profile (the same queue as Publish).'
+      : /^Opening the /.test(note)
+      ? 'The profile was closed. ACL opens it with automation for this read and closes '
+        + 'it again afterwards; profiles that were already open stay open.'
+      : 'The profile window was opened by hand. ACL closes it through Multilogin '
+        + '(nothing is killed) and reopens it with automation.';
   });
 }
 
@@ -8532,11 +8542,14 @@ async function amapAwaitReading(account, per, tries) {
 
 function amapSpendFailed(btn, cell, why, shot, how, code) {
   var hand = code === 'open_by_hand';
+  /* ACL-1580: профиль разлогинен в Facebook — войти может только человек;
+     текст целиком, без «retry» и без кнопки «open profile». */
+  var out = code === 'profile_logged_out';
   btn.disabled = !!amapReadAllBusy;
   /* ACL-1518: окно открыто руками — не сбой, а что сделать человеку: кнопка
      остаётся обычной Read spend, текст — целиком в ячейке. */
-  btn.className = hand ? 'amap-btn amap-read' : 'amap-btn amap-read amap-live-bad';
-  btn.textContent = hand ? 'Read spend' : 'failed · retry';
+  btn.className = hand || out ? 'amap-btn amap-read' : 'amap-btn amap-read amap-live-bad';
+  btn.textContent = hand || out ? 'Read spend' : 'failed · retry';
   btn.title = why;
   /* Причина — в самой ячейке, а не только в подсказке к кнопке.
      8 сентября прогон упал, ячейка осталась прежней, и это читалось как «не
@@ -8550,16 +8563,18 @@ function amapSpendFailed(btn, cell, why, shot, how, code) {
     /* ACL-1282: отказ разбивки относится к этим же датам и переживает
        неудачу спенда — она его не опровергает. */
     var split = cell.querySelector('.amap-split-bad');
-    cell.innerHTML = hand ? '<span class="amap-live-hand"></span>' : '<span class="amap-live-bad"></span>';
+    cell.innerHTML = hand || out ? '<span class="amap-live-hand"></span>' : '<span class="amap-live-bad"></span>';
     if (old) cell.appendChild(old);
     if (split) cell.appendChild(split);
     var bad = cell.firstChild;
-    bad.textContent = hand || why.length <= 40 ? why : why.slice(0, 39) + '…';
+    bad.textContent = hand || out || why.length <= 40 ? why : why.slice(0, 39) + '…';
     bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'screenshot: ' + shot : '');
   }
   /* Если прицепиться не к чему, «retry» ничего не изменит: сначала нужно
-     поднять профиль автоматизацией. Кнопка появляется ровно в этом случае. */
-  if (/профил|profile/i.test(why || '') && !btn.parentNode.querySelector('.amap-openprof')) {
+     поднять профиль автоматизацией. Кнопка появляется ровно в этом случае.
+     ACL-1580: закрытый профиль чтение поднимает само — кнопка остаётся для
+     отказов запуска; разлогиненному она не поможет. */
+  if (!out && /профил|profile/i.test(why || '') && !btn.parentNode.querySelector('.amap-openprof')) {
     var open = document.createElement('button');
     open.type = 'button';
     open.className = 'amap-btn amap-openprof';
