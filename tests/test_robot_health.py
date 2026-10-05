@@ -17,6 +17,9 @@ from pathlib import Path
 
 import pytest
 
+# ACL-1582: файл идёт только в Windows-задание CI; причина — в маркере.
+pytestmark = pytest.mark.windows_only(reason="launcher logs of the installed Windows build and drive-letter paths")
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))

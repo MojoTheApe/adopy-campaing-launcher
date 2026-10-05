@@ -1,5 +1,92 @@
 # System history
 
+## Platform-neutral tests run on Linux; only marked tests stay on Windows — ACL-1582
+
+Every test ran on Windows runners (6 jobs per run), whose minutes bill at 2x Linux,
+although most tests are pure logic, fixtures and Chromium bench pages.
+
+- `windows_only` pytest marker, module-level with a required reason, registered in
+  `tests/conftest.py`. 14 of 363 test files carry it (msvcrt locks, 8.3 short paths,
+  `install_acl.bat`/cmd, the PowerShell bootstrap and launcher contract, the Windows
+  runtime layout, Windows session/screen APIs, `taskkill`, drive-letter paths, backslash
+  path traversal of the status screenshot, cross-process lock races); the other 349 run
+  on Linux. `python scripts/acl_test_platform.py report` lists the reasons.
+- Guard `tests/test_acl_test_platform.py` (AST, also in the fast scope job): an unmarked
+  file may not
+  - import a Windows module (`msvcrt`, `winreg`, `_winapi`, `winsound`, `win32*`,
+    `pywintypes`, `wmi`), also via `pytest.importorskip`, `importlib.import_module`
+    or `__import__`;
+  - branch on the platform (`os.name`, `sys.platform`, `platform.system()`; `==`, `in`,
+    `startswith`; `from sys import platform`, `import os as _o`; a string `skipif`), or
+    use an imported `IS_WINDOWS`/`is_windows` helper in a condition or `skipif`;
+  - use `windll`, `ProactorEventLoop`, `os.startfile`, `CREATE_NO_WINDOW`, `getattr(ctypes, "windll")`;
+  - call `powershell`/`pwsh`, a Windows command as a list or as a `shell=True` string,
+    or reference `.ps1`, `LOCALAPPDATA`, `APPDATA`, `USERPROFILE`, `PROGRAMDATA`;
+  - hold a Windows path literal (drive letter with a backslash, a UNC share, `%X%` plus a backslash)
+    or a bare one-backslash string constant, anywhere; a multi-segment `a\b` string only in an `assert`.
+  Round 2 added: a relative backslash path (`..\escape`) anywhere, `platform.system().lower()`,
+  Windows env names in any case inside `os.environ`/`os.getenv`. `absolute-forward-slashes` moved to the
+  Windows screenshot file (84 + 24 = 108 cases) and `test_config_locations` checks the checkout with `Path.is_relative_to`.
+  Data-only lines take `# linux-ok: <why>`.
+- Review fixes: the first Linux run failed 18 backslash-traversal cases in
+  `test_status_screenshot.py`; they moved to `test_status_screenshot_backslash_windows.py`
+  (108 cases before, 90 + 18 after). The two cross-process lock tests
+  (`test_processes_preserve_each_update`, `test_multiple_processes_do_not_lose_writes`)
+  moved to `test_cross_process_locks_windows.py` (msvcrt locking + os.replace sharing
+  violations, ACL-1419). The shard cost model weighs a Chromium-launching file above one
+  that starts another process, so Linux shards get an even share of browser files.
+- `scripts/acl_test_shard.py --platform linux|windows`; an empty shard now fails.
+- `ci.yml`: `linux tests (3.11|3.13, 1..3)` on ubuntu-latest (Chromium with
+  `--with-deps`; the Python list comes from the scope job per ACL-1581, so most PRs
+  run 3.13 only) and `windows tests (3.13)` on windows-latest (marked files, the smoke
+  set, secret scan and `acl_smoke.py`). `ACL verification` requires both.
+- `scripts/acl_ci_reuse.py` `REQUIRED_JOBS` and the release gate `verify_promotion`
+  need every Linux shard, the Windows job and `ACL verification`. Runs of the old
+  layout (`test (py, shard)`) are refused, with a clear message on the tag path.
+- Not proven locally: this laptop has neither WSL nor Docker, so the Linux selection
+  first runs in CI. A file that fails there only because of Windows paths or CRLF gets
+  the marker (the screenshot and lock cases above were exactly that).
+
+## CI: one Python on PRs, superseded PR runs cancelled, installer job stops at 20 min — ACL-1581
+
+The Actions budget ran out for the fourth time on 2026-10-05 (about 4300 Windows minutes
+in one day). This is the cheapest slice of ACL-1541.
+
+- `scripts/acl_ci_scope.py` now also decides the Python versions of the `ci.yml` test
+  matrix and writes them as the `python` output (a JSON list). A `pull_request` run tests
+  Python 3.13 only (3 jobs instead of 6). A PR that touches dependency or bootstrap inputs
+  tests 3.11 and 3.13: `requirements*.txt`/`.in`, `constraints*.txt`, `.python-version`, `pyproject.toml`, `setup.py`/`setup.cfg`,
+  `pytest.ini`, both `conftest.py`, root `*.bat` installers/launchers,
+  `tests/bootstrap_windows_harness.ps1`, `packaging/**`, `.github/workflows/**`,
+  `scripts/acl_test_shard.py` and the CI scope/reuse scripts. Push runs
+  (stage/main/master), manual runs, an empty diff and any classification error test both.
+- `ci.yml` reads the list with `fromJSON(needs.scope.outputs.python || '["3.11", "3.13"]')`;
+  job names stay `test (<py>, <shard>)` and `ACL verification` still aggregates
+  `needs.test.result`. `REQUIRED_JOBS` is unchanged and now built from
+  `acl_ci_reuse.FULL_PYTHON_VERSIONS`, so a one-Python run is never a reuse proof or a
+  release proof (`verify_promotion` is unchanged).
+- Concurrency in `ci.yml` and `windows-installer.yml`: the group is `pr-<number>` for a
+  PR and `<ref>-<run_id>` for anything else, and `cancel-in-progress` is true only for
+  `pull_request`. Before, two quick squash merges to stage shared the group
+  `refs/heads/stage` and the second cancelled the first task's stage verification.
+  `tracker-link.yml` runs only on PRs and already cancelled correctly; unchanged.
+- `windows-installer.yml` build/install job: `timeout-minutes` 30 -> 20. Step limits:
+  install 3 (new), previous package 12 -> 7, onedir 8 -> 3, bundle test 5 -> 2, installer
+  build 10 -> 5, install test 8 -> 3, update cycle 8 -> 7. The numbers come from the last
+  91 green runs (2026-10-03..05): job p95 774 s, max 810 s, sum of step p95 884 s. Each step
+  limit is at least 1.5x its p95 and 1.25x its max, the job limit at least 1.3x the sum of step p95 and 1.5x
+  the job p95, so a hang fails on its own step. The update step
+  (420 s) must hold the earlier work (max 137 s), stop-server (30 s), the helper wait and
+  the cleanup (30 s), so `test_update_cycle.py` now waits `HELPER_WAIT_SECONDS = 150`
+  (was 360 s) and its `finally` cleanup can run; a test reads every `.wait(...)` timeout
+  from the script with `ast`.
+- Tests: `tests/test_acl_ci_scope.py` (version decision), `tests/test_acl_ci_reuse.py`
+  and `tests/test_publish_release.py` (a one-Python run is never a proof; the tag path is
+  unchanged), new `tests/test_acl_ci_workflows.py` (concurrency evaluated from the YAML,
+  matrix wiring, installer limits). The scope job also runs the new file.
+- Not verified on GitHub: the Actions budget was exhausted. After it is restored, a real
+  PR should show 3 test jobs and its stage push 6.
+
 ## Screen-values probe: reads only by default, every capture is opt-in — ACL-1532
 
 `scripts/probe_screen_values.py` measures whether our captures change a running

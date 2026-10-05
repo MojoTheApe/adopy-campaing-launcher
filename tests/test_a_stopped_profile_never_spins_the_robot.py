@@ -35,6 +35,9 @@ from types import SimpleNamespace
 import pytest
 from playwright.sync_api import sync_playwright
 
+# ACL-1582: файл идёт только в Windows-задание CI; причина — в маркере.
+pytestmark = pytest.mark.windows_only(reason="stops a real Chromium process tree with taskkill /T")
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
