@@ -6349,7 +6349,7 @@
             "session": "run_p1581k_1005"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-P1581K",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -6367,7 +6367,8 @@
           "report": "# ACL-1581 handoff (Worker-P1581K, run_p1581k_1005)\n\nPR #584 (codex/acl-1581-ci-one-python -> stage), head de5bff07. Claim 41bf17cc9a6140b0ad8079de28703b4f.\n\n## What changed\n- `scripts/acl_ci_scope.py`: adds `python_versions()` and `touches_dependencies()`, and writes a new `python` output (a JSON list) plus the version list in the step summary. A `pull_request` run gets `[\"3.13\"]`. Everything else gets `[\"3.11\", \"3.13\"]`: a PR that touches dependency/bootstrap inputs, a push, a manual run, an empty diff, a classification error, or reuse. The dependency/bootstrap inputs are `requirements*.txt`, pyproject/setup.py/setup.cfg, pytest.ini, both conftest.py, root `*.bat`, `tests/bootstrap_windows_harness.ps1`, `packaging/**`, `.github/workflows/**`, `scripts/acl_test_shard.py` and `scripts/acl_ci_scope.py`/`acl_ci_reuse.py`.\n- `scripts/acl_ci_reuse.py`: adds `FULL_PYTHON_VERSIONS = (\"3.11\", \"3.13\")`. `REQUIRED_JOBS` is built from it and its value is unchanged (6 test jobs + ACL verification).\n- `ci.yml`:\n  - the scope job outputs `python`;\n  - the matrix uses `fromJSON(needs.scope.outputs.python || '[\"3.11\", \"3.13\"]')`;\n  - the scope job's pytest list adds `tests/test_acl_ci_workflows.py`;\n  - concurrency is changed (see below).\n- `windows-installer.yml`: concurrency is changed the same way. The build/install job timeout goes from 30 to 15 min, and the step limits are 3/5/3/2/5/3/4 min (install, previous package, onedir, bundle test, installer build, install test, update cycle).\n- Docs: CHANGELOG entry and the CI paragraph in `docs/repository/WORKFLOW.md`.\n\n## Concurrency\n- Group: `pr-<number>` for a pull_request, `<ref>-<run_id>` otherwise. `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`.\n- Old behaviour, verified by evaluating the old YAML in the test: two stage pushes shared `acl-ci-refs/heads/stage` with cancel=true, so a later squash merge cancelled the earlier stage verification. Pushes now use a per-run group, because cancel=false alone would still replace a pending run in the same group.\n- `tracker-link.yml` runs on PRs only and was already correct, so it is unchanged and covered by the test.\n\n## Installer step timeouts\nThe slowest of six green runs on 2026-10-04 took 744 s. The sum of per-step maxima is 794 s, about 13% under 15 min. Strict \"step limits sum to 15 min or less\" is impossible with useful headroom, because the heavy steps alone take up to 11 min. The rule used instead, checked in the test:\n- each limit is at least 1.4x the step's slowest green time;\n- the slowest time of all earlier steps plus the limit fits in 15 min.\n\nTrade-off: `test_update_cycle.py` has an internal helper wait of up to 360 s, longer than its 4-min step.\n\n## Tests (local, ACL_LIBRARY_* empty)\n- `pytest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_publish_release.py tests/test_acl_ci_workflows.py -q`: 216 passed.\n- `pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_acl_ci_workflows.py -q`: 183 passed.\n- Test-first: the new tests were red before the change, and the concurrency and timeout tests fail against the stage YAML.\n- `scripts/acl_scan_secrets.py`: clean. PyYAML parses all three workflows.\n- CI was not run because the Actions budget is exhausted.\n\n## Gates\n- `verify_promotion` is unchanged. New tests on the tag path: a full push run is accepted, a reused main run is accepted, a tree with only a one-Python PR run is refused, and a one-Python push or main run is refused.\n- The required check names `ACL verification` and `Installer verification` are unchanged.\n\n## Open\n- The last acceptance item is left unchecked: a real PR should show 3 test jobs and its stage push 6, once the budget is back. The coordinator checks this on the merge."
         },
         "pr": 584,
-        "queued_at": "2026-10-05T07:19:01+00:00"
+        "queued_at": "2026-10-05T07:19:01+00:00",
+        "reviewer": "Reviewer-R1581J"
       },
       "582": {
         "implementers": [
@@ -6857,6 +6858,10 @@
       "Worker-L1582W": {
         "session": "run_l1582w_1005",
         "role": "Worker"
+      },
+      "Reviewer-R1581J": {
+        "session": "rev_r1581j_1005",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -8120,10 +8125,20 @@
       529,
       573,
       580,
-      581,
       582
     ],
-    "review": null,
+    "review": {
+      "id": "3b65e86d31e44a4d8d48e6a621b0759c",
+      "pr": 584,
+      "issues": [
+        581
+      ],
+      "actor": "Reviewer-R1581J",
+      "session": "rev_r1581j_1005",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-05T09:44:30+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -11647,6 +11662,13 @@
         "prs": [
           586
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-05T09:44:30+00:00",
+        "pr": 584,
+        "lane": "3b65e86d31e44a4d8d48e6a621b0759c",
+        "actor": "Reviewer-R1581J"
       }
     ],
     "policy": {
