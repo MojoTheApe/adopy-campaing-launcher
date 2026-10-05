@@ -4904,7 +4904,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "603": {
+        "actor": "Worker-S1603C",
+        "session": "run_s1603c_1005",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1603-slots",
+        "worktree": "C:\\acl-1603-slots",
+        "id": "402ed70d623a432a85d2666a2733cf4e",
+        "issue": 603,
+        "state": "implementing",
+        "started_at": "2026-10-05T17:11:49+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -6785,6 +6798,17 @@
         "pr": 599,
         "queued_at": "2026-10-05T14:18:07+00:00",
         "reviewer": "Reviewer-R1588K"
+      },
+      "603": {
+        "implementers": [
+          {
+            "actor": "Worker-S1603C",
+            "session": "run_s1603c_1005"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1603C",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -7279,6 +7303,10 @@
       "Reviewer-R1588K": {
         "session": "rev_r1588k_1005",
         "role": "Reviewer"
+      },
+      "Worker-S1603C": {
+        "session": "run_s1603c_1005",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -12393,6 +12421,13 @@
         "prs": [
           602
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-05T17:11:49+00:00",
+        "issue": 603,
+        "claim": "402ed70d623a432a85d2666a2733cf4e",
+        "actor": "Worker-S1603C"
       }
     ],
     "policy": {
