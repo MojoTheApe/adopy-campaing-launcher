@@ -163,7 +163,7 @@ def test_the_installer_is_kept_only_when_its_sha256_matches(github):
 
 
 @pytest.mark.parametrize("field,value", [
-    ("sha256", "not-a-hash"), ("name", "..\\evil.exe"), ("name", "setup.msi"), ("size", 0)])
+    ("sha256", "not-a-hash"), ("name", "..\\evil.exe"), ("name", "setup.msi"), ("size", 0)])  # linux-ok: a hostile file name rejected by a whitelist, runs on any OS
 def test_a_suspicious_release_json_is_refused(field, value):
     good = {"schema": 1, "version": "2026-09-20",
             "installer": {"name": "Setup.exe", "size": 10, "sha256": "a" * 64}}

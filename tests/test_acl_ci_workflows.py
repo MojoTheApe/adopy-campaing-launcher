@@ -149,20 +149,25 @@ def test_tracker_link_runs_only_on_pull_requests():
 def test_scope_publishes_the_python_list_and_the_matrix_uses_it():
     ci = workflow("ci.yml")
     assert ci["jobs"]["scope"]["outputs"]["python"] == "${{ steps.scope.outputs.python }}"
-    test = ci["jobs"]["test"]
+    # ACL-1582: список версий из scope получает Linux-задание; Windows — всегда 3.13.
+    test = ci["jobs"]["test-linux"]
     assert test["needs"] == "scope"
-    # Имена заданий остаются «test (<py>, <shard>)»: name не задан, ключи матрицы те же.
-    assert "name" not in test
+    # Имена заданий заданы явно (ACL-1582): «linux tests (<py>, <shard>)».
+    assert test["name"] == "linux tests (${{ matrix.python-version }}, ${{ matrix.shard }})"
     assert list(test["strategy"]["matrix"]) == ["python-version", "shard"]
+    assert test["strategy"]["matrix"]["python-version"].startswith("${{ fromJSON(needs.scope.outputs.python")
     assert test["strategy"]["matrix"]["shard"] == [1, 2, 3]
     assert test["strategy"]["fail-fast"] is False
+    assert ci["jobs"]["test-windows"]["strategy"]["matrix"]["python-version"] == ["3.13"]
 
 
 def test_required_check_names_are_unchanged():
     assert workflow("ci.yml")["jobs"]["admission"]["name"] == "ACL verification"
     assert workflow("windows-installer.yml")["jobs"]["admission"]["name"] == "Installer verification"
-    # Агрегат смотрит на итог всей матрицы (3 или 6 заданий) через needs.test.result.
-    assert "TESTS: ${{ needs.test.result }}" in yaml.safe_dump(workflow("ci.yml")["jobs"]["admission"], width=1000)
+    # Агрегат смотрит на итог всей матрицы каждого задания (ACL-1582: Linux и Windows).
+    dumped = yaml.safe_dump(workflow("ci.yml")["jobs"]["admission"], width=1000)
+    assert "LINUX_TESTS: ${{ needs.test-linux.result }}" in dumped
+    assert "WINDOWS_TESTS: ${{ needs.test-windows.result }}" in dumped
 
 
 def test_scope_job_runs_the_workflow_checks():
@@ -237,7 +242,7 @@ def test_every_step_limit_has_headroom_and_fits_inside_the_job_limit():
         assert elapsed + minutes * 60 <= limit, step["name"]
         elapsed += STEP_P95[step["name"]]
     for step in steps:
-        if step.get("shell") == "pwsh" and step["name"] != "Create downloadable archive":
+        if step.get("shell") == "pwsh" and step["name"] != "Create downloadable archive":  # linux-ok: reads YAML, runs nothing
             assert "timeout-minutes" in step, step["name"]
 
 

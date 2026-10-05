@@ -15,7 +15,7 @@ def test_planning_and_tracker_metadata_prs_use_light_checks(paths):
 
 @pytest.mark.parametrize("paths", [
     [], ["README.md", "dashboard.py"], ["requirements.txt"],
-    ["packaging/windows/build.ps1"], [".github/workflows/ci.yml"],
+    ["packaging/windows/build.ps1"], [".github/workflows/ci.yml"],  # linux-ok: paths for the classifier, never run
     ["scripts/acl_ci_scope.py"], ["tracker/cli.py"], ["scripts/task_tracker.py"],
     ["tests/test_acl_ci_scope.py"], ["docs/runtime.py"], ["new-file"],
     ["dashboard/help.md"], ["docs/note.md\nrequirements.txt"],
@@ -79,10 +79,10 @@ def test_pr_without_dependency_or_bootstrap_changes_runs_one_python(paths):
     "requirements.txt", "requirements-dev.txt", "requirements-extras.txt", "requirements-new.txt",
     "pyproject.toml", "setup.py", "setup.cfg", "pytest.ini", "conftest.py", "tests/conftest.py",
     "install_acl.bat", "Install ACL.bat", "enable_stable_updates.bat", "start_dashboard.bat",
-    "tests/bootstrap_windows_harness.ps1",
-    "packaging/windows/build.ps1", "packaging/windows/installer.iss", "packaging/windows/setup_wizard.py",
+    "tests/bootstrap_windows_harness.ps1",  # linux-ok: paths for the classifier, never run
+    "packaging/windows/build.ps1", "packaging/windows/installer.iss", "packaging/windows/setup_wizard.py",  # linux-ok: same
     ".github/workflows/ci.yml", ".github/workflows/windows-installer.yml", ".github/workflows/new.yml",
-    "scripts/acl_test_shard.py", "scripts/acl_ci_scope.py", "scripts/acl_ci_reuse.py",
+    "scripts/acl_test_shard.py", "scripts/acl_test_platform.py", "scripts/acl_ci_scope.py", "scripts/acl_ci_reuse.py",
 ])
 def test_pr_touching_dependency_or_bootstrap_inputs_runs_both_pythons(path):
     for paths in ([path], ["dashboard.py", path, "docs/note.md"]):

@@ -82,8 +82,8 @@ For historical tasks follow the explicit reconciliation in ADOPTION.md.
 
 Use the requirements and isolation rules in [engineering context](../system/AGENT_CONTEXT.md).
 Run focused behavior tests first, then scanner, smoke, the complete required tests
-and packaging checks on the final candidate. Windows CI remains required for code,
-dependencies, packaging and CI changes. Record success, skip, infrastructure failure
+and packaging checks on the final candidate. CI (Linux and Windows test jobs)
+remains required for code, dependencies, packaging and CI changes. Record success, skip, infrastructure failure
 and unrun manual checks separately. Do not rerun a successful unchanged candidate
 without a new failure, change or unresolved concern.
 
@@ -93,20 +93,49 @@ The full suite runs in parallel with pytest-xdist (`requirements-dev.txt`):
 
     python -m pytest tests/ -q -n auto --dist loadfile
 
-CI (`.github/workflows/ci.yml`) runs the same command split into three jobs per
-Python version. Pushes to stage/main/master and manual runs test Python 3.11 and
-3.13 (6 jobs). A pull request tests Python 3.13 only (3 jobs), unless it touches
-dependency or bootstrap inputs (requirements, pyproject/setup, conftest, root
-`.bat` installers, `packaging/`, `.github/workflows/`, `scripts/acl_test_shard.py`,
-the CI scope/reuse scripts): then it tests both. The scope job decides this
-(`scripts/acl_ci_scope.py`, ACL-1581). Only a full push or manual run proves a tree
-for reuse and releases. A new push to a PR branch cancels that PR's superseded CI
-and installer runs; stage/main/master pushes and manual runs are never cancelled
-or replaced. The installer build/install job stops at 15 minutes.
-`python scripts/acl_test_shard.py <k> 3` prints
-the test files of shard k (together the shards are exactly `tests/test_*.py`,
-checked by `tests/test_acl_test_shard.py`). The hosted Windows runner of this
-private repository has two CPUs, so xdist alone did not shorten CI.
+CI (`.github/workflows/ci.yml`, ACL-1582) splits the suite by platform:
+
+| Job name (exact) | Runner | Python | Files |
+|---|---|---|---|
+| `linux tests (<py>, <k>)` | ubuntu-latest | 3.11 and 3.13 on pushes and manual runs, 3.13 on most PRs (below); shards k = 1..3 | every `tests/test_*.py` without the `windows_only` marker: `python scripts/acl_test_shard.py --platform linux <k> 3` |
+| `windows tests (<py>)` | windows-latest | 3.13 | the `windows_only` files plus the Windows smoke set (`scripts/acl_test_platform.py` `WINDOWS_SMOKE`), after the secret scan and `scripts/acl_smoke.py`: `--platform windows 1 1` |
+| `ACL verification` | ubuntu-latest | - | aggregates `scope`, both Linux and Windows test jobs |
+
+A test file that needs Windows says so at module level, with the reason:
+
+    pytestmark = pytest.mark.windows_only(reason="msvcrt byte-range locks")
+
+`tests/test_acl_test_platform.py` (also run in the fast scope job) fails when an
+unmarked file uses Windows-only APIs or assumptions: `msvcrt`/`winreg` imports,
+`ctypes.windll`, `os.name`/`sys.platform` Windows branches (including
+`skipif(os.name != "nt")`, which would silently drop coverage on Linux),
+`powershell`/`pwsh`, `.ps1`, `LOCALAPPDATA`, Windows commands (`taskkill`,
+`cmd.exe`, `*.bat`...) and backslash paths inside `assert`. A line that only
+mentions such a thing as data carries `# linux-ok: <why>`. When a test fails on
+Linux only because of paths or CRLF, mark it; do not silently change it in a way
+that hides the Windows behaviour. `python scripts/acl_test_platform.py report`
+prints the split and every reason. Without `--platform`, `acl_test_shard.py`
+shards all files as before; the shards together are exactly the platform's
+selection (`tests/test_acl_test_shard.py`). The hosted runners of this private
+repository have two CPUs, so xdist alone did not shorten CI.
+
+The job names are fixed with `name:` because `scripts/acl_ci_reuse.py`
+(`REQUIRED_JOBS`) and the release gate (`scripts/acl_publish_release.py`) look
+jobs up by name; `tests/test_ci_layout.py` keeps them in step with the matrices.
+A reuse proof or a release needs every Linux shard, the Windows job and
+`ACL verification` of one run. Runs of the old layout (`test (<py>, <k>)`, all on
+Windows, before ACL-1582) are refused, not translated: a release of a tree that
+only has such a run needs a fresh `ci.yml` run on main.
+
+Python versions (ACL-1581): pushes to stage/main/master and manual runs test 3.11
+and 3.13 on Linux. A pull request tests 3.13 only, unless it touches dependency or
+bootstrap inputs (requirements, pyproject/setup, conftest, root `.bat` installers,
+`packaging/`, `.github/workflows/`, `scripts/acl_test_shard.py`, the CI scope/reuse
+scripts): then it tests both. The scope job decides this (`scripts/acl_ci_scope.py`).
+The Windows job always uses 3.13. Only a full push or manual run proves a tree for
+reuse and releases. A new push to a PR branch cancels that PR's superseded CI and
+installer runs; stage/main/master pushes and manual runs are never cancelled or
+replaced. The installer build/install job stops at 15 minutes.
 `--dist loadfile` keeps every test file on one worker: more than 80 files start
 their own Chromium in a module fixture, and spreading one file over all workers
 starts that browser once per worker (on the owner's laptop the test-by-test
@@ -132,7 +161,8 @@ file alone before suspecting the code, and lower `-n`.
 
 Required admission names: `descriptor`, `tracker-link`, `ACL verification`,
 `Installer verification`. Aggregates require all applicable underlying jobs; a
-metadata-only PR may skip Windows only through the existing closed classification.
+metadata-only PR may skip the Linux and Windows test jobs only through the existing
+closed classification.
 Stage/main pushes and manual runs execute the full checks, except that a push or PR
 whose exact git tree already passed a full push or workflow_dispatch run of the same
 workflow reuses it

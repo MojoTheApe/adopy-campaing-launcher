@@ -10,6 +10,9 @@ from src.web import keep_awake as ka
 from src.web import publish_jobs as pj
 from src.fb_ads_rpa import run_telemetry as rt
 
+# ACL-1582: файл идёт только в Windows-задание CI; причина — в маркере.
+pytestmark = pytest.mark.windows_only(reason="real Windows session and screen APIs (ProcessIdToSessionId, keep-awake)")
+
 
 @pytest.fixture
 def job(monkeypatch):

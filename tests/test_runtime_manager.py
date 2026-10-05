@@ -9,6 +9,10 @@ import pytest
 
 from scripts import acl_runtime_manager as runtime
 
+# ACL-1582: файл идёт только в Windows-задание CI; причина — в маркере.
+pytestmark = pytest.mark.windows_only(
+    reason="per-commit launcher runtime in the Windows venv layout (Scripts/python.exe)")
+
 OLD = "a" * 40
 NEW = "b" * 40
 

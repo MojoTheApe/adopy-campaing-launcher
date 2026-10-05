@@ -1,6 +1,8 @@
 """ACL-1565: reuse a full green run only for a tree git proves identical; any doubt runs in full.
 
-Recorded GitHub API payloads (trimmed) live in tests/fixtures/ci_reuse. Their
+Recorded GitHub API payloads (trimmed) live in tests/fixtures/ci_reuse. ACL-1582:
+``ci_full_jobs.json`` is the recorded run renamed to the current Linux + Windows
+job layout; the recording itself is ``ci_full_jobs_legacy.json``. Their
 commit sha is replaced by a commit of a real temporary git repository, and the
 payload's own ``tree_id`` is set to a lie, so every tree comparison here is
 computed by git. No test touches the network.
@@ -190,11 +192,36 @@ def test_untrustworthy_candidate_run_is_refused(promotion, field, value):
     lambda jobs: jobs[-1].update(conclusion="skipped"),                   # ACL verification
     lambda jobs: jobs[1].update(run_id=1),                                # a job of another run
     lambda jobs: jobs.append(dict(jobs[1], conclusion="failure")),        # duplicate name failed
+    # ACL-1582: the Windows job of the new layout is required like any shard.
+    lambda jobs: jobs.remove(next(j for j in jobs if j["name"] == "windows tests (3.13)")),
+    lambda jobs: next(j for j in jobs if j["name"] == "windows tests (3.13)").update(conclusion="skipped"),
+    lambda jobs: next(j for j in jobs if j["name"] == "windows tests (3.13)").update(conclusion="failure"),
+    # A green job of the old layout next to the new ones makes the run doubtful.
+    lambda jobs: jobs.append(dict(jobs[1], name="test (3.13, 1)")),
 ])
 def test_partial_cancelled_or_failed_matrix_is_refused(promotion, mutate):
     api, push = green_api(promotion["stage"])
     mutate(api.jobs_by_run[push["id"]]["jobs"])
     assert decide(promotion, api)["windows"] is True
+
+
+def test_a_green_full_run_of_the_old_layout_is_never_reused(promotion):
+    """ACL-1582: decided — runs with the old job names are refused, not translated."""
+    api, push = green_api(promotion["stage"])
+    legacy = recorded("ci_full_jobs_legacy.json")
+    assert all(j["conclusion"] == "success" for j in legacy["jobs"])
+    api.jobs_by_run[push["id"]] = legacy
+    result = decide(promotion, api)
+    assert result["windows"] is True and result["reuse"] == "no-proven-full-run"
+
+
+def test_the_ci_layout_requires_every_linux_shard_and_the_windows_job():
+    required = set(reuse.REQUIRED_JOBS["ci.yml"])
+    assert {f"linux tests ({p}, {s})" for p in ("3.11", "3.13") for s in (1, 2, 3)} <= required
+    assert "windows tests (3.13)" in required and "ACL verification" in required
+    assert not any(reuse.LEGACY_CI_JOB.fullmatch(name) for name in required)
+    assert reuse.legacy_layout({"test (3.11, 1)": []}, "ci.yml")
+    assert not reuse.legacy_layout({"test (3.11, 1)": []}, "windows-installer.yml")
 
 
 def test_partial_installer_run_is_refused(promotion):
@@ -258,27 +285,32 @@ def workflow(name):
 
 
 def test_required_ci_jobs_match_the_real_test_matrix():
-    # ACL-1581: версии Python приходят из scope; push-прогон получает полный список,
-    # а при сбое scope срабатывает запасной полный список из самого выражения.
+    # ACL-1581: версии Python Linux-заданий приходят из scope; push-прогон получает
+    # полный список, при сбое scope — запасной полный список из самого выражения.
+    # ACL-1582: Linux-задания по версиям и шардам, Windows-задание по версиям.
     ci = workflow("ci.yml")
-    matrix = ci["jobs"]["test"]["strategy"]["matrix"]
-    expression = matrix["python-version"]
+    linux = ci["jobs"]["test-linux"]["strategy"]["matrix"]
+    windows = ci["jobs"]["test-windows"]["strategy"]["matrix"]
+    expression = linux["python-version"]
     assert expression == "${{ fromJSON(needs.scope.outputs.python || '[\"3.11\", \"3.13\"]') }}"
     fallback = json.loads(expression.split("|| '")[1].split("')")[0])
     push_versions = scope.classify([], "push")["python"]
-    assert fallback == push_versions == list(reuse.FULL_PYTHON_VERSIONS)
-    expected = {f"test ({p}, {s})" for p in push_versions for s in matrix["shard"]}
+    assert fallback == push_versions == list(reuse.FULL_PYTHON_VERSIONS) == list(reuse.CI_LINUX_PYTHONS)
+    expected = {reuse.ci_linux_job(p, s) for p in push_versions for s in linux["shard"]}
+    expected |= {reuse.ci_windows_job(p) for p in windows["python-version"]}
     expected.add(ci["jobs"]["admission"]["name"])
     assert set(reuse.REQUIRED_JOBS["ci.yml"]) == expected
-    assert len(reuse.REQUIRED_JOBS["ci.yml"]) == 7
+    assert len(reuse.REQUIRED_JOBS["ci.yml"]) == 8
+    assert ci["jobs"]["test-linux"]["name"] == "linux tests (${{ matrix.python-version }}, ${{ matrix.shard }})"
+    assert ci["jobs"]["test-windows"]["name"] == "windows tests (${{ matrix.python-version }})"
 
 
 # --- ACL-1581: a one-Python PR run is never a proof -------------------------------------------------
 
 def one_python(jobs, run_id):
-    """Задания PR-прогона ACL-1581: только 3.13 × 3 шарда и агрегат."""
-    jobs["jobs"] = [dict(j, run_id=run_id) for j in jobs["jobs"] if not j["name"].startswith("test (3.11")]
-    assert sum(j["name"].startswith("test (3.13") for j in jobs["jobs"]) == 3
+    """Задания PR-прогона ACL-1581: Linux только 3.13 × 3 шарда, Windows 3.13 и агрегат."""
+    jobs["jobs"] = [dict(j, run_id=run_id) for j in jobs["jobs"] if not j["name"].startswith("linux tests (3.11")]
+    assert sum(j["name"].startswith("linux tests (3.13") for j in jobs["jobs"]) == 3
     return jobs
 
 
