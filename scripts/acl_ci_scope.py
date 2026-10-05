@@ -22,6 +22,7 @@ PR_PYTHON_VERSIONS = ("3.13",)
 # Входы зависимостей и бутстрапа: PR, задевший любой из них, гоняет обе версии.
 DEPENDENCY_FILES = {
     "pyproject.toml", "setup.py", "setup.cfg", "pytest.ini", "conftest.py", "tests/conftest.py",
+    ".python-version",
     "tests/bootstrap_windows_harness.ps1",
     # Сама матрица: деление на шарды и решение о версиях.
     "scripts/acl_test_shard.py", "scripts/acl_test_platform.py", "scripts/acl_ci_scope.py",
@@ -36,8 +37,10 @@ def touches_dependencies(name):
         return True
     if "/" in name:
         return False
-    # Корень: requirements*.txt и .bat-скрипты установки/запуска (install_acl.bat и др.).
-    return name.startswith("requirements") and name.endswith(".txt") or name.lower().endswith(".bat")
+    # Корень: requirements*.txt/.in, constraints*.txt и .bat-скрипты установки/запуска.
+    return (name.startswith("requirements") and name.endswith((".txt", ".in"))
+            or name.startswith("constraints") and name.endswith(".txt")
+            or name.lower().endswith(".bat"))
 
 
 def python_versions(paths, event_name):
