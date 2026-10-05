@@ -27,10 +27,12 @@ in one day). This is the cheapest slice of ACL-1541.
   install 3 (new), previous package 12 -> 7, onedir 8 -> 3, bundle test 5 -> 2, installer
   build 10 -> 5, install test 8 -> 3, update cycle 8 -> 7. The numbers come from the last
   91 green runs (2026-10-03..05): job p95 774 s, max 810 s, sum of step p95 884 s. Each step
-  limit is at least 1.5x its p95, the job limit at least 1.3x the sum of step p95 and 1.5x
-  the job p95, so a hang fails on its own step. The update step (420 s) is longer than the
-  360 s wait of `test_update_cycle.py` plus its 30 s stop-server, so the script's `finally`
-  cleanup can run; a test reads that wait from the script.
+  limit is at least 1.5x its p95 and 1.25x its max, the job limit at least 1.3x the sum of step p95 and 1.5x
+  the job p95, so a hang fails on its own step. The update step
+  (420 s) must hold the earlier work (max 137 s), stop-server (30 s), the helper wait and
+  the cleanup (30 s), so `test_update_cycle.py` now waits `HELPER_WAIT_SECONDS = 150`
+  (was 360 s) and its `finally` cleanup can run; a test reads every `.wait(...)` timeout
+  from the script with `ast`.
 - Tests: `tests/test_acl_ci_scope.py` (version decision), `tests/test_acl_ci_reuse.py`
   and `tests/test_publish_release.py` (a one-Python run is never a proof; the tag path is
   unchanged), new `tests/test_acl_ci_workflows.py` (concurrency evaluated from the YAML,
