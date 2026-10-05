@@ -4542,6 +4542,20 @@ async def publish_jobs_slots() -> JSONResponse:
     return JSONResponse(slots_snapshot())
 
 
+@app.post("/publish-jobs/kept/release")
+async def publish_jobs_release_kept(request: Request) -> JSONResponse:
+    """«Release» у оставленного окна в очереди: снять с него место (ACL-1603).
+
+    Не зависит от панели задания. Окно не закрывается — только перестаёт
+    считаться в потолке профилей. Объявлен до `/publish-jobs/{job_id}/…`.
+    """
+    form = await request.form()
+    from src.web.publish_jobs import release_kept
+
+    got = release_kept(str(form.get("account") or ""))
+    return JSONResponse(got, status_code=200 if got.get("ok") else 404)
+
+
 @app.post("/publish-jobs/{job_id}/cancel")
 async def publish_jobs_cancel(job_id: str) -> JSONResponse:
     """Stop a running publish/RPA job; Multilogin window stays open."""

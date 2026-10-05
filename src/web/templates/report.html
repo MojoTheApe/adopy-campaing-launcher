@@ -5454,7 +5454,7 @@ window.cbTree = (function () {
         var what = x.stage === 'checking' ? 'checking'
           : x.stage === 'queued'
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
-               : q.state === 'waiting_review' ? cbReviewWait(q)
+               : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
                : q.state === 'waiting_memory' ? 'queued — waiting for memory'
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
@@ -6062,8 +6062,11 @@ window.cbBuild = (function () {
       return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
     }
     if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
+      var reserve = Number(q.reserve_mb) || 0;
+      var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
       return { state: 'build-wait', sign: '',
-               why: 'Waiting: ' + gb(q.available_mb) + ' GB free, a profile uses ~' + gb(q.profile_mb) + ' GB'
+               why: 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, needs ' + gb(need) + ' GB (profile ~'
+                    + gb(q.profile_mb) + ' GB + ' + String(+gb(reserve)) + ' GB reserve)'
                     + (ahead ? ' (' + ahead + ' ahead)' : '') };
     }
     return { state: 'build-wait', sign: '',
@@ -12156,9 +12159,25 @@ function cbSentCampaignNames(fd) {
  * новые не принимаются, пока страницу не перезагрузят. */
 /* ACL-1603: потолок занят окнами, оставленными открытыми на проверку. */
 function cbReviewWait(q) {
+  var names = (q && q.kept_accounts) || [];
+  if (names.length) return 'waiting: review windows still open for ' + names.join(', ') + ' — close them to continue';
   var n = Math.max(1, parseInt(q && q.kept, 10) || 1);
   return 'waiting: ' + n + ' review window' + (n === 1 ? ' is' : 's are') + ' still open — close them to continue';
 }
+/* «Release» у каждого оставленного окна: снять место, не закрывая окно. */
+function cbReviewRelease(q) {
+  return ((q && q.kept_accounts) || []).map(function (a) {
+    return ' <a href="#" class="cbd-q-retry" data-cb-release-kept="' + aclEscHtml(a) + '">Release ' + aclEscHtml(a) + '</a>';
+  }).join('');
+}
+document.addEventListener('click', function (ev) {
+  var t = ev.target && ev.target.closest ? ev.target.closest('[data-cb-release-kept]') : null;
+  if (!t) return;
+  ev.preventDefault();
+  var fd = new FormData();
+  fd.set('account', t.getAttribute('data-cb-release-kept'));
+  fetch('/publish-jobs/kept/release', { method: 'POST', body: fd }).catch(function () { /* следующий опрос покажет */ });
+});
 
 /* Ключ одной отправки Publish (ACL-1399) — см. start_job(request_id). */
 function cbRequestId() {
@@ -13174,7 +13193,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       // ACL-1321: профилей разом — сколько тянет память машины; остальные ждут.
       : isQueued ? (queue.reason === 'profile'
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
-          : queue.state === 'waiting_review' ? cbReviewWait(queue)
+          : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
           : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))

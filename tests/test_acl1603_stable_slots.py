@@ -464,8 +464,10 @@ def test_a_kept_window_closed_by_hand_in_multilogin_stops_holding_its_slot():
     assert a
 
 
-def _fake_run(monkeypatch, *, closes: bool):
-    slots = Machine(available_gb=128).slots(tick_s=30)
+def _fake_run(monkeypatch, *, closes: bool, cancel_after_grant: bool = False):
+    # Замер видит профиль открытым: иначе «окно закрыто руками» снимет место
+    # само, и тест не отличил бы `close_profile` без `release` (ревью N1).
+    slots = _slots_seeing_all_profiles()
     monkeypatch.setattr(pj, "_slots", slots)
     monkeypatch.setattr(pj, "use_rpa_publish", lambda: True)
     monkeypatch.setattr(pj, "_clear_inherited_asyncio_loop", lambda: None)
@@ -482,6 +484,16 @@ def _fake_run(monkeypatch, *, closes: bool):
 
     monkeypatch.setattr(pj, "_run_rpa", fake_rpa)
     job_id = pj.create_job("Doc19", "CL", [{}])
+    if cancel_after_grant:
+        real_acquire = slots.acquire
+
+        def acquire_then_cancel(*a, **kw):
+            grant = real_acquire(*a, **kw)
+            with pj._jobs_lock:
+                pj._jobs[job_id]["cancel_requested"] = True
+            return grant
+
+        monkeypatch.setattr(slots, "acquire", acquire_then_cancel)
     pj._run_job(job_id, [], account_label="Doc19", country="CL", via_multilogin=True,
                 activate=False, dry_run=False, hand_off=True)
     return slots, job_id
@@ -519,3 +531,86 @@ def test_the_refusal_message_uses_the_trimmed_label(clean_jobs):
     with pytest.raises(pj.DuplicateJobError) as err:
         pj.create_job("  Doc19 ", "CL", [{}])
     assert str(err.value) == "Doc19 is already in the queue"
+
+
+# ── раунд 3 ревью ────────────────────────────────────────────────────────
+
+def test_no_slot_is_kept_for_a_job_that_never_reached_the_browser(clean_jobs, monkeypatch):
+    slots, job_id = _fake_run(monkeypatch, closes=False, cancel_after_grant=True)
+    assert pj._jobs[job_id].get("started_at") is None
+    assert slots.snapshot()["running"] == []
+
+
+def test_kept_entries_are_not_counted_as_warming_up():
+    now = [1000.0]
+    settings = _settings(warmup_s=90)
+    slots = ps.ProfileSlots(memory=lambda: mem(128), settings=lambda: settings, clock=lambda: now[0],
+                            tick_s=0.02,
+                            usage=ps.ProfileUsage(lambda p: {}, clock=lambda: now[0], background=False))
+    Job(slots, "a", "P1")
+    assert slots._warming() == 1                     # только что стартовал — греется
+    slots.keep("a", "Doc19")
+    assert slots._warming() == 0                     # окно оставлено: память уже занята и измерима
+
+
+def test_the_waiting_line_names_the_kept_accounts_and_the_dashboard_can_release_one():
+    slots = _slots_seeing_all_profiles()
+    Job(slots, "a", "P1")
+    Job(slots, "b", "P2")
+    slots.keep("a", "KLD_BFL_B94")
+    slots.keep("b", "Doc21")
+    c = Job(slots, "c", "P3")
+    time.sleep(0.15)
+    view = pj._queue_view(c.waits[0])
+    assert view["kept_accounts"] == ["Doc21", "KLD_BFL_B94"]
+    html = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    assert "waiting: review windows still open for " in html and "data-cb-release-kept" in html
+    assert slots.release_kept(" kld_bfl_b94 ") == 1          # без панели задания
+    assert _until(lambda: c.started)
+    assert slots.release_kept("nobody") == 0
+    c.finish()
+
+
+def test_the_release_endpoint_frees_a_kept_slot_and_404s_for_an_unknown_account(monkeypatch):
+    import httpx
+    from src.web import app as app_mod
+
+    slots = _slots_seeing_all_profiles()
+    monkeypatch.setattr(pj, "_slots", slots)
+    Job(slots, "a", "P1")
+    slots.keep("a", "Doc19")
+
+    async def post(account):
+        transport = httpx.ASGITransport(app=app_mod.app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            return await client.post("/publish-jobs/kept/release", data={"account": account})
+
+    ok = asyncio.run(post("Doc19"))
+    assert ok.status_code == 200 and ok.json() == {"ok": True, "released": 1}
+    assert slots.snapshot()["running"] == []
+    assert asyncio.run(post("Doc19")).status_code == 404
+
+
+def test_pruning_a_kept_window_of_the_waiting_profile_does_not_subtract_twice():
+    """N4: окно того же профиля и так не считается; убрав его, running не падает ниже."""
+    now = [1000.0]
+    found = {"P2": 3 * GB}                           # P1 в Multilogin не найден — окно закрыто
+    usage = ps.ProfileUsage(lambda profiles: {p: v for p, v in found.items() if p in profiles},
+                            clock=lambda: now[0], background=False)
+    settings = _settings(warmup_s=10, settle_s=10, ceiling=3)
+    slots = ps.ProfileSlots(memory=lambda: mem(128), settings=lambda: settings, clock=lambda: now[0],
+                            tick_s=0.02, usage=usage)
+    Job(slots, "a", "P1")
+    Job(slots, "b", "P2")
+    slots.keep("a", "A")
+    now[0] += 30
+    got = slots._decide_now("P1")
+    assert got["running"] == 1, got                   # только P2; не 0 и не -1
+
+
+def test_the_first_profile_wait_message_mentions_the_reserve():
+    html = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    assert "Waiting for memory: " in html and "GB reserve)" in html
+    d = ps.decide(0, 0, _mb(int(5.4 * GB)), ps.load_settings({}))
+    view = pj._queue_view(d)
+    assert (view["need_mb"], view["reserve_mb"], view["profile_mb"]) == (int(6.5 * GB), 3 * GB, int(3.5 * GB))

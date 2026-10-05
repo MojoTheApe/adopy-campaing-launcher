@@ -448,7 +448,7 @@ def _run_job(
         with _jobs_lock:
             left_open = not bool((_jobs.get(job_id) or {}).get("profile_closed"))
         if left_open and _job_ran_in_browser(job_id):
-            _slots.keep(job_id)
+            _slots.keep(job_id, account_label)
         else:
             _slots.release(job_id)
 
@@ -476,6 +476,9 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "limit": verdict.get("limit"),
         "cap": verdict.get("cap"),
         "kept": verdict.get("kept"),
+        "kept_accounts": list(verdict.get("kept_accounts") or []),
+        "need_mb": verdict.get("need_mb"),
+        "reserve_mb": verdict.get("reserve_mb"),
         "running": verdict.get("running"),
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),
@@ -792,6 +795,15 @@ def _profile_has_other_job(job_id: str, account_label: str) -> bool:
 
 
 _ACTIVE_STATUSES = frozenset({"pending", "queued", "running", "cancelling"})
+
+
+def release_kept(account_label: str) -> dict[str, Any]:
+    """Снять место с оставленного окна аккаунта, не закрывая окно (ACL-1603)."""
+    count = _slots.release_kept(account_label)
+    if count:
+        return {"ok": True, "released": count}
+    return {"ok": False, "released": 0,
+            "error": f"{str(account_label).strip()} has no review window holding a slot"}
 
 
 def close_profile(job_id: str) -> dict[str, Any]:

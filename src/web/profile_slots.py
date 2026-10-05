@@ -477,6 +477,29 @@ class ProfileSlots:
     def _kept(self) -> list[str]:
         return [j for j, r in self._running.items() if r.get("kept")]
 
+    def _count_running(self, profile: str = "") -> int:
+        return len([1 for r in self._running.values()
+                    if not (r.get("kept") and profile and r["profile"] == profile)])
+
+    def _kept_accounts(self) -> list[str]:
+        return sorted({str(r.get("label") or "") for r in self._running.values()
+                       if r.get("kept") and r.get("label")})
+
+    def release_kept(self, label: str) -> int:
+        """Снять место с оставленного окна аккаунта, не закрывая его (ACL-1603).
+
+        Выход, когда окно не закрыть из панели задания: человек сам решил,
+        что окно можно не считать. Возвращает, сколько мест снято.
+        """
+        label = str(label or "").strip().lower()
+        with self._cond:
+            gone = [j for j, r in self._running.items()
+                    if r.get("kept") and str(r.get("label") or "").strip().lower() == label]
+            for j in gone:
+                del self._running[j]
+            self._cond.notify_all()
+        return len(gone)
+
     def _reuse_kept(self, profile: str) -> None:
         """Новое задание на профиль берёт место оставленного там окна."""
         for j in [j for j, r in self._running.items() if r.get("kept") and r["profile"] == profile]:
@@ -515,8 +538,7 @@ class ProfileSlots:
         """
         settings = self._settings()
         # ACL-1603: окна, оставленные открытыми после сбоя (ревью), держат место.
-        running = len([1 for r in self._running.values()
-                       if not (r.get("kept") and profile and r["profile"] == profile)])
+        running = self._count_running(profile)
         measured_mb: int | None = None
         probe: dict[str, Any] = {}
         # Мерим, только когда это что-то решает: авто, кто-то идёт, потолок не взят.
@@ -533,8 +555,10 @@ class ProfileSlots:
                     for j in [j for j, r in self._running.items()
                               if r.get("kept") and r in settled and r["profile"] not in per]:
                         del self._running[j]
-                        running -= 1
-                        kept_n -= 1
+                    # Пересчёт, а не «минус один»: убранное окно могло быть тем,
+                    # что мы и так не считали (тот же профиль) — вычли бы дважды.
+                    running = self._count_running(profile)
+                    kept_n = len(self._kept())
                 if probe.get("status") == "ok" and per:
                     values: list[int] = []
                     for r in settled:
@@ -557,6 +581,7 @@ class ProfileSlots:
         decision = decide(running, self._warming(), self._memory(), settings, measured_mb, current)
         if kept_n:
             decision["kept"] = kept_n
+            decision["kept_accounts"] = self._kept_accounts()
             if not decision.get("allow") and decision.get("reason") == "ceiling":
                 # Потолок занят окнами на проверке: человеку надо их закрыть.
                 decision["reason"] = "review_windows"
@@ -642,7 +667,7 @@ class ProfileSlots:
             self._running.pop(job_id, None)
             self._cond.notify_all()
 
-    def keep(self, job_id: str) -> None:
+    def keep(self, job_id: str, label: str = "") -> None:
         """Задание кончилось, но окно профиля оставлено открытым (ACL-1603).
 
         Место остаётся занятым, пока профиль не закроют (`release`): иначе
@@ -651,6 +676,7 @@ class ProfileSlots:
         with self._cond:
             if job_id in self._running:
                 self._running[job_id]["kept"] = True
+                self._running[job_id]["label"] = str(label or "")
             self._cond.notify_all()
 
     def grants(self, profile: str) -> int:

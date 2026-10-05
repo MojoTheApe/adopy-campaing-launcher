@@ -1,5 +1,21 @@
 # System history
 
+## A hand-opened window is reopened even when Multilogin is slow to release the profile — ACL-1606
+
+Regression from ACL-1562 (05.10, FacebookElf403): after the robot closed the window through
+the Multilogin API, Multilogin still held the profile for a moment, the start answered
+"locked", and the robot read that as "opened by hand" again and gave up with the window closed.
+
+- After its own graceful stop the robot marks the profile as its own, so a lock is no longer
+  read as a hand-opened window.
+- The start is retried for up to ~30 s (1, 1, 2, 2, 3, 3, 4, 4, 5, 5 s) while Multilogin still
+  says "locked" / "already running". Any other start error fails at once, without retries.
+- Still graceful only: no kill, no other profile touched, no plain browser.
+- If the profile is still held after the retries: "Multilogin did not release the profile after
+  closing its window — open it again in Multilogin".
+- Telemetry: the existing `profile_hand_window` step now carries `start_retries` and
+  `start_waited_s` in its diag (no new step).
+
 ## At most 2 profiles, a real memory reserve, no duplicate jobs — ACL-1603
 
 Stage 0 of the stable-build plan. On 05.10 "Publish all" for ~20 accounts let 3 profiles
@@ -29,6 +45,12 @@ duplicate jobs.
   then says "waiting: N review windows are still open — close them to continue". The first
   profile now also needs profile + reserve free (2810 MB or 400 MB free: it waits, "waiting
   for memory"). The refusal message uses the trimmed account name.
+- Review round 3: the waiting line names the kept accounts ("waiting: review windows still
+  open for KLD_BFL_B94, Doc21 — close them to continue") with a "Release" link per account
+  (`POST /publish-jobs/kept/release`) that stops counting that window without closing it;
+  the memory wait says "Waiting for memory: 5.4 GB free, needs 6.5 GB (profile ~3.5 GB + 3 GB
+  reserve)". Tests get a fake host memory and a fresh slot queue (`tests/conftest.py`), so no
+  test waits on the CI runner's real free memory.
 - Tests: `tests/test_acl1603_stable_slots.py`; the ACL-1321/1424 tests now pin the old
   numbers explicitly.
 
