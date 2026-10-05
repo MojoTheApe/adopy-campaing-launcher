@@ -1,5 +1,29 @@
 # System history
 
+## Creatives show the concrete variant — ACL-1593
+
+The Creatives breakdown no longer stops at the group number. The variant is the leading
+number of the file name: `1_es_2403_post.mp4` is creative 2403, variant 1.
+
+- The robot names ads `"<creative> <variant> - <text>"` (`2403 1 - Pro Bancolombia`,
+  `AdDraft.ad_name`). A file name without a leading number gives the name as before.
+- `split_ad_title_variant` returns creative, variant and text; `split_ad_title` keeps its
+  (creative, text) contract, so every group caller is unchanged. `enrich_structure` adds a
+  `VariantId` column.
+- Creative breakdown: the group row keeps its totals and expands on click into `1962 · 1`,
+  `1962 · 2`, ..., `1962 · no variant` rows with the same metrics; variants add up to the
+  group.
+- Backfill for ads built before this change: `src/creative_variant.py` reads the robot's
+  own `ad_creative_pair` records (campaign + creative number -> variant of the Square
+  file). Only an unambiguous pair counts - if one campaign used two variants of the same
+  creative, the ad names are not in the journal and the rows stay "no variant". A variant
+  typed in the ad title always wins. Only this machine's journal is read.
+- Backfill is skipped for a campaign name that appears under more than one account or country in the
+  stats (the robot record has no account, so it could belong to either). The journal is pre-filtered
+  on `ad_creative_pair` and its map cached by (path, mtime, size); the fill is vectorised. Variants
+  are numeric-normalised ("01" = "1").
+- No new telemetry step.
+
 ## Reads open a closed profile themselves and close what they opened — ACL-1580
 
 "Read spend", "Read all" and the country read no longer refuse a closed Multilogin
