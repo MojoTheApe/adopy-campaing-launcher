@@ -4913,9 +4913,11 @@
         "worktree": "C:\\acl-1606-reopen-retry",
         "id": "c9ade5af4c224e9bb49d781cd5ee3122",
         "issue": 606,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-05T17:35:31+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 607,
+        "report": "# ACL-1606 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/607 (into stage)\nBranch: codex/acl-1606-reopen-retry, commit 1207a11b3a14dda08ce78fc847c25bae86e2a417\nClaim: c9ade5af4c224e9bb49d781cd5ee3122\n\n## Changed\n- src/fb_ads_rpa/browser.py `_reopen_hand_opened`: after the robot's own stop, `_mark_robot_profile`; start retried with backoff (1,1,2,2,3,3,4,4,5,5 s = 30 s) while the error reads locked / already running (`_start_still_held`). Start uses `allow_restart=False, allow_kill=False`, so no extra stops, no kill, other profiles untouched, no plain browser. Non-lock errors are not retried.\n- Failure: ProfileStop RESTART_FAILED with \"Multilogin did not release the profile after closing its window \u2014 open it again in Multilogin: <last error>\".\n- Telemetry: same `profile_hand_window` step, diag `start_retries`, `start_waited_s`.\n- docs/system/CHANGELOG.md entry.\n- New tests/test_a_reopen_retries_while_multilogin_holds_the_profile.py (5 tests; 4 fail before the fix, the non-lock no-retry guard passes both ways).\n\n## Checks\n- 5 new + tests/test_a_hand_opened_window_is_reopened_at_once.py, test_a_hand_opened_profile_is_reopened_when_safe.py, test_reads_reopen_a_hand_opened_profile.py, test_acl_test_platform.py: 153 passed.\n- scripts/acl_scan_secrets.py: clean.\n- Full suite not run locally (CI only).\n- Live acceptance (hand-opened profile with slow Multilogin release) not done: no Multilogin allowed."
       }
     },
     "tasks": {
