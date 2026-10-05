@@ -85,8 +85,10 @@ def alias_matches(series, alias):
 _CREATIVE_NUM_RE = re.compile(r"(?<!\d)(\d{3,4})(?!\d)")
 
 
-def split_ad_title(ad_title) -> tuple[str, str]:
-    """Split an Ad Title into (creative id, text name).
+def split_ad_title_variant(ad_title) -> tuple[str, str, str]:
+    """Split an Ad Title into (creative id, variant, text name).
+
+    ACL-1593: the variant digit is kept instead of dropped; "" when absent.
 
     The sheet stores both halves in one cell. This used to split on a dash
     with whitespace on at least one side, which is how most titles are
@@ -100,19 +102,19 @@ def split_ad_title(ad_title) -> tuple[str, str]:
     after it is the text, minus a variant digit ("2046 1 - Story14" is
     creative 2046) and any separators:
 
-        "2046 1 - Story14"  -> ("2046", "Story14")
-        "2257 Story3"       -> ("2257", "Story3")
-        "2307_2- 6"         -> ("2307", "6")
-        "Vid 2257 - Story13"-> ("2257", "Story13")
-        "2046- Powered"     -> ("2046", "Powered")
+        "2046 1 - Story14"  -> ("2046", "1", "Story14")
+        "2257 Story3"       -> ("2257", "", "Story3")
+        "2307_2- 6"         -> ("2307", "2", "6")
+        "Vid 2257 - Story13"-> ("2257", "", "Story13")
+        "2046- Powered"     -> ("2046", "", "Powered")
 
     Titles with no number at all fall back to the dash rule, which is all
-    there is to go on ("Blue - modern" -> ("Blue", "modern")). Titles with
+    there is to go on ("Blue - modern" -> ("Blue", "", "modern")). Titles with
     neither ("New Engagement Ad", "-") return an empty text.
     """
     s = "" if ad_title is None else str(ad_title).strip()
     if not s or s == "-":
-        return "", ""
+        return "", "", ""
 
     m = _CREATIVE_NUM_RE.search(s)
     if m:
@@ -120,17 +122,31 @@ def split_ad_title(ad_title) -> tuple[str, str]:
         # A digit right after the creative number is a variant, not the text —
         # unless dropping it would leave nothing, as in "2046 - 6" where the
         # text really is "6".
-        trimmed = re.sub(r"^\d+(?!\d)[\s_\-–—]*", "", rest)
-        if trimmed.strip(" -_–—"):
-            rest = trimmed
-        return m.group(1), rest.strip(" -_–—")
+        vm = re.match(r"^(\d+)(?!\d)[\s_\-–—]*", rest)
+        variant = ""
+        if vm:
+            trimmed = rest[vm.end():]
+            if trimmed.strip(" -_–—"):
+                rest = trimmed
+                variant = str(int(vm.group(1)))  # «01» и «1» — один вариант
+        return m.group(1), variant, rest.strip(" -_–—")
 
     m = re.search(r"\s-|-\s", s)
     if not m:
-        return s, ""
+        return s, "", ""
     creative = s[: m.start()].strip(" -")
     text = s[m.end():].strip(" -")
-    return (creative or s), text
+    return (creative or s), "", text
+
+
+def split_ad_title(ad_title) -> tuple[str, str]:
+    """(creative id, text name) — the group contract; the variant is dropped.
+
+    Every caller that groups by creative + text uses this; the ones that need
+    the variant too call `split_ad_title_variant`.
+    """
+    creative, _variant, text = split_ad_title_variant(ad_title)
+    return creative, text
 
 
 _MEDIA_TYPE_TOKENS = frozenset(
@@ -333,6 +349,8 @@ def enrich_structure(df: pd.DataFrame) -> pd.DataFrame:
     _split = df["Ad Title"].apply(split_ad_title)
     df["CreativeId"] = _split.apply(lambda t: t[0])
     df["TextName"] = _split.apply(lambda t: t[1])
+    # ACL-1593: вариант креатива (ведущее число файла) — отдельной колонкой.
+    df["VariantId"] = df["Ad Title"].apply(lambda t: split_ad_title_variant(t)[1])
 
     df["Country Final"] = df["Country"]
 
@@ -672,7 +690,9 @@ def main(  # noqa: PLR0913
             raise ValueError(f"Missing expected columns in Excel: {missing}")
 
         df = compute_metrics(df)
-        df = enrich_structure(df)
+        from src.creative_variant import apply_backfill
+
+        df = apply_backfill(enrich_structure(df))
         combos = aggregate_combos(df)
         preamble = "\n".join(filter_lines)
         return build_full_report_markdown(

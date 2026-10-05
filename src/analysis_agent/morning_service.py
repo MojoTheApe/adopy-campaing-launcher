@@ -30,6 +30,7 @@ from src.analysis_agent.analyze_fb_stats import (
     compute_metrics,
     enrich_structure,
 )
+from src.creative_variant import apply_backfill as apply_variant_backfill
 from src.analysis_agent.gsheet_accounts import fetch_account_rows
 from src.analysis_agent.morning_report import build_morning_report
 from src.analysis_agent.news_context import NewsFetcher, build_news_context
@@ -127,7 +128,8 @@ def _load_enriched_df(excel_path: str) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Missing columns in Excel: {missing}")
     df = compute_metrics(df_raw)
-    df = enrich_structure(df)
+    # ACL-1593: вариант для объявлений, построенных до имени с вариантом.
+    df = apply_variant_backfill(enrich_structure(df))
     return df
 
 

@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.creative_variant import file_variant as _file_variant
 from src.fb_ads_rpa import failure_policy as _failure_policy
 
 # Dimensions, not creative numbers: "1080x1080", "1080x1920", and the same
@@ -45,7 +46,7 @@ class AdDraft:
     ad_body2: str = ""
 
     def ad_name(self) -> str:
-        """Name for the ad in Ads Manager: "<creative> - <text>".
+        """Name for the ad in Ads Manager: "<creative> [<variant>] - <text>".
 
         The stats sheet stores both halves in one Ad Title cell in exactly
         this shape ("2046 1 - Text6"), and the dashboard splits it back
@@ -59,6 +60,13 @@ class AdDraft:
         creative = (self.creative_id or "").strip()
         if not creative and self.creative_filename:
             creative = _creative_number(self.creative_filename)
+        # ACL-1593: ведущее число файла — вариант («1_es_2403_post.mp4» →
+        # «2403 1»). Только когда номер имени совпадает с креативом объявления:
+        # свободный текст в creative_id число из файла не получает.
+        if creative and self.creative_filename and creative == _creative_number(self.creative_filename):
+            variant = _file_variant(self.creative_filename)
+            if variant:
+                creative = f"{creative} {variant}"
         text = (self.copy_name or "").strip()
         if creative and text:
             return f"{creative} - {text}"
