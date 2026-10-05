@@ -4794,7 +4794,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "593": {
+        "actor": "Worker-V1593C",
+        "session": "run_v1593c_1005",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1593-variants",
+        "worktree": "C:\\acl-1593-variants",
+        "id": "ae464f094ebe42faa1bf8513addb9c47",
+        "issue": 593,
+        "state": "implementing",
+        "started_at": "2026-10-05T13:14:19+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -6619,6 +6632,17 @@
         "pr": 585,
         "queued_at": "2026-10-05T07:33:21+00:00",
         "reviewer": "Reviewer-R1582X"
+      },
+      "593": {
+        "implementers": [
+          {
+            "actor": "Worker-V1593C",
+            "session": "run_v1593c_1005"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-V1593C",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -7097,6 +7121,10 @@
       "Reviewer-R1580V": {
         "session": "rev_r1580v_1005",
         "role": "Reviewer"
+      },
+      "Worker-V1593C": {
+        "session": "run_v1593c_1005",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -12083,6 +12111,13 @@
         "prs": [
           596
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-05T13:14:19+00:00",
+        "issue": 593,
+        "claim": "ae464f094ebe42faa1bf8513addb9c47",
+        "actor": "Worker-V1593C"
       }
     ],
     "policy": {
