@@ -6959,7 +6959,7 @@
             "session": "run_c1611a_1005"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-C1611A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -6977,7 +6977,8 @@
           "report": "# ACL-1611 handoff (Worker-C1611A, claim 5c1474c8ebc34065abef89e321d9162d)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/612 (into stage), head 784db5e6d91b8e97f2f6ff31e08471ce19b4b61d, branch codex/acl-1611-audience-card.\n\n## Root cause\nIn runs 6ebd77ccaf6a / e89bda52e7a5 / 34a6c60bd4ed / 3f7c5979e020 (9403A, 05.10) the editor URL was `adsets/edit/standalone` (markup `editor_drawer`), not `simple_create`. The `simple` flag was false, so `open_card(\"Audience\")` (only called under `if simple`) never ran. No `simple_card` or `simple_create` telemetry rows exist for those runs. The Further limit row sat 0x0 in the card's hidden body (`further_limit_row` not_opened, unlaid, 5 attempts).\n\n## Real capture\nYes. Fixture `tests/fixtures/ads_manager/audience_card_collapsed_drawer_2026_10_05.html` (card_run_a from 6ebd77ccaf6a/02, card_run_b from e89bda52e7a5/03), cut with capture_to_fixture.py, --review read, scan clean. Header and summary are two role=button aria-pressed=false buttons with one aria-labelledby; the \"About audiences\" link is inside the header.\n\n## Changes\n- simple_create.py: _CARD_JS clicks the card title (not the header centre); the hit is rejected if it lands on a link/button/input inside the card or on a foreign role=button. New _CARD_CONTROLS_JS and _card_controls verify the opened body is shown and holds visible controls. open_card returns \"no_controls\" if not. Telemetry `simple_card` diag gains `target` and `controls` (`how` already existed). No new step name, so report.html is unchanged (simple_card is already in the cb-build-model rules).\n- meta_dom.py: new _open_audience_card; both Audience call sites (further-limit step, location second pass) call it in every layout, no `if simple`.\n- Tests: new tests/test_bench_audience_card_collapsed_drawer.py (10). Updated test_the_classic_wizard_is_unchanged (classic wizard now probes only the Audience card).\n- Catalogue (json + md), fixtures README, docs/system/CHANGELOG.md updated. bench_catalogue --check OK. acl_scan_secrets clean.\n- Reverse-applying the src patch made 9 of the 10 new tests fail (only \"detected\" passes before the fix).\n\n## Test counts (all pass)\nnew bench 10; test_acl_test_platform 100; bench_audience_controls_badge_on 20; build_progress_model 30; location_retry_and_second_pass 25; simple_create_location_summary 14; collapsed_age_row_is_opened 9; the_single_screen_editor_flow 29; the_single_screen_editor_is_walked: 11 card/audience/placements/location tests, each run on its own. The other 17 tests in that file (markup/level detection) were not run: Chromium teardown on this laptop hangs for minutes per test.\n\n## Remaining for live\nRun a 9403A-style campaign on the editor_drawer window with a collapsed Audience card. Expect `simple_card` ok=true note `Audience:opened`, diag.how cdp, controls >= 1, then `further_limit_row` ok. If `no_controls` appears, the card opened with an empty body. Only the \"Advantage+ on, no custom audiences\" collapsed state was captured. Budget and Placements call sites are unchanged (still `simple` only)."
         },
         "pr": 612,
-        "queued_at": "2026-10-05T20:09:14+00:00"
+        "queued_at": "2026-10-05T20:09:14+00:00",
+        "reviewer": "Reviewer-R1611P"
       }
     },
     "actors": {
@@ -7491,6 +7492,10 @@
       },
       "Reviewer-R1603Z": {
         "session": "rev_r1603z_1005",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1611P": {
+        "session": "rev_r1611p_1005",
         "role": "Reviewer"
       }
     },
@@ -8944,10 +8949,20 @@
       406,
       433,
       526,
-      529,
-      611
+      529
     ],
-    "review": null,
+    "review": {
+      "id": "05dfeb6d4ae745f89f81dfa001f4402f",
+      "pr": 612,
+      "issues": [
+        611
+      ],
+      "actor": "Reviewer-R1611P",
+      "session": "rev_r1611p_1005",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-05T22:56:13+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -12749,6 +12764,13 @@
         "prs": [
           618
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-05T22:56:13+00:00",
+        "pr": 612,
+        "lane": "05dfeb6d4ae745f89f81dfa001f4402f",
+        "actor": "Reviewer-R1611P"
       }
     ],
     "policy": {
