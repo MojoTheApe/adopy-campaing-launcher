@@ -251,7 +251,7 @@ def test_only_the_last_few_shots_per_account_are_kept(local, monkeypatch):
 # ── отдача снимка: только по id и только из папки ────────────────────────
 
 @pytest.mark.parametrize("bad", [
-    "", "..", "../account_spend", "..\\account_spend", "status_x/../../account_spend",
+    "", "..", "../account_spend", "..\\account_spend", "status_x/../../account_spend",  # linux-ok: a hostile id as data, never opened as a path on Linux
     "account_spend", "status_..", "status_a.png", "C:\\Windows\\win", "status_" + "a" * 300,  # linux-ok: a hostile id as data, never opened as a path on Linux
 ])
 def test_a_shot_id_cannot_leave_the_folder(local, bad):
@@ -319,7 +319,6 @@ def test_the_endpoint_refuses_unknown_ids_and_paths(local, client, bad):
 # папкой лежат настоящие снимки, и каждый маршрут сначала проверяет, что без
 # защит файл БЫЛ БЫ найден (`_naive`), — иначе тест ничего не доказывает.
 
-BS = "\\"  # linux-ok: a hostile id as data, never opened as a path on Linux
 OTHER_PNG = PNG + b"outside"  # отличимые байты: в ответе их быть не должно
 
 
@@ -342,11 +341,10 @@ def _outside(local: Path) -> dict[str, str]:
         "parent-through-subdir": "status_x/../../escape",
         "sibling": "../spend_shots_evil/status_x",
         "absolute": far_id,
-        "absolute-forward-slashes": far_id.replace(BS, "/"),
     }
 
 
-ROUTES = ["parent", "parent-through-subdir", "sibling", "absolute", "absolute-forward-slashes"]
+ROUTES = ["parent", "parent-through-subdir", "sibling", "absolute"]
 
 
 def _naive(local: Path, shot_id: str) -> Path:

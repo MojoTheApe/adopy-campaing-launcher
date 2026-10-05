@@ -24,6 +24,9 @@ although most tests are pure logic, fixtures and Chromium bench pages.
     or reference `.ps1`, `LOCALAPPDATA`, `APPDATA`, `USERPROFILE`, `PROGRAMDATA`;
   - hold a Windows path literal (drive letter with a backslash, a UNC share, `%X%` plus a backslash)
     or a bare one-backslash string constant, anywhere; a multi-segment `a\b` string only in an `assert`.
+  Round 2 added: a relative backslash path (`..\escape`) anywhere, `platform.system().lower()`,
+  Windows env names in any case inside `os.environ`/`os.getenv`. `absolute-forward-slashes` moved to the
+  Windows screenshot file (84 + 24 = 108 cases) and `test_config_locations` checks the checkout with `Path.is_relative_to`.
   Data-only lines take `# linux-ok: <why>`.
 - Review fixes: the first Linux run failed 18 backslash-traversal cases in
   `test_status_screenshot.py`; they moved to `test_status_screenshot_backslash_windows.py`

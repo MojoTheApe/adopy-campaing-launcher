@@ -157,6 +157,19 @@ CAUGHT = {
     "SHARE = '\\\\\\\\server\\\\share'": "backslash-path",  # linux-ok: guard sample
     "BS = '\\\\'": "backslash-path",  # linux-ok: guard sample
     "parts = name.split('\\\\')": "backslash-path",  # linux-ok: guard sample
+    # ACL-1582 round 2
+    "x = {'id': '..\\\\escape'}": "backslash-path",  # linux-ok: guard sample
+    "root = p.rsplit('\\\\config\\\\', 1)[0]": "backslash-path",  # linux-ok: guard sample
+    "name = 'a\\\\b'": "backslash-path",  # linux-ok: guard sample
+    "if platform.system().lower() == 'windows':\n    pass": "platform-branch",
+    "if os.name.lower() == 'nt':\n    pass": "platform-branch",
+    "base = os.environ.get('userprofile')": "USERPROFILE",  # linux-ok: guard sample
+    "base = os.getenv('LocalAppData')": "LOCALAPPDATA",  # linux-ok: guard sample
+    "base = os.environ['ProgramData']": "PROGRAMDATA",  # linux-ok: guard sample
+    "from helpers import on_windows\nif on_windows():\n    pass": "platform-helper",
+    "from helpers import is_win\nif is_win:\n    pass": "platform-helper",
+    "from helpers import is_nt\nif not is_nt:\n    pass": "platform-helper",
+    "from helpers import is_win32\nif is_win32:\n    pass": "platform-helper",
 }
 
 
@@ -178,7 +191,10 @@ def test_the_guard_reports_line_and_text():
     "assert p.as_posix() == 'tests/test_x.py'\n",
     "monkeypatch.setattr(rt.sys, 'platform', 'win32')\n",     # подмена платформы — нейтральна
     "rows = ['where', 'what']\n",
-    "x = 'taskkill'\n",                                        # упоминание, не команда
+    "subprocess.run('taskkill /F /PID 1')\n",                  # без shell=True строка-команда не идёт через cmd
+    "x = os.environ.get('userprofile_note')\n",                # имя целиком, не часть слова
+    "html = re.sub(r'a', r'\\1b', s)\n",                        # обратная ссылка регулярки
+    "x = 'taskkill'\n",                                       # упоминание, не команда
     "p = 'C:/Users/x/AppData/Local/ACL'\n",                    # AppData в строке пути — данные
     "subprocess.run('echo hi', shell=True)\n",                 # shell-строка не с Windows-программы
 ])

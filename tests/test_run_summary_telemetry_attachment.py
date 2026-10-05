@@ -46,7 +46,7 @@ PROFILE = "-".join(("3f2b8c1e", "9a7d", "4e21", "b5c4", "0d1e2f3a4b5c"))
 JOB = "-".join(("7c1d2e3f", "4a5b", "4c6d", "8e7f", "a0b1c2d3e4f5"))
 
 SECRETS = (ACT_ID, BIZ_ID, "adsmanager.facebook.com", EMAIL, TOKEN, "ivan.petrov",
-           r"Users\ivan", SHORT_ACT, PROFILE)
+           r"Users\ivan", SHORT_ACT, PROFILE)  # linux-ok: a relative Windows path as opaque data, never touched on disk
 
 
 class CapturingTransport(Transport):
@@ -306,7 +306,7 @@ def test_the_background_send_attaches_too(sentry, journal):
 @pytest.mark.parametrize("path, name", [
     (r"C:\Users\Ivan Petrov\AppData\Local\ACL\shot.png", "Petrov"),        # F1: пробел в имени  # linux-ok: a Windows path as opaque data, never touched on disk
     ("C:/Users/Ivan Petrov/AppData/Local/ACL/shot.png", "Petrov"),
-    (r"\srv\Users\ivan.petrov\share\run.log", "ivan.petrov"),             # UNC
+    (r"\srv\Users\ivan.petrov\share\run.log", "ivan.petrov"),             # UNC  # linux-ok: a relative Windows path as opaque data, never touched on disk
     ("/Users/ivan.petrov/Library/ACL/run.log", "ivan.petrov"),             # M3b: macOS
     ("/home/ivan.petrov/acl/run.log", "ivan.petrov"),                      # M3b: Linux
 ])

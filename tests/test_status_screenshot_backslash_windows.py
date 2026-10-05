@@ -25,14 +25,20 @@ def _outside_backslash(local) -> dict[str, str]:
     (local / "escape.png").write_bytes(OTHER_PNG)
     (local / "spend_shots_evil").mkdir(exist_ok=True)
     (local / "spend_shots_evil" / "status_x.png").write_bytes(OTHER_PNG)
+    far = local.parent / f"{local.name}-elsewhere"
+    far.mkdir(exist_ok=True)
+    (far / "escape.png").write_bytes(OTHER_PNG)
+    far_id = str(far / "escape")  # drive path; sent below with forward slashes
     return {
         "parent-backslash": ".." + BS + "escape",
         "parent-through-subdir-backslash": "status_x" + BS + ".." + BS + ".." + BS + "escape",
         "sibling-backslash": ".." + BS + "spend_shots_evil" + BS + "status_x",
+        "absolute-forward-slashes": far_id.replace(BS, "/"),
     }
 
 
-ROUTES = ["parent-backslash", "parent-through-subdir-backslash", "sibling-backslash"]
+ROUTES = ["parent-backslash", "parent-through-subdir-backslash", "sibling-backslash",
+          "absolute-forward-slashes"]
 
 
 @pytest.mark.parametrize("route", ROUTES)

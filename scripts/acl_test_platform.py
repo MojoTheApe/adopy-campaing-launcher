@@ -48,6 +48,8 @@ WINDOWS_SMOKE = (
 )
 
 _SHELLS = re.compile(r"(?:powershell|pwsh)(?:\.exe)?", re.I)
+# Имя переменной целиком, без учёта регистра: только внутри вызовов os.environ / os.getenv.
+_WIN_ENV_NAME = re.compile(r"LOCALAPPDATA|APPDATA|USERPROFILE|PROGRAMDATA|PROGRAMFILES|SYSTEMROOT|COMSPEC", re.I)
 _PS1 = re.compile(r"\.ps1\b", re.I)
 # Переменные окружения Windows (имя целиком, не часть слова).
 # Регистр важен: «AppData» в строке пути — данные, «APPDATA» — переменная окружения.
@@ -70,7 +72,7 @@ _WINDOWS_SHELL_WORDS = _WINDOWS_COMMANDS | {"dir", "del", "copy", "xcopy", "ver"
                                             "findstr", "ipconfig", "systeminfo", "sc", "reg", "where"}
 _WINDOWS_MODULES = {"msvcrt", "winreg", "_winreg", "_winapi", "winsound", "pywintypes", "pythoncom", "wmi",
                     "winerror", "servicemanager"}
-_PLATFORM_CONSTS = {"win32", "Windows", "cygwin", "win", "nt"}
+_PLATFORM_CONSTS = {"win32", "windows", "cygwin", "win", "nt"}  # в нижнем регистре: сравнение без учёта регистра
 _WINDLL = ("windll", "WinDLL", "oledll")
 # Имена, которые существуют только на Windows (атрибут, имя из from-импорта или getattr).
 _WINDOWS_ATTRS = {"ProactorEventLoop", "WindowsSelectorEventLoopPolicy", "WindowsProactorEventLoopPolicy",
@@ -95,10 +97,15 @@ def _windows_path_literal(value: str, *, loose: bool = True) -> bool:
         return False
     if _DRIVE.search(value) or _ENV_PATH.search(value) or _UNC.match(value):
         return True
-    if not loose or _REGEX_META.search(value) or "\n" in value:
-        return False
+    if _REGEX_META.search(value) or "\n" in value or re.match(r"\\[0-9.]", value):
+        return False  # регулярка или обратная ссылка: «\.xlsx», «\1false»
     parts = value.split("\\")
-    return len(parts) >= 2 and all(_SEGMENT.fullmatch(p) for p in parts)
+    named = [p for p in parts if p]
+    if not named or not all(_SEGMENT.fullmatch(p) for p in named):
+        return False
+    # «..\escape», «\config\», «a\b»: относительный путь с обратной косой — где угодно.
+    # Одиночный короткий сегмент («\d», «\w») — скорее регулярка, чем путь.
+    return len(named) >= 2 or (loose and len(parts) >= 2) or len(named[0]) >= 3 or ".." in named
 
 
 def _aliases(tree) -> dict[str, str]:
@@ -126,6 +133,12 @@ def _dotted(node, aliases: dict[str, str] | None = None) -> str:
     while isinstance(node, ast.Attribute):
         names.append(node.attr)
         node = node.value
+    if isinstance(node, ast.Call):  # platform.system().lower
+        base = _dotted(node, aliases)
+        if not base:
+            return ""
+        names.append(base)
+        return ".".join(reversed(names))
     if isinstance(node, ast.Name):
         names.append(aliases.get(node.id, node.id))
         return ".".join(reversed(names))
@@ -213,8 +226,8 @@ def _platform_compare(node, aliases=None) -> bool:
     if not isinstance(node, ast.Compare):
         return False
     sides = [node.left, *node.comparators]
-    names = {_dotted(s, aliases) for s in sides}
-    consts = set().union(*(_string_consts(s) for s in sides))
+    names = {re.sub(r"\.(?:lower|upper|casefold)\(\)$", "", _dotted(s, aliases)) for s in sides}
+    consts = {c.casefold() for s in sides for c in _string_consts(s)}
     return bool(("os.name" in names and "nt" in consts)
                 or ({"sys.platform", "platform.system()", "platform.platform()"} & names
                     and consts & _PLATFORM_CONSTS))
@@ -317,6 +330,8 @@ def windows_signals(source: str) -> list[tuple[int, str, str]]:
             func = _dotted(node.func, aliases)
             first = node.args[0] if node.args else None
             text = first.value if isinstance(first, ast.Constant) and isinstance(first.value, str) else None
+            if func in ("os.getenv", "os.environ.get", "os.environ.pop", "os.environ.setdefault")                     and text is not None and _WIN_ENV_NAME.fullmatch(text):
+                hit(node, text.upper())  # userprofile, LocalAppData: Windows сравнивает без учёта регистра
             if func.endswith("platform.startswith") and func.split(".")[0] in ("sys", "platform"):
                 hit(node, "platform-branch")
             elif func.split(".")[-1] in ("skipif", "skipIf") and text is not None and _platform_string(text):
@@ -328,6 +343,10 @@ def windows_signals(source: str) -> list[tuple[int, str, str]]:
                 hit(node, "windll" if node.args[1].value in _WINDLL else "windows-api")
             elif _shell_string_command(node, aliases):
                 hit(node, "windows-command")
+        elif isinstance(node, ast.Subscript) and _dotted(node.value, aliases) == "os.environ":
+            key = node.slice
+            if isinstance(key, ast.Constant) and isinstance(key.value, str) and _WIN_ENV_NAME.fullmatch(key.value):
+                hit(node, key.value.upper())
         elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
             value = node.value
             env = _WIN_ENV.search(value)
