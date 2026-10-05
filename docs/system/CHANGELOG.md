@@ -1,6 +1,6 @@
 # System history
 
-## CI: one Python on PRs, superseded PR runs cancelled, installer job stops at 15 min — ACL-1581
+## CI: one Python on PRs, superseded PR runs cancelled, installer job stops at 20 min — ACL-1581
 
 The Actions budget ran out for the fourth time on 2026-10-05 (about 4300 Windows minutes
 in one day). This is the cheapest slice of ACL-1541.
@@ -8,7 +8,7 @@ in one day). This is the cheapest slice of ACL-1541.
 - `scripts/acl_ci_scope.py` now also decides the Python versions of the `ci.yml` test
   matrix and writes them as the `python` output (a JSON list). A `pull_request` run tests
   Python 3.13 only (3 jobs instead of 6). A PR that touches dependency or bootstrap inputs
-  tests 3.11 and 3.13: `requirements*.txt`, `pyproject.toml`, `setup.py`/`setup.cfg`,
+  tests 3.11 and 3.13: `requirements*.txt`/`.in`, `constraints*.txt`, `.python-version`, `pyproject.toml`, `setup.py`/`setup.cfg`,
   `pytest.ini`, both `conftest.py`, root `*.bat` installers/launchers,
   `tests/bootstrap_windows_harness.ps1`, `packaging/**`, `.github/workflows/**`,
   `scripts/acl_test_shard.py` and the CI scope/reuse scripts. Push runs
@@ -23,14 +23,14 @@ in one day). This is the cheapest slice of ACL-1541.
   `pull_request`. Before, two quick squash merges to stage shared the group
   `refs/heads/stage` and the second cancelled the first task's stage verification.
   `tracker-link.yml` runs only on PRs and already cancelled correctly; unchanged.
-- `windows-installer.yml` build/install job: `timeout-minutes` 30 → 15. Step limits:
-  install 3 (new), previous package 12 → 5, onedir 8 → 3, bundle test 5 → 2, installer
-  build 10 → 5, install test 8 → 3, update cycle 8 → 4. The slowest of six green runs on
-  2026-10-04 took 744 s. Each limit is at least 1.4x the step's slowest green time, and the
-  slowest time of all earlier steps plus the limit fits in 15 min, so a hang fails on its
-  own step. Known trade-off: `test_update_cycle.py` has internal waits of up to 360 s
-  for the update helper, longer than its 4-minute step; a helper that hangs now fails on
-  the step limit instead of the script's own message (the evidence upload still runs).
+- `windows-installer.yml` build/install job: `timeout-minutes` 30 -> 20. Step limits:
+  install 3 (new), previous package 12 -> 7, onedir 8 -> 3, bundle test 5 -> 2, installer
+  build 10 -> 5, install test 8 -> 3, update cycle 8 -> 7. The numbers come from the last
+  91 green runs (2026-10-03..05): job p95 774 s, max 810 s, sum of step p95 884 s. Each step
+  limit is at least 1.5x its p95, the job limit at least 1.3x the sum of step p95 and 1.5x
+  the job p95, so a hang fails on its own step. The update step (420 s) is longer than the
+  360 s wait of `test_update_cycle.py` plus its 30 s stop-server, so the script's `finally`
+  cleanup can run; a test reads that wait from the script.
 - Tests: `tests/test_acl_ci_scope.py` (version decision), `tests/test_acl_ci_reuse.py`
   and `tests/test_publish_release.py` (a one-Python run is never a proof; the tag path is
   unchanged), new `tests/test_acl_ci_workflows.py` (concurrency evaluated from the YAML,

@@ -82,13 +82,12 @@ jobs:
     runs-on: windows-latest
     # ACL-1491: a green run takes ~12 min (2026-10-02: 736 s). One run hung
     # for 50 min before someone cancelled it. ACL-1581: two runs hung for the
-    # full 30 min on 2026-10-04, so the job now stops at 15 min. The slowest of
-    # six green runs on 2026-10-04 took 744 s. Every step that installs, builds
-    # or starts the packaged app has its own limit, about 1.4-2.7x its slowest
-    # green time, chosen so that the slowest time of all earlier steps plus that
-    # limit still fits in 15 min: a hang fails on the step that hung, not on the
-    # job limit (tests/test_acl_ci_workflows.py checks this).
-    timeout-minutes: 15
+    # full 30 min on 2026-10-04, so the job now stops at 20 min. Limits come
+    # from the last 91 green runs (2026-10-03..05): job p95 774 s, max 810 s,
+    # sum of step p95 884 s. Each step limit is at least 1.5x its p95, the job
+    # limit at least 1.3x the sum of step p95 and 1.5x the job p95, so a hang
+    # fails on the step that hung (tests/test_acl_ci_workflows.py checks this).
+    timeout-minutes: 20
     env:
       ACL_NO_TELEMETRY: "1"
       PYTHONIOENCODING: utf-8
@@ -118,7 +117,7 @@ jobs:
           python -m unittest discover -s packaging/windows/tests -p "test_setup_wizard.py" -v
 
       - name: Build previous isolated test package from the candidate source
-        timeout-minutes: 5
+        timeout-minutes: 7
         shell: pwsh
         run: |
           ./packaging/windows/build.ps1 -Version "$env:ACL_TEST_PREVIOUS_VERSION"
@@ -145,7 +144,9 @@ jobs:
         run: ./packaging/windows/test_installer.ps1 -Version "$env:ACL_PACKAGE_VERSION"
 
       - name: Test real package update, restart, and recovery
-        timeout-minutes: 4
+        # test_update_cycle.py waits up to 360 s (+30 s stop-server) and cleans up in
+        # `finally`; the step must outlive that so the cleanup can run.
+        timeout-minutes: 7
         shell: pwsh
         run: |
           python packaging/windows/test_update_cycle.py --old-version "$env:ACL_TEST_PREVIOUS_VERSION" --version "$env:ACL_PACKAGE_VERSION"

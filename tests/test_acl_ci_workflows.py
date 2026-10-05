@@ -2,7 +2,7 @@
 
 - superseded PR runs are cancelled, stage/main/master pushes and manual runs never are;
 - the test matrix takes its Python versions from the scope job, with a full fallback;
-- the installer build/install job stops at 15 minutes and every step limit fits inside.
+- the installer build/install job stops at 20 minutes and every step limit fits inside.
 
 Concurrency expressions are evaluated by a small GitHub-expression evaluator below, so
 the test checks what the YAML really says, not a copy of it.
@@ -172,60 +172,78 @@ def test_scope_job_runs_the_workflow_checks():
 # --- the installer build/install job --------------------------------------------------------------
 
 INSTALLER_JOB = "phase-2-packaging-spike"
-# Самые долгие длительности шагов (с) из шести зелёных запусков 2026-10-04
-# (37214804931, 37216023748, 37221077133, 37221943752, 37222309525, 37223632051).
-SLOWEST = {
-    "Set up job": 1, "Check out full history": 11, "Set up Python 3.13": 7,
-    "Install runtime and packager": 63, "Test setup with runtime dependencies": 5,
-    "Build previous isolated test package from the candidate source": 213,
-    "Build onedir bundle": 69, "Test the packaged executable": 11,
-    "Build per-user Windows installer": 176, "Test install, launch, repair, and uninstall": 68,
-    "Test real package update, restart, and recovery": 125,
-    "Keep update and recovery evidence even after failure": 6, "Create downloadable archive": 17,
-    "Upload Windows preview and test logs": 17, "Post steps": 5,
+# p95 и максимум (с) по шагу в 91 зелёном запуске windows-installer.yml
+# 2026-10-03..05 (шаги из API заданий, запуски с переиспользованием исключены).
+# Только шаги с лимитом; у остальных шагов (set up job, checkout, setup python,
+# тест setup, evidence, архив, upload, post) нет своего лимита, их суммарные
+# значения: p95 = 884 - 787 = 97 с, максимум = 1093 - 892 = 201 с.
+STEP_P95 = {
+    "Install runtime and packager": 90,
+    "Build previous isolated test package from the candidate source": 232,
+    "Build onedir bundle": 78, "Test the packaged executable": 12,
+    "Build per-user Windows installer": 164,
+    "Test install, launch, repair, and uninstall": 85,
+    "Test real package update, restart, and recovery": 126,
 }
+STEP_MAX = {
+    "Install runtime and packager": 97,
+    "Build previous isolated test package from the candidate source": 252,
+    "Build onedir bundle": 104, "Test the packaged executable": 16,
+    "Build per-user Windows installer": 176,
+    "Test install, launch, repair, and uninstall": 110,
+    "Test real package update, restart, and recovery": 137,
+}
+OTHER_STEPS_P95, OTHER_STEPS_MAX = 97, 201
+JOB_P95, JOB_MAX = 774, 810
+SUM_STEP_P95 = sum(STEP_P95.values()) + OTHER_STEPS_P95  # 884
 
 
 def installer_job():
     return workflow("windows-installer.yml")["jobs"][INSTALLER_JOB]
 
 
-def test_installer_build_job_times_out_at_15_minutes():
+def test_installer_build_job_times_out_at_20_minutes():
     job = installer_job()
     assert job["name"] == "Build, install, repair, and uninstall"
-    assert job["timeout-minutes"] == 15
+    assert job["timeout-minutes"] == 20
 
 
-def test_slowest_green_run_fits_with_headroom():
-    assert set(SLOWEST) - {"Set up job", "Post steps"} == {s["name"] for s in installer_job()["steps"]}
-    # Сумма максимумов по шагам (794 с) пессимистичнее самого долгого реального
-    # запуска (744 с): даже такой «худший во всём» запуск оставляет ~13 % запаса.
-    total = sum(SLOWEST.values())
-    assert total <= 800
-    assert total * 1.13 <= installer_job()["timeout-minutes"] * 60
+def test_data_is_consistent():
+    assert SUM_STEP_P95 == 884
+    assert sum(STEP_MAX.values()) + OTHER_STEPS_MAX == 1093
 
 
-def test_every_step_limit_fits_inside_the_job_limit():
-    """Зависший шаг падает по своему лимиту раньше лимита задания.
-
-    Для каждого шага с лимитом: самое долгое время всех шагов до него плюс его
-    лимит не больше 15 минут; после последнего лимитированного шага ещё
-    помещаются самые долгие хвостовые шаги. Лимит шага — не меньше 1.4x его
-    самой долгой зелёной длительности, чтобы обычная медленная машина не падала."""
-    steps = installer_job()["steps"]
+def test_job_limit_has_headroom_over_measured_p95():
     limit = installer_job()["timeout-minutes"] * 60
-    elapsed = SLOWEST["Set up job"]
-    timed = 0
+    assert limit >= 1.3 * SUM_STEP_P95
+    assert limit >= 1.5 * JOB_P95
+    assert limit > JOB_MAX
+
+
+def test_every_step_limit_has_headroom_and_fits_inside_the_job_limit():
+    """Каждый лимит шага не меньше 1.5x его p95, и зависший шаг падает по своему
+    лимиту раньше лимита задания (p95 всех шагов до него плюс его лимит)."""
+    steps = installer_job()["steps"]
+    assert {s["name"] for s in steps if "timeout-minutes" in s} == set(STEP_P95)
+    limit = installer_job()["timeout-minutes"] * 60
+    elapsed = OTHER_STEPS_P95
     for step in steps:
         minutes = step.get("timeout-minutes")
-        if minutes is not None:
-            timed += 1
-            assert minutes * 60 >= 1.4 * SLOWEST[step["name"]], step["name"]
-            assert elapsed + minutes * 60 <= limit, step["name"]
-        elapsed += SLOWEST[step["name"]]
-    assert elapsed + SLOWEST["Post steps"] <= limit
-    # Все шаги, которые ставят зависимости, собирают или запускают пакет, ограничены.
-    assert timed == 7
+        if minutes is None:
+            continue
+        assert minutes * 60 >= 1.5 * STEP_P95[step["name"]], step["name"]
+        assert elapsed + minutes * 60 <= limit, step["name"]
+        elapsed += STEP_P95[step["name"]]
     for step in steps:
         if step.get("shell") == "pwsh" and step["name"] != "Create downloadable archive":
             assert "timeout-minutes" in step, step["name"]
+
+
+def test_update_step_outlives_the_update_cycle_script_wait():
+    """test_update_cycle.py ждёт helper до N с и чистит в finally; шаг должен жить дольше N + 30 с."""
+    source = (ROOT / "packaging/windows/test_update_cycle.py").read_text(encoding="utf-8")
+    waits = [int(n) for n in re.findall(r"\.wait\(timeout=(\d+)\)", source)]
+    assert waits, "no helper.wait(timeout=N) found in test_update_cycle.py"
+    step = next(s for s in installer_job()["steps"]
+                if s["name"] == "Test real package update, restart, and recovery")
+    assert step["timeout-minutes"] * 60 > max(waits) + 30

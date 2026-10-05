@@ -66,7 +66,8 @@ def test_full_and_pr_python_sets():
 @pytest.mark.parametrize("paths", [
     ["dashboard.py"], ["src/fb_ads_rpa/page_capture.py", "tests/test_page_capture.py"],
     ["README.md", "dashboard.py"], ["scripts/task_tracker.py"], ["docs/runtime.py"],
-    ["tests/test_acl_ci_scope.py"], ["packaging_notes.txt"], ["scripts/requirements_note.py"],
+    ["tests/test_acl_ci_scope.py"], ["packaging_notes.txt"], ["constraints.md"],
+    ["sub/.python-version"], ["sub/constraints.txt"], ["sub/requirements.in"], ["scripts/requirements_note.py"],
 ])
 def test_pr_without_dependency_or_bootstrap_changes_runs_one_python(paths):
     result = classify(paths, "pull_request")
@@ -74,6 +75,7 @@ def test_pr_without_dependency_or_bootstrap_changes_runs_one_python(paths):
 
 
 @pytest.mark.parametrize("path", [
+    "requirements.in", "requirements-dev.in", "constraints.txt", "constraints-py313.txt", ".python-version",
     "requirements.txt", "requirements-dev.txt", "requirements-extras.txt", "requirements-new.txt",
     "pyproject.toml", "setup.py", "setup.cfg", "pytest.ini", "conftest.py", "tests/conftest.py",
     "install_acl.bat", "Install ACL.bat", "enable_stable_updates.bat", "start_dashboard.bat",
@@ -132,3 +134,20 @@ def test_real_pr_diff_with_requirements_runs_both_pythons(tmp_path):
     (tmp_path / "requirements.txt").write_text("pytest\n")
     git("add", "requirements.txt"); git("commit", "-qm", "deps")
     assert select(tmp_path, "pull_request", event(git("rev-parse", "HEAD")))["python"] == ["3.11", "3.13"]
+
+
+@pytest.mark.parametrize("python,expected", [
+    ([], ["3.11", "3.13"]), (None, ["3.11", "3.13"]), (["2.7"], ["3.11", "3.13"]),
+    (["2.7", "3.13"], ["3.13"]), (["3.13"], ["3.13"]),
+])
+def test_main_cleans_the_python_output(monkeypatch, tmp_path, python, expected):
+    import json
+    import scripts.acl_ci_scope as scope
+    for key in ("GITHUB_TOKEN", "GITHUB_STEP_SUMMARY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(scope, "decide", lambda *a, **k: {"windows": True, "reason": "x", "python": python})
+    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "o"))
+    monkeypatch.setattr("sys.argv", ["acl_ci_scope.py", "--event-name", "push", "--event-file", str(tmp_path / "x")])
+    scope.main()
+    line = next(l for l in (tmp_path / "o").read_text(encoding="utf-8").splitlines() if l.startswith("python="))
+    assert json.loads(line[len("python="):]) == expected
