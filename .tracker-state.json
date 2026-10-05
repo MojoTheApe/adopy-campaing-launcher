@@ -4959,7 +4959,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "611": {
+        "actor": "Worker-C1611A",
+        "session": "run_c1611a_1005",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1611-audience-card",
+        "worktree": "C:\\acl-1611-audience-card",
+        "id": "5c1474c8ebc34065abef89e321d9162d",
+        "issue": 611,
+        "state": "implementing",
+        "started_at": "2026-10-05T19:19:54+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -6895,6 +6908,17 @@
         "pr": 607,
         "queued_at": "2026-10-05T17:42:30+00:00",
         "reviewer": "Reviewer-R1606Y"
+      },
+      "611": {
+        "implementers": [
+          {
+            "actor": "Worker-C1611A",
+            "session": "run_c1611a_1005"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-C1611A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -7401,6 +7425,10 @@
       "Reviewer-R1606Y": {
         "session": "rev_r1606y_1005",
         "role": "Reviewer"
+      },
+      "Worker-C1611A": {
+        "session": "run_c1611a_1005",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -12594,6 +12622,13 @@
         "prs": [
           609
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-05T19:19:54+00:00",
+        "issue": 611,
+        "claim": "5c1474c8ebc34065abef89e321d9162d",
+        "actor": "Worker-C1611A"
       }
     ],
     "policy": {
