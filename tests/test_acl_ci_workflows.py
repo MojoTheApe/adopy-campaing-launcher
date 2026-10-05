@@ -8,6 +8,7 @@ Concurrency expressions are evaluated by a small GitHub-expression evaluator bel
 the test checks what the YAML really says, not a copy of it.
 """
 from pathlib import Path
+import ast
 import re
 
 import pytest
@@ -237,6 +238,7 @@ def test_every_step_limit_has_headroom_and_fits_inside_the_job_limit():
         if minutes is None:
             continue
         assert minutes * 60 >= 1.5 * STEP_P95[step["name"]], step["name"]
+        assert minutes * 60 >= 1.25 * STEP_MAX[step["name"]], step["name"]
         assert elapsed + minutes * 60 <= limit, step["name"]
         elapsed += STEP_P95[step["name"]]
     for step in steps:
@@ -244,11 +246,58 @@ def test_every_step_limit_has_headroom_and_fits_inside_the_job_limit():
             assert "timeout-minutes" in step, step["name"]
 
 
+def wait_timeouts(source):
+    """Все .wait(...)-таймауты файла: ключом или позицией; имена — модульные int-константы.
+
+    Всё, что не литерал int и не разрешимая константа, — ошибка (AssertionError)."""
+    tree = ast.parse(source)
+    constants = {}
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Constant) and type(node.value.value) is int):
+            constants[node.targets[0].id] = node.value.value
+    found = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "wait"):
+            continue
+        keyword = [k.value for k in node.keywords if k.arg == "timeout"]
+        value = keyword[0] if keyword else node.args[0] if node.args else None
+        if value is None:
+            continue  # wait() без таймаута не используется; ниже проверим, что таймауты найдены
+        if isinstance(value, ast.Constant) and type(value.value) is int:
+            found.append(value.value)
+        elif isinstance(value, ast.Name) and value.id in constants:
+            found.append(constants[value.id])
+        else:
+            raise AssertionError(f"wait timeout at line {node.lineno} is not an int literal or module constant")
+    return found, constants
+
+
+@pytest.mark.parametrize("snippet,expected", [
+    ("helper.wait(timeout=900)", [900]),
+    ("helper.wait(timeout = 900)", [900]),
+    ("helper.wait(900)", [900]),
+    ("X = 700\nhelper.wait(timeout=X)\nhelper.wait(X)", [700, 700]),
+])
+def test_wait_timeouts_reader_sees_every_spelling(snippet, expected):
+    assert wait_timeouts(snippet)[0] == expected
+
+
+@pytest.mark.parametrize("snippet", [
+    "helper.wait(timeout=UNKNOWN)", "helper.wait(timeout=2 * 450)", "helper.wait(900.0)", "helper.wait(timeout=t)",
+])
+def test_wait_timeouts_reader_rejects_unreadable_values(snippet):
+    with pytest.raises(AssertionError):
+        wait_timeouts(snippet)
+
+
 def test_update_step_outlives_the_update_cycle_script_wait():
-    """test_update_cycle.py ждёт helper до N с и чистит в finally; шаг должен жить дольше N + 30 с."""
+    """test_update_cycle.py ждёт helper до N с и чистит в finally. Шаг должен вместить
+    работу до ожидания (макс. зелёный шаг), stop-server (30 с), ожидание и очистку (30 с)."""
     source = (ROOT / "packaging/windows/test_update_cycle.py").read_text(encoding="utf-8")
-    waits = [int(n) for n in re.findall(r"\.wait\(timeout=(\d+)\)", source)]
-    assert waits, "no helper.wait(timeout=N) found in test_update_cycle.py"
-    step = next(s for s in installer_job()["steps"]
-                if s["name"] == "Test real package update, restart, and recovery")
-    assert step["timeout-minutes"] * 60 > max(waits) + 30
+    waits, constants = wait_timeouts(source)
+    assert constants.get("HELPER_WAIT_SECONDS") in waits, "the long wait must use HELPER_WAIT_SECONDS"
+    name = "Test real package update, restart, and recovery"
+    step = next(s for s in installer_job()["steps"] if s["name"] == name)
+    limit_s = step["timeout-minutes"] * 60
+    assert limit_s >= STEP_MAX[name] + max(waits) + 60
