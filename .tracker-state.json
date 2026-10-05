@@ -4536,6 +4536,18 @@
         "state": "implementing",
         "started_at": "2026-10-05T06:41:24+00:00",
         "from_status": "status:idea"
+      },
+      "581": {
+        "actor": "Worker-P1581K",
+        "session": "run_p1581k_1005",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "codex/acl-1581-ci-one-python",
+        "worktree": "C:\\acl-1581-ci-one-python",
+        "id": "41bf17cc9a6140b0ad8079de28703b4f",
+        "issue": 581,
+        "state": "implementing",
+        "started_at": "2026-10-05T06:44:16+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -6288,6 +6300,17 @@
         "state": "implementing",
         "worker": "Worker-R1580O",
         "coordinator": "Coordinator-C0930A"
+      },
+      "581": {
+        "implementers": [
+          {
+            "actor": "Worker-P1581K",
+            "session": "run_p1581k_1005"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-P1581K",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -6741,6 +6764,10 @@
       },
       "Worker-R1580O": {
         "session": "run_r1580o_1005",
+        "role": "Worker"
+      },
+      "Worker-P1581K": {
+        "session": "run_p1581k_1005",
         "role": "Worker"
       }
     },
@@ -11462,6 +11489,13 @@
         "issue": 580,
         "claim": "a57dc99923a74c0d8e81eb4c3c40eb5c",
         "actor": "Worker-R1580O"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-05T06:44:16+00:00",
+        "issue": 581,
+        "claim": "41bf17cc9a6140b0ad8079de28703b4f",
+        "actor": "Worker-P1581K"
       }
     ],
     "policy": {
