@@ -45,7 +45,7 @@ from src.campaign_bridge.dashboard_publisher import preview_jobs
 from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
-from src.web.publish_jobs import get_job, start_job, cancel_job
+from src.web.publish_jobs import DuplicateJobError, get_job, start_job, cancel_job
 from src.web.cache import (
     background_build_state,
     cache_built_at,
@@ -4521,6 +4521,10 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
 
     try:
         job_id, total = await asyncio.to_thread(launch)
+    except DuplicateJobError as exc:
+        # ACL-1603: у аккаунта уже есть идущее или ждущее задание — второго нет.
+        return JSONResponse({"error": str(exc), "duplicate": True, "account": exc.account_label,
+                             "job_id": exc.job_id}, status_code=409)
     except (RuntimeError, ValueError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse({"job_id": job_id, "total": total})
@@ -4536,6 +4540,20 @@ async def publish_jobs_slots() -> JSONResponse:
     from src.web.publish_jobs import slots_snapshot
 
     return JSONResponse(slots_snapshot())
+
+
+@app.post("/publish-jobs/kept/release")
+async def publish_jobs_release_kept(request: Request) -> JSONResponse:
+    """«Release» у оставленного окна в очереди: снять с него место (ACL-1603).
+
+    Не зависит от панели задания. Окно не закрывается — только перестаёт
+    считаться в потолке профилей. Объявлен до `/publish-jobs/{job_id}/…`.
+    """
+    form = await request.form()
+    from src.web.publish_jobs import release_kept
+
+    got = release_kept(str(form.get("account") or ""))
+    return JSONResponse(got, status_code=200 if got.get("ok") else 404)
 
 
 @app.post("/publish-jobs/{job_id}/cancel")

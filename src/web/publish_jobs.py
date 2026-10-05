@@ -45,6 +45,23 @@ _request_locks: dict[str, threading.Lock] = {}
 _request_lock = threading.Lock()
 _REQUEST_KEYS_MAX = 500
 
+#: Задание в этих статусах держит аккаунт: второе на него не заводим (ACL-1603).
+_LIVE_STATUSES = frozenset({"pending", "queued", "running", "cancelling"})
+
+
+class DuplicateJobError(ValueError):
+    """У аккаунта уже есть идущее или ждущее задание (ACL-1603)."""
+
+    def __init__(self, account_label: str, job_id: str = "") -> None:
+        super().__init__(f"{str(account_label).strip()} is already in the queue")
+        self.account_label = account_label
+        self.job_id = job_id
+
+
+def _norm_account(label: Any) -> str:
+    return str(label or "").strip().lower()
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -87,6 +104,13 @@ def create_job(
     with _jobs_lock:
         if _update_reserved:
             raise RuntimeError("ACL is restarting for an update. Wait until it returns before starting a campaign.")
+        # ACL-1603: 05.10 второй «Publish all» поставил десять заданий на
+        # аккаунты, у которых задания уже были. Проверка и вставка — под одним
+        # замком, иначе два запроса разом прошли бы оба.
+        for other in _jobs.values():
+            if (other.get("status") in _LIVE_STATUSES
+                    and _norm_account(other.get("account_label")) == _norm_account(account_label)):
+                raise DuplicateJobError(account_label, str(other.get("job_id") or ""))
         _jobs[job_id] = {
             "job_id": job_id,
             "account_label": account_label,
@@ -160,7 +184,23 @@ def _cancel_publisher(publisher: RpaPublisher) -> None:
 
 def slots_snapshot() -> dict[str, Any]:
     """Сколько профилей разом разрешено сейчас, что идёт и что ждёт (ACL-1321)."""
-    return _slots.snapshot()
+    snap = _slots.snapshot()
+    # ACL-1603: по аккаунту — идёт / ждёт памяти / ждёт места / ждёт профиль.
+    with _jobs_lock:
+        snap["accounts"] = [
+            {"account": j.get("account_label"), "job_id": j.get("job_id"),
+             "state": _account_state(j)}
+            for j in _jobs.values() if j.get("status") in _LIVE_STATUSES
+        ]
+    return snap
+
+
+def _account_state(job: dict[str, Any]) -> str:
+    """running / waiting_memory / waiting_slot / waiting_profile — для дешборда."""
+    if job.get("status") in ("running", "cancelling"):
+        return "running"
+    queue = job.get("queue") or {}
+    return str(queue.get("state") or "waiting_slot")
 
 
 def active_job_count() -> int:
@@ -401,18 +441,44 @@ def _run_job(
                     hand_off=True,
                 )
     finally:
-        _slots.release(job_id)
+        # ACL-1603: окно профиля, оставленное открытым на проверку, продолжает
+        # держать место, пока его не закроют (`close_profile`, кнопка Close
+        # profile, мягкая остановка): иначе очередь пускала бы третий и
+        # четвёртый Mimic поверх двух забытых окон.
+        with _jobs_lock:
+            left_open = not bool((_jobs.get(job_id) or {}).get("profile_closed"))
+        if left_open and _job_ran_in_browser(job_id):
+            _slots.keep(job_id, account_label)
+        else:
+            _slots.release(job_id)
+
+
+def _job_ran_in_browser(job_id: str) -> bool:
+    """Задание дошло до браузера (статус «running» был) — окно профиля могло остаться."""
+    with _jobs_lock:
+        return bool((_jobs.get(job_id) or {}).get("started_at"))
 
 
 def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
     """Что о месте в очереди видит дешборд (ACL-1321, ACL-1424)."""
+    hold = verdict.get("reason")
     return {
+        # ACL-1603: состояние для дешборда — память, место или профиль.
+        "state": ("waiting_profile" if hold == "profile"
+                  else "waiting_memory" if hold in ("memory_low", "below_reserve")
+                  else "waiting_review" if hold == "review_windows"
+                  else "waiting_slot"),
         # «profile» — ждёт свой профиль; иначе — свободное место.
         "reason": "profile" if verdict.get("reason") == "profile" else "slot",
         # Почему нет места: memory_low / ceiling / order / override_full …
         "hold": verdict.get("reason"),
         "ahead": int(verdict.get("ahead") or 0),
         "limit": verdict.get("limit"),
+        "cap": verdict.get("cap"),
+        "kept": verdict.get("kept"),
+        "kept_accounts": list(verdict.get("kept_accounts") or []),
+        "need_mb": verdict.get("need_mb"),
+        "reserve_mb": verdict.get("reserve_mb"),
         "running": verdict.get("running"),
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),
@@ -731,6 +797,15 @@ def _profile_has_other_job(job_id: str, account_label: str) -> bool:
 _ACTIVE_STATUSES = frozenset({"pending", "queued", "running", "cancelling"})
 
 
+def release_kept(account_label: str) -> dict[str, Any]:
+    """Снять место с оставленного окна аккаунта, не закрывая окно (ACL-1603)."""
+    count = _slots.release_kept(account_label)
+    if count:
+        return {"ok": True, "released": count}
+    return {"ok": False, "released": 0,
+            "error": f"{str(account_label).strip()} has no review window holding a slot"}
+
+
 def close_profile(job_id: str) -> dict[str, Any]:
     """Кнопка «Close profile» на панели задания (ACL-1444).
 
@@ -773,6 +848,8 @@ def close_profile(job_id: str) -> dict[str, Any]:
     with _jobs_lock:
         if job_id in _jobs:
             _jobs[job_id]["profile_closed"] = True
+    # ACL-1603: закрытое окно больше не держит место в очереди профилей.
+    _slots.release(job_id)
     _slots.wake()
     return {"ok": True, "job_id": job_id, "message": "Closed the profile"}
 

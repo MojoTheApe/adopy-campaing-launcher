@@ -5417,7 +5417,10 @@ window.cbTree = (function () {
     box.hidden = false;
 
     var lines = (p.report || []).map(function (r) {
-      var mark = r.state === 'ok' ? '<span class="cbd-q-ok">✓</span>' : '<span class="cbd-q-bad">✕</span>';
+      // ACL-1603: аккаунт, у которого задание уже есть, пропущен как дубль.
+      var mark = r.state === 'ok' ? '<span class="cbd-q-ok">✓</span>'
+        : r.state === 'dup' ? '<span class="cbd-q-queued">⧉</span>'
+        : '<span class="cbd-q-bad">✕</span>';
       var tail = r.skipped ? ' · ' + r.skipped + ' skipped' : '';
       return '<div class="cbd-q-line">' + mark + ' ' + aclEscHtml(r.account) + tail
         + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '') + '</div>';
@@ -5429,6 +5432,12 @@ window.cbTree = (function () {
     if (p.done) {
       var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
       lines.unshift('<div class="cbd-q-head">Done — ' + ok + ' of ' + p.of + ' accounts</div>');
+      var dups = (p.report || []).filter(function (r) { return r.state === 'dup'; })
+        .map(function (r) { return aclEscHtml(r.account); });
+      if (dups.length) {
+        lines.splice(1, 0, '<div class="cbd-q-line cbd-q-dup">Skipped as duplicate (already in the queue): '
+          + dups.join(', ') + '</div>');
+      }
     } else if (p.live && p.live.length) {
       // Каждый неоконченный аккаунт своей строкой (ACL-1321): кто
       // проверяется, кто собирается, кто ждёт места в очереди профилей.
@@ -5445,6 +5454,8 @@ window.cbTree = (function () {
         var what = x.stage === 'checking' ? 'checking'
           : x.stage === 'queued'
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
+               : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
+               : q.state === 'waiting_memory' ? 'queued — waiting for memory'
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
           : 'building the draft';
@@ -6047,9 +6058,15 @@ window.cbBuild = (function () {
     }
     // ACL-1424: мало памяти — сколько свободно и сколько берёт профиль.
     var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
-    if (q.hold === 'memory_low' && q.available_mb != null && q.profile_mb) {
+    if (q.hold === 'review_windows') {
+      return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
+    }
+    if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
+      var reserve = Number(q.reserve_mb) || 0;
+      var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
       return { state: 'build-wait', sign: '',
-               why: 'Waiting: ' + gb(q.available_mb) + ' GB free, a profile uses ~' + gb(q.profile_mb) + ' GB'
+               why: 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, needs ' + gb(need) + ' GB (profile ~'
+                    + gb(q.profile_mb) + ' GB + ' + String(+gb(reserve)) + ' GB reserve)'
                     + (ahead ? ' (' + ahead + ' ahead)' : '') };
     }
     return { state: 'build-wait', sign: '',
@@ -12140,6 +12157,28 @@ function cbSentCampaignNames(fd) {
  * Stop — только своё задание. Потерянный статус (дешборд перезапущен)
  * по-прежнему останавливает всю вкладку: неотправленные аккаунты не едут,
  * новые не принимаются, пока страницу не перезагрузят. */
+/* ACL-1603: потолок занят окнами, оставленными открытыми на проверку. */
+function cbReviewWait(q) {
+  var names = (q && q.kept_accounts) || [];
+  if (names.length) return 'waiting: review windows still open for ' + names.join(', ') + ' — close them to continue';
+  var n = Math.max(1, parseInt(q && q.kept, 10) || 1);
+  return 'waiting: ' + n + ' review window' + (n === 1 ? ' is' : 's are') + ' still open — close them to continue';
+}
+/* «Release» у каждого оставленного окна: снять место, не закрывая окно. */
+function cbReviewRelease(q) {
+  return ((q && q.kept_accounts) || []).map(function (a) {
+    return ' <a href="#" class="cbd-q-retry" data-cb-release-kept="' + aclEscHtml(a) + '">Release ' + aclEscHtml(a) + '</a>';
+  }).join('');
+}
+if (typeof document.addEventListener === 'function') document.addEventListener('click', function (ev) {   // в песочнице тестов страницы документа-события нет
+  var t = ev.target && ev.target.closest ? ev.target.closest('[data-cb-release-kept]') : null;
+  if (!t) return;
+  ev.preventDefault();
+  var fd = new FormData();
+  fd.set('account', t.getAttribute('data-cb-release-kept'));
+  fetch('/publish-jobs/kept/release', { method: 'POST', body: fd }).catch(function () { /* следующий опрос покажет */ });
+});
+
 /* Ключ одной отправки Publish (ACL-1399) — см. start_job(request_id). */
 function cbRequestId() {
   try {
@@ -12286,6 +12325,12 @@ function cbNewRun(notify) {
     cbPostPublish(fd)
       .then(function (data) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
+        if (data.error && data.duplicate) {
+          // ACL-1603: у аккаунта уже есть идущее или ждущее задание.
+          if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">' + aclEscHtml(data.error) + '</span>';
+          settle(e, { account: e.label, state: 'dup', why: data.error, skipped: skipped });
+          return;
+        }
         if (data.error) {
           if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
           settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped });
@@ -13148,6 +13193,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       // ACL-1321: профилей разом — сколько тянет память машины; остальные ждут.
       : isQueued ? (queue.reason === 'profile'
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
+          : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
+          : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
