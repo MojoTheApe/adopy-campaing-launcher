@@ -20,6 +20,10 @@ def job(monkeypatch):
     monkeypatch.setattr(pj, '_clear_inherited_asyncio_loop', lambda: None)
     monkeypatch.setattr(pj, '_write_draft_status', lambda *a, **kw: None)
     monkeypatch.setattr(rt, 'screen_locked', lambda: None)
+    # ACL-1603: первому профилю тоже нужен запас памяти; своя память — не хоста.
+    from src.web import profile_slots as ps
+    monkeypatch.setattr(pj, '_slots', ps.ProfileSlots(
+        memory=lambda: ps.MemoryReading(total_mb=65536, available_mb=49152)))
     key = pj.create_job('Offline', 'Test', [{}])
     yield key
     with pj._jobs_lock:

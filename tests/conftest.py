@@ -133,6 +133,34 @@ def _finished_profiles_stay_open(monkeypatch):
     yield
 
 
+# Тесты не читают настоящую память машины через очередь профилей (ACL-1603).
+#
+# С ACL-1603 даже первый профиль ждёт «профиль + запас» (6,5 ГБ свободных), и
+# задание, прошедшее через глобальную `publish_jobs._slots` с настоящим
+# `read_memory`, на занятом CI-раннере ждало бы вечно (Windows-набор упёрся в
+# 30 минут). Подставная память — много; тесту нужна своя — он ставит
+# `ProfileSlots(memory=...)` или `monkeypatch.setattr(pj._slots, "_memory", ...)`
+# позже этой фикстуры. Сам `profile_slots.read_memory` не трогаем: тесты
+# настоящей пробы проверяют именно его.
+@pytest.fixture(autouse=True)
+def _slot_queue_never_reads_the_host_memory(monkeypatch):
+    try:
+        from src.web import profile_slots as ps
+        from src.web import publish_jobs as pj
+    except Exception:
+        yield
+        return
+
+    def plenty():
+        return ps.MemoryReading(total_mb=64 * 1024, available_mb=48 * 1024)
+
+    monkeypatch.setitem(ps.ProfileSlots.__init__.__kwdefaults__, "memory", plenty)
+    # Свежая очередь на каждый тест: окна, оставленные прошлым тестом
+    # (`keep`), не должны занимать места следующему.
+    monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(memory=plenty))
+    yield
+
+
 @pytest.fixture
 def enriched_df() -> pd.DataFrame:
     """Return an enriched DataFrame as if compute_metrics + enrich_structure ran.
