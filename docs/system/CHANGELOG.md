@@ -1,5 +1,30 @@
 # System history
 
+## Platform-neutral tests run on Linux; only marked tests stay on Windows — ACL-1582
+
+Every test ran on Windows runners (6 jobs per run), whose minutes bill at 2x Linux,
+although most tests are pure logic, fixtures and Chromium bench pages.
+
+- `windows_only` pytest marker, module-level with a required reason, registered in
+  `tests/conftest.py`. 12 of 358 test files carry it (msvcrt locks, 8.3 short paths,
+  `install_acl.bat`/cmd, the PowerShell bootstrap and launcher contract, the Windows
+  runtime layout, Windows session/screen APIs, `taskkill`, drive-letter paths); the
+  other 346 run on Linux. `python scripts/acl_test_platform.py report` lists the reasons.
+- Guard `tests/test_acl_test_platform.py` (AST, also in the fast scope job): an unmarked
+  file may not import `msvcrt`/`winreg`, use `windll`, branch on `os.name`/`sys.platform`
+  for Windows, call `powershell`/`pwsh` or Windows commands, reference `.ps1` or
+  `LOCALAPPDATA`, or assert on backslash paths. Data-only lines take `# linux-ok: <why>`.
+- `scripts/acl_test_shard.py --platform linux|windows`; an empty shard now fails.
+- `ci.yml`: `linux tests (3.11|3.13, 1..3)` on ubuntu-latest (Chromium with
+  `--with-deps`) and `windows tests (3.13)` on windows-latest (marked files, the smoke
+  set, secret scan and `acl_smoke.py`). `ACL verification` requires both.
+- `scripts/acl_ci_reuse.py` `REQUIRED_JOBS` and the release gate `verify_promotion`
+  need every Linux shard, the Windows job and `ACL verification`. Runs of the old
+  layout (`test (py, shard)`) are refused, with a clear message on the tag path.
+- Not proven locally: this laptop has neither WSL nor Docker, so the Linux selection
+  first runs in CI. A file that fails there only because of Windows paths or CRLF gets
+  the marker.
+
 ## Screen-values probe: reads only by default, every capture is opt-in — ACL-1532
 
 `scripts/probe_screen_values.py` measures whether our captures change a running

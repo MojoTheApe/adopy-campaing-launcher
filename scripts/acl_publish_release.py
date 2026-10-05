@@ -50,7 +50,13 @@ def verify_promotion(tag: str, source_repo: str, report=print) -> str:
     run = dict(run, id=int(match[1]))
     main_url = f"https://github.com/{source_repo}/actions/runs/{run['id']}"
     # Ошибка API на заданиях самого main-прогона не глотается: релиз останавливается.
-    if reuse.full_jobs_passed(_api, source_repo, run, "ci.yml"):
+    jobs = reuse.latest_jobs(_api, source_repo, run)
+    # ACL-1582: прогон старой раскладки (всё на Windows, `test (py, shard)`) не
+    # доказывает текущий набор заданий — ни сам, ни через переиспользование.
+    if reuse.legacy_layout(jobs, "ci.yml"):
+        raise ValueError("Recorded main CI used the job layout before ACL-1582 (test (py, shard)); "
+                         "rerun ci.yml on main to get a run with the Linux and Windows test jobs")
+    if reuse.jobs_complete(jobs, "ci.yml"):
         report(f"Full test matrix ran in the recorded main run {main_url}")
         return sha
     tree = _git("rev-parse", f"{sha}^{{tree}}")

@@ -1,4 +1,5 @@
-# Runs the test suite on Windows, which is the only OS ACL runs on.
+# Runs the test suite: platform-neutral tests on Linux, Windows-only tests on
+# Windows (ACL-1582).
 #
 # There was no build at all until 2026-08-30, and it showed: 19 of 212 tests
 # were failing, some for weeks. They described a dashboard that had been
@@ -7,10 +8,14 @@
 # that rejected a field the caller had not sent. Tests nothing runs do not
 # protect anything; they rot quietly and take real failures down with them.
 #
-# Windows on purpose: ACL is a Playwright + Multilogin tool on buyers' Windows
-# machines, and path handling, CRLF and %LOCALAPPDATA% are exactly where this
-# code goes wrong. A green Linux build would be reassurance about a platform
-# nobody uses.
+# ACL is a Playwright + Multilogin tool on buyers' Windows machines, and path
+# handling, CRLF, %LOCALAPPDATA%, file locks and the PowerShell bootstrap are
+# exactly where this code goes wrong. Those tests carry the `windows_only`
+# marker (with a reason) and run in the Windows job, next to the smoke check
+# that the app starts on Windows. Everything else is pure logic, fixtures and
+# bench pages in Playwright Chromium; it runs on ubuntu-latest, whose minutes
+# cost half. tests/test_acl_test_platform.py refuses an unmarked test that uses
+# Windows-only APIs, so the split is checked, not guessed.
 name: CI
 
 on:
@@ -57,17 +62,23 @@ jobs:
         run: |
           python3 -m json.tool tracker/config.json > /dev/null
           python3 -m json.tool tracker/engine.json > /dev/null
-          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py -q
-  test:
+          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py tests/test_acl_test_platform.py tests/test_ci_layout.py -q
+
+  # ACL-1582: the job names are spelled out (`name:`) because the reuse proof
+  # (scripts/acl_ci_reuse.py REQUIRED_JOBS) and the release gate
+  # (scripts/acl_publish_release.py) look jobs up by these exact names; a test
+  # (tests/test_ci_layout.py) keeps them and the matrices in step. Runs of the
+  # old layout, `test (py, shard)`, are never accepted as proof.
+  test-linux:
+    name: linux tests (${{ matrix.python-version }}, ${{ matrix.shard }})
     needs: scope
+    # scope.outputs.windows=false: docs-only PR, or this exact tree already
+    # passed a full push run. Then both test jobs are skipped; any other answer
+    # (or a failed scope) runs them.
     if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.windows != 'false') }}
-    runs-on: windows-latest
-    # 2026-09-27: the suite passed 3300 tests and runs ~19-20 min on the hosted
-    # runner (3.13: 19m13s; 3.11 was cancelled at 20m16s on PR #328). Keep headroom.
+    runs-on: ubuntu-latest
     timeout-minutes: 35
 
-    # Belt and braces alongside scripts/_console.py: the runner's console is not
-    # UTF-8, and a Russian line printed by any step would abort it.
     env:
       PYTHONIOENCODING: utf-8
 
@@ -75,10 +86,8 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.13"]
-        # ACL-1397: the suite is split into 3 jobs per Python version
-        # (scripts/acl_test_shard.py). A private repository's hosted Windows
-        # runner has 2 CPUs, so pytest-xdist alone did not shorten CI; three
-        # runners do. Together the shards are exactly tests/test_*.py.
+        # ACL-1397: shards by scripts/acl_test_shard.py; with --platform linux
+        # together they are exactly the files without the windows_only marker.
         shard: [1, 2, 3]
 
     steps:
@@ -99,42 +108,87 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
-      # Same check the launcher runs before it lets a new version become the
-      # installed one, so CI fails on exactly what would block a buyer's update.
-      # Runtime still attaches to Multilogin; Chromium below is only for
-      # isolated tests of recorded/synthetic DOM fixtures.
+      # Runtime still attaches to Multilogin; Chromium is only for isolated
+      # tests of recorded/synthetic DOM fixtures. --with-deps installs the
+      # system libraries Chromium needs on Ubuntu.
+      - name: Install Chromium for isolated DOM tests
+        run: python -m playwright install --with-deps chromium
+
+      # `loadfile` keeps each test file on one worker: 80+ files launch their
+      # own Chromium in a module fixture. See docs/repository/WORKFLOW.md.
+      - name: Tests (Linux shard ${{ matrix.shard }} of 3)
+        run: |
+          echo "CPUs on this runner: $(nproc)"
+          list=$(python scripts/acl_test_shard.py --platform linux ${{ matrix.shard }} 3)
+          mapfile -t files <<< "$list"
+          if [ -z "$list" ] || [ "${#files[@]}" -eq 0 ]; then echo "no test files for shard ${{ matrix.shard }}"; exit 1; fi
+          echo "${#files[@]} test files in this shard"
+          python -m pytest "${files[@]}" -q -n auto --dist loadfile
+
+  test-windows:
+    name: windows tests (${{ matrix.python-version }})
+    needs: scope
+    if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.windows != 'false') }}
+    runs-on: windows-latest
+    # Only the windows_only files and the smoke set; the full Windows suite
+    # took ~20 min per shard before ACL-1582.
+    timeout-minutes: 30
+
+    # Belt and braces alongside scripts/_console.py: the runner's console is not
+    # UTF-8, and a Russian line printed by any step would abort it.
+    env:
+      PYTHONIOENCODING: utf-8
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # The buyers' installer ships 3.13; Linux covers 3.11 for the neutral tests.
+        python-version: ["3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
       # ACL is pushed to a repository outside developers read and copied onto
       # every buyer's machine, so the tree must not carry credentials or the
-      # identifiers saying which real ad accounts anyone works in. First run of
-      # this found live cabinets in two handoff docs and in a docstring.
+      # identifiers saying which real ad accounts anyone works in. Also run on
+      # Windows: the scanner reads paths and line endings as a buyer's checkout has them.
       - name: Data and secret scan
         run: python scripts/acl_scan_secrets.py
 
-      - name: Smoke check (does ACL start?)
+      # Same check the launcher runs before it lets a new version become the
+      # installed one, so CI fails on exactly what would block a buyer's update.
+      - name: Smoke check (does ACL start on Windows?)
         run: python scripts/acl_smoke.py
 
       - name: Install Chromium for isolated DOM tests
         run: python -m playwright install chromium
 
-      # Parallel since ACL-1397: this job's shard of the test files, with one
-      # pytest-xdist worker per runner CPU. `loadfile` keeps each test file on
-      # one worker: 80+ files launch their own Chromium in a module fixture,
-      # and spreading a file's tests over workers launched that browser once
-      # per worker (measured locally: 41 min with test-by-test `load` vs
-      # 20 min with `loadfile`). See docs/repository/WORKFLOW.md.
-      - name: Tests (shard ${{ matrix.shard }} of 3)
+      - name: Tests (windows_only files and the Windows smoke set)
         run: |
           Write-Output "CPUs on this runner: $env:NUMBER_OF_PROCESSORS"
-          $files = @(python scripts/acl_test_shard.py ${{ matrix.shard }} 3)
-          if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { throw "no test files for shard ${{ matrix.shard }}" }
-          Write-Output "$($files.Count) test files in this shard"
+          $files = @(python scripts/acl_test_shard.py --platform windows 1 1)
+          if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { throw "no Windows test files" }
+          Write-Output "$($files.Count) test files on Windows"
           python -m pytest @files -q -n auto --dist loadfile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   admission:
     name: ACL verification
     if: ${{ always() }}
-    needs: [scope, test]
+    needs: [scope, test-linux, test-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Require every applicable check
@@ -142,13 +196,16 @@ jobs:
           SCOPE: ${{ needs.scope.result }}
           WINDOWS: ${{ needs.scope.outputs.windows }}
           REUSED: ${{ needs.scope.outputs.reused_from }}
-          TESTS: ${{ needs.test.result }}
+          LINUX_TESTS: ${{ needs.test-linux.result }}
+          WINDOWS_TESTS: ${{ needs.test-windows.result }}
         run: |
           test "$SCOPE" = success
           if test -n "$REUSED"; then echo "Reused full results of run $REUSED (same tree)"; fi
           if test "$WINDOWS" = false; then
-            test "$TESTS" = skipped
+            test "$LINUX_TESTS" = skipped
+            test "$WINDOWS_TESTS" = skipped
           else
             test "$WINDOWS" = true
-            test "$TESTS" = success
+            test "$LINUX_TESTS" = success
+            test "$WINDOWS_TESTS" = success
           fi
