@@ -810,6 +810,11 @@ class _ReadOpen:
     profile_id: str = ""
     entry: Any = None
     started_mono: float = 0.0
+    #: Вкладка чтения — вкладка окна, которое чтение подняло: её не закрываем
+    #: (закрылось бы окно); профиль закроет мягкая остановка или Publish.
+    keep_tab: bool = False
+    #: Сколько мест очередь выдала профилю к моменту запуска (`grants`).
+    grants_seen: int = 0
 
 
 #: Чтение просит запускать закрытый профиль (`opening_closed_profile`). Флагом
@@ -856,14 +861,23 @@ def _take_over_pending(profile_id: str, opened: "_ReadOpen | None") -> None:
     opened.started, opened.slot_id = True, prev.slot_id
     opened.profile_id, opened.started_mono = prev.profile_id, prev.started_mono
     opened.entry = opened.entry or prev.entry
+    opened.grants_seen = prev.grants_seen
 
 
-def _start_closed(entry, account_label: str, opened: _ReadOpen):
+def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
     """Запустить закрытый профиль для чтения путём «open profile» (ACL-1580).
 
     Сначала место в очереди профилей Publish (строка ожидания на карте), потом
     старт: `allow_restart=False` — открытое окно не перезапускается,
     `allow_kill=False` — ничего не убивается. Не поднялся — место отпускаем.
+
+    Ревью PR #583:
+    * (F2) ожидание места бывает долгим, а `/mlx-profile-open` замок профиля
+      не берёт — профиль могли открыть автоматизацией, пока мы ждали.
+      `recheck()` после выдачи места: прицепились — профиль не наш, место
+      отпускаем и после чтения его не закрываем.
+    * (F1) место профиля держит Publish (`shared`) — профиль после чтения
+      остаётся Publish: чтение его не закрывает (ни сразу, ни по таймеру).
     """
     from src.fb_ads_rpa import browser as rpa_browser
 
@@ -881,6 +895,15 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen):
         _set_wait_note(account_label, "")
     shared = bool(grant and grant.get("shared"))
     waited_s = time.monotonic() - waited_from
+    if recheck is not None:
+        try:
+            ready = recheck()
+        except Exception:
+            ready = None
+        if ready is not None:
+            if not shared:
+                queue.release(slot_id)
+            return ready
     _set_wait_note(account_label, STARTING_NOTE.format(account=account_label))
     began = time.monotonic()
     try:
@@ -897,11 +920,17 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen):
         ) from exc
     finally:
         _set_wait_note(account_label, "")
-    opened.started = True
+    opened.keep_tab = True
+    # Место профиля держит Publish — после чтения профиль его, а не наш.
+    opened.started = not shared
     opened.slot_id = "" if shared else slot_id
     opened.profile_id = profile_id
     opened.entry = entry
     opened.started_mono = began
+    try:
+        opened.grants_seen = int(queue.grants(profile_id))
+    except Exception:
+        opened.grants_seen = 0
     _record("spend_profile_started", True, time.monotonic() - began,
             {"account": account_label, "slot_wait_s": round(waited_s, 1), "shared_slot": shared})
     return conn
@@ -916,6 +945,18 @@ def _close_started(opened: _ReadOpen) -> None:
     from src.fb_ads_rpa import browser as rpa_browser
 
     began = time.monotonic()
+    if _publish_touched(opened):
+        # Ревью PR #583 (F1): профилем пользуется (или воспользовалось) другое
+        # задание — окно его: Publish сам решает, закрывать ли (ACL-1444).
+        if opened.slot_id:
+            try:
+                _slot_queue().release(opened.slot_id)
+            except Exception:
+                log.exception("Could not release the profile slot of %s", opened.account)
+        _record("spend_profile_closed_after_read", None, 0.0,
+                {"account": opened.account, "skipped": "another_job"})
+        opened.started = False
+        return
     ok, error = True, ""
     try:
         rpa_browser.stop_profile_on_request(opened.entry, opened.account)
@@ -934,6 +975,19 @@ def _close_started(opened: _ReadOpen) -> None:
         diag["error"] = error
     _record("spend_profile_closed_after_read", ok, time.monotonic() - began, diag)
     opened.started = False
+
+
+def _publish_touched(opened: _ReadOpen) -> bool:
+    """Держит ли место профиля другое задание, ждёт ли его, или держало ли
+    после нашего запуска (`grants` вырос). Не прочиталось — считаем, что да:
+    оставить окно открытым безопаснее, чем закрыть чужое."""
+    try:
+        queue = _slot_queue()
+        return bool(queue.others_on(opened.profile_id, opened.slot_id)
+                    or int(queue.grants(opened.profile_id)) != opened.grants_seen)
+    except Exception:
+        log.exception("Could not ask the profile queue about %s", opened.account)
+        return True
 
 
 def _close_if_still_pending(opened: _ReadOpen) -> None:
@@ -1069,6 +1123,19 @@ def _short_path(path: str) -> str:
         return ""
 
 
+def _attach_open(direct_cls, entry, profile_id: str):
+    """Прицепиться к профилю, если он уже открыт автоматизацией; иначе None."""
+    udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
+    if udd is None:
+        return None
+    direct = direct_cls()
+    for spelling in _dir_spellings(udd):
+        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
+        if conn is not None:
+            return conn
+    return None
+
+
 def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = None):
     """Подключиться к уже открытому профилю. Никогда его не перезапускать.
 
@@ -1115,7 +1182,8 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
         # Папку создаёт сам Multilogin при первом запуске — у профиля, ни разу
         # не запускавшегося здесь, её нет; открытым он быть не может.
         if opening is not None:
-            return _start_closed(entry, account_label, opening)
+            return _start_closed(entry, account_label, opening,
+                                 recheck=lambda: _attach_open(direct_cls, entry, profile_id))
         raise ProfileNotAttachable(
             f"Profile folder {profile_id} was not found. Is this profile open on this machine?"
         )
@@ -1165,7 +1233,8 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
             pass
         return conn
     if opening is not None:
-        return _start_closed(entry, account_label, opening)
+        return _start_closed(entry, account_label, opening,
+                             recheck=lambda: _attach_open(direct_cls, entry, profile_id))
     raise ProfileNotAttachable(
         f"{account_label}: the profile is not open. Open it through automation and leave the window open; "
         "the read will attach to it without restarting anything."
@@ -1555,7 +1624,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
             # ACL-1580: у профиля, который чтение само подняло, это вкладка
             # окна — её не закрываем (закрылось бы окно); профиль закроет
             # мягкая остановка ниже.
-            if not held.started:
+            if not held.keep_tab:
                 try:
                     conn.page.close()
                 except Exception:

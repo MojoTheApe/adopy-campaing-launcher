@@ -447,6 +447,10 @@ class ProfileSlots:
         self._cond = threading.Condition()
         self._waiting: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
         self._running: dict[str, dict[str, Any]] = {}
+        # ACL-1580: сколько мест выдано каждому профилю за всё время — по
+        # счётчику чтение узнаёт, что профилем успело воспользоваться другое
+        # задание, пока оно ждало закрыть запущенный им профиль.
+        self._grants: dict[str, int] = {}
 
     # ── решение под замком ─────────────────────────────────────────────
 
@@ -561,6 +565,7 @@ class ProfileSlots:
                     if verdict.get("allow"):
                         del self._waiting[job_id]
                         self._running[job_id] = {"profile": profile, "started": self._clock()}
+                        self._grants[profile] = self._grants.get(profile, 0) + 1
                         self._cond.notify_all()   # следующий в очереди — перепроверить
                         return {"waited_s": round(self._clock() - enqueued, 1),
                                 "decision": verdict, "first_hold": first_hold, "shared": False}
@@ -589,6 +594,18 @@ class ProfileSlots:
         with self._cond:
             self._running.pop(job_id, None)
             self._cond.notify_all()
+
+    def grants(self, profile: str) -> int:
+        """Сколько мест выдано этому профилю (ACL-1580)."""
+        with self._cond:
+            return self._grants.get(str(profile or ""), 0)
+
+    def others_on(self, profile: str, job_id: str = "") -> bool:
+        """Держит ли место этого профиля или ждёт его кто-то, кроме `job_id` (ACL-1580)."""
+        profile = str(profile or "")
+        with self._cond:
+            return any(j != job_id and r["profile"] == profile
+                       for j, r in [*self._running.items(), *self._waiting.items()])
 
     def wake(self) -> None:
         """Перепроверить сейчас (отмена ждущего задания)."""

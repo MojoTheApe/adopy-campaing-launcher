@@ -50,11 +50,14 @@ def _robot_step_names() -> set[str]:
     """Имена шагов, которые робот называет в коде: `record("…")` и списки
     шагов политики повторов."""
     names: set[str] = set()
-    # ACL-1580: и шаги чтений спенда (`spend_profile_*`) — они в той же телеметрии.
-    paths = [*(ROOT / "src" / "fb_ads_rpa").rglob("*.py"), *(ROOT / "src" / "analysis_agent").rglob("*.py")]
-    for path in paths:
+    for path in (ROOT / "src" / "fb_ads_rpa").rglob("*.py"):
         text = path.read_text(encoding="utf-8", errors="replace")
         names.update(re.findall(r"""\brecord\(\s*["']([a-z][a-z0-9_]*)["']""", text))
+    # ACL-1580: и шаги чтений спенда (`spend_profile_*`) — они в той же
+    # телеметрии; там их пишут и через обёртку `_record("…")`.
+    for path in (ROOT / "src" / "analysis_agent").rglob("*.py"):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        names.update(re.findall(r"""\b_?record\(\s*["']([a-z][a-z0-9_]*)["']""", text))
     from src.fb_ads_rpa import retry_policy as rp
 
     names |= set(rp.CAMPAIGN_RETRY_STEPS) | set(rp.NON_RETRYABLE_FLOW_STEPS) | set(rp.BLOCKING_REVIEW_STEPS)

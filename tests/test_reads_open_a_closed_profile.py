@@ -194,6 +194,9 @@ def test_a_closed_profile_is_started_then_read(reads, page_reads):
     started = _steps(reads, "spend_profile_started")
     assert len(started) == 1 and started[0][1] is True
     assert isinstance(started[0][2].get("duration_s"), float)
+    # Ревью PR #583 (F3): вкладка поднятого чтением окна не закрывается —
+    # она может быть в окне единственной; окно закрывает мягкая остановка.
+    assert ("tab_closed", PROFILE) not in reads.ev
 
 
 def test_a_profile_the_read_started_is_closed_gracefully_and_only_it(reads, page_reads):
@@ -233,6 +236,8 @@ def test_an_open_profile_is_attached_not_restarted_and_left_open(reads, page_rea
     assert ("attach", PROFILE) in reads.ev
     assert reads.automation.get(PROFILE), "открытый профиль закрыт"
     assert not _steps(reads, "spend_profile_started")
+    # Своя вкладка чтения в чужом окне закрывается — окно остаётся.
+    assert ("tab_closed", PROFILE) in reads.ev
     assert not _steps(reads, "spend_profile_closed_after_read")
     assert reads.queue.snapshot()["running"] == [], "открытому профилю место не нужно"
 
@@ -455,3 +460,116 @@ def test_the_new_steps_have_a_build_model_rule():
     rules = m.read_model()["rules"]
     for step in ("spend_profile_started", "spend_profile_closed_after_read", "spend_profile_restarted"):
         assert m.stage_of(step, rules) is not None, step
+
+
+# ── ревью PR #583: Publish на том же профиле, чужое окно, старый таймер ────
+
+def _run(fn, *a):
+    box = {}
+
+    def go():
+        try:
+            box["out"] = fn(*a)
+        except BaseException as exc:  # noqa: BLE001
+            box["exc"] = exc
+
+    th = threading.Thread(target=go, daemon=True)
+    th.start()
+    return th, box
+
+
+def _stops(world):
+    return [e for e in world.ev if isinstance(e, tuple) and e[0] == "stop"]
+
+
+def test_a_read_sharing_a_publish_slot_never_closes_the_profile(reads, page_reads, monkeypatch):
+    """F1: Publish держит место профиля P и ждёт его замок, который держит
+    чтение. Чтение не ждёт за ним (иначе оба ждали бы друг друга), поднимает
+    P — и оставляет его Publish: ни сразу, ни по таймеру не закрывает."""
+    monkeypatch.setattr(sp, "CLOSE_GRACE_S", 0.05)
+    assert reads.queue.acquire("publish-1", PROFILE) is not None
+    th, box = _run(sp.read_via_rpa, ACCOUNT, DAY, DAY)
+    th.join(5)
+    assert not th.is_alive(), "чтение встало в очередь за Publish своего же профиля"
+    assert box["out"].state == "ok"
+    assert ("start", PROFILE) in reads.ev
+    assert ("tab_closed", PROFILE) not in reads.ev
+    time.sleep(0.3)                                 # дольше паузы закрытия
+    assert _stops(reads) == [], "чтение закрыло профиль, который ждёт Publish"
+    reads.queue.release("publish-1")                # Publish кончился, окно оставил
+    time.sleep(0.3)
+    assert _stops(reads) == [], "таймер чтения закрыл окно, оставленное Publish"
+    assert reads.automation.get(PROFILE)
+
+
+def test_a_publish_waiting_for_the_profile_during_the_grace_gets_it_open(reads, page_reads, monkeypatch):
+    """F1: пока удачное чтение держит запущенный им профиль, за его местом
+    встал Publish того же профиля. Таймер профиль не закрывает — отдаёт."""
+    monkeypatch.setattr(sp, "CLOSE_GRACE_S", 0.2)
+    assert sp.read_via_rpa(ACCOUNT, DAY, DAY).state == "ok"
+    grant = {}
+    th = threading.Thread(target=lambda: grant.update(g=reads.queue.acquire("publish-2", PROFILE)),
+                          daemon=True)
+    th.start()
+    th.join(5)
+    assert not th.is_alive() and grant["g"] is not None, "Publish не получил место"
+    assert _stops(reads) == [], "таймер закрыл профиль, которого ждал Publish"
+    skipped = _steps(reads, "spend_profile_closed_after_read")
+    assert len(skipped) == 1 and skipped[0][2]["diag"]["skipped"] == "another_job"
+    reads.queue.release("publish-2")
+
+
+def test_a_stale_timer_after_the_country_takeover_stops_nothing(reads, page_reads, monkeypatch):
+    """F3: страны забрали профиль и закрыли его сами; старый таймер спенда,
+    сработав позже, не останавливает профиль второй раз."""
+    monkeypatch.setattr(sp, "CLOSE_GRACE_S", 0.15)
+    fired = threading.Event()
+    real = sp._close_if_still_pending
+
+    def watched(opened):
+        try:
+            real(opened)
+        finally:
+            fired.set()
+
+    monkeypatch.setattr(sp, "_close_if_still_pending", watched)
+    assert sp.read_via_rpa(ACCOUNT, DAY, DAY).state == "ok"
+    reads.page_kw = {"fail": RuntimeError("report exploded")}
+    cs.read_country_split(ACCOUNT, DAY)
+    assert _stops(reads) == [("stop", PROFILE)]
+    assert fired.wait(5), "таймер спенда не сработал"
+    assert _stops(reads) == [("stop", PROFILE)], "старый таймер остановил профиль второй раз"
+
+
+def test_a_profile_opened_by_someone_else_during_the_slot_wait_is_not_ours(reads, page_reads):
+    """F2: пока чтение ждало место, профиль открыли автоматизацией мимо замка
+    (`/mlx-profile-open`). Чтение цепляется к нему, не запускает и не закрывает."""
+    assert reads.queue.acquire("other", "X") is not None    # единственное место занято
+    th, box = _run(sp.read_via_rpa, ACCOUNT, DAY, DAY)
+    assert _wait_for(lambda: sp.hand_wait_note(ACCOUNT).startswith(sp.SLOT_WAIT_NOTE))
+    reads.running[PROFILE] = frozenset({1})
+    reads.automation[PROFILE] = True                         # кто-то открыл профиль
+    reads.queue.release("other")
+    th.join(5)
+    assert not th.is_alive() and box["out"].state == "ok"
+    names = [e[0] for e in reads.ev if isinstance(e, tuple)]
+    assert "start" not in names and "stop" not in names
+    assert reads.automation.get(PROFILE), "чужое окно закрыто"
+    assert reads.queue.snapshot()["running"] == [], "место не отпущено"
+    assert not _steps(reads, "spend_profile_started")
+
+
+def test_a_publish_that_finished_before_the_timer_keeps_its_window(reads, page_reads, monkeypatch):
+    """F1, сценарий ревью: Publish держал место P, чтение его разделило и
+    подняло P; Publish кончился и оставил окно (ACL-1444: hand-off,
+    FB_RPA_KEEP_PROFILES_OPEN) раньше, чем сработал бы таймер чтения.
+    Профиль запустило чтение, но он — Publish: таймера нет вовсе."""
+    monkeypatch.setattr(sp, "CLOSE_GRACE_S", 0.2)
+    assert reads.queue.acquire("publish-1", PROFILE) is not None
+    th, box = _run(sp.read_via_rpa, ACCOUNT, DAY, DAY)
+    th.join(5)
+    assert box["out"].state == "ok"
+    reads.queue.release("publish-1")
+    time.sleep(0.5)
+    assert _stops(reads) == [], "таймер чтения закрыл окно, оставленное Publish"
+    assert not sp._PENDING_CLOSE, "чтение считает профиль Publish своим"

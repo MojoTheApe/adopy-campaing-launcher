@@ -1377,7 +1377,7 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
                     save_split(out)
                 except Exception:
                     pass
-            if not held.started:
+            if not held.keep_tab:
                 try:
                     conn.page.close()  # _attach_only creates a separate owned tab
                 except Exception:

@@ -29,6 +29,17 @@ need themselves.
 - Telemetry: `spend_profile_started` and `spend_profile_closed_after_read`, with
   durations. `spend_profile_` steps are in the `cb-build-model` hold rule, and
   `tests/test_build_progress_model.py` now also scans `src/analysis_agent`.
+- Review of PR #583:
+  - A profile the read started on a slot shared with a Publish of the same profile
+    belongs to that Publish: the read never closes it, neither at once nor by timer.
+  - Before any close (at once or after the grace), the read checks the queue. If
+    another job holds or waits for the profile's slot, or got one since the read
+    started it (`ProfileSlots.grants`), the read only releases its own slot and leaves
+    the window to that job (`skipped: another_job`).
+  - After the slot is granted, the read checks again whether the profile is already
+    open. `/mlx-profile-open` does not take the profile lock, so the profile may have
+    been opened during the wait. If it is open, the read attaches and does not treat
+    the profile as its own.
 - Tests: `tests/test_reads_open_a_closed_profile.py` (fakes only, no live Multilogin).
 
 ## Screen-values probe: reads only by default, every capture is opt-in — ACL-1532
