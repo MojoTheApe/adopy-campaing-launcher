@@ -1,5 +1,32 @@
 # System history
 
+## Screen-values probe: reads only by default, every capture is opt-in — ACL-1532
+
+`scripts/probe_screen_values.py` measures whether our captures change a running
+Multilogin profile's screen values. Without flags it now only reads (`page.evaluate`,
+`Browser.getWindowForTarget`) and takes no capture, so a default run changes nothing.
+After review:
+
+- (a) `page.screenshot` and (b) `screenshots.capture` run only with
+  `--allow-viewport-reset`. The live run on 9943 (03.10) showed they reset the
+  profile's viewport (1919x1079 to 3837x2157 device px).
+- (c) CDP `Page.captureScreenshot` with clip and (d) without clip run only with
+  `--allow-cdp-capture`. The ACL-1529 review found in headless Chromium that (c) from
+  a new session resets another session's device-metrics override; (d) is unmeasured.
+  Both are skipped when the window is minimised. The docstring and `--help` say all this.
+- (c) and (d) run on their own async connection. Connecting, opening the session, the
+  target lookup and the capture each have a 20 s ceiling; a hang aborts the capture and
+  detaches the CDP session.
+- `--out` warns that the PNGs carry account data. A folder inside the repository is
+  refused unless it is under `output/`. The folder is created only after the account
+  lookup succeeds. The docstring example uses `output/acl1532_probe`.
+- Open tabs are printed as hosts only (Meta paths can carry ids and names). No open tabs
+  stops cleanly instead of raising IndexError.
+- `tests/test_probe_screen_values.py`: offline, with a fake page and context. It covers
+  the default run taking no capture, each flag enabling only its captures, `main`
+  passing the flags to `probe`, a timeout that fails if `asyncio.wait_for` is removed,
+  and `--out` handling.
+
 ## CI reuses a full green run of the same tree on promotion — ACL-1565
 
 Every task ran the full Windows suite (6 shards) and the installer build three times
