@@ -32,11 +32,16 @@ PROVABLE_EVENTS = {"push", "workflow_dispatch"}
 # Сколько последних коммитов с тем же деревом проверяем: продвижение даёт 2-3.
 MAX_CANDIDATES = 20
 
+# Версии Python полного прогона ci.yml. ACL-1581: PR без изменений зависимостей
+# и бутстрапа гоняет только 3.13 (scripts/acl_ci_scope.py), поэтому такой прогон
+# никогда не «полный»; push-прогоны и запасной список матрицы — эти версии.
+FULL_PYTHON_VERSIONS = ("3.11", "3.13")
+
 # Обязательные задания полного прогона для каждого workflow. Матрица ci.yml
 # сверяется с этим списком тестом (tests/test_acl_ci_reuse.py), чтобы новая
 # версия Python или шард не сделали «полным» прогон без них.
 REQUIRED_JOBS = {
-    "ci.yml": tuple(f"test ({python}, {shard})" for python in ("3.11", "3.13") for shard in (1, 2, 3))
+    "ci.yml": tuple(f"test ({python}, {shard})" for python in FULL_PYTHON_VERSIONS for shard in (1, 2, 3))
     + ("ACL verification",),
     "windows-installer.yml": ("Verify build inputs", "Build, install, repair, and uninstall",
                               "Installer verification"),
