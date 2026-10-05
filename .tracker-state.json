@@ -4904,7 +4904,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "606": {
+        "actor": "Worker-M1606R",
+        "session": "run_m1606r_1005",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1606-reopen-retry",
+        "worktree": "C:\\acl-1606-reopen-retry",
+        "id": "c9ade5af4c224e9bb49d781cd5ee3122",
+        "issue": 606,
+        "state": "implementing",
+        "started_at": "2026-10-05T17:35:31+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -6812,6 +6825,17 @@
         },
         "pr": 605,
         "queued_at": "2026-10-05T17:28:32+00:00"
+      },
+      "606": {
+        "implementers": [
+          {
+            "actor": "Worker-M1606R",
+            "session": "run_m1606r_1005"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-M1606R",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -7309,6 +7333,10 @@
       },
       "Worker-S1603C": {
         "session": "run_s1603c_1005",
+        "role": "Worker"
+      },
+      "Worker-M1606R": {
+        "session": "run_m1606r_1005",
         "role": "Worker"
       }
     },
@@ -12439,6 +12467,13 @@
         "issue": 603,
         "pr": 605,
         "actor": "Worker-S1603C"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-05T17:35:31+00:00",
+        "issue": 606,
+        "claim": "c9ade5af4c224e9bb49d781cd5ee3122",
+        "actor": "Worker-M1606R"
       }
     ],
     "policy": {
