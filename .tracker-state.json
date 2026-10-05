@@ -4808,9 +4808,11 @@
         "worktree": "C:\\acl-1588-any-account",
         "id": "484a4c918d0d4f1dbcb598c383b4776a",
         "issue": 588,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-05T14:04:31+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 599,
+        "report": "# ACL-1588 handoff (Worker-A1588M)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/599 (into stage), head bd41ce0e465135d4531aee882ce38d824e30989d\nBranch codex/acl-1588-any-account, worktree C:\\acl-1588-any-account, claim 484a4c918d0d4f1dbcb598c383b4776a\n\n## Filter sites\n- src/web/app.py api_accounts_overview, sheet-row loop: `owner != selected_cm -> continue` now skips only a row with no map entry (it goes to suggestions). Connected here -> always listed, with owner_hint.\n- same endpoint, local-only loop (map accounts absent from the sheet): filter removed.\n- same endpoint, suggestions: no longer limited to the selected CM; includes other managers' sheet accounts.\n- owner_hint \"owner in stats: X\" added to rows, shown in Accounts (report.html).\n- Left as is (numbers): get_selected_cm in _period_key / report_for_period (my_cm), cache.py _cm_key, team_library.py, goals cm. These filter stats only.\n- Home map (_build_account_map_view) and Builder (_add_linked_accounts_to_builder) take accounts from the map and country links, no CM filter: nothing to change. Their tests pass before and after (guards, not red-before).\n- Read spend / Publish: no CM/owner filter found in src.\n- JS: amapConnect no /account-links when Country empty; amapOpenFoundProfile bounded 75 s (probe 60 s), timeout message, row still saved with profile_id/folder_id/instance; AMAP_LAST_FOUND pre-fills manual form (profile option, folder, instance, ad account).\n\n## Tests\n- tests/test_acl_1588_any_account.py (9 + node harness tests/acl_1588_connect_harness.cjs): 4 server tests fail on old app.py; harness fails on old template.\n- Affected set (11 files incl. test_acl_test_platform.py): 202 passed. acl_scan_secrets: clean.\n\n## Remains for live check\n- FacebookDoc30 appears for buyer Evgeni Sedin after connecting; hint text visible in Accounts.\n- Connect on a found profile whose /mlx-profile-open hangs: message after ~75 s, row saved with profile. Timed-out connect with a country still reloads at once via amapSend (message not readable then).\n- Server-side: /mlx-profile-open itself still has no server timeout (only the client waits)."
       }
     },
     "tasks": {
