@@ -49,11 +49,14 @@ WINDOWS_SMOKE = (
 
 _SHELLS = re.compile(r"(?:powershell|pwsh)(?:\.exe)?", re.I)
 _PS1 = re.compile(r"\.ps1\b", re.I)
-_LOCALAPPDATA = re.compile(r"LOCALAPPDATA", re.I)
-# Windows-путь в утверждении: диск («C:\»), переменная («%X%\») или хотя бы два
-# сегмента через одиночную обратную косую без метасимволов регулярок.
+# Переменные окружения Windows (имя целиком, не часть слова).
+# Регистр важен: «AppData» в строке пути — данные, «APPDATA» — переменная окружения.
+_WIN_ENV = re.compile(r"(?<![A-Za-z])((?i:LOCALAPPDATA)|APPDATA|USERPROFILE|PROGRAMDATA|PROGRAMFILES|SYSTEMROOT|COMSPEC)"
+                      r"(?![A-Za-z])")
+# Windows-путь: диск («C:\»), переменная («%X%\»), UNC («\\server\»).
 _DRIVE = re.compile(r"(?<![A-Za-z])[A-Za-z]:\\")
 _ENV_PATH = re.compile(r"%\w+%\\")
+_UNC = re.compile(r"^\\\\[\w.$-]+\\")
 _REGEX_META = re.compile(r"[\^$*+?()\[\]{}|]")
 # Сегмент пути без пробелов по краям: «A \ B» (разделитель групп) — не путь.
 _SEGMENT = re.compile(r"[\w.%~-](?:[\w .%~-]*[\w.%~-])?")
@@ -62,27 +65,69 @@ _SEGMENT = re.compile(r"[\w.%~-](?:[\w .%~-]*[\w.%~-])?")
 # суффикса это слишком часто просто данные.
 _WINDOWS_COMMANDS = {"cmd", "taskkill", "tasklist", "robocopy", "icacls", "wmic", "schtasks",
                      "powershell", "pwsh", "where.exe", "reg.exe", "net.exe", "attrib.exe"}
+# Строка-команда с shell=True: первое слово — Windows-программа или встроенная команда cmd.
+_WINDOWS_SHELL_WORDS = _WINDOWS_COMMANDS | {"dir", "del", "copy", "xcopy", "ver", "start", "cls", "mklink",
+                                            "findstr", "ipconfig", "systeminfo", "sc", "reg", "where"}
+_WINDOWS_MODULES = {"msvcrt", "winreg", "_winreg", "_winapi", "winsound", "pywintypes", "pythoncom", "wmi",
+                    "winerror", "servicemanager"}
+_PLATFORM_CONSTS = {"win32", "Windows", "cygwin", "win", "nt"}
+_WINDLL = ("windll", "WinDLL", "oledll")
+# Имена, которые существуют только на Windows (атрибут, имя из from-импорта или getattr).
+_WINDOWS_ATTRS = {"ProactorEventLoop", "WindowsSelectorEventLoopPolicy", "WindowsProactorEventLoopPolicy",
+                  "startfile", "CREATE_NO_WINDOW", "CREATE_NEW_CONSOLE", "CREATE_NEW_PROCESS_GROUP",
+                  "DETACHED_PROCESS", "CTRL_BREAK_EVENT", "getwindowsversion", "STARTUPINFO",
+                  "STARTF_USESHOWWINDOW", "SW_HIDE", "WinError", *_WINDLL}
+_PLATFORM_HELPER = re.compile(r"^_*(?:is_?windows|on_?windows|is_?win|is_?win32|is_?nt)$", re.I)
+_SUBPROCESS_CALLS = {"subprocess.run", "subprocess.call", "subprocess.Popen", "subprocess.check_call",
+                     "subprocess.check_output", "os.system", "os.popen"}
+_IMPORT_CALLS = {"pytest.importorskip", "importlib.import_module", "__import__"}
 
 
-def _windows_path_literal(value: str) -> bool:
+def _is_windows_module(name: str) -> bool:
+    root = name.split(".")[0]
+    return root in _WINDOWS_MODULES or root.startswith("win32")
+
+
+def _windows_path_literal(value: str, *, loose: bool = True) -> bool:
+    """Windows-путь в строке. ``loose`` — ещё и «a\\b» без метасимволов регулярок
+    (так — только в утверждениях: вне их это слишком часто данные)."""
     if "\\" not in value:
         return False
-    if _DRIVE.search(value) or _ENV_PATH.search(value):
+    if _DRIVE.search(value) or _ENV_PATH.search(value) or _UNC.match(value):
         return True
-    if _REGEX_META.search(value) or "\n" in value:
+    if not loose or _REGEX_META.search(value) or "\n" in value:
         return False
     parts = value.split("\\")
     return len(parts) >= 2 and all(_SEGMENT.fullmatch(p) for p in parts)
 
 
-def _dotted(node) -> str:
-    """«os.name», «sys.platform», «ctypes.windll» для цепочки атрибутов."""
+def _aliases(tree) -> dict[str, str]:
+    """Имя в файле → настоящее: ``import os as _o`` даёт ``_o -> os``, а
+    ``from sys import platform`` даёт ``platform -> sys.platform``."""
+    found: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    found[alias.asname] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            for alias in node.names:
+                found[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+    return found
+
+
+def _dotted(node, aliases: dict[str, str] | None = None) -> str:
+    """«os.name», «sys.platform», «platform.system()» для цепочки атрибутов и вызова."""
+    aliases = aliases or {}
+    if isinstance(node, ast.Call):
+        inner = _dotted(node.func, aliases)
+        return f"{inner}()" if inner else ""
     names = []
     while isinstance(node, ast.Attribute):
         names.append(node.attr)
         node = node.value
     if isinstance(node, ast.Name):
-        names.append(node.id)
+        names.append(aliases.get(node.id, node.id))
         return ".".join(reversed(names))
     return ""
 
@@ -92,6 +137,12 @@ def _parse(source: str):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return ast.parse(source)
+
+
+def _first_word(text: str) -> str:
+    words = text.strip().replace("\\", "/").split()
+    word = words[0].rsplit("/", 1)[-1].lower() if words else ""
+    return word[:-4] if word.endswith(".exe") and word[:-4] in _WINDOWS_COMMANDS else word
 
 
 def _windows_command(node) -> bool:
@@ -107,6 +158,35 @@ def _windows_command(node) -> bool:
     return name.endswith(".exe") and name[:-4] in _WINDOWS_COMMANDS
 
 
+def _leading_text(node) -> str | None:
+    """Начало строки-команды: константа, f-строка, «'cmd ' + x», «'cmd %s' % x»."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr) and node.values:
+        return _leading_text(node.values[0])
+    if isinstance(node, ast.BinOp):
+        return _leading_text(node.left)
+    return None
+
+
+def _shell_string_command(node, aliases) -> bool:
+    """``subprocess.run('taskkill /F /PID 1', shell=True)`` и ``os.system('cmd /c x')``."""
+    if not isinstance(node, ast.Call) or not node.args:
+        return False
+    func = _dotted(node.func, aliases)
+    if func not in _SUBPROCESS_CALLS:
+        return False
+    text = _leading_text(node.args[0])
+    if text is None:
+        return False
+    if func.startswith("subprocess.") and not any(
+            kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True
+            for kw in node.keywords):
+        return False
+    word = _first_word(text)
+    return word in _WINDOWS_SHELL_WORDS or word.endswith((".bat", ".cmd", ".ps1"))
+
+
 def _docstring_ids(tree) -> set[int]:
     ids = set()
     for node in ast.walk(tree):
@@ -118,15 +198,51 @@ def _docstring_ids(tree) -> set[int]:
     return ids
 
 
-def _platform_compare(node) -> bool:
-    """``os.name == "nt"``, ``sys.platform != "win32"`` и т.п."""
+def _string_consts(node) -> set[str]:
+    """Строки стороны сравнения, в том числе внутри ``("nt",)`` / ``["win32"]``."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {node.value}
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return {c for e in node.elts for c in _string_consts(e)}
+    return set()
+
+
+def _platform_compare(node, aliases=None) -> bool:
+    """``os.name == "nt"``, ``os.name in ("nt",)``, ``"win" in sys.platform``,
+    ``platform.system() == "Windows"``; ``from sys import platform`` и ``import os as _o`` тоже."""
     if not isinstance(node, ast.Compare):
         return False
     sides = [node.left, *node.comparators]
-    names = {_dotted(s) for s in sides}
-    consts = {s.value for s in sides if isinstance(s, ast.Constant) and isinstance(s.value, str)}
-    return bool(({"os.name"} & names and "nt" in consts)
-                or ({"sys.platform", "platform.system()"} & names and consts & {"win32", "Windows", "cygwin"}))
+    names = {_dotted(s, aliases) for s in sides}
+    consts = set().union(*(_string_consts(s) for s in sides))
+    return bool(("os.name" in names and "nt" in consts)
+                or ({"sys.platform", "platform.system()", "platform.platform()"} & names
+                    and consts & _PLATFORM_CONSTS))
+
+
+def _platform_string(expr: str) -> bool:
+    """Строковое условие ``skipif("sys.platform == 'win32'")``."""
+    try:
+        tree = ast.parse(expr.strip(), mode="eval")
+    except SyntaxError:
+        return False
+    return any(_platform_compare(n, {}) or (isinstance(n, ast.Call) and
+                                            _dotted(n.func).endswith("platform.startswith"))
+               for n in ast.walk(tree))
+
+
+def _condition_ids(tree) -> set[int]:
+    """Узлы внутри условий (if, тернарное, assert, skipif): там помощник вроде IS_WINDOWS что-то решает."""
+    ids = set()
+    for node in ast.walk(tree):
+        tests = []
+        if isinstance(node, (ast.If, ast.IfExp, ast.While, ast.Assert)):
+            tests = [node.test]
+        elif isinstance(node, ast.Call) and _dotted(node.func).split(".")[-1] in ("skipif", "skipIf", "skipUnless"):
+            tests = list(node.args[:1])
+        for t in tests:
+            ids.update(id(n) for n in ast.walk(t))
+    return ids
 
 
 def windows_signals(source: str) -> list[tuple[int, str, str]]:
@@ -134,10 +250,21 @@ def windows_signals(source: str) -> list[tuple[int, str, str]]:
 
     Разбор по AST: строка в комментарии или в докстринге — не признак, а
     ``import msvcrt`` внутри теста — признак, даже если тест его «прячет»
-    за ``if os.name == "nt"`` (это само по себе второй признак)."""
+    за ``if os.name == "nt"`` (это само по себе второй признак).
+
+    Правила: модули Windows (в import, importorskip, import_module, __import__);
+    платформенные ветки (os.name, sys.platform, platform.system(), в том числе
+    через ``in``, from-импорт и псевдоним, и строкой в skipif); помощники
+    IS_WINDOWS из импорта в условиях; Windows-команды списком или строкой с
+    shell=True; переменные окружения Windows; API, которых нет вне Windows
+    (windll, ProactorEventLoop, os.startfile, CREATE_NO_WINDOW, ...); Windows-пути
+    с обратной косой и голая константа из одной обратной косой."""
     tree = _parse(source)
     lines = source.splitlines()
+    aliases = _aliases(tree)
+    imported = {a.asname or a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names}
     docstrings = _docstring_ids(tree)
+    conditions = _condition_ids(tree)
     asserted = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Assert):
@@ -156,33 +283,61 @@ def windows_signals(source: str) -> list[tuple[int, str, str]]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                root = alias.name.split(".")[0]
-                if root in ("msvcrt", "winreg", "_winapi", "winsound"):
-                    hit(node, root)
-        elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in (
-                "msvcrt", "winreg", "_winapi", "winsound"):
-            hit(node, node.module.split(".")[0])
+                if _is_windows_module(alias.name):
+                    hit(node, alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            module = (node.module or "").split(".")[0]
+            if _is_windows_module(module):
+                hit(node, module)
+            for a in node.names:
+                if module == "ctypes" and a.name in _WINDLL:
+                    hit(node, "windll")
+                elif a.name in _WINDOWS_ATTRS and a.name not in _WINDLL:
+                    hit(node, "windows-api")
         elif isinstance(node, ast.Attribute):
-            dotted = _dotted(node)
-            if dotted.startswith(("msvcrt.", "winreg.")) and isinstance(node.ctx, ast.Load):
-                pass  # сам import уже признак; атрибуты не дублируем
-            elif dotted.endswith(".windll") or dotted == "windll" or dotted.endswith(".WinDLL"):
+            if node.attr in _WINDLL:
                 hit(node, "windll")
+            elif node.attr in _WINDOWS_ATTRS and isinstance(node.ctx, ast.Load):
+                hit(node, "windows-api")
+            elif _PLATFORM_HELPER.match(node.attr) and id(node) in conditions:
+                hit(node, "platform-helper")
+        elif isinstance(node, ast.Name):
+            if node.id == "windll":
+                hit(node, "windll")
+            elif _PLATFORM_HELPER.match(node.id) and id(node) in conditions and node.id in imported:
+                hit(node, "platform-helper")
+            elif node.id in _WINDOWS_ATTRS and node.id in imported and isinstance(node.ctx, ast.Load):
+                hit(node, "windows-api")
         elif _windows_command(node):
             hit(node, "windows-command")
-        elif isinstance(node, ast.Compare) and _platform_compare(node):
-            hit(node, "platform-branch")
-        elif isinstance(node, ast.Call) and _dotted(node.func) == "sys.platform.startswith":
-            hit(node, "platform-branch")
+        elif isinstance(node, ast.Compare):
+            if _platform_compare(node, aliases):
+                hit(node, "platform-branch")
+        elif isinstance(node, ast.Call):
+            func = _dotted(node.func, aliases)
+            first = node.args[0] if node.args else None
+            text = first.value if isinstance(first, ast.Constant) and isinstance(first.value, str) else None
+            if func.endswith("platform.startswith") and func.split(".")[0] in ("sys", "platform"):
+                hit(node, "platform-branch")
+            elif func.split(".")[-1] in ("skipif", "skipIf") and text is not None and _platform_string(text):
+                hit(node, "platform-branch")
+            elif func in _IMPORT_CALLS and text is not None and _is_windows_module(text):
+                hit(node, text.split(".")[0])
+            elif func == "getattr" and len(node.args) > 1 and isinstance(node.args[1], ast.Constant) \
+                    and node.args[1].value in _WINDOWS_ATTRS:
+                hit(node, "windll" if node.args[1].value in _WINDLL else "windows-api")
+            elif _shell_string_command(node, aliases):
+                hit(node, "windows-command")
         elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
             value = node.value
+            env = _WIN_ENV.search(value)
             if _SHELLS.fullmatch(value.strip()) or re.match(r"(?:powershell|pwsh)(?:\.exe)?\s", value, re.I):
                 hit(node, "powershell")
             elif _PS1.search(value):
                 hit(node, ".ps1")
-            elif _LOCALAPPDATA.search(value):
-                hit(node, "LOCALAPPDATA")
-            elif id(node) in asserted and _windows_path_literal(value):
+            elif env:
+                hit(node, env.group(1).upper())
+            elif value == "\\" or _windows_path_literal(value, loose=id(node) in asserted):
                 hit(node, "backslash-path")
     return sorted(set(hits))
 

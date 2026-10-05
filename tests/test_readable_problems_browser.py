@@ -37,7 +37,7 @@ def _result(failures, *, success=True):
     apply_step_failures(r, failures)
     r.run_id = "cc8fcfa17ae9"
     r.campaign_id = "120200000000001"
-    r.screenshot_paths = [r"C:\acl\output\rpa_pages\cc8fcfa17ae9\ad_copy.png"]
+    r.screenshot_paths = [r"C:\acl\output\rpa_pages\cc8fcfa17ae9\ad_copy.png"]  # linux-ok: a Windows path as opaque data, never touched on disk
     r.steps_completed.insert(0, "campaign_created")
     return r.to_job_dict()
 

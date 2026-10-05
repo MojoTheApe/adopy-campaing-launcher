@@ -111,11 +111,52 @@ CAUGHT = {
     "subprocess.run(['pwsh', '-c', 'x'])": "powershell",  # linux-ok: guard sample
     "HARNESS = 'tests/bootstrap_windows_harness.ps1'": ".ps1",  # linux-ok: guard sample
     "base = os.environ['LOCALAPPDATA']": "LOCALAPPDATA",  # linux-ok: guard sample
-    "assert path == 'C:\\\\Users\\\\buyer\\\\ACL'": "backslash-path",
-    "assert 'scripts\\\\acl_smoke.py' in text": "backslash-path",
+    "assert path == 'C:\\\\Users\\\\buyer\\\\ACL'": "backslash-path",  # linux-ok: guard sample
+    "assert 'scripts\\\\acl_smoke.py' in text": "backslash-path",  # linux-ok: guard sample
     "subprocess.run(['taskkill', '/F', '/T', '/PID', '1'])": "windows-command",
     "subprocess.run(['cmd.exe', '/c', 'x'])": "windows-command",
     "subprocess.run(['install_acl.bat'])": "windows-command",
+    # ACL-1582 review: каждый из этих образцов раньше проходил молча.
+    "platform.system() == 'Windows'": "platform-branch",
+    "from platform import system\nIS = system() == 'Windows'": "platform-branch",
+    "if os.name in ('nt',):\n    pass": "platform-branch",
+    "WIN = 'win' in sys.platform": "platform-branch",
+    "from sys import platform\nif platform == 'win32':\n    pass": "platform-branch",
+    "from os import name\nif name == 'nt':\n    pass": "platform-branch",
+    "import os as _o\nif _o.name == 'nt':\n    pass": "platform-branch",
+    "import sys as _s\nif _s.platform.startswith('win'):\n    pass": "platform-branch",
+    "@pytest.mark.skipif(\"sys.platform == 'win32'\", reason='x')\ndef test_a():\n    pass": "platform-branch",
+    "@pytest.mark.skipif('os.name != \"nt\"', reason='x')\ndef test_a():\n    pass": "platform-branch",
+    "pytest.importorskip('msvcrt')": "msvcrt",
+    "importlib.import_module('msvcrt')": "msvcrt",
+    "from importlib import import_module\nimport_module('winreg')": "winreg",
+    "__import__('winreg')": "winreg",
+    "import win32api": "win32api",
+    "import win32con": "win32con",
+    "import pywintypes": "pywintypes",
+    "import wmi": "wmi",
+    "from config.paths import IS_WINDOWS\n@pytest.mark.skipif(not IS_WINDOWS, reason='x')\ndef test_a():\n    pass": "platform-helper",
+    "from helpers import is_windows\nif is_windows():\n    pass": "platform-helper",
+    "from config import paths\nif paths.IS_WINDOWS:\n    pass": "platform-helper",
+    "subprocess.run('taskkill /F /IM chrome.exe', shell=True)": "windows-command",
+    "subprocess.check_output('cmd /c dir', shell=True)": "windows-command",
+    "os.system('powershell -c x')": "windows-command",
+    "subprocess.run(f'robocopy {a} {b}', shell=True)": "windows-command",
+    "home = os.environ['USERPROFILE']": "USERPROFILE",  # linux-ok: guard sample
+    "base = os.getenv('APPDATA')": "APPDATA",  # linux-ok: guard sample
+    "base = os.environ.get('PROGRAMDATA')": "PROGRAMDATA",  # linux-ok: guard sample
+    "loop = asyncio.ProactorEventLoop()": "windows-api",
+    "asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())": "windows-api",
+    "os.startfile('x')": "windows-api",
+    "subprocess.Popen(['x'], creationflags=subprocess.CREATE_NO_WINDOW)": "windows-api",
+    "from subprocess import CREATE_NO_WINDOW": "windows-api",
+    "getattr(ctypes, 'windll')": "windll",
+    "from ctypes import windll": "windll",
+    "x = getattr(subprocess, 'CREATE_NO_WINDOW')": "windows-api",
+    "PATH = 'C:\\\\Users\\\\x'": "backslash-path",  # linux-ok: guard sample
+    "SHARE = '\\\\\\\\server\\\\share'": "backslash-path",  # linux-ok: guard sample
+    "BS = '\\\\'": "backslash-path",  # linux-ok: guard sample
+    "parts = name.split('\\\\')": "backslash-path",  # linux-ok: guard sample
 }
 
 
@@ -134,11 +175,12 @@ def test_the_guard_reports_line_and_text():
     "# import msvcrt   (a comment)\nx = 1\n",
     "assert re.search(r'\\d+\\.\\d+', text)\n",                # регулярка, не путь
     "assert groups('A \\\\ B') == ['A', 'B']\n",               # разделитель, не путь
-    "PATH = 'C:\\\\Users\\\\x'\n",                             # путь не в утверждении
     "assert p.as_posix() == 'tests/test_x.py'\n",
     "monkeypatch.setattr(rt.sys, 'platform', 'win32')\n",     # подмена платформы — нейтральна
     "rows = ['where', 'what']\n",
     "x = 'taskkill'\n",                                        # упоминание, не команда
+    "p = 'C:/Users/x/AppData/Local/ACL'\n",                    # AppData в строке пути — данные
+    "subprocess.run('echo hi', shell=True)\n",                 # shell-строка не с Windows-программы
 ])
 def test_the_guard_ignores_platform_neutral_code(source):
     assert tp.windows_signals(source) == []

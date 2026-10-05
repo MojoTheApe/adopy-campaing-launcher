@@ -252,7 +252,7 @@ def test_only_the_last_few_shots_per_account_are_kept(local, monkeypatch):
 
 @pytest.mark.parametrize("bad", [
     "", "..", "../account_spend", "..\\account_spend", "status_x/../../account_spend",
-    "account_spend", "status_..", "status_a.png", "C:\\Windows\\win", "status_" + "a" * 300,
+    "account_spend", "status_..", "status_a.png", "C:\\Windows\\win", "status_" + "a" * 300,  # linux-ok: a hostile id as data, never opened as a path on Linux
 ])
 def test_a_shot_id_cannot_leave_the_folder(local, bad):
     (local / "account_spend.json").write_text("{}", encoding="utf-8")
@@ -319,12 +319,16 @@ def test_the_endpoint_refuses_unknown_ids_and_paths(local, client, bad):
 # папкой лежат настоящие снимки, и каждый маршрут сначала проверяет, что без
 # защит файл БЫЛ БЫ найден (`_naive`), — иначе тест ничего не доказывает.
 
-BS = "\\"
+BS = "\\"  # linux-ok: a hostile id as data, never opened as a path on Linux
 OTHER_PNG = PNG + b"outside"  # отличимые байты: в ответе их быть не должно
 
 
 def _outside(local: Path) -> dict[str, str]:
-    """Разложить настоящие PNG вне папки снимков; вернуть id-маршрут → id."""
+    """Разложить настоящие PNG вне папки снимков; вернуть id-маршрут → id.
+
+    Маршруты с обратной косой («*-backslash») живут в
+    tests/test_status_screenshot_backslash_windows.py: `\` — разделитель
+    только на Windows (ACL-1582)."""
     (local / "spend_shots").mkdir(exist_ok=True)
     (local / "escape.png").write_bytes(OTHER_PNG)                       # родитель
     (local / "spend_shots_evil").mkdir(exist_ok=True)                   # сосед с похожим именем
@@ -335,20 +339,14 @@ def _outside(local: Path) -> dict[str, str]:
     far_id = str(far / "escape")
     return {
         "parent": "../escape",
-        "parent-backslash": ".." + BS + "escape",
         "parent-through-subdir": "status_x/../../escape",
-        "parent-through-subdir-backslash": "status_x" + BS + ".." + BS + ".." + BS + "escape",
         "sibling": "../spend_shots_evil/status_x",
-        "sibling-backslash": ".." + BS + "spend_shots_evil" + BS + "status_x",
         "absolute": far_id,
         "absolute-forward-slashes": far_id.replace(BS, "/"),
     }
 
 
-ROUTES = [
-    "parent", "parent-backslash", "parent-through-subdir", "parent-through-subdir-backslash",
-    "sibling", "sibling-backslash", "absolute", "absolute-forward-slashes",
-]
+ROUTES = ["parent", "parent-through-subdir", "sibling", "absolute", "absolute-forward-slashes"]
 
 
 def _naive(local: Path, shot_id: str) -> Path:

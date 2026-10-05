@@ -33,7 +33,7 @@ def local_dir(tmp_path, monkeypatch):
 
 def test_local_config_dir_is_outside_the_checkout(local_dir, monkeypatch):
     monkeypatch.delenv("ACL_CONFIG_DIR", raising=False)
-    resolved = paths.get_local_config_dir().replace("/", "\\").lower()
+    resolved = paths.get_local_config_dir().replace("/", "\\").lower()  # linux-ok: string normalisation of a path, runs on any OS
     checkout = str(paths.__file__).rsplit("\\config\\", 1)[0].lower()
     assert not resolved.startswith(checkout), (
         f"конфиг машины оказался внутри чекаута ({resolved}) — обновление или "

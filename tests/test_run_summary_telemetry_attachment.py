@@ -39,7 +39,7 @@ URL = (f"https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={ACT_ID
        f"&business_id={BIZ_ID}&selected_campaign_ids=555")
 EMAIL = "ivan.petrov@example.com"
 TOKEN = "EAAB" + "x7Yq" * 12
-USER_PATH = r"C:\Users\ivan.petrov\AppData\Local\ACL\workspace\output\shot.png"
+USER_PATH = r"C:\Users\ivan.petrov\AppData\Local\ACL\workspace\output\shot.png"  # linux-ok: a Windows path as opaque data, never touched on disk
 SHORT_ACT = "act_" + "98765"
 PROFILE = "-".join(("3f2b8c1e", "9a7d", "4e21", "b5c4", "0d1e2f3a4b5c"))
 # Номер задания дешборда — наш uuid4; как и в `acl_sentry`, едет без дефисов.
@@ -180,7 +180,7 @@ def test_ids_urls_emails_tokens_and_user_paths_do_not_survive(sentry, journal):
         _row(RUN, "ad_copy", False, note=f"token={TOKEN} for {EMAIL} at {USER_PATH}",
              job=JOB),
         _row(RUN, "publish_check", None,
-             diag={"nested": [{"href": URL, "path": USER_PATH.replace("\\", "/")}]}),
+             diag={"nested": [{"href": URL, "path": USER_PATH.replace("\\", "/")}]}),  # linux-ok: a Windows path as opaque data, never touched on disk
     ])
     _send()
     event = _summary_event(sentry)
@@ -304,7 +304,7 @@ def test_the_background_send_attaches_too(sentry, journal):
 # ── ревью PR #556 ─────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("path, name", [
-    (r"C:\Users\Ivan Petrov\AppData\Local\ACL\shot.png", "Petrov"),        # F1: пробел в имени
+    (r"C:\Users\Ivan Petrov\AppData\Local\ACL\shot.png", "Petrov"),        # F1: пробел в имени  # linux-ok: a Windows path as opaque data, never touched on disk
     ("C:/Users/Ivan Petrov/AppData/Local/ACL/shot.png", "Petrov"),
     (r"\srv\Users\ivan.petrov\share\run.log", "ivan.petrov"),             # UNC
     ("/Users/ivan.petrov/Library/ACL/run.log", "ivan.petrov"),             # M3b: macOS

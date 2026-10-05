@@ -12,8 +12,8 @@ Every `tests/test_*.py` lands in exactly one shard (checked by
 tests/test_acl_test_shard.py), so the shards together are the full suite.
 Files are spread by a rough cost, largest first onto the lightest shard:
 the number of tests in the file, and a flat extra for a file that starts a
-real browser, Node or another process, because starting Chromium costs more
-than most whole test files. Deterministic: the same tree gives the same split.
+real browser (more), Node or another process, because starting Chromium costs
+more than most whole test files. Deterministic: the same tree gives the same split.
 
 ACL-1582: ``--platform linux`` shards only the files without the
 ``windows_only`` marker, ``--platform windows`` the marked files plus the
@@ -36,8 +36,12 @@ TESTS = ROOT / "tests"
 
 _TEST_DEF = re.compile(r"^\s*(?:async\s+)?def\s+test_", re.M)
 _PARAM = re.compile(r"@pytest\.mark\.parametrize\(")
-_HEAVY = re.compile(r"sync_playwright|chromium\.launch|subprocess\.(?:run|Popen)|TestClient\(")
+_BROWSER = re.compile(r"sync_playwright|chromium\.launch")
+_HEAVY = re.compile(r"subprocess\.(?:run|Popen)|TestClient\(")
 HEAVY_EXTRA = 25
+# ACL-1582: на Linux шард с большим числом файлов, запускающих Chromium, шёл
+# 14 минут против 9 у остальных: запуск браузера дороже, чем другой процесс.
+BROWSER_EXTRA = 45
 
 
 def test_files() -> list[Path]:
@@ -47,7 +51,8 @@ def test_files() -> list[Path]:
 def cost(path: Path) -> int:
     text = path.read_text(encoding="utf-8", errors="replace")
     tests = len(_TEST_DEF.findall(text)) + 2 * len(_PARAM.findall(text))
-    return max(1, tests) + (HEAVY_EXTRA if _HEAVY.search(text) else 0)
+    extra = BROWSER_EXTRA if _BROWSER.search(text) else HEAVY_EXTRA if _HEAVY.search(text) else 0
+    return max(1, tests) + extra
 
 
 def shards(count: int, platform: str | None = None) -> list[list[Path]]:

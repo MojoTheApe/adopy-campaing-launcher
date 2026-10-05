@@ -76,3 +76,25 @@ def test_an_empty_shard_fails_instead_of_passing_with_no_tests(monkeypatch, caps
     monkeypatch.setattr(platforms, "select", lambda platform: one)
     assert shard.main(["--platform", "windows", "2", "2"]) == 1
     assert "no test files" in capsys.readouterr().err
+
+
+# --- ACL-1582: a browser file weighs more, so Chromium-heavy files spread over the shards -----------
+
+def test_a_file_that_launches_chromium_weighs_more_than_one_that_starts_a_process(tmp_path, monkeypatch):
+    body = "def test_a():\n    pass\n\n\ndef test_b():\n    pass\n"
+    plain = tmp_path / "test_plain.py"
+    proc = tmp_path / "test_proc.py"
+    browser = tmp_path / "test_browser.py"
+    plain.write_text(body, encoding="utf-8")
+    proc.write_text("import subprocess\n" + body + "subprocess.run(['x'])\n", encoding="utf-8")
+    browser.write_text("from playwright.sync_api import sync_playwright\n" + body, encoding="utf-8")
+    assert shard.cost(plain) == 2
+    assert shard.cost(proc) == 2 + shard.HEAVY_EXTRA
+    assert shard.cost(browser) == 2 + shard.BROWSER_EXTRA
+    assert shard.cost(plain) < shard.cost(proc) < shard.cost(browser)
+
+
+def test_the_browser_files_are_spread_evenly_over_the_linux_shards():
+    counts = [sum(1 for p in part if shard._BROWSER.search(p.read_text(encoding="utf-8", errors="replace")))
+              for part in shard.shards(3, "linux")]
+    assert max(counts) - min(counts) <= 3, counts

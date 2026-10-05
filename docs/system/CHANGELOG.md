@@ -6,14 +6,32 @@ Every test ran on Windows runners (6 jobs per run), whose minutes bill at 2x Lin
 although most tests are pure logic, fixtures and Chromium bench pages.
 
 - `windows_only` pytest marker, module-level with a required reason, registered in
-  `tests/conftest.py`. 12 of 358 test files carry it (msvcrt locks, 8.3 short paths,
+  `tests/conftest.py`. 14 of 363 test files carry it (msvcrt locks, 8.3 short paths,
   `install_acl.bat`/cmd, the PowerShell bootstrap and launcher contract, the Windows
-  runtime layout, Windows session/screen APIs, `taskkill`, drive-letter paths); the
-  other 346 run on Linux. `python scripts/acl_test_platform.py report` lists the reasons.
+  runtime layout, Windows session/screen APIs, `taskkill`, drive-letter paths, backslash
+  path traversal of the status screenshot, cross-process lock races); the other 349 run
+  on Linux. `python scripts/acl_test_platform.py report` lists the reasons.
 - Guard `tests/test_acl_test_platform.py` (AST, also in the fast scope job): an unmarked
-  file may not import `msvcrt`/`winreg`, use `windll`, branch on `os.name`/`sys.platform`
-  for Windows, call `powershell`/`pwsh` or Windows commands, reference `.ps1` or
-  `LOCALAPPDATA`, or assert on backslash paths. Data-only lines take `# linux-ok: <why>`.
+  file may not
+  - import a Windows module (`msvcrt`, `winreg`, `_winapi`, `winsound`, `win32*`,
+    `pywintypes`, `wmi`), also via `pytest.importorskip`, `importlib.import_module`
+    or `__import__`;
+  - branch on the platform (`os.name`, `sys.platform`, `platform.system()`; `==`, `in`,
+    `startswith`; `from sys import platform`, `import os as _o`; a string `skipif`), or
+    use an imported `IS_WINDOWS`/`is_windows` helper in a condition or `skipif`;
+  - use `windll`, `ProactorEventLoop`, `os.startfile`, `CREATE_NO_WINDOW`, `getattr(ctypes, "windll")`;
+  - call `powershell`/`pwsh`, a Windows command as a list or as a `shell=True` string,
+    or reference `.ps1`, `LOCALAPPDATA`, `APPDATA`, `USERPROFILE`, `PROGRAMDATA`;
+  - hold a Windows path literal (drive letter with a backslash, a UNC share, `%X%` plus a backslash)
+    or a bare one-backslash string constant, anywhere; a multi-segment `a\b` string only in an `assert`.
+  Data-only lines take `# linux-ok: <why>`.
+- Review fixes: the first Linux run failed 18 backslash-traversal cases in
+  `test_status_screenshot.py`; they moved to `test_status_screenshot_backslash_windows.py`
+  (108 cases before, 90 + 18 after). The two cross-process lock tests
+  (`test_processes_preserve_each_update`, `test_multiple_processes_do_not_lose_writes`)
+  moved to `test_cross_process_locks_windows.py` (msvcrt locking + os.replace sharing
+  violations, ACL-1419). The shard cost model weighs a Chromium-launching file above one
+  that starts another process, so Linux shards get an even share of browser files.
 - `scripts/acl_test_shard.py --platform linux|windows`; an empty shard now fails.
 - `ci.yml`: `linux tests (3.11|3.13, 1..3)` on ubuntu-latest (Chromium with
   `--with-deps`; the Python list comes from the scope job per ACL-1581, so most PRs
@@ -24,7 +42,7 @@ although most tests are pure logic, fixtures and Chromium bench pages.
   layout (`test (py, shard)`) are refused, with a clear message on the tag path.
 - Not proven locally: this laptop has neither WSL nor Docker, so the Linux selection
   first runs in CI. A file that fails there only because of Windows paths or CRLF gets
-  the marker.
+  the marker (the screenshot and lock cases above were exactly that).
 
 ## CI: one Python on PRs, superseded PR runs cancelled, installer job stops at 15 min — ACL-1581
 
