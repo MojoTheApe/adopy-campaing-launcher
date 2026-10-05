@@ -110,7 +110,8 @@ def test_main_push_reuses_the_green_stage_run_of_the_same_tree(promotion):
     api, push = green_api(promotion["stage"])
     result = decide(promotion, api)
     assert result == {"windows": False, "reason": "reused-green-full-run-of-same-tree",
-                      "reused_from": push["html_url"], "tree": promotion["tree"], "commit": promotion["stage"]}
+                      "reused_from": push["html_url"], "tree": promotion["tree"], "commit": promotion["stage"],
+                      "python": ["3.11", "3.13"]}
     assert reuse.summary_line(result["reused_from"], result["tree"]) == (f"Reused full results of run {push['html_url']} "
                                           f"(same tree {promotion['tree']})")
 
@@ -262,7 +263,8 @@ def test_cli_writes_reuse_outputs_and_summary(promotion, monkeypatch, tmp_path_f
         monkeypatch.setenv(key, value)
     monkeypatch.setattr("sys.argv", ["acl_ci_scope.py", "--event-name", "push", "--event-file", str(out / "none")])
     scope.main()
-    assert (out / "o").read_text(encoding="utf-8") == f"windows=false\nreused_from={push['html_url']}\n"
+    assert (out / "o").read_text(encoding="utf-8") == (f"windows=false\nreused_from={push['html_url']}\n"
+                                                       'python=["3.11", "3.13"]\n')
     assert (out / "s").read_text(encoding="utf-8").strip() == (
         f"Reused full results of run {push['html_url']} (same tree {promotion['tree']})")
 
@@ -273,7 +275,7 @@ def test_cli_without_token_runs_in_full(monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "o"))
     monkeypatch.setattr("sys.argv", ["acl_ci_scope.py", "--event-name", "push", "--event-file", str(tmp_path / "x")])
     scope.main()
-    assert (tmp_path / "o").read_text(encoding="utf-8") == "windows=true\nreused_from=\n"
+    assert (tmp_path / "o").read_text(encoding="utf-8") == 'windows=true\nreused_from=\npython=["3.11", "3.13"]\n'
 
 
 # --- the workflows are wired to it ----------------------------------------------------------------
@@ -283,16 +285,57 @@ def workflow(name):
 
 
 def test_required_ci_jobs_match_the_real_test_matrix():
+    # ACL-1581: версии Python Linux-заданий приходят из scope; push-прогон получает
+    # полный список, при сбое scope — запасной полный список из самого выражения.
     # ACL-1582: Linux-задания по версиям и шардам, Windows-задание по версиям.
     ci = workflow("ci.yml")
     linux = ci["jobs"]["test-linux"]["strategy"]["matrix"]
     windows = ci["jobs"]["test-windows"]["strategy"]["matrix"]
-    expected = {reuse.ci_linux_job(p, s) for p in linux["python-version"] for s in linux["shard"]}
+    expression = linux["python-version"]
+    assert expression == "${{ fromJSON(needs.scope.outputs.python || '[\"3.11\", \"3.13\"]') }}"
+    fallback = json.loads(expression.split("|| '")[1].split("')")[0])
+    push_versions = scope.classify([], "push")["python"]
+    assert fallback == push_versions == list(reuse.FULL_PYTHON_VERSIONS) == list(reuse.CI_LINUX_PYTHONS)
+    expected = {reuse.ci_linux_job(p, s) for p in push_versions for s in linux["shard"]}
     expected |= {reuse.ci_windows_job(p) for p in windows["python-version"]}
     expected.add(ci["jobs"]["admission"]["name"])
     assert set(reuse.REQUIRED_JOBS["ci.yml"]) == expected
+    assert len(reuse.REQUIRED_JOBS["ci.yml"]) == 8
     assert ci["jobs"]["test-linux"]["name"] == "linux tests (${{ matrix.python-version }}, ${{ matrix.shard }})"
     assert ci["jobs"]["test-windows"]["name"] == "windows tests (${{ matrix.python-version }})"
+
+
+# --- ACL-1581: a one-Python PR run is never a proof -------------------------------------------------
+
+def one_python(jobs, run_id):
+    """Задания PR-прогона ACL-1581: Linux только 3.13 × 3 шарда, Windows 3.13 и агрегат."""
+    jobs["jobs"] = [dict(j, run_id=run_id) for j in jobs["jobs"] if not j["name"].startswith("linux tests (3.11")]
+    assert sum(j["name"].startswith("linux tests (3.13") for j in jobs["jobs"]) == 3
+    return jobs
+
+
+def test_a_one_python_pr_run_is_never_a_proof(promotion):
+    api, push = green_api(promotion["stage"])
+    # Остаётся только pull_request-запуск с тремя заданиями 3.13 — как настоящий PR после ACL-1581.
+    api.runs_by_sha[promotion["stage"]] = [r for r in api.runs_by_sha[promotion["stage"]] if r["event"] == "pull_request"]
+    pull = api.runs_by_sha[promotion["stage"]][0]
+    one_python(api.jobs_by_run[pull["id"]], pull["id"])
+    for event in ("push", "pull_request"):
+        result = decide(promotion, api, event=event)
+        assert result["windows"] is True and result["reuse"] == "no-proven-full-run"
+
+
+def test_a_one_python_matrix_is_not_full_even_on_a_push_run(promotion):
+    api, push = green_api(promotion["stage"])
+    one_python(api.jobs_by_run[push["id"]], push["id"])
+    assert decide(promotion, api)["windows"] is True
+
+
+def test_a_full_push_run_is_a_proof(promotion):
+    api, push = green_api(promotion["stage"])
+    assert push["event"] == "push"
+    assert reuse.full_jobs_passed(api, REPO, push, "ci.yml") is True
+    assert decide(promotion, api)["reused_from"] == push["html_url"]
 
 
 def test_required_installer_jobs_match_the_real_workflow():
@@ -366,5 +409,16 @@ def test_an_invalid_reused_url_is_never_written_to_outputs(promotion, monkeypatc
         monkeypatch.setenv(key, value)
     monkeypatch.setattr("sys.argv", ["acl_ci_scope.py", "--event-name", "push", "--event-file", str(tmp_path / "x")])
     scope.main()
-    assert (tmp_path / "o").read_text(encoding="utf-8") == "windows=true\nreused_from=\n"
+    assert (tmp_path / "o").read_text(encoding="utf-8") == 'windows=true\nreused_from=\npython=["3.11", "3.13"]\n'
     assert "runs/1" not in (tmp_path / "s").read_text(encoding="utf-8")
+
+
+def test_cli_writes_one_python_for_a_code_only_pr(monkeypatch, tmp_path):
+    # ACL-1581: PR без зависимостей/бутстрапа получает матрицу только из 3.13.
+    for key in ("GITHUB_TOKEN", "GITHUB_STEP_SUMMARY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(scope, "select", lambda root, name, event: scope.classify(["dashboard.py"], "pull_request"))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "o"))
+    monkeypatch.setattr("sys.argv", ["acl_ci_scope.py", "--event-name", "pull_request", "--event-file", str(tmp_path / "x")])
+    scope.main()
+    assert (tmp_path / "o").read_text(encoding="utf-8") == 'windows=true\nreused_from=\npython=["3.13"]\n'

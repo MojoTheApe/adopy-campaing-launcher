@@ -97,7 +97,7 @@ CI (`.github/workflows/ci.yml`, ACL-1582) splits the suite by platform:
 
 | Job name (exact) | Runner | Python | Files |
 |---|---|---|---|
-| `linux tests (<py>, <k>)` | ubuntu-latest | 3.11 and 3.13, shards k = 1..3 | every `tests/test_*.py` without the `windows_only` marker: `python scripts/acl_test_shard.py --platform linux <k> 3` |
+| `linux tests (<py>, <k>)` | ubuntu-latest | 3.11 and 3.13 on pushes and manual runs, 3.13 on most PRs (below); shards k = 1..3 | every `tests/test_*.py` without the `windows_only` marker: `python scripts/acl_test_shard.py --platform linux <k> 3` |
 | `windows tests (<py>)` | windows-latest | 3.13 | the `windows_only` files plus the Windows smoke set (`scripts/acl_test_platform.py` `WINDOWS_SMOKE`), after the secret scan and `scripts/acl_smoke.py`: `--platform windows 1 1` |
 | `ACL verification` | ubuntu-latest | - | aggregates `scope`, both Linux and Windows test jobs |
 
@@ -126,6 +126,16 @@ A reuse proof or a release needs every Linux shard, the Windows job and
 `ACL verification` of one run. Runs of the old layout (`test (<py>, <k>)`, all on
 Windows, before ACL-1582) are refused, not translated: a release of a tree that
 only has such a run needs a fresh `ci.yml` run on main.
+
+Python versions (ACL-1581): pushes to stage/main/master and manual runs test 3.11
+and 3.13 on Linux. A pull request tests 3.13 only, unless it touches dependency or
+bootstrap inputs (requirements, pyproject/setup, conftest, root `.bat` installers,
+`packaging/`, `.github/workflows/`, `scripts/acl_test_shard.py`, the CI scope/reuse
+scripts): then it tests both. The scope job decides this (`scripts/acl_ci_scope.py`).
+The Windows job always uses 3.13. Only a full push or manual run proves a tree for
+reuse and releases. A new push to a PR branch cancels that PR's superseded CI and
+installer runs; stage/main/master pushes and manual runs are never cancelled or
+replaced. The installer build/install job stops at 15 minutes.
 `--dist loadfile` keeps every test file on one worker: more than 80 files start
 their own Chromium in a module fixture, and spreading one file over all workers
 starts that browser once per worker (on the owner's laptop the test-by-test

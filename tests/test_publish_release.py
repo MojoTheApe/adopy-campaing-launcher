@@ -268,9 +268,48 @@ def test_reused_main_run_refuses_an_old_layout_stage_run_as_proof(reused_release
         pub.verify_promotion("acl-release-2026-10-04", "test/source")
 
 
+# --- ACL-1581: PR runs test one Python on Linux; the tag path is unchanged ------------------------------
+
+def one_python_jobs(run_id):
+    jobs = jobs_of(run_id)
+    jobs["jobs"] = [j for j in jobs["jobs"] if not j["name"].startswith("linux tests (3.11")]
+    return jobs
+
+
+def test_tag_path_full_push_run_still_publishes(promotion):
+    lines = []
+    assert pub.verify_promotion("acl-release-2026-09-19", "test/source", report=lines.append) == "a" * 40
+    assert lines == ["Full test matrix ran in the recorded main run https://github.com/test/source/actions/runs/42"]
+
+
+def test_tag_path_reused_main_run_still_publishes(reused_release):
+    assert pub.verify_promotion("acl-release-2026-10-04", "test/source") == reused_release["main"]
+
+
+def test_only_a_one_python_pr_run_for_the_tree_refuses_the_release(reused_release):
+    reused_release["stage_run"] = dict(reused_release["stage_run"], event="pull_request")
+    reused_release["stage_jobs"] = one_python_jobs(41)
+    with pytest.raises(ValueError, match="neither ran the full test matrix"):
+        pub.verify_promotion("acl-release-2026-10-04", "test/source")
+
+
 def test_reused_main_run_refuses_a_stage_run_without_the_windows_job(reused_release):
     jobs = jobs_of(41)
     jobs["jobs"] = [j for j in jobs["jobs"] if not j["name"].startswith("windows tests (")]
     reused_release["stage_jobs"] = jobs
+    with pytest.raises(ValueError, match="neither ran the full test matrix"):
+        pub.verify_promotion("acl-release-2026-10-04", "test/source")
+
+
+def test_a_one_python_matrix_is_refused_even_on_a_push_run(reused_release):
+    reused_release["stage_jobs"] = one_python_jobs(41)
+    with pytest.raises(ValueError, match="neither ran the full test matrix"):
+        pub.verify_promotion("acl-release-2026-10-04", "test/source")
+
+
+def test_a_one_python_main_run_is_not_a_full_run(reused_release):
+    # Даже если бы main-прогон сам прогнал только 3.13, он не «полный» и нужен доказуемый полный прогон.
+    reused_release["main_jobs"] = one_python_jobs(42)
+    reused_release["stage_jobs"] = one_python_jobs(41)
     with pytest.raises(ValueError, match="neither ran the full test matrix"):
         pub.verify_promotion("acl-release-2026-10-04", "test/source")

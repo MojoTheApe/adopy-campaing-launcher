@@ -27,9 +27,13 @@ on:
 permissions:
   contents: read
 
+# ACL-1581: a new push to a PR branch cancels that PR's superseded run. Pushes to
+# stage/main/master and manual runs get a group of their own (run_id), so a later
+# squash merge never cancels, or replaces while pending, an earlier task's stage
+# or main verification.
 concurrency:
-  group: acl-ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: acl-ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.ref, github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   scope:
@@ -44,12 +48,16 @@ jobs:
     outputs:
       windows: ${{ steps.scope.outputs.windows }}
       reused_from: ${{ steps.scope.outputs.reused_from }}
+      # ACL-1581: JSON list of Python versions for the test matrix.
+      python: ${{ steps.scope.outputs.python }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       # windows=false also when this exact tree already passed a full push run
       # (promotion stage -> main); release tags and manual runs always run in full.
+      # python: ["3.13"] for a PR that does not touch dependency/bootstrap inputs,
+      # ["3.11", "3.13"] for everything else (ACL-1581).
       - id: scope
         run: python3 scripts/acl_ci_scope.py --workflow ci.yml
         env:
@@ -62,7 +70,7 @@ jobs:
         run: |
           python3 -m json.tool tracker/config.json > /dev/null
           python3 -m json.tool tracker/engine.json > /dev/null
-          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py tests/test_acl_test_platform.py tests/test_ci_layout.py -q
+          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_acl_ci_workflows.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py tests/test_acl_test_platform.py tests/test_ci_layout.py -q
 
   # ACL-1582: the job names are spelled out (`name:`) because the reuse proof
   # (scripts/acl_ci_reuse.py REQUIRED_JOBS) and the release gate
@@ -85,7 +93,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.13"]
+        # ACL-1581: a PR tests Python 3.13 only, unless it touches dependency or
+        # bootstrap inputs (scripts/acl_ci_scope.py). Pushes and manual runs test
+        # both versions, so a release proof always has every Linux job
+        # (scripts/acl_ci_reuse.py REQUIRED_JOBS). The fallback list is the full
+        # matrix, for a scope job that failed before writing its output.
+        python-version: ${{ fromJSON(needs.scope.outputs.python || '["3.11", "3.13"]') }}
         # ACL-1397: shards by scripts/acl_test_shard.py; with --platform linux
         # together they are exactly the files without the windows_only marker.
         shard: [1, 2, 3]

@@ -7,6 +7,7 @@ their names (the reuse proof and the release gate look jobs up by name) and the
 from __future__ import annotations
 
 import itertools
+import json
 import os
 import shutil
 import subprocess
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts import acl_ci_reuse as reuse  # noqa: E402
+from scripts import acl_ci_scope as scope  # noqa: E402
 
 CI = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
 JOBS = CI["jobs"]
@@ -31,6 +33,16 @@ def _render(template: str, **matrix) -> str:
     for key, value in matrix.items():
         template = template.replace("${{ matrix.%s }}" % key, str(value))
     return template
+
+
+def _linux_push_pythons() -> list[str]:
+    """ACL-1581: версии Linux-задания приходят из scope; push-прогон и запасной
+    список выражения — полный набор, он и обязателен для доказательства."""
+    expression = JOBS["test-linux"]["strategy"]["matrix"]["python-version"]
+    assert expression == "${{ fromJSON(needs.scope.outputs.python || '[\"3.11\", \"3.13\"]') }}"
+    fallback = json.loads(expression.split("|| '")[1].split("')")[0])
+    assert fallback == scope.classify([], "push")["python"]
+    return fallback
 
 
 def _run(job: str) -> str:
@@ -46,7 +58,7 @@ def test_the_linux_job_runs_every_unmarked_file_on_ubuntu_in_shards():
     job = JOBS["test-linux"]
     assert job["runs-on"] == "ubuntu-latest"
     matrix = job["strategy"]["matrix"]
-    assert tuple(matrix["python-version"]) == reuse.CI_LINUX_PYTHONS
+    assert tuple(_linux_push_pythons()) == reuse.CI_LINUX_PYTHONS
     assert tuple(matrix["shard"]) == reuse.CI_LINUX_SHARDS
     run = _run("test-linux")
     assert f"scripts/acl_test_shard.py --platform linux ${{{{ matrix.shard }}}} {len(reuse.CI_LINUX_SHARDS)}" in run
@@ -77,7 +89,7 @@ def test_job_names_are_exactly_the_required_jobs_of_the_reuse_proof():
     linux, windows = JOBS["test-linux"], JOBS["test-windows"]
     lm, wm = linux["strategy"]["matrix"], windows["strategy"]["matrix"]
     names = {_render(linux["name"], **{"python-version": p, "shard": s})
-             for p, s in itertools.product(lm["python-version"], lm["shard"])}
+             for p, s in itertools.product(_linux_push_pythons(), lm["shard"])}
     names |= {_render(windows["name"], **{"python-version": p}) for p in wm["python-version"]}
     names.add(JOBS["admission"]["name"])
     assert names == set(reuse.REQUIRED_JOBS["ci.yml"])
