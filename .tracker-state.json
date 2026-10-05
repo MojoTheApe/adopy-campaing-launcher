@@ -6432,7 +6432,7 @@
             "session": "run_l1582w_1005"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-L1582W",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -6450,7 +6450,8 @@
           "report": "# ACL-1582 handoff: platform-neutral tests on Linux, marked tests on Windows\n\n- PR: #585 (base `stage`), head `2ee22f84081dac0cb80173106de7b75901812206`, branch `codex/acl-1582-linux-split`\n- Claim: `d0dc116956b5444ea97fa3e96da13ef8` (Worker-L1582W, run_l1582w_1005)\n- ACL-1581 (`work/codex/acl-1581-ci-one-python`, de5bff07) is merged into this branch. Its Python list from the scope job drives the Linux job, and the Windows job stays on 3.13.\n- CI was not run, because the Actions budget is exhausted. All evidence below is local.\n\n## Split\n358 test files: 346 go to Linux and 12 are marked `windows_only`. The Windows job also runs 2 neutral smoke files, `acl_smoke.py` and the secret scan.\n\nMarked files and reasons:\n- msvcrt locks: `test_file_lock_races`, `test_shared_file_locks`, `test_journal_keeps_every_line`\n- 8.3 short paths: `test_a_robot_profile_with_short_paths_is_owned`, `test_attach_short_path`\n- cmd runs `install_acl.bat`: `test_installer_recovery_review`\n- launcher contract and PowerShell harness: `test_windows_launcher_contract`\n- the bootstrap's copy of the update gate: `test_update_gate`\n- Windows venv runtime layout: `test_runtime_manager`\n- Windows session and screen APIs: `test_publish_screen_guard_review`\n- drive letters and launcher logs: `test_robot_health`\n- `taskkill`: `test_a_stopped_profile_never_spins_the_robot`\n\nTo list the split with every reason, run `python scripts/acl_test_platform.py report`.\n\n## Guard rules (tests/test_acl_test_platform.py; it also runs in the scope job)\nThe guard parses the AST of each unmarked test file. It flags:\n- an import of `msvcrt`, `winreg`, `_winapi` or `winsound`\n- use of `windll`\n- a Windows branch on `os.name`, `sys.platform` or `platform.system()`, including in a skipif\n- a `powershell` or `pwsh` invocation\n- a `.ps1` reference\n- `LOCALAPPDATA`\n- a command list that starts with a Windows program\n- a backslash path inside an `assert`\n\nIt skips docstrings and comments. A data-only line can be waived with `# linux-ok: <why>`. The marker must be module-level and must give a reason.\n\n## Gates\n- `REQUIRED_JOBS[\"ci.yml\"]` is `linux tests (3.11|3.13, 1..3)`, plus `windows tests (3.13)`, plus `ACL verification`.\n- Runs of the old layout (`test (py, shard)`) are refused, both as reuse proof and on the tag path. `verify_promotion` gives an explicit \"layout before ACL-1582\" error.\n- Consequence: the first release after this lands needs a main `ci.yml` run in the new layout.\n\n## Local evidence\n- Affected tests pass: `test_acl_ci_scope`, `test_acl_ci_reuse`, `test_acl_ci_workflows`, `test_publish_release`, `test_acl_test_shard`, `test_master_adoption`, `test_acl_test_platform` and `test_ci_layout`. That is 319 passed and 3 skipped on win32 (the bash admission tests).\n- I ran the admission script with Git Bash: the 2 allowed cases pass and all 12 refusal cases are refused.\n- `collect-only -m windows_only` selects 185 tests.\n- The secret scan is clean.\n\n## Open\n- Linux dry run: not done, because this laptop has neither WSL nor Docker. The first real Linux job is the proof. A file that fails there only because of paths or CRLF gets the marker.\n- The before/after minutes measurement on #541 is still open (its checkbox is unchecked)."
         },
         "pr": 585,
-        "queued_at": "2026-10-05T07:33:21+00:00"
+        "queued_at": "2026-10-05T07:33:21+00:00",
+        "reviewer": "Reviewer-R1582X"
       }
     },
     "actors": {
@@ -6916,6 +6917,10 @@
       },
       "Reviewer-R1581J": {
         "session": "rev_r1581j_1005",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1582X": {
+        "session": "rev_r1582x_1005",
         "role": "Reviewer"
       }
     },
@@ -8203,10 +8208,20 @@
       526,
       529,
       573,
-      580,
-      582
+      580
     ],
-    "review": null,
+    "review": {
+      "id": "ea468dfb946642708a2de65fba97bdf2",
+      "pr": 585,
+      "issues": [
+        582
+      ],
+      "actor": "Reviewer-R1582X",
+      "session": "rev_r1582x_1005",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-05T10:32:22+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -11756,6 +11771,13 @@
         "prs": [
           590
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-05T10:32:22+00:00",
+        "pr": 585,
+        "lane": "ea468dfb946642708a2de65fba97bdf2",
+        "actor": "Reviewer-R1582X"
       }
     ],
     "policy": {
