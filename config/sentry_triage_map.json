@@ -17,6 +17,8 @@
     {"step": "ad_creative_upload", "reason": "upload-button-missing", "task": "ACL-1348", "note": "wizard open, no Upload button on the Media step"},
     {"step": "ad_creative_upload", "reason": "wizard-not-opened", "task": "ACL-1348", "note": "Set up creative did not open the creative wizard"},
     {"step": "ad_creative_upload", "reason": "same-file-already-*", "task": "ACL-1348", "note": "same file refused for a later ad of the run"},
+    {"step": "foreign_window", "reason": "*", "task": "ACL-1573", "note": "a Meta window the robot did not open stood over a step (title in the event); add it to the registry in src/fb_ads_rpa/foreign_windows.py (KNOWN)"},
+    {"step": "*", "reason": "unknown-window", "task": "ACL-1573", "note": "step stopped: an unknown Meta window could not be closed safely (Unknown Meta window blocked the step: <title>)"},
     {"step": "relay_selftest", "reason": "*", "task": "ACL-1330", "note": "synthetic self-test of the Sentry -> cloud routine trigger (docs/system/SENTRY_ROUTINE_SETUP.md) - not a robot failure, keep this row"}
   ]
 }
