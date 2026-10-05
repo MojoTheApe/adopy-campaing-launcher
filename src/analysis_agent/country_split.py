@@ -46,7 +46,14 @@ from src.analysis_agent.account_spend import (
     _shoot,
     _sleep,
     reopening_by_hand,
+    LOGGED_OUT_CODE,
+    _ReadOpen,
+    _finish_started,
+    _logged_out,
+    logged_out_message,
+    opening_closed_profile,
 )
+from src.fb_ads_rpa import profile_trouble as _profile_trouble
 
 #: Экран отчётов Ads Manager. `?act=` обязателен — без него Reporting
 #: откроет «какой-нибудь» кабинет, а чтение чужого кабинета — отказ.
@@ -1216,6 +1223,7 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
     date_to = date_to or date_from
     out = CountrySplit(account=account, date_from=date_from, date_to=date_to)
     conn = None
+    held = _ReadOpen(account)
     try:
         entry = _entry_for(account)
         if entry is None:
@@ -1224,12 +1232,23 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
         url = _reporting_url(act, date_from, date_to)  # validate before attach
         expected_act = "act_" + act.removeprefix("act_")
         # ACL-1518: окно, открытое руками, переоткрывается путём Publish.
-        with reopening_by_hand():
+        # ACL-1580: закрытый профиль чтение запускает само и потом закрывает.
+        with reopening_by_hand(), opening_closed_profile(held):
             conn = _attach_only(entry, account)
         page = conn.page
-        page.goto(url, timeout=REPORT_TIMEOUT_MS, wait_until="domcontentloaded")
+        try:
+            page.goto(url, timeout=REPORT_TIMEOUT_MS, wait_until="domcontentloaded")
+        except Exception as exc:
+            if _profile_trouble.classify_error(exc)[0] == LOGGED_OUT_CODE:
+                raise ProfileNotAttachable(logged_out_message(account), code=LOGGED_OUT_CODE) from exc
+            raise
+        if _logged_out(page):
+            # Разлогинен — понятная строка и никаких повторов.
+            raise ProfileNotAttachable(logged_out_message(account), code=LOGGED_OUT_CODE)
         _sleep(4)
         if _act_from_url(page, tries=6) != expected_act:
+            if _logged_out(page, deep=True):
+                raise ProfileNotAttachable(logged_out_message(account), code=LOGGED_OUT_CODE)
             raise ValueError("Ads Reporting opened a different account; reading refused")
         out.status, out.status_text = _read_status(page)
         # Дождаться интерфейса и выйти из отчёта, который Reporting открыл сам:
@@ -1358,14 +1377,18 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
                     save_split(out)
                 except Exception:
                     pass
-            try:
-                conn.page.close()  # _attach_only creates a separate owned tab
-            except Exception:
-                pass
+            if not held.keep_tab:
+                try:
+                    conn.page.close()  # _attach_only creates a separate owned tab
+                except Exception:
+                    pass
             try:
                 conn.close(keep_browser_open=True)
             except Exception:
                 pass
+        # ACL-1580: профиль, который запустило это чтение (или Read spend перед
+        # ним), закрывается мягкой остановкой — и при отказе тоже.
+        _finish_started(held)
     return out
 
 
