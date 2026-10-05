@@ -5454,6 +5454,7 @@ window.cbTree = (function () {
         var what = x.stage === 'checking' ? 'checking'
           : x.stage === 'queued'
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
+               : q.state === 'waiting_review' ? cbReviewWait(q)
                : q.state === 'waiting_memory' ? 'queued — waiting for memory'
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
@@ -6057,6 +6058,9 @@ window.cbBuild = (function () {
     }
     // ACL-1424: мало памяти — сколько свободно и сколько берёт профиль.
     var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+    if (q.hold === 'review_windows') {
+      return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
+    }
     if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
       return { state: 'build-wait', sign: '',
                why: 'Waiting: ' + gb(q.available_mb) + ' GB free, a profile uses ~' + gb(q.profile_mb) + ' GB'
@@ -12150,6 +12154,12 @@ function cbSentCampaignNames(fd) {
  * Stop — только своё задание. Потерянный статус (дешборд перезапущен)
  * по-прежнему останавливает всю вкладку: неотправленные аккаунты не едут,
  * новые не принимаются, пока страницу не перезагрузят. */
+/* ACL-1603: потолок занят окнами, оставленными открытыми на проверку. */
+function cbReviewWait(q) {
+  var n = Math.max(1, parseInt(q && q.kept, 10) || 1);
+  return 'waiting: ' + n + ' review window' + (n === 1 ? ' is' : 's are') + ' still open — close them to continue';
+}
+
 /* Ключ одной отправки Publish (ACL-1399) — см. start_job(request_id). */
 function cbRequestId() {
   try {
@@ -13164,6 +13174,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       // ACL-1321: профилей разом — сколько тянет память машины; остальные ждут.
       : isQueued ? (queue.reason === 'profile'
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
+          : queue.state === 'waiting_review' ? cbReviewWait(queue)
           : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))

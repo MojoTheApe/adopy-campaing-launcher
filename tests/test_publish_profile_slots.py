@@ -45,9 +45,12 @@ def mem(available_gb: float, total_gb: float = 16) -> ps.MemoryReading:
 
 # ── правило ──────────────────────────────────────────────────────────────
 
-def test_the_first_profile_always_starts_even_with_no_memory_left():
-    d = ps.decide(0, 0, mem(0.2), S)
-    assert d["allow"] and d["reason"] == "floor" and d["limit"] == 1
+def test_the_first_profile_waits_for_the_reserve_too():
+    """ACL-1603 (ревью F2): «пол в один профиль» больше не пускает при любой памяти."""
+    low = ps.decide(0, 0, mem(0.2), S)
+    assert low["allow"] is False and low["reason"] == "below_reserve"
+    ok = ps.decide(0, 0, mem(3.0), S)           # 1,5 + 1,5
+    assert ok["allow"] and ok["reason"] == "memory_ok"
 
 
 def test_another_profile_starts_only_with_room_for_it_and_the_reserve():
@@ -132,14 +135,23 @@ class Machine:
         self.now = 1000.0
         self.settings = settings or ps.SlotSettings(warmup_s=0, profile_mb=OLD_PROFILE_MB, **OLD)
 
+    _queue = None
+
     def memory(self):
-        return None if self.available_gb is None else mem(self.available_gb)
+        if self.available_gb is None:
+            return None
+        # ACL-1603: первый профиль тоже ждёт запаса; пока ничего не идёт, у
+        # подставной машины памяти вдоволь (тесты проверяют следующие профили).
+        if self._queue is not None and not self._queue._running:
+            return mem(max(self.available_gb, 64))
+        return mem(self.available_gb)
 
     def slots(self, tick_s: float = 0.05) -> ps.ProfileSlots:
         # Замер профилей подставной: «не нашли» — решает оценка из настроек.
         probe = ps.ProfileUsage(lambda profiles: {}, clock=lambda: self.now, background=False)
-        return ps.ProfileSlots(memory=self.memory, settings=lambda: self.settings,
-                               clock=lambda: self.now, tick_s=tick_s, usage=probe)
+        self._queue = ps.ProfileSlots(memory=self.memory, settings=lambda: self.settings,
+                                      clock=lambda: self.now, tick_s=tick_s, usage=probe)
+        return self._queue
 
 
 class Job:
@@ -218,12 +230,16 @@ def test_freed_memory_starts_the_next_one_without_any_job_finishing():
     a.finish(); b.finish()
 
 
-def test_the_first_profile_starts_on_a_machine_with_no_free_memory():
+def test_the_first_profile_waits_on_a_machine_with_no_free_memory_and_starts_when_it_frees():
     m = Machine(available_gb=0.1)
-    slots = m.slots()
+    slots = ps.ProfileSlots(memory=lambda: mem(m.available_gb), settings=lambda: m.settings,
+                            clock=lambda: m.now, tick_s=0.05,
+                            usage=ps.ProfileUsage(lambda p: {}, clock=lambda: m.now, background=False))
     a = Job(slots, "a", "P1")
+    time.sleep(0.15)
+    assert not a.started and a.waits[0]["reason"] == "below_reserve"
+    m.available_gb = 8
     assert _until(lambda: a.started)
-    assert a.grant["decision"]["reason"] == "floor"
     a.finish()
 
 
@@ -359,6 +375,8 @@ def runner(monkeypatch):
     def fake_rpa(job_id, slots_, *, account_label, **kw):
         entered[account_label].set()
         release[account_label].wait(timeout=5)
+        with pj._jobs_lock:
+            pj._jobs[job_id]["profile_closed"] = True    # чистый прогон закрыл профиль
         pj._finish(job_id)
 
     monkeypatch.setattr(pj, "_run_rpa", fake_rpa)
@@ -460,7 +478,9 @@ def test_the_slots_endpoint_says_how_many_run_at_once(monkeypatch):
     from src.web.app import app
 
     machine = Machine(available_gb=5.0, settings=ps.SlotSettings())
-    monkeypatch.setattr(pj, "_slots", machine.slots())
+    monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(
+        memory=lambda: mem(5.0), settings=lambda: machine.settings, tick_s=0.05,
+        usage=ps.ProfileUsage(lambda p: {}, background=False)))
 
     async def get():
         transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
@@ -471,5 +491,5 @@ def test_the_slots_endpoint_says_how_many_run_at_once(monkeypatch):
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["mode"] == "auto" and body["running"] == [] and body["waiting"] == []
-    assert body["next"]["reason"] == "floor" and body["next"]["available_mb"] == 5 * GB
+    assert body["next"]["reason"] == "memory_low" and body["next"]["available_mb"] == 5 * GB
     assert body["settings"]["ceiling"] == ps.DEFAULT_CEILING == 2

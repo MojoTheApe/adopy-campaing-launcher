@@ -24,6 +24,11 @@ duplicate jobs.
   skipped as a duplicate (`/publish-jobs/slots` now also returns `accounts` with a
   `state`). The slot decision rows in telemetry (`job_phase` notes `slot_decision` /
   `slot_queue`) carry `cap`, `reserve_mb`, free memory, measured use and the reason.
+- Review round 2: a window left open after a failed run keeps holding its slot until the
+  profile is closed (Close profile, a graceful stop, or by hand in Multilogin); the queue
+  then says "waiting: N review windows are still open — close them to continue". The first
+  profile now also needs profile + reserve free (2810 MB or 400 MB free: it waits, "waiting
+  for memory"). The refusal message uses the trimmed account name.
 - Tests: `tests/test_acl1603_stable_slots.py`; the ACL-1321/1424 tests now pin the old
   numbers explicitly.
 

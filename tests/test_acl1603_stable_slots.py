@@ -285,7 +285,7 @@ def test_a_second_job_for_an_account_that_is_already_in_the_queue_is_refused(cle
         pj._jobs[first]["status"] = status
     with pytest.raises(pj.DuplicateJobError) as err:
         pj.create_job(" doc19 ", "CL", [{}])          # регистр и пробелы не спасают
-    assert str(err.value) == " doc19  is already in the queue"
+    assert str(err.value) == "doc19 is already in the queue"
     assert err.value.job_id == first
     assert len(pj._jobs) == 1
 
@@ -370,3 +370,152 @@ def test_the_decision_for_telemetry_carries_cap_free_memory_measured_use_and_rea
     for key in ("cap", "available_mb", "measured_mb", "profile_mb", "reserve_mb", "reason"):
         assert key in row, key
     assert row["reason"] == "memory_low" and row["cap"] == 2
+
+
+# ── раунд 2 ревью: открытые окна и первый профиль ───────────────────────
+
+def _slots_seeing_all_profiles(available_gb=128):
+    """Очередь, чей замер видит каждый профиль открытым (3,5 ГБ у каждого)."""
+    machine = Machine(available_gb=available_gb)
+    probe = ps.ProfileUsage(lambda profiles: {p: int(3.5 * GB) for p in profiles},
+                            clock=lambda: machine.now, background=False)
+    return ps.ProfileSlots(memory=lambda: mem(machine.available_gb), settings=lambda: machine.settings,
+                           clock=lambda: machine.now, tick_s=0.02, usage=probe)
+
+
+def _mb(mb: int) -> ps.MemoryReading:
+    return ps.MemoryReading(total_mb=32 * GB, available_mb=mb)
+
+
+@pytest.mark.parametrize("free_mb", [2810, 400, 6000])
+def test_the_first_profile_waits_for_memory_too(free_mb):
+    """05.10 16:27: первый профиль пускали при 2810 МБ свободных."""
+    d = ps.decide(0, 0, _mb(free_mb), ps.load_settings({}))
+    assert d["allow"] is False
+    assert d["reason"] == ("below_reserve" if free_mb < 3 * GB else "memory_low")
+    assert pj._queue_view(d)["state"] == "waiting_memory"
+    assert d["need_mb"] == int(6.5 * GB)
+
+
+def test_the_first_profile_starts_with_profile_plus_reserve_and_waits_until_then():
+    m = Machine(available_gb=2.81)
+    slots = m.slots()
+    a = Job(slots, "a", "P1")
+    time.sleep(0.15)
+    assert not a.started and a.waits[0]["reason"] == "below_reserve"
+    m.available_gb = 6.5
+    assert _until(lambda: a.started)
+    a.finish()
+
+
+def test_windows_kept_open_after_a_failure_still_hold_their_slots():
+    """Два оставленных окна + третий/четвёртый Mimic — ровно сбой 05.10."""
+    slots = _slots_seeing_all_profiles()
+    a = Job(slots, "a", "P1")
+    b = Job(slots, "b", "P2")
+    slots.keep("a")
+    slots.keep("b")                                  # оба задания кончились, окна открыты
+    c = Job(slots, "c", "P3")
+    d = Job(slots, "d", "P4")
+    time.sleep(0.2)
+    assert not c.started and not d.started
+    assert c.waits[0]["reason"] == "review_windows" and c.waits[0]["kept"] == 2
+    assert pj._queue_view(c.waits[0])["state"] == "waiting_review"
+    assert pj._queue_view(c.waits[0])["kept"] == 2
+    slots.release("a")                               # человек закрыл одно окно
+    assert _until(lambda: c.started)
+    time.sleep(0.1)
+    assert not d.started
+    for j in (c, d):
+        j.finish()
+    slots.release("b")
+
+
+def test_a_new_job_on_a_profile_with_a_kept_window_reuses_it_instead_of_waiting():
+    slots = _slots_seeing_all_profiles()
+    Job(slots, "a", "P1")
+    Job(slots, "b", "P2")
+    slots.keep("a")
+    slots.keep("b")
+    again = Job(slots, "a2", "P1")                   # тот же профиль, окно уже открыто
+    assert _until(lambda: again.started)
+    assert [r["profile"] for r in slots.snapshot()["running"]].count("P1") == 1
+    again.finish()
+
+
+def test_a_kept_window_closed_by_hand_in_multilogin_stops_holding_its_slot():
+    now = [1000.0]
+    found = {"P1": 3 * GB}
+    usage = ps.ProfileUsage(lambda profiles: {p: v for p, v in found.items() if p in profiles},
+                            clock=lambda: now[0], background=False)
+    settings = _settings(warmup_s=10, settle_s=10)
+    slots = ps.ProfileSlots(memory=lambda: mem(128), settings=lambda: settings,
+                            clock=lambda: now[0], tick_s=0.02, usage=usage)
+    a = Job(slots, "a", "P1")
+    Job(slots, "b", "P2")
+    slots.keep("a")
+    slots.keep("b")
+    now[0] += 30
+    found.clear()                                    # окон в Multilogin больше нет
+    now[0] += 30
+    c = Job(slots, "c", "P3")
+    assert _until(lambda: c.started), "закрытые руками окна навсегда заняли очередь"
+    c.finish()
+    assert a
+
+
+def _fake_run(monkeypatch, *, closes: bool):
+    slots = Machine(available_gb=128).slots(tick_s=30)
+    monkeypatch.setattr(pj, "_slots", slots)
+    monkeypatch.setattr(pj, "use_rpa_publish", lambda: True)
+    monkeypatch.setattr(pj, "_clear_inherited_asyncio_loop", lambda: None)
+    import contextlib
+    monkeypatch.setattr(pj, "keep_display_awake", lambda *a, **k: contextlib.nullcontext())
+    monkeypatch.setattr(pj, "_watch_screen_lock", lambda *a, **k: contextlib.nullcontext())
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: label)
+
+    def fake_rpa(job_id, slots_, **kw):
+        if closes:
+            with pj._jobs_lock:
+                pj._jobs[job_id]["profile_closed"] = True
+        pj._finish(job_id)
+
+    monkeypatch.setattr(pj, "_run_rpa", fake_rpa)
+    job_id = pj.create_job("Doc19", "CL", [{}])
+    pj._run_job(job_id, [], account_label="Doc19", country="CL", via_multilogin=True,
+                activate=False, dry_run=False, hand_off=True)
+    return slots, job_id
+
+
+def test_a_finished_job_that_left_its_window_open_keeps_the_slot_until_the_profile_is_closed(
+        clean_jobs, monkeypatch):
+    slots, job_id = _fake_run(monkeypatch, closes=False)
+    assert [(r["profile"], r["kept"]) for r in slots.snapshot()["running"]] == [("Doc19", True)]
+
+    from src.fb_ads_rpa import rpa_publisher as rp
+    monkeypatch.setattr(rp, "close_account_profile", lambda label: None)
+    got = pj.close_profile(job_id)                   # кнопка Close profile
+    assert got["ok"] is True
+    assert slots.snapshot()["running"] == []
+
+
+def test_a_job_that_closed_its_profile_releases_the_slot(clean_jobs, monkeypatch):
+    slots, _ = _fake_run(monkeypatch, closes=True)
+    assert slots.snapshot()["running"] == []
+
+
+# ── точное совпадение аккаунта и текст отказа ────────────────────────────
+
+def test_an_account_whose_name_only_starts_the_same_is_not_a_duplicate(clean_jobs):
+    pj.create_job("FacebookDoc12", "CL", [{}])
+    pj.create_job("FacebookDoc121", "CL", [{}])      # префикс — другой аккаунт
+    pj.create_job("FacebookDoc1", "CL", [{}])
+    with pytest.raises(pj.DuplicateJobError):
+        pj.create_job("facebookdoc12 ", "CL", [{}])
+
+
+def test_the_refusal_message_uses_the_trimmed_label(clean_jobs):
+    pj.create_job("Doc19", "CL", [{}])
+    with pytest.raises(pj.DuplicateJobError) as err:
+        pj.create_job("  Doc19 ", "CL", [{}])
+    assert str(err.value) == "Doc19 is already in the queue"

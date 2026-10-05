@@ -66,8 +66,8 @@ def test_a_tiny_measurement_never_goes_below_the_floor():
 
 def test_ceiling_and_floor_still_hold_with_measurements():
     s = _S()
-    first = ps.decide(0, 0, mem(0.2), s, measured_mb=None)
-    assert first["allow"] and first["reason"] == "floor"
+    first = ps.decide(0, 0, mem(20), s, measured_mb=None)
+    assert first["allow"] and first["reason"] == "memory_ok"
     capped = ps.decide(4, 0, mem(60), s, measured_mb=int(1.6 * GB))
     assert capped["allow"] is False and capped["reason"] == "ceiling"
 
@@ -124,7 +124,14 @@ class Machine:
         self.asked: list[list[str]] = []
 
     def memory(self):
+        # ACL-1603: первый профиль тоже ждёт запаса, поэтому пока ничего не
+        # идёт, у подставной машины памяти вдоволь — тесты ниже проверяют
+        # решение о СЛЕДУЮЩЕМ профиле при заданной памяти.
+        if self._queue is not None and not self._queue._running:
+            return mem(max(self.available_gb, 64))
         return mem(self.available_gb)
+
+    _queue = None
 
     def measure(self, profiles):
         self.asked.append(sorted(profiles))
@@ -134,8 +141,9 @@ class Machine:
 
     def slots(self, tick_s=0.05):
         probe = ps.ProfileUsage(self.measure, clock=lambda: self.now, background=False)
-        return ps.ProfileSlots(memory=self.memory, settings=lambda: self.settings,
-                               clock=lambda: self.now, tick_s=tick_s, usage=probe)
+        self._queue = ps.ProfileSlots(memory=self.memory, settings=lambda: self.settings,
+                                      clock=lambda: self.now, tick_s=tick_s, usage=probe)
+        return self._queue
 
 
 class Job:
