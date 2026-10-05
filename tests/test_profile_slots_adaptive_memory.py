@@ -21,6 +21,14 @@ sys.path.insert(0, str(ROOT))
 from src.web import profile_slots as ps  # noqa: E402
 
 GB = 1024
+# До ACL-1603: потолок 4, запас 1,5 ГБ, пол замера 1,5 ГБ. Механику (замер,
+# рост, откат к оценке) эти тесты проверяют на прежних числах; новые
+# умолчания (2 / 3 ГБ / 3,5 ГБ) — в test_acl1603_stable_slots.py.
+OLD = dict(ceiling=4, reserve_mb=int(1.5 * GB), profile_floor_mb=int(1.5 * GB))
+
+
+def _S(**kw):
+    return ps.SlotSettings(**{**OLD, **kw})
 
 
 def mem(available_gb: float, total_gb: float = 32) -> ps.MemoryReading:
@@ -33,14 +41,14 @@ def test_a_run_starts_assuming_three_and_a_half_gb_per_profile():
     assert ps.DEFAULT_PROFILE_MEMORY_GB == 3.5
     s = ps.load_settings({})
     assert s.profile_mb == int(3.5 * GB)
-    d = ps.decide(1, 0, mem(4.9), s)            # 3,5 + 1,5 запас = 5,0
+    d = ps.decide(1, 0, mem(6.4), s)            # 3,5 + 3 запас = 6,5 (ACL-1603)
     assert d["allow"] is False and d["reason"] == "memory_low"
     assert d["profile_mb"] == int(3.5 * GB) and d["profile_mb_source"] == "estimate"
-    assert ps.decide(1, 0, mem(5.0), s)["allow"] is True
+    assert ps.decide(1, 0, mem(6.5), s)["allow"] is True
 
 
 def test_the_measured_average_replaces_the_estimate():
-    s = ps.SlotSettings()
+    s = _S()
     d = ps.decide(1, 0, mem(4.5), s, measured_mb=int(2.4 * GB))   # 2,4 + 1,5 = 3,9
     assert d["allow"] is True and d["profile_mb_source"] == "measured"
     assert d["profile_mb"] == int(2.4 * GB) and d["need_mb"] == int(2.4 * GB) + s.reserve_mb
@@ -50,15 +58,16 @@ def test_the_measured_average_replaces_the_estimate():
 
 def test_a_tiny_measurement_never_goes_below_the_floor():
     s = ps.SlotSettings()
+    assert s.profile_floor_mb == int(3.5 * GB)   # ACL-1603
     assert s.profile_floor_mb == int(ps.DEFAULT_PROFILE_FLOOR_GB * GB)
     d = ps.decide(1, 0, mem(20), s, measured_mb=200)
     assert d["profile_mb"] == s.profile_floor_mb and d["measured_mb"] == 200
 
 
 def test_ceiling_and_floor_still_hold_with_measurements():
-    s = ps.SlotSettings()
-    first = ps.decide(0, 0, mem(0.2), s, measured_mb=None)
-    assert first["allow"] and first["reason"] == "floor"
+    s = _S()
+    first = ps.decide(0, 0, mem(20), s, measured_mb=None)
+    assert first["allow"] and first["reason"] == "memory_ok"
     capped = ps.decide(4, 0, mem(60), s, measured_mb=int(1.6 * GB))
     assert capped["allow"] is False and capped["reason"] == "ceiling"
 
@@ -111,11 +120,18 @@ class Machine:
         self.now = 1000.0
         self.usage = usage or {}          # профиль → МБ; исключение — сбой замера
         # settle_s=60: здесь «прогрелся» и «устоялся» совпадают; молодой профиль — свой тест.
-        self.settings = settings or ps.SlotSettings(warmup_s=60, settle_s=60)
+        self.settings = settings or _S(warmup_s=60, settle_s=60)
         self.asked: list[list[str]] = []
 
     def memory(self):
+        # ACL-1603: первый профиль тоже ждёт запаса, поэтому пока ничего не
+        # идёт, у подставной машины памяти вдоволь — тесты ниже проверяют
+        # решение о СЛЕДУЮЩЕМ профиле при заданной памяти.
+        if self._queue is not None and not self._queue._running:
+            return mem(max(self.available_gb, 64))
         return mem(self.available_gb)
+
+    _queue = None
 
     def measure(self, profiles):
         self.asked.append(sorted(profiles))
@@ -125,8 +141,9 @@ class Machine:
 
     def slots(self, tick_s=0.05):
         probe = ps.ProfileUsage(self.measure, clock=lambda: self.now, background=False)
-        return ps.ProfileSlots(memory=self.memory, settings=lambda: self.settings,
-                               clock=lambda: self.now, tick_s=tick_s, usage=probe)
+        self._queue = ps.ProfileSlots(memory=self.memory, settings=lambda: self.settings,
+                                      clock=lambda: self.now, tick_s=tick_s, usage=probe)
+        return self._queue
 
 
 class Job:
@@ -190,7 +207,7 @@ def test_the_measured_profiles_let_the_next_one_start_and_low_memory_holds_it():
     time.sleep(0.15)
     assert not c.started
     hold = c.waits[-1]
-    assert hold["reason"] == "memory_low" and hold["measured_mb"] == int(2.2 * GB)
+    assert hold["reason"] == "memory_low" and hold["measured_mb"] == int(2.4 * GB)   # ACL-1603: максимум, не среднее
     assert hold["available_mb"] == int(2.1 * GB)
     m.available_gb = 6.0                            # закрыл — место есть
     m.now += 10                                     # замер устарел, перечитан
@@ -229,7 +246,7 @@ def test_a_profile_not_found_by_the_probe_keeps_the_estimate():
 
 
 def test_the_override_never_measures():
-    m = Machine(available_gb=0.5, usage={"P1": 99 * GB}, settings=ps.SlotSettings(override=2, warmup_s=0))
+    m = Machine(available_gb=0.5, usage={"P1": 99 * GB}, settings=_S(override=2, warmup_s=0))
     slots = m.slots()
     a = Job(slots, "a", "P1")
     b = Job(slots, "b", "P2")
@@ -304,7 +321,7 @@ def test_each_hold_decision_goes_to_telemetry(monkeypatch):
 # ── ревью PR #425: никогда не перегружать, без id в телеметрии ──────────
 
 def test_the_growth_of_running_profiles_is_reserved():
-    s = ps.SlotSettings()
+    s = _S()
     # Средняя 3,4; один профиль сейчас 2,0 — ему ещё расти на 1,4 ГБ.
     d = ps.decide(2, 0, mem(6.0), s, measured_mb=int(3.4 * GB),
                   current_mb=[int(2.0 * GB), int(3.4 * GB)])
@@ -319,7 +336,7 @@ def test_the_growth_of_running_profiles_is_reserved():
 
 def test_a_young_profile_measured_small_does_not_lower_the_estimate():
     m = Machine(available_gb=5.5, usage={"P1": int(1.0 * GB)},
-                settings=ps.SlotSettings(warmup_s=60, settle_s=300))
+                settings=_S(warmup_s=60, settle_s=300))
     slots = m.slots()
     a = Job(slots, "a", "P1")
     m.now += 61                                     # прогрелся, но кампании ещё не открыл
@@ -333,7 +350,7 @@ def test_a_young_profile_measured_small_does_not_lower_the_estimate():
     m.now += 300                                    # устоялся на 1,0 ГБ — теперь верим замеру
     m.available_gb = 5.5
     assert _until(lambda: b.started)
-    assert b.grant["decision"]["profile_mb"] == ps.SlotSettings().profile_floor_mb
+    assert b.grant["decision"]["profile_mb"] == _S().profile_floor_mb
     a.finish()
     b.finish()
 

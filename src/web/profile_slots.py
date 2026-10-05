@@ -84,10 +84,13 @@ TICK_S = 2.0
 #: Сколько разом, когда память прочитать не удалось: осторожно, но не один.
 FALLBACK_LIMIT = 2
 
-DEFAULT_CEILING = 4
+#: ACL-1603: жёсткий потолок — не больше двух профилей разом, что бы ни
+#: показывала оценка памяти. Меняется на машине через `ACL_MAX_PROFILES`.
+DEFAULT_CEILING = 2
 DEFAULT_PROFILE_MEMORY_GB = 3.5
-DEFAULT_PROFILE_FLOOR_GB = 1.5
-DEFAULT_RESERVE_GB = 1.5
+#: ACL-1603: замер профиля не ниже 3,5 ГБ, запас под ОС и чужие программы — 3 ГБ.
+DEFAULT_PROFILE_FLOOR_GB = 3.5
+DEFAULT_RESERVE_GB = 3.0
 DEFAULT_WARMUP_S = 90.0
 #: Моложе этого профиль считаем не легче оценки: кампании/редактор ещё впереди.
 DEFAULT_SETTLE_S = 300.0
@@ -104,7 +107,11 @@ MEASURE_RESTART_FACTOR = 4.0
 
 @dataclass(frozen=True)
 class SlotSettings:
-    """Настройки решения; `override` — ручное число разом или None (авто)."""
+    """Настройки решения.
+
+    `override` — число разом без вопроса к памяти; из окружения НЕ читается
+    (ACL-1603: потолок и память действуют всегда), оставлено для тестов.
+    """
 
     override: int | None = None
     ceiling: int = DEFAULT_CEILING
@@ -139,16 +146,21 @@ def _env_number(env: dict[str, str] | Any, key: str, default: float, *, minimum:
 def load_settings(env: dict[str, str] | Any = None) -> SlotSettings:
     """Настройки из окружения (машинный `.env`). Мусор в значении — умолчание."""
     env = os.environ if env is None else env
-    override: int | None = None
-    raw = str(env.get("ACL_MAX_PARALLEL_PROFILES", "") or "").strip().lower()
-    if raw and raw not in ("auto", "0"):
+    # ACL-1603: потолок — `ACL_MAX_PROFILES` (по умолчанию 2). Прежние имена
+    # `ACL_MAX_PARALLEL_PROFILES` / `ACL_MAX_PARALLEL_CEILING` читаются как
+    # его запасные: ручное число больше не отменяет память и потолок.
+    ceiling = DEFAULT_CEILING
+    for key in ("ACL_MAX_PROFILES", "ACL_MAX_PARALLEL_PROFILES", "ACL_MAX_PARALLEL_CEILING"):
+        raw = str(env.get(key, "") or "").strip().lower()
+        if not raw or raw in ("auto", "0"):
+            continue
         try:
-            override = max(1, int(raw))
+            ceiling = max(1, int(float(raw.replace(",", "."))))
+            break
         except ValueError:
-            log.warning("ACL_MAX_PARALLEL_PROFILES=%r is not a whole number; using automatic", raw)
+            log.warning("%s=%r is not a whole number; trying the next setting", key, raw)
     return SlotSettings(
-        override=override,
-        ceiling=int(_env_number(env, "ACL_MAX_PARALLEL_CEILING", DEFAULT_CEILING, minimum=1)),
+        ceiling=ceiling,
         profile_mb=int(_env_number(env, "ACL_PROFILE_MEMORY_GB", DEFAULT_PROFILE_MEMORY_GB, minimum=0.1) * 1024),
         profile_floor_mb=int(_env_number(env, "ACL_PROFILE_MEMORY_FLOOR_GB", DEFAULT_PROFILE_FLOOR_GB,
                                          minimum=0.1) * 1024),
@@ -369,7 +381,8 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
     факты для телеметрии: `allow`, `reason`, `limit` (сколько разом сейчас
     выходит), память, `profile_mb` (по чём считали профиль) и его источник.
     """
-    out: dict[str, Any] = {"running": running, "warming": warming}
+    out: dict[str, Any] = {"running": running, "warming": warming, "cap": settings.ceiling,
+                           "reserve_mb": settings.reserve_mb}
     if memory is not None:
         out.update(total_mb=memory.total_mb, available_mb=memory.available_mb)
     if settings.override is None:
@@ -387,20 +400,22 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
         out.update(limit=limit, allow=running < limit,
                    reason="override" if running < limit else "override_full")
         return out
-    if running == 0:
-        out.update(limit=_auto_limit(running, warming, memory, settings, growth), allow=True,
-                   reason="floor")
-        return out
     if running >= settings.ceiling:
         out.update(limit=settings.ceiling, allow=False, reason="ceiling")
         return out
     if memory is None:
+        # Память не прочиталась: не блокируем навсегда, но и не больше двух.
         limit = min(FALLBACK_LIMIT, settings.ceiling)
         out.update(limit=limit, allow=running < limit,
                    reason="memory_unknown" if running < limit else "memory_unknown_full")
         return out
     need = settings.profile_mb * (1 + warming) + settings.reserve_mb + growth
     out["need_mb"] = need
+    if memory.available_mb < settings.reserve_mb:
+        # ACL-1603: свободно меньше запаса — новый профиль не стартует, пока
+        # память не вернётся (идущие профили при этом не трогаем).
+        out.update(limit=running, allow=False, reason="below_reserve")
+        return out
     limit = _auto_limit(running, warming, memory, settings, growth)
     ok = memory.available_mb >= need
     out.update(limit=limit, allow=ok, reason="memory_ok" if ok else "memory_low")
@@ -455,7 +470,40 @@ class ProfileSlots:
     # ── решение под замком ─────────────────────────────────────────────
 
     def _busy_profiles(self) -> set[str]:
-        return {r["profile"] for r in self._running.values()}
+        # Оставленное открытым окно профиль не «занимает»: его новое задание
+        # берёт себе (см. `_reuse_kept`), а не ждёт.
+        return {r["profile"] for r in self._running.values() if not r.get("kept")}
+
+    def _kept(self) -> list[str]:
+        return [j for j, r in self._running.items() if r.get("kept")]
+
+    def _count_running(self, profile: str = "") -> int:
+        return len([1 for r in self._running.values()
+                    if not (r.get("kept") and profile and r["profile"] == profile)])
+
+    def _kept_accounts(self) -> list[str]:
+        return sorted({str(r.get("label") or "") for r in self._running.values()
+                       if r.get("kept") and r.get("label")})
+
+    def release_kept(self, label: str) -> int:
+        """Снять место с оставленного окна аккаунта, не закрывая его (ACL-1603).
+
+        Выход, когда окно не закрыть из панели задания: человек сам решил,
+        что окно можно не считать. Возвращает, сколько мест снято.
+        """
+        label = str(label or "").strip().lower()
+        with self._cond:
+            gone = [j for j, r in self._running.items()
+                    if r.get("kept") and str(r.get("label") or "").strip().lower() == label]
+            for j in gone:
+                del self._running[j]
+            self._cond.notify_all()
+        return len(gone)
+
+    def _reuse_kept(self, profile: str) -> None:
+        """Новое задание на профиль берёт место оставленного там окна."""
+        for j in [j for j, r in self._running.items() if r.get("kept") and r["profile"] == profile]:
+            del self._running[j]
 
     def _head(self) -> str | None:
         """Первое в очереди задание, чей профиль свободен."""
@@ -468,7 +516,8 @@ class ProfileSlots:
     def _warming(self) -> int:
         warmup = self._settings().warmup_s
         now = self._clock()
-        return sum(1 for r in self._running.values() if now - r["started"] < warmup)
+        return sum(1 for r in self._running.values()
+                   if not r.get("kept") and now - r["started"] < warmup)
 
     def _verdict(self, job_id: str) -> dict[str, Any]:
         w = self._waiting[job_id]
@@ -477,24 +526,39 @@ class ProfileSlots:
             return {"allow": False, "reason": "profile", "ahead": ahead}
         if self._head() != job_id:
             return {"allow": False, "reason": "order", "ahead": ahead}
-        decision = self._decide_now()
+        decision = self._decide_now(w["profile"])
         decision["ahead"] = ahead
         return decision
 
-    def _decide_now(self) -> dict[str, Any]:
-        """`decide` с замером прогретых профилей вместо оценки, если он есть."""
+    def _decide_now(self, profile: str = "") -> dict[str, Any]:
+        """`decide` с замером прогретых профилей вместо оценки, если он есть.
+
+        `profile` — профиль ждущего задания: оставленное на нём окно не
+        считаем, задание займёт его место само.
+        """
         settings = self._settings()
-        running = len(self._running)
+        # ACL-1603: окна, оставленные открытыми после сбоя (ревью), держат место.
+        running = self._count_running(profile)
         measured_mb: int | None = None
         probe: dict[str, Any] = {}
         # Мерим, только когда это что-то решает: авто, кто-то идёт, потолок не взят.
         current: list[int] = []
-        if settings.override is None and 0 < running < settings.ceiling:
+        kept_n = len(self._kept())
+        if settings.override is None and 0 < running and (running < settings.ceiling or kept_n):
             now = self._clock()
             settled = [r for r in self._running.values() if now - r["started"] >= settings.warmup_s]
             if settled:
                 probe = self._usage.read(sorted({r["profile"] for r in settled}))
                 per = probe.get("per_profile") or {}
+                if probe.get("status") == "ok":
+                    # Окно закрыли руками (в Multilogin) — место больше не держим.
+                    for j in [j for j, r in self._running.items()
+                              if r.get("kept") and r in settled and r["profile"] not in per]:
+                        del self._running[j]
+                    # Пересчёт, а не «минус один»: убранное окно могло быть тем,
+                    # что мы и так не считали (тот же профиль) — вычли бы дважды.
+                    running = self._count_running(profile)
+                    kept_n = len(self._kept())
                 if probe.get("status") == "ok" and per:
                     values: list[int] = []
                     for r in settled:
@@ -512,8 +576,15 @@ class ProfileSlots:
                         values.append(value)
                         current.append(now_mb)
                     if values:
-                        measured_mb = int(sum(values) / len(values))
+                        # ACL-1603: самый тяжёлый из недавних замеров, не среднее.
+                        measured_mb = int(max(values))
         decision = decide(running, self._warming(), self._memory(), settings, measured_mb, current)
+        if kept_n:
+            decision["kept"] = kept_n
+            decision["kept_accounts"] = self._kept_accounts()
+            if not decision.get("allow") and decision.get("reason") == "ceiling":
+                # Потолок занят окнами на проверке: человеку надо их закрыть.
+                decision["reason"] = "review_windows"
         if probe:
             decision["measure"] = probe.get("status")
             if current:
@@ -564,6 +635,7 @@ class ProfileSlots:
                     verdict = self._verdict(job_id)
                     if verdict.get("allow"):
                         del self._waiting[job_id]
+                        self._reuse_kept(profile)
                         self._running[job_id] = {"profile": profile, "started": self._clock()}
                         self._grants[profile] = self._grants.get(profile, 0) + 1
                         self._cond.notify_all()   # следующий в очереди — перепроверить
@@ -595,6 +667,18 @@ class ProfileSlots:
             self._running.pop(job_id, None)
             self._cond.notify_all()
 
+    def keep(self, job_id: str, label: str = "") -> None:
+        """Задание кончилось, но окно профиля оставлено открытым (ACL-1603).
+
+        Место остаётся занятым, пока профиль не закроют (`release`): иначе
+        очередь не видела бы открытых окон и пускала третий и четвёртый Mimic.
+        """
+        with self._cond:
+            if job_id in self._running:
+                self._running[job_id]["kept"] = True
+                self._running[job_id]["label"] = str(label or "")
+            self._cond.notify_all()
+
     def grants(self, profile: str) -> int:
         """Сколько мест выдано этому профилю (ACL-1580)."""
         with self._cond:
@@ -604,7 +688,7 @@ class ProfileSlots:
         """Держит ли место этого профиля или ждёт его кто-то, кроме `job_id` (ACL-1580)."""
         profile = str(profile or "")
         with self._cond:
-            return any(j != job_id and r["profile"] == profile
+            return any(j != job_id and r["profile"] == profile and not r.get("kept")
                        for j, r in [*self._running.items(), *self._waiting.items()])
 
     def wake(self) -> None:
@@ -619,7 +703,8 @@ class ProfileSlots:
             return {
                 "settings": asdict(settings),
                 "mode": "override" if settings.override is not None else "auto",
-                "running": [{"job_id": j, "profile": r["profile"]} for j, r in self._running.items()],
+                "running": [{"job_id": j, "profile": r["profile"], "kept": bool(r.get("kept"))}
+                            for j, r in self._running.items()],
                 "waiting": [{"job_id": j, "profile": w["profile"]} for j, w in self._waiting.items()],
                 "next": self._decide_now(),
             }
