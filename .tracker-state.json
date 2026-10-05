@@ -6543,7 +6543,7 @@
             "session": "run_r1580o_1005"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-R1580O",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -8423,6 +8423,30 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-05T11:04:20+00:00",
         "state": "reviewing"
+      },
+      "596": {
+        "id": "c2d652fb1b2c4d9b94265dbcd8ed2fce",
+        "pr": 583,
+        "issues": [
+          580
+        ],
+        "actor": "Reviewer-R1580V",
+        "session": "rev_r1580v_1005",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-05T11:53:18+00:00",
+        "state": "reviewing"
+      },
+      "583": {
+        "id": "c2d652fb1b2c4d9b94265dbcd8ed2fce",
+        "pr": 583,
+        "issues": [
+          580
+        ],
+        "actor": "Reviewer-R1580V",
+        "session": "rev_r1580v_1005",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-05T11:53:18+00:00",
+        "state": "reviewing"
       }
     },
     "review_queue": [
@@ -8431,18 +8455,7 @@
       526,
       529
     ],
-    "review": {
-      "id": "c2d652fb1b2c4d9b94265dbcd8ed2fce",
-      "pr": 583,
-      "issues": [
-        580
-      ],
-      "actor": "Reviewer-R1580V",
-      "session": "rev_r1580v_1005",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-10-05T11:53:18+00:00",
-      "state": "reviewing"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -12051,6 +12064,25 @@
         "pr": 583,
         "lane": "c2d652fb1b2c4d9b94265dbcd8ed2fce",
         "actor": "Reviewer-R1580V"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-05T13:05:56+00:00",
+        "review": {
+          "id": "c2d652fb1b2c4d9b94265dbcd8ed2fce",
+          "pr": 583,
+          "issues": [
+            580
+          ],
+          "actor": "Reviewer-R1580V",
+          "session": "rev_r1580v_1005",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-05T11:53:18+00:00",
+          "state": "reviewing"
+        },
+        "prs": [
+          596
+        ]
       }
     ],
     "policy": {
