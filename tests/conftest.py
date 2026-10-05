@@ -57,6 +57,17 @@ for _name in ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH"):
     os.environ[_name] = ""
 
 
+# Маркер файлов, которым нужен Windows (ACL-1582). Это метка отбора для CI
+# (scripts/acl_test_platform.py), а не пропуск: на Linux такие файлы просто не
+# попадают в задание. Причина обязательна — её требует guard
+# (tests/test_acl_test_platform.py).
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "windows_only(reason): the test file needs Windows; CI runs it only in the Windows job (ACL-1582)",
+    )
+
+
 # Тесты не пишут в живую машинную папку ACL (ревью v3 PR #314).
 #
 # `config.paths.get_local_config_dir()` — это `%LOCALAPPDATA%\ACL`: там

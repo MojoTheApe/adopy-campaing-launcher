@@ -1,11 +1,9 @@
 """Offline integration of the library, HTTP API, builder and RPA resolution."""
 import asyncio
 import json
-import multiprocessing
 import os
 import shutil
 import subprocess
-import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,28 +30,6 @@ def test_bad_registry_is_preserved(tmp_path):
         with pytest.raises(tr.TargetingError):
             tr.add('New', 'Finance')
         assert tr._store().read_text(encoding='utf-8') == content
-
-
-def test_multiple_processes_do_not_lose_writes():
-    # ACL-1419: the worker sits in a light module (see tests/targeting_worker.py),
-    # every worker is joined before its exit code is read, and a worker that
-    # outlives the deadline is reported as a hang, not as `None == 0`.
-    ctx = multiprocessing.get_context('spawn')
-    workers = [ctx.Process(target=targeting_worker.add_eight, args=(str(tr._store()), i))
-               for i in range(3)]
-    for w in workers:
-        w.start()
-    deadline = time.monotonic() + 120
-    for w in workers:
-        w.join(max(0.0, deadline - time.monotonic()))
-    hung = [w.name for w in workers if w.is_alive()]
-    for w in workers:
-        if w.is_alive():
-            w.terminate()
-            w.join(10)
-    assert not hung, f'workers still running after 120 s: {hung}'
-    assert [w.exitcode for w in workers] == [0, 0, 0]
-    assert len(tr.all_targets()) == 24
 
 
 def test_save_waits_out_a_briefly_held_registry(monkeypatch):

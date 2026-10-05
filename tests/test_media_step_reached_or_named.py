@@ -346,7 +346,7 @@ def test_the_wizard_is_captured_once_per_ad(page, wizard_opens, tmp_path, monkey
 
 # ── память прогона: навигация — не приговор файлу ─────────────────────────
 
-FILE = r"C:\creatives\1_2333_eslat_post.mp4"
+FILE = r"C:\creatives\1_2333_eslat_post.mp4"  # linux-ok: a Windows path as opaque data, never touched on disk
 
 
 @pytest.fixture
@@ -408,7 +408,7 @@ def test_a_file_that_was_offered_and_failed_is_still_remembered(monkeypatch, mem
 def test_an_earlier_ads_offered_file_does_not_condemn_the_next_ads_file(monkeypatch, memo):
     """Объявление 1 подало свой файл и не встало; объявление 2 (другой файл)
     упало на мастере. «Файл подавали» — про объявление 1, не про 2."""
-    other = r"C:\creatives\2_other.mp4"
+    other = r"C:\creatives\2_other.mp4"  # linux-ok: a Windows path as opaque data, never touched on disk
 
     def upload(page, ctype, path, **k):
         if path == FILE:

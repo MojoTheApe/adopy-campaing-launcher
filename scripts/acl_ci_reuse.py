@@ -11,7 +11,10 @@ Reuse is allowed only when it is provable:
   proven later, so it never counts);
 - the run concluded ``success`` and every required job of the full matrix ran
   and succeeded in its latest attempt (a run that itself reused, or was partial,
-  skipped or cancelled, does not count).
+  skipped or cancelled, does not count);
+- ACL-1582: a ci.yml run must have the current job layout (Linux and Windows
+  test jobs). A run of the old layout (``test (py, shard)``, all on Windows) is
+  refused even if green: it ran a different split of the suite.
 
 Any doubt (API error, missing data, no matching run) returns ``None``: the
 caller runs everything in full.
@@ -32,11 +35,36 @@ PROVABLE_EVENTS = {"push", "workflow_dispatch"}
 # Сколько последних коммитов с тем же деревом проверяем: продвижение даёт 2-3.
 MAX_CANDIDATES = 20
 
-# Обязательные задания полного прогона для каждого workflow. Матрица ci.yml
-# сверяется с этим списком тестом (tests/test_acl_ci_reuse.py), чтобы новая
-# версия Python или шард не сделали «полным» прогон без них.
+# Версии Python полного прогона ci.yml. ACL-1581: PR без изменений зависимостей
+# и бутстрапа гоняет только 3.13 (scripts/acl_ci_scope.py), поэтому такой прогон
+# никогда не «полный»; push-прогоны и запасной список матрицы — эти версии.
+FULL_PYTHON_VERSIONS = ("3.11", "3.13")
+
+# ACL-1582: раскладка полного push-прогона ci.yml. Непомеченные тесты идут на
+# Linux (все версии полного прогона × шарды), помеченные windows_only — одним
+# заданием на Windows. Имена заданий заданы в ci.yml явно (`name:`), а тесты
+# (tests/test_acl_ci_reuse.py, tests/test_ci_layout.py) сверяют этот список с
+# workflow, чтобы новая версия Python или шард не сделали «полным» прогон без них.
+CI_LINUX_PYTHONS = FULL_PYTHON_VERSIONS
+CI_LINUX_SHARDS = (1, 2, 3)
+CI_WINDOWS_PYTHONS = ("3.13",)
+
+
+def ci_linux_job(python, shard):
+    return f"linux tests ({python}, {shard})"
+
+
+def ci_windows_job(python):
+    return f"windows tests ({python})"
+
+
+# Задания раскладки до ACL-1582 (всё на Windows): такой прогон не доказательство.
+LEGACY_CI_JOB = re.compile(r"test \(\d+\.\d+, \d+\)")
+
+# Обязательные задания полного прогона для каждого workflow.
 REQUIRED_JOBS = {
-    "ci.yml": tuple(f"test ({python}, {shard})" for python in ("3.11", "3.13") for shard in (1, 2, 3))
+    "ci.yml": tuple(ci_linux_job(p, s) for p in CI_LINUX_PYTHONS for s in CI_LINUX_SHARDS)
+    + tuple(ci_windows_job(p) for p in CI_WINDOWS_PYTHONS)
     + ("ACL verification",),
     "windows-installer.yml": ("Verify build inputs", "Build, install, repair, and uninstall",
                               "Installer verification"),
@@ -70,20 +98,36 @@ def same_tree_commits(root, tree, limit=MAX_CANDIDATES):
     return found
 
 
-def full_jobs_passed(api, repo, run, workflow):
-    """Все обязательные задания последней попытки запуска реально прошли."""
-    required = REQUIRED_JOBS[workflow]
+def latest_jobs(api, repo, run):
+    """Задания последней попытки запуска по имени (только задания этого запуска)."""
     payload = api(f"repos/{repo}/actions/runs/{int(run['id'])}/jobs?filter=latest&per_page=100")
     jobs = {}
     for job in payload.get("jobs") or []:
         if job.get("run_id") != run["id"]:
             continue
         jobs.setdefault(job.get("name"), []).append(job)
-    for name in required:
+    return jobs
+
+
+def legacy_layout(jobs, workflow):
+    """Прогон ci.yml в раскладке до ACL-1582 (есть задание ``test (py, shard)``)."""
+    return workflow == "ci.yml" and any(LEGACY_CI_JOB.fullmatch(str(name)) for name in jobs)
+
+
+def jobs_complete(jobs, workflow):
+    """Полный набор текущей раскладки прошёл; старая раскладка — никогда."""
+    if legacy_layout(jobs, workflow):
+        return False
+    for name in REQUIRED_JOBS[workflow]:
         rows = jobs.get(name) or []
         if not rows or any(r.get("status") != "completed" or r.get("conclusion") != "success" for r in rows):
             return False
     return True
+
+
+def full_jobs_passed(api, repo, run, workflow):
+    """Все обязательные задания последней попытки запуска реально прошли."""
+    return jobs_complete(latest_jobs(api, repo, run), workflow)
 
 
 def valid_run_url(url, repo, run_id=None):

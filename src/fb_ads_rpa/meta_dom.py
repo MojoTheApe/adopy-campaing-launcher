@@ -20,6 +20,7 @@ from src.fb_ads_rpa import simple_create as _simple
 from src.fb_ads_rpa import wizard_capture as _wizard_capture
 from src.fb_ads_rpa import creative_pairing as _pairing
 from src.fb_ads_rpa import crop_step as _crop
+from src.fb_ads_rpa import foreign_windows as _windows
 
 #: Порог, за которым Playwright отказывается передавать файл.
 #:
@@ -2790,7 +2791,7 @@ def _conversion_location_menu_open(page: Page) -> bool:
     return False
 
 
-def _ensure_conversion_menu_open(page: Page, *, tries: int = 2) -> bool:
+def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str] | None = None) -> bool:
     """Меню Conversion location открыто к следующему способу выбора Website.
 
     25.09 (90a8987edad9, SA Investing; 19 полных отказов с 19.09): все восемь
@@ -2805,6 +2806,11 @@ def _ensure_conversion_menu_open(page: Page, *, tries: int = 2) -> bool:
         if _conversion_location_menu_open(page):
             return True
         dismiss_publish_draft_dialog(page)
+        # ACL-1573 / ACL-1572: окно поверх (панель Notifications, шаблон
+        # имени «Ad set name») забирает клик по триггеру — сперва закрыть.
+        got = _windows.before_step(page, "conversion_menu")
+        if closed is not None:
+            closed.extend(got)
         if not click_conversion_location_dropdown(page):
             return False
         for _poll in range(8):
@@ -2872,13 +2878,20 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     tried: list[str] = []
     reopened = 0
     menu_closed = 0
+    # ACL-1573: какие чужие окна закрыли между способами (`<вид>:<чем>`) и
+    # сколько раз меню так и не открылось.
+    windows_closed: list[str] = []
+    reopen_failed = 0
 
     def _done(method: str | None, ok: bool) -> bool:
         try:
+            diag = {"tried": tried, "reopened": reopened, "menu_closed": menu_closed}
+            if windows_closed or reopen_failed:
+                diag.update(windows_closed=windows_closed, reopen_failed=reopen_failed)
             _telemetry.record(
                 "conversion_website_pick", ok,
                 note=method or "not_selected",
-                diag={"tried": tried, "reopened": reopened, "menu_closed": menu_closed},
+                diag=diag,
             )
         except Exception:
             pass
@@ -2887,12 +2900,23 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     for name, method in methods:
         if is_website_conversion_selected(page):
             return _done(tried[-1] if tried else "already", True)
+        # ACL-1573 / ACL-1572: между способами — закрыть чужие окна реестра
+        # (панель Notifications, шаблон имени): они забирают фокус, и меню
+        # закрывается само.
+        windows_closed.extend(_windows.before_step(page, "conversion_website"))
         was_open = _conversion_location_menu_open(page)
         if not was_open:
             menu_closed += 1
-            if not _ensure_conversion_menu_open(page):
+            opened = _ensure_conversion_menu_open(page, closed=windows_closed)
+            if not opened and _windows.after_failure(page, "conversion_website"):
+                # Меню не открылось — запасной ход сторожа (раз на шаг):
+                # закрыли окно над ним — открыть ещё раз.
+                windows_closed.append("fallback")
+                opened = _ensure_conversion_menu_open(page, closed=windows_closed)
+            if not opened:
                 # Меню не открыть — способ жал бы в пустоту; следующий
                 # способ снова попробует открыть.
+                reopen_failed += 1
                 tried.append(f"{name}:menu_closed")
                 continue
             reopened += 1
@@ -4875,8 +4899,11 @@ def _under_flow_budget(flow):
 
     @functools.wraps(flow)
     def run(*args, **kwargs):
+        # ACL-1573: счётчики сторожа чужих окон — на прогон кампании; отказ,
+        # который остановило незнакомое окно, несёт его заголовок.
+        _windows.reset()
         try:
-            return flow(*args, **kwargs)
+            return _windows.attach_block(flow(*args, **kwargs))
         except FlowBudgetExceeded as stop:
             try:
                 _telemetry.record(stop.reason, False, note=str(stop.detail.get("after_step", "")),
@@ -4988,6 +5015,15 @@ def run_recorded_campaign_flow(
         return _StallWatch(page, where, reload=not _ADDITIONAL_AD_STEP.match(where))
 
     def _click(loc, *, where: str, attempts: int = 5) -> bool:
+        # ACL-1573: шаг под сторожем чужих окон — окна реестра закрываются до
+        # нажатия, а отказ даёт один запасной ход (закрыть окно над шагом и
+        # нажать ещё раз, `foreign_windows.guarded`).
+        if _tab_gone(page):
+            return False
+        return _windows.guarded(page, where, lambda: _click_tries(loc, where=where, attempts=attempts),
+                                target=loc)
+
+    def _click_tries(loc, *, where: str, attempts: int) -> bool:
         # Повторы нажатия затянулись дольше STALL_BUDGET_S — вкладку будим
         # (и, если висит, перезагружаем) один раз, потом повторы идут дальше.
         watch = _watch(where)
@@ -5023,6 +5059,14 @@ def run_recorded_campaign_flow(
         return False
 
     def _fill(loc, value: str, *, where: str, attempts: int = 5, info: dict | None = None) -> bool:
+        # ACL-1573: как `_click` — под сторожем чужих окон.
+        if _tab_gone(page):
+            return False
+        return _windows.guarded(page, where,
+                                lambda: _fill_tries(loc, value, where=where, attempts=attempts, info=info),
+                                target=loc)
+
+    def _fill_tries(loc, value: str, *, where: str, attempts: int, info: dict | None) -> bool:
         # ACL-1371: `info` — что было за попытки (для причины отказа шага):
         # дошли ли до поля, сколько раз вкладка не ответила, чем кончилась
         # последняя попытка (метка, без текста исключения).
@@ -5530,7 +5574,10 @@ def run_recorded_campaign_flow(
     # (8dbafcecb31f) — он накрывает меню Conversion location.
     _cancel_naming_template_dialog(page)
 
-    if not click_conversion_location_dropdown(page):
+    # ACL-1573 / ACL-1572: открытие меню — под сторожем окон (окна реестра
+    # до нажатия; отказ — закрыть чужое окно и нажать ещё раз).
+    if not _windows.guarded(page, "conversion_location_open",
+                            lambda: click_conversion_location_dropdown(page)):
         _shot("fail_conversion_location_open")
         return "conversion_location_open"
     # Live evidence (2026-07-21): the open menu shows Website directly, both
@@ -15847,6 +15894,9 @@ def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
     closed += _close_banners(page, _BANNER_TITLES + _NETWORK_TOAST_TITLES)
     if editor and _cancel_naming_template_dialog(page):
         closed.append("naming_template_dialog")
+    # ACL-1573: окна реестра, которых этот сбор не знал: панель Notifications,
+    # опросы, тост сети с «×» без подписи (снимок 20583efb8c41).
+    closed += _windows.before_step(page, where, only=("notifications", "survey", "network_toast"))
     if how or trouble:
         reloaded = False
         why = ""

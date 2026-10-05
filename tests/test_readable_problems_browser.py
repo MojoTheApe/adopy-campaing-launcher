@@ -37,7 +37,7 @@ def _result(failures, *, success=True):
     apply_step_failures(r, failures)
     r.run_id = "cc8fcfa17ae9"
     r.campaign_id = "120200000000001"
-    r.screenshot_paths = [r"C:\acl\output\rpa_pages\cc8fcfa17ae9\ad_copy.png"]
+    r.screenshot_paths = [r"C:\acl\output\rpa_pages\cc8fcfa17ae9\ad_copy.png"]  # linux-ok: a Windows path as opaque data, never touched on disk
     r.steps_completed.insert(0, "campaign_created")
     return r.to_job_dict()
 
@@ -121,7 +121,7 @@ def test_two_blocking_and_one_warning_render_as_the_mockup(browser):
         body = tech.text_content()
         for needed in ("conversion_event", "ad_copy", "1741 - Pro Bancolombia has no text",
                        "ad2_second_text", "add_control_not_found", "cc8fcfa17ae9",
-                       r"output\rpa_pages\cc8fcfa17ae9\ad_copy.png", "120200000000001"):
+                       r"output\rpa_pages\cc8fcfa17ae9\ad_copy.png", "120200000000001"):  # linux-ok: a relative Windows path as opaque data, never touched on disk
             assert needed in body, needed
         # The builder card is off-screen in this harness, so toggle by event.
         details.locator("summary").dispatch_event("click")

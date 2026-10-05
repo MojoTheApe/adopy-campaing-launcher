@@ -33,9 +33,9 @@ def local_dir(tmp_path, monkeypatch):
 
 def test_local_config_dir_is_outside_the_checkout(local_dir, monkeypatch):
     monkeypatch.delenv("ACL_CONFIG_DIR", raising=False)
-    resolved = paths.get_local_config_dir().replace("/", "\\").lower()
-    checkout = str(paths.__file__).rsplit("\\config\\", 1)[0].lower()
-    assert not resolved.startswith(checkout), (
+    resolved = Path(paths.get_local_config_dir()).resolve()
+    checkout = Path(paths.__file__).resolve().parents[1]  # config/paths.py -> the checkout root
+    assert not resolved.is_relative_to(checkout), (
         f"конфиг машины оказался внутри чекаута ({resolved}) — обновление или "
         "повторный clone унесёт настройки байера с собой"
     )
