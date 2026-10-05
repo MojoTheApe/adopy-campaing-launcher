@@ -1,5 +1,45 @@
 # System history
 
+## CI: one Python on PRs, superseded PR runs cancelled, installer job stops at 20 min — ACL-1581
+
+The Actions budget ran out for the fourth time on 2026-10-05 (about 4300 Windows minutes
+in one day). This is the cheapest slice of ACL-1541.
+
+- `scripts/acl_ci_scope.py` now also decides the Python versions of the `ci.yml` test
+  matrix and writes them as the `python` output (a JSON list). A `pull_request` run tests
+  Python 3.13 only (3 jobs instead of 6). A PR that touches dependency or bootstrap inputs
+  tests 3.11 and 3.13: `requirements*.txt`/`.in`, `constraints*.txt`, `.python-version`, `pyproject.toml`, `setup.py`/`setup.cfg`,
+  `pytest.ini`, both `conftest.py`, root `*.bat` installers/launchers,
+  `tests/bootstrap_windows_harness.ps1`, `packaging/**`, `.github/workflows/**`,
+  `scripts/acl_test_shard.py` and the CI scope/reuse scripts. Push runs
+  (stage/main/master), manual runs, an empty diff and any classification error test both.
+- `ci.yml` reads the list with `fromJSON(needs.scope.outputs.python || '["3.11", "3.13"]')`;
+  job names stay `test (<py>, <shard>)` and `ACL verification` still aggregates
+  `needs.test.result`. `REQUIRED_JOBS` is unchanged and now built from
+  `acl_ci_reuse.FULL_PYTHON_VERSIONS`, so a one-Python run is never a reuse proof or a
+  release proof (`verify_promotion` is unchanged).
+- Concurrency in `ci.yml` and `windows-installer.yml`: the group is `pr-<number>` for a
+  PR and `<ref>-<run_id>` for anything else, and `cancel-in-progress` is true only for
+  `pull_request`. Before, two quick squash merges to stage shared the group
+  `refs/heads/stage` and the second cancelled the first task's stage verification.
+  `tracker-link.yml` runs only on PRs and already cancelled correctly; unchanged.
+- `windows-installer.yml` build/install job: `timeout-minutes` 30 -> 20. Step limits:
+  install 3 (new), previous package 12 -> 7, onedir 8 -> 3, bundle test 5 -> 2, installer
+  build 10 -> 5, install test 8 -> 3, update cycle 8 -> 7. The numbers come from the last
+  91 green runs (2026-10-03..05): job p95 774 s, max 810 s, sum of step p95 884 s. Each step
+  limit is at least 1.5x its p95 and 1.25x its max, the job limit at least 1.3x the sum of step p95 and 1.5x
+  the job p95, so a hang fails on its own step. The update step
+  (420 s) must hold the earlier work (max 137 s), stop-server (30 s), the helper wait and
+  the cleanup (30 s), so `test_update_cycle.py` now waits `HELPER_WAIT_SECONDS = 150`
+  (was 360 s) and its `finally` cleanup can run; a test reads every `.wait(...)` timeout
+  from the script with `ast`.
+- Tests: `tests/test_acl_ci_scope.py` (version decision), `tests/test_acl_ci_reuse.py`
+  and `tests/test_publish_release.py` (a one-Python run is never a proof; the tag path is
+  unchanged), new `tests/test_acl_ci_workflows.py` (concurrency evaluated from the YAML,
+  matrix wiring, installer limits). The scope job also runs the new file.
+- Not verified on GitHub: the Actions budget was exhausted. After it is restored, a real
+  PR should show 3 test jobs and its stage push 6.
+
 ## Screen-values probe: reads only by default, every capture is opt-in — ACL-1532
 
 `scripts/probe_screen_values.py` measures whether our captures change a running
