@@ -1746,6 +1746,24 @@
           606
         ],
         "recorded_at": "2026-10-05T18:25:36+00:00"
+      },
+      "605": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1603Z",
+        "review_session": "rev_r1603z_1005",
+        "execution_lane": "8dc65979589a4158b53ab96f5dc29773",
+        "implementer": "Worker-S1603C",
+        "head_sha": "11cd40c6ae6c2b47c1dfc612e4862839bc14b363",
+        "base_sha": "de4be0bd6007adba3ae1ec366273636dd09cdfc4",
+        "tree_sha": "2f713548a6dfc22391f10f92d020060a4e8b3f0d",
+        "report": "# Independent review \u2014 PR #605 (ACL-1603, Issue #603), round 4\n\nReviewer-R1603Z (rev_r1603z_1005); implementer Worker-S1603C.\n- Head: de6a4505eb565f87847a9b491b5831b096edcbbe (tree 2f713548a6dfc22391f10f92d020060a4e8b3f0d)\n- Base work/stage: de4be0bd6007adba3ae1ec366273636dd09cdfc4\n\n## Verdict: approved\n\n## Coordinator checks\n1. B3 is fixed.\n   - `tests/test_publishing_everything_at_once.py` passes locally.\n   - CI linux (3.11, 1) and (3.13, 1) are SUCCESS.\n   - The handler is guarded by `typeof document.addEventListener === 'function'`.\n   - Mutation B3 (guard removed) is CAUGHT.\n2. Mutations.\n   - R17 (production `_slots = ProfileSlots(memory=lambda: None)`): CAUGHT by `test_the_production_queue_reads_the_real_host_memory`. That test checks the source text, which is weak but enough.\n   - Spot re-checks M7, R3, R7 and R14: all CAUGHT.\n   - R13 (drop the `kept` check in `release_kept`): still SURVIVES. See the note below.\n3. Diff 52921df4..de6a4505 is one commit.\n   - `src/web/templates/report.html`: one line, the guard.\n   - `tests/test_acl1603_stable_slots.py`: +39 lines, three new tests.\n   - Nothing else changed.\n4. `git merge-tree --write-tree work/stage HEAD` is clean (tree equals HEAD).\n5. CI on de6a4505: all 16 checks are SUCCESS, including `windows tests (3.13)` (2m22s), all six Linux shards, `ACL verification` and tracker-link.\n   - The first run went red. One job failed: `test_hidden_accounts_browser.py` on linux (3.11, 2), a Playwright click timeout. That code is unrelated, and the test passes locally (1 passed).\n   - Several other jobs sat 15 min in the runner queue and were cancelled.\n   - I reran the failed/cancelled jobs twice; the second rerun went fully green. No other run changed.\n\n## Note (non-blocking)\n- R13 survives because `test_releasing_the_account_of_a_running_job_is_a_404_and_keeps_the_slot` posts for a running entry that has no `label`. Only `keep()` sets a label, so the label match fails before the `kept` check is reached.\n- The guarantee still holds in production for the same reason: running entries never carry a label (a reused kept slot's new entry has none either). So no running job can be released.\n- The test does not prove the `kept` check itself. To pin it, give the running entry a label in that test. A follow-up is enough.\n\n## Local runs (head de6a4505)\n- Affected files: the 1603 suite, both earlier slot suites, reads, three-accounts, screen-guard, clean-profile-close, test_acl_test_platform and publishing_everything_at_once: 297 passed.\n- Headless browser files (multi_publish, build_dot): 22 passed.\n- `scripts/acl_scan_secrets.py`: clean.\n\n## Earlier rounds (still valid)\n- Cap 2, the 3 GB reserve with a 3.5 GB floor (it now applies to the first profile too), and windows kept open after a failure holding their slots are all pinned by tests.\n- So are the duplicate refusal (409 / \"already in the queue\"), the named review windows with the Release action, and the test isolation from host memory.\n- Round 3 mutation results stand: 26 of 29 caught, and R17 is now caught as well.\n\n## Issue #603 checkbox map\n- [x] Tests: never more than 2 running, including kept-open windows.\n- [x] Tests: a start is refused when free memory < per-profile + reserve, including the first profile.\n- [x] Tests: a memory drop mid-run stops new starts.\n- [x] Tests: duplicates are refused and listed.\n- [ ] Live: \"Publish all\" on 20 accounts, at most 2 at a time, no duplicates. Not done; it needs the owner's live check.\n  - With the owner's .env (cap 2, reserve 3, floor 3.5), the first profile needs 6.5 GB free.\n",
+        "main_sha": "eea3d5c6cf2a6714668cf1d2acb7ad4ee2907f8d",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          603
+        ],
+        "recorded_at": "2026-10-05T21:47:52+00:00"
       }
     },
     "stage": {
