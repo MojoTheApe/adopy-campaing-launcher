@@ -16,15 +16,50 @@ except ImportError:  # запуск как python3 scripts/acl_ci_scope.py
 ROOT_DOCS = {"README.md", "AGENTS.md", "CLAUDE.md", "AGENT_CONTEXT.md", "CHANGELOG.md"}
 TRACKER_METADATA = {"tracker/config.json", "tracker/engine.json"}
 
+# ACL-1581: PR проверяется на одной версии Python, полный набор — push-прогоны
+# (stage/main/master) и ручной запуск, они же доказательство для ACL-1565 и релиза.
+PR_PYTHON_VERSIONS = ("3.13",)
+# Входы зависимостей и бутстрапа: PR, задевший любой из них, гоняет обе версии.
+DEPENDENCY_FILES = {
+    "pyproject.toml", "setup.py", "setup.cfg", "pytest.ini", "conftest.py", "tests/conftest.py",
+    ".python-version",
+    "tests/bootstrap_windows_harness.ps1",
+    # Сама матрица: деление на шарды и решение о версиях.
+    "scripts/acl_test_shard.py", "scripts/acl_ci_scope.py", "scripts/acl_ci_reuse.py",
+}
+DEPENDENCY_PREFIXES = (".github/workflows/", "packaging/")
+
+
+def touches_dependencies(name):
+    """Путь из зависимостей/бутстрапа: requirements*, установщик, .bat-установка, CI."""
+    if name in DEPENDENCY_FILES or name.startswith(DEPENDENCY_PREFIXES):
+        return True
+    if "/" in name:
+        return False
+    # Корень: requirements*.txt/.in, constraints*.txt и .bat-скрипты установки/запуска.
+    return (name.startswith("requirements") and name.endswith((".txt", ".in"))
+            or name.startswith("constraints") and name.endswith(".txt")
+            or name.lower().endswith(".bat"))
+
+
+def python_versions(paths, event_name):
+    """Версии Python матрицы ci.yml; при любом сомнении — полный набор."""
+    if event_name != "pull_request" or not paths or any(touches_dependencies(p) for p in paths):
+        return list(reuse.FULL_PYTHON_VERSIONS)
+    return list(PR_PYTHON_VERSIONS)
+
 
 def classify(paths, event_name):
+    python = python_versions(paths, event_name)
     if event_name != "pull_request" or not paths:
-        return {"windows": True, "reason": "full-base-or-manual-validation"}
+        return {"windows": True, "reason": "full-base-or-manual-validation", "python": python}
     for name in paths:
         document = name in ROOT_DOCS or name.startswith("docs/") and name.endswith(".md")
         if not document and name not in TRACKER_METADATA:
-            return {"windows": True, "reason": "product-build-or-unknown-change"}
-    return {"windows": False, "reason": "documentation-and-tracker-metadata-only"}
+            return {"windows": True, "reason": "product-build-or-unknown-change", "python": python}
+    # Windows не запускается; список версий полный, чтобы матрица никогда не была пустой.
+    return {"windows": False, "reason": "documentation-and-tracker-metadata-only",
+            "python": list(reuse.FULL_PYTHON_VERSIONS)}
 
 
 def changed_paths(root, base, head):
@@ -43,7 +78,8 @@ def select(root, event_name, event):
         pr = event["pull_request"]
         return classify(changed_paths(root, pr["base"]["sha"], pr["head"]["sha"]), event_name)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        return {"windows": True, "reason": "classification-unavailable-run-full"}
+        return {"windows": True, "reason": "classification-unavailable-run-full",
+                "python": list(reuse.FULL_PYTHON_VERSIONS)}
 
 
 def decide(root, event_name, event, *, ref="", workflow="ci.yml", repo="", api=None, run_id=None):
@@ -66,7 +102,8 @@ def decide(root, event_name, event, *, ref="", workflow="ci.yml", repo="", api=N
     if not reuse.valid_run_url(proof.get("run_url"), repo, proof.get("run_id")):
         return dict(result, reuse="invalid-run-url-run-full")
     return {"windows": False, "reason": "reused-green-full-run-of-same-tree",
-            "reused_from": proof["run_url"], "tree": proof["tree"], "commit": proof["commit"]}
+            "reused_from": proof["run_url"], "tree": proof["tree"], "commit": proof["commit"],
+            "python": list(reuse.FULL_PYTHON_VERSIONS)}
 
 
 def main():
@@ -90,13 +127,17 @@ def main():
         with args.output.open("a", encoding="utf-8") as f:
             f.write("windows=" + str(result["windows"]).lower() + "\n")
             f.write("reused_from=" + result.get("reused_from", "") + "\n")
+            # JSON-список для fromJSON в матрице ci.yml; только известные версии, иначе полный набор.
+            versions = [v for v in result.get("python") or () if v in reuse.FULL_PYTHON_VERSIONS]
+            f.write("python=" + json.dumps(versions or list(reuse.FULL_PYTHON_VERSIONS)) + "\n")
     if args.summary:
         with args.summary.open("a", encoding="utf-8") as f:
             if result.get("reused_from"):
                 f.write(reuse.summary_line(result["reused_from"], result["tree"]) + "\n")
             else:
                 f.write(f"Scope: windows={str(result['windows']).lower()} ({result['reason']}"
-                        + (f", {result['reuse']}" if result.get("reuse") else "") + ")\n")
+                        + (f", {result['reuse']}" if result.get("reuse") else "") + ")"
+                        + (f", Python {', '.join(result['python'])}" if result.get("windows") else "") + "\n")
     print(json.dumps(result))
 
 

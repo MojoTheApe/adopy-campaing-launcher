@@ -93,8 +93,17 @@ The full suite runs in parallel with pytest-xdist (`requirements-dev.txt`):
 
     python -m pytest tests/ -q -n auto --dist loadfile
 
-CI (`.github/workflows/ci.yml`) runs the same command on both Python versions,
-split into three jobs per version: `python scripts/acl_test_shard.py <k> 3` prints
+CI (`.github/workflows/ci.yml`) runs the same command split into three jobs per
+Python version. Pushes to stage/main/master and manual runs test Python 3.11 and
+3.13 (6 jobs). A pull request tests Python 3.13 only (3 jobs), unless it touches
+dependency or bootstrap inputs (requirements, pyproject/setup, conftest, root
+`.bat` installers, `packaging/`, `.github/workflows/`, `scripts/acl_test_shard.py`,
+the CI scope/reuse scripts): then it tests both. The scope job decides this
+(`scripts/acl_ci_scope.py`, ACL-1581). Only a full push or manual run proves a tree
+for reuse and releases. A new push to a PR branch cancels that PR's superseded CI
+and installer runs; stage/main/master pushes and manual runs are never cancelled
+or replaced. The installer build/install job stops at 15 minutes.
+`python scripts/acl_test_shard.py <k> 3` prints
 the test files of shard k (together the shards are exactly `tests/test_*.py`,
 checked by `tests/test_acl_test_shard.py`). The hosted Windows runner of this
 private repository has two CPUs, so xdist alone did not shorten CI.
