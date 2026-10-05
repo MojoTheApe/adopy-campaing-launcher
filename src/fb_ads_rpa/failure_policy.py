@@ -526,8 +526,39 @@ PER_AD_DETAIL: dict[tuple[str, str], tuple[str, str, str, str]] = {
 }
 
 
+# ── ACL-1573: шаг остановило незнакомое окно Meta ──────────────────────────
+#
+# `<шаг>:Unknown Meta window blocked the step: <title> (unknown_window)` —
+# сторож окон (`foreign_windows.attach_block`) не смог безопасно закрыть
+# окно, которого шаг не открывал. Вердикт шага не меняется (имя до «:»),
+# меняется объяснение: оператор читает заголовок окна.
+UNKNOWN_WINDOW_TOKEN = "(unknown_window)"
+UNKNOWN_WINDOW_PREFIX = "Unknown Meta window blocked the step: "
+
+
+def _window_detail(failure: str) -> tuple[str, str, str, str] | None:
+    raw = str(failure or "")
+    if ":" not in raw:
+        return None
+    note = raw.split(":", 1)[1].strip()
+    if not note.endswith(UNKNOWN_WINDOW_TOKEN) or not note.startswith(UNKNOWN_WINDOW_PREFIX):
+        return None
+    title = note[: -len(UNKNOWN_WINDOW_TOKEN)].strip()
+    return (
+        f"{title}; the robot only closes such a window with its own Close / Not now / Dismiss / "
+        "Cancel or Escape and never presses Publish, Confirm or Continue in it, so the step was "
+        "stopped - the draft may be incomplete",
+        title,
+        "A Meta window the robot does not know stayed over the editor, so this step was not done.",
+        "Open the draft in Ads Manager, close that window by hand and check this step.",
+    )
+
+
 def _detail(failure: str) -> tuple[str, str, str, str] | None:
     raw = str(failure or "")
+    window = _window_detail(raw)
+    if window:
+        return window
     per_ad = _PER_AD_NAME.fullmatch(base_name(raw))
     if not per_ad or ":" not in raw:
         return None

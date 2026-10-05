@@ -114,6 +114,61 @@ After review:
   passing the flags to `probe`, a timeout that fails if `asyncio.wait_for` is removed,
   and `--out` handling.
 
+## Foreign Meta windows: detect, close safely, name the blocker — ACL-1573 (slice A), ACL-1572
+
+During runs Meta shows windows the robot did not open. Each step knew a few of them on its
+own, and an unknown window silently failed the step. ACL-1572 (Doc21, 01.10 308c4f7c8a5a and
+04.10 254ee3b3e0c7 / 87d43d6202af / 18d15b75d1eb): `conversion_website_pick` saw
+`menu_closed` x8 with `reopened: 0`. The failure screenshots show the "Ad set name -
+Template" naming dialog (Add component / Choose existing template / Cancel / Save) over
+Conversion location, opened after the one-time `_cancel_naming_template_dialog` check. The
+Notifications panel named in ACL-1572 is Meta's pre-rendered, hidden flyout
+(`toggleTargetClosed`): it is in all 284 local captures, successful steps included.
+
+- New `src/fb_ads_rpa/foreign_windows.py`: one registry (`KNOWN`) of Meta windows and their
+  closers - Notifications panel (Escape, then its own toggle), "Turn off ad blocker",
+  onboarding tour, naming template dialog, draft review, surveys - plus the
+  network toast. The existing handlers (`_close_ad_blocker_modal`, `_close_onboarding_tour`,
+  `_cancel_naming_template_dialog`, `dismiss_publish_draft_dialog`) are called from the
+  registry unchanged. Windows a step opens
+  (media wizard, objective window, loading) are `owned` and never touched. The media wizard
+  and its Replace picker are recognised by structure, not by the title of their current
+  screen: the step row (Media / Trim / Crop / Text / Creative generation / Enhancements /
+  Translation, `aria-current="step"`) or the ad's `ad_image_video_selector_section` /
+  `creative-tool-asset` surface. That structural check runs first, then the registry kinds,
+  then the text-only owned kinds (`objective`, `loading`), which match only the window's own
+  heading. A "Loading..." line inside the naming or Notifications dialog no longer makes it
+  owned. An owned window is never closed by the fallback. The "Creative setup → Site links"
+  screen is part of the wizard, so it is no longer a registry entry; the ad-text step still
+  cancels it with `_cancel_site_links_modal`. A replay over the captures under C:\acl-live-* gives
+  419 wizard and picker windows, all owned, none unknown. Hidden windows
+  (`toggleTargetClosed`, `display:none`, `hidden`, zero size) are not windows.
+- Before every `_click` / `_fill` of the recorded flow, before the Conversion location menu is
+  opened and between the eight Website pick strategies, registry windows are closed. A
+  `foreign_window` telemetry row gives kind / title / role / surface (no ids, URLs or the
+  campaign name).
+- After a failed step (at most once per step per campaign): unknown windows are captured
+  (`page_capture`, step `foreign_window`, own quota 3), sent to Sentry with their title
+  (`foreign_window: unknown-window`, grouped per title), and closed only with their own
+  Close / Not now / Dismiss / Cancel / x or Escape (focused into the window). The step is
+  then retried once. Publish, Confirm, Accept, Submit, Create, Continue, Save, Discard,
+  anything in a footer / publish surface or outside the window is never pressed. If the
+  window stays, the flow's failure becomes `<step>:Unknown Meta window blocked the step:
+  <title> (unknown_window)`. The step name before ":" is unchanged, so retry and failure
+  policy verdicts are the same as before.
+- `conversion_website_pick` diag: `windows_closed` and `reopen_failed`. When the menu does not
+  reopen, the guard's fallback runs once and the menu is opened again.
+- `_clear_blocking_overlays` also closes the Notifications panel, surveys and the real
+  network toast (its "x" has no `aria-label`, which `_close_banners` never recognised).
+- Dashboard: `failure_policy` explains `(unknown_window)` failures. The title becomes "Unknown
+  Meta window blocked the step: <title>", with an impact and an action line. The build
+  progress model holds on `foreign_window`.
+- Sentry triage map: `foreign_window` and reason `unknown-window` -> ACL-1573.
+- Bench: `foreign_windows_doc21_2026_10_04.html` and `network_toast_2026_10_01.html`;
+  `tests/test_foreign_windows_are_closed_or_named.py`.
+- Next: slice B (refresh and restore the editor to the same object) and slice C (per-campaign
+  checkpoints and resume) attach to `after_failure` returning False.
+
 ## CI reuses a full green run of the same tree on promotion — ACL-1565
 
 Every task ran the full Windows suite (6 shards) and the installer build three times
