@@ -2499,6 +2499,15 @@ async def api_select_buyer(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "selected": selected})
 
 
+
+def _owner_hint(owner: str, selected_cm: str) -> str:
+    """ACL-1588: подсказка, когда CM в книге статистики — не выбранный байер."""
+    owner = (owner or "").strip()
+    if owner and selected_cm and owner != selected_cm:
+        return f"owner in stats: {owner}"
+    return ""
+
+
 @app.get("/api/accounts-overview")
 @_off_loop
 def api_accounts_overview() -> JSONResponse:
@@ -2624,6 +2633,7 @@ def api_accounts_overview() -> JSONResponse:
     }
 
     accounts = []
+    other_owner_labels: list[str] = []
     for row in sheet_rows:
         label = (row.get("account_label") or row.get("alias") or "").strip()
         entry = resolve_account_entry(account_map, label) if label else None
@@ -2631,11 +2641,17 @@ def api_accounts_overview() -> JSONResponse:
         profile_id = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
         missing = [n for n, v in (("ad_account_id", ad_id), ("profile_id", profile_id)) if not v]
         owner = owner_by_alias.get(normalize_account_alias(label), "")
-        if selected_cm and owner and owner != selected_cm:
+        # ACL-1588: кто назван CM в книге статистики, не прячет аккаунт, который
+        # подключён на этой машине. Чужой аккаунт без строки в карте тут не
+        # показываем (его место — подсказки для подключения), но он остаётся
+        # доступным для поиска.
+        if selected_cm and owner and owner != selected_cm and entry is None:
+            other_owner_labels.append(label)
             continue
         accounts.append({
             "label": label,
             "owner": owner,
+            "owner_hint": _owner_hint(owner, selected_cm),
             "country_name": country_by_alias.get(normalize_account_alias(label), ""),
             # An account can belong to two countries at once — five of fourteen
             # do. Showing only one hides the other, and the hidden one is a
@@ -2660,14 +2676,14 @@ def api_accounts_overview() -> JSONResponse:
         if not label or label in listed:
             continue
         owner = owner_by_alias.get(normalize_account_alias(label), "")
-        if selected_cm and owner and owner != selected_cm:
-            continue
+        # ACL-1588: подключён здесь — виден всегда, чьим бы ни назвала его книга.
         ad_id = (getattr(entry, "ad_account_id", "") or "").strip()
         profile_id = (getattr(entry, "profile_id", "") or "").strip()
         missing = [n for n, v in (("ad_account_id", ad_id), ("profile_id", profile_id)) if not v]
         accounts.append({
             "label": label,
             "owner": owner,
+            "owner_hint": _owner_hint(owner, selected_cm),
             "country_name": country_by_alias.get(normalize_account_alias(label), ""),
             # An account can belong to two countries at once — five of fourteen
             # do. Showing only one hides the other, and the hidden one is a
@@ -2718,8 +2734,11 @@ def api_accounts_overview() -> JSONResponse:
             alias
             for alias, owner in owner_by_alias.items()
             if alias and alias not in listed_norm
-            and (not selected_cm or owner == selected_cm)
         }
+        # ACL-1588: подсказки для подключения — все аккаунты, а не только
+        # выбранного байера: любой менеджер может подключить любой аккаунт.
+        | {normalize_account_alias(l) for l in other_owner_labels
+           if normalize_account_alias(l) and normalize_account_alias(l) not in listed_norm}
     )
 
     # Спрятанное помечается, а не вырезается: счётчик спрятанных и кнопка
