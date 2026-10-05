@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 from src.fb_ads_rpa import meta_dom as md  # noqa: E402
 from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
 
-FILE = r"C:\creatives\heavy.mp4"
+FILE = r"C:\creatives\heavy.mp4"  # linux-ok: a Windows path as opaque data, never touched on disk
 
 
 @pytest.fixture(autouse=True)
@@ -99,7 +99,7 @@ def test_a_different_file_is_not_punished(monkeypatch):
 
     md.upload_ad_creative_with_retry(object(), "video", FILE)
     uploads.clear()
-    md.upload_ad_creative_with_retry(object(), "video", r"C:\creatives\other.mp4")
+    md.upload_ad_creative_with_retry(object(), "video", r"C:\creatives\other.mp4")  # linux-ok: a Windows path as opaque data, never touched on disk
     assert uploads, "другой файл обязан получить свою попытку"
 
 

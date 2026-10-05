@@ -21,6 +21,10 @@ import pytest
 
 from scripts import acl_update_gate as gate
 
+# ACL-1582: файл идёт только в Windows-задание CI; причина — в маркере.
+pytestmark = pytest.mark.windows_only(
+    reason="Install ACL.bat carries its own copy of this gate; the bootstrap contract is Windows-only")
+
 # Отгружаемая стадия гейта — до того, как autouse-фикстура warn_stage её подменит.
 _SHIPPED = gate.GATE_ENFORCE
 

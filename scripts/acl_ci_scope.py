@@ -25,7 +25,8 @@ DEPENDENCY_FILES = {
     ".python-version",
     "tests/bootstrap_windows_harness.ps1",
     # Сама матрица: деление на шарды и решение о версиях.
-    "scripts/acl_test_shard.py", "scripts/acl_ci_scope.py", "scripts/acl_ci_reuse.py",
+    "scripts/acl_test_shard.py", "scripts/acl_test_platform.py", "scripts/acl_ci_scope.py",
+    "scripts/acl_ci_reuse.py",
 }
 DEPENDENCY_PREFIXES = (".github/workflows/", "packaging/")
 

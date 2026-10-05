@@ -71,7 +71,7 @@ def test_the_floor_setting_is_read_from_the_machine_env():
 # ── замер процессов (подставные процессы) ────────────────────────────────
 
 class FakeProc:
-    def __init__(self, pid, cmdline, rss_mb, children=(), exe=r"C:\Users\u\mlx\deps\mimic_153.2\chrome.exe",
+    def __init__(self, pid, cmdline, rss_mb, children=(), exe=r"C:\Users\u\mlx\deps\mimic_153.2\chrome.exe",  # linux-ok: a Windows path as opaque data, never touched on disk
                  name="chrome.exe"):
         self.pid, self._cmd, self._rss, self._children = pid, cmdline, rss_mb, list(children)
         self.info = {"name": name, "exe": exe, "cmdline": cmdline}
@@ -91,7 +91,7 @@ def test_a_profile_tree_is_found_by_its_id_and_never_counts_other_chrome():
     root = FakeProc(1, ["chrome.exe", "--client-session-id=AAAA-1111", "--user-data-dir=X"], 600, [kid])
     other = FakeProc(3, ["chrome.exe", "--client-session-id=BBBB-2222"], 3000)
     own_chrome = FakeProc(4, ["chrome.exe", "--client-session-id=aaaa-1111"], 5000,
-                          exe=r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+                          exe=r"C:\Program Files\Google\Chrome\Application\chrome.exe")  # linux-ok: a Windows path as opaque data, never touched on disk
     got = ps.measure_profiles(["aaaa-1111", "CCCC-3333"], processes=lambda: [root, other, own_chrome, kid])
     assert got == {"aaaa-1111": 1500}
 
