@@ -4267,14 +4267,27 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.creatives %}
-    <tr title="{{ row.ad_title }}">
-      <td>{{ row.creative_id or row.ad_title }}</td>
+    {# ACL-1593: группа раскрывается в строки вариантов (сумма = строка группы). #}
+    <tr title="{{ row.ad_title }}"{% if row.has_variants %} class="creative-group" style="cursor:pointer" onclick="var n=this.nextElementSibling;while(n&&n.classList.contains('creative-variant')){n.hidden=!n.hidden;n=n.nextElementSibling;}"{% endif %}>
+      <td>{% if row.has_variants %}&#9656; {% endif %}{{ row.creative_id or row.ad_title }}</td>
       <td>{{ row.text_name or '—' }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.spend | fmt_usd }}</td>
       <td class="num">{{ row.cpa | fmt_usd }}</td>
     </tr>
+    {% if row.has_variants %}
+    {% for v in row.variants %}
+    <tr class="creative-variant" hidden>
+      <td style="padding-left:1.5em">{{ v.label }}</td>
+      <td>{{ row.text_name or '—' }}</td>
+      <td class="num">{{ v.deposits }}</td>
+      <td class="num">{{ v.leads }}</td>
+      <td class="num">{{ v.spend | fmt_usd }}</td>
+      <td class="num">{{ v.cpa | fmt_usd }}</td>
+    </tr>
+    {% endfor %}
+    {% endif %}
   {% endfor %}
   </tbody>
 </table>
@@ -9092,22 +9105,52 @@ var AMAP_OPEN_TIMEOUT_MSG = 'The profile opened but did not answer \u2014 check 
   + '(login, checkpoint), then press Connect again.';
 var AMAP_LAST_FOUND = null;   // профиль последнего нажатия Connect — для ручной формы
 
-function amapFetchJson(url, opts, ms) {
-  var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
-  var o = Object.assign({}, opts || {});
-  if (ctl) o.signal = ctl.signal;
+/* Таймаут только перестаёт ждать — запрос не отменяется: сервер открывает
+   профиль дальше, и пока он не ответил, второе открытие того же профиля не
+   начинают (ACL-1588). `settled` вызывается, когда исходный запрос закончился. */
+var AMAP_OPEN_INFLIGHT = {};   // profile_id → Promise, который завершается с запросом
+
+function amapFetchJson(url, opts, ms, settled) {
   var timer;
   var limit = new Promise(function (_, reject) {
     timer = setTimeout(function () {
       var e = new Error('timeout'); e.timeout = true;
-      if (ctl) { try { ctl.abort(); } catch (x) { /* уже закончилось */ } }
       reject(e);
     }, ms);
   });
-  var work = fetch(url, o).then(function (r) { return r.json(); });
+  var work = fetch(url, opts || {}).then(function (r) { return r.json(); });
+  if (settled) work.then(settled, settled);
   return Promise.race([work, limit]).then(
     function (v) { clearTimeout(timer); return v; },
     function (e) { clearTimeout(timer); throw e; });
+}
+
+/* Ручная форма (ACL-1588): профиль, найденный поиском, подставляется в список;
+   возвращает выбранный profile_id. */
+function amapPrefillSelect(ps, keep, openProfiles, lf) {
+  if (keep || !lf || !lf.profile_id) return keep;
+  if (!openProfiles.some(function (p) { return p.profile_id === lf.profile_id; })) {
+    var o = document.createElement('option');
+    o.value = lf.profile_id;
+    o.textContent = (lf.name || lf.profile_id.slice(0, 8)) + ' \u00b7 found by search';
+    ps.appendChild(o);
+  }
+  return lf.profile_id;
+}
+
+/* Что ручная форма берёт у найденного профиля, если он тот же, что выбран. */
+function amapManualExtras(pid, picked, lf) {
+  var out = {};
+  var same = lf && lf.profile_id && lf.profile_id === pid ? lf : null;
+  if (picked && picked.folder_id) out.folder_id = picked.folder_id;
+  else if (same && same.folder_id) out.folder_id = same.folder_id;
+  if (same && same.instance) out.multilogin_instance = same.instance;
+  out.ad_account_id = same ? (same.ad_account_id || '') : '';
+  return out;
+}
+
+function amapOwnerHint(a, esc) {
+  return a && a.owner_hint ? ' <span class="acc-owner-hint">' + esc(a.owner_hint) + '</span>' : '';
 }
 
 async function amapOpenFoundProfile(box, p, inst, btn, row) {
@@ -9123,8 +9166,11 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
   var d = null;
   p._openTimedOut = false;
   try {
+    var done;
+    AMAP_OPEN_INFLIGHT[p.profile_id] = new Promise(function (r) { done = r; });
     d = await amapFetchJson('/mlx-profile-open', { method: 'POST', body: body, credentials: 'same-origin' },
-                            AMAP_OPEN_WAIT_MS);
+                            AMAP_OPEN_WAIT_MS, function () { delete AMAP_OPEN_INFLIGHT[p.profile_id]; done(); });
+    if (d && d.timeout) p._openTimedOut = true;
   } catch (e) {
     if (e && e.timeout) { p._openTimedOut = true; d = { ok: false, message: AMAP_OPEN_TIMEOUT_MSG }; }
     else d = { ok: false, message: String(e && e.message || e) };
@@ -9151,6 +9197,12 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
    x01), и тогда номер вписывают сами или оставляют на потом. */
 async function amapOpenAndConnect(box, p, inst, btn, row) {
   if (btn.disabled) return;
+  if (AMAP_OPEN_INFLIGHT[p.profile_id]) {
+    /* Первое открытие ещё идёт на сервере — второе не запускаем. */
+    box.querySelector('.amap-msg').textContent =
+      'This profile is still opening — wait for it to finish, then press Connect again.';
+    return;
+  }
   btn.disabled = true;
   AMAP_LAST_FOUND = {
     profile_id: p.profile_id, folder_id: p.folder_id || (p._details || {}).folder_id || '',
@@ -9161,7 +9213,11 @@ async function amapOpenAndConnect(box, p, inst, btn, row) {
     if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
     await amapConnect(box, p, inst, btn, opened);
   } finally {
-    btn.disabled = false;
+    /* Кнопка остаётся выключенной, пока не закончился исходный запрос на
+       открытие, — а не только до таймаута. */
+    var pending = AMAP_OPEN_INFLIGHT[p.profile_id];
+    if (pending) pending.then(function () { btn.disabled = false; });
+    else btn.disabled = false;
   }
 }
 
@@ -9428,7 +9484,7 @@ async function amapConnect(box, profile, instance, btn, opened) {
   });
   var pd = null; try { pd = await patch.json(); } catch (e) {}
   if (!pd || !pd.ok) {
-    btn.disabled = false;
+    /* кнопку включает amapOpenAndConnect: пока исходное открытие не закончилось, она выключена */
     msg.textContent = (pd && pd.error) ? pd.error : ('could not save (HTTP ' + patch.status + ')');
     msg.className = 'amap-msg bad';
     return;
@@ -9436,18 +9492,17 @@ async function amapConnect(box, profile, instance, btn, opened) {
   /* ACL-1588: страна необязательна. Пустая не ходит в /account-links — там
      400 «A country or asset name is required», хотя строка в карте уже
      записана и всё получилось. */
+  if (profile._openTimedOut) {
+    /* Строка записана с профилем, но человеку надо успеть прочитать, что
+       профиль не ответил, — страницу перезагружаем не сразу (и со страной,
+       и без неё). */
+    msg.className = 'amap-msg bad';
+    msg.textContent = 'Connected: ' + name + ' (saved with its profile). ' + AMAP_OPEN_TIMEOUT_MSG;
+    await new Promise(function (r) { setTimeout(r, 6000); });
+  }
   if (!(country || '').trim()) {
-    msg.className = 'amap-msg';
-    btn.disabled = false;
-    if (profile._openTimedOut) {
-      /* Строка записана с профилем, но человеку надо успеть прочитать, что
-         профиль не ответил, — страницу перезагружаем не сразу. */
-      msg.textContent = 'Connected: ' + name + ' (saved with its profile). ' + AMAP_OPEN_TIMEOUT_MSG;
-      setTimeout(function () { location.reload(); }, 6000);
-    } else {
-      msg.textContent = 'Connected: ' + name;
-      location.reload();
-    }
+    if (!profile._openTimedOut) { msg.className = 'amap-msg'; msg.textContent = 'Connected: ' + name; }
+    location.reload();
     return;
   }
   amapSend({ action: 'link', kind: 'country', value: country, account: name }, msg);
@@ -13460,9 +13515,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   function addManual() {
     var pid = (el('ac-new-prof') || {}).value || '';
     var name = ((el('ac-new-label') || {}).value || '').trim() || accountForProfile(pid);
-    var ad = ((el('ac-new-adid') || {}).value || '').trim() || detectedFor(pid)
-             || ((typeof AMAP_LAST_FOUND !== 'undefined' && AMAP_LAST_FOUND && AMAP_LAST_FOUND.profile_id === pid)
-                  ? AMAP_LAST_FOUND.ad_account_id : '');
+    var extras = amapManualExtras(pid, openProfiles.filter(function (p) { return p.profile_id === pid; })[0], AMAP_LAST_FOUND);
+    var ad = ((el('ac-new-adid') || {}).value || '').trim() || detectedFor(pid) || extras.ad_account_id;
     var country = ((el('ac-new-country') || {}).value || '').trim();
 
     if (!name) { say('Name could not be worked out — enter it manually', 'err'); openManual(); return; }
@@ -13471,13 +13525,10 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     if (!ad) { say('Ad account could not be worked out — enter it manually', 'err'); openManual(); return; }
 
     var picked = openProfiles.filter(function (p) { return p.profile_id === pid; })[0];
-    var lastFound = (typeof AMAP_LAST_FOUND !== 'undefined' && AMAP_LAST_FOUND
-                     && AMAP_LAST_FOUND.profile_id === pid) ? AMAP_LAST_FOUND : null;
     var payload = { account_name: name, ad_account_id: ad };
     if (pid) payload.profile_id = pid;
-    if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
-    else if (lastFound && lastFound.folder_id) payload.folder_id = lastFound.folder_id;
-    if (lastFound && lastFound.instance) payload.multilogin_instance = lastFound.instance;
+    if (extras.folder_id) payload.folder_id = extras.folder_id;
+    if (extras.multilogin_instance) payload.multilogin_instance = extras.multilogin_instance;
     if (country) payload.country = country;
 
     var btn = el('ac-add-btn');
@@ -13556,7 +13607,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         + '" aria-label="select ' + esc(a.label) + '">' + '</td>'
         + '<td><div class="acc-name">' + esc(a.label) + '</div>'
         + '<div class="acc-meta">' + pill + local
-        + (a.owner_hint ? ' <span class="acc-owner-hint">' + esc(a.owner_hint) + '</span>' : '')
+        + amapOwnerHint(a, esc)
         + '</div></td>'
         + '<td>' + countryCell(a) + '</td>'
         + '<td><input class="ac-adid" type="text" style="width:12rem" value="'
@@ -13596,15 +13647,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       ps.innerHTML = profileOptions('', '');
       /* ACL-1588: профиль, найденный поиском, подставляется в ручную форму —
          после таймаута Connect человек не должен выбирать его заново. */
-      var lf = (typeof AMAP_LAST_FOUND !== 'undefined') ? AMAP_LAST_FOUND : null;
-      if (!keep && lf && lf.profile_id) {
-        if (!openProfiles.some(function (p) { return p.profile_id === lf.profile_id; })) {
-          var o = document.createElement('option');
-          o.value = lf.profile_id; o.textContent = (lf.name || lf.profile_id.slice(0, 8)) + ' · found by search';
-          ps.appendChild(o);
-        }
-        keep = lf.profile_id;
-      }
+      keep = amapPrefillSelect(ps, keep, openProfiles, AMAP_LAST_FOUND);
       ps.value = keep;
     }
 

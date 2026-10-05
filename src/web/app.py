@@ -3507,6 +3507,15 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
 
 
+_OPEN_INFLIGHT: "dict[str, asyncio.Future]" = {}
+# Короче клиентских 75 с: тогда человек видит ответ сервера, а не свой таймаут.
+OPEN_WAIT_S = 70.0
+OPEN_TIMEOUT_MESSAGE = ("The profile opened but did not answer \u2014 check its window in Multilogin "
+                        "(login, checkpoint), then press Connect again.")
+OPEN_ALREADY_MESSAGE = ("This profile is already being opened \u2014 wait for it to finish, "
+                        "then press Connect again.")
+
+
 @app.post("/mlx-profile-open")
 async def mlx_profile_open(request: Request) -> JSONResponse:
     """Поднять найденный в Multilogin профиль — ещё до подключения аккаунта.
@@ -3523,13 +3532,36 @@ async def mlx_profile_open(request: Request) -> JSONResponse:
     profile_id = (form.get("profile_id") or "").strip()
     if not profile_id:
         return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
-    ok, message = await asyncio.to_thread(
+    # ACL-1588: один открывающий вызов на profile_id. Клиент перестаёт ждать по
+    # таймауту, а поток открытия живёт дальше; без этой защиты «press Connect
+    # again» запускал второе открытие того же профиля.
+    existing = _OPEN_INFLIGHT.get(profile_id)
+    if existing is not None and not existing.done():
+        return JSONResponse({"ok": False, "already_opening": True,
+                             "message": OPEN_ALREADY_MESSAGE}, status_code=409)
+    task = asyncio.ensure_future(asyncio.to_thread(
         account_spend.open_profile_for_automation,
         profile_id,
         (form.get("folder_id") or "").strip(),
         (form.get("instance") or "A").strip(),
         (form.get("name") or "").strip(),
-    )
+    ))
+    _OPEN_INFLIGHT[profile_id] = task
+
+    def _release(done, key=profile_id):
+        if _OPEN_INFLIGHT.get(key) is done:
+            _OPEN_INFLIGHT.pop(key, None)
+        if not done.cancelled():
+            done.exception()  # прочитано, чтобы asyncio не ругался на «забытое»
+
+    task.add_done_callback(_release)
+    try:
+        # Ожидание ограничено, но поток не отменяется и профиль не убивается и
+        # не перезапускается: просто отвечаем раньше, чем клиент потеряет терпение.
+        ok, message = await asyncio.wait_for(asyncio.shield(task), OPEN_WAIT_S)
+    except asyncio.TimeoutError:
+        return JSONResponse({"ok": False, "timeout": True,
+                             "message": OPEN_TIMEOUT_MESSAGE}, status_code=409)
     return JSONResponse({"ok": ok, "message": message}, status_code=200 if ok else 409)
 
 

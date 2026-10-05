@@ -69,6 +69,10 @@ def test_accounts_lists_a_connected_account_whatever_the_stats_cm(machine):
     by_label = {a["label"]: a for a in data["accounts"]}
     assert "FacebookDoc30" in by_label, "connected here, so it is never hidden"
     assert by_label["FacebookDoc30"]["connected"] is True
+    # Строка идёт из листа, а не из «только здесь»: старый фильтр в цикле листа
+    # возвращал аккаунт через local_only без статуса.
+    assert by_label["FacebookDoc30"]["status"] == "Active"
+    assert not by_label["FacebookDoc30"].get("local_only")
     assert by_label["FacebookDoc30"]["owner_hint"] == "owner in stats: Dan Dicker"
 
 
@@ -123,6 +127,45 @@ def test_stats_numbers_still_follow_the_selected_buyer():
     assert a != b
     src = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
     assert 'my_cm=report.get("my_cm") or get_selected_cm()' in src
+
+
+def _post_open(profile_id="p1"):
+    return {"data": {"profile_id": profile_id, "folder_id": "f", "instance": "A", "name": "n"}}
+
+
+def test_a_second_open_of_the_same_profile_does_not_start(monkeypatch):
+    """B3: один открывающий вызов на profile_id, второй отвечает сразу."""
+    import threading
+    from src.analysis_agent import account_spend
+
+    gate, started = threading.Event(), []
+
+    def slow_open(*a, **k):
+        started.append(a[0])
+        gate.wait(5)
+        return True, "opened"
+
+    monkeypatch.setattr(account_spend, "open_profile_for_automation", slow_open)
+    monkeypatch.setattr(web_app, "OPEN_WAIT_S", 0.3)
+
+    async def go():
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as c:
+            first = await c.post("/mlx-profile-open", **_post_open())
+            second = await c.post("/mlx-profile-open", **_post_open())
+            other = await c.post("/mlx-profile-open", **_post_open("p2"))
+            gate.set()
+            await asyncio.sleep(0.2)
+            third = await c.post("/mlx-profile-open", **_post_open())
+            return first, second, other, third
+
+    first, second, other, third = asyncio.run(go())
+    assert first.json()["timeout"] is True, "bounded server wait, same English message"
+    assert "did not answer" in first.json()["message"]
+    assert second.json().get("already_opening") is True and "already being opened" in second.json()["message"]
+    assert started.count("p1") == 1 + 1, "p1 opened once while in flight, then again only after it finished"
+    assert "p2" in started, "another profile is independent"
+    assert third.json()["ok"] is True
 
 
 needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
