@@ -4266,14 +4266,27 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.creatives %}
-    <tr title="{{ row.ad_title }}">
-      <td>{{ row.creative_id or row.ad_title }}</td>
+    {# ACL-1593: группа раскрывается в строки вариантов (сумма = строка группы). #}
+    <tr title="{{ row.ad_title }}"{% if row.has_variants %} class="creative-group" style="cursor:pointer" onclick="var n=this.nextElementSibling;while(n&&n.classList.contains('creative-variant')){n.hidden=!n.hidden;n=n.nextElementSibling;}"{% endif %}>
+      <td>{% if row.has_variants %}&#9656; {% endif %}{{ row.creative_id or row.ad_title }}</td>
       <td>{{ row.text_name or '—' }}</td>
       <td class="num">{{ row.deposits }}</td>
       <td class="num">{{ row.leads }}</td>
       <td class="num">{{ row.spend | fmt_usd }}</td>
       <td class="num">{{ row.cpa | fmt_usd }}</td>
     </tr>
+    {% if row.has_variants %}
+    {% for v in row.variants %}
+    <tr class="creative-variant" hidden>
+      <td style="padding-left:1.5em">{{ v.label }}</td>
+      <td>{{ row.text_name or '—' }}</td>
+      <td class="num">{{ v.deposits }}</td>
+      <td class="num">{{ v.leads }}</td>
+      <td class="num">{{ v.spend | fmt_usd }}</td>
+      <td class="num">{{ v.cpa | fmt_usd }}</td>
+    </tr>
+    {% endfor %}
+    {% endif %}
   {% endfor %}
   </tbody>
 </table>
