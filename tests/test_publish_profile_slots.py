@@ -33,7 +33,10 @@ GB = 1024
 # Правило очереди считается здесь при профиле 1,5 ГБ (так было до ACL-1424);
 # оценка 3,5 ГБ и замер профилей — test_profile_slots_adaptive_memory.py.
 OLD_PROFILE_MB = int(1.5 * GB)
-S = ps.SlotSettings(profile_mb=OLD_PROFILE_MB)   # потолок 4, профиль 1,5 ГБ, запас 1,5 ГБ
+# До ACL-1603 потолок был 4, запас 1,5 ГБ: механику очереди проверяем на них,
+# новые умолчания (2 / 3 ГБ / 3,5 ГБ) — в test_acl1603_stable_slots.py.
+OLD = dict(ceiling=4, reserve_mb=int(1.5 * GB), profile_floor_mb=int(1.5 * GB))
+S = ps.SlotSettings(profile_mb=OLD_PROFILE_MB, **OLD)   # потолок 4, профиль 1,5 ГБ, запас 1,5 ГБ
 
 
 def mem(available_gb: float, total_gb: float = 16) -> ps.MemoryReading:
@@ -90,10 +93,13 @@ def test_the_limit_shown_is_what_memory_allows_now():
 # ── настройки машины ─────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("raw,expected", [
-    ("", None), ("auto", None), ("0", None), ("3", 3), (" 2 ", 2), ("-4", 1), ("many", None),
+    ("", ps.DEFAULT_CEILING), ("auto", ps.DEFAULT_CEILING), ("0", ps.DEFAULT_CEILING),
+    ("3", 3), (" 2 ", 2), ("-4", 1), ("many", ps.DEFAULT_CEILING),
 ])
-def test_the_override_is_read_from_the_machine_env(raw, expected):
-    assert ps.load_settings({"ACL_MAX_PARALLEL_PROFILES": raw}).override == expected
+def test_the_legacy_manual_number_is_now_only_the_cap(raw, expected):
+    """ACL-1603: ручное число больше не отменяет память — это потолок."""
+    got = ps.load_settings({"ACL_MAX_PARALLEL_PROFILES": raw})
+    assert got.override is None and got.ceiling == expected
 
 
 def test_tuning_values_are_read_and_garbage_falls_back_to_defaults():
@@ -105,10 +111,10 @@ def test_tuning_values_are_read_and_garbage_falls_back_to_defaults():
 
 
 def test_a_setting_changed_while_running_applies_to_the_next_decision(monkeypatch):
-    monkeypatch.setenv("ACL_MAX_PARALLEL_PROFILES", "1")
-    assert ps.load_settings().override == 1
-    monkeypatch.setenv("ACL_MAX_PARALLEL_PROFILES", "3")
-    assert ps.load_settings().override == 3
+    monkeypatch.setenv("ACL_MAX_PROFILES", "1")
+    assert ps.load_settings().ceiling == 1
+    monkeypatch.setenv("ACL_MAX_PROFILES", "3")
+    assert ps.load_settings().ceiling == 3
 
 
 def test_the_real_memory_probe_answers_on_this_machine():
@@ -124,7 +130,7 @@ class Machine:
     def __init__(self, available_gb: float, settings: ps.SlotSettings | None = None):
         self.available_gb = available_gb
         self.now = 1000.0
-        self.settings = settings or ps.SlotSettings(warmup_s=0, profile_mb=OLD_PROFILE_MB)
+        self.settings = settings or ps.SlotSettings(warmup_s=0, profile_mb=OLD_PROFILE_MB, **OLD)
 
     def memory(self):
         return None if self.available_gb is None else mem(self.available_gb)
@@ -320,7 +326,7 @@ def test_a_cancelled_waiting_job_leaves_the_queue_at_once():
 
 
 def test_a_just_started_profile_holds_back_the_next_until_it_has_warmed_up():
-    m = Machine(available_gb=3.5, settings=ps.SlotSettings(warmup_s=90, profile_mb=OLD_PROFILE_MB))
+    m = Machine(available_gb=3.5, settings=ps.SlotSettings(warmup_s=90, profile_mb=OLD_PROFILE_MB, **OLD))
     slots = m.slots()
     a = Job(slots, "a", "P1")
     b = Job(slots, "b", "P2")
@@ -466,4 +472,4 @@ def test_the_slots_endpoint_says_how_many_run_at_once(monkeypatch):
     body = res.json()
     assert body["mode"] == "auto" and body["running"] == [] and body["waiting"] == []
     assert body["next"]["reason"] == "floor" and body["next"]["available_mb"] == 5 * GB
-    assert body["settings"]["ceiling"] == 4
+    assert body["settings"]["ceiling"] == ps.DEFAULT_CEILING == 2

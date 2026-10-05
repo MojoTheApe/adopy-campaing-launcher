@@ -45,6 +45,23 @@ _request_locks: dict[str, threading.Lock] = {}
 _request_lock = threading.Lock()
 _REQUEST_KEYS_MAX = 500
 
+#: Задание в этих статусах держит аккаунт: второе на него не заводим (ACL-1603).
+_LIVE_STATUSES = frozenset({"pending", "queued", "running", "cancelling"})
+
+
+class DuplicateJobError(ValueError):
+    """У аккаунта уже есть идущее или ждущее задание (ACL-1603)."""
+
+    def __init__(self, account_label: str, job_id: str = "") -> None:
+        super().__init__(f"{account_label} is already in the queue")
+        self.account_label = account_label
+        self.job_id = job_id
+
+
+def _norm_account(label: Any) -> str:
+    return str(label or "").strip().lower()
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -87,6 +104,13 @@ def create_job(
     with _jobs_lock:
         if _update_reserved:
             raise RuntimeError("ACL is restarting for an update. Wait until it returns before starting a campaign.")
+        # ACL-1603: 05.10 второй «Publish all» поставил десять заданий на
+        # аккаунты, у которых задания уже были. Проверка и вставка — под одним
+        # замком, иначе два запроса разом прошли бы оба.
+        for other in _jobs.values():
+            if (other.get("status") in _LIVE_STATUSES
+                    and _norm_account(other.get("account_label")) == _norm_account(account_label)):
+                raise DuplicateJobError(account_label, str(other.get("job_id") or ""))
         _jobs[job_id] = {
             "job_id": job_id,
             "account_label": account_label,
@@ -160,7 +184,23 @@ def _cancel_publisher(publisher: RpaPublisher) -> None:
 
 def slots_snapshot() -> dict[str, Any]:
     """Сколько профилей разом разрешено сейчас, что идёт и что ждёт (ACL-1321)."""
-    return _slots.snapshot()
+    snap = _slots.snapshot()
+    # ACL-1603: по аккаунту — идёт / ждёт памяти / ждёт места / ждёт профиль.
+    with _jobs_lock:
+        snap["accounts"] = [
+            {"account": j.get("account_label"), "job_id": j.get("job_id"),
+             "state": _account_state(j)}
+            for j in _jobs.values() if j.get("status") in _LIVE_STATUSES
+        ]
+    return snap
+
+
+def _account_state(job: dict[str, Any]) -> str:
+    """running / waiting_memory / waiting_slot / waiting_profile — для дешборда."""
+    if job.get("status") in ("running", "cancelling"):
+        return "running"
+    queue = job.get("queue") or {}
+    return str(queue.get("state") or "waiting_slot")
 
 
 def active_job_count() -> int:
@@ -406,13 +446,19 @@ def _run_job(
 
 def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
     """Что о месте в очереди видит дешборд (ACL-1321, ACL-1424)."""
+    hold = verdict.get("reason")
     return {
+        # ACL-1603: состояние для дешборда — память, место или профиль.
+        "state": ("waiting_profile" if hold == "profile"
+                  else "waiting_memory" if hold in ("memory_low", "below_reserve")
+                  else "waiting_slot"),
         # «profile» — ждёт свой профиль; иначе — свободное место.
         "reason": "profile" if verdict.get("reason") == "profile" else "slot",
         # Почему нет места: memory_low / ceiling / order / override_full …
         "hold": verdict.get("reason"),
         "ahead": int(verdict.get("ahead") or 0),
         "limit": verdict.get("limit"),
+        "cap": verdict.get("cap"),
         "running": verdict.get("running"),
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),

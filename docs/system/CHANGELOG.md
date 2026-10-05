@@ -1,5 +1,32 @@
 # System history
 
+## At most 2 profiles, a real memory reserve, no duplicate jobs — ACL-1603
+
+Stage 0 of the stable-build plan. On 05.10 "Publish all" for ~20 accounts let 3 profiles
+run with 2.4 GB free of 32 GB, Meta tabs froze, and a second "Publish all" queued 10
+duplicate jobs.
+
+- Hard cap of **2 profiles at once**, whatever the memory estimate says. Set per machine
+  with `ACL_MAX_PROFILES` in the machine `.env` (default 2). The old
+  `ACL_MAX_PARALLEL_PROFILES` / `ACL_MAX_PARALLEL_CEILING` are read as fallback names for
+  the same cap; a manual number no longer skips the memory check.
+- A profile starts only when free memory >= the per-profile use + a **3 GB reserve**
+  (`ACL_MEMORY_RESERVE_GB`). Per-profile use is the heaviest recent measurement (not the
+  average), floor 3.5 GB (`ACL_PROFILE_MEMORY_FLOOR_GB`), 3.5 GB estimate until a
+  profile has warmed up. The check is repeated while a profile warms up (it is counted
+  in full). If free memory drops below the reserve during a run, no new profile starts
+  (`below_reserve`) until it recovers. Reads (ACL-1580) still share a Publish's slot on
+  the same profile and never wait behind the cap for it.
+- A job for an account that already has a pending/queued/running/cancelling job is
+  refused with "{account} is already in the queue" (HTTP 409, `duplicate: true`). "Publish
+  all" skips such accounts and lists them: "Skipped as duplicate (already in the queue)".
+- The dashboard shows per account: running, waiting for memory, waiting for a slot, or
+  skipped as a duplicate (`/publish-jobs/slots` now also returns `accounts` with a
+  `state`). The slot decision rows in telemetry (`job_phase` notes `slot_decision` /
+  `slot_queue`) carry `cap`, `reserve_mb`, free memory, measured use and the reason.
+- Tests: `tests/test_acl1603_stable_slots.py`; the ACL-1321/1424 tests now pin the old
+  numbers explicitly.
+
 ## An account connected here is never hidden by the stats CM — ACL-1588
 
 Owner's decision (05.10): any manager may connect any account for themselves.

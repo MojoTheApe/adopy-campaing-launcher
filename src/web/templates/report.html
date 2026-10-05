@@ -5417,7 +5417,10 @@ window.cbTree = (function () {
     box.hidden = false;
 
     var lines = (p.report || []).map(function (r) {
-      var mark = r.state === 'ok' ? '<span class="cbd-q-ok">✓</span>' : '<span class="cbd-q-bad">✕</span>';
+      // ACL-1603: аккаунт, у которого задание уже есть, пропущен как дубль.
+      var mark = r.state === 'ok' ? '<span class="cbd-q-ok">✓</span>'
+        : r.state === 'dup' ? '<span class="cbd-q-queued">⧉</span>'
+        : '<span class="cbd-q-bad">✕</span>';
       var tail = r.skipped ? ' · ' + r.skipped + ' skipped' : '';
       return '<div class="cbd-q-line">' + mark + ' ' + aclEscHtml(r.account) + tail
         + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '') + '</div>';
@@ -5429,6 +5432,12 @@ window.cbTree = (function () {
     if (p.done) {
       var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
       lines.unshift('<div class="cbd-q-head">Done — ' + ok + ' of ' + p.of + ' accounts</div>');
+      var dups = (p.report || []).filter(function (r) { return r.state === 'dup'; })
+        .map(function (r) { return aclEscHtml(r.account); });
+      if (dups.length) {
+        lines.splice(1, 0, '<div class="cbd-q-line cbd-q-dup">Skipped as duplicate (already in the queue): '
+          + dups.join(', ') + '</div>');
+      }
     } else if (p.live && p.live.length) {
       // Каждый неоконченный аккаунт своей строкой (ACL-1321): кто
       // проверяется, кто собирается, кто ждёт места в очереди профилей.
@@ -5445,6 +5454,7 @@ window.cbTree = (function () {
         var what = x.stage === 'checking' ? 'checking'
           : x.stage === 'queued'
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
+               : q.state === 'waiting_memory' ? 'queued — waiting for memory'
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
           : 'building the draft';
@@ -6047,7 +6057,7 @@ window.cbBuild = (function () {
     }
     // ACL-1424: мало памяти — сколько свободно и сколько берёт профиль.
     var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
-    if (q.hold === 'memory_low' && q.available_mb != null && q.profile_mb) {
+    if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
       return { state: 'build-wait', sign: '',
                why: 'Waiting: ' + gb(q.available_mb) + ' GB free, a profile uses ~' + gb(q.profile_mb) + ' GB'
                     + (ahead ? ' (' + ahead + ' ahead)' : '') };
@@ -12286,6 +12296,12 @@ function cbNewRun(notify) {
     cbPostPublish(fd)
       .then(function (data) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
+        if (data.error && data.duplicate) {
+          // ACL-1603: у аккаунта уже есть идущее или ждущее задание.
+          if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">' + aclEscHtml(data.error) + '</span>';
+          settle(e, { account: e.label, state: 'dup', why: data.error, skipped: skipped });
+          return;
+        }
         if (data.error) {
           if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
           settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped });
@@ -13148,6 +13164,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       // ACL-1321: профилей разом — сколько тянет память машины; остальные ждут.
       : isQueued ? (queue.reason === 'profile'
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
+          : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'

@@ -45,7 +45,7 @@ from src.campaign_bridge.dashboard_publisher import preview_jobs
 from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
-from src.web.publish_jobs import get_job, start_job, cancel_job
+from src.web.publish_jobs import DuplicateJobError, get_job, start_job, cancel_job
 from src.web.cache import (
     background_build_state,
     cache_built_at,
@@ -4521,6 +4521,10 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
 
     try:
         job_id, total = await asyncio.to_thread(launch)
+    except DuplicateJobError as exc:
+        # ACL-1603: у аккаунта уже есть идущее или ждущее задание — второго нет.
+        return JSONResponse({"error": str(exc), "duplicate": True, "account": exc.account_label,
+                             "job_id": exc.job_id}, status_code=409)
     except (RuntimeError, ValueError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse({"job_id": job_id, "total": total})

@@ -84,10 +84,13 @@ TICK_S = 2.0
 #: Сколько разом, когда память прочитать не удалось: осторожно, но не один.
 FALLBACK_LIMIT = 2
 
-DEFAULT_CEILING = 4
+#: ACL-1603: жёсткий потолок — не больше двух профилей разом, что бы ни
+#: показывала оценка памяти. Меняется на машине через `ACL_MAX_PROFILES`.
+DEFAULT_CEILING = 2
 DEFAULT_PROFILE_MEMORY_GB = 3.5
-DEFAULT_PROFILE_FLOOR_GB = 1.5
-DEFAULT_RESERVE_GB = 1.5
+#: ACL-1603: замер профиля не ниже 3,5 ГБ, запас под ОС и чужие программы — 3 ГБ.
+DEFAULT_PROFILE_FLOOR_GB = 3.5
+DEFAULT_RESERVE_GB = 3.0
 DEFAULT_WARMUP_S = 90.0
 #: Моложе этого профиль считаем не легче оценки: кампании/редактор ещё впереди.
 DEFAULT_SETTLE_S = 300.0
@@ -104,7 +107,11 @@ MEASURE_RESTART_FACTOR = 4.0
 
 @dataclass(frozen=True)
 class SlotSettings:
-    """Настройки решения; `override` — ручное число разом или None (авто)."""
+    """Настройки решения.
+
+    `override` — число разом без вопроса к памяти; из окружения НЕ читается
+    (ACL-1603: потолок и память действуют всегда), оставлено для тестов.
+    """
 
     override: int | None = None
     ceiling: int = DEFAULT_CEILING
@@ -139,16 +146,21 @@ def _env_number(env: dict[str, str] | Any, key: str, default: float, *, minimum:
 def load_settings(env: dict[str, str] | Any = None) -> SlotSettings:
     """Настройки из окружения (машинный `.env`). Мусор в значении — умолчание."""
     env = os.environ if env is None else env
-    override: int | None = None
-    raw = str(env.get("ACL_MAX_PARALLEL_PROFILES", "") or "").strip().lower()
-    if raw and raw not in ("auto", "0"):
+    # ACL-1603: потолок — `ACL_MAX_PROFILES` (по умолчанию 2). Прежние имена
+    # `ACL_MAX_PARALLEL_PROFILES` / `ACL_MAX_PARALLEL_CEILING` читаются как
+    # его запасные: ручное число больше не отменяет память и потолок.
+    ceiling = DEFAULT_CEILING
+    for key in ("ACL_MAX_PROFILES", "ACL_MAX_PARALLEL_PROFILES", "ACL_MAX_PARALLEL_CEILING"):
+        raw = str(env.get(key, "") or "").strip().lower()
+        if not raw or raw in ("auto", "0"):
+            continue
         try:
-            override = max(1, int(raw))
+            ceiling = max(1, int(float(raw.replace(",", "."))))
+            break
         except ValueError:
-            log.warning("ACL_MAX_PARALLEL_PROFILES=%r is not a whole number; using automatic", raw)
+            log.warning("%s=%r is not a whole number; trying the next setting", key, raw)
     return SlotSettings(
-        override=override,
-        ceiling=int(_env_number(env, "ACL_MAX_PARALLEL_CEILING", DEFAULT_CEILING, minimum=1)),
+        ceiling=ceiling,
         profile_mb=int(_env_number(env, "ACL_PROFILE_MEMORY_GB", DEFAULT_PROFILE_MEMORY_GB, minimum=0.1) * 1024),
         profile_floor_mb=int(_env_number(env, "ACL_PROFILE_MEMORY_FLOOR_GB", DEFAULT_PROFILE_FLOOR_GB,
                                          minimum=0.1) * 1024),
@@ -369,7 +381,8 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
     факты для телеметрии: `allow`, `reason`, `limit` (сколько разом сейчас
     выходит), память, `profile_mb` (по чём считали профиль) и его источник.
     """
-    out: dict[str, Any] = {"running": running, "warming": warming}
+    out: dict[str, Any] = {"running": running, "warming": warming, "cap": settings.ceiling,
+                           "reserve_mb": settings.reserve_mb}
     if memory is not None:
         out.update(total_mb=memory.total_mb, available_mb=memory.available_mb)
     if settings.override is None:
@@ -401,6 +414,11 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
         return out
     need = settings.profile_mb * (1 + warming) + settings.reserve_mb + growth
     out["need_mb"] = need
+    if memory.available_mb < settings.reserve_mb:
+        # ACL-1603: свободно меньше запаса — новый профиль не стартует, пока
+        # память не вернётся (идущие профили при этом не трогаем).
+        out.update(limit=running, allow=False, reason="below_reserve")
+        return out
     limit = _auto_limit(running, warming, memory, settings, growth)
     ok = memory.available_mb >= need
     out.update(limit=limit, allow=ok, reason="memory_ok" if ok else "memory_low")
@@ -512,7 +530,8 @@ class ProfileSlots:
                         values.append(value)
                         current.append(now_mb)
                     if values:
-                        measured_mb = int(sum(values) / len(values))
+                        # ACL-1603: самый тяжёлый из недавних замеров, не среднее.
+                        measured_mb = int(max(values))
         decision = decide(running, self._warming(), self._memory(), settings, measured_mb, current)
         if probe:
             decision["measure"] = probe.get("status")
