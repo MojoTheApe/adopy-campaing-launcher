@@ -6627,7 +6627,7 @@
             "session": "run_v1593c_1005"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-V1593C",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -6645,7 +6645,8 @@
           "report": "# ACL-1593 handoff\n\nPR #597 (base stage), head d79a8c6b2b063601d2118fd80ef0ce39b7368c9a, branch codex/acl-1593-variants.\n\nChanged: src/creative_variant.py (new), src/fb_ads_rpa/draft.py, src/analysis_agent/analyze_fb_stats.py,\nmorning_report.py, morning_service.py, src/web/templates/report.html, tests/test_creative_variants.py, CHANGELOG.\n\nsplit_ad_title callers: analyze_fb_stats.enrich_structure, morning_report.build_creative_breakdown,\nsection_filters.filter_creative_rows - unchanged (split_ad_title keeps the 2-tuple, wraps the new\nsplit_ad_title_variant). enrich_structure also adds VariantId via the new function.\n\nTests: 156 passed (variants, section_filters, fb_ads_rpa_draft, acl_test_platform, analyze_fb_stats) + 143 passed\n(morning_drilldown, build_progress_model, acl_test_platform). Secret scan clean. No new telemetry step.\n\nLive check left: build an ad from a file like 1_es_2403_post.mp4 and see \"2403 1 - ...\" in Meta; after the stats\nupdate the breakdown shows 2403 \u00b7 1; backfill on real ads (needs this machine's rpa_telemetry.jsonl with ad_creative_pair).\nBackfill limit: robot journal has no ad name, so a campaign using two variants of one creative stays \"no variant\"."
         },
         "pr": 597,
-        "queued_at": "2026-10-05T13:23:42+00:00"
+        "queued_at": "2026-10-05T13:23:42+00:00",
+        "reviewer": "Reviewer-R1593Q"
       }
     },
     "actors": {
@@ -7128,6 +7129,10 @@
       "Worker-V1593C": {
         "session": "run_v1593c_1005",
         "role": "Worker"
+      },
+      "Reviewer-R1593Q": {
+        "session": "rev_r1593q_1005",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -8484,10 +8489,20 @@
       406,
       433,
       526,
-      529,
-      593
+      529
     ],
-    "review": null,
+    "review": {
+      "id": "d2640e689d0b4b1e8a383e84a5c93a4f",
+      "pr": 597,
+      "issues": [
+        593
+      ],
+      "actor": "Reviewer-R1593Q",
+      "session": "rev_r1593q_1005",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-05T14:01:51+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -12129,6 +12144,13 @@
         "issue": 593,
         "pr": 597,
         "actor": "Worker-V1593C"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-05T14:01:51+00:00",
+        "pr": 597,
+        "lane": "d2640e689d0b4b1e8a383e84a5c93a4f",
+        "actor": "Reviewer-R1593Q"
       }
     ],
     "policy": {
