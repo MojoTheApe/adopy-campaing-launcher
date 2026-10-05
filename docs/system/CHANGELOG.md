@@ -1,5 +1,30 @@
 # System history
 
+## An account connected here is never hidden by the stats CM — ACL-1588
+
+Owner's decision (05.10): any manager may connect any account for themselves.
+
+- `/api/accounts-overview` no longer skips an account that is in this machine's account
+  map because the stats workbook names another CM (FacebookDoc30 / "Dan Dicker" under
+  buyer "Evgeni Sedin"). The row carries `owner_hint` ("owner in stats: Dan Dicker"),
+  shown under the account name in Accounts. Home and the Builder already take their
+  accounts from the map and the country links, so they keep showing it.
+- Suggestions for connecting now list every account (stats aliases of all managers and
+  sheet accounts of other managers that are not connected here). The selected buyer
+  still filters the stats numbers (spend, leads, goals) and nothing else.
+- Connect with the optional Country left empty saves the row and sends no
+  `/account-links` request (no 400 "A country or asset name is required").
+- Connect on a found profile waits for `/mlx-profile-open` at most 75 s (the ad-account
+  probe 60 s). On a timeout it says "The profile opened but did not answer — check its
+  window in Multilogin (login, checkpoint), then press Connect again." and still saves
+  the row with the profile_id, folder_id and instance. The manual form pre-selects the
+  last found profile.
+- `/mlx-profile-open` runs at most one open per profile_id (a second call answers at once
+  with "already being opened") and answers after 70 s with the same message instead of
+  hanging; the open itself is never cancelled, killed or restarted. The Connect button of
+  that profile stays disabled until the original request settles.
+- Tests: `tests/test_acl_1588_any_account.py`, `tests/acl_1588_connect_harness.cjs`.
+
 ## Creatives show the concrete variant — ACL-1593
 
 The Creatives breakdown no longer stops at the group number. The variant is the leading
