@@ -1,5 +1,21 @@
 # System history
 
+## A hand-opened window is reopened even when Multilogin is slow to release the profile — ACL-1606
+
+Regression from ACL-1562 (05.10, FacebookElf403): after the robot closed the window through
+the Multilogin API, Multilogin still held the profile for a moment, the start answered
+"locked", and the robot read that as "opened by hand" again and gave up with the window closed.
+
+- After its own graceful stop the robot marks the profile as its own, so a lock is no longer
+  read as a hand-opened window.
+- The start is retried for up to ~30 s (1, 1, 2, 2, 3, 3, 4, 4, 5, 5 s) while Multilogin still
+  says "locked" / "already running". Any other start error fails at once, without retries.
+- Still graceful only: no kill, no other profile touched, no plain browser.
+- If the profile is still held after the retries: "Multilogin did not release the profile after
+  closing its window — open it again in Multilogin".
+- Telemetry: the existing `profile_hand_window` step now carries `start_retries` and
+  `start_waited_s` in its diag (no new step).
+
 ## An account connected here is never hidden by the stats CM — ACL-1588
 
 Owner's decision (05.10): any manager may connect any account for themselves.

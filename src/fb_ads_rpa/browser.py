@@ -1983,6 +1983,23 @@ HAND_WINDOW_NOTICE = "The {account} window was opened by hand — reopening it w
 #: закрыла окно. Окно остаётся как было — ничего не убиваем.
 HAND_WINDOW_STOP_FAILED = "Multilogin did not close the hand-opened window"
 
+#: ACL-1606: после мягкой остановки Multilogin ещё недолго держит профиль
+#: («locked» / «still running»). Запуск повторяем с короткой паузой; сумма
+#: пауз — ~30 с. Часы не нужны: бюджет задан самим списком.
+HAND_WINDOW_START_BACKOFF_S = (1, 1, 2, 2, 3, 3, 4, 4, 5, 5)
+
+#: ACL-1606: причина, если Multilogin так и не отпустил профиль.
+HAND_WINDOW_NOT_RELEASED = ("Multilogin did not release the profile after closing its window "
+                            "— open it again in Multilogin")
+
+
+def _start_still_held(exc: BaseException) -> bool:
+    """Запуск отказан, потому что Multilogin ещё держит профиль (ACL-1606)."""
+    msg = str(exc).lower()
+    return any(mark in msg for mark in (
+        "already running", "profile_already_running", "browser process is running",
+        "can't lock", "cant lock", "cannot lock"))
+
 
 def _stop_clock() -> float:
     """Часы для длительности мягкой остановки (тесты подменяют)."""
@@ -1991,18 +2008,24 @@ def _stop_clock() -> float:
 
 def _record_hand_window(entry: AccountMapEntry, *, ok: bool, where: str, note: str,
                         verdict: "hand_window.Verdict", error: str = "",
-                        stop_s: float | None = None) -> None:
+                        stop_s: float | None = None, retries: int | None = None,
+                        waited_s: float | None = None) -> None:
     """Строка телеметрии `profile_hand_window` и крошка Sentry (ACL-1388).
 
     `note` — чем кончилось (`reopened`, `disabled`, `mlx_stop_failed`…), в
     `diag` — где это было. Без id профиля, как у `_record_profile_restart`.
     ACL-1562: `stop_s` — сколько шла мягкая остановка через MLX API (вместе
-    с ожиданием, пока процессы окна закроются).
+    с ожиданием, пока процессы окна закроются). ACL-1606: `retries` / `waited_s` —
+    сколько раз запуск повторяли, пока Multilogin держал профиль, и сколько
+    секунд ждали (поля `diag`, нового шага нет).
     """
     diag = {"where": where, "workspace": (getattr(entry, "multilogin_instance", "") or "A"),
             **verdict.diag()}
     if stop_s is not None:
         diag["stop_s"] = round(stop_s, 1)
+    if retries:
+        diag["start_retries"] = retries
+        diag["start_waited_s"] = round(waited_s or 0, 1)
     if error:
         diag["error"] = error[:160]
     try:
@@ -2376,17 +2399,40 @@ class MultiloginAttachOnlyProvider:
             raise _open_by_hand(profile_id, account_label,
                                 f"{where}; {HAND_WINDOW_STOP_FAILED} within "
                                 f"{HAND_WINDOW_EXIT_WAIT_S} s", verdict)
+        # ACL-1606: окно закрыли мы сами — профиль теперь робота, а не «открыт
+        # руками»: запуск, споткнувшийся о замок Multilogin, не должен снова
+        # читаться как окно человека и сдаваться сразу.
+        _mark_robot_profile(profile_id, udd)
         # Окно уже закрыто: не поднялось — это отказ перезапуска, профиль
-        # может остаться закрытым (как у `restart_unresponsive`).
-        try:
-            started = self._start_via_mlx_api(entry, account_label, profile_id, udd, allow_kill=False)
-            conn = self._connect_started(started, profile_id)
-        except Exception as exc:
-            detail = _exc_text(exc)
-            _record_hand_window(entry, ok=False, where=where, note="restart_failed", verdict=verdict,
-                                error=detail, stop_s=stop_s)
-            raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
-        _record_hand_window(entry, ok=True, where=where, note="reopened", verdict=verdict, stop_s=stop_s)
+        # может остаться закрытым (как у `restart_unresponsive`). Пока
+        # Multilogin ещё держит профиль, повторяем запуск (до ~30 с). Только
+        # `allow_kill=False` и `allow_restart=False`: лишних остановок нет,
+        # других профилей не трогаем, простой браузер не открываем.
+        retries = 0
+        waited_s = 0.0
+        while True:
+            try:
+                started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
+                                                  allow_restart=False, allow_kill=False)
+                conn = self._connect_started(started, profile_id)
+                break
+            except Exception as exc:
+                detail = _exc_text(exc)
+                if _start_still_held(exc) and retries < len(HAND_WINDOW_START_BACKOFF_S):
+                    pause = HAND_WINDOW_START_BACKOFF_S[retries]
+                    retries += 1
+                    waited_s += pause
+                    log.info("%s: Multilogin still holds profile %s after the stop; start retry %d in %s s",
+                             account_label, profile_id, retries, pause)
+                    time.sleep(pause)
+                    continue
+                if _start_still_held(exc):
+                    detail = f"{HAND_WINDOW_NOT_RELEASED}: {detail}"
+                _record_hand_window(entry, ok=False, where=where, note="restart_failed", verdict=verdict,
+                                    error=detail, stop_s=stop_s, retries=retries, waited_s=waited_s)
+                raise profile_trouble.ProfileStop(profile_trouble.RESTART_FAILED, detail) from exc
+        _record_hand_window(entry, ok=True, where=where, note="reopened", verdict=verdict, stop_s=stop_s,
+                            retries=retries, waited_s=waited_s)
         return conn
 
     def _stop_profile(self, entry: AccountMapEntry, account_label: str, profile_id: str, udd: str,
