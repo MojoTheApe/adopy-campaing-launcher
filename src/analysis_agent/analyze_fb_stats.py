@@ -128,7 +128,7 @@ def split_ad_title_variant(ad_title) -> tuple[str, str, str]:
             trimmed = rest[vm.end():]
             if trimmed.strip(" -_–—"):
                 rest = trimmed
-                variant = vm.group(1)
+                variant = str(int(vm.group(1)))  # «01» и «1» — один вариант
         return m.group(1), variant, rest.strip(" -_–—")
 
     m = re.search(r"\s-|-\s", s)
