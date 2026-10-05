@@ -4525,20 +4525,6 @@
   },
   "execution": {
     "claims": {
-      "580": {
-        "actor": "Worker-R1580O",
-        "session": "run_r1580o_1005",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1580-read-opens",
-        "worktree": "C:\\acl-1580-read-opens",
-        "id": "a57dc99923a74c0d8e81eb4c3c40eb5c",
-        "issue": 580,
-        "state": "handoff",
-        "started_at": "2026-10-05T06:41:24+00:00",
-        "from_status": "status:idea",
-        "pr": 583,
-        "report": "# ACL-1580 handoff \u2014 Worker-R1580O (run_r1580o_1005)\n\n- PR: MojoTheApe/adopy-campaing-launcher#583 \u2192 `stage`\n- Branch: `codex/acl-1580-read-opens` (worktree `C:\\acl-1580-read-opens`), head `695dbb70fa1e15d26c27d4d82478828afba8a94e`\n- Claim: `a57dc99923a74c0d8e81eb4c3c40eb5c`\n\n## What changed\n- `src/analysis_agent/account_spend.py`\n  - New context `opening_closed_profile(_ReadOpen)`. Inside it, `_attach_only` no longer refuses a closed profile (or a missing profile folder). It calls `_start_closed` instead:\n    - takes a place in the Publish slot queue (`_slot_queue()` \u2192 `publish_jobs._slots`, with `share_profile=True`);\n    - shows \"Waiting for a free profile slot\" / \"Opening the {account} profile with automation\" on the row through the existing `waiting` channel (`_HAND_WAIT`);\n    - calls `multilogin_attach.open(allow_missing_dir=True, allow_restart=False, allow_kill=False)`, the same path as \"open profile\";\n    - records telemetry `spend_profile_started`.\n  - Without the context, nothing changes for `turn_off` / `read_ad_account`: they still refuse a closed profile.\n  - `_finish_started` closes after the read: `stop_profile_on_request` (an MLX stop of that one profile, `allow_kill=False`), then releases the slot and records `spend_profile_closed_after_read`. A successful Read spend defers this by `CLOSE_GRACE_S` (30 s). In that window the country read takes the profile over (`_take_over_pending`) and closes it at its own end.\n  - A tab of a started profile is not closed by the read, because it may be the window's only tab. The MLX stop closes it.\n  - Logged out: `LOGGED_OUT_MESSAGE` / `LOGGED_OUT_CODE` (`profile_logged_out`). It is checked on the login URL after `goto`, on a `goto` exception and, in the act-mismatch and grid-not-ready branches, on the login form (`classify_page`). There is no retry.\n- `src/analysis_agent/country_split.py`: the same context, the same logged-out check (raises `ProfileNotAttachable` with the code), and `_finish_started` in `finally`.\n- `src/web/profile_slots.py`: `acquire(..., share_profile=False)`. If a Publish already holds this profile's place, the read shares it (`shared: True`, not added to `running`). This prevents a deadlock: the read holds the profile lock and Publish waits for that lock while holding the slot.\n- `src/web/templates/report.html`:\n  - `amapSpendFailed` shows a logged-out profile as plain text, with no \"retry\" and no \"open profile\" button.\n  - The country mark shows it plainly too.\n  - The `amapHandWait` tooltip depends on which note is shown.\n  - `spend_profile_` was added to the cb-build-model hold rule.\n- Tests:\n  - new `tests/test_reads_open_a_closed_profile.py` (17 tests; all failed before the change);\n  - `tests/test_reads_reopen_a_hand_opened_profile.py`: 2 pinned JS lines updated;\n  - `tests/test_build_progress_model.py` now scans `src/analysis_agent` as well.\n- `docs/system/CHANGELOG.md` entry.\n\n## Checks\n- 34 affected test files run locally: 887 passed, 2 failed. The 2 failures were fixed: one was a timing-sensitive new test, now deterministic with an event; the other was a pinned JS line. The new test file was rerun green 8 times in a row.\n- `scripts/acl_scan_secrets.py`: clean.\n- CI was not run (the Actions budget is exhausted); no reruns were triggered.\n\n## Live check left (not done: no Multilogin/Meta in this run)\n- Read spend on a closed 1443 profile, without pressing \"open profile\": the profile starts, the read goes through, and the profile closes about 30 s later (or after the country read).\n- Read all on several closed accounts: they open one after another within the memory slots, the row shows \"Waiting for a free profile slot\", and each profile is closed after its read.\n- A logged-out profile shows the plain line.\n- To confirm in telemetry: `spend_profile_started` / `spend_profile_closed_after_read` rows with durations.\n\n## Notes / risks\n- The `CLOSE_GRACE_S` timer lives in memory. If serve.py restarts within those 30 s, the profile stays open (it is not killed).\n- Read jobs appear in `/publish-jobs/slots` as `read:<account>:<id>` entries while they hold a place.\n- The \"open profile\" button and `/account-spend/open-profile` are unchanged."
-      },
       "581": {
         "actor": "Worker-P1581K",
         "session": "run_p1581k_1005",
@@ -6311,9 +6297,25 @@
             "session": "run_r1580o_1005"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1580O",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-R1580O",
+          "session": "run_r1580o_1005",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1580-read-opens",
+          "worktree": "C:\\acl-1580-read-opens",
+          "id": "a57dc99923a74c0d8e81eb4c3c40eb5c",
+          "issue": 580,
+          "state": "handoff",
+          "started_at": "2026-10-05T06:41:24+00:00",
+          "from_status": "status:idea",
+          "pr": 583,
+          "report": "# ACL-1580 handoff \u2014 Worker-R1580O (run_r1580o_1005)\n\n- PR: MojoTheApe/adopy-campaing-launcher#583 \u2192 `stage`\n- Branch: `codex/acl-1580-read-opens` (worktree `C:\\acl-1580-read-opens`), head `695dbb70fa1e15d26c27d4d82478828afba8a94e`\n- Claim: `a57dc99923a74c0d8e81eb4c3c40eb5c`\n\n## What changed\n- `src/analysis_agent/account_spend.py`\n  - New context `opening_closed_profile(_ReadOpen)`. Inside it, `_attach_only` no longer refuses a closed profile (or a missing profile folder). It calls `_start_closed` instead:\n    - takes a place in the Publish slot queue (`_slot_queue()` \u2192 `publish_jobs._slots`, with `share_profile=True`);\n    - shows \"Waiting for a free profile slot\" / \"Opening the {account} profile with automation\" on the row through the existing `waiting` channel (`_HAND_WAIT`);\n    - calls `multilogin_attach.open(allow_missing_dir=True, allow_restart=False, allow_kill=False)`, the same path as \"open profile\";\n    - records telemetry `spend_profile_started`.\n  - Without the context, nothing changes for `turn_off` / `read_ad_account`: they still refuse a closed profile.\n  - `_finish_started` closes after the read: `stop_profile_on_request` (an MLX stop of that one profile, `allow_kill=False`), then releases the slot and records `spend_profile_closed_after_read`. A successful Read spend defers this by `CLOSE_GRACE_S` (30 s). In that window the country read takes the profile over (`_take_over_pending`) and closes it at its own end.\n  - A tab of a started profile is not closed by the read, because it may be the window's only tab. The MLX stop closes it.\n  - Logged out: `LOGGED_OUT_MESSAGE` / `LOGGED_OUT_CODE` (`profile_logged_out`). It is checked on the login URL after `goto`, on a `goto` exception and, in the act-mismatch and grid-not-ready branches, on the login form (`classify_page`). There is no retry.\n- `src/analysis_agent/country_split.py`: the same context, the same logged-out check (raises `ProfileNotAttachable` with the code), and `_finish_started` in `finally`.\n- `src/web/profile_slots.py`: `acquire(..., share_profile=False)`. If a Publish already holds this profile's place, the read shares it (`shared: True`, not added to `running`). This prevents a deadlock: the read holds the profile lock and Publish waits for that lock while holding the slot.\n- `src/web/templates/report.html`:\n  - `amapSpendFailed` shows a logged-out profile as plain text, with no \"retry\" and no \"open profile\" button.\n  - The country mark shows it plainly too.\n  - The `amapHandWait` tooltip depends on which note is shown.\n  - `spend_profile_` was added to the cb-build-model hold rule.\n- Tests:\n  - new `tests/test_reads_open_a_closed_profile.py` (17 tests; all failed before the change);\n  - `tests/test_reads_reopen_a_hand_opened_profile.py`: 2 pinned JS lines updated;\n  - `tests/test_build_progress_model.py` now scans `src/analysis_agent` as well.\n- `docs/system/CHANGELOG.md` entry.\n\n## Checks\n- 34 affected test files run locally: 887 passed, 2 failed. The 2 failures were fixed: one was a timing-sensitive new test, now deterministic with an event; the other was a pinned JS line. The new test file was rerun green 8 times in a row.\n- `scripts/acl_scan_secrets.py`: clean.\n- CI was not run (the Actions budget is exhausted); no reruns were triggered.\n\n## Live check left (not done: no Multilogin/Meta in this run)\n- Read spend on a closed 1443 profile, without pressing \"open profile\": the profile starts, the read goes through, and the profile closes about 30 s later (or after the country read).\n- Read all on several closed accounts: they open one after another within the memory slots, the row shows \"Waiting for a free profile slot\", and each profile is closed after its read.\n- A logged-out profile shows the plain line.\n- To confirm in telemetry: `spend_profile_started` / `spend_profile_closed_after_read` rows with durations.\n\n## Notes / risks\n- The `CLOSE_GRACE_S` timer lives in memory. If serve.py restarts within those 30 s, the profile stays open (it is not killed).\n- Read jobs appear in `/publish-jobs/slots` as `read:<account>:<id>` entries while they hold a place.\n- The \"open profile\" button and `/account-spend/open-profile` are unchanged."
+        },
+        "pr": 583,
+        "queued_at": "2026-10-05T07:06:57+00:00"
       },
       "581": {
         "implementers": [
@@ -8035,7 +8037,8 @@
       433,
       526,
       529,
-      573
+      573,
+      580
     ],
     "review": {
       "id": "ca2339846473487d98fefbfe7158d6a4",
@@ -11532,6 +11535,13 @@
         "issue": 582,
         "claim": "d0dc116956b5444ea97fa3e96da13ef8",
         "actor": "Worker-L1582W"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-05T07:06:57+00:00",
+        "issue": 580,
+        "pr": 583,
+        "actor": "Worker-R1580O"
       }
     ],
     "policy": {
