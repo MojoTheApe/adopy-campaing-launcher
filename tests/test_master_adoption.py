@@ -135,7 +135,7 @@ def test_existing_ids_and_modules_are_preserved():
 
 @pytest.mark.parametrize('workflow,success_fields', [
     ('ci.yml', ['TESTS']), ('windows-installer.yml', ['INPUTS', 'INSTALLER'])])
-@pytest.mark.skipif(sys.platform == 'win32', reason='Ubuntu job shell contract is tested in the Ubuntu tooling job')
+@pytest.mark.skipif(sys.platform == 'win32', reason='Ubuntu job shell contract is tested in the Ubuntu tooling job')  # linux-ok: Linux-only
 def test_ci_admission_runs_fail_closed(workflow, success_fields):
     import os
     data = yaml.safe_load((ROOT / '.github/workflows' / workflow).read_text())

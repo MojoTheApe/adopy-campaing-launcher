@@ -26,6 +26,9 @@ from config import paths
 from src.analysis_agent import targeting_registry as tr
 from src.web import hidden_accounts as ha
 
+# ACL-1582: файл идёт только в Windows-задание CI; причина — в маркере.
+pytestmark = pytest.mark.windows_only(reason="msvcrt byte-range lock behaviour (LK_LOCK give-up, write conflicts)")
+
 
 @pytest.fixture(autouse=True)
 def _isolated(tmp_path, monkeypatch):

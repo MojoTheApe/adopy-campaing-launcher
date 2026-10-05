@@ -29,6 +29,9 @@ from pathlib import Path
 
 import pytest
 
+# ACL-1582: файл идёт только в Windows-задание CI; причина — в маркере.
+pytestmark = pytest.mark.windows_only(reason="8.3 short spelling of Windows profile folders; asserts on drive-letter (C:) paths")
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 

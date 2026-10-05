@@ -15,7 +15,7 @@ def test_planning_and_tracker_metadata_prs_use_light_checks(paths):
 
 @pytest.mark.parametrize("paths", [
     [], ["README.md", "dashboard.py"], ["requirements.txt"],
-    ["packaging/windows/build.ps1"], [".github/workflows/ci.yml"],
+    ["packaging/windows/build.ps1"], [".github/workflows/ci.yml"],  # linux-ok: paths for the classifier, never run
     ["scripts/acl_ci_scope.py"], ["tracker/cli.py"], ["scripts/task_tracker.py"],
     ["tests/test_acl_ci_scope.py"], ["docs/runtime.py"], ["new-file"],
     ["dashboard/help.md"], ["docs/note.md\nrequirements.txt"],

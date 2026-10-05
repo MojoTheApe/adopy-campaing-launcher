@@ -1,6 +1,7 @@
 """Split the test files into N CI shards (ACL-1397).
 
     python scripts/acl_test_shard.py 2 3      # prints the files of shard 2 of 3
+    python scripts/acl_test_shard.py --platform linux 2 3    # shard 2 of 3 of the Linux job
 
 The hosted Windows runner of a private repository has two CPUs, so
 pytest-xdist alone gives CI almost nothing (measured on PR #409: 23-31 min
@@ -13,12 +14,22 @@ Files are spread by a rough cost, largest first onto the lightest shard:
 the number of tests in the file, and a flat extra for a file that starts a
 real browser, Node or another process, because starting Chromium costs more
 than most whole test files. Deterministic: the same tree gives the same split.
+
+ACL-1582: ``--platform linux`` shards only the files without the
+``windows_only`` marker, ``--platform windows`` the marked files plus the
+Windows smoke set (scripts/acl_test_platform.py). Without the flag every file
+is sharded, as before.
 """
 from __future__ import annotations
 
 import re
 import sys
 from pathlib import Path
+
+try:
+    from scripts import acl_test_platform as platforms
+except ImportError:  # запуск как python scripts/acl_test_shard.py
+    import acl_test_platform as platforms
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
@@ -39,12 +50,14 @@ def cost(path: Path) -> int:
     return max(1, tests) + (HEAVY_EXTRA if _HEAVY.search(text) else 0)
 
 
-def shards(count: int) -> list[list[Path]]:
+def shards(count: int, platform: str | None = None) -> list[list[Path]]:
+    """``platform`` — None (все файлы), "linux" или "windows" (ACL-1582)."""
     if count < 1:
         raise ValueError("shard count must be at least 1")
+    files = test_files() if platform is None else platforms.select(platform)
     buckets: list[list[Path]] = [[] for _ in range(count)]
     load = [0] * count
-    for path in sorted(test_files(), key=lambda p: (-cost(p), p.name)):
+    for path in sorted(files, key=lambda p: (-cost(p), p.name)):
         i = min(range(count), key=lambda k: (load[k], k))
         buckets[i].append(path)
         load[i] += cost(path)
@@ -52,6 +65,12 @@ def shards(count: int) -> list[list[Path]]:
 
 
 def main(argv: list[str]) -> int:
+    platform = None
+    if argv[:1] == ["--platform"]:
+        if len(argv) < 2 or argv[1] not in platforms.PLATFORMS:
+            print(f"--platform must be one of {', '.join(platforms.PLATFORMS)}", file=sys.stderr)
+            return 2
+        platform, argv = argv[1], argv[2:]
     if len(argv) != 2 or not all(a.isdigit() for a in argv):
         print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
         return 2
@@ -59,7 +78,12 @@ def main(argv: list[str]) -> int:
     if not 1 <= index <= count:
         print(f"shard {index} is outside 1..{count}", file=sys.stderr)
         return 2
-    for path in shards(count)[index - 1]:
+    parts = shards(count, platform)
+    if not parts[index - 1]:
+        # Пустой шард — ошибка конфигурации CI, а не «зелёный» пустой прогон.
+        print(f"shard {index} of {count} has no test files", file=sys.stderr)
+        return 1
+    for path in parts[index - 1]:
         print(path.relative_to(ROOT).as_posix())
     return 0
 
