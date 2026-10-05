@@ -1,5 +1,26 @@
 # System history
 
+## A collapsed Audience card is opened by clicking the card in every editor layout — ACL-1611
+
+05.10, Facebook_9403A (KW_TRL_All_Video_Mix_35_05.10): the ad set's Audience section showed as a
+read-only summary card (Locations / Age / Gender / Languages, "Advantage+ on", no Edit button).
+The robot looked for the "Further limit the reach of your ads" row inside it, found it 0x0 in the
+hidden body five times and stopped. The card was only opened when the single-screen editor was
+recognised by its URL; this window (`adsets/edit/standalone`) was not.
+
+- The card is opened in every layout: no summary card means nothing is clicked, an open card is
+  left alone.
+- The click goes to the card's own title, never to a link or a button inside it ("About
+  audiences" is never pressed).
+- After the click the robot checks that the card body is shown and holds controls; a card that
+  "opened" with an empty body is reported as such instead of passing.
+- The step is generic (`simple_create.open_card(title)`), so other collapsed section cards use it
+  unchanged; Audience is the first one wired in the non-single-screen layout.
+- Telemetry: the existing `simple_card` step now carries `target` and `controls` in its diag
+  (`how` was already there). No new step.
+- Bench: `audience_card_collapsed_drawer_2026_10_05.html` (real captures of 6ebd77ccaf6a and
+  e89bda52e7a5), `tests/test_bench_audience_card_collapsed_drawer.py`.
+
 ## A hand-opened window is reopened even when Multilogin is slow to release the profile — ACL-1606
 
 Regression from ACL-1562 (05.10, FacebookElf403): after the robot closed the window through

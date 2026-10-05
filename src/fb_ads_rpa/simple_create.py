@@ -196,11 +196,21 @@ _CARD_JS = r"""
       if (body) body.setAttribute('data-acl-card-body', '1');
       const btn = btns[0];
       btn.scrollIntoView({ block: 'center', behavior: 'instant' });
-      const r = bar.getBoundingClientRect();
-      const x = r.x + Math.min(r.width / 2, 120), y = r.y + r.height / 2;
+      // ACL-1611: жмём в заголовок карточки (слева), а не в центр шапки: в
+      // шапке Audience есть ссылка «About audiences», и центр мог попасть
+      // в неё. Попадание годится, только если под точкой нет ничего
+      // нажимаемого, кроме самой кнопки карточки.
+      const hr = h.getBoundingClientRect();
+      const r = (hr.width > 0 && hr.height > 0) ? hr : bar.getBoundingClientRect();
+      const x = r.x + Math.min(r.width / 2, 60), y = r.y + r.height / 2;
       const hit = document.elementFromPoint(x, y);
+      const inner = !!hit && !!hit.closest(
+        'a, button, input, select, textarea, label, [role=link], [role=checkbox], [role=switch], [role=combobox]');
+      const rb = hit && hit.closest('[role=button]');
+      const foreign = !!rb && !btns.includes(rb);
       btn.setAttribute('data-acl-card-button', bar.id);
-      return { found: true, pressed: false, x, y, hit: !!hit && btn.contains(hit), body: !!body, bar: bar.id };
+      return { found: true, pressed: false, x, y, hit: !!hit && btn.contains(hit) && !inner && !foreign,
+               body: !!body, bar: bar.id };
     }
     return { found: false };
   }
@@ -249,13 +259,47 @@ def _card_open(page, title: str, wait_s: float) -> bool:
     return False
 
 
+_CARD_CONTROLS_JS = r"""
+  () => {
+    // ACL-1611: тело раскрытой карточки (метка ставится в _CARD_JS) и число
+    // видимых управляющих элементов в нём: поля, комбобоксы, строки-кнопки.
+    const body = document.querySelector('[data-acl-card-body]');
+    if (!body) return { body: false, n: 0 };
+    if (body.hidden || !body.isConnected) return { body: true, shown: false, n: 0 };
+    const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const n = [...body.querySelectorAll(
+      'input, textarea, select, [role=combobox], [role=textbox], [role=button], [role=switch], [role=checkbox]')]
+      .filter(vis).length;
+    return { body: true, shown: true, n };
+  }
+"""
+"""Есть ли в раскрытой карточке управляющие элементы (а не пустая оболочка)."""
+
+
+def _card_controls(page, wait_s: float) -> dict:
+    md = _md()
+    got: dict = {}
+    for _ in range(max(1, int(wait_s / 0.25))):
+        try:
+            got = md._eval_bounded(page, _CARD_CONTROLS_JS) or {}
+        except Exception:
+            return {}
+        if not got.get("body") or got.get("n"):
+            break
+        time.sleep(0.25)
+    return got
+
+
 def open_card(page, title: str) -> str:
     """Раскрыть свёрнутую карточку нового редактора по её заголовку.
 
     "absent" — такой карточки-сводки нет (прежний мастер или карточка без
     сворачивания — обработчик работает как раньше); "open" — уже раскрыта;
-    "opened" — раскрыли; "failed" — не раскрылась ни доверенным кликом по
-    шапке, ни DOM-кликом по кнопке. Строка телеметрии `simple_card`.
+    "opened" — раскрыли и в теле есть управляющие элементы; "no_controls" —
+    нажатие прошло, а тело пустое или скрыто (ACL-1611); "failed" — не
+    раскрылась ни доверенным кликом по шапке, ни DOM-кликом по кнопке.
+    Нажимается только сама карточка (заголовок), не кнопка или ссылка
+    внутри неё. Строка телеметрии `simple_card` (diag.how — чем раскрыли).
     """
     md = _md()
     try:
@@ -281,8 +325,15 @@ def open_card(page, title: str) -> str:
         if _card_open(page, title, 3.0):
             how = "dom"
     result = "opened" if how else "failed"
-    md._telemetry.record("simple_card", bool(how), note=f"{title}:{result}",
-                         diag={"how": how, "hit": bool(state.get("hit"))})
+    diag = {"how": how, "hit": bool(state.get("hit")), "target": "card_header"}
+    if how:
+        # ACL-1611: «раскрылась» — это ещё и управляющие элементы в теле.
+        # Тело не нашли (метки нет) — проверить нечем, считаем раскрытой.
+        ctl = _card_controls(page, 2.0)
+        diag["controls"] = ctl.get("n") if ctl.get("body") else None
+        if ctl.get("body") and not ctl.get("n"):
+            result = "no_controls"
+    md._telemetry.record("simple_card", result == "opened", note=f"{title}:{result}", diag=diag)
     return result
 
 
