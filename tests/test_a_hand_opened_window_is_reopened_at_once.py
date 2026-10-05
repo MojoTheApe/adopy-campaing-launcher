@@ -428,8 +428,10 @@ def test_stop_pressed_during_the_reopen_does_not_start_the_campaign(world, monke
     assert "kill" not in world.ev
     # Ревью PR #563 (раунд 3): только отключение от CDP — окно человека
     # остаётся открытым, и второй остановки профиля нет.
-    assert world.closes == [{"keep_browser_open": True}], world.closes
-    assert world.ev == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)], world.ev
+    # ACL-1606: Stop слышен и перед запуском — после него профиль не поднимают,
+    # подключения нет, закрывать нечего.
+    assert world.closes == [], world.closes
+    assert world.ev == [("stop", PROFILE)], world.ev
 
 
 # ── Ревью PR #563 (F3): текст отказа говорит правду о причине ─────────────

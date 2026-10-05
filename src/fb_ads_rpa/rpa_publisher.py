@@ -9,6 +9,7 @@ from typing import Any
 from config.paths import get_ad_account_map_path
 from src.fb_ads_rpa.ads_manager_flow import AdsManagerFlow
 from src.fb_ads_rpa.browser import (
+    ReopenCancelled,
     BrowserConnection,
     PlaywrightProfileProvider,
     get_browser_provider,
@@ -300,12 +301,17 @@ class RpaPublisher:
         try:
             # ACL-1562: окно, открытое руками, провайдер переоткрывает сразу —
             # ожидания тишины ввода (ACL-1427) и его Stop больше нет.
+            # ACL-1606: Stop слышен и между повторами запуска профиля.
+            try:
+                self._provider.cancel_check = lambda: bool(getattr(self, "_cancelled", False))
+            except Exception:
+                pass
             self._conn = self._provider.open(entry, account_label)
             log.info("Browser opened via %s", self._provider.__class__.__name__)
         except Exception as exc:
             err_str = str(exc)
             self._reset_browser(keep_browser_open=soft)
-            if isinstance(exc, profile_trouble.ProfileStop):
+            if isinstance(exc, (profile_trouble.ProfileStop, ReopenCancelled)):
                 # ACL-1320: причина в профиле (вход, сеть, открыт руками) —
                 # её текст и есть сообщение; обходных путей нет.
                 raise
@@ -603,6 +609,11 @@ class RpaPublisher:
             self._report_profile_stop(stop, campaign_name, draft.account_label, "attach",
                                       cancelled=bool(getattr(self, "_cancelled", False)))
             return self._profile_stop_result(campaign_name, stop)
+        except ReopenCancelled:
+            # ACL-1606: Stop нажат, пока профиль ждали; профиль не поднят.
+            return RpaPublishResult(campaign_name=campaign_name, success=False,
+                                    error="Stopped by the user before the campaign started",
+                                    steps_completed=["cancelled_before_campaign"])
         if getattr(self, "_cancelled", False):
             # Ревью PR #563 (F2): Stop нажали, пока открывался браузер
             # (переоткрытие окна, открытого руками, идёт секунды и не

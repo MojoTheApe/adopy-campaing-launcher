@@ -99,8 +99,8 @@ def test_the_second_attempt_is_not_read_as_hand_opened(locked, monkeypatch):
     conn = locked.prov.open(_entry(), ACCOUNT)
     assert conn.page == "reopened-page"
     assert calls == ["no_automation_port"], "переоткрытие вызвано повторно"
-    # Профиль — робота: замок после собственной остановки не «рука».
-    assert br._robot_profile(PROFILE, f"C:/mlx/{PROFILE}")
+    # Метки «робота» после повтора нет, пока запуск не удался сам; удачный
+    # запуск ставит её сам — окно к этому моменту открыто.
     assert not any(r[2].get("note") == "mlx_lock" for r in locked.rows)
 
 
@@ -125,3 +125,39 @@ def test_no_other_profile_is_touched(locked):
     touched = {e[1] for e in locked.ev if isinstance(e, tuple)}
     assert touched == {PROFILE}, touched
     assert locked.running[OTHER_PROFILE]
+
+
+def test_a_failed_reopen_then_a_hand_window_gets_no_stop_and_no_kill(locked, monkeypatch):
+    """Ревью PR #607 (F1): отказ переоткрытия не оставляет метку «профиль робота»."""
+    locked.lock_left = 10 ** 6
+    with pytest.raises(pt.ProfileStop):
+        locked.prov.open(_entry(), ACCOUNT)
+    assert not br._robot_profile(PROFILE, f"C:/mlx/{PROFILE}")
+    assert PROFILE not in br._ROBOT_PROFILES
+    # Владелец открыл окно руками — теперь не отвечает ничего, кроме отказа.
+    locked.running[PROFILE] = frozenset({4242})
+    locked.ev.clear()
+    locked.kill_flags.clear()
+    with pytest.raises(pt.ProfileStop) as stop:
+        locked.prov.open(_entry(), ACCOUNT, allow_kill=True, reopen_hand_window=False)
+    assert stop.value.code == pt.OPEN_BY_HAND
+    assert locked.ev == [], locked.ev
+    assert "kill" not in locked.ev
+
+
+def test_stop_pressed_during_the_retries_does_not_start_the_profile(locked):
+    locked.lock_left = 10 ** 6
+    seen = []
+
+    def cancel():
+        seen.append(locked.start_calls)
+        return locked.start_calls >= 2
+
+    locked.prov.cancel_check = cancel
+    with pytest.raises(br.ReopenCancelled) as err:
+        locked.prov.open(_entry(), ACCOUNT)
+    assert "stopped by the user" in str(err.value)
+    assert locked.start_calls == 2, "после Stop профиль запускали ещё раз"
+    assert "kill" not in locked.ev
+    step, ok, kw = _hand_row(locked)
+    assert (ok, kw["note"]) == (False, "cancelled")

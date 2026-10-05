@@ -1990,7 +1990,12 @@ HAND_WINDOW_START_BACKOFF_S = (1, 1, 2, 2, 3, 3, 4, 4, 5, 5)
 
 #: ACL-1606: причина, если Multilogin так и не отпустил профиль.
 HAND_WINDOW_NOT_RELEASED = ("Multilogin did not release the profile after closing its window "
-                            "— open it again in Multilogin")
+                            "— open it again in Multilogin (if it is held on another machine "
+                            "or by another user, close it there)")
+
+
+class ReopenCancelled(RuntimeError):
+    """Stop нажат, пока ждали освобождения профиля: профиль не поднят (ACL-1606)."""
 
 
 def _start_still_held(exc: BaseException) -> bool:
@@ -2092,6 +2097,8 @@ class MultiloginAttachOnlyProvider:
         self._direct = MultiloginDirectCDPProvider()
         self._launcher: Any = None
         self._api_started = False
+        #: ACL-1606: `() -> bool` — задание остановлено; проверяется между повторами запуска.
+        self.cancel_check: "Callable[[], bool] | None" = None
 
     def _start_via_mlx_api(
         self,
@@ -2319,6 +2326,14 @@ class MultiloginAttachOnlyProvider:
         _record_profile_restart(entry, profile_id, ok=True, where="attach")
         return conn
 
+    def _cancel_requested(self) -> bool:
+        """Задание остановлено кнопкой Stop (публикатор ставит `cancel_check`)."""
+        check = getattr(self, "cancel_check", None)
+        try:
+            return bool(check()) if callable(check) else False
+        except Exception:
+            return False
+
     def _owns_port(self, udd: str) -> bool:
         """Отладочный порт слушает процесс Mimic именно этого профиля (F6)."""
         if not udd:
@@ -2399,10 +2414,12 @@ class MultiloginAttachOnlyProvider:
             raise _open_by_hand(profile_id, account_label,
                                 f"{where}; {HAND_WINDOW_STOP_FAILED} within "
                                 f"{HAND_WINDOW_EXIT_WAIT_S} s", verdict)
-        # ACL-1606: окно закрыли мы сами — профиль теперь робота, а не «открыт
-        # руками»: запуск, споткнувшийся о замок Multilogin, не должен снова
-        # читаться как окно человека и сдаваться сразу.
-        _mark_robot_profile(profile_id, udd)
+        # ACL-1606: профиль НЕ помечаем профилем робота (ревью PR #607, F1): окно
+        # уже закрыто, список процессов пуст, и метка «робота» осталась бы до
+        # конца процесса — позже окно, открытое руками, Publish остановил бы
+        # и убил. Помечать и не нужно: запуск идёт с `allow_restart=False`, и
+        # замок Multilogin даёт ошибку раньше, чем срабатывает вопрос «чей
+        # профиль». Метку ставит сам удачный запуск.
         # Окно уже закрыто: не поднялось — это отказ перезапуска, профиль
         # может остаться закрытым (как у `restart_unresponsive`). Пока
         # Multilogin ещё держит профиль, повторяем запуск (до ~30 с). Только
@@ -2411,6 +2428,12 @@ class MultiloginAttachOnlyProvider:
         retries = 0
         waited_s = 0.0
         while True:
+            # Ревью PR #607 (F2): Stop нажат — профиль больше не поднимаем.
+            if self._cancel_requested():
+                _record_hand_window(entry, ok=False, where=where, note="cancelled", verdict=verdict,
+                                    error="stopped by the user", stop_s=stop_s, retries=retries,
+                                    waited_s=waited_s)
+                raise ReopenCancelled(f"{account_label}: stopped by the user; the profile was not reopened")
             try:
                 started = self._start_via_mlx_api(entry, account_label, profile_id, udd,
                                                   allow_restart=False, allow_kill=False)
