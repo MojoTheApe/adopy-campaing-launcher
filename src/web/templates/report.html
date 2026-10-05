@@ -12170,7 +12170,7 @@ function cbReviewRelease(q) {
     return ' <a href="#" class="cbd-q-retry" data-cb-release-kept="' + aclEscHtml(a) + '">Release ' + aclEscHtml(a) + '</a>';
   }).join('');
 }
-document.addEventListener('click', function (ev) {
+if (typeof document.addEventListener === 'function') document.addEventListener('click', function (ev) {   // в песочнице тестов страницы документа-события нет
   var t = ev.target && ev.target.closest ? ev.target.closest('[data-cb-release-kept]') : null;
   if (!t) return;
   ev.preventDefault();

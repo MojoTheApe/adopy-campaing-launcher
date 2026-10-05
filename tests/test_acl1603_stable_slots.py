@@ -614,3 +614,42 @@ def test_the_first_profile_wait_message_mentions_the_reserve():
     d = ps.decide(0, 0, _mb(int(5.4 * GB)), ps.load_settings({}))
     view = pj._queue_view(d)
     assert (view["need_mb"], view["reserve_mb"], view["profile_mb"]) == (int(6.5 * GB), 3 * GB, int(3.5 * GB))
+
+
+# ── раунд 4 ревью ────────────────────────────────────────────────────────
+
+def test_the_release_click_handler_survives_a_document_without_event_listeners():
+    """Песочница тестов страницы даёт `document` без addEventListener (B3)."""
+    html = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    assert "if (typeof document.addEventListener === 'function') document.addEventListener('click'" in html
+
+
+def test_releasing_the_account_of_a_running_job_is_a_404_and_keeps_the_slot(monkeypatch):
+    import httpx
+    from src.web import app as app_mod
+
+    slots = _slots_seeing_all_profiles()
+    monkeypatch.setattr(pj, "_slots", slots)
+    running = Job(slots, "a", "P1")                  # идёт, не оставлен
+
+    async def post():
+        transport = httpx.ASGITransport(app=app_mod.app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            return await client.post("/publish-jobs/kept/release", data={"account": "P1"})
+
+    assert asyncio.run(post()).status_code == 404
+    assert [(r["job_id"], r["kept"]) for r in slots.snapshot()["running"]] == [("a", False)]
+    running.finish()
+
+
+def test_the_production_queue_reads_the_real_host_memory():
+    """По тождеству, не вызовом: autouse-подмена памяти в conftest не должна это скрыть (R17)."""
+    import importlib
+    import inspect
+
+    src = inspect.getsource(pj)
+    assert "_slots = ProfileSlots()" in src                      # без своей памяти
+    default = inspect.signature(ps.ProfileSlots.__init__).parameters["memory"].default
+    # conftest подменяет умолчание на время теста; настоящее — в исходнике модуля.
+    assert "memory: Callable[[], MemoryReading | None] = read_memory" in inspect.getsource(ps.ProfileSlots.__init__)
+    assert default is not None and importlib.import_module("src.web.profile_slots").read_memory is ps.read_memory
