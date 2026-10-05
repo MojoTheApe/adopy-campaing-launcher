@@ -4548,6 +4548,18 @@
         "state": "implementing",
         "started_at": "2026-10-05T06:44:16+00:00",
         "from_status": "status:idea"
+      },
+      "582": {
+        "actor": "Worker-L1582W",
+        "session": "run_l1582w_1005",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "codex/acl-1582-linux-split",
+        "worktree": "C:\\acl-1582-linux-split",
+        "id": "d0dc116956b5444ea97fa3e96da13ef8",
+        "issue": 582,
+        "state": "implementing",
+        "started_at": "2026-10-05T06:44:39+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -6311,6 +6323,17 @@
         "state": "implementing",
         "worker": "Worker-P1581K",
         "coordinator": "Coordinator-T1004Q"
+      },
+      "582": {
+        "implementers": [
+          {
+            "actor": "Worker-L1582W",
+            "session": "run_l1582w_1005"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-L1582W",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -6768,6 +6791,10 @@
       },
       "Worker-P1581K": {
         "session": "run_p1581k_1005",
+        "role": "Worker"
+      },
+      "Worker-L1582W": {
+        "session": "run_l1582w_1005",
         "role": "Worker"
       }
     },
@@ -11496,6 +11523,13 @@
         "issue": 581,
         "claim": "41bf17cc9a6140b0ad8079de28703b4f",
         "actor": "Worker-P1581K"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-05T06:44:39+00:00",
+        "issue": 582,
+        "claim": "d0dc116956b5444ea97fa3e96da13ef8",
+        "actor": "Worker-L1582W"
       }
     ],
     "policy": {
