@@ -633,6 +633,21 @@ _CREATIVE_WHY_TEXT = {
                                           "ad is left in the draft for review."),
     "crop_vertical_changed_without_story": ("The Vertical crop changed although no story file was "
                                             "picked; the ad is left in the draft for review."),
+    # ACL-1637 (live 06.10): the same video on several ads of one campaign.
+    "library_has_no_copy": ("This ad has no media: the same video was already used by an earlier "
+                            "ad, Meta's media library showed no copy of it and the file could not "
+                            "be uploaded again for this ad; the ad is left in the draft for review."),
+    "same_file_already_uploaded_this_run": ("This ad has no media: the same video was already "
+                                            "uploaded for an earlier ad, but it could not be "
+                                            "attached to this ad; the ad is left in the draft for "
+                                            "review."),
+    "same_file_already_failed_this_run": ("This ad has no media: the same video already failed to "
+                                          "upload for an earlier ad and was not accepted again for "
+                                          "this ad; the ad is left in the draft for review."),
+    "file_not_landed": ("This ad has no media: the browser did not accept the video file in "
+                        "Meta's upload dialog; the ad is left in the draft for review."),
+    "wizard_not_opened": ("This ad has no media: Meta's 'Set up creative' wizard did not open "
+                          "for this ad; the ad is left in the draft for review."),
     # ACL-1551 (live 04.10): Next on Crop did not move Meta's wizard on.
     "crop_wizard_stuck": ("Meta's media wizard stayed on its Crop step (Next did not move it on), "
                           "so the robot closed the wizard with its own Close; the ad's media is not "

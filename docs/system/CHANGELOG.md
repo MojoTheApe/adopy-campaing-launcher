@@ -1,5 +1,26 @@
 # System history
 
+## The same video on several ads gets media on every ad — ACL-1637
+
+06.10, Doc120 (45b9778e65df) and B97 (5f05cf961d37, 152f7df4ef6a): the first ad got the video,
+ads 2-4 got none (`same_file_already_uploaded_this_run` / `library_has_no_copy`) and the campaign
+ended do-not-publish.
+
+- Cause: a heavy video is compressed first, and the copy that goes to Meta is named
+  `<name>.<key>.mp4`. Meta's media library captions the tile with that name, but the "file already
+  uploaded this run" path searched only for the original name, so it never found the tile. The
+  "do not upload twice" rule then left the ad empty.
+- The library lookup of ads 2+ now also searches by the compressed copy's name (found in the
+  compression cache, no ffmpeg needed) and looks twice, with a pause, because a fresh upload
+  appears in the grid with a delay.
+- If the library genuinely has no copy, the file is uploaded again for that ad: once per ad, one
+  attempt, and only when the wizard reached the Media step. A wizard that did not open is not
+  followed by an upload through the same wizard.
+- An ad that still ends without media now says why in plain English (`library_has_no_copy`,
+  `same_file_already_*`, `file_not_landed`, `wizard_not_opened`), is a blocking problem and the
+  campaign stays do-not-publish.
+- Tests: `tests/test_same_video_on_several_ads_gets_media.py`.
+
 ## Stop ends a job whose robot is stuck inside a step — ACL-1614
 
 05.10, job 1ad447f9: Stop was pressed while the robot sat inside a page call. Stop closed the
