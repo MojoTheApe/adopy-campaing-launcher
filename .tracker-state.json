@@ -5105,6 +5105,18 @@
         "state": "implementing",
         "started_at": "2026-10-06T05:55:50+00:00",
         "from_status": "status:idea"
+      },
+      "620": {
+        "actor": "Worker-S1620A",
+        "session": "run_s1620a_1006",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1620-notes",
+        "worktree": "C:\\acl-1620-notes",
+        "id": "35f17cb61db04e0a98cb1c082515cea6",
+        "issue": 620,
+        "state": "implementing",
+        "started_at": "2026-10-06T05:56:41+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -7104,6 +7116,17 @@
         "state": "implementing",
         "worker": "Worker-S1615A",
         "coordinator": "Coordinator-C0930A"
+      },
+      "620": {
+        "implementers": [
+          {
+            "actor": "Worker-S1620A",
+            "session": "run_s1620a_1006"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1620A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -7633,6 +7656,10 @@
       },
       "Worker-S1615A": {
         "session": "run_s1615a_1006",
+        "role": "Worker"
+      },
+      "Worker-S1620A": {
+        "session": "run_s1620a_1006",
         "role": "Worker"
       }
     },
@@ -12961,6 +12988,13 @@
         "issue": 615,
         "claim": "ad6de659a7b043919d3f23ef81a3bbe6",
         "actor": "Worker-S1615A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-06T05:56:41+00:00",
+        "issue": 620,
+        "claim": "35f17cb61db04e0a98cb1c082515cea6",
+        "actor": "Worker-S1620A"
       }
     ],
     "policy": {
