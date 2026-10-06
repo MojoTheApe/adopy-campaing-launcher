@@ -13,6 +13,7 @@ from typing import Any
 from playwright.sync_api import Error as _PlaywrightError
 from playwright.sync_api import Frame, Page
 
+from src.fb_ads_rpa import job_cancel as _job_cancel
 from src.fb_ads_rpa import page_liveness as _liveness
 from src.fb_ads_rpa import profile_trouble as _trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
@@ -903,6 +904,7 @@ def scroll_to_section(page: Page, *labels: str, budget_s: float = SCROLL_SECTION
         if time.time() >= deadline:
             return False
         time.sleep(0.25)
+        _job_cancel.check()
 
 
 def _conversion_location_display_value(page: Page) -> str:
@@ -1753,6 +1755,8 @@ def _sleep_h(base: float, spread: float = 0.3) -> None:
     шаг дольше срока, пока цикл хоть раз засыпает.
     """
     time.sleep(_human_jitter(base, spread))
+    # ACL-1614: Stop слышен в каждом цикле ожидания (паузы стоят во всех).
+    _job_cancel.check()
     _flow_budget_check()
 
 
@@ -1825,6 +1829,7 @@ def _flow_budget_disarm() -> None:
 
 def _flow_budget_step(step: str) -> None:
     """Граница шага: срок следующего шага считается отсюда."""
+    _job_cancel.check()  # ACL-1614: Stop слышен на каждой границе шага
     if getattr(_flow_budget, "armed", False):
         _flow_budget.step_start = time.time()
         _flow_budget.step = step
@@ -11381,7 +11386,9 @@ def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
         return closed
     finally:
         # ACL-1551: осталось ли на экране окно — в ту же строку телеметрии.
-        if not closed or trail.exit:
+        if _job_cancel.requested():
+            trail.dialog_left = None   # ACL-1614: после Stop страницу не читаем
+        elif not closed or trail.exit:
             left = _open_dialog_count(page)
             trail.dialog_left = None if left is None else left > 0
         else:

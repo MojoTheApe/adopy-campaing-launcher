@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from typing import Any
 
@@ -108,11 +109,21 @@ class RpaPublisher:
         self._conn: BrowserConnection | None = None
         self._entry = None
         self._cancelled = False
+        # ACL-1614: Stop только сигналит. Поток задания слышит Event в ожиданиях
+        # (`job_cancel.check`) и сам закрывает соединение на выходе.
+        self.cancel_event = threading.Event()
 
     def cancel(self) -> None:
-        """Stop RPA work; disconnect CDP but leave Multilogin window open."""
+        """Сигнал остановки; безопасно из любого потока.
+
+        Соединение Playwright и браузер отсюда НЕ закрываются (ACL-1614): sync
+        Playwright принадлежит потоку задания, а закрытие из чужого потока
+        оставляло его в бесконечном цикле с GIL в руках (05.10). Поток
+        задания увидит флаг, выйдет `JobCancelled` и вызовет `close` сам;
+        окно Multilogin остаётся открытым, как и раньше.
+        """
         self._cancelled = True
-        self.close(force=False)
+        self.cancel_event.set()
 
     def build_drafts(
         self,
