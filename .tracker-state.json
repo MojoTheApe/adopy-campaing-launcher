@@ -7096,7 +7096,7 @@
             "session": "run_s1615a_1006"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1615A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -7114,7 +7114,8 @@
           "report": "# ACL-1615 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/621 (into stage), commit f00768c6c61e971a4f8f471c93cac16d3639c39a\nClaim: ad6de659a7b043919d3f23ef81a3bbe6, branch codex/acl-1615-creative-index\n\n## Changes\n- src/meta_campaign_agent/creative_finder.py: per-root index (lower basename -> relative path strings), one os.scandir walk per root, immutable snapshot swapped under a lock (one build for concurrent callers), dir-mtime recheck throttled to 5 s and immediate on a miss, rebuild-once-and-retry if an indexed path vanished. Realpath / within-root check done per lookup; suffix disambiguation, 404, 409 unchanged. reset_creative_index() added. Cache capped at 4 roots; memory is relative strings only.\n- src/web/app.py: /creative-file lookup + sniff run in a dedicated 4-thread pool (not the report pool); Cache-Control private, max-age=3600, ETag, Last-Modified, 304; Range support (206/416) written by hand because Starlette 0.36 FileResponse has none (it used to answer 200 with the whole file). Middleware keeps that Cache-Control only for /creative-file 200/206/304; everything else stays no-store.\n- Other endpoints: /api/creatives and /creative-brief already use _off_loop; no other route walks the disk per creative. Nothing else changed.\n- docs/system/CHANGELOG.md entry; tests/test_acl_1615_creative_index.py (17 tests).\n\n## Tests (explicit files, ACL_LIBRARY_* blank)\n- test_acl_1615_creative_index.py: 16 passed, 1 skipped (real symlink needs privilege; escape covered via realpath fake)\n- test_the_creative_file_route_only_serves_allowed_media, test_meta_campaign_agent, test_creative_variants, test_parse_build_form, test_second_primary_text_reaches_the_robot, test_acl_test_platform: all passed (160 passed, 4 skipped, plus platform test fixed with a linux-ok marker)\n- acl_scan_secrets.py: clean\n- Not run: *_browser tests (they only mention creative_file as a form field).\n\n## Notes for reviewer\n- A newly added duplicate in an existing dir is noticed on the next hit only after the 5 s throttle (misses recheck immediately).\n- TestClient is broken in this env (httpx mismatch); endpoint tests use httpx.ASGITransport."
         },
         "pr": 621,
-        "queued_at": "2026-10-06T06:06:32+00:00"
+        "queued_at": "2026-10-06T06:06:32+00:00",
+        "reviewer": "Reviewer-R1615Q"
       },
       "620": {
         "implementers": [
@@ -7676,6 +7677,10 @@
       "Worker-S1620A": {
         "session": "run_s1620a_1006",
         "role": "Worker"
+      },
+      "Reviewer-R1615Q": {
+        "session": "rev_r1615q_1006",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -9153,12 +9158,22 @@
       433,
       526,
       529,
-      615,
       614,
       613,
       620
     ],
-    "review": null,
+    "review": {
+      "id": "cf94a145b48a4d00b99cdb232b5ad900",
+      "pr": 621,
+      "issues": [
+        615
+      ],
+      "actor": "Reviewer-R1615Q",
+      "session": "rev_r1615q_1006",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-06T07:29:44+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -13042,6 +13057,13 @@
         "issue": 620,
         "pr": 624,
         "actor": "Worker-S1620A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-06T07:29:44+00:00",
+        "pr": 621,
+        "lane": "cf94a145b48a4d00b99cdb232b5ad900",
+        "actor": "Reviewer-R1615Q"
       }
     ],
     "policy": {
