@@ -5307,7 +5307,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "628": {
+        "actor": "Worker-S1628A",
+        "session": "run_s1628a_1006",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1628-flaky",
+        "worktree": "C:\\acl-1628-flaky",
+        "id": "f4204a3207804a9692abec606dc8be34",
+        "issue": 628,
+        "state": "implementing",
+        "started_at": "2026-10-06T18:46:59+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -7520,6 +7533,17 @@
         },
         "pr": 644,
         "queued_at": "2026-10-06T16:07:53+00:00"
+      },
+      "628": {
+        "implementers": [
+          {
+            "actor": "Worker-S1628A",
+            "session": "run_s1628a_1006"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1628A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -8094,6 +8118,10 @@
       "Reviewer-R1637K": {
         "session": "rev_r1637k_1006",
         "role": "Reviewer"
+      },
+      "Worker-S1628A": {
+        "session": "run_s1628a_1006",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -13748,6 +13776,13 @@
         "pr": 639,
         "lane": "272de5c2632047c295b566179fed3be2",
         "actor": "Reviewer-R1637K"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-06T18:46:59+00:00",
+        "issue": 628,
+        "claim": "f4204a3207804a9692abec606dc8be34",
+        "actor": "Worker-S1628A"
       }
     ],
     "policy": {
