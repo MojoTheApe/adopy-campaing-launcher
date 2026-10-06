@@ -29,7 +29,7 @@ from typing import Any, Dict
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import FastAPI, Request, UploadFile, File
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -1279,8 +1279,11 @@ def _is_loopback_url(value: str | None) -> bool:
         return False
 
 
-def _secure_headers(response: Response) -> Response:
-    response.headers["Cache-Control"] = "no-store"
+def _secure_headers(response: Response, *, keep_cache_control: bool = False) -> Response:
+    # ACL-1615: превью креатива кэшируется браузером (его Cache-Control
+    # выставляет сам маршрут); всё остальное по-прежнему no-store.
+    if not (keep_cache_control and "cache-control" in response.headers):
+        response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -1313,7 +1316,13 @@ async def local_dashboard_boundary(request: Request, call_next):
                 JSONResponse({"error": "Cross-site request blocked"}, status_code=403)
             )
 
-    return _secure_headers(await call_next(request))
+    response = await call_next(request)
+    keep = (
+        request.url.path == "/creative-file"
+        and request.method.upper() in {"GET", "HEAD"}
+        and response.status_code in (200, 206, 304)
+    )
+    return _secure_headers(response, keep_cache_control=keep)
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -2927,31 +2936,164 @@ def _sniff_creative_media_type(path: Path) -> str | None:
     return None
 
 
-@app.get("/creative-file")
-async def creative_file(path: str = "") -> Response:
-    """Serve creative bytes (image/video) for the Campaign Builder's visual
-    ad preview — the only route that returns actual file content; /api/creatives
-    only lists metadata. `path` is whatever the client already knows (a
-    rel_path from /api/creatives, or a bare filename) and is resolved the same
-    root-scoped way publish-time enrichment does, so it can never escape
-    get_creatives_root().
-    """
-    if not path.strip():
-        return JSONResponse({"error": "path is required"}, status_code=400)
+# ACL-1615: предпросмотры Builder-а — десятки запросов подряд. Свой небольшой
+# пул, а не отчётный: шторм превью не должен занять потоки отчёта и слотов.
+_CREATIVE_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="acl-creative")
+
+# Файл креатива по одному и тому же пути не меняется, браузеру незачем
+# перезапрашивать превью (ETag/Last-Modified проставляет FileResponse).
+_CREATIVE_CACHE_CONTROL = "private, max-age=3600"
+
+
+def _resolve_creative_for_serving(path: str) -> tuple[Path | None, str | None, JSONResponse | None]:
+    """Блокирующая часть /creative-file (обход индекса, realpath, чтение первых
+    байт) — выполняется в потоке, а не в цикле событий."""
     try:
         resolved = _find_creative_file_scoped(get_creatives_root(), path)
     except CreativeNotFoundError:
-        return JSONResponse({"error": "Creative not found"}, status_code=404)
+        return None, None, JSONResponse({"error": "Creative not found"}, status_code=404)
     except AmbiguousCreativeError as e:
-        return JSONResponse({"error": str(e)}, status_code=409)
+        return None, None, JSONResponse({"error": str(e)}, status_code=409)
 
     media_type = _sniff_creative_media_type(resolved)
     if media_type is None:
         # ACL-1342 S02: не картинка и не видео из разрешённого списка — файл
         # существует (find_creative_file его нашёл), но отдавать его как есть
         # нельзя независимо от имени и расширения.
-        return JSONResponse({"error": "Unsupported creative type"}, status_code=415)
-    return FileResponse(resolved, media_type=media_type)
+        return None, None, JSONResponse({"error": "Unsupported creative type"}, status_code=415)
+    return resolved, media_type, None
+
+
+def _creative_validators(st: os.stat_result) -> tuple[str, str]:
+    """(ETag, Last-Modified) — те же, что строит FileResponse."""
+    import hashlib
+    from email.utils import formatdate
+
+    etag = '"' + hashlib.md5(f"{st.st_mtime}-{st.st_size}".encode(), usedforsecurity=False).hexdigest() + '"'
+    return etag, formatdate(st.st_mtime, usegmt=True)
+
+
+def _creative_not_modified(request: Request | None, resolved: Path) -> Response | None:
+    """304, если браузер уже держит эту версию файла (If-None-Match /
+    If-Modified-Since)."""
+    if request is None:
+        return None
+    try:
+        st = os.stat(resolved)
+    except OSError:
+        return None
+    from email.utils import parsedate_to_datetime
+
+    etag, last_modified = _creative_validators(st)
+    headers = {"etag": etag, "last-modified": last_modified, "cache-control": _CREATIVE_CACHE_CONTROL}
+    inm = request.headers.get("if-none-match")
+    if inm:
+        tags = {t.strip().removeprefix("W/") for t in inm.split(",")}
+        if etag in tags or "*" in tags:
+            return Response(status_code=304, headers=headers)
+        return None
+    ims = request.headers.get("if-modified-since")
+    if ims:
+        try:
+            since = parsedate_to_datetime(ims).timestamp()
+        except (TypeError, ValueError):
+            return None
+        if int(st.st_mtime) <= since:
+            return Response(status_code=304, headers=headers)
+    return None
+
+
+def _creative_range_response(request: Request | None, resolved: Path, media_type: str) -> Response | None:
+    """Range для видео. Starlette 0.36 (fastapi 0.110) сам Range не умеет и
+    отдавал файл целиком, а без 206 браузер не перематывает ролик. Поддержан
+    один диапазон (`bytes=a-b`, `a-`, `-n`); остальное — обычный 200."""
+    if request is None:
+        return None
+    header = request.headers.get("range")
+    if not header or not header.lower().startswith("bytes="):
+        return None
+    try:
+        st = os.stat(resolved)
+    except OSError:
+        return None
+    size = st.st_size
+    etag, last_modified = _creative_validators(st)
+    if_range = request.headers.get("if-range")
+    if if_range and if_range.strip() != etag and if_range.strip() != last_modified:
+        return None  # файл изменился — отдаём целиком
+    spec = header[6:].strip()
+    if "," in spec or "-" not in spec:
+        return None
+    first, _, last = spec.partition("-")
+    try:
+        if first == "":
+            n = int(last)
+            if n <= 0:
+                raise ValueError
+            start, end = max(size - n, 0), size - 1
+        else:
+            start = int(first)
+            end = int(last) if last else size - 1
+            end = min(end, size - 1)
+    except ValueError:
+        return None
+    base = {"accept-ranges": "bytes", "etag": etag, "last-modified": last_modified,
+            "cache-control": _CREATIVE_CACHE_CONTROL}
+    if size == 0 or start >= size or start > end:
+        return Response(status_code=416, headers={**base, "content-range": f"bytes */{size}"})
+
+    def chunks():
+        remaining = end - start + 1
+        with open(resolved, "rb") as fh:
+            fh.seek(start)
+            while remaining > 0:
+                data = fh.read(min(1024 * 1024, remaining))
+                if not data:
+                    break
+                remaining -= len(data)
+                yield data
+
+    return StreamingResponse(
+        chunks(),
+        status_code=206,
+        media_type=media_type,
+        headers={**base, "content-range": f"bytes {start}-{end}/{size}", "content-length": str(end - start + 1)},
+    )
+
+
+@app.get("/creative-file")
+async def creative_file(path: str = "", request: Request = None) -> Response:
+    """Serve creative bytes (image/video) for the Campaign Builder's visual
+    ad preview — the only route that returns actual file content; /api/creatives
+    only lists metadata. `path` is whatever the client already knows (a
+    rel_path from /api/creatives, or a bare filename) and is resolved the same
+    root-scoped way publish-time enrichment does, so it can never escape
+    get_creatives_root().
+
+    ACL-1615: поиск файла идёт в пуле потоков, не в цикле событий (раньше
+    каждый предпросмотр блокировал все остальные запросы на 10-30 с). Range
+    для видео отдаёт сам FileResponse.
+    """
+    if not path.strip():
+        return JSONResponse({"error": "path is required"}, status_code=400)
+    loop = asyncio.get_running_loop()
+    ctx = contextvars.copy_context()
+    resolved, media_type, error = await loop.run_in_executor(
+        _CREATIVE_POOL, functools.partial(ctx.run, _resolve_creative_for_serving, path)
+    )
+    if error is not None:
+        return error
+    not_modified = await loop.run_in_executor(_CREATIVE_POOL, _creative_not_modified, request, resolved)
+    if not_modified is not None:
+        return not_modified
+    ranged = _creative_range_response(request, resolved, media_type)
+    if ranged is not None:
+        return ranged
+    return FileResponse(
+        resolved,
+        media_type=media_type,
+        headers={"Cache-Control": _CREATIVE_CACHE_CONTROL, "Accept-Ranges": "bytes"},
+    )
 
 
 @app.post("/api/accounts-hidden")
