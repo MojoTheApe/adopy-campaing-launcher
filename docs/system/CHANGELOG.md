@@ -39,6 +39,22 @@ holding the GIL, the whole dashboard slowed to 10-30 s per request, and the job 
   once per job. The row does not reset the "No new step for N min" clock on the page.
 - Tests: `tests/test_acl1614_cancel_hung_job.py`.
 
+## Account map: a free-text Note per account replaces the Setup column — ACL-1620
+
+Owner request 06.10: the Setup column ("ready / needs setup") is not needed; managers want to
+write their own note about an account.
+
+- The Setup column is gone. In its place is **Note**: the start of the note on one line with an
+  ellipsis, the full text in the tooltip, a faint "add note" when empty.
+- Click (or Enter on the focused cell) opens an editor with a resizable textarea and a Close
+  button. Close, Esc and a click outside all save; an empty text deletes the note; a failed save
+  keeps the editor open with the text and says "save failed".
+- Stored per account label on this machine only: `%LOCALAPPDATA%\ACLccount_notes.json`, written
+  atomically under the machine lock. It is never in the repo. Up to 10,000 characters per note.
+- `GET /api/account-notes` and `POST /api/account-notes` ({account, text}). The same account shows
+  the same note in every country; notes survive a report refresh and a dashboard restart.
+- Text is escaped on render and written to the page only as text.
+- The `ready` / `to_do` fields stay in the row data; only their display is removed.
 ## Campaign Builder creative previews no longer freeze the dashboard — ACL-1615
 
 05.10 py-spy: while the Builder loaded video previews, every other request (job status, slots,

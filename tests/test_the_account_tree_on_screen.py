@@ -1478,7 +1478,7 @@ def test_the_labels_are_the_words_from_the_table_head(page):
       спенд кабинета; в строке кампании — спенд самой кампании словами Meta.
     * «Status» → «Delivery». Status строки аккаунта — предупреждение
       кабинета; здесь стоит доставка Meta.
-    * «Setup» → «Meta». Setup аккаунта — готовность к работе, а в дереве
+    * «Note» → «Meta». Note аккаунта — заметка менеджера (ACL-1620; раньше Setup), а в дереве
       эта колонка несёт результат Meta (ACL-1275).
 
     Остальные читаются из шаблона: переименуют заголовок — тест это заметит.
@@ -1491,7 +1491,7 @@ def test_the_labels_are_the_words_from_the_table_head(page):
       document.querySelectorAll('.amap-tree-line > [data-label]')).map(c => c.dataset.label)""")
     assert labels[1] == 'Meta spend' and heads[2] == 'Account spend', (heads[2], labels[1])
     assert labels[7] == 'Delivery' and heads[8] == 'Status', (heads[8], labels[7])
-    assert labels[8] == 'Meta' and heads[9] == 'Setup', (heads[9], labels[8])
+    assert labels[8] == 'Meta' and heads[9] == 'Note', (heads[9], labels[8])
     # Книжные числа названы ровно так, как их зовёт шапка.
     assert [labels[0]] + labels[2:7] == [heads[1]] + heads[3:8], (labels, heads)
 
