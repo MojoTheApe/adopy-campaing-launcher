@@ -48,7 +48,7 @@ DIRTY = """
 <div><button id="cws">Close without saving</button></div>
 <div><button id="leave">Leave</button></div>
 <div><button id="rem">Remove</button></div>
-<div><button id="ok">Show audience</button></div>
+<div><button id="ok">Show more</button></div>
 """
 
 
@@ -283,9 +283,9 @@ def test_an_unknown_index_or_a_malformed_answer_is_give_up(page, answer):
 
 
 def test_close_dialog_needs_a_closing_button_inside_a_dialog(page):
-    page.set_content(_html("<div><button id='x'>Show audience</button></div>" + NAMING))
-    assert run(page, FakeClient(pick("Show audience", "close_dialog"))).reason == "behind_dialog"
-    assert run(page, FakeClient(pick("Add component", "close_dialog"))).reason == "not_a_dialog_close_button"
+    page.set_content(_html("<div><button id='x'>Show more</button></div>" + NAMING))
+    assert run(page, FakeClient(pick("Show more", "close_dialog"))).reason == "behind_dialog"
+    assert run(page, FakeClient(pick("Add component", "close_dialog"))).reason.startswith("not_allowlisted")
     res = run(page, FakeClient(pick("Cancel", "close_dialog")))
     assert res.ok is True and clicked(page) == ["Cancel"]
 
@@ -299,8 +299,8 @@ def test_expand_needs_a_collapsed_element(page):
 
 def test_the_element_changed_between_summary_and_click_is_not_clicked(page):
     """Индекс остался, а под ним уже «Publish»: метку перечитываем перед кликом."""
-    page.set_content(_html(DIRTY + mutate_on_mark("Show audience", "el.textContent = 'Publish';")))
-    res = run(page, FakeClient(pick("Show audience")))
+    page.set_content(_html(DIRTY + mutate_on_mark("Show more", "el.textContent = 'Publish';")))
+    res = run(page, FakeClient(pick("Show more")))
     assert res.action == "give_up" and res.reason == "dom_changed"
     assert clicked(page) == []
 
@@ -345,8 +345,8 @@ def test_suggest_never_touches_the_page(page):
 
 def test_act_clicks_exactly_the_chosen_element(page):
     page.set_content(_html(DIRTY))
-    res = run(page, FakeClient(pick("Show audience")), mode="act")
-    assert res.ok is True and res.action == "click" and res.label == "Show audience"
+    res = run(page, FakeClient(pick("Show more")), mode="act")
+    assert res.ok is True and res.action == "click" and res.label == "Show more"
     assert clicked(page) == ["ok"]
     assert page.evaluate("document.querySelectorAll('[data-acl-ai]').length") == 0
 
@@ -382,7 +382,7 @@ def test_scroll_to_and_escape_act(page):
 def test_off_is_the_default_and_never_asks(page, monkeypatch):
     monkeypatch.delenv("ACL_AI_RESCUE", raising=False)
     page.set_content(_html(DIRTY))
-    cl = FakeClient(pick("Show audience"))
+    cl = FakeClient(pick("Show more"))
     res = ar.rescue(page, step="s", goal="g", error="e", budget=ar.RescueBudget(), client=cl)
     assert res.skipped and res.mode == "off" and cl.calls == 0 and clicked(page) == []
     monkeypatch.setenv("ACL_AI_RESCUE", "bogus")
@@ -469,7 +469,7 @@ def test_exceptions_never_escape(page, monkeypatch):
         def record(self, *a, **k):
             raise OSError("disk")
 
-    assert run(page, FakeClient(pick("Show audience")), tel=BadTelemetry()).ok is True
+    assert run(page, FakeClient(pick("Show more")), tel=BadTelemetry()).ok is True
 
     class DeadPage:
         def evaluate(self, *a, **k):
@@ -479,7 +479,7 @@ def test_exceptions_never_escape(page, monkeypatch):
     assert isinstance(res, ar.RescueResult)  # не бросило
 
     monkeypatch.setattr(ar, "build_summary", lambda *a, **k: (_ for _ in ()).throw(ValueError("x")))
-    res = run(page, FakeClient(pick("Show audience")))
+    res = run(page, FakeClient(pick("Show more")))
     assert res.skipped and res.reason.startswith("error:")
 
 
@@ -488,14 +488,14 @@ def test_exceptions_never_escape(page, monkeypatch):
 def test_telemetry_row_shape(page):
     page.set_content(_html(DIRTY))
     tel = FakeTelemetry()
-    res = run(page, FakeClient(pick("Show audience"), tokens=(321, 9)), tel=tel, step="further_limit_row")
+    res = run(page, FakeClient(pick("Show more"), tokens=(321, 9)), tel=tel, step="further_limit_row")
     step, ok, kw = tel.rows[-1]
     assert (step, ok, kw["note"]) == ("ai_rescue", True, "click")
     d = kw["diag"]
     assert d["step"] == "further_limit_row" and d["mode"] == "act" and d["action"] == "click"
-    assert d["label"] == "Show audience" and d["input_tokens"] == 321 and d["output_tokens"] == 9
+    assert d["label"] == "Show more" and d["input_tokens"] == 321 and d["output_tokens"] == 9
     assert d["latency_s"] >= 0 and len(d["summary_hash"]) == 12 and "goal" in d and "reason" in d
-    assert res.label == "Show audience"
+    assert res.label == "Show more"
 
 
 def test_the_request_carries_the_schema_model_and_timeout(page, monkeypatch):
@@ -585,15 +585,23 @@ def test_b2_the_click_lands_on_the_verified_point_not_on_a_link_in_the_card(page
     assert len(clk) == 1 and clk[0] != "LNK"
 
 
-def test_n2_the_click_is_a_plain_mouse_click_without_playwright_retries(page, monkeypatch):
-    page.set_content(_html("<div><button id='b'>Show audience</button></div>"))
+def test_n2_the_click_goes_through_locator_click_with_position_and_a_short_timeout(page, monkeypatch):
+    page.set_content(_html("<div><button id='b'>Show more</button></div>"))
+    seen = {}
+    orig = page.locator
 
-    def boom(*a, **k):
-        raise AssertionError("locator.click would retry for seconds")
+    class Spy:
+        def __init__(self, loc):
+            self.loc = loc
 
-    monkeypatch.setattr(page, "locator", boom)
-    assert run(page, FakeClient(pick("Show audience"))).ok is True
+        def click(self, **kw):
+            seen.update(kw)
+            return self.loc.click(**kw)
+
+    monkeypatch.setattr(page, "locator", lambda sel: Spy(orig(sel)))
+    assert run(page, FakeClient(pick("Show more"))).ok is True
     assert clicked(page) == ["b"]
+    assert seen["timeout"] <= 1000 and set(seen["position"]) == {"x", "y"}
 
 
 # B3: источники подписи
@@ -706,7 +714,7 @@ def test_b5_spanish_buttons_are_not_clicked(page, word):
     assert res.reason.startswith("forbidden") and clk == []
 
 
-@pytest.mark.parametrize("word", ["Show audience", "Continue", "Next", "More options", "Audience details"])
+@pytest.mark.parametrize("word", ["Show more", "Continue", "Next", "More options", "Audience details"])
 def test_b5_harmless_labels_pass_the_table(word):
     assert ar.forbidden_reason([word]) is None, word
 
@@ -729,14 +737,23 @@ def test_b6_close_works_only_through_close_dialog_inside_a_dialog(page):
     assert res.ok is True and len(clk) == 1
 
 
-def test_b6_the_editor_drawer_dialog_is_not_a_foreign_dialog(page):
-    """Окно-редактор (с полем имени кампании и футером Publish) — не чужое окно: Close в нём не закрывается."""
+def test_b6_a_small_dialog_with_a_name_field_is_a_real_dialog(page):
+    """Поле имени внутри маленького окна — не редактор: Publish в тексте окна блокирует всё."""
     body = ('<div role="dialog"><input placeholder="Enter your campaign name" value=""><div>Publish</div>'
-            '<div role="button" aria-label="Close">x</div><div><button>Next step</button></div></div>')
+            '<div role="button" aria-label="Close">x</div><div><button>Show more</button></div></div>')
     res, clk, _ = probe(page, body, by_label("Close", "close_dialog"))
     assert res.action == "give_up" and clk == []
-    res, clk, _ = probe(page, body, by_label("Next step"))
-    assert res.ok is True and clk == ["Next step"]  # а обычная кнопка внутри — доступна
+    res, clk, _ = probe(page, body, by_label("Show more"))
+    assert res.reason.startswith("forbidden_dialog") and clk == []
+
+
+def test_b6_a_full_screen_editor_dialog_is_the_editor_not_a_foreign_dialog(page):
+    body = ('<div role="dialog" style="width:100vw;height:100vh"><input placeholder="Enter your campaign name" value="x">'
+            '<div>Publish</div><div role="button" aria-label="Close">x</div><div><button>Show more</button></div></div>')
+    res, clk, _ = probe(page, body, by_label("Close", "close_dialog"))
+    assert res.action == "give_up" and clk == []
+    res, clk, _ = probe(page, body, by_label("Show more"))
+    assert res.ok is True and clk == ["Show more"]
 
 
 # B7 / N3: переключатели, строки списков, страница списка
@@ -754,12 +771,12 @@ def test_b7_switches_checkboxes_and_radios_are_never_clicked(page):
 def test_b7_row_controls_are_hidden_from_the_model_and_refused(page):
     body = ('<table><tr><td><input type="checkbox" role="switch" id="SW" aria-label="On/off" checked></td>'
             '<td><a href="#">Some campaign link</a></td><td><button>Duplicate</button></td></tr></table>'
-            '<div><button>Outside</button></div>')
+            '<div><button>Show more</button></div>')
     page.set_content(_html(body))
     s = ar.build_summary(page)
     assert "On/off" not in s.text and "Duplicate" not in s.text and "Some campaign" not in s.text
     res = run(page, FakeClient(lambda p, pg: {"action": "click", "index": 0}))
-    assert res.ok is True and clicked(page) == ["Outside"]
+    assert res.ok is True and clicked(page) == ["Show more"]
     page.evaluate("document.querySelector('button').setAttribute('data-acl-ai', '77')")
     res = run(page, FakeClient(lambda p, pg: {"action": "click", "index": 77}))
     assert res.reason == "unknown_index"
@@ -789,9 +806,9 @@ def test_n3_a_list_page_gives_up_without_calling_the_model(page):
 
 def test_n3_a_dialog_over_the_list_is_handled_but_the_list_behind_it_is_not(page):
     dlg = ('<div role="dialog" style="position:fixed;left:300px;top:100px;width:400px;height:300px;background:#fff">'
-           '<h2>Choose how to create</h2><div role="button" id="MAN">Manual setup</div></div>')
+           '<h2>Choose how to create</h2><div role="button" id="MAN">Not now</div></div>')
     page.set_content(_html(LIST_TABLE + dlg))
-    res = run(page, FakeClient(by_label("Manual setup")))
+    res = run(page, FakeClient(by_label("Not now", "close_dialog")))
     assert res.ok is True and clicked(page) == ["MAN"]
     res = run(page, FakeClient(by_label("Create")))
     assert res.reason == "behind_dialog"
@@ -822,10 +839,10 @@ def test_j_a_plain_expand_button_still_works(page):
 
 
 def test_l_a_publish_overlay_over_the_target_is_not_clicked(page):
-    body = ('<div><button id="SAFE" style="width:200px;height:50px">Show audience</button></div>'
+    body = ('<div><button id="SAFE" style="width:200px;height:50px">Show more</button></div>'
             '<div style="position:absolute;left:0;top:0;width:400px;height:100px"><button id="PUBOVER" '
             'style="width:400px;height:100px;opacity:0.99">Publish</button></div>')
-    res, clk, _ = probe(page, body, by_label("Show audience"))
+    res, clk, _ = probe(page, body, by_label("Show more"))
     assert res.action == "give_up" and res.reason.startswith("hit_") and clk == []
 
 
@@ -837,8 +854,8 @@ def test_suggest_applies_the_same_checks_as_act(page):
 
 # N7: клиент, созданный нами, закрывается
 def test_n7_the_client_we_built_is_closed(page, monkeypatch):
-    page.set_content(_html("<div><button>Show audience</button></div>"))
-    cl = FakeClient(pick("Show audience"))
+    page.set_content(_html("<div><button>Show more</button></div>"))
+    cl = FakeClient(pick("Show more"))
     closed = []
     cl.close = lambda: closed.append(1)
     monkeypatch.setattr(ar, "_make_client", lambda: (cl, ""))
@@ -848,10 +865,10 @@ def test_n7_the_client_we_built_is_closed(page, monkeypatch):
 
 def test_n5_the_anchor_search_has_a_time_cap(page, monkeypatch):
     monkeypatch.setattr(ar, "ANCHOR_SCAN_MS", 1)
-    page.set_content(_html("".join(f"<p>text line {i}</p>" for i in range(5000)) + "<button>Show audience</button>"))
+    page.set_content(_html("".join(f"<p>text line {i}</p>" for i in range(5000)) + "<button>Show more</button>"))
     t0 = time.monotonic()
     s = ar.build_summary(page, anchor="no such anchor anywhere")
-    assert time.monotonic() - t0 < 5 and "Show audience" in s.text
+    assert time.monotonic() - t0 < 5 and "Show more" in s.text
 
 
 # B8: чистка — настоящие утечки с ревью (имена заменены синтетическими)
@@ -881,7 +898,7 @@ def test_b8_the_summary_of_a_page_with_those_leaks_is_clean(page):
             '<button>Pixel KLD_BFL_B96</button><button>Pixel B90</button><button>Pixel FacebookDoc120</button>'
             '<table><tr><td><a href="#">sample engagement campaign</a></td></tr></table>'
             '<div><a href="#">sample traffic campaign</a></div>'
-            '<div><button>Show audience</button></div>')
+            '<div><button>Show more</button></div>')
     page.set_content(_html(body))
     s = ar.build_summary(page)
     flat = re.sub(r"^\[\d+\] ", "", s.text, flags=re.M)
@@ -891,6 +908,298 @@ def test_b8_the_summary_of_a_page_with_those_leaks_is_clean(page):
 
 
 def test_b8_names_from_the_caller_are_replaced(page):
-    page.set_content(_html("<h2 role='heading'>Quiet Ocean Studio - main</h2><div><button>Show audience</button></div>"))
+    page.set_content(_html("<h2 role='heading'>Quiet Ocean Studio - main</h2><div><button>Show more</button></div>"))
     assert "Quiet Ocean" in ar.build_summary(page).text
     assert "Quiet Ocean" not in ar.build_summary(page, names=("Quiet Ocean Studio",)).text
+
+
+# ═══ раунд 2 ревью: белый список как основной слой, пробы click_probe2/scrub_probe2/listpage ═══
+
+FOOT = "/am/editor_drawer/editor:ad_set/editor_drawer_footer"
+
+
+def probe_clicked_nothing(page, body, choose, **kw):
+    res, clk, esc = probe(page, body, choose, **kw)
+    assert clk == [] and esc == 0, (res, clk, esc)
+    return res
+
+
+# ── позитивный белый список ──────────────────────────────────────────────────
+
+@pytest.mark.parametrize("label", ["Next", "Continue", "OK", "Save", "More options", "Create", "Confirm", "Done",
+                                   "Apply", "Add component", "Get started", "Boost", "Audience details"])
+def test_allowlist_click_refuses_everything_not_listed(page, label):
+    res = probe_clicked_nothing(page, f'<div><button id="X">{label}</button></div>', by_label(label))
+    assert res.action == "give_up" and res.reason.startswith("not_allowlisted:"), res.reason
+
+
+@pytest.mark.parametrize("label", ["Show more", "See more", "Ver más", "Mostrar más", "Ver mais", "Show less"])
+def test_allowlist_click_allows_the_short_list(page, label):
+    res, clk, _ = probe(page, f'<div><button id="X">{label}</button></div>', by_label(label))
+    assert res.ok is True and clk == ["X"], res.reason
+
+
+@pytest.mark.parametrize("label,ok", [("Audience", True), ("Placements", True), ("Conjuntos de anuncios", True),
+                                      ("Posicionamentos", True), ("Billing", False), ("Settings", False)])
+def test_allowlist_tabs_by_name(page, label, ok):
+    res, clk, _ = probe(page, f'<div><div role="tab" id="T" aria-selected="false">{label}</div></div>', by_label(label))
+    assert res.ok is ok and (len(clk) == 1) is ok, (label, res.reason)
+
+
+@pytest.mark.parametrize("label", ["Close", "Cancel", "Not now", "Skip", "Dismiss", "Got it", "Maybe later", "Later",
+                                   "No thanks", "Cerrar", "Cancelar", "Ahora no", "Omitir", "Entendido", "Más tarde",
+                                   "No, gracias", "Fechar", "Agora não", "Pular", "Entendi", "Mais tarde", "×", "X"])
+def test_allowlist_close_dialog_labels_in_three_languages(page, label):
+    body = f'<div role="dialog"><h2>Heads up</h2><span>Something new is here</span><div role="button" id="C" aria-label="{label}">{label}</div></div>'
+    res, clk, _ = probe(page, body, lambda p, pg: {"action": "close_dialog", "index": 0})
+    assert res.ok is True and clk == ["C"], (label, res.reason)
+
+
+def test_allowlist_close_dialog_refuses_other_labels(page):
+    body = ('<div role="dialog"><h2>Heads up</h2><span>New</span><div role="button" id="A">Details</div>'
+            '<div role="button" id="B">Add component</div></div>')
+    for label in ("Details", "Add component"):
+        res, clk, _ = probe(page, body, by_label(label, "close_dialog"))
+        assert res.reason.startswith("not_allowlisted") and clk == [], (label, res.reason)
+
+
+@pytest.mark.parametrize("text", ["Discard changes?", "You have unsaved changes", "Leave this page?", "You will lose your work",
+                                  "Descartar cambios", "Cambios sin guardar", "Salir de la página", "Alterações sem salvar",
+                                  "Sair da página", "Se perderán los datos"])
+def test_allowlist_cancel_and_close_are_refused_on_dialogs_that_mention_losing_work(page, text):
+    for label in ("Cancel", "Close", "Cancelar", "Fechar"):
+        body = (f'<div role="dialog"><h2>Careful</h2><span>{text}</span>'
+                f'<div role="button" id="C" aria-label="{label}">{label}</div></div>')
+        res, clk, _ = probe(page, body, lambda p, pg: {"action": "close_dialog", "index": 0})
+        assert res.action == "give_up" and clk == [], (text, label, res.reason)
+
+
+def test_allowlist_click_on_a_close_word_is_refused_even_inside_a_dialog(page):
+    body = '<div role="dialog"><h2>Hi</h2><span>Info</span><div role="button" id="C" aria-label="Skip">Skip</div></div>'
+    res, clk, _ = probe(page, body, by_label("Skip", "click"))
+    assert res.reason == "close_only_via_close_dialog" and clk == []
+
+
+def test_allowlist_expand_needs_a_collapsed_state(page):
+    page.set_content(_html("<div><button aria-expanded='false' id='A'>Advanced settings</button></div>"
+                           "<div><div role='button' aria-pressed='false' id='B'>Audience summary</div></div>"
+                           "<div><button id='C'>Plain</button></div><div><button aria-expanded='true'>Open</button></div>"))
+    assert run(page, FakeClient(by_label("Advanced settings", "expand"))).ok is True
+    assert run(page, FakeClient(by_label("Audience summary", "expand"))).ok is True
+    assert clicked(page) == ["A", "B"]
+    assert run(page, FakeClient(by_label("Plain", "expand"))).reason == "not_collapsed"
+    assert run(page, FakeClient(by_label("Open", "expand"))).reason == "not_collapsed"
+
+
+def test_allowlist_a_collapsed_element_with_a_forbidden_label_is_still_refused(page):
+    res = probe_clicked_nothing(page, '<div><button aria-expanded="false">Delete options</button></div>',
+                                by_label("Delete options", "expand"))
+    assert res.reason.startswith("forbidden")
+
+
+def test_allowlist_press_escape_needs_a_real_clean_dialog(page):
+    res, clk, esc = probe(page, '<div role="dialog"><h2>Heads up</h2><span>Info</span></div>',
+                          lambda p, pg: {"action": "press_escape"})
+    assert res.ok is True and esc == 1
+    for body in ('<div role="dialog"><h2>Heads up</h2><span>Discard changes?</span></div>',
+                 '<div role="dialog"><h2>Heads up</h2><span>Unsaved edits</span></div>',
+                 '<div role="dialog"><textarea>typed</textarea></div>', '<div><h2>No dialog</h2></div>'):
+        res, clk, esc = probe(page, body, lambda p, pg: {"action": "press_escape"})
+        assert res.action == "give_up" and esc == 0, body
+
+
+def test_allowlist_scroll_to_is_always_allowed_but_never_clicks(page):
+    res, clk, _ = probe(page, '<div style="height:3000px"></div><div><button id="P">Publish</button></div>',
+                        by_label("Publish", "scroll_to"))
+    assert res.ok is True and clk == [] and page.evaluate("window.scrollY") > 1000
+
+
+def test_allowlist_a_missing_table_refuses_everything(page, monkeypatch):
+    monkeypatch.setattr(ar, "_table", lambda: None)
+    res = probe_clicked_nothing(page, '<div><button id="X">Show more</button></div>', by_label("Show more"))
+    assert res.action == "give_up" and "forbidden_table_missing" in res.reason
+
+
+def test_the_table_in_the_yaml_has_the_allowlist():
+    import yaml
+    from src.fb_ads_rpa import wizard_guard as wg
+
+    raw = yaml.safe_load(wg._ZONES_PATH.read_text(encoding="utf-8"))["ai_rescue"]
+    assert {"close_dialog", "click", "tab"} <= set(raw["allow"])
+    for label in ("Next", "Continue", "OK", "More options"):
+        assert ar.norm_text(label) not in {ar.norm_text(x) for x in raw["allow"]["click"]}
+
+
+# ── R2-B1: «редактор» нельзя подделать меткой data-surface ───────────────────
+
+def test_r2b1_a_discard_confirm_inside_the_footer_surface_is_a_real_dialog(page):
+    body = ('<div><input placeholder="Enter your ad set name here..." value="x"><div data-surface="' + FOOT + '">'
+            '<div role="dialog" data-surface="' + FOOT + '/confirm"><h2>Discard changes?</h2>'
+            '<span>Unsaved edits will be lost.</span><div><div role="button" id="OK" data-surface="' + FOOT +
+            '/confirm/lib:ok">OK</div></div></div></div></div>')
+    for action in ("click", "close_dialog"):
+        res = probe_clicked_nothing(page, body, by_label("OK", action))
+        assert res.action == "give_up", (action, res.reason)
+
+
+def test_r2b1_a_publish_confirm_carrying_a_publish_marker_is_a_real_dialog(page):
+    body = ('<div role="dialog"><h2>Publish your campaign?</h2><span>Ads start delivering now.</span>'
+            '<div data-surface="/am/editor_drawer/editor:ad/simple_create_publish/confirm"><div>'
+            '<div role="button" id="GO">Confirm</div></div></div></div>')
+    res = probe_clicked_nothing(page, body, by_label("Confirm"))
+    assert res.reason.startswith("forbidden_dialog")
+
+
+def test_r2b1_a_dialog_nested_in_the_editor_dialog_is_real_and_checked(page):
+    body = ('<div role="dialog" style="width:100vw;height:100vh"><input placeholder="Enter your ad set name here" value="x">'
+            '<div role="dialog"><h2>Your draft will be discarded</h2><div role="button" id="OK">Not now</div></div></div>')
+    res = probe_clicked_nothing(page, body, by_label("Not now", "close_dialog"))
+    assert res.reason.startswith("forbidden_dialog") or res.reason == "close_blocked_by_dialog_text"
+    harmless = body.replace("Your draft will be discarded", "Heads up")
+    res, clk, _ = probe(page, harmless, by_label("Not now", "close_dialog"))
+    assert res.ok is True and clk == ["OK"]
+
+
+# ── R2-B2: прокрутка и клик ──────────────────────────────────────────────────
+
+def test_r2b2_smooth_scroll_never_lands_on_the_publish_button_below(page):
+    body = ('<style>html{scroll-behavior:smooth}</style><div style="height:1300px"></div>'
+            '<div><button id="SAFE" style="height:40px;width:300px">Show more</button></div><div style="height:150px"></div>'
+            '<div><button id="PUB" style="height:400px;width:300px">Publish</button></div><div style="height:2000px"></div>')
+    for _ in range(3):
+        res, clk, _ = probe(page, body, by_label("Show more"))
+        page.wait_for_timeout(500)
+        assert res.ok is True and "PUB" not in page.evaluate("window.clicked") and clk == ["SAFE"], (res.reason, clk)
+
+
+def test_r2b2_smooth_scroll_in_a_container(page):
+    body = ('<style>#sc{scroll-behavior:smooth;overflow:auto;height:800px}</style><div id="sc"><div style="height:1300px"></div>'
+            '<div><button id="SAFE" style="height:40px;width:300px">Show more</button></div><div style="height:150px"></div>'
+            '<div><button id="PUB" style="height:400px;width:300px">Publish</button></div><div style="height:2000px"></div></div>')
+    res, clk, _ = probe(page, body, by_label("Show more"))
+    page.wait_for_timeout(500)
+    assert "PUB" not in page.evaluate("window.clicked")
+
+
+def test_r2b2_a_refused_pick_never_scrolls_the_page(page):
+    body = '<div style="height:3000px"></div><div><button id="P">Publish</button></div>'
+    res = probe_clicked_nothing(page, body, by_label("Publish"))
+    assert res.action == "give_up" and page.evaluate("window.scrollY") == 0
+    body = '<div style="height:3000px"></div><div><button id="P">Next</button></div>'
+    res = probe_clicked_nothing(page, body, by_label("Next"))
+    assert res.reason.startswith("not_allowlisted") and page.evaluate("window.scrollY") == 0
+
+
+def test_r2b2_a_target_that_keeps_moving_is_not_clicked(page):
+    body = ('<style>@keyframes mv{from{transform:translateX(0)}to{transform:translateX(600px)}}'
+            '#M{animation:mv 0.5s linear infinite alternate}</style><div><button id="M">Show more</button></div>')
+    res, clk, _ = probe(page, body, by_label("Show more"))
+    assert res.action == "give_up" and res.reason == "rect_unstable" and clk == []
+
+
+# ── R2-B3: словоформы, мягкий перенос, нулевая ширина ───────────────────────
+
+INFLECTED = ["Your draft will be deleted.", "Changes will be discarded.", "Se eliminará el borrador.",
+             "2 ads will be removed from this campaign.", "Deleting", "Unpublished changes", "Publishing now",
+             "Removing ads", "Borrando anuncios", "Anuncio eliminado", "Descartando cambios", "Quitaremos el anuncio",
+             "Anúncio excluído", "Apagaremos o anúncio", "Descartado", "Publicado", "Pagamento recusado", "Facturación",
+             "Aceptaremos los términos", "Aceitar termos", "Cerrar sesión ahora", "Sair da conta", "Payments overdue",
+             "Pub­lish", "Del​ete", "Dele⁠te", "Pub﻿lish"]
+
+
+@pytest.mark.parametrize("text", INFLECTED)
+def test_r2b3_inflected_and_hidden_character_forms_are_forbidden(text):
+    assert ar.forbidden_reason([text]), text
+    assert ar.forbidden_reason(["Show more"], text), text
+
+
+@pytest.mark.parametrize("text", ["Your draft will be deleted.", "Changes will be discarded.", "Se eliminará el borrador.",
+                                  "2 ads will be removed from this campaign."])
+def test_r2b3_probes_n3_through_n3d_click_nothing(page, text):
+    body = f'<div role="dialog"><h2>Heads up</h2><span>{text}</span><div role="button" id="OK">Continuar</div></div>'
+    assert probe_clicked_nothing(page, body, by_label("Continuar")).action == "give_up"
+
+
+def test_r2b3_probes_n3e_n5_n7_labels(page):
+    for label in ("Deleting", "Unpublished changes", "Pub­lish"):
+        res = probe_clicked_nothing(page, f'<div><button id="X">{label}</button></div>', by_label(label[:3]))
+        assert res.reason.startswith("forbidden"), (label, res.reason)
+
+
+@pytest.mark.parametrize("text", ["Show more", "Page settings", "Facebook Page", "Audience", "Pagination", "Next step",
+                                  "Placements", "Targeting", "Languages", "Budget", "Schedule"])
+def test_r2b3_stems_do_not_swallow_ordinary_words(text):
+    assert ar.forbidden_reason([text]) is None, text
+
+
+# ── R2-B4: имена кампаний и кабинетов ────────────────────────────────────────
+
+@pytest.mark.parametrize("text", ["CO_bnc_All_Video_GMBL | extra", "CO_bnc_All_Video_Day", "name | CO_bnc_All_Video_Day",
+                                  "2408 - ES Fav pro", "123 - Some Account Name", "Some Account Name - 2408",
+                                  "KW_TRL_x"])
+def test_r2b4_campaign_and_account_names_are_scrubbed(text):
+    out = ar.scrub_text(text)
+    for needle in ("CO_", "bnc", "GMBL", "Fav", "Some Account", "TRL", "extra", "Day"):
+        assert needle not in out, (text, out)
+    assert not re.search("[0-9]", out), out
+
+
+def test_r2b4_the_underscore_token_is_a_name_before_and_after_the_bar():
+    assert ar.scrub_text("CO_bnc_All_Video_GMBL | x") == "<name> | <name>"
+    assert ar.scrub_text("hello CO_bnc_All end") == "hello <name> end"
+
+
+# ── R2-N1: настоящий список Meta ─────────────────────────────────────────────
+
+REAL_LIST = ('<div role="table" style="width:1500px;height:520px"><div role="row">Campaign Delivery Results</div>'
+             '<div role="presentation"><div>' + "".join(
+                 f'<div><input type="checkbox" role="switch" aria-label="On/off"><button>Open row {i}</button></div>'
+                 for i in range(6)) + '</div></div></div><div><button>Show more</button></div>')
+
+
+def test_r2n1_a_div_role_table_with_one_row_is_a_list_page(page):
+    page.set_content(_html(REAL_LIST))
+    cl = FakeClient(by_label("Show more"))
+    res = run(page, cl)
+    assert res.reason == "list_page" and cl.calls == 0 and clicked(page) == []
+
+
+def test_r2n1_controls_inside_role_table_are_hidden_and_refused_with_a_dialog_open(page):
+    dlg = ('<div role="dialog" style="position:fixed;left:300px;top:100px;width:400px;height:300px;background:#fff">'
+           '<h2>Hi</h2><span>Info</span><div role="button" id="D">Not now</div></div>')
+    page.set_content(_html(REAL_LIST + dlg))
+    s = ar.build_summary(page)
+    assert "On/off" not in s.text and "Open row" not in s.text and "Not now" in s.text
+    res = run(page, FakeClient(by_label("Not now", "close_dialog")))
+    assert res.ok is True and clicked(page) == ["D"]
+
+
+def test_r2n1_a_small_role_table_in_the_editor_is_not_a_list_page_but_its_controls_are_refused(page):
+    body = ('<div role="table" style="width:200px;height:60px"><div role="row"><button id="B">Show more</button></div></div>'
+            '<div><button id="C">Show more</button></div>')
+    page.set_content(_html(body))
+    s = ar.build_summary(page)
+    assert s.list_page is False and len(s.elements) == 1
+
+
+# ── R2-N2: shadow DOM ────────────────────────────────────────────────────────
+
+def test_r2n2_a_target_with_a_shadow_root_is_refused(page):
+    body = ('<div><button id="NB" style="width:200px;height:40px">Show more<x-s id="XS"></x-s></button></div>'
+            '<script>document.getElementById("XS").attachShadow({mode:"open"}).innerHTML="<span>Publish</span>";</script>')
+    res = probe_clicked_nothing(page, body, by_label("Show more"))
+    assert res.reason == "shadow_dom"
+
+
+def test_r2_iframe_overlay_is_refused(page):
+    body = ('<div><button id="SAFE" style="width:300px;height:60px">Show more</button></div>'
+            '<iframe srcdoc="<button>Publish</button>" style="position:absolute;left:0;top:0;width:400px;height:120px;border:0">'
+            '</iframe>')
+    res = probe_clicked_nothing(page, body, by_label("Show more"))
+    assert res.reason.startswith("hit_")
+
+
+def test_norm_text_strips_invisible_characters_and_maps_cross_glyphs():
+    assert ar.norm_text("Pub­lish") == "publish"
+    assert ar.norm_text("​Del‌ete⁠") == "delete"
+    assert ar.norm_text("×") == "x" and ar.norm_text("✕") == "x"

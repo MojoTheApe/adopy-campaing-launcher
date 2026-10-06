@@ -15,16 +15,26 @@ to do. This first PR is the standalone module only; nothing in the flow calls it
   without digits are replaced only when the caller passes them in `names=`.
 - The model answers with exactly one action: click, expand, close dialog, press Escape, scroll to,
   or give up. Safety is in code, not in the prompt, and when in doubt it refuses:
-  - one EN/ES/PT table of forbidden words in `config/rpa_forbidden_zones.yaml` (publish, delete,
-    remove, discard, terms, instant forms, log out, payment, "leave", duplicate, edit, on/off);
+  - a positive allowlist is the primary gate (`allow` in `config/rpa_forbidden_zones.yaml`, EN/ES/PT):
+    expand only an element that is collapsed; close a real dialog only with Close/Cancel/Not now/Skip/
+    Dismiss/Got it/Later/No thanks (never when the dialog mentions discard, unsaved or leaving); click
+    only "Show more"/"See more" buttons and a few named tabs; Escape only over a real clean dialog;
+    scroll always. Anything else is `not_allowlisted:<label>`, logged for the owner to widen later;
+  - the denylist is the second layer, matched on word stems (deleted, eliminara, unpublished) after
+    stripping soft hyphens and zero-width characters (publish, delete, remove, discard, terms,
+    instant forms, log out, payment, "leave", duplicate, edit, on/off);
   - the check covers every label source of the target and its descendants (text, aria-label,
     title, alt, value, aria-labelledby), the text next to it and the FULL text of the dialog around it;
   - only buttons and tabs are clicked; switches, checkboxes, radios, fields and links never; nothing
     inside a list row; a list page gives up without calling the model;
   - Close works only as "close dialog" inside a visible dialog with no edited fields; Escape needs a
     visible dialog without edited fields;
-  - the click goes to a point checked with `elementFromPoint` (the marked element or a harmless
-    non-interactive part of it), one plain mouse click, no retries.
+  - a refused pick never scrolls the page; an allowed one is scrolled instantly, must stand still for
+    two frames, is vetted again, and is clicked with `locator.click(position, timeout=1s)` at a point
+    checked with `elementFromPoint`;
+  - a dialog is always a real dialog (a nested one too); the editor counts as the editor only when it
+    holds the name field and covers half the screen; a list page (a wide table or grid) gives up
+    before the model is called; shadow DOM targets are refused.
 - `ACL_AI_RESCUE=suggest` logs the answer and leaves the page untouched; `act` performs the one
   action and returns, the caller re-runs its own check. Model: `ACL_AI_RESCUE_MODEL`
   (default `claude-sonnet-5-5`), 20 second limit, no retries. No key or SDK means the rung is skipped.

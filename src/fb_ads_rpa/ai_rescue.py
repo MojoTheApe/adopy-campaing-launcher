@@ -74,26 +74,39 @@ class _Table:
                     out.append((str(r.get("reason") or pat), re.compile(rf"(?<![a-z0-9])(?:{pat})(?![a-z0-9])")))
             return out
 
+        allow = raw.get("allow") or {}
         self.context = comp(raw.get("context"))
         self.target_only = comp(raw.get("target_only"))
-        self.close_labels = {norm_text(x) for x in raw.get("close_labels") or []}
+        self.close_blockers = comp(raw.get("close_blockers"))
+        self.allow_close = {norm_text(x) for x in allow.get("close_dialog") or []}
+        self.allow_click = {norm_text(x) for x in allow.get("click") or []}
+        self.allow_tab = {norm_text(x) for x in allow.get("tab") or []}
 
 
 @lru_cache(maxsize=1)
 def _table() -> _Table | None:
-    """Таблица запретов из config/rpa_forbidden_zones.yaml; нет файла/секции — None (отказываем всё)."""
+    """Таблица из config/rpa_forbidden_zones.yaml; нет файла/секции/allowlist — None (отказываем всё)."""
     try:
         raw = yaml.safe_load(_wg._ZONES_PATH.read_text(encoding="utf-8")) or {}
         t = _Table(raw.get("ai_rescue") or {})
-        return t if t.context and t.target_only and t.close_labels else None
+        ok = t.context and t.target_only and t.close_blockers and t.allow_close and t.allow_click and t.allow_tab
+        return t if ok else None
     except Exception as exc:
         log.warning("ai_rescue: forbidden table unreadable (%s) - every pick will be refused", type(exc).__name__)
         return None
 
 
+_GLYPH_X = str.maketrans({"×": " x ", "✕": " x ", "✖": " x ", "✗": " x ", "╳": " x "})
+
+
 def norm_text(text: str) -> str:
-    """Нижний регистр, без диакритики, всё не-буквенное — один пробел, «hereDelete» → «here delete»."""
-    t = re.sub(r"([a-zà-ÿ])([A-ZÀ-Ý])", r"\1 \2", str(text or ""))
+    """Нижний регистр, без диакритики и невидимых символов, всё не-буквенное — один пробел.
+
+    Мягкий перенос и символы нулевой ширины (категория Cf: U+00AD, U+200B-200D, U+2060, U+FEFF)
+    выбрасываются ДО разбора: «Pub­lish» на экране — «Publish». «hereDelete» → «here delete».
+    """
+    t = "".join(ch for ch in str(text or "") if unicodedata.category(ch) != "Cf").translate(_GLYPH_X)
+    t = re.sub(r"([a-zà-ÿ])([A-ZÀ-Ý])", r"\1 \2", t)
     t = unicodedata.normalize("NFKD", t)
     t = "".join(ch for ch in t if not unicodedata.combining(ch)).lower()
     return re.sub(r"[\W_]+", " ", t).strip()
@@ -137,13 +150,31 @@ def forbidden_reason(label_parts, nearby: str = "", dialog_texts=(), *, close_di
     return None
 
 
+def _norm_parts(parts) -> list[str]:
+    return [n for n in (norm_text(p) for p in parts or []) if n]
+
+
 def is_close_label(parts) -> bool:
-    """Все источники подписи — «закрывающие» слова (Close/Cerrar/Cancel/×…)."""
+    """Все источники подписи — слова из allowlist close_dialog (Close/Cerrar/Cancel/×…)."""
     t = _table()
-    if t is None:
+    ns = _norm_parts(parts)
+    return bool(t) and bool(ns) and all(n in t.allow_close for n in ns)
+
+
+def click_allowed(parts, role: str) -> bool:
+    """Подпись кнопки в коротком списке click (вкладки — в списке tab)."""
+    t = _table()
+    ns = _norm_parts(parts)
+    if not t or not ns:
         return False
-    ns = [n for n in (norm_text(p) for p in parts or []) if n]
-    return bool(ns) and all(n in t.close_labels for n in ns)
+    names = t.allow_tab if role == "tab" else t.allow_click
+    return all(n in names for n in ns)
+
+
+def close_blocked_by(text: str) -> str | None:
+    """Окно, которое закрывать нельзя ни под какой подписью (отмена может выбросить работу)."""
+    t = _table()
+    return _scan(t.close_blockers, text) if t else "forbidden_table_missing"
 
 
 # ── чистка того, что уходит наружу ──────────────────────────────────────────
@@ -158,9 +189,11 @@ _FBTOKEN_RE = re.compile(r"\bEA[A-Za-z0-9]{8,}\b")
 _BLOB_RE = re.compile(r"\b(?=[A-Za-z_-]*\d)[A-Za-z0-9_-]{20,}\b")
 _PHONE_RE = re.compile(r"(?<!\w)\+?\d[\d\s().-]{7,}\d(?!\w)")
 #: «<номер кабинета> - Имя кабинета»: всё после номера — имя.
-_ACCOUNT_HEAD_RE = re.compile(r"\d{5,}\s*[-–—]\s*[^|]+")
+_ACCOUNT_HEAD_RE = re.compile(r"\d{3,}\s*[-–—]\s*[^|]+")
+#: Любой токен с «_»: имена кампаний байера (CO_bnc_All_Video_GMBL), id, snake_case.
+_UNDERSCORE_RE = re.compile(r"[A-Za-z0-9.\-]*_[A-Za-z0-9_.\-]*")
 #: «Имя кабинета - <номер>» (имя перед номером).
-_ACCOUNT_TAIL_RE = re.compile(r"[^|]{0,60}?\s[-–—]\s*\d{5,}")
+_ACCOUNT_TAIL_RE = re.compile(r"[^|]{0,60}?\s[-–—]\s*\d{3,}")
 #: Метка аккаунта в любом регистре: Facebook_9403A, FacebookDoc120, UL921, «Account 1234».
 _ACCOUNT_RE = re.compile(r"\b(?:facebook|fb|account|acct)[A-Za-z_\s-]{0,20}\d+[A-Za-z]?\b|\b[A-Z]{2,3}\d{3,}[A-Za-z]?\b", re.I)
 _PIXEL_RE = re.compile(r"\bpixel\s+\S+", re.I)
@@ -200,6 +233,7 @@ def scrub_text(text: str, names: tuple[str, ...] | list[str] = ()) -> str:
     out = _JWT_RE.sub("<token>", out)
     out = _FBTOKEN_RE.sub("<token>", out)
     out = _UUID_RE.sub("<id>", out)
+    out = _UNDERSCORE_RE.sub("<name>", out)
     out = re.sub(r"\s*\|.*$", " | <name>", out, flags=re.S) if "|" in out else out
     out = _ACCOUNT_HEAD_RE.sub("<account>", out)
     out = _ACCOUNT_TAIL_RE.sub("<account>", out)
@@ -233,11 +267,10 @@ const shown = (e) => {
 };
 const DLG = '[role=dialog], [role=alertdialog], [aria-modal="true"]';
 const HEAD = '[role=heading], h1, h2, h3, h4';
-// сам редактор (как в foreign_windows): окно-редактор — не «чужое» окно
+// Окно-редактор: ТОЛЬКО если внутри само поле имени кампании/группы/объявления и окно занимает
+// не меньше половины экрана. Метки data-surface не используются (их несёт любой потомок футера).
 const EDITOR = 'input[placeholder^="Enter your campaign name"], input[placeholder^="Enter your ad set name"],'
-  + ' input[placeholder^="Enter your ad name"], [data-surface*="editor_drawer_footer"],'
-  + ' [data-surface*="simple_create_publish"], [data-surface="/am/editor_drawer"],'
-  + ' [data-surface$="editor:campaign"], [data-surface$="editor:ad_set"], [data-surface$="editor:ad"]';
+  + ' input[placeholder^="Enter your ad name"]';
 const INTER = 'button, a[href], input, select, textarea, [role=button], [role=link], [role=switch],'
   + ' [role=checkbox], [role=radio], [role=menuitem], [role=tab], [tabindex], [aria-expanded],'
   + ' [contenteditable="true"]';
@@ -315,7 +348,11 @@ const stateOf = (e) => {
   if (pr === 'true') s.push('pressed'); else if (pr === 'false') s.push('not-pressed');
   return s;
 };
-const isEditor = (d) => !!d.querySelector(EDITOR);
+const isEditor = (d) => {
+  if (!d.querySelector(EDITOR)) return false;
+  const r = d.getBoundingClientRect();
+  return r.width * r.height >= 0.5 * innerWidth * innerHeight;
+};
 const realDialogs = () => [...document.querySelectorAll(DLG)].filter((d) => shown(d) && !isEditor(d));
 const dialogOf = (el) => {
   let d = el.parentElement ? el.parentElement.closest(DLG) : null;
@@ -325,7 +362,9 @@ const dialogOf = (el) => {
 const dirtyIn = (d) => [...d.querySelectorAll(
   'input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=button]):not([type=submit]), textarea, [contenteditable="true"]')]
   .some((x) => norm(typeof x.value === 'string' ? x.value : x.textContent) !== '');
-const inRowOf = (el) => !!el.closest('tr, [role=row], [role=gridcell], [role=columnheader]');
+const inRowOf = (el) => !!el.closest(
+  'tr, table, [role=row], [role=gridcell], [role=columnheader], [role=table], [role=grid], [role=treegrid]');
+const hasShadow = (el) => [el, ...el.querySelectorAll('*')].some((x) => !!x.shadowRoot);
 """
 
 _SUMMARY_JS = "(args) => {" + _PRE + r"""
@@ -347,10 +386,11 @@ _SUMMARY_JS = "(args) => {" + _PRE + r"""
   const dlgOut = dialogs.slice(0, 5).map((d) => ({title: dlgTitle(d), text: textOf(d, false).slice(0, 300)}));
   const headings = [...new Set([...document.querySelectorAll(HEAD)].filter(shown)
     .map((h) => norm(h.textContent).slice(0, 80)).filter(Boolean))].slice(0, 25);
-  // страница-список кампаний/групп/объявлений: широкая таблица из 3+ строк, окон нет
+  // страница-список кампаний/групп/объявлений: широкая таблица/грид (у Meta это один
+  // div[role=table] с одной строкой-шапкой), окон нет
   const vp = innerWidth * innerHeight;
   const grids = [...document.querySelectorAll('table, [role=grid], [role=treegrid], [role=table]')].filter((g) => {
-    if (!shown(g) || g.querySelectorAll('tr, [role=row]').length < 3) return false;
+    if (!shown(g)) return false;
     const r = g.getBoundingClientRect();
     return r.width * r.height >= 0.35 * vp;
   });
@@ -398,11 +438,23 @@ _SUMMARY_JS = "(args) => {" + _PRE + r"""
 
 #: Всё, что нужно для решения «можно ли»: полные источники подписи цели и потомков,
 #: окружение, полный текст окна, и (act) точка клика, проверенная elementFromPoint.
-_LOCATE_JS = "(args) => {" + _PRE + r"""
+_LOCATE_JS = "async (args) => {" + _PRE + r"""
   const hits = document.querySelectorAll('[data-acl-ai="' + args.i + '"]');
   if (hits.length !== 1) return {found: hits.length};
   const el = hits[0];
-  if (args.scroll) el.scrollIntoView({block: 'center', inline: 'center'});
+  const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  const rectOf = () => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; };
+  let stable = true;
+  if (args.prepare) {
+    // мгновенная прокрутка (CSS scroll-behavior: smooth игнорируется), затем два кадра:
+    // прямоугольник цели должен стоять на месте
+    el.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
+    await frame();
+    const r1 = rectOf();
+    await frame();
+    const r2 = rectOf();
+    stable = r1.every((v, k) => Math.abs(v - r2[k]) < 0.5);
+  }
   const role = roleOf(el);
   const dlgs = [];
   const d = dialogOf(el);
@@ -414,11 +466,12 @@ _LOCATE_JS = "(args) => {" + _PRE + r"""
     found: 1, visible: shown(el), role, label: labelOf(el, role), parts: parts(el),
     nearby: pt.length <= 400 ? pt : '',
     dialogs: dlgs.map((x) => ({text: norm(textOf(x, true) + ' ' + norm(x.getAttribute('aria-label'))), dirty: dirtyIn(x)})),
-    dialogOpen: realDialogs().length > 0, inDialog: !!d, inRow: inRowOf(el),
+    dialogOpen: realDialogs().length > 0, inDialog: !!d, inRow: inRowOf(el), shadow: hasShadow(el),
     desc: [...el.querySelectorAll(INTER)].slice(0, 80).map((x) => ({role: roleOf(x), parts: parts(x)})),
-    expanded: el.getAttribute('aria-expanded'), pressed: el.getAttribute('aria-pressed'), hit: null,
+    expanded: el.getAttribute('aria-expanded'), pressed: el.getAttribute('aria-pressed'),
+    stable, hit: null,
   };
-  if (args.hit) {
+  if (args.prepare) {
     const rr = el.getBoundingClientRect();
     let res = {ok: false, reason: 'no_point'};
     for (const [fx, fy] of [[.5, .5], [.25, .5], [.75, .5], [.5, .25], [.5, .75], [.08, .5], [.5, .08]]) {
@@ -429,7 +482,8 @@ _LOCATE_JS = "(args) => {" + _PRE + r"""
       if (h !== el && !el.contains(h)) { res = {ok: false, reason: 'covered'}; continue; }
       const ia = h.closest(INTER);
       if (ia && ia !== el && el.contains(ia)) { res = {ok: false, reason: 'interactive_descendant'}; continue; }
-      res = {ok: true, x, y, parts: parts(h)};
+      // позиция внутри элемента — для locator.click(position=...), он ещё раз проверит цель
+      res = {ok: true, x: x - rr.left, y: y - rr.top, parts: parts(h)};
       break;
     }
     info.hit = res;
@@ -685,41 +739,40 @@ def _usage(resp) -> tuple[int | None, int | None]:
 
 # ── решение «можно ли» и исполнение ─────────────────────────────────────────
 
-def _vet(action: str, info: dict[str, Any], label: str) -> str | None:
-    """Причина отказа по свежим данным со страницы (`_LOCATE_JS`) или None. Сомневаешься — отказывай."""
+def _vet(action: str, info: dict[str, Any], label: str, *, after_prepare: bool = False) -> str | None:
+    """Причина отказа по свежим данным со страницы (`_LOCATE_JS`) или None.
+
+    Два слоя, оба обязательны: чёрный список слов (в любой словоформе и языке) и ПОЛОЖИТЕЛЬНЫЙ
+    белый список действий (`allow` в yaml). Сомневаешься — отказывай.
+    """
     if info.get("found") != 1:
         return "element_gone_or_ambiguous"
     if not info.get("visible"):
         return "element_not_visible"
     if info.get("label", "") != label:
         return "dom_changed"
+    if after_prepare and not info.get("stable"):
+        return "rect_unstable"
+    if action == "scroll_to":
+        return None  # прокрутка кампанию изменить не может
     parts = info.get("parts") or []
-    if not any(norm_text(p) for p in parts):
+    if not _norm_parts(parts):
         return "empty_label"
+    if info.get("shadow"):
+        return "shadow_dom"
     if info.get("inRow"):
         return "in_list_row"
     if info.get("dialogOpen") and not info.get("inDialog"):
         return "behind_dialog"
     dialogs = info.get("dialogs") or []
     close_dialog = action == "close_dialog"
+    # слой 1: чёрный список (подпись цели, потомков, соседний текст, ПОЛНЫЙ текст окна)
     why = forbidden_reason(parts, info.get("nearby", ""), [d.get("text", "") for d in dialogs],
                            close_dialog=close_dialog)
     if why:
         return why
-    if action == "scroll_to":
-        return None
     if info.get("role") not in CLICKABLE_ROLES:
         return f"role_not_allowed:{info.get('role')}"
-    closing = is_close_label(parts)
-    if close_dialog:
-        if not info.get("inDialog") or not closing:
-            return "not_a_dialog_close_button"
-        if any(d.get("dirty") for d in dialogs):
-            return "dirty_dialog"
-    elif closing:
-        return "close_only_via_close_dialog"
-    if action == "expand" and info.get("expanded") != "false" and info.get("pressed") != "false":
-        return "not_collapsed"
     desc = info.get("desc") or []
     if desc:
         if action != "expand":
@@ -730,7 +783,29 @@ def _vet(action: str, info: dict[str, Any], label: str) -> str | None:
             why = forbidden_reason(d.get("parts") or [], "", ())
             if why:
                 return f"descendant_{why}"
-    return None
+    # слой 2: белый список
+    if close_dialog:
+        if not info.get("inDialog") or not dialogs:
+            return "not_a_dialog_close_button"
+        if not is_close_label(parts):
+            return f"not_allowlisted:{scrub_text(label)[:40]}"
+        for d in dialogs:
+            if close_blocked_by(d.get("text", "")):
+                return "close_blocked_by_dialog_text"
+            if d.get("dirty"):
+                return "dirty_dialog"
+        return None
+    if is_close_label(parts):
+        return "close_only_via_close_dialog"
+    if action == "expand":
+        if info.get("expanded") == "false" or info.get("pressed") == "false":
+            return None
+        return "not_collapsed"
+    if action == "click":
+        if click_allowed(parts, info.get("role", "")):
+            return None
+        return f"not_allowlisted:{scrub_text(label)[:40]}"
+    return f"action_not_supported:{action}"
 
 
 def _execute(page, act: dict[str, Any], summary: PageSummary, mode: str) -> tuple[bool, str, str, str]:
@@ -749,6 +824,8 @@ def _execute(page, act: dict[str, Any], summary: PageSummary, mode: str) -> tupl
             why = forbidden_reason([], "", [d.get("text", "")])
             if why:
                 return False, "give_up", "", f"escape_blocked:{why}"
+            if close_blocked_by(d.get("text", "")):
+                return False, "give_up", "", "close_blocked_by_dialog_text"
             if d.get("dirty"):
                 return False, "give_up", "", "dirty_dialog"
         if mode == "act":
@@ -763,18 +840,26 @@ def _execute(page, act: dict[str, Any], summary: PageSummary, mode: str) -> tupl
     if el is None:
         return False, "give_up", "", "unknown_index"
     label = el["label"]
-    act_mode = mode == "act"
+    # 1) проверка БЕЗ единой прокрутки: отказанный выбор страницу не трогает
     try:
-        info = page.evaluate(_LOCATE_JS, {"i": idx, "scroll": act_mode, "hit": act_mode and action != "scroll_to"})
+        info = page.evaluate(_LOCATE_JS, {"i": idx, "prepare": False})
     except Exception as exc:
         return False, "give_up", label, f"recheck_failed:{type(exc).__name__}"
     why = _vet(action, info or {}, label)
     if why:
         return False, "give_up", label, why
-    if not act_mode:
+    if mode != "act":
         return True, action, label, ""
+    # 2) мгновенная прокрутка, два кадра покоя, повторная полная проверка и проверка попадания
+    try:
+        info = page.evaluate(_LOCATE_JS, {"i": idx, "prepare": True})
+    except Exception as exc:
+        return False, "give_up", label, f"prepare_failed:{type(exc).__name__}"
+    why = _vet(action, info or {}, label, after_prepare=True)
+    if why:
+        return False, "give_up", label, why
     if action == "scroll_to":
-        return True, action, label, ""  # прокрутка уже сделана при проверке
+        return True, action, label, ""
     hit = info.get("hit") or {}
     if not hit.get("ok"):
         return False, "give_up", label, f"hit_{hit.get('reason', 'unknown')}"
@@ -783,8 +868,8 @@ def _execute(page, act: dict[str, Any], summary: PageSummary, mode: str) -> tupl
     if why:
         return False, "give_up", label, f"hit_{why}"
     try:
-        # клик по проверенной точке, без повторов и ожиданий Playwright
-        page.mouse.click(hit["x"], hit["y"])
+        # Playwright сам ещё раз проверит, что в точке клика наша цель; ожидание не дольше 1 с
+        page.locator(f'[{MARK}="{int(idx)}"]').click(position={"x": hit["x"], "y": hit["y"]}, timeout=1000)
     except Exception as exc:
         return False, action, label, f"action_failed:{type(exc).__name__}"
     return True, action, label, ""
