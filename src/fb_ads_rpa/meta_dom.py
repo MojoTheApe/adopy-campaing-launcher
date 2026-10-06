@@ -245,6 +245,9 @@ CREATIVE_STEP_BUDGET_S = 25 * 60
 #: Не начинать повтор загрузки, если от срока шага осталось меньше.
 CREATIVE_RETRY_MIN_S = 120.0
 
+#: Причина «медиатека открыта, копии файла в ней нет» (ACL-1637).
+LIBRARY_HAS_NO_COPY = "library_has_no_copy"
+
 #: ACL-1354: столько подряд непрочитанных опросов блока Media (~10 с) —
 #: и проверка медиа кончается: вкладка не читается, ждать нечего.
 MEDIA_CHECK_UNREADABLE_POLLS = 20
@@ -10572,12 +10575,29 @@ def _upload_ad_creative_with_retry(
         diag = {"file": Path(creative_path).name}
         if blocked_by:
             diag["blocked_by"] = blocked_by
-        _telemetry.record("ad_creative_upload", False, note=why, diag=diag)
-        # В итог шага — то, что на самом деле помешало: до Media не дошли —
-        # это про мастер, а не про правило «второй раз не грузим».
-        _set_upload_why(blocked_by if blocked_by in _NAVIGATION_WHYS
-                        or blocked_by == "upload_exception" else why)
-        return False
+        if upload_already_failed(creative_path):
+            # Причину прошлого провала несём в диагностику: именно она решает,
+            # можно ли заливать заново.
+            diag["earlier_failure"] = failed_upload_reason(creative_path)
+        if (blocked_by == LIBRARY_HAS_NO_COPY
+                and upload_failure_allows_reupload(creative_path)
+                and _creative_left() >= CREATIVE_RETRY_MIN_S):
+            # ACL-1637: мастер дошёл до Media, медиатека спрошена по обоим
+            # именам, и копии нет. Правило «второй раз не грузим» не должно
+            # оставлять объявление пустым: заливаем файл для ЭТОГО объявления
+            # заново — один раз на объявление, одной попыткой. Но только если
+            # файл до Meta не доходил (`file_not_landed`, мастер): файл,
+            # который Meta отвергла или чей кроп не сошёлся, не грузим снова.
+            _telemetry.record("ad_creative_upload", None, note="reupload_library_has_no_copy",
+                              diag=diag)
+            attempts = 1
+        else:
+            _telemetry.record("ad_creative_upload", False, note=why, diag=diag)
+            # В итог шага — то, что на самом деле помешало: до Media не дошли —
+            # это про мастер, а не про правило «второй раз не грузим».
+            _set_upload_why(blocked_by if blocked_by in _NAVIGATION_WHYS
+                            or blocked_by == "upload_exception" else why)
+            return False
 
     for attempt in range(attempts):
         # Причина — только последней попытки: не оставлять причину первой,
@@ -10611,8 +10631,8 @@ def _upload_ad_creative_with_retry(
             # Отказ по самому медиа объявления: ни «медиа есть», ни вторая
             # попытка его не исправят (порт ACL-1284).
             _close_creative_setup_modal(page)
-            _remember_upload_failed(creative_path)
             _set_upload_why(_refused_why())
+            _remember_upload_failed(creative_path)
             return False
         _close_creative_setup_modal(page)
         _sleep_h(0.8)
@@ -10708,7 +10728,11 @@ def _upload_ad_creative_with_retry(
 #: креативом, и после провала на первом остальные два платили полную цену без
 #: единого шанса. Замер 15.09: `ad2_creative_upload` — 178 секунд в среднем,
 #: почти всё впустую; за день это 10 минут из 48.
-_failed_uploads: set[tuple[str, str]] = set()
+#:
+#: ACL-1637 (ревью M1): значение — причина провала. Только по ней решается,
+#: можно ли залить файл для следующего объявления заново: допустимо лишь
+#: когда файл до Meta не доходил.
+_failed_uploads: dict[tuple[str, str], str] = {}
 
 
 def _upload_memo_key(creative_path: str) -> tuple[str, str]:
@@ -10716,7 +10740,30 @@ def _upload_memo_key(creative_path: str) -> tuple[str, str]:
 
 
 def _remember_upload_failed(creative_path: str) -> None:
-    _failed_uploads.add(_upload_memo_key(creative_path))
+    # Причина — та, что уже названа для этого объявления (`last_upload_why`):
+    # вызывающий обязан назвать её до запоминания.
+    _failed_uploads[_upload_memo_key(creative_path)] = last_upload_why() or ""
+
+
+#: ACL-1637: провалы, после которых файл ещё можно залить для другого
+#: объявления: Meta его не видела. Отказ самой Meta (`media_refused_on_ad`),
+#: кроп и любая причина, при которой файл подавали, сюда не входят.
+_REUPLOAD_OK_WHYS = _NAVIGATION_WHYS | {"file_not_landed"}
+
+
+def upload_failure_allows_reupload(creative_path: str) -> bool:
+    """Можно ли заливать файл заново, помня его провал в этом прогоне?
+
+    Нет провала — можно. Есть — только если файл до Meta не доходил.
+    """
+    key = _upload_memo_key(creative_path)
+    if key not in _failed_uploads:
+        return True
+    return _failed_uploads[key] in _REUPLOAD_OK_WHYS
+
+
+def failed_upload_reason(creative_path: str) -> str:
+    return _failed_uploads.get(_upload_memo_key(creative_path), "")
 
 
 #: Файлы, которые в этом прогоне уже успешно загрузились.
@@ -12245,6 +12292,42 @@ def _media_step_behind(step: dict | None) -> bool:
     return steps.index("Media") < steps.index(current)
 
 
+#: Сколько раз за копией ходить в медиатеку объявлению 2+ (ACL-1637).
+_KNOWN_COPY_ROUNDS = 2
+#: Пауза между заходами: свежезагруженное видео в сетке появляется не сразу.
+_KNOWN_COPY_REFRESH_S = 8.0
+
+
+def _reuse_known_copy(page: Page, creative_path: str, is_video: bool) -> bool | None:
+    """Взять из медиатеки копию файла, уже уезжавшего в этом прогоне.
+
+    `True` — прикрепили; `False` — выбор не снялся, шаг обязан отказать;
+    `None` — копии нет ни под одним именем. Имена два: исходник (уже спрошен
+    выше, но на втором заходе спрашиваем снова — сетка могла дорисоваться) и
+    сжатая копия из кэша, под которой файл и лежит в медиатеке.
+    """
+    original = Path(creative_path).name
+    derived = ""
+    if is_video:
+        try:
+            from src.fb_ads_rpa import creative_compress
+
+            derived = creative_compress.cached_copy_name(creative_path)
+        except Exception:
+            derived = ""
+    for round_no in range(_KNOWN_COPY_ROUNDS):
+        if round_no:
+            if _creative_left() < _KNOWN_COPY_REFRESH_S + 30:
+                break  # срок шага на исходе — второй заход не начинаем
+            _sleep_h(_KNOWN_COPY_REFRESH_S)
+        names = ([derived] if derived else []) + ([original] if round_no else [])
+        for name in names:
+            decision = _reuse_upload_decision(page, name)
+            if decision is not None:
+                return decision
+    return None
+
+
 def upload_ad_creative(
     page: Page, creative_type: str, creative_path: str, *, edit_url: str = "",
     reuse_only: bool = False,
@@ -12465,13 +12548,21 @@ def upload_ad_creative(
             _set_upload_why("library_pick_left_selection")
         return verdict
     if reuse_only:
-        # Память прогона говорит, что файл уже уходил наверх: второй раз Meta
-        # его не берёт, медиатека была единственным путём, и копии там нет.
-        # Объявление оставляем как есть и называем причину.
+        # ACL-1637: в Meta уехала сжатая копия, а в медиатеке она подписана
+        # своим именем — по имени исходника плитки нет никогда. Ищем и по
+        # имени копии, и с одним повтором: свежая загрузка появляется в сетке
+        # не сразу.
+        known = _reuse_known_copy(page, creative_path, is_video)
+        if known is not None:
+            if known is False:
+                _set_upload_why("library_pick_left_selection")
+            return known
+        # Копии в медиатеке нет. Решает вызывающий: он заливает файл для этого
+        # объявления заново (один раз на объявление), а не оставляет его пустым.
         _close_creative_setup_modal(page)
         _telemetry.record("ad_creative_reuse", None, note="library_has_no_copy",
                           diag={"file": Path(creative_path).name})
-        _set_upload_why("library_has_no_copy")
+        _set_upload_why(LIBRARY_HAS_NO_COPY)
         return False
 
     # Clear the library search box before uploading. The reuse attempt just
@@ -15395,8 +15486,12 @@ def creative_soft_fail(tag: str, ad_label: str) -> str:
     """
     why = last_upload_why()
     base = f"{tag}_creative_upload"
-    if why in (_crop.WIZARD_STUCK, MEDIA_PICKER_LOADING):
+    if why in (_crop.WIZARD_STUCK, MEDIA_PICKER_LOADING, LIBRARY_HAS_NO_COPY,
+               "same_file_already_uploaded_this_run", "same_file_already_failed_this_run",
+               "file_not_landed", "wizard_not_opened"):
         # ACL-1559: выбор медиа шага Media не догрузился — тоже своим именем.
+        # ACL-1637: объявление без медиа из-за одного видео на нескольких
+        # объявлениях — причина называется, а не «creative_upload» без слов.
         return f"{base}:{why} - {ad_label}: {_simple.creative_why_text(why)}"
     return base
 
