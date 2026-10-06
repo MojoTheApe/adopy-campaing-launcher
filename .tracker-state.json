@@ -5069,22 +5069,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "620": {
-        "actor": "Worker-S1620A",
-        "session": "run_s1620a_1006",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1620-notes",
-        "worktree": "C:\\acl-1620-notes",
-        "id": "35f17cb61db04e0a98cb1c082515cea6",
-        "issue": 620,
-        "state": "handoff",
-        "started_at": "2026-10-06T05:56:41+00:00",
-        "from_status": "status:idea",
-        "pr": 624,
-        "report": "# ACL-1620 handoff (Worker-S1620A, run_s1620a_1006)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/624 (into stage), head 632310954f5d99a26520cdbbd8bf1cd1200b7348, branch codex/acl-1620-notes, worktree C:\\acl-1620-notes. Claim id 35f17cb61db04e0a98cb1c082515cea6.\n\n## What changed\n- src/web/account_notes.py (new): load / set_note, keyed by exact account label (edges trimmed), cap 10,000 chars, empty text deletes, atomic write via config.paths._atomic_write under machine_file_lock + thread lock.\n- config/paths.py: get_account_notes_path() -> %LOCALAPPDATA%\\ACL\\account_notes.json (ACL_CONFIG_DIR override). Separate commit.\n- src/web/app.py: GET/POST /api/account-notes next to /api/accounts-hidden; amap view carries \"notes\" (read on every map build, so refresh / fragment re-render keep them).\n- _account_map_country.html: Setup header and amap-setup cell replaced by Note (one-line ellipsis, full text in title and data-note, \"add note\" when empty, tabindex/role=button). Colgroup 11 cols still sum to 100 (Account 25%, Note 12%). ready / to_do data fields kept (nothing else displayed them; only tests read amap-setup).\n- report.html: CSS (td.amap-note, .amap-note-pop) and a delegated JS block (marked ACL-1620 notes) on document: click / Enter opens the editor; Close, Esc and mousedown outside save; same label updated in all cells; failed save keeps the editor open with the text and shows \"save failed\". Text goes into the DOM only via textContent / value.\n- docs/system/CHANGELOG.md entry.\n- Updated old tests that asserted the Setup column: tests/test_manage_accounts_table.py (3 obsolete tests removed, 1 added), tests/test_september_review.py (parametrized row test no longer checks setup text).\n\n## Tests (headless, ACL_LIBRARY_* blank, explicit files)\n- tests/test_acl1620_account_notes.py: 13 passed (endpoints save/load/overwrite/empty-delete, length cap, bad input, file location outside repo, failed write keeps old file and no tmp, broken file reads empty, 12 concurrent saves, template truncation + title + no Setup + 11 th / 11 td, HTML escaping, map view carries notes; 4 Playwright tests: click-type-Esc-reload, outside click / Close / empty delete, inert HTML + late-added cell via delegation, failed save keeps editor).\n- tests/test_manage_accounts_table.py: 7 passed. tests/test_september_review.py: 19 passed. tests/test_account_map_view.py: 8 passed.\n- acl_scan_secrets.py: clean.\n- NOT completed: tests/test_the_account_tree_on_screen.py (about 100 browser tests, very slow on the loaded laptop; it slices report.html from amapTreeLine to the amapTurnOffDisarm tail, which ends before the new block, so it is unaffected), tests/test_copy_for_group.py, tests/test_the_builder_tree.py, tests/test_acl_test_platform.py were started in a background loop but had not reported when this was written. Reviewer / CI should cover them.\n\n## Notes for the reviewer\n- Keying is by exact label as in the row (data-account); a label edited in the sheet loses its note.\n- Reviewer attack points covered: XSS (Jinja escape plus textContent), htmx re-render (delegation, notes loaded per map build), concurrent saves (lock + atomic replace), outside click, file location, header/row column count.\n- No live / Multilogin / Meta, no port 9090, no Publish."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -7138,9 +7123,25 @@
             "session": "run_s1620a_1006"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1620A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1620A",
+          "session": "run_s1620a_1006",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1620-notes",
+          "worktree": "C:\\acl-1620-notes",
+          "id": "35f17cb61db04e0a98cb1c082515cea6",
+          "issue": 620,
+          "state": "handoff",
+          "started_at": "2026-10-06T05:56:41+00:00",
+          "from_status": "status:idea",
+          "pr": 624,
+          "report": "# ACL-1620 handoff (Worker-S1620A, run_s1620a_1006)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/624 (into stage), head 632310954f5d99a26520cdbbd8bf1cd1200b7348, branch codex/acl-1620-notes, worktree C:\\acl-1620-notes. Claim id 35f17cb61db04e0a98cb1c082515cea6.\n\n## What changed\n- src/web/account_notes.py (new): load / set_note, keyed by exact account label (edges trimmed), cap 10,000 chars, empty text deletes, atomic write via config.paths._atomic_write under machine_file_lock + thread lock.\n- config/paths.py: get_account_notes_path() -> %LOCALAPPDATA%\\ACL\\account_notes.json (ACL_CONFIG_DIR override). Separate commit.\n- src/web/app.py: GET/POST /api/account-notes next to /api/accounts-hidden; amap view carries \"notes\" (read on every map build, so refresh / fragment re-render keep them).\n- _account_map_country.html: Setup header and amap-setup cell replaced by Note (one-line ellipsis, full text in title and data-note, \"add note\" when empty, tabindex/role=button). Colgroup 11 cols still sum to 100 (Account 25%, Note 12%). ready / to_do data fields kept (nothing else displayed them; only tests read amap-setup).\n- report.html: CSS (td.amap-note, .amap-note-pop) and a delegated JS block (marked ACL-1620 notes) on document: click / Enter opens the editor; Close, Esc and mousedown outside save; same label updated in all cells; failed save keeps the editor open with the text and shows \"save failed\". Text goes into the DOM only via textContent / value.\n- docs/system/CHANGELOG.md entry.\n- Updated old tests that asserted the Setup column: tests/test_manage_accounts_table.py (3 obsolete tests removed, 1 added), tests/test_september_review.py (parametrized row test no longer checks setup text).\n\n## Tests (headless, ACL_LIBRARY_* blank, explicit files)\n- tests/test_acl1620_account_notes.py: 13 passed (endpoints save/load/overwrite/empty-delete, length cap, bad input, file location outside repo, failed write keeps old file and no tmp, broken file reads empty, 12 concurrent saves, template truncation + title + no Setup + 11 th / 11 td, HTML escaping, map view carries notes; 4 Playwright tests: click-type-Esc-reload, outside click / Close / empty delete, inert HTML + late-added cell via delegation, failed save keeps editor).\n- tests/test_manage_accounts_table.py: 7 passed. tests/test_september_review.py: 19 passed. tests/test_account_map_view.py: 8 passed.\n- acl_scan_secrets.py: clean.\n- NOT completed: tests/test_the_account_tree_on_screen.py (about 100 browser tests, very slow on the loaded laptop; it slices report.html from amapTreeLine to the amapTurnOffDisarm tail, which ends before the new block, so it is unaffected), tests/test_copy_for_group.py, tests/test_the_builder_tree.py, tests/test_acl_test_platform.py were started in a background loop but had not reported when this was written. Reviewer / CI should cover them.\n\n## Notes for the reviewer\n- Keying is by exact label as in the row (data-account); a label edited in the sheet loses its note.\n- Reviewer attack points covered: XSS (Jinja escape plus textContent), htmx re-render (delegation, notes loaded per map build), concurrent saves (lock + atomic replace), outside click, file location, header/row column count.\n- No live / Multilogin / Meta, no port 9090, no Publish."
+        },
+        "pr": 624,
+        "queued_at": "2026-10-06T06:38:54+00:00"
       }
     },
     "actors": {
@@ -9154,7 +9155,8 @@
       529,
       615,
       614,
-      613
+      613,
+      620
     ],
     "review": null,
     "history": [
@@ -13033,6 +13035,13 @@
         "issue": 613,
         "pr": 623,
         "actor": "Worker-S1613A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-06T06:38:54+00:00",
+        "issue": 620,
+        "pr": 624,
+        "actor": "Worker-S1620A"
       }
     ],
     "policy": {
