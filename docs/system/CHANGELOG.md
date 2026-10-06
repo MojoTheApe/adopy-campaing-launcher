@@ -8,13 +8,25 @@ Facebook_5265, three runs on 06.10 ended do-not-publish: `audience_location` fai
 - Locations: the card has only "United States" in every capture - the target country was never
   in it. Meta's new "Open Dropdown" button label was read as a second location (the name of the
   "Remove" row); button labels are no longer part of a location name.
-- When Enter (no visible suggestions) adds nothing to the card, the robot now presses the
-  highlighted suggestion (`aria-activedescendant`) and checks the card again; a country that is
-  still not in the card is a failed attempt (`audience_location_attempt`, note `not_in_card`) and
-  the retry ladder goes on, instead of a "success" followed by `default_location_left`.
-- Ads 2-4: the ad list rows show no Action menu until the cursor is over them. When neither
+- A country that Enter (no visible suggestions) did not add to the card is no longer a success:
+  the robot reads the card after Enter, and a missing country is a failed attempt
+  (`audience_location_attempt`, note `not_in_card`), so the retry ladder retypes, instead of a
+  "success" followed by `default_location_left`. When every attempt ends `not_in_card`, the closing
+  `audience_location` row says `not_in_card` (not `no_location_suggestions`).
+- Why Enter added nothing is not known. The search box in the captures carries
+  `aria-activedescendant="SA"`, but the attribute is stale: there is no suggestion list and no
+  element with id "SA" in the DOM. As a defensive extra, the robot presses the suggestion the box
+  points at, only when that suggestion is the country itself ("<country> (Country)", the bare
+  country name, or id = the ISO code); a city or region is never pressed (ACL-1390). Whether this
+  press adds the country live is unverified.
+- The card check counts a country only from its own location row: in the grouped layout a city
+  row under the country's heading (e.g. "Riyadh" under "Saudi Arabia") is not the country.
+- Ads 2-4: in the captures the ad list rows have empty button slots (no Action menu). When neither
   Create ad nor the ad set Action menu is in the tree, the robot moves the mouse over the ad set
-  row (no click) and reads the tree again, up to 3 times; telemetry `tree.hover` = {tries, woke}.
+  row (mouse movement only: no click, no keyboard focus) and reads the tree again, up to 3 times,
+  stopping as soon as the buttons appear; telemetry `tree.hover` = {tries, woke}. That the buttons
+  are drawn on hover is inferred from the empty button slots, not from a live capture. A tab that
+  stops answering during the hover is reported as `tab_frozen`.
 - The onboarding modal "A streamlined way to create campaigns" was closed by `own_close` before
   the location step in all runs; it is not the cause.
 - Bench fixtures `locations_open_dropdown_card_2026_10_06.html`,

@@ -1162,23 +1162,25 @@ def create_next_ad(page, *, tag: str, known_names: list[str],
 
 
 _ADSET_ROW_POINT_JS = r"""
-  (focus) => {
+  () => {
     const tree = document.querySelector('[data-surface="/am/editor_drawer"]');
     const row = tree && tree.querySelector('[data-surface$="editor_tree:adset"] [role=rowheader]');
     if (!row) return { why: 'no_row' };
     row.scrollIntoView({ block: 'center', behavior: 'instant' });
     const r = row.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return { why: 'hidden' };
-    if (focus) { try { row.focus({ preventScroll: true }); } catch (e) {} }
     // Кнопки строки стоят справа; точка — внутри строки, левее края.
     return { x: r.x + Math.max(10, r.width - 40), y: r.y + r.height / 2,
              x0: r.x + Math.min(r.width / 2, 80) };
   }
 """
-"""Точка над строкой группы в дереве (движение мыши, не нажатие); `focus`
-дополнительно ставит на строку фокус клавиатуры (без клика)."""
+"""Точка над строкой группы в дереве (движение мыши, не нажатие).
+
+Фокус клавиатуры на строку не ставится ни на одной попытке (ревью PR #632,
+F5): фокус строки дерева Meta может её выбрать и увести редактор на группу."""
 
 #: Сколько раз навести курсор на строку группы, прежде чем признать, что кнопок нет.
+#: Кнопки появились — наведение сразу прекращается.
 _WAKE_TRIES = 3
 
 
@@ -1189,14 +1191,16 @@ def _wake_adset_row(page, tree: dict) -> dict:
     объявления на месте блока кнопок («default», «Action menu») пустой
     `<div></div>` — Meta рисует их только под курсором (снимки 24.09 и 30.09
     держали кнопки в DOM). Движение мыши — не нажатие и охраны не требует.
+    Только `mouse.move`: ни нажатия, ни фокуса (тесты это проверяют).
     Возвращает дерево, перечитанное после наведения, с `hover` =
-    {"tries", "woke"}; не появились — прежний отказ `no_create_control`.
+    {"tries", "woke"}; не появились — прежний отказ `no_create_control`;
+    вкладка не ответила — дерево с `tree: False` и `error` (`tab_frozen`).
     """
     md = _md()
     hover = {"tries": 0, "woke": False}
     for n in range(_WAKE_TRIES):
         try:
-            pt = md._eval_bounded(page, _ADSET_ROW_POINT_JS, n > 0) or {}
+            pt = md._eval_bounded(page, _ADSET_ROW_POINT_JS) or {}
         except Exception:
             pt = {}
         if "x" not in pt:
@@ -1274,6 +1278,11 @@ def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
         # ACL-1630: кнопок строки в DOM нет, пока над ней нет курсора.
         tree = _wake_adset_row(page, tree)
         out["tree"] = tree
+        # Ревью PR #632 (F6): вкладка перестала отвечать во время наведения —
+        # это `tab_frozen`, а не «нет Action menu».
+        if not tree.get("tree"):
+            out["why"] = "tab_frozen" if tree.get("error") else "no_ad_list"
+            return
     ads_before = int((tree.get("levels") or {}).get("Ad") or 0)
     out["ads_before"] = ads_before
     if tree.get("create"):

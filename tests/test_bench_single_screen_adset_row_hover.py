@@ -40,20 +40,54 @@ _BUTTON = ('<div role="none"><div aria-busy="false" role="button" tabindex="0" '
            '<span><div><div>Action menu</div></div></span></div></div>')
 
 # Поведение Meta: кнопки строки появляются под курсором (`window.hover_mounts`
-# = false — строка их не рисует и под курсором).
+# = false — строка их не рисует и под курсором; `window.mount_on` = N —
+# рисует на N-м входе курсора в строку).
+#
+# Ревью PR #632 (F2, F5): все нажатия (`mousedown`, `pointerdown`, `click`…) и
+# все переходы фокуса на странице пишутся на уровне документа, в фазе
+# перехвата, куда бы они ни пришлись — на строку, на пустое место дерева,
+# куда угодно. `window.entries` — сколько раз курсор вошёл в строку группы;
+# `window.presses_at_mount` / `window.focus_at_mount` — что было до того, как
+# кнопки нарисованы (то есть за всё наведение).
 _HOVER = """
 <script>
   window.hover_mounts = true;
+  window.mount_on = 1;
   window.mounted = 0;
+  window.entries = 0;
+  window.presses = [];
+  window.focuses = [];
+  window.presses_at_mount = null;
+  window.focus_at_mount = null;
+  const adsetRow = () => document.querySelector('[role=rowheader][aria-label="Ad set"]');
+  const desc = (t) => !t || !t.getAttribute ? String(t)
+    : (t.tagName.toLowerCase() + '|' + (t.getAttribute('role') || '') + '|'
+       + (t.getAttribute('aria-label') || (t.textContent || '').trim()).slice(0, 30));
+  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click',
+                      'auxclick', 'dblclick', 'contextmenu']) {
+    document.addEventListener(type, (e) => {
+      window.presses.push(type + ':' + desc(e.target)
+                          + (adsetRow() && adsetRow().contains(e.target) ? ':adset_row' : ''));
+    }, true);
+  }
+  document.addEventListener('focusin', (e) => { window.focuses.push(desc(e.target)); }, true);
   document.addEventListener('mouseover', (e) => {
     const row = e.target.closest('[role=rowheader][aria-label="Ad set"]');
-    if (!row || !window.hover_mounts || row.querySelector('[data-surface*="action-menu-item"]')) return;
+    if (!row || (e.relatedTarget && row.contains(e.relatedTarget))) return;
+    window.entries++;
+    if (!window.hover_mounts || window.entries < window.mount_on
+        || row.querySelector('[data-surface*="action-menu-item"]')) return;
+    window.presses_at_mount = window.presses.slice();
+    window.focus_at_mount = window.focuses.slice();
     const slot = row.querySelector('[id^="default-button-for-action-menu_"]').parentElement.nextElementSibling;
     slot.innerHTML = '%BUTTON%';
     window.mounted++;
   }, true);
 </script>
 """
+
+#: Где фокус: поле ввода — признак того, что наведение что-то нажало.
+_ACTIVE_JS = "() => { const a = document.activeElement; return a ? a.tagName.toLowerCase() : null; }"
 
 
 def _html() -> str:
@@ -109,7 +143,14 @@ def test_ad_2_is_created_once_the_row_is_hovered(env):
     assert clicks[1] == base.CREATE_SURFACE + "|Create ad"
     assert base._forbidden(clicks) == []
     assert page.evaluate("window.mounted") == 1
-    assert got["tree"]["hover"]["woke"] is True
+    assert got["tree"]["hover"] == {"tries": 1, "woke": True}
+    # Ревью PR #632 (F2): за наведение — ни одного нажатия и ни одного фокуса
+    # где бы то ни было; потом ровно два нажатия — «Action menu» и «Create ad».
+    assert page.evaluate("window.presses_at_mount") == []
+    assert page.evaluate("window.focus_at_mount") == []
+    downs = [p for p in page.evaluate("window.presses") if p.startswith("mousedown:")]
+    assert len(downs) == 2, downs
+    assert "Action menu" in downs[0] and "Create ad" in downs[1], downs
     row = [r for r in env["rows"] if r[0] == "simple_create_more_ads"]
     assert len(row) == 1 and row[0][1] is True and row[0][2] == "created"
 
@@ -119,9 +160,65 @@ def test_a_row_that_shows_no_buttons_even_under_the_cursor_is_still_named(env):
     page.evaluate("() => { window.hover_mounts = false; }")
     got = sc.create_next_ad(page, tag="ad2", known_names=["Sample Ad 01"])
     assert got["ok"] is False and got["why"] == "no_create_control"
-    assert got["tree"]["hover"]["woke"] is False and got["tree"]["hover"]["tries"] >= 1
+    # Ревью PR #632 (F5): ровно три наведения, каждое — новый вход курсора.
+    assert got["tree"]["hover"] == {"tries": sc._WAKE_TRIES, "woke": False}
+    assert sc._WAKE_TRIES == 3
+    assert page.evaluate("window.entries") == 3
     assert base._clicks(page) == []
+    # Ревью PR #632 (F2): наведение ничего не нажимает и фокус не двигает —
+    # ни строку группы, ни что-либо ещё на странице.
+    assert page.evaluate("window.presses") == []
+    assert page.evaluate("window.focuses") == []
+    assert page.evaluate(_ACTIVE_JS) not in ("input", "textarea")
     assert got["capture"], "отказ сохраняет снимок дерева"
+
+
+def test_hovering_stops_as_soon_as_the_buttons_appear(env):
+    """Кнопки нарисованы на втором входе курсора — третьего наведения нет (F5)."""
+    page = env["page"]
+    page.evaluate("() => { window.mount_on = 2; }")
+    got = sc.create_next_ad(page, tag="ad2", known_names=["Sample Ad 01"])
+    assert got["ok"], got
+    assert got["tree"]["hover"] == {"tries": 2, "woke": True}
+    assert page.evaluate("window.mounted") == 1
+    assert page.evaluate("window.presses_at_mount") == []
+    assert page.evaluate("window.focus_at_mount") == []
+    assert got["pressed"] == ["adset_action_menu", "menu_create_ad"]
+
+
+def test_no_keyboard_focus_on_the_row_on_any_try(env):
+    """Решение (F5): фокус клавиатуры на строку дерева не ставится вовсе —
+    фокус строки Meta может её выбрать. Точка наведения его не трогает."""
+    page = env["page"]
+    page.evaluate("() => { window.hover_mounts = false; }")
+    for _ in range(3):
+        pt = sc._md()._eval_bounded(page, sc._ADSET_ROW_POINT_JS)
+        assert "x" in pt and "x0" in pt
+    assert page.evaluate("window.focuses") == []
+    assert page.evaluate(_ACTIVE_JS) == "body"
+
+
+def test_a_tab_that_freezes_while_hovering_is_tab_frozen(env, monkeypatch):
+    """Ревью PR #632 (F6): дерево после наведения не прочиталось (вкладка
+    зависла) — отказ `tab_frozen`, а не «нет Action menu»."""
+    page = env["page"]
+    page.evaluate("() => { window.hover_mounts = false; }")
+    real = md._eval_bounded
+    reads = {"tree": 0}
+
+    def eval_bounded(pg, js, *a, **k):
+        if js == sc._MORE_ADS_TREE_JS:
+            reads["tree"] += 1
+            if reads["tree"] > 1:
+                raise TimeoutError("frozen")
+        return real(pg, js, *a, **k)
+
+    monkeypatch.setattr(md, "_eval_bounded", eval_bounded)
+    got = sc.create_next_ad(page, tag="ad2", known_names=["Sample Ad 01"])
+    assert got["ok"] is False and got["why"] == "tab_frozen", got
+    assert got["tree"]["tree"] is False and got["tree"]["error"] == "TimeoutError"
+    assert got["tree"]["hover"]["tries"] == 1
+    assert page.evaluate("window.presses") == []
 
 
 def test_a_tree_that_already_has_the_menu_is_not_hovered(env):
