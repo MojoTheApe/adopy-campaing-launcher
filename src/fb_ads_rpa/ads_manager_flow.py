@@ -958,6 +958,13 @@ class AdsManagerFlow:
         """
         detail = stop.detail or ""
         if stop.code == profile_trouble.LOGGED_OUT:
+            # ACL-1604: окно разлогиненного профиля — на экран, чтобы человек вошёл.
+            try:
+                from src.fb_ads_rpa import browser as _browser
+
+                _browser.front_if_logged_out(self.page, stop.code)
+            except Exception:
+                pass
             note = "login_form" if detail == "login_form" else "login_page"
         elif profile_trouble.net_code(detail):
             note = profile_trouble.net_code(detail)

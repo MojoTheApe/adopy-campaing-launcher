@@ -875,6 +875,59 @@ def _restore_offscreen(context, page) -> bool:
     return True
 
 
+def front_for_login(page) -> dict:
+    """Окно разлогиненного профиля — на экран, вперёд (ACL-1604).
+
+    Робот держит окна свёрнутыми или за краем экрана, и человек не видел, что
+    профиль ждёт входа: задание вставало с `profile_logged_out`, а окно было
+    спрятано. Здесь только ЭТО окно: свёрнутое — в обычное состояние, стоящее
+    за краем — на экран, вкладка — вперёд. Окно не закрывается, процесс не
+    трогается, другие профили не затрагиваются. `put_window_back` после этого
+    окно не сворачивает (запись о доме снята) — человеку нужно им пользоваться.
+    Любой сбой — молча в журнал: остановка аккаунта важнее окна.
+    """
+    out = {"restored": False, "moved": False, "front": False}
+    try:
+        context = page.context
+        _OFFSCREEN.pop(id(context), None)
+        session = context.new_cdp_session(page)
+        info = session.send("Browser.getWindowForTarget") or {}
+        wid, bounds = info.get("windowId"), info.get("bounds") or {}
+        if wid is not None:
+            if bounds.get("windowState") in ("minimized",):
+                session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}})
+                out["restored"] = True
+                time.sleep(0.4)
+                bounds = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or bounds
+            left = bounds.get("left")
+            if out["restored"] or (isinstance(left, int) and left < 0):
+                width = max(int(bounds.get("width") or 0), 1200)
+                height = max(int(bounds.get("height") or 0), 800)
+                session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {
+                    "left": 40, "top": 40, "width": width, "height": height}})
+                out["moved"] = True
+    except Exception as exc:
+        log.debug("front_for_login window: %s", exc)
+    try:
+        page.bring_to_front()
+        out["front"] = True
+    except Exception as exc:
+        log.debug("front_for_login front: %s", exc)
+    try:
+        from src.fb_ads_rpa import run_telemetry as rt
+
+        rt.record("profile_front_for_login", out["front"] or out["moved"] or out["restored"], diag=dict(out))
+    except Exception:
+        pass
+    return out
+
+
+def front_if_logged_out(page, kind: str) -> None:
+    """Вызывается там, где робот только что узнал вход Facebook (kind)."""
+    if kind == profile_trouble.LOGGED_OUT and page is not None:
+        front_for_login(page)
+
+
 def put_window_back(page) -> None:
     """Вернуть окно, выведенное за край экрана, на место и свернуть."""
     saved = _OFFSCREEN.pop(id(page.context), None)
@@ -1096,6 +1149,7 @@ def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
                     profile_trouble.note_net_error(new, detail)
                 if kind:
                     diag["why"], diag["detail"] = kind, detail
+                    front_if_logged_out(new, kind)
                     raise profile_trouble.ProfileStop(kind, detail) from exc
                 if "timeout" not in type(exc).__name__.lower() and "Timeout" not in str(exc):
                     raise
@@ -1112,6 +1166,7 @@ def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
             kind, detail = profile_trouble.classify_page(new, history=False)
             if kind:
                 diag["why"], diag["detail"] = kind, detail
+                front_if_logged_out(new, kind)
                 raise profile_trouble.ProfileStop(kind, detail)
         if page_answers(new, 5.0) is False:
             diag["why"] = "meta_silent_in_new_tab"
@@ -1307,6 +1362,7 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
                     # вкладки, ни перезапуска профиля через MLX API).
                     kind, detail = profile_trouble.classify_page(page)
                     if kind:
+                        front_if_logged_out(page, kind)
                         raise profile_trouble.ProfileStop(kind, detail)
                     replacement = fresh_tab(page, page.url if (page.url or "").startswith("http") else "")
                     if replacement is None:

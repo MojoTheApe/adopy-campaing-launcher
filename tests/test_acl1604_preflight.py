@@ -50,6 +50,10 @@ def codes(v):
     return [r.code for r in v.blocking]
 
 
+def note_codes(v):
+    return [r.code for r in v.notes]
+
+
 # --- карта и токен ----------------------------------------------------------
 
 def test_good_account_is_ready():
@@ -70,34 +74,40 @@ def test_dead_token_blocks_missing_or_expired():
 
 # --- телеметрия -------------------------------------------------------------
 
-def test_recent_logged_out_blocks_with_time_and_hint():
+def test_past_logged_out_is_only_a_note_with_time_and_front_window_hint():
     v = verdict(signals=[{"code": pf.LOGGED_OUT, "ts": iso(2)}])
-    assert codes(v) == [pf.LOGGED_OUT]
-    r = v.blocking[0]
-    assert "logged out" in r.text() and "(seen " in r.text()
-    assert "log in inside Multilogin" in r.hint
+    assert v.ready and codes(v) == []
+    assert note_codes(v) == [pf.LOGGED_OUT]
+    r = v.notes[0]
+    assert "logged out last time" in r.text() and "(seen " in r.text()
+    assert "in front" in r.hint
 
 
-def test_old_signal_is_ignored():
-    assert verdict(signals=[{"code": pf.LOGGED_OUT, "ts": iso(30)}]).ready
+def test_other_past_signals_never_block():
+    for code in (pf.NETWORK, pf.RESTART_FAILED, pf.HAND_WINDOW_STUCK, pf.CHECKPOINT):
+        v = verdict(signals=[{"code": code, "ts": iso(1)}])
+        assert v.ready and note_codes(v) == [code]
+
+
+def test_old_signal_is_not_even_noted():
+    v = verdict(signals=[{"code": pf.LOGGED_OUT, "ts": iso(30)}])
+    assert v.ready and not v.notes
 
 
 def test_later_successful_step_clears_the_signal():
     sig = [{"code": pf.LOGGED_OUT, "ts": iso(5)}, {"code": "", "ts": iso(4)}]
-    assert verdict(signals=sig).ready
-    # а трудность ПОСЛЕ успеха — снова держит
+    assert not verdict(signals=sig).notes
+    # а трудность ПОСЛЕ успеха — снова в заметке
     sig = [{"code": "", "ts": iso(5)}, {"code": pf.NETWORK, "ts": iso(4)}]
-    assert codes(verdict(signals=sig)) == [pf.NETWORK]
+    assert note_codes(verdict(signals=sig)) == [pf.NETWORK]
 
 
 def test_later_status_read_clears_logged_out():
     sig = [{"code": pf.LOGGED_OUT, "ts": iso(5)}]
-    assert verdict(signals=sig, status={"status": "clear", "at": iso(1)}).ready
+    assert not verdict(signals=sig, status={"status": "clear", "at": iso(1)}).notes
 
 
-def test_hand_window_that_could_not_reopen_blocks_but_open_profile_only_notes():
-    v = verdict(signals=[{"code": pf.HAND_WINDOW_STUCK, "ts": iso(3)}])
-    assert codes(v) == [pf.HAND_WINDOW_STUCK]
+def test_open_profile_only_notes():
     v = verdict(open_profile=True)   # ACL-1606: открыт руками — переоткроется, не блок
     assert v.ready and [n.code for n in v.notes] == [pf.OPEN_NOW]
 
@@ -112,7 +122,7 @@ def test_status_disabled_restricted_block_review_only_notes():
 def test_checkpoint_from_status_text():
     v = verdict(status={"status": "restricted", "status_text": "Security checkpoint: confirm your identity",
                         "at": iso(1)})
-    assert pf.CHECKPOINT in codes(v)
+    assert pf.CHECKPOINT in note_codes(v) and pf.CHECKPOINT not in codes(v)
 
 
 # --- разбор строк телеметрии ------------------------------------------------
@@ -145,14 +155,15 @@ def test_preflight_end_to_end_lists_not_ready_and_queues_good():
         resolve=lambda m, n: m.get(n), token_for=lambda inst: GOOD_TOKEN,
         telemetry_rows=rows_for_5265, status_for=lambda a: {}, open_profile_ids=lambda: {"p-1"}, now=NOW)
     by = {v.account: v for v in out}
-    assert codes(by["Facebook_5265"]) == [pf.LOGGED_OUT]
-    assert codes(by["9403A"]) == [pf.CHECKPOINT]
+    assert by["Facebook_5265"].ready and note_codes(by["Facebook_5265"]) == [pf.LOGGED_OUT, pf.OPEN_NOW]
+    assert by["9403A"].ready and pf.CHECKPOINT in note_codes(by["9403A"])
     assert by["Good1"].ready
     assert codes(by["Nope"]) == [pf.NO_PROFILE]
     assert codes(by["Ghost"]) == [pf.NOT_IN_MAP]
     s = pf.summary(out)
-    assert s["ready"] == ["Good1"] and s["opened_profiles"] is False
-    assert s["text"].startswith("Not ready: Facebook_5265 — logged out of Facebook (seen ")
+    assert s["ready"] == ["Facebook_5265", "9403A", "Good1"] and s["opened_profiles"] is False
+    assert s["not_ready"] == ["Nope", "Ghost"]
+    assert s["text"].startswith("Not ready: Nope — no Multilogin profile is set")
 
 
 def test_preflight_makes_no_calls_for_an_empty_list():

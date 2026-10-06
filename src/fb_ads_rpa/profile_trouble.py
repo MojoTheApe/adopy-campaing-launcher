@@ -39,7 +39,8 @@ LEAD_TERMS = "lead_terms_not_accepted"
 
 #: Что сказать человеку — английский, это видно в дешборде.
 MESSAGES = {
-    LOGGED_OUT: "Log in to Facebook in this Multilogin profile, close it, then publish again",
+    LOGGED_OUT: "Logged out of Facebook - the profile window is brought to the front: log in in it, "
+                "then press Publish again",
     NETWORK: "The profile's proxy/network is not working — check the proxy in Multilogin",
     RESTART_FAILED: "Restarting the Multilogin profile failed, so it may be closed now — "
                     "open it in Multilogin, check that it loads Ads Manager, close it, "

@@ -16,6 +16,11 @@ Elf403 открыт руками. Здесь — быстрый разбор д�
   Ни скриншотов, ни перезапусков, ни обращений к Meta.
 * **Один разбор на нажатие**, только по аккаунтам, которые ставятся в очередь.
   Таймеров и опроса нет.
+* Блокирует только то, что запуститься не может вовсе: нет в карте / нет
+  профиля, мёртвый токен Multilogin, кабинет disabled/restricted. Сигналы
+  прошлых прогонов (вход, сеть, перезапуск, чекпоинт) — заметки «will try»
+  (решение владельца 06.10): робот пробует, а разлогиненное окно откроется
+  впереди (`browser.front_for_login`).
 * Окно, открытое руками, — не «заблокирован»: робот мягко переоткроет его сам
   (ACL-1562/1606). В списке такой профиль — заметка «will be reopened».
 * Чего без открытия профиля увидеть НЕЛЬЗЯ: вышел ли аккаунт из Facebook
@@ -37,8 +42,8 @@ from typing import Any, Callable, Iterable
 
 log = logging.getLogger(__name__)
 
-#: Сколько часов сигнал прошлого прогона считается живым. Дольше — человек
-#: уже мог войти в профиль; такой аккаунт не блокируется (есть «run anyway»).
+#: Сколько часов сигнал прошлого прогона показывается заметкой. На запуск он
+#: не влияет (с 06.10 не блокирует): только чтобы не пугать старым.
 SIGNAL_TTL_H = 12.0
 ENV_TTL = "ACL_PREFLIGHT_TTL_H"
 
@@ -65,14 +70,14 @@ MESSAGES: dict[str, tuple[str, str]] = {
     NO_TOKEN: ("Multilogin is not connected for this account's workspace",
                "connect Multilogin (Sign in to Multilogin)"),
     TOKEN_EXPIRED: ("the Multilogin token has expired", "sign in to Multilogin again"),
-    LOGGED_OUT: ("logged out of Facebook", "log in inside Multilogin, close the window, then publish"),
-    NETWORK: ("the profile's proxy/network is not working", "check the proxy in Multilogin"),
-    CHECKPOINT: ("security checkpoint / account protection page",
-                 "open the profile in Multilogin, pass the Facebook check by hand, close the window"),
-    RESTART_FAILED: ("the profile could not be restarted last time",
-                     "open it in Multilogin, check that Ads Manager loads, close the window"),
-    HAND_WINDOW_STUCK: ("the window opened by hand could not be reopened last time",
-                        "close that window in Multilogin"),
+    # Прошлые сигналы — заметки, а не блок (решение владельца 06.10): робот всё
+    # равно пробует; если аккаунт и вправду разлогинен, окно откроется впереди.
+    LOGGED_OUT: ("logged out last time", "will try; the window will open in front if still logged out"),
+    NETWORK: ("the profile's network failed last time", "will try; check the proxy in Multilogin if it fails again"),
+    CHECKPOINT: ("security checkpoint last time",
+                 "will try; the window will open in front if the check is still there"),
+    RESTART_FAILED: ("the profile could not be restarted last time", "will try"),
+    HAND_WINDOW_STUCK: ("the window opened by hand could not be reopened last time", "will try"),
     DISABLED: ("the ad account is disabled by Meta", "resolve it in Meta, or skip this account"),
     RESTRICTED: ("the ad account is restricted by Meta", "resolve it in Meta, or skip this account"),
     OPEN_NOW: ("the profile is open now", "the robot will reuse it or gently reopen it"),
@@ -282,7 +287,7 @@ def classify(account: str, *, entry: Any = None, token: str | None = None,
             continue
         if seen_alive and ts and seen_alive > ts:
             continue
-        v.blocking.append(_reason(code, "telemetry", ts))
+        v.notes.append(_reason(code, "telemetry", ts))
 
     kind = (status.get("status") or "").lower()
     text = status.get("status_text") or ""
@@ -292,8 +297,8 @@ def classify(account: str, *, entry: Any = None, token: str | None = None,
         v.blocking.append(_reason(RESTRICTED, "status", status_at))
     elif kind == "review":
         v.notes.append(_reason(REVIEW, "status", status_at))
-    if kind not in ("clear", "") and _CHECKPOINT_RE.search(text) and not any(r.code == CHECKPOINT for r in v.blocking):
-        v.blocking.append(_reason(CHECKPOINT, "status", status_at))
+    if kind not in ("clear", "") and _CHECKPOINT_RE.search(text) and not any(r.code == CHECKPOINT for r in v.notes):
+        v.notes.append(_reason(CHECKPOINT, "status", status_at))
 
     if open_profile:
         v.notes.append(_reason(OPEN_NOW, "launcher"))
