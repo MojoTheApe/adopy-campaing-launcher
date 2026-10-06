@@ -18,6 +18,10 @@ Owner review of ACL-1620 (06.10).
 - Kept from ACL-1620: escaping, the strict read on save with the `.corrupt` backup, the in-flight
   guard, columns Account 28% / Note 9%. Notes are never sent anywhere: the only call is the local
   `POST /api/account-notes` ({account, text} or {country, text}).
+- The note is drawn as an input box (field border, radius, light background, one line with an
+  ellipsis). An empty note shows the same quiet box with no text, so it is always clear that it can
+  be clicked. The country box stays compact beside the name.
+
 ## The same video on several ads gets media on every ad — ACL-1637
 
 06.10, Doc120 (45b9778e65df) and B97 (5f05cf961d37, 152f7df4ef6a): the first ad got the video,
