@@ -5234,22 +5234,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "633": {
-        "actor": "Worker-S1633A",
-        "session": "run_s1633a_1006",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1633-notes",
-        "worktree": "C:\\acl-1633-notes",
-        "id": "71e08678b28c426dab8dc08ca193e666",
-        "issue": 633,
-        "state": "handoff",
-        "started_at": "2026-10-06T13:35:15+00:00",
-        "from_status": "status:idea",
-        "pr": 635,
-        "report": "# ACL-1633 handoff (Worker-S1633A, run_s1633a_1006)\n\nPR #635 into stage, head c0a521680eb0234605e7533aca34e10b599fb237, branch codex/acl-1633-notes, worktree C:\\acl-1633-notes.\n\nChanges: countries map in account_notes.json (old file migrates without loss), set_note(kind), GET returns notes+countries, POST takes {account,text} or {country,text}; country note inside the country name cell; empty note renders nothing and CSS draws a pencil on hover/focus; editor is textarea + Delete + one-word state, saves on outside click/Esc/Ctrl+Enter, Delete shows Deleted - Undo for 5 s; ACL-1620 guarantees kept (escaping, strict read + .corrupt backup, in-flight guard, widths 28/9).\n\nTests (foreground, one file per process): test_acl1633_country_notes + test_acl1620_account_notes 38 passed; country_read 18; manage_accounts_table 7; september_review 19; account_map_view 8; account_tree_on_screen 107; acl_test_platform 100; secrets scan clean.\n\nPreview: scratchpad\\acl-1633-preview.png\n\nClaim id: 71e08678b28c426dab8dc08ca193e666 (actor Worker-S1633A)."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -7387,9 +7372,25 @@
             "session": "run_s1633a_1006"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1633A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1633A",
+          "session": "run_s1633a_1006",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1633-notes",
+          "worktree": "C:\\acl-1633-notes",
+          "id": "71e08678b28c426dab8dc08ca193e666",
+          "issue": 633,
+          "state": "handoff",
+          "started_at": "2026-10-06T13:35:15+00:00",
+          "from_status": "status:idea",
+          "pr": 635,
+          "report": "# ACL-1633 handoff (Worker-S1633A, run_s1633a_1006)\n\nPR #635 into stage, head c0a521680eb0234605e7533aca34e10b599fb237, branch codex/acl-1633-notes, worktree C:\\acl-1633-notes.\n\nChanges: countries map in account_notes.json (old file migrates without loss), set_note(kind), GET returns notes+countries, POST takes {account,text} or {country,text}; country note inside the country name cell; empty note renders nothing and CSS draws a pencil on hover/focus; editor is textarea + Delete + one-word state, saves on outside click/Esc/Ctrl+Enter, Delete shows Deleted - Undo for 5 s; ACL-1620 guarantees kept (escaping, strict read + .corrupt backup, in-flight guard, widths 28/9).\n\nTests (foreground, one file per process): test_acl1633_country_notes + test_acl1620_account_notes 38 passed; country_read 18; manage_accounts_table 7; september_review 19; account_map_view 8; account_tree_on_screen 107; acl_test_platform 100; secrets scan clean.\n\nPreview: scratchpad\\acl-1633-preview.png\n\nClaim id: 71e08678b28c426dab8dc08ca193e666 (actor Worker-S1633A)."
+        },
+        "pr": 635,
+        "queued_at": "2026-10-06T13:36:02+00:00"
       }
     },
     "actors": {
@@ -9499,7 +9500,8 @@
       529,
       613,
       630,
-      629
+      629,
+      633
     ],
     "review": null,
     "history": [
@@ -13497,6 +13499,13 @@
         "at": "2026-10-06T13:35:15+00:00",
         "issue": 633,
         "claim": "71e08678b28c426dab8dc08ca193e666",
+        "actor": "Worker-S1633A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-06T13:36:02+00:00",
+        "issue": 633,
+        "pr": 635,
         "actor": "Worker-S1633A"
       }
     ],
