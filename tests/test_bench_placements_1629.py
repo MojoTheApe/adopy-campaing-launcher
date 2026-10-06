@@ -115,10 +115,21 @@ _SIM_B_JS = r"""
     fold(name, true);
     cats[name].btn.addEventListener('click', () => fold(name, !cats[name].folded));
   }
-  // The five category checkboxes start on (diag `before: true`).
+  // The five category checkboxes start on. As on Meta, the box of a category WITH rows
+  // is derived from them: on only when every row is on, `false` while some are off
+  // (both B90 captures end like that). A click on it sets every enabled row.
   for (const cb of document.querySelectorAll('[id^="placement-"] input[type=checkbox]')) {
     cb.checked = true; cb.setAttribute('aria-checked', 'true');
   }
+  const derived = { 'Feeds': 'placement-feed', 'Stories, Status, Reels': 'placement-story',
+    'In-stream ads for reels': 'placement-stream' };
+  const recalc = (name) => {
+    const box = document.querySelector('#' + derived[name] + ' input[type=checkbox]');
+    const on = cats[name].rows.every(r => r.querySelector('input[type=checkbox]').checked);
+    box.checked = on; box.setAttribute('aria-checked', String(on));
+  };
+  for (const name of Object.keys(derived)) recalc(name);
+  window.__boxClicks = []; window.__rowsTouched = false;
   const foldedOnce = new Set();
   // Category boxes Meta keeps disabled and still `aria-checked=true` while it saves
   // the click (cfg.catHold = {name: {ms, mode}}): after `ms` the box is free and,
@@ -131,6 +142,19 @@ _SIM_B_JS = r"""
   document.addEventListener('click', (e) => {
     const cb = e.target;
     if (!(cb instanceof HTMLInputElement) || cb.type !== 'checkbox') return;
+    const dname = Object.keys(derived).find(n => cb.closest('#' + derived[n]));
+    if (dname) {
+      const was = cb.getAttribute('aria-checked') === 'true';
+      window.__boxClicks.push({ name: dname, afterRows: window.__rowsTouched });
+      for (const r of cats[dname].rows) {
+        const rc = r.querySelector('input[type=checkbox]');
+        if (rc.disabled) continue;
+        rc.checked = !was; rc.setAttribute('aria-checked', String(!was));
+        state[rc.dataset.simLabel].checked = !was;
+      }
+      recalc(dname);
+      return;
+    }
     const catName = Object.keys(catIds).find(n => cb.closest('#' + catIds[n]));
     const hold = catName && (cfg.catHold || {})[catName];
     if (hold && (hold.again || !held.has(catName))) {
@@ -148,6 +172,8 @@ _SIM_B_JS = r"""
     if (!label) return;
     state[label].checked = cb.checked;
     const cat = cb.dataset.simCat;
+    window.__rowsTouched = true;
+    setTimeout(() => recalc(cat), 5);
     if (cfg.collapse === 'once' && !foldedOnce.has(cat)) {
       foldedOnce.add(cat);
       setTimeout(() => fold(cat, true), 30);
@@ -168,6 +194,7 @@ _SIM_B_JS = r"""
     const cb = document.querySelector('input[data-sim-label="' + label + '"]');
     cb.checked = !cb.checked; cb.setAttribute('aria-checked', String(cb.checked));
     state[label].checked = cb.checked;
+    recalc(cb.dataset.simCat);
   } };
 }
 """
@@ -225,8 +252,10 @@ def test_layout_b_placements_are_set_and_read_back(page):
     assert report["subitems_not_offered"] == ["Messenger Stories"]
     check = report["not_offered_check"]["Stories, Status, Reels"]
     assert check["complete"] and check["stable"] and check["end"]["end"] is True, check
-    cats = {n: report["categories"][n]["checked"] for n in md._PLACEMENT_CATEGORIES}
-    assert cats == md._PLACEMENT_CATEGORIES
+    # Wanted-off categories read false; the wanted-on ones are partial on the page and
+    # are judged by their rows (R2-1), so their box is not asserted.
+    off = {n: report["categories"][n]["checked"] for n, w in md._PLACEMENT_CATEGORIES.items() if not w}
+    assert off == {n: False for n in off}
 
 
 def test_layout_b_a_category_folded_after_a_click_is_opened_again(page):
@@ -626,3 +655,60 @@ def test_a_category_that_folds_while_the_list_settles_is_opened_again(page, monk
     assert md.fill_placements(page, report) is True, report.get("not_offered_check")
     assert report["not_offered_check"]["Stories, Status, Reels"]["reopened"] >= 1
     assert report["subitems_not_offered"] == ["Messenger Stories"]
+
+
+# ── round 2 of the review: partial parents, finish pass, notice scope ─────────
+
+def _box(page, cat_id: str):
+    return page.evaluate(
+        "(id) => document.querySelector('#' + id + ' input[type=checkbox]').getAttribute('aria-checked')", cat_id)
+
+
+def test_the_real_b90_end_state_passes_with_partial_parent_boxes(page):
+    """R2-1: at the end of a real run Feeds, "Stories, Status, Reels" and In-stream read
+    `aria-checked=false` (some of their rows are on, some off). That is the wanted
+    end state, and the step passes: those categories are judged by their rows."""
+    _load_b(page)
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, {
+        k: report.get(k) for k in ("final_readback", "subitems_missing", "categories_failed")}
+    assert [_box(page, i) for i in ("placement-feed", "placement-story", "placement-stream")] == ["false"] * 3
+    rows_on = page.evaluate(
+        "() => Object.values(window.__sim.state).filter(v => v.checked).length")
+    assert 0 < rows_on < len(page.evaluate("() => Object.keys(window.__sim.state)"))
+    assert report["final_readback"] == {"mismatch": []}
+    _assert_wanted(page)
+
+
+def test_a_partial_wanted_on_category_is_never_clicked_by_the_finish_pass(page, monkeypatch):
+    """R2-2: a click on a partial parent turns all its rows on and undoes the robot's own
+    exclusions. After the first row was touched no category box is clicked, even while
+    the finish pass runs for another category (Search results held by Meta)."""
+    monkeypatch.setattr(md, "_PLACEMENTS_RECONCILE_MAX_S", 6.0)
+    _load_b(page, catHold={"Search results": {"ms": 1500, "mode": "revert"}})
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, report.get("categories_failed")
+    late = [c for c in page.evaluate("window.__boxClicks") if c["afterRows"]]
+    assert late == [], late
+    assert "Search results" in report["categories_reconciled"]
+    _assert_wanted(page)
+
+
+def test_the_acl_1336_notice_is_not_used_where_manual_placements_are_offered(page):
+    """R2-3: B90 shows the same Meta notice but still offers manual placements. If the
+    categories are missed for another reason (the node never opens), the old message
+    is given, not the ACL-1336 one."""
+    _load_b(page)
+    page.evaluate(r"""() => {
+      const node = [...document.querySelectorAll('[role=button][aria-expanded]')]
+        .find(b => /^Placements$/.test(b.textContent.replace(/\s+/g, ' ').trim()));
+      const dead = node.cloneNode(true);
+      node.replaceWith(dead);
+      const note = document.createElement('div');
+      note.textContent = 'Excluding placements or platforms will no longer be available for your ad sets.';
+      dead.parentElement.parentElement.appendChild(note);
+    }""")
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert "ACL-1336" not in report.get("notice", ""), report.get("notice")
+    assert "Show more settings" in report["notice"] or "could not be" in report["notice"]

@@ -18,9 +18,13 @@ failed campaign ended as do-not-publish. Two new layouts, both in the classic ed
   on "Ads on Facebook Reels" had it). The finish pass now re-reads such a category and clicks it
   again once it is enabled, within the shared reopen cap and time limit; a box that stays disabled
   and checked still fails and is named (`categories_failed`).
-- **Final read-back**: after all clicks the step reads every category and every planned sub-item
-  row from the page once more and passes only if all of them match the plan; a late revert by the
-  page fails the step (`final_readback.mismatch`).
+- **Final read-back**: after all clicks the step reads every planned sub-item row and the fully-off
+  categories (Search results, Apps and sites) from the page once more and passes only if all match
+  the plan; a late revert fails the step (`final_readback.mismatch`). A category the plan wants on is
+  judged only by its rows: Meta shows its box as unchecked while only some of its placements are on,
+  so the finish pass never clicks it (a click would turn all its placements on).
+  The ACL-1336 reason is used only when the opened card has no manual-placement entry and carries
+  Meta's notice (B90 shows the notice and still offers manual placements).
 - **A row disabled while Meta saves** ("Ads on Facebook Reels", 13 runs on 05.10): before a seen
   placement is called missing, the step reads it again, reopens its category and sets it, for up
   to 6 s.

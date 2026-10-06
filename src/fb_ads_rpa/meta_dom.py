@@ -7246,8 +7246,9 @@ def _placements_exclusion_notice_shown(page: Page) -> bool:
     """
     try:
         return bool(page.evaluate(
-            """() => /will no longer be available for your ad sets/i.test(
-                (document.body.textContent || '').replace(/\\s+/g, ' '))"""
+            """() => { const root = document.querySelector('[data-rpa-placements-marker]') || document.body;
+                return /will no longer be available for your ad sets/i.test(
+                  (root.textContent || '').replace(/\\s+/g, ' ')); }"""
         ))
     except Exception:
         return False
@@ -8588,7 +8589,16 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             else:
                 tail = ("The account-level placement exclusions were not applied ("
                         + str(report.get("account_exclusions") or "unknown") + ").")
-            if _placements_exclusion_notice_shown(page):
+            # ACL-1336 называем, только если на открытой карточке нет ручного
+            # входа (ни «Show more settings», ни узла «Placements»): то же
+            # объявление есть и на B90, где ручные площадки ещё предлагаются.
+            manual_entry = (
+                _present_in_placements("Show more settings", exact=False)
+                or _present_in_placements("Hide settings", exact=False)
+                or bool((report.get("expand_placements") or {}).get("found"))
+                or bool((report.get("placement_controls") or {}).get("found"))
+            )
+            if _placements_exclusion_notice_shown(page) and not manual_entry:
                 # Карточка открыта и без категорий, а Meta сама пишет, что
                 # исключения площадок больше не будут доступны (ACL-1336):
                 # не «категории под Show more settings», а отказ Meta.
@@ -8635,7 +8645,15 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                 # секунд она свободна и в нужном (или откатившемся) состоянии.
                 # Сразу отказом не считаем — категория уходит в `cat_wrong`, и
                 # `_reconcile` перечитает её и кликнет заново, когда разблокируется.
-                cat_wrong.append(name)
+                if want:
+                    # R2-1/R2-2 (PR #636): у Meta родитель читается `false`, пока
+                    # включена лишь часть его площадок, а план всегда часть
+                    # выключает. Включаемую категорию по её галочке не судим и
+                    # не кликаем повторно (клик по частичной включает ВСЕ её
+                    # площадки и отменяет наши исключения): судят её строки.
+                    report.setdefault("categories_judged_by_rows", []).append(name)
+                else:
+                    cat_wrong.append(name)
         _sleep_h(0.3)
     if locked_ok:
         report["categories_locked_as_wanted"] = locked_ok
@@ -8928,6 +8946,8 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         waiting = False
         for name in list(cat_wrong):
             want = _PLACEMENT_CATEGORIES[name]
+            if want:
+                continue            # только полностью выключаемые (Search results, Apps and sites)
             now, enabled = _category_now(name)
             if now is want:
                 cat_wrong.remove(name)
@@ -9020,6 +9040,8 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         except Exception:
             cands = {}
         for name, want in _PLACEMENT_CATEGORIES.items():
+            if want:
+                continue            # включаемая категория: галочка у Meta частичная, судят строки
             rows = cands.get(name) if isinstance(cands, dict) else None
             got = bool(rows[0].get("checked")) if rows else None
             if got is not want:
