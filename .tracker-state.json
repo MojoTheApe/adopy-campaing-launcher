@@ -5069,7 +5069,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "614": {
+        "actor": "Worker-S1614A",
+        "session": "run_s1614a_1006",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1614-cancel",
+        "worktree": "C:\\acl-1614-cancel",
+        "id": "08b79f9bd0934e90866d189724599827",
+        "issue": 614,
+        "state": "implementing",
+        "started_at": "2026-10-06T05:54:35+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -7034,6 +7047,17 @@
         "pr": 612,
         "queued_at": "2026-10-05T20:09:14+00:00",
         "reviewer": "Reviewer-R1611P"
+      },
+      "614": {
+        "implementers": [
+          {
+            "actor": "Worker-S1614A",
+            "session": "run_s1614a_1006"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1614A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -7552,6 +7576,10 @@
       "Reviewer-R1611P": {
         "session": "rev_r1611p_1005",
         "role": "Reviewer"
+      },
+      "Worker-S1614A": {
+        "session": "run_s1614a_1006",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -12858,6 +12886,13 @@
         "prs": [
           619
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-06T05:54:35+00:00",
+        "issue": 614,
+        "claim": "08b79f9bd0934e90866d189724599827",
+        "actor": "Worker-S1614A"
       }
     ],
     "policy": {
