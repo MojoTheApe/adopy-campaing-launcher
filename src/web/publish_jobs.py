@@ -604,12 +604,18 @@ def _run_job_inner(
         with _jobs_lock:
             _jobs[job_id].pop("queue", None)
             _jobs[job_id]["slot_wait_s"] = grant["waited_s"]
+            # ACL-1642: пропущено вперёд головы очереди, ждавшей память.
+            if grant["decision"].get("started_ahead"):
+                _jobs[job_id]["started_ahead"] = True
         # Сколько задание ждало места и почему его пустили — в телеметрию.
         if _rt is not None:
             try:
                 _rt.record("job_phase", True, campaign=first_campaign, note="slot_queue",
                            duration_s=float(grant["waited_s"]),
                            diag={"account": account_label,
+                                 # ACL-1642: был ли профиль уже открыт и пошло ли вперёд очереди.
+                                 "profile_open": bool(grant["decision"].get("profile_open")),
+                                 "started_ahead": bool(grant["decision"].get("started_ahead")),
                                  "decision": _decision_for_telemetry(grant["decision"]),
                                  "first_hold": (_decision_for_telemetry(grant["first_hold"])
                                                 if grant["first_hold"] else None)})
@@ -697,6 +703,7 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),
         "profile_mb_source": verdict.get("profile_mb_source"),
+        "profile_open": bool(verdict.get("profile_open")),
     }
 
 

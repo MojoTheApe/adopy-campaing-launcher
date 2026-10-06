@@ -7569,9 +7569,10 @@ window.cbBuild = (function () {
       var reserve = Number(q.reserve_mb) || 0;
       var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
       return { state: 'build-wait', sign: '',
-               why: 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, needs ' + gb(need) + ' GB (profile ~'
-                    + gb(q.profile_mb) + ' GB + ' + String(+gb(reserve)) + ' GB reserve)'
-                    + (ahead ? ' (' + ahead + ' ahead)' : '') };
+               why: 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, a new profile needs ' + gb(need)
+                    + ' GB (profile ~' + gb(q.profile_mb) + ' GB + ' + String(+gb(reserve)) + ' GB reserve)'
+                    + (ahead ? ' (' + ahead + ' ahead)' : '')
+                    + '. Close a Multilogin profile you don\'t need, or press Release on a finished one.' };
     }
     return { state: 'build-wait', sign: '',
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
@@ -7639,7 +7640,8 @@ window.cbBuild = (function () {
       }
       return { state: 'build-run', sign: '', pct: pct,
                why: c.step ? 'Building: ' + stepText(c.step) + (c.ok === false ? ' — failed, retrying' : '')
-                           : 'Building: starting' };
+                           : (p.started_ahead ? 'Started ahead: its profile was already open'
+                                              : 'Building: starting') };
     }
     if (p.status === 'cancelling') return { state: 'build-run', sign: '', why: 'Stopping…' };
     if (p.status === 'running') return { state: 'build-run', sign: '', why: 'Waiting for its turn' };

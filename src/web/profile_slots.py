@@ -99,6 +99,14 @@ DEFAULT_SETTLE_S = 300.0
 #: перечитать; старше `MEASURE_MAX_AGE_S` — не верить и брать оценку.
 MEASURE_TTL_S = 5.0
 MEASURE_MAX_AGE_S = 30.0
+#: ACL-1642: «профиль открыт?» — свежим ответ считается столько секунд; старше
+#: `OPEN_MAX_AGE_S` — не верить (профиль считается закрытым, как до ACL-1642).
+OPEN_TTL_S = 5.0
+OPEN_MAX_AGE_S = 15.0
+#: Проверка, не вернувшаяся за это время, считается зависшей: новую не ждём
+#: бесконечно, а через `OPEN_RESTART_S` запускаем заново.
+OPEN_RESTART_S = 20.0
+
 #: Замер, не вернувшийся за это время, считается сбоем (решение — по оценке).
 MEASURE_TIMEOUT_S = 5.0
 #: Замер висит дольше стольких таймаутов — бросаем его и запускаем новый.
@@ -219,6 +227,46 @@ def _mimic_processes() -> list[Any]:
             if str(p.info.get("name") or "").lower() == "chrome.exe"]
 
 
+def _root_profile(proc: Any, wanted: dict[str, str]) -> str | None:
+    """Какому из `wanted` профилей принадлежит корневой `chrome.exe` Mimic.
+
+    None — не Mimic, дочерний процесс или чужой профиль. Только чтение
+    полей, уже снятых psutil (`name`/`exe`/`cmdline`): процесс не трогаем.
+    """
+    info = getattr(proc, "info", {}) or {}
+    if "mimic" not in str(info.get("exe") or "").lower():
+        return None
+    args = [str(a) for a in (info.get("cmdline") or [])]
+    if any(a.startswith("--type=") for a in args):
+        return None   # дочерний процесс; его посчитаем в дереве корня
+    found = None
+    for a in args:
+        key, _, value = a.partition("=")
+        value = value.strip().strip('"').lower()
+        if key == "--client-session-id" and value in wanted:
+            found = wanted[value]
+        elif key == "--user-data-dir":
+            tail = value.replace("/", "\\").rstrip("\\").rsplit("\\", 1)[-1]
+            if tail in wanted:
+                found = wanted[tail]
+        if found:
+            break
+    return found
+
+
+def find_open_profiles(profiles: Any, *, processes: Callable[[], list[Any]] = _mimic_processes) -> set[str]:
+    """Какие из `profiles` сейчас открыты в Multilogin (ACL-1642). Только чтение.
+
+    Тот же признак, что у замера памяти: корневой `chrome.exe` Mimic этого
+    профиля. Ничего не открываем, не закрываем и не цепляемся к порту —
+    только список процессов. Сбой чтения — исключение наверх.
+    """
+    wanted = {str(p).strip().lower(): str(p) for p in profiles if str(p or "").strip()}
+    if not wanted:
+        return set()
+    return {f for f in (_root_profile(proc, wanted) for proc in processes()) if f}
+
+
 def measure_profiles(profiles: Any, *, processes: Callable[[], list[Any]] = _mimic_processes) -> dict[str, int]:
     """Память (МБ) дерева процессов Mimic каждого из `profiles`. Только чтение.
 
@@ -235,24 +283,7 @@ def measure_profiles(profiles: Any, *, processes: Callable[[], list[Any]] = _mim
     if not wanted:
         return out
     for proc in processes():
-        info = getattr(proc, "info", {}) or {}
-        if "mimic" not in str(info.get("exe") or "").lower():
-            continue
-        args = [str(a) for a in (info.get("cmdline") or [])]
-        if any(a.startswith("--type=") for a in args):
-            continue   # дочерний процесс; его посчитаем в дереве корня
-        found = None
-        for a in args:
-            key, _, value = a.partition("=")
-            value = value.strip().strip('"').lower()
-            if key == "--client-session-id" and value in wanted:
-                found = wanted[value]
-            elif key == "--user-data-dir":
-                tail = value.replace("/", "\\").rstrip("\\").rsplit("\\", 1)[-1]
-                if tail in wanted:
-                    found = wanted[tail]
-            if found:
-                break
+        found = _root_profile(proc, wanted)
         if not found:
             continue
         total = 0
@@ -368,9 +399,101 @@ class ProfileUsage:
             return {"status": "stale"}
 
 
+class OpenProfileProbe:
+    """Открыт ли профиль в Multilogin (ACL-1642) — только чтение, не ждёт.
+
+    Проверка — список процессов Mimic (`find_open_profiles`): ничего не
+    открывает, не закрывает и не цепляется к порту. Идёт в своём потоке;
+    `read` отдаёт последний готовый ответ и никогда его не ждёт, поэтому
+    под замком очереди вызывать безопасно. Нет свежего ответа, проверка
+    упала или зависла — `None`: профиль считаем закрытым (как до ACL-1642),
+    память спрашиваем как раньше. Готовый ответ будит ожидающих (`on_ready`).
+    `background=False` — проверять прямо в вызывающем потоке (тесты).
+    """
+
+    def __init__(
+        self,
+        check: Callable[[list[str]], set[str]] = find_open_profiles,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        ttl_s: float = OPEN_TTL_S,
+        max_age_s: float = OPEN_MAX_AGE_S,
+        restart_s: float = OPEN_RESTART_S,
+        background: bool = True,
+        on_ready: Callable[[], None] | None = None,
+    ) -> None:
+        self._check = check
+        self._clock = clock
+        self._ttl_s = ttl_s
+        self._max_age_s = max_age_s
+        self._restart_s = restart_s
+        self._background = background
+        self.on_ready = on_ready
+        self._lock = threading.Lock()
+        self._cache: dict[str, tuple[float, bool]] = {}
+        self._want: set[str] = set()
+        self._inflight_since: float | None = None
+        self._gen = 0
+        #: Сколько раз реально проверяли (для тестов: кэш работает).
+        self.checks = 0
+
+    def _run(self, profiles: list[str], gen: int) -> None:
+        try:
+            opened = {str(p) for p in self._check(profiles)}
+        except Exception as exc:   # нет прав / нет psutil — профиль «неизвестен»
+            opened = None
+            log.info("open-profile probe failed: %s", exc)
+        with self._lock:
+            self.checks += 1
+            if opened is not None:
+                now = self._clock()
+                for p in profiles:
+                    self._cache[p] = (now, p in opened)
+            if gen == self._gen:
+                self._inflight_since = None
+        if self._background and self.on_ready is not None:
+            try:
+                self.on_ready()
+            except Exception:
+                pass
+
+    def read(self, profile: str) -> bool | None:
+        profile = str(profile or "")
+        if not profile:
+            return None
+        now = self._clock()
+        with self._lock:
+            hit = self._cache.get(profile)
+            fresh = hit is not None and now - hit[0] < self._ttl_s
+            hung = self._inflight_since is not None and now - self._inflight_since > self._restart_s
+            start = False
+            if not fresh:
+                self._want.add(profile)
+                if self._inflight_since is None or hung:
+                    start = True
+                    self._inflight_since = now
+                    self._gen += 1
+            gen = self._gen
+            batch = sorted(self._want) if start else []
+            if start:
+                self._want.clear()
+        if start:
+            if self._background:
+                threading.Thread(target=self._run, args=(batch, gen), daemon=True,
+                                 name="acl-open-profile").start()
+            else:
+                self._run(batch, gen)
+        with self._lock:
+            hit = self._cache.get(profile)
+            if hit is not None and self._clock() - hit[0] < self._max_age_s:
+                return hit[1]
+            return None
+
+
 def decide(running: int, warming: int, memory: MemoryReading | None,
            settings: SlotSettings, measured_mb: int | None = None,
-           current_mb: list[int] | None = None) -> dict[str, Any]:
+           current_mb: list[int] | None = None,
+           profile_open: bool = False) -> dict[str, Any]:
     """Можно ли стартовать ещё один профиль. Чистая функция — всё на входе.
 
     `running` — сколько профилей идёт, `warming` — сколько из них стартовали
@@ -380,9 +503,13 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
     `profile_mb` он ещё дорастёт, этот рост (`growth_mb`) резервируем. Ответ —
     факты для телеметрии: `allow`, `reason`, `limit` (сколько разом сейчас
     выходит), память, `profile_mb` (по чём считали профиль) и его источник.
+
+    `profile_open` (ACL-1642) — профиль задания уже открыт: его память уже
+    занята и из «свободно» вычтена, нового профиля стартом не прибавится.
+    Тогда `memory_low` / `below_reserve` не спрашиваем; потолок действует.
     """
     out: dict[str, Any] = {"running": running, "warming": warming, "cap": settings.ceiling,
-                           "reserve_mb": settings.reserve_mb}
+                           "reserve_mb": settings.reserve_mb, "profile_open": bool(profile_open)}
     if memory is not None:
         out.update(total_mb=memory.total_mb, available_mb=memory.available_mb)
     if settings.override is None:
@@ -408,6 +535,10 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
         limit = min(FALLBACK_LIMIT, settings.ceiling)
         out.update(limit=limit, allow=running < limit,
                    reason="memory_unknown" if running < limit else "memory_unknown_full")
+        return out
+    if profile_open:
+        # ACL-1642: профиль уже открыт — новой памяти нет, потолок проверен выше.
+        out.update(limit=min(settings.ceiling, running + 1), allow=True, reason="profile_open")
         return out
     need = settings.profile_mb * (1 + warming) + settings.reserve_mb + growth
     out["need_mb"] = need
@@ -450,12 +581,17 @@ class ProfileSlots:
         clock: Callable[[], float] = time.monotonic,
         tick_s: float = TICK_S,
         usage: ProfileUsage | None = None,
+        open_probe: OpenProfileProbe | None = None,
     ) -> None:
         self._memory = memory
         # Замер идущих профилей (ACL-1424): готовый ответ будит ожидающих.
         self._usage = usage if usage is not None else ProfileUsage()
         if self._usage.on_ready is None:
             self._usage.on_ready = self.wake
+        # ACL-1642: открыт ли профиль задания — отдельный неблокирующий кэш.
+        self._open = open_probe if open_probe is not None else OpenProfileProbe()
+        if self._open.on_ready is None:
+            self._open.on_ready = self.wake
         self._settings = settings
         self._clock = clock
         self._tick_s = tick_s
@@ -517,17 +653,53 @@ class ProfileSlots:
         warmup = self._settings().warmup_s
         now = self._clock()
         return sum(1 for r in self._running.values()
-                   if not r.get("kept") and now - r["started"] < warmup)
+                   if not r.get("kept") and not r.get("open") and now - r["started"] < warmup)
+
+    def _is_open(self, profile: str) -> bool:
+        """Профиль уже открыт в Multilogin (ACL-1642). Не ждёт: кэш, `None` = нет."""
+        return bool(profile) and self._open.read(profile) is True
+
+    def _may_start_ahead(self, job_id: str, head: str | None) -> bool:
+        """ACL-1642: голова очереди ждёт память, а профиль этого задания уже открыт.
+
+        Такое задание новой памяти не просит — пропускаем его вперёд. Не
+        голодает ли голова: вперёд идут только задания на УЖЕ открытых
+        профилях, их число конечно (по одному на профиль), и память головы
+        они не берут. Среди таких идёт первое по очереди.
+        """
+        if head is None:
+            return False
+        if not self._is_open(self._waiting[job_id]["profile"]):
+            return False
+        held = self._decide_now(self._waiting[head]["profile"])
+        if held.get("allow") or held.get("reason") not in ("memory_low", "below_reserve"):
+            return False
+        busy = self._busy_profiles()
+        for other, w in self._waiting.items():
+            if other == job_id:
+                break
+            if other != head and w["profile"] not in busy and self._is_open(w["profile"]):
+                return False   # раньше стоит такое же задание — оно первое
+        return True
 
     def _verdict(self, job_id: str) -> dict[str, Any]:
         w = self._waiting[job_id]
         ahead = list(self._waiting).index(job_id)
         if w["profile"] in self._busy_profiles():
             return {"allow": False, "reason": "profile", "ahead": ahead}
-        if self._head() != job_id:
-            return {"allow": False, "reason": "order", "ahead": ahead}
+        head = self._head()
+        jumped = False
+        if head != job_id:
+            if not self._may_start_ahead(job_id, head):
+                return {"allow": False, "reason": "order", "ahead": ahead}
+            jumped = True
         decision = self._decide_now(w["profile"])
         decision["ahead"] = ahead
+        if jumped:
+            if not (decision.get("allow") and decision.get("reason") == "profile_open"):
+                # Потолок или сбой чтения: вперёд не пускаем, ждём своей очереди.
+                return {"allow": False, "reason": "order", "ahead": ahead}
+            decision["started_ahead"] = True
         return decision
 
     def _decide_now(self, profile: str = "") -> dict[str, Any]:
@@ -578,7 +750,8 @@ class ProfileSlots:
                     if values:
                         # ACL-1603: самый тяжёлый из недавних замеров, не среднее.
                         measured_mb = int(max(values))
-        decision = decide(running, self._warming(), self._memory(), settings, measured_mb, current)
+        decision = decide(running, self._warming(), self._memory(), settings, measured_mb, current,
+                          profile_open=self._is_open(profile))
         if kept_n:
             decision["kept"] = kept_n
             decision["kept_accounts"] = self._kept_accounts()
@@ -636,7 +809,8 @@ class ProfileSlots:
                     if verdict.get("allow"):
                         del self._waiting[job_id]
                         self._reuse_kept(profile)
-                        self._running[job_id] = {"profile": profile, "started": self._clock()}
+                        self._running[job_id] = {"profile": profile, "started": self._clock(),
+                                                 "open": verdict.get("reason") == "profile_open"}
                         self._grants[profile] = self._grants.get(profile, 0) + 1
                         self._cond.notify_all()   # следующий в очереди — перепроверить
                         return {"waited_s": round(self._clock() - enqueued, 1),
