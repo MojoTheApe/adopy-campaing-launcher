@@ -569,11 +569,11 @@ def test_a_category_box_disabled_while_meta_saves_is_clicked_again_when_free(pag
 def test_a_category_box_that_settles_on_its_own_passes(page, monkeypatch):
     """Meta keeps the box disabled and on while saving, then shows it off: no more clicks."""
     monkeypatch.setattr(md, "_PLACEMENTS_RECONCILE_MAX_S", 6.0)
-    _load_b(page, catHold={"Apps and sites": {"ms": 2500, "mode": "off"}})
+    _load_b(page, catHold={"Search results": {"ms": 2500, "mode": "off"}})
     report: dict = {}
     assert md.fill_placements(page, report) is True, report.get("categories_failed")
-    assert _cat_checked(page, "Apps and sites") is False
-    assert "Apps and sites" not in report.get("categories_reclicked", {})
+    assert _cat_checked(page, "Search results") is False
+    assert "Search results" not in report.get("categories_reclicked", {})
 
 
 def test_a_category_box_that_stays_disabled_and_checked_fails(page):
