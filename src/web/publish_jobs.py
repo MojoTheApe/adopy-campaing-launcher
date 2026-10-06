@@ -274,10 +274,19 @@ def _abandon_job(job_id: str) -> bool:
     except Exception:
         pass
     step = step.replace("_", " ") if step else "an unknown step"
+    # Ключ профиля — до замка заданий (читает карту аккаунтов) и ложится на
+    # задание вместе с отметкой «брошено», чтобы ожидающие его видели сразу.
+    with _jobs_lock:
+        label0 = (_jobs.get(job_id) or {}).get("account_label", "")
+    try:
+        key = profile_key_for(label0)
+    except Exception:
+        key = None
     with _jobs_lock:
         job = _jobs.get(job_id)
         if job is None or job.get("abandoned") or job.get("status") in ("done", "cancelled"):
             return False
+        job["profile_key"] = key
         job["abandoned"] = True
         job["status"] = "cancelled"
         job["finished_at"] = _now_iso()
@@ -303,17 +312,11 @@ def _abandon_job(job_id: str) -> bool:
 def _stopped_robot_on(profile: str, job_id: str) -> bool:
     """На этом профиле есть брошенное, но ещё не вышедшее задание (ACL-1614)."""
     with _jobs_lock:
-        others = [(jid, str(j.get("account_label") or "")) for jid, j in _jobs.items()
+        # Ключ профиля записан на задание при отказе от него: карту аккаунтов с
+        # диска каждые 0,25 с не читаем.
+        others = [(jid, j.get("profile_key")) for jid, j in _jobs.items()
                   if jid != job_id and j.get("abandoned")]
-    for jid, label in others:
-        if jid not in _job_ended:
-            continue    # поток вышел
-        try:
-            if profile_key_for(label) == profile:
-                return True
-        except Exception:
-            continue
-    return False
+    return any(key == profile and jid in _job_ended for jid, key in others)
 
 
 def _wait_for_stopped_robot(job_id: str, profile: str) -> bool:
@@ -568,17 +571,32 @@ def _run_job_inner(
         _record_slot_decision(_rt, first_campaign, account_label, verdict)
 
     profile = profile_key_for(account_label)
-    grant = _slots.acquire(
-        job_id,
-        profile,
-        cancelled=lambda: _is_cancelled(job_id),
-        on_wait=_show_wait,
-    )
-    if grant is None:
-        with _jobs_lock:
-            _jobs[job_id].pop("queue", None)
-        _finish(job_id, cancelled=True)
-        return
+    # ACL-1614: профиль с брошенным, ещё не вышедшим роботом ждём ДО места в
+    # очереди: зависший профиль не должен занимать место и стопорить остальные
+    # аккаунты (ревью PR #622, R2-B1). Ожидание видно на задании и снимается Stop.
+    while True:
+        if not _wait_for_stopped_robot(job_id, profile):
+            with _jobs_lock:
+                _jobs[job_id].pop("queue", None)
+            _finish(job_id, cancelled=True)
+            return
+        grant = _slots.acquire(
+            job_id,
+            profile,
+            cancelled=lambda: _is_cancelled(job_id),
+            on_wait=_show_wait,
+        )
+        if grant is None:
+            with _jobs_lock:
+                _jobs[job_id].pop("queue", None)
+            _finish(job_id, cancelled=True)
+            return
+        # Робота бросили, пока мы стояли в очереди за местом: место отдаём
+        # обратно и ждём его выхода снаружи очереди.
+        if _stopped_robot_on(profile, job_id):
+            _slots.release(job_id)
+            continue
+        break
     try:
         with _jobs_lock:
             _jobs[job_id].pop("queue", None)
@@ -594,9 +612,6 @@ def _run_job_inner(
                                                 if grant["first_hold"] else None)})
             except Exception:
                 pass
-        if not _wait_for_stopped_robot(job_id, profile):
-            _finish(job_id, cancelled=True)
-            return
         with _publish_serial(profile):
             if _is_cancelled(job_id):
                 _finish(job_id, cancelled=True)

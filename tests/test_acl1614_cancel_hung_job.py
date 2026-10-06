@@ -674,3 +674,100 @@ def test_job_ended_events_do_not_leak(env):
     assert _until(lambda: job_id not in pj._job_ended)
     with pj._jobs_lock:
         pj._jobs.pop(made, None)
+
+
+# ── ревью PR #622, раунд 2 ──────────────────────────────────────────────────
+
+def test_with_one_slot_a_stopped_profile_does_not_block_other_accounts(env):
+    """R2-B1: ожидающее брошенного робота задание места не держит."""
+    entered, wake = threading.Event(), env.gate()
+    started: list[str] = []
+
+    def behave(pub, draft):
+        started.append(threading.current_thread().name)
+        if len(started) == 1:
+            entered.set()
+            wake.wait(20)
+        return _ok_result(draft)
+
+    FakePublisher.behaviour = behave
+    first = env.start("Doc19")
+    assert entered.wait(5)
+    pj.cancel_job(first)
+    assert _until(lambda: pj.get_job(first)["status"] == "cancelled", timeout=3)
+    same = env.start("Doc19b")                  # тот же профиль P
+    assert _until(lambda: (pj.get_job(same).get("queue") or {}).get("hold") == "stopped_robot", timeout=5)
+    other = env.start("KLD")                    # профиль Q, место одно
+    assert _until(lambda: pj.get_job(other)["status"] == "done", timeout=5)
+    snap = env.slots.snapshot()
+    assert same not in [w["job_id"] for w in snap["waiting"]] + _running_ids(env.slots)
+    assert pj.get_job(same)["status"] == "queued" and len(started) == 2
+    # Stop снимает ожидание.
+    pj.cancel_job(same)
+    assert _until(lambda: pj.get_job(same)["status"] == "cancelled", timeout=3)
+
+
+def test_the_profile_lock_is_unchanged_by_an_abandon(env):
+    from src.fb_ads_rpa.operations import profile_lock
+
+    entered, wake = threading.Event(), env.gate()
+
+    def stuck(pub, draft):
+        entered.set()
+        wake.wait(20)
+        return _ok_result(draft)
+
+    FakePublisher.behaviour = stuck
+    lock = profile_lock("Doc19")
+    first = env.start("Doc19")
+    assert entered.wait(5)
+    pj.cancel_job(first)
+    assert _until(lambda: pj.get_job(first)["status"] == "cancelled", timeout=3)
+    assert profile_lock("Doc19") is lock, "two robots must never drive one browser"
+
+
+def test_the_takeover_and_teach_loops_send_the_heartbeat(monkeypatch):
+    from src.fb_ads_rpa import pacing
+
+    monkeypatch.setattr(pacing.time, "sleep", lambda s: None)
+    beats = []
+
+    def beat():
+        beats.append(1)
+        pacing.release_takeover()
+        pacing._TEACH_WAITING = False
+
+    monkeypatch.setattr(job_cancel, "heartbeat", beat)
+    pacing.request_takeover()
+    try:
+        assert pacing.wait_for_human_release(None, max_wait_s=5) is True
+        assert len(beats) == 1
+        pacing._TEACH_WAITING = True
+        assert pacing.wait_for_teach_resume(5) is True
+        assert len(beats) == 2
+    finally:
+        pacing.release_takeover()
+        pacing._TEACH_WAITING = False
+
+
+def test_a_job_queued_before_the_abandon_gives_its_slot_back(env):
+    """R2-B1: задание, ждавшее место до отказа от робота, место не удерживает."""
+    entered, wake = threading.Event(), env.gate()
+    started: list[str] = []
+
+    def behave(pub, draft):
+        started.append(threading.current_thread().name)
+        if len(started) == 1:
+            entered.set()
+            wake.wait(20)
+        return _ok_result(draft)
+
+    FakePublisher.behaviour = behave
+    first = env.start("Doc19")
+    assert entered.wait(5)
+    same = env.start("Doc19b")                  # уже в очереди за местом / профилем
+    other = env.start("KLD")
+    pj.cancel_job(first)
+    assert _until(lambda: pj.get_job(other)["status"] == "done", timeout=8)
+    assert pj.get_job(same)["status"] == "queued" and len(started) == 2
+    assert same not in _running_ids(env.slots)

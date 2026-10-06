@@ -27,12 +27,39 @@ holding the GIL, the whole dashboard slowed to 10-30 s per request, and the job 
   Multilogin).
 - Known quiet waits (human takeover, teach wait, compression) send a heartbeat, so they never
   raise `step_stuck`.
+- A same-profile job waits for the stopped robot BEFORE it takes a queue slot, so a hung profile
+  never blocks other accounts; Stop ends that wait.
+- Limit: a thread hung forever inside one CDP call (a frozen tab with no timeout) keeps the
+  profile lock until the dashboard is restarted; Close profile answers "busy" meanwhile. The
+  ffmpeg heartbeat also hides a wedged ffmpeg from `step_stuck` until its compression timeout.
 - The page shows "Stopping..." for a cancelling job (never "waiting"/"opening") and the stuck
   reason on a stopped one.
 - New signal `step_stuck`: a running job with no telemetry step for `ACL_STEP_STUCK_S` (default
   300 s) records one `step_stuck` row (last step, idle seconds) and sends one Sentry message,
   once per job. The row does not reset the "No new step for N min" clock on the page.
 - Tests: `tests/test_acl1614_cancel_hung_job.py`.
+
+## Campaign Builder creative previews no longer freeze the dashboard — ACL-1615
+
+05.10 py-spy: while the Builder loaded video previews, every other request (job status, slots,
+the report) waited 10-30 s. `/creative-file` ran on the event loop and walked the whole creatives
+root (`rglob("*")`) for every single preview.
+
+- The lookup runs in its own small thread pool, not on the event loop (and not in the report
+  pool, so a preview burst cannot starve the report).
+- Creatives index: lowercase basename -> relative paths, built with one tree walk per root and
+  rebuilt when a directory mtime changes (checked at most every 5 s, immediately on a miss) or
+  when an indexed file has disappeared. A path that no longer exists is never returned (publish
+  enrichment uses the same finder).
+- Behaviour unchanged: path-suffix disambiguation, 404 not found, 409 for duplicates, the
+  ACL-1342 realpath / within-root check (done per lookup, so a symlink swapped later is caught).
+- Previews are cached by the browser (`Cache-Control: private, max-age=3600`, ETag,
+  Last-Modified, 304 on revalidation). Everything else stays `no-store`.
+- Video Range requests: the installed Starlette cannot serve them and answered 200 with the whole
+  file; `/creative-file` now answers 206/416 for a single range.
+- `/api/creatives` and the creative brief already run off the loop; no other route walks the
+  disk per creative.
+- Tests: `tests/test_acl_1615_creative_index.py`.
 
 ## A collapsed Audience card is opened by clicking the card in every editor layout — ACL-1611
 
