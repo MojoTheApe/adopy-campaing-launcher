@@ -120,9 +120,29 @@ _SIM_B_JS = r"""
     cb.checked = true; cb.setAttribute('aria-checked', 'true');
   }
   const foldedOnce = new Set();
+  // Category boxes Meta keeps disabled and still `aria-checked=true` while it saves
+  // the click (cfg.catHold = {name: {ms, mode}}): after `ms` the box is free and,
+  // mode "off" - shows the new value, "revert" - is back on and needs another
+  // click. `again` re-arms the hold on every click (a page that never lets go).
+  const catIds = { 'Feeds': 'placement-feed', 'Stories, Status, Reels': 'placement-story',
+    'In-stream ads for reels': 'placement-stream', 'Search results': 'placement-search',
+    'Apps and sites': 'placement-external' };
+  const held = new Set();
   document.addEventListener('click', (e) => {
     const cb = e.target;
     if (!(cb instanceof HTMLInputElement) || cb.type !== 'checkbox') return;
+    const catName = Object.keys(catIds).find(n => cb.closest('#' + catIds[n]));
+    const hold = catName && (cfg.catHold || {})[catName];
+    if (hold && (hold.again || !held.has(catName))) {
+      held.add(catName);
+      cb.disabled = true; cb.setAttribute('aria-disabled', 'true');
+      setTimeout(() => {
+        cb.disabled = false; cb.setAttribute('aria-disabled', 'false');
+        if (hold.mode === 'off') cb.setAttribute('aria-checked', String(cb.checked));
+        else { cb.checked = true; cb.setAttribute('aria-checked', 'true'); }
+      }, hold.ms);
+      return;
+    }
     setTimeout(() => cb.setAttribute('aria-checked', String(cb.checked)), 0);
     const label = cb.dataset.simLabel;
     if (!label) return;
@@ -144,14 +164,18 @@ _SIM_B_JS = r"""
     node.setAttribute('aria-expanded', String(!open));
     region.style.display = open ? 'none' : '';
   });
-  window.__sim = { state, cats };
+  window.__sim = { state, cats, flip: (label) => {
+    const cb = document.querySelector('input[data-sim-label="' + label + '"]');
+    cb.checked = !cb.checked; cb.setAttribute('aria-checked', String(cb.checked));
+    state[label].checked = cb.checked;
+  } };
 }
 """
 
 
 def _cfg_b(**kw) -> dict:
     cfg = {"ids": CATEGORY_IDS, "off": [], "locked": ["Facebook Business Explore"],
-           "unlock": {}, "collapse": "never"}
+           "unlock": {}, "collapse": "never", "catHold": {}}
     cfg["off"] = kw.pop("off", ["Facebook Business Explore"])
     cfg.update(kw)
     return cfg
@@ -294,6 +318,14 @@ _SIM_CARD_JS = r"""
     for (const b of pair) b.setAttribute('aria-pressed', 'true');
     for (const b of bodies) b.hidden = false;
   };
+  if (cfg.overlay) {
+    // A control that covers the whole card: a hit-test point lands on it, not on the card.
+    sec.style.position = 'relative';
+    const ov = document.createElement('button');
+    ov.style.cssText = 'position:absolute;left:0;top:0;right:0;bottom:0;z-index:50;opacity:0';
+    ov.addEventListener('click', () => window.__log.push('inner_clicked'));
+    sec.appendChild(ov);
+  }
   if (cfg.cardClickable) for (const b of pair) b.addEventListener('click', open);
   const summary = [...sec.querySelectorAll('span')].find(e => norm(e.textContent) === 'None');
   const header = [...sec.querySelectorAll('span')].find(e => norm(e.textContent) === 'None set');
@@ -325,6 +357,11 @@ _SIM_CARD_JS = r"""
   $('review').addEventListener('click', () => { window.__log.push('review'); hide('dlg'); $('rev').style.display = 'block'; });
   $('confirm').addEventListener('click', () => {
     window.__log.push('confirm'); hide('rev');
+    if (cfg.switchLost) { window.__log.push('switch_lost'); $('sw').checked = false; $('list').style.display = 'none'; return; }
+    if (cfg.dropBox) {
+      const sp = [...$('list').querySelectorAll('span')].find(x => x.textContent === cfg.dropBox);
+      sp.parentElement.parentElement.remove();
+    }
     if (cfg.saveFails) { window.__log.push('save_lost'); $('sw').checked = false; $('list').style.display = 'none';
       for (const c of $('list').querySelectorAll('input')) c.checked = true; return; }
     const names = [...$('list').querySelectorAll('span')].map(x => x.textContent).join(', ');
@@ -341,7 +378,8 @@ _SIM_CARD_JS = r"""
 
 
 def _load_card(page, **kw) -> None:
-    cfg = {"cardClickable": True, "summary": "stale", "noEdit": False, "saveFails": False}
+    cfg = {"cardClickable": True, "summary": "stale", "noEdit": False, "saveFails": False,
+           "switchLost": False, "dropBox": "", "overlay": False}
     cfg.update(kw)
     page.set_content("<html><body style='margin:0;padding-top:120px'>"
                      f"{fragment(COLLAPSED, 'card')}</body></html>")
@@ -437,3 +475,154 @@ def test_account_exclusions_that_meta_does_not_offer_are_a_warning(page, tmp_pat
     assert "no longer offers" in report["notice"]
     row = [r for r in _rows(tmp_path) if r["step"] == "account_placement_exclusions"][-1]
     assert row["ok"] is False and row["note"] == "account_controls_not_offered"
+
+
+def test_the_9403a_notice_says_meta_no_longer_offers_exclusions(page):
+    """Review of PR #636 (F2): the opened 9403A card has no categories and shows
+    Meta's notice that excluding placements "will no longer be available for your
+    ad sets". The blocking reason says that (ACL-1336), not "categories under
+    Show more settings"."""
+    _load_card(page, summary="live")
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert report["notice"].startswith(
+        "Meta no longer offers manual placement exclusions on this ad set (ACL-1336); "
+        "placements left as Meta set them."), report["notice"]
+    assert "Show more settings" not in report["notice"]
+    assert report["why"] == "placement_categories_not_reached"
+
+
+def test_a_page_error_reading_the_card_is_not_reported_as_not_offered(page, monkeypatch):
+    """F5: a page call that throws while the Account controls row is looked for is a
+    read error, not "Meta no longer offers exclusions"."""
+    _load_card(page)
+    real = page.evaluate
+
+    def flaky(script, *a, **k):
+        if "account-controls-row" in str(a) or "account-controls-row" in script:
+            raise RuntimeError("Execution context was destroyed")
+        return real(script, *a, **k)
+    monkeypatch.setattr(page, "evaluate", flaky)
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert report["account_exclusions"] == "account_controls_row_read_error"
+    assert "no longer offers" not in report["account_exclusions_warning"]
+    assert "Could not read" in report["account_exclusions_warning"]
+
+
+def test_a_control_over_the_card_header_is_not_clicked(page, tmp_path):
+    """The card-open click guard: the point in the heading is covered by another
+    control, so no trusted click goes there; the card is opened through its own
+    button instead (DOM click)."""
+    _load_card(page, overlay=True)
+    report: dict = {}
+    md.fill_placements(page, report)
+    log = page.evaluate("window.__log")
+    assert "inner_clicked" not in log, log
+    assert report["placements_card_open"] == "opened"
+    row = [r for r in _rows(tmp_path) if r["step"] == "placements_card"][-1]
+    assert row["diag"]["how"] == "dom", row
+
+
+def test_exclusions_with_the_switch_lost_are_not_verified(page):
+    """The four boxes read off but the dialog's switch is off again: the account is
+    not restricted to specific placements, so that is not a verified save."""
+    _load_card(page, switchLost=True)
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert report["account_exclusions_ok"] is False
+    assert report["account_exclusions"] == "summary_still_none"
+
+
+def test_an_exclusion_box_missing_from_the_dialog_is_not_counted_as_excluded(page):
+    """After the save the dialog has no row for one of the four placements: it
+    cannot be read, so it is not "excluded"."""
+    _load_card(page, dropBox="Facebook right column")
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert report["account_exclusions_ok"] is False
+
+
+# ── F1/F3 of the review: category boxes disabled while saving, final read-back ─
+
+def _cat_checked(page, name: str) -> bool:
+    return page.evaluate(
+        "(id) => document.querySelector('#' + id + ' input[type=checkbox]').getAttribute('aria-checked') === 'true'",
+        {"Search results": "placement-search", "Apps and sites": "placement-external"}[name])
+
+
+def test_a_category_box_disabled_while_meta_saves_is_clicked_again_when_free(page, monkeypatch):
+    """Review F1 (11 of 29 live failures): "Search results" stays disabled and still
+    on for ~2.5 s after it is clicked off, then is free - and still on (the click
+    was lost). The step reads it again and clicks it off once it is enabled."""
+    monkeypatch.setattr(md, "_PLACEMENTS_RECONCILE_MAX_S", 6.0)
+    _load_b(page, catHold={"Search results": {"ms": 2500, "mode": "revert"}})
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, {
+        k: report.get(k) for k in ("categories_failed", "categories", "final_readback")}
+    assert _cat_checked(page, "Search results") is False
+    assert "Search results" in report["categories_reconciled"]
+    assert report["categories_reclicked"]["Search results"] == 1
+    _assert_wanted(page)
+
+
+def test_a_category_box_that_settles_on_its_own_passes(page, monkeypatch):
+    """Meta keeps the box disabled and on while saving, then shows it off: no more clicks."""
+    monkeypatch.setattr(md, "_PLACEMENTS_RECONCILE_MAX_S", 6.0)
+    _load_b(page, catHold={"Apps and sites": {"ms": 2500, "mode": "off"}})
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, report.get("categories_failed")
+    assert _cat_checked(page, "Apps and sites") is False
+    assert "Apps and sites" not in report.get("categories_reclicked", {})
+
+
+def test_a_category_box_that_stays_disabled_and_checked_fails(page):
+    """A box Meta never frees is an honest failure that names it."""
+    _load_b(page, catHold={"Search results": {"ms": 10 ** 9, "mode": "revert"}})
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert report["categories_failed"] == ["Search results"]
+
+
+def test_a_category_box_the_page_reverts_on_every_click_stops_at_the_cap(page, monkeypatch):
+    """The page takes every click back: one honest refusal after the shared cap, no loop."""
+    monkeypatch.setattr(md, "_PLACEMENTS_RECONCILE_MAX_S", 6.0)
+    _load_b(page, catHold={"Search results": {"ms": 100, "mode": "revert", "again": True}})
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert report["categories_failed"] == ["Search results"]
+    assert report["categories_reclicked"]["Search results"] <= md._PLACEMENT_REOPENS
+
+
+def test_a_late_revert_by_the_page_fails_the_step(page, monkeypatch):
+    """Review F3: after everything is set the page takes one placement back. The final
+    read of every row sees it and the step fails."""
+    wrapped = ("(label) => { if (label === 'Threads feed' && !window.__rev) {"
+               " window.__rev = 1; window.__sim.flip('Threads feed'); }"
+               " return (" + md.PLACEMENTS_SUBITEM_READ_JS + ")(label); }")
+    monkeypatch.setattr(md, "PLACEMENTS_SUBITEM_READ_JS", wrapped)
+    _load_b(page)
+    report: dict = {}
+    assert md.fill_placements(page, report) is False
+    assert {"row": "Threads feed", "want": False, "got": True} in report["final_readback"]["mismatch"]
+
+
+def test_a_clean_run_has_an_empty_final_readback(page):
+    _load_b(page)
+    report: dict = {}
+    assert md.fill_placements(page, report) is True
+    assert report["final_readback"] == {"mismatch": []}
+
+
+def test_a_category_that_folds_while_the_list_settles_is_opened_again(page, monkeypatch):
+    """The "not offered" proof needs the list open: Meta folds it during the wait and
+    the settle loop opens it again (without that, "Messenger Stories" stays missing)."""
+    wrapped = ("(name) => { if (name === 'Stories, Status, Reels' && !window.__f) {"
+               " window.__f = 1; window.__sim.cats[name].btn.click(); }"
+               " return (" + md._CATEGORY_END_JS + ")(name); }")
+    monkeypatch.setattr(md, "_CATEGORY_END_JS", wrapped)
+    _load_b(page)
+    report: dict = {}
+    assert md.fill_placements(page, report) is True, report.get("not_offered_check")
+    assert report["not_offered_check"]["Stories, Status, Reels"]["reopened"] >= 1
+    assert report["subitems_not_offered"] == ["Messenger Stories"]

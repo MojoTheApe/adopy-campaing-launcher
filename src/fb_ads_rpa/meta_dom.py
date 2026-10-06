@@ -7237,6 +7237,22 @@ def _wheel_to_placements_card(page: Page, max_ticks: int = 40) -> int:
     return -1
 
 
+def _placements_exclusion_notice_shown(page: Page) -> bool:
+    """На карточке есть объявление Meta «Excluding placements ... will no longer be available».
+
+    ACL-1336: Meta снимает ручные исключения площадок на уровне ad set. Это не
+    промах селектора и не «категории под Show more settings», а то, что
+    категорий на карточке больше нет.
+    """
+    try:
+        return bool(page.evaluate(
+            """() => /will no longer be available for your ad sets/i.test(
+                (document.body.textContent || '').replace(/\\s+/g, ' '))"""
+        ))
+    except Exception:
+        return False
+
+
 def _placements_exclusion_removed(page: Page) -> bool:
     """Карточка Placements, на которой Meta убрала ручной выбор площадок.
 
@@ -7340,7 +7356,8 @@ def _open_account_controls_dialog(page: Page) -> tuple[str | None, dict | None]:
 
     Возвращает (`None`, состояние строки) или (метка отказа, состояние строки).
     Метки `account_controls_row_not_found` и `edit_placement_controls_not_found`
-    значат «на карточке этого нет» — Meta такого не предлагает.
+    значат «на карточке этого нет» — Meta такого не предлагает; `*_read_error` —
+    сбой чтения страницы, не вывод о том, что предлагает Meta.
     """
     # Строка «Account controls» — раскрывашка; внутри кнопка «Edit placement controls».
     #
@@ -7358,6 +7375,8 @@ def _open_account_controls_dialog(page: Page) -> tuple[str | None, dict | None]:
     )
     if row_state is None:
         return "account_controls_row_not_found", None
+    if row_state.get("read_error"):
+        return "account_controls_row_read_error", row_state
     if row_state.get("expanded") != "true":
         how = _click_marked(page, "account-controls-row")
         if not how:
@@ -7371,6 +7390,8 @@ def _open_account_controls_dialog(page: Page) -> tuple[str | None, dict | None]:
     )
     if edit_state is None:
         return "edit_placement_controls_not_found", row_state
+    if edit_state.get("read_error"):
+        return "edit_placement_controls_read_error", row_state
     if not _click_marked(page, "edit-placement-controls"):
         return "edit_placement_controls_not_clickable", row_state
     try:
@@ -7426,6 +7447,13 @@ def ensure_account_placement_exclusions(page: Page, report: dict | None = None) 
 
     # 1–2. Строка «Account controls» → «Edit placement controls» → окно.
     err, row_state = _open_account_controls_dialog(page)
+    if err in ("account_controls_row_read_error", "edit_placement_controls_read_error"):
+        # Вызов страницы упал — это сбой чтения, а не вывод «Meta не предлагает».
+        report["account_exclusions_warning"] = (
+            "Could not read the Placements card (the page call failed), so the "
+            "account-level placement exclusions were not applied."
+        )
+        return _record(False, err, row=row_state)
     if err in ("account_controls_row_not_found", "edit_placement_controls_not_found"):
         # ACL-1629: Meta не предлагает исключения — не «ошибка селектора», а
         # предупреждение, которое видно в отчёте и в причине отказа шага.
@@ -7533,6 +7561,8 @@ def _scroll_and_mark(page: Page, finder_js: str, mark: str) -> dict | None:
     """Найти узел выражением `finder_js`, прокрутить к нему и пометить.
 
     Возвращает {expanded, w, h} после прокрутки или None, если узла нет.
+    Если сам вызов страницы упал — {"read_error": ...}: это «не смогли
+    прочитать», а не «узла нет» (ревью PR #636, F5).
     """
     js = (
         "(mark) => { const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();"
@@ -7546,8 +7576,8 @@ def _scroll_and_mark(page: Page, finder_js: str, mark: str) -> dict | None:
     )
     try:
         state = page.evaluate(js, mark)
-    except Exception:
-        return None
+    except Exception as exc:
+        return {"read_error": f"{type(exc).__name__}: {exc}"[:120]}
     _sleep_h(0.6)
     return state
 
@@ -8558,11 +8588,20 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             else:
                 tail = ("The account-level placement exclusions were not applied ("
                         + str(report.get("account_exclusions") or "unknown") + ").")
-            report["notice"] = (
-                "The placement categories under Show more settings could not be "
-                "set, so the ad set would run on more placements than requested. "
-                + tail
-            )
+            if _placements_exclusion_notice_shown(page):
+                # Карточка открыта и без категорий, а Meta сама пишет, что
+                # исключения площадок больше не будут доступны (ACL-1336):
+                # не «категории под Show more settings», а отказ Meta.
+                report["notice"] = (
+                    "Meta no longer offers manual placement exclusions on this ad set "
+                    "(ACL-1336); placements left as Meta set them. " + tail
+                )
+            else:
+                report["notice"] = (
+                    "The placement categories under Show more settings could not be "
+                    "set, so the ad set would run on more placements than requested. "
+                    + tail
+                )
             return False
         _dump_dbg()
         return False
@@ -8572,6 +8611,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     # ── категории ────────────────────────────────────────────────────────
     report["categories"] = {}
     locked_ok: list[str] = []
+    cat_wrong: list[str] = []
     for name, want in _PLACEMENT_CATEGORIES.items():
         res = _set_category(name, want)
         report["categories"][name] = res
@@ -8590,7 +8630,12 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             ):
                 locked_ok.append(name)
             else:
-                ok = False
+                # ACL-1629, ревью PR #636 (F1): Meta держит галочку категории
+                # включённой и недоступной, пока сохраняет клик; через пару
+                # секунд она свободна и в нужном (или откатившемся) состоянии.
+                # Сразу отказом не считаем — категория уходит в `cat_wrong`, и
+                # `_reconcile` перечитает её и кликнет заново, когда разблокируется.
+                cat_wrong.append(name)
         _sleep_h(0.3)
     if locked_ok:
         report["categories_locked_as_wanted"] = locked_ok
@@ -8859,19 +8904,66 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     # заново и доделываем: раскрываем её раздел (раскрывается только
     # свёрнутый), ставим и перечитываем — пока не встала или не кончится срок.
     # Площадку, которую страница так и не показала, это не касается.
+    def _category_now(name: str) -> tuple[bool | None, bool]:
+        """(галочка категории сейчас, доступна ли она) — со страницы, без клика."""
+        try:
+            cands = (_category_candidates() or {}).get(name) or []
+        except Exception:
+            cands = []
+        if not cands:
+            return None, False
+        first = cands[0]
+        return bool(first.get("checked")), not first.get("disabled")
+
+    def _reconcile_categories(rounds: int) -> bool:
+        """Один заход по категориям, которые не встали сразу (F1, PR #636).
+
+        Перечитывает каждую со страницы: встала — снимаем с учёта; недоступна —
+        ждём следующего захода (Meta ещё сохраняет); доступна и не та — один
+        новый клик через `_set_category`. Кликов на категорию не больше
+        `_PLACEMENT_REOPENS` — тот же предел, что у раскрытий: против страницы,
+        которая откатывает галочку на каждый клик, это честный отказ, а не цикл.
+        Возвращает True, если категория ещё ждёт разблокировки.
+        """
+        waiting = False
+        for name in list(cat_wrong):
+            want = _PLACEMENT_CATEGORIES[name]
+            now, enabled = _category_now(name)
+            if now is want:
+                cat_wrong.remove(name)
+                report.setdefault("categories_reconciled", {})[name] = rounds
+                report["categories"].setdefault(name, {})["checked"] = want
+                continue
+            if not enabled:
+                waiting = True
+                continue
+            clicks = report.setdefault("categories_reclicked", {})
+            if clicks.get(name, 0) >= _PLACEMENT_REOPENS:
+                continue
+            clicks[name] = clicks.get(name, 0) + 1
+            res = _set_category(name, want)
+            report["categories"][name] = res
+            if res.get("checkbox") and res.get("checked") is want:
+                cat_wrong.remove(name)
+                report.setdefault("categories_reconciled", {})[name] = rounds
+        return waiting and bool(cat_wrong)
+
     def _reconcile() -> None:
         t0 = time.monotonic()
         rounds = 0
         while True:
             pending = [x for x in remaining_on + remaining_off
                        if _label_on_page(x, report["subitems_seen"])]
-            if not pending:
+            if not pending and not cat_wrong:
                 return
             if rounds >= 2 and time.monotonic() - t0 >= _PLACEMENTS_RECONCILE_MAX_S:
                 return
             rounds += 1
             report["subitems_reconciled"] = rounds
             acted = False
+            # Категории — до подпунктов: их клик не раскрывает и не сворачивает
+            # разделы, а подпунктам раскрытие нужно оставить открытым.
+            waiting = _reconcile_categories(rounds) if cat_wrong else False
             for cat in dict.fromkeys(_SUBITEM_CATEGORY.get(x) for x in pending):
                 if not cat:
                     continue
@@ -8893,11 +8985,14 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                     x for x in here if not _label_on_page(x, report["subitems_seen"]))
                 _pass(here)
                 _settle_visible(here)
-            if not acted:
+            if not acted and not waiting:
                 return
             _sleep_h(1.0)
 
     _reconcile()
+    if cat_wrong:
+        ok = False
+        report["categories_failed"] = list(cat_wrong)
 
     # «Не предлагается» — не отказ: на площадку, которой нет, показа не будет.
     # Включаемые сюда не попадают никогда — их отсутствие остаётся отказом.
@@ -8914,6 +9009,52 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     _dbg.append(f"subitems_seen={report['subitems_seen']}")
     if report["subitems_missing"]:
         ok = False
+
+    # ACL-1629, ревью PR #636 (F3): итог — только по тому, что страница
+    # показывает В КОНЦЕ, а не по чтению в том же вызове, что и клик. Страница
+    # могла откатить галочку уже после захода; такой откат — отказ.
+    def _final_readback() -> list[dict]:
+        wrong: list[dict] = []
+        try:
+            cands = _category_candidates() or {}
+        except Exception:
+            cands = {}
+        for name, want in _PLACEMENT_CATEGORIES.items():
+            rows = cands.get(name) if isinstance(cands, dict) else None
+            got = bool(rows[0].get("checked")) if rows else None
+            if got is not want:
+                wrong.append({"row": name, "want": want, "got": got})
+        plan = [(x, True) for x in _SUBITEMS_ON] + [(x, False) for x in _SUBITEMS_OFF]
+        for cat in dict.fromkeys(_SUBITEM_CATEGORY.get(x) for x, _w in plan):
+            if not cat:
+                continue
+            _expand_category(cat)       # раскрывает только свёрнутую
+            _sleep_h(0.6)
+            here = _subitem_labels()
+            for label, want in plan:
+                if _SUBITEM_CATEGORY.get(label) != cat:
+                    continue
+                if not _label_on_page(label, here):
+                    # Включаемая обязана читаться; выключаемая, которой нет
+                    # (Meta её не предлагает), судится выше.
+                    if want and _label_on_page(label, report["subitems_seen"]):
+                        wrong.append({"row": label, "want": want, "got": None})
+                    continue
+                try:
+                    res = page.evaluate(PLACEMENTS_SUBITEM_READ_JS, label) or {}
+                except Exception as exc:
+                    res = {"found": False, "why": str(exc)[:80]}
+                got = res.get("checked") if res.get("found") else None
+                if got is not want:
+                    wrong.append({"row": label, "want": want, "got": got})
+        return wrong
+
+    if ok:
+        late = _final_readback()
+        report["final_readback"] = {"mismatch": late}
+        if late:
+            ok = False
+            _dbg.append(f"final_readback mismatch={late}")
 
     # Пока хоть что-то не сошлось, отказ должен принести разметку строк, а не
     # одно число. Круг 13 стоил целого прогона ровно потому, что «Search

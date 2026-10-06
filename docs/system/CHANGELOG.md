@@ -11,18 +11,35 @@ failed campaign ended as do-not-publish. Two new layouts, both in the classic ed
   "collapsed" for ever, and "Messenger Stories" stayed a missing placement. The check now reads
   both expander kinds. A category Meta folds again after a save is reopened; the settle budget
   counts from the first page answer, not from entry (B91: one slow read used the whole budget).
+- **A second cause of the same B90/B91 failures: a category box disabled while Meta saves.**
+  After a category ("Search results", "Apps and sites") is clicked off, Meta keeps its box
+  disabled and still `aria-checked=true` for a few seconds. The step read it once and failed,
+  although the box ended in the wanted state (11 of 29 failed runs; every run that also failed
+  on "Ads on Facebook Reels" had it). The finish pass now re-reads such a category and clicks it
+  again once it is enabled, within the shared reopen cap and time limit; a box that stays disabled
+  and checked still fails and is named (`categories_failed`).
+- **Final read-back**: after all clicks the step reads every category and every planned sub-item
+  row from the page once more and passes only if all of them match the plan; a late revert by the
+  page fails the step (`final_readback.mismatch`).
 - **A row disabled while Meta saves** ("Ads on Facebook Reels", 13 runs on 05.10): before a seen
   placement is called missing, the step reads it again, reopens its category and sets it, for up
   to 6 s.
 - **Collapsed Placements card in the standalone editor** (9403A): a summary button
   (`aria-pressed=false`) over a hidden body. It was only opened on the single-screen editor path;
   the step now opens it in any editor, and a card that does not open fails as
-  `placements_card_not_opened` with an English reason.
+  `placements_card_not_opened` with an English reason. This is not a fix for 9403A: the opened
+  card has no categories at all, only Meta's notice that excluding placements "will no longer be
+  available for your ad sets". It is most likely the same cause as ACL-1336 and stays
+  do-not-publish; the blocking reason now says "Meta no longer offers manual placement exclusions
+  on this ad set (ACL-1336); placements left as Meta set them." The owner decides the policy in
+  ACL-1336.
 - **Account placement exclusions**: when the card summary still reads "None" after Confirm, the
   step reopens "Placement controls for this ad account" and reads the switch and the four boxes
   back (`excluded_verified_in_dialog`); a lost save stays a failure. When the card has no
   "Account controls" row or "Edit placement controls" button, the report says Meta no longer
-  offers them (`account_controls_not_offered`) and the blocking reason names it.
+  offers them (`account_controls_not_offered`) and the blocking reason names it. If the page call
+  itself fails while the row is looked for, the report says it was a read error
+  (`account_controls_row_read_error`), not that Meta does not offer the exclusions.
 - Tests: `tests/test_bench_placements_1629.py` on two scrubbed captures; bench catalogue rows
   added.
 
