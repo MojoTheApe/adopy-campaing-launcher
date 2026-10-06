@@ -16,6 +16,27 @@ write their own note about an account.
   the same note in every country; notes survive a report refresh and a dashboard restart.
 - Text is escaped on render and written to the page only as text.
 - The `ready` / `to_do` fields stay in the row data; only their display is removed.
+## Campaign Builder creative previews no longer freeze the dashboard — ACL-1615
+
+05.10 py-spy: while the Builder loaded video previews, every other request (job status, slots,
+the report) waited 10-30 s. `/creative-file` ran on the event loop and walked the whole creatives
+root (`rglob("*")`) for every single preview.
+
+- The lookup runs in its own small thread pool, not on the event loop (and not in the report
+  pool, so a preview burst cannot starve the report).
+- Creatives index: lowercase basename -> relative paths, built with one tree walk per root and
+  rebuilt when a directory mtime changes (checked at most every 5 s, immediately on a miss) or
+  when an indexed file has disappeared. A path that no longer exists is never returned (publish
+  enrichment uses the same finder).
+- Behaviour unchanged: path-suffix disambiguation, 404 not found, 409 for duplicates, the
+  ACL-1342 realpath / within-root check (done per lookup, so a symlink swapped later is caught).
+- Previews are cached by the browser (`Cache-Control: private, max-age=3600`, ETag,
+  Last-Modified, 304 on revalidation). Everything else stays `no-store`.
+- Video Range requests: the installed Starlette cannot serve them and answered 200 with the whole
+  file; `/creative-file` now answers 206/416 for a single range.
+- `/api/creatives` and the creative brief already run off the loop; no other route walks the
+  disk per creative.
+- Tests: `tests/test_acl_1615_creative_index.py`.
 
 ## A collapsed Audience card is opened by clicking the card in every editor layout — ACL-1611
 
