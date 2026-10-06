@@ -5070,20 +5070,6 @@
   },
   "execution": {
     "claims": {
-      "614": {
-        "actor": "Worker-S1614A",
-        "session": "run_s1614a_1006",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1614-cancel",
-        "worktree": "C:\\acl-1614-cancel",
-        "id": "08b79f9bd0934e90866d189724599827",
-        "issue": 614,
-        "state": "handoff",
-        "started_at": "2026-10-06T05:54:35+00:00",
-        "from_status": "status:idea",
-        "pr": 622,
-        "report": "# ACL-1614 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/622 (codex/acl-1614-cancel -> stage), SHA df05af83178ad7106e0e5833d6b31c3c81e03e1f\nClaim id: 08b79f9bd0934e90866d189724599827\n\n## What changed\n- `src/fb_ads_rpa/job_cancel.py` (new): `JobCancelled(BaseException)`, thread-local `bind/unbind/check`. One thread-local read + `Event.is_set()` per check (test bound: < 20 us).\n- `RpaPublisher.cancel()` only sets `_cancelled` and `cancel_event`; no `close()` anywhere on the cancel path. The job thread binds the event in `_run_rpa`, catches `JobCancelled`, unbinds, then `_let_go_of_profile` closes from its own thread (window stays open).\n- Checks added after the sleeps / at step boundaries: `meta_dom._sleep_h`, `_flow_budget_step`, the 0.25 s poll after `_conversion_location...`, `pacing.pause_*` and takeover/teach waits, `foreign_windows.before_step` and `_clear_marks`, `page_liveness.answers`, all `time.sleep` lines in `ads_manager_flow`, `simple_create`, `crop_step`. Sleeps keep calling `time.sleep` (tests replace `md.time`), so timing for normal runs is unchanged.\n- `publish_jobs`: cancel deadline watchdog (`ACL_CANCEL_DEADLINE_S`, default 60) -> `_abandon_job`: status cancelled, error \"Stopped by the user - the robot was stuck in <step>; the Multilogin window was left open\", slot released, profile lock replaced (`operations.abandon_profile_lock`), telemetry for the job muted. Single slot owner via `_claim_slot` (thread or deadline, never both). All job writers (`_append_result`, `_fatal`, `_finish`, errors, notices, total, profile_closed, queue view, Sentry exception) skip an abandoned job.\n- `step_stuck`: per-job watcher thread, `ACL_STEP_STUCK_S` default 300; one telemetry row (`diag.last_step`, `idle_s`, ok=None) and one Sentry message (`sentry_signal.report_step_stuck` -> `acl_sentry.report_step_stuck`, fingerprint by step); fires once per job. `publish_progress` ignores `step_stuck` rows so they do not reset the stall clock. `step_stuck$` added to the \"hold\" rule of cb-build-model.\n- `report.html`: `cancelling` -> \"Stopping...\" (before the queued/\"waiting for its turn\" branches), cancelled -> \"Stopped\" / the stuck reason (`stoppedText`).\n- CHANGELOG entry in `docs/system/CHANGELOG.md`.\n\n## Tests\n- New `tests/test_acl1614_cancel_hung_job.py`: 18 passed.\n- Affected set (acl1603 slots, publishing_everything_at_once, acl_test_platform, dashboard_stays_responsive, publish_profile_slots, publish_screen_guard_review, build_progress_model, campaign_build_progress, pacing_takeover, run_telemetry, stopped_profile_never_spins, job_exception_reaches_sentry, sentry_gets_only_campaign_failures): 332 passed.\n- Timing tests touching meta_dom/ads_manager_flow clocks (time_budget, opens_within_two_minutes, objective_dialog_waits, simple_create_more_ads): passed.\n- `scripts/acl_scan_secrets.py`: clean. Full suite not run (CI only).\n\n## Known limits / for the reviewer\n- A job blocked on the profile lock held by an abandoned thread (queued behind it before the abandon) stays blocked until that thread wakes; cancelling it works through its own deadline (abandoned too). New jobs get a fresh lock.\n- An abandoned thread's Playwright call stays blocked; nothing closes the connection under it (no spin). It lives as a daemon until the call returns or the process restarts.\n- Checks are in the main flow modules only; `browser.py` open/attach has its own `cancel_check` (ACL-1606) and was not touched. A hang inside a single CDP call is covered only by the deadline.\n- The abandoned window is no longer tracked by the slot queue (spec: release), so the queue can start a profile next to it.\n\n## Live check remaining\n- Stop a real run while it is inside a long wait: expect \"Stopping...\" then \"Stopped\" within seconds, window open, slot free.\n- Freeze a tab (or block a step) and press Stop: expect the stuck message after ~60 s and the next queued job starting.\n- Idle job > 5 min: one `step_stuck` row and one Sentry message, not repeated."
-      },
       "613": {
         "actor": "Worker-S1613A",
         "session": "run_s1613a_1006",
@@ -7081,9 +7067,25 @@
             "session": "run_s1614a_1006"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1614A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1614A",
+          "session": "run_s1614a_1006",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1614-cancel",
+          "worktree": "C:\\acl-1614-cancel",
+          "id": "08b79f9bd0934e90866d189724599827",
+          "issue": 614,
+          "state": "handoff",
+          "started_at": "2026-10-06T05:54:35+00:00",
+          "from_status": "status:idea",
+          "pr": 622,
+          "report": "# ACL-1614 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/622 (codex/acl-1614-cancel -> stage), SHA df05af83178ad7106e0e5833d6b31c3c81e03e1f\nClaim id: 08b79f9bd0934e90866d189724599827\n\n## What changed\n- `src/fb_ads_rpa/job_cancel.py` (new): `JobCancelled(BaseException)`, thread-local `bind/unbind/check`. One thread-local read + `Event.is_set()` per check (test bound: < 20 us).\n- `RpaPublisher.cancel()` only sets `_cancelled` and `cancel_event`; no `close()` anywhere on the cancel path. The job thread binds the event in `_run_rpa`, catches `JobCancelled`, unbinds, then `_let_go_of_profile` closes from its own thread (window stays open).\n- Checks added after the sleeps / at step boundaries: `meta_dom._sleep_h`, `_flow_budget_step`, the 0.25 s poll after `_conversion_location...`, `pacing.pause_*` and takeover/teach waits, `foreign_windows.before_step` and `_clear_marks`, `page_liveness.answers`, all `time.sleep` lines in `ads_manager_flow`, `simple_create`, `crop_step`. Sleeps keep calling `time.sleep` (tests replace `md.time`), so timing for normal runs is unchanged.\n- `publish_jobs`: cancel deadline watchdog (`ACL_CANCEL_DEADLINE_S`, default 60) -> `_abandon_job`: status cancelled, error \"Stopped by the user - the robot was stuck in <step>; the Multilogin window was left open\", slot released, profile lock replaced (`operations.abandon_profile_lock`), telemetry for the job muted. Single slot owner via `_claim_slot` (thread or deadline, never both). All job writers (`_append_result`, `_fatal`, `_finish`, errors, notices, total, profile_closed, queue view, Sentry exception) skip an abandoned job.\n- `step_stuck`: per-job watcher thread, `ACL_STEP_STUCK_S` default 300; one telemetry row (`diag.last_step`, `idle_s`, ok=None) and one Sentry message (`sentry_signal.report_step_stuck` -> `acl_sentry.report_step_stuck`, fingerprint by step); fires once per job. `publish_progress` ignores `step_stuck` rows so they do not reset the stall clock. `step_stuck$` added to the \"hold\" rule of cb-build-model.\n- `report.html`: `cancelling` -> \"Stopping...\" (before the queued/\"waiting for its turn\" branches), cancelled -> \"Stopped\" / the stuck reason (`stoppedText`).\n- CHANGELOG entry in `docs/system/CHANGELOG.md`.\n\n## Tests\n- New `tests/test_acl1614_cancel_hung_job.py`: 18 passed.\n- Affected set (acl1603 slots, publishing_everything_at_once, acl_test_platform, dashboard_stays_responsive, publish_profile_slots, publish_screen_guard_review, build_progress_model, campaign_build_progress, pacing_takeover, run_telemetry, stopped_profile_never_spins, job_exception_reaches_sentry, sentry_gets_only_campaign_failures): 332 passed.\n- Timing tests touching meta_dom/ads_manager_flow clocks (time_budget, opens_within_two_minutes, objective_dialog_waits, simple_create_more_ads): passed.\n- `scripts/acl_scan_secrets.py`: clean. Full suite not run (CI only).\n\n## Known limits / for the reviewer\n- A job blocked on the profile lock held by an abandoned thread (queued behind it before the abandon) stays blocked until that thread wakes; cancelling it works through its own deadline (abandoned too). New jobs get a fresh lock.\n- An abandoned thread's Playwright call stays blocked; nothing closes the connection under it (no spin). It lives as a daemon until the call returns or the process restarts.\n- Checks are in the main flow modules only; `browser.py` open/attach has its own `cancel_check` (ACL-1606) and was not touched. A hang inside a single CDP call is covered only by the deadline.\n- The abandoned window is no longer tracked by the slot queue (spec: release), so the queue can start a profile next to it.\n\n## Live check remaining\n- Stop a real run while it is inside a long wait: expect \"Stopping...\" then \"Stopped\" within seconds, window open, slot free.\n- Freeze a tab (or block a step) and press Stop: expect the stuck message after ~60 s and the next queued job starting.\n- Idle job > 5 min: one `step_stuck` row and one Sentry message, not repeated."
+        },
+        "pr": 622,
+        "queued_at": "2026-10-06T06:14:51+00:00"
       },
       "613": {
         "implementers": [
@@ -9144,7 +9146,8 @@
       433,
       526,
       529,
-      615
+      615,
+      614
     ],
     "review": null,
     "history": [
@@ -13009,6 +13012,13 @@
         "issue": 615,
         "pr": 621,
         "actor": "Worker-S1615A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-06T06:14:51+00:00",
+        "issue": 614,
+        "pr": 622,
+        "actor": "Worker-S1614A"
       }
     ],
     "policy": {
