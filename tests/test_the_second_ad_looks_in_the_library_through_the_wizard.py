@@ -42,6 +42,7 @@ def quiet(monkeypatch):
     md._telemetry.set_current_run("run-x", "camp")
     md._uploaded_ok.clear(); md._failed_uploads.clear()
     yield
+    md._set_upload_why(None)
     md._uploaded_ok.clear(); md._failed_uploads.clear()
 
 

@@ -49,6 +49,7 @@ def quiet(monkeypatch):
     md._uploaded_ok.clear()
     md._failed_uploads.clear()
     yield said
+    md._set_upload_why(None)  # причина не должна утекать в соседние тесты
     md._uploaded_ok.clear()
     md._failed_uploads.clear()
 
