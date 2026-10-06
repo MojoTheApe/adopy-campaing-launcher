@@ -6052,6 +6052,10 @@ window.cbBuild = (function () {
   function waiting(q) {
     q = q || {};
     var ahead = Math.max(0, parseInt(q.ahead, 10) || 0);
+    if (q.hold === 'stopped_robot') {
+      return { state: 'build-wait', sign: '',
+               why: 'Waiting for the stopped robot on this profile to let go' };
+    }
     if (q.reason === 'profile') {
       return { state: 'build-wait', sign: '',
                why: 'Waiting for the Multilogin profile — another run is using it' };
@@ -13206,7 +13210,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var doneLabel = isCancelled ? 'stopped'
       : (isCancelling ? 'stopping… (the Multilogin window stays open)'
       // ACL-1321: профилей разом — сколько тянет память машины; остальные ждут.
-      : isQueued ? (queue.reason === 'profile'
+      : isQueued ? (queue.hold === 'stopped_robot'
+          ? 'queued — waiting for the stopped robot on this profile to let go'
+          : queue.reason === 'profile'
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
           : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
           : queue.state === 'waiting_memory' ? 'queued — waiting for memory'

@@ -79,6 +79,7 @@ def wait_for_teach_resume(max_wait_s: float = 600.0) -> bool:
     while _t.time() < deadline:
         _t.sleep(0.5)
         job_cancel.check()
+        job_cancel.heartbeat()   # тихое ожидание человека — не зависание
         if not _TEACH_WAITING:
             return True
     end_teach_wait()
@@ -158,6 +159,7 @@ def wait_for_human_release(page: "Page | None" = None, *, max_wait_s: float = 30
                 pass
         time.sleep(0.5)
         job_cancel.check()
+        job_cancel.heartbeat()   # тихое ожидание человека — не зависание
         if not _HUMAN_TAKEOVER:
             if page:
                 try:

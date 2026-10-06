@@ -2420,11 +2420,14 @@ class AdsManagerFlow:
                         **({"ad_body2": ad.ad_body2} if ad.ad_body2 else {}),
                     )
                 finally:
-                    try:
-                        from src.fb_ads_rpa.browser import put_window_back
-                        put_window_back(self.page)
-                    except Exception:
-                        pass
+                    # ACL-1614: после Stop окно не трогаем — им может уже
+                    # владеть другое задание этого профиля.
+                    if not job_cancel.requested():
+                        try:
+                            from src.fb_ads_rpa.browser import put_window_back
+                            put_window_back(self.page)
+                        except Exception:
+                            pass
                 if not fail_step:
                     break
                 # ACL-1318: попытка кончилась — это настоящий отказ кампании, и

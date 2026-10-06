@@ -38,6 +38,23 @@ def requested() -> bool:
     return event is not None and event.is_set()
 
 
+def heartbeat() -> None:
+    """Известное тихое ожидание (ожидание человека, сжатие видео): задание живо.
+
+    Строк телеметрии такие ожидания не пишут, и сторож `step_stuck` счёл бы их
+    зависанием. Heartbeat обновляет время последней активности задания, не
+    меняя названия последнего шага. Вне задания — ничего не делает.
+    """
+    if getattr(_tls, "event", None) is None:
+        return
+    try:
+        from src.fb_ads_rpa import run_telemetry
+
+        run_telemetry.beat()
+    except Exception:
+        pass
+
+
 def check() -> None:
     """Бросить `JobCancelled`, если Stop нажат. Дёшево: зовётся в каждом цикле ожидания."""
     event = getattr(_tls, "event", None)

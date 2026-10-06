@@ -11108,7 +11108,9 @@ def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
         return closed
     finally:
         # ACL-1551: осталось ли на экране окно — в ту же строку телеметрии.
-        if not closed or trail.exit:
+        if _job_cancel.requested():
+            trail.dialog_left = None   # ACL-1614: после Stop страницу не читаем
+        elif not closed or trail.exit:
             left = _open_dialog_count(page)
             trail.dialog_left = None if left is None else left > 0
         else:

@@ -18,6 +18,15 @@ holding the GIL, the whole dashboard slowed to 10-30 s per request, and the job 
   the Multilogin window was left open", its slot and profile lock are released so the queue
   moves on, and the thread is abandoned. If it wakes later it writes no results, errors,
   telemetry or notices and does not touch the slot again.
+- The profile lock is not released on abandon (review of PR #622): the hung thread may still
+  hold the browser, and two robots must never drive one browser. A job for the same profile
+  waits ("Waiting for the stopped robot on this profile to let go") until the old thread exits;
+  jobs on other profiles start because the slot is free.
+- After a Stop the robot no longer minimises the window or reads the page in cleanup blocks,
+  and the ffmpeg compression wait is cancellable (our own ffmpeg child is terminated, never
+  Multilogin).
+- Known quiet waits (human takeover, teach wait, compression) send a heartbeat, so they never
+  raise `step_stuck`.
 - The page shows "Stopping..." for a cancelling job (never "waiting"/"opening") and the stuck
   reason on a stopped one.
 - New signal `step_stuck`: a running job with no telemetry step for `ACL_STEP_STUCK_S` (default

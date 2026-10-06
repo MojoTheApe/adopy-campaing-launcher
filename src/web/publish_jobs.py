@@ -14,6 +14,7 @@ from __future__ import annotations
 import contextlib
 import os
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -175,7 +176,6 @@ def create_job(
             "done_count": 0,
             "cancel_requested": False,
         }
-        _job_ended.setdefault(job_id, threading.Event())
     return job_id
 
 
@@ -293,12 +293,53 @@ def _abandon_job(job_id: str) -> bool:
     if _claim_slot(job_id):
         _slots.release(job_id)
     _slots.wake()
-    try:
-        from src.fb_ads_rpa.operations import abandon_profile_lock
+    # Замок профиля НЕ трогаем (решение по ревью PR #622, вариант (b)): зависший
+    # поток, возможно, ещё держит браузер, и два робота на одном браузере
+    # недопустимы. Задания того же профиля ждут, пока поток не выйдет сам
+    # (`_wait_for_stopped_robot`); другие профили идут, место свободно.
+    return True
 
-        abandon_profile_lock(profile_key_for(account_label))
-    except Exception:
-        pass
+
+def _stopped_robot_on(profile: str, job_id: str) -> bool:
+    """На этом профиле есть брошенное, но ещё не вышедшее задание (ACL-1614)."""
+    with _jobs_lock:
+        others = [(jid, str(j.get("account_label") or "")) for jid, j in _jobs.items()
+                  if jid != job_id and j.get("abandoned")]
+    for jid, label in others:
+        if jid not in _job_ended:
+            continue    # поток вышел
+        try:
+            if profile_key_for(label) == profile:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _wait_for_stopped_robot(job_id: str, profile: str) -> bool:
+    """Ждать, пока брошенный робот этого профиля отпустит его. False — нас отменили.
+
+    Показывает причину ожидания на задании. Замок профиля всё равно берётся
+    потом обычным `with`: здесь только видимость и отмена.
+    """
+    shown = False
+    while _stopped_robot_on(profile, job_id):
+        if _is_cancelled(job_id):
+            return False
+        if not shown:
+            shown = True
+            with _jobs_lock:
+                job = _jobs.get(job_id)
+                if job is not None and not job.get("abandoned"):
+                    view = _queue_view({"reason": "profile"})
+                    view["hold"] = "stopped_robot"
+                    job["queue"] = view
+        time.sleep(0.25)
+    if shown:
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is not None:
+                job.pop("queue", None)
     return True
 
 
@@ -553,6 +594,9 @@ def _run_job_inner(
                                                 if grant["first_hold"] else None)})
             except Exception:
                 pass
+        if not _wait_for_stopped_robot(job_id, profile):
+            _finish(job_id, cancelled=True)
+            return
         with _publish_serial(profile):
             if _is_cancelled(job_id):
                 _finish(job_id, cancelled=True)
@@ -797,6 +841,9 @@ def _run_rpa(
         _active_publishers[job_id] = publisher
     # ACL-1614: Stop слышен потоку задания в каждом ожидании (job_cancel.check).
     job_cancel.bind(getattr(publisher, "cancel_event", None))
+    # Stop мог прийти до регистрации публикатора: `cancel_job` его не нашёл.
+    if _is_cancelled(job_id):
+        publisher.cancel()
     try:
         drafts = publisher.build_drafts(
             slots,
@@ -1183,6 +1230,9 @@ def _start_job(
         total=len(drafts),
         campaign_names=[str(getattr(d, "name", "") or "") for d in drafts],
     )
+    # Event конца потока заводится здесь, прямо перед потоком: у задания, чей
+    # поток не стартовал, он не остаётся навсегда.
+    _job_ended[job_id] = threading.Event()
     t = threading.Thread(
         target=_run_job,
         args=(job_id, slots),
@@ -1197,5 +1247,9 @@ def _start_job(
         daemon=True,
         name=f"publish-{job_id[:8]}",
     )
-    t.start()
+    try:
+        t.start()
+    except BaseException:
+        _job_ended.pop(job_id, None)
+        raise
     return job_id

@@ -67,13 +67,13 @@ class FakePublisher:
 
 
 @pytest.fixture
-def env(monkeypatch):
+def env(monkeypatch, request):
     FakePublisher.instances = []
     FakePublisher.behaviour = None
     probe = ps.ProfileUsage(lambda profiles: {}, clock=time.monotonic, background=False)
     slots = ps.ProfileSlots(
         memory=lambda: ps.MemoryReading(total_mb=32 * 1024, available_mb=64 * 1024),
-        settings=lambda: ps.SlotSettings(override=1, warmup_s=0),
+        settings=lambda: ps.SlotSettings(override=getattr(request, "param", 1), warmup_s=0),
         tick_s=0.02, usage=probe)
     monkeypatch.setattr(pj, "_slots", slots)
     monkeypatch.setattr(pj, "RpaPublisher", FakePublisher)
@@ -172,26 +172,57 @@ def test_a_stuck_job_names_the_last_step_it_logged(env):
     assert pj.get_job(job_id)["stuck_step"] == "simple create"
 
 
-def test_the_next_job_on_the_profile_starts_after_the_abandon(env):
+@pytest.mark.parametrize("env", [2], indirect=True)
+def test_the_same_profile_waits_for_the_stopped_robot_other_profiles_go_on(env):
+    """Решение по ревью PR #622 (B2/B3, вариант b): замок профиля не выбрасываем.
+    Два робота на одном браузере недопустимы; другой профиль идёт — место свободно."""
     entered, wake = threading.Event(), env.gate()
-    second_in = threading.Event()
+    started: list[str] = []
 
     def behave(pub, draft):
-        if not entered.is_set():
+        started.append(threading.current_thread().name)
+        if len(started) == 1:
             entered.set()
             wake.wait(20)
-            return _ok_result(draft)
-        second_in.set()
         return _ok_result(draft)
 
     FakePublisher.behaviour = behave
     first = env.start("Doc19")
     assert entered.wait(5)
-    second = env.start("Doc19b")       # тот же профиль, другой аккаунт: ждёт первое
-    assert _until(lambda: pj.get_job(second)["status"] == "queued")
+    same = env.start("Doc19b")            # тот же профиль
     pj.cancel_job(first)
-    assert second_in.wait(5), "the queue must move on after the stuck job was abandoned"
-    assert _until(lambda: pj.get_job(second)["status"] == "done")
+    assert _until(lambda: pj.get_job(first)["status"] == "cancelled", timeout=3)
+    other = env.start("KLD")              # другой профиль, место свободно
+    assert _until(lambda: pj.get_job(other)["status"] == "done", timeout=5)
+
+    # Тот же профиль не стартует и говорит почему.
+    assert _until(lambda: (pj.get_job(same).get("queue") or {}).get("hold") == "stopped_robot", timeout=5)
+    time.sleep(0.4)
+    assert pj.get_job(same)["status"] == "queued"
+    assert len(started) == 2, "a second robot must not drive the profile of a stopped one"
+
+    wake.set()                             # старый поток вышел — профиль свободен
+    assert _until(lambda: pj.get_job(same)["status"] == "done", timeout=8)
+    assert "queue" not in pj.get_job(same)
+
+
+def test_a_job_waiting_for_the_stopped_robot_can_still_be_cancelled(env):
+    entered, wake = threading.Event(), env.gate()
+
+    def stuck(pub, draft):
+        entered.set()
+        wake.wait(20)
+        return _ok_result(draft)
+
+    FakePublisher.behaviour = stuck
+    first = env.start("Doc19")
+    assert entered.wait(5)
+    pj.cancel_job(first)
+    assert _until(lambda: pj.get_job(first)["status"] == "cancelled", timeout=3)
+    same = env.start("Doc19b")
+    assert _until(lambda: (pj.get_job(same).get("queue") or {}).get("hold") == "stopped_robot", timeout=5)
+    pj.cancel_job(same)
+    assert _until(lambda: pj.get_job(same)["status"] == "cancelled", timeout=3)
 
 
 def test_the_abandoned_thread_waking_up_writes_and_frees_nothing(env):
@@ -474,3 +505,172 @@ def test_the_page_says_stopping_then_stopped_never_opening():
     assert "why: 'Stopping…'" in html
     assert "function stoppedText(p, plain)" in html
     assert "stall_|step_stuck$|tab_frozen$" in html
+
+
+# ── ревью PR #622: хвост ────────────────────────────────────────────────────
+
+def test_a_woken_abandoned_thread_never_calls_the_slot_queue_again(env, monkeypatch):
+    """N1: `_claim_slot` — единственная защита от `keep`/`release` брошенного потока."""
+    entered, wake = threading.Event(), env.gate()
+    calls: list[tuple[str, str]] = []
+
+    def spy(name):
+        real = getattr(env.slots, name)
+
+        def wrapped(job_id, *a, **k):
+            calls.append((name, job_id))
+            return real(job_id, *a, **k)
+
+        monkeypatch.setattr(env.slots, name, wrapped)
+
+    spy("keep")
+    spy("release")
+
+    def stuck(pub, draft):
+        entered.set()
+        wake.wait(20)
+        return _ok_result(draft)
+
+    FakePublisher.behaviour = stuck
+    job_id = env.start("Doc19")
+    assert entered.wait(5)
+    assert pj._job_ran_in_browser(job_id), "the woken thread must look like it ran in the browser"
+    pj.cancel_job(job_id)
+    assert _until(lambda: pj.get_job(job_id)["status"] == "cancelled", timeout=3)
+    assert calls == [("release", job_id)]
+    wake.set()
+    assert _until(lambda: not env.threads[0].is_alive())
+    assert calls == [("release", job_id)], "the woken thread touched the slot queue again"
+
+
+def test_a_step_that_swallows_exceptions_still_lets_the_cancel_through(env):
+    """N2: мягкие отказы шагов ловят `except Exception` — Stop сквозь них проходит."""
+    from src.fb_ads_rpa import meta_dom as md
+
+    entered = threading.Event()
+
+    def soft(pub, draft):
+        entered.set()
+        while True:
+            try:
+                md._sleep_h(0.01)
+            except Exception:
+                pass
+
+    FakePublisher.behaviour = soft
+    job_id = env.start("Doc19")
+    assert entered.wait(5)
+    pj.cancel_job(job_id)
+    assert _until(lambda: pj.get_job(job_id)["status"] == "cancelled", timeout=3)
+    assert not pj.get_job(job_id).get("abandoned"), "the cancel was swallowed by a step"
+
+
+def test_quiet_waits_keep_the_job_alive_for_the_step_stuck_watch(monkeypatch):
+    """N3: ожидание человека / сжатие не пишут строк — heartbeat, а не зависание."""
+    now = {"t": 1000.0}
+    monkeypatch.setattr(rt, "_clock", lambda: now["t"])
+    monkeypatch.setenv("ACL_STEP_STUCK_S", "300")
+    job_id = "acl1614-quiet"
+    with pj._jobs_lock:
+        pj._jobs[job_id] = {"job_id": job_id, "status": "running", "results": [], "errors": [],
+                            "campaign_names": [], "done_count": 0}
+    box: dict = {}
+
+    def thread():
+        rt.set_current_job(job_id)
+        job_cancel.bind(threading.Event())
+        try:
+            rt._touch_job(job_id, "ad_copy")
+            for _ in range(10):
+                now["t"] += 200            # 2000 с тишины в сумме
+                job_cancel.heartbeat()
+            box["last"] = rt.last_activity(job_id)
+        finally:
+            job_cancel.unbind()
+
+    try:
+        t = threading.Thread(target=thread)
+        t.start()
+        t.join(5)
+        assert box["last"][1] == "ad_copy", "the heartbeat must keep the last step's name"
+        assert pj._step_stuck_tick(job_id, {"fired": False, "since": 0.0}, "Doc19") is False
+    finally:
+        with pj._jobs_lock:
+            pj._jobs.pop(job_id, None)
+        rt.forget_job(job_id)
+
+
+def test_ffmpeg_wait_is_cancelled_and_terminates_the_child():
+    from src.fb_ads_rpa import creative_compress as cc
+
+    ev = threading.Event()
+    box: dict = {}
+
+    def run():
+        job_cancel.bind(ev)
+        try:
+            cc._run([sys.executable, "-c", "import time; time.sleep(60)"], 120)
+        except BaseException as exc:      # noqa: BLE001
+            box["exc"] = exc
+        finally:
+            job_cancel.unbind()
+
+    t = threading.Thread(target=run)
+    t0 = time.monotonic()
+    t.start()
+    time.sleep(0.7)
+    ev.set()
+    t.join(10)
+    assert not t.is_alive() and isinstance(box.get("exc"), job_cancel.JobCancelled)
+    assert time.monotonic() - t0 < 5, "the child was not terminated on Stop"
+
+
+def test_ffmpeg_run_still_returns_output_and_code():
+    from src.fb_ads_rpa import creative_compress as cc
+
+    code, text = cc._run([sys.executable, "-c", "import sys; print('out'); sys.stderr.write('err')"], 30)
+    assert code == 0 and "out" in text and "err" in text
+
+
+def test_the_window_and_the_page_are_left_alone_after_stop():
+    import inspect
+
+    from src.fb_ads_rpa import ads_manager_flow, meta_dom
+
+    flow = inspect.getsource(ads_manager_flow)
+    assert flow.index("if not job_cancel.requested():") < flow.index("put_window_back(self.page)")
+    walk = inspect.getsource(meta_dom._walk_creative_wizard)
+    assert walk.index("_job_cancel.requested()") < walk.index("_open_dialog_count(page)")
+
+
+def test_a_stop_that_arrived_before_the_publisher_registered_still_reaches_it(env):
+    """N4: Stop между проверкой в `_run_job_inner` и регистрацией публикатора."""
+    pj_id = pj.create_job("Doc19", "CL", [{}], total=1, campaign_names=["CAMP"])
+    with pj._jobs_lock:
+        pj._jobs[pj_id]["cancel_requested"] = True
+        pj._jobs[pj_id]["status"] = "cancelling"
+    seen = threading.Event()
+
+    def poll(pub, draft):
+        seen.set()
+        return _ok_result(draft)
+
+    FakePublisher.behaviour = poll
+    pj._run_rpa(pj_id, [{}], account_label="Doc19", country="CL", activate=False, hand_off=True)
+    assert FakePublisher.instances[0].cancel_event.is_set()
+    assert not seen.is_set()
+    assert pj.get_job(pj_id)["status"] == "cancelled"
+    job_cancel.unbind()
+    with pj._jobs_lock:
+        pj._jobs.pop(pj_id, None)
+
+
+def test_job_ended_events_do_not_leak(env):
+    FakePublisher.behaviour = lambda pub, draft: _ok_result(draft)
+    made = pj.create_job("KLD", "CL", [{}], total=1, campaign_names=["CAMP"])
+    assert made not in pj._job_ended, "create_job alone must not leave an event behind"
+    job_id = env.start("Doc19")
+    assert _until(lambda: pj.get_job(job_id)["status"] == "done")
+    assert _until(lambda: job_id not in pj._job_ended)
+    with pj._jobs_lock:
+        pj._jobs.pop(made, None)

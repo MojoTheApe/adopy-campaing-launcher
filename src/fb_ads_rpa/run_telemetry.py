@@ -543,6 +543,16 @@ def forget_job(job_id: str) -> None:
         _LAST_BY_JOB.pop(str(job_id), None)
 
 
+def beat() -> None:
+    """Задание живо без новой строки: время последней активности, шаг прежний."""
+    job = current_job_id()
+    if not job:
+        return
+    with _JOBS_LOCK:
+        seen = _LAST_BY_JOB.get(job)
+        _LAST_BY_JOB[job] = (_clock(), seen[1] if seen else "")
+
+
 def _touch_job(job_id: str, step: str) -> None:
     with _JOBS_LOCK:
         _LAST_BY_JOB[job_id] = (_clock(), step)
