@@ -1,5 +1,44 @@
 # System history
 
+## Stop ends a job whose robot is stuck inside a step — ACL-1614
+
+05.10, job 1ad447f9: Stop was pressed while the robot sat inside a page call. Stop closed the
+Playwright connection from the web thread; the job thread then spun forever inside Playwright
+holding the GIL, the whole dashboard slowed to 10-30 s per request, and the job stayed
+"cancelling" with its profile slot until the dashboard was restarted.
+
+- Stop only signals now. The connection and the browser are never closed from another thread;
+  the job thread closes its own connection when it unwinds. The Multilogin window stays open and
+  the profile is never stopped.
+- The flow checks the signal in its waits (the shared pause helpers, `before_step`, the
+  liveness probe, the sleeps in the Ads Manager flow, simple create and crop step) and raises
+  `JobCancelled`, which unwinds through the normal path: a Stop ends within a few seconds.
+- If the job thread has not ended within `ACL_CANCEL_DEADLINE_S` (default 60 s), e.g. blocked in
+  one call on a frozen tab, the job becomes "Stopped by the user - the robot was stuck in <step>;
+  the Multilogin window was left open", its slot and profile lock are released so the queue
+  moves on, and the thread is abandoned. If it wakes later it writes no results, errors,
+  telemetry or notices and does not touch the slot again.
+- The profile lock is not released on abandon (review of PR #622): the hung thread may still
+  hold the browser, and two robots must never drive one browser. A job for the same profile
+  waits ("Waiting for the stopped robot on this profile to let go") until the old thread exits;
+  jobs on other profiles start because the slot is free.
+- After a Stop the robot no longer minimises the window or reads the page in cleanup blocks,
+  and the ffmpeg compression wait is cancellable (our own ffmpeg child is terminated, never
+  Multilogin).
+- Known quiet waits (human takeover, teach wait, compression) send a heartbeat, so they never
+  raise `step_stuck`.
+- A same-profile job waits for the stopped robot BEFORE it takes a queue slot, so a hung profile
+  never blocks other accounts; Stop ends that wait.
+- Limit: a thread hung forever inside one CDP call (a frozen tab with no timeout) keeps the
+  profile lock until the dashboard is restarted; Close profile answers "busy" meanwhile. The
+  ffmpeg heartbeat also hides a wedged ffmpeg from `step_stuck` until its compression timeout.
+- The page shows "Stopping..." for a cancelling job (never "waiting"/"opening") and the stuck
+  reason on a stopped one.
+- New signal `step_stuck`: a running job with no telemetry step for `ACL_STEP_STUCK_S` (default
+  300 s) records one `step_stuck` row (last step, idle seconds) and sends one Sentry message,
+  once per job. The row does not reset the "No new step for N min" clock on the page.
+- Tests: `tests/test_acl1614_cancel_hung_job.py`.
+
 ## Account map: a free-text Note per account replaces the Setup column — ACL-1620
 
 Owner request 06.10: the Setup column ("ready / needs setup") is not needed; managers want to

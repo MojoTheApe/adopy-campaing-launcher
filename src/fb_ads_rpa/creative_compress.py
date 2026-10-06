@@ -46,6 +46,8 @@ from typing import Callable
 
 from config import paths
 
+from src.fb_ads_rpa import job_cancel
+
 #: Выше этого веса обычный путь загрузки перестаёт работать. То же число, что
 #: и `meta_dom._PW_FILE_LIMIT_MB`, и не случайно: именно там кончается дорога,
 #: которую Playwright проходит сам.
@@ -143,12 +145,34 @@ def ffmpeg_exe() -> str:
 
 
 def _run(args: list[str], timeout: float) -> tuple[int, str]:
-    proc = subprocess.run(
-        args, capture_output=True, text=True, encoding="utf-8",
-        errors="replace", timeout=timeout,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    """Запустить ffmpeg и дождаться; Stop задания его обрывает (ACL-1614).
+
+    Ждём опросом, а не одним вызовом: сжатие идёт минуты, и всё это время Stop
+    должен быть слышен. На Stop завершаем СВОЙ дочерний процесс ffmpeg (не
+    Multilogin) и бросаем `JobCancelled`. Пока ждём — heartbeat: сжатие не
+    пишет строк телеметрии, и это не зависание (`step_stuck`).
+    """
+    proc = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+        errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
-    return proc.returncode, (proc.stderr or "") + (proc.stdout or "")
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            out, err = proc.communicate(timeout=0.5)
+            break
+        except subprocess.TimeoutExpired:
+            pass
+        if job_cancel.requested():
+            proc.kill()
+            proc.communicate()
+            job_cancel.check()
+        if time.monotonic() >= deadline:
+            proc.kill()
+            proc.communicate()
+            raise subprocess.TimeoutExpired(args, timeout)
+        job_cancel.heartbeat()
+    return proc.returncode, (err or "") + (out or "")
 
 
 def duration_s(path: str, *, run=_run, exe: str = "") -> float:
@@ -277,6 +301,7 @@ def ensure_uploadable(path: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
         with tempfile.TemporaryDirectory(prefix="encode-", dir=dst.parent) as tmp:
             pending = Path(tmp) / "creative.mp4"
             ok = compress(path, str(pending), kbps, run=run, exe=exe)
+            job_cancel.check()    # ACL-1614: Stop во время сжатия — дальше не идём
             got = size_mb(pending)
             if not ok or not (0 < got <= min(limit_mb, original)):
                 raise ValueError("encoded copy is incomplete or too large")
