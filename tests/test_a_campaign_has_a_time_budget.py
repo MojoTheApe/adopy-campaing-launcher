@@ -226,3 +226,41 @@ def test_inside_a_step_record_the_stop_waits_for_the_row(clock, monkeypatch):
         md._flow_budget.defer = False
     with pytest.raises(md.FlowBudgetExceeded):
         md._flow_budget_check()
+
+
+class _HungTab:
+    """Вкладка, на которой каждый вызов ждёт свой таймаут и падает (ACL-1641)."""
+
+    url = "https://adsmanager.facebook.com/adsmanager/manage/ads/edit/standalone"
+
+    def __init__(self, clock):
+        self.clock = clock
+        self.calls = 0
+
+    def wait_for_function(self, js, arg=None, timeout=0):
+        self.calls += 1
+        self.clock.now += timeout / 1000.0
+        raise TimeoutError("Timeout %dms exceeded" % timeout)
+
+
+def test_the_step_limit_fires_on_a_hung_tab_after_a_failed_create(clock, monkeypatch):
+    """573ab2cf3646 (06.10): `create_additional_ad` упал в 14:01:38, дальше
+    разбор отказа читал вкладку голым `page.evaluate`, и срок шага (600 с)
+    сработал только на 1221-й секунде. Теперь каждое чтение ограничено, и
+    срок слышен внутри них: выход — в пределах срока плюс запас."""
+    monkeypatch.setattr(md, "_reload_refused", lambda page, where: False)
+    monkeypatch.setattr(md, "_telemetry", SimpleNamespace(record=lambda *a, **k: None))
+    page = _HungTab(clock)
+    md._flow_budget_arm()
+    md._flow_budget_step("ad2_creative_upload")
+    start = clock.now
+    with pytest.raises(md.FlowBudgetExceeded) as stop:
+        for _ in range(10_000):          # как цикл повторов шага над зависшей вкладкой
+            md.recover_stuck_page(page, "ad2_create", editor=True)
+            md._tree_new_ad_shells(page)
+            md._open_tree_ad(page, "New Leads Ad")
+    assert stop.value.reason == "step_budget_exceeded"
+    assert stop.value.detail["after_step"] == "ad2_creative_upload"
+    over = clock.now - start - md.STEP_BUDGET_S
+    assert 0 <= over <= 30, over
+    assert page.calls > 0

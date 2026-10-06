@@ -3031,10 +3031,12 @@ def _chrome_error_page(page: Page) -> str:
     """Код ошибки, если во вкладке вместо Ads Manager — страница ошибки Chrome."""
     try:
         if (page.url or "").startswith("chrome-error://"):
-            got = page.evaluate("() => (document.body && document.body.innerText || '').match(/ERR_[A-Z_]+/)")
+            got = _eval_bounded(page, "() => (document.body && document.body.innerText || '').match(/ERR_[A-Z_]+/)")
             return (got or ["ERR_UNKNOWN"])[0] if isinstance(got, list) else "ERR_UNKNOWN"
         # Адрес может остаться прежним (SSL-ошибка) — смотрим саму страницу.
-        return page.evaluate(_ERROR_PAGE_JS) or ""
+        # ACL-1641: голый `page.evaluate` на зависшей вкладке не возвращался
+        # никогда (573ab2cf3646: 19 минут после отказа create_additional_ad).
+        return _eval_bounded(page, _ERROR_PAGE_JS) or ""
     except Exception:
         pass
     return ""
@@ -3650,8 +3652,15 @@ def _eval_bounded(page: Page, js: str, arg=None, timeout_s: float = LIVENESS_PRO
     через `timeout_s`, а не вечное ожидание. Остаток риска — чтение
     результата (`json_value`) сразу после ответа страницы.
     """
-    handle = page.wait_for_function(f"(arg) => ({{ v: ({js})(arg) }})", arg=arg,
-                                    timeout=int(timeout_s * 1000))
+    try:
+        handle = page.wait_for_function(f"(arg) => ({{ v: ({js})(arg) }})", arg=arg,
+                                        timeout=int(timeout_s * 1000))
+    except BaseException:
+        # ACL-1641: вкладка не ответила — срок шага мог выйти за время ожидания;
+        # без проверки цикл из таких вызовов тянул шаг бесконечно.
+        if not getattr(_flow_budget, "defer", False):
+            _flow_budget_check()
+        raise
     try:
         got = handle.json_value()
     finally:
@@ -3907,6 +3916,7 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = Fa
     * Под `_reloads_blocked` (ACL-1353, объявления 2+ нового редактора) —
       никогда: False и строка `loading_modal_reload` (note `refused:<причина>`).
     """
+    _flow_budget_check()  # ACL-1641: срок шага — до любых обращений к вкладке
     if _reload_refused(page, where):
         return False
     err = _chrome_error_page(page)
@@ -15180,8 +15190,8 @@ def _audience_already_manual(page: Page) -> bool:
 def _tree_new_ad_shells(page: Page) -> int:
     """Сколько строк «New Leads ad» в левом дереве (-1 — не прочитать)."""
     try:
-        return int(page.evaluate(
-            r"""() => {
+        return int(_eval_bounded(
+            page, r"""() => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
               return [...document.querySelectorAll('*')].filter(e => {
                 if (e.children.length !== 0 || !/^New Leads ad$/i.test(norm(e.textContent))) return false;
@@ -15206,30 +15216,33 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
         # ACL-1353 (ревью PR #365, F2): объявления 2+ нового редактора —
         # щелчок по строке дерева заново открыл бы (и портил) объявление.
         return False
-    point = page.evaluate(
-        """(adName) => {
-          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-          // Без учёта регистра: Doc20 называет заготовку «New Leads ad»,
-          // S15/Doc21 — «New Leads Ad». Точное сравнение не находило
-          // заготовку, и вызывающий создавал второе объявление (17.09).
-          const want = adName.toLowerCase();
-          const nameMatches = (raw) => {
-            const t = norm(raw).replace(/[…\\u2026]+$/, '').toLowerCase();
-            if (!t) return false;
-            if (t === want) return true;
-            return t.length >= 10 && want.startsWith(t);
-          };
-          const cands = [...document.querySelectorAll('*')].filter(e =>
-            e.offsetParent !== null && e.children.length === 0 && nameMatches(e.textContent));
-          let best = null, bx = Infinity;
-          for (const c of cands) {
-            const r = c.getBoundingClientRect();
-            if (r.width > 0 && r.x < bx) { bx = r.x; best = r; }
-          }
-          return best ? {x: best.x + best.width / 2, y: best.y + best.height / 2} : null;
-        }""",
-        ad_name,
-    )
+    try:
+        point = _eval_bounded(
+            page, """(adName) => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              // Без учёта регистра: Doc20 называет заготовку «New Leads ad»,
+              // S15/Doc21 — «New Leads Ad». Точное сравнение не находило
+              // заготовку, и вызывающий создавал второе объявление (17.09).
+              const want = adName.toLowerCase();
+              const nameMatches = (raw) => {
+                const t = norm(raw).replace(/[…\\u2026]+$/, '').toLowerCase();
+                if (!t) return false;
+                if (t === want) return true;
+                return t.length >= 10 && want.startsWith(t);
+              };
+              const cands = [...document.querySelectorAll('*')].filter(e =>
+                e.offsetParent !== null && e.children.length === 0 && nameMatches(e.textContent));
+              let best = null, bx = Infinity;
+              for (const c of cands) {
+                const r = c.getBoundingClientRect();
+                if (r.width > 0 && r.x < bx) { bx = r.x; best = r; }
+              }
+              return best ? {x: best.x + best.width / 2, y: best.y + best.height / 2} : null;
+            }""",
+            ad_name,
+        )
+    except Exception:
+        return False  # ACL-1641: вкладка не ответила — строки дерева не прочитать
     if not point:
         return False
     try:
