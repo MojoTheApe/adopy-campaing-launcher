@@ -33,6 +33,8 @@ import os
 import re
 import time
 
+from src.fb_ads_rpa import job_cancel
+
 #: Адрес нового редактора (в пути, не в параметрах).
 SIMPLE_CREATE_PATH = "/adsmanager/manage/simple_create"
 
@@ -256,6 +258,7 @@ def _card_open(page, title: str, wait_s: float) -> bool:
         except Exception:
             return False
         time.sleep(0.25)
+        job_cancel.check()
     return False
 
 
@@ -287,6 +290,7 @@ def _card_controls(page, wait_s: float) -> dict:
         if not got.get("body") or got.get("n"):
             break
         time.sleep(0.25)
+        job_cancel.check()
     return got
 
 
@@ -420,6 +424,7 @@ def ensure_leads_objective(page) -> str:
             except Exception:
                 pass
         time.sleep(0.25)
+        job_cancel.check()
     md._telemetry.record("simple_objective", False, note="not_set",
                          diag={"was": got.get("checked"), "hit": bool(where.get("hit"))})
     return "failed"
@@ -476,6 +481,7 @@ def lead_terms_block(page, *, wait_s: float = 4.0) -> str:
         if not text or time.time() >= deadline:
             return text if isinstance(text, str) else ""
         time.sleep(0.5)
+        job_cancel.check()
 
 
 # ── После перезагрузки ───────────────────────────────────────────────────
@@ -881,6 +887,7 @@ def _wait_menu(page, wait_s: float) -> dict:
         if got.get("open") or time.time() >= deadline:
             return got
         time.sleep(0.3)
+        job_cancel.check()
 
 
 def _read_ads(page) -> dict:
@@ -970,6 +977,7 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
                         _wv().wake_if_hidden(page, where="create_next_ad",
                                              waited_s=now - start, answered=False)
                     time.sleep(1.0)
+                    job_cancel.check()
                     continue
             busy_s += now - unanswered_at
             if not closed and _wv().woken_recently(page):
@@ -1021,6 +1029,7 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
             _wv().wake_if_hidden(page, where="create_next_ad", waited_s=now - start,
                                  answered=True, probe=False)
         time.sleep(0.5)
+        job_cancel.check()
     got["dialog_first"] = dialog
     got["dialog_until_s"] = dialog_s if dialog else None
     got["waited_s"] = round(time.time() - start, 1)
@@ -1094,6 +1103,7 @@ def close_media_picker(page, *, wait_s: float = 6.0) -> dict:
             out["why"] = "still_open"
             return out
         time.sleep(0.4)
+        job_cancel.check()
 
 
 def create_next_ad(page, *, tag: str, known_names: list[str],
@@ -1367,6 +1377,7 @@ def ad_listed(page, name: str, *, wait_s: float = 8.0) -> dict:
         if listed or time.time() >= deadline or got.get("error"):
             return {"listed": listed, "ads": got.get("ads"), "error": got.get("error")}
         time.sleep(0.5)
+        job_cancel.check()
 
 
 # ── Медиа нового объявления (ACL-1412) ───────────────────────────────────

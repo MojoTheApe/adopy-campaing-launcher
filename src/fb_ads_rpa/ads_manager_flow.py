@@ -12,7 +12,7 @@ RPA_FLOW_VERSION = "v96"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
-from src.fb_ads_rpa import failure_policy, profile_trouble, retry_policy, run_summary, sentry_signal
+from src.fb_ads_rpa import failure_policy, job_cancel, profile_trouble, retry_policy, run_summary, sentry_signal
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.page_diagnostics import diagnose_and_recover
 from src.fb_ads_rpa.meta_dom import (
@@ -372,6 +372,7 @@ def _click_manual_campaign_setup(page: Page) -> bool:
                 if radio.is_visible(timeout=1500):
                     radio.click(timeout=4000, force=True)
                     time.sleep(0.45)
+                    job_cancel.check()
                     if _is_manual_setup_selected(page):
                         return True
             except Exception:
@@ -381,6 +382,7 @@ def _click_manual_campaign_setup(page: Page) -> bool:
                 if el.is_visible(timeout=1500):
                     el.click(timeout=4000, force=True)
                     time.sleep(0.45)
+                    job_cancel.check()
                     if _is_manual_setup_selected(page):
                         return True
                     # Mouse chain on bbox (CDP-safe)
@@ -388,10 +390,13 @@ def _click_manual_campaign_setup(page: Page) -> bool:
                     if box:
                         page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
                         time.sleep(0.05)
+                        job_cancel.check()
                         page.mouse.down()
                         time.sleep(0.07)
+                        job_cancel.check()
                         page.mouse.up()
                         time.sleep(0.45)
+                        job_cancel.check()
                         if _is_manual_setup_selected(page):
                             return True
             except Exception:
@@ -434,6 +439,7 @@ def _click_manual_campaign_setup(page: Page) -> bool:
         try:
             if root.evaluate(script):
                 time.sleep(0.5)
+                job_cancel.check()
                 if _is_manual_setup_selected(page):
                     return True
         except Exception:
@@ -458,17 +464,20 @@ def _dismiss_ai_guided_setup_dialog(page: Page, *, timeout_ms: int = 20000) -> b
             return True
         _click_manual_campaign_setup(page)
         time.sleep(0.55)
+        job_cancel.check()
         if _objectives_chooser_visible(page):
             return True
         if _is_manual_setup_selected(page) and not _ai_describe_textarea_visible(page):
             # Manual selected; wait briefly for objectives to render
             time.sleep(0.8)
+            job_cancel.check()
             if _objectives_chooser_visible(page):
                 return True
             # Objectives may already be there under a slightly different label
             if _is_objective_modal_open(page):
                 return True
         time.sleep(0.35)
+        job_cancel.check()
 
     return _objectives_chooser_visible(page) or (
         _is_manual_setup_selected(page) and not _ai_describe_textarea_visible(page)
@@ -503,6 +512,7 @@ def _wait_for_ads_manager_ready(page: Page, *, timeout_ms: int = 60000) -> None:
                     except Exception:
                         pass
         _time.sleep(0.5)
+        job_cancel.check()
 
 
 def _wait_for_standalone_url(page: Page, *, timeout_ms: int = 8000) -> bool:
@@ -514,6 +524,7 @@ def _wait_for_standalone_url(page: Page, *, timeout_ms: int = 8000) -> bool:
         if "/edit/standalone" in page.url or "/campaigns/edit/" in page.url:
             return True
         _time.sleep(0.3)
+        job_cancel.check()
     return False
 
 
@@ -535,6 +546,7 @@ def _click_continue_when_enabled(page: Page, *, timeout_ms: int) -> None:
             except Exception as exc:
                 last_err = exc
         _time.sleep(0.35)
+        job_cancel.check()
     raise AdsManagerFlowError("Continue button not enabled/visible") from last_err
 
 
@@ -751,8 +763,10 @@ def _select_leads_objective(page: Page, selectors: list[str], *, timeout_ms: int
                     if box:
                         page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
                         time.sleep(0.05)
+                        job_cancel.check()
                         page.mouse.down()
                         time.sleep(0.07)
+                        job_cancel.check()
                         page.mouse.up()
                     else:
                         heading.click(timeout=per_try, force=True)
@@ -1081,6 +1095,7 @@ class AdsManagerFlow:
             if _is_ad_set_level_visible(self.page):
                 return True
             _time.sleep(0.4)
+            job_cancel.check()
         return False
 
     def _navigate_to_ad_set_level(self, result: RpaPublishResult) -> bool:
@@ -1231,6 +1246,7 @@ class AdsManagerFlow:
                         raise
                     log.warning("campaigns goto failed (%s/3): %s", attempt + 1, str(exc)[:80])
                     time.sleep(8.0)
+                    job_cancel.check()
             info["attempts"] = attempt + 1
             if last_exc is None:
                 # Ревью PR #323 (F3): переход удался — прежние ошибки сети
@@ -1513,6 +1529,7 @@ class AdsManagerFlow:
                     except Exception:
                         pass
             _time.sleep(0.4)
+            job_cancel.check()
         result.steps_completed.append("wizard_form_wait_timeout")
 
     def _fill_campaign_name(self, draft: CampaignDraft, result: RpaPublishResult) -> None:
@@ -1645,6 +1662,7 @@ class AdsManagerFlow:
                 result.steps_completed.append("ad_level_ready")
                 return True
             _time.sleep(0.4)
+            job_cancel.check()
 
         result.steps_completed.append("ad_level_wait_timeout")
         self._shot("04e_ad_level_wait_fail", result)
@@ -1788,6 +1806,7 @@ class AdsManagerFlow:
         if click_conversion_location_dropdown(self.page):
             wait_conversion_menu_open(self.page)
             time.sleep(0.5)
+            job_cancel.check()
             menu_open = conversion_menu_is_open(self.page)
             if menu_open and conversion_location_menu_visible(self.page):
                 result.steps_completed.append("conversion_location_menu_opened")
@@ -1877,6 +1896,7 @@ class AdsManagerFlow:
         if resumed:
             # After user click: capture what changed and verify
             time.sleep(0.8)
+            job_cancel.check()
             if is_website_conversion_selected(self.page):
                 result.steps_completed.append("conversion_location_website_teach")
                 shot = self._shot("04d_conversion_website_teach", result)
@@ -2400,11 +2420,14 @@ class AdsManagerFlow:
                         **({"ad_body2": ad.ad_body2} if ad.ad_body2 else {}),
                     )
                 finally:
-                    try:
-                        from src.fb_ads_rpa.browser import put_window_back
-                        put_window_back(self.page)
-                    except Exception:
-                        pass
+                    # ACL-1614: после Stop окно не трогаем — им может уже
+                    # владеть другое задание этого профиля.
+                    if not job_cancel.requested():
+                        try:
+                            from src.fb_ads_rpa.browser import put_window_back
+                            put_window_back(self.page)
+                        except Exception:
+                            pass
                 if not fail_step:
                     break
                 # ACL-1318: попытка кончилась — это настоящий отказ кампании, и
@@ -2470,6 +2493,7 @@ class AdsManagerFlow:
                     f"recorded_flow_retry_scheduled:{fail_step}:attempt{attempt + 1}"
                 )
                 time.sleep(retry_policy.backoff_s(fail_step, attempt))
+                job_cancel.check()
 
             result.steps_completed.append("recorded_flow:reached_ad" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step

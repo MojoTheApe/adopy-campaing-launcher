@@ -61,6 +61,7 @@ import threading
 import time
 from typing import Any
 
+from src.fb_ads_rpa import job_cancel
 from src.fb_ads_rpa import run_telemetry as _telemetry
 
 #: Machine switch for the whole Crop step handling. Off → the walk presses Next
@@ -384,6 +385,7 @@ def _wait(page, ok, wait_s: float = 3.0) -> dict:
     state = read(page)
     while not ok(state) and time.time() < deadline:
         time.sleep(0.25)
+        job_cancel.check()
         state = read(page)
     return state
 
@@ -517,6 +519,7 @@ def _cancel_picker(page) -> None:
     if pt:
         _md()._cdp_mouse_click(page, float(pt["x"]), float(pt["y"]))
         time.sleep(0.8)
+        job_cancel.check()
 
 
 def _back_to_crop(page, log: dict) -> bool:
@@ -539,6 +542,7 @@ def _back_to_crop(page, log: dict) -> bool:
         if time.time() >= deadline:
             break
         time.sleep(0.4)
+        job_cancel.check()
     if got.get("in_wizard"):
         # Still on the picker: the old way out (the wizard's Close), and the
         # step is blocked - the Crop cards can no longer be read back.
@@ -547,6 +551,7 @@ def _back_to_crop(page, log: dict) -> bool:
             log["picker_back"] = "Close"
             _md()._cdp_mouse_click(page, float(closing["x"]), float(closing["y"]))
             time.sleep(0.8)
+            job_cancel.check()
     return False
 
 
@@ -576,6 +581,7 @@ def _replace_vertical(page, filename: str, log: dict) -> str:
     picker = _picker(page)
     while not picker.get("open") and time.time() < deadline:
         time.sleep(0.4)
+        job_cancel.check()
         picker = _picker(page)
     log["picker_buttons"] = picker.get("buttons")
     _capture(page, "wizard_crop_replace", {"file": filename, "picker": picker})
@@ -596,6 +602,7 @@ def _replace_vertical(page, filename: str, log: dict) -> str:
         if available:
             break
         time.sleep(1.0)
+        job_cancel.check()
         tiles = md._library_tiles(page, filename)
     log["tiles"] = available
     if not available:
@@ -614,6 +621,7 @@ def _replace_vertical(page, filename: str, log: dict) -> str:
             continue
         for _ in range(10):
             time.sleep(0.3)
+            job_cancel.check()
             count = md._library_selected_count(page)
             if md._library_tile_selected(tile) or (count is not None and before is not None and count > before):
                 taken = True
@@ -636,6 +644,7 @@ def _replace_vertical(page, filename: str, log: dict) -> str:
     deadline = time.time() + 20.0
     while time.time() < deadline:
         time.sleep(0.5)
+        job_cancel.check()
         if not _picker(page).get("open") and read(page).get("found"):
             return ""
     _cancel_picker(page)
