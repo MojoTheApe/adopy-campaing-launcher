@@ -12214,8 +12214,32 @@ window.cbPublishAll = function (onProgress, picked) {
 
   var names = forms.map(cbFormTitle);
 
+  // ACL-1604: до подтверждения — быстрая проверка аккаунтов по уже известным
+  // данным (профили не открываются). Не ответила — прежнее подтверждение.
+  cbPreflightFetch(forms.map(cbFormAccount)).then(function (pf) {
+  var bad = {}, badList = [];
+  ((pf && pf.accounts) || []).forEach(function (a) {
+    if (a && a.ready === false) { bad[String(a.account).toLowerCase()] = a; badList.push(a); }
+  });
+  var badForms = forms.filter(function (f) { return bad[cbFormAccount(f).toLowerCase()]; });
+  var anyway = false;
+  var pfHtml = '';
+  if (badList.length) {
+    pfHtml = '<div class="cb-preflight" style="border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin:0.5rem 0;font-size:0.82rem">'
+      + '<strong style="color:var(--bad)">Not ready (' + badList.length + ')</strong> — skipped unless you run them anyway:<br>'
+      + badList.map(function (a) {
+          return '<div>' + aclEscHtml(a.account) + ' — ' + aclEscHtml((a.reasons || []).map(function (r) {
+            return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
+          }).join('; ')) + '</div>';
+        }).join('')
+      + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway"> Run anyway</label></div>';
+  }
+  var notes = ((pf && pf.accounts) || []).filter(function (a) { return a.ready !== false && (a.notes || []).some(function (n) { return n.code === 'open_now'; }); });
+  if (notes.length) pfHtml += '<div class="cb-preflight-note" style="color:var(--muted);font-size:0.8rem">'
+    + aclEscHtml(notes.map(function (a) { return a.account; }).join(', ')) + ': profile is open — the robot will reuse or reopen it.</div>';
+
   _safeConfirm(only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?',
-    (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
+    pfHtml + (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
     + 'Accounts: <strong>' + forms.length + '</strong><br>'
     + (only
       ? '<div class="cb-selected-list" style="font-size:0.85rem;line-height:1.5">' + listed.join('<br>') + '</div>'
@@ -12234,12 +12258,36 @@ window.cbPublishAll = function (onProgress, picked) {
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook</span>',
     function () {
-      var got = _runPublishQueue(forms, onProgress || function () {},
+      var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
+      if (pf) cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
+      if (!go.length) { window.alert('No account is ready to run. Fix the listed accounts or tick "Run anyway".'); return; }
+      var got = _runPublishQueue(go, onProgress || function () {},
         only ? function (form) { return cbPickedIn(form, only); } : null);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     },
     { confirmLabel: only ? 'Publish selected → drafts' : 'Publish all → drafts' });
+  var box = document.getElementById('cb-pf-anyway');
+  if (box) box.addEventListener('change', function () { anyway = box.checked; });
+  });
 };
+
+/* ACL-1604: проверка аккаунтов — один запрос на нажатие, по тем, что идут в
+ * очередь. Любая неудача (сеть, не тот ответ) — null: тогда всё как раньше. */
+function cbPreflightFetch(accounts) {
+  var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+  var timer = ctl ? setTimeout(function () { ctl.abort(); }, 8000) : null;
+  return fetch('/api/publish-preflight?accounts=' + encodeURIComponent(accounts.join(',')), ctl ? { signal: ctl.signal } : {})
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { return d && Array.isArray(d.accounts) ? d : null; })
+    .catch(function () { return null; })
+    .then(function (d) { if (timer) clearTimeout(timer); return d; });
+}
+function cbPreflightDecision(queued, skipped, runAnyway) {
+  try {
+    fetch('/api/publish-preflight/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queued: queued, skipped: skipped, run_anyway: runAnyway }) }).catch(function () {});
+  } catch (e) { /* журнал — не условие запуска */ }
+}
 
 /* Имя карточки для подтверждения. */
 function cbSlotTitle(slot) {

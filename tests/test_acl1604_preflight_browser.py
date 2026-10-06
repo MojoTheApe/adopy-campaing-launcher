@@ -1,0 +1,54 @@
+"""ACL-1604: «Publish all» показывает «Not ready» и не ставит такие аккаунты (headless).
+
+Страница настоящая, сеть подменена: проверка отвечает, что Demo разлогинен, а
+Other готов. По умолчанию уходит только Other; Demo — только с «Run anyway».
+"""
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from playwright.sync_api import expect
+from test_builder_multi_publish_browser import (  # noqa: F401 — фикстуры
+    browser, html, ui, add, ready,
+)
+
+PREFLIGHT = {'accounts': [
+    {'account': 'Demo', 'ready': False, 'notes': [], 'reasons': [
+        {'code': 'logged_out', 'message': 'logged out of Facebook', 'seen_label': '05.10 14:02',
+         'hint': 'log in inside Multilogin, close the window, then publish'}]},
+    {'account': 'Other', 'ready': True, 'reasons': [], 'notes': []}]}
+
+
+def test_not_ready_account_is_listed_and_skipped_unless_run_anyway(ui):
+    p, state = ui
+    decisions = []
+
+    def route(r):
+        if urlparse(r.request.url).path == '/api/publish-preflight/decision':
+            decisions.append(r.request.post_data_json)
+            r.fulfill(json={'ok': True})
+        else:
+            r.fulfill(json=PREFLIGHT)
+    p.route('**/api/publish-preflight**', route)
+    add(p, 0)
+    add(p, 1)
+    ready(p)
+
+    p.locator('.cbd-publish-all').click()
+    modal = p.locator('#safe-confirm-modal')
+    expect(modal.locator('.cb-preflight')).to_contain_text('Demo — logged out of Facebook (seen 05.10 14:02)')
+    expect(modal.locator('.cb-preflight')).to_contain_text('log in inside Multilogin')
+    p.locator('#sfc-ok').click()
+    for _ in range(40):
+        if state['posts']:
+            break
+        p.wait_for_timeout(100)
+    p.wait_for_timeout(400)
+    assert [f['account_label'] for f in state['posts']] == ['Other']
+    for _ in range(30):
+        if decisions:
+            break
+        p.wait_for_timeout(100)
+    assert decisions == [{'queued': ['Other'], 'skipped': ['Demo'], 'run_anyway': []}]
