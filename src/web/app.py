@@ -3028,8 +3028,10 @@ def _creative_range_response(request: Request | None, resolved: Path, media_type
     try:
         if first == "":
             n = int(last)
-            if n <= 0:
+            if n < 0:
                 raise ValueError
+            if n == 0:  # `bytes=-0` — пустой суффикс, RFC 9110: не удовлетворить
+                return Response(status_code=416, headers={"accept-ranges": "bytes", "content-range": f"bytes */{size}"})
             start, end = max(size - n, 0), size - 1
         else:
             start = int(first)

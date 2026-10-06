@@ -68,7 +68,7 @@ def test_duplicates_are_ambiguous_and_suffix_disambiguates(tree):
     with pytest.raises(AmbiguousCreativeError):
         find_creative_file(tree, "1_es_2292_post.mp4")
     assert find_creative_file(tree, "A/1_es_2292_post.mp4").parent.name == "A"
-    assert find_creative_file(tree, "b\\1_es_2292_post.mp4").parent.name == "B"  # linux-ok: бэкслэш в имени — данные, поиск нормализует разделители
+    assert find_creative_file(tree, "b\\1_es_2292_post.mp4").parent.name == "B"  # linux-ok: бэкслэш в имени — данные, basename берётся из нормализованного имени
 
 
 def test_not_found_is_404_class(tree):
@@ -179,36 +179,44 @@ class _SyncClient:
 
 
 def test_endpoint_does_not_block_the_event_loop(tree, monkeypatch):
+    """Быстрый запрос обязан завершиться, ПОКА медленный ещё внутри finder-а.
+    Если поиск вернуть в цикл событий, медленный запрос держит цикл, быстрый
+    не стартует, и таймаут события срабатывает."""
     monkeypatch.setattr(web, "get_creatives_root", lambda: str(tree))
     real = web._find_creative_file_scoped
+    inside = threading.Event()
+    release = threading.Event()
 
     def slow(root, path):
         if path == "slow.mp4":
-            time.sleep(1.0)
+            inside.set()
+            assert release.wait(10), "быстрый запрос не завершился, пока медленный внутри finder-а"
             return tree / "A" / "solo.mp4"
         return real(root, path)
 
     monkeypatch.setattr(web, "_find_creative_file_scoped", slow)
 
     async def scenario():
-        t0 = time.monotonic()
         slow_task = asyncio.create_task(web.creative_file(path="slow.mp4"))
-        await asyncio.sleep(0.05)
-        t1 = time.monotonic()
-        fast = await web.creative_file(path="solo.mp4")
-        fast_elapsed = time.monotonic() - t1
-        # Сам цикл тоже свободен.
-        tick = time.monotonic()
-        await asyncio.sleep(0)
-        loop_free = time.monotonic() - tick
-        await slow_task
-        return fast.status_code, fast_elapsed, loop_free, time.monotonic() - t0
+        # Ждём, пока медленный поток реально внутри finder-а (без блокировки цикла).
+        for _ in range(200):
+            if inside.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert inside.is_set()
+        fast = await asyncio.wait_for(web.creative_file(path="solo.mp4"), timeout=5)
+        slow_still_inside = not slow_task.done()
+        release.set()
+        slow_resp = await slow_task
+        return fast.status_code, slow_still_inside, slow_resp.status_code
 
-    status, fast_elapsed, loop_free, total = asyncio.run(scenario())
-    assert status == 200
-    assert fast_elapsed < 0.5
-    assert loop_free < 0.1
-    assert total >= 1.0
+    try:
+        fast_status, slow_still_inside, slow_status = asyncio.run(scenario())
+    finally:
+        release.set()
+    assert fast_status == 200
+    assert slow_still_inside
+    assert slow_status == 200
 
 
 def test_endpoint_sends_cache_headers_and_honours_conditional_requests(tree, monkeypatch):
@@ -263,3 +271,95 @@ def test_endpoint_other_routes_stay_no_store(tree, monkeypatch):
     client = _SyncClient()
     r = client.get("/creative-file", params={"path": ""})
     assert r.status_code == 400 and r.headers["cache-control"] == "no-store"
+
+
+def test_range_end_beyond_file_is_clamped(tree, monkeypatch):
+    monkeypatch.setattr(web, "get_creatives_root", lambda: str(tree))
+    size = len(_MP4)
+    r = _SyncClient().get("/creative-file", params={"path": "A/solo.mp4"}, headers={"Range": "bytes=0-999999"})
+    assert r.status_code == 206
+    assert r.headers["content-range"] == f"bytes 0-{size - 1}/{size}"
+    assert r.headers["content-length"] == str(size)
+    assert r.content == _MP4
+
+
+def test_zero_length_suffix_range_is_unsatisfiable(tree, monkeypatch):
+    monkeypatch.setattr(web, "get_creatives_root", lambda: str(tree))
+    r = _SyncClient().get("/creative-file", params={"path": "A/solo.mp4"}, headers={"Range": "bytes=-0"})
+    assert r.status_code == 416
+    assert r.headers["content-range"] == f"bytes */{len(_MP4)}"
+
+
+def test_416_from_creative_file_still_leaves_with_no_store(tree, monkeypatch):
+    monkeypatch.setattr(web, "get_creatives_root", lambda: str(tree))
+    r = _SyncClient().get("/creative-file", params={"path": "A/solo.mp4"}, headers={"Range": "bytes=9999-"})
+    assert r.status_code == 416
+    assert "cache-control" in r.headers  # маршрут его выставил сам
+    assert r.headers["cache-control"] == "no-store"
+
+
+def test_other_route_with_own_cache_control_still_gets_no_store(monkeypatch):
+    @web.app.get("/__acl1615_probe")
+    async def probe():
+        return web.Response(content="x", headers={"Cache-Control": "public, max-age=999"})
+
+    try:
+        r = _SyncClient().get("/__acl1615_probe")
+    finally:
+        web.app.router.routes[:] = [
+            x for x in web.app.router.routes if getattr(x, "path", "") != "/__acl1615_probe"
+        ]
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-store"
+
+
+def test_error_statuses_from_creative_file_stay_no_store(tree, monkeypatch):
+    monkeypatch.setattr(web, "get_creatives_root", lambda: str(tree))
+    for path, code in (("nope.mp4", 404), ("1_es_2292_post.mp4", 409)):
+        r = _SyncClient().get("/creative-file", params={"path": path})
+        assert r.status_code == code and r.headers["cache-control"] == "no-store"
+
+
+def test_fresh_lookup_sees_a_duplicate_added_inside_the_throttle_window(tree):
+    assert find_creative_file(tree, "solo.mp4").parent.name == "A"
+    # Свежая проверка mtime: на быстрых ФС mtime каталога может совпасть —
+    # подправим его вручную, как будто добавление было позже построения.
+    (tree / "B" / "solo.mp4").write_bytes(_MP4)
+    st = os.stat(tree / "B")
+    os.utime(tree / "B", ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
+    # Обычный вызов внутри окна 5 с ещё видит старый индекс ...
+    assert find_creative_file(tree, "solo.mp4").parent.name == "A"
+    # ... а вызов публикации — нет.
+    with pytest.raises(AmbiguousCreativeError):
+        find_creative_file(tree, "solo.mp4", fresh=True)
+
+
+def test_full_rebuild_safety_net_finds_file_when_dir_mtime_never_changes(tree, monkeypatch):
+    with pytest.raises(CreativeNotFoundError):
+        find_creative_file(tree, "late.mp4")
+    (tree / "B" / "late.mp4").write_bytes(_MP4)
+    monkeypatch.setattr(cf, "_dirs_changed", lambda snap: False)  # ФС без mtime каталога
+    with pytest.raises(CreativeNotFoundError):
+        find_creative_file(tree, "late.mp4")
+    monkeypatch.setattr(cf, "_FULL_REBUILD_SECONDS", 0.0)
+    assert find_creative_file(tree, "late.mp4").name == "late.mp4"
+
+
+def test_concurrent_stale_callers_cause_a_single_rebuild(tree, monkeypatch):
+    find_creative_file(tree, "solo.mp4")
+    monkeypatch.setattr(cf, "_dirs_changed", lambda snap: False)
+    (tree / "A" / "solo.mp4").unlink()
+    key = os.path.normcase(os.path.abspath(tree))
+    seen = cf._snapshots[key]
+    builds = []
+    real = cf._build_snapshot
+
+    def counting(root):
+        builds.append(root)
+        return real(root)
+
+    monkeypatch.setattr(cf, "_build_snapshot", counting)
+    threads = [threading.Thread(target=cf._get_snapshot, args=(key,), kwargs={"seen": seen}) for _ in range(8)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert len(builds) == 1

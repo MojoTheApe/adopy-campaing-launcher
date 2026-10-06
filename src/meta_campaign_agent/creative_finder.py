@@ -30,16 +30,17 @@ def _is_within(root_real: str, target_real: str) -> bool:
 # десятки байт на файл. Снимок неизменяемый: перестройка собирает новый и
 # подменяет ссылку целиком, поэтому читатели не видят полупостроенный индекс.
 _RECHECK_SECONDS = 5.0  # как часто проверять mtime каталогов (stat без листинга)
+_FULL_REBUILD_SECONDS = 60.0  # страховка для ФС, где mtime каталога не меняется
 _MAX_ROOTS = 4  # корней в кэше; корень один, но тесты и смена настроек — нет
 
 
 class _Snapshot:
-    __slots__ = ("by_name", "dir_mtimes", "checked_at")
+    __slots__ = ("by_name", "dir_mtimes", "checked_at", "built_at")
 
     def __init__(self, by_name: dict[str, list[str]], dir_mtimes: dict[str, int]):
         self.by_name = by_name
         self.dir_mtimes = dir_mtimes
-        self.checked_at = time.monotonic()
+        self.checked_at = self.built_at = time.monotonic()
 
 
 _index_lock = threading.Lock()
@@ -87,13 +88,17 @@ def _dirs_changed(snap: _Snapshot) -> bool:
     return False
 
 
-def _get_snapshot(root: str, *, force: bool = False, recheck: bool = False) -> _Snapshot:
-    """`force` — перестроить безусловно; `recheck` — проверить mtime каталогов
-    вне троттлинга (промах поиска: файл мог только что появиться)."""
+def _get_snapshot(root: str, *, seen: _Snapshot | None = None, recheck: bool = False) -> _Snapshot:
+    """`seen` — снимок, на котором поиск споткнулся (удалённый файл): перестроить,
+    но только если его ещё никто не заменил — N параллельных вызовов дают одну
+    перестройку. `recheck` — проверить mtime каталогов вне троттлинга (промах
+    поиска или публикация: файл мог только что появиться)."""
     with _index_lock:
         snap = _snapshots.get(root)
         now = time.monotonic()
-        stale = snap is None or force
+        stale = snap is None or (seen is not None and snap is seen)
+        if not stale and now - snap.built_at >= _FULL_REBUILD_SECONDS:
+            stale = True
         if not stale and (recheck or now - snap.checked_at >= _RECHECK_SECONDS):
             stale = _dirs_changed(snap)
             if not stale:
@@ -107,7 +112,7 @@ def _get_snapshot(root: str, *, force: bool = False, recheck: bool = False) -> _
 
 
 def reset_creative_index() -> None:
-    """Сбросить индекс (кнопка обновления списка креативов, тесты)."""
+    """Сбросить индекс (тесты; следующий поиск построит его заново)."""
     with _index_lock:
         _snapshots.clear()
 
@@ -138,7 +143,7 @@ def _lookup(root_path: Path, root_real: str, snap: _Snapshot, name_norm: str,
     return matches, stale
 
 
-def find_creative_file(root: str | Path, filename: str) -> Path:
+def find_creative_file(root: str | Path, filename: str, *, fresh: bool = False) -> Path:
     """
     Search root for filename (basename match, case-insensitive) via a cached
     per-root index (ACL-1615), not a tree walk per call.
@@ -148,6 +153,9 @@ def find_creative_file(root: str | Path, filename: str) -> Path:
 
     Never returns a path that no longer exists: a stale index entry or a miss
     triggers a re-check/rebuild and one retry.
+
+    `fresh=True` (публикация) всегда сверяет mtime каталогов, без троттлинга:
+    дубликат, добавленный секунду назад, всё равно даст AmbiguousCreativeError.
 
     Raises CreativeNotFoundError or AmbiguousCreativeError.
     """
@@ -163,17 +171,19 @@ def find_creative_file(root: str | Path, filename: str) -> Path:
     name_norm = name.replace("\\", "/")
     has_path = "/" in name_norm
 
-    target_basename = Path(name).name.lower()
+    # Basename — из нормализованного имени: `Path(name).name` на POSIX не
+    # считает обратный слэш разделителем, и результат зависел бы от ОС.
+    target_basename = name_norm.rsplit("/", 1)[-1].lower()
 
     # ACL-1342 S02: реальный путь корня — один раз, не на каждой итерации.
     root_real = os.path.realpath(root_path)
     key = os.path.normcase(os.path.abspath(root_path))
 
-    snap = _get_snapshot(key)
+    snap = _get_snapshot(key, recheck=fresh)
     matches, stale = _lookup(root_path, root_real, snap, name_norm, has_path, target_basename)
     if stale:
         # Устаревший путь в индексе — перестраиваем один раз и ищем заново.
-        snap = _get_snapshot(key, force=True)
+        snap = _get_snapshot(key, seen=snap)
         matches, _ = _lookup(root_path, root_real, snap, name_norm, has_path, target_basename)
     elif not matches:
         # Промах: файл мог появиться только что — внеочередная проверка mtime.
