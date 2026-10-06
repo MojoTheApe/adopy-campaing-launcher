@@ -1,5 +1,28 @@
 # System history
 
+## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
+
+The last rung of the fallback ladder: when a step fails on a screen the robot does not know (a
+collapsed card, a stray dialog, a moved button), `src/fb_ads_rpa/ai_rescue.py` can ask Claude what
+to do. This first PR is the standalone module only; nothing in the flow calls it, and
+`ACL_AI_RESCUE` defaults to `off`.
+
+- The model gets text only, never a screenshot: open dialogs, headings and up to 150 visible
+  controls (12k characters at most) with role, label, state and section, each with a stable index.
+- Everything sent is scrubbed first: ids, `act=` and URLs, e-mails, tokens, account labels,
+  campaign names and any names the caller passes in become placeholders.
+- The model answers with exactly one action: click, expand, close dialog, press Escape, scroll to,
+  or give up. Safety is in code, not in the prompt: a forbidden label or nearby text (Publish,
+  Delete, Remove, Discard, terms, instant forms, log out, payment, "close without saving"), an unknown
+  index or a malformed answer becomes "give up". The element is re-read just before the click.
+- `ACL_AI_RESCUE=suggest` logs the answer and leaves the page untouched; `act` performs the one
+  action and returns, the caller re-runs its own check. Model: `ACL_AI_RESCUE_MODEL`
+  (default `claude-sonnet-5-5`), 20 second limit, no retries. No key or SDK means the rung is skipped.
+- At most 2 calls per step and 4 per campaign, counted by an object the caller passes in.
+- Telemetry: new step `ai_rescue` (mapped to "hold" in the build progress model).
+- Tests: `tests/test_ai_rescue.py` with a fake model; fixture `ai_guided_setup_dialog_2026_10_05.html`
+  (live capture fb358fda8aab).
+
 ## A collapsed Audience card is opened by clicking the card in every editor layout — ACL-1611
 
 05.10, Facebook_9403A (KW_TRL_All_Video_Mix_35_05.10): the ad set's Audience section showed as a

@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**21 robot steps × 106 layouts, 56 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**22 robot steps × 108 layouts, 57 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -33,6 +33,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | editor gone under the robot | 1 | 1 | 0 | 0 |
 | banners and blocks (any step) | 2 | 2 | 0 | 0 |
 | foreign windows (any step, ACL-1573) | 9 | 9 | 0 | 0 |
+| ai rescue summary (any step, ACL-1613) | 2 | 2 | 0 | 0 |
 
 ## objective
 
@@ -286,6 +287,15 @@ Robot: window guard before each step and after a failed one (foreign_windows.bef
 | Media wizard stuck on Crop and its Replace picker | 232d398471bd/01_wizard_crop_replace, 232d398471bd/04_ad_creative_upload | `wizard_crop_story_missing_2026_10_04.html` · crop_busy, in_wizard_picker | `tests/test_foreign_windows_are_closed_or_named.py` | owned (step row / media surface): never closed, no Sentry event, no capture | pass |
 | Media wizard on its Media step (picker loaded) | 232d398471bd/00_wizard_media | `wizard_media_picker_2026_10_04.html` · loaded | `tests/test_foreign_windows_are_closed_or_named.py` | owned (step row / media surface): never closed, no Sentry event, no capture | pass |
 | Unknown dialogs over the Doc21 editor (unsafe-only buttons; safe Not now; footer-surface Close inside; Publish footer of the single-screen editor) | synthetic | `foreign_windows_doc21_2026_10_04.html` · editor_footer | `tests/test_foreign_windows_are_closed_or_named.py` | Publish/Confirm/Continue and footers never pressed; captured + Sentry + 'Unknown Meta window blocked the step: <title>'; a safe Not now closes it and the step is retried once | pass |
+
+## ai rescue summary (any step, ACL-1613)
+
+Robot: ai_rescue.build_summary: text-only page summary the model sees (dialogs first, then the anchor area), scrubbed
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| Create-campaign dialog 'Meta AI-guided setup' / 'Manual campaign setup' (radio pair, Create new campaign) | fb358fda8aab/00_stall_objective_wait | `ai_guided_setup_dialog_2026_10_05.html` · dialog | `tests/test_ai_rescue.py` | dialog listed first with its title; both radios with checked state; summary has no ids, URLs or e-mails | pass |
+| Collapsed Audience card (same capture as ACL-1611) | 6ebd77ccaf6a/02_further_limit_reach_click | `audience_card_collapsed_drawer_2026_10_05.html` · card_run_a, card_run_b | `tests/test_ai_rescue.py` | card button listed as not-pressed; a model pick of it is expanded by exactly one click | pass |
 
 ## Seen but not cut
 
