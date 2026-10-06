@@ -80,6 +80,7 @@ class _Table:
         self.close_blockers = comp(raw.get("close_blockers"))
         self.allow_close = {norm_text(x) for x in allow.get("close_dialog") or []}
         self.allow_click = {norm_text(x) for x in allow.get("click") or []}
+        self.allow_expand = {norm_text(x) for x in allow.get("expand") or []}
         self.allow_tab = {norm_text(x) for x in allow.get("tab") or []}
 
 
@@ -89,7 +90,8 @@ def _table() -> _Table | None:
     try:
         raw = yaml.safe_load(_wg._ZONES_PATH.read_text(encoding="utf-8")) or {}
         t = _Table(raw.get("ai_rescue") or {})
-        ok = t.context and t.target_only and t.close_blockers and t.allow_close and t.allow_click and t.allow_tab
+        ok = (t.context and t.target_only and t.close_blockers and t.allow_close and t.allow_click and t.allow_tab
+              and t.allow_expand)
         return t if ok else None
     except Exception as exc:
         log.warning("ai_rescue: forbidden table unreadable (%s) - every pick will be refused", type(exc).__name__)
@@ -169,6 +171,13 @@ def click_allowed(parts, role: str) -> bool:
         return False
     names = t.allow_tab if role == "tab" else t.allow_click
     return all(n in names for n in ns)
+
+
+def expand_allowed(label: str) -> bool:
+    """Подпись начинается с названия раздела из allowlist expand (целое слово/слова с начала)."""
+    t = _table()
+    n = norm_text(label)
+    return bool(t) and bool(n) and any(n == x or n.startswith(x + " ") for x in t.allow_expand)
 
 
 def close_blocked_by(text: str) -> str | None:
@@ -323,15 +332,16 @@ const roleOf = (e) => {
 };
 // короткая подпись для модели; у полей ввода значение (имя страницы, пикселя) не берём
 const labelOf = (e, role) => {
+  // поле ввода/выбора (combobox, textbox, select): ТОЛЬКО placeholder, иначе <field> —
+  // aria-label, aria-labelledby, value и подписи могут нести имя страницы или кабинета
+  if (FIELD.has(role) || e.tagName === 'SELECT') {
+    return (norm(e.getAttribute('placeholder')) || '<field>').slice(0, 80);
+  }
   let l = norm(e.getAttribute('aria-label'));
   const lb = e.getAttribute('aria-labelledby');
   if (!l && lb) l = norm(lb.split(/\s+/).map((id) => document.getElementById(id)).filter(Boolean)
     .map((x) => textOf(x, false)).join(' '));
   if (!l && e.labels && e.labels.length) l = norm([...e.labels].map((x) => textOf(x, false)).join(' '));
-  if (FIELD.has(role) || e.tagName === 'SELECT') {
-    if (!l) l = norm(e.getAttribute('placeholder') || e.getAttribute('title'));
-    return (l || '<field>').slice(0, 80);
-  }
   if (!l) l = textOf(e, false);
   if (!l && e.tagName === 'INPUT' && typeof e.value === 'string') l = norm(e.value);  // input type=button
   if (!l) l = norm(e.getAttribute('title') || e.getAttribute('placeholder') || e.getAttribute('alt'));
@@ -364,6 +374,7 @@ const dirtyIn = (d) => [...d.querySelectorAll(
   .some((x) => norm(typeof x.value === 'string' ? x.value : x.textContent) !== '');
 const inRowOf = (el) => !!el.closest(
   'tr, table, [role=row], [role=gridcell], [role=columnheader], [role=table], [role=grid], [role=treegrid]');
+const isLink = (el) => !!el.closest('a[href]');
 const hasShadow = (el) => [el, ...el.querySelectorAll('*')].some((x) => !!x.shadowRoot);
 """
 
@@ -465,8 +476,9 @@ _LOCATE_JS = "async (args) => {" + _PRE + r"""
   const info = {
     found: 1, visible: shown(el), role, label: labelOf(el, role), parts: parts(el),
     nearby: pt.length <= 400 ? pt : '',
-    dialogs: dlgs.map((x) => ({text: norm(textOf(x, true) + ' ' + norm(x.getAttribute('aria-label'))), dirty: dirtyIn(x)})),
-    dialogOpen: realDialogs().length > 0, inDialog: !!d, inRow: inRowOf(el), shadow: hasShadow(el),
+    dialogs: dlgs.map((x) => ({text: norm(textOf(x, true) + ' ' + norm(x.getAttribute('aria-label'))), dirty: dirtyIn(x),
+                               editorLike: !!x.querySelector(EDITOR)})),
+    dialogOpen: realDialogs().length > 0, inDialog: !!d, inRow: inRowOf(el), shadow: hasShadow(el), link: isLink(el),
     desc: [...el.querySelectorAll(INTER)].slice(0, 80).map((x) => ({role: roleOf(x), parts: parts(x)})),
     expanded: el.getAttribute('aria-expanded'), pressed: el.getAttribute('aria-pressed'),
     stable, hit: null,
@@ -493,7 +505,8 @@ _LOCATE_JS = "async (args) => {" + _PRE + r"""
 """
 
 _DIALOGS_JS = "() => {" + _PRE + r"""
-  return realDialogs().map((d) => ({text: norm(textOf(d, true) + ' ' + norm(d.getAttribute('aria-label'))), dirty: dirtyIn(d)}));
+  return realDialogs().map((d) => ({text: norm(textOf(d, true) + ' ' + norm(d.getAttribute('aria-label'))), dirty: dirtyIn(d),
+                editorLike: !!d.querySelector(EDITOR)}));
 }
 """
 
@@ -760,6 +773,8 @@ def _vet(action: str, info: dict[str, Any], label: str, *, after_prepare: bool =
         return "empty_label"
     if info.get("shadow"):
         return "shadow_dom"
+    if info.get("link"):
+        return "link_target"
     if info.get("inRow"):
         return "in_list_row"
     if info.get("dialogOpen") and not info.get("inDialog"):
@@ -790,6 +805,8 @@ def _vet(action: str, info: dict[str, Any], label: str, *, after_prepare: bool =
         if not is_close_label(parts):
             return f"not_allowlisted:{scrub_text(label)[:40]}"
         for d in dialogs:
+            if d.get("editorLike"):
+                return "editor_dialog_not_closable"  # окно с полем имени кампании — никогда, пустое или нет
             if close_blocked_by(d.get("text", "")):
                 return "close_blocked_by_dialog_text"
             if d.get("dirty"):
@@ -798,9 +815,11 @@ def _vet(action: str, info: dict[str, Any], label: str, *, after_prepare: bool =
     if is_close_label(parts):
         return "close_only_via_close_dialog"
     if action == "expand":
-        if info.get("expanded") == "false" or info.get("pressed") == "false":
-            return None
-        return "not_collapsed"
+        if info.get("expanded") != "false" and info.get("pressed") != "false":
+            return "not_collapsed"
+        if expand_allowed(label):
+            return None  # только заголовок свёрнутого раздела; Create new / Share / Advantage+ … — нет
+        return f"not_allowlisted:{scrub_text(label)[:40]}"
     if action == "click":
         if click_allowed(parts, info.get("role", "")):
             return None
@@ -826,6 +845,8 @@ def _execute(page, act: dict[str, Any], summary: PageSummary, mode: str) -> tupl
                 return False, "give_up", "", f"escape_blocked:{why}"
             if close_blocked_by(d.get("text", "")):
                 return False, "give_up", "", "close_blocked_by_dialog_text"
+            if d.get("editorLike"):
+                return False, "give_up", "", "editor_dialog_not_closable"
             if d.get("dirty"):
                 return False, "give_up", "", "dirty_dialog"
         if mode == "act":

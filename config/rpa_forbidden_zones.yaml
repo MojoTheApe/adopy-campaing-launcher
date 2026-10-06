@@ -58,6 +58,13 @@ ai_rescue:
                    fechar, agora nao, pular, entendi, mais tarde, nao obrigado]
     # click: buttons only, minimal. Next / Continue / OK / "More options" are NOT here on purpose.
     click: [show more, see more, show less, see less, ver mas, mostrar mas, ver menos, ver mais, mostrar mais]
+    # expand: collapsed section/card headings only; the label must START with one of these names.
+    expand: [audience, placements, budget, schedule, budget schedule, locations, languages, detailed targeting,
+             demographics, age, gender, optimization delivery, conversion, destination, tracking, ad setup, creative,
+             publico, ubicaciones, presupuesto, idiomas, ubicaciones geograficas, segmentacion detallada, conversion,
+             destino, configuracion del anuncio, programacion, edad, genero, demografia, seguimiento, creatividad,
+             posicionamentos, orcamento, idiomas, locais, segmentacao detalhada, conversao, configuracao do anuncio,
+             programacao, idade, demografia, rastreamento, criativo]
     # click on role=tab: by name.
     tab: [campaigns, ad sets, ads, audience, placements, creative, ad creative, details, overview,
           campanas, conjuntos de anuncios, anuncios, publico, ubicaciones, creatividad, detalles,
@@ -66,8 +73,11 @@ ai_rescue:
   # (Cancel / Close on "Discard changes?" can throw work away).
   close_blockers:
     - {lang: en, reason: unsaved, pattern: 'discard\w*|unsaved|leav\w*|lose|lost|without saving'}
+    - {lang: en, reason: policy, pattern: 'polic\w*|certif\w*|confirm\w*|consent\w*|acknowledg\w*|agree\w*|declar\w*|go live|review and publish|non discrimination'}
     - {lang: es, reason: unsaved, pattern: 'descart\w*|sin guardar|salir|perd\w*'}
+    - {lang: es, reason: policy, pattern: 'politic\w*|certific\w*|confirm\w*|consentimiento\w*|reconoc\w*|acept\w*|declar\w*|en vivo|revisar y publicar|no discriminacion'}
     - {lang: pt, reason: unsaved, pattern: 'descart\w*|sem salvar|sair|perd\w*'}
+    - {lang: pt, reason: policy, pattern: 'polit\w*|certific\w*|confirm\w*|consentimento\w*|reconhec\w*|aceit\w*|declar\w*|ao vivo|revisar e publicar|nao discriminacao'}
   context:
     - {lang: en, reason: publish, pattern: '(?:un|re)?publish\w*'}
     - {lang: en, reason: delete, pattern: '(?:un)?delet\w*'}
@@ -78,7 +88,7 @@ ai_rescue:
     - {lang: en, reason: logout, pattern: 'log ?out|sign ?out'}
     - {lang: en, reason: payment, pattern: 'payments?|billing|credit card|debit card'}
     - {lang: en, reason: leave_unsaved, pattern: 'close without saving|leav\w*|don t save'}
-    - {lang: es, reason: publish, pattern: 'public\w*'}
+    - {lang: es, reason: publish, pattern: 'publi(?:car\w*|cad[oa]s?|que\w*|cacion\w*|sh\w*)|publica(?:r|ndo)'}
     - {lang: es, reason: delete, pattern: 'elimin\w*|borr\w*|quit\w*'}
     - {lang: es, reason: discard, pattern: 'descart\w*'}
     - {lang: es, reason: terms_accept, pattern: 'acept\w*|condicion\w*|terminos'}
@@ -86,8 +96,8 @@ ai_rescue:
     - {lang: es, reason: logout, pattern: 'cerrar sesi\w*'}
     - {lang: es, reason: payment, pattern: 'pago\w*|pagar\w*|pagad\w*|factur\w*|metodo de pago'}
     - {lang: es, reason: leave_unsaved, pattern: 'salir'}
-    - {lang: pt, reason: publish, pattern: 'public\w*'}
-    - {lang: pt, reason: delete, pattern: 'exclu\w*|apag\w*|remov\w*'}
+    - {lang: pt, reason: publish, pattern: 'publicar\w*|publicad[oa]s?|publica(?:r|ndo)'}
+    - {lang: pt, reason: delete, pattern: 'exclu(?:ir\w*|i\w*|y\w*|a\w*)|apag\w*|remov\w*'}
     - {lang: pt, reason: discard, pattern: 'descart\w*'}
     - {lang: pt, reason: terms_accept, pattern: 'aceit\w*|concord\w*|termos'}
     - {lang: pt, reason: lead_form, pattern: 'formularios? instantaneos?|(?:criar|novo|adicionar) formulario'}

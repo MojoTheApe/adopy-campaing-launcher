@@ -16,7 +16,9 @@ to do. This first PR is the standalone module only; nothing in the flow calls it
 - The model answers with exactly one action: click, expand, close dialog, press Escape, scroll to,
   or give up. Safety is in code, not in the prompt, and when in doubt it refuses:
   - a positive allowlist is the primary gate (`allow` in `config/rpa_forbidden_zones.yaml`, EN/ES/PT):
-    expand only an element that is collapsed; close a real dialog only with Close/Cancel/Not now/Skip/
+    expand only a collapsed section card whose name is on a short list (Audience, Placements, Budget,
+    Locations, ... and the ES/PT names; never Create new, Share, Advantage+ toggles); links are never targets;
+    field labels show only the placeholder; close a real dialog only with Close/Cancel/Not now/Skip/
     Dismiss/Got it/Later/No thanks (never when the dialog mentions discard, unsaved or leaving); click
     only "Show more"/"See more" buttons and a few named tabs; Escape only over a real clean dialog;
     scroll always. Anything else is `not_allowlisted:<label>`, logged for the owner to widen later;

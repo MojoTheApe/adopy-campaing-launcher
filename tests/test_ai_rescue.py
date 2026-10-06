@@ -564,9 +564,9 @@ def test_b2_expand_on_a_card_with_a_nested_delete_button_is_refused(page):
 
 def test_b2_a_harmless_nested_button_covering_the_card_is_refused_by_the_hit_test(page):
     body = ('<div role="button" aria-expanded="false" style="width:600px;height:200px;position:relative;display:block">'
-            'Card title text'
+            'Audience card title'
             '<button id="INNER" style="position:absolute;left:0;top:0;width:600px;height:200px">More details</button></div>')
-    res, clk, _ = probe(page, body, by_label("Card title", "expand"))
+    res, clk, _ = probe(page, body, by_label("Audience card title", "expand"))
     assert res.action == "give_up" and res.reason == "hit_interactive_descendant" and clk == []
 
 
@@ -834,7 +834,8 @@ def test_n1_a_dialog_with_edited_text_is_not_closed_or_escaped(page):
 
 
 def test_j_a_plain_expand_button_still_works(page):
-    res, clk, _ = probe(page, '<div><button id="MORE" aria-expanded="false">More</button></div>', by_label("More", "expand"))
+    res, clk, _ = probe(page, '<div><button id="MORE" aria-expanded="false">Audience</button></div>',
+                        by_label("Audience", "expand"))
     assert res.ok is True and clk == ["MORE"]
 
 
@@ -981,10 +982,10 @@ def test_allowlist_click_on_a_close_word_is_refused_even_inside_a_dialog(page):
 
 
 def test_allowlist_expand_needs_a_collapsed_state(page):
-    page.set_content(_html("<div><button aria-expanded='false' id='A'>Advanced settings</button></div>"
+    page.set_content(_html("<div><button aria-expanded='false' id='A'>Placements</button></div>"
                            "<div><div role='button' aria-pressed='false' id='B'>Audience summary</div></div>"
                            "<div><button id='C'>Plain</button></div><div><button aria-expanded='true'>Open</button></div>"))
-    assert run(page, FakeClient(by_label("Advanced settings", "expand"))).ok is True
+    assert run(page, FakeClient(by_label("Placements", "expand"))).ok is True
     assert run(page, FakeClient(by_label("Audience summary", "expand"))).ok is True
     assert clicked(page) == ["A", "B"]
     assert run(page, FakeClient(by_label("Plain", "expand"))).reason == "not_collapsed"
@@ -1203,3 +1204,146 @@ def test_norm_text_strips_invisible_characters_and_maps_cross_glyphs():
     assert ar.norm_text("Pub­lish") == "publish"
     assert ar.norm_text("​Del‌ete⁠") == "delete"
     assert ar.norm_text("×") == "x" and ar.norm_text("✕") == "x"
+
+
+# ═══ раунд 3 ревью: поля, ярлык expand, ссылки, close_blockers, узкие основы, окно с полем имени ═══
+
+SEC_DLG = ('<div role="dialog" style="position:fixed;left:300px;top:100px;width:400px;height:300px;background:#fff">'
+           '<h2>Hi</h2><span>Info</span><div role="button" id="D">Not now</div></div>')
+
+
+# R3-B1: подписи полей — только placeholder
+def test_r3b1_the_account_picker_never_shows_its_labelledby_text(page):
+    body = ('<span id="acc">Sample Beauty Studio - 1234567890 ( )</span>'
+            '<div role="combobox" aria-labelledby="acc" aria-expanded="false" style="width:300px;height:30px">picker</div>'
+            '<input role="combobox" aria-label="Sample Beauty Studio" value="Sample Beauty Studio">'
+            '<select aria-label="Sample Beauty Studio"><option>Sample Beauty Studio</option></select>'
+            '<input type="text" aria-label="Sample Beauty Studio" value="Sample Beauty Studio" placeholder="Search here">'
+            + SEC_DLG)
+    page.set_content(_html(body))
+    s = ar.build_summary(page)
+    assert "Sample" not in s.text and "Beauty" not in s.text and "picker" not in s.text, s.text
+    assert s.text.count('"<field>"') >= 3 and 'textbox "Search here"' in s.text
+
+
+# R3-N1: expand только по названию раздела
+REAL_EXPAND_LABELS = ["More", "More items", "Action Menu", "Share", "Create new", "Open Dropdown", "Toggle", "Include",
+                      "Add media", "Set up creative", "Campaign bid strategy Highest volume", "Advantage+ audience",
+                      "Advantage+ placements"]
+SECTIONS = ["Audience", "Placements", "Budget", "Schedule", "Budget & schedule", "Locations", "Languages",
+            "Detailed targeting", "Demographics", "Age", "Gender", "Optimization & delivery", "Conversion",
+            "Destination", "Tracking", "Ad setup", "Creative", "Público", "Ubicaciones", "Presupuesto", "Idiomas",
+            "Ubicaciones geográficas", "Segmentación detallada", "Conversión", "Destino", "Configuración del anuncio",
+            "Posicionamentos", "Orçamento", "Programação", "Segmentação detalhada", "Conversão", "Criativo"]
+
+
+@pytest.mark.parametrize("label", REAL_EXPAND_LABELS)
+@pytest.mark.parametrize("attr", ['aria-expanded="false"', 'aria-pressed="false"'])
+def test_r3n1_expand_refuses_every_real_non_section_label(page, label, attr):
+    res = probe_clicked_nothing(page, f'<div><div role="button" id="X" {attr}>{label}</div></div>',
+                                by_label(label, "expand"))
+    assert res.action == "give_up" and res.reason.startswith(("not_allowlisted", "forbidden", "has_interactive")), res.reason
+
+
+@pytest.mark.parametrize("label", SECTIONS)
+def test_r3n1_expand_allows_section_names(page, label):
+    res, clk, _ = probe(page, f'<div><div role="button" id="X" aria-pressed="false">{label}</div></div>',
+                        lambda p, pg: {"action": "expand", "index": 0})
+    assert res.ok is True and clk == ["X"], (label, res.reason)
+
+
+def test_r3n1_a_section_card_heading_with_a_long_summary_passes_but_a_toggle_does_not(page):
+    page.set_content(_html('<div><div role="button" id="C" aria-pressed="false">Audience Custom audiences Locations Age '
+                           'Gender Languages</div></div><div><div role="button" id="T" aria-pressed="false">'
+                           'Advantage+ audience</div></div>'))
+    assert run(page, FakeClient(by_label("Audience", "expand"))).ok is True
+    assert run(page, FakeClient(by_label("Advantage+ audience", "expand"))).reason.startswith("not_allowlisted")
+    assert clicked(page) == ["C"]
+
+
+# R3-N2: ссылки
+def test_r3n2_a_link_with_role_button_is_never_a_target(page):
+    for body in ('<div><a id="SM" href="https://example.org/help" role="button">Show more</a></div>',
+                 '<div><a href="#x"><span id="SM" role="button">Show more</span></a></div>'):
+        res = probe_clicked_nothing(page, body, by_label("Show more"))
+        assert res.reason == "link_target", res.reason
+        assert page.url == "about:blank"
+
+
+# R3-N3: close_blockers
+@pytest.mark.parametrize("title,text,label", [
+    ("Non-discrimination policy", "By continuing you confirm your ads comply with our advertising policies.", "Got it"),
+    ("Review your campaign", "Everything looks good. You can go live now or later.", "Skip"),
+    ("Lead Ads Terms", "Please read before continuing.", "Got it"),
+    ("Consent", "I consent to the processing.", "Dismiss"),
+    ("Certify", "You certify that the ad is yours.", "Got it"),
+    ("Please acknowledge", "Acknowledge the notice.", "Got it"),
+    ("Política de no discriminación", "Al continuar confirmas que tus anuncios cumplen.", "Entendido"),
+    ("Revisar y publicar", "Puedes salir en vivo ahora.", "Omitir"),
+    ("Consentimiento", "Das tu consentimiento.", "Entendido"),
+    ("Política de não discriminação", "Ao continuar você confirma.", "Entendi"),
+    ("Revisar e publicar", "Você pode ir ao vivo agora.", "Pular"),
+    ("Declaração", "Você declara que concorda.", "Entendi"),
+])
+def test_r3n3_got_it_and_skip_never_acknowledge_policies_or_skip_a_review(page, title, text, label):
+    body = (f'<div role="dialog"><h2>{title}</h2><span>{text}</span>'
+            f'<div><div role="button" id="X">{label}</div></div></div>')
+    res = probe_clicked_nothing(page, body, by_label(label, "close_dialog"))
+    assert res.action == "give_up", (title, res.reason)
+    res = probe_clicked_nothing(page, body, lambda p, pg: {"action": "press_escape"})
+    assert res.action == "give_up", (title, res.reason)
+
+
+def test_r3n3_a_harmless_got_it_still_works(page):
+    body = '<div role="dialog"><h2>New</h2><span>We moved a button.</span><div><div role="button" id="X">Got it</div></div></div>'
+    res, clk, _ = probe(page, body, by_label("Got it", "close_dialog"))
+    assert res.ok is True and clk == ["X"]
+
+
+# R3-N6: узкие основы — испанский интерфейс остаётся рабочим
+@pytest.mark.parametrize("text", ["Público", "Cuenta publicitaria", "publicidad", "Conta de anúncios", "Exclusões",
+                                  "Excluded placements", "Anuncios publicitarios", "Publico objetivo"])
+def test_r3n6_ordinary_spanish_and_portuguese_words_pass(text):
+    assert ar.forbidden_reason([text]) is None, text
+
+
+@pytest.mark.parametrize("text", ["Publicar", "Publicado", "Publicada", "Publish", "Published", "publíquese",
+                                  "Publicando", "Publicación", "Publicar anúncio", "Publicadas", "Excluir", "Exclua",
+                                  "Excluído", "Excluidos", "Excluye", "Excluya", "Excluir anúncio"])
+def test_r3n6_verb_forms_are_still_refused(text):
+    assert ar.forbidden_reason([text]), text
+
+
+def test_r3n6_the_spanish_audience_card_and_the_publico_tab_work(page):
+    res, clk, _ = probe(page, '<div><div role="button" id="C" aria-pressed="false">Público</div></div>',
+                        lambda p, pg: {"action": "expand", "index": 0})
+    assert res.ok is True and clk == ["C"]
+    res, clk, _ = probe(page, '<div><div role="tab" id="T">Público</div></div>', lambda p, pg: {"action": "click", "index": 0})
+    assert res.ok is True and len(clk) == 1
+    body = ('<div role="dialog"><h2>Cuenta publicitaria</h2><span>Anuncios y publicidad</span>'
+            '<div role="button" id="C" aria-label="Cerrar">x</div></div>')
+    res, clk, _ = probe(page, body, by_label("Cerrar", "close_dialog"))
+    assert res.ok is True and clk == ["C"]
+
+
+# R3-N4: окно с полем имени кампании не закрывается никогда
+def test_r3n4_a_small_editor_like_dialog_with_an_empty_name_is_not_closable(page):
+    body = ('<div role="dialog" style="position:fixed;right:0;top:0;width:500px;height:800px">'
+            '<input placeholder="Enter your ad set name here..."><h2>Ad set</h2><span>Budget</span>'
+            '<div role="button" id="CLS" aria-label="Close">x</div></div>')
+    res = probe_clicked_nothing(page, body, by_label("Close", "close_dialog"))
+    assert res.reason == "editor_dialog_not_closable"
+    res = probe_clicked_nothing(page, body, lambda p, pg: {"action": "press_escape"})
+    assert res.reason == "editor_dialog_not_closable"
+
+
+def test_r3_editor_header_close_is_refused_both_ways_and_tabs_and_naming_escape_work_by_design(page):
+    body = ('<div><input placeholder="Enter your campaign name here..." value="c"><h2>Campaign</h2>'
+            '<div role="button" id="CLS">Close</div></div>')
+    assert probe_clicked_nothing(page, body, by_label("Close")).action == "give_up"
+    assert probe_clicked_nothing(page, body, by_label("Close", "close_dialog")).reason == "not_a_dialog_close_button"
+    res, clk, _ = probe(page, '<div role="tablist"><div role="tab" id="TAB">Ads</div></div>', by_label("Ads"))
+    assert res.ok is True
+    res, clk, esc = probe(page, '<div role="dialog"><h2>Ad set name</h2><span>Name your ad sets consistently.</span>'
+                                '<div role="button">Cancel</div></div>', lambda p, pg: {"action": "press_escape"})
+    assert res.ok is True and esc == 1
