@@ -5129,7 +5129,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "630": {
+        "actor": "Worker-S1630L",
+        "session": "run_s1630l_1006",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "codex/acl-1630-sc-location-ads",
+        "worktree": "C:\\acl-1630-sc-location-ads",
+        "id": "09b0d43516fd466fa157b1aad05a4b23",
+        "issue": 630,
+        "state": "implementing",
+        "started_at": "2026-10-06T09:43:32+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -7204,6 +7217,17 @@
         "pr": 624,
         "queued_at": "2026-10-06T06:38:54+00:00",
         "reviewer": "Reviewer-R1620Q"
+      },
+      "630": {
+        "implementers": [
+          {
+            "actor": "Worker-S1630L",
+            "session": "run_s1630l_1006"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1630L",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -7746,6 +7770,10 @@
       "Reviewer-R1620Q": {
         "session": "rev_r1620q_1006",
         "role": "Reviewer"
+      },
+      "Worker-S1630L": {
+        "session": "run_s1630l_1006",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -13178,6 +13206,13 @@
         "pr": 624,
         "lane": "4187a1005fc345619c6ff3a2608aa0b5",
         "actor": "Reviewer-R1620Q"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-06T09:43:32+00:00",
+        "issue": 630,
+        "claim": "09b0d43516fd466fa157b1aad05a4b23",
+        "actor": "Worker-S1630L"
       }
     ],
     "policy": {
