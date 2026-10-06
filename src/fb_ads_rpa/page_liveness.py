@@ -136,6 +136,10 @@ def answers(page, timeout_s: float = 5.0) -> bool | None:
     отпускает GIL). Ушедшую вкладку не спрашиваем вовсе, а «закрыто» в ответе
     помечает её ушедшей — следующий вопрос не пойдёт к драйверу.
     """
+    # ACL-1614: после Stop вкладку не спрашиваем — проверка живости тоже ожидание.
+    from src.fb_ads_rpa import job_cancel
+
+    job_cancel.check()
     if tab_gone(page):
         return None
     try:

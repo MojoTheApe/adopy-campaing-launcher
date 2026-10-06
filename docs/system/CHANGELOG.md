@@ -1,5 +1,30 @@
 # System history
 
+## Stop ends a job whose robot is stuck inside a step — ACL-1614
+
+05.10, job 1ad447f9: Stop was pressed while the robot sat inside a page call. Stop closed the
+Playwright connection from the web thread; the job thread then spun forever inside Playwright
+holding the GIL, the whole dashboard slowed to 10-30 s per request, and the job stayed
+"cancelling" with its profile slot until the dashboard was restarted.
+
+- Stop only signals now. The connection and the browser are never closed from another thread;
+  the job thread closes its own connection when it unwinds. The Multilogin window stays open and
+  the profile is never stopped.
+- The flow checks the signal in its waits (the shared pause helpers, `before_step`, the
+  liveness probe, the sleeps in the Ads Manager flow, simple create and crop step) and raises
+  `JobCancelled`, which unwinds through the normal path: a Stop ends within a few seconds.
+- If the job thread has not ended within `ACL_CANCEL_DEADLINE_S` (default 60 s), e.g. blocked in
+  one call on a frozen tab, the job becomes "Stopped by the user - the robot was stuck in <step>;
+  the Multilogin window was left open", its slot and profile lock are released so the queue
+  moves on, and the thread is abandoned. If it wakes later it writes no results, errors,
+  telemetry or notices and does not touch the slot again.
+- The page shows "Stopping..." for a cancelling job (never "waiting"/"opening") and the stuck
+  reason on a stopped one.
+- New signal `step_stuck`: a running job with no telemetry step for `ACL_STEP_STUCK_S` (default
+  300 s) records one `step_stuck` row (last step, idle seconds) and sends one Sentry message,
+  once per job. The row does not reset the "No new step for N min" clock on the page.
+- Tests: `tests/test_acl1614_cancel_hung_job.py`.
+
 ## A collapsed Audience card is opened by clicking the card in every editor layout — ACL-1611
 
 05.10, Facebook_9403A (KW_TRL_All_Video_Mix_35_05.10): the ad set's Audience section showed as a

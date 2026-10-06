@@ -160,6 +160,18 @@ def draft_names(draft: Any) -> list[str]:
     return [n for n in names if n]
 
 
+def report_step_stuck(step: str, idle_s: float, *, job: str = "", account: str = "",
+                      campaign: str = "") -> str:
+    """Задание молчит дольше порога — одно событие на простой (ACL-1614)."""
+    try:
+        from src import acl_sentry
+
+        return acl_sentry.report_step_stuck(step, idle_s, job=job, account=account,
+                                            campaign=campaign) or ""
+    except Exception:
+        return ""
+
+
 def report_campaign_stop(
     fail_step: str,
     *,

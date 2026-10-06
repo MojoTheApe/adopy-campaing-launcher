@@ -6,6 +6,8 @@ import random
 import time
 from typing import TYPE_CHECKING
 
+from src.fb_ads_rpa import job_cancel
+
 if TYPE_CHECKING:
     from playwright.sync_api import Page
 
@@ -76,6 +78,7 @@ def wait_for_teach_resume(max_wait_s: float = 600.0) -> bool:
     deadline = _t.time() + max_wait_s
     while _t.time() < deadline:
         _t.sleep(0.5)
+        job_cancel.check()
         if not _TEACH_WAITING:
             return True
     end_teach_wait()
@@ -154,6 +157,7 @@ def wait_for_human_release(page: "Page | None" = None, *, max_wait_s: float = 30
             except Exception:
                 pass
         time.sleep(0.5)
+        job_cancel.check()
         if not _HUMAN_TAKEOVER:
             if page:
                 try:
@@ -180,21 +184,25 @@ def pause_short(page: "Page | None" = None) -> None:
     if check_human_takeover(page):
         wait_for_human_release(page)
     time.sleep(random.uniform(0.4, 0.9) if _slow() else random.uniform(0.25, 0.6))
+    job_cancel.check()
 
 
 def pause_medium(page: "Page | None" = None) -> None:
     if check_human_takeover(page):
         wait_for_human_release(page)
     time.sleep(random.uniform(1.0, 2.2) if _slow() else random.uniform(0.6, 1.3))
+    job_cancel.check()
 
 
 def pause_long(page: "Page | None" = None) -> None:
     if check_human_takeover(page):
         wait_for_human_release(page)
     time.sleep(random.uniform(2.5, 4.5) if _slow() else random.uniform(1.0, 1.8))
+    job_cancel.check()
 
 
 def pause_after_navigation(page: "Page | None" = None) -> None:
     if check_human_takeover(page):
         wait_for_human_release(page)
     time.sleep(random.uniform(2.0, 3.5) if _slow() else random.uniform(1.0, 1.7))
+    job_cancel.check()
