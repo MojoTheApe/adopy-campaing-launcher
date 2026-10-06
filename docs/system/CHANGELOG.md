@@ -1,5 +1,34 @@
 # System history
 
+## The same video on several ads gets media on every ad — ACL-1637
+
+06.10, Doc120 (45b9778e65df) and B97 (5f05cf961d37, 152f7df4ef6a): the first ad got the video,
+ads 2-4 got none (`same_file_already_uploaded_this_run` / `library_has_no_copy`) and the campaign
+ended do-not-publish.
+
+- Cause: a heavy video is compressed first, and the copy that goes to Meta is named
+  `<name>.<key>.mp4`. Meta's media library captions the tile with that name, but the "file already
+  uploaded this run" path searched only for the original name, so it never found the tile. The
+  "do not upload twice" rule then left the ad empty.
+- The library lookup of ads 2+ now also searches by the compressed copy's name (found in the
+  compression cache, no ffmpeg needed) and looks twice, with a pause, because a fresh upload
+  appears in the grid with a delay.
+- If the library genuinely has no copy, the file is uploaded again for that ad: once per ad, one
+  attempt, and only when the wizard reached the Media step. A wizard that did not open is not
+  followed by an upload through the same wizard.
+- The per-run failed-upload memo now keeps the failure reason. A file that failed earlier is
+  uploaded again only if it never reached Meta (`file_not_landed`, wizard/navigation reasons). A
+  file Meta refused (`media_refused_on_ad`), a crop failure, or any failure where Meta saw the
+  file is not uploaded again; the ad ends with a named reason.
+- An ad that still ends without media now says why in plain English (`library_has_no_copy`,
+  `same_file_already_*`, `file_not_landed`, `wizard_not_opened`), is a blocking problem and the
+  campaign stays do-not-publish.
+- Not changed here: in run 573ab2cf3646 the ad 2 creative step finished at 14:00:17,
+  `create_additional_ad` failed at 14:01:38, and nothing was recorded until `step_budget_exceeded`
+  at 14:20:38. That 19-minute hang is outside the creative-upload path; it belongs to the
+  step-stuck work (ACL-1614) and is handed to its owner.
+- Tests: `tests/test_same_video_on_several_ads_gets_media.py`.
+
 ## Single-screen editor: default country removal and ads 2-4 on 06.10 layout — ACL-1630
 
 Facebook_5265, three runs on 06.10 ended do-not-publish: `audience_location` failed with

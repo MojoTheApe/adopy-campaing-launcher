@@ -105,6 +105,7 @@ def test_failures_before_the_stop_are_kept(flow, monkeypatch):
 
     monkeypatch.setattr(dom, "create_additional_ad", create)
     flow["fail_upload"] = {"a.png"}
+    dom._set_upload_why(None)  # причина соседнего теста не должна утекать в строку отказа
     result, soft = flow["run"]()
     assert result == "browser_closed"
     assert "ad_creative_upload" in soft, soft

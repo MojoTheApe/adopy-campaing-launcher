@@ -538,7 +538,8 @@ def test_each_ads_upload_failure_carries_its_own_reason(flow, tmp_path):
     `ad_creative_upload`, которую Sentry для `ad2_…` не читает; а отказ
     объявления 1 получал причину объявления 2 (та же строка, записанная
     позже). Теперь у каждой строки шага объявления — своя причина."""
-    assert "ad_creative_upload" in flow and "ad2_creative_upload" in flow
+    # ACL-1637: `wizard_not_opened` теперь называется в самой строке объявления 1.
+    assert any(r.startswith("ad_creative_upload") for r in flow) and "ad2_creative_upload" in flow
     ad1 = [r for r in _rows(tmp_path, "ad_creative_upload") if r["ok"] is False]
     ad2 = [r for r in _rows(tmp_path, "ad2_creative_upload") if r["ok"] is False]
     assert ad1 and ad1[-1]["note"] == "wizard_not_opened"
