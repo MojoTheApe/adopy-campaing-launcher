@@ -42,6 +42,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from src.fb_ads_rpa import job_cancel
 from src.fb_ads_rpa import run_telemetry as _telemetry
 
 #: Строка телеметрии сторожа.
@@ -436,6 +437,7 @@ def scan(page, *, target=None, timeout_s: float = 2.0) -> list[Window]:
 
 
 def _clear_marks(page) -> None:
+    job_cancel.check()  # ACL-1614: после Stop страницу не трогаем
     try:
         page.evaluate(_CLEAR_MARKS_JS)
     except Exception:
@@ -609,6 +611,9 @@ def before_step(page, where: str, *, target=None, only: tuple[str, ...] | None =
     Возвращает, что закрыли (`<вид>:<чем>`). `only` — закрывать только эти
     виды (из `_clear_blocking_overlays`: остальное он закрывает сам).
     """
+    # ACL-1614: перед шагом — Stop слышен до первого обращения к странице
+    # (05.10 поток зависал именно в `_clear_marks` отсюда).
+    job_cancel.check()
     closed: list[str] = []
     handled: set = set()
     try:

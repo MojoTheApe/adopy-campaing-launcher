@@ -197,6 +197,10 @@ def job_progress(
         ts = _parse_ts(row.get("ts"))
         if ts is None or (since is not None and ts < since):
             continue
+        # ACL-1614: сигнал «робот молчит» не шаг робота — его строка не должна
+        # обнулять тишину, о которой он сам сообщает.
+        if _base_step(row.get("step")) == "step_stuck":
+            continue
         last[name] = row
         steps_seen.setdefault(name, []).append(str(row.get("step") or ""))
         if latest is None or ts > latest:

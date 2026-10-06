@@ -12,12 +12,15 @@ form fields and violated the product's manual-final-publish boundary.
 from __future__ import annotations
 
 import contextlib
+import os
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from config.paths import get_draft_status_path
+from src.fb_ads_rpa import job_cancel
 from src.fb_ads_rpa.creative_compress import observe_preparation
 from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.draft import RpaPublishResult
@@ -45,6 +48,34 @@ _request_locks: dict[str, threading.Lock] = {}
 _request_lock = threading.Lock()
 _REQUEST_KEYS_MAX = 500
 
+# ── ACL-1614: Stop зависшего задания ───────────────────────────────────────
+#: Сколько секунд поток задания может не отзываться на Stop, прежде чем задание
+#: объявляется остановленным, место отдаётся очереди, а поток бросается.
+CANCEL_DEADLINE_S = 60.0
+#: Сколько секунд задание без новой строки телеметрии считается зависшим.
+STEP_STUCK_S = 300.0
+#: Как часто сторож смотрит на тишину задания.
+_STUCK_POLL_S = 15.0
+#: Конец потока задания: Event на задание. Сторож срока ждёт его.
+_job_ended: dict[str, threading.Event] = {}
+
+
+def _env_seconds(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, "").strip())
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _cancel_deadline_s() -> float:
+    return _env_seconds("ACL_CANCEL_DEADLINE_S", CANCEL_DEADLINE_S)
+
+
+def _step_stuck_s() -> float:
+    return _env_seconds("ACL_STEP_STUCK_S", STEP_STUCK_S)
+
+
 #: Задание в этих статусах держит аккаунт: второе на него не заводим (ACL-1603).
 _LIVE_STATUSES = frozenset({"pending", "queued", "running", "cancelling"})
 
@@ -66,8 +97,19 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _abandoned(job_id: str) -> bool:
+    """Задание брошено по сроку Stop: его поток больше ничего не пишет (ACL-1614).
+
+    Звать под `_jobs_lock`.
+    """
+    job = _jobs.get(job_id)
+    return job is None or bool(job.get("abandoned"))
+
+
 def _append_creative_notice(job_id: str, note: str) -> None:
     with _jobs_lock:
+        if _abandoned(job_id):
+            return
         notices = _jobs[job_id].setdefault("creative_notices", [])
         if note not in notices:
             notices.append(note)
@@ -140,7 +182,10 @@ def create_job(
 def cancel_job(job_id: str) -> dict[str, Any]:
     """Request cancellation of a running/pending job.
 
-    Stops RPA and disconnects CDP; Multilogin window stays open for FB login check.
+    Only signals (ACL-1614): the job thread notices the flag in its waits,
+    unwinds and disconnects CDP itself; the Multilogin window stays open for
+    the FB login check. A thread that does not react within the deadline is
+    abandoned (`_abandon_job`).
     """
     with _jobs_lock:
         job = _jobs.get(job_id)
@@ -153,10 +198,17 @@ def cancel_job(job_id: str) -> dict[str, Any]:
         if job["status"] in ("pending", "queued", "running"):
             job["status"] = "cancelling"
         publisher = _active_publishers.get(job_id)
+        # ACL-1614: срок на выход потока — один сторож на задание.
+        watch = not job.get("cancel_watch")
+        job["cancel_watch"] = True
 
     # Задание, ждущее места в очереди профилей, узнаёт об отмене сразу, а не
     # по таймеру. Вне замка заданий: очередь берёт его из-под своего.
     _slots.wake()
+
+    if watch:
+        threading.Thread(target=_enforce_cancel_deadline, args=(job_id,), daemon=True,
+                         name=f"cancel-deadline-{job_id[:8]}").start()
 
     if publisher is not None:
         # ACL-1399: не в потоке вызывающего. Отмена рвёт CDP-соединение
@@ -166,7 +218,8 @@ def cancel_job(job_id: str) -> dict[str, Any]:
         # запроса, она ломала сам цикл сервера — 29.09 12:54:59 лог полон
         # «loop … is not the running loop», и дешборд перестал отвечать.
         # Свой короткий поток: ответ «останавливаю» уходит сразу, что бы ни
-        # делала отмена и сколько бы она ни ждала браузер.
+        # делала отмена и сколько бы она ни ждала браузер. С ACL-1614 отмена
+        # публикатора только ставит флаг и сама ничего не закрывает.
         threading.Thread(
             target=_cancel_publisher, args=(publisher,), daemon=True,
             name=f"cancel-{job_id[:8]}",
@@ -180,6 +233,117 @@ def _cancel_publisher(publisher: RpaPublisher) -> None:
         publisher.cancel()
     except Exception:
         pass
+
+
+def _enforce_cancel_deadline(job_id: str) -> None:
+    """Ждать конца потока задания до срока; не дождались — бросить его."""
+    ended = _job_ended.get(job_id)
+    if ended is None or ended.wait(_cancel_deadline_s()):
+        return
+    _abandon_job(job_id)
+
+
+def _claim_slot(job_id: str) -> bool:
+    """Право решить судьбу места задания — одному: потоку или сроку Stop.
+
+    Без этого брошенный поток, проснувшись, отпустил бы (или занял «как
+    оставленное окно») место, которое очередь уже отдала другому.
+    """
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None or job.get("slot_settled"):
+            return False
+        job["slot_settled"] = True
+        return True
+
+
+def _abandon_job(job_id: str) -> bool:
+    """Поток не ответил на Stop за срок: задание - `cancelled`, место свободно.
+
+    Окно Multilogin остаётся открытым, профиль не трогаем. Поток остаётся
+    демоном: соединение под ним никто не закрывает, поэтому он просто ждёт свой
+    вызов CDP и не крутится. Проснувшись, ничего не пишет (`abandoned`).
+    """
+    step = ""
+    _rt = None
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        seen = _rt.last_activity(job_id)
+        step = seen[1] if seen else ""
+    except Exception:
+        pass
+    step = step.replace("_", " ") if step else "an unknown step"
+    # Ключ профиля — до замка заданий (читает карту аккаунтов) и ложится на
+    # задание вместе с отметкой «брошено», чтобы ожидающие его видели сразу.
+    with _jobs_lock:
+        label0 = (_jobs.get(job_id) or {}).get("account_label", "")
+    try:
+        key = profile_key_for(label0)
+    except Exception:
+        key = None
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None or job.get("abandoned") or job.get("status") in ("done", "cancelled"):
+            return False
+        job["profile_key"] = key
+        job["abandoned"] = True
+        job["status"] = "cancelled"
+        job["finished_at"] = _now_iso()
+        job["stuck_step"] = step
+        job["errors"].append(
+            f"Stopped by the user — the robot was stuck in {step}; "
+            "the Multilogin window was left open")
+        job.pop("queue", None)
+        account_label = job.get("account_label", "")
+        _active_publishers.pop(job_id, None)
+    if _rt is not None:
+        _rt.abandon_job(job_id)
+    if _claim_slot(job_id):
+        _slots.release(job_id)
+    _slots.wake()
+    # Замок профиля НЕ трогаем (решение по ревью PR #622, вариант (b)): зависший
+    # поток, возможно, ещё держит браузер, и два робота на одном браузере
+    # недопустимы. Задания того же профиля ждут, пока поток не выйдет сам
+    # (`_wait_for_stopped_robot`); другие профили идут, место свободно.
+    return True
+
+
+def _stopped_robot_on(profile: str, job_id: str) -> bool:
+    """На этом профиле есть брошенное, но ещё не вышедшее задание (ACL-1614)."""
+    with _jobs_lock:
+        # Ключ профиля записан на задание при отказе от него: карту аккаунтов с
+        # диска каждые 0,25 с не читаем.
+        others = [(jid, j.get("profile_key")) for jid, j in _jobs.items()
+                  if jid != job_id and j.get("abandoned")]
+    return any(key == profile and jid in _job_ended for jid, key in others)
+
+
+def _wait_for_stopped_robot(job_id: str, profile: str) -> bool:
+    """Ждать, пока брошенный робот этого профиля отпустит его. False — нас отменили.
+
+    Показывает причину ожидания на задании. Замок профиля всё равно берётся
+    потом обычным `with`: здесь только видимость и отмена.
+    """
+    shown = False
+    while _stopped_robot_on(profile, job_id):
+        if _is_cancelled(job_id):
+            return False
+        if not shown:
+            shown = True
+            with _jobs_lock:
+                job = _jobs.get(job_id)
+                if job is not None and not job.get("abandoned"):
+                    view = _queue_view({"reason": "profile"})
+                    view["hold"] = "stopped_robot"
+                    job["queue"] = view
+        time.sleep(0.25)
+    if shown:
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is not None:
+                job.pop("queue", None)
+    return True
 
 
 def slots_snapshot() -> dict[str, Any]:
@@ -334,7 +498,29 @@ def _watch_screen_lock(job_id: str):
             stop.set()
 
 
-def _run_job(
+def _run_job(job_id: str, slots: list[dict[str, Any]], **kwargs: Any) -> None:
+    """Runs in a daemon thread. Updates _jobs[job_id] as it progresses.
+
+    ACL-1614: обёртка отмечает конец потока (по нему сторож срока Stop понимает,
+    что бросать нечего) и ловит `JobCancelled`, долетевший до самого верха.
+    """
+    ended = _job_ended.setdefault(job_id, threading.Event())
+    try:
+        _run_job_inner(job_id, slots, **kwargs)
+    except job_cancel.JobCancelled:
+        with _jobs_lock:
+            live = not _abandoned(job_id)
+            if live:
+                _jobs[job_id]["errors"].append("Stopped by the user")
+        if live:
+            _finish(job_id, cancelled=True)
+    finally:
+        job_cancel.unbind()
+        ended.set()
+        _job_ended.pop(job_id, None)
+
+
+def _run_job_inner(
     job_id: str,
     slots: list[dict[str, Any]],
     *,
@@ -345,7 +531,6 @@ def _run_job(
     dry_run: bool = False,
     hand_off: bool = False,
 ) -> None:
-    """Runs in a daemon thread. Updates _jobs[job_id] as it progresses."""
     # Must be first: clear any asyncio event loop inherited from the parent
     # async handler (Python 3.14+ ContextVar propagation via threading.Thread).
     _clear_inherited_asyncio_loop()
@@ -380,23 +565,38 @@ def _run_job(
     def _show_wait(verdict: dict[str, Any]) -> None:
         with _jobs_lock:
             job = _jobs.get(job_id)
-            if job is not None:
+            if job is not None and not job.get("abandoned"):
                 job["queue"] = _queue_view(verdict)
         # ACL-1424: каждое решение «ждать» — в телеметрию (свободно, замер, итог).
         _record_slot_decision(_rt, first_campaign, account_label, verdict)
 
     profile = profile_key_for(account_label)
-    grant = _slots.acquire(
-        job_id,
-        profile,
-        cancelled=lambda: _is_cancelled(job_id),
-        on_wait=_show_wait,
-    )
-    if grant is None:
-        with _jobs_lock:
-            _jobs[job_id].pop("queue", None)
-        _finish(job_id, cancelled=True)
-        return
+    # ACL-1614: профиль с брошенным, ещё не вышедшим роботом ждём ДО места в
+    # очереди: зависший профиль не должен занимать место и стопорить остальные
+    # аккаунты (ревью PR #622, R2-B1). Ожидание видно на задании и снимается Stop.
+    while True:
+        if not _wait_for_stopped_robot(job_id, profile):
+            with _jobs_lock:
+                _jobs[job_id].pop("queue", None)
+            _finish(job_id, cancelled=True)
+            return
+        grant = _slots.acquire(
+            job_id,
+            profile,
+            cancelled=lambda: _is_cancelled(job_id),
+            on_wait=_show_wait,
+        )
+        if grant is None:
+            with _jobs_lock:
+                _jobs[job_id].pop("queue", None)
+            _finish(job_id, cancelled=True)
+            return
+        # Робота бросили, пока мы стояли в очереди за местом: место отдаём
+        # обратно и ждём его выхода снаружи очереди.
+        if _stopped_robot_on(profile, job_id):
+            _slots.release(job_id)
+            continue
+        break
     try:
         with _jobs_lock:
             _jobs[job_id].pop("queue", None)
@@ -417,8 +617,11 @@ def _run_job(
                 _finish(job_id, cancelled=True)
                 return
             with _jobs_lock:
+                if _abandoned(job_id):
+                    return
                 _jobs[job_id]["status"] = "running"
                 _jobs[job_id]["started_at"] = _now_iso()
+            _start_stuck_watch(job_id, account_label)
 
             if activate or not use_rpa_publish():
                 _fatal(job_id, "ACL safety gate: only draft-only RPA jobs are allowed")
@@ -445,12 +648,15 @@ def _run_job(
         # держать место, пока его не закроют (`close_profile`, кнопка Close
         # profile, мягкая остановка): иначе очередь пускала бы третий и
         # четвёртый Mimic поверх двух забытых окон.
-        with _jobs_lock:
-            left_open = not bool((_jobs.get(job_id) or {}).get("profile_closed"))
-        if left_open and _job_ran_in_browser(job_id):
-            _slots.keep(job_id, account_label)
-        else:
-            _slots.release(job_id)
+        # ACL-1614: решает место либо этот поток, либо срок Stop (`_abandon_job`),
+        # но не оба: брошенный поток, проснувшись, места не трогает.
+        if _claim_slot(job_id):
+            with _jobs_lock:
+                left_open = not bool((_jobs.get(job_id) or {}).get("profile_closed"))
+            if left_open and _job_ran_in_browser(job_id):
+                _slots.keep(job_id, account_label)
+            else:
+                _slots.release(job_id)
 
 
 def _job_ran_in_browser(job_id: str) -> bool:
@@ -506,12 +712,16 @@ def _record_slot_decision(rt: Any, campaign: str, account: str, verdict: dict[st
 
 def _append_result(job_id: str, res: dict[str, Any]) -> None:
     with _jobs_lock:
+        if _abandoned(job_id):
+            return   # ACL-1614: брошенный поток в закрытое задание не пишет
         _jobs[job_id]["results"].append(res)
         _jobs[job_id]["done_count"] += 1
 
 
 def _fatal(job_id: str, msg: str) -> None:
     with _jobs_lock:
+        if _abandoned(job_id):
+            return
         _jobs[job_id]["errors"].append(msg)
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["finished_at"] = _now_iso()
@@ -612,6 +822,9 @@ def _write_draft_status(
 
 def _finish(job_id: str, *, cancelled: bool = False) -> None:
     with _jobs_lock:
+        if _abandoned(job_id):
+            _active_publishers.pop(job_id, None)
+            return   # ACL-1614: задание уже закрыто сроком Stop
         _jobs[job_id]["status"] = "cancelled" if cancelled else "done"
         _jobs[job_id]["finished_at"] = _now_iso()
         account_label = _jobs[job_id].get("account_label", "")
@@ -641,6 +854,11 @@ def _run_rpa(
     publisher = RpaPublisher(dry_run=dry_run, hand_off=hand_off)
     with _jobs_lock:
         _active_publishers[job_id] = publisher
+    # ACL-1614: Stop слышен потоку задания в каждом ожидании (job_cancel.check).
+    job_cancel.bind(getattr(publisher, "cancel_event", None))
+    # Stop мог прийти до регистрации публикатора: `cancel_job` его не нашёл.
+    if _is_cancelled(job_id):
+        publisher.cancel()
     try:
         drafts = publisher.build_drafts(
             slots,
@@ -649,6 +867,12 @@ def _run_rpa(
             activate=activate,
             preview_mode=False,
         )
+    except job_cancel.JobCancelled:
+        job_cancel.unbind()
+        _add_error(job_id, "Stopped by the user")
+        publisher.close(force=False)
+        _finish(job_id, cancelled=True)
+        return
     except Exception as e:
         _fatal(job_id, f"Failed to build campaign drafts: {e}")
         # Финальное ревью PR #314 (d): исключение сборки черновиков кончает
@@ -657,7 +881,10 @@ def _run_rpa(
         try:
             from src import acl_sentry
 
-            acl_sentry.report_job_exception(e, job=job_id, account=account_label, phase="build_drafts")
+            with _jobs_lock:
+                quiet = _abandoned(job_id)
+            if not quiet:
+                acl_sentry.report_job_exception(e, job=job_id, account=account_label, phase="build_drafts")
         except Exception:
             pass
         with _jobs_lock:
@@ -665,8 +892,9 @@ def _run_rpa(
         return
 
     with _jobs_lock:
-        _jobs[job_id]["total"] = len(drafts)
-        _jobs[job_id]["campaign_names"] = [str(getattr(d, "name", "") or "") for d in drafts]
+        if not _abandoned(job_id):
+            _jobs[job_id]["total"] = len(drafts)
+            _jobs[job_id]["campaign_names"] = [str(getattr(d, "name", "") or "") for d in drafts]
 
     if not drafts:
         _fatal(job_id, "No campaigns to publish.")
@@ -693,8 +921,7 @@ def _run_rpa(
             ready.append(draft)
 
     if _is_cancelled(job_id):
-        with _jobs_lock:
-            _jobs[job_id]["errors"].append("Stopped by the user")
+        _add_error(job_id, "Stopped by the user")
         # Never stop Multilogin — user needs the window to verify FB login.
         publisher.close(force=False)
         _finish(job_id, cancelled=True)
@@ -713,28 +940,105 @@ def _run_rpa(
             with observe_preparation(lambda note: _append_creative_notice(job_id, note)):
                 result = publisher.publish_draft(draft)
             _append_result(job_id, _job_result_from_rpa(result))
+    except job_cancel.JobCancelled:
+        # ACL-1614: Stop услышан внутри шага — обычный выход, как между кампаниями.
+        cancelled = True
+        _add_error(job_id, "Stopped by the user")
     except Exception as e:
         if _is_cancelled(job_id):
             cancelled = True
-            with _jobs_lock:
-                _jobs[job_id]["errors"].append("Stopped by the user")
+            _add_error(job_id, "Stopped by the user")
         else:
-            with _jobs_lock:
-                _jobs[job_id]["errors"].append(f"RPA error: {e}")
+            _add_error(job_id, f"RPA error: {e}")
             # ACL-1318: исключение, которым кончилась кампания, — в Sentry, со
             # стеком и через тот же вычиститель; отправка работу не роняет.
             try:
                 from src import acl_sentry
 
-                acl_sentry.report_job_exception(e, job=job_id, account=account_label, phase="publish")
+                with _jobs_lock:
+                    quiet = _abandoned(job_id)
+                if not quiet:
+                    acl_sentry.report_job_exception(e, job=job_id, account=account_label, phase="publish")
             except Exception:
                 pass
     finally:
+        # Дальше уборка (закрытие соединения из ЭТОГО потока): проверки отмены
+        # в ней больше не нужны и не должны её прерывать.
+        job_cancel.unbind()
         # Disconnect CDP; the Multilogin window stays open for review unless
         # every campaign came out clean (ACL-1444, `_let_go_of_profile`).
         _let_go_of_profile(job_id, publisher, account_label,
                            clean=not (cancelled or _is_cancelled(job_id)) and _job_is_clean(job_id))
         _finish(job_id, cancelled=cancelled or _is_cancelled(job_id))
+
+
+def _add_error(job_id: str, msg: str) -> None:
+    """Ошибка в задание; брошенное по сроку Stop молчит (ACL-1614)."""
+    with _jobs_lock:
+        if not _abandoned(job_id):
+            _jobs[job_id]["errors"].append(msg)
+
+
+# ── ACL-1614: сигнал «робот молчит» ─────────────────────────────────────────
+
+def _step_stuck_tick(job_id: str, state: dict[str, Any], account_label: str) -> bool:
+    """Одна проверка тишины идущего задания; True — сигнал отправлен.
+
+    Тишина — от последней строки телеметрии задания (до первой — от начала
+    работы). Сигнал один на задание: `state["fired"]`. Часы — `run_telemetry.clock`.
+    """
+    if state.get("fired"):
+        return False
+    from src.fb_ads_rpa import run_telemetry as _rt
+
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None or job.get("abandoned") or job.get("status") != "running":
+            return False
+        names = list(job.get("campaign_names") or [])
+        done = int(job.get("done_count") or 0)
+    seen = _rt.last_activity(job_id)
+    last_t, step = seen if seen else (state["since"], "")
+    last_t = max(last_t, state["since"])
+    idle = _rt.clock() - last_t
+    if idle < _step_stuck_s():
+        return False
+    state["fired"] = True
+    campaign = names[done] if done < len(names) else ""
+    step = step or "job_start"
+    try:
+        _rt.record("step_stuck", None, campaign=campaign, diag={"last_step": step, "idle_s": round(idle, 1)})
+    except Exception:
+        pass
+    try:
+        from src.fb_ads_rpa import sentry_signal
+
+        sentry_signal.report_step_stuck(step, idle, job=job_id, account=account_label,
+                                        campaign=campaign)
+    except Exception:
+        pass
+    return True
+
+
+def _start_stuck_watch(job_id: str, account_label: str) -> None:
+    """Сторож тишины: свой поток на задание, в браузер не ходит."""
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        state: dict[str, Any] = {"fired": False, "since": _rt.clock()}
+        ended = _job_ended.get(job_id)
+        if ended is None:
+            return
+
+        def watch() -> None:
+            _rt.set_current_job(job_id)    # строка сигнала несёт номер задания
+            while not ended.wait(max(0.05, min(_STUCK_POLL_S, _step_stuck_s() / 2))):
+                if _step_stuck_tick(job_id, state, account_label):
+                    return
+
+        threading.Thread(target=watch, daemon=True, name=f"stuck-watch-{job_id[:8]}").start()
+    except Exception:
+        pass    # сигнал необязателен: сбой сторожа работу не роняет
 
 
 def _job_is_clean(job_id: str) -> bool:
@@ -776,6 +1080,8 @@ def _let_go_of_profile(job_id: str, publisher: Any, account_label: str, *, clean
         from src.fb_ads_rpa.rpa_publisher import PROFILE_CLOSED_NOTICE
 
         with _jobs_lock:
+            if _abandoned(job_id):
+                return
             _jobs[job_id]["profile_closed"] = True
         _append_creative_notice(job_id, PROFILE_CLOSED_NOTICE)
         # Очередь будит `_slots.release` в `_run_job` сразу после этого.
@@ -939,6 +1245,9 @@ def _start_job(
         total=len(drafts),
         campaign_names=[str(getattr(d, "name", "") or "") for d in drafts],
     )
+    # Event конца потока заводится здесь, прямо перед потоком: у задания, чей
+    # поток не стартовал, он не остаётся навсегда.
+    _job_ended[job_id] = threading.Event()
     t = threading.Thread(
         target=_run_job,
         args=(job_id, slots),
@@ -953,5 +1262,9 @@ def _start_job(
         daemon=True,
         name=f"publish-{job_id[:8]}",
     )
-    t.start()
+    try:
+        t.start()
+    except BaseException:
+        _job_ended.pop(job_id, None)
+        raise
     return job_id

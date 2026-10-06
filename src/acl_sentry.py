@@ -236,6 +236,31 @@ def report_job_exception(exc: BaseException, *, job: str = "", account: str = ""
         return sentry_sdk.capture_exception(exc) or ""
 
 
+def report_step_stuck(step: str, idle_s: float, *, job: str = "", account: str = "",
+                      campaign: str = "") -> str:
+    """Робот не писал шагов дольше порога (ACL-1614, сигнал «завис»).
+
+    Отпечаток — по шагу, на котором встали: одно и то же зависание на одном
+    шаге у разных заданий складывается в один тикет, а не в событие на каждое.
+    """
+    if not init():
+        return ""
+    import sentry_sdk
+
+    step = str(step or "unknown")
+    with sentry_sdk.new_scope() as scope:
+        scope.fingerprint = ["acl-step-stuck", step]
+        scope.set_tag("failure_kind", "step_stuck")
+        scope.set_tag("step", step)
+        if account:
+            scope.set_tag("account", account_tag(account))
+        ctx = {"idle_s": round(float(idle_s), 1), "campaign": campaign}
+        if job:
+            ctx["job"] = str(job).replace("-", "")
+        scope.set_context("run", ctx)
+        return sentry_sdk.capture_message(f"step_stuck: {step}", level="error") or ""
+
+
 def account_tag(account: str) -> str:
     """Тег аккаунта — только короткий ярлык (первое слово: «FacebookDoc19»),
     без имени персоны после него (повторное ревью v3 PR #314)."""
