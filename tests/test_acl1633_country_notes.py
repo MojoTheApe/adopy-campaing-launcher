@@ -167,17 +167,20 @@ def _map(account_notes=None, country_notes=None, rows=None, country="Mexico"):
 
 def test_an_empty_note_renders_no_text_anywhere():
     html = _map()
-    country = re.search(r'<span class="amap-country-note empty"[^>]*>(.*?)</span>', html, re.S)
+    country = re.search(r'<span class="amap-country-note empty"[^>]*>(.*?</span>)</span>', html, re.S)
     cell = re.search(r'<td class="amap-acct-note empty"[^>]*>(.*?)</td>', html, re.S)
-    assert country and country.group(1) == "" and cell and cell.group(1).strip() == ""
+    strip = lambda x: re.sub(r"<[^>]+>", "", x).strip()
+    assert country and strip(country.group(1)) == "" and cell and strip(cell.group(1)) == ""
+    # ACL-1633 v2: у пустой заметки есть коробка (поле ввода), только без текста.
+    assert 'class="amap-note-box"' in country.group(1) and 'class="amap-note-box"' in cell.group(1)
     assert "add note" not in html.lower() and "✎" not in html
 
 
 def test_a_filled_note_shows_its_first_line_and_the_full_text_in_the_tooltip():
     long = "first line " * 12 + "\nsecond line"
     html = _map({"Demo": long}, {"Mexico": long})
-    for pattern in (r'<td class="amap-acct-note"[^>]*>(.*?)</td>', r'<span class="amap-country-note"[^>]*>(.*?)</span>'):
-        shown = re.search(pattern, html, re.S).group(1).strip()
+    for pattern in (r'<td class="amap-acct-note"[^>]*>(.*?)</td>', r'<span class="amap-country-note"[^>]*>(.*?</span>)</span>'):
+        shown = re.sub(r"<[^>]+>", "", re.search(pattern, html, re.S).group(1)).strip()
         assert "second line" not in shown and shown.endswith("…")
     assert 'title="' + long.replace("\n", "&#13;&#10;") + '"' in html.replace("\r", "").replace("\n", "&#13;&#10;") or "second line" in html
 
@@ -341,7 +344,7 @@ def test_delete_shows_undo_for_five_seconds_and_undo_restores(browser):
 
 def test_the_pencil_shows_only_on_hover_or_focus_of_an_empty_note(browser):
     page, errors = _open(browser)
-    op = "getComputedStyle(document.querySelector('td.amap-acct-note[data-account=\"Quiet\"]'), '::after').opacity"
+    op = "getComputedStyle(document.querySelector('td.amap-acct-note[data-account=\"Quiet\"] .amap-note-box'), '::after').opacity"
     assert float(page.evaluate(op)) == 0
     _acct(page, "Quiet").hover()
     assert float(page.evaluate(op)) > 0.3
@@ -393,4 +396,30 @@ def test_the_editor_does_not_cover_the_row_when_there_is_room(browser):
     assert pop["y"] >= cell["y"] + cell["height"] - 1 or pop["y"] + pop["height"] <= cell["y"] + 1
     assert pop["x"] >= 0 and pop["x"] + pop["width"] <= 1280
     page.keyboard.press("Escape")
+    page.close()
+
+
+def test_the_note_is_drawn_as_an_input_box_of_equal_height(browser):
+    notes.set_note("Demo", "filled")
+    page, errors = _open(browser)
+    info = page.evaluate("""() => {
+      const q = (s) => document.querySelector(s);
+      const cs = (e) => getComputedStyle(e);
+      const filled = q('td.amap-acct-note[data-account="Demo"] .amap-note-box');
+      const empty = q('td.amap-acct-note[data-account="Quiet"] .amap-note-box');
+      const country = q('.amap-country-note .amap-note-box');
+      const cell = q('td.amap-acct-note[data-account="Quiet"]');
+      return {
+        border: cs(empty).borderTopWidth, radius: cs(empty).borderTopLeftRadius, cursor: cs(empty).cursor,
+        hf: filled.getBoundingClientRect().height, he: empty.getBoundingClientRect().height,
+        full: empty.getBoundingClientRect().width / cell.getBoundingClientRect().width,
+        countryW: country.getBoundingClientRect().width, italic: cs(empty).fontStyle,
+        countryBorder: cs(country).borderTopWidth };
+    }""")
+    assert info["border"] == "1px" and info["countryBorder"] == "1px" and info["cursor"] == "text"
+    assert info["radius"] != "0px" and info["italic"] == "normal"
+    assert abs(info["hf"] - info["he"]) < 0.5, info
+    assert info["full"] > 0.8, info  # в строке аккаунта коробка занимает ячейку
+    assert info["countryW"] <= 18 * 16 + 1, info  # в заголовке страны — компактная
+    assert not errors, errors
     page.close()

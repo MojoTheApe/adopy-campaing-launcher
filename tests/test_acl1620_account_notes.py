@@ -177,7 +177,8 @@ def test_template_shows_truncated_note_with_full_text_in_title_and_no_setup():
     assert f'title="{long}"' in html and f'data-note="{long}"' in html
     # ACL-1633: пустая ячейка не пишет ничего (карандаш рисует CSS при наведении).
     empty = re.search(r'<td class="amap-acct-note empty"[^>]*>(.*?)</td>', html, re.S)
-    assert empty and empty.group(1).strip() == ""
+    assert empty and re.sub(r"<[^>]+>", "", empty.group(1)).strip() == ""
+    assert 'class="amap-note-box"' in empty.group(1)  # коробка есть и у пустой
     assert "add note" not in html.lower()
     assert "Setup" not in html and "amap-setup" not in html and "needs setup" not in html
     assert ">Note<" in html

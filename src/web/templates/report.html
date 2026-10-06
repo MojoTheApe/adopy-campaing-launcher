@@ -1805,13 +1805,23 @@
     /* ACL-1620 / ACL-1633: заметка к аккаунту и к стране. Пустая не рисует ничего;
        карандаш появляется при наведении на строку или фокусе на ячейке.
        Заполненная — первая строка с многоточием, весь текст в title. */
-    .amap table.amap-grid td.amap-acct-note { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
-    .amap td.amap-acct-note:hover, .amap td.amap-acct-note:focus-visible { background: var(--bg-subtle); }
-    .amap-acct-note.empty::after, .amap-country-note.empty::after { content: '\270E'; opacity: 0; color: var(--muted); }
-    .amap tr:hover > td.amap-acct-note.empty::after, .amap-acct-note.empty:focus-visible::after,
-    .amap summary:hover .amap-country-note.empty::after, .amap-country-note.empty:focus-visible::after { opacity: 0.55; }
-    .amap-country-note { cursor: pointer; margin-left: 0.5rem; font-weight: 400; font-size: 0.78rem; color: var(--muted); }
-    .amap-country-note:focus-visible, .amap-acct-note:focus-visible { outline: 1px solid var(--field-border); }
+    /* Заметка — поле ввода: рамка, фон, скругление, как у полей формы. Пустая
+       показывает ту же коробку без текста и той же высоты, так что «сюда можно
+       писать» видно всегда. Карандаш рисует ::after при наведении и фокусе. */
+    .amap-note-box {
+      position: relative; display: block; box-sizing: border-box; height: 1.7rem; line-height: calc(1.7rem - 2px);
+      padding: 0 1.4rem 0 0.4rem; border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--muted); font-weight: 400; cursor: text;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: border-color .12s;
+    }
+    .amap-note-box::after { content: '\270E'; position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); opacity: 0; color: var(--muted); }
+    .amap-acct-note:hover .amap-note-box, .amap-country-note:hover .amap-note-box,
+    .amap-acct-note:focus-visible .amap-note-box, .amap-country-note:focus-visible .amap-note-box { border-color: var(--text, currentColor); }
+    .amap-acct-note:hover .amap-note-box::after, .amap-country-note:hover .amap-note-box::after,
+    .amap-acct-note:focus-visible .amap-note-box::after, .amap-country-note:focus-visible .amap-note-box::after { opacity: 0.6; }
+    .amap table.amap-grid td.amap-acct-note { cursor: text; padding-top: 0.15rem; padding-bottom: 0.15rem; }
+    .amap-country-note { display: inline-block; vertical-align: middle; margin-left: 0.5rem; width: 18rem; max-width: 40%; font-size: 0.78rem; }
+    .amap-country-note:focus-visible, .amap-acct-note:focus-visible { outline: none; }
     .amap-note-pop {
       position: fixed; z-index: 1000; width: min(24rem, calc(100vw - 1rem));
       background: var(--bg, #fff); color: inherit; border: 1px solid var(--field-border);
@@ -8855,7 +8865,8 @@ async function amapSend(body, msgEl) {
       el.setAttribute('data-note', text);
       el.title = text;
       el.classList.toggle('empty', !text);
-      el.textContent = text ? first(text) : '';
+      var box = el.querySelector('.amap-note-box');
+      if (box) box.textContent = text ? first(text) : '';
     });
   }
 
