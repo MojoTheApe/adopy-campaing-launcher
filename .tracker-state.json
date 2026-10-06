@@ -5252,7 +5252,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "642": {
+        "actor": "Worker-S1642A",
+        "session": "run_s1642a_1006",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1642-open-profile",
+        "worktree": "C:\\acl-1642-open-profile",
+        "id": "68af845c8be24bd3801201057f735f91",
+        "issue": 642,
+        "state": "implementing",
+        "started_at": "2026-10-06T15:48:31+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -7437,6 +7450,17 @@
         },
         "pr": 639,
         "queued_at": "2026-10-06T14:47:53+00:00"
+      },
+      "642": {
+        "implementers": [
+          {
+            "actor": "Worker-S1642A",
+            "session": "run_s1642a_1006"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1642A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -8003,6 +8027,10 @@
       "Reviewer-R1630V": {
         "session": "rev_r1630v_1006",
         "role": "Reviewer"
+      },
+      "Worker-S1642A": {
+        "session": "run_s1642a_1006",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -13593,6 +13621,13 @@
         "pr": 632,
         "lane": "f268fe8ec2114951baa611ac91ef9039",
         "actor": "Reviewer-R1630V"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-06T15:48:31+00:00",
+        "issue": 642,
+        "claim": "68af845c8be24bd3801201057f735f91",
+        "actor": "Worker-S1642A"
       }
     ],
     "policy": {
