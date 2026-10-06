@@ -182,7 +182,7 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
               <small class="amap-st-hint">Copy for group — paste it into the provider's group</small></div>{% endif -%}
               {%- endif -%}
             </td>
-            {#- ACL-1620: колонка Setup («ready / needs setup») убрана — заметка
+            {#- ACL-1620: прежняя колонка состояния убрана — заметка
                 менеджера вместо неё. Полный текст лежит в data-note и в title,
                 на экране — начало одной строкой. Редактор открывает делегат
                 клика в report.html, поэтому ячейки, пришедшие через htmx,
