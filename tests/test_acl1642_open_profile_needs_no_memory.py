@@ -122,17 +122,23 @@ def test_ceiling_still_applies_to_an_open_profile():
 
 def test_kept_window_is_not_counted_twice():
     m = Machine(open_profiles={"p1", "p2"})
-    slots = m.slots()
+    # Замер видит оба профиля: оставленное окно p1 не снимается как «закрыто руками».
+    usage = ps.ProfileUsage(lambda profiles: {p: 4 * GB for p in profiles},
+                            clock=lambda: m.now, background=False)
+    probe = ps.OpenProfileProbe(m._check, clock=lambda: m.now, background=False)
+    slots = ps.ProfileSlots(memory=lambda: mem(m.available_gb), settings=lambda: m.settings,
+                            clock=lambda: m.now, tick_s=0.02, usage=usage, open_probe=probe)
     slots.acquire("A", "p1")
     slots.keep("A", "acc-a")          # окно осталось открытым на проверку
     slots.acquire("B", "p2")
-    m.available_gb = 2.0
-    # потолок 2 занят: оставленное окно p1 + идущий p2; новое задание на p1
-    # берёт место оставленного окна, а не просит третье.
+    m.now += 10
+    # потолок 2 занят оставленным окном p1 и идущим p2; новое задание на p1
+    # берёт место оставленного окна. Посчитай мы его дважды — упёрлись бы в потолок.
     grant = slots.acquire("A2", "p1")
     assert grant["decision"]["reason"] == "profile_open"
     snap = slots.snapshot()
-    assert len(snap["running"]) == 2 and not any(r["kept"] for r in snap["running"])
+    assert sorted(r["profile"] for r in snap["running"]) == ["p1", "p2"]
+    assert not any(r["kept"] for r in snap["running"])
 
 
 def test_a_later_open_profile_job_starts_ahead_of_a_memory_blocked_head():
@@ -153,6 +159,32 @@ def test_a_later_open_profile_job_starts_ahead_of_a_memory_blocked_head():
     slots.release("A")
     assert _until(lambda: head.done)
     assert not head.grant["decision"].get("started_ahead")
+
+
+def _enqueue(slots, *jobs):
+    """Поставить задания в очередь, не запуская потоков: порядок задаём сами."""
+    with slots._cond:
+        for job_id, profile in jobs:
+            slots._waiting[job_id] = {"profile": profile, "since": 0.0}
+
+
+def test_nobody_jumps_a_head_that_is_not_blocked_on_memory():
+    m = Machine(open_profiles={"p4"}, ceiling=4)
+    slots = m.slots()
+    slots.acquire("A", "p1")
+    m.available_gb = 5.0
+    _enqueue(slots, ("H", "p3"), ("L", "p4"))
+    with slots._cond:
+        real = slots._decide_now
+        # голова стоит НЕ на памяти (потолок/обзор окон): обгонять её нельзя
+        slots._decide_now = lambda profile="": (
+            {"allow": False, "reason": "ceiling"} if profile == "p3" else real(profile))
+        assert slots._may_start_ahead("L", "H") is False
+        verdict = slots._verdict("L")
+        slots._decide_now = real
+        assert verdict["reason"] == "order" and not verdict["behind_memory"]
+        # а когда голова стоит на памяти — обгон разрешён (потолок 4 не мешает)
+        assert slots._may_start_ahead("L", "H") is True
 
 
 def test_nobody_jumps_a_head_blocked_by_the_ceiling():
@@ -183,31 +215,29 @@ def test_two_jobs_on_one_open_profile_do_not_both_start():
 
 
 def test_among_open_profile_jobs_the_earlier_one_goes_first():
-    m = Machine(open_profiles={"p3", "p4"})
+    m = Machine(open_profiles={"p3", "p4"}, ceiling=5)   # потолок не держит второго
     slots = m.slots()
     slots.acquire("A", "p1")
     m.available_gb = 5.0
-    head = Job(slots, "H", "p2")
-    assert _until(lambda: head.holds)
-    first = Job(slots, "L1", "p3")
-    assert _until(lambda: first.done)
-    # потолок 2 теперь занят A и L1: второй открытый ждёт, а не обгоняет по гонке
-    second = Job(slots, "L2", "p4")
-    assert _until(lambda: second.holds)
-    assert not second.done
-    head.cancel(slots)
-    second.cancel(slots)
+    _enqueue(slots, ("H", "p2"), ("L1", "p3"), ("L2", "p4"))
+    with slots._cond:
+        second = slots._verdict("L2")
+        first = slots._verdict("L1")
+    assert second["allow"] is False and second["reason"] == "order"
+    assert first["allow"] is True and first["started_ahead"] is True
 
 
-def test_an_open_profile_job_is_not_counted_as_warming():
-    m = Machine(open_profiles={"p2"}, warmup_s=90.0, ceiling=3)
+def test_an_open_profile_job_still_reserves_its_growth_like_any_starting_job():
+    """Ревью #644, B2: только что стартовавший открытый профиль ещё может вырасти."""
+    m = Machine(open_profiles={"pO"}, warmup_s=90.0, ceiling=3)
     slots = m.slots()
-    slots.acquire("A", "p1")
-    m.now += 100        # A прогрелся
-    m.available_gb = 2.0
-    slots.acquire("B", "p2")   # открытый: память уже занята
-    snap_warming = slots._warming()
-    assert snap_warming == 0   # свою память он не «вот-вот займёт»
+    need_one = m.settings.profile_mb + m.settings.reserve_mb
+    m.available_gb = (need_one + 100) / GB   # памяти ровно на один профиль
+    assert slots.acquire("J", "pO")["decision"]["reason"] == "profile_open"
+    assert slots._warming() == 1
+    head = slots._decide_now("pC")           # закрытый профиль сразу следом
+    assert head["allow"] is False and head["reason"] == "memory_low"
+    assert head["need_mb"] == 2 * m.settings.profile_mb + m.settings.reserve_mb
 
 
 def test_detection_is_cached_and_only_reads():
@@ -301,8 +331,102 @@ def test_queue_view_and_telemetry_carry_profile_open():
 def test_dashboard_text_has_the_hint_and_the_started_ahead_note():
     html = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
     assert "a new profile needs " in html
-    assert "press Release on a finished one" in html
+    assert "press Release" not in html            # Release памяти не освобождает
+    assert "Waiting behind a job that waits for memory" in html
+    assert "GB for profiles still starting or growing" in html
     assert "Started ahead: its profile was already open" in html
     src = (ROOT / "src" / "web" / "profile_slots.py").read_text(encoding="utf-8")
     for forbidden in ("terminate(", ".kill(", "close_profile", "stop_profile"):
         assert forbidden not in src
+
+
+def test_a_failing_check_does_not_spin_the_queue():
+    """Ревью #644, B1: сбой проверки + будящая очередь давали сотни потоков в секунду."""
+    calls = {"n": 0}
+
+    def failing(profiles):
+        calls["n"] += 1
+        raise OSError("access denied")
+
+    m = Machine()
+    usage = ps.ProfileUsage(lambda profiles: {}, background=False)
+    probe = ps.OpenProfileProbe(failing, ttl_s=0.5)
+    slots = ps.ProfileSlots(memory=lambda: mem(m.available_gb), settings=lambda: m.settings,
+                            usage=usage, open_probe=probe, tick_s=0.02)
+    slots.acquire("A", "p1")
+    m.available_gb = 2.0
+    stop = {"v": False}
+    t = threading.Thread(target=lambda: slots.acquire("B", "p2", cancelled=lambda: stop["v"]),
+                         daemon=True)
+    t.start()
+    time.sleep(1.2)
+    stop["v"] = True
+    slots.wake()
+    t.join(3)
+    # ≤ 2 проверок на TTL (0,5 с) за 1,2 с, плюс первая от «A»
+    assert calls["n"] <= 6, calls["n"]
+
+
+def test_an_open_answer_is_trusted_only_while_fresh():
+    """Ревью #644, N2: закрытое руками окно не пускает профиль без памяти."""
+    m = Machine(open_profiles={"p2"})
+    slots = m.slots()
+    slots.acquire("A", "p1")
+    m.available_gb = 2.0
+    assert slots._is_open("p2") is True
+    m.open.discard("p2")                      # окно закрыли руками
+    m.now += ps.OPEN_TTL_S + 0.1              # старый «открыт» уже не верим
+    assert slots._is_open("p2") is False      # проверка перечиталась
+
+
+def test_job_started_ahead_and_telemetry_carry_the_flags(monkeypatch):
+    """Ревью #644, N4: `job["started_ahead"]` и строка `slot_queue`."""
+    import contextlib
+
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    m = Machine(open_profiles={"Doc19"})
+    slots = m.slots()
+    slots.acquire("A", "p1")
+    m.available_gb = 5.0
+    head = Job(slots, "H", "pH")              # голова ждёт память
+    assert _until(lambda: head.holds)
+    rows = []
+    monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, kw)))
+    monkeypatch.setattr(pj, "_slots", slots)
+    monkeypatch.setattr(pj, "use_rpa_publish", lambda: True)
+    monkeypatch.setattr(pj, "_clear_inherited_asyncio_loop", lambda: None)
+    monkeypatch.setattr(pj, "keep_display_awake", lambda *a, **k: contextlib.nullcontext())
+    monkeypatch.setattr(pj, "_watch_screen_lock", lambda *a, **k: contextlib.nullcontext())
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: label)
+    monkeypatch.setattr(pj, "_run_rpa", lambda job_id, slots_, **kw: pj._finish(job_id))
+    job_id = pj.create_job("Doc19", "CL", [{}])
+    try:
+        pj._run_job(job_id, [], account_label="Doc19", country="CL", via_multilogin=True,
+                    activate=False, dry_run=False, hand_off=True)
+        assert pj._jobs[job_id]["started_ahead"] is True
+        diag = next(kw["diag"] for _, kw in rows if kw.get("note") == "slot_queue")
+        assert diag["profile_open"] is True and diag["started_ahead"] is True
+        assert diag["decision"]["reason"] == "profile_open"
+    finally:
+        with pj._jobs_lock:
+            pj._jobs.pop(job_id, None)
+        head.cancel(slots)
+
+
+def test_queue_view_tells_jobs_behind_a_memory_blocked_head():
+    view = pj._queue_view({"reason": "order", "behind_memory": True, "ahead": 1})
+    assert view["state"] == "waiting_memory" and view["behind_memory"] is True
+    plain = pj._queue_view({"reason": "order", "ahead": 1})
+    assert plain["state"] == "waiting_slot"
+
+
+def test_a_job_behind_a_memory_blocked_head_says_so():
+    m = Machine()
+    slots = m.slots()
+    slots.acquire("A", "p1")
+    m.available_gb = 5.0
+    _enqueue(slots, ("H", "p2"), ("X", "p3"))
+    with slots._cond:
+        verdict = slots._verdict("X")
+    assert verdict["reason"] == "order" and verdict["behind_memory"] is True
