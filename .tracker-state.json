@@ -5234,7 +5234,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "637": {
+        "actor": "Worker-M1637V",
+        "session": "run_m1637v_1006",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "codex/acl-1637-same-video",
+        "worktree": "C:\\acl-1637-same-video",
+        "id": "fd4da3723f0c461d9da0e85a34a2351c",
+        "issue": 637,
+        "state": "implementing",
+        "started_at": "2026-10-06T14:11:40+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -7391,6 +7404,17 @@
         },
         "pr": 635,
         "queued_at": "2026-10-06T13:36:02+00:00"
+      },
+      "637": {
+        "implementers": [
+          {
+            "actor": "Worker-M1637V",
+            "session": "run_m1637v_1006"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-M1637V",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -7948,6 +7972,10 @@
       },
       "Worker-S1633A": {
         "session": "run_s1633a_1006",
+        "role": "Worker"
+      },
+      "Worker-M1637V": {
+        "session": "run_m1637v_1006",
         "role": "Worker"
       }
     },
@@ -13507,6 +13535,13 @@
         "issue": 633,
         "pr": 635,
         "actor": "Worker-S1633A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-06T14:11:40+00:00",
+        "issue": 637,
+        "claim": "fd4da3723f0c461d9da0e85a34a2351c",
+        "actor": "Worker-M1637V"
       }
     ],
     "policy": {
