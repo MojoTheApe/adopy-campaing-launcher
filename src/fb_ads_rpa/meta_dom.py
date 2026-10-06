@@ -17660,6 +17660,56 @@ def _click_country_option(root, page: Page, search_term: str) -> tuple[str, list
     return "entered", texts
 
 
+_ACTIVE_SUGGESTION_JS = r"""
+  () => {
+    const q = [...document.querySelectorAll('input')].find(i =>
+      /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''));
+    const id = q && q.getAttribute('aria-activedescendant');
+    if (!id) return null;
+    const el = document.getElementById(id);
+    if (!el) return null;
+    el.scrollIntoView({block: 'nearest'});
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+  }
+"""
+"""Центр подсвеченной подсказки поля поиска локаций (`aria-activedescendant`)."""
+
+
+def _click_active_suggestion(page: Page) -> bool:
+    """Нажать подсказку, на которую указывает поле поиска (ACL-1630).
+
+    Без неё Enter иногда ничего не добавляет. Нет подсвеченной подсказки или у
+    неё нет коробки — False, ничего не нажато.
+    """
+    try:
+        pt = page.evaluate(_ACTIVE_SUGGESTION_JS)
+    except Exception:
+        return False
+    if not pt:
+        return False
+    try:
+        _cdp_mouse_click(page, pt["x"], pt["y"])
+    except Exception:
+        return False
+    return True
+
+
+def _country_added_or_unread(page: Page, search_term: str) -> bool:
+    """Страна стоит в карточке локаций — или карточку прочитать нельзя.
+
+    Решает только читаемая карточка без нужной страны: пустой ответ значит
+    «судить нечем», и прежний путь (дальше `_clear_other_locations` скажет
+    `location_rows_not_read`) не меняется.
+    """
+    keep = (search_term or "").strip().lower()
+    rows = _location_rows_settled(page, tries=2, pause_s=0.6)
+    if not rows:
+        return True
+    return any(keep in r["name"].lower() for r in rows)
+
+
 def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     """Pick the country-level suggestion from the location autocomplete.
 
@@ -17693,6 +17743,16 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
         outcome, texts = "no_suggestions", []
         if _wait_location_options(root, timeout_s=wait_s):
             outcome, texts = _click_country_option(root, page, search_term)
+            if outcome == "entered" and not _country_added_or_unread(page, search_term):
+                # 06.10 (5265, ACL-1630): Enter без видимых вариантов страну в
+                # карточку не добавил (в карточке одна United States, у поля
+                # `aria-activedescendant="SA"`). Нажимаем подсвеченную
+                # подсказку и снова сверяем карточку; не встала — попытка
+                # не засчитана, лестница идёт дальше.
+                if _click_active_suggestion(page):
+                    _sleep_h(0.7)
+                if not _country_added_or_unread(page, search_term):
+                    outcome = "not_in_card"
         if outcome in ("picked", "entered"):
             if n > 1:
                 _telemetry.record("audience_location_attempt", True, note=outcome,
@@ -17845,7 +17905,12 @@ def _location_rows(page: Page) -> list[dict]:
                   // 21.09 18:44 (CR_ait IPO): имя читалось как «United StatesClose» —
                   // слово прилипает без пробела, и чистка по границе слова его не
                   // убирала, поэтому строка не совпадала ни с одной страной.
+                  // 06.10 (5265, ACL-1630): у кнопки-списка строки появилась видимая
+                  // подпись «Open Dropdown», и строка «Remove» получала её как имя
+                  // страны («left: United States, Open Dropdown»). Подписи кнопок
+                  // — не часть имени: имя ищется выше, где стоит сама страна.
                   const t = norm(row.textContent)
+                    .replace(/\b(Open Dropdown|Close Dropdown)\b/gi, '')
                     .replace(/\b(Close|Remove|Quitar|Eliminar)\b/gi, '')
                     .replace(/(Close|Remove|Quitar|Eliminar)\s*$/i, '').trim();
                   if (t && t.length <= 80) { name = t; break; }
