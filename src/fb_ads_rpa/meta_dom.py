@@ -8866,16 +8866,30 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                 return
             rounds += 1
             report["subitems_reconciled"] = rounds
+            acted = False
             for cat in dict.fromkeys(_SUBITEM_CATEGORY.get(x) for x in pending):
                 if not cat:
                     continue
-                _expand_category(cat)
+                # Перераскрытия здесь идут в тот же счёт `_PLACEMENT_REOPENS` на
+                # категорию: против страницы, сворачивающей раздел на каждый
+                # клик, — честный отказ, а не цикл «раскрыть-кликнуть» до конца
+                # срока (ACL-1313). Открытую категорию повтор не трогает.
+                if len((report.get("reopened") or {}).get(cat) or []) >= _PLACEMENT_REOPENS:
+                    continue
+                again = _expand_category(cat)
+                if again.get("was") == "false":
+                    report.setdefault("reopened", {}).setdefault(cat, []).append(
+                        {"was": "false", "reconcile": rounds,
+                         "lost": [x for x in pending if _SUBITEM_CATEGORY.get(x) == cat]})
+                acted = True
                 _sleep_h(0.8)
                 here = _subitem_labels()
                 report["subitems_seen"].extend(
                     x for x in here if not _label_on_page(x, report["subitems_seen"]))
                 _pass(here)
                 _settle_visible(here)
+            if not acted:
+                return
             _sleep_h(1.0)
 
     _reconcile()
