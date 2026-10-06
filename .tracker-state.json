@@ -5319,6 +5319,18 @@
         "state": "implementing",
         "started_at": "2026-10-06T18:46:59+00:00",
         "from_status": "status:idea"
+      },
+      "649": {
+        "actor": "Worker-S1649A",
+        "session": "run_s1649a_1006",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1649-ci-cost",
+        "worktree": "C:\\acl-1649-ci-cost",
+        "id": "4864b9141e3d497a95df437846a703e5",
+        "issue": 649,
+        "state": "implementing",
+        "started_at": "2026-10-06T18:47:23+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -7544,6 +7556,17 @@
         "state": "implementing",
         "worker": "Worker-S1628A",
         "coordinator": "Coordinator-C0930A"
+      },
+      "649": {
+        "implementers": [
+          {
+            "actor": "Worker-S1649A",
+            "session": "run_s1649a_1006"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1649A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -8121,6 +8144,10 @@
       },
       "Worker-S1628A": {
         "session": "run_s1628a_1006",
+        "role": "Worker"
+      },
+      "Worker-S1649A": {
+        "session": "run_s1649a_1006",
         "role": "Worker"
       }
     },
@@ -13783,6 +13810,13 @@
         "issue": 628,
         "claim": "f4204a3207804a9692abec606dc8be34",
         "actor": "Worker-S1628A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-06T18:47:23+00:00",
+        "issue": 649,
+        "claim": "4864b9141e3d497a95df437846a703e5",
+        "actor": "Worker-S1649A"
       }
     ],
     "policy": {
