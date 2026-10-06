@@ -237,6 +237,14 @@
         {"layout": "Media wizard on its Media step (picker loaded)", "seen": ["232d398471bd/00_wizard_media"], "fixture": "wizard_media_picker_2026_10_04.html", "fragment": "loaded", "test": "tests/test_foreign_windows_are_closed_or_named.py", "expected": "owned (step row / media surface): never closed, no Sentry event, no capture", "status": "pass"},
         {"layout": "Unknown dialogs over the Doc21 editor (unsafe-only buttons; safe Not now; footer-surface Close inside; Publish footer of the single-screen editor)", "seen": ["synthetic"], "fixture": "foreign_windows_doc21_2026_10_04.html", "fragment": "editor_footer", "test": "tests/test_foreign_windows_are_closed_or_named.py", "expected": "Publish/Confirm/Continue and footers never pressed; captured + Sentry + 'Unknown Meta window blocked the step: <title>'; a safe Not now closes it and the step is retried once", "status": "pass"}
       ]
+    },
+    {
+      "step": "ai rescue summary (any step, ACL-1613)",
+      "robot": "ai_rescue.build_summary: text-only page summary the model sees (dialogs first, then the anchor area), scrubbed",
+      "layouts": [
+        {"layout": "Create-campaign dialog 'Meta AI-guided setup' / 'Manual campaign setup' (radio pair, Create new campaign)", "seen": ["fb358fda8aab/00_stall_objective_wait"], "fixture": "ai_guided_setup_dialog_2026_10_05.html", "fragment": "dialog", "test": "tests/test_ai_rescue.py", "expected": "dialog listed first with its title; both radios with checked state; summary has no ids, URLs or e-mails", "status": "pass"},
+        {"layout": "Collapsed Audience card (same capture as ACL-1611)", "seen": ["6ebd77ccaf6a/02_further_limit_reach_click"], "fixture": "audience_card_collapsed_drawer_2026_10_05.html", "fragment": "card_run_a, card_run_b", "test": "tests/test_ai_rescue.py", "expected": "card button listed as not-pressed; a model pick of it is expanded by exactly one click", "status": "pass"}
+      ]
     }
   ],
   "not_cut": [
