@@ -1,5 +1,31 @@
 # System history
 
+## Placements on Meta's layouts of 2026-10-05/06 in the classic ad set editor — ACL-1629
+
+Since 05.10 the placements step failed on several accounts (B90, B91, 9403A, Doc120), and every
+failed campaign ended as do-not-publish. Two new layouts, both in the classic editor:
+
+- **Category expanders as plain buttons** (B90, B91): each category row has a
+  `<button aria-label="Expand|Collapse">` without `aria-expanded`. The robot set the checkboxes,
+  but its "Meta does not offer this placement" check only knew the old expanders, answered
+  "collapsed" for ever, and "Messenger Stories" stayed a missing placement. The check now reads
+  both expander kinds. A category Meta folds again after a save is reopened; the settle budget
+  counts from the first page answer, not from entry (B91: one slow read used the whole budget).
+- **A row disabled while Meta saves** ("Ads on Facebook Reels", 13 runs on 05.10): before a seen
+  placement is called missing, the step reads it again, reopens its category and sets it, for up
+  to 6 s.
+- **Collapsed Placements card in the standalone editor** (9403A): a summary button
+  (`aria-pressed=false`) over a hidden body. It was only opened on the single-screen editor path;
+  the step now opens it in any editor, and a card that does not open fails as
+  `placements_card_not_opened` with an English reason.
+- **Account placement exclusions**: when the card summary still reads "None" after Confirm, the
+  step reopens "Placement controls for this ad account" and reads the switch and the four boxes
+  back (`excluded_verified_in_dialog`); a lost save stays a failure. When the card has no
+  "Account controls" row or "Edit placement controls" button, the report says Meta no longer
+  offers them (`account_controls_not_offered`) and the blocking reason names it.
+- Tests: `tests/test_bench_placements_1629.py` on two scrubbed captures; bench catalogue rows
+  added.
+
 ## Account map: a free-text Note per account replaces the Setup column — ACL-1620
 
 Owner request 06.10: the Setup column ("ready / needs setup") is not needed; managers want to
