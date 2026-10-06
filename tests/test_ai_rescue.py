@@ -48,7 +48,7 @@ DIRTY = """
 <div><button id="cws">Close without saving</button></div>
 <div><button id="leave">Leave</button></div>
 <div><button id="rem">Remove</button></div>
-<div><button id="ok">Edit audience</button></div>
+<div><button id="ok">Show audience</button></div>
 """
 
 
@@ -110,8 +110,10 @@ class FakeClient:
 
 
 def index_of(prompt: str, label: str, role: str = "") -> int:
-    m = re.search(rf'^\[(\d+)\] {role or r"\w+"} "{re.escape(label)}"', prompt, re.M)
-    assert m, f"{label!r} not in summary:\n{prompt}"
+    r = role or r"\w+"
+    m = (re.search(rf'^\[(\d+)\] {r} "{re.escape(label)}"', prompt, re.M)
+         or re.search(rf'^\[(\d+)\] {r} "{re.escape(label)}', prompt, re.M))
+    assert m, f"{label!r} not in summary: {prompt}"
     return int(m.group(1))
 
 
@@ -246,7 +248,7 @@ def test_a_harmless_button_in_a_destructive_dialog_is_refused(page):
     page.set_content(_html('<div role="dialog"><div role="heading">Delete this draft?</div>'
                            '<button>Continue</button><button>Cancel</button></div>'))
     res = run(page, FakeClient(pick("Cancel", "close_dialog")))
-    assert res.action == "give_up" and "forbidden_nearby" in res.reason
+    assert res.action == "give_up" and "forbidden_dialog" in res.reason
     assert clicked(page) == []
 
 
@@ -281,8 +283,8 @@ def test_an_unknown_index_or_a_malformed_answer_is_give_up(page, answer):
 
 
 def test_close_dialog_needs_a_closing_button_inside_a_dialog(page):
-    page.set_content(_html("<button id='x'>Edit audience</button>" + NAMING))
-    assert run(page, FakeClient(pick("Edit audience", "close_dialog"))).reason == "not_a_dialog_close_button"
+    page.set_content(_html("<div><button id='x'>Show audience</button></div>" + NAMING))
+    assert run(page, FakeClient(pick("Show audience", "close_dialog"))).reason == "behind_dialog"
     assert run(page, FakeClient(pick("Add component", "close_dialog"))).reason == "not_a_dialog_close_button"
     res = run(page, FakeClient(pick("Cancel", "close_dialog")))
     assert res.ok is True and clicked(page) == ["Cancel"]
@@ -297,9 +299,9 @@ def test_expand_needs_a_collapsed_element(page):
 
 def test_the_element_changed_between_summary_and_click_is_not_clicked(page):
     """Индекс остался, а под ним уже «Publish»: метку перечитываем перед кликом."""
-    page.set_content(_html(DIRTY + mutate_on_mark("Edit audience", "el.textContent = 'Publish';")))
-    res = run(page, FakeClient(pick("Edit audience")))
-    assert res.action == "give_up" and "recheck_forbidden" in res.reason
+    page.set_content(_html(DIRTY + mutate_on_mark("Show audience", "el.textContent = 'Publish';")))
+    res = run(page, FakeClient(pick("Show audience")))
+    assert res.action == "give_up" and res.reason == "dom_changed"
     assert clicked(page) == []
 
 
@@ -328,12 +330,11 @@ def test_a_removed_element_is_give_up(page):
 # ── режимы ───────────────────────────────────────────────────────────────────
 
 def test_suggest_never_touches_the_page(page):
-    page.set_content(_html("<button id='a'>Edit audience</button><div role='dialog'>"
-                           "<span role='heading'>Hi</span><button>Close</button></div>"))
+    page.set_content(_html("<div role='dialog'><span role='heading'>Hi</span><button id='c'>Close</button></div>"))
     before = page.evaluate("document.documentElement.outerHTML")
     tel = FakeTelemetry()
-    res = run(page, FakeClient(pick("Edit audience")), mode="suggest", tel=tel)
-    assert res.ok is True and res.action == "click" and res.mode == "suggest"
+    res = run(page, FakeClient(pick("Close", "close_dialog")), mode="suggest", tel=tel)
+    assert res.ok is True and res.action == "close_dialog" and res.mode == "suggest"
     assert clicked(page) == []
     assert page.evaluate("document.documentElement.outerHTML") == before  # даже data-acl-ai убраны
     assert tel.rows[-1][2]["diag"]["mode"] == "suggest"
@@ -344,8 +345,8 @@ def test_suggest_never_touches_the_page(page):
 
 def test_act_clicks_exactly_the_chosen_element(page):
     page.set_content(_html(DIRTY))
-    res = run(page, FakeClient(pick("Edit audience")), mode="act")
-    assert res.ok is True and res.action == "click" and res.label == "Edit audience"
+    res = run(page, FakeClient(pick("Show audience")), mode="act")
+    assert res.ok is True and res.action == "click" and res.label == "Show audience"
     assert clicked(page) == ["ok"]
     assert page.evaluate("document.querySelectorAll('[data-acl-ai]').length") == 0
 
@@ -368,11 +369,12 @@ def test_act_expands_the_collapsed_audience_card(page):
 
 
 def test_scroll_to_and_escape_act(page):
-    page.set_content(_html("<div style='height:3000px'></div><button id='far'>Far away</button>"
-                           "<script>window.esc=0;document.addEventListener('keydown',"
-                           "e=>{if(e.key==='Escape')window.esc++})</script>"))
+    page.set_content(_html("<div style='height:3000px'></div><div><button id='far'>Far away</button></div>"))
     res = run(page, FakeClient(pick("Far away", "scroll_to")))
     assert res.ok and page.evaluate("window.scrollY") > 1000 and clicked(page) == []
+    page.set_content(_html("<div role='dialog'><h2>Heads up</h2><span>Something</span></div>"
+                           "<script>window.esc=0;document.addEventListener('keydown',"
+                           "e=>{if(e.key==='Escape')window.esc++})</script>"))
     assert run(page, FakeClient(lambda p, pg: {"action": "press_escape"})).ok
     assert page.evaluate("window.esc") == 1
 
@@ -380,7 +382,7 @@ def test_scroll_to_and_escape_act(page):
 def test_off_is_the_default_and_never_asks(page, monkeypatch):
     monkeypatch.delenv("ACL_AI_RESCUE", raising=False)
     page.set_content(_html(DIRTY))
-    cl = FakeClient(pick("Edit audience"))
+    cl = FakeClient(pick("Show audience"))
     res = ar.rescue(page, step="s", goal="g", error="e", budget=ar.RescueBudget(), client=cl)
     assert res.skipped and res.mode == "off" and cl.calls == 0 and clicked(page) == []
     monkeypatch.setenv("ACL_AI_RESCUE", "bogus")
@@ -404,7 +406,7 @@ def test_caps_two_per_step_and_four_per_campaign(page):
     assert cl.calls == 4 and budget.total == 4
     res = run(page, cl, budget=budget, step="c")
     assert res.skipped and cl.calls == 4
-    assert tel.rows[-1][2]["diag"]["reason"] == "budget_exhausted" or True
+    assert tel.rows[-1][2]["diag"]["reason"] == "budget_exhausted"
 
 
 def test_a_failed_call_still_spends_the_budget(page):
@@ -467,7 +469,7 @@ def test_exceptions_never_escape(page, monkeypatch):
         def record(self, *a, **k):
             raise OSError("disk")
 
-    assert run(page, FakeClient(pick("Edit audience")), tel=BadTelemetry()).ok is True
+    assert run(page, FakeClient(pick("Show audience")), tel=BadTelemetry()).ok is True
 
     class DeadPage:
         def evaluate(self, *a, **k):
@@ -477,7 +479,7 @@ def test_exceptions_never_escape(page, monkeypatch):
     assert isinstance(res, ar.RescueResult)  # не бросило
 
     monkeypatch.setattr(ar, "build_summary", lambda *a, **k: (_ for _ in ()).throw(ValueError("x")))
-    res = run(page, FakeClient(pick("Edit audience")))
+    res = run(page, FakeClient(pick("Show audience")))
     assert res.skipped and res.reason.startswith("error:")
 
 
@@ -486,14 +488,14 @@ def test_exceptions_never_escape(page, monkeypatch):
 def test_telemetry_row_shape(page):
     page.set_content(_html(DIRTY))
     tel = FakeTelemetry()
-    res = run(page, FakeClient(pick("Edit audience"), tokens=(321, 9)), tel=tel, step="further_limit_row")
+    res = run(page, FakeClient(pick("Show audience"), tokens=(321, 9)), tel=tel, step="further_limit_row")
     step, ok, kw = tel.rows[-1]
     assert (step, ok, kw["note"]) == ("ai_rescue", True, "click")
     d = kw["diag"]
     assert d["step"] == "further_limit_row" and d["mode"] == "act" and d["action"] == "click"
-    assert d["label"] == "Edit audience" and d["input_tokens"] == 321 and d["output_tokens"] == 9
+    assert d["label"] == "Show audience" and d["input_tokens"] == 321 and d["output_tokens"] == 9
     assert d["latency_s"] >= 0 and len(d["summary_hash"]) == 12 and "goal" in d and "reason" in d
-    assert res.label == "Edit audience"
+    assert res.label == "Show audience"
 
 
 def test_the_request_carries_the_schema_model_and_timeout(page, monkeypatch):
@@ -516,3 +518,379 @@ def test_the_step_is_known_to_the_progress_model():
     from tests.test_build_progress_model import MODEL, m
 
     assert m.stage_of("ai_rescue", MODEL["rules"]) == "hold"
+
+
+# ═══ ревью PR #623: каждая проба ревьюера — регрессионный тест ═══════════════
+
+ESC_LOG = ("<script>window.esc=0;document.addEventListener('keydown',"
+           "e=>{if(e.key==='Escape')window.esc++})</script>")
+
+
+def probe(page, body, choose, *, mode="act", **kw):
+    """Страница + подставная модель; возвращает (результат, список нажатий, число Escape)."""
+    page.set_content(_html(body + ESC_LOG))
+    res = run(page, FakeClient(choose), mode=mode, **kw)
+    return res, clicked(page), page.evaluate("window.esc")
+
+
+def by_label(label, action="click"):
+    return lambda prompt, pg: {"action": action, "index": index_of(prompt, label)}
+
+
+# B1: слова склеиваются без разделителей
+def test_b1_text_extraction_keeps_word_boundaries():
+    assert "here delete ad set" in ar.norm_text("...length hereDelete ad set")
+    assert ar.forbidden_reason(["Placements"], "Cost per goal hereDelete ad set")
+
+
+def test_b1_a_container_whose_text_ends_in_delete_is_refused(page):
+    body = ('<div role="button" aria-expanded="false" style="width:600px;height:80px">'
+            'Audience card summary with a long description that goes past eighty characters in total length here'
+            '<b>Delete ad set</b></div>')
+    res, clk, _ = probe(page, body, by_label("Audience card", "expand"))
+    assert res.action == "give_up" and res.reason.startswith("forbidden_label") and clk == []
+
+
+# B2: клик попадает в вложенный запрещённый элемент
+def test_b2_expand_on_a_card_with_a_nested_delete_button_is_refused(page):
+    body = ('<div role="button" aria-expanded="false" style="width:600px;height:200px;position:relative;display:block">'
+            'Audience card summary with a long description that pushes beyond eighty characters total length here'
+            '<button id="DEL" style="position:absolute;left:0;top:0;width:600px;height:200px;opacity:0.99">'
+            'Delete ad set</button></div>')
+    res, clk, _ = probe(page, body, by_label("Audience card", "expand"))
+    assert res.action == "give_up" and clk == []
+    assert "descendant_forbidden" in res.reason or "forbidden_label" in res.reason
+
+
+def test_b2_a_harmless_nested_button_covering_the_card_is_refused_by_the_hit_test(page):
+    body = ('<div role="button" aria-expanded="false" style="width:600px;height:200px;position:relative;display:block">'
+            'Card title text'
+            '<button id="INNER" style="position:absolute;left:0;top:0;width:600px;height:200px">More details</button></div>')
+    res, clk, _ = probe(page, body, by_label("Card title", "expand"))
+    assert res.action == "give_up" and res.reason == "hit_interactive_descendant" and clk == []
+
+
+def test_b2_click_on_an_element_with_interactive_descendants_is_refused(page):
+    body = '<div role="button" style="width:300px;height:60px">Row <button>Details</button></div>'
+    res, clk, _ = probe(page, body, by_label("Row", "click"))
+    assert res.reason == "has_interactive_descendants" and clk == []
+
+
+def test_b2_the_click_lands_on_the_verified_point_not_on_a_link_in_the_card(page):
+    body = ('<div role="button" aria-expanded="false" style="width:600px;height:100px;position:relative;display:block">'
+            'Audience summary<a href="#" id="LNK" style="position:absolute;left:250px;top:0;width:100px;height:100px">'
+            'About audiences</a></div>')
+    res, clk, _ = probe(page, body, by_label("Audience summary", "expand"))
+    assert res.ok is True, res.reason
+    assert len(clk) == 1 and clk[0] != "LNK"
+
+
+def test_n2_the_click_is_a_plain_mouse_click_without_playwright_retries(page, monkeypatch):
+    page.set_content(_html("<div><button id='b'>Show audience</button></div>"))
+
+    def boom(*a, **k):
+        raise AssertionError("locator.click would retry for seconds")
+
+    monkeypatch.setattr(page, "locator", boom)
+    assert run(page, FakeClient(pick("Show audience"))).ok is True
+    assert clicked(page) == ["b"]
+
+
+# B3: источники подписи
+def test_b3_a_benign_aria_label_over_a_publish_text_is_refused(page):
+    body = ('<div><span>' + "Lorem ipsum filler text. " * 10 +
+            '</span><button id="PUB" aria-label="Continue">Publish</button></div>')
+    res, clk, _ = probe(page, body, by_label("Continue"))
+    assert res.reason.startswith("forbidden_label") and clk == []
+
+
+def test_b3_a_title_with_delete_is_refused(page):
+    res, clk, _ = probe(page, '<div><button id="T" title="Delete" aria-label="Options">...</button></div>',
+                        by_label("Options"))
+    assert res.reason.startswith("forbidden_label") and clk == []
+
+
+def test_b3_an_icon_button_whose_child_says_delete_is_refused(page):
+    body = '<div><div role="button" id="TRASH"><span aria-label="Delete"></span><img alt="Delete" src="x"></div></div>'
+    res, clk, _ = probe(page, body, by_label(""))
+    assert res.reason.startswith("forbidden_label") and clk == []
+
+
+def test_b3_labelledby_and_value_are_label_sources(page):
+    body = ('<span id="lb">Publish now</span><div><button id="A" aria-labelledby="lb" aria-label="Go">Go</button></div>'
+            '<div><input type="button" id="B" value="Delete"></div>')
+    page.set_content(_html(body))
+    assert run(page, FakeClient(by_label("Go"))).reason.startswith("forbidden_label")
+    assert run(page, FakeClient(lambda p, pg: {"action": "click", "index": index_of(p, "Delete", "button")})
+               ).reason.startswith("forbidden_label")
+    assert clicked(page) == []
+
+
+def test_b3_an_empty_label_is_refused(page):
+    res, clk, _ = probe(page, '<div><div role="button" id="X" style="width:20px;height:20px"></div></div>',
+                        by_label(""))
+    assert res.reason == "empty_label" and clk == []
+
+
+def test_b3_the_forbidden_check_sees_text_past_the_display_cap(page):
+    body = '<div><button id="L">' + "harmless words " * 20 + ' and finally Publish</button></div>'
+    res, clk, _ = probe(page, body, lambda p, pg: {"action": "click", "index": 0})
+    assert res.reason.startswith("forbidden_label") and clk == []
+
+
+# B4: полный текст окна
+def test_b4_the_dialog_title_with_a_nested_tag_counts(page):
+    body = ('<div role="dialog"><h2>Delete 3 ads?<b> </b></h2><div>This cannot be undone <i>.</i></div>'
+            '<button id="OK">OK</button></div>')
+    res, clk, _ = probe(page, body, by_label("OK"))
+    assert res.reason.startswith("forbidden_dialog") and clk == []
+
+
+def test_b4_a_forbidden_phrase_after_a_long_dialog_text_counts(page):
+    body = ('<div role="dialog"><h2>Unsaved</h2>' + "".join(f"<span>Some info line {i}.</span>" for i in range(80)) +
+            '<span>Discard changes?</span><button id="YES">Yes</button></div>')
+    res, clk, _ = probe(page, body, by_label("Yes"))
+    assert res.reason.startswith("forbidden_dialog") and clk == []
+
+
+# B5: испанский и португальский — каждая запись таблицы
+SAMPLES = {
+    ("en", "publish"): "Publish", ("en", "delete"): "Delete ad", ("en", "remove"): "Remove",
+    ("en", "discard"): "Discard changes", ("en", "terms_accept"): "Accept terms",
+    ("en", "lead_form"): "Create instant form", ("en", "logout"): "Log out",
+    ("en", "payment"): "Add payment method", ("en", "leave_unsaved"): "Close without saving",
+    ("es", "publish"): "Publicar", ("es", "delete"): "Eliminar", ("es", "discard"): "Descartar cambios",
+    ("es", "terms_accept"): "Aceptar términos y condiciones", ("es", "lead_form"): "Formulario instantáneo",
+    ("es", "logout"): "Cerrar sesión", ("es", "payment"): "Añadir método de pago",
+    ("es", "leave_unsaved"): "Salir sin guardar",
+    ("pt", "publish"): "Publicar anúncio", ("pt", "delete"): "Excluir", ("pt", "discard"): "Descartar alterações",
+    ("pt", "terms_accept"): "Aceitar os termos", ("pt", "lead_form"): "Criar formulário",
+    ("pt", "logout"): "Encerrar sessão", ("pt", "payment"): "Forma de pagamento",
+    ("pt", "leave_unsaved"): "Sair sem salvar",
+    ("en", "duplicate"): "Duplicate", ("en", "edit"): "Edit", ("en", "toggle"): "Turn on",
+    ("es", "duplicate"): "Duplicar", ("es", "edit"): "Editar", ("es", "toggle"): "Desactivar",
+    ("pt", "duplicate"): "Duplicar", ("pt", "edit"): "Editar", ("pt", "toggle"): "Desativar",
+}
+EXTRA = ["Borrar", "Quitar", "Eliminar anuncio", "Pago", "Facturación", "Remover", "Apagar", "Cobrança",
+         "Faturamento", "Cartão de crédito", "Novo formulário", "Crear formulario", "Acepto", "Concordar",
+         "Logout", "Sign out", "On/off", "Turn off", "Ativar", "Ligar", "Encender", "Salir", "Sair", "Don't save",
+         "Billing", "Payments", "Terms of service", "Instant forms"]
+
+
+def _table_rows():
+    import yaml
+    from src.fb_ads_rpa import wizard_guard as wg
+
+    raw = yaml.safe_load(wg._ZONES_PATH.read_text(encoding="utf-8"))["ai_rescue"]
+    return [(r["lang"], r["reason"]) for r in raw["context"] + raw["target_only"]]
+
+
+def test_b5_every_table_row_has_a_sample_in_its_language():
+    missing = [k for k in _table_rows() if k not in SAMPLES]
+    assert not missing, f"add a sample for {missing}"
+
+
+@pytest.mark.parametrize("key", sorted(SAMPLES))
+def test_b5_each_pattern_blocks_its_language(key):
+    assert ar.forbidden_reason([SAMPLES[key]]), key
+
+
+@pytest.mark.parametrize("word", EXTRA)
+def test_b5_more_variants_are_blocked(word):
+    assert ar.forbidden_reason([word]), word
+
+
+@pytest.mark.parametrize("word", ["Publicar", "Eliminar", "Descartar cambios", "Aceptar", "Cerrar sesión"])
+def test_b5_spanish_buttons_are_not_clicked(page, word):
+    res, clk, _ = probe(page, f'<div><button id="X">{word}</button></div>', by_label(word))
+    assert res.reason.startswith("forbidden") and clk == []
+
+
+@pytest.mark.parametrize("word", ["Show audience", "Continue", "Next", "More options", "Audience details"])
+def test_b5_harmless_labels_pass_the_table(word):
+    assert ar.forbidden_reason([word]) is None, word
+
+
+# B6: Close
+def test_b6_the_editor_header_close_is_not_clickable(page):
+    body = '<div><h2>Ad copy</h2><div role="button" id="CLOSE" aria-label="Close">x</div></div>'
+    res, clk, _ = probe(page, body, by_label("Close"))
+    assert res.action == "give_up" and clk == []
+    res, clk, _ = probe(page, body, by_label("Close", "close_dialog"))
+    assert res.reason == "not_a_dialog_close_button" and clk == []
+
+
+def test_b6_close_works_only_through_close_dialog_inside_a_dialog(page):
+    body = '<div role="dialog"><h2>Heads up</h2><span>Something happened</span><div role="button" aria-label="Close">x</div></div>'
+    res, clk, _ = probe(page, body, by_label("Close", "click"))
+    assert res.reason in ("close_only_via_close_dialog",) or res.reason.startswith("forbidden_zone")
+    assert clk == []
+    res, clk, _ = probe(page, body, by_label("Close", "close_dialog"))
+    assert res.ok is True and len(clk) == 1
+
+
+def test_b6_the_editor_drawer_dialog_is_not_a_foreign_dialog(page):
+    """Окно-редактор (с полем имени кампании и футером Publish) — не чужое окно: Close в нём не закрывается."""
+    body = ('<div role="dialog"><input placeholder="Enter your campaign name" value=""><div>Publish</div>'
+            '<div role="button" aria-label="Close">x</div><div><button>Next step</button></div></div>')
+    res, clk, _ = probe(page, body, by_label("Close", "close_dialog"))
+    assert res.action == "give_up" and clk == []
+    res, clk, _ = probe(page, body, by_label("Next step"))
+    assert res.ok is True and clk == ["Next step"]  # а обычная кнопка внутри — доступна
+
+
+# B7 / N3: переключатели, строки списков, страница списка
+def test_b7_switches_checkboxes_and_radios_are_never_clicked(page):
+    body = ('<div><input type="checkbox" role="switch" id="SW" aria-label="Status toggle"></div>'
+            '<div><input type="checkbox" id="CB" aria-label="Placement option"></div>'
+            '<div><input type="radio" id="RD" aria-label="Budget type"></div>')
+    page.set_content(_html(body))
+    for label in ("Status toggle", "Placement option", "Budget type"):
+        res = run(page, FakeClient(by_label(label)))
+        assert res.reason.startswith("role_not_allowed"), (label, res.reason)
+    assert clicked(page) == []
+
+
+def test_b7_row_controls_are_hidden_from_the_model_and_refused(page):
+    body = ('<table><tr><td><input type="checkbox" role="switch" id="SW" aria-label="On/off" checked></td>'
+            '<td><a href="#">Some campaign link</a></td><td><button>Duplicate</button></td></tr></table>'
+            '<div><button>Outside</button></div>')
+    page.set_content(_html(body))
+    s = ar.build_summary(page)
+    assert "On/off" not in s.text and "Duplicate" not in s.text and "Some campaign" not in s.text
+    res = run(page, FakeClient(lambda p, pg: {"action": "click", "index": 0}))
+    assert res.ok is True and clicked(page) == ["Outside"]
+    page.evaluate("document.querySelector('button').setAttribute('data-acl-ai', '77')")
+    res = run(page, FakeClient(lambda p, pg: {"action": "click", "index": 77}))
+    assert res.reason == "unknown_index"
+
+
+def test_b7_duplicate_edit_on_off_are_forbidden_words(page):
+    for word in ("Duplicate", "Edit", "Turn on", "On/off", "Turn off"):
+        res, clk, _ = probe(page, f'<div><button id="X">{word}</button></div>', by_label(word))
+        assert res.reason.startswith("forbidden") and clk == [], word
+
+
+LIST_TABLE = ('<table style="width:1300px;height:600px">' +
+              "".join(f'<tr><td><a href="#">Campaign row {i}</a></td><td><input type="checkbox" role="switch" '
+                      f'aria-label="On/off"></td></tr>' for i in range(5)) + "</table><div><button>Create</button></div>")
+
+
+def test_n3_a_list_page_gives_up_without_calling_the_model(page):
+    page.set_content(_html(LIST_TABLE))
+    cl = FakeClient(by_label("Create"))
+    tel = FakeTelemetry()
+    budget = ar.RescueBudget()
+    res = run(page, cl, tel=tel, budget=budget)
+    assert res.action == "give_up" and res.reason == "list_page" and not res.skipped
+    assert cl.calls == 0 and clicked(page) == [] and budget.total == 0
+    assert tel.rows[-1][0] == "ai_rescue" and tel.rows[-1][2]["diag"]["reason"] == "list_page"
+
+
+def test_n3_a_dialog_over_the_list_is_handled_but_the_list_behind_it_is_not(page):
+    dlg = ('<div role="dialog" style="position:fixed;left:300px;top:100px;width:400px;height:300px;background:#fff">'
+           '<h2>Choose how to create</h2><div role="button" id="MAN">Manual setup</div></div>')
+    page.set_content(_html(LIST_TABLE + dlg))
+    res = run(page, FakeClient(by_label("Manual setup")))
+    assert res.ok is True and clicked(page) == ["MAN"]
+    res = run(page, FakeClient(by_label("Create")))
+    assert res.reason == "behind_dialog"
+
+
+# N1: правки не теряются
+def test_n1_escape_without_a_dialog_is_refused(page):
+    res, clk, esc = probe(page, '<div><h2>Ad editor</h2><textarea>edited</textarea></div>',
+                          lambda p, pg: {"action": "press_escape"})
+    assert res.reason == "no_dialog" and esc == 0
+
+
+def test_n1_a_dialog_with_edited_text_is_not_closed_or_escaped(page):
+    body = ('<div role="dialog"><h2>Details</h2><span>Primary text</span><textarea>new text</textarea>'
+            '<div role="button" id="CLS" aria-label="Close">x</div></div>')
+    res, clk, esc = probe(page, body, by_label("Close", "close_dialog"))
+    assert res.reason == "dirty_dialog" and clk == []
+    res, clk, esc = probe(page, body, lambda p, pg: {"action": "press_escape"})
+    assert res.reason == "dirty_dialog" and esc == 0
+    clean = body.replace("new text", "")
+    res, clk, esc = probe(page, clean, lambda p, pg: {"action": "press_escape"})
+    assert res.ok is True and esc == 1
+
+
+def test_j_a_plain_expand_button_still_works(page):
+    res, clk, _ = probe(page, '<div><button id="MORE" aria-expanded="false">More</button></div>', by_label("More", "expand"))
+    assert res.ok is True and clk == ["MORE"]
+
+
+def test_l_a_publish_overlay_over_the_target_is_not_clicked(page):
+    body = ('<div><button id="SAFE" style="width:200px;height:50px">Show audience</button></div>'
+            '<div style="position:absolute;left:0;top:0;width:400px;height:100px"><button id="PUBOVER" '
+            'style="width:400px;height:100px;opacity:0.99">Publish</button></div>')
+    res, clk, _ = probe(page, body, by_label("Show audience"))
+    assert res.action == "give_up" and res.reason.startswith("hit_") and clk == []
+
+
+def test_suggest_applies_the_same_checks_as_act(page):
+    body = '<div><button id="PUB">Publicar</button></div>'
+    res, clk, _ = probe(page, body, by_label("Publicar"), mode="suggest")
+    assert res.action == "give_up" and clk == []
+
+
+# N7: клиент, созданный нами, закрывается
+def test_n7_the_client_we_built_is_closed(page, monkeypatch):
+    page.set_content(_html("<div><button>Show audience</button></div>"))
+    cl = FakeClient(pick("Show audience"))
+    closed = []
+    cl.close = lambda: closed.append(1)
+    monkeypatch.setattr(ar, "_make_client", lambda: (cl, ""))
+    res = ar.rescue(page, step="s", goal="g", error="e", budget=ar.RescueBudget(), telemetry=FakeTelemetry(), mode="act")
+    assert res.ok is True and closed == [1]
+
+
+def test_n5_the_anchor_search_has_a_time_cap(page, monkeypatch):
+    monkeypatch.setattr(ar, "ANCHOR_SCAN_MS", 1)
+    page.set_content(_html("".join(f"<p>text line {i}</p>" for i in range(5000)) + "<button>Show audience</button>"))
+    t0 = time.monotonic()
+    s = ar.build_summary(page, anchor="no such anchor anywhere")
+    assert time.monotonic() - t0 < 5 and "Show audience" in s.text
+
+
+# B8: чистка — настоящие утечки с ревью (имена заменены синтетическими)
+LEAKS = ["B96", "Story14", "Doc120", "Investment_35_06.10", "FacebookDoc120", "facebookdoc120", "9403A",
+         "Pixel KLD_BFL_B96", "Pixel B90", "Pixel FacebookDoc120", "06.10", "ES Pro Meli 2"]
+
+
+@pytest.mark.parametrize("text", LEAKS)
+def test_b8_no_token_with_a_digit_survives(text):
+    assert not re.search("[0-9]", ar.scrub_text(text)), ar.scrub_text(text)
+
+
+def test_b8_account_heading_and_campaign_tail_are_scrubbed():
+    out = ar.scrub_text("1234567890123 - ES Pro Meli")
+    assert out == "<account>", out
+    assert ar.scrub_text("ES Pro Meli - 1234567890123") == "<account>"
+    out = ar.scrub_text("Mix_A_B_C|Investment_35_06.10")
+    assert "Investment" not in out and out.endswith("| <name>"), out
+    assert ar.scrub_text("Pixel Something") == "Pixel <name>"
+
+
+def test_b8_the_summary_of_a_page_with_those_leaks_is_clean(page):
+    body = ('<h2 role="heading">1234567890123 - ES Pro Meli</h2><h2 role="heading">Story14</h2>'
+            '<h2 role="heading">Mix_A_B_C|Investment_35_06.10</h2>'
+            '<div role="combobox" aria-label="Facebook Page">Sample Page Name - XY</div>'
+            '<div role="combobox">Another Page Name</div>'
+            '<button>Pixel KLD_BFL_B96</button><button>Pixel B90</button><button>Pixel FacebookDoc120</button>'
+            '<table><tr><td><a href="#">sample engagement campaign</a></td></tr></table>'
+            '<div><a href="#">sample traffic campaign</a></div>'
+            '<div><button>Show audience</button></div>')
+    page.set_content(_html(body))
+    s = ar.build_summary(page)
+    flat = re.sub(r"^\[\d+\] ", "", s.text, flags=re.M)
+    assert not re.search("[0-9]", flat), flat
+    assert "Sample Page Name" not in flat and "Another Page Name" not in flat and "engagement" not in flat and "traffic" not in flat
+    assert "<field>" in flat
+
+
+def test_b8_names_from_the_caller_are_replaced(page):
+    page.set_content(_html("<h2 role='heading'>Quiet Ocean Studio - main</h2><div><button>Show audience</button></div>"))
+    assert "Quiet Ocean" in ar.build_summary(page).text
+    assert "Quiet Ocean" not in ar.build_summary(page, names=("Quiet Ocean Studio",)).text

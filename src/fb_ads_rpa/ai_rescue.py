@@ -5,6 +5,8 @@
 вычищает из неё всё, по чему опознаётся аккаунт, спрашивает модель и получает
 ровно одно действие из белого списка. Безопасность — в коде, не в подсказке:
 запрещённая кнопка, неизвестный индекс, битый ответ — всё это `give_up`.
+Принцип: сомневаешься — отказывай. `give_up` стоит одной красной кампании,
+неверный клик может опубликовать, удалить или выключить живую кампанию.
 
     res = rescue(page, step="further_limit_row", goal="open the Audience section",
                  error="row not found", budget=budget, telemetry=run_telemetry)
@@ -25,8 +27,12 @@ import os
 import re
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
+
+import yaml
 
 from . import foreign_windows as _fw
 from . import run_telemetry as _run_telemetry
@@ -40,54 +46,104 @@ DEFAULT_MODEL = "claude-sonnet-5-5"
 #: Потолок ожидания ответа модели, секунд (общий, а не «на фазу», как у httpx).
 TIMEOUT_S = 20.0
 MAX_TOKENS = 300
-#: Потолки сводки: что уходит модели.
+#: Потолки сводки: что уходит модели (на проверку запрещённого они не влияют).
 MAX_ELEMENTS = 150
 MAX_CHARS = 12000
 MAX_LABEL = 80
 MAX_SCAN = 600  # сколько кандидатов собирает JS на огромной странице
+ANCHOR_SCAN_MS = 2000  # потолок поиска якоря шага
 
 ACTIONS = ("click", "expand", "close_dialog", "press_escape", "scroll_to", "give_up")
 _NEEDS_INDEX = ("click", "expand", "close_dialog", "scroll_to")
 MARK = "data-acl-ai"
+#: Роли, по которым вообще можно кликнуть. Переключатели, чекбоксы, радио, поля
+#: ввода и ссылки (уводят со страницы) — никогда.
+CLICKABLE_ROLES = ("button", "tab")
 
 
-# ── запрещённое: в коде, а не в подсказке ───────────────────────────────────
+# ── запрещённое: одна таблица в yaml (EN/ES/PT), проверка в коде ────────────
 
-#: Метка элемента и текст рядом/в окне. Сверх `config/rpa_forbidden_zones.yaml`
-#: (его правила подключены ниже через wizard_guard — не дублируем).
-FORBIDDEN_RE = re.compile(
-    r"\bpublish(ed|ing)?\b"
-    r"|\bdelete\b|\bremove\b|\bdiscard\b"
-    r"|\baccept\b|\bagree\b|\bterms\b"
-    r"|\b(create|new|add)\s+(a\s+)?(lead\s+|instant\s+)?form\b|\binstant forms?\b"
-    r"|\blog\s?out\b|\bsign\s?out\b"
-    r"|\bpayments?\b|\bbilling\b|credit card|\bdebit card\b"
-    r"|close without saving|leave without|\bleave( page| this page)?\b|\bdon.t save\b",
-    re.I,
-)
+class _Table:
+    def __init__(self, raw: dict[str, Any]):
+        def comp(rows):
+            out = []
+            for r in rows or []:
+                pat = str(r.get("pattern") or "")
+                if pat:
+                    # границы слов — нашими lookaround'ами по нормализованному тексту
+                    out.append((str(r.get("reason") or pat), re.compile(rf"(?<![a-z0-9])(?:{pat})(?![a-z0-9])")))
+            return out
 
-#: Для close_dialog: метка должна быть «закрывающей».
-_CLOSE_LABEL_RE = re.compile(r"^(close|cancel|not now|dismiss|no thanks|cerrar|cancelar|×|✕|x)$", re.I)
+        self.context = comp(raw.get("context"))
+        self.target_only = comp(raw.get("target_only"))
+        self.close_labels = {norm_text(x) for x in raw.get("close_labels") or []}
 
 
-def forbidden_reason(label: str, nearby: str = "") -> str | None:
-    """Причина запрета клика по элементу с такой меткой и таким окружением, иначе None."""
-    for text, where in ((label, "label"), (nearby, "nearby")):
-        t = str(text or "")
-        if not t.strip():
-            continue
-        m = FORBIDDEN_RE.search(t)
-        if m:
-            return f"forbidden_{where}:{m.group(0).lower()[:30]}"
+@lru_cache(maxsize=1)
+def _table() -> _Table | None:
+    """Таблица запретов из config/rpa_forbidden_zones.yaml; нет файла/секции — None (отказываем всё)."""
     try:
-        # scope="ai_rescue": правило «Close» (scope wizard_chrome) не должно
-        # мешать закрыть чужое окно; остальные правила yaml действуют.
-        why = _wg.forbidden_click_reason(label, scope="ai_rescue")
-    except Exception:
-        why = None
-    if why:
-        return f"forbidden_zone:{str(why)[:40]}"
+        raw = yaml.safe_load(_wg._ZONES_PATH.read_text(encoding="utf-8")) or {}
+        t = _Table(raw.get("ai_rescue") or {})
+        return t if t.context and t.target_only and t.close_labels else None
+    except Exception as exc:
+        log.warning("ai_rescue: forbidden table unreadable (%s) - every pick will be refused", type(exc).__name__)
+        return None
+
+
+def norm_text(text: str) -> str:
+    """Нижний регистр, без диакритики, всё не-буквенное — один пробел, «hereDelete» → «here delete»."""
+    t = re.sub(r"([a-zà-ÿ])([A-ZÀ-Ý])", r"\1 \2", str(text or ""))
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch)).lower()
+    return re.sub(r"[\W_]+", " ", t).strip()
+
+
+def _scan(rows, text: str) -> str | None:
+    n = norm_text(text)
+    for reason, rx in rows:
+        if rx.search(n):
+            return reason
     return None
+
+
+def forbidden_reason(label_parts, nearby: str = "", dialog_texts=(), *, close_dialog: bool = False) -> str | None:
+    """Причина запрета для цели с такими источниками подписи, окружением и текстом окон; иначе None.
+
+    Тексты не усекаются. Нет таблицы — запрещено всё.
+    """
+    t = _table()
+    if t is None:
+        return "forbidden_table_missing"
+    parts = [label_parts] if isinstance(label_parts, str) else list(label_parts or [])
+    whole = " | ".join(str(x) for x in parts)
+    for rows, text, where in ((t.context, whole, "label"), (t.target_only, whole, "label"),
+                              (t.context, nearby, "nearby")):
+        why = _scan(rows, text)
+        if why:
+            return f"forbidden_{where}:{why}"
+    for d in dialog_texts or ():
+        why = _scan(t.context, str(d))
+        if why:
+            return f"forbidden_dialog:{why}"
+    for part in parts:
+        try:
+            # без scope «Close» из yaml (wizard_chrome) действует; для close_dialog — снят
+            why = _wg.forbidden_click_reason(str(part), scope="ai_rescue" if close_dialog else None)
+        except Exception:
+            why = None
+        if why:
+            return f"forbidden_zone:{str(why)[:40]}"
+    return None
+
+
+def is_close_label(parts) -> bool:
+    """Все источники подписи — «закрывающие» слова (Close/Cerrar/Cancel/×…)."""
+    t = _table()
+    if t is None:
+        return False
+    ns = [n for n in (norm_text(p) for p in parts or []) if n]
+    return bool(ns) and all(n in t.close_labels for n in ns)
 
 
 # ── чистка того, что уходит наружу ──────────────────────────────────────────
@@ -101,21 +157,35 @@ _FBTOKEN_RE = re.compile(r"\bEA[A-Za-z0-9]{8,}\b")
 #: Длинная «каша» из букв и цифр (токены, хэши, render-id), обязательно с цифрой.
 _BLOB_RE = re.compile(r"\b(?=[A-Za-z_-]*\d)[A-Za-z0-9_-]{20,}\b")
 _PHONE_RE = re.compile(r"(?<!\w)\+?\d[\d\s().-]{7,}\d(?!\w)")
-_DIGITS_RE = re.compile(r"\d{4,}")
-#: Метка аккаунта: Facebook_9403A, UL921, DQ204, «Account 1234».
-_ACCOUNT_RE = re.compile(r"\b(?:Facebook|FB|Account|Acct)[_\s-]*[A-Z]*\d+[A-Za-z]?\b|\b[A-Z]{2,3}\d{3,}[A-Za-z]?\b")
-#: Имя кампании байера: KW_TRL_All_Video_Mix_35_05.10 (>= 4 частей через «_»).
-_CAMPAIGN_RE = re.compile(r"\b[A-Za-z]{2,}(?:_[A-Za-z0-9.\-]+){3,}")
+#: «<номер кабинета> - Имя кабинета»: всё после номера — имя.
+_ACCOUNT_HEAD_RE = re.compile(r"\d{5,}\s*[-–—]\s*[^|]+")
+#: «Имя кабинета - <номер>» (имя перед номером).
+_ACCOUNT_TAIL_RE = re.compile(r"[^|]{0,60}?\s[-–—]\s*\d{5,}")
+#: Метка аккаунта в любом регистре: Facebook_9403A, FacebookDoc120, UL921, «Account 1234».
+_ACCOUNT_RE = re.compile(r"\b(?:facebook|fb|account|acct)[A-Za-z_\s-]{0,20}\d+[A-Za-z]?\b|\b[A-Z]{2,3}\d{3,}[A-Za-z]?\b", re.I)
+_PIXEL_RE = re.compile(r"\bpixel\s+\S+", re.I)
 #: «Evgeni's account», «Evgeni's page».
 _POSSESSIVE_RE = re.compile(r"\b[\w.-]+['’]s (?:account|profile|page|business)\b", re.I)
+#: Любой токен с цифрой: B96, Story14, Doc120, Investment_35_06.10, 06.10.
+_DIGIT_TOKEN_RE = re.compile(r"[A-Za-z0-9_.+\-]*\d[A-Za-z0-9_.+\-]*")
+
+
+def _digit_token(m: re.Match) -> str:
+    tok = m.group(0).strip(".")
+    return "<n>" if tok.isdigit() and len(tok) <= 3 else "<id>"
 
 
 def scrub_text(text: str, names: tuple[str, ...] | list[str] = ()) -> str:
     """Убрать из строки всё, что опознаёт аккаунт, кампанию или человека.
 
-    Порядок важен: сначала адреса и ссылки (в них цифры), потом токены, потом
-    номера. `names` — известные имена (страницы, люди), которые нельзя угадать
-    регуляркой; имя кампании прогона берётся из телеметрии.
+    Порядок важен: сначала адреса и ссылки (в них цифры), потом имена, потом
+    каждый токен с цифрой. Хвост после `|` (имя кампании в заголовке) — имя.
+
+    `names` — свободные имена, которые регуляркой не угадать: их подаёт вызывающий
+    (PR-2): имя Facebook-страницы и Instagram, имя рекламного кабинета, имена
+    пикселей, имя кампании. Пустой `names` оставляет в тексте имена без цифр и
+    без подчёркиваний («The Self Made Method - CSI»). Имя кампании прогона берётся
+    из телеметрии.
     """
     out = str(text or "")
     try:
@@ -130,12 +200,15 @@ def scrub_text(text: str, names: tuple[str, ...] | list[str] = ()) -> str:
     out = _JWT_RE.sub("<token>", out)
     out = _FBTOKEN_RE.sub("<token>", out)
     out = _UUID_RE.sub("<id>", out)
-    out = _CAMPAIGN_RE.sub("<campaign>", out)
+    out = re.sub(r"\s*\|.*$", " | <name>", out, flags=re.S) if "|" in out else out
+    out = _ACCOUNT_HEAD_RE.sub("<account>", out)
+    out = _ACCOUNT_TAIL_RE.sub("<account>", out)
     out = _ACCOUNT_RE.sub("<account>", out)
+    out = _PIXEL_RE.sub("Pixel <name>", out)
     out = _POSSESSIVE_RE.sub("<name>", out)
     out = _BLOB_RE.sub("<token>", out)
     out = _PHONE_RE.sub("<phone>", out)
-    out = _DIGITS_RE.sub("<digits>", out)
+    out = _DIGIT_TOKEN_RE.sub(_digit_token, out)
     try:
         out = _run_telemetry.scrub(out)
     except Exception:
@@ -143,63 +216,125 @@ def scrub_text(text: str, names: tuple[str, ...] | list[str] = ()) -> str:
     return re.sub(r"\s+", " ", out).strip()
 
 
-# ── сводка страницы ─────────────────────────────────────────────────────────
+# ── страница: общий JS-пролог ───────────────────────────────────────────────
 
-_SUMMARY_JS = r"""
-(args) => {
+_PRE = r"""
+const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+const shown = (e) => {
+  if (!e || !e.getBoundingClientRect) return false;
+  const r = e.getBoundingClientRect();
+  if (r.width <= 1 || r.height <= 1) return false;
+  for (let n = e; n && n.nodeType === 1; n = n.parentElement) {
+    const s = getComputedStyle(n);
+    if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
+    if (n.hasAttribute('hidden') || n.hasAttribute('inert')) return false;
+  }
+  return true;
+};
+const DLG = '[role=dialog], [role=alertdialog], [aria-modal="true"]';
+const HEAD = '[role=heading], h1, h2, h3, h4';
+// сам редактор (как в foreign_windows): окно-редактор — не «чужое» окно
+const EDITOR = 'input[placeholder^="Enter your campaign name"], input[placeholder^="Enter your ad set name"],'
+  + ' input[placeholder^="Enter your ad name"], [data-surface*="editor_drawer_footer"],'
+  + ' [data-surface*="simple_create_publish"], [data-surface="/am/editor_drawer"],'
+  + ' [data-surface$="editor:campaign"], [data-surface$="editor:ad_set"], [data-surface$="editor:ad"]';
+const INTER = 'button, a[href], input, select, textarea, [role=button], [role=link], [role=switch],'
+  + ' [role=checkbox], [role=radio], [role=menuitem], [role=tab], [tabindex], [aria-expanded],'
+  + ' [contenteditable="true"]';
+const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
+const ROLES = new Set(['button','link','checkbox','radio','combobox','textbox','tab','switch','menuitem','searchbox']);
+const FIELD = new Set(['combobox', 'textbox', 'searchbox']);
+// текст узлов через пробел; attrs — ещё aria-label/title/alt/value всех потомков
+const textOf = (root, attrs, skipRoot) => {
+  const out = [];
+  const walk = (n) => {
+    if (n.nodeType === 3) { const t = norm(n.data); if (t) out.push(t); return; }
+    if (n.nodeType !== 1 || SKIP.has(n.tagName)) return;
+    if (attrs && !(skipRoot && n === root)) {
+      for (const a of ['aria-label', 'title', 'alt']) { const v = norm(n.getAttribute(a)); if (v) out.push(v); }
+      if (n.tagName === 'INPUT') { const v = norm(n.value || n.getAttribute('value')); if (v) out.push(v); }
+    }
+    for (const c of n.childNodes) walk(c);
+  };
+  walk(root);
+  return norm(out.join(' '));
+};
+// ВСЕ источники подписи цели и потомков, по одному на элемент массива
+const parts = (el) => {
+  const p = [];
+  for (const a of ['aria-label', 'title', 'alt']) { const v = norm(el.getAttribute(a)); if (v) p.push(v); }
+  if (typeof el.value === 'string') { const v = norm(el.value); if (v) p.push(v); }
+  const lb = el.getAttribute('aria-labelledby');
+  if (lb) for (const id of lb.split(/\s+/)) { const x = document.getElementById(id); if (x) { const v = textOf(x, true); if (v) p.push(v); } }
+  const t = textOf(el, true, true); if (t) p.push(t);   // своё aria-label уже в списке выше
+  return p;
+};
+const roleOf = (e) => {
+  const r = (e.getAttribute('role') || '').toLowerCase();
+  if (ROLES.has(r)) return r;
+  const t = e.tagName.toLowerCase();
+  if (t === 'button') return 'button';
+  if (t === 'a' && e.hasAttribute('href')) return 'link';
+  if (t === 'select') return 'combobox';
+  if (t === 'textarea') return 'textbox';
+  if (t === 'input') {
+    const ty = (e.getAttribute('type') || 'text').toLowerCase();
+    if (ty === 'checkbox' || ty === 'radio') return ty;
+    if (ty === 'button' || ty === 'submit') return 'button';
+    if (ty === 'hidden' || ty === 'file') return '';
+    return 'textbox';
+  }
+  if (e.getAttribute('contenteditable') === 'true') return 'textbox';
+  if (e.hasAttribute('aria-expanded')) return r || 'button';
+  return '';
+};
+// короткая подпись для модели; у полей ввода значение (имя страницы, пикселя) не берём
+const labelOf = (e, role) => {
+  let l = norm(e.getAttribute('aria-label'));
+  const lb = e.getAttribute('aria-labelledby');
+  if (!l && lb) l = norm(lb.split(/\s+/).map((id) => document.getElementById(id)).filter(Boolean)
+    .map((x) => textOf(x, false)).join(' '));
+  if (!l && e.labels && e.labels.length) l = norm([...e.labels].map((x) => textOf(x, false)).join(' '));
+  if (FIELD.has(role) || e.tagName === 'SELECT') {
+    if (!l) l = norm(e.getAttribute('placeholder') || e.getAttribute('title'));
+    return (l || '<field>').slice(0, 80);
+  }
+  if (!l) l = textOf(e, false);
+  if (!l && e.tagName === 'INPUT' && typeof e.value === 'string') l = norm(e.value);  // input type=button
+  if (!l) l = norm(e.getAttribute('title') || e.getAttribute('placeholder') || e.getAttribute('alt'));
+  return l.slice(0, 80);
+};
+const stateOf = (e) => {
+  const s = [];
+  const ex = e.getAttribute('aria-expanded');
+  if (ex === 'true' || ex === 'false') s.push(ex === 'true' ? 'expanded' : 'collapsed');
+  if (e.disabled || e.getAttribute('aria-disabled') === 'true') s.push('disabled');
+  const ch = e.getAttribute('aria-checked');
+  if (e.checked === true || ch === 'true') s.push('checked');
+  const pr = e.getAttribute('aria-pressed');
+  if (pr === 'true') s.push('pressed'); else if (pr === 'false') s.push('not-pressed');
+  return s;
+};
+const isEditor = (d) => !!d.querySelector(EDITOR);
+const realDialogs = () => [...document.querySelectorAll(DLG)].filter((d) => shown(d) && !isEditor(d));
+const dialogOf = (el) => {
+  let d = el.parentElement ? el.parentElement.closest(DLG) : null;
+  while (d && isEditor(d)) d = d.parentElement ? d.parentElement.closest(DLG) : null;
+  return d;
+};
+const dirtyIn = (d) => [...d.querySelectorAll(
+  'input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=button]):not([type=submit]), textarea, [contenteditable="true"]')]
+  .some((x) => norm(typeof x.value === 'string' ? x.value : x.textContent) !== '');
+const inRowOf = (el) => !!el.closest('tr, [role=row], [role=gridcell], [role=columnheader]');
+"""
+
+_SUMMARY_JS = "(args) => {" + _PRE + r"""
   const {anchor, maxScan} = args;
   for (const e of document.querySelectorAll('[data-acl-ai]')) e.removeAttribute('data-acl-ai');
-  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
-  const shown = (e) => {
-    if (!e || !e.getBoundingClientRect) return false;
-    const r = e.getBoundingClientRect();
-    if (r.width <= 1 || r.height <= 1) return false;
-    for (let n = e; n && n.nodeType === 1; n = n.parentElement) {
-      const s = getComputedStyle(n);
-      if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
-      if (n.hasAttribute('hidden') || n.hasAttribute('inert')) return false;
-    }
-    return true;
-  };
-  const DLG = '[role=dialog], [role=alertdialog], [aria-modal="true"]';
-  const HEAD = '[role=heading], h1, h2, h3, h4';
-  const ROLES = new Set(['button','link','checkbox','radio','combobox','textbox','tab','switch','menuitem','searchbox']);
-  const roleOf = (e) => {
-    const r = (e.getAttribute('role') || '').toLowerCase();
-    if (ROLES.has(r)) return r;
-    const t = e.tagName.toLowerCase();
-    if (t === 'button') return 'button';
-    if (t === 'a' && e.hasAttribute('href')) return 'link';
-    if (t === 'select') return 'combobox';
-    if (t === 'textarea') return 'textbox';
-    if (t === 'input') {
-      const ty = (e.getAttribute('type') || 'text').toLowerCase();
-      if (ty === 'checkbox' || ty === 'radio') return ty;
-      if (ty === 'button' || ty === 'submit') return 'button';
-      if (ty === 'hidden' || ty === 'file') return '';
-      return 'textbox';
-    }
-    if (e.getAttribute('contenteditable') === 'true') return 'textbox';
-    if (e.hasAttribute('aria-expanded')) return r || 'button';
-    return '';
-  };
-  const labelOf = (e) => {
-    let l = norm(e.getAttribute('aria-label'));
-    const lb = e.getAttribute('aria-labelledby');
-    if (!l && lb) l = norm(lb.split(/\s+/).map((id) => document.getElementById(id)).filter(Boolean)
-      .map((x) => x.textContent).join(' '));
-    if (!l && e.labels && e.labels.length) l = norm([...e.labels].map((x) => x.textContent).join(' '));
-    if (!l) l = norm(e.textContent);
-    if (!l) l = norm(e.getAttribute('title') || e.getAttribute('placeholder') || e.getAttribute('alt'));
-    return l.slice(0, 80);
-  };
   const dlgTitle = (d) => {
     const h = [...d.querySelectorAll(HEAD)].filter(shown).map((x) => norm(x.textContent)).find(Boolean);
-    return (h || norm(d.getAttribute('aria-label')) || norm(d.textContent)).slice(0, 80);
+    return (h || norm(d.getAttribute('aria-label')) || textOf(d, false)).slice(0, 80);
   };
-  const leaves = (root, lim) => [...root.querySelectorAll('*')]
-    .filter((x) => x.children.length === 0 && shown(x)).map((x) => norm(x.textContent)).filter(Boolean)
-    .join(' ').slice(0, lim);
   const sectionOf = (e) => {
     let n = e.parentElement;
     for (let i = 0; n && i < 7; i++, n = n.parentElement) {
@@ -208,31 +343,31 @@ _SUMMARY_JS = r"""
     }
     return '';
   };
-  const stateOf = (e) => {
-    const s = [];
-    const ex = e.getAttribute('aria-expanded');
-    if (ex === 'true' || ex === 'false') s.push(ex === 'true' ? 'expanded' : 'collapsed');
-    if (e.disabled || e.getAttribute('aria-disabled') === 'true') s.push('disabled');
-    const ch = e.getAttribute('aria-checked');
-    if (e.checked === true || ch === 'true') s.push('checked');
-    const pr = e.getAttribute('aria-pressed');
-    if (pr === 'true') s.push('pressed'); else if (pr === 'false') s.push('not-pressed');
-    return s;
-  };
-  const dialogs = [...document.querySelectorAll(DLG)].filter(shown);
-  const dlgOut = dialogs.slice(0, 5).map((d) => ({title: dlgTitle(d), text: leaves(d, 300)}));
+  const dialogs = realDialogs();
+  const dlgOut = dialogs.slice(0, 5).map((d) => ({title: dlgTitle(d), text: textOf(d, false).slice(0, 300)}));
   const headings = [...new Set([...document.querySelectorAll(HEAD)].filter(shown)
     .map((h) => norm(h.textContent).slice(0, 80)).filter(Boolean))].slice(0, 25);
-  // якорь шага: самый короткий видимый элемент с таким текстом
+  // страница-список кампаний/групп/объявлений: широкая таблица из 3+ строк, окон нет
+  const vp = innerWidth * innerHeight;
+  const grids = [...document.querySelectorAll('table, [role=grid], [role=treegrid], [role=table]')].filter((g) => {
+    if (!shown(g) || g.querySelectorAll('tr, [role=row]').length < 3) return false;
+    const r = g.getBoundingClientRect();
+    return r.width * r.height >= 0.35 * vp;
+  });
+  const listPage = grids.length > 0 && dialogs.length === 0;
+  // якорь шага: первый видимый текстовый узел с этим текстом, поиск не дольше 2 с
   let ay = null, ax = 0;
   if (anchor) {
-    const a = anchor.toLowerCase();
-    const hits = [...document.querySelectorAll('body *')]
-      .filter((x) => shown(x) && norm(x.textContent).toLowerCase().includes(a))
-      .sort((p, q) => norm(p.textContent).length - norm(q.textContent).length);
-    if (hits.length) {
-      const r = hits[0].getBoundingClientRect();
-      ay = r.top + r.height / 2; ax = r.left + r.width / 2;
+    const a = anchor.toLowerCase(), t0 = performance.now();
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) {
+      if (performance.now() - t0 > args.anchorMs) break;
+      if (n.data.toLowerCase().includes(a) && n.parentElement && shown(n.parentElement)) {
+        const r = n.parentElement.getBoundingClientRect();
+        ay = r.top + r.height / 2; ax = r.left + r.width / 2;
+        break;
+      }
     }
   }
   const out = [];
@@ -241,73 +376,70 @@ _SUMMARY_JS = r"""
   for (const e of document.querySelectorAll(sel)) {
     if (scanned >= maxScan) break;
     const role = roleOf(e);
-    if (!role || !shown(e)) continue;
+    // строки списков и ссылки (по ним мы не кликаем, а подписи — имена кампаний) модели не показываем
+    if (!role || role === 'link' || !shown(e) || inRowOf(e)) continue;
     scanned++;
     const r = e.getBoundingClientRect();
-    const d = e.closest(DLG);
+    const d = dialogOf(e);
     const inDialog = !!(d && dialogs.includes(d));
     const dist = ay === null ? r.top : Math.abs(r.top + r.height / 2 - ay) + 0.25 * Math.abs(r.left + r.width / 2 - ax);
-    out.push({el: e, role, label: labelOf(e), state: stateOf(e), inDialog, dist,
-              dialog: inDialog ? dlgTitle(d) : '', dlgEl: inDialog ? d : null});
+    out.push({el: e, role, label: labelOf(e, role), state: stateOf(e), inDialog, dist,
+              dialog: inDialog ? dlgTitle(d) : ''});
   }
   out.sort((p, q) => (q.inDialog - p.inDialog) || (p.dist - q.dist));
-  const dlgText = new Map();
   const res = out.map((o, i) => {
     o.el.setAttribute('data-acl-ai', String(i));
-    let nearby;
-    if (o.dlgEl) {
-      if (!dlgText.has(o.dlgEl)) dlgText.set(o.dlgEl, leaves(o.dlgEl, 500));
-      nearby = dlgText.get(o.dlgEl);
-    } else {
-      const p = o.el.parentElement;
-      nearby = norm(p ? p.textContent : '').slice(0, 160);
-    }
     return {i, role: o.role, label: o.label, state: o.state, inDialog: o.inDialog,
-            dialog: o.dialog, section: o.inDialog ? o.dialog : sectionOf(o.el), nearby};
+            dialog: o.dialog, section: o.inDialog ? o.dialog : sectionOf(o.el)};
   });
-  return {dialogs: dlgOut, headings, elements: res, scanned};
+  return {dialogs: dlgOut, headings, elements: res, scanned, listPage};
 }
 """
 
-_CHECK_JS = r"""
-(i) => {
-  const hits = document.querySelectorAll('[data-acl-ai="' + i + '"]');
+#: Всё, что нужно для решения «можно ли»: полные источники подписи цели и потомков,
+#: окружение, полный текст окна, и (act) точка клика, проверенная elementFromPoint.
+_LOCATE_JS = "(args) => {" + _PRE + r"""
+  const hits = document.querySelectorAll('[data-acl-ai="' + args.i + '"]');
   if (hits.length !== 1) return {found: hits.length};
-  const e = hits[0];
-  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
-  const r = e.getBoundingClientRect();
-  let vis = r.width > 1 && r.height > 1;
-  for (let n = e; vis && n && n.nodeType === 1; n = n.parentElement) {
-    const s = getComputedStyle(n);
-    if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') vis = false;
+  const el = hits[0];
+  if (args.scroll) el.scrollIntoView({block: 'center', inline: 'center'});
+  const role = roleOf(el);
+  const dlgs = [];
+  const d = dialogOf(el);
+  if (d) dlgs.push(d);
+  for (const x of el.querySelectorAll(DLG)) if (shown(x) && !isEditor(x)) dlgs.push(x);
+  const p = el.parentElement;
+  const pt = p && !d ? textOf(p, true) : '';
+  const info = {
+    found: 1, visible: shown(el), role, label: labelOf(el, role), parts: parts(el),
+    nearby: pt.length <= 400 ? pt : '',
+    dialogs: dlgs.map((x) => ({text: norm(textOf(x, true) + ' ' + norm(x.getAttribute('aria-label'))), dirty: dirtyIn(x)})),
+    dialogOpen: realDialogs().length > 0, inDialog: !!d, inRow: inRowOf(el),
+    desc: [...el.querySelectorAll(INTER)].slice(0, 80).map((x) => ({role: roleOf(x), parts: parts(x)})),
+    expanded: el.getAttribute('aria-expanded'), pressed: el.getAttribute('aria-pressed'), hit: null,
+  };
+  if (args.hit) {
+    const rr = el.getBoundingClientRect();
+    let res = {ok: false, reason: 'no_point'};
+    for (const [fx, fy] of [[.5, .5], [.25, .5], [.75, .5], [.5, .25], [.5, .75], [.08, .5], [.5, .08]]) {
+      const x = rr.left + rr.width * fx, y = rr.top + rr.height * fy;
+      if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) { res = {ok: false, reason: 'offscreen'}; continue; }
+      const h = document.elementFromPoint(x, y);
+      if (!h) { res = {ok: false, reason: 'no_hit'}; continue; }
+      if (h !== el && !el.contains(h)) { res = {ok: false, reason: 'covered'}; continue; }
+      const ia = h.closest(INTER);
+      if (ia && ia !== el && el.contains(ia)) { res = {ok: false, reason: 'interactive_descendant'}; continue; }
+      res = {ok: true, x, y, parts: parts(h)};
+      break;
+    }
+    info.hit = res;
   }
-  let l = norm(e.getAttribute('aria-label'));
-  const lb = e.getAttribute('aria-labelledby');
-  if (!l && lb) l = norm(lb.split(/\s+/).map((id) => document.getElementById(id)).filter(Boolean)
-    .map((x) => x.textContent).join(' '));
-  if (!l && e.labels && e.labels.length) l = norm([...e.labels].map((x) => x.textContent).join(' '));
-  if (!l) l = norm(e.textContent);
-  if (!l) l = norm(e.getAttribute('title') || e.getAttribute('placeholder') || e.getAttribute('alt'));
-  const d = e.closest('[role=dialog], [role=alertdialog], [aria-modal="true"]');
-  let nearby;
-  if (d) {
-    nearby = [...d.querySelectorAll('*')].filter((x) => x.children.length === 0)
-      .map((x) => norm(x.textContent)).filter(Boolean).join(' ').slice(0, 500);
-  } else {
-    const p = e.parentElement;
-    nearby = norm(p ? p.textContent : '').slice(0, 160);
-  }
-  return {found: 1, label: l.slice(0, 80), nearby, visible: vis, inDialog: !!d,
-          expanded: e.getAttribute('aria-expanded'), pressed: e.getAttribute('aria-pressed')};
+  return info;
 }
 """
 
-_DIALOG_TEXT_JS = r"""
-() => {
-  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  return [...document.querySelectorAll('[role=dialog], [role=alertdialog], [aria-modal="true"]')]
-    .filter((d) => { const r = d.getBoundingClientRect(); return r.width > 1 && r.height > 1; })
-    .map((d) => norm(d.textContent).slice(0, 800));
+_DIALOGS_JS = "() => {" + _PRE + r"""
+  return realDialogs().map((d) => ({text: norm(textOf(d, true) + ' ' + norm(d.getAttribute('aria-label'))), dirty: dirtyIn(d)}));
 }
 """
 
@@ -322,6 +454,7 @@ class PageSummary:
     headings: list[str] = field(default_factory=list)
     truncated: int = 0
     digest: str = ""
+    list_page: bool = False
 
 
 def clear_marks(page) -> None:
@@ -336,9 +469,11 @@ def build_summary(page, *, anchor: str = "", names: tuple[str, ...] | list[str] 
 
     Диалоги и их элементы идут первыми, затем элементы вокруг якоря шага
     (без якоря — сверху вниз). Потолки: MAX_ELEMENTS строк и MAX_CHARS знаков.
+    Строки списков (таблица кампаний) модели не показываются.
     """
     try:
-        raw = page.evaluate(_SUMMARY_JS, {"anchor": str(anchor or ""), "maxScan": MAX_SCAN})
+        raw = page.evaluate(_SUMMARY_JS, {"anchor": str(anchor or ""), "maxScan": MAX_SCAN,
+                                          "anchorMs": ANCHOR_SCAN_MS})
     except Exception as exc:
         log.warning("ai_rescue: DOM summary failed (%s), falling back to the aria snapshot", type(exc).__name__)
         return _fallback_summary(page, names)
@@ -366,7 +501,7 @@ def build_summary(page, *, anchor: str = "", names: tuple[str, ...] | list[str] 
             break
         lines.append(line)
         used += len(line) + 1
-        kept[int(el["i"])] = {**el, "label": str(el.get("label", "")), "nearby": str(el.get("nearby", ""))}
+        kept[int(el["i"])] = {**el, "label": str(el.get("label", ""))}
     truncated = total - len(kept)
     if truncated > 0:
         lines.append(f"... {truncated} more elements not shown")
@@ -374,7 +509,7 @@ def build_summary(page, *, anchor: str = "", names: tuple[str, ...] | list[str] 
     return PageSummary(
         text=text, elements=kept, dialogs=list(raw.get("dialogs") or []),
         headings=list(raw.get("headings") or []), truncated=max(0, truncated),
-        digest=hashlib.sha256(text.encode("utf-8")).hexdigest()[:12],
+        digest=hashlib.sha256(text.encode("utf-8")).hexdigest()[:12], list_page=bool(raw.get("listPage")),
     )
 
 
@@ -395,11 +530,16 @@ def _fallback_summary(page, names) -> PageSummary:
 
 @dataclass
 class RescueBudget:
-    """Счётчик одной кампании: 2 вызова на шаг, 4 на кампанию. Передаёт вызывающий."""
+    """Счётчик одной кампании: 2 вызова на шаг, 4 на кампанию. Передаёт вызывающий.
+
+    `names` — свободные имена для чистки (имя Facebook-страницы и Instagram, имя
+    рекламного кабинета, имена пикселей, имя кампании); их заполняет вызывающий
+    в PR-2, регулярками эти имена не угадать.
+    """
 
     per_step: int = 2
     per_campaign: int = 4
-    names: tuple[str, ...] = ()  # известные имена страниц/людей для чистки
+    names: tuple[str, ...] = ()
     total: int = 0
     by_step: dict[str, int] = field(default_factory=dict)
 
@@ -543,7 +683,55 @@ def _usage(resp) -> tuple[int | None, int | None]:
     return getattr(u, "input_tokens", None), getattr(u, "output_tokens", None)
 
 
-# ── исполнение ──────────────────────────────────────────────────────────────
+# ── решение «можно ли» и исполнение ─────────────────────────────────────────
+
+def _vet(action: str, info: dict[str, Any], label: str) -> str | None:
+    """Причина отказа по свежим данным со страницы (`_LOCATE_JS`) или None. Сомневаешься — отказывай."""
+    if info.get("found") != 1:
+        return "element_gone_or_ambiguous"
+    if not info.get("visible"):
+        return "element_not_visible"
+    if info.get("label", "") != label:
+        return "dom_changed"
+    parts = info.get("parts") or []
+    if not any(norm_text(p) for p in parts):
+        return "empty_label"
+    if info.get("inRow"):
+        return "in_list_row"
+    if info.get("dialogOpen") and not info.get("inDialog"):
+        return "behind_dialog"
+    dialogs = info.get("dialogs") or []
+    close_dialog = action == "close_dialog"
+    why = forbidden_reason(parts, info.get("nearby", ""), [d.get("text", "") for d in dialogs],
+                           close_dialog=close_dialog)
+    if why:
+        return why
+    if action == "scroll_to":
+        return None
+    if info.get("role") not in CLICKABLE_ROLES:
+        return f"role_not_allowed:{info.get('role')}"
+    closing = is_close_label(parts)
+    if close_dialog:
+        if not info.get("inDialog") or not closing:
+            return "not_a_dialog_close_button"
+        if any(d.get("dirty") for d in dialogs):
+            return "dirty_dialog"
+    elif closing:
+        return "close_only_via_close_dialog"
+    if action == "expand" and info.get("expanded") != "false" and info.get("pressed") != "false":
+        return "not_collapsed"
+    desc = info.get("desc") or []
+    if desc:
+        if action != "expand":
+            return "has_interactive_descendants"
+        for d in desc:
+            if d.get("role") in ("switch", "checkbox", "radio", "textbox", "searchbox"):
+                return "has_interactive_descendants"
+            why = forbidden_reason(d.get("parts") or [], "", ())
+            if why:
+                return f"descendant_{why}"
+    return None
+
 
 def _execute(page, act: dict[str, Any], summary: PageSummary, mode: str) -> tuple[bool, str, str, str]:
     """Проверить выбор и (в act) выполнить. Возвращает (ok, action, сырая метка, причина)."""
@@ -551,15 +739,18 @@ def _execute(page, act: dict[str, Any], summary: PageSummary, mode: str) -> tupl
     if action == "give_up":
         return False, "give_up", "", act.get("reason") or "model_gave_up"
     if action == "press_escape":
-        # Escape в окне вида «Discard changes?» не нажимаем — по тексту любого видимого окна.
         try:
-            texts = page.evaluate(_DIALOG_TEXT_JS) or []
-        except Exception:
-            texts = []
-        for t in texts:
-            why = forbidden_reason("", t)
+            dialogs = page.evaluate(_DIALOGS_JS) or []
+        except Exception as exc:
+            return False, "give_up", "", f"escape_check_failed:{type(exc).__name__}"
+        if not dialogs:
+            return False, "give_up", "", "no_dialog"
+        for d in dialogs:
+            why = forbidden_reason([], "", [d.get("text", "")])
             if why:
                 return False, "give_up", "", f"escape_blocked:{why}"
+            if d.get("dirty"):
+                return False, "give_up", "", "dirty_dialog"
         if mode == "act":
             try:
                 page.keyboard.press("Escape")
@@ -571,40 +762,29 @@ def _execute(page, act: dict[str, Any], summary: PageSummary, mode: str) -> tupl
     el = summary.elements.get(idx)
     if el is None:
         return False, "give_up", "", "unknown_index"
-    label, nearby = el["label"], el["nearby"]
-    why = forbidden_reason(label, nearby)
-    if why:
-        return False, "give_up", label, why
-    if action == "close_dialog" and (not el.get("inDialog") or not _CLOSE_LABEL_RE.match(label.strip())):
-        return False, "give_up", label, "not_a_dialog_close_button"
-    if action == "expand" and not any(x in (el.get("state") or []) for x in ("collapsed", "not-pressed")):
-        return False, "give_up", label, "not_collapsed"
-    if mode != "act":
-        return True, action, label, ""
-
-    # Страница могла измениться между сводкой и действием: метку и окружение
-    # читаем заново и сверяем непосредственно перед кликом.
+    label = el["label"]
+    act_mode = mode == "act"
     try:
-        cur = page.evaluate(_CHECK_JS, idx)
+        info = page.evaluate(_LOCATE_JS, {"i": idx, "scroll": act_mode, "hit": act_mode and action != "scroll_to"})
     except Exception as exc:
         return False, "give_up", label, f"recheck_failed:{type(exc).__name__}"
-    if not cur or cur.get("found") != 1:
-        return False, "give_up", label, "element_gone_or_ambiguous"
-    if not cur.get("visible"):
-        return False, "give_up", label, "element_not_visible"
-    why = forbidden_reason(cur.get("label", ""), cur.get("nearby", ""))
+    why = _vet(action, info or {}, label)
     if why:
-        return False, "give_up", label, f"recheck_{why}"
-    if cur.get("label", "") != label:
-        return False, "give_up", label, "dom_changed"
-    if action == "expand" and cur.get("expanded") != "false" and cur.get("pressed") != "false":
-        return False, "give_up", label, "not_collapsed"
+        return False, "give_up", label, why
+    if not act_mode:
+        return True, action, label, ""
+    if action == "scroll_to":
+        return True, action, label, ""  # прокрутка уже сделана при проверке
+    hit = info.get("hit") or {}
+    if not hit.get("ok"):
+        return False, "give_up", label, f"hit_{hit.get('reason', 'unknown')}"
+    # то, во что попадёт клик, тоже проверяем на запрещённое
+    why = forbidden_reason(hit.get("parts") or [], "", (), close_dialog=action == "close_dialog")
+    if why:
+        return False, "give_up", label, f"hit_{why}"
     try:
-        loc = page.locator(f'[{MARK}="{int(idx)}"]')
-        if action == "scroll_to":
-            loc.scroll_into_view_if_needed(timeout=3000)
-        else:
-            loc.click(timeout=3000)
+        # клик по проверенной точке, без повторов и ожиданий Playwright
+        page.mouse.click(hit["x"], hit["y"])
     except Exception as exc:
         return False, action, label, f"action_failed:{type(exc).__name__}"
     return True, action, label, ""
@@ -615,7 +795,7 @@ def _prompt(step: str, goal: str, error: str, summary: PageSummary, names) -> st
         return scrub_text(t, names)
 
     return (
-        f"Step: {s(step)}\nGoal: {s(goal)}\nLast error: {s(error)[:300]}\n\n"
+        f"Step: {step}\nGoal: {s(goal)}\nLast error: {s(error)[:300]}\n\n"
         f"Page summary:\n{summary.text}\n\nCall rescue_action with exactly one action."
     )
 
@@ -647,15 +827,23 @@ def _rescue(page, step, goal, error, budget, telemetry, client, anchor, mode) ->
                  step, budget.total, budget.per_campaign)
         _record(telemetry, None, "skipped", {**base, "reason": "budget_exhausted"})
         return RescueResult(False, mode, reason="budget_exhausted", skipped=True)
-    if client is None:
-        client, why = _make_client()
-        if client is None:
-            log.warning("ai_rescue: skipped (%s) - set ANTHROPIC_API_KEY in the machine .env", why)
-            _record(telemetry, None, "skipped", {**base, "reason": why})
-            return RescueResult(False, mode, reason=why, skipped=True)
 
+    built = None
     try:
         summary = build_summary(page, anchor=anchor, names=budget.names)
+        if summary.list_page:
+            # страница-список: строки и переключатели живых кампаний — не наше дело, модель не зовём
+            log.info("ai_rescue: list page, give_up without asking the model")
+            _record(telemetry, False, "give_up", {**base, "action": "give_up", "reason": "list_page",
+                                                   "summary_hash": summary.digest})
+            return RescueResult(False, mode, "give_up", reason="list_page")
+        if client is None:
+            client, why = _make_client()
+            if client is None:
+                log.warning("ai_rescue: skipped (%s) - set ANTHROPIC_API_KEY in the machine .env", why)
+                _record(telemetry, None, "skipped", {**base, "reason": why})
+                return RescueResult(False, mode, reason=why, skipped=True)
+            built = client
         budget.spend(step)
         t0 = time.monotonic()
         resp, err = _ask(client, _prompt(step, goal, error, summary, budget.names))
@@ -682,3 +870,8 @@ def _rescue(page, step, goal, error, budget, telemetry, client, anchor, mode) ->
         return RescueResult(ok, mode, action, label, reason)
     finally:
         clear_marks(page)  # страница остаётся такой, какой была (suggest — ни одного изменения)
+        if built is not None:
+            try:
+                built.close()  # клиент создали мы — закрываем; чужой (подставной) не трогаем
+            except Exception:
+                pass

@@ -10,11 +10,21 @@ to do. This first PR is the standalone module only; nothing in the flow calls it
 - The model gets text only, never a screenshot: open dialogs, headings and up to 150 visible
   controls (12k characters at most) with role, label, state and section, each with a stable index.
 - Everything sent is scrubbed first: ids, `act=` and URLs, e-mails, tokens, account labels,
-  campaign names and any names the caller passes in become placeholders.
+  every word that contains a digit, the text after a `|` in a name, field values (Page, Pixel,
+  account comboboxes), links and campaign-list rows (never shown to the model). Free names
+  without digits are replaced only when the caller passes them in `names=`.
 - The model answers with exactly one action: click, expand, close dialog, press Escape, scroll to,
-  or give up. Safety is in code, not in the prompt: a forbidden label or nearby text (Publish,
-  Delete, Remove, Discard, terms, instant forms, log out, payment, "close without saving"), an unknown
-  index or a malformed answer becomes "give up". The element is re-read just before the click.
+  or give up. Safety is in code, not in the prompt, and when in doubt it refuses:
+  - one EN/ES/PT table of forbidden words in `config/rpa_forbidden_zones.yaml` (publish, delete,
+    remove, discard, terms, instant forms, log out, payment, "leave", duplicate, edit, on/off);
+  - the check covers every label source of the target and its descendants (text, aria-label,
+    title, alt, value, aria-labelledby), the text next to it and the FULL text of the dialog around it;
+  - only buttons and tabs are clicked; switches, checkboxes, radios, fields and links never; nothing
+    inside a list row; a list page gives up without calling the model;
+  - Close works only as "close dialog" inside a visible dialog with no edited fields; Escape needs a
+    visible dialog without edited fields;
+  - the click goes to a point checked with `elementFromPoint` (the marked element or a harmless
+    non-interactive part of it), one plain mouse click, no retries.
 - `ACL_AI_RESCUE=suggest` logs the answer and leaves the page untouched; `act` performs the one
   action and returns, the caller re-runs its own check. Model: `ACL_AI_RESCUE_MODEL`
   (default `claude-sonnet-5-5`), 20 second limit, no retries. No key or SDK means the rung is skipped.
