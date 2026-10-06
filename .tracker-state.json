@@ -5408,9 +5408,11 @@
         "worktree": "C:\\acl-1628-flaky",
         "id": "f4204a3207804a9692abec606dc8be34",
         "issue": 628,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-06T18:46:59+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 658,
+        "report": "# ACL-1628 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/658 (into stage), SHA d57c0c31, branch codex/acl-1628-flaky, worktree C:/acl-1628-flaky.\n\n## Root causes (all in the tests; product code is correct)\n1. builder publish selected: `add()` set the asset with a bare `.value`; the name (`cbUpdateName`) was completed only by the 350 ms drawer check, while the drawer checkbox aria-label was rendered earlier with the old name. Not a date race. Fix: `add()` fires `input` on the asset field; the test waits for the label with `expect(...).to_have_attribute`.\n2. drawer lost/cancelled [missing]: by design a lost status (404) of job 1 calls `halt()` and stops account 2 if its preview is still in flight, so `len(posts) == 2` raced. Fix: mocked status poll held until both jobs are posted (`poll_after_posts`).\n3. stopped profile: an instant return never releases the GIL, so the neighbour thread did 0 steps (rate 0.0 vs base 8.3M in the CI log). Fix: rate check only on a window >= 0.25 s (`MIN_RATE_WINDOW_S`); the dt bound still proves the instant return.\n\n## Repeat runs (local, headless, one file at a time)\n- builder publish selected: 15/15 (plus both builder files whole: 12/12 each)\n- drawer lost/cancelled: 30/30 (15 x [missing, cancelled]); an earlier run hit TargetClosedError at repetition 5 (browser killed externally, machine busy), 10 passed before it; rerun clean\n- stopped profile: 15/15\n\nCI state: PR just opened, checks pending at report time."
       },
       "649": {
         "actor": "Worker-S1649A",
