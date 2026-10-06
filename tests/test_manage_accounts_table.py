@@ -46,30 +46,6 @@ def test_only_one_place_connects_an_account():
         )
 
 
-def test_the_state_of_the_account_is_written_not_ticked():
-    """Галочка отвечала на вопрос, которого никто не задаёт вслух.
-
-    ✅/❌ говорило «готов ли», а спрашивают другое: что с аккаунтом. Слово
-    отвечает на второй вопрос и, когда аккаунт не готов, называет причину —
-    ради неё и держали отдельную колонку «To do».
-    """
-    t = ROW.read_text(encoding="utf-8")
-    assert "r.ready" in t, "состояние аккаунта негде посмотреть"
-    assert ">ready<" in t, "состояние не написано словом"
-    assert "needs setup" in t, "неготовый аккаунт ничего о себе не говорит"
-    # Смотрим только в строки таблицы: в комментарии рядом галочка названа
-    # нарочно — там объясняется, почему её убрали.
-    body = t[t.index("<tbody>"): t.index("</tbody>")]
-    assert "✅" not in body and "❌" not in body, "галочка вернулась"
-
-
-def test_the_reason_is_written_when_the_account_is_not_ready():
-    """Иначе «needs setup» — это тупик: непонятно, что именно сделать."""
-    t = ROW.read_text(encoding="utf-8")
-    setup = t[t.index('class="amap-setup"'): t.index("</td>", t.index('class="amap-setup"'))]
-    assert "r.to_do" in setup, "причина неготовности потерялась вместе с колонкой"
-
-
 def test_the_open_recommendations_column_is_gone():
     """Список рекомендаций у готового аккаунта — шум, а не задача.
 
@@ -110,22 +86,6 @@ def test_a_failed_read_shows_its_reason_after_a_reload():
     assert "sr.shot" in cell, "снимок опять негде найти"
 
 
-def test_an_account_the_workbook_never_heard_of_is_not_called_unfinished():
-    """«Нет в книге» и «в книге, но не готов» — разные вещи.
-
-    Аккаунт, заведённый на дешборде для тестов, в рабочей книге статистики не
-    появится никогда. Красное «needs setup» на нём означало бы задачу, которой
-    не существует, — а предупреждение, которое горит всегда, перестаёт что-либо
-    значить, и настоящую нехватку рядом уже никто не заметит.
-    """
-    t = ROW.read_text(encoding="utf-8")
-    setup = t[t.index('class="amap-setup"'): t.index("</td>", t.index('class="amap-setup"'))]
-    assert "not in the workbook" in setup, "аккаунт вне книги снова назван недонастроенным"
-    assert "r.in_workbook" in setup, "неоткуда узнать, знает ли книга этот аккаунт"
-    # Настоящая недонастройка никуда не делась: книга знает и не считает готовым.
-    assert "needs setup" in setup
-
-
 def test_the_row_carries_whether_the_workbook_knows_the_account():
     """Признак считается на сервере: шаблон не должен гадать по прочерку.
 
@@ -133,3 +93,16 @@ def test_the_row_carries_whether_the_workbook_knows_the_account():
     """
     source = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
     assert '"in_workbook"' in source and "_workbook_has_account(df, country_name, label)" in source
+
+
+def test_the_setup_column_is_replaced_by_a_note_column():
+    """ACL-1620: «ready / needs setup» убрано, на его месте заметка менеджера.
+
+    Поля r.ready / r.to_do остаются в данных, но в таблицу больше не выводятся.
+    """
+    t = ROW.read_text(encoding="utf-8")
+    head = t[t.index("<thead>"): t.index("</thead>")]
+    body = t[t.index("<tbody>"): t.index("</tbody>")]
+    assert ">Setup<" not in head and "amap-setup" not in t
+    assert ">Note<" in head and 'class="amap-acct-note' in body
+    assert "needs setup" not in body and "r.to_do" not in body

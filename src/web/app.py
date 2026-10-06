@@ -33,6 +33,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from src.web import account_notes as _account_notes
+
 # Make project root importable when invoked via `uvicorn src.web.app:app`
 _PROJ_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJ_ROOT) not in sys.path:
@@ -873,6 +875,9 @@ def _build_account_map_view(
         "dates": dates,
         "live": live,
         "splits": splits,
+        # ACL-1620: заметки менеджера по подписи аккаунта; читаются при каждой
+        # сборке карты, поэтому переживают обновление отчёта и htmx-перерисовку.
+        "notes": _account_notes.load(),
         "fallback": fallback,
         "date_from": date_from,
         "date_to": date_to,
@@ -3096,6 +3101,38 @@ async def creative_file(path: str = "", request: Request = None) -> Response:
         media_type=media_type,
         headers={"Cache-Control": _CREATIVE_CACHE_CONTROL, "Accept-Ranges": "bytes"},
     )
+
+
+@app.get("/api/account-notes")
+def api_account_notes_get() -> JSONResponse:
+    """Все заметки менеджера к аккаунтам (ACL-1620)."""
+    return JSONResponse({"ok": True, "notes": _account_notes.load()})
+
+
+@app.post("/api/account-notes")
+async def api_account_notes_set(request: Request) -> JSONResponse:
+    """Сохранить заметку к одному аккаунту; пустой текст удаляет её.
+
+    Body JSON: {account, text}
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Expected JSON"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
+    account, text = body.get("account"), body.get("text", "")
+    if not isinstance(account, str) or not account.strip():
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not isinstance(text, str):
+        return JSONResponse({"ok": False, "error": "text must be a string"}, status_code=400)
+    try:
+        notes = _account_notes.set_note(account, text)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except OSError:
+        return JSONResponse({"ok": False, "error": "Could not save the note. Try again."}, status_code=500)
+    return JSONResponse({"ok": True, "account": account.strip(), "text": notes.get(account.strip(), "")})
 
 
 @app.post("/api/accounts-hidden")
