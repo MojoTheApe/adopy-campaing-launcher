@@ -5234,22 +5234,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "637": {
-        "actor": "Worker-M1637V",
-        "session": "run_m1637v_1006",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "codex/acl-1637-same-video",
-        "worktree": "C:\\acl-1637-same-video",
-        "id": "fd4da3723f0c461d9da0e85a34a2351c",
-        "issue": 637,
-        "state": "handoff",
-        "started_at": "2026-10-06T14:11:40+00:00",
-        "from_status": "status:idea",
-        "pr": 639,
-        "report": "# Handoff ACL-1637 (PR #639)\n\nCause: heavy videos are sent as a compressed copy named `<name>.<key>.mp4`; the library tile carries that name, but ads 2+ searched the original name only, and \"do not upload twice\" left them empty.\n\nFix: ads 2+ search by the compressed name (twice, with a pause); if no copy, one re-upload per ad; ads without media end do-not-publish with English reasons.\n\nTests: tests/test_same_video_on_several_ads_gets_media.py, 17 passed locally. Neighbouring creative test files were NOT completed locally (coordinator stopped test runs for RAM); two tests in tests/test_media_step_reached_or_named.py failed in an interrupted run before I narrowed creative_soft_fail (test_each_ads_upload_failure_carries_its_own_reason, test_a_current_media_step_that_loads_is_waited_for_not_clicked) - unverified after the narrowing, CI must confirm.\n\nOpen: B97 file input not mounting (file_not_landed) and wizard_not_opened after a stalled ad 1 upload are named, not fixed; need a live check. Live checkbox left unchecked."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -7414,9 +7399,25 @@
             "session": "run_m1637v_1006"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-M1637V",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-M1637V",
+          "session": "run_m1637v_1006",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "codex/acl-1637-same-video",
+          "worktree": "C:\\acl-1637-same-video",
+          "id": "fd4da3723f0c461d9da0e85a34a2351c",
+          "issue": 637,
+          "state": "handoff",
+          "started_at": "2026-10-06T14:11:40+00:00",
+          "from_status": "status:idea",
+          "pr": 639,
+          "report": "# Handoff ACL-1637 (PR #639)\n\nCause: heavy videos are sent as a compressed copy named `<name>.<key>.mp4`; the library tile carries that name, but ads 2+ searched the original name only, and \"do not upload twice\" left them empty.\n\nFix: ads 2+ search by the compressed name (twice, with a pause); if no copy, one re-upload per ad; ads without media end do-not-publish with English reasons.\n\nTests: tests/test_same_video_on_several_ads_gets_media.py, 17 passed locally. Neighbouring creative test files were NOT completed locally (coordinator stopped test runs for RAM); two tests in tests/test_media_step_reached_or_named.py failed in an interrupted run before I narrowed creative_soft_fail (test_each_ads_upload_failure_carries_its_own_reason, test_a_current_media_step_that_loads_is_waited_for_not_clicked) - unverified after the narrowing, CI must confirm.\n\nOpen: B97 file input not mounting (file_not_landed) and wizard_not_opened after a stalled ad 1 upload are named, not fixed; need a live check. Live checkbox left unchecked."
+        },
+        "pr": 639,
+        "queued_at": "2026-10-06T14:47:53+00:00"
       }
     },
     "actors": {
@@ -9531,7 +9532,8 @@
       613,
       630,
       629,
-      633
+      633,
+      637
     ],
     "review": null,
     "history": [
@@ -13543,6 +13545,13 @@
         "at": "2026-10-06T14:11:40+00:00",
         "issue": 637,
         "claim": "fd4da3723f0c461d9da0e85a34a2351c",
+        "actor": "Worker-M1637V"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-06T14:47:53+00:00",
+        "issue": 637,
+        "pr": 639,
         "actor": "Worker-M1637V"
       }
     ],
