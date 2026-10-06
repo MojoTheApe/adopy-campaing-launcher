@@ -168,7 +168,6 @@
       <details class="amap-cm-country" data-country="__cm__:{{ g.country | e }}">
         <summary class="amap-cm-row amap-row">
           <span class="amap-cell-name">{{ g.country }}</span>
-          <span></span>
           {{ mx.spans(g.spend, g.leads, g.deposits) }}
           <span></span><span></span>
         </summary>
@@ -176,7 +175,6 @@
         <div class="amap-cm-row amap-row amap-cm-person{% if r.is_me %} me{% endif %}">
           <span></span>
           <span class="amap-cell-name">{{ r.cm }}{% if r.is_me %} (you){% endif %}</span>
-          <span></span>
           {{ mx.spans(r.spend, r.leads, r.deposits) }}
           <span></span><span></span>
         </div>
