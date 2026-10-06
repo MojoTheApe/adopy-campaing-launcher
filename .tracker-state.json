@@ -7318,7 +7318,7 @@
             "session": "run_s1630l_1006"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1630L",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -7336,7 +7336,8 @@
           "report": "# Handoff ACL-1630 (Worker-S1630L, run_s1630l_1006)\n\nPR: #632 (base stage), branch codex/acl-1630-sc-location-ads, two commits (locations; ad set hover).\nClaim: 09b0d43516fd466fa157b1aad05a4b23\n\n## Diagnosis\n1. Locations: in all six captures the card holds only \"United States\" (Close disabled); Saudi Arabia was never added, so `left` listed every row. \"Open Dropdown\" is the new visible label of the row's dropdown button, read as the name of the \"Remove\" row. Enter with no visible options was counted as success without checking the card; the highlighted suggestion (`aria-activedescendant=\"SA\"`) was never committed. Onboarding modal was closed by own_close before the step: harmless.\n2. Ad 2: the tree rows have empty button containers (no \"default\"/\"Action menu\" in DOM) until the cursor is over the row; no covering dialog, wizard or Create ad control. Fix: hover the ad set row (no click) and re-read, up to 3 times.\n\n## Fix\n- meta_dom.py: button labels stripped from location names; after Enter, card checked, highlighted suggestion pressed, failed attempt `not_in_card` otherwise.\n- simple_create.py: `_wake_adset_row` before declaring `no_create_control`; telemetry `tree.hover`.\n\n## Tests\nNew: tests/test_bench_location_open_dropdown.py (9), tests/test_bench_single_screen_adset_row_hover.py (4); fixtures locations_open_dropdown_card_2026_10_06.html, editor_tree_no_action_buttons_2026_10_06.html (scrubbed, scan clean).\nAffected files run locally with ACL_LIBRARY_* empty: 140 passed (plus test_bench_catalogue 7 passed).\n\n## Open\n- Unverified live: that pressing the highlighted suggestion adds the country, and that hover mounts the row buttons (both emulated; no captures). Live check is a separate task; Live checkbox unchecked.\n- ACL-1614 (#622) not yet in stage at push time; merged work/stage (already up to date). Re-merge if it lands first."
         },
         "pr": 632,
-        "queued_at": "2026-10-06T10:03:03+00:00"
+        "queued_at": "2026-10-06T10:03:03+00:00",
+        "reviewer": "Reviewer-R1630V"
       },
       "629": {
         "implementers": [
@@ -7980,6 +7981,10 @@
       "Worker-M1637V": {
         "session": "run_m1637v_1006",
         "role": "Worker"
+      },
+      "Reviewer-R1630V": {
+        "session": "rev_r1630v_1006",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -9530,12 +9535,22 @@
       526,
       529,
       613,
-      630,
       629,
       633,
       637
     ],
-    "review": null,
+    "review": {
+      "id": "f268fe8ec2114951baa611ac91ef9039",
+      "pr": 632,
+      "issues": [
+        630
+      ],
+      "actor": "Reviewer-R1630V",
+      "session": "rev_r1630v_1006",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-06T14:58:30+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -13553,6 +13568,13 @@
         "issue": 637,
         "pr": 639,
         "actor": "Worker-M1637V"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-06T14:58:30+00:00",
+        "pr": 632,
+        "lane": "f268fe8ec2114951baa611ac91ef9039",
+        "actor": "Reviewer-R1630V"
       }
     ],
     "policy": {
