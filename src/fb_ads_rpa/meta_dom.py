@@ -18086,6 +18086,88 @@ def _click_country_option(root, page: Page, search_term: str) -> tuple[str, list
     return "entered", texts
 
 
+_ACTIVE_SUGGESTION_JS = r"""
+  () => {
+    const q = [...document.querySelectorAll('input')].find(i =>
+      /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''));
+    const id = q && q.getAttribute('aria-activedescendant');
+    if (!id) return null;
+    const el = document.getElementById(id);
+    if (!el) return null;
+    el.scrollIntoView({block: 'nearest'});
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    const text = (el.innerText || el.textContent || '').replace(/[\s\u200b]+/g, ' ').trim();
+    return {x: r.x + r.width / 2, y: r.y + r.height / 2, id, text};
+  }
+"""
+"""Подсвеченная подсказка поля поиска локаций (`aria-activedescendant`):
+центр, id и текст."""
+
+
+def _active_suggestion_is_country(pt: dict, search_term: str) -> bool:
+    """Подсвеченная подсказка — сама страна, а не её город или регион.
+
+    Правило ACL-1390, как в `_click_country_option`: текст — «<страна>
+    (Country)» или одно имя страны. Текста нет — решает id: у варианта
+    страны id равен её ISO-коду («SA»), у городов и регионов — числовые ключи.
+    """
+    text = (pt.get("text") or "").strip()
+    if text:
+        tagged, bare = _country_option_res(search_term)
+        return bool(tagged.search(text) or bare.search(text))
+    iso = _COUNTRY_NAME_TO_ISO.get((search_term or "").strip().lower())
+    return bool(iso) and str(pt.get("id") or "").strip().upper() == iso
+
+
+def _click_active_suggestion(page: Page, search_term: str) -> bool:
+    """Нажать подсвеченную подсказку поля поиска, если это страна (ACL-1630).
+
+    Запасной путь после Enter, который ничего не добавил. Нажимается только
+    вариант самой страны (`_active_suggestion_is_country`): город или регион
+    с тем же именем не берётся никогда (ACL-1390, ревью PR #632 F1).
+    Нет подсвеченной подсказки, у неё нет коробки или это не страна — False,
+    ничего не нажато.
+    """
+    try:
+        pt = page.evaluate(_ACTIVE_SUGGESTION_JS)
+    except Exception:
+        return False
+    if not pt or not _active_suggestion_is_country(pt, search_term):
+        return False
+    try:
+        _cdp_mouse_click(page, pt["x"], pt["y"])
+    except Exception:
+        return False
+    return True
+
+
+def _country_added_or_unread(page: Page, search_term: str) -> bool:
+    """Страна стоит в карточке локаций — или карточку прочитать нельзя.
+
+    Решает только читаемая карточка без нужной страны: пустой ответ значит
+    «судить нечем», и прежний путь (дальше `_clear_other_locations` скажет
+    `location_rows_not_read`) не меняется.
+    """
+    rows = _location_rows_settled(page, tries=2, pause_s=0.6)
+    if not rows:
+        return True
+    # Ревью PR #632 (F1): в раскладке по странам у заголовка группы — ✕
+    # («Close»), у строки локации — «Remove». Город «Riyadh» встаёт строкой
+    # под заголовком «Saudi Arabia», и заголовок страной не считается: нужна
+    # строка «Remove», чьё имя — сама страна (как вариант страны, ACL-1390).
+    # В старой раскладке (`<li>` + «Close») строк «Remove» нет — там решает
+    # имя чипа, и тоже целиком, а не подстрокой.
+    tagged, bare = _country_option_res(search_term)
+
+    def is_country(r: dict) -> bool:
+        return bool(tagged.search(r["name"]) or bare.search(r["name"]))
+
+    if any("remove" in (r.get("kinds") or ()) for r in rows):
+        return any(is_country(r) and "remove" in (r.get("kinds") or ()) for r in rows)
+    return any(is_country(r) for r in rows)
+
+
 def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     """Pick the country-level suggestion from the location autocomplete.
 
@@ -18100,6 +18182,7 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     it and type slower; a shorter prefix; the longest wait. Each attempt after
     a failed first one is a telemetry row `audience_location_attempt`.
     """
+    outcomes: list[str] = []
     for n, (what, delay_ms, wait_s) in enumerate(_LOCATION_ATTEMPTS, start=1):
         typed = _location_prefix(search_term) if what == "prefix" else search_term
         if n > 1:
@@ -18119,19 +18202,38 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
         outcome, texts = "no_suggestions", []
         if _wait_location_options(root, timeout_s=wait_s):
             outcome, texts = _click_country_option(root, page, search_term)
+            if outcome == "entered" and not _country_added_or_unread(page, search_term):
+                # 06.10 (5265, ACL-1630): в карточке после шага одна United
+                # States — Enter без видимых вариантов страну не добавил, а шаг
+                # считал это успехом. Теперь такая попытка не засчитана
+                # (`not_in_card`), и лестница набирает заново. Нажатие
+                # подсвеченной подсказки — запасной путь на всякий случай и
+                # только для самой страны; живьём не проверен:
+                # `aria-activedescendant="SA"` на снимках — устаревший
+                # атрибут, ни списка, ни элемента с id="SA" в DOM не было.
+                if _click_active_suggestion(page, search_term):
+                    _sleep_h(0.7)
+                if not _country_added_or_unread(page, search_term):
+                    outcome = "not_in_card"
         if outcome in ("picked", "entered"):
             if n > 1:
                 _telemetry.record("audience_location_attempt", True, note=outcome,
                                   diag={"attempt": n, "typed": typed, "options": texts,
                                         "outcome": outcome})
             return True
+        outcomes.append(outcome)
         _telemetry.record("audience_location_attempt", False, note=outcome,
                           diag={"attempt": n, "typed": typed, "options": texts,
                                 "outcome": outcome})
     # Поле оставляем пустым: второй проход (ACL-1390) наберёт страну начисто.
     _retype_location_search(root, page, "", 0)
-    _telemetry.record("audience_location", None, note="no_location_suggestions",
-                      diag={"typed": search_term, "attempts": len(_LOCATION_ATTEMPTS)})
+    # Ревью PR #632 (F7): подсказки были, но страна ни разу не встала в
+    # карточку — итоговая строка говорит это, а не «подсказок нет».
+    note = ("not_in_card" if outcomes and all(o == "not_in_card" for o in outcomes)
+            else "no_location_suggestions")
+    _telemetry.record("audience_location", None, note=note,
+                      diag={"typed": search_term, "attempts": len(_LOCATION_ATTEMPTS),
+                            "outcomes": outcomes})
     return False
 
 
@@ -18271,18 +18373,28 @@ def _location_rows(page: Page) -> list[dict]:
                   // 21.09 18:44 (CR_ait IPO): имя читалось как «United StatesClose» —
                   // слово прилипает без пробела, и чистка по границе слова его не
                   // убирала, поэтому строка не совпадала ни с одной страной.
+                  // 06.10 (5265, ACL-1630): у кнопки-списка строки появилась видимая
+                  // подпись «Open Dropdown», и строка «Remove» получала её как имя
+                  // страны («left: United States, Open Dropdown»). Подписи кнопок
+                  // — не часть имени: имя ищется выше, где стоит сама страна.
                   const t = norm(row.textContent)
+                    .replace(/\b(Open Dropdown|Close Dropdown)\b/gi, '')
                     .replace(/\b(Close|Remove|Quitar|Eliminar)\b/gi, '')
                     .replace(/(Close|Remove|Quitar|Eliminar)\s*$/i, '').trim();
                   if (t && t.length <= 80) { name = t; break; }
                 }
                 if (!name) continue;
                 const r = b.getBoundingClientRect();
-                const entry = { name, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                // Вид кнопки (ревью PR #632, F1): «close» — ✕ заголовка группы
+                // (или чипа старой раскладки), «remove» — строка локации.
+                const label = norm(b.getAttribute('aria-label') || '') + ' ' + norm(b.textContent);
+                const kind = /\b(remove|delete|quitar|eliminar)\b/i.test(label) ? 'remove' : 'close';
+                const entry = { name, x: r.x + r.width / 2, y: r.y + r.height / 2, kinds: [kind] };
                 if (isOff(b)) entry.disabled = true;
                 // Крестик и «Remove» одной страны — одна строка; включённый важнее.
                 const same = rows.find(o => o.name === name);
                 if (same) {
+                  if (!same.kinds.includes(kind)) same.kinds.push(kind);
                   if (same.disabled && !entry.disabled) { same.x = entry.x; same.y = entry.y; delete same.disabled; }
                   continue;
                 }

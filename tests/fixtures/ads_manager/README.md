@@ -308,3 +308,14 @@ Coverage limit: no Meta JS or CSS — `tests/test_bench_audience_card_collapsed_
 Both cut with `scripts/capture_to_fixture.py` (classes, inline styles, SVG, ids, `act=`, URLs, campaign names removed; render ids to `syn_N`; `--review` read, only UI strings remain). No account, campaign or creative data in the blocks. UI language: English. Meta build identifier and browser version: not recorded.
 
 Coverage limit: no Meta JS or CSS. `tests/test_bench_placements_1629.py` emulates the category buttons (fold/unfold, a fold after the first save, a row disabled for a while after its category opens), the card opening (a click on either button presses both and un-hides the body) and the "Placement controls for this ad account" dialog, whose markup is synthetic (it was not in either capture). What the opened 9403A card offers beyond "Advantage+ placements · Edit" was not captured.
+
+
+## ACL-1630 single-screen editor Locations and ad tree (live runs 2026-10-06)
+
+`locations_open_dropdown_card_2026_10_06.html` - fragment `card`: the whole `#LOCATION` block of aa99ab40d397/00_audience_location (Facebook_5265, SA_ARC, `simple_create`; the same card in fab05371305f/00 and da07f392ff1f/00 and in all three second-pass captures; capture truncated at 3.98 MB, the block is whole). One group "United States" with a disabled Close, its row with a labelled "Open Dropdown" button and a disabled "Remove", then "Include" / "Search locations" (empty, `aria-expanded=false`), Browse, map controls. Saudi Arabia is not in the card in any of the six captures. `aria-activedescendant="SA"` on the search box was in the live DOM but is not kept by the cutter. Cut with `scripts/capture_to_fixture.py`; no account or campaign data. UI language: English. Meta build identifier and browser version: not recorded.
+
+Coverage limit: no Meta JS or CSS and no suggestion list - `tests/test_bench_location_open_dropdown.py` adds the CSS that makes the buttons icons, emulates the suggestion, the second country group and Meta's rule that the last country cannot be removed. Why Enter did not add the country live is not in the captures.
+
+`editor_tree_no_action_buttons_2026_10_06.html` - fragment `tree`: `block_ad_tree.html` of aa99ab40d397/07_simple_create_more_ads (step `simple_create_more_ads` failed `no_create_control`; the trees of fab05371305f/08 and da07f392ff1f/08 are the same). Three rows (Campaign, Ad set, Ad) and, where the 24.09 / 30.09 captures hold the "default" and "Action menu" buttons, an empty `<div></div>`. Campaign name replaced by the cutter, ad name by `Sample ad 1`. UI language: English. Meta build identifier and browser version: not recorded.
+
+Coverage limit: no Meta JS - `tests/test_bench_single_screen_adset_row_hover.py` emulates the buttons appearing on `mouseover` of the ad set row, with the button markup of the 30.09 capture. That Meta draws them on hover is inferred from the empty containers; no capture was taken with the cursor over the row.
