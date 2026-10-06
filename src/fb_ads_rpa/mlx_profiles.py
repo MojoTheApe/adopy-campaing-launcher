@@ -332,6 +332,16 @@ def profile_name_key(name: str) -> str:
 
     words = (name or "").split()
     first = words[0] if words else ""
+    # Явное правило имён (config/account_name_rules.json): id после префикса —
+    # точная идентичность, любой длины, без угадывания по хвосту.
+    try:
+        from src.analysis_agent.account_names import id_suffix
+
+        ident = id_suffix(first)
+        if ident:
+            return ident
+    except Exception:  # pragma: no cover - конфиг правил не должен ронять поиск профиля
+        pass
     m = _re.search(r"([A-Za-z])(\d{1,4})\s*$", first)
     return (m.group(1) + m.group(2)).upper() if m else ""
 

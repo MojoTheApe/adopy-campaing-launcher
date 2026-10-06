@@ -673,20 +673,33 @@ def _build_account_map_view(
             # называют вслух. Это уже догадка, поэтому она идёт последней, берётся
             # только при единственном совпадении и всегда подписывается на экране.
             alias = ""
-            if not excel.get("has_data"):
+            alias_exact = False
+            from src.analysis_agent.account_names import rule_split
+
+            # Под явным правилом имени разрешатель нужен и когда числа уже
+            # нашлись: пользователь должен видеть, из какого имени книги они.
+            if not excel.get("has_data") or rule_split(label):
                 # Тот же разрешатель, что и у раскрытия объявлений: два способа
                 # отвечать на один вопрос однажды разойдутся, и разойдутся молча.
                 # Resolve identity against the whole workbook. A date filter
                 # must not hide a collision or an older exact match.
                 resolved = workbook_alias_for(df, country_name, label)
                 if resolved and resolved.casefold() != label.casefold():
+                    # Явное правило имён — точное совпадение: имя из книги
+                    # по-прежнему показываем, но без пометки «догадка по хвосту».
+                    from src.analysis_agent.account_names import account_key
+
                     alias = resolved
-                    excel = _numbers(country_name, alias) or excel
+                    alias_exact = account_key(resolved) == account_key(label)
+                    excel = _numbers(country_name, resolved) or excel
             rows.append({
                 "account": label,
                 # чем именно подставлены числа — чтобы совпадение по хвосту
                 # никогда не выглядело как имя самого аккаунта
                 "workbook_alias": alias,
+                # True — имя из книги найдено по явному правилу (config/
+                # account_name_rules.json), а не угадано по хвосту
+                "workbook_alias_exact": alias_exact,
                 # страны, под которыми числа этого аккаунта лежат на самом деле
                 "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, label),
                 # состояние кабинета — без периода: спенд отвечает «сколько за
@@ -1736,6 +1749,13 @@ def _render_report(
             label = acc.get("account_label")
             if alias and label:
                 alias_map[alias] = label
+        # Под явным правилом имён (account_name_rules.json) тот же аккаунт
+        # знают и под вторым именем: KLD_BFL_B98 -> подпись FacebookMKTOBFLB98.
+        from src.analysis_agent.account_names import rule_alternates
+
+        for alias, label in list(alias_map.items()):
+            for alt in rule_alternates(alias):
+                alias_map.setdefault(alt, label)
         account_alias_map[cid] = alias_map
 
     return templates.TemplateResponse(
@@ -1796,6 +1816,12 @@ def _alias_by_tail(label: str, known: dict) -> str:
     это не «выберем первое»: подставленное наугад число выглядит точно так же,
     как правильное, и проверить его человеку будет нечем.
     """
+    # Явное правило имён побеждает догадку по хвосту и не считается догадкой.
+    from src.analysis_agent.account_names import exact_alias
+
+    exact = exact_alias(label, known)
+    if exact:
+        return exact
     tail = _account_tail(label)
     if not tail:
         return ""
@@ -1829,11 +1855,20 @@ def workbook_alias_for(df, country: str, label: str) -> str:
         sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
         if sub.empty:
             return label
-        if bool(alias_matches(sub["Account Alias"], label).any()):
-            return label
         names = sorted(
             {str(a).strip() for a in sub["Account Alias"].dropna() if str(a).strip()}
         )
+        # Явное правило имён: если в книге аккаунт записан под другим префиксом
+        # (FacebookMKTOBFLB98 для KLD_BFL_B98), отдаём настоящее имя из книги —
+        # оно точное, а не догадка.
+        from src.analysis_agent.account_names import exact_alias
+
+        if label not in names:
+            exact = exact_alias(label, names)
+            if exact:
+                return exact
+        if bool(alias_matches(sub["Account Alias"], label).any()):
+            return label
         return _alias_by_tail(label, names) or label
     except Exception:  # pragma: no cover - перевод имени не должен ронять страницу
         return label
