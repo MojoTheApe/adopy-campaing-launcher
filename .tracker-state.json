@@ -5234,22 +5234,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "629": {
-        "actor": "Worker-P1629N",
-        "session": "run_p1629n_1006",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "codex/acl-1629-placements",
-        "worktree": "C:\\acl-1629-placements",
-        "id": "75c7997c5cc94de9aaa26f5afed5f8a5",
-        "issue": 629,
-        "state": "handoff",
-        "started_at": "2026-10-06T09:44:04+00:00",
-        "from_status": "status:idea",
-        "pr": 636,
-        "report": "# Handoff ACL-1629 (Worker-P1629N, run_p1629n_1006)\n\nPR: #636 (base stage), branch codex/acl-1629-placements, merged work/stage (ACL-1614 #622 included).\nClaim: 75c7997c5cc94de9aaa26f5afed5f8a5\n\n## Diagnosis\n1. B90/B91 (classic editor, ~30 runs since 05.10 13:55): category expanders are plain `<button aria-label=\"Expand|Collapse\">` in the category `li`, no `aria-expanded`. Every checkbox was set, but the \"not offered\" proof (`_CATEGORY_END_JS`) only knew aria-expanded expanders, answered `collapsed` forever, and \"Messenger Stories\" was counted missing. B91 07:25: a slow first read used the whole settle budget (`reads: 1`).\n2. \"Ads on Facebook Reels\" was disabled and still on while Meta saved (`\u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u0438 \u043d\u0435 \u0442\u0430`, 13 runs on 05.10); In-stream is last, so it never got a second visit.\n3. 9403A (standalone editor): the Placements card is collapsed into a summary (`aria-pressed=false`) over a `<div hidden>` body; only the single-screen path opened it, so 0/5 categories. Account exclusions were confirmed, but the card summary stayed \"None\" (`summary_still_none`).\nACL-1336: not the same cause. Its notice is on both cards, but manual placements are still offered on B90/B91. Only the \"account exclusions not offered\" warning overlaps; the #336 owner decision remains open.\n\n## Fix (meta_dom.py)\n- `_CATEGORY_END_JS` handles both expander kinds; the settle loop reopens a folded category; the budget counts from the first answer.\n- `_reconcile`: a seen-but-unset placement is re-read, reopened and set for up to 6 s before it is called missing; it shares the ACL-1313 per-category reopen cap (my addition after test_rpa_placements_category_recollapse caught an unbounded loop).\n- `_open_collapsed_placements_card` in any editor; `placements_card_not_opened` with an English notice when it does not open.\n- Exclusions: a stale \"None\" is verified by reopening the account dialog (`excluded_verified_in_dialog`); a lost save fails; a missing row or button gives `account_controls_not_offered` plus an English warning, carried into the blocking notice.\n\n## Tests\nNew: tests/test_bench_placements_1629.py (14) on placements_button_expanders_2026_10_06.html and placements_collapsed_card_standalone_2026_10_06.html (scrubbed, scan clean). Old code: 10 fail (reproducing the live diag), 4 pass (markup and guard tests).\nAffected files run locally with ACL_LIBRARY_* empty, after the merge 164 passed (9 files). Before the merge: 1629 file 14/14, old placements files 42/43, then 43/43 after the reconcile cap fix. Catalogue and platform guard: 107 passed.\n\n## Open\n- Unverified live: the account-controls dialog markup is synthetic (not in the captures); what the opened 9403A card offers beyond \"Advantage+ placements \u00b7 Edit\" is unknown. The live check on B90/B91/9403A is a separate task; the Live checkbox is unchecked."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -7360,9 +7345,25 @@
             "session": "run_p1629n_1006"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P1629N",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-P1629N",
+          "session": "run_p1629n_1006",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "codex/acl-1629-placements",
+          "worktree": "C:\\acl-1629-placements",
+          "id": "75c7997c5cc94de9aaa26f5afed5f8a5",
+          "issue": 629,
+          "state": "handoff",
+          "started_at": "2026-10-06T09:44:04+00:00",
+          "from_status": "status:idea",
+          "pr": 636,
+          "report": "# Handoff ACL-1629 (Worker-P1629N, run_p1629n_1006)\n\nPR: #636 (base stage), branch codex/acl-1629-placements, merged work/stage (ACL-1614 #622 included).\nClaim: 75c7997c5cc94de9aaa26f5afed5f8a5\n\n## Diagnosis\n1. B90/B91 (classic editor, ~30 runs since 05.10 13:55): category expanders are plain `<button aria-label=\"Expand|Collapse\">` in the category `li`, no `aria-expanded`. Every checkbox was set, but the \"not offered\" proof (`_CATEGORY_END_JS`) only knew aria-expanded expanders, answered `collapsed` forever, and \"Messenger Stories\" was counted missing. B91 07:25: a slow first read used the whole settle budget (`reads: 1`).\n2. \"Ads on Facebook Reels\" was disabled and still on while Meta saved (`\u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u0438 \u043d\u0435 \u0442\u0430`, 13 runs on 05.10); In-stream is last, so it never got a second visit.\n3. 9403A (standalone editor): the Placements card is collapsed into a summary (`aria-pressed=false`) over a `<div hidden>` body; only the single-screen path opened it, so 0/5 categories. Account exclusions were confirmed, but the card summary stayed \"None\" (`summary_still_none`).\nACL-1336: not the same cause. Its notice is on both cards, but manual placements are still offered on B90/B91. Only the \"account exclusions not offered\" warning overlaps; the #336 owner decision remains open.\n\n## Fix (meta_dom.py)\n- `_CATEGORY_END_JS` handles both expander kinds; the settle loop reopens a folded category; the budget counts from the first answer.\n- `_reconcile`: a seen-but-unset placement is re-read, reopened and set for up to 6 s before it is called missing; it shares the ACL-1313 per-category reopen cap (my addition after test_rpa_placements_category_recollapse caught an unbounded loop).\n- `_open_collapsed_placements_card` in any editor; `placements_card_not_opened` with an English notice when it does not open.\n- Exclusions: a stale \"None\" is verified by reopening the account dialog (`excluded_verified_in_dialog`); a lost save fails; a missing row or button gives `account_controls_not_offered` plus an English warning, carried into the blocking notice.\n\n## Tests\nNew: tests/test_bench_placements_1629.py (14) on placements_button_expanders_2026_10_06.html and placements_collapsed_card_standalone_2026_10_06.html (scrubbed, scan clean). Old code: 10 fail (reproducing the live diag), 4 pass (markup and guard tests).\nAffected files run locally with ACL_LIBRARY_* empty, after the merge 164 passed (9 files). Before the merge: 1629 file 14/14, old placements files 42/43, then 43/43 after the reconcile cap fix. Catalogue and platform guard: 107 passed.\n\n## Open\n- Unverified live: the account-controls dialog markup is synthetic (not in the captures); what the opened 9403A card offers beyond \"Advantage+ placements \u00b7 Edit\" is unknown. The live check on B90/B91/9403A is a separate task; the Live checkbox is unchecked."
+        },
+        "pr": 636,
+        "queued_at": "2026-10-06T13:30:18+00:00"
       }
     },
     "actors": {
@@ -9467,7 +9468,8 @@
       526,
       529,
       613,
-      630
+      630,
+      629
     ],
     "review": null,
     "history": [
@@ -13452,6 +13454,13 @@
         "prs": [
           634
         ]
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-06T13:30:18+00:00",
+        "issue": 629,
+        "pr": 636,
+        "actor": "Worker-P1629N"
       }
     ],
     "policy": {
