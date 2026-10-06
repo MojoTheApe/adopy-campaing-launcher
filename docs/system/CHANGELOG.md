@@ -1,5 +1,31 @@
 # System history
 
+## One metric set in every attribution table, Totals and Campaign managers on Home — ACL-1652, ACL-1654, ACL-1656
+
+Every attribution table now shows **Spend, Leads, FTDs, CPL, CPA, CR** in this order, with the same
+names, formulas and number format. Decisions: owner, 2026-10-06 (issue #652).
+
+- **One source.** `src/analysis_agent/metric_columns.py` holds the header lists, the three formulas and the
+  number format; templates take headers and cells from `_metrics.html`; the JS twin `acl6Metrics` in
+  `report.html` is pinned to the Python helper by `tests/test_metric_columns.py`.
+- **Formulas.** CPL = Spend / Leads, CPA = Spend / FTDs, CR = FTDs / Leads, "—" when the divisor is 0.
+  Money is whole dollars rounded up everywhere (the asset-landing drill used to round to nearest).
+- **Fixed.** A zero CPA showed "$0" in Targeting, Creatives and CM Comparison; CR 0.0% showed "—" in the
+  account row and tree rows (it is a real number when there are leads).
+- **Tables.** Home country rows (+CPL), Home and Manage account table ("FTD" is now "FTDs", Account spend stays),
+  tree rows, CM Comparison, Assets, the asset-landing drill, Landings, Trends, Combos, Targeting, Creatives,
+  Optimization ad sets and the three drills. Net, ROI and Player Value stay after the six metrics.
+- **Trends**: two-line cells (last days bold, whole period grey), and "Trending down" is shown.
+  **Combos**: one identity cell (offer, device, age, category chip; interest and creative below).
+- **Drills** scroll horizontally inside the table when the builder is open.
+- **Home headers** are in normal case (they were upper case, which turned "FTDs" into "FTDS").
+- **Totals row** (ACL-1654) under the country rows, before Available accounts: Spend, Leads and FTDs are summed,
+  CPL/CPA/CR are computed from the sums. "Account read" is summed once per account and only when every
+  read account is in one currency; otherwise "—".
+- **Campaign managers** (ACL-1656) at the bottom of Home, collapsed by default (state in localStorage):
+  country rows are the sum of all managers, the current manager is highlighted. Same rows as CM Comparison.
+- Python edits (`morning_report.py` trend builder, `app.py`) need a `serve.py` restart.
+
 ## Placements on Meta's layouts of 2026-10-05/06 in the classic ad set editor — ACL-1629
 
 Since 05.10 the placements step failed on several accounts (B90, B91, 9403A, Doc120), and every
