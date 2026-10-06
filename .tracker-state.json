@@ -7455,7 +7455,7 @@
             "session": "run_m1637v_1006"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-M1637V",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -7473,7 +7473,8 @@
           "report": "# Handoff ACL-1637 (PR #639)\n\nCause: heavy videos are sent as a compressed copy named `<name>.<key>.mp4`; the library tile carries that name, but ads 2+ searched the original name only, and \"do not upload twice\" left them empty.\n\nFix: ads 2+ search by the compressed name (twice, with a pause); if no copy, one re-upload per ad; ads without media end do-not-publish with English reasons.\n\nTests: tests/test_same_video_on_several_ads_gets_media.py, 17 passed locally. Neighbouring creative test files were NOT completed locally (coordinator stopped test runs for RAM); two tests in tests/test_media_step_reached_or_named.py failed in an interrupted run before I narrowed creative_soft_fail (test_each_ads_upload_failure_carries_its_own_reason, test_a_current_media_step_that_loads_is_waited_for_not_clicked) - unverified after the narrowing, CI must confirm.\n\nOpen: B97 file input not mounting (file_not_landed) and wizard_not_opened after a stalled ad 1 upload are named, not fixed; need a live check. Live checkbox left unchecked."
         },
         "pr": 639,
-        "queued_at": "2026-10-06T14:47:53+00:00"
+        "queued_at": "2026-10-06T14:47:53+00:00",
+        "reviewer": "Reviewer-R1637K"
       },
       "642": {
         "implementers": [
@@ -8071,6 +8072,10 @@
       "Worker-S1642A": {
         "session": "run_s1642a_1006",
         "role": "Worker"
+      },
+      "Reviewer-R1637K": {
+        "session": "rev_r1637k_1006",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -9647,10 +9652,20 @@
       613,
       629,
       633,
-      637,
       642
     ],
-    "review": null,
+    "review": {
+      "id": "272de5c2632047c295b566179fed3be2",
+      "pr": 639,
+      "issues": [
+        637
+      ],
+      "actor": "Reviewer-R1637K",
+      "session": "rev_r1637k_1006",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-06T16:09:22+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -13708,6 +13723,13 @@
         "issue": 642,
         "pr": 644,
         "actor": "Worker-S1642A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-06T16:09:22+00:00",
+        "pr": 639,
+        "lane": "272de5c2632047c295b566179fed3be2",
+        "actor": "Reviewer-R1637K"
       }
     ],
     "policy": {
