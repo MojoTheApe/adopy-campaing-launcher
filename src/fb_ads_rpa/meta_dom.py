@@ -4401,6 +4401,18 @@ _FURTHER_LIMIT_ROW_JS = r"""
 перемеряется (ACL-1332: 0×0 до прокрутки — ещё не повод её не видеть)."""
 
 
+def _open_audience_card(page: Page) -> str:
+    """Раскрыть карточку Audience, если она свёрнута в сводку (ACL-1611).
+
+    Не зависит от раскладки: нет карточки-сводки — "absent", раскрыта —
+    "open", и ничего не нажимается. Само раскрытие — общее
+    `simple_create.open_card` (клик по заголовку карточки, не по кнопке или
+    ссылке внутри, проверка управляющих элементов, строка `simple_card`);
+    для других карточек зовётся так же, с их заголовком.
+    """
+    return _simple.open_card(page, "Audience")
+
+
 def _further_limit_row(page: Page) -> dict:
     """Найти, прокрутить в центр и перемерить строку Further limit."""
     try:
@@ -5665,8 +5677,11 @@ def run_recorded_campaign_flow(
         # ACL-1327: в новом редакторе карточка Audience свёрнута в сводку
         # («Locations United States, Age 18 - 65+ …»), строка «Further limit»
         # лежит в скрытом теле — сперва раскрыть.
-        if simple:
-            _simple.open_card(page, "Audience")
+        # ACL-1611: и не только в новом редакторе — карточка-сводка с тем же
+        # разметочным узором встречается и в окне `editor_drawer` (9403A,
+        # 05.10: адрес `adsets/edit/standalone`, `simple` ложно, карточку не
+        # открывали, строка Further limit 0×0 — пять попыток впустую).
+        _open_audience_card(page)
         # ACL-1324: строка ищется по разметке и жмётся CDP-кликом
         # (`_open_further_limit`), успех — только открытое окно.
         opened = _open_further_limit(page)
@@ -18849,10 +18864,10 @@ def _location_second_pass(page: Page, country: str, *, simple: bool, adset_name:
     miss: list[str] = []
     if simple:
         reached = bool(_simple.scroll_to_level(page, "adset").get("ok"))
-        if reached:
-            _simple.open_card(page, "Audience")
     else:
         reached = _open_tree_adset(page, adset_name, miss)
+    if reached:
+        _open_audience_card(page)
     if not reached:
         _telemetry.record("audience_location_second_pass", False,
                           note=("open:" + miss[0]) if miss else "adset_not_reached",
