@@ -5094,20 +5094,6 @@
         "started_at": "2026-10-06T05:55:02+00:00",
         "from_status": "status:idea"
       },
-      "615": {
-        "actor": "Worker-S1615A",
-        "session": "run_s1615a_1006",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1615-creative-index",
-        "worktree": "C:\\acl-1615-creative-index",
-        "id": "ad6de659a7b043919d3f23ef81a3bbe6",
-        "issue": 615,
-        "state": "handoff",
-        "started_at": "2026-10-06T05:55:50+00:00",
-        "from_status": "status:idea",
-        "pr": 621,
-        "report": "# ACL-1615 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/621 (into stage), commit f00768c6c61e971a4f8f471c93cac16d3639c39a\nClaim: ad6de659a7b043919d3f23ef81a3bbe6, branch codex/acl-1615-creative-index\n\n## Changes\n- src/meta_campaign_agent/creative_finder.py: per-root index (lower basename -> relative path strings), one os.scandir walk per root, immutable snapshot swapped under a lock (one build for concurrent callers), dir-mtime recheck throttled to 5 s and immediate on a miss, rebuild-once-and-retry if an indexed path vanished. Realpath / within-root check done per lookup; suffix disambiguation, 404, 409 unchanged. reset_creative_index() added. Cache capped at 4 roots; memory is relative strings only.\n- src/web/app.py: /creative-file lookup + sniff run in a dedicated 4-thread pool (not the report pool); Cache-Control private, max-age=3600, ETag, Last-Modified, 304; Range support (206/416) written by hand because Starlette 0.36 FileResponse has none (it used to answer 200 with the whole file). Middleware keeps that Cache-Control only for /creative-file 200/206/304; everything else stays no-store.\n- Other endpoints: /api/creatives and /creative-brief already use _off_loop; no other route walks the disk per creative. Nothing else changed.\n- docs/system/CHANGELOG.md entry; tests/test_acl_1615_creative_index.py (17 tests).\n\n## Tests (explicit files, ACL_LIBRARY_* blank)\n- test_acl_1615_creative_index.py: 16 passed, 1 skipped (real symlink needs privilege; escape covered via realpath fake)\n- test_the_creative_file_route_only_serves_allowed_media, test_meta_campaign_agent, test_creative_variants, test_parse_build_form, test_second_primary_text_reaches_the_robot, test_acl_test_platform: all passed (160 passed, 4 skipped, plus platform test fixed with a linux-ok marker)\n- acl_scan_secrets.py: clean\n- Not run: *_browser tests (they only mention creative_file as a form field).\n\n## Notes for reviewer\n- A newly added duplicate in an existing dir is noticed on the next hit only after the 5 s throttle (misses recheck immediately).\n- TestClient is broken in this env (httpx mismatch); endpoint tests use httpx.ASGITransport."
-      },
       "620": {
         "actor": "Worker-S1620A",
         "session": "run_s1620a_1006",
@@ -7115,9 +7101,25 @@
             "session": "run_s1615a_1006"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1615A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1615A",
+          "session": "run_s1615a_1006",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1615-creative-index",
+          "worktree": "C:\\acl-1615-creative-index",
+          "id": "ad6de659a7b043919d3f23ef81a3bbe6",
+          "issue": 615,
+          "state": "handoff",
+          "started_at": "2026-10-06T05:55:50+00:00",
+          "from_status": "status:idea",
+          "pr": 621,
+          "report": "# ACL-1615 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/621 (into stage), commit f00768c6c61e971a4f8f471c93cac16d3639c39a\nClaim: ad6de659a7b043919d3f23ef81a3bbe6, branch codex/acl-1615-creative-index\n\n## Changes\n- src/meta_campaign_agent/creative_finder.py: per-root index (lower basename -> relative path strings), one os.scandir walk per root, immutable snapshot swapped under a lock (one build for concurrent callers), dir-mtime recheck throttled to 5 s and immediate on a miss, rebuild-once-and-retry if an indexed path vanished. Realpath / within-root check done per lookup; suffix disambiguation, 404, 409 unchanged. reset_creative_index() added. Cache capped at 4 roots; memory is relative strings only.\n- src/web/app.py: /creative-file lookup + sniff run in a dedicated 4-thread pool (not the report pool); Cache-Control private, max-age=3600, ETag, Last-Modified, 304; Range support (206/416) written by hand because Starlette 0.36 FileResponse has none (it used to answer 200 with the whole file). Middleware keeps that Cache-Control only for /creative-file 200/206/304; everything else stays no-store.\n- Other endpoints: /api/creatives and /creative-brief already use _off_loop; no other route walks the disk per creative. Nothing else changed.\n- docs/system/CHANGELOG.md entry; tests/test_acl_1615_creative_index.py (17 tests).\n\n## Tests (explicit files, ACL_LIBRARY_* blank)\n- test_acl_1615_creative_index.py: 16 passed, 1 skipped (real symlink needs privilege; escape covered via realpath fake)\n- test_the_creative_file_route_only_serves_allowed_media, test_meta_campaign_agent, test_creative_variants, test_parse_build_form, test_second_primary_text_reaches_the_robot, test_acl_test_platform: all passed (160 passed, 4 skipped, plus platform test fixed with a linux-ok marker)\n- acl_scan_secrets.py: clean\n- Not run: *_browser tests (they only mention creative_file as a form field).\n\n## Notes for reviewer\n- A newly added duplicate in an existing dir is noticed on the next hit only after the 5 s throttle (misses recheck immediately).\n- TestClient is broken in this env (httpx mismatch); endpoint tests use httpx.ASGITransport."
+        },
+        "pr": 621,
+        "queued_at": "2026-10-06T06:06:32+00:00"
       },
       "620": {
         "implementers": [
@@ -9139,7 +9141,8 @@
       406,
       433,
       526,
-      529
+      529,
+      615
     ],
     "review": null,
     "history": [
@@ -12997,6 +13000,13 @@
         "issue": 620,
         "claim": "35f17cb61db04e0a98cb1c082515cea6",
         "actor": "Worker-S1620A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-06T06:06:32+00:00",
+        "issue": 615,
+        "pr": 621,
+        "actor": "Worker-S1615A"
       }
     ],
     "policy": {
