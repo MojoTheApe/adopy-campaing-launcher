@@ -183,12 +183,12 @@ def test_failed_snapshot_replace_preserves_the_previous_backup(tmp_path, monkeyp
     assert list(target.parent.glob("*.tmp")) == []
 
 
-@pytest.mark.parametrize("ready,reason,expected", [
-    (True, "Open recommendations", "ready"),
-    (False, "Verify <identity>", "Verify &lt;identity&gt;"),
-    (False, "", "needs setup"),
+@pytest.mark.parametrize("ready,reason", [
+    (True, "Open recommendations"),
+    (False, "Verify <identity>"),
+    (False, ""),
 ])
-def test_setup_states_render_with_account_actions_and_matching_drill_width(ready, reason, expected):
+def test_row_states_render_with_account_actions_and_matching_drill_width(ready, reason):
     import re
     row = dict(account="Demo", ready=ready, to_do=reason, in_workbook=True, has_data=True, spend=12,
                leads=2, deposits=1, cpl=6, cpa=12, cr=50, status={})
@@ -196,10 +196,9 @@ def test_setup_states_render_with_account_actions_and_matching_drill_width(ready
         mc={"country": "Mexico", "key": "MX", "rows": [row]},
         amap={"live": {}, "span": "day", "date_from": "2026-09-09", "all_accounts": []},
         mlx={"A": "Demo A", "B": "Demo B"})
-    setup = re.search(r'<td class="amap-setup">(.*?)</td>', html, re.S).group(1)
-    assert expected in setup
-    assert "Open recommendations" not in setup
-    assert "<identity>" not in setup
+    # ACL-1620: колонки Setup больше нет — причина неготовности не выводится.
+    assert "amap-setup" not in html and "needs setup" not in html
+    assert "Open recommendations" not in html and "<identity>" not in html
     assert len(re.findall(r"<th[ >]", html)) == len(re.findall(r"<td[ >]", html)) == 11
     # `ncols=11` проверялось здесь же: это была ширина книжной строки
     # раскрытия. 12.09 книжная детализация ушла со стрелки — у живого дерева
