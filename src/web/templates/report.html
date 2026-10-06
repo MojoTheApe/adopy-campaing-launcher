@@ -1802,21 +1802,27 @@
        «needs setup» и «no warning» на 1280–1366px уходили в многоточие.
        Узкие поля возвращают им место; строка не растёт. */
     .amap table.amap-grid td.amap-status, .amap table.amap-grid td.amap-acct-note { padding-left: 0.3rem; padding-right: 0.3rem; }
-    /* ACL-1620: заметка к аккаунту — начало одной строкой с многоточием, весь
-       текст в title; клик открывает редактор. */
-    .amap table.amap-grid td.amap-acct-note { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* ACL-1620 / ACL-1633: заметка к аккаунту и к стране. Пустая не рисует ничего;
+       карандаш появляется при наведении на строку или фокусе на ячейке.
+       Заполненная — первая строка с многоточием, весь текст в title. */
+    .amap table.amap-grid td.amap-acct-note { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
     .amap td.amap-acct-note:hover, .amap td.amap-acct-note:focus-visible { background: var(--bg-subtle); }
-    .amap td.amap-acct-note .amap-note-add { color: var(--muted); opacity: 0.55; font-style: italic; }
+    .amap-acct-note.empty::after, .amap-country-note.empty::after { content: '\270E'; opacity: 0; color: var(--muted); }
+    .amap tr:hover > td.amap-acct-note.empty::after, .amap-acct-note.empty:focus-visible::after,
+    .amap summary:hover .amap-country-note.empty::after, .amap-country-note.empty:focus-visible::after { opacity: 0.55; }
+    .amap-country-note { cursor: pointer; margin-left: 0.5rem; font-weight: 400; font-size: 0.78rem; color: var(--muted); }
+    .amap-country-note:focus-visible, .amap-acct-note:focus-visible { outline: 1px solid var(--field-border); }
     .amap-note-pop {
-      position: fixed; z-index: 1000; width: min(26rem, calc(100vw - 1rem));
+      position: fixed; z-index: 1000; width: min(24rem, calc(100vw - 1rem));
       background: var(--bg, #fff); color: inherit; border: 1px solid var(--field-border);
-      border-radius: var(--radius-sm); box-shadow: 0 6px 24px rgba(0,0,0,.25); padding: 0.6rem;
+      border-radius: var(--radius-sm); box-shadow: 0 6px 24px rgba(0,0,0,.25); padding: 0.5rem;
     }
-    .amap-note-pop .amap-note-title { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.3rem; overflow-wrap: anywhere; }
-    .amap-note-pop textarea { width: 100%; min-height: 7rem; resize: both; max-width: 100%; box-sizing: border-box; font: inherit; }
-    .amap-note-pop .amap-note-foot { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; }
-    .amap-note-pop .amap-note-state { font-size: 0.72rem; color: var(--muted); flex: 1; }
+    .amap-note-pop textarea { width: 100%; min-height: 6rem; resize: both; max-width: 100%; box-sizing: border-box; font: inherit; }
+    .amap-note-pop .amap-note-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 0.3rem; font-size: 0.72rem; }
+    .amap-note-pop .amap-note-del, .amap-note-toast button { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); text-decoration: underline; cursor: pointer; }
+    .amap-note-pop .amap-note-state { color: var(--muted); }
     .amap-note-pop .amap-note-state.bad { color: var(--danger); }
+    .amap-note-toast { position: fixed; left: 1rem; bottom: 1rem; z-index: 1000; font-size: 0.8rem; background: var(--bg, #fff); border: 1px solid var(--field-border); border-radius: var(--radius-sm); padding: 0.35rem 0.6rem; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
     .amap .amap-x {
       background: none; border: 1px solid var(--field-border);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -8830,39 +8836,45 @@ async function amapSend(body, msgEl) {
 }
 
 /* ACL-1620 notes { */
-/* Заметка к аккаунту на карте. Делегирование на document: строки дерева и
-   ячейки, пришедшие через htmx или перерисовку карты, работают без повторной
-   подписки. Текст попадает в DOM только через textContent/value. */
+/* Заметка к аккаунту (ячейка таблицы) и к стране (строка заголовка страны).
+   Делегирование на document: строки дерева и ячейки, пришедшие через htmx или
+   перерисовку карты, работают без повторной подписки. Текст попадает в DOM
+   только через textContent/value. Заметки никуда не отправляются, кроме
+   локального POST /api/account-notes. */
 (function () {
-  var MAX = 10000, PREVIEW = 60;
-  var pop = null, cur = null; // cur: {account, original, cell}
-  var saving = 0; // пока сохранение в пути, новый редактор не открываем: иначе откроется старый текст
+  var MAX = 10000, SEL = 'td.amap-acct-note, .amap-country-note';
+  var pop = null, toast = null, cur = null, saving = 0, hideTimer = null, toastTimer = null;
+  // cur: {kind, label, original, cell}
 
-  function shorten(t) { t = t.replace(/\s+/g, ' ').trim(); return t.length > PREVIEW ? t.slice(0, PREVIEW) + '…' : t; }
+  function first(t) { var l = t.split('\n')[0].trim(); return l.length > 60 ? l.slice(0, 60) + '\u2026' : l; }
 
-  function paint(account, text) {
-    // Одна подпись может стоять в нескольких странах — обновляем все ячейки.
-    document.querySelectorAll('td.amap-acct-note').forEach(function (td) {
-      if (td.getAttribute('data-account') !== account) return;
-      td.setAttribute('data-note', text);
-      td.title = text || 'Add a note';
-      td.classList.toggle('empty', !text);
-      td.textContent = '';
-      var sp = document.createElement('span');
-      if (text) { sp.className = 'amap-note-text'; sp.textContent = shorten(text); }
-      else { sp.className = 'amap-note-add'; sp.textContent = 'add note'; }
-      td.appendChild(sp);
+  function paint(kind, label, text) {
+    // Одна подпись может стоять в нескольких местах (аккаунт в нескольких странах).
+    document.querySelectorAll(SEL).forEach(function (el) {
+      if (el.getAttribute('data-note-kind') !== kind || el.getAttribute('data-account') !== label) return;
+      el.setAttribute('data-note', text);
+      el.title = text;
+      el.classList.toggle('empty', !text);
+      el.textContent = text ? first(text) : '';
     });
+  }
+
+  function post(kind, label, text) {
+    var body = { text: text }; body[kind] = label;
+    return fetch('/api/account-notes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, j: j }; }); })
+      .then(function (res) { if (!res.ok) throw new Error((res.j && res.j.error) || 'failed'); return res.j; });
   }
 
   function build() {
     pop = document.createElement('div');
     pop.className = 'amap-note-pop';
     pop.hidden = true;
-    pop.innerHTML = '<div class="amap-note-title"></div><textarea maxlength="' + MAX + '" aria-label="Account note"></textarea>' +
-      '<div class="amap-note-foot"><span class="amap-note-state" role="status"></span><button type="button" class="amap-btn amap-note-close">Close</button></div>';
+    pop.innerHTML = '<textarea maxlength="' + MAX + '" aria-label="Note"></textarea>' +
+      '<div class="amap-note-foot"><button type="button" class="amap-note-del">Delete</button><span class="amap-note-state" role="status"></span></div>';
     document.body.appendChild(pop);
-    pop.querySelector('.amap-note-close').addEventListener('click', function () { close(); });
+    pop.querySelector('.amap-note-del').addEventListener('click', del);
   }
 
   function state(msg, bad) {
@@ -8870,54 +8882,81 @@ async function amapSend(body, msgEl) {
     el.textContent = msg; el.className = 'amap-note-state' + (bad ? ' bad' : '');
   }
 
-  function open(td) {
-    if (saving) return;
+  function open(el) {
+    if (saving) return; // пока сохранение в пути, открывать нельзя: покажет старый текст
     if (!pop) build();
     if (cur) close();
-    var account = td.getAttribute('data-account') || '';
-    var text = td.getAttribute('data-note') || '';
-    cur = { account: account, original: text, cell: td };
-    pop.querySelector('.amap-note-title').textContent = account;
+    clearTimeout(hideTimer);
+    var text = el.getAttribute('data-note') || '';
+    cur = { kind: el.getAttribute('data-note-kind'), label: el.getAttribute('data-account') || '', original: text, cell: el };
     var ta = pop.querySelector('textarea');
+    ta.setAttribute('aria-label', 'Note for ' + cur.label);
     ta.value = text; state('', false);
     pop.hidden = false;
-    var r = td.getBoundingClientRect();
-    var w = pop.offsetWidth, h = pop.offsetHeight;
+    var r = el.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    // Не закрываем строку, которую правят: ниже ячейки, а если не влезает — выше.
+    var below = r.bottom + 4, top = below + h + 8 > window.innerHeight && r.top - h - 4 > 4 ? r.top - h - 4 : below;
     pop.style.left = Math.max(4, Math.min(r.left, window.innerWidth - w - 4)) + 'px';
-    pop.style.top = Math.max(4, r.bottom + h + 8 > window.innerHeight ? r.top - h - 4 : r.bottom + 4) + 'px';
+    pop.style.top = Math.max(4, top) + 'px';
     ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length); // курсор в конце
   }
 
+  // Закрыть и сохранить. Успех — на миг «Saved» и окно прячется; неудача —
+  // окно остаётся с текстом и «Save failed».
   function close() {
     if (!cur || !pop) return Promise.resolve();
     var c = cur, text = pop.querySelector('textarea').value;
     if (text === c.original) { cur = null; pop.hidden = true; return Promise.resolve(); }
-    state('saving…', false);
+    state('Saving', false);
     saving += 1;
-    return fetch('/api/account-notes', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account: c.account, text: text })
-    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, j: j }; }); })
-      .then(function (res) {
-        if (!res.ok) throw new Error((res.j && res.j.error) || 'failed');
-        paint(c.account, res.j.text || '');
-        if (cur === c) { cur = null; pop.hidden = true; }
-      })
-      .catch(function () {
-        // Не закрываем: текст остаётся в поле, иначе заметка потерялась бы молча.
-        if (cur === c) state('save failed — press Close to retry', true);
-      })
+    return post(c.kind, c.label, text).then(function (j) {
+      paint(c.kind, c.label, j.text || '');
+      if (cur === c) {
+        cur = null; state('Saved', false);
+        hideTimer = setTimeout(function () { if (!cur) pop.hidden = true; }, 500);
+      }
+    }).catch(function () {
+      // Не закрываем: текст остаётся в поле, иначе заметка потерялась бы молча.
+      if (cur === c) state('Save failed', true);
+    }).then(function () { saving -= 1; });
+  }
+
+  function showToast(c, previous) {
+    if (!toast) { toast = document.createElement('div'); toast.className = 'amap-note-toast'; toast.setAttribute('role', 'status'); document.body.appendChild(toast); }
+    toast.hidden = false; toast.textContent = 'Deleted \u2014 ';
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = 'Undo'; toast.appendChild(b);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.hidden = true; }, 5000);
+    b.addEventListener('click', function () {
+      clearTimeout(toastTimer); toast.hidden = true;
+      post(c.kind, c.label, previous).then(function (j) { paint(c.kind, c.label, j.text || ''); });
+    });
+  }
+
+  function del() {
+    if (!cur) return;
+    var c = cur, previous = c.original || pop.querySelector('textarea').value;
+    saving += 1;
+    post(c.kind, c.label, '').then(function () {
+      paint(c.kind, c.label, '');
+      if (cur === c) { cur = null; pop.hidden = true; }
+      if (previous.trim()) showToast(c, previous);
+    }).catch(function () { if (cur === c) state('Save failed', true); })
       .then(function () { saving -= 1; });
   }
 
   document.addEventListener('click', function (e) {
-    var td = e.target.closest && e.target.closest('td.amap-acct-note');
-    if (td) { open(td); }
-  });
+    var el = e.target.closest && e.target.closest(SEL);
+    if (!el) return;
+    e.preventDefault(); e.stopPropagation(); // заметка стоит внутри <summary>: строка не раскрывается
+    open(el);
+  }, true);
   document.addEventListener('keydown', function (e) {
     if (cur && e.key === 'Escape') { e.preventDefault(); close(); return; }
-    var td = e.target.closest && e.target.closest('td.amap-acct-note');
-    if (td && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(td); }
+    if (cur && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); close(); return; }
+    var el = e.target.closest && e.target.closest(SEL);
+    if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(el); }
   });
   // mousedown, а не click: к моменту click фокус и выделение уже ушли.
   document.addEventListener('mousedown', function (e) {

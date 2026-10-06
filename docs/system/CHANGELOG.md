@@ -1,5 +1,24 @@
 # System history
 
+## Notes: a country note, and nothing on screen when a note is empty — ACL-1633
+
+Owner review of ACL-1620 (06.10).
+
+- Country notes: each country header row on the account map takes a note in the same style. They
+  are stored in the same local `account_notes.json` under a separate `countries` map. An old file
+  (account notes only) is read as it is and gains the `countries` key on the first save; nothing is
+  lost and no migration step is needed.
+- No noise: an empty note shows nothing. A faint pencil appears only while the row (or the note)
+  is hovered or focused. A filled note shows its first line with an ellipsis; the full text is in
+  the tooltip.
+- Simpler editor: only the textarea, a small "Delete" and a one-word state ("Saving", "Saved",
+  "Save failed"). The cursor opens at the end. It saves on outside click, Esc or Ctrl+Enter; there
+  is no Save or Close button. Delete asks nothing and shows "Deleted - Undo" for 5 seconds.
+- Click or Enter opens the editor, including from a country header (the country does not fold).
+- Kept from ACL-1620: escaping, the strict read on save with the `.corrupt` backup, the in-flight
+  guard, columns Account 28% / Note 9%. Notes are never sent anywhere: the only call is the local
+  `POST /api/account-notes` ({account, text} or {country, text}).
+
 ## Stop ends a job whose robot is stuck inside a step — ACL-1614
 
 05.10, job 1ad447f9: Stop was pressed while the robot sat inside a page call. Stop closed the

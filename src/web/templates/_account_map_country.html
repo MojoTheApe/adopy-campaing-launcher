@@ -189,10 +189,8 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
                 работают без повторной подписки. Поля ready и to_do
                 остаются в данных: их читают другие места. -#}
             {%- set note = (amap.notes or {}).get(r.account | trim, '') -%}
-            <td class="amap-acct-note{{ ' empty' if not note }}" tabindex="0" role="button" data-account="{{ r.account | trim | e }}" data-note="{{ note | e }}" title="{{ note | e if note else 'Add a note' }}">
-              {%- if note -%}<span class="amap-note-text">{{ note | truncate(60, True, '…') | e }}</span>
-              {%- else -%}<span class="amap-note-add">add note</span>
-              {%- endif -%}
+            <td class="amap-acct-note{{ ' empty' if not note }}" tabindex="0" role="button" data-note-kind="account" data-account="{{ r.account | trim | e }}" data-note="{{ note | e }}" title="{{ note | e }}" aria-label="Note for {{ r.account | trim | e }}">
+              {{- note.split('\n')[0] | truncate(60, True, '…') | e if note -}}
             </td>
             <td class="amap-actions">
               {%- if amap.span == 'all' or not amap.date_from -%}
