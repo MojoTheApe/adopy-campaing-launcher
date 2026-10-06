@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from playwright.sync_api import expect
 from test_builder_multi_publish_browser import (  # noqa: F401 — фикстуры
-    browser, html, ui, add, ready,
+    browser, html, ui, add, ready, press_publish,
 )
 
 PREFLIGHT = {'accounts': [
@@ -52,3 +52,41 @@ def test_not_ready_account_is_listed_and_skipped_unless_run_anyway(ui):
             break
         p.wait_for_timeout(100)
     assert decisions == [{'queued': ['Other'], 'skipped': ['Demo'], 'run_anyway': []}]
+
+
+def test_single_card_publish_is_checked_too(ui):
+    """Одиночный Publish: без галки «Run anyway» неготовый аккаунт не уходит."""
+    p, state = ui
+    decisions = []
+
+    def route(r):
+        if urlparse(r.request.url).path == '/api/publish-preflight/decision':
+            decisions.append(r.request.post_data_json)
+            r.fulfill(json={'ok': True})
+        else:
+            r.fulfill(json=PREFLIGHT)
+    p.route('**/api/publish-preflight**', route)
+    add(p, 0)
+    ready(p)
+
+    press_publish(p, 0)
+    expect(p.locator('#safe-confirm-modal .cb-preflight')).to_contain_text('Demo — logged out of Facebook')
+    p.locator('#sfc-ok').click()
+    p.wait_for_timeout(800)
+    assert state['posts'] == []
+    assert any('not ready' in d for d in state['dialogs']), state['dialogs']
+    assert decisions[-1] == {'queued': [], 'skipped': ['Demo'], 'run_anyway': []}
+
+    press_publish(p, 0)
+    p.locator('#cb-pf-anyway').check()
+    p.locator('#sfc-ok').click()
+    for _ in range(40):
+        if state['posts']:
+            break
+        p.wait_for_timeout(100)
+    assert [f['account_label'] for f in state['posts']] == ['Demo']
+    for _ in range(30):
+        if len(decisions) >= 2:
+            break
+        p.wait_for_timeout(100)
+    assert decisions[-1] == {'queued': ['Demo'], 'skipped': [], 'run_anyway': ['Demo']}
