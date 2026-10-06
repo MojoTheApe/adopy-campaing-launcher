@@ -1801,12 +1801,12 @@
     /* Status и Setup отдали кнопкам по проценту; с прежними полями 0.85rem
        «needs setup» и «no warning» на 1280–1366px уходили в многоточие.
        Узкие поля возвращают им место; строка не растёт. */
-    .amap table.amap-grid td.amap-status, .amap table.amap-grid td.amap-note { padding-left: 0.3rem; padding-right: 0.3rem; }
+    .amap table.amap-grid td.amap-status, .amap table.amap-grid td.amap-acct-note { padding-left: 0.3rem; padding-right: 0.3rem; }
     /* ACL-1620: заметка к аккаунту — начало одной строкой с многоточием, весь
        текст в title; клик открывает редактор. */
-    .amap table.amap-grid td.amap-note { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .amap td.amap-note:hover, .amap td.amap-note:focus-visible { background: var(--bg-subtle); }
-    .amap td.amap-note .amap-note-add { color: var(--muted); opacity: 0.55; font-style: italic; }
+    .amap table.amap-grid td.amap-acct-note { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .amap td.amap-acct-note:hover, .amap td.amap-acct-note:focus-visible { background: var(--bg-subtle); }
+    .amap td.amap-acct-note .amap-note-add { color: var(--muted); opacity: 0.55; font-style: italic; }
     .amap-note-pop {
       position: fixed; z-index: 1000; width: min(26rem, calc(100vw - 1rem));
       background: var(--bg, #fff); color: inherit; border: 1px solid var(--field-border);
@@ -8817,12 +8817,13 @@ async function amapSend(body, msgEl) {
 (function () {
   var MAX = 10000, PREVIEW = 60;
   var pop = null, cur = null; // cur: {account, original, cell}
+  var saving = 0; // пока сохранение в пути, новый редактор не открываем: иначе откроется старый текст
 
   function shorten(t) { t = t.replace(/\s+/g, ' ').trim(); return t.length > PREVIEW ? t.slice(0, PREVIEW) + '…' : t; }
 
   function paint(account, text) {
     // Одна подпись может стоять в нескольких странах — обновляем все ячейки.
-    document.querySelectorAll('td.amap-note').forEach(function (td) {
+    document.querySelectorAll('td.amap-acct-note').forEach(function (td) {
       if (td.getAttribute('data-account') !== account) return;
       td.setAttribute('data-note', text);
       td.title = text || 'Add a note';
@@ -8851,6 +8852,7 @@ async function amapSend(body, msgEl) {
   }
 
   function open(td) {
+    if (saving) return;
     if (!pop) build();
     if (cur) close();
     var account = td.getAttribute('data-account') || '';
@@ -8872,7 +8874,7 @@ async function amapSend(body, msgEl) {
     var c = cur, text = pop.querySelector('textarea').value;
     if (text === c.original) { cur = null; pop.hidden = true; return Promise.resolve(); }
     state('saving…', false);
-    window.__amapNoteSaving = (window.__amapNoteSaving || 0) + 1;
+    saving += 1;
     return fetch('/api/account-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ account: c.account, text: text })
@@ -8886,16 +8888,16 @@ async function amapSend(body, msgEl) {
         // Не закрываем: текст остаётся в поле, иначе заметка потерялась бы молча.
         if (cur === c) state('save failed — press Close to retry', true);
       })
-      .then(function () { window.__amapNoteSaving -= 1; });
+      .then(function () { saving -= 1; });
   }
 
   document.addEventListener('click', function (e) {
-    var td = e.target.closest && e.target.closest('td.amap-note');
+    var td = e.target.closest && e.target.closest('td.amap-acct-note');
     if (td) { open(td); }
   });
   document.addEventListener('keydown', function (e) {
     if (cur && e.key === 'Escape') { e.preventDefault(); close(); return; }
-    var td = e.target.closest && e.target.closest('td.amap-note');
+    var td = e.target.closest && e.target.closest('td.amap-acct-note');
     if (td && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(td); }
   });
   // mousedown, а не click: к моменту click фокус и выделение уже ушли.

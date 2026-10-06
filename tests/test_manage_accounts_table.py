@@ -104,5 +104,5 @@ def test_the_setup_column_is_replaced_by_a_note_column():
     head = t[t.index("<thead>"): t.index("</thead>")]
     body = t[t.index("<tbody>"): t.index("</tbody>")]
     assert ">Setup<" not in head and "amap-setup" not in t
-    assert ">Note<" in head and 'class="amap-note' in body
+    assert ">Note<" in head and 'class="amap-acct-note' in body
     assert "needs setup" not in body and "r.to_do" not in body

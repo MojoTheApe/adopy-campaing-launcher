@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -49,6 +50,29 @@ def load() -> dict[str, str]:
     return {k: v for k, v in items.items() if isinstance(k, str) and isinstance(v, str) and v.strip()}
 
 
+def _load_strict() -> dict[str, str]:
+    """Чтение для записи: ничего не теряет молча.
+
+    Нет файла — пусто. Файл есть, но не читается (OSError) — отказ: запись
+    поверх стёрла бы все остальные заметки. Файл испорчен — откладываем его
+    в `account_notes.json.corrupt-<время>` и начинаем с пустого."""
+    path = Path(get_account_notes_path())
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    try:
+        data = json.loads(raw)
+        items = data.get("notes") if isinstance(data, dict) else None
+        if not isinstance(items, dict):
+            raise ValueError("bad shape")
+    except ValueError:
+        backup = path.with_name(f"{path.name}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}")
+        path.replace(backup)
+        return {}
+    return {k: v for k, v in items.items() if isinstance(k, str) and isinstance(v, str) and v.strip()}
+
+
 def _save(notes: dict[str, str]) -> None:
     _atomic_write(get_account_notes_path(),
                   json.dumps({"notes": notes}, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8"))
@@ -71,7 +95,7 @@ def set_note(account: str, text: str) -> dict[str, str]:
     if len(text) > MAX_NOTE_LEN:
         raise ValueError(f"note is longer than {MAX_NOTE_LEN} characters")
     with _transaction():
-        notes = load()
+        notes = _load_strict()
         if text.strip():
             notes[label] = text
         else:

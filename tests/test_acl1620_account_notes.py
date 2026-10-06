@@ -98,11 +98,46 @@ def test_a_failed_write_leaves_the_previous_file_intact(monkeypatch):
     assert [p for p in path.parent.iterdir() if p.name.endswith(".tmp")] == []
 
 
-def test_a_broken_file_reads_as_empty_not_a_crash():
-    Path(paths.get_account_notes_path()).write_text("{not json", encoding="utf-8")
-    assert _get() == {}
+def test_a_broken_file_renders_empty_but_a_save_keeps_the_old_content():
+    path = Path(paths.get_account_notes_path())
+    path.write_text("{not json", encoding="utf-8")
+    assert _get() == {}  # отрисовка не падает
     assert _post({"account": "A", "text": "x"})[0] == 200
     assert _get() == {"A": "x"}
+    backups = list(path.parent.glob("account_notes.json.corrupt-*"))
+    assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == "{not json"
+
+
+def test_a_wrong_root_is_preserved_too():
+    path = Path(paths.get_account_notes_path())
+    path.write_text('["a"]', encoding="utf-8")
+    assert _post({"account": "A", "text": "x"})[0] == 200
+    assert [p.read_text(encoding="utf-8") for p in path.parent.glob("account_notes.json.corrupt-*")] == ['["a"]']
+
+
+def test_an_unreadable_file_refuses_the_save_and_loses_nothing(monkeypatch):
+    _post({"account": "Keep", "text": "precious"})
+    path = Path(paths.get_account_notes_path())
+    before = path.read_bytes()
+    real = Path.read_text
+
+    def deny(self, *a, **k):
+        if self.name == "account_notes.json":
+            raise PermissionError("sharing violation")
+        return real(self, *a, **k)
+
+    with monkeypatch.context() as m:  # откат только подмены чтения, не ACL_CONFIG_DIR
+        m.setattr(Path, "read_text", deny)
+        code, body = _post({"account": "Other", "text": "new"})
+    assert code == 500 and not body["ok"]
+    assert path.read_bytes() == before
+    assert _get() == {"Keep": "precious"}
+
+
+def test_the_label_is_stripped_on_both_sides():
+    _post({"account": "  Padded  ", "text": "n"})
+    html = _render([_row("  Padded  ")], notes.load())
+    assert 'data-note="n"' in html and 'data-account="Padded"' in html
 
 
 def test_concurrent_saves_keep_valid_json_and_every_note():
@@ -137,7 +172,7 @@ def _render(rows, note_map):
 def test_template_shows_truncated_note_with_full_text_in_title_and_no_setup():
     long = "word " * 40 + "END"
     html = _render([_row("Demo"), _row("Empty")], {"Demo": long})
-    cell = re.search(r'<td class="amap-note"[^>]*>(.*?)</td>', html, re.S)
+    cell = re.search(r'<td class="amap-acct-note"[^>]*>(.*?)</td>', html, re.S)
     assert "END" not in cell.group(1) and "…" in cell.group(1)
     assert f'title="{long}"' in html and f'data-note="{long}"' in html
     assert "add note" in html and 'title="Add a note"' in html
@@ -169,7 +204,7 @@ def _js_block() -> str:
 
 def _css() -> str:
     src = (TPL / "report.html").read_text(encoding="utf-8")
-    m = re.search(r"(\.amap table\.amap-grid td\.amap-note \{.*?\.amap-note-pop \.amap-note-state\.bad \{[^}]*\})", src, re.S)
+    m = re.search(r"(\.amap table\.amap-grid td\.amap-acct-note \{.*?\.amap-note-pop \.amap-note-state\.bad \{[^}]*\})", src, re.S)
     return m.group(1) if m else ""
 
 
@@ -191,7 +226,7 @@ def browser():
             b.close()
 
 
-def _open_page(browser, fail_posts=False):
+def _open_page(browser, fail_posts=False, hold=None):
     page = browser.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -212,6 +247,9 @@ def _open_page(browser, fail_posts=False):
                 t.start()
                 t.join()
                 resp = box[0]
+                if hold is not None:  # ответ придерживаем: сохранение «в пути»
+                    hold.append((r, resp))
+                    return
                 r.fulfill(status=resp.status_code, content_type="application/json", body=resp.body)
         else:
             r.fulfill(json={})
@@ -222,7 +260,7 @@ def _open_page(browser, fail_posts=False):
 
 
 def _cell(page, name):
-    return page.locator(f'td.amap-note[data-account="{name}"]')
+    return page.locator(f'td.amap-acct-note[data-account="{name}"]')
 
 
 def _hidden(page):
@@ -275,13 +313,13 @@ def test_html_note_is_inert_and_cells_added_later_work(browser):
     page.locator(".amap-note-pop textarea").fill(evil)
     page.locator(".amap-note-close").click()
     _hidden(page)
-    assert page.locator("td.amap-note img, td.amap-note b").count() == 0
+    assert page.locator("td.amap-acct-note img, td.amap-acct-note b").count() == 0
     assert _cell(page, "Evil").inner_text().startswith("<img")
     page.reload()
     page.wait_for_timeout(200)  # onerror, если бы разметка ожила, сработал бы здесь
-    assert not page.evaluate("window.__x") and page.locator("td.amap-note img").count() == 0
+    assert not page.evaluate("window.__x") and page.locator("td.amap-acct-note img").count() == 0
     # Ячейка, появившаяся после загрузки (как строки дерева из htmx), открывается тем же делегатом.
-    page.evaluate("""() => { const t = document.querySelector('td.amap-note').cloneNode(true);
+    page.evaluate("""() => { const t = document.querySelector('td.amap-acct-note').cloneNode(true);
         t.setAttribute('data-account', 'Late'); t.setAttribute('data-note', ''); document.querySelector('tbody tr').appendChild(t); }""")
     _cell(page, "Late").click()
     assert page.locator(".amap-note-pop").is_visible()
@@ -298,4 +336,26 @@ def test_a_failed_save_keeps_the_editor_open_with_the_text(browser):
     page.wait_for_function("document.querySelector('.amap-note-state').textContent.includes('save failed')")
     assert page.locator(".amap-note-pop").is_visible()
     assert page.locator(".amap-note-pop textarea").input_value() == "must not be lost"
+    page.close()
+
+
+def test_reopening_right_after_close_shows_the_new_text(browser):
+    held = []
+    page, errors = _open_page(browser, hold=held)  # ответ сервера придержан
+    _cell(page, "Demo").click()
+    page.locator(".amap-note-pop textarea").fill("fresh text")
+    page.locator(".amap-note-close").click()
+    page.wait_for_timeout(300)
+    assert held, "сохранение не ушло"
+    # Сохранение в пути: открытие игнорируется, окно не перерисовывается старым текстом.
+    page.evaluate("document.querySelector('td.amap-acct-note[data-account=\"Demo\"]').click()")
+    assert page.locator(".amap-note-pop textarea").input_value() == "fresh text"
+    for route, resp in held:
+        route.fulfill(status=resp.status_code, content_type="application/json", body=resp.body)
+    _hidden(page)
+    page.wait_for_function("document.querySelector('td.amap-acct-note[data-account=\"Demo\"]').dataset.note === 'fresh text'")
+    _cell(page, "Demo").click()
+    assert page.locator(".amap-note-pop textarea").input_value() == "fresh text"
+    assert _get() == {"Demo": "fresh text"}
+    assert not errors, errors
     page.close()
