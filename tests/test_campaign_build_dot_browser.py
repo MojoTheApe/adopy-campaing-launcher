@@ -330,7 +330,7 @@ def test_a_job_held_by_low_memory_says_how_much_is_free_and_what_a_profile_uses(
                          reserve_mb=3 * 1024, need_mb=int(6.5 * 1024))
     show(p, state, held)
     expect(dot(p, a)).to_have_class('cbd-ind cbd-ind-build-wait')
-    expect(dot(p, a)).to_have_attribute('title', 'Waiting for memory: 5.4 GB free, a new profile needs 6.5 GB (profile ~3.5 GB + 3 GB reserve). Close a Multilogin profile you don\'t need, or press Release on a finished one.')
+    expect(dot(p, a)).to_have_attribute('title', 'Waiting for memory: 5.4 GB free, a new profile needs 6.5 GB (profile ~3.5 GB + 3 GB reserve). Close a Multilogin profile you don\'t need.')
 
 
 def test_the_publish_all_list_says_queued_and_then_building(ui):

@@ -7565,14 +7565,22 @@ window.cbBuild = (function () {
     if (q.hold === 'review_windows') {
       return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
     }
+    if (q.behind_memory) {
+      return { state: 'build-wait', sign: '',
+               why: 'Waiting behind a job that waits for memory' + (ahead ? ' (' + ahead + ' ahead)' : '') };
+    }
     if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
       var reserve = Number(q.reserve_mb) || 0;
       var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
+      /* Разбор складывается в «needs»: остаток — профили, что ещё стартуют или растут. */
+      var extra = Math.max(0, need - Number(q.profile_mb) - reserve);
       return { state: 'build-wait', sign: '',
                why: 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, a new profile needs ' + gb(need)
-                    + ' GB (profile ~' + gb(q.profile_mb) + ' GB + ' + String(+gb(reserve)) + ' GB reserve)'
+                    + ' GB (profile ~' + gb(q.profile_mb) + ' GB + '
+                    + (extra >= 51 ? gb(extra) + ' GB for profiles still starting or growing + ' : '')
+                    + String(+gb(reserve)) + ' GB reserve)'
                     + (ahead ? ' (' + ahead + ' ahead)' : '')
-                    + '. Close a Multilogin profile you don\'t need, or press Release on a finished one.' };
+                    + '. Close a Multilogin profile you don\'t need.' };
     }
     return { state: 'build-wait', sign: '',
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };

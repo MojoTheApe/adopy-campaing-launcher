@@ -685,7 +685,8 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
     return {
         # ACL-1603: состояние для дешборда — память, место или профиль.
         "state": ("waiting_profile" if hold == "profile"
-                  else "waiting_memory" if hold in ("memory_low", "below_reserve")
+                  else "waiting_memory" if (hold in ("memory_low", "below_reserve")
+                                            or verdict.get("behind_memory"))
                   else "waiting_review" if hold == "review_windows"
                   else "waiting_slot"),
         # «profile» — ждёт свой профиль; иначе — свободное место.
@@ -704,6 +705,8 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "profile_mb": verdict.get("profile_mb"),
         "profile_mb_source": verdict.get("profile_mb_source"),
         "profile_open": bool(verdict.get("profile_open")),
+        # ACL-1642: стоит за головой, которая ждёт память.
+        "behind_memory": bool(verdict.get("behind_memory")),
     }
 
 

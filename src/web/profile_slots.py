@@ -102,7 +102,9 @@ MEASURE_MAX_AGE_S = 30.0
 #: ACL-1642: «профиль открыт?» — свежим ответ считается столько секунд; старше
 #: `OPEN_MAX_AGE_S` — не верить (профиль считается закрытым, как до ACL-1642).
 OPEN_TTL_S = 5.0
-OPEN_MAX_AGE_S = 15.0
+#: Ответ «открыт» снимает проверку памяти, поэтому верим ему только пока он
+#: свеж (ревью #644, N2): закрытое руками окно не должно пускать профиль без памяти.
+OPEN_MAX_AGE_S = OPEN_TTL_S
 #: Проверка, не вернувшаяся за это время, считается зависшей: новую не ждём
 #: бесконечно, а через `OPEN_RESTART_S` запускаем заново.
 OPEN_RESTART_S = 20.0
@@ -434,6 +436,9 @@ class OpenProfileProbe:
         self._want: set[str] = set()
         self._inflight_since: float | None = None
         self._gen = 0
+        #: Когда проверка падала в последний раз: до конца TTL не повторяем
+        #: (ревью #644, B1: иначе сбой + `wake` = цикл из потоков).
+        self._failed_at: float | None = None
         #: Сколько раз реально проверяли (для тестов: кэш работает).
         self.checks = 0
 
@@ -445,13 +450,17 @@ class OpenProfileProbe:
             log.info("open-profile probe failed: %s", exc)
         with self._lock:
             self.checks += 1
+            now = self._clock()
             if opened is not None:
-                now = self._clock()
+                self._failed_at = None
                 for p in profiles:
                     self._cache[p] = (now, p in opened)
+            else:
+                self._failed_at = now
             if gen == self._gen:
                 self._inflight_since = None
-        if self._background and self.on_ready is not None:
+        # Сбой нового не сообщает — ожидающих не будим.
+        if opened is not None and self._background and self.on_ready is not None:
             try:
                 self.on_ready()
             except Exception:
@@ -467,9 +476,10 @@ class OpenProfileProbe:
             fresh = hit is not None and now - hit[0] < self._ttl_s
             hung = self._inflight_since is not None and now - self._inflight_since > self._restart_s
             start = False
+            backoff = self._failed_at is not None and now - self._failed_at < self._ttl_s
             if not fresh:
                 self._want.add(profile)
-                if self._inflight_since is None or hung:
+                if (self._inflight_since is None or hung) and not backoff:
                     start = True
                     self._inflight_since = now
                     self._gen += 1
@@ -653,11 +663,18 @@ class ProfileSlots:
         warmup = self._settings().warmup_s
         now = self._clock()
         return sum(1 for r in self._running.values()
-                   if not r.get("kept") and not r.get("open") and now - r["started"] < warmup)
+                   if not r.get("kept") and now - r["started"] < warmup)
 
     def _is_open(self, profile: str) -> bool:
         """Профиль уже открыт в Multilogin (ACL-1642). Не ждёт: кэш, `None` = нет."""
         return bool(profile) and self._open.read(profile) is True
+
+    def _head_blocked_on_memory(self, head: str | None) -> bool:
+        """Голова очереди стоит именно на памяти (не на потолке и не на обзоре окон)."""
+        if head is None:
+            return False
+        held = self._decide_now(self._waiting[head]["profile"])
+        return not held.get("allow") and held.get("reason") in ("memory_low", "below_reserve")
 
     def _may_start_ahead(self, job_id: str, head: str | None) -> bool:
         """ACL-1642: голова очереди ждёт память, а профиль этого задания уже открыт.
@@ -667,12 +684,11 @@ class ProfileSlots:
         профилях, их число конечно (по одному на профиль), и память головы
         они не берут. Среди таких идёт первое по очереди.
         """
-        if head is None:
+        if head is None or head == job_id:
             return False
         if not self._is_open(self._waiting[job_id]["profile"]):
             return False
-        held = self._decide_now(self._waiting[head]["profile"])
-        if held.get("allow") or held.get("reason") not in ("memory_low", "below_reserve"):
+        if not self._head_blocked_on_memory(head):
             return False
         busy = self._busy_profiles()
         for other, w in self._waiting.items():
@@ -691,7 +707,9 @@ class ProfileSlots:
         jumped = False
         if head != job_id:
             if not self._may_start_ahead(job_id, head):
-                return {"allow": False, "reason": "order", "ahead": ahead}
+                # Стоим за головой, ждущей память: так и показываем (ревью #644, N3).
+                return {"allow": False, "reason": "order", "ahead": ahead,
+                        "behind_memory": self._head_blocked_on_memory(head)}
             jumped = True
         decision = self._decide_now(w["profile"])
         decision["ahead"] = ahead
@@ -817,7 +835,8 @@ class ProfileSlots:
                                 "decision": verdict, "first_hold": first_hold, "shared": False}
                     if first_hold is None:
                         first_hold = verdict
-                    note: tuple = (verdict.get("reason"), verdict.get("ahead"))
+                    note: tuple = (verdict.get("reason"), verdict.get("ahead"),
+                                   bool(verdict.get("behind_memory")))
                     if verdict.get("reason") == "memory_low":
                         # Причина на экране — «свободно X ГБ, профиль ~Y ГБ»:
                         # заметная перемена цифр тоже новость (шаг 0,5 / 0,25 ГБ).
