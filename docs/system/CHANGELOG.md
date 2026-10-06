@@ -1,5 +1,25 @@
 # System history
 
+## Single-screen editor: default country removal and ads 2-4 on 06.10 layout — ACL-1630
+
+Facebook_5265, three runs on 06.10 ended do-not-publish: `audience_location` failed with
+`default_location_left` (left: United States, Open Dropdown) and `ad2_create` with `no_create_control`.
+
+- Locations: the card has only "United States" in every capture - the target country was never
+  in it. Meta's new "Open Dropdown" button label was read as a second location (the name of the
+  "Remove" row); button labels are no longer part of a location name.
+- When Enter (no visible suggestions) adds nothing to the card, the robot now presses the
+  highlighted suggestion (`aria-activedescendant`) and checks the card again; a country that is
+  still not in the card is a failed attempt (`audience_location_attempt`, note `not_in_card`) and
+  the retry ladder goes on, instead of a "success" followed by `default_location_left`.
+- Ads 2-4: the ad list rows show no Action menu until the cursor is over them. When neither
+  Create ad nor the ad set Action menu is in the tree, the robot moves the mouse over the ad set
+  row (no click) and reads the tree again, up to 3 times; telemetry `tree.hover` = {tries, woke}.
+- The onboarding modal "A streamlined way to create campaigns" was closed by `own_close` before
+  the location step in all runs; it is not the cause.
+- Bench fixtures `locations_open_dropdown_card_2026_10_06.html`,
+  `editor_tree_no_action_buttons_2026_10_06.html`; live check pending.
+
 ## Account map: a free-text Note per account replaces the Setup column — ACL-1620
 
 Owner request 06.10: the Setup column ("ready / needs setup") is not needed; managers want to
