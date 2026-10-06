@@ -1,5 +1,50 @@
 # System history
 
+## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
+
+The last rung of the fallback ladder: when a step fails on a screen the robot does not know (a
+collapsed card, a stray dialog, a moved button), `src/fb_ads_rpa/ai_rescue.py` can ask Claude what
+to do. This first PR is the standalone module only; nothing in the flow calls it, and
+`ACL_AI_RESCUE` defaults to `off`.
+
+- The model gets text only, never a screenshot: open dialogs, headings and up to 150 visible
+  controls (12k characters at most) with role, label, state and section, each with a stable index.
+- Everything sent is scrubbed first: ids, `act=` and URLs, e-mails, tokens, account labels,
+  every word that contains a digit, the text after a `|` in a name, field values (Page, Pixel,
+  account comboboxes), links and campaign-list rows (never shown to the model). Free names
+  without digits are replaced only when the caller passes them in `names=`.
+- The model answers with exactly one action: click, expand, close dialog, press Escape, scroll to,
+  or give up. Safety is in code, not in the prompt, and when in doubt it refuses:
+  - a positive allowlist is the primary gate (`allow` in `config/rpa_forbidden_zones.yaml`, EN/ES/PT):
+    expand only a collapsed section card whose name is on a short list (Audience, Placements, Budget,
+    Locations, ... and the ES/PT names; never Create new, Share, Advantage+ toggles); links are never targets;
+    field labels show only the placeholder; close a real dialog only with Close/Cancel/Not now/Skip/
+    Dismiss/Got it/Later/No thanks (never when the dialog mentions discard, unsaved or leaving); click
+    only "Show more"/"See more" buttons and a few named tabs; Escape only over a real clean dialog;
+    scroll always. Anything else is `not_allowlisted:<label>`, logged for the owner to widen later;
+  - the denylist is the second layer, matched on word stems (deleted, eliminara, unpublished) after
+    stripping soft hyphens and zero-width characters (publish, delete, remove, discard, terms,
+    instant forms, log out, payment, "leave", duplicate, edit, on/off);
+  - the check covers every label source of the target and its descendants (text, aria-label,
+    title, alt, value, aria-labelledby), the text next to it and the FULL text of the dialog around it;
+  - only buttons and tabs are clicked; switches, checkboxes, radios, fields and links never; nothing
+    inside a list row; a list page gives up without calling the model;
+  - Close works only as "close dialog" inside a visible dialog with no edited fields; Escape needs a
+    visible dialog without edited fields;
+  - a refused pick never scrolls the page; an allowed one is scrolled instantly, must stand still for
+    two frames, is vetted again, and is clicked with `locator.click(position, timeout=1s)` at a point
+    checked with `elementFromPoint`;
+  - a dialog is always a real dialog (a nested one too); the editor counts as the editor only when it
+    holds the name field and covers half the screen; a list page (a wide table or grid) gives up
+    before the model is called; shadow DOM targets are refused.
+- `ACL_AI_RESCUE=suggest` logs the answer and leaves the page untouched; `act` performs the one
+  action and returns, the caller re-runs its own check. Model: `ACL_AI_RESCUE_MODEL`
+  (default `claude-sonnet-5-5`), 20 second limit, no retries. No key or SDK means the rung is skipped.
+- At most 2 calls per step and 4 per campaign, counted by an object the caller passes in.
+- Telemetry: new step `ai_rescue` (mapped to "hold" in the build progress model).
+- Tests: `tests/test_ai_rescue.py` with a fake model; fixture `ai_guided_setup_dialog_2026_10_05.html`
+  (live capture fb358fda8aab).
+
 ## Placements on Meta's layouts of 2026-10-05/06 in the classic ad set editor — ACL-1629
 
 Since 05.10 the placements step failed on several accounts (B90, B91, 9403A, Doc120), and every
