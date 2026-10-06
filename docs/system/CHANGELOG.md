@@ -45,6 +45,151 @@ to do. This first PR is the standalone module only; nothing in the flow calls it
 - Tests: `tests/test_ai_rescue.py` with a fake model; fixture `ai_guided_setup_dialog_2026_10_05.html`
   (live capture fb358fda8aab).
 
+## Placements on Meta's layouts of 2026-10-05/06 in the classic ad set editor — ACL-1629
+
+Since 05.10 the placements step failed on several accounts (B90, B91, 9403A, Doc120), and every
+failed campaign ended as do-not-publish. Two new layouts, both in the classic editor:
+
+- **Category expanders as plain buttons** (B90, B91): each category row has a
+  `<button aria-label="Expand|Collapse">` without `aria-expanded`. The robot set the checkboxes,
+  but its "Meta does not offer this placement" check only knew the old expanders, answered
+  "collapsed" for ever, and "Messenger Stories" stayed a missing placement. The check now reads
+  both expander kinds. A category Meta folds again after a save is reopened; the settle budget
+  counts from the first page answer, not from entry (B91: one slow read used the whole budget).
+- **A second cause of the same B90/B91 failures: a category box disabled while Meta saves.**
+  After a category ("Search results", "Apps and sites") is clicked off, Meta keeps its box
+  disabled and still `aria-checked=true` for a few seconds. The step read it once and failed,
+  although the box ended in the wanted state (11 of 29 failed runs; every run that also failed
+  on "Ads on Facebook Reels" had it). The finish pass now re-reads such a category and clicks it
+  again once it is enabled, within the shared reopen cap and time limit; a box that stays disabled
+  and checked still fails and is named (`categories_failed`).
+- **Final read-back**: after all clicks the step reads every planned sub-item row and the fully-off
+  categories (Search results, Apps and sites) from the page once more and passes only if all match
+  the plan; a late revert fails the step (`final_readback.mismatch`). A category the plan wants on is
+  judged only by its rows: Meta shows its box as unchecked while only some of its placements are on,
+  so the finish pass never clicks it (a click would turn all its placements on).
+  The ACL-1336 reason is used only when the opened card has no manual-placement entry and carries
+  Meta's notice (B90 shows the notice and still offers manual placements).
+- **A row disabled while Meta saves** ("Ads on Facebook Reels", 13 runs on 05.10): before a seen
+  placement is called missing, the step reads it again, reopens its category and sets it, for up
+  to 6 s.
+- **Collapsed Placements card in the standalone editor** (9403A): a summary button
+  (`aria-pressed=false`) over a hidden body. It was only opened on the single-screen editor path;
+  the step now opens it in any editor, and a card that does not open fails as
+  `placements_card_not_opened` with an English reason. This is not a fix for 9403A: the opened
+  card has no categories at all, only Meta's notice that excluding placements "will no longer be
+  available for your ad sets". It is most likely the same cause as ACL-1336 and stays
+  do-not-publish; the blocking reason now says "Meta no longer offers manual placement exclusions
+  on this ad set (ACL-1336); placements left as Meta set them." The owner decides the policy in
+  ACL-1336.
+- **Account placement exclusions**: when the card summary still reads "None" after Confirm, the
+  step reopens "Placement controls for this ad account" and reads the switch and the four boxes
+  back (`excluded_verified_in_dialog`); a lost save stays a failure. When the card has no
+  "Account controls" row or "Edit placement controls" button, the report says Meta no longer
+  offers them (`account_controls_not_offered`) and the blocking reason names it. If the page call
+  itself fails while the row is looked for, the report says it was a read error
+  (`account_controls_row_read_error`), not that Meta does not offer the exclusions.
+- Tests: `tests/test_bench_placements_1629.py` on two scrubbed captures; bench catalogue rows
+  added.
+## The same video on several ads gets media on every ad — ACL-1637
+
+06.10, Doc120 (45b9778e65df) and B97 (5f05cf961d37, 152f7df4ef6a): the first ad got the video,
+ads 2-4 got none (`same_file_already_uploaded_this_run` / `library_has_no_copy`) and the campaign
+ended do-not-publish.
+
+- Cause: a heavy video is compressed first, and the copy that goes to Meta is named
+  `<name>.<key>.mp4`. Meta's media library captions the tile with that name, but the "file already
+  uploaded this run" path searched only for the original name, so it never found the tile. The
+  "do not upload twice" rule then left the ad empty.
+- The library lookup of ads 2+ now also searches by the compressed copy's name (found in the
+  compression cache, no ffmpeg needed) and looks twice, with a pause, because a fresh upload
+  appears in the grid with a delay.
+- If the library genuinely has no copy, the file is uploaded again for that ad: once per ad, one
+  attempt, and only when the wizard reached the Media step. A wizard that did not open is not
+  followed by an upload through the same wizard.
+- The per-run failed-upload memo now keeps the failure reason. A file that failed earlier is
+  uploaded again only if it never reached Meta (`file_not_landed`, wizard/navigation reasons). A
+  file Meta refused (`media_refused_on_ad`), a crop failure, or any failure where Meta saw the
+  file is not uploaded again; the ad ends with a named reason.
+- An ad that still ends without media now says why in plain English (`library_has_no_copy`,
+  `same_file_already_*`, `file_not_landed`, `wizard_not_opened`), is a blocking problem and the
+  campaign stays do-not-publish.
+- Not changed here: in run 573ab2cf3646 the ad 2 creative step finished at 14:00:17,
+  `create_additional_ad` failed at 14:01:38, and nothing was recorded until `step_budget_exceeded`
+  at 14:20:38. That 19-minute hang is outside the creative-upload path; it belongs to the
+  step-stuck work (ACL-1614) and is handed to its owner.
+- Tests: `tests/test_same_video_on_several_ads_gets_media.py`.
+
+## Single-screen editor: default country removal and ads 2-4 on 06.10 layout — ACL-1630
+
+Facebook_5265, three runs on 06.10 ended do-not-publish: `audience_location` failed with
+`default_location_left` (left: United States, Open Dropdown) and `ad2_create` with `no_create_control`.
+
+- Locations: the card has only "United States" in every capture - the target country was never
+  in it. Meta's new "Open Dropdown" button label was read as a second location (the name of the
+  "Remove" row); button labels are no longer part of a location name.
+- A country that Enter (no visible suggestions) did not add to the card is no longer a success:
+  the robot reads the card after Enter, and a missing country is a failed attempt
+  (`audience_location_attempt`, note `not_in_card`), so the retry ladder retypes, instead of a
+  "success" followed by `default_location_left`. When every attempt ends `not_in_card`, the closing
+  `audience_location` row says `not_in_card` (not `no_location_suggestions`).
+- Why Enter added nothing is not known. The search box in the captures carries
+  `aria-activedescendant="SA"`, but the attribute is stale: there is no suggestion list and no
+  element with id "SA" in the DOM. As a defensive extra, the robot presses the suggestion the box
+  points at, only when that suggestion is the country itself ("<country> (Country)", the bare
+  country name, or id = the ISO code); a city or region is never pressed (ACL-1390). Whether this
+  press adds the country live is unverified.
+- The card check counts a country only from its own location row: in the grouped layout a city
+  row under the country's heading (e.g. "Riyadh" under "Saudi Arabia") is not the country.
+- Ads 2-4: in the captures the ad list rows have empty button slots (no Action menu). When neither
+  Create ad nor the ad set Action menu is in the tree, the robot moves the mouse over the ad set
+  row (mouse movement only: no click, no keyboard focus) and reads the tree again, up to 3 times,
+  stopping as soon as the buttons appear; telemetry `tree.hover` = {tries, woke}. That the buttons
+  are drawn on hover is inferred from the empty button slots, not from a live capture. A tab that
+  stops answering during the hover is reported as `tab_frozen`.
+- The onboarding modal "A streamlined way to create campaigns" was closed by `own_close` before
+  the location step in all runs; it is not the cause.
+- Bench fixtures `locations_open_dropdown_card_2026_10_06.html`,
+  `editor_tree_no_action_buttons_2026_10_06.html`; live check pending.
+
+## Stop ends a job whose robot is stuck inside a step — ACL-1614
+
+05.10, job 1ad447f9: Stop was pressed while the robot sat inside a page call. Stop closed the
+Playwright connection from the web thread; the job thread then spun forever inside Playwright
+holding the GIL, the whole dashboard slowed to 10-30 s per request, and the job stayed
+"cancelling" with its profile slot until the dashboard was restarted.
+
+- Stop only signals now. The connection and the browser are never closed from another thread;
+  the job thread closes its own connection when it unwinds. The Multilogin window stays open and
+  the profile is never stopped.
+- The flow checks the signal in its waits (the shared pause helpers, `before_step`, the
+  liveness probe, the sleeps in the Ads Manager flow, simple create and crop step) and raises
+  `JobCancelled`, which unwinds through the normal path: a Stop ends within a few seconds.
+- If the job thread has not ended within `ACL_CANCEL_DEADLINE_S` (default 60 s), e.g. blocked in
+  one call on a frozen tab, the job becomes "Stopped by the user - the robot was stuck in <step>;
+  the Multilogin window was left open", its slot and profile lock are released so the queue
+  moves on, and the thread is abandoned. If it wakes later it writes no results, errors,
+  telemetry or notices and does not touch the slot again.
+- The profile lock is not released on abandon (review of PR #622): the hung thread may still
+  hold the browser, and two robots must never drive one browser. A job for the same profile
+  waits ("Waiting for the stopped robot on this profile to let go") until the old thread exits;
+  jobs on other profiles start because the slot is free.
+- After a Stop the robot no longer minimises the window or reads the page in cleanup blocks,
+  and the ffmpeg compression wait is cancellable (our own ffmpeg child is terminated, never
+  Multilogin).
+- Known quiet waits (human takeover, teach wait, compression) send a heartbeat, so they never
+  raise `step_stuck`.
+- A same-profile job waits for the stopped robot BEFORE it takes a queue slot, so a hung profile
+  never blocks other accounts; Stop ends that wait.
+- Limit: a thread hung forever inside one CDP call (a frozen tab with no timeout) keeps the
+  profile lock until the dashboard is restarted; Close profile answers "busy" meanwhile. The
+  ffmpeg heartbeat also hides a wedged ffmpeg from `step_stuck` until its compression timeout.
+- The page shows "Stopping..." for a cancelling job (never "waiting"/"opening") and the stuck
+  reason on a stopped one.
+- New signal `step_stuck`: a running job with no telemetry step for `ACL_STEP_STUCK_S` (default
+  300 s) records one `step_stuck` row (last step, idle seconds) and sends one Sentry message,
+  once per job. The row does not reset the "No new step for N min" clock on the page.
+- Tests: `tests/test_acl1614_cancel_hung_job.py`.
 
 ## Account map: a free-text Note per account replaces the Setup column — ACL-1620
 

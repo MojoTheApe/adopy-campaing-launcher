@@ -5760,7 +5760,7 @@ window.cbTree = (function () {
   "derived": {"rows": 951, "attempts": 19, "until": "2026-09-28"},
   "stages": [["profile", 18], ["campaign", 57], ["adset", 178], ["ad", 175], ["final", 6]],
   "rules": [
-    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|tab_frozen$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|spend_profile_|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
+    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|spend_profile_|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
     ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error)", "profile"],
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
     ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad$|simple_ad_section$)", "adset"],
@@ -6067,6 +6067,10 @@ window.cbBuild = (function () {
   function waiting(q) {
     q = q || {};
     var ahead = Math.max(0, parseInt(q.ahead, 10) || 0);
+    if (q.hold === 'stopped_robot') {
+      return { state: 'build-wait', sign: '',
+               why: 'Waiting for the stopped robot on this profile to let go' };
+    }
     if (q.reason === 'profile') {
       return { state: 'build-wait', sign: '',
                why: 'Waiting for the Multilogin profile — another run is using it' };
@@ -6088,6 +6092,13 @@ window.cbBuild = (function () {
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
   }
 
+  /* ACL-1614: остановленное задание. Если робот завис и сервер бросил его по
+     сроку, в ошибках задания стоит причина («stuck in <шаг>») — показываем её. */
+  function stoppedText(p, plain) {
+    var stuck = (p.errors || []).filter(function (e) { return /stuck in/.test(String(e)); })[0];
+    return stuck ? String(stuck) : (plain || 'Stopped');
+  }
+
   /* Состояние точки для одной кампании задания. */
   function classify(j, name, ads) {
     if (j.lost) {
@@ -6105,8 +6116,16 @@ window.cbBuild = (function () {
     var active = isActive(p);
     // ACL-1321: задание ждёт места (памяти машины на ещё один профиль) или
     // свой профиль — робот его не трогал, точка не дышит.
+    // ACL-1614: Stop нажат — точка говорит «Stopping…», а не «ждёт очереди» /
+    // «открывается»; кампания, у которой итог уже есть, остаётся с итогом.
+    if (p.status === 'cancelling' && !(c && c.result)) {
+      return { state: 'build-run', sign: '', why: 'Stopping…' };
+    }
     if (p.status === 'queued') return waiting(p.queue);
-    if (!c) return active ? { state: 'build-run', sign: '', why: 'Waiting for its turn' } : null;
+    if (!c) {
+      if (active) return { state: 'build-run', sign: '', why: 'Waiting for its turn' };
+      return p.status === 'cancelled' ? { state: 'build-bad', sign: '', why: stoppedText(p) } : null;
+    }
 
     var r = c.result;
     if (active && c.blocker) return { state: 'build-attn', sign: '', why: String(c.blocker) };
@@ -6120,7 +6139,7 @@ window.cbBuild = (function () {
     }
     if (!active) {
       return { state: 'build-bad', sign: '',
-               why: p.status === 'cancelled' ? 'Stopped before this campaign was built'
+               why: p.status === 'cancelled' ? stoppedText(p, 'Stopped before this campaign was built')
                  : ((p.errors || [])[0] || 'Not built') };
     }
     if (p.status === 'running' && c.name === p.current) {
@@ -13305,7 +13324,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var doneLabel = isCancelled ? 'stopped'
       : (isCancelling ? 'stopping… (the Multilogin window stays open)'
       // ACL-1321: профилей разом — сколько тянет память машины; остальные ждут.
-      : isQueued ? (queue.reason === 'profile'
+      : isQueued ? (queue.hold === 'stopped_robot'
+          ? 'queued — waiting for the stopped robot on this profile to let go'
+          : queue.reason === 'profile'
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
           : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
           : queue.state === 'waiting_memory' ? 'queued — waiting for memory'

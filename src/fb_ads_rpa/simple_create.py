@@ -33,6 +33,8 @@ import os
 import re
 import time
 
+from src.fb_ads_rpa import job_cancel
+
 #: Адрес нового редактора (в пути, не в параметрах).
 SIMPLE_CREATE_PATH = "/adsmanager/manage/simple_create"
 
@@ -256,6 +258,7 @@ def _card_open(page, title: str, wait_s: float) -> bool:
         except Exception:
             return False
         time.sleep(0.25)
+        job_cancel.check()
     return False
 
 
@@ -287,6 +290,7 @@ def _card_controls(page, wait_s: float) -> dict:
         if not got.get("body") or got.get("n"):
             break
         time.sleep(0.25)
+        job_cancel.check()
     return got
 
 
@@ -420,6 +424,7 @@ def ensure_leads_objective(page) -> str:
             except Exception:
                 pass
         time.sleep(0.25)
+        job_cancel.check()
     md._telemetry.record("simple_objective", False, note="not_set",
                          diag={"was": got.get("checked"), "hit": bool(where.get("hit"))})
     return "failed"
@@ -476,6 +481,7 @@ def lead_terms_block(page, *, wait_s: float = 4.0) -> str:
         if not text or time.time() >= deadline:
             return text if isinstance(text, str) else ""
         time.sleep(0.5)
+        job_cancel.check()
 
 
 # ── После перезагрузки ───────────────────────────────────────────────────
@@ -627,6 +633,21 @@ _CREATIVE_WHY_TEXT = {
                                           "ad is left in the draft for review."),
     "crop_vertical_changed_without_story": ("The Vertical crop changed although no story file was "
                                             "picked; the ad is left in the draft for review."),
+    # ACL-1637 (live 06.10): the same video on several ads of one campaign.
+    "library_has_no_copy": ("This ad has no media: the same video was already used by an earlier "
+                            "ad, Meta's media library showed no copy of it and the file could not "
+                            "be uploaded again for this ad; the ad is left in the draft for review."),
+    "same_file_already_uploaded_this_run": ("This ad has no media: the same video was already "
+                                            "uploaded for an earlier ad, but it could not be "
+                                            "attached to this ad; the ad is left in the draft for "
+                                            "review."),
+    "same_file_already_failed_this_run": ("This ad has no media: the same video already failed to "
+                                          "upload for an earlier ad and was not accepted again for "
+                                          "this ad; the ad is left in the draft for review."),
+    "file_not_landed": ("This ad has no media: the browser did not accept the video file in "
+                        "Meta's upload dialog; the ad is left in the draft for review."),
+    "wizard_not_opened": ("This ad has no media: Meta's 'Set up creative' wizard did not open "
+                          "for this ad; the ad is left in the draft for review."),
     # ACL-1551 (live 04.10): Next on Crop did not move Meta's wizard on.
     "crop_wizard_stuck": ("Meta's media wizard stayed on its Crop step (Next did not move it on), "
                           "so the robot closed the wizard with its own Close; the ad's media is not "
@@ -881,6 +902,7 @@ def _wait_menu(page, wait_s: float) -> dict:
         if got.get("open") or time.time() >= deadline:
             return got
         time.sleep(0.3)
+        job_cancel.check()
 
 
 def _read_ads(page) -> dict:
@@ -970,6 +992,7 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
                         _wv().wake_if_hidden(page, where="create_next_ad",
                                              waited_s=now - start, answered=False)
                     time.sleep(1.0)
+                    job_cancel.check()
                     continue
             busy_s += now - unanswered_at
             if not closed and _wv().woken_recently(page):
@@ -1021,6 +1044,7 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
             _wv().wake_if_hidden(page, where="create_next_ad", waited_s=now - start,
                                  answered=True, probe=False)
         time.sleep(0.5)
+        job_cancel.check()
     got["dialog_first"] = dialog
     got["dialog_until_s"] = dialog_s if dialog else None
     got["waited_s"] = round(time.time() - start, 1)
@@ -1094,6 +1118,7 @@ def close_media_picker(page, *, wait_s: float = 6.0) -> dict:
             out["why"] = "still_open"
             return out
         time.sleep(0.4)
+        job_cancel.check()
 
 
 def create_next_ad(page, *, tag: str, known_names: list[str],
@@ -1151,6 +1176,77 @@ def create_next_ad(page, *, tag: str, known_names: list[str],
     return out
 
 
+_ADSET_ROW_POINT_JS = r"""
+  () => {
+    const tree = document.querySelector('[data-surface="/am/editor_drawer"]');
+    const row = tree && tree.querySelector('[data-surface$="editor_tree:adset"] [role=rowheader]');
+    if (!row) return { why: 'no_row' };
+    row.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const r = row.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return { why: 'hidden' };
+    // Кнопки строки стоят справа; точка — внутри строки, левее края.
+    return { x: r.x + Math.max(10, r.width - 40), y: r.y + r.height / 2,
+             x0: r.x + Math.min(r.width / 2, 80) };
+  }
+"""
+"""Точка над строкой группы в дереве (движение мыши, не нажатие).
+
+Фокус клавиатуры на строку не ставится ни на одной попытке (ревью PR #632,
+F5): фокус строки дерева Meta может её выбрать и увести редактор на группу."""
+
+#: Сколько раз навести курсор на строку группы, прежде чем признать, что кнопок нет.
+#: Кнопки появились — наведение сразу прекращается.
+_WAKE_TRIES = 3
+
+
+def _wake_adset_row(page, tree: dict) -> dict:
+    """Навести курсор на строку группы, чтобы Meta нарисовала её кнопки.
+
+    ACL-1630 (06.10, Facebook_5265): в дереве у строк кампании, группы и
+    объявления на месте блока кнопок («default», «Action menu») пустой
+    `<div></div>` — Meta рисует их только под курсором (снимки 24.09 и 30.09
+    держали кнопки в DOM). Движение мыши — не нажатие и охраны не требует.
+    Только `mouse.move`: ни нажатия, ни фокуса (тесты это проверяют).
+    Возвращает дерево, перечитанное после наведения, с `hover` =
+    {"tries", "woke"}; не появились — прежний отказ `no_create_control`;
+    вкладка не ответила — дерево с `tree: False` и `error` (`tab_frozen`).
+    """
+    md = _md()
+    hover = {"tries": 0, "woke": False}
+    for n in range(_WAKE_TRIES):
+        try:
+            pt = md._eval_bounded(page, _ADSET_ROW_POINT_JS) or {}
+        except Exception:
+            pt = {}
+        if "x" not in pt:
+            hover["why"] = pt.get("why") or "no_point"
+            break
+        hover["tries"] = n + 1
+        try:
+            # Сначала в сторону, потом на строку: `mouseover` приходит при
+            # входе курсора, а не при стоянии над ней.
+            page.mouse.move(pt["x0"], pt["y"] + 90)
+            page.mouse.move(pt["x0"], pt["y"], steps=4)
+            page.mouse.move(pt["x"], pt["y"], steps=4)
+        except Exception:
+            hover["why"] = "mouse_error"
+            break
+        md._sleep_h(0.5)
+        try:
+            fresh = md._eval_bounded(page, _MORE_ADS_TREE_JS, [CREATE_AD_RE, _ADSET_MENU_SURFACE]) or {}
+        except Exception as exc:
+            fresh = {"tree": False, "error": type(exc).__name__}
+        if not fresh.get("tree"):
+            tree = fresh
+            break
+        tree = fresh
+        if tree.get("create") or tree.get("adset_menu"):
+            hover["woke"] = True
+            break
+    tree["hover"] = hover
+    return tree
+
+
 def clear_leftover_wizard(page) -> dict | None:
     """Мастер медиа прошлого объявления ещё на экране — закрыть его своим Close.
 
@@ -1193,6 +1289,15 @@ def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
     if not tree.get("tree"):
         out["why"] = "tab_frozen" if tree.get("error") else "no_ad_list"
         return
+    if not tree.get("create") and not tree.get("adset_menu"):
+        # ACL-1630: кнопок строки в DOM нет, пока над ней нет курсора.
+        tree = _wake_adset_row(page, tree)
+        out["tree"] = tree
+        # Ревью PR #632 (F6): вкладка перестала отвечать во время наведения —
+        # это `tab_frozen`, а не «нет Action menu».
+        if not tree.get("tree"):
+            out["why"] = "tab_frozen" if tree.get("error") else "no_ad_list"
+            return
     ads_before = int((tree.get("levels") or {}).get("Ad") or 0)
     out["ads_before"] = ads_before
     if tree.get("create"):
@@ -1296,6 +1401,7 @@ def ad_listed(page, name: str, *, wait_s: float = 8.0) -> dict:
         if listed or time.time() >= deadline or got.get("error"):
             return {"listed": listed, "ads": got.get("ads"), "error": got.get("error")}
         time.sleep(0.5)
+        job_cancel.check()
 
 
 # ── Медиа нового объявления (ACL-1412) ───────────────────────────────────
