@@ -18,6 +18,66 @@ Owner review of ACL-1620 (06.10).
 - Kept from ACL-1620: escaping, the strict read on save with the `.corrupt` backup, the in-flight
   guard, columns Account 28% / Note 9%. Notes are never sent anywhere: the only call is the local
   `POST /api/account-notes` ({account, text} or {country, text}).
+## The same video on several ads gets media on every ad — ACL-1637
+
+06.10, Doc120 (45b9778e65df) and B97 (5f05cf961d37, 152f7df4ef6a): the first ad got the video,
+ads 2-4 got none (`same_file_already_uploaded_this_run` / `library_has_no_copy`) and the campaign
+ended do-not-publish.
+
+- Cause: a heavy video is compressed first, and the copy that goes to Meta is named
+  `<name>.<key>.mp4`. Meta's media library captions the tile with that name, but the "file already
+  uploaded this run" path searched only for the original name, so it never found the tile. The
+  "do not upload twice" rule then left the ad empty.
+- The library lookup of ads 2+ now also searches by the compressed copy's name (found in the
+  compression cache, no ffmpeg needed) and looks twice, with a pause, because a fresh upload
+  appears in the grid with a delay.
+- If the library genuinely has no copy, the file is uploaded again for that ad: once per ad, one
+  attempt, and only when the wizard reached the Media step. A wizard that did not open is not
+  followed by an upload through the same wizard.
+- The per-run failed-upload memo now keeps the failure reason. A file that failed earlier is
+  uploaded again only if it never reached Meta (`file_not_landed`, wizard/navigation reasons). A
+  file Meta refused (`media_refused_on_ad`), a crop failure, or any failure where Meta saw the
+  file is not uploaded again; the ad ends with a named reason.
+- An ad that still ends without media now says why in plain English (`library_has_no_copy`,
+  `same_file_already_*`, `file_not_landed`, `wizard_not_opened`), is a blocking problem and the
+  campaign stays do-not-publish.
+- Not changed here: in run 573ab2cf3646 the ad 2 creative step finished at 14:00:17,
+  `create_additional_ad` failed at 14:01:38, and nothing was recorded until `step_budget_exceeded`
+  at 14:20:38. That 19-minute hang is outside the creative-upload path; it belongs to the
+  step-stuck work (ACL-1614) and is handed to its owner.
+- Tests: `tests/test_same_video_on_several_ads_gets_media.py`.
+
+## Single-screen editor: default country removal and ads 2-4 on 06.10 layout — ACL-1630
+
+Facebook_5265, three runs on 06.10 ended do-not-publish: `audience_location` failed with
+`default_location_left` (left: United States, Open Dropdown) and `ad2_create` with `no_create_control`.
+
+- Locations: the card has only "United States" in every capture - the target country was never
+  in it. Meta's new "Open Dropdown" button label was read as a second location (the name of the
+  "Remove" row); button labels are no longer part of a location name.
+- A country that Enter (no visible suggestions) did not add to the card is no longer a success:
+  the robot reads the card after Enter, and a missing country is a failed attempt
+  (`audience_location_attempt`, note `not_in_card`), so the retry ladder retypes, instead of a
+  "success" followed by `default_location_left`. When every attempt ends `not_in_card`, the closing
+  `audience_location` row says `not_in_card` (not `no_location_suggestions`).
+- Why Enter added nothing is not known. The search box in the captures carries
+  `aria-activedescendant="SA"`, but the attribute is stale: there is no suggestion list and no
+  element with id "SA" in the DOM. As a defensive extra, the robot presses the suggestion the box
+  points at, only when that suggestion is the country itself ("<country> (Country)", the bare
+  country name, or id = the ISO code); a city or region is never pressed (ACL-1390). Whether this
+  press adds the country live is unverified.
+- The card check counts a country only from its own location row: in the grouped layout a city
+  row under the country's heading (e.g. "Riyadh" under "Saudi Arabia") is not the country.
+- Ads 2-4: in the captures the ad list rows have empty button slots (no Action menu). When neither
+  Create ad nor the ad set Action menu is in the tree, the robot moves the mouse over the ad set
+  row (mouse movement only: no click, no keyboard focus) and reads the tree again, up to 3 times,
+  stopping as soon as the buttons appear; telemetry `tree.hover` = {tries, woke}. That the buttons
+  are drawn on hover is inferred from the empty button slots, not from a live capture. A tab that
+  stops answering during the hover is reported as `tab_frozen`.
+- The onboarding modal "A streamlined way to create campaigns" was closed by `own_close` before
+  the location step in all runs; it is not the cause.
+- Bench fixtures `locations_open_dropdown_card_2026_10_06.html`,
+  `editor_tree_no_action_buttons_2026_10_06.html`; live check pending.
 
 ## Stop ends a job whose robot is stuck inside a step — ACL-1614
 

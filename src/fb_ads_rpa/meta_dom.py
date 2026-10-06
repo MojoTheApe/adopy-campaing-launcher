@@ -245,6 +245,9 @@ CREATIVE_STEP_BUDGET_S = 25 * 60
 #: Не начинать повтор загрузки, если от срока шага осталось меньше.
 CREATIVE_RETRY_MIN_S = 120.0
 
+#: Причина «медиатека открыта, копии файла в ней нет» (ACL-1637).
+LIBRARY_HAS_NO_COPY = "library_has_no_copy"
+
 #: ACL-1354: столько подряд непрочитанных опросов блока Media (~10 с) —
 #: и проверка медиа кончается: вкладка не читается, ждать нечего.
 MEDIA_CHECK_UNREADABLE_POLLS = 20
@@ -10131,12 +10134,29 @@ def _upload_ad_creative_with_retry(
         diag = {"file": Path(creative_path).name}
         if blocked_by:
             diag["blocked_by"] = blocked_by
-        _telemetry.record("ad_creative_upload", False, note=why, diag=diag)
-        # В итог шага — то, что на самом деле помешало: до Media не дошли —
-        # это про мастер, а не про правило «второй раз не грузим».
-        _set_upload_why(blocked_by if blocked_by in _NAVIGATION_WHYS
-                        or blocked_by == "upload_exception" else why)
-        return False
+        if upload_already_failed(creative_path):
+            # Причину прошлого провала несём в диагностику: именно она решает,
+            # можно ли заливать заново.
+            diag["earlier_failure"] = failed_upload_reason(creative_path)
+        if (blocked_by == LIBRARY_HAS_NO_COPY
+                and upload_failure_allows_reupload(creative_path)
+                and _creative_left() >= CREATIVE_RETRY_MIN_S):
+            # ACL-1637: мастер дошёл до Media, медиатека спрошена по обоим
+            # именам, и копии нет. Правило «второй раз не грузим» не должно
+            # оставлять объявление пустым: заливаем файл для ЭТОГО объявления
+            # заново — один раз на объявление, одной попыткой. Но только если
+            # файл до Meta не доходил (`file_not_landed`, мастер): файл,
+            # который Meta отвергла или чей кроп не сошёлся, не грузим снова.
+            _telemetry.record("ad_creative_upload", None, note="reupload_library_has_no_copy",
+                              diag=diag)
+            attempts = 1
+        else:
+            _telemetry.record("ad_creative_upload", False, note=why, diag=diag)
+            # В итог шага — то, что на самом деле помешало: до Media не дошли —
+            # это про мастер, а не про правило «второй раз не грузим».
+            _set_upload_why(blocked_by if blocked_by in _NAVIGATION_WHYS
+                            or blocked_by == "upload_exception" else why)
+            return False
 
     for attempt in range(attempts):
         # Причина — только последней попытки: не оставлять причину первой,
@@ -10170,8 +10190,8 @@ def _upload_ad_creative_with_retry(
             # Отказ по самому медиа объявления: ни «медиа есть», ни вторая
             # попытка его не исправят (порт ACL-1284).
             _close_creative_setup_modal(page)
-            _remember_upload_failed(creative_path)
             _set_upload_why(_refused_why())
+            _remember_upload_failed(creative_path)
             return False
         _close_creative_setup_modal(page)
         _sleep_h(0.8)
@@ -10267,7 +10287,11 @@ def _upload_ad_creative_with_retry(
 #: креативом, и после провала на первом остальные два платили полную цену без
 #: единого шанса. Замер 15.09: `ad2_creative_upload` — 178 секунд в среднем,
 #: почти всё впустую; за день это 10 минут из 48.
-_failed_uploads: set[tuple[str, str]] = set()
+#:
+#: ACL-1637 (ревью M1): значение — причина провала. Только по ней решается,
+#: можно ли залить файл для следующего объявления заново: допустимо лишь
+#: когда файл до Meta не доходил.
+_failed_uploads: dict[tuple[str, str], str] = {}
 
 
 def _upload_memo_key(creative_path: str) -> tuple[str, str]:
@@ -10275,7 +10299,30 @@ def _upload_memo_key(creative_path: str) -> tuple[str, str]:
 
 
 def _remember_upload_failed(creative_path: str) -> None:
-    _failed_uploads.add(_upload_memo_key(creative_path))
+    # Причина — та, что уже названа для этого объявления (`last_upload_why`):
+    # вызывающий обязан назвать её до запоминания.
+    _failed_uploads[_upload_memo_key(creative_path)] = last_upload_why() or ""
+
+
+#: ACL-1637: провалы, после которых файл ещё можно залить для другого
+#: объявления: Meta его не видела. Отказ самой Meta (`media_refused_on_ad`),
+#: кроп и любая причина, при которой файл подавали, сюда не входят.
+_REUPLOAD_OK_WHYS = _NAVIGATION_WHYS | {"file_not_landed"}
+
+
+def upload_failure_allows_reupload(creative_path: str) -> bool:
+    """Можно ли заливать файл заново, помня его провал в этом прогоне?
+
+    Нет провала — можно. Есть — только если файл до Meta не доходил.
+    """
+    key = _upload_memo_key(creative_path)
+    if key not in _failed_uploads:
+        return True
+    return _failed_uploads[key] in _REUPLOAD_OK_WHYS
+
+
+def failed_upload_reason(creative_path: str) -> str:
+    return _failed_uploads.get(_upload_memo_key(creative_path), "")
 
 
 #: Файлы, которые в этом прогоне уже успешно загрузились.
@@ -11804,6 +11851,42 @@ def _media_step_behind(step: dict | None) -> bool:
     return steps.index("Media") < steps.index(current)
 
 
+#: Сколько раз за копией ходить в медиатеку объявлению 2+ (ACL-1637).
+_KNOWN_COPY_ROUNDS = 2
+#: Пауза между заходами: свежезагруженное видео в сетке появляется не сразу.
+_KNOWN_COPY_REFRESH_S = 8.0
+
+
+def _reuse_known_copy(page: Page, creative_path: str, is_video: bool) -> bool | None:
+    """Взять из медиатеки копию файла, уже уезжавшего в этом прогоне.
+
+    `True` — прикрепили; `False` — выбор не снялся, шаг обязан отказать;
+    `None` — копии нет ни под одним именем. Имена два: исходник (уже спрошен
+    выше, но на втором заходе спрашиваем снова — сетка могла дорисоваться) и
+    сжатая копия из кэша, под которой файл и лежит в медиатеке.
+    """
+    original = Path(creative_path).name
+    derived = ""
+    if is_video:
+        try:
+            from src.fb_ads_rpa import creative_compress
+
+            derived = creative_compress.cached_copy_name(creative_path)
+        except Exception:
+            derived = ""
+    for round_no in range(_KNOWN_COPY_ROUNDS):
+        if round_no:
+            if _creative_left() < _KNOWN_COPY_REFRESH_S + 30:
+                break  # срок шага на исходе — второй заход не начинаем
+            _sleep_h(_KNOWN_COPY_REFRESH_S)
+        names = ([derived] if derived else []) + ([original] if round_no else [])
+        for name in names:
+            decision = _reuse_upload_decision(page, name)
+            if decision is not None:
+                return decision
+    return None
+
+
 def upload_ad_creative(
     page: Page, creative_type: str, creative_path: str, *, edit_url: str = "",
     reuse_only: bool = False,
@@ -12024,13 +12107,21 @@ def upload_ad_creative(
             _set_upload_why("library_pick_left_selection")
         return verdict
     if reuse_only:
-        # Память прогона говорит, что файл уже уходил наверх: второй раз Meta
-        # его не берёт, медиатека была единственным путём, и копии там нет.
-        # Объявление оставляем как есть и называем причину.
+        # ACL-1637: в Meta уехала сжатая копия, а в медиатеке она подписана
+        # своим именем — по имени исходника плитки нет никогда. Ищем и по
+        # имени копии, и с одним повтором: свежая загрузка появляется в сетке
+        # не сразу.
+        known = _reuse_known_copy(page, creative_path, is_video)
+        if known is not None:
+            if known is False:
+                _set_upload_why("library_pick_left_selection")
+            return known
+        # Копии в медиатеке нет. Решает вызывающий: он заливает файл для этого
+        # объявления заново (один раз на объявление), а не оставляет его пустым.
         _close_creative_setup_modal(page)
         _telemetry.record("ad_creative_reuse", None, note="library_has_no_copy",
                           diag={"file": Path(creative_path).name})
-        _set_upload_why("library_has_no_copy")
+        _set_upload_why(LIBRARY_HAS_NO_COPY)
         return False
 
     # Clear the library search box before uploading. The reuse attempt just
@@ -14954,8 +15045,12 @@ def creative_soft_fail(tag: str, ad_label: str) -> str:
     """
     why = last_upload_why()
     base = f"{tag}_creative_upload"
-    if why in (_crop.WIZARD_STUCK, MEDIA_PICKER_LOADING):
+    if why in (_crop.WIZARD_STUCK, MEDIA_PICKER_LOADING, LIBRARY_HAS_NO_COPY,
+               "same_file_already_uploaded_this_run", "same_file_already_failed_this_run",
+               "file_not_landed", "wizard_not_opened"):
         # ACL-1559: выбор медиа шага Media не догрузился — тоже своим именем.
+        # ACL-1637: объявление без медиа из-за одного видео на нескольких
+        # объявлениях — причина называется, а не «creative_upload» без слов.
         return f"{base}:{why} - {ad_label}: {_simple.creative_why_text(why)}"
     return base
 
@@ -17667,6 +17762,88 @@ def _click_country_option(root, page: Page, search_term: str) -> tuple[str, list
     return "entered", texts
 
 
+_ACTIVE_SUGGESTION_JS = r"""
+  () => {
+    const q = [...document.querySelectorAll('input')].find(i =>
+      /search locations?|buscar ubicaci/i.test(i.getAttribute('placeholder') || ''));
+    const id = q && q.getAttribute('aria-activedescendant');
+    if (!id) return null;
+    const el = document.getElementById(id);
+    if (!el) return null;
+    el.scrollIntoView({block: 'nearest'});
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    const text = (el.innerText || el.textContent || '').replace(/[\s\u200b]+/g, ' ').trim();
+    return {x: r.x + r.width / 2, y: r.y + r.height / 2, id, text};
+  }
+"""
+"""Подсвеченная подсказка поля поиска локаций (`aria-activedescendant`):
+центр, id и текст."""
+
+
+def _active_suggestion_is_country(pt: dict, search_term: str) -> bool:
+    """Подсвеченная подсказка — сама страна, а не её город или регион.
+
+    Правило ACL-1390, как в `_click_country_option`: текст — «<страна>
+    (Country)» или одно имя страны. Текста нет — решает id: у варианта
+    страны id равен её ISO-коду («SA»), у городов и регионов — числовые ключи.
+    """
+    text = (pt.get("text") or "").strip()
+    if text:
+        tagged, bare = _country_option_res(search_term)
+        return bool(tagged.search(text) or bare.search(text))
+    iso = _COUNTRY_NAME_TO_ISO.get((search_term or "").strip().lower())
+    return bool(iso) and str(pt.get("id") or "").strip().upper() == iso
+
+
+def _click_active_suggestion(page: Page, search_term: str) -> bool:
+    """Нажать подсвеченную подсказку поля поиска, если это страна (ACL-1630).
+
+    Запасной путь после Enter, который ничего не добавил. Нажимается только
+    вариант самой страны (`_active_suggestion_is_country`): город или регион
+    с тем же именем не берётся никогда (ACL-1390, ревью PR #632 F1).
+    Нет подсвеченной подсказки, у неё нет коробки или это не страна — False,
+    ничего не нажато.
+    """
+    try:
+        pt = page.evaluate(_ACTIVE_SUGGESTION_JS)
+    except Exception:
+        return False
+    if not pt or not _active_suggestion_is_country(pt, search_term):
+        return False
+    try:
+        _cdp_mouse_click(page, pt["x"], pt["y"])
+    except Exception:
+        return False
+    return True
+
+
+def _country_added_or_unread(page: Page, search_term: str) -> bool:
+    """Страна стоит в карточке локаций — или карточку прочитать нельзя.
+
+    Решает только читаемая карточка без нужной страны: пустой ответ значит
+    «судить нечем», и прежний путь (дальше `_clear_other_locations` скажет
+    `location_rows_not_read`) не меняется.
+    """
+    rows = _location_rows_settled(page, tries=2, pause_s=0.6)
+    if not rows:
+        return True
+    # Ревью PR #632 (F1): в раскладке по странам у заголовка группы — ✕
+    # («Close»), у строки локации — «Remove». Город «Riyadh» встаёт строкой
+    # под заголовком «Saudi Arabia», и заголовок страной не считается: нужна
+    # строка «Remove», чьё имя — сама страна (как вариант страны, ACL-1390).
+    # В старой раскладке (`<li>` + «Close») строк «Remove» нет — там решает
+    # имя чипа, и тоже целиком, а не подстрокой.
+    tagged, bare = _country_option_res(search_term)
+
+    def is_country(r: dict) -> bool:
+        return bool(tagged.search(r["name"]) or bare.search(r["name"]))
+
+    if any("remove" in (r.get("kinds") or ()) for r in rows):
+        return any(is_country(r) and "remove" in (r.get("kinds") or ()) for r in rows)
+    return any(is_country(r) for r in rows)
+
+
 def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     """Pick the country-level suggestion from the location autocomplete.
 
@@ -17681,6 +17858,7 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
     it and type slower; a shorter prefix; the longest wait. Each attempt after
     a failed first one is a telemetry row `audience_location_attempt`.
     """
+    outcomes: list[str] = []
     for n, (what, delay_ms, wait_s) in enumerate(_LOCATION_ATTEMPTS, start=1):
         typed = _location_prefix(search_term) if what == "prefix" else search_term
         if n > 1:
@@ -17700,19 +17878,38 @@ def _pick_country_suggestion(root, page: Page, search_term: str) -> bool:
         outcome, texts = "no_suggestions", []
         if _wait_location_options(root, timeout_s=wait_s):
             outcome, texts = _click_country_option(root, page, search_term)
+            if outcome == "entered" and not _country_added_or_unread(page, search_term):
+                # 06.10 (5265, ACL-1630): в карточке после шага одна United
+                # States — Enter без видимых вариантов страну не добавил, а шаг
+                # считал это успехом. Теперь такая попытка не засчитана
+                # (`not_in_card`), и лестница набирает заново. Нажатие
+                # подсвеченной подсказки — запасной путь на всякий случай и
+                # только для самой страны; живьём не проверен:
+                # `aria-activedescendant="SA"` на снимках — устаревший
+                # атрибут, ни списка, ни элемента с id="SA" в DOM не было.
+                if _click_active_suggestion(page, search_term):
+                    _sleep_h(0.7)
+                if not _country_added_or_unread(page, search_term):
+                    outcome = "not_in_card"
         if outcome in ("picked", "entered"):
             if n > 1:
                 _telemetry.record("audience_location_attempt", True, note=outcome,
                                   diag={"attempt": n, "typed": typed, "options": texts,
                                         "outcome": outcome})
             return True
+        outcomes.append(outcome)
         _telemetry.record("audience_location_attempt", False, note=outcome,
                           diag={"attempt": n, "typed": typed, "options": texts,
                                 "outcome": outcome})
     # Поле оставляем пустым: второй проход (ACL-1390) наберёт страну начисто.
     _retype_location_search(root, page, "", 0)
-    _telemetry.record("audience_location", None, note="no_location_suggestions",
-                      diag={"typed": search_term, "attempts": len(_LOCATION_ATTEMPTS)})
+    # Ревью PR #632 (F7): подсказки были, но страна ни разу не встала в
+    # карточку — итоговая строка говорит это, а не «подсказок нет».
+    note = ("not_in_card" if outcomes and all(o == "not_in_card" for o in outcomes)
+            else "no_location_suggestions")
+    _telemetry.record("audience_location", None, note=note,
+                      diag={"typed": search_term, "attempts": len(_LOCATION_ATTEMPTS),
+                            "outcomes": outcomes})
     return False
 
 
@@ -17852,18 +18049,28 @@ def _location_rows(page: Page) -> list[dict]:
                   // 21.09 18:44 (CR_ait IPO): имя читалось как «United StatesClose» —
                   // слово прилипает без пробела, и чистка по границе слова его не
                   // убирала, поэтому строка не совпадала ни с одной страной.
+                  // 06.10 (5265, ACL-1630): у кнопки-списка строки появилась видимая
+                  // подпись «Open Dropdown», и строка «Remove» получала её как имя
+                  // страны («left: United States, Open Dropdown»). Подписи кнопок
+                  // — не часть имени: имя ищется выше, где стоит сама страна.
                   const t = norm(row.textContent)
+                    .replace(/\b(Open Dropdown|Close Dropdown)\b/gi, '')
                     .replace(/\b(Close|Remove|Quitar|Eliminar)\b/gi, '')
                     .replace(/(Close|Remove|Quitar|Eliminar)\s*$/i, '').trim();
                   if (t && t.length <= 80) { name = t; break; }
                 }
                 if (!name) continue;
                 const r = b.getBoundingClientRect();
-                const entry = { name, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                // Вид кнопки (ревью PR #632, F1): «close» — ✕ заголовка группы
+                // (или чипа старой раскладки), «remove» — строка локации.
+                const label = norm(b.getAttribute('aria-label') || '') + ' ' + norm(b.textContent);
+                const kind = /\b(remove|delete|quitar|eliminar)\b/i.test(label) ? 'remove' : 'close';
+                const entry = { name, x: r.x + r.width / 2, y: r.y + r.height / 2, kinds: [kind] };
                 if (isOff(b)) entry.disabled = true;
                 // Крестик и «Remove» одной страны — одна строка; включённый важнее.
                 const same = rows.find(o => o.name === name);
                 if (same) {
+                  if (!same.kinds.includes(kind)) same.kinds.push(kind);
                   if (same.disabled && !entry.disabled) { same.x = entry.x; same.y = entry.y; delete same.disabled; }
                   continue;
                 }
