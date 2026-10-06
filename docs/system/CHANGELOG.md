@@ -16,9 +16,17 @@ ended do-not-publish.
 - If the library genuinely has no copy, the file is uploaded again for that ad: once per ad, one
   attempt, and only when the wizard reached the Media step. A wizard that did not open is not
   followed by an upload through the same wizard.
+- The per-run failed-upload memo now keeps the failure reason. A file that failed earlier is
+  uploaded again only if it never reached Meta (`file_not_landed`, wizard/navigation reasons). A
+  file Meta refused (`media_refused_on_ad`), a crop failure, or any failure where Meta saw the
+  file is not uploaded again; the ad ends with a named reason.
 - An ad that still ends without media now says why in plain English (`library_has_no_copy`,
   `same_file_already_*`, `file_not_landed`, `wizard_not_opened`), is a blocking problem and the
   campaign stays do-not-publish.
+- Not changed here: in run 573ab2cf3646 the ad 2 creative step finished at 14:00:17,
+  `create_additional_ad` failed at 14:01:38, and nothing was recorded until `step_budget_exceeded`
+  at 14:20:38. That 19-minute hang is outside the creative-upload path; it belongs to the
+  step-stuck work (ACL-1614) and is handed to its owner.
 - Tests: `tests/test_same_video_on_several_ads_gets_media.py`.
 
 ## Stop ends a job whose robot is stuck inside a step — ACL-1614

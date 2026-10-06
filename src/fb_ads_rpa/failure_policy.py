@@ -534,6 +534,12 @@ PER_AD_DETAIL: dict[tuple[str, str], tuple[str, str, str, str]] = {
         ("same_file_already_failed_this_run",
          "the same video already failed to upload for an earlier ad and was not accepted again",
          "shared video failed earlier"),
+        ("file_not_landed",
+         "the browser did not hand the video file to Meta's upload dialog for this ad",
+         "video file not accepted by the upload dialog"),
+        ("wizard_not_opened",
+         "Meta's 'Set up creative' wizard did not open for this ad",
+         "creative wizard did not open"),
     )},
     # ACL-1551: the wizard of the previous ad was still open and its own Close
     # did not close it, so the ad set's Action menu could not be used.

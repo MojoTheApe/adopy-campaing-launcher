@@ -68,6 +68,18 @@ def test_the_cached_copy_name_is_found_without_ffmpeg(tmp_path, monkeypatch):
     assert cc.cached_copy_name(str(src), limit_mb=1.0) == ""
 
 
+def test_an_empty_or_oversized_cache_file_is_not_a_copy(tmp_path, monkeypatch):
+    monkeypatch.setattr(cc, "cache_dir", lambda: tmp_path / "cache")
+    src = tmp_path / "big.mp4"
+    src.write_bytes(b"x" * 4096)
+    dst = cc.cache_path(str(src), cc.DEFAULT_TARGET_MB)
+    dst.parent.mkdir(parents=True)
+    dst.write_bytes(b"")
+    assert cc.cached_copy_name(str(src), limit_mb=0.001) == "", "пустой файл — не копия"
+    dst.write_bytes(b"y" * 3000)     # больше лимита (~1048 байт)
+    assert cc.cached_copy_name(str(src), limit_mb=0.001) == "", "копия крупнее лимита — не копия"
+
+
 # ── медиатека: копия под именем сжатого файла, в том числе после обновления ─
 
 def _library(monkeypatch, *, visible_from_round: int, names: list[str]):
@@ -101,6 +113,13 @@ def test_no_copy_anywhere_is_none_after_two_rounds(quiet, monkeypatch):
     asked = _library(monkeypatch, visible_from_round=1, names=[])
     assert md._reuse_known_copy(object(), FILE, True) is None
     assert asked == [DERIVED, DERIVED, "sample_video_01_post.mp4"]
+
+
+def test_no_second_library_round_when_the_step_budget_is_nearly_spent(quiet, monkeypatch):
+    asked = _library(monkeypatch, visible_from_round=1, names=[])
+    monkeypatch.setattr(md, "_creative_left", lambda: 5.0)
+    assert md._reuse_known_copy(object(), FILE, True) is None
+    assert asked == [DERIVED], "только первый заход"
 
 
 def test_a_dirty_pick_is_a_refusal_not_a_reupload(quiet, monkeypatch):
@@ -175,13 +194,72 @@ def test_a_wizard_that_did_not_open_is_not_followed_by_a_reupload(quiet, monkeyp
     assert md.last_upload_why() == "wizard_not_opened"
 
 
-def test_a_file_that_failed_on_ad1_still_gets_one_reupload_for_ad2(quiet, monkeypatch):
+def test_a_file_that_never_reached_meta_gets_one_reupload_for_ad2(quiet, monkeypatch):
     """B97 5f05cf961d37: объявление 1 — `file_not_landed`, и объявления 2-3
     получали `same_file_already_failed_this_run` без единой попытки."""
     calls = _ads(monkeypatch, library_has_copy=False)
+    md._set_upload_why("file_not_landed")
     md._remember_upload_failed(FILE)
+    md._set_upload_why(None)
     assert md.upload_ad_creative_with_retry(object(), "video", FILE) is True
     assert calls == ["reuse", "upload"]
+
+
+def test_a_file_meta_refused_is_not_uploaded_again_and_keeps_a_named_reason(quiet, monkeypatch):
+    calls = _ads(monkeypatch, library_has_copy=False)
+    md._set_upload_why("media_refused_on_ad")
+    md._remember_upload_failed(FILE)
+    md._set_upload_why(None)
+    assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
+    assert calls == ["reuse"], "ни одной новой заливки"
+    assert md.last_upload_why() == "same_file_already_failed_this_run"
+    assert ("ad_creative_upload", False, "same_file_already_failed_this_run") in quiet
+    assert md.failed_upload_reason(FILE) == "media_refused_on_ad", "причина провала сохранена"
+
+
+@pytest.mark.parametrize("why", ["crop_wizard_stuck", "upload_failed_unnamed", "page_closed"])
+def test_other_failures_where_meta_saw_the_file_are_not_reuploaded(quiet, monkeypatch, why):
+    calls = _ads(monkeypatch, library_has_copy=False)
+    md._set_upload_why(why)
+    md._remember_upload_failed(FILE)
+    md._set_upload_why(None)
+    assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
+    assert calls == ["reuse"]
+
+
+def test_a_dirty_library_pick_is_not_followed_by_a_reupload(quiet, monkeypatch):
+    calls: list[str] = []
+
+    def fake_upload(page, ct, cp, *, edit_url="", reuse_only=False):
+        calls.append("reuse" if reuse_only else "upload")
+        md._set_upload_why("library_pick_left_selection")
+        return False
+
+    monkeypatch.setattr(md, "upload_ad_creative", fake_upload)
+    md.remember_upload_succeeded(FILE)
+    assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
+    assert calls == ["reuse"]
+
+
+@pytest.mark.parametrize("probe", ["_media_block_filled_now", "_wizard_past_media"])
+def test_media_already_on_the_ad_is_checked_before_any_reupload(quiet, monkeypatch, probe):
+    calls = _ads(monkeypatch, library_has_copy=False)
+    monkeypatch.setattr(md, probe, lambda page: True)
+    monkeypatch.setattr(md, "_crop_gate", lambda *a, **k: False)
+    md.remember_upload_succeeded(FILE)
+    assert md.upload_ad_creative_with_retry(object(), "video", FILE) is True
+    assert calls == ["reuse"], "медиа уже на объявлении — заливки нет"
+
+
+def test_media_seen_after_the_wizard_is_closed_is_checked_before_any_reupload(quiet, monkeypatch):
+    calls = _ads(monkeypatch, library_has_copy=False)
+    monkeypatch.setattr(md, "_creative_wizard_open", lambda page: True)
+    seen = iter([False, True])
+    monkeypatch.setattr(md, "_media_block_filled_now", lambda page: next(seen))
+    monkeypatch.setattr(md, "_crop_gate", lambda *a, **k: False)
+    md.remember_upload_succeeded(FILE)
+    assert md.upload_ad_creative_with_retry(object(), "video", FILE) is True
+    assert calls == ["reuse"]
 
 
 def test_no_time_left_ends_with_a_named_reason_not_a_reupload(quiet, monkeypatch):
@@ -197,7 +275,7 @@ def test_no_time_left_ends_with_a_named_reason_not_a_reupload(quiet, monkeypatch
 
 @pytest.mark.parametrize("why", [
     "library_has_no_copy", "same_file_already_uploaded_this_run",
-    "same_file_already_failed_this_run",
+    "same_file_already_failed_this_run", "file_not_landed", "wizard_not_opened",
 ])
 def test_an_ad_without_media_ends_blocking_with_an_english_reason(why):
     text = sc.creative_why_text(why)
