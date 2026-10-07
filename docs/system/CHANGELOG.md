@@ -1,5 +1,15 @@
 # System history
 
+## B97: the robot waits for Meta's media counter and Crop cards instead of giving up — ACL-1669
+
+Two live B97 runs of the same build (07.10) failed for one reason: Meta draws the step bodies late and the robot read them once, immediately.
+
+- Library pick (run 3edaf71b0613): the "N selected" counter was read 0.1 s after the Media step opened, found nothing and refused (`selection_state_unavailable`), so no ad got media and `url_field_missing` followed on each. The robot now waits up to 4 s for the counter. If it still is not there and no tile is marked, it clicks nothing, steps back and uploads the file once (ACL-1637 rule: one upload per ad); a marked tile with no counter is still refused, now with the named reason `library_selection_unreadable`. Later ads do not ask the library again once the counter is known to be missing.
+- Crop (run bc4302862ee7): the pick worked, but Crop was read while Meta still showed loading placeholders (no Square/Vertical cards) and ended `crop_replace_button_missing`. The step now waits up to 20 s for the cards; if they never appear it names the missing card.
+- `url_field_missing` on an ad that has no media is reported as `<ad>_destination:url_field_missing_no_media` with a sentence saying it is a consequence of the missing media, not a separate destination problem.
+- ACL-1637 did not cause this: the counter check dates from 17.09 and ad 1 never goes through the ACL-1637 path.
+- Not verified live: the 07.10 captures were taken after the wizard closed, so the real picker markup of that run is not available; the bench uses the 04.10 picker without its footer counters and a hand-reduced Crop-loading fragment.
+
 ## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
 
 The last rung of the fallback ladder: when a step fails on a screen the robot does not know (a

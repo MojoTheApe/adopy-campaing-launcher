@@ -248,6 +248,9 @@ CREATIVE_RETRY_MIN_S = 120.0
 #: Причина «медиатека открыта, копии файла в ней нет» (ACL-1637).
 LIBRARY_HAS_NO_COPY = "library_has_no_copy"
 
+#: Причина «в сетке медиатеки нет счётчика выбора, выбор не подтвердить» (ACL-1669).
+LIBRARY_COUNTER_MISSING = "library_selection_unreadable"
+
 #: ACL-1354: столько подряд непрочитанных опросов блока Media (~10 с) —
 #: и проверка медиа кончается: вкладка не читается, ждать нечего.
 MEDIA_CHECK_UNREADABLE_POLLS = 20
@@ -6119,7 +6122,8 @@ def run_recorded_campaign_flow(
                     # ACL-1371: причина — в note строки (a90d704c892a: «silent»).
                     _shot("fail_ad_destination", last_destination_diag(),
                           note=last_destination_why() or "destination_not_set")
-                    ad_level_fails.append(destination_soft_fail("ad", ad_name or "ad 1"))
+                    ad_level_fails.append(destination_soft_fail(
+                        "ad", ad_name or "ad 1", no_media=not creative_uploaded))
                 else:
                     _shot("after_ad_destination")
             except Exception as exc:
@@ -6353,7 +6357,8 @@ def run_recorded_campaign_flow(
                             if not set_ad_destination_website(page, destination_url):
                                 _shot(f"fail_{tag}_destination", last_destination_diag(),
                                       note=last_destination_why() or "destination_not_set")
-                                ad_level_fails.append(destination_soft_fail(tag, extra_name or tag))
+                                ad_level_fails.append(destination_soft_fail(
+                                    tag, extra_name or tag, no_media=no_creative))
                             else:
                                 _shot(f"after_{tag}_destination")
                         except Exception as exc:
@@ -9620,6 +9625,32 @@ def _library_selected_count(page: Page) -> int | None:
         return None
 
 
+#: Сколько секунд ждать счётчик «N selected» после открытия сетки (ACL-1669).
+#: B97, 07.10 (3edaf71b0613): шаг читал счётчик через 0.1 с после открытия
+#: Media и получал None; нужный нам ответ — «подождать», а не «отказать».
+_LIBRARY_COUNTER_WAIT_S = 4.0
+
+#: Состояние попыток повторного использования в рамках шага креатива.
+#: `counter_missing` — сетка открыта, а счётчика выбора в ней нет (ACL-1669):
+#: тогда ничего не кликаем и не повторяем попытку для следующих имён файла.
+_reuse_state: dict = {"counter_missing": False}
+
+
+def _library_selected_count_waiting(page: Page, limit_s: float = _LIBRARY_COUNTER_WAIT_S) -> int | None:
+    """Счётчик выбора; если его ещё нет — переспросить до `limit_s` секунд.
+
+    Meta дорисовывает нижнюю панель «N selected» уже после кнопки Upload и
+    плиток, так что чтение сразу после открытия шага Media бывает пустым.
+    """
+    count = _library_selected_count(page)
+    waited = 0.0
+    while count is None and waited < limit_s:
+        _sleep_h(0.5)
+        waited += 0.5
+        count = _library_selected_count(page)
+    return count
+
+
 def _library_tiles(page: Page, filename: str):
     """Locator for the clickable library tiles captioned `filename`.
 
@@ -10054,9 +10085,23 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
       differently-labelled button, force-close the modal — that keeps the
       selection applied rather than discarding it.
     """
-    before = _library_selected_count(page)
+    before = _library_selected_count_waiting(page)
     if before is None:
-        _telemetry.record("ad_creative_reuse", False, note="selection_state_unavailable")
+        # ACL-1669 (B97, 07.10): счётчика выбора в сетке нет и после ожидания.
+        # Выбор плиток без него не подтвердить, поэтому не кликаем вовсе.
+        # Но и «грязной» сетку считать нельзя, если мы ничего не трогали и ни
+        # одна плитка не отмечена: тогда файл просто грузится заново (одна
+        # загрузка на объявление, правило ACL-1637). Отмеченная плитка при
+        # нечитаемом счётчике — настоящая неизвестность, как и раньше отказ.
+        marked = _library_any_tile_marked(page)
+        _reuse_state["counter_missing"] = True
+        if marked is False:
+            _telemetry.record("ad_creative_reuse", None, note="selection_counter_missing",
+                              diag={"file": filename, "waited_s": _LIBRARY_COUNTER_WAIT_S,
+                                    "tile_marked": False})
+            return REUSE_ABSENT
+        _telemetry.record("ad_creative_reuse", False, note="selection_state_unavailable",
+                          diag={"file": filename, "tile_marked": marked})
         return REUSE_DIRTY
     _library_search(page, filename)
 
@@ -12316,6 +12361,8 @@ def _reuse_known_copy(page: Page, creative_path: str, is_video: bool) -> bool | 
         except Exception:
             derived = ""
     for round_no in range(_KNOWN_COPY_ROUNDS):
+        if _reuse_state.get("counter_missing"):
+            break  # ACL-1669: без счётчика выбор не подтвердить — повторы бесполезны
         if round_no:
             if _creative_left() < _KNOWN_COPY_REFRESH_S + 30:
                 break  # срок шага на исходе — второй заход не начинаем
@@ -12348,6 +12395,7 @@ def upload_ad_creative(
     _set_last_upload_diag({"file": Path(creative_path).name, "attempts": []})
     _note_media_refused(None)
     _crop.reset_attempt()
+    _reuse_state["counter_missing"] = False
     is_video = (creative_type or "").strip().lower() == "video"
     option_label = "Video ad" if is_video else "Image ad"
 
@@ -12545,7 +12593,9 @@ def upload_ad_creative(
     if verdict is not None:
         if verdict is False:
             # Выбор в медиатеке не снялся (запись с подробностями — внутри).
-            _set_upload_why("library_pick_left_selection")
+            # ACL-1669: нечитаемый счётчик при отмеченной плитке — своя причина.
+            _set_upload_why(LIBRARY_COUNTER_MISSING if _reuse_state.get("counter_missing")
+                            else "library_pick_left_selection")
         return verdict
     if reuse_only:
         # ACL-1637: в Meta уехала сжатая копия, а в медиатеке она подписана
@@ -12662,7 +12712,8 @@ def upload_ad_creative(
 
     # Compression changes the library caption. Keep original-name reuse above,
     # then also look for an already uploaded derived copy when reuse is enabled.
-    if Path(creative_path).name != _diag["file"] and get_reuse_library_media():
+    if (Path(creative_path).name != _diag["file"] and get_reuse_library_media()
+            and not _reuse_state.get("counter_missing")):
         decision = _reuse_upload_decision(page, Path(creative_path).name)
         if decision is not None:
             _diag["reused"] = decision
@@ -15488,7 +15539,7 @@ def creative_soft_fail(tag: str, ad_label: str) -> str:
     base = f"{tag}_creative_upload"
     if why in (_crop.WIZARD_STUCK, MEDIA_PICKER_LOADING, LIBRARY_HAS_NO_COPY,
                "same_file_already_uploaded_this_run", "same_file_already_failed_this_run",
-               "file_not_landed", "wizard_not_opened"):
+               "file_not_landed", "wizard_not_opened", LIBRARY_COUNTER_MISSING):
         # ACL-1559: выбор медиа шага Media не догрузился — тоже своим именем.
         # ACL-1637: объявление без медиа из-за одного видео на нескольких
         # объявлениях — причина называется, а не «creative_upload» без слов.
@@ -15496,7 +15547,11 @@ def creative_soft_fail(tag: str, ad_label: str) -> str:
     return base
 
 
-def destination_soft_fail(tag: str, ad_label: str) -> str:
+#: ACL-1669: поле URL не нашлось, потому что у объявления нет медиа.
+URL_FIELD_NO_MEDIA = "url_field_missing_no_media"
+
+
+def destination_soft_fail(tag: str, ad_label: str, *, no_media: bool = False) -> str:
     """Строка мягкого отказа назначения объявления `tag` (ACL-1543).
 
     Instant form не выключился — `<tag>_destination:instant_form_not_switched
@@ -15507,6 +15562,10 @@ def destination_soft_fail(tag: str, ad_label: str) -> str:
     base = f"{tag}_destination"
     if why == INSTANT_FORM_NOT_SWITCHED:
         return f"{base}:{why} - {ad_label}: {_simple.destination_why_text(why)}"
+    if no_media and why == "url_field_missing":
+        # Без медиа Meta не показывает поле URL: это следствие отказа
+        # креатива, а не отдельная поломка назначения (B97, 07.10).
+        return f"{base}:{URL_FIELD_NO_MEDIA} - {ad_label}: {_simple.destination_why_text(URL_FIELD_NO_MEDIA)}"
     return base
 
 
