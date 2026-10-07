@@ -245,6 +245,9 @@ CREATIVE_STEP_BUDGET_S = 25 * 60
 #: Не начинать повтор загрузки, если от срока шага осталось меньше.
 CREATIVE_RETRY_MIN_S = 120.0
 
+#: Причина «медиатека открыта, копии файла в ней нет» (ACL-1637).
+LIBRARY_HAS_NO_COPY = "library_has_no_copy"
+
 #: ACL-1354: столько подряд непрочитанных опросов блока Media (~10 с) —
 #: и проверка медиа кончается: вкладка не читается, ждать нечего.
 MEDIA_CHECK_UNREADABLE_POLLS = 20
@@ -6915,22 +6918,41 @@ _CATEGORY_END_JS = (
       const root = document.querySelector('[data-rpa-placements-marker]') || document;
       const hit = rowFor(root, name);
       if (!hit) return { end: false, why: 'category row not found' };
-      let btn = hit.row;
-      for (let i = 0; i < 12 && btn; i++) {
-        if (btn.getAttribute('role') === 'list') { btn = null; break; }
-        if (btn.getAttribute('role') === 'button' && btn.hasAttribute('aria-expanded')) break;
-        btn = btn.parentElement;
+      // ACL-1629 (b40ba4e8c2d6, 05.10–06.10): вторая разметка раскрывателя —
+      // обычная `<button aria-label="Expand|Collapse">` в `li` категории, без
+      // `aria-expanded` вовсе; подпункты лежат в том же блоке
+      // `ads_placement_expandable_list_item_*`. Прежний подъём по
+      // `[role=button][aria-expanded]` на ней отвечал «collapsed» при открытом
+      // списке, и «Messenger Stories» нельзя было признать «не предлагается».
+      const catLi = hit.row.closest('li');
+      const lblBtn = catLi && [...catLi.querySelectorAll('button[aria-label]')].find(b =>
+        !b.hasAttribute('aria-expanded') && /^(expand|collapse)$/i.test(b.getAttribute('aria-label') || ''));
+      let btn = null, region = null, item = null, own = null;
+      if (lblBtn) {
+        if (/^expand$/i.test(lblBtn.getAttribute('aria-label'))) return { end: false, why: 'collapsed' };
+        region = hit.row.closest('[id^="ads_placement_expandable_list_item_"]') || catLi.parentElement;
+        own = hit.cb;
+        item = region.closest('li');
+      } else {
+        btn = hit.row;
+        for (let i = 0; i < 12 && btn; i++) {
+          if (btn.getAttribute('role') === 'list') { btn = null; break; }
+          if (btn.getAttribute('role') === 'button' && btn.hasAttribute('aria-expanded')) break;
+          btn = btn.parentElement;
+        }
+        if (!btn) return { end: false, why: 'no expander' };
+        if (btn.getAttribute('aria-expanded') !== 'true') return { end: false, why: 'collapsed' };
+        const ctl = btn.getAttribute('aria-controls');
+        region = ctl ? document.getElementById(ctl) : null;
+        if (!region && btn.parentElement)
+          region = btn.parentElement.querySelector(':scope > [role=region]');
+        item = btn.closest('[role=listitem], li');
       }
-      if (!btn) return { end: false, why: 'no expander' };
-      if (btn.getAttribute('aria-expanded') !== 'true') return { end: false, why: 'collapsed' };
-      const ctl = btn.getAttribute('aria-controls');
-      let region = ctl ? document.getElementById(ctl) : null;
-      if (!region && btn.parentElement)
-        region = btn.parentElement.querySelector(':scope > [role=region]');
       if (!region) return { end: false, why: 'no region' };
       const shown = (e) => !!e && e.getClientRects().length > 0;
       const rowOf = (cb) => cb.closest('[role=listitem], li, label') || cb.parentElement;
-      const cbs = [...region.querySelectorAll('input[type=checkbox], [role=checkbox]')];
+      const cbs = [...region.querySelectorAll('input[type=checkbox], [role=checkbox]')]
+        .filter(cb => cb !== own);
       if (!cbs.length) return { end: false, why: 'no rows', rows: 0 };
       // Внутренняя прокрутка списка — ко дну: виртуальный хвост монтируется так.
       const scrollers = [region, ...region.querySelectorAll('*')].filter(e =>
@@ -6941,7 +6963,6 @@ _CATEGORY_END_JS = (
       const hidden = cbs.filter(cb => !shown(rowOf(cb))).length;
       const atBottom = scrollers.every(s => s.scrollTop + s.clientHeight >= s.scrollHeight - 2);
       const busy = [...region.querySelectorAll('[role=progressbar]')].some(shown);
-      const item = btn.closest('[role=listitem], li');
       const next = item ? item.nextElementSibling : null;
       const out = { rows: cbs.length, hidden, last_shown: shown(lastRow), at_bottom: atBottom,
                     busy, next: next ? shown(next) : null };
@@ -6957,6 +6978,11 @@ _CATEGORY_END_JS = (
 #: отказах; бесконечный цикл против страницы, которая сворачивает на каждый
 #: клик, — хуже честного отказа.
 _PLACEMENT_REOPENS = 2
+
+#: Сколько секунд после обхода всех разделов доделывать увиденные, но не вставшие
+#: площадки (ACL-1629): недоступная на первом заходе галочка освобождается, когда
+#: Meta закончит сохранение.
+_PLACEMENTS_RECONCILE_MAX_S = 6.0
 
 
 #: JS-кусок: заголовки карточки Placements — `placementsHeadings()`.
@@ -6979,6 +7005,111 @@ _PLACEMENTS_HEADING_JS = r"""
   const placementsHeadings = () => [...document.querySelectorAll('[role=heading]')]
     .filter(h => phTitle(h) === 'Placements');
 """
+
+
+_PLACEMENTS_CARD_STATE_JS = r"""() => {""" + _PLACEMENTS_HEADING_JS + r"""
+  for (const e of document.querySelectorAll('[data-rpa-placements-card-button]'))
+    e.removeAttribute('data-rpa-placements-card-button');
+  const heads = placementsHeadings();
+  for (const h of heads) {
+    const bar = h.closest('[role=toolbar]');
+    if (!bar || !bar.id) continue;
+    const btns = [...document.querySelectorAll('[role=button][aria-pressed]')]
+      .filter(b => (b.getAttribute('aria-labelledby') || '').split(/\s+/).includes(bar.id));
+    if (!btns.length) continue;
+    if (btns.some(b => b.getAttribute('aria-pressed') === 'true')) return { found: true, pressed: true };
+    const btn = btns[0];
+    btn.setAttribute('data-rpa-placements-card-button', '1');
+    btn.scrollIntoView({ block: 'center', behavior: 'instant' });
+    // Жмём в заголовок слева, а не в центр шапки: внутри заголовка лежат кнопки
+    // «Explore placement opportunities» / «More options» (28.09), и попадание
+    // годится, только если под точкой нет ничего нажимаемого, кроме самой карточки.
+    const r = h.getBoundingClientRect();
+    const x = r.x + Math.min(r.width / 2, 40), y = r.y + Math.min(r.height / 2, 12);
+    const hit = document.elementFromPoint(x, y);
+    const inner = !!hit && !!hit.closest(
+      'a, button, input, select, textarea, label, [role=link], [role=checkbox], [role=switch], [role=combobox]');
+    const rb = hit && hit.closest('[role=button]');
+    const foreign = !!rb && !btns.includes(rb);
+    return { found: true, pressed: false, x, y, hit: !!hit && btn.contains(hit) && !inner && !foreign };
+  }
+  return { found: false };
+}"""
+"""Свёрнута ли карточка Placements (кнопка-сводка `aria-pressed=false`) и куда жать."""
+
+
+def _placements_card_pressed(page: Page, wait_s: float) -> bool:
+    for _ in range(max(1, int(wait_s / 0.25))):
+        try:
+            if page.evaluate(
+                "() => { const b = document.querySelector('[data-rpa-placements-card-button]');"
+                " return !!b && b.getAttribute('aria-pressed') === 'true'; }"
+            ):
+                return True
+        except Exception:
+            return False
+        time.sleep(0.25)
+    return False
+
+
+def _open_collapsed_placements_card(page: Page) -> str:
+    """Раскрыть свёрнутую карточку Placements — в любом редакторе (ACL-1629).
+
+    ab33293af6d7 (Facebook_9403A, 06.10): классический редактор ad set
+    (`/adsets/edit/standalone`) показал ту же свёрнутую карточку, что и
+    редактор «в один экран» — сводка «Account controls: None set · Platforms ·
+    Placements: Advantage+ placements» (`role=button aria-pressed=false`), тело
+    в `<div hidden>`. Раскрывал её только путь `simple_create`; здесь шаг
+    искал категории в скрытом теле: «видно 0 категорий из 5».
+
+    "absent" — карточки-сводки нет (прежняя карточка, без сворачивания);
+    "open" — уже раскрыта; "opened" — раскрыли; "failed" — не раскрылась ни
+    нажатием в заголовок, ни DOM-кликом по её кнопке.
+    """
+    try:
+        state = page.evaluate(_PLACEMENTS_CARD_STATE_JS) or {}
+    except Exception:
+        return "absent"
+    if not state.get("found"):
+        return "absent"
+    if state.get("pressed"):
+        return "open"
+    how = ""
+    if state.get("hit"):
+        try:
+            _cdp_mouse_click(page, state["x"], state["y"])
+        except Exception:
+            pass
+        if _placements_card_pressed(page, 3.0):
+            how = "cdp"
+    if not how:
+        try:
+            page.evaluate(
+                "() => { const b = document.querySelector('[data-rpa-placements-card-button]');"
+                " if (b) b.click(); }")
+        except Exception:
+            pass
+        if _placements_card_pressed(page, 3.0):
+            how = "dom"
+    result = "opened" if how else "failed"
+    _telemetry.record("placements_card", result == "opened", note=result, diag={"how": how})
+    if how:
+        # Тело открытой карточки ещё может грузиться — ждём индикатор.
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < _PLACEMENTS_CARD_LOAD_WAIT_S:
+            try:
+                busy = page.evaluate(
+                    """() => { const sec = document.querySelector(
+                        '[data-surface$="adset_placement_static_pgd_section"]');
+                      return !!sec && [...sec.querySelectorAll('[role=progressbar]')].some(p =>
+                        !p.closest('[hidden]') && (p.getAttribute('aria-busy') === 'true'
+                          || /loading/i.test(p.getAttribute('aria-valuetext') || ''))); }""")
+            except Exception:
+                break
+            if not busy:
+                break
+            _sleep_h(0.5)
+    return result
 
 
 def _tag_placements_section(page: Page) -> dict:
@@ -7109,6 +7240,23 @@ def _wheel_to_placements_card(page: Page, max_ticks: int = 40) -> int:
     return -1
 
 
+def _placements_exclusion_notice_shown(page: Page) -> bool:
+    """На карточке есть объявление Meta «Excluding placements ... will no longer be available».
+
+    ACL-1336: Meta снимает ручные исключения площадок на уровне ad set. Это не
+    промах селектора и не «категории под Show more settings», а то, что
+    категорий на карточке больше нет.
+    """
+    try:
+        return bool(page.evaluate(
+            """() => { const root = document.querySelector('[data-rpa-placements-marker]') || document.body;
+                return /will no longer be available for your ad sets/i.test(
+                  (root.textContent || '').replace(/\\s+/g, ' ')); }"""
+        ))
+    except Exception:
+        return False
+
+
 def _placements_exclusion_removed(page: Page) -> bool:
     """Карточка Placements, на которой Meta убрала ручной выбор площадок.
 
@@ -7207,6 +7355,80 @@ def _excluded_placements_summary(page: Page) -> str | None:
         return None
 
 
+def _open_account_controls_dialog(page: Page) -> tuple[str | None, dict | None]:
+    """Открыть окно «Placement controls for this ad account» с карточки Placements.
+
+    Возвращает (`None`, состояние строки) или (метка отказа, состояние строки).
+    Метки `account_controls_row_not_found` и `edit_placement_controls_not_found`
+    значат «на карточке этого нет» — Meta такого не предлагает; `*_read_error` —
+    сбой чтения страницы, не вывод о том, что предлагает Meta.
+    """
+    # Строка «Account controls» — раскрывашка; внутри кнопка «Edit placement controls».
+    #
+    # Живой прогон 0054550ac608 (22:49): `row.click` — TimeoutError на обоих
+    # аккаунтах, хотя после прогона тот же клик в том же окне проходил. Во
+    # время шага карточка ещё не прокручена в видимую часть редактора, и
+    # Playwright ждёт «видимости», которой без прокрутки нет. Поэтому: сперва
+    # прокрутить сам узел, затем честный клик, а если он всё равно отказал —
+    # клик DOM по тому же узлу.
+    row_state = _scroll_and_mark(
+        page,
+        r"[...document.querySelectorAll('[role=button][aria-expanded]')]"
+        r".find(e => /^Account controls/i.test(norm(e.textContent)))",
+        "account-controls-row",
+    )
+    if row_state is None:
+        return "account_controls_row_not_found", None
+    if row_state.get("read_error"):
+        return "account_controls_row_read_error", row_state
+    if row_state.get("expanded") != "true":
+        how = _click_marked(page, "account-controls-row")
+        if not how:
+            return "account_controls_row_click_failed", row_state
+        _sleep_h(1.2)
+    edit_state = _scroll_and_mark(
+        page,
+        r"[...document.querySelectorAll('[role=button]')]"
+        r".find(e => norm(e.textContent) === 'Edit placement controls')",
+        "edit-placement-controls",
+    )
+    if edit_state is None:
+        return "edit_placement_controls_not_found", row_state
+    if edit_state.get("read_error"):
+        return "edit_placement_controls_read_error", row_state
+    if not _click_marked(page, "edit-placement-controls"):
+        return "edit_placement_controls_not_clickable", row_state
+    try:
+        _account_controls_dialog(page).wait_for(state="visible", timeout=8000)
+    except Exception:
+        return "dialog_did_not_open", row_state
+    return None, row_state
+
+
+def _verify_account_exclusions_in_dialog(page: Page) -> dict:
+    """Прочитать сохранённые исключения из самого окна аккаунта (ACL-1629).
+
+    ab33293af6d7 (9403A): четыре площадки сняты и подтверждены, а строка
+    «Excluded placements» на карточке так и осталась «None» — карточка
+    обновляется не сразу или не обновляется вовсе. Достоверно — только окно:
+    открываем его заново, читаем переключатель и четыре галочки, закрываем
+    через Cancel, ничего не меняя.
+    """
+    err, _row = _open_account_controls_dialog(page)
+    if err:
+        return {"verified": False, "why": err}
+    dialog = _account_controls_dialog(page)
+    try:
+        switch_on = bool(dialog.get_by_label(_ACCOUNT_CONTROLS_SWITCH).first.is_checked())
+    except Exception:
+        switch_on = False
+    boxes = _account_exclusion_boxes(page)
+    _cancel_account_controls(page)
+    on = [n for n, v in boxes.items() if v is not False]
+    return {"verified": bool(switch_on and boxes and not on), "switch_on": switch_on,
+            "boxes": boxes, "not_excluded": on}
+
+
 def ensure_account_placement_exclusions(page: Page, report: dict | None = None) -> bool:
     """Исключить площадки на уровне рекламного аккаунта (Account controls).
 
@@ -7227,43 +7449,28 @@ def ensure_account_placement_exclusions(page: Page, report: dict | None = None) 
 
     report["summary_before"] = _excluded_placements_summary(page)
 
-    # 1. Строка «Account controls» — раскрывашка; внутри кнопка «Edit placement controls».
-    #
-    # Живой прогон 0054550ac608 (22:49): `row.click` — TimeoutError на обоих
-    # аккаунтах, хотя после прогона тот же клик в том же окне проходил. Во
-    # время шага карточка ещё не прокручена в видимую часть редактора, и
-    # Playwright ждёт «видимости», которой без прокрутки нет. Поэтому: сперва
-    # прокрутить сам узел, затем честный клик, а если он всё равно отказал —
-    # клик DOM по тому же узлу.
-    row_state = _scroll_and_mark(
-        page,
-        r"[...document.querySelectorAll('[role=button][aria-expanded]')]"
-        r".find(e => /^Account controls/i.test(norm(e.textContent)))",
-        "account-controls-row",
-    )
-    if row_state is None:
-        return _record(False, "account_controls_row_not_found")
-    if row_state.get("expanded") != "true":
-        how = _click_marked(page, "account-controls-row")
-        if not how:
-            return _record(False, "account_controls_row_click_failed", row=row_state)
-        _sleep_h(1.2)
-    edit_state = _scroll_and_mark(
-        page,
-        r"[...document.querySelectorAll('[role=button]')]"
-        r".find(e => norm(e.textContent) === 'Edit placement controls')",
-        "edit-placement-controls",
-    )
-    if edit_state is None:
-        return _record(False, "edit_placement_controls_not_found", row=row_state)
-    if not _click_marked(page, "edit-placement-controls"):
-        return _record(False, "edit_placement_controls_not_clickable", row=row_state)
-
+    # 1–2. Строка «Account controls» → «Edit placement controls» → окно.
+    err, row_state = _open_account_controls_dialog(page)
+    if err in ("account_controls_row_read_error", "edit_placement_controls_read_error"):
+        # Вызов страницы упал — это сбой чтения, а не вывод «Meta не предлагает».
+        report["account_exclusions_warning"] = (
+            "Could not read the Placements card (the page call failed), so the "
+            "account-level placement exclusions were not applied."
+        )
+        return _record(False, err, row=row_state)
+    if err in ("account_controls_row_not_found", "edit_placement_controls_not_found"):
+        # ACL-1629: Meta не предлагает исключения — не «ошибка селектора», а
+        # предупреждение, которое видно в отчёте и в причине отказа шага.
+        report["account_exclusions_warning"] = (
+            "Meta no longer offers account-level placement exclusions here: "
+            + ("the 'Account controls' row" if err == "account_controls_row_not_found"
+               else "the 'Edit placement controls' button")
+            + " is not on the Placements card, so the placements were not excluded."
+        )
+        return _record(False, "account_controls_not_offered", missing=err, row=row_state)
+    if err:
+        return _record(False, err, row=row_state)
     dialog = _account_controls_dialog(page)
-    try:
-        dialog.wait_for(state="visible", timeout=8000)
-    except Exception:
-        return _record(False, "dialog_did_not_open")
 
     # 2. Переключатель «My business can only advertise on specific placements».
     switch = dialog.get_by_label(_ACCOUNT_CONTROLS_SWITCH)
@@ -7329,10 +7536,23 @@ def ensure_account_placement_exclusions(page: Page, report: dict | None = None) 
     # редактор остался на ad set, и `ad_name` упал. Закрываем крестиком.
     _close_account_controls_toast(page)
 
-    # 5. Проверка: карточка больше не говорит «None».
-    summary = _excluded_placements_summary(page)
-    if summary is not None and summary.strip().lower() in ("", "none"):
-        return _record(False, "summary_still_none", changed=changed, confirmed=confirmed, summary=summary)
+    # 5. Проверка: карточка больше не говорит «None». Meta обновляет её с
+    # задержкой (а на свёрнутой карточке — может и не обновить), поэтому читаем
+    # несколько раз; если «None» так и осталось — достоверность даёт только
+    # повторное чтение окна аккаунта (ACL-1629, ab33293af6d7).
+    summary = None
+    for _ in range(6):
+        summary = _excluded_placements_summary(page)
+        if summary is not None and summary.strip().lower() not in ("", "none"):
+            break
+        _sleep_h(1.0)
+    if summary is None or summary.strip().lower() in ("", "none"):
+        proof = _verify_account_exclusions_in_dialog(page)
+        if proof.get("verified"):
+            return _record(True, "excluded_verified_in_dialog", changed=changed,
+                           confirmed=confirmed, summary=summary)
+        return _record(False, "summary_still_none", changed=changed, confirmed=confirmed,
+                       summary=summary, dialog=proof)
     if summary:
         absent = [n for n in _ACCOUNT_EXCLUDED_PLACEMENTS if n.lower() not in summary.lower()]
         if absent:
@@ -7345,6 +7565,8 @@ def _scroll_and_mark(page: Page, finder_js: str, mark: str) -> dict | None:
     """Найти узел выражением `finder_js`, прокрутить к нему и пометить.
 
     Возвращает {expanded, w, h} после прокрутки или None, если узла нет.
+    Если сам вызов страницы упал — {"read_error": ...}: это «не смогли
+    прочитать», а не «узла нет» (ревью PR #636, F5).
     """
     js = (
         "(mark) => { const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();"
@@ -7358,8 +7580,8 @@ def _scroll_and_mark(page: Page, finder_js: str, mark: str) -> dict | None:
     )
     try:
         state = page.evaluate(js, mark)
-    except Exception:
-        return None
+    except Exception as exc:
+        return {"read_error": f"{type(exc).__name__}: {exc}"[:120]}
     _sleep_h(0.6)
     return state
 
@@ -7630,6 +7852,11 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     _dbg.append(f"placements_y={placements_y} via={placements_y_via}")
     if placements_y is None:
         return _card_not_found({"tagged": False, "stage": "scroll"})
+
+    # ACL-1629: свёрнутая карточка (сводка вместо тела) — раскрыть, пока нет метки.
+    card_open = _open_collapsed_placements_card(page)
+    report["placements_card_open"] = card_open
+    _dbg.append(f"card_open={card_open}")
 
     # Confirmed live 2026-07-27: Y-coordinate disambiguation between
     # Budget & schedule's "Show more settings" and Placements' own kept
@@ -8336,6 +8563,16 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # longer be available for your ad sets». Кликать там нечего; в том же
         # кабинете соседнее ad set ещё получало старую карточку (17:41 PF ok).
         # Отличаем это от промаха селектора, чтобы оператор видел причину.
+        if report.get("placements_card_open") == "failed":
+            # Карточка свёрнута и не раскрылась: аккаунт-уровень с неё не трогаем —
+            # скрытое тело не показывает, что с ним на самом деле.
+            report["why"] = "placements_card_not_opened"
+            report["notice"] = (
+                "The Placements card is collapsed and could not be opened, so the "
+                "manual placements could not be set."
+            )
+            _dump_dbg()
+            return False
         if _placements_exclusion_removed(page):
             # Решение владельца 16.09: исключения ставим сами — на уровне
             # аккаунта, единственном, где Meta их ещё принимает.
@@ -8345,10 +8582,39 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             # площадками вместо 7. Успех — только пять категорий по списку.
             report["account_exclusions_ok"] = ensure_account_placement_exclusions(page, report)
             report["why"] = "placement_categories_not_reached"
-            report["notice"] = (
-                "The placement categories under Show more settings could not be "
-                "set, so the ad set would run on more placements than requested."
+            # ACL-1629: причина называет и судьбу исключений аккаунта — применены
+            # и проверены, не предлагаются Meta или не встали.
+            if report["account_exclusions_ok"]:
+                tail = ("The account-level placement exclusions were applied and verified, "
+                        "but they do not replace the requested manual placements.")
+            elif report.get("account_exclusions_warning"):
+                tail = report["account_exclusions_warning"]
+            else:
+                tail = ("The account-level placement exclusions were not applied ("
+                        + str(report.get("account_exclusions") or "unknown") + ").")
+            # ACL-1336 называем, только если на открытой карточке нет ручного
+            # входа (ни «Show more settings», ни узла «Placements»): то же
+            # объявление есть и на B90, где ручные площадки ещё предлагаются.
+            manual_entry = (
+                _present_in_placements("Show more settings", exact=False)
+                or _present_in_placements("Hide settings", exact=False)
+                or bool((report.get("expand_placements") or {}).get("found"))
+                or bool((report.get("placement_controls") or {}).get("found"))
             )
+            if _placements_exclusion_notice_shown(page) and not manual_entry:
+                # Карточка открыта и без категорий, а Meta сама пишет, что
+                # исключения площадок больше не будут доступны (ACL-1336):
+                # не «категории под Show more settings», а отказ Meta.
+                report["notice"] = (
+                    "Meta no longer offers manual placement exclusions on this ad set "
+                    "(ACL-1336); placements left as Meta set them. " + tail
+                )
+            else:
+                report["notice"] = (
+                    "The placement categories under Show more settings could not be "
+                    "set, so the ad set would run on more placements than requested. "
+                    + tail
+                )
             return False
         _dump_dbg()
         return False
@@ -8358,6 +8624,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     # ── категории ────────────────────────────────────────────────────────
     report["categories"] = {}
     locked_ok: list[str] = []
+    cat_wrong: list[str] = []
     for name, want in _PLACEMENT_CATEGORIES.items():
         res = _set_category(name, want)
         report["categories"][name] = res
@@ -8376,7 +8643,20 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             ):
                 locked_ok.append(name)
             else:
-                ok = False
+                # ACL-1629, ревью PR #636 (F1): Meta держит галочку категории
+                # включённой и недоступной, пока сохраняет клик; через пару
+                # секунд она свободна и в нужном (или откатившемся) состоянии.
+                # Сразу отказом не считаем — категория уходит в `cat_wrong`, и
+                # `_reconcile` перечитает её и кликнет заново, когда разблокируется.
+                if want:
+                    # R2-1/R2-2 (PR #636): у Meta родитель читается `false`, пока
+                    # включена лишь часть его площадок, а план всегда часть
+                    # выключает. Включаемую категорию по её галочке не судим и
+                    # не кликаем повторно (клик по частичной включает ВСЕ её
+                    # площадки и отменяет наши исключения): судят её строки.
+                    report.setdefault("categories_judged_by_rows", []).append(name)
+                else:
+                    cat_wrong.append(name)
         _sleep_h(0.3)
     if locked_ok:
         report["categories_locked_as_wanted"] = locked_ok
@@ -8486,6 +8766,12 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         last: tuple | None = None
         quiet_from = t0
         reads = 0
+        reopened = 0
+        # ACL-1629 (b359855fb534, B91 07:25: `reads: 1, waited_s: 10.8`): бюджет
+        # ожидания считается от ПЕРВОГО ответа страницы, а не от входа сюда —
+        # медленный первый ответ съедал все шесть секунд, второго чтения не
+        # было, список «не устоялся», и «Messenger Stories» оставалась пропажей.
+        first_read_at: float | None = None
         labels: list[str] = []
         end: dict = {}
         stable = False
@@ -8496,6 +8782,15 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                 end = {"error": str(exc)[:80]}
             labels = _subitem_labels()
             reads += 1
+            if first_read_at is None:
+                first_read_at = time.monotonic()
+            # Раздел свёрнут (Meta перерисовала его после сохранения) — раскрыть
+            # заново, а не ждать до конца бюджета свёрнутого списка.
+            if end.get("why") == "collapsed" and reopened < _PLACEMENT_REOPENS:
+                reopened += 1
+                _expand_category(name)
+                _sleep_h(0.6, spread=0.0)
+                continue
             fresh = [x for x in labels if not _label_on_page(x, here)]
             if fresh:
                 here.extend(fresh)
@@ -8510,7 +8805,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             elif now - quiet_from >= _SUBITEMS_SETTLE_QUIET_S and end.get("end"):
                 stable = True
                 break
-            if now - t0 >= _SUBITEMS_SETTLE_MAX_S:
+            if reads >= 2 and now - first_read_at >= _SUBITEMS_SETTLE_MAX_S:
                 break
             _sleep_h(0.25, spread=0.0)
         on_unseen = [x for x in own if x in _SUBITEMS_ON and not _label_on_page(x, here)]
@@ -8522,6 +8817,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
             "on_unseen": on_unseen,
             "open": open_now,
             "end": end,
+            "reopened": reopened,
             "complete": stable and open_now and not on_unseen and bool(end.get("end")),
         }
 
@@ -8621,6 +8917,106 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                                    if x in remaining_off
                                    and not _label_on_page(x, report["subitems_seen"]))
 
+    # ACL-1629 (b40ba4e8c2d6 и ещё 13 прогонов 05–06.10): «Ads on Facebook
+    # Reels» на первом заходе была недоступна и ещё включена («недоступна и не
+    # та»), а раздел In-stream, последний в списке, второго захода уже не
+    # получал; на снимке после шага галочка снята и доступна. Прежде чем
+    # записать увиденную площадку в «missing», читаем её состояние со страницы
+    # заново и доделываем: раскрываем её раздел (раскрывается только
+    # свёрнутый), ставим и перечитываем — пока не встала или не кончится срок.
+    # Площадку, которую страница так и не показала, это не касается.
+    def _category_now(name: str) -> tuple[bool | None, bool]:
+        """(галочка категории сейчас, доступна ли она) — со страницы, без клика."""
+        try:
+            cands = (_category_candidates() or {}).get(name) or []
+        except Exception:
+            cands = []
+        if not cands:
+            return None, False
+        first = cands[0]
+        return bool(first.get("checked")), not first.get("disabled")
+
+    def _reconcile_categories(rounds: int) -> bool:
+        """Один заход по категориям, которые не встали сразу (F1, PR #636).
+
+        Перечитывает каждую со страницы: встала — снимаем с учёта; недоступна —
+        ждём следующего захода (Meta ещё сохраняет); доступна и не та — один
+        новый клик через `_set_category`. Кликов на категорию не больше
+        `_PLACEMENT_REOPENS` — тот же предел, что у раскрытий: против страницы,
+        которая откатывает галочку на каждый клик, это честный отказ, а не цикл.
+        Возвращает True, если категория ещё ждёт разблокировки.
+        """
+        waiting = False
+        for name in list(cat_wrong):
+            want = _PLACEMENT_CATEGORIES[name]
+            if want:
+                continue            # только полностью выключаемые (Search results, Apps and sites)
+            now, enabled = _category_now(name)
+            if now is want:
+                cat_wrong.remove(name)
+                report.setdefault("categories_reconciled", {})[name] = rounds
+                report["categories"].setdefault(name, {})["checked"] = want
+                continue
+            if not enabled:
+                waiting = True
+                continue
+            clicks = report.setdefault("categories_reclicked", {})
+            if clicks.get(name, 0) >= _PLACEMENT_REOPENS:
+                continue
+            clicks[name] = clicks.get(name, 0) + 1
+            res = _set_category(name, want)
+            report["categories"][name] = res
+            if res.get("checkbox") and res.get("checked") is want:
+                cat_wrong.remove(name)
+                report.setdefault("categories_reconciled", {})[name] = rounds
+        return waiting and bool(cat_wrong)
+
+    def _reconcile() -> None:
+        t0 = time.monotonic()
+        rounds = 0
+        while True:
+            pending = [x for x in remaining_on + remaining_off
+                       if _label_on_page(x, report["subitems_seen"])]
+            if not pending and not cat_wrong:
+                return
+            if rounds >= 2 and time.monotonic() - t0 >= _PLACEMENTS_RECONCILE_MAX_S:
+                return
+            rounds += 1
+            report["subitems_reconciled"] = rounds
+            acted = False
+            # Категории — до подпунктов: их клик не раскрывает и не сворачивает
+            # разделы, а подпунктам раскрытие нужно оставить открытым.
+            waiting = _reconcile_categories(rounds) if cat_wrong else False
+            for cat in dict.fromkeys(_SUBITEM_CATEGORY.get(x) for x in pending):
+                if not cat:
+                    continue
+                # Перераскрытия здесь идут в тот же счёт `_PLACEMENT_REOPENS` на
+                # категорию: против страницы, сворачивающей раздел на каждый
+                # клик, — честный отказ, а не цикл «раскрыть-кликнуть» до конца
+                # срока (ACL-1313). Открытую категорию повтор не трогает.
+                if len((report.get("reopened") or {}).get(cat) or []) >= _PLACEMENT_REOPENS:
+                    continue
+                again = _expand_category(cat)
+                if again.get("was") == "false":
+                    report.setdefault("reopened", {}).setdefault(cat, []).append(
+                        {"was": "false", "reconcile": rounds,
+                         "lost": [x for x in pending if _SUBITEM_CATEGORY.get(x) == cat]})
+                acted = True
+                _sleep_h(0.8)
+                here = _subitem_labels()
+                report["subitems_seen"].extend(
+                    x for x in here if not _label_on_page(x, report["subitems_seen"]))
+                _pass(here)
+                _settle_visible(here)
+            if not acted and not waiting:
+                return
+            _sleep_h(1.0)
+
+    _reconcile()
+    if cat_wrong:
+        ok = False
+        report["categories_failed"] = list(cat_wrong)
+
     # «Не предлагается» — не отказ: на площадку, которой нет, показа не будет.
     # Включаемые сюда не попадают никогда — их отсутствие остаётся отказом.
     # Ревью PR #449 (B2): итог сверяется заново — пункт, который хоть где-то
@@ -8636,6 +9032,54 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
     _dbg.append(f"subitems_seen={report['subitems_seen']}")
     if report["subitems_missing"]:
         ok = False
+
+    # ACL-1629, ревью PR #636 (F3): итог — только по тому, что страница
+    # показывает В КОНЦЕ, а не по чтению в том же вызове, что и клик. Страница
+    # могла откатить галочку уже после захода; такой откат — отказ.
+    def _final_readback() -> list[dict]:
+        wrong: list[dict] = []
+        try:
+            cands = _category_candidates() or {}
+        except Exception:
+            cands = {}
+        for name, want in _PLACEMENT_CATEGORIES.items():
+            if want:
+                continue            # включаемая категория: галочка у Meta частичная, судят строки
+            rows = cands.get(name) if isinstance(cands, dict) else None
+            got = bool(rows[0].get("checked")) if rows else None
+            if got is not want:
+                wrong.append({"row": name, "want": want, "got": got})
+        plan = [(x, True) for x in _SUBITEMS_ON] + [(x, False) for x in _SUBITEMS_OFF]
+        for cat in dict.fromkeys(_SUBITEM_CATEGORY.get(x) for x, _w in plan):
+            if not cat:
+                continue
+            _expand_category(cat)       # раскрывает только свёрнутую
+            _sleep_h(0.6)
+            here = _subitem_labels()
+            for label, want in plan:
+                if _SUBITEM_CATEGORY.get(label) != cat:
+                    continue
+                if not _label_on_page(label, here):
+                    # Включаемая обязана читаться; выключаемая, которой нет
+                    # (Meta её не предлагает), судится выше.
+                    if want and _label_on_page(label, report["subitems_seen"]):
+                        wrong.append({"row": label, "want": want, "got": None})
+                    continue
+                try:
+                    res = page.evaluate(PLACEMENTS_SUBITEM_READ_JS, label) or {}
+                except Exception as exc:
+                    res = {"found": False, "why": str(exc)[:80]}
+                got = res.get("checked") if res.get("found") else None
+                if got is not want:
+                    wrong.append({"row": label, "want": want, "got": got})
+        return wrong
+
+    if ok:
+        late = _final_readback()
+        report["final_readback"] = {"mismatch": late}
+        if late:
+            ok = False
+            _dbg.append(f"final_readback mismatch={late}")
 
     # Пока хоть что-то не сошлось, отказ должен принести разметку строк, а не
     # одно число. Круг 13 стоил целого прогона ровно потому, что «Search
@@ -10131,12 +10575,29 @@ def _upload_ad_creative_with_retry(
         diag = {"file": Path(creative_path).name}
         if blocked_by:
             diag["blocked_by"] = blocked_by
-        _telemetry.record("ad_creative_upload", False, note=why, diag=diag)
-        # В итог шага — то, что на самом деле помешало: до Media не дошли —
-        # это про мастер, а не про правило «второй раз не грузим».
-        _set_upload_why(blocked_by if blocked_by in _NAVIGATION_WHYS
-                        or blocked_by == "upload_exception" else why)
-        return False
+        if upload_already_failed(creative_path):
+            # Причину прошлого провала несём в диагностику: именно она решает,
+            # можно ли заливать заново.
+            diag["earlier_failure"] = failed_upload_reason(creative_path)
+        if (blocked_by == LIBRARY_HAS_NO_COPY
+                and upload_failure_allows_reupload(creative_path)
+                and _creative_left() >= CREATIVE_RETRY_MIN_S):
+            # ACL-1637: мастер дошёл до Media, медиатека спрошена по обоим
+            # именам, и копии нет. Правило «второй раз не грузим» не должно
+            # оставлять объявление пустым: заливаем файл для ЭТОГО объявления
+            # заново — один раз на объявление, одной попыткой. Но только если
+            # файл до Meta не доходил (`file_not_landed`, мастер): файл,
+            # который Meta отвергла или чей кроп не сошёлся, не грузим снова.
+            _telemetry.record("ad_creative_upload", None, note="reupload_library_has_no_copy",
+                              diag=diag)
+            attempts = 1
+        else:
+            _telemetry.record("ad_creative_upload", False, note=why, diag=diag)
+            # В итог шага — то, что на самом деле помешало: до Media не дошли —
+            # это про мастер, а не про правило «второй раз не грузим».
+            _set_upload_why(blocked_by if blocked_by in _NAVIGATION_WHYS
+                            or blocked_by == "upload_exception" else why)
+            return False
 
     for attempt in range(attempts):
         # Причина — только последней попытки: не оставлять причину первой,
@@ -10170,8 +10631,8 @@ def _upload_ad_creative_with_retry(
             # Отказ по самому медиа объявления: ни «медиа есть», ни вторая
             # попытка его не исправят (порт ACL-1284).
             _close_creative_setup_modal(page)
-            _remember_upload_failed(creative_path)
             _set_upload_why(_refused_why())
+            _remember_upload_failed(creative_path)
             return False
         _close_creative_setup_modal(page)
         _sleep_h(0.8)
@@ -10267,7 +10728,11 @@ def _upload_ad_creative_with_retry(
 #: креативом, и после провала на первом остальные два платили полную цену без
 #: единого шанса. Замер 15.09: `ad2_creative_upload` — 178 секунд в среднем,
 #: почти всё впустую; за день это 10 минут из 48.
-_failed_uploads: set[tuple[str, str]] = set()
+#:
+#: ACL-1637 (ревью M1): значение — причина провала. Только по ней решается,
+#: можно ли залить файл для следующего объявления заново: допустимо лишь
+#: когда файл до Meta не доходил.
+_failed_uploads: dict[tuple[str, str], str] = {}
 
 
 def _upload_memo_key(creative_path: str) -> tuple[str, str]:
@@ -10275,7 +10740,30 @@ def _upload_memo_key(creative_path: str) -> tuple[str, str]:
 
 
 def _remember_upload_failed(creative_path: str) -> None:
-    _failed_uploads.add(_upload_memo_key(creative_path))
+    # Причина — та, что уже названа для этого объявления (`last_upload_why`):
+    # вызывающий обязан назвать её до запоминания.
+    _failed_uploads[_upload_memo_key(creative_path)] = last_upload_why() or ""
+
+
+#: ACL-1637: провалы, после которых файл ещё можно залить для другого
+#: объявления: Meta его не видела. Отказ самой Meta (`media_refused_on_ad`),
+#: кроп и любая причина, при которой файл подавали, сюда не входят.
+_REUPLOAD_OK_WHYS = _NAVIGATION_WHYS | {"file_not_landed"}
+
+
+def upload_failure_allows_reupload(creative_path: str) -> bool:
+    """Можно ли заливать файл заново, помня его провал в этом прогоне?
+
+    Нет провала — можно. Есть — только если файл до Meta не доходил.
+    """
+    key = _upload_memo_key(creative_path)
+    if key not in _failed_uploads:
+        return True
+    return _failed_uploads[key] in _REUPLOAD_OK_WHYS
+
+
+def failed_upload_reason(creative_path: str) -> str:
+    return _failed_uploads.get(_upload_memo_key(creative_path), "")
 
 
 #: Файлы, которые в этом прогоне уже успешно загрузились.
@@ -11804,6 +12292,42 @@ def _media_step_behind(step: dict | None) -> bool:
     return steps.index("Media") < steps.index(current)
 
 
+#: Сколько раз за копией ходить в медиатеку объявлению 2+ (ACL-1637).
+_KNOWN_COPY_ROUNDS = 2
+#: Пауза между заходами: свежезагруженное видео в сетке появляется не сразу.
+_KNOWN_COPY_REFRESH_S = 8.0
+
+
+def _reuse_known_copy(page: Page, creative_path: str, is_video: bool) -> bool | None:
+    """Взять из медиатеки копию файла, уже уезжавшего в этом прогоне.
+
+    `True` — прикрепили; `False` — выбор не снялся, шаг обязан отказать;
+    `None` — копии нет ни под одним именем. Имена два: исходник (уже спрошен
+    выше, но на втором заходе спрашиваем снова — сетка могла дорисоваться) и
+    сжатая копия из кэша, под которой файл и лежит в медиатеке.
+    """
+    original = Path(creative_path).name
+    derived = ""
+    if is_video:
+        try:
+            from src.fb_ads_rpa import creative_compress
+
+            derived = creative_compress.cached_copy_name(creative_path)
+        except Exception:
+            derived = ""
+    for round_no in range(_KNOWN_COPY_ROUNDS):
+        if round_no:
+            if _creative_left() < _KNOWN_COPY_REFRESH_S + 30:
+                break  # срок шага на исходе — второй заход не начинаем
+            _sleep_h(_KNOWN_COPY_REFRESH_S)
+        names = ([derived] if derived else []) + ([original] if round_no else [])
+        for name in names:
+            decision = _reuse_upload_decision(page, name)
+            if decision is not None:
+                return decision
+    return None
+
+
 def upload_ad_creative(
     page: Page, creative_type: str, creative_path: str, *, edit_url: str = "",
     reuse_only: bool = False,
@@ -12024,13 +12548,21 @@ def upload_ad_creative(
             _set_upload_why("library_pick_left_selection")
         return verdict
     if reuse_only:
-        # Память прогона говорит, что файл уже уходил наверх: второй раз Meta
-        # его не берёт, медиатека была единственным путём, и копии там нет.
-        # Объявление оставляем как есть и называем причину.
+        # ACL-1637: в Meta уехала сжатая копия, а в медиатеке она подписана
+        # своим именем — по имени исходника плитки нет никогда. Ищем и по
+        # имени копии, и с одним повтором: свежая загрузка появляется в сетке
+        # не сразу.
+        known = _reuse_known_copy(page, creative_path, is_video)
+        if known is not None:
+            if known is False:
+                _set_upload_why("library_pick_left_selection")
+            return known
+        # Копии в медиатеке нет. Решает вызывающий: он заливает файл для этого
+        # объявления заново (один раз на объявление), а не оставляет его пустым.
         _close_creative_setup_modal(page)
         _telemetry.record("ad_creative_reuse", None, note="library_has_no_copy",
                           diag={"file": Path(creative_path).name})
-        _set_upload_why("library_has_no_copy")
+        _set_upload_why(LIBRARY_HAS_NO_COPY)
         return False
 
     # Clear the library search box before uploading. The reuse attempt just
@@ -14954,8 +15486,12 @@ def creative_soft_fail(tag: str, ad_label: str) -> str:
     """
     why = last_upload_why()
     base = f"{tag}_creative_upload"
-    if why in (_crop.WIZARD_STUCK, MEDIA_PICKER_LOADING):
+    if why in (_crop.WIZARD_STUCK, MEDIA_PICKER_LOADING, LIBRARY_HAS_NO_COPY,
+               "same_file_already_uploaded_this_run", "same_file_already_failed_this_run",
+               "file_not_landed", "wizard_not_opened"):
         # ACL-1559: выбор медиа шага Media не догрузился — тоже своим именем.
+        # ACL-1637: объявление без медиа из-за одного видео на нескольких
+        # объявлениях — причина называется, а не «creative_upload» без слов.
         return f"{base}:{why} - {ad_label}: {_simple.creative_why_text(why)}"
     return base
 
