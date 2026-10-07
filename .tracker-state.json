@@ -7817,7 +7817,7 @@
             "session": "run_s1649a_1006"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1649A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -7835,7 +7835,8 @@
           "report": "# ACL-1649 handoff (Worker-S1649A) - BLOCKED at commit\n\nState: all code and tests done in C:\\acl-1649-ci-cost (branch codex/acl-1649-ci-cost, base work/stage), UNCOMMITTED.\nThe Bash permission layer denied `git add ... && git commit` (twice, also with -F file). Not worked around.\nCommit message is ready: scratchpad\\commit_msg.txt.\n\nFiles: .github/workflows/{ci,delivery-check,windows-installer}.yml, scripts/{acl_ci_reuse,acl_ci_scope,acl_publish_release,acl_ci_minutes}.py,\ntests/{test_acl_ci_reuse,test_acl_ci_scope,test_acl_ci_workflows,test_ci_layout,test_acl_ci_chain,test_acl_ci_minutes}.py\n\nTests (foreground, --noconftest): chain 25 passed; reuse 80 (79 + the fixed admission case, re-verified 17 related); publish_release 45; ci_layout+workflows 49 passed 1 skipped\n(admission bash test skipped on Windows; the script was exercised manually with bash: ok); minutes 11; scope+platform 268+100 passed after linux-ok marks.\n\nFix during finish: a run now counts as proof only if its own admission job (ACL verification / Installer verification) passed.\n\nRemaining: commit, git fetch work + merge work/stage, push to work, open PR into stage (Tracker issues: ACL-1649), execution handoff --apply.\nSee the handback message for numbers, root cause and expected savings."
         },
         "pr": 666,
-        "queued_at": "2026-10-07T06:02:16+00:00"
+        "queued_at": "2026-10-07T06:02:16+00:00",
+        "reviewer": "Reviewer-R1649Q"
       },
       "641": {
         "implementers": [
@@ -8714,6 +8715,10 @@
       "Worker-C1572W": {
         "session": "run_c1572w_1007",
         "role": "Worker"
+      },
+      "Reviewer-R1649Q": {
+        "session": "rev_r1649q_1007",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -10413,13 +10418,23 @@
       653,
       641,
       651,
-      649,
       652,
       669,
       572,
       638
     ],
-    "review": null,
+    "review": {
+      "id": "74fd5f81160b47aa9fe434d5933aa1ff",
+      "pr": 666,
+      "issues": [
+        649
+      ],
+      "actor": "Reviewer-R1649Q",
+      "session": "rev_r1649q_1007",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-07T09:12:41+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -14761,6 +14776,13 @@
         "prs": [
           672
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T09:12:41+00:00",
+        "pr": 666,
+        "lane": "74fd5f81160b47aa9fe434d5933aa1ff",
+        "actor": "Reviewer-R1649Q"
       }
     ],
     "policy": {
