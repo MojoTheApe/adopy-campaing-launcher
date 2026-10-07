@@ -8867,7 +8867,7 @@
             "session": "run_o1702a_1007"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-O1702A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -8885,7 +8885,8 @@
           "report": "# ACL-1702 handoff - Worker-O1702A (run_o1702a_1007)\n\nPR: MojoTheApe/adopy-campaing-launcher#704 (codex/acl-1702-watchdog -> stage), commit b6a813ef.\nBranch base: work/stage at da6bb0e8 (ACL-1673 #683 already in stage).\n\n## Built\n- `src/fb_ads_rpa/tab_watchdog.py` (new):\n  - captures the job thread's stack;\n  - raw-websocket CDP client (stdlib only);\n  - `unblock_tab` (terminate, then reload except in the editor, then closeTarget);\n  - `unblock_tick` policy (threshold, same asyncio Task, takeover/teach skip, off switch, max 3 per job).\n- `publish_jobs`: the stuck watcher keeps running after `step_stuck`. It dumps the stack at `step_stuck`, ticks the unblocker, and writes `tab_unblocked` / `tab_unblock_skipped` rows plus a Sentry message.\n- `browser._connect_playwright`: records the CDP endpoint per job thread.\n- `page_liveness.tab_gone`: honours the hung mark, so the 1673 guards stop.\n- `ads_manager_flow` attempt loop and `rpa_publisher.publish_draft`: an unblock turns into `tab_hung:<step>`, with no retry and no re-attach replay.\n- `failure_policy` / `retry_policy`: `tab_hung` is BLOCKING and has a guide entry.\n- `report.html` build-model hold regex: `tab_unblocked`, `tab_unblock_skipped`, `tab_hung`.\n- `run_telemetry`: `last_run_id(job)`; watcher rows (`WATCHER_STEPS`) do not reset the silence clock.\n\n## Key findings\n- With sync Playwright, `sys._current_frames()[job_tid]` shows only the dispatcher greenlet (asyncio select). The real blocked call is `main_greenlet.gr_frame`. Without it the stack dump names nothing useful.\n- Real Chromium 1228, `while(true)` in `page.evaluate`:\n  - `Target.attachToTarget` answers immediately.\n  - `Runtime.terminateExecution` does NOT answer within 5 s and does not stop the script.\n  - `Page.reload` unblocks the call in ~0.3 s: \"Execution context was destroyed\".\n  - `Target.closeTarget` unblocks it in ~0.7 s: TargetClosedError.\n  - End to end with the default order: ~6 s after the threshold. Without terminate: ~0.6\u20131.2 s.\n  - Job thread CPU 0.00\u20130.05 s over 6\u201312 s. All non-counter threads under 0.5 s CPU, so no busy spin and no GIL hold.\n  - The second tab is untouched and answers.\n- Deviation from the Issue text: `Page.reload` is skipped when the URL path contains `/edit` (the ad editor). Reopening the Leads editor corrupts the ad (ACL-1353), so it goes straight to `closeTarget`.\n- Defaults: unblock at 180 s is earlier than `step_stuck` at 300 s, so the unblock writes its own stack dump (reason `tab_unblock`) before acting.\n\n## Tests\n- `tests/test_acl1702_tab_watchdog.py`: 19 tests with fakes, passing.\n- `tests/test_acl1702_tab_unblock_real_chromium.py`: 3 tests, windows_only, real Chromium, passing. Run in the foreground, one file, with free RAM above 6 GB.\n- Affected files pass locally: 1614, failure_policy, retry contract, build model, readable problems, run_telemetry, run_summary/Sentry, the 1673 guards, publisher tests, CI layout. The full suite runs only in CI.\n\n## Environment note\nOn this laptop a killed test Chromium sometimes takes 2\u20135 minutes to exit, even after `taskkill` reports SUCCESS. The fixture kills the tree (taskkill, then psutil) and warns instead of failing if a process is still exiting. All test Chromium processes (`acl1320_*` profile dirs) were gone at hand-off. My own attempt to force-kill the slow ones was denied by the permission classifier; they exited by themselves.\n\n## Not done / follow-ups\n- No live-run check. The first live verification is the next hang on a real profile: look for `tab_unblocked` rows and `output/stuck_stacks/*.txt`.\n- Obsidian diary entry left to the coordinator."
         },
         "pr": 704,
-        "queued_at": "2026-10-07T16:48:16+00:00"
+        "queued_at": "2026-10-07T16:48:16+00:00",
+        "reviewer": "Reviewer-R1702Q"
       },
       "705": {
         "implementers": [
@@ -9653,6 +9654,10 @@
       },
       "Reviewer-R1693W": {
         "session": "rev_r1693w_1007",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1702Q": {
+        "session": "rev_r1702q_1007",
         "role": "Reviewer"
       }
     },
@@ -11617,11 +11622,21 @@
       653,
       651,
       652,
-      702,
       705,
       710
     ],
-    "review": null,
+    "review": {
+      "id": "30655cbc44644e69bfbc12558e3bade9",
+      "pr": 704,
+      "issues": [
+        702
+      ],
+      "actor": "Reviewer-R1702Q",
+      "session": "rev_r1702q_1007",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-07T22:20:38+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -16375,6 +16390,13 @@
         "prs": [
           713
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T22:20:38+00:00",
+        "pr": 704,
+        "lane": "30655cbc44644e69bfbc12558e3bade9",
+        "actor": "Reviewer-R1702Q"
       }
     ],
     "policy": {
