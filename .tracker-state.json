@@ -2027,7 +2027,7 @@
       "source_sha": "872737889a376fbcdab4333c3a526055f06bbf2b",
       "main_tree": "c4d72b3e76ada9a76e8324d5a11b99bcb9dafd2a",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-07T13:35:03+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -3291,6 +3291,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-07T13:14:36+00:00"
+      },
+      "641": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 694,
+            "merge_sha": "db8b2244f5bed7b9cc68de122ddd049c9c65d3f8",
+            "tree_sha": "e7c834cfee05e7275a1fd01ca42e19f7e17825ee"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-07T13:56:39+00:00"
       }
     },
     "promotions": {
@@ -5744,6 +5756,31 @@
           "report": "ACL-1572 stage verification: Git and installer checks green on the actual stage bcc622d. Independent review: scratchpad/review_671.md."
         },
         "verified_at": "2026-10-07T12:36:44+00:00"
+      },
+      "694": {
+        "pr": 664,
+        "issues": [
+          641
+        ],
+        "tree_sha": "e7c834cfee05e7275a1fd01ca42e19f7e17825ee",
+        "source_sha": "872737889a376fbcdab4333c3a526055f06bbf2b",
+        "main_tree": "c4d72b3e76ada9a76e8324d5a11b99bcb9dafd2a",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-07T13:35:03+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "872737889a376fbcdab4333c3a526055f06bbf2b",
+          "tree_sha": "e7c834cfee05e7275a1fd01ca42e19f7e17825ee",
+          "checks": [
+            "Git checks on actual stage 8727378: CI run 37629595540 success (sharded, Python 3.11/3.13)",
+            "Windows installer run 37629595604 success"
+          ],
+          "report": "ACL-1641 stage verification: Git and installer checks green on the actual stage 8727378. Independent review: scratchpad/review_664.md."
+        },
+        "verified_at": "2026-10-07T13:36:23+00:00"
       }
     }
   },
