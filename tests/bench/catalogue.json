@@ -125,6 +125,7 @@
       "robot": "Next to the ad level; create_additional_ad via the tree's ad set menu",
       "layouts": [
         {"layout": "Left tree: campaign, ad set (action menu), ad", "seen": ["d3e690189a6e/04_create_additional_ad", "0afc79a410c6/04_create_additional_ad"], "fixture": "editor_tree_adset_2026_09_24.html", "fragment": null, "test": "tests/test_additional_ad_waits_for_tree.py", "expected": "ad set menu opens, ad created", "status": "pass"},
+        {"layout": "Left tree with a fresh \"New Leads Ad\" row in the middle (ACL-1675): ad rows are told apart by row id, not by place", "seen": ["4e4969867d28/12_ad4_create"], "fixture": "editor_tree_new_shell_between_2026_10_07.html", "fragment": null, "test": "tests/test_a_failed_ad_leaves_no_duplicate_shell.py", "expected": "only a row id that was not in the pre-create snapshot is adopted", "status": "pass"},
         {"layout": "AdsPERouteLoadPlaceholder spinner instead of the editor", "seen": ["7364047ef03c/05_create_additional_ad"], "fixture": "route_placeholder_2026_09_24.html", "fragment": null, "test": "tests/test_route_placeholder_is_loading.py", "expected": "not ready; spinner wins over a stale tree", "status": "pass"},
         {"layout": "Breadcrumb header only, no tree rows", "seen": ["7d2ce3ab1161/05_create_additional_ad"], "fixture": "breadcrumb_only_2026_09_24.html", "fragment": null, "test": "tests/test_additional_ad_waits_for_tree.py", "expected": "not ready, no blind click", "status": "pass"}
       ]
