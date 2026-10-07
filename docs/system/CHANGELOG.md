@@ -1,5 +1,23 @@
 # System history
 
+## Advantage+ audience on WhatsApp campaigns: a collapsed Age row with a note is opened again — ACL-1638
+
+The classic ad set editor failed the `advantage_plus_audience` step (`still_on`, campaign not published)
+on 06.10 on FacebookDoc120 and Facebook_9403A. These were two different failures.
+
+- Doc120 (and 4285247f763a on 05.10): on WhatsApp campaigns Meta writes the collapsed Age row as
+  "35 - 65+ · Unknown age on WhatsApp: Excluded" with a "Your suggestion" label. The robot only
+  recognised a summary that ended right after the bounds, so it never opened the row
+  (`age_row_opened: false`, `age: []`) and never unchecked "Use as a suggestion". The summary now
+  accepts a note after the bounds, so the row is opened, the suggestion is unchecked and the badge is
+  re-read as before.
+- 9403A (d4f9d5f016c1, 327c0b934cb3): the age was already a hard 35 - 65+ and the checkbox was off, but
+  the badge read "Advantage+ on" again after reading "off" before the age step. Nothing is left for the
+  robot to click, and the cause of the flip is not known from the captures, so the step still blocks the
+  draft. A failure now carries `age_suggestion_checked` and `mode` in its telemetry, and a read-only
+  `audience_badge_probe` row after the age, location, languages and targeting steps shows which step
+  flips the badge on the next occurrence.
+
 ## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
 
 The last rung of the fallback ladder: when a step fails on a screen the robot does not know (a
