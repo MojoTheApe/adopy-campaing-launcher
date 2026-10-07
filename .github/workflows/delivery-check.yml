@@ -1,6 +1,8 @@
 name: Delivery setup (draft adoption)
 on:
+  # ACL-1649: a branch push with an open PR ran this twice (push + pull_request); the PR run covers it.
   push:
+    branches: [master, main, stage]
   pull_request:
 permissions:
   contents: read
