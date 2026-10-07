@@ -43,7 +43,13 @@ class _Req:
 
 
 def _post(body):
-    r = asyncio.run(web.api_account_notes_set(_Req(body)))
+    # В отдельном потоке: после браузерных тестов в главном потоке уже крутится
+    # цикл событий Playwright, и asyncio.run там не запустить.
+    box = []
+    t = threading.Thread(target=lambda: box.append(asyncio.run(web.api_account_notes_set(_Req(body)))))
+    t.start()
+    t.join()
+    r = box[0]
     return r.status_code, json.loads(r.body)
 
 
@@ -60,19 +66,19 @@ def _file():
 def test_a_country_note_can_be_saved_loaded_deleted_and_undone():
     code, body = _post({"country": "Mexico", "text": "call Pedro"})
     assert code == 200 and body["kind"] == "country" and body["country"] == "Mexico"
-    assert _get_all()["countries"] == {"Mexico": "call Pedro"}
+    assert _get_all()["countries"] == {notes.country_key("Mexico"): "call Pedro"}
     assert _get_all()["notes"] == {}
     assert _post({"country": "Mexico", "text": ""})[0] == 200  # Delete
     assert _get_all()["countries"] == {}
     assert _post({"country": "Mexico", "text": "call Pedro"})[0] == 200  # Undo = записать прежний текст
-    assert _get_all()["countries"] == {"Mexico": "call Pedro"}
+    assert _get_all()["countries"] == {notes.country_key("Mexico"): "call Pedro"}
 
 
 def test_account_and_country_notes_with_the_same_name_are_independent():
     _post({"account": "Peru", "text": "account"})
     _post({"country": "Peru", "text": "country"})
     data = _get_all()
-    assert data["notes"] == {"Peru": "account"} and data["countries"] == {"Peru": "country"}
+    assert data["notes"] == {"Peru": "account"} and data["countries"] == {notes.country_key("Peru"): "country"}
     _post({"country": "Peru", "text": ""})
     assert _get_all()["notes"] == {"Peru": "account"}
 
@@ -90,14 +96,14 @@ def test_an_old_file_without_countries_migrates_without_loss():
     assert _get_all() == {"ok": True, "notes": {"Doc19": "keep", "Doc20": "me"}, "countries": {}}
     assert _post({"country": "Chile", "text": "new"})[0] == 200
     data = json.loads(_file().read_text(encoding="utf-8"))
-    assert data == {"notes": {"Doc19": "keep", "Doc20": "me"}, "countries": {"Chile": "new"}}
+    assert data == {"notes": {"Doc19": "keep", "Doc20": "me"}, "countries": {notes.country_key("Chile"): "new"}}
     assert not list(_file().parent.glob("account_notes.json.corrupt-*"))
 
 
 def test_an_account_save_keeps_the_country_notes():
     _post({"country": "Chile", "text": "c"})
     _post({"account": "A", "text": "a"})
-    assert json.loads(_file().read_text(encoding="utf-8")) == {"notes": {"A": "a"}, "countries": {"Chile": "c"}}
+    assert json.loads(_file().read_text(encoding="utf-8")) == {"notes": {"A": "a"}, "countries": {notes.country_key("Chile"): "c"}}
 
 
 def test_a_corrupt_file_is_moved_aside_and_an_unreadable_one_refuses(monkeypatch):
@@ -136,7 +142,7 @@ def test_mixed_concurrent_saves_keep_every_note():
     [t.join() for t in ts]
     data = json.loads(_file().read_text(encoding="utf-8"))
     assert data["notes"] == {f"Acc{i}": f"a{i}" for i in range(8)}
-    assert data["countries"] == {f"Land{i}": f"c{i}" for i in range(8)}
+    assert data["countries"] == {f"land{i}": f"c{i}" for i in range(8)}
 
 
 def test_notes_are_not_sent_anywhere():
@@ -159,7 +165,7 @@ def _row(name="Demo"):
 
 def _map(account_notes=None, country_notes=None, rows=None, country="Mexico"):
     amap = dict(dates=[], countries=[dict(country=country, key="MX", rows=rows or [_row("Demo"), _row("Quiet")],
-                                         spend=0, leads=0, deposits=0)],
+                                         spend=0, leads=0, deposits=0, note_key=notes.country_key(country))],
                 available=[], all_accounts=["Demo", "Quiet"], live={}, date_from="2026-09-01", date_to="2026-09-09",
                 span="", notes=account_notes or {}, country_notes=country_notes or {})
     return web.templates.env.get_template("_account_map.html").render(amap=amap, mlx={"A": "A", "B": "B"})
@@ -178,7 +184,7 @@ def test_an_empty_note_renders_no_text_anywhere():
 
 def test_a_filled_note_shows_its_first_line_and_the_full_text_in_the_tooltip():
     long = "first line " * 12 + "\nsecond line"
-    html = _map({"Demo": long}, {"Mexico": long})
+    html = _map({"Demo": long}, {notes.country_key("Mexico"): long})
     for pattern in (r'<td class="amap-acct-note"[^>]*>(.*?)</td>', r'<span class="amap-country-note"[^>]*>(.*?</span>)</span>'):
         shown = re.sub(r"<[^>]+>", "", re.search(pattern, html, re.S).group(1)).strip()
         assert "second line" not in shown and shown.endswith("…")
@@ -187,7 +193,7 @@ def test_a_filled_note_shows_its_first_line_and_the_full_text_in_the_tooltip():
 
 def test_note_text_is_escaped_in_both_places():
     evil = '"><img src=x onerror=alert(1)><script>alert(2)</script>'
-    html = _map({"Demo": evil}, {"Mexico": evil})
+    html = _map({"Demo": evil}, {notes.country_key("Mexico"): evil})
     assert "<img" not in html and "<script>alert" not in html
     assert html.count("&lt;img") >= 4
 
@@ -295,7 +301,7 @@ def test_a_country_note_saves_on_esc_and_does_not_toggle_the_country(browser):
     page.locator(".amap-note-pop textarea").fill("Mexico: ask about limits")
     page.keyboard.press("Escape")
     _gone(page)
-    assert notes.load_countries() == {"Mexico": "Mexico: ask about limits"}
+    assert notes.load_countries() == {notes.country_key("Mexico"): "Mexico: ask about limits"}
     assert "Mexico: ask about limits" in _country(page).inner_text()
     page.reload()
     assert "Mexico: ask about limits" in _country(page).inner_text()
@@ -422,4 +428,112 @@ def test_the_note_is_drawn_as_an_input_box_of_equal_height(browser):
     assert info["full"] > 0.8, info  # в строке аккаунта коробка занимает ячейку
     assert info["countryW"] <= 18 * 16 + 1, info  # в заголовке страны — компактная
     assert not errors, errors
+    page.close()
+
+
+# ---- ACL-1633 разбор: ключ страны и условный Undo --------------------------
+
+def test_a_country_code_and_its_name_are_one_note_and_case_does_not_matter():
+    assert notes.country_key("CR") == notes.country_key("Costa Rica") == notes.country_key("cr") == notes.country_key(" costa  rica ")
+    _post({"country": "Costa Rica", "text": "from the name"})
+    assert _post({"country": "CR", "text": "from the code"})[0] == 200
+    assert _get_all()["countries"] == {notes.country_key("CR"): "from the code"}
+    # неизвестные имена не сливаются по первым двум буквам
+    assert notes.country_key("Xyland") != notes.country_key("Xytown")
+
+
+def test_old_country_keys_migrate_on_read_and_on_write_without_loss():
+    _file().write_text(json.dumps({"notes": {"A": "a"}, "countries": {"Costa Rica": "one", "CR": "two", "Narnia": "n"}}),
+                       encoding="utf-8")
+    cr = notes.country_key("CR")
+    loaded = _get_all()["countries"]
+    assert set(loaded) == {cr, "narnia"} and loaded["narnia"] == "n"
+    assert loaded[cr] in ("one\ntwo", "two\none") or set(loaded[cr].split("\n")) == {"one", "two"}
+    assert _post({"account": "B", "text": "b"})[0] == 200  # запись мигрирует файл
+    data = json.loads(_file().read_text(encoding="utf-8"))
+    assert set(data["countries"]) == {cr, "narnia"} and data["notes"] == {"A": "a", "B": "b"}
+
+
+def test_the_template_looks_the_country_note_up_by_the_canonical_key():
+    notes.set_note("Costa Rica", "tico", "country")
+    for shown in ("CR", "Costa Rica"):
+        html = _map(notes.load(), notes.load_countries(), country=shown)
+        assert 'data-note="tico"' in html and f'data-key="{notes.country_key("CR")}"' in html
+
+
+def test_a_conditional_write_refuses_when_the_note_is_no_longer_empty():
+    _post({"account": "Demo", "text": "newer"})
+    code, body = _post({"account": "Demo", "text": "old", "if_empty": True})
+    assert code == 409 and not body["ok"]
+    assert _get_all()["notes"] == {"Demo": "newer"}
+    _post({"account": "Demo", "text": ""})
+    assert _post({"account": "Demo", "text": "old", "if_empty": True})[0] == 200
+    assert _get_all()["notes"] == {"Demo": "old"}
+
+
+def test_delete_then_edit_then_undo_keeps_the_newer_note(browser):
+    notes.set_note("Demo", "old")
+    page, errors = _open(browser)
+    _acct(page).click()
+    page.locator(".amap-note-del").click()
+    _gone(page)
+    assert notes.load() == {}
+    # Редактор открыт — тост Undo уходит сразу, чтобы нечем было затереть новое.
+    _acct(page).click()
+    assert not page.locator(".amap-note-toast").is_visible()
+    page.locator(".amap-note-pop textarea").fill("newer")
+    page.keyboard.press("Escape")
+    _gone(page)
+    assert notes.load() == {"Demo": "newer"}
+    assert not page.locator(".amap-note-toast").is_visible()
+    assert not errors, errors
+    page.close()
+
+
+def test_undo_after_a_server_side_change_does_not_overwrite(browser):
+    """Даже если тост остался (запись пришла из другого окна), сервер не даст
+    затереть: Undo шлёт if_empty."""
+    notes.set_note("Demo", "old")
+    page, errors = _open(browser)
+    _acct(page).click()
+    page.locator(".amap-note-del").click()
+    _gone(page)
+    notes.set_note("Demo", "written elsewhere")
+    page.locator(".amap-note-toast button").click()
+    page.wait_for_function("document.querySelector('.amap-note-toast').hidden")
+    assert notes.load() == {"Demo": "written elsewhere"}
+    assert not errors, errors
+    page.close()
+
+
+def test_a_failed_undo_says_so(browser):
+    notes.set_note("Demo", "old")
+    page = browser.new_page(viewport={"width": 1280, "height": 720})
+    state = {"fail": False}
+
+    def route(r):
+        if r.request.resource_type == "document":
+            r.fulfill(content_type="text/html", body=page_html())
+        elif r.request.method == "POST":
+            d = r.request.post_data_json
+            if d.get("if_empty") and state["fail"]:
+                r.fulfill(status=500, json={"ok": False, "error": "x"})
+                return
+            box = []
+            th = threading.Thread(target=lambda: box.append(asyncio.run(web.api_account_notes_set(_Req(d)))))
+            th.start()
+            th.join()
+            r.fulfill(status=box[0].status_code, content_type="application/json", body=box[0].body)
+        else:
+            r.fulfill(json={})
+
+    page.route("**/*", route)
+    page.goto("http://acl.test/")
+    _acct(page).click()
+    page.locator(".amap-note-del").click()
+    _gone(page)
+    state["fail"] = True
+    page.locator(".amap-note-toast button").click()
+    page.wait_for_function("document.querySelector('.amap-note-toast').textContent === 'Undo failed'")
+    assert notes.load() == {}
     page.close()

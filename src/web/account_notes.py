@@ -40,6 +40,44 @@ def _transaction():
             yield
 
 
+class NoteChanged(Exception):
+    """Условная запись (if_empty) отказала: заметку успели написать заново."""
+
+
+def country_key(name: str) -> str:
+    """Канонический ключ страны: «CR», «cr» и «Costa Rica» — одна заметка.
+
+    Известное имя страны и двухбуквенный код сводятся к коду (тот же справочник,
+    что у карты); неизвестное имя остаётся собой, без регистра — укорачивать
+    его до двух букв, как делает _country_code, нельзя: две разные страны
+    слились бы в одну заметку."""
+    text = " ".join(str(name or "").split())
+    if not text:
+        return ""
+    try:
+        from src.web.app import _COUNTRY_CODES, _country_code
+    except Exception:  # справочника нет под рукой — хотя бы без регистра
+        return text.casefold()
+    if len(text) == 2 and text.isalpha():
+        return text.upper()
+    if text.lower() in _COUNTRY_CODES:
+        return _country_code(text)
+    return text.casefold()
+
+
+def _canon_countries(items: dict[str, str]) -> dict[str, str]:
+    """Ключи стран — в каноническую форму. Два старых ключа, сошедшихся в один
+    («CR» и «Costa Rica»), не теряются: тексты склеиваются."""
+    out: dict[str, str] = {}
+    for raw in sorted(items):
+        key = country_key(raw)
+        if not key:
+            continue
+        text = items[raw]
+        out[key] = text if key not in out or out[key] == text else out[key] + "\n" + text
+    return out
+
+
 def _clean(items) -> dict[str, str]:
     if not isinstance(items, dict):
         return {}
@@ -56,7 +94,7 @@ def _load_all() -> tuple[dict[str, str], dict[str, str]]:
         return {}, {}
     if not isinstance(data, dict):
         return {}, {}
-    return _clean(data.get("notes")), _clean(data.get("countries"))
+    return _clean(data.get("notes")), _canon_countries(_clean(data.get("countries")))
 
 
 def load() -> dict[str, str]:
@@ -65,7 +103,7 @@ def load() -> dict[str, str]:
 
 
 def load_countries() -> dict[str, str]:
-    """Заметки стран."""
+    """Заметки стран по каноническому ключу (старые ключи приводятся на чтении)."""
     return _load_all()[1]
 
 
@@ -75,7 +113,8 @@ def _load_strict() -> tuple[dict[str, str], dict[str, str]]:
     Нет файла — пусто. Файл есть, но не читается (OSError) — отказ: запись
     поверх стёрла бы все остальные заметки. Файл испорчен — откладываем его
     в `account_notes.json.corrupt-<время>` и начинаем с пустого. Ключа
-    `countries` может не быть (файл ACL-1620) — тогда страны пусты."""
+    `countries` может не быть (файл ACL-1620) — тогда страны пусты. Ключи стран
+    приводятся к канонической форме, так что запись заодно мигрирует файл."""
     path = Path(get_account_notes_path())
     try:
         raw = path.read_text(encoding="utf-8")
@@ -83,13 +122,14 @@ def _load_strict() -> tuple[dict[str, str], dict[str, str]]:
         return {}, {}
     try:
         data = json.loads(raw)
-        if not isinstance(data, dict) or not isinstance(data.get("notes"), dict)                 or not isinstance(data.get("countries", {}), dict):
+        if (not isinstance(data, dict) or not isinstance(data.get("notes"), dict)
+                or not isinstance(data.get("countries", {}), dict)):
             raise ValueError("bad shape")
     except ValueError:
         backup = path.with_name(f"{path.name}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}")
         path.replace(backup)
         return {}, {}
-    return _clean(data["notes"]), _clean(data.get("countries"))
+    return _clean(data["notes"]), _canon_countries(_clean(data.get("countries")))
 
 
 def _save(notes: dict[str, str], countries: dict[str, str]) -> None:
@@ -102,13 +142,15 @@ def get(account: str) -> str:
     return load().get(account, "")
 
 
-def set_note(account: str, text: str, kind: str = "account") -> dict[str, str]:
+def set_note(account: str, text: str, kind: str = "account", if_empty: bool = False) -> dict[str, str]:
     """Сохранить заметку; пустой текст удаляет её. Отдаёт заметки того же вида.
 
-    kind: "account" или "country". Подпись — ровно как в строке (только края
-    обрезаются). Текст не нормализуем: переводы строк и пробелы внутри — часть
-    заметки. ValueError — подпись пуста или слишком длинна, текст длиннее
-    потолка или неизвестный вид.
+    kind: "account" или "country" (страна — по каноническому ключу). Подпись —
+    ровно как в строке (только края обрезаются). Текст не нормализуем: переводы
+    строк и пробелы внутри — часть заметки. if_empty — записать, только если
+    заметки сейчас нет (так работает Undo: он не затирает свежий текст);
+    иначе NoteChanged. ValueError — подпись пуста или слишком длинна, текст
+    длиннее потолка или неизвестный вид.
     """
     if kind not in ("account", "country"):
         raise ValueError("unknown note kind")
@@ -117,12 +159,15 @@ def set_note(account: str, text: str, kind: str = "account") -> dict[str, str]:
         raise ValueError("account is required" if kind == "account" else "country is required")
     if len(text) > MAX_NOTE_LEN:
         raise ValueError(f"note is longer than {MAX_NOTE_LEN} characters")
+    key = country_key(label) if kind == "country" else label
     with _transaction():
         notes, countries = _load_strict()
         target = notes if kind == "account" else countries
+        if if_empty and target.get(key, "").strip():
+            raise NoteChanged(key)
         if text.strip():
-            target[label] = text
+            target[key] = text
         else:
-            target.pop(label, None)
+            target.pop(key, None)
         _save(notes, countries)
         return target

@@ -861,6 +861,11 @@ def _build_account_map_view(
     def _with_assets(rows: list[dict]) -> list[dict]:
         return [{**r, "assets": account_links.values_for(r["account"], "asset")} for r in rows]
 
+    for mc in countries:
+        # ACL-1633: заметка страны живёт под каноническим ключом, а не под
+        # отображаемым именем («CR» и «Costa Rica» — одна заметка).
+        mc["note_key"] = _account_notes.country_key(mc.get("country") or "")
+
     available = _with_assets(buckets["shown"])
     return {
         "countries": countries,
@@ -3116,7 +3121,8 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
     """Сохранить заметку к одному аккаунту или одной стране; пустой текст
     удаляет её. Заметки остаются в файле этой машины и никуда не уходят.
 
-    Body JSON: {account, text} или {country, text}
+    Body JSON: {account, text} или {country, text}; необязательное if_empty: true —
+    записать, только если заметки сейчас нет (Undo).
     """
     try:
         body = await request.json()
@@ -3131,12 +3137,16 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
     if not isinstance(text, str):
         return JSONResponse({"ok": False, "error": "text must be a string"}, status_code=400)
     try:
-        notes = _account_notes.set_note(label, text, kind)
+        notes = _account_notes.set_note(label, text, kind, if_empty=body.get("if_empty") is True)
+    except _account_notes.NoteChanged:
+        # Undo не затирает свежий текст: заметку успели написать заново.
+        return JSONResponse({"ok": False, "error": "The note changed meanwhile"}, status_code=409)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except OSError:
         return JSONResponse({"ok": False, "error": "Could not save the note. Try again."}, status_code=500)
-    return JSONResponse({"ok": True, "kind": kind, kind: label.strip(), "text": notes.get(label.strip(), "")})
+    key = _account_notes.country_key(label) if kind == "country" else label.strip()
+    return JSONResponse({"ok": True, "kind": kind, kind: label.strip(), "key": key, "text": notes.get(key, "")})
 
 
 @app.post("/api/accounts-hidden")

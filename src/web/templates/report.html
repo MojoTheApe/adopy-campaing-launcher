@@ -8854,14 +8854,18 @@ async function amapSend(body, msgEl) {
 (function () {
   var MAX = 10000, SEL = 'td.amap-acct-note, .amap-country-note';
   var pop = null, toast = null, cur = null, saving = 0, hideTimer = null, toastTimer = null;
-  // cur: {kind, label, original, cell}
+  // cur: {kind, label, original, cell}; undo: то, что вернёт Undo (одна запись за раз)
+  var undo = null;
+
+  function hideToast() { clearTimeout(toastTimer); undo = null; if (toast) toast.hidden = true; }
 
   function first(t) { var l = t.split('\n')[0].trim(); return l.length > 60 ? l.slice(0, 60) + '\u2026' : l; }
 
-  function paint(kind, label, text) {
-    // Одна подпись может стоять в нескольких местах (аккаунт в нескольких странах).
+  function paint(kind, key, text) {
+    // Одна заметка может стоять в нескольких местах (аккаунт в нескольких
+    // странах; страна под разными написаниями — «CR» и «Costa Rica»).
     document.querySelectorAll(SEL).forEach(function (el) {
-      if (el.getAttribute('data-note-kind') !== kind || el.getAttribute('data-account') !== label) return;
+      if (el.getAttribute('data-note-kind') !== kind || (el.getAttribute('data-key') || el.getAttribute('data-account')) !== key) return;
       el.setAttribute('data-note', text);
       el.title = text;
       el.classList.toggle('empty', !text);
@@ -8870,12 +8874,13 @@ async function amapSend(body, msgEl) {
     });
   }
 
-  function post(kind, label, text) {
+  function post(kind, label, text, ifEmpty) {
     var body = { text: text }; body[kind] = label;
+    if (ifEmpty) body.if_empty = true;
     return fetch('/api/account-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, j: j }; }); })
-      .then(function (res) { if (!res.ok) throw new Error((res.j && res.j.error) || 'failed'); return res.j; });
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, j: j, status: r.status }; }); })
+      .then(function (res) { if (!res.ok) { var e = new Error((res.j && res.j.error) || 'failed'); e.status = res.status; throw e; } return res.j; });
   }
 
   function build() {
@@ -8898,8 +8903,9 @@ async function amapSend(body, msgEl) {
     if (!pop) build();
     if (cur) close();
     clearTimeout(hideTimer);
+    hideToast(); // открыли редактор — Undo больше не про эту заметку
     var text = el.getAttribute('data-note') || '';
-    cur = { kind: el.getAttribute('data-note-kind'), label: el.getAttribute('data-account') || '', original: text, cell: el };
+    cur = { kind: el.getAttribute('data-note-kind'), label: el.getAttribute('data-account') || '', key: el.getAttribute('data-key') || el.getAttribute('data-account') || '', original: text, cell: el };
     var ta = pop.querySelector('textarea');
     ta.setAttribute('aria-label', 'Note for ' + cur.label);
     ta.value = text; state('', false);
@@ -8922,7 +8928,8 @@ async function amapSend(body, msgEl) {
     state('Saving', false);
     saving += 1;
     return post(c.kind, c.label, text).then(function (j) {
-      paint(c.kind, c.label, j.text || '');
+      hideToast(); // заметка записана заново: старый Undo затёр бы её
+      paint(c.kind, j.key || c.key, j.text || '');
       if (cur === c) {
         cur = null; state('Saved', false);
         hideTimer = setTimeout(function () { if (!cur) pop.hidden = true; }, 500);
@@ -8935,13 +8942,23 @@ async function amapSend(body, msgEl) {
 
   function showToast(c, previous) {
     if (!toast) { toast = document.createElement('div'); toast.className = 'amap-note-toast'; toast.setAttribute('role', 'status'); document.body.appendChild(toast); }
+    undo = { kind: c.kind, label: c.label, previous: previous };
     toast.hidden = false; toast.textContent = 'Deleted \u2014 ';
     var b = document.createElement('button'); b.type = 'button'; b.textContent = 'Undo'; toast.appendChild(b);
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.hidden = true; }, 5000);
+    toastTimer = setTimeout(hideToast, 5000);
     b.addEventListener('click', function () {
-      clearTimeout(toastTimer); toast.hidden = true;
-      post(c.kind, c.label, previous).then(function (j) { paint(c.kind, c.label, j.text || ''); });
+      if (saving || !undo) return; // Undo идёт через тот же охранник «сохранение в пути»
+      var u = undo;
+      clearTimeout(toastTimer);
+      saving += 1;
+      // if_empty: сервер вернёт заметку, только если её по-прежнему нет.
+      post(u.kind, u.label, u.previous, true).then(function (j) {
+        paint(u.kind, j.key || u.label, j.text || ''); hideToast();
+      }).catch(function (err) {
+        if (err && err.status === 409) { hideToast(); return; } // успели написать заново — молча
+        toast.textContent = 'Undo failed'; toastTimer = setTimeout(hideToast, 3000);
+      }).then(function () { saving -= 1; });
     });
   }
 
@@ -8949,8 +8966,8 @@ async function amapSend(body, msgEl) {
     if (!cur) return;
     var c = cur, previous = c.original || pop.querySelector('textarea').value;
     saving += 1;
-    post(c.kind, c.label, '').then(function () {
-      paint(c.kind, c.label, '');
+    post(c.kind, c.label, '').then(function (j) {
+      paint(c.kind, j.key || c.key, '');
       if (cur === c) { cur = null; pop.hidden = true; }
       if (previous.trim()) showToast(c, previous);
     }).catch(function () { if (cur === c) state('Save failed', true); })
