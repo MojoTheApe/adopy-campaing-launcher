@@ -38,3 +38,79 @@ recover:
   # News → manage list without edit wizard counts as failure; reopen needs a second try.
   max_attempts: 3
   prefer_close_news_tab: true
+
+# ACL-1613: what the AI rescue module (src/fb_ads_rpa/ai_rescue.py) may and may not act on.
+# Everything is matched on NORMALISED text (lower case, accents and zero-width/soft-hyphen
+# characters stripped, every non-letter/digit run turned into one space), so write the entries in
+# plain ascii lower case. There are two layers and BOTH must pass:
+#   1. `allow`: a positive allowlist, the primary gate. Anything not listed is refused with
+#      not_allowlisted:<label>. Widen it only from `suggest` logs, one entry at a time.
+#   2. `context` / `target_only`: the denylist. Stems with `\w*` catch inflections (deleted,
+#      eliminara). `context` is checked against the target's label sources, the text next to it and
+#      the FULL text of the dialog around it; `target_only` only against the target's own label
+#      sources (it would otherwise block every harmless button inside an "Edit ..." dialog).
+# A missing or empty table means every pick is refused.
+ai_rescue:
+  allow:
+    # close_dialog: a control inside a verified real dialog, label must be one of these.
+    close_dialog: [close, x, cancel, not now, skip, dismiss, got it, maybe later, later, no thanks,
+                   cerrar, cancelar, ahora no, omitir, entendido, mas tarde, no gracias,
+                   fechar, agora nao, pular, entendi, mais tarde, nao obrigado]
+    # click: buttons only, minimal. Next / Continue / OK / "More options" are NOT here on purpose.
+    click: [show more, see more, show less, see less, ver mas, mostrar mas, ver menos, ver mais, mostrar mais]
+    # expand: collapsed section/card headings only; the label must START with one of these names.
+    expand: [audience, placements, budget, schedule, budget schedule, locations, languages, detailed targeting,
+             demographics, age, gender, optimization delivery, conversion, destination, tracking, ad setup, creative,
+             publico, ubicaciones, presupuesto, idiomas, ubicaciones geograficas, segmentacion detallada, conversion,
+             destino, configuracion del anuncio, programacion, edad, genero, demografia, seguimiento, creatividad,
+             posicionamentos, orcamento, idiomas, locais, segmentacao detalhada, conversao, configuracao do anuncio,
+             programacao, idade, demografia, rastreamento, criativo]
+    # click on role=tab: by name.
+    tab: [campaigns, ad sets, ads, audience, placements, creative, ad creative, details, overview,
+          campanas, conjuntos de anuncios, anuncios, publico, ubicaciones, creatividad, detalles,
+          campanhas, posicionamentos, criativo, detalhes]
+  # A dialog whose text matches any of these is never closed by us, whatever the label
+  # (Cancel / Close on "Discard changes?" can throw work away).
+  close_blockers:
+    - {lang: en, reason: unsaved, pattern: 'discard\w*|unsaved|leav\w*|lose|lost|without saving'}
+    - {lang: en, reason: policy, pattern: 'polic\w*|certif\w*|confirm\w*|consent\w*|acknowledg\w*|agree\w*|declar\w*|go live|review and publish|non discrimination'}
+    - {lang: es, reason: unsaved, pattern: 'descart\w*|sin guardar|salir|perd\w*'}
+    - {lang: es, reason: policy, pattern: 'politic\w*|certific\w*|confirm\w*|consentimiento\w*|reconoc\w*|acept\w*|declar\w*|en vivo|revisar y publicar|no discriminacion'}
+    - {lang: pt, reason: unsaved, pattern: 'descart\w*|sem salvar|sair|perd\w*'}
+    - {lang: pt, reason: policy, pattern: 'polit\w*|certific\w*|confirm\w*|consentimento\w*|reconhec\w*|aceit\w*|declar\w*|ao vivo|revisar e publicar|nao discriminacao'}
+  context:
+    - {lang: en, reason: publish, pattern: '(?:un|re)?publish\w*'}
+    - {lang: en, reason: delete, pattern: '(?:un)?delet\w*'}
+    - {lang: en, reason: remove, pattern: 'remov\w*'}
+    - {lang: en, reason: discard, pattern: 'discard\w*'}
+    - {lang: en, reason: terms_accept, pattern: 'accept\w*|agree\w*|terms\w*'}
+    - {lang: en, reason: lead_form, pattern: '(?:create|new|add) (?:a )?(?:lead |instant )?forms?|instant forms?'}
+    - {lang: en, reason: logout, pattern: 'log ?out|sign ?out'}
+    - {lang: en, reason: payment, pattern: 'payments?|billing|credit card|debit card'}
+    - {lang: en, reason: leave_unsaved, pattern: 'close without saving|leav\w*|don t save'}
+    - {lang: es, reason: publish, pattern: 'publi(?:car\w*|cad[oa]s?|que\w*|cacion\w*|sh\w*)|publica(?:r|ndo)'}
+    - {lang: es, reason: delete, pattern: 'elimin\w*|borr\w*|quit\w*'}
+    - {lang: es, reason: discard, pattern: 'descart\w*'}
+    - {lang: es, reason: terms_accept, pattern: 'acept\w*|condicion\w*|terminos'}
+    - {lang: es, reason: lead_form, pattern: 'formularios? instantaneos?|(?:crear|nuevo|anadir|agregar) formulario'}
+    - {lang: es, reason: logout, pattern: 'cerrar sesi\w*'}
+    - {lang: es, reason: payment, pattern: 'pago\w*|pagar\w*|pagad\w*|factur\w*|metodo de pago'}
+    - {lang: es, reason: leave_unsaved, pattern: 'salir'}
+    - {lang: pt, reason: publish, pattern: 'publicar\w*|publicad[oa]s?|publica(?:r|ndo)'}
+    - {lang: pt, reason: delete, pattern: 'exclu(?:ir\w*|i\w*|y\w*|a\w*)|apag\w*|remov\w*'}
+    - {lang: pt, reason: discard, pattern: 'descart\w*'}
+    - {lang: pt, reason: terms_accept, pattern: 'aceit\w*|concord\w*|termos'}
+    - {lang: pt, reason: lead_form, pattern: 'formularios? instantaneos?|(?:criar|novo|adicionar) formulario'}
+    - {lang: pt, reason: logout, pattern: 'encerrar sessao|sair da conta|sair'}
+    - {lang: pt, reason: payment, pattern: 'pagamento\w*|cobranca|faturamento|forma de pagamento|cartao de credito'}
+    - {lang: pt, reason: leave_unsaved, pattern: 'sair'}
+  target_only:
+    - {lang: en, reason: duplicate, pattern: 'duplicat\w*'}
+    - {lang: en, reason: edit, pattern: 'edit\w*'}
+    - {lang: en, reason: toggle, pattern: 'on off|turn on|turn off|switch on|switch off'}
+    - {lang: es, reason: duplicate, pattern: 'duplic\w*'}
+    - {lang: es, reason: edit, pattern: 'editar\w*'}
+    - {lang: es, reason: toggle, pattern: 'activar|desactivar|encender'}
+    - {lang: pt, reason: duplicate, pattern: 'duplic\w*'}
+    - {lang: pt, reason: edit, pattern: 'editar\w*'}
+    - {lang: pt, reason: toggle, pattern: 'ativar|desativar|ligar|desligar'}
