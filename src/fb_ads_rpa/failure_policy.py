@@ -542,19 +542,14 @@ PER_AD_DETAIL: dict[tuple[str, str], tuple[str, str, str, str]] = {
          "creative wizard did not open"),
         # ACL-1669 (live 07.10, B97): the library grid showed no "N selected" counter.
         ("library_selection_unreadable",
-         "Meta's media library showed no selection counter and the robot could not prove "
-         "the grid was drawn and clean (no tiles yet, or a tile already marked), so it "
-         "did not click or upload over a selection it could not read",
+         "Meta's media library showed no selection counter, so the robot could not tell what "
+         "is selected and neither clicked a tile nor uploaded over it; attach the media by hand",
          "library selection unreadable"),
         ("library_not_searched_counter_unreadable",
          "Meta's media library showed no selection counter, so the robot did not search it "
          "for a copy of the video; the library was not asked, it did not say it has no copy, "
-         "and the robot's one upload for this ad did not attach the media",
+         "and the robot did not upload again - attach the media by hand",
          "library not searched, counter unreadable"),
-        ("library_selection_not_single",
-         "after the robot's upload Meta's media library showed more than one item selected, "
-         "so the robot could not tell which media would be attached and stopped",
-         "more than one library item selected"),
     )},
     # ACL-1669: no media on the ad, so Meta shows no URL field. Still BLOCKING.
     ("destination", "url_field_missing_no_media"): (

@@ -108,7 +108,8 @@ _CUT_JS = r"""
       const name = a.name;
       const ok = keep.includes(name) || name === 'href'
         || (name.startsWith('aria-') && name !== 'aria-activedescendant');
-      if (!ok) { n.removeAttribute(name); continue; }
+      // data-test-decoration is kept only as Meta's selected-tile mark.
+      if (!ok || (name === 'data-test-decoration' && a.value !== 'selected')) { n.removeAttribute(name); continue; }
       if (name === 'href') { n.setAttribute('href', '#'); continue; }
       if (idRefs.includes(name)) {
         const v = a.value.split(/\s+/).filter(Boolean).map(syn).join(' ');

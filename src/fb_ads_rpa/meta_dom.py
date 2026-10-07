@@ -255,9 +255,6 @@ LIBRARY_COUNTER_MISSING = "library_selection_unreadable"
 #: `library_has_no_copy` («копии нет»), когда поиска по ней не было (ACL-1669).
 LIBRARY_NOT_SEARCHED = "library_not_searched_counter_unreadable"
 
-#: После загрузки без счётчика выбрано больше одного элемента (ACL-1669).
-LIBRARY_SELECTION_NOT_SINGLE = "library_selection_not_single"
-
 #: ACL-1354: столько подряд непрочитанных опросов блока Media (~10 с) —
 #: и проверка медиа кончается: вкладка не читается, ждать нечего.
 MEDIA_CHECK_UNREADABLE_POLLS = 20
@@ -9660,68 +9657,6 @@ def _library_selected_count_waiting(page: Page, limit_s: float = _LIBRARY_COUNTE
     return count
 
 
-def _library_grid_tile_count(page: Page) -> int | None:
-    """Сколько плиток нарисовано в сетке верхнего диалога (None — сетки нет).
-
-    ACL-1669: «ни одна плитка не отмечена» доказывает чистый выбор, только если
-    сетка уже нарисована. Диалог без сетки или с пустой сеткой — это «Meta ещё
-    рисует», и считать его чистым нельзя.
-    """
-    try:
-        value = page.evaluate(
-            "() => { const d = " + _LIBRARY_DIALOG_JS + "; if (!d) return null;"
-            " const g = d.querySelector('[aria-label=\"grid\"], [role=grid]'); if (!g) return null;"
-            " return [...g.querySelectorAll('[role=button], [role=option], [role=gridcell]')]"
-            " .filter(e => e.getBoundingClientRect().width > 0).length; }"
-        )
-        return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
-    except Exception:
-        return None
-
-
-def _library_marked_count(page: Page) -> int | None:
-    """Сколько плиток сетки отмечено (`data-test-decoration=selected` и др.)."""
-    try:
-        value = page.evaluate(
-            "() => { const d = " + _LIBRARY_DIALOG_JS + "; if (!d) return null;"
-            " return [...d.querySelectorAll('[data-test-decoration=\"selected\"],"
-            " [aria-checked=\"true\"], [aria-selected=\"true\"], input[type=checkbox]:checked')]"
-            " .filter(el => !el.closest('[role=tab], [role=tablist], [role=switch]')).length; }"
-        )
-        return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
-    except Exception:
-        return None
-
-
-def _selection_after_fallback(page: Page) -> int | None:
-    """Сколько элементов выбрано после загрузки без счётчика (None — не прочесть).
-
-    Берётся большее из счётчика и отмеченных плиток: цель — поймать двойной
-    выбор, а не подтвердить единичный.
-    """
-    counts = [n for n in (_library_selected_count(page), _library_marked_count(page)) if n is not None]
-    return max(counts) if counts else None
-
-
-def _refuse_doubled_selection(page: Page, creative_path: str) -> bool:
-    """После загрузки без счётчика: True, если выбрано больше одного элемента.
-
-    ACL-1669: загрузка пошла без счётчика выбора — читаем выбор один раз;
-    больше одного элемента значит чужой выбор под нашим файлом. Это отказ
-    (причина названа, строка блокирующая), а не «ok». Прочесть выбор не
-    удалось или он единичный — шаг идёт дальше, его проверит блок Media.
-    """
-    if not _reuse_state.get("counter_missing"):
-        return False
-    chosen = _selection_after_fallback(page)
-    if chosen is None or chosen <= 1:
-        return False
-    _telemetry.record("ad_creative_upload", False, note=LIBRARY_SELECTION_NOT_SINGLE,
-                      diag={"file": Path(creative_path).name, "selected": chosen})
-    _set_upload_why(LIBRARY_SELECTION_NOT_SINGLE)
-    return True
-
-
 def _library_tiles(page: Page, filename: str):
     """Locator for the clickable library tiles captioned `filename`.
 
@@ -10159,24 +10094,13 @@ def _try_reuse_library_media(page: Page, filename: str) -> str:
     before = _library_selected_count_waiting(page)
     if before is None:
         # ACL-1669 (B97, 07.10): счётчика выбора в сетке нет и после ожидания.
-        # Выбор плиток без него не подтвердить, поэтому не кликаем вовсе.
-        # Но и «грязной» сетку считать нельзя, если мы ничего не трогали: тогда
-        # файл просто грузится заново (одна загрузка на объявление, правило
-        # ACL-1637), а после загрузки выбор читается ещё раз (см. _finish_upload).
-        #
-        # Загрузка разрешена только при ОБОИХ условиях (ревью PR #670): сетка
-        # реально нарисована (плитки есть) и ни одна плитка не отмечена. Нет
-        # сетки, плиток ещё нет, отметка есть или её не прочесть — отказ.
-        tiles_drawn = _library_grid_tile_count(page)
-        marked = _library_any_tile_marked(page)
+        # Выбор плиток без него не подтвердить, поэтому не кликаем и не грузим:
+        # честный отказ `library_selection_unreadable`, медиа ставят вручную.
+        # Безопасный автоматический обход требует живого снимка именно этого
+        # состояния (ревью PR #670, два раунда) — это отдельная работа.
         _reuse_state["counter_missing"] = True
-        if tiles_drawn and marked is False:
-            _telemetry.record("ad_creative_reuse", None, note="selection_counter_missing",
-                              diag={"file": filename, "waited_s": _LIBRARY_COUNTER_WAIT_S,
-                                    "tile_marked": False, "tiles": tiles_drawn})
-            return REUSE_ABSENT
         _telemetry.record("ad_creative_reuse", False, note="selection_state_unavailable",
-                          diag={"file": filename, "tile_marked": marked, "tiles": tiles_drawn})
+                          diag={"file": filename, "waited_s": _LIBRARY_COUNTER_WAIT_S})
         return REUSE_DIRTY
     _library_search(page, filename)
 
@@ -10699,7 +10623,7 @@ def _upload_ad_creative_with_retry(
             # Причину прошлого провала несём в диагностику: именно она решает,
             # можно ли заливать заново.
             diag["earlier_failure"] = failed_upload_reason(creative_path)
-        if (blocked_by in (LIBRARY_HAS_NO_COPY, LIBRARY_NOT_SEARCHED)
+        if (blocked_by == LIBRARY_HAS_NO_COPY
                 and upload_failure_allows_reupload(creative_path)
                 and _creative_left() >= CREATIVE_RETRY_MIN_S):
             # ACL-1637: мастер дошёл до Media, медиатека спрошена по обоим
@@ -12834,8 +12758,6 @@ def upload_ad_creative(
             pass
 
     def _finish_upload() -> bool:
-        if _refuse_doubled_selection(page, creative_path):
-            return False
         # Advance until the wizard closes (or we run out of patience). Said in
         # the diagnostic either way: a wizard left open is what breaks every
         # step after this one, and until 2026-09-16 the only trace of it was
@@ -13140,19 +13062,34 @@ def _simple_page(page: Page) -> bool:
     return isinstance(url, str) and _simple.url_is_simple_create(url)
 
 
-def _ad_has_no_media(page: Page, *, creative_failed: bool) -> bool:
-    """Правда ли, что у объявления нет медиа (ACL-1669).
+def _media_block_empty_seen(page: Page) -> bool:
+    """Видно ли пустое состояние блока Media (ACL-1669, ревью PR #670).
 
-    Отказ креатива сам по себе об этом не говорит: кроп-ворота и исключения
-    бывают при уже прикреплённом медиа. Поэтому спрашиваем блок Media; если его
-    не прочесть — считаем, что медиа есть (имя `url_field_missing` остаётся).
+    Только положительное свидетельство: «Please specify the media» на экране
+    (классический редактор) или состояние `empty` у смонтированного блока
+    (новый редактор). Блок не читается или размонтирован — это НЕ «медиа нет».
     """
-    if not creative_failed:
-        return False
     try:
-        return not _media_block_filled_now(page)
+        if _simple_page(page):
+            shown = _simple.show_media_block(page, budget_s=6.0)
+            return bool(shown.get("mounted")) and shown.get("state") == "empty"
+        return bool(page.evaluate(
+            r"""() => [...document.querySelectorAll('*')]
+              .filter(e => e.children.length === 0 && e.getBoundingClientRect().width > 0)
+              .some(e => (e.textContent || '').replace(/\s+/g, ' ').trim()
+                .includes('Please specify the media'))"""
+        ))
     except Exception:
         return False
+
+
+def _ad_has_no_media(page: Page, *, creative_failed: bool) -> bool:
+    """Правда ли, что у объявления нет медиа: отказ креатива И виден пустой блок.
+
+    Отказ креатива сам по себе об этом не говорит (кроп-ворота, исключения при
+    прикреплённом медиа), а нечитаемый блок — не пустой блок.
+    """
+    return bool(creative_failed) and _media_block_empty_seen(page)
 
 
 def _media_block_filled_now(page: Page) -> bool:
@@ -15636,7 +15573,7 @@ def creative_soft_fail(tag: str, ad_label: str) -> str:
     if why in (_crop.WIZARD_STUCK, MEDIA_PICKER_LOADING, LIBRARY_HAS_NO_COPY,
                "same_file_already_uploaded_this_run", "same_file_already_failed_this_run",
                "file_not_landed", "wizard_not_opened", LIBRARY_COUNTER_MISSING,
-               LIBRARY_NOT_SEARCHED, LIBRARY_SELECTION_NOT_SINGLE):
+               LIBRARY_NOT_SEARCHED):
         # ACL-1559: выбор медиа шага Media не догрузился — тоже своим именем.
         # ACL-1637: объявление без медиа из-за одного видео на нескольких
         # объявлениях — причина называется, а не «creative_upload» без слов.
