@@ -5523,9 +5523,11 @@
         "worktree": "C:\\acl-1638-advplus",
         "id": "78a94138e5274961b605419804791daf",
         "issue": 638,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-07T07:35:02+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 674,
+        "report": "# ACL-1638 handoff (Worker-A1638D, run_a1638d_1007)\n\nPR #674 (codex/acl-1638-advplus -> stage), head 5ee81f09.\n\n## Diagnosis\nTwo different failures behind `advantage_plus_audience still_on` on 06.10:\n- Doc120 (573ab2cf3646; also 4285247f763a on 05.10): on WhatsApp campaigns the collapsed Age row reads \"35 - 65+ \u00b7 Unknown age on WhatsApp: Excluded\" with \"Your suggestion\". `_AGE_SUMMARY_RE` was anchored right after the bounds, so the row never opened (`age_row_opened: false`, `age: []`) and \"Use as a suggestion\" was never unchecked. Card was open and in controls mode; this is not the ACL-1611/1617 collapsed-card problem, card-opening code is untouched. FIXED.\n- 9403A (d4f9d5f016c1, 327c0b934cb3): age row opens, checkbox already unchecked, hard 35 - 65+, badge still \"Advantage+ on\". Badge read \"off\" before the age step and \"on\" at the final check; the captures do not say which step flipped it (run 8c6496e50815 keeps \"off\" with suggestion-style interests, so Detailed targeting alone is not it). Nothing left to click: the step still blocks the draft. NOT FIXED; instrumentation added.\n\n## What changed\n- `_AGE_SUMMARY_RE` accepts a `\u00b7 note`; `_AGE_SUMMARY_READ_JS` drops the note before splitting.\n- `verify_audience_advantage_off` failure diag adds `age_suggestion_checked` and `mode`.\n- New read-only `audience_badge_probe` telemetry after the age, location, languages and targeting steps.\n- Fixture `audience_whatsapp_suggestions_2026_10_06.html` (scrubbed, scan clean), bench catalogue, fixtures README, docs/system/CHANGELOG.md.\n\n## Tests\n`tests/test_bench_audience_whatsapp_suggestions.py` (13 cases). Pure-Python cases and `tests/test_bench_catalogue.py` passed locally; browser cases were NOT run locally (RAM rule), they run in CI.\n\n## Open\n- Live check (separate task at merge): next Doc120 / 9403A runs. For 9403A read `audience_badge_probe` rows to see which step flips the badge, then decide on a fix.\n- Live checkbox left unchecked."
       }
     },
     "tasks": {
