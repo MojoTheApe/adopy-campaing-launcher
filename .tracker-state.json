@@ -1973,7 +1973,7 @@
       "source_sha": "eab2d0e1258195d07726c56c041c79e1f7a95f0c",
       "main_tree": "859ee9d57600615abee533d52a32f20549617eb9",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-07T09:29:33+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -3201,6 +3201,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-07T08:33:22+00:00"
+      },
+      "649": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 679,
+            "merge_sha": "d48ef7a3c668ecd94ec0fb3390dea2eb6860747f",
+            "tree_sha": "e8d07458323d6ef030e0a8273b037261620c6640"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-07T09:32:43+00:00"
       }
     },
     "promotions": {
@@ -5579,6 +5591,31 @@
           "note": "Recorded after promotion with owner approval (2026-10-07): verify-stage was run after main PR #672 by a coordinator script bug; the checks are the real stage runs."
         },
         "verified_at": "2026-10-07T08:32:31+00:00"
+      },
+      "679": {
+        "pr": 666,
+        "issues": [
+          649
+        ],
+        "tree_sha": "e8d07458323d6ef030e0a8273b037261620c6640",
+        "source_sha": "eab2d0e1258195d07726c56c041c79e1f7a95f0c",
+        "main_tree": "859ee9d57600615abee533d52a32f20549617eb9",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-07T09:29:33+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "eab2d0e1258195d07726c56c041c79e1f7a95f0c",
+          "tree_sha": "e8d07458323d6ef030e0a8273b037261620c6640",
+          "checks": [
+            "Git checks on actual stage eab2d0e: CI run 37600928636 success (sharded, Python 3.11/3.13)",
+            "Windows installer run 37600928623 success"
+          ],
+          "report": "ACL-1649 stage verification: Git and installer checks green on the actual stage eab2d0e. Independent review: scratchpad/review_666.md."
+        },
+        "verified_at": "2026-10-07T09:30:49+00:00"
       }
     }
   },
