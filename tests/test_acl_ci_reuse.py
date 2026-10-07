@@ -109,9 +109,9 @@ def decide(promotion, api, event="push", ref="refs/heads/main", workflow="ci.yml
 def test_main_push_reuses_the_green_stage_run_of_the_same_tree(promotion):
     api, push = green_api(promotion["stage"])
     result = decide(promotion, api)
-    assert result == {"windows": False, "reason": "reused-green-full-run-of-same-tree",
+    assert result == {"windows": False, "linux": False, "reason": "reused-green-full-run-of-same-tree",
                       "reused_from": push["html_url"], "tree": promotion["tree"], "commit": promotion["stage"],
-                      "python": ["3.11", "3.13"]}
+                      "reused_runs": [push["html_url"]], "python": ["3.11", "3.13"]}
     assert reuse.summary_line(result["reused_from"], result["tree"]) == (f"Reused full results of run {push['html_url']} "
                                           f"(same tree {promotion['tree']})")
 
@@ -119,7 +119,8 @@ def test_main_push_reuses_the_green_stage_run_of_the_same_tree(promotion):
 def test_stage_to_main_pr_merge_commit_reuses_the_stage_run(promotion, monkeypatch):
     # The PR checkout is a merge commit; only its git tree matters.
     api, push = green_api(promotion["stage"])
-    monkeypatch.setattr(scope, "select", lambda root, name, event: {"windows": True, "reason": "product"})
+    monkeypatch.setattr(scope, "select", lambda root, name, event, **kw: {
+        "windows": True, "linux": True, "reason": "product", "python": ["3.11", "3.13"]})
     result = scope.decide(promotion["root"], "pull_request", {}, ref="refs/pull/7/merge",
                           workflow="ci.yml", repo=REPO, api=api, run_id="999")
     assert result["windows"] is False and result["reused_from"] == push["html_url"]
@@ -129,7 +130,7 @@ def test_installer_classify_reuses_the_same_way(promotion):
     api, push = green_api(promotion["stage"], "windows-installer.yml")
     result = decide(promotion, api, workflow="windows-installer.yml")
     assert result["windows"] is False and result["reused_from"] == push["html_url"]
-    assert all("/workflows/windows-installer.yml/" in c for c in api.calls if "/jobs?" not in c)
+    assert all("/workflows/windows-installer.yml/" in c for c in api.calls if "/jobs?" not in c and "/pulls" not in c)
 
 
 # --- any doubt runs in full ---------------------------------------------------------------------
@@ -202,7 +203,9 @@ def test_untrustworthy_candidate_run_is_refused(promotion, field, value):
 def test_partial_cancelled_or_failed_matrix_is_refused(promotion, mutate):
     api, push = green_api(promotion["stage"])
     mutate(api.jobs_by_run[push["id"]]["jobs"])
-    assert decide(promotion, api)["windows"] is True
+    result = decide(promotion, api)
+    # ACL-1649: покрытие считается по заданиям, но «всё переиспользовано» — только при полном наборе.
+    assert result["windows"] is True or result["linux"] is True
 
 
 def test_a_green_full_run_of_the_old_layout_is_never_reused(promotion):
@@ -239,7 +242,7 @@ def test_the_current_run_is_never_its_own_proof(promotion):
 
 def test_docs_only_pr_stays_light_without_any_api_call(promotion, monkeypatch):
     api = FakeApi(error=AssertionError("must not be called"))
-    monkeypatch.setattr(scope, "select", lambda root, name, event: {"windows": False, "reason": "docs"})
+    monkeypatch.setattr(scope, "select", lambda root, name, event, **kw: {"windows": False, "linux": False, "reason": "docs"})
     assert scope.decide(promotion["root"], "pull_request", {}, api=api, repo=REPO)["windows"] is False
 
 
@@ -263,7 +266,7 @@ def test_cli_writes_reuse_outputs_and_summary(promotion, monkeypatch, tmp_path_f
         monkeypatch.setenv(key, value)
     monkeypatch.setattr("sys.argv", ["acl_ci_scope.py", "--event-name", "push", "--event-file", str(out / "none")])
     scope.main()
-    assert (out / "o").read_text(encoding="utf-8") == (f"windows=false\nreused_from={push['html_url']}\n"
+    assert (out / "o").read_text(encoding="utf-8") == (f"windows=false\nlinux=false\nreused_from={push['html_url']}\n"
                                                        'python=["3.11", "3.13"]\n')
     assert (out / "s").read_text(encoding="utf-8").strip() == (
         f"Reused full results of run {push['html_url']} (same tree {promotion['tree']})")
@@ -275,7 +278,7 @@ def test_cli_without_token_runs_in_full(monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "o"))
     monkeypatch.setattr("sys.argv", ["acl_ci_scope.py", "--event-name", "push", "--event-file", str(tmp_path / "x")])
     scope.main()
-    assert (tmp_path / "o").read_text(encoding="utf-8") == 'windows=true\nreused_from=\npython=["3.11", "3.13"]\n'
+    assert (tmp_path / "o").read_text(encoding="utf-8") == 'windows=true\nlinux=true\nreused_from=\npython=["3.11", "3.13"]\n'
 
 
 # --- the workflows are wired to it ----------------------------------------------------------------
@@ -323,12 +326,17 @@ def test_a_one_python_pr_run_is_never_a_proof(promotion):
     for event in ("push", "pull_request"):
         result = decide(promotion, api, event=event)
         assert result["windows"] is True and result["reuse"] == "no-proven-full-run"
+        assert result["linux"] is True
 
 
 def test_a_one_python_matrix_is_not_full_even_on_a_push_run(promotion):
     api, push = green_api(promotion["stage"])
     one_python(api.jobs_by_run[push["id"]], push["id"])
-    assert decide(promotion, api)["windows"] is True
+    # ACL-1649: Windows и 3.13 покрыты, поэтому на пути в main недостающее — только 3.11.
+    result = decide(promotion, api)
+    assert result["windows"] is False and result["linux"] is True and result["python"] == ["3.11"]
+    # Релизные ворота такого доказательства не принимают: полный набор требует и 3.11.
+    assert reuse.find_reuse(promotion["root"], api, REPO, "ci.yml", promotion["tree"]) is None
 
 
 def test_a_full_push_run_is_a_proof(promotion):
@@ -350,7 +358,9 @@ def test_scope_jobs_read_actions_and_publish_the_reused_run(name, flag):
     # Только задание scope читает Actions; остальные (код PR на Windows) — нет.
     assert data["permissions"] == {"contents": "read"}
     job = data["jobs"]["scope"]
-    assert job["permissions"] == {"contents": "read", "actions": "read"}
+    # ACL-1649: pull-requests: read — связать коммит stage/main с влитым PR (commits/<sha>/pulls).
+    # checks: read — аннотация scope-задания прогона PR о проверенном дереве (tested_tree).
+    assert job["permissions"] == {"contents": "read", "actions": "read", "pull-requests": "read", "checks": "read"}
     assert all("permissions" not in other for key, other in data["jobs"].items() if key != "scope")
     assert job["outputs"]["reused_from"] == "${{ steps.scope.outputs.reused_from }}"
     step = next(s for s in job["steps"] if s.get("id") == "scope")
@@ -398,8 +408,9 @@ def test_run_url_must_be_this_repositorys_exact_run(url, ok):
 def test_an_invalid_reused_url_is_never_written_to_outputs(promotion, monkeypatch, tmp_path):
     # Даже если find_reuse вернул доказательство, кривой URL не уходит в GITHUB_OUTPUT.
     bad = "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/1\nwindows=false"
-    monkeypatch.setattr(scope.reuse, "find_reuse", lambda *a, **k: {
-        "run_id": 1, "run_url": bad, "commit": promotion["stage"], "tree": promotion["tree"]})
+    monkeypatch.setattr(scope.reuse, "find_coverage", lambda *a, **k: {
+        "covered": set(reuse.REQUIRED_JOBS["ci.yml"]),
+        "runs": [{"run_id": 1, "run_url": bad, "commit": promotion["stage"], "tree": promotion["tree"]}]})
     real_decide = scope.decide
     monkeypatch.setattr(scope.reuse, "github_api", lambda token, base: FakeApi())
     monkeypatch.setattr(scope, "decide", lambda root, *a, **k: real_decide(promotion["root"], *a, **k))
@@ -409,7 +420,7 @@ def test_an_invalid_reused_url_is_never_written_to_outputs(promotion, monkeypatc
         monkeypatch.setenv(key, value)
     monkeypatch.setattr("sys.argv", ["acl_ci_scope.py", "--event-name", "push", "--event-file", str(tmp_path / "x")])
     scope.main()
-    assert (tmp_path / "o").read_text(encoding="utf-8") == 'windows=true\nreused_from=\npython=["3.11", "3.13"]\n'
+    assert (tmp_path / "o").read_text(encoding="utf-8") == 'windows=true\nlinux=true\nreused_from=\npython=["3.11", "3.13"]\n'
     assert "runs/1" not in (tmp_path / "s").read_text(encoding="utf-8")
 
 
@@ -417,8 +428,8 @@ def test_cli_writes_one_python_for_a_code_only_pr(monkeypatch, tmp_path):
     # ACL-1581: PR без зависимостей/бутстрапа получает матрицу только из 3.13.
     for key in ("GITHUB_TOKEN", "GITHUB_STEP_SUMMARY"):
         monkeypatch.delenv(key, raising=False)
-    monkeypatch.setattr(scope, "select", lambda root, name, event: scope.classify(["dashboard.py"], "pull_request"))
+    monkeypatch.setattr(scope, "select", lambda root, name, event, **kw: scope.classify(["dashboard.py"], "pull_request", "stage"))
     monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "o"))
     monkeypatch.setattr("sys.argv", ["acl_ci_scope.py", "--event-name", "pull_request", "--event-file", str(tmp_path / "x")])
     scope.main()
-    assert (tmp_path / "o").read_text(encoding="utf-8") == 'windows=true\nreused_from=\npython=["3.13"]\n'
+    assert (tmp_path / "o").read_text(encoding="utf-8") == 'windows=true\nlinux=true\nreused_from=\npython=["3.13"]\n'
