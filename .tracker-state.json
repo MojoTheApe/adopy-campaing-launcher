@@ -5542,9 +5542,11 @@
         "worktree": "C:\\acl-1604-preflight",
         "id": "3187b024a3a24738a3057da5e5a87ca8",
         "issue": 604,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-06T18:52:28+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 662,
+        "report": "# ACL-1604 handoff (Worker-S1604A)\n\nCommit 87de8b20 on codex/acl-1604-preflight (worktree C:\\acl-1604-preflight, base work/stage 39a9cb1b). Not pushed, no PR.\n\nFiles: src/web/publish_preflight.py (new), src/web/app.py (2 endpoints), src/web/templates/report.html (cbPublishAll), tests/test_acl1604_preflight.py, tests/test_acl1604_preflight_browser.py.\n\nSee the final reply for detection scope, test counts and open questions."
       },
       "652": {
         "actor": "Worker-S1652A",
