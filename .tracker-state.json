@@ -7854,7 +7854,7 @@
             "session": "run_s1650a_1006"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1650A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -7872,7 +7872,8 @@
           "report": "# ACL-1650 handoff\n\nChange: `.cbd-country` colour `--muted` -> `--accent` in src/web/templates/report.html (one rule, one comment line). Contrast 5.17:1 light, 7.05:1 dark on the drawer background.\n\nChecks: tests/test_acl_test_platform.py and tests/test_the_builder_tree.py, 110 passed. Headless light/dark screenshots: scratchpad acl-1650-light.png / acl-1650-dark.png (synthetic markup with the template's real CSS).\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/661 (work/stage merged in, no conflicts)."
         },
         "pr": 661,
-        "queued_at": "2026-10-07T05:48:02+00:00"
+        "queued_at": "2026-10-07T05:48:02+00:00",
+        "reviewer": "Reviewer-R1650Q"
       },
       "652": {
         "implementers": [
@@ -8556,6 +8557,10 @@
       "Worker-S1651A": {
         "session": "run_s1651a_1006",
         "role": "Worker"
+      },
+      "Reviewer-R1650Q": {
+        "session": "rev_r1650q_1007",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -10227,14 +10232,24 @@
       529,
       633,
       642,
-      650,
       604,
       653,
       641,
       651,
       649
     ],
-    "review": null,
+    "review": {
+      "id": "5a641cf36a22467aba73cb490f030034",
+      "pr": 661,
+      "issues": [
+        650
+      ],
+      "actor": "Reviewer-R1650Q",
+      "session": "rev_r1650q_1007",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-07T06:05:11+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -14501,6 +14516,13 @@
         "issue": 649,
         "pr": 666,
         "actor": "Worker-S1649A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T06:05:11+00:00",
+        "pr": 661,
+        "lane": "5a641cf36a22467aba73cb490f030034",
+        "actor": "Reviewer-R1650Q"
       }
     ],
     "policy": {
