@@ -235,14 +235,14 @@ def tested_tree(api, repo, jobs, workflow):
     return found.pop() if len(found) == 1 else None
 
 
-def verify_pr_heads(root, api, repo, commit, branch="", fetch=None):
+def verify_pr_heads(root, api, repo, commit, branch=""):
     """Головы PR, влитых именно коммитом ``commit`` (кандидаты для поиска прогонов ``pull_request``).
 
     Сама голова ничего не доказывает: прогон принимается только с аннотацией о проверенном
     дереве (``tested_tree``). Здесь только привязка «этот PR влит этим коммитом»:
     ``merge_commit_sha`` равен ``commit`` (commits/<sha>/pulls отдаёт и PR, где commit лишь
     один из коммитов), PR влит и из этого же репозитория. Ветка ``branch``, если задана, — база PR.
-    ``fetch`` оставлен для совместимости и не используется. Ошибка API — пустой список."""
+    Ошибка API — пустой список."""
     if not SHA.fullmatch(commit or "") or not REPO.fullmatch(repo or ""):
         return []
     try:
@@ -263,7 +263,7 @@ def verify_pr_heads(root, api, repo, commit, branch="", fetch=None):
     return heads
 
 
-def collect_pr_heads(root, api, repo, tree, commits=(), fetch=None):
+def collect_pr_heads(root, api, repo, tree, commits=()):
     """Головы PR для всех коммитов с деревом ``tree``: сам проверяемый коммит и его двойники.
 
     Цепочка PR -> stage -> main: у коммита stage есть своя голова PR (и у слияния в main —
@@ -299,7 +299,10 @@ def find_coverage(root, api, repo, workflow, tree, exclude_run_id=None, pr_heads
             events[commit] = set(PROVABLE_EVENTS)
     for head in pr_heads:
         if SHA.fullmatch(head or ""):
-            events.setdefault(head, set()).update(PROVABLE_EVENTS | {"pull_request"})
+            # Только pull_request (и только с аннотацией): push/dispatch на голове PR доказывают дерево
+            # самой головы, а не дерево влитого коммита. Если голова при этом ещё и коммит с тем же
+            # деревом, push-прогоны уже допущены циклом выше по git-проверке дерева.
+            events.setdefault(head, set()).add("pull_request")
     relevant = set(REQUIRED_JOBS[workflow])
     admission = REQUIRED_JOBS[workflow][-1]
     for commit, allowed in events.items():

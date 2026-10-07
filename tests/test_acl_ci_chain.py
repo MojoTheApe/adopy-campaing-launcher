@@ -177,18 +177,22 @@ def test_a_pr_run_that_git_does_not_tie_to_the_commit_is_refused(chain, break_it
 
 # --- B3: a PR run counts only with the annotation about the tree it tested -------------------------------
 
-@pytest.mark.parametrize("notes", [
-    [],                                                       # an unrelated run on the same head: no marker
-    [note("a" * 40)],                                         # retargeted PR: the old base tested another tree
-    [note(None, message="tree=not-a-sha")],
-    [note(None, message="")],
-    [note(None, title="something-else")],
-    [note(None, message="tree=" + "a" * 40 + " extra")],
-    [note("a" * 40), note("b" * 40)],                         # two different claims are ambiguous
+@pytest.mark.parametrize("make_notes", [
+    lambda t: [],                                             # an unrelated run on the same head: no marker
+    lambda t: [note("a" * 40)],                               # retargeted PR: the old base tested another tree
+    lambda t: [note(None, message="tree=not-a-sha")],
+    lambda t: [note(None, message="")],
+    lambda t: [note(None, title="something-else")],
+    lambda t: [note(None, message="tree=" + "a" * 40 + " extra")],
+    lambda t: [note("a" * 40), note("b" * 40)],               # two different claims are ambiguous
+    lambda t: [note(t), note("a" * 40)],                      # the right tree next to another one: ambiguous
+    lambda t: [note("a" * 40), note(t)],
+    lambda t: [note(t), note(None, message="tree=zzz")],      # the right tree next to a malformed marker
+    lambda t: [note(None, message="oops"), note(t)],
 ])
-def test_a_pr_run_without_a_matching_tree_marker_is_refused(chain, notes):
+def test_a_pr_run_without_a_matching_tree_marker_is_refused(chain, make_notes):
     api = pr_run_api(chain)
-    api.notes[1000] = notes
+    api.notes[1000] = make_notes(chain["tree"])
     result = decide(chain, api, chain["s"], "push", "refs/heads/stage", stage_event(chain))
     assert result["windows"] is True and result["reuse"] == "no-proven-full-run"
 
@@ -204,6 +208,18 @@ def test_an_unrelated_pr_run_on_the_same_head_adds_no_coverage(chain):
     cov = reuse.find_coverage(chain["root"], api, REPO, "ci.yml", chain["tree"], pr_heads=heads)
     assert [r["run_id"] for r in cov["runs"]] == [100]
     assert not set(reuse.REQUIRED_JOBS["ci.yml"]) <= cov["covered"]
+
+
+def test_two_different_markers_on_one_job_are_ambiguous_never_picked(chain):
+    # Strict: whatever order or set iteration gives, a run that claims two trees proves neither.
+    for notes in ([note(chain["tree"]), note("a" * 40)], [note("a" * 40), note(chain["tree"])],
+                  [note("a" * 40), note("b" * 40)], [note(chain["tree"]), note(None, message="tree=zzz")]):
+        api = pr_run_api(chain)
+        api.notes[1000] = notes
+        assert reuse.tested_tree(api, REPO, reuse.latest_jobs(api, REPO, {"id": 100}), "ci.yml") is None
+    api = pr_run_api(chain)
+    api.notes[1000] = [note(chain["tree"]), note(chain["tree"])]          # the same claim twice is still one claim
+    assert reuse.tested_tree(api, REPO, reuse.latest_jobs(api, REPO, {"id": 100}), "ci.yml") == chain["tree"]
 
 
 def test_a_marker_on_a_run_with_two_scope_jobs_is_ambiguous(chain):
@@ -225,6 +241,57 @@ def test_a_pr_run_is_never_taken_for_a_commit_without_a_verified_head(chain):
     api = pr_run_api(chain)
     api.runs[chain["s"]] = [run(100, chain["s"], "pull_request", "stage")]
     assert reuse.find_coverage(chain["root"], api, REPO, "ci.yml", chain["tree"])["runs"] == []
+
+
+# --- R2-B1: only pull_request runs are taken from a PR head, and only with the marker -------------------
+
+FULL_JOBS = [f"linux tests ({p}, {k})" for p in ("3.11", "3.13") for k in (1, 2, 3)] + [
+    "windows tests (3.13)", "ACL verification"]
+
+
+@pytest.mark.parametrize("event", ["workflow_dispatch", "push"])
+def test_a_push_or_dispatch_run_on_a_pr_head_with_another_tree_is_no_proof(chain, event):
+    # H tested tree(H) (full set, no marker). The squash S2 landed on a stage that had moved, so its tree
+    # differs from tree(H); H is still the head of the PR that S2 closed.
+    git(chain["root"], "checkout", "-q", "--detach", chain["p"])
+    (chain["root"] / "other.py").write_text("another task landed first\n")
+    git(chain["root"], "add", "other.py"); git(chain["root"], "commit", "-qm", "other")
+    moved = git(chain["root"], "rev-parse", "HEAD")
+    h_tree = git(chain["root"], "rev-parse", f"{chain['h']}^{{tree}}")
+    s2 = git(chain["root"], "commit-tree", git(chain["root"], "rev-parse", f"{moved}^{{tree}}"), "-p", moved, "-m", "squash 2")
+    tree2 = git(chain["root"], "rev-parse", f"{s2}^{{tree}}")
+    assert tree2 != h_tree
+    api = Api(runs={chain["h"]: [run(500, chain["h"], event, "codex/x")]},
+              jobs={500: [scope_job(500)] + [job(n, 500) for n in FULL_JOBS]},
+              pulls={s2: [pull(7, chain["h"], s2)]})
+    checkout(chain, s2)
+    heads = reuse.collect_pr_heads(chain["root"], api, REPO, tree2, [s2])
+    assert chain["h"] in heads
+    assert reuse.find_coverage(chain["root"], api, REPO, "ci.yml", tree2, pr_heads=heads)["runs"] == []
+    assert reuse.find_reuse(chain["root"], api, REPO, "ci.yml", tree2, pr_heads=heads) is None
+
+
+def test_the_stage_push_run_does_not_count_for_a_main_commit_with_a_hotfix(chain):
+    # main got a hotfix: tree(M2) != tree(S). The PR into main has head S, so S is a verified PR head,
+    # but a push run on S proves tree(S), not tree(M2).
+    git(chain["root"], "checkout", "-q", "--detach", chain["m"])
+    (chain["root"] / "hotfix.py").write_text("hotfix on main\n")
+    git(chain["root"], "add", "hotfix.py"); git(chain["root"], "commit", "-qm", "hotfix")
+    hot = git(chain["root"], "rev-parse", "HEAD")
+    m2 = git(chain["root"], "commit-tree", git(chain["root"], "rev-parse", f"{hot}^{{tree}}"), "-p", hot, "-p", chain["s"],
+             "-m", "Merge pull request #9 from stage")
+    tree2 = git(chain["root"], "rev-parse", f"{m2}^{{tree}}")
+    assert tree2 != chain["tree"]
+    api = Api(runs={chain["s"]: [run(600, chain["s"], "push", "stage")]},
+              jobs={600: [job(n, 600) for n in FULL_JOBS]},
+              pulls={m2: [pull(9, chain["s"], m2, base="main")]})
+    checkout(chain, m2)
+    heads = reuse.collect_pr_heads(chain["root"], api, REPO, tree2, [m2])
+    assert chain["s"] in heads
+    assert reuse.find_coverage(chain["root"], api, REPO, "ci.yml", tree2, pr_heads=heads)["runs"] == []
+    result = scope.decide(chain["root"], "push", {"before": hot, "after": m2}, ref="refs/heads/main", workflow="ci.yml",
+                          repo=REPO, api=api, run_id="999")
+    assert result["windows"] is True and result["linux"] is True and result["reuse"] == "no-proven-full-run"
 
 
 def test_the_pr_api_failing_means_no_pr_proof(chain):

@@ -198,7 +198,7 @@ def wanted_jobs(workflow, result):
     return set(reuse.REQUIRED_JOBS[workflow]) if result["windows"] else set()
 
 
-def decide(root, event_name, event, *, ref="", workflow="ci.yml", repo="", api=None, run_id=None, fetch=None):
+def decide(root, event_name, event, *, ref="", workflow="ci.yml", repo="", api=None, run_id=None):
     """Классификация, затем (ACL-1565/1649) переиспользование зелёных прогонов того же дерева.
 
     Покрытие складывается из нескольких прогонов (stage: 3.13 + Windows, PR в main: 3.11).
@@ -213,8 +213,7 @@ def decide(root, event_name, event, *, ref="", workflow="ci.yml", repo="", api=N
         if not tree:
             return dict(result, reuse="no-proven-full-run")
         # ACL-1649: головы влитых PR всех коммитов с этим деревом (stage, main, merge-коммит PR).
-        heads = reuse.collect_pr_heads(root, api, repo, tree, [reuse._git(root, "rev-parse", "HEAD")],
-                                       **({"fetch": fetch} if fetch else {}))
+        heads = reuse.collect_pr_heads(root, api, repo, tree, [reuse._git(root, "rev-parse", "HEAD")])
         coverage = reuse.find_coverage(root, api, repo, workflow, tree, exclude_run_id=run_id, pr_heads=heads)
     except Exception:  # noqa: BLE001 — сомнение означает полный прогон
         return dict(result, reuse="lookup-failed-run-full")
