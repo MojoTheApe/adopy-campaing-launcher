@@ -252,7 +252,7 @@ def _check_uncached(*, fetch: bool) -> dict[str, Any]:
             "available": False,
             "current": _describe(""),
             "candidate": None,
-            "note": "This copy of ACL is not a git checkout, so it cannot update itself.",
+            "note": "This copy of ACM is not a git checkout, so it cannot update itself.",
             "supervised": is_supervised(),
         }
     current = _describe(head)

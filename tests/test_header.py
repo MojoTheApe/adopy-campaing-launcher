@@ -69,3 +69,10 @@ def test_the_logo_is_the_blue_adopy_mark():
     svg = (ROOT / "src" / "web" / "static" / "logo.svg").read_text(encoding="utf-8")
     assert "#2563eb" in svg and "<text" not in svg and "<rect" not in svg
     assert 'aria-label="Adopy Campaign Manager"' in svg
+
+
+def test_the_header_caption_is_the_product_name():
+    """ACL-1705: подпись под знаком — «Adopy Campaign Manager», слова Launcher в шапке нет."""
+    head = _header()
+    assert re.search(r'<h1 class="brand-name">Adopy Campaign Manager</h1>', head)
+    assert "Launcher" not in head

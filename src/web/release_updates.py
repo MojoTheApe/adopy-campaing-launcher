@@ -377,4 +377,4 @@ def start_helper(setup: Path, manifest: dict) -> None:
                          env={**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"})
     except OSError as exc:
         pending.unlink(missing_ok=True)
-        raise UpdateError("The update helper could not start. ACL is still running.") from exc
+        raise UpdateError("The update helper could not start. ACM is still running.") from exc

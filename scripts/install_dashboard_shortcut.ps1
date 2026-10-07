@@ -52,7 +52,7 @@ $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath       = $DashboardBat
 $Shortcut.WorkingDirectory = $ProjectRoot
-$Shortcut.Description      = "Launch Adopy Campaign Manager "
+$Shortcut.Description      = "Launch Adopy Campaign Manager"
 $Shortcut.IconLocation     = (Resolve-Path $IcoFile).Path + ",0"
 $Shortcut.Save()
 

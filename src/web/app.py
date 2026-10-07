@@ -1641,7 +1641,7 @@ async def _apply_release_update(active_jobs) -> JSONResponse:
         restarting = True
         return JSONResponse({"ok": True, "target": manifest["version"]})
     except (release_updates.UpdateError, OSError, ValueError, TypeError, KeyError) as exc:
-        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACL is still running."
+        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACM is still running."
         return JSONResponse({"ok": False, "error": message}, status_code=400)
     finally:
         # A successful handoff deliberately keeps the reservations until exit.
@@ -4670,7 +4670,7 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     request_id = (form.get("request_id") or "").strip()
     if activate:
         return JSONResponse(
-            {"error": "Live activation is disabled: ACL creates draft-only campaigns."},
+            {"error": "Live activation is disabled: ACM creates draft-only campaigns."},
             status_code=403,
         )
     if not user_confirmed:

@@ -456,6 +456,7 @@
       src: url('/static/fonts/inter-medium-latin.woff2') format('woff2');
     }
     header.page-header h1.brand-name {
+      margin: 0;
       font-family: 'ACM Inter', "Segoe UI", system-ui, sans-serif;
       font-size: 12px;
       font-weight: 500;
@@ -468,12 +469,6 @@
       flex-direction: column;
       gap: 0.15rem;
       min-width: 0;
-    }
-    /* Начертание: «Adopy» несёт вес, остальное — спокойнее. Одно название, а
-       не два слова подряд одинаковой громкости. */
-    header.page-header h1 {
-      margin: 0;
-      white-space: nowrap;
     }
 
     /* Две подписанные величины. Подпись приглушена, значение — нет: читают
@@ -7095,7 +7090,7 @@ function amapAwaitSplit(account, per, tries) {
           if (!s) throw new Error('the reading disappeared before it finished');
           if (typeof amapHandWait === 'function') amapHandWait(account, s.state === 'running' ? (j.waiting || '') : '');
           if (s.state !== 'running') { resolve(s); return; }
-          if (tries > 120) throw new Error('no answer after six minutes — check the launcher window');
+          if (tries > 120) throw new Error('no answer after six minutes — check the Adopy Campaign Manager window');
           resolve(amapAwaitSplit(account, per, tries + 1));
         })
         .catch(reject);
@@ -8421,7 +8416,7 @@ function amapPollSpend(account, cell, btn, tries, per, pressed) {
   per = per || amapPeriod();
   if (!per.from || per.span === 'all') return;
   if (tries > 120) {
-    amapApplyReading(account, {state: 'failed', error: 'no answer after six minutes — check the launcher window'});
+    amapApplyReading(account, {state: 'failed', error: 'no answer after six minutes — check the Adopy Campaign Manager window'});
     return;
   }
   setTimeout(function () {
@@ -8608,7 +8603,7 @@ async function amapQueueRead(job, per) {
     }
     return done.state;
   } catch (e) {
-    var message = e && e.name === 'AbortError' ? 'Read request timed out — check the launcher window' : String(e && e.message || e);
+    var message = e && e.name === 'AbortError' ? 'Read request timed out — check the Adopy Campaign Manager window' : String(e && e.message || e);
     amapApplyReading(job.account, {state: 'failed', error: message});
     return 'failed';
   }
@@ -8629,7 +8624,7 @@ async function amapAwaitReading(account, per, tries) {
       return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null};
     }
   }
-  throw new Error('no answer after six minutes — check the launcher window');
+  throw new Error('no answer after six minutes — check the Adopy Campaign Manager window');
 }
 
 function amapSpendFailed(btn, cell, why, shot, how, code) {
