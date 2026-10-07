@@ -5951,7 +5951,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "705": {
+        "actor": "Worker-S1705A",
+        "session": "run_s1705a_1007",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1705-rebrand",
+        "worktree": "C:\\acl-1705-rebrand",
+        "id": "95084f0259904f088303c26419e58790",
+        "issue": 705,
+        "state": "implementing",
+        "started_at": "2026-10-07T17:13:45+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -8662,6 +8675,17 @@
         },
         "pr": 704,
         "queued_at": "2026-10-07T16:48:16+00:00"
+      },
+      "705": {
+        "implementers": [
+          {
+            "actor": "Worker-S1705A",
+            "session": "run_s1705a_1007"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1705A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -9356,6 +9380,10 @@
       "Reviewer-R1691T": {
         "session": "rev_r1691t_1007",
         "role": "Reviewer"
+      },
+      "Worker-S1705A": {
+        "session": "run_s1705a_1007",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -15868,6 +15896,13 @@
         "pr": 692,
         "lane": "4da862ab01e5473387d78b0f1ee1467e",
         "actor": "Reviewer-R1691T"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-07T17:13:45+00:00",
+        "issue": 705,
+        "claim": "95084f0259904f088303c26419e58790",
+        "actor": "Worker-S1705A"
       }
     ],
     "policy": {
