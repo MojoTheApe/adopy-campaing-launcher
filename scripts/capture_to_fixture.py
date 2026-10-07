@@ -27,7 +27,8 @@ except `aria-activedescendant`, `id`, `data-surface`, `placeholder`, `type`,
 `value`, `tabindex`, `hidden`, `for`, `checked`, `disabled`, `name`, `min`,
 `max`, `step`, `typeaheadcomponentid`, `contenteditable`; `href` set to `#`). Removed: scripts,
 styles, frames, images/video (an `<i>` stands in), SVG (an `<i>`), classes,
-inline styles, `data-*` other than `data-surface`, the robot's own marks.
+inline styles, `data-*` other than `data-surface` and `data-test-decoration` (Meta's
+selected-tile mark, which the robot reads), the robot's own marks.
 Meta render ids (`js_*`, `_r_*_`, `u_*`, `mount_*`) become `syn_N`, the same N
 wherever the same id is referenced (`for`, `aria-labelledby`, ...).
 
@@ -63,7 +64,7 @@ FIXTURES = _ROOT / "tests" / "fixtures" / "ads_manager"
 KEEP_ATTRS = (
     "role", "id", "data-surface", "placeholder", "type", "value", "tabindex", "hidden",
     "for", "checked", "disabled", "name", "min", "max", "step", "typeaheadcomponentid",
-    "contenteditable",
+    "contenteditable", "data-test-decoration",
 )
 
 #: JS that cuts one fragment out of the loaded capture (runs in offline

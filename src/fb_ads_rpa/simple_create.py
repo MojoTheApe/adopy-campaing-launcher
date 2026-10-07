@@ -646,9 +646,18 @@ _CREATIVE_WHY_TEXT = {
                                           "this ad; the ad is left in the draft for review."),
     # ACL-1669 (B97, 07.10): the library grid showed no selection counter.
     "library_selection_unreadable": ("This ad has no media: Meta's media library showed no "
-                                     "selection counter and a tile was already marked, so the "
-                                     "robot could not tell what is selected and did not upload "
-                                     "over it; the ad is left in the draft for review."),
+                                     "selection counter and the robot could not prove the grid "
+                                     "was drawn and clean (no tiles yet, or a tile already "
+                                     "marked), so it did not upload over it; the ad is left in "
+                                     "the draft for review."),
+    "library_not_searched_counter_unreadable": (
+        "This ad has no media: Meta's media library showed no selection counter, so the robot "
+        "did not search it for a copy of the video (this is not a 'no copy' answer) and its one "
+        "upload for this ad did not attach the media; the ad is left in the draft for review."),
+    "library_selection_not_single": ("This ad has no media: after the upload Meta's media "
+                                     "library showed more than one item selected, so the robot "
+                                     "could not tell which media would be attached; the ad is "
+                                     "left in the draft for review."),
     "file_not_landed": ("This ad has no media: the browser did not accept the video file in "
                         "Meta's upload dialog; the ad is left in the draft for review."),
     "wizard_not_opened": ("This ad has no media: Meta's 'Set up creative' wizard did not open "

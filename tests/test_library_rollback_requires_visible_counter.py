@@ -43,15 +43,5 @@ def test_an_exclusive_replacement_is_not_proven_undone_by_the_same_count(page):
 
 
 def test_unknown_initial_selection_blocks_fallback(page):
-    # ACL-1669: без счётчика, но и с отмеченной плиткой — по-прежнему отказ.
     page.locator('#count').evaluate('el => el.remove()')
-    page.evaluate("document.querySelector('button').setAttribute('data-test-decoration', 'selected')")
     assert md._try_reuse_library_media(page, 'missing.mp4') == md.REUSE_DIRTY
-
-
-def test_no_counter_and_nothing_marked_steps_back_for_a_fresh_upload(page):
-    # ACL-1669 (B97, 07.10): счётчика нет, плиток с отметкой нет — ничего не
-    # кликаем, файл грузится заново.
-    page.locator('#count').evaluate('el => el.remove()')
-    assert md._try_reuse_library_media(page, 'missing.mp4') == md.REUSE_ABSENT
-    assert page.evaluate('window.selected') is True  # ничего не тронуто
