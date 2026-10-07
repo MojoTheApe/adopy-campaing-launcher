@@ -5554,9 +5554,11 @@
         "worktree": "C:\\acl-1650-country-colour",
         "id": "95023b33f3094fd9a8ecceb2f721e769",
         "issue": 650,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-06T18:56:22+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 661,
+        "report": "# ACL-1650 handoff\n\nChange: `.cbd-country` colour `--muted` -> `--accent` in src/web/templates/report.html (one rule, one comment line). Contrast 5.17:1 light, 7.05:1 dark on the drawer background.\n\nChecks: tests/test_acl_test_platform.py and tests/test_the_builder_tree.py, 110 passed. Headless light/dark screenshots: scratchpad acl-1650-light.png / acl-1650-dark.png (synthetic markup with the template's real CSS).\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/661 (work/stage merged in, no conflicts)."
       },
       "652": {
         "actor": "Worker-S1652A",
