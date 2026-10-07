@@ -1,5 +1,21 @@
 # System history
 
+## next_to_ad confirms the ad level and names the reason on that step — ACL-1693
+
+Manager laptop LAPTOP-UA006, run 81c1bfbb5456 (07.10, window 1536x730 at dpr 1.25): `next_to_ad`
+was recorded ok, but the editor stayed on "Ad sets - Edit" (`levels: ["ad_set"]`). Five `ad_name`
+tries ended in `not_on_ad_level`, then every creative upload ended in `wizard_not_opened` - about
+four minutes lost, and the failure was named on the wrong step.
+
+- After the Next press the robot reads the editor level. Still on the ad set: it closes the
+  notices that may cover Next (the "WhatsApp Status included" notice was open over the page) and
+  presses Next again, up to three presses in all.
+- Still not on the ad level: the campaign fails at `next_to_ad` with a page capture and a reason
+  - `next_covered`, `next_outside_viewport`, `dialog_open`, `next_not_found` or `next_clicked_no_change`.
+- A page whose level cannot be read is not pressed blindly (the old behaviour is kept).
+- The browser zoom is not touched. Evidence is not enough to pin the cause (see the PR for the
+  captures to request from the laptop).
+
 ## Conversion location: the menu is opened by click or script, and a failure names its reason — ACL-1572
 
 `conversion_website_pick: not_selected` failed campaigns on Doc21, Elf403, KLD_BFL_B91 and

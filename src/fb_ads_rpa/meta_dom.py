@@ -6346,7 +6346,23 @@ def run_recorded_campaign_flow(
                 _shot("fail_next_to_ad")
                 return "next_to_ad"
             _wait_loading()
-            _shot("after_next_to_ad")
+            # ACL-1693: «Next нажат» ещё не значит «открыт уровень объявления».
+            reach = reach_ad_level(
+                page,
+                lambda: _click(page.get_by_role("button", name="Next"), where="next_to_ad"),
+                lambda: _clear_blocking_overlays(page, "ad_set"),
+            )
+            if not reach["ok"]:
+                # Отказ на самом шаге навигации, с причиной и снимком страницы:
+                # прежде он всплывал через пять минут как `not_on_ad_level`.
+                _shot("fail_next_to_ad", {
+                    "why": reach["why"], "presses": reach["presses"],
+                    "cleared": reach["cleared"][:6], "state": reach["state"],
+                }, note=reach["why"])
+                return "next_to_ad"
+            _shot("after_next_to_ad", {"presses": reach["presses"], "level": reach["level"]}
+                  if reach["presses"] > 1 or reach["level"] == "unknown" else None,
+                  note="repressed" if reach["presses"] > 1 else None)
         ad_edit_url = page.url
         reached_ad_level = True
         if not ensure_editor_window(page, "ad"):
@@ -16705,6 +16721,145 @@ def _simple_create_layout(page: Page) -> bool:
     нового редактора (`simple_create.is_simple_create`, чтение ограниченное).
     """
     return _simple.is_simple_create(page)
+
+
+# ── ACL-1693: Next нажат, а редактор остался на уровне ad set ──────────────
+#
+# 07.10, LAPTOP-UA006 (81c1bfbb5456, окно 1536×730, dpr 1,25): `next_to_ad`
+# записался ok за 12 с, но редактор остался на «Ad sets - Edit» — на странице
+# только `editor:ad_set`. Пять попыток `ad_name` кончились `not_on_ad_level`,
+# затем креатив — `wizard_not_opened`, всего ~4 минуты впустую. Уведомление
+# «WhatsApp Status included» висело над страницей (шаг placements видел
+# `dialogs: 1`) и закрылось только уже после Next: клик, скорее всего, попал
+# в него (так же было с «Account controls updating», Doc20). Доказательств
+# нет — снимка страницы Next у нас нет. Поэтому робот теперь САМ проверяет, что
+# перешёл на уровень объявления, и при отказе называет причину на этом шаге.
+
+#: Уровни редактора на странице, окна и положение кнопки Next. Тексты
+#: диалогов и кнопок в ответ не попадают — только признаки.
+_NEXT_TO_AD_STATE_JS = r"""() => {
+  const seen = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'
+      && !el.closest('[aria-hidden="true"], [inert]');
+  };
+  const levels = [...new Set([...document.querySelectorAll('[data-surface]')]
+    .map(e => ((e.getAttribute('data-surface') || '').match(/\/editor:([a-z_]+)$/) || [])[1])
+    .filter(Boolean))].slice(0, 6);
+  const dialogs = [...document.querySelectorAll('[role=dialog]')].filter(seen).length;
+  const btn = [...document.querySelectorAll('[role=button], button')]
+    .filter(e => ((e.textContent || '').replace(/[\s​]+/g, ' ').trim()) === 'Next');
+  const out = {levels: levels, dialogs: dialogs, next: {found: btn.length > 0},
+               viewport: [innerWidth, innerHeight]};
+  const el = btn.find(seen);
+  if (!el) return out;
+  const r = el.getBoundingClientRect();
+  const x = r.x + r.width / 2, y = r.y + r.height / 2;
+  const inView = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
+  let covered = false;
+  if (inView) {
+    const hit = document.elementFromPoint(x, y);
+    covered = !!hit && !el.contains(hit) && !hit.contains(el);
+  }
+  out.next = {found: true, visible: true, in_view: inView, covered: covered};
+  return out;
+}"""
+
+
+def next_to_ad_state(page: Page) -> dict:
+    """Что видно после нажатия Next: уровни редактора, окна, состояние кнопки.
+
+    Не читается — пустой словарь (вызывающий считает уровень неизвестным).
+    """
+    try:
+        state = _eval_bounded(page, _NEXT_TO_AD_STATE_JS, timeout_s=3.0)
+    except Exception:
+        return {}
+    state = dict(state) if isinstance(state, dict) else {}
+    try:
+        state["wizard"] = wizard_editor_level(page) or ""
+    except Exception:
+        state["wizard"] = ""
+    return state
+
+
+def _ad_level_verdict(state: dict) -> str:
+    """"ad" — на уровне объявления; "ad_set" — всё ещё на ad set; "" — не ясно."""
+    levels = state.get("levels") or []
+    wizard = state.get("wizard") or ""
+    if "ad" in levels or wizard == "ad":
+        return "ad"
+    if "ad_set" in levels or wizard == "ad_set":
+        return "ad_set"
+    return ""
+
+
+def _next_to_ad_why(state: dict, pressed: bool) -> str:
+    """Причина, по которой Next не привёл на уровень объявления."""
+    nxt = state.get("next") or {}
+    if not pressed or not nxt.get("found"):
+        return "next_not_found"
+    if nxt.get("covered"):
+        return "next_covered"
+    if nxt.get("visible") and nxt.get("in_view") is False:
+        return "next_outside_viewport"
+    if state.get("dialogs"):
+        return "dialog_open"
+    return "next_clicked_no_change"
+
+
+def reach_ad_level(page: Page, press_next, clear_overlays, *, read_state=None, sleep=None,
+                   wait_ticks: int = 14, presses: int = 3) -> dict:
+    """После первого нажатия Next убедиться, что редактор открыл уровень объявления.
+
+    Остался на ad set — закрываем перекрывающие уведомления (`clear_overlays`)
+    и нажимаем Next ещё раз, всего до `presses` нажатий. Не вышло — `ok: False`
+    с причиной `why` и состоянием страницы. Не ясно, на каком уровне
+    (разметка не читается) — `ok: True`, `level: "unknown"`: решать за страницу
+    нечего, дальше шаги скажут сами. Повторно Next нажимается ТОЛЬКО когда
+    страница прямо показала уровень ad set: на уровне объявления Next нет.
+
+    Результат: ok, why, presses (сколько нажатий всего), cleared (что закрыли
+    перед повторами), level, state (последнее прочитанное).
+    """
+    read = read_state or next_to_ad_state
+    nap = sleep or (lambda s: _sleep_h(s, 0.1))
+    out: dict = {"ok": False, "why": "", "presses": 1, "cleared": [], "level": "", "state": {}}
+    pressed = True
+    for attempt in range(max(1, presses)):
+        verdict, state = "", {}
+        for tick in range(max(1, wait_ticks)):
+            try:
+                state = read(page) or {}
+            except Exception:
+                state = {}
+            verdict = _ad_level_verdict(state)
+            if verdict != "ad_set":
+                break
+            if tick + 1 < wait_ticks:
+                nap(0.5)
+        out["state"] = state
+        if verdict == "ad":
+            return {**out, "ok": True, "level": "ad"}
+        if verdict == "":
+            return {**out, "ok": True, "level": "unknown"}
+        out["level"] = "ad_set"
+        if attempt + 1 >= presses:
+            break
+        # Страница всё ещё на ad set: что-то перекрыло Next или нажатие не дошло.
+        try:
+            out["cleared"] += list(clear_overlays() or [])
+        except Exception:
+            pass
+        try:
+            pressed = bool(press_next())
+        except Exception:
+            pressed = False
+        out["presses"] += 1
+        if not pressed:
+            break
+    out["why"] = _next_to_ad_why(out["state"], pressed)
+    return out
 
 
 def _clear_blocking_overlays(page: Page, where: str, *, editor: bool = True,
