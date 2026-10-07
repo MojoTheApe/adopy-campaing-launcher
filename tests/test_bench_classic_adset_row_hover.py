@@ -44,6 +44,8 @@ _CSS = """<style>
   body { margin: 0; }
   #crumbs { height: 40px; width: 420px; overflow: hidden; }
   #crumbs div { display: inline-block; }
+  /* Крошки друг под другом, обе в левой трети окна, как живьём (y ~ 0-40). */
+  #crumbs div[data-testid] { display: block; height: 20px; overflow: hidden; }
   #tree { width: 400px; }
   [role=row] { height: 46px; }
   [role=rowheader] { height: 46px; }
@@ -61,11 +63,20 @@ _PAGE_JS = """
   window.presses_at_mount = null;
   window.focus_at_mount = null;
   window.menu_opened = 0;
+  window.fail_first_menu = false;
+  window.failed_once = false;
+  window.press_pts = [];
   const desc = (t) => !t || !t.getAttribute ? String(t)
     : (t.tagName.toLowerCase() + '|' + (t.getAttribute('role') || '') + '|'
        + (t.getAttribute('aria-label') || (t.textContent || '').trim()).slice(0, 30));
   window.openMenu = (btn) => btn.addEventListener('click', () => {
     window.menu_opened++;
+    if (window.fail_first_menu && !window.failed_once) {
+      // Выбор группы перемонтирует дерево: кнопка пропадает, меню не открыто.
+      window.failed_once = true;
+      btn.parentElement.parentElement.innerHTML = '<div></div>';
+      return;
+    }
     const item = document.createElement('div');
     item.setAttribute('role', 'menuitem');
     item.setAttribute('data-surface', '/am/editor_drawer/lib:campaign-structure-item-action-menu-create');
@@ -81,6 +92,7 @@ _PAGE_JS = """
                       'auxclick', 'dblclick', 'contextmenu']) {
     document.addEventListener(type, (e) => { window.presses.push(type + ':' + desc(e.target)); }, true);
   }
+  document.addEventListener('mousedown', (e) => { window.press_pts.push([e.clientX, e.clientY]); }, true);
   document.addEventListener('focusin', (e) => { window.focuses.push(desc(e.target)); }, true);
   document.addEventListener('mouseover', (e) => {
     const row = e.target.closest('[role=rowheader][aria-label="Ad set"]');
@@ -206,3 +218,34 @@ def test_a_tree_that_already_has_the_button_is_not_hovered(env):
     assert md.create_additional_ad(page, ADSET) is True
     assert page.evaluate("window.mounted") == 0
     assert page.evaluate("window.entries") == 0
+
+
+def test_the_legacy_coordinate_point_is_the_tree_row_not_the_breadcrumb(env, monkeypatch):
+    """Подвести к устаревшему пути по координатам при дереве на месте (ACL-1691, F2).
+
+    Шапка несёт `data-testid="nav-header-*"` и то же имя группы на y~20; без
+    исключения шапки «строкой группы» снова оказалась бы она."""
+    page = env["page"]
+    assert page.locator('[data-testid^="nav-header"]').count() == 3
+    monkeypatch.setattr(md, "_wake_classic_adset_row", lambda p: {"row": False, "tries": 0, "woke": False})
+    page.evaluate("() => { window.hover_mounts = false; }")
+    md.create_additional_ad(page, ADSET)
+    pts = page.evaluate("window.press_pts")
+    assert pts, "the legacy coordinate click did not run"
+    crumb_bottom = page.evaluate("document.getElementById('crumbs').getBoundingClientRect().bottom")
+    x, y = pts[0]
+    assert y > crumb_bottom, (pts, crumb_bottom)
+    hit = page.evaluate(
+        "([x, y]) => !!document.elementFromPoint(x, y).closest('[data-surface$=\"editor_tree:adset\"]')",
+        [x, y])
+    assert hit is True, pts
+
+
+def test_a_tree_that_remounts_after_the_first_menu_is_hovered_again(env):
+    """После перемонтирования дерева кнопка снова только под курсором (F4)."""
+    page = env["page"]
+    page.evaluate("() => { window.fail_first_menu = true; }")
+    assert md.create_additional_ad(page, ADSET) is True
+    assert page.evaluate("window.mounted") == 2
+    assert page.evaluate("window.menu_opened") == 2
+    assert page.evaluate("window.press_pts") == []  # по-прежнему ни одного нажатия мышью

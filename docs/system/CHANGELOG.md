@@ -18,6 +18,14 @@ press, no focus, at most 3 tries, stopping as soon as the button appears), then 
 ("The ad set row in the left tree shows no Action menu button, even with the cursor over it; nothing was
 clicked.") instead of clicking blindly. The legacy coordinate fallback now ignores the breadcrumb.
 
+After that block the caller no longer adopts an existing "New Leads Ad" row or retries the create: nothing was
+clicked, so there is no new shell, and adopting another ad would report a false "created" and overwrite it. The
+ad fails as `adN_create:adset_action_menu_not_shown`.
+
+Where the blind coordinate fallback is still reachable: when the tree readiness check times out (30 s, no ad set
+row) or when the hover finds no ad set row (`hidden`, or no point after a timeout). With the breadcrumb and
+left-third filters the only thing it can click there is the ad set row itself; it cannot reach a breadcrumb or an ad row.
+
 ## Conversion location: the menu is opened by click or script, and a failure names its reason — ACL-1572
 
 `conversion_website_pick: not_selected` failed campaigns on Doc21, Elf403, KLD_BFL_B91 and

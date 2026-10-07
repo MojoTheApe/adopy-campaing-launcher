@@ -6544,14 +6544,22 @@ def run_recorded_campaign_flow(
                                 # Confirmed need live 2026-07-29 (Test146, B ad2):
                                 # create failed once, leaving the ad missing
                                 # entirely — the only fill step with no retry path.
-                                if _open_tree_ad(page, "New Leads Ad"):
+                                #
+                                # ACL-1691: after the honest block (nothing was clicked) there
+                                # is no new shell to adopt — an existing "New Leads Ad" is
+                                # another ad. Neither adopt nor retry; keep the reason.
+                                if _LAST_CREATE_BLOCK == "adset_action_menu_not_shown":
+                                    pass
+                                elif _open_tree_ad(page, "New Leads Ad"):
                                     _close_creative_setup_modal(page)
                                     created = True
                                 else:
                                     created = create_additional_ad(page, adset_name)
                             if not created:
                                 _shot(f"fail_{tag}_create")
-                                ad_level_fails.append(f"{tag}_create")
+                                ad_level_fails.append(
+                                    f"{tag}_create:{_LAST_CREATE_BLOCK}" if _LAST_CREATE_BLOCK
+                                    else f"{tag}_create")
                                 continue
                             _shot(f"after_{tag}_create")
                             # 17.09 00:02 (Doc20, cbe566db70b2): один «Create ad» дал
@@ -9493,6 +9501,10 @@ def select_devices_ios_only(page: Page) -> bool:
     )
 
 
+#: Reason of the last honest block in `create_additional_ad` (nothing clicked), "" otherwise.
+_LAST_CREATE_BLOCK = ""
+
+
 def create_additional_ad(page: Page, adset_name: str) -> bool:
     """Add another ad to the ad set that's already open (for campaigns with
     more than one ad per ad set), landing on the same "Set up creative"
@@ -9550,6 +9562,8 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     # d3e690189a6e/08): шаг стартовал на странице, где дерева ещё нет —
     # `AdsPERouteLoadPlaceholder` после смены маршрута или сразу после
     # перезагрузки (есть только шапка nav-header-*). Сначала ждём дерево.
+    global _LAST_CREATE_BLOCK
+    _LAST_CREATE_BLOCK = ""
     click_point = None
     tree_ready = _wait_tree_ready(page)
     shells_before = _tree_new_ad_shells(page)
@@ -9698,6 +9712,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
             # Строка группы в дереве есть, курсор над ней побывал, а «Action
             # menu» не нарисовано. Вслепую по строке не нажимаем: нажатие на
             # неё выбирает группу и уводит редактор с объявления. Блокируем.
+            _LAST_CREATE_BLOCK = "adset_action_menu_not_shown"
             _diag("adset_action_menu_not_shown", {
                 "hover": hover,
                 "reason": ("The ad set row in the left tree shows no Action menu button, "
