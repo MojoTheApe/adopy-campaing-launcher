@@ -29,7 +29,7 @@ from src.fb_ads_rpa import meta_dom as md  # noqa: E402
 from tests.test_additional_ad_without_creative_has_no_text import flow  # noqa: E402,F401
 
 FIX = Path(__file__).parent / "fixtures" / "ads_manager"
-TREE = next(FIX.glob("editor_tree_new_shell_between_*.html")).read_text(encoding="utf-8")
+TREE = (FIX / "editor_tree_new_shell_between_2026_10_07.html").read_text(encoding="utf-8")
 
 P = md._SHELL_ROW_PREFIX
 FRESH = P + "100000000000005"        # свежая заготовка: третья из четырёх объявлений, посередине
