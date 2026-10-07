@@ -13,6 +13,7 @@ from typing import Any
 from playwright.sync_api import Error as _PlaywrightError
 from playwright.sync_api import Frame, Page
 
+from src.fb_ads_rpa import ad_account_guard as _ad_account_guard
 from src.fb_ads_rpa import job_cancel as _job_cancel
 from src.fb_ads_rpa import page_liveness as _liveness
 from src.fb_ads_rpa import profile_trouble as _trouble
@@ -3097,6 +3098,11 @@ def _conversion_failure_reason(page: Page, *, reopen_failed: int = 0) -> str:
     return ""
 
 
+def last_wrong_ad_account() -> str:
+    """ACL-1697: «expected act_X, opened act_Y» последнего стопа `wrong_ad_account`."""
+    return getattr(_conv_tls, "wrong_act", "")
+
+
 def last_conversion_failure_reason() -> str:
     """Причина последнего отказа выбора Website (в этом потоке) — для текста ошибки шага."""
     return getattr(_conv_tls, "reason", "")
@@ -5274,6 +5280,7 @@ def run_recorded_campaign_flow(
     soft_fails_out: list[str] | None = None,
     on_new_page=None,
     ad_body2: str = "",
+    expected_act: str = "",
 ) -> str:
     """Create -> Website -> ... -> Ad level, using the exact locators from a
     verified human Playwright codegen recording (2026-07-21) instead of the
@@ -5623,10 +5630,25 @@ def run_recorded_campaign_flow(
 
     # ACL-1320: Create и окно цели — под жёстким бюджетом `_open_campaign`
     # (~45 с на раунд, ~2 мин всего; третий раунд — в свежей вкладке).
-    opened = _open_campaign(
-        page, list_url,
-        press=lambda p, where: _click(p.get_by_role("button", name="Create", exact=True), where=where),
-        shot=_shot, on_new_page=_adopt)
+    def _press_create(p: Page, where: str) -> bool:
+        # ACL-1697: кабинет сверяется перед КАЖДЫМ нажатием Create — и в
+        # повторах, и после перезагрузки списка или свежей вкладки (`p` — та
+        # страница, на которой жмём). Не тот кабинет — ProfileStop, без клика.
+        # Не на Ads Manager (обрыв сети, пустая вкладка) — не жмём и не «чужой
+        # кабинет»: False, дальше идёт прежнее восстановление раундов.
+        if expected_act and not _ad_account_guard.stop_if_wrong(p, expected_act, where):
+            return False
+        return _click(p.get_by_role("button", name="Create", exact=True), where=where)
+
+    try:
+        opened = _open_campaign(
+            page, list_url, press=_press_create, shot=_shot, on_new_page=_adopt)
+    except _trouble.ProfileStop as stop:
+        if stop.code != _trouble.WRONG_AD_ACCOUNT:
+            raise
+        _conv_tls.wrong_act = stop.detail
+        _shot("fail_wrong_ad_account", note=stop.detail)
+        return "wrong_ad_account"
     if opened == "profile_unresponsive":
         _shot("fail_profile_unresponsive")
         return "profile_unresponsive"
