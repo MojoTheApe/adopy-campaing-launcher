@@ -1,4 +1,4 @@
-# ACL — Adopy Campaigns Launcher · runtime dependencies
+# ACL — Adopy Campaign Manager · runtime dependencies
 #
 # Pinned with ==, not >=. These are the versions ACL actually runs on today
 # (verified 2026-08-25 on the machine that published a live campaign), and ACL

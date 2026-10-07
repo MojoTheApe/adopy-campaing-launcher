@@ -60,15 +60,12 @@ def test_the_routine_csv_line_is_not_a_warning():
     assert "warnings.append" not in body, "обычная работа снова объявлена предупреждением"
 
 
-def test_the_logo_is_left_alone():
-    """Знак оставлен прежним — решение пользователя.
+def test_the_logo_is_the_blue_adopy_mark():
+    """ACL-1705: знак — плоская синяя метка Adopy «A» (#2563eb), без плитки и текста.
 
-    Я заменил его геометрией, потому что «ACL» нарисовано как `<text>` шрифтом
-    Segoe UI: на машине без него буква подставляется другой, и знак едет.
-    Пользователь вернул прежний, и это его выбор — но риск не исчез, поэтому
-    записан на доску как `acl-701a`, а не забыт.
-
-    Проверка держит только одно: файл не меняется молча.
+    Прежний знак с `<text>`-буквами «ACL» зависел от шрифта Segoe UI; новый —
+    чистая геометрия, поэтому проверяем, что текста в нём нет.
     """
     svg = (ROOT / "src" / "web" / "static" / "logo.svg").read_text(encoding="utf-8")
-    assert "<text" in svg and "ACL" in svg, "знак подменили — он должен остаться прежним"
+    assert "#2563eb" in svg and "<text" not in svg and "<rect" not in svg
+    assert 'aria-label="Adopy Campaign Manager"' in svg

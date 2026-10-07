@@ -135,7 +135,7 @@ def create_job(
 ) -> str:
     """Create a new publish job, store it, return its job_id."""
     if activate:
-        raise ValueError("ACL is draft-only: live activation is disabled")
+        raise ValueError("ACM is draft-only: live activation is disabled")
     if not use_rpa_publish():
         raise RuntimeError(
             "The legacy Meta API backend is disabled in the campaign-manager dashboard"
@@ -145,7 +145,7 @@ def create_job(
     job_id = str(uuid.uuid4())
     with _jobs_lock:
         if _update_reserved:
-            raise RuntimeError("ACL is restarting for an update. Wait until it returns before starting a campaign.")
+            raise RuntimeError("ACM is restarting for an update. Wait until it returns before starting a campaign.")
         # ACL-1603: 05.10 второй «Publish all» поставил десять заданий на
         # аккаунты, у которых задания уже были. Проверка и вставка — под одним
         # замком, иначе два запроса разом прошли бы оба.
@@ -624,7 +624,7 @@ def _run_job_inner(
             _start_stuck_watch(job_id, account_label)
 
             if activate or not use_rpa_publish():
-                _fatal(job_id, "ACL safety gate: only draft-only RPA jobs are allowed")
+                _fatal(job_id, "ACM safety gate: only draft-only RPA jobs are allowed")
                 return
             # Заблокированный экран останавливает сборку: система уходит на
             # защищённый рабочий стол, браузер перестаёт получать время, и
@@ -1222,7 +1222,7 @@ def _start_job(
     hand_off: bool,
 ) -> str:
     if activate:
-        raise ValueError("ACL is draft-only: live activation is disabled")
+        raise ValueError("ACM is draft-only: live activation is disabled")
     if not use_rpa_publish():
         raise RuntimeError(
             "The legacy Meta API backend is disabled in the campaign-manager dashboard"

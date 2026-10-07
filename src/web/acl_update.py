@@ -269,7 +269,7 @@ def _check_uncached(*, fetch: bool) -> dict[str, Any]:
     if not candidate_sha:
         return _no_update(current, "The release channel is unavailable on this machine.")
     if candidate_sha == head:
-        return _no_update(current, "ACL is up to date.")
+        return _no_update(current, "ACM is up to date.")
 
     from scripts.acl_update_gate import UNVERIFIED_NOTE, validate_candidate
 

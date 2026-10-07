@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title Adopy Campaigns Launcher
+title Adopy Campaign Manager
 cd /d "%~dp0"
 
 set PORT=9090
@@ -8,7 +8,7 @@ set URL=http://127.0.0.1:%PORT%/
 set HEALTH_URL=http://127.0.0.1:%PORT%/health
 
 echo.
-echo  Adopy Campaigns Launcher
+echo  Adopy Campaign Manager
 echo  ========================
 echo.
 

@@ -1218,7 +1218,7 @@ _NCOLS_BY_SECTION = {
     "optimization": 7,    # adset, spend, leads, ftds, cpl, cpa, reason
 }
 
-app = FastAPI(title="Adopy Campaigns Launcher")
+app = FastAPI(title="Adopy Campaign Manager")
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
@@ -1584,7 +1584,7 @@ async def acl_update_apply() -> JSONResponse:
         return JSONResponse(
             {
                 "ok": False,
-                "error": "ACL was not started by its launcher, so nothing would "
+                "error": "ACM was not started by its launcher, so nothing would "
                          "bring it back. Start it from the desktop shortcut and "
                          "try again.",
             },
@@ -1597,7 +1597,7 @@ async def acl_update_apply() -> JSONResponse:
             {
                 "ok": False,
                 "error": f"{busy} campaign job(s) still running. Updating restarts "
-                         "ACL, which would abandon them half-built.",
+                         "ACM, which would abandon them half-built.",
             },
             status_code=409,
         )
