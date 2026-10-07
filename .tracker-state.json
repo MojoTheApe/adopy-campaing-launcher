@@ -5629,9 +5629,11 @@
         "worktree": "C:\\acl-1684-doc120-stories",
         "id": "a9313d8023c6407ea6dd70d09bf68b6e",
         "issue": 684,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-07T11:23:01+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 685,
+        "report": "# ACL-1684 handoff\n\nPR #685 (base stage), branch codex/acl-1684-doc120-stories.\n\nDiagnosis: on Doc120 (run 4e4969867d28) the Stories list was complete (end true, at_bottom true, busy false, hidden 0, rows 5) but Meta folded it twice; each re-opening used the 6 s wait counted from the first read, and the changing row count restarted the quiet window, so the check ended `stable: false`. Fixed in the not-offered check only: the wait restarts after each re-opening (hard limit 15 s), `rows` is out of the stability key.\n\nTests (CI only, bench): tests/test_bench_placements_1684.py - flickering complete list is not offered; never-proven end still blocks; never-settling list stops at the hard limit; offered but hidden row is never not offered. Bench catalogue updated, secrets scan clean, catalogue test passes locally.\n\nNot run locally (laptop rules): the browser bench tests. Live checkbox left unchecked; live check is a separate task after merge."
       }
     },
     "tasks": {
