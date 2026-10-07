@@ -266,3 +266,82 @@ def test_select_uses_the_event_diff_per_workflow(tmp_path):
     zero = {"before": "0" * 40, "after": code}
     assert select(tmp_path, "push", zero, ref="refs/heads/stage", workflow="windows-installer.yml")["windows"] is True
     assert select(tmp_path, "push", zero, ref="refs/heads/stage", workflow="ci.yml")["python"] == ["3.11", "3.13"]
+
+
+# --- ACL-1649 review: bundled files and the installer ---------------------------------------------------
+
+import re  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from scripts.acl_ci_scope import BUNDLED_DIRS, BUNDLED_FILES, added_or_deleted_paths, is_bundled  # noqa: E402
+
+SPEC = Path(__file__).resolve().parents[1] / "packaging/windows/acl_windows.spec"
+
+
+def test_the_bundled_list_covers_every_data_path_of_the_spec():
+    text = SPEC.read_text(encoding="utf-8")
+    block = text[text.index("datas = ["):text.index("] + playwright_datas")]
+    paths = ["/".join(re.findall(r'"([^"]+)"', chunk))
+             for chunk in re.findall(r'PROJECT_ROOT((?: / "[^"]+")+)\)', block)]
+    assert len(paths) >= 14, paths
+    for path in paths:
+        assert is_bundled(path) or is_bundled(path + "/x"), path          # a file, or a directory with files under it
+    # and nothing in the lists that the spec does not bundle
+    for entry in BUNDLED_FILES | set(BUNDLED_DIRS):
+        assert entry.rstrip("/") in paths, entry
+
+
+def test_a_hidden_import_of_the_spec_triggers_the_installer():
+    text = SPEC.read_text(encoding="utf-8")
+    assert '"scripts.acl_runtime_manager"' in text
+    assert touches_installer("scripts/acl_runtime_manager.py") and touches_installer("scripts/acl_smoke.py")
+
+
+@pytest.mark.parametrize("path", ["config/rpa_recipes/new.yaml", "knowledge_base/new.md", "src/web/static/new.js",
+                                  "src/web/templates/new.html", "config/benchmarks.json"])
+def test_adding_or_deleting_a_bundled_file_needs_the_installer_but_editing_it_does_not(path):
+    assert classify_installer([path], "pull_request", "stage")["windows"] is False             # content edit
+    assert classify_installer([path], "pull_request", "stage", structural=[path])["windows"] is True
+    assert classify_installer([path], "push", None, "stage", structural=[path])["windows"] is True
+    assert classify_installer([path], "pull_request", "stage", structural=["src/web/app.py"])["windows"] is False
+
+
+def test_added_and_deleted_paths_come_from_the_real_diff(tmp_path):
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
+    git("init", "-q")
+    git("config", "user.name", "CI fixture")
+    git("config", "user.email", "ci@example.invalid")
+    for name in ("keep.txt", "gone.txt", "edit.txt"):
+        (tmp_path / name).write_text("1\n")
+    git("add", "keep.txt", "gone.txt", "edit.txt"); git("commit", "-qm", "initial")
+    base = git("rev-parse", "HEAD")
+    (tmp_path / "gone.txt").rename(tmp_path / "renamed.txt")
+    (tmp_path / "edit.txt").write_text("2\n")
+    (tmp_path / "new.txt").write_text("1\n")
+    git("add", "-A"); git("commit", "-qm", "change")                       # fixture-only temporary repository
+    assert sorted(added_or_deleted_paths(tmp_path, base, git("rev-parse", "HEAD"))) == ["gone.txt", "new.txt", "renamed.txt"]
+    with pytest.raises(ValueError):
+        added_or_deleted_paths(tmp_path, "a", "b")
+
+
+def test_select_sees_a_new_bundled_file_in_the_pr_diff(tmp_path):
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
+    git("init", "-q")
+    git("config", "user.name", "CI fixture")
+    git("config", "user.email", "ci@example.invalid")
+    (tmp_path / "knowledge_base").mkdir()
+    (tmp_path / "knowledge_base" / "a.md").write_text("1\n")
+    git("add", "knowledge_base/a.md"); git("commit", "-qm", "initial")
+    base = git("rev-parse", "HEAD")
+    (tmp_path / "knowledge_base" / "a.md").write_text("2\n")
+    git("commit", "-qam", "edit")
+    edit_only = git("rev-parse", "HEAD")
+    (tmp_path / "knowledge_base" / "b.md").write_text("1\n")
+    git("add", "knowledge_base/b.md"); git("commit", "-qm", "new file")
+    added = git("rev-parse", "HEAD")
+    pr = lambda head: {"pull_request": {"base": {"sha": base, "ref": "stage"}, "head": {"sha": head}}}
+    assert select(tmp_path, "pull_request", pr(edit_only), workflow="windows-installer.yml")["windows"] is False
+    result = select(tmp_path, "pull_request", pr(added), workflow="windows-installer.yml")
+    assert result["windows"] is True and result["reason"] == "bundled-file-added-or-deleted"

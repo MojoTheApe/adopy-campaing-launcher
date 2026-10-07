@@ -21,13 +21,13 @@ ACL-1649: reuse the PR -> stage -> main chain.
 - Покрытие складывается по заданиям из нескольких прогонов одного дерева: stage
   проверяет 3.13 + Windows, PR в main добирает 3.11, а push в main не запускает
   ничего (``find_coverage``). Релизные ворота по-прежнему требуют полный набор.
-- Прогон ``pull_request`` теперь тоже доказательство, но только для коммита, который
-  git связывает с PR: этот PR влит в проверяемую ветку (API ``commits/<sha>/pulls``),
-  дерево коммита равно дереву головы PR, а прежний конец ветки (первый родитель)
-  входит в историю головы PR. Тогда временный merge-коммит прогона PR
-  (``refs/pull/N/merge``) имел то же дерево, что и голова PR (``verify_pr_heads``).
-  Почему раньше reuse не срабатывал: squash-коммит stage не содержит голову PR в своей
-  истории (её нет в клоне), а прогоны ``pull_request`` не принимались вовсе.
+- Прогон ``pull_request`` теперь тоже доказательство, но только с аннотацией, которую его
+  собственное scope-задание записало о реально проверенном дереве (``tested_tree``), и только
+  для головы PR, влитого именно этим коммитом (``verify_pr_heads``: API ``commits/<sha>/pulls``,
+  ``merge_commit_sha`` == коммит). Дерево merge-коммита PR видно только самому прогону, поэтому
+  оно записывается там же; ``run.pull_requests`` после слияния пуст и для привязки не годится.
+  Почему раньше reuse не срабатывал: прогоны ``pull_request`` не принимались вовсе, а голову PR
+  squash-коммит stage не содержит.
 
 Any doubt (API error, missing data, no matching run) returns ``None``: the
 caller runs everything in full.
@@ -206,35 +206,44 @@ def required_jobs(workflow, pythons=FULL_PYTHON_VERSIONS, windows=True, linux=Tr
     return names
 
 
-def _git_ok(root, *args):
-    try:
-        subprocess.check_output(["git", *args], cwd=root, text=True, stderr=subprocess.DEVNULL)
-        return True
-    except (OSError, subprocess.SubprocessError):
-        return False
+# ACL-1649: прогон pull_request доказывает дерево, только если его собственное scope-задание
+# записало аннотацию с деревом, которое он реально проверял (checkout merge-коммита PR).
+# Почему не run.pull_requests: после слияния PR и удаления ветки GitHub отдаёт там пустой список
+# (проверено на прогонах влитых PR), так что привязка по нему никогда не сработала бы на stage.
+MARKER_TITLE = "acl-tested-tree"
+MARKER_MESSAGE = re.compile(r"tree=([0-9a-f]{40})")
+SCOPE_JOB = {"ci.yml": "Classify and check project tooling", "windows-installer.yml": "Classify installer changes"}
 
 
-def fetch_pr_head(root, number):
-    """Забрать голову PR в клон (``refs/pull/N/head``): клон Actions её не содержит."""
-    return _git_ok(root, "fetch", "--no-tags", "--quiet", "origin", f"refs/pull/{int(number)}/head")
+def marker_line(tree):
+    """Строка для stdout scope-шага: команда GitHub Actions, создающая аннотацию задания."""
+    return f"::notice title={MARKER_TITLE}::tree={tree}"
 
 
-def verify_pr_heads(root, api, repo, commit, branch, fetch=fetch_pr_head):
-    """Головы влитых PR, чей прогон ``pull_request`` доказуемо проверял дерево ``commit``.
+def tested_tree(api, repo, jobs, workflow):
+    """Дерево из аннотации scope-задания прогона или None (нет, неоднозначно или ошибка формата)."""
+    rows = jobs.get(SCOPE_JOB.get(workflow)) or []
+    if len(rows) != 1 or not isinstance(rows[0].get("id"), int):
+        return None
+    found = set()
+    for note in api(f"repos/{repo}/check-runs/{rows[0]['id']}/annotations?per_page=50") or []:
+        if note.get("title") == MARKER_TITLE:
+            match = MARKER_MESSAGE.fullmatch(str(note.get("message") or "").strip())
+            if not match:
+                return None
+            found.add(match[1])
+    return found.pop() if len(found) == 1 else None
 
-    Прогон PR проверяет merge-коммит (база на тот момент + голова H). Если прежний конец
-    ветки P1 (первый родитель ``commit``) входит в историю H, то любая база B <= P1 тоже
-    входит в H, и дерево merge-коммита равно дереву H. Остаётся требовать, чтобы дерево
-    ``commit`` равнялось дереву H (squash или merge без чужих правок). Любое сомнение —
-    пустой список."""
+
+def verify_pr_heads(root, api, repo, commit, branch="", fetch=None):
+    """Головы PR, влитых именно коммитом ``commit`` (кандидаты для поиска прогонов ``pull_request``).
+
+    Сама голова ничего не доказывает: прогон принимается только с аннотацией о проверенном
+    дереве (``tested_tree``). Здесь только привязка «этот PR влит этим коммитом»:
+    ``merge_commit_sha`` равен ``commit`` (commits/<sha>/pulls отдаёт и PR, где commit лишь
+    один из коммитов), PR влит и из этого же репозитория. Ветка ``branch``, если задана, — база PR.
+    ``fetch`` оставлен для совместимости и не используется. Ошибка API — пустой список."""
     if not SHA.fullmatch(commit or "") or not REPO.fullmatch(repo or ""):
-        return []
-    tree = tree_of(root, commit)
-    try:
-        parent = _git(root, "rev-parse", "--verify", "--quiet", f"{commit}^1")
-    except (OSError, subprocess.SubprocessError):
-        return []
-    if not tree or not SHA.fullmatch(parent):
         return []
     try:
         prs = api(f"repos/{repo}/commits/{commit}/pulls?per_page=10")
@@ -244,31 +253,27 @@ def verify_pr_heads(root, api, repo, commit, branch, fetch=fetch_pr_head):
     for pr in prs if isinstance(prs, list) else []:
         head, number = (pr.get("head") or {}).get("sha"), pr.get("number")
         base = pr.get("base") or {}
-        # Именно слияние PR: merge_commit_sha равен commit (commits/<sha>/pulls отдаёт и PR,
-        # у которых commit лишь один из коммитов). Ветка, если задана, — база PR.
         if (not pr.get("merged_at") or pr.get("merge_commit_sha") != commit
                 or (branch and base.get("ref") != branch) or not isinstance(number, int)
                 or not SHA.fullmatch(head or "")
                 or (base.get("repo") or {}).get("full_name", repo) != repo
                 or ((pr.get("head") or {}).get("repo") or {}).get("full_name", repo) != repo):
             continue
-        if tree_of(root, head) is None and not fetch(root, number):
-            continue
-        if tree_of(root, head) == tree and _git_ok(root, "merge-base", "--is-ancestor", parent, head):
-            heads.append(head)
+        heads.append(head)
     return heads
 
 
-def collect_pr_heads(root, api, repo, tree, commits=(), fetch=fetch_pr_head):
+def collect_pr_heads(root, api, repo, tree, commits=(), fetch=None):
     """Головы PR для всех коммитов с деревом ``tree``: сам проверяемый коммит и его двойники.
 
-    Цепочка PR -> stage -> main: у коммита stage есть своя голова PR, и именно её прогон
-    покрывает дерево, когда прогоны stage и main сами пропущены по reuse."""
+    Цепочка PR -> stage -> main: у коммита stage есть своя голова PR (и у слияния в main —
+    голова stage), и именно прогон на этой голове покрывает дерево, когда прогоны stage и
+    main сами пропущены по reuse. ``commits`` проверяются, только если их дерево равно ``tree``."""
     heads = []
     for commit in list(commits) + same_tree_commits(root, tree):
         if tree_of(root, commit) != tree:
             continue
-        for head in verify_pr_heads(root, api, repo, commit, "", fetch):
+        for head in verify_pr_heads(root, api, repo, commit, ""):
             if head not in heads:
                 heads.append(head)
     return heads
@@ -278,8 +283,12 @@ def find_coverage(root, api, repo, workflow, tree, exclude_run_id=None, pr_heads
     """Какие задания уже прошли на этом дереве: объединение по нескольким прогонам.
 
     -> {"covered": set имён, "runs": [{run_id, run_url, commit, event, branch, jobs}]}.
-    Прогоны ``pull_request`` берутся только для голов из ``pr_heads`` (verify_pr_heads);
-    прогоны старой раскладки не считаются. Исключения API/git не глотаются."""
+    Прогоны ``push``/``workflow_dispatch`` — на коммитах с этим деревом по git. Прогоны
+    ``pull_request`` — только на головах из ``pr_heads`` и только с аннотацией о том же дереве
+    (``tested_tree``); без аннотации, с другим деревом или чужим PR прогон не принимается.
+    Прогон засчитывается, лишь если его итоговое задание прошло и он дал хотя бы одно
+    тестовое задание (иначе ``reused_from`` указывал бы на прогон, который ничего не запускал).
+    Прогоны старой раскладки не считаются. Исключения API/git не глотаются."""
     covered, runs = set(), []
     if workflow not in REQUIRED_JOBS or not REPO.fullmatch(repo or ""):
         return {"covered": covered, "runs": runs}
@@ -289,21 +298,24 @@ def find_coverage(root, api, repo, workflow, tree, exclude_run_id=None, pr_heads
         if tree_of(root, commit) == tree:
             events[commit] = set(PROVABLE_EVENTS)
     for head in pr_heads:
-        if tree_of(root, head) == tree:
+        if SHA.fullmatch(head or ""):
             events.setdefault(head, set()).update(PROVABLE_EVENTS | {"pull_request"})
     relevant = set(REQUIRED_JOBS[workflow])
+    admission = REQUIRED_JOBS[workflow][-1]
     for commit, allowed in events.items():
         for run in candidate_runs(api, repo, workflow, commit, exclude_run_id, allowed):
             jobs = latest_jobs(api, repo, run)
             if legacy_layout(jobs, workflow):
                 continue
+            if run["event"] == "pull_request" and tested_tree(api, repo, jobs, workflow) != tree:
+                continue
             passed = passed_names(jobs)
             # Итоговое задание прогона (ACL verification / Installer verification) тоже должно
             # быть успешным: без него прогон не доказательство, даже если часть заданий зелёная.
-            if REQUIRED_JOBS[workflow][-1] not in passed:
+            if admission not in passed:
                 continue
             names = passed & relevant
-            if names - covered:
+            if (names - {admission}) - covered:
                 covered |= names
                 runs.append({"run_id": run["id"], "run_url": run["html_url"], "commit": commit, "tree": tree,
                              "event": run["event"], "branch": run.get("head_branch"), "jobs": sorted(names)})

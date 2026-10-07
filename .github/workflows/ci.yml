@@ -42,12 +42,14 @@ jobs:
     timeout-minutes: 5
     # ACL-1565: only this job reads earlier runs of the workflow, to reuse a full
     # green run of the exact same git tree (scripts/acl_ci_reuse.py).
-    # ACL-1649: pull-requests: read — чтобы связать squash/merge-коммит stage и main с влитым
-    # PR (commits/<sha>/pulls) и принять его прогон pull_request как доказательство.
+    # ACL-1649: pull-requests: read — связать squash/merge-коммит stage и main с влитым PR
+    # (commits/<sha>/pulls); checks: read — прочитать аннотацию scope-задания прогона PR о
+    # проверенном дереве (scripts/acl_ci_reuse.py tested_tree).
     permissions:
       contents: read
       actions: read
       pull-requests: read
+      checks: read
     outputs:
       windows: ${{ steps.scope.outputs.windows }}
       # ACL-1649: Linux и Windows решаются отдельно (на PR в main stage-прогон уже покрыл

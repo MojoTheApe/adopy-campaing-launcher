@@ -30,8 +30,22 @@ INSTALLER_PREFIXES = ("packaging/", ".github/workflows/", "assets/")
 INSTALLER_FILES = {
     "delivery.json", ".env.example", "pyproject.toml", "setup.py", "setup.cfg", ".python-version",
     "src/web/acl_update.py", "src/web/machine_paths.py", "src/web/release_signing.py",
-    "src/web/release_updates.py",
+    "src/web/release_updates.py", "scripts/acl_runtime_manager.py",   # скрытый импорт пакета (acl_windows.spec)
 }
+# Данные, которые acl_windows.spec кладёт в пакет. Правка содержимого установщик не ломает (путь в main
+# всё равно проверяет его целиком), но добавление, удаление или переименование такого файла меняет
+# состав пакета, поэтому на PR в stage оно запускает установщик. Список сверяет тест со spec.
+BUNDLED_FILES = {
+    ".env.example", "config/ad_account_map.example.csv", "config/ads_manager_selectors.yaml",
+    "config/analysis_reading_rules.json", "config/benchmarks.json", "config/content_plan_week.example.json",
+    "config/knowledge_base.json", "config/rpa_forbidden_zones.yaml",
+}
+BUNDLED_DIRS = ("config/rpa_intents/", "config/rpa_recipes/", "config/rpa_variations/", "knowledge_base/",
+                "src/web/static/", "src/web/templates/")
+
+
+def is_bundled(name):
+    return name in BUNDLED_FILES or name.startswith(BUNDLED_DIRS)
 INSTALLER_SCRIPT_PREFIXES = (
     "scripts/acl_publish_release", "scripts/acl_release_", "scripts/acl_sign_release", "scripts/acl_smoke",
     "scripts/acl_update_gate", "scripts/acl_scan_secrets", "scripts/acl_ci_",
@@ -102,7 +116,7 @@ def touches_installer(name):
     return root_dependency_file(name)
 
 
-def classify_installer(paths, event_name, base_ref=None, branch=None):
+def classify_installer(paths, event_name, base_ref=None, branch=None, structural=()):
     """Нужен ли workflow «Windows installer». На пути в main — всегда; в лёгком контуре — по входам."""
     python = list(reuse.FULL_PYTHON_VERSIONS)
     if not light_context(event_name, base_ref, branch) or not paths:
@@ -110,6 +124,8 @@ def classify_installer(paths, event_name, base_ref=None, branch=None):
     if any(touches_installer(name) for name in paths):
         return {"windows": True, "linux": False, "reason": "installer-packaging-delivery-or-dependency-change",
                 "python": python}
+    if any(is_bundled(name) for name in structural):
+        return {"windows": True, "linux": False, "reason": "bundled-file-added-or-deleted", "python": python}
     return {"windows": False, "linux": False, "reason": "no-installer-inputs-changed", "python": python}
 
 
@@ -126,6 +142,25 @@ def branch_of(ref):
     """Имя ветки из GITHUB_REF; теги и прочее — пустая строка (полный контур)."""
     ref = str(ref or "")
     return ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ""
+
+
+def added_or_deleted_paths(root, base, head):
+    """Пути, добавленные или удалённые между базой и головой (rename = удаление + добавление)."""
+    if not all(re.fullmatch(r"[0-9a-f]{40}", sha or "") for sha in (base, head)):
+        raise ValueError("Expected exact base/head commits")
+    ancestor = subprocess.check_output(["git", "merge-base", base, head], cwd=root, text=True).strip()
+    output = subprocess.check_output(["git", "diff", "--no-renames", "--name-status", "-z", ancestor, head],
+                                     cwd=root).split(b"\0")
+    return [output[i + 1].decode("utf-8", errors="surrogateescape")
+            for i in range(0, len(output) - 1, 2) if output[i][:1] in (b"A", b"D")]
+
+
+def event_structural(root, event_name, event):
+    if event_name == "pull_request":
+        return added_or_deleted_paths(root, event["pull_request"]["base"]["sha"], event["pull_request"]["head"]["sha"])
+    if event_name == "push":
+        return added_or_deleted_paths(root, event["before"], event["after"])
+    return []
 
 
 def event_paths(root, event_name, event):
@@ -145,7 +180,11 @@ def select(root, event_name, event, *, ref="", workflow="ci.yml"):
         if event_name == "pull_request":
             base_ref = event["pull_request"]["base"]["ref"]
         branch = branch_of(ref)
-        paths = event_paths(root, event_name, event) if light_context(event_name, base_ref, branch) else []
+        light = light_context(event_name, base_ref, branch)
+        paths = event_paths(root, event_name, event) if light else []
+        if classifier is classify_installer:
+            structural = event_structural(root, event_name, event) if light else []
+            return classifier(paths, event_name, base_ref, branch, structural)
         return classifier(paths, event_name, base_ref, branch)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         return {"windows": True, "linux": workflow != "windows-installer.yml",
@@ -219,6 +258,12 @@ def main():
     result = decide(Path(__file__).resolve().parents[1], args.event_name, event,
                     ref=os.environ.get("GITHUB_REF", ""), workflow=args.workflow,
                     repo=os.environ.get("GITHUB_REPOSITORY", ""), api=api, run_id=os.environ.get("GITHUB_RUN_ID"))
+    if args.event_name == "pull_request":
+        # ACL-1649: аннотация задания о реально проверенном дереве (checkout merge-коммита PR):
+        # по ней stage и main позже доказывают, что прогон PR проверял именно их дерево.
+        tested = reuse.tree_of(Path(__file__).resolve().parents[1], "HEAD")
+        if tested:
+            print(reuse.marker_line(tested))
     if args.output:
         with args.output.open("a", encoding="utf-8") as f:
             f.write("windows=" + str(result["windows"]).lower() + "\n")

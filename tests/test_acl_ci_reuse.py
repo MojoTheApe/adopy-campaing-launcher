@@ -359,7 +359,8 @@ def test_scope_jobs_read_actions_and_publish_the_reused_run(name, flag):
     assert data["permissions"] == {"contents": "read"}
     job = data["jobs"]["scope"]
     # ACL-1649: pull-requests: read — связать коммит stage/main с влитым PR (commits/<sha>/pulls).
-    assert job["permissions"] == {"contents": "read", "actions": "read", "pull-requests": "read"}
+    # checks: read — аннотация scope-задания прогона PR о проверенном дереве (tested_tree).
+    assert job["permissions"] == {"contents": "read", "actions": "read", "pull-requests": "read", "checks": "read"}
     assert all("permissions" not in other for key, other in data["jobs"].items() if key != "scope")
     assert job["outputs"]["reused_from"] == "${{ steps.scope.outputs.reused_from }}"
     step = next(s for s in job["steps"] if s.get("id") == "scope")
