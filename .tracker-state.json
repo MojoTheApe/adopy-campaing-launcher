@@ -1944,6 +1944,24 @@
           650
         ],
         "recorded_at": "2026-10-07T07:25:26+00:00"
+      },
+      "666": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1649Q",
+        "review_session": "rev_r1649q_1007",
+        "execution_lane": "74fd5f81160b47aa9fe434d5933aa1ff",
+        "implementer": "Worker-S1649A",
+        "head_sha": "5a90fc4cbab54b6c9711300d778487c89be4d235",
+        "base_sha": "0fa66af6ece68cdbfdcbdd63ccbbbdae8d26d00f",
+        "tree_sha": "e8d07458323d6ef030e0a8273b037261620c6640",
+        "report": "# Review of PR #666 (ACL-1649), round 3\n\nVerdict: APPROVED.\nReviewer-R1649Q (rev_r1649q_1007). Implementer: Worker-S1649A.\n- Head: ff8d201da31191ffd28548bf43e1a3e6d024f5b7 (fix a265a153 plus a merge of work/stage 0fa66af6, which includes ACL-1650).\n- Base work/stage: 0fa66af6ece68cdbfdcbdd63ccbbbdae8d26d00f, an ancestor of the head.\n- Tree: e8d07458323d6ef030e0a8273b037261620c6640.\n- `git merge-tree --write-tree work/stage HEAD` gives exactly the head tree, so it is clean.\n- The merge commit brings in only src/web/templates/report.html from stage, and no change to the PR's own files.\n\n## R2-B1: fixed\n- `find_coverage` now does `events.setdefault(head, set()).add(\"pull_request\")` for PR heads. Push and workflow_dispatch runs\n  count only on commits that git confirms have the proven tree.\n- My scratchpad/sim666_r2.py now gives None for both shapes, a dispatch run and a push run on a PR head whose tree differs.\n- New tests cover this:\n  - test_a_push_or_dispatch_run_on_a_pr_head_with_another_tree_is_no_proof[push|workflow_dispatch]\n  - test_the_stage_push_run_does_not_count_for_a_main_commit_with_a_hotfix\n- Mutant R7 (put push and dispatch back on PR heads) is killed.\n\n## Marker refusals (round-2 R2-N1): fixed\nNew cases [T+other], [other+T], [T+malformed] and [malformed+T] are refused. R1 (ambiguous markers: take any) and R2 (a\nmalformed marker is skipped) are now killed.\n\n## Marker on this PR's CI\nThe scope-job annotation of run 37596023973 reads `tree=e8d07458...`, which equals the tree of refs/pull/666/merge and the head\ntree. The B3 decision from round 2 stands: binding a run by the tree it tested is accepted under our threat model (only our\nown agents, every diff reviewed).\n\n## Tests (local, one file at a time, --noconftest)\n| File | Result |\n|---|---|\n| test_acl_ci_chain | 46 passed |\n| test_acl_ci_scope | 178 passed |\n| test_master_adoption | 20 passed, 2 skipped (the bash cases are skipped on Windows and pass in CI) |\n| test_publish_release | 47 passed |\n| test_acl_ci_workflows | 41 passed |\n| test_acl_ci_minutes | 11 passed |\n| test_ci_layout | 8 passed, 1 skipped |\n| test_acl_test_platform | 100 passed |\n| test_acl_ci_reuse | 80 passed |\n\n## Mutations (scratchpad/mutate666b.py on a scratch copy of this head)\nKilled:\n- N1 accept a PR run without its marker\n- N2 drop merge_commit_sha\n- N3 the gate excludes the main run again\n- N4 count a run that ran no test job\n- N5 ignore added or deleted bundled files\n- R1 ambiguous markers\n- R2 malformed marker skipped\n- R3 marker taken from any job\n- R4 deletes ignored\n- R5 marker not printed\n- R7 PR heads admit push/dispatch\nR6 (admission job not required): killed (test_acl_ci_reuse::test_partial_cancelled_or_failed_matrix_is_refused). 12 of 12 killed, 0 survived.\n\n## CI (head ff8d201d): all green\n- CI run 37596023973: success. Scope job passed with tooling tests 509 passed; its decision was windows and linux true,\n  python [3.11, 3.13], reason product-build-or-unknown-change, no reuse.\n- All 6 Linux shards, windows (3.13) and the ACL verification admission bash passed.\n- Windows installer run 37596023972: success. Tracker linkage 37596023985: success. Delivery setup 37596023991: success.\n\n## Non-blocking, carried over\n- The installer still treats content edits to bundled files and hidden imports as main-path-only. That is by design: the\n  main path and release.yml always rebuild and test the installer.\n",
+        "main_sha": "fd405412c6004565562ad27713991612bdb1f530",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          649
+        ],
+        "recorded_at": "2026-10-07T09:13:25+00:00"
       }
     },
     "stage": {
