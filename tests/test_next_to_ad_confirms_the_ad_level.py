@@ -120,7 +120,70 @@ def test_classic_wizard_sidebar_level_counts():
     assert md._ad_level_verdict({"levels": [], "wizard": "ad_set"}) == "ad_set"
 
 
-def test_the_flow_checks_the_level_and_fails_at_the_navigation_step():
+def test_ad_level_appearing_after_a_failed_re_press_is_ok():
+    """Ревью F1: Next на уровне объявления нет — провал нажатия не отказ."""
+    class Late(Script):
+        def press(self):
+            self.presses += 1
+            self.states = [AD]  # переход закончился, пока искали Next
+            self.reads = 0
+            return False
+
+    s = Late([AD_SET])
+    got = run(s)
+    assert got["ok"] and got["level"] == "ad" and got["why"] == ""
+    assert s.presses == 1
+
+
+def test_markers_beat_the_sidebar_guess():
+    """Ревью F3: метки ad set и догадка «ad» по дереву — решают метки."""
+    assert md._ad_level_verdict({"levels": ["ad_set"], "wizard": "ad"}) == "ad_set"
+    assert md._ad_level_verdict({"levels": ["ad", "ad_set"], "wizard": "ad_set"}) == "ad"
+    assert md._ad_level_verdict({"levels": ["campaign"], "wizard": "ad"}) == "ad"
+
+
+def test_sidebar_guess_with_ad_set_markers_is_still_stuck():
+    s = Script([{**AD_SET, "wizard": "ad"}])
+    got = run(s)
+    assert not got["ok"] and got["level"] == "ad_set"
+
+
+def test_the_flow_checks_the_level():
     src = inspect.getsource(md.run_recorded_campaign_flow)
     assert "reach_ad_level(" in src
-    assert 'note=reach["why"]' in src
+    assert 'name="Next", exact=True' in src
+
+
+from tests.test_destination_and_ad_name_say_why import flow  # noqa: E402,F401
+
+
+def test_stuck_on_the_ad_set_returns_the_blocking_step(flow, monkeypatch):
+    """Ревью F2/F4: подтверждённый «ad set» — блокирующая остановка, не повтор."""
+    from src.fb_ads_rpa import failure_policy, retry_policy
+
+    monkeypatch.setattr(md, "reach_ad_level", lambda *a, **k: {
+        "ok": False, "why": "next_clicked_no_change", "presses": 3, "cleared": [], "level": "ad_set",
+        "state": {"levels": ["ad_set"]}})
+    result, _soft, rows, _ = flow()
+    assert result == "next_to_ad_stuck_on_adset"
+    failed = [r for r in rows if r["step"] == "next_to_ad" and r["ok"] is False]
+    assert failed and failed[-1]["note"] == "next_clicked_no_change"
+    step = "next_to_ad_stuck_on_adset"
+    assert step in retry_policy.BLOCKING_REVIEW_STEPS
+    assert step in retry_policy.NON_RETRYABLE_FLOW_STEPS
+    assert step not in retry_policy.CAMPAIGN_RETRY_STEPS
+    assert retry_policy.should_retry_campaign(step, completed_attempts=0) is False
+    assert failure_policy.severity(step) == failure_policy.BLOCKING
+    assert "unclassified" not in failure_policy.reason(step)
+
+
+def test_the_stuck_stop_blocks_the_campaign_with_a_reason_and_no_retry(monkeypatch):
+    from tests.test_objective_dialog_waits_while_loading import _publish_with_failures
+    from src.fb_ads_rpa import failure_policy
+
+    step = "next_to_ad_stuck_on_adset"
+    result, sleeps = _publish_with_failures(monkeypatch, [step])
+    assert sleeps == [], "не повторяется"
+    assert result.success is False
+    assert step in result.blocking_failures
+    assert failure_policy.reason(step) in result.error

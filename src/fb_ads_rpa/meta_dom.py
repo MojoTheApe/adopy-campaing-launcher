@@ -6376,7 +6376,7 @@ def run_recorded_campaign_flow(
             # ACL-1693: «Next нажат» ещё не значит «открыт уровень объявления».
             reach = reach_ad_level(
                 page,
-                lambda: _click(page.get_by_role("button", name="Next"), where="next_to_ad"),
+                lambda: _click(page.get_by_role("button", name="Next", exact=True), where="next_to_ad"),
                 lambda: _clear_blocking_overlays(page, "ad_set"),
             )
             if not reach["ok"]:
@@ -6386,7 +6386,10 @@ def run_recorded_campaign_flow(
                     "why": reach["why"], "presses": reach["presses"],
                     "cleared": reach["cleared"][:6], "state": reach["state"],
                 }, note=reach["why"])
-                return "next_to_ad"
+                # Страница уверенно показывает ad set после всех нажатий: повтор
+                # кампании оставил бы ещё один черновик (ревью PR #695, F2) —
+                # остановка на проверку, не повтор.
+                return "next_to_ad_stuck_on_adset"
             _shot("after_next_to_ad", {"presses": reach["presses"], "level": reach["level"]}
                   if reach["presses"] > 1 or reach["level"] == "unknown" else None,
                   note="repressed" if reach["presses"] > 1 else None)
@@ -16837,13 +16840,20 @@ def next_to_ad_state(page: Page) -> dict:
 
 
 def _ad_level_verdict(state: dict) -> str:
-    """"ad" — на уровне объявления; "ad_set" — всё ещё на ad set; "" — не ясно."""
+    """"ad" — на уровне объявления; "ad_set" — всё ещё на ad set; "" — не ясно.
+
+    Решают метки страницы (`/editor:<уровень>`); догадка по боковому дереву
+    мастера (`wizard_editor_level`) — только когда меток уровня нет (ревью
+    PR #695, F3). Ad перед ad_set: пока смонтированы оба, переход идёт.
+    """
     levels = state.get("levels") or []
-    wizard = state.get("wizard") or ""
-    if "ad" in levels or wizard == "ad":
+    if "ad" in levels:
         return "ad"
-    if "ad_set" in levels or wizard == "ad_set":
+    if "ad_set" in levels:
         return "ad_set"
+    wizard = state.get("wizard") or ""
+    if wizard in ("ad", "ad_set"):
+        return wizard
     return ""
 
 
@@ -16910,6 +16920,24 @@ def reach_ad_level(page: Page, press_next, clear_overlays, *, read_state=None, s
             pressed = False
         out["presses"] += 1
         if not pressed:
+            # Next не нашёлся — возможно, потому что переход уже случился и на
+            # уровне объявления кнопки нет (ревью PR #695, F1): читаем заново.
+            verdict, state = "", {}
+            for tick in range(max(1, wait_ticks)):
+                try:
+                    state = read(page) or {}
+                except Exception:
+                    state = {}
+                verdict = _ad_level_verdict(state)
+                if verdict != "ad_set":
+                    break
+                if tick + 1 < wait_ticks:
+                    nap(0.5)
+            out["state"] = state
+            if verdict == "ad":
+                return {**out, "ok": True, "level": "ad"}
+            if verdict == "":
+                return {**out, "ok": True, "level": "unknown"}
             break
     out["why"] = _next_to_ad_why(out["state"], pressed)
     return out
