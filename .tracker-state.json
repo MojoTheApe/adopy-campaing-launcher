@@ -6034,9 +6034,11 @@
         "worktree": "C:\\acl-1710-ci-chromium",
         "id": "e55424b9a0bb48db8cf2c9e1bfa03656",
         "issue": 710,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-07T19:56:39+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 711,
+        "report": "Tracker issues: ACL-1710\n\n## What changed\n- `scripts/ci_retry.sh` (new): 3 attempts, each cut by `timeout` (300 s Linux, 180 s Windows), 15/10 s pause, apt locks and partial lists cleaned before each retry, clear `::error::` if all fail.\n- Linux and Windows \"Install Chromium\" steps go through it, with hard step `timeout-minutes` 16 / 12.\n- Browser download cached with `actions/cache@v4` keyed on the installed Playwright version. Linux on a cache hit runs only `playwright install-deps chromium` (same bounded retry).\n- Linux test job `timeout-minutes` 35 -> 25. Windows job already had 30, unchanged.\n- Check/job names, ACL-1649 reuse logic and release-gate requirements untouched. `tests/test_ci_layout.py` extended, new `tests/test_ci_retry.py`; WORKFLOW.md updated.\n\n## Measurements (Chromium install step, 3 recent green runs, before)\n- Linux: 23-110 s (typical 25-60 s); Windows: 14-31 s. Linux shards total 11-17 min.\n- After: see the CI of this PR (cold cache first run, cache hit on the next push).\n\n## Hang simulation\nA throwaway CI commit with `sleep 400` on one shard was skipped: a stage PR runs 3 Linux + 1 Windows jobs, well over the ~40 runner-minute budget. Proved locally instead with the same script: `ci_retry.sh 3 5 2 -- sleep 400` cuts each attempt at its limit (exit 124), retries 3 times, then fails with \"all 3 attempts failed\" in 22 s. `tests/test_ci_retry.py` covers hang/cleanup/retry-success. With the real limits, a hang fails at ~5 min per attempt and the step is capped at 16 min.\n\nLocal tests: test_ci_layout, test_ci_retry, test_acl_ci_workflows, test_acl_ci_chain, test_acl_ci_scope: 276 passed.\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)"
       }
     },
     "tasks": {
