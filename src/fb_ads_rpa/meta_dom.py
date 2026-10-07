@@ -5454,6 +5454,10 @@ def run_recorded_campaign_flow(
         if not (page_state["closed"] or _page_read_trouble(page) == "closed"):
             return False
         _telemetry.record("browser_closed", False, note="page_closed", diag={"where": where})
+        # ACL-1673: шаг — только в diag.where этой строки и в метке «tab closed»
+        # страницы здоровья робота. В список отказов `page_closed:<шаг>` не
+        # кладём: у политики сбоев такого имени нет («Unclassified step» и
+        # второе событие Sentry на каждую закрытую вкладку).
         if soft_fails_out is not None and fails:
             soft_fails_out.extend(fails)
         return True
@@ -5491,13 +5495,15 @@ def run_recorded_campaign_flow(
         # 9 сентября `diag` был пуст, и сказать про них было нечего — ни
         # человеку, ни будущему агенту. Собранное в одном месте не разойдётся
         # с вызовами, и новый шаг получит контекст, ничего для этого не делая.
-        if ok is False and not frozen:
+        # ACL-1673: на ушедшей вкладке контекст, разметку и снимок не берём.
+        gone = _tab_gone(page)
+        if ok is False and not frozen and not gone:
             diag = _telemetry.merge_diag(_telemetry.page_context(page), diag)
         # Разметка упавшего шага — на диск, рядом со скриншотом. По картинке
         # селектор не напишешь: на вопрос «почему не нашлась кнопка» отвечает
         # то, что было в DOM. Тот же снимок нужен стенду `acl-340`, без
         # которого `meta_dom` не покрыть тестами.
-        if ok is False and not frozen:
+        if ok is False and not frozen and not gone:
             try:
                 from src.fb_ads_rpa import page_capture as _pages
 
@@ -5523,7 +5529,7 @@ def run_recorded_campaign_flow(
             _flow_budget_check()
         if ok is not False and not _shot_worth_a_picture(label):
             return
-        if frozen:
+        if frozen or gone:
             return
         try:
             from src.fb_ads_rpa.screenshots import capture as _capture
@@ -5878,6 +5884,10 @@ def run_recorded_campaign_flow(
         _wait_loading()
         _shot("after_next_to_adset")
     if not ensure_editor_window(page, "adset"):
+        if page_state["closed"] or _tab_gone(page):
+            page_state["closed"] = True
+            if _closed_stop("adset_window", soft_fails):
+                return "browser_closed"
         return "window_too_small"
     _clear_blocking_overlays(page, "adset")
 
@@ -6340,6 +6350,24 @@ def run_recorded_campaign_flow(
             soft_fails_out.extend(soft_fails)
             soft_fails_out.extend(ad_level_fails)
 
+    def _dead_page_stop(where: str) -> bool:
+        """Единый страж границы шага объявления: вкладки нет — работа кончена.
+
+        ACL-1673 (7641d7b3d86a, B96, 07.10): `ad3_destination` ответил
+        `page_closed`, а поток ещё ~1.5 мин шёл по мёртвой странице —
+        `window_bounds` с пустыми границами, `ad_copy_fields not_revealed` ×2,
+        `ad3_copy`, и только `ad4_create` назвал `browser_closed`. Проверка
+        локальная (`_tab_gone`: `is_closed()`, `browser.is_connected()`, метка
+        «закрыто»), без единого вызова страницы. Свежую вкладку в объявлении
+        не открываем: повторное открытие редактора Leads-объявления само его
+        портит (ACL-1353), а продолжать «с последнего проверенного» нечем —
+        останов, `browser_closed` (шаг — в `diag.where`).
+        """
+        if not (page_state["closed"] or _tab_gone(page)):
+            return False
+        page_state["closed"] = True
+        return _closed_stop(where, soft_fails + ad_level_fails)
+
     # ACL-1390: нужен и после блока объявлений (охрана второго прохода).
     simple_extra_tried = False
     if creative_path:
@@ -6384,6 +6412,8 @@ def run_recorded_campaign_flow(
         ad_edit_url = page.url
         reached_ad_level = True
         if not ensure_editor_window(page, "ad"):
+            if _dead_page_stop("ad_window"):
+                return "browser_closed"
             return "window_too_small"
         _clear_blocking_overlays(page, "ad")
         if _stop_if_account_blocked("ad_editor"):
@@ -6396,6 +6426,8 @@ def run_recorded_campaign_flow(
             name_try: dict = {}
             if not _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), final_ad_name, where="ad_name",
                          info=name_try):
+                if _dead_page_stop("ad_name"):
+                    return "browser_closed"
                 # ACL-1371: отказ имени — с названной причиной (PYTHON-1W «silent»).
                 name_diag = ad_name_failure(page, name_try)
                 _shot("fail_ad_name", name_diag, note=name_diag.get("why"))
@@ -6403,6 +6435,8 @@ def run_recorded_campaign_flow(
                 copy_ad_name = _name_in_the_field(page, final_ad_name)
             else:
                 _shot("after_ad_name")
+            if _dead_page_stop("ad_name"):
+                return "browser_closed"
 
         creative_uploaded = False
         if reached_ad_level:
@@ -6440,6 +6474,8 @@ def run_recorded_campaign_flow(
         # текста: Meta ставит в Browser add-ons «Instant form», а формы нет.
         # Назначение (внутри него и выбор «None») теперь идёт ДО текста, и
         # блокировке взяться неоткуда.
+        if reached_ad_level and _dead_page_stop("ad_creative_upload"):
+            return "browser_closed"
         if reached_ad_level and destination_url:
             try:
                 if not set_ad_destination_website(page, destination_url):
@@ -6459,6 +6495,10 @@ def run_recorded_campaign_flow(
                       note="destination_exception")
                 ad_level_fails.append(f"ad_destination:{str(exc)[:60]}")
 
+        # ACL-1673: назначение отказало, потому что вкладки нет, — текст на
+        # мёртвой странице не пишем.
+        if reached_ad_level and _dead_page_stop("ad_destination"):
+            return "browser_closed"
         if reached_ad_level and creative_uploaded and (ad_title or ad_body):
             try:
                 copy_report: dict = {}
@@ -6495,6 +6535,9 @@ def run_recorded_campaign_flow(
                 {"second_text": {"ok": False,
                                  "why": "no_creative" if not creative_uploaded else "no_primary_text"}}))
 
+        if reached_ad_level and _dead_page_stop("ad_copy"):
+            return "browser_closed"
+
         # Additional ads (2nd, 3rd, ...) in the same ad set — each one is a
         # fresh "Create ad" (create_additional_ad()) followed by the exact
         # same per-ad fill sequence used for the first ad above. Confirmed
@@ -6525,6 +6568,8 @@ def run_recorded_campaign_flow(
             with _reloads_blocked("simple_create_new_ad" if simple else ""):
                 for i, extra in enumerate(additional_ads, start=2):
                     tag = f"ad{i}"
+                    if _dead_page_stop(f"{tag}_create"):
+                        return "browser_closed"
                     if simple and simple_open_ad is None:
                         # Прошлое «Create ad» не дошло до нового объявления —
                         # дальше не жмём: каждое нажатие может оставить пустую
@@ -6604,6 +6649,8 @@ def run_recorded_campaign_flow(
                             continue
 
                     if not ensure_editor_window(page, tag):
+                        if _dead_page_stop(f"{tag}_window"):
+                            return "browser_closed"
                         return "window_too_small"
                     # PR #314, ревью: перезагрузка здесь (окно ad blocker) может
                     # открыть первое объявление — и имя второго легло бы в него.
@@ -6624,6 +6671,8 @@ def run_recorded_campaign_flow(
                     name_ok = _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), extra_name,
                                     where=f"{tag}_name", info=name_try)
                     if not name_ok:
+                        if _dead_page_stop(f"{tag}_name"):
+                            return "browser_closed"
                         name_diag = ad_name_failure(page, name_try)
                         _shot(f"fail_{tag}_name", name_diag, note=name_diag.get("why"))
                         ad_level_fails.append(f"{tag}_name")
@@ -6634,6 +6683,8 @@ def run_recorded_campaign_flow(
                         known_names.append(extra_copy_name)
                         simple_open_ad = (tag, extra_copy_name)
 
+                    if _dead_page_stop(f"{tag}_name"):
+                        return "browser_closed"
                     extra_creative_path = extra.get("creative_path") or ""
                     no_creative = False
                     if extra_creative_path:
@@ -6663,6 +6714,8 @@ def run_recorded_campaign_flow(
                             ad_level_fails.append(f"{tag}_creative_upload:{str(exc)[:60]}")
                             no_creative = True
 
+                    if _dead_page_stop(f"{tag}_creative_upload"):
+                        return "browser_closed"
                     extra_title = extra.get("ad_title") or ""
                     extra_body = extra.get("ad_body") or ""
                     extra_body2 = extra.get("ad_body2") or ""
@@ -6691,6 +6744,8 @@ def run_recorded_campaign_flow(
                                   note="destination_exception")
                             ad_level_fails.append(f"{tag}_destination:{str(exc)[:60]}")
 
+                    if _dead_page_stop(f"{tag}_destination"):
+                        return "browser_closed"
                     if (extra_title or extra_body) and no_creative:
                         # ACL-1313 (SA Mix, da86e97cbf8b): без медиа Meta не рисует
                         # поля текста вовсе — шаг текста лишь жёг минуты на поиск
@@ -6730,6 +6785,8 @@ def run_recorded_campaign_flow(
                             _shot(f"fail_{tag}_copy")
                             ad_level_fails.append(f"{tag}_copy:{str(exc)[:60]}")
 
+                    if _dead_page_stop(f"{tag}_copy"):
+                        return "browser_closed"
                     if simple and name_ok:
                         # ACL-1353: сверка объявления N — его имя в списке
                         # объявлений (дерево обновляет имя вслед за полем), без
@@ -6750,6 +6807,8 @@ def run_recorded_campaign_flow(
         # fill time, yet the post-run live verification found the
         # lead_gen_form_id error banner on it. Re-visit each ad once the
         # whole campaign is filled and re-fix anything that reverted.
+        if reached_ad_level and _dead_page_stop("ads_done"):
+            return "browser_closed"
         if reached_ad_level and simple_extra_tried:
             # ACL-1353 (ревью PR #365, B1): после «Create ad» в новом редакторе
             # восстановление зависшей страницы не зовём — перезагрузка открыла
@@ -15924,6 +15983,24 @@ def destination_soft_fail(tag: str, ad_label: str, *, no_media: bool = False) ->
     return base
 
 
+def _destination_stop(page: Page, destination_url: str) -> bool:
+    """Граница под-шага назначения: вкладки нет или она не отвечает — стоп.
+
+    ACL-1673 (7641d7b3d86a, B96): `ad3_destination` молчал 8 мин и кончился
+    `page_closed`. Под-шаги ниже — `count()`, `keyboard.press`, `insert_text`,
+    `is_visible` — таймаута не соблюдают и на зависшей вкладке висят, пока её
+    не убьёт сам браузер; срок шага (10 мин) за 8 мин не сработал. Перед
+    каждым — локальная проверка `_tab_gone` и ограниченная проба `_tab_frozen`
+    (5 с, заодно срок шага). Причина — `page_closed` / `tab_frozen` в
+    `last_destination_why()`.
+    """
+    if _tab_gone(page):
+        return not _destination_failed(page, "page_closed", destination_url)
+    if _tab_frozen(page):
+        return not _destination_failed(page, "tab_frozen", destination_url)
+    return False
+
+
 def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     """Set the ad's destination to Website + Browser add-ons: None, with the
     real account tracking link — instead of the Instant Form Meta suggests
@@ -15943,6 +16020,8 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     via the shared `_close_creative_setup_modal()` helper.
     """
     _last_destination.update(why="", diag={}, instant_form={})
+    if _destination_stop(page, destination_url):
+        return False
     _close_creative_setup_modal(page)
 
     # Confirmed live (2026-07-27): the Destination section's container
@@ -15965,6 +16044,8 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     # см. порядок ниже.
     _last_destination["instant_form"] = _switch_off_instant_form(page)
     _show_destination_section(page)
+    if _destination_stop(page, destination_url):
+        return False
 
     # ORDER MATTERS — URL first, "None" LAST. Confirmed live 2026-07-30
     # after a day of chasing "the radio keeps reverting": editing the
@@ -15994,6 +16075,11 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
         ):
             return _destination_failed(page, "url_field_missing", destination_url)
         url_box = page.locator('[data-rpa-field="dest"]').first
+        # ACL-1673: проба — ДО фокуса, а не между фокусом и вводом: за время
+        # пробы на разбуженной вкладке Meta могла перерисоваться, и Ctrl+A с
+        # URL ушли бы не в то поле.
+        if _destination_stop(page, destination_url):
+            return False
         if not url_box.count():
             return _destination_failed(page, "url_field_missing", destination_url)
         url_handle = _focus_via_cdp_click(page, url_box)
@@ -16024,6 +16110,8 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
     except Exception as exc:
         return _destination_failed(page, "url_insert_error", destination_url, error=type(exc).__name__)
 
+    if _destination_stop(page, destination_url):
+        return False
     if not _select_browser_addon_none(page):
         return _destination_failed(page, "addon_none_not_set", destination_url)
 
@@ -16065,6 +16153,8 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
 
     if not _both_ok():
         for _ in range(2):
+            if _destination_stop(page, destination_url):
+                return False
             try:
                 if _switch_on():
                     _turn_off_instant_form_switch(page)
@@ -17278,6 +17368,10 @@ def wait_editor_saved(page: Page, *, timeout_s: float = 15, appear_s: float = 1.
     """
     import time as _time
 
+    # ACL-1673: на ушедшей или зависшей вкладке ждать сохранения нечего, а
+    # `is_visible()` ниже таймаута не соблюдает и висел бы вместе с ней.
+    if _tab_gone(page) or _tab_frozen(page):
+        return
     appear_deadline = _time.time() + appear_s
     while _time.time() < appear_deadline:
         if _editor_is_busy_saving(page):

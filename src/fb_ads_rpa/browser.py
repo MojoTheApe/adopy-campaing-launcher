@@ -1190,6 +1190,15 @@ def ensure_editor_window(page, section: str) -> bool:
             and inner[0] >= MIN_EDITOR_WIDTH
         )
 
+    # ACL-1673 (7641d7b3d86a): на ушедшей вкладке ширину окна не спрашиваем и
+    # окно не двигаем — CDP-вызовы зря ждут, а пустые границы читались как
+    # «окно слишком узкое». Одна строка с причиной, без `window_too_small`.
+    from src.fb_ads_rpa.page_liveness import tab_gone
+
+    if tab_gone(page):
+        rt.record("window_bounds", False, note="page_closed", diag={"section": section})
+        return False
+
     before = rt.window_state(page)
     after = before
     if not readable(before):
