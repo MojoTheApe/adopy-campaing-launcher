@@ -137,8 +137,8 @@ POLICY: dict[str, tuple[str, str]] = {
     "tab_hung": (
         BLOCKING,
         "the profile's browser tab stopped answering inside one step for minutes, so the "
-        "robot unblocked that tab and stopped the campaign; the draft is incomplete and was "
-        "not retried - check it in Ads Manager and finish or delete it",
+        "robot closed that tab (the profile stays open) and stopped the campaign; the draft is "
+        "incomplete and was not retried - check it in Ads Manager and finish or delete it",
     ),
     "step_budget_exceeded": (
         BLOCKING,
@@ -359,7 +359,7 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     ),
     "tab_hung": (
         "Browser tab hung during a step",
-        "The robot unblocked the frozen tab and stopped, so the draft is incomplete.",
+        "The robot closed the frozen tab and stopped, so the draft is incomplete.",
         "Open the draft in Ads Manager and finish or delete it.",
     ),
     "step_budget_exceeded": (

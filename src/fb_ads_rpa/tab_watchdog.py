@@ -17,11 +17,12 @@ Playwright без таймаута на зависшем рендерере де
    greenlet потока (`gr_frame`); его запоминаем при старте задания.
 
 2. **Разблокировка.** Поток стоит в ОДНОМ вызове Playwright дольше
-   `ACL_STUCK_UNBLOCK_S` (180 с) — поток сторожа открывает СВОЁ соединение
-   CDP к браузеру профиля (сырой websocket на тот же порт отладки) и по
-   цели этой вкладки пробует по очереди: `Runtime.terminateExecution`,
-   `Page.reload` (кроме редактора — его переоткрытие портит объявление,
-   ACL-1353), `Target.closeTarget`. У каждого вызова свой таймаут.
+   `ACL_STUCK_UNBLOCK_S` (240 с) — поток сторожа открывает СВОЁ соединение
+   CDP к браузеру профиля (сырой websocket на тот же порт отладки) и
+   закрывает ЭТУ вкладку (`Target.closeTarget`, свой таймаут на вызов).
+   Перезагрузки и terminate нет (ревью PR #704): reload переоткрыл бы
+   редактор или выбросил начатое создание, terminate на зависшем рендерере
+   не отвечает.
 
    Почему не объекты Playwright задания: sync Playwright привязан к потоку
    (greenlet и цикл событий потока задания). Вызов из чужого потока — это
@@ -34,8 +35,10 @@ Playwright без таймаута на зависшем рендерере де
    вызов получает обычную ошибку от драйвера и возвращается сам.
 
    Перед действием вкладка помечается «зависла» (`page_liveness.tab_gone` её
-   видит) — стражи ACL-1673 останавливают работу объявления, а поток кампании
-   (`take_hung`) называет итог `tab_hung:<шаг>`. Не трогаем: другие вкладки и
+   видит) — стражи ACL-1673 останавливают работу объявления; паузы и проверки
+   сроков потока кампании бросают `FlowBudgetExceeded("tab_hung")` (жёсткая
+   остановка, мимо `except Exception`), а поток кампании (`take_hung`)
+   называет итог `tab_hung:<шаг>`. Не трогаем: другие вкладки и
    профили, сам браузер и профиль Multilogin; ничего не делаем при
    перехвате человеком или ожидании обучения (`pacing`). Ни одного вызова к
    объектам Playwright из потока сторожа — только чтение полей.
@@ -47,6 +50,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import socket
 import struct
 import sys
@@ -61,14 +65,18 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 #: Сколько секунд поток может стоять в одном вызове Playwright без строки
-#: телеметрии, прежде чем сторож разблокирует вкладку.
-UNBLOCK_S = 180.0
+#: телеметрии, прежде чем сторож разблокирует вкладку. Ревью PR #704: выше
+#: 180 с таймаута загрузки файла (`_PW_SET_FILES_MS`), с запасом.
+UNBLOCK_S = 240.0
 #: Таймаут каждого вызова CDP сторожа (подключение, getTargets, attach, …).
 CALL_S = 5.0
 #: Сколько ждать после каждого способа, вернулся ли заблокированный вызов.
 SETTLE_S = 10.0
 #: Больше разблокировок на одно задание не делаем: что-то не так системно.
 MAX_PER_JOB = 3
+#: Файлов стеков храним не больше стольких и не дольше стольких дней.
+STACKS_KEEP = 200
+STACKS_KEEP_DAYS = 14.0
 
 _HUNG_ATTR = "_acl_hung_step"
 
@@ -112,6 +120,15 @@ class JobThread:
         return ref() if ref is not None else None
 
 
+#: id потока задания → адрес CDP браузера, к которому он подключён.
+_ENDPOINTS: dict[int, str] = {}
+#: id потока задания → шаг, на котором сторож разблокировал его вкладку.
+_HUNG: dict[int, str] = {}
+#: id потоков заданий (адрес CDP запоминаем только за ними).
+_JOB_TIDS: set[int] = set()
+_lock = threading.Lock()
+
+
 def this_thread() -> JobThread:
     """Запомнить ТЕКУЩИЙ поток как поток задания (зовёт сам поток задания)."""
     ref = None
@@ -121,22 +138,31 @@ def this_thread() -> JobThread:
         ref = weakref.ref(_gl.getcurrent())
     except Exception:
         ref = None
-    return JobThread(tid=threading.get_ident(), greenlet_ref=ref)
-
-
-#: id потока задания → адрес CDP браузера, к которому он подключён.
-_ENDPOINTS: dict[int, str] = {}
-#: id потока задания → шаг, на котором сторож разблокировал его вкладку.
-_HUNG: dict[int, str] = {}
-_lock = threading.Lock()
+    tid = threading.get_ident()
+    with _lock:
+        _JOB_TIDS.add(tid)
+    return JobThread(tid=tid, greenlet_ref=ref)
 
 
 def note_endpoint(cdp_url: str) -> None:
-    """Подключились к браузеру — запомнить адрес CDP для потока (зовёт поток задания)."""
+    """Подключились к браузеру — запомнить адрес CDP для потока задания.
+
+    Ревью PR #704 (m3): только за потоком задания (`this_thread`); прочие
+    потоки (чтение расходов и т. п.) сюда не пишут — их id Windows раздаёт
+    заново, и запись осталась бы висеть.
+    """
     if not cdp_url:
         return
+    tid = threading.get_ident()
     with _lock:
-        _ENDPOINTS[threading.get_ident()] = str(cdp_url)
+        if tid in _JOB_TIDS:
+            _ENDPOINTS[tid] = str(cdp_url)
+
+
+def forget_endpoint() -> None:
+    """Соединение задания сброшено (переподключение, конец) — адрес забыть."""
+    with _lock:
+        _ENDPOINTS.pop(threading.get_ident(), None)
 
 
 def endpoint_of(tid: int) -> str:
@@ -148,6 +174,7 @@ def forget_thread(tid: int) -> None:
     with _lock:
         _ENDPOINTS.pop(tid, None)
         _HUNG.pop(tid, None)
+        _JOB_TIDS.discard(tid)
 
 
 def take_hung() -> str:
@@ -161,8 +188,9 @@ def take_hung() -> str:
 
 
 def peek_hung() -> str:
-    with _lock:
-        return _HUNG.get(threading.get_ident(), "")
+    """Шаг разблокировки этого потока, не снимая отметки. Дёшево: без замка
+    (одно чтение dict под GIL) — зовётся в каждой паузе потока кампании."""
+    return _HUNG.get(threading.get_ident(), "")
 
 
 def page_marked_hung(page) -> bool:
@@ -386,15 +414,33 @@ def dump_exception(exc: BaseException, *, run_id: str, step: str, reason: str,
             f"last_step: {step or '-'}",
         ]
         for key, value in (detail or {}).items():
-            lines.append(f"{key}: {value}")
+            lines.append(f"{key}: {_scrub(str(value))}")
         if page is not None:
             lines.append(f"page_url: {_safe_url(page_url(page)) or '-'}")
+        # Ревью PR #704 (m5): текст исключений Playwright несёт полные адреса с
+        # act/business id — чистим и его.
         body = ("\n".join(lines) + "\n\n-- where the stop was raised --\n"
-                + "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                + _scrub("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
                 + "\n-- caught at --\n" + "".join(traceback.format_stack()))
         return _write(body, run_id, out_dir)
     except Exception:
         return None
+
+
+_URL_RE = re.compile(r"https?://[^\s'\"<>]+")
+_ID_RE = re.compile(r"(?<![\w.])\d{8,}(?![\w.])")
+
+
+def _scrub(text: str) -> str:
+    """Адреса — без запроса и якоря; длинные числа (act/business/ad id) — `<id>`."""
+    text = _URL_RE.sub(lambda m: _safe_url(m.group(0)), text or "")
+    try:
+        from src.fb_ads_rpa import run_telemetry
+
+        text = run_telemetry.scrub(text)
+    except Exception:
+        pass
+    return _ID_RE.sub("<id>", text)
 
 
 def _write(body: str, run_id: str, out_dir: Path | None) -> Path:
@@ -404,7 +450,23 @@ def _write(body: str, run_id: str, out_dir: Path | None) -> Path:
     safe_run = "".join(ch for ch in (run_id or "norun") if ch.isalnum() or ch in "-_")[:40]
     path = folder / f"{safe_run}_{stamp}.txt"
     path.write_text(body, encoding="utf-8")
+    _prune(folder)
     return path
+
+
+def _prune(folder: Path, keep: int = STACKS_KEEP, keep_days: float = STACKS_KEEP_DAYS) -> None:
+    """Ревью PR #704 (m5): не больше `keep` новейших файлов и не старше `keep_days`."""
+    try:
+        files = sorted(folder.glob("*.txt"), key=lambda f: f.stat().st_mtime, reverse=True)
+        cutoff = time.time() - keep_days * 86400
+        for i, f in enumerate(files):
+            if i >= keep or f.stat().st_mtime < cutoff:
+                try:
+                    f.unlink()
+                except OSError:
+                    pass
+    except Exception:
+        pass
 
 
 def _safe_url(url: str) -> str:
@@ -585,14 +647,6 @@ def _browser_ws(cdp_url: str, timeout: float) -> tuple[str, int, str]:
 
 # ── Разблокировка ────────────────────────────────────────────────────────────
 
-def _editor(url: str) -> bool:
-    """Редактор Ads Manager: его переоткрытие портит объявление (ACL-1353)."""
-    try:
-        return "/edit" in urlparse(url).path
-    except Exception:
-        return True
-
-
 def _settled(done: Callable[[], bool], wait_s: float) -> bool:
     end = time.monotonic() + wait_s
     while True:
@@ -606,13 +660,20 @@ def _settled(done: Callable[[], bool], wait_s: float) -> bool:
 def unblock_tab(cdp_url: str, url: str, done: Callable[[], bool], *,
                 connect: Callable[..., Any] | None = None,
                 call_s: float = CALL_S, settle_s: float = SETTLE_S) -> dict:
-    """Разблокировать ОДНУ вкладку (цель с адресом `url`) через своё соединение CDP.
+    """Разблокировать ОДНУ вкладку (цель с адресом `url`): `Target.closeTarget`.
 
-    Порядок: `Runtime.terminateExecution` → `Page.reload` (не в редакторе) →
-    `Target.closeTarget`. После каждого — ждём до `settle_s`, вернулся ли
-    заблокированный вызов (`done`). Цель ищется среди вкладок (`type ==
-    "page"`) по точному адресу; нет её или их несколько — не делаем ничего:
-    чужие вкладки не трогаем. Браузер и профиль не закрываем никогда.
+    Ревью PR #704 (решение координатора): только закрытие. `Page.reload`
+    переоткрыл бы редактор (и одноэкранный `simple_create`, где в адресе нет
+    `/edit`) или выбросил начатое создание на списке кампаний (ACL-1313);
+    `Runtime.terminateExecution` на зависшем рендерере не отвечал и не помогал
+    (замер на Chromium 1228). Кампания всё равно кончается `tab_hung`, а
+    следующая подключается к профилю заново.
+
+    Цель — среди вкладок (`type == "page"`) по точному адресу; нет её или их
+    несколько — не делаем ничего: чужие вкладки не трогаем. Последнюю вкладку
+    браузера не закрываем голой: Chrome с последним окном закрылся бы целиком
+    (а с ним профиль Multilogin) — сперва рядом открывается пустая фоновая
+    (`Target.createTarget`, тот же контекст). Браузер не закрываем никогда.
     """
     out: dict[str, Any] = {"ok": False, "method": "", "tried": [], "why": ""}
     if not cdp_url:
@@ -628,75 +689,46 @@ def unblock_tab(cdp_url: str, url: str, done: Callable[[], bool], *,
     except Exception as exc:
         out["why"] = f"connect:{type(exc).__name__}"
         return out
-    session = ""
     try:
         try:
             infos = (cdp.call("Target.getTargets", timeout=call_s) or {}).get("targetInfos") or []
         except Exception as exc:
             out["why"] = f"targets:{type(exc).__name__}"
             return out
-        mine = [t for t in infos if t.get("type") == "page" and t.get("url") == url]
+        pages = [t for t in infos if t.get("type") == "page"]
+        mine = [t for t in pages if t.get("url") == url]
         if len(mine) != 1:
             out["why"] = "no_target" if not mine else "ambiguous_target"
             return out
         target = str(mine[0].get("targetId") or "")
         tried: list[str] = out["tried"]
-
-        def attempt(name: str, fn: Callable[[], Any]) -> bool:
-            t0 = time.monotonic()
+        if len(pages) == 1:
+            params: dict[str, Any] = {"url": "about:blank", "background": True}
+            if mine[0].get("browserContextId"):
+                params["browserContextId"] = mine[0]["browserContextId"]
             try:
-                fn()
-                tried.append(f"{name}:sent")
+                cdp.call("Target.createTarget", params, timeout=call_s)
+                tried.append("spare_tab:sent")
             except Exception as exc:
-                tried.append(f"{name}:{type(exc).__name__}")
-                # Команда могла сработать, а ответ — не успеть: проверяем сразу.
-                if done():
-                    out.update(ok=True, method=name, settle_s=round(time.monotonic() - t0, 2))
-                    return True
-                return False
-            if _settled(done, settle_s):
-                out.update(ok=True, method=name, settle_s=round(time.monotonic() - t0, 2))
-                return True
-            tried.append(f"{name}:no_effect")
-            return False
-
-        def terminate() -> None:
-            # Замер на настоящем Chromium (07.10, сборка 1228): attach к вкладке
-            # с `while (true) {}` отвечает сразу, а `Runtime.terminateExecution`
-            # — нет (таймаут 5 с, скрипт не прерван). Дальше выручает reload.
-            nonlocal session
-            try:
-                got = cdp.call("Target.attachToTarget", {"targetId": target, "flatten": True},
-                               timeout=call_s) or {}
-            except Exception as exc:
-                tried.append(f"attach:{type(exc).__name__}")
-                raise
-            session = str(got.get("sessionId") or "")
-            if not session:
-                tried.append("attach:no_session")
-                raise CdpError("no session")
-            cdp.call("Runtime.terminateExecution", session_id=session, timeout=call_s)
-
-        if attempt("terminate", terminate):
-            return out
-        if _editor(url):
-            tried.append("reload:skipped_editor")
-        elif session:
-            if attempt("reload", lambda: cdp.call("Page.reload", {}, session_id=session,
-                                                  timeout=call_s)):
+                # Без запасной вкладки последнюю не закрываем: браузер ушёл бы.
+                tried.append(f"spare_tab:{type(exc).__name__}")
+                out["why"] = "last_tab"
                 return out
+        t0 = time.monotonic()
+        try:
+            cdp.call("Target.closeTarget", {"targetId": target}, timeout=call_s)
+            tried.append("close:sent")
+        except Exception as exc:
+            tried.append(f"close:{type(exc).__name__}")
+            if not done():
+                return out
+        if done() or _settled(done, settle_s):
+            out.update(ok=True, method="close", settle_s=round(time.monotonic() - t0, 2))
         else:
-            tried.append("reload:no_session")
-        attempt("close", lambda: cdp.call("Target.closeTarget", {"targetId": target},
-                                          timeout=call_s))
+            tried.append("close:no_effect")
         return out
     finally:
         out["seconds"] = round(time.monotonic() - started, 2)
-        if session:
-            try:
-                cdp.call("Target.detachFromTarget", {"sessionId": session}, timeout=min(call_s, 2.0))
-            except Exception:
-                pass
         try:
             cdp.close()
         except Exception:

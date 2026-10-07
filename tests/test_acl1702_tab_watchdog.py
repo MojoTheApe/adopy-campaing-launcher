@@ -282,8 +282,7 @@ def _acts():
 
     def act(call):
         calls.append(call)
-        call_done = {"ok": True, "method": "terminate", "tried": ["terminate:sent"]}
-        return call_done
+        return {"ok": True, "method": "close", "tried": ["close:sent"]}
 
     return calls, act
 
@@ -299,7 +298,7 @@ def test_unblock_waits_for_the_threshold_then_acts_once_on_that_call():
         assert calls == []
         got = tw.unblock_tick(watch, idle_s=181, step="ad_destination", now=181.0,
                               unblock_s=180, act=act)
-        assert got and got["ok"] and got["method"] == "terminate" and got["marked"]
+        assert got and got["ok"] and got["method"] == "close" and got["marked"]
         assert len(calls) == 1 and calls[0].url == URL
         # Тот же вызов второй раз не трогаем.
         assert tw.unblock_tick(watch, idle_s=400, step="ad_destination", now=400.0,
@@ -308,6 +307,34 @@ def test_unblock_waits_for_the_threshold_then_acts_once_on_that_call():
         # Вкладка для кампании «ушла» — стражи ACL-1673 остановят работу.
         assert page_liveness.tab_gone(fj.page) is True
     assert fj.hung_seen == "ad_destination", "поток кампании узнаёт шаг разблокировки"
+
+
+def test_unblock_needs_the_job_silent_for_the_threshold():
+    """Ревью PR #704 (m8): тот же вызов давно, но строка телеметрии свежая — не трогать."""
+    calls, act = _acts()
+    with FakeJob() as fj:
+        watch = tw.Watch(job=fj.job)
+        tw.unblock_tick(watch, idle_s=0, step="s", now=0.0, unblock_s=180, act=act)
+        assert tw.unblock_tick(watch, idle_s=179, step="s", now=900.0, unblock_s=180, act=act) is None
+        assert tw.unblock_tick(watch, idle_s=2, step="s", now=950.0, unblock_s=180, act=act) is None
+        assert calls == []
+
+
+def test_unblock_stops_after_three_per_job():
+    """Ревью PR #704 (m8): не больше `MAX_PER_JOB` разблокировок на задание."""
+    assert tw.MAX_PER_JOB == 3
+    calls, act = _acts()
+    with FakeJob() as fj:
+        watch = tw.Watch(job=fj.job, count=tw.MAX_PER_JOB - 1)
+        tw.unblock_tick(watch, idle_s=0, step="s", now=0.0, unblock_s=180, act=act)
+        assert tw.unblock_tick(watch, idle_s=900, step="s", now=900.0, unblock_s=180, act=act)
+        assert watch.count == tw.MAX_PER_JOB and len(calls) == 1
+        tw.take_hung()
+    with FakeJob() as fj:
+        watch = tw.Watch(job=fj.job, count=tw.MAX_PER_JOB)
+        tw.unblock_tick(watch, idle_s=0, step="s", now=0.0, unblock_s=180, act=act)
+        assert tw.unblock_tick(watch, idle_s=900, step="s", now=900.0, unblock_s=180, act=act) is None
+    assert len(calls) == 1
 
 
 def test_unblock_needs_the_same_call_for_the_whole_threshold():
@@ -365,7 +392,7 @@ def test_nothing_sent_leaves_the_tab_unmarked():
 
 
 def test_default_threshold_and_env(monkeypatch):
-    assert tw.unblock_after_s() == 180.0
+    assert tw.unblock_after_s() == 240.0, "выше 180 с таймаута загрузки файла"
     monkeypatch.setenv("ACL_STUCK_UNBLOCK_S", "42")
     assert tw.unblock_after_s() == 42.0
     assert tw.enabled() is True
@@ -374,23 +401,52 @@ def test_default_threshold_and_env(monkeypatch):
         assert tw.enabled() is False
 
 
-# ── CDP: только эта цель ──────────────────────────────────────────────────
+# ── Адрес CDP: только за потоком задания ─────────────────────────────────
+
+def test_the_endpoint_is_kept_only_for_job_threads_and_forgotten_on_reset():
+    box: dict = {}
+
+    def other():
+        tw.note_endpoint("http://127.0.0.1:1111")
+        box["tid"] = threading.get_ident()
+
+    t = threading.Thread(target=other)
+    t.start()
+    t.join(5)
+    assert tw.endpoint_of(box["tid"]) == "", "не поток задания — не записываем"
+
+    def job():
+        me = tw.this_thread()
+        tw.note_endpoint("http://127.0.0.1:2222")
+        box["kept"] = tw.endpoint_of(me.tid)
+        tw.forget_endpoint()
+        box["after_reset"] = tw.endpoint_of(me.tid)
+        tw.forget_thread(me.tid)
+
+    t = threading.Thread(target=job)
+    t.start()
+    t.join(5)
+    assert box["kept"] == "http://127.0.0.1:2222" and box["after_reset"] == ""
+
+
+# ── CDP: только закрытие, только эта цель ───────────────────────────────
 
 class FakeCdp:
-    def __init__(self, targets, *, works_on=None):
+    def __init__(self, targets, *, works_on="Target.closeTarget", refuse=()):
         self.targets = targets
         self.sent: list = []
         self.works_on = works_on
+        self.refuse = refuse
         self.closed = False
         self.flag = {"done": False}
 
     def call(self, method, params=None, *, session_id="", timeout=5.0):
         assert timeout <= 5.0, "у каждого вызова свой короткий срок"
         self.sent.append((method, dict(params or {}), session_id))
+        if method in self.refuse:
+            raise tw.CdpError(f"{method}: refused")
         if method == "Target.getTargets":
             return {"targetInfos": self.targets}
-        if method == "Target.attachToTarget":
-            return {"sessionId": "S-me"}
         if method == self.works_on:
             self.flag["done"] = True
         return {}
@@ -401,8 +457,9 @@ class FakeCdp:
 
 def _targets(url=URL):
     return [
-        {"type": "page", "targetId": "T-other", "url": "https://www.facebook.com/"},
-        {"type": "page", "targetId": "T-me", "url": url},
+        {"type": "page", "targetId": "T-other", "url": "https://www.facebook.com/",
+         "browserContextId": "C1"},
+        {"type": "page", "targetId": "T-me", "url": url, "browserContextId": "C1"},
         {"type": "service_worker", "targetId": "T-sw", "url": url},
         {"type": "browser", "targetId": "T-browser", "url": ""},
     ]
@@ -413,77 +470,160 @@ def _run(cdp, url=URL):
                           connect=lambda u, timeout: cdp, settle_s=0.2)
 
 
-def _touched_targets(cdp):
-    out = set()
-    for method, params, session in cdp.sent:
-        if "targetId" in params:
-            out.add(params["targetId"])
-        if session:
-            assert session == "S-me"
-    return out
+def _methods(cdp):
+    return [m for m, _p, _s in cdp.sent]
 
 
-def test_terminate_first_and_stop_when_it_works():
-    cdp = FakeCdp(_targets(), works_on="Runtime.terminateExecution")
-    got = _run(cdp)
-    assert got["ok"] and got["method"] == "terminate"
-    methods = [m for m, _p, _s in cdp.sent]
-    assert methods[:3] == ["Target.getTargets", "Target.attachToTarget", "Runtime.terminateExecution"]
-    assert "Page.reload" not in methods and "Target.closeTarget" not in methods
-    assert methods[-1] == "Target.detachFromTarget"
-    assert _touched_targets(cdp) == {"T-me"}
+# Ревью PR #704 (B1): одноэкранный редактор без `/edit` в адресе, список
+# кампаний (reload выбросил бы начатое создание, ACL-1313) и редактор — все
+# только закрываются.
+@pytest.mark.parametrize("url", [
+    "https://adsmanager.facebook.com/adsmanager/manage/simple_create?act=1&campaign_id=2",
+    "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1",
+    "https://adsmanager.facebook.com/adsmanager/manage/ads/edit?act=1&selected_ad_ids=2",
+])
+def test_the_hung_tab_is_closed_never_reloaded_or_terminated(url):
+    cdp = FakeCdp(_targets(url))
+    got = _run(cdp, url)
+    assert got["ok"] and got["method"] == "close"
+    assert _methods(cdp) == ["Target.getTargets", "Target.closeTarget"]
+    assert ("Target.closeTarget", {"targetId": "T-me"}, "") in cdp.sent
+    for banned in ("Page.reload", "Runtime.terminateExecution", "Target.attachToTarget",
+                   "Browser.close"):
+        assert banned not in _methods(cdp)
     assert cdp.closed
 
 
-def test_escalates_to_reload_then_close_only_for_that_target():
-    cdp = FakeCdp(_targets(), works_on=None)
-    got = _run(cdp)
-    methods = [m for m, _p, _s in cdp.sent]
-    assert "Runtime.terminateExecution" in methods
-    assert methods.index("Runtime.terminateExecution") < methods.index("Page.reload") \
-        < methods.index("Target.closeTarget")
-    assert ("Target.closeTarget", {"targetId": "T-me"}, "") in cdp.sent
-    assert _touched_targets(cdp) == {"T-me"}, "чужие вкладки не трогаем"
-    assert not any(m.startswith("Browser.close") for m in methods), "браузер не закрываем"
-    assert got["ok"] is False and "close:no_effect" in got["tried"]
-
-
-def test_close_ends_it_when_terminate_does_not():
-    cdp = FakeCdp(_targets(), works_on="Target.closeTarget")
+def test_the_last_tab_gets_a_spare_before_it_is_closed():
+    """Последняя вкладка: Chrome закрылся бы целиком (и профиль) — сперва запасная."""
+    only = [t for t in _targets() if t["targetId"] != "T-other"]
+    cdp = FakeCdp(only)
     got = _run(cdp)
     assert got["ok"] and got["method"] == "close"
+    assert _methods(cdp) == ["Target.getTargets", "Target.createTarget", "Target.closeTarget"]
+    create = cdp.sent[1][1]
+    assert create["url"] == "about:blank" and create["background"] is True
+    assert create["browserContextId"] == "C1"
 
 
-def test_the_ad_editor_is_never_reloaded():
-    editor = "https://adsmanager.facebook.com/adsmanager/manage/ads/edit?act=1&selected_ad_ids=2"
-    cdp = FakeCdp(_targets(editor), works_on="Target.closeTarget")
-    got = _run(cdp, editor)
-    methods = [m for m, _p, _s in cdp.sent]
-    assert "Page.reload" not in methods and "reload:skipped_editor" in got["tried"]
-    assert got["method"] == "close"
+def test_without_a_spare_tab_the_last_tab_is_not_closed():
+    only = [t for t in _targets() if t["targetId"] != "T-other"]
+    cdp = FakeCdp(only, refuse=("Target.createTarget",))
+    got = _run(cdp)
+    assert got["why"] == "last_tab" and not got["ok"]
+    assert "Target.closeTarget" not in _methods(cdp)
+
+
+def test_close_without_effect_is_reported():
+    cdp = FakeCdp(_targets(), works_on=None)
+    got = _run(cdp)
+    assert got["ok"] is False and "close:no_effect" in got["tried"]
 
 
 def test_two_tabs_with_the_same_address_are_left_alone():
     targets = _targets() + [{"type": "page", "targetId": "T-twin", "url": URL}]
-    cdp = FakeCdp(targets, works_on="Target.closeTarget")
+    cdp = FakeCdp(targets)
     got = _run(cdp)
     assert got["why"] == "ambiguous_target" and not got["ok"]
-    assert [m for m, _p, _s in cdp.sent] == ["Target.getTargets"]
+    assert _methods(cdp) == ["Target.getTargets"]
 
 
 def test_no_such_tab_sends_nothing():
     cdp = FakeCdp([t for t in _targets() if t["targetId"] != "T-me"])
     got = _run(cdp)
     assert got["why"] == "no_target"
-    assert [m for m, _p, _s in cdp.sent] == ["Target.getTargets"]
+    assert _methods(cdp) == ["Target.getTargets"]
 
 
 def test_the_watchdog_never_uses_the_jobs_playwright_objects():
     """Сторож ходит в браузер только своим соединением (ACL-1614: не рвать чужое)."""
     src = (ROOT / "src/fb_ads_rpa/tab_watchdog.py").read_text(encoding="utf-8")
     for banned in ("new_browser_cdp_session", "new_cdp_session", ".disconnect(", "browser.close",
-                   "page.close", "playwright.stop", "_stop_thread_playwright"):
+                   "page.close", "playwright.stop", "_stop_thread_playwright",
+                   '"Page.reload"', '"Runtime.terminateExecution"'):
         assert banned not in src, banned
+
+
+# ── Стеки: чистка текста и предел числа файлов ──────────────────────────
+
+def test_dump_exception_strips_queries_and_ids(tmp_path):
+    exc = RuntimeError("Page.goto: net::ERR at https://adsmanager.facebook.com/adsmanager/manage/"
+                       "campaigns?act=1234567890123&business_id=987654321012 (act 1234567890123)")
+    path = tw.dump_exception(exc, run_id="r1", step="campaigns_list_ready", reason="step_budget_exceeded",
+                             detail={"url": "https://x.test/p?token=SECRET", "ad": 120211234567890},
+                             out_dir=tmp_path)
+    text = path.read_text(encoding="utf-8")
+    assert "https://adsmanager.facebook.com/adsmanager/manage/campaigns" in text
+    for leak in ("1234567890123", "987654321012", "120211234567890", "SECRET", "act="):
+        assert leak not in text, leak
+
+
+def test_stack_files_are_capped(tmp_path):
+    import os as _os
+
+    old = tmp_path / "old_run.txt"
+    old.write_text("x")
+    long_ago = time.time() - (tw.STACKS_KEEP_DAYS + 1) * 86400
+    _os.utime(old, (long_ago, long_ago))
+    for i in range(tw.STACKS_KEEP + 5):
+        f = tmp_path / f"r{i:04d}.txt"
+        f.write_text("x")
+        _os.utime(f, (time.time() - 1000 + i, time.time() - 1000 + i))
+    tw._prune(tmp_path)
+    left = sorted(p.name for p in tmp_path.glob("*.txt"))
+    assert len(left) == tw.STACKS_KEEP and "old_run.txt" not in left
+    assert "r0000.txt" not in left and f"r{tw.STACKS_KEEP + 4:04d}.txt" in left
+
+
+# ── Жёсткая остановка после разблокировки (ревью PR #704, B2) ───────────
+
+def test_a_helper_that_swallows_the_error_does_not_act_again(monkeypatch):
+    from src.fb_ads_rpa import meta_dom as md
+
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+    monkeypatch.setattr(pacing.time, "sleep", lambda *_a: None)
+    actions: list = []
+
+    def helper(page):
+        try:
+            raise RuntimeError("Target page, context or browser has been closed")
+        except Exception:
+            pass            # мягкий отказ: так делают десятки помощников
+        pacing.pause_short(page)
+        actions.append("click")
+
+    @md._under_flow_budget
+    def flow(page):
+        md._flow_budget_arm()
+        helper(page)
+        actions.append("fill")
+        return ""
+
+    tw._mark(tw.this_thread(), None, "ad_destination")
+    try:
+        assert flow(None) == "tab_hung"
+    finally:
+        tw.take_hung()
+    assert actions == [], "после разблокировки — ни одного действия"
+
+
+def test_sleep_h_stops_too_and_nothing_happens_outside_a_campaign(monkeypatch):
+    from src.fb_ads_rpa import meta_dom as md
+
+    monkeypatch.setattr(md.time, "sleep", lambda *_a: None)
+    monkeypatch.setattr(pacing.time, "sleep", lambda *_a: None)
+    tw._mark(tw.this_thread(), None, "s")
+    try:
+        md._flow_budget_disarm()
+        pacing.pause_short(None)        # вне потока кампании — не бросает
+        md._sleep_h(0.01)
+        md._flow_budget_arm()
+        with pytest.raises(md.FlowBudgetExceeded) as stop:
+            md._sleep_h(0.01)
+        assert stop.value.reason == "tab_hung" and stop.value.detail["after_step"] == "s"
+    finally:
+        md._flow_budget_disarm()
+        tw.take_hung()
 
 
 # ── Итог кампании: tab_hung без повтора ──────────────────────────────────────
@@ -553,3 +693,94 @@ def test_a_plain_error_without_an_unblock_still_raises(monkeypatch):
                                       ad_title="t", ad_body="b")])])
     with pytest.raises(RuntimeError, match="boom"):
         flow.publish_campaign(draft)
+
+
+# ── Зависшая вкладка не отравляет остаток задания (ревью PR #704, B3) ──────
+
+class _Draft:
+    def __init__(self, name):
+        self.status = "DRAFT"
+        self.errors = []
+        self.name = name
+        self.account_label = "Doc19"
+
+
+def _publisher():
+    from unittest.mock import MagicMock
+
+    from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+
+    p = RpaPublisher.__new__(RpaPublisher)
+    p._conn = None
+    p._entry = None
+    p._provider = MagicMock()
+    p.hand_off = False
+    p.dry_run = False
+    p.selectors_path = None
+    return p
+
+
+def test_a_hang_on_the_campaigns_list_lets_the_next_campaign_reattach_and_run(monkeypatch):
+    """PYTHON-6C: зависание в `_goto_campaigns`/`_ensure_campaigns_ready` — вне цикла
+    попыток. Кампания A — `tab_hung`; кампания B того же задания подключается
+    заново и идёт, без `browser_closed`."""
+    from unittest.mock import MagicMock
+
+    from src.fb_ads_rpa import rpa_publisher as rp
+    from src.fb_ads_rpa.draft import RpaPublishResult
+
+    p = _publisher()
+    conns: list = []
+
+    def ensure(label):
+        if p._conn is None:
+            page = type("P", (), {"is_closed": lambda self: False})()
+            p._conn = MagicMock(provider="multilogin", page=page)
+            conns.append(p._conn)
+        return p._conn
+
+    seen_pages: list = []
+
+    def publish_campaign(draft, dry_run=False):
+        page = p._conn.page
+        seen_pages.append(page)
+        if draft.name == "A":
+            tw._mark(tw.this_thread(), page, "campaigns_list_ready")
+            raise RuntimeError("Page.goto: Target page, context or browser has been closed")
+        assert not page_liveness.tab_gone(page), "следующая кампания — на живой вкладке"
+        return RpaPublishResult(campaign_name=draft.name, success=True)
+
+    monkeypatch.setattr(p, "_ensure_browser", ensure)
+    monkeypatch.setattr(p, "_flow", lambda conn, label: MagicMock(publish_campaign=publish_campaign))
+    a = p.publish_draft(_Draft("A"))
+    assert a.success is False and a.blocking_failures == ["tab_hung:campaigns_list_ready"]
+    assert p._conn is None, "соединение сброшено — следующая подключится заново"
+    assert not page_liveness.tab_gone(seen_pages[0]), "метка снята"
+    conns[0].close.assert_called_once_with(keep_browser_open=True)
+    b = p.publish_draft(_Draft("B"))
+    assert b.success is True and not b.blocking_failures
+    assert len(conns) == 2 and seen_pages[1] is not seen_pages[0]
+    assert tw.peek_hung() == ""
+
+
+def test_an_unblock_outside_a_campaign_does_not_brand_the_next_one(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from src.fb_ads_rpa.draft import RpaPublishResult
+
+    p = _publisher()
+    conn = MagicMock(provider="multilogin")
+    monkeypatch.setattr(p, "_ensure_browser", lambda label: conn)
+    flags: list = []
+
+    def publish_campaign(draft, dry_run=False):
+        flags.append(tw.peek_hung())
+        return RpaPublishResult(campaign_name=draft.name, success=True)
+
+    monkeypatch.setattr(p, "_flow", lambda c, label: MagicMock(publish_campaign=publish_campaign))
+    p._conn = conn
+    # Сторож сработал после конца прошлой кампании (уборка окна и т. п.).
+    tw._mark(tw.this_thread(), None, "put_window_back")
+    got = p.publish_draft(_Draft("B"))
+    assert flags == [""], "отметка снята в начале кампании"
+    assert got.success is True and not got.blocking_failures

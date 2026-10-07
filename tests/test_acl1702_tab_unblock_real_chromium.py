@@ -13,9 +13,12 @@ Chromium запускается с `--remote-debugging-port`, поток зад�
 * вторая вкладка того же браузера жива и отвечает, браузер не закрыт;
 * после ошибки страж «вкладки нет» (ACL-1673) видит её ушедшей.
 
-Способы по отдельности: `Runtime.terminateExecution` (первый в очереди);
-`Page.reload` и `Target.closeTarget`, когда terminate недоступен; в редакторе
-reload пропускается — сразу close.
+Способ один — `Target.closeTarget` (ревью PR #704): список кампаний,
+одноэкранный редактор `simple_create` и редактор объявления закрываются, не
+перезагружаются. Последняя вкладка браузера закрывается только после
+запасной пустой — браузер (а с ним профиль Multilogin) остаётся жив.
+Замер 07.10 (Chromium 1228), до решения: `Runtime.terminateExecution` на такой
+вкладке не отвечал за 5 с и скрипт не прерывал.
 
 Тяжёлый тест: настоящий браузер. Гонять по одному файлу и только при
 свободной памяти > 6 ГБ; Chromium убивается в конце (`taskkill /T`).
@@ -149,7 +152,8 @@ def _others_cpu(skip_native_id: int) -> float:
 class HungJob:
     """Поток задания: свой sync Playwright, подключение по CDP, зависший evaluate."""
 
-    def __init__(self, port: int, url: str, other_url: str):
+    def __init__(self, port: int, url: str, other_url: str, *, only: bool = False):
+        self.only = only
         self.cdp_url = f"http://127.0.0.1:{port}"
         self.url = url
         self.other_url = other_url
@@ -180,10 +184,17 @@ class HungJob:
                     time.sleep(0.2)
             tw.note_endpoint(self.cdp_url)
             ctx = browser.contexts[0]
-            other = ctx.new_page()
-            other.goto(self.other_url)
+            other = None
+            if not self.only:
+                other = ctx.new_page()
+                other.goto(self.other_url)
             page = ctx.new_page()
             page.goto(self.url)
+            if self.only:
+                # Зависшая — единственная вкладка браузера.
+                for extra in list(ctx.pages):
+                    if extra is not page:
+                        extra.close()
             self.t_block = time.monotonic()
             self.blocking.set()
             try:
@@ -196,27 +207,19 @@ class HungJob:
             self.gone_after = page_liveness.tab_gone(page)
             self.hung = tw.take_hung()
             # Вторая вкладка того же браузера жива и отвечает.
-            try:
-                self.other_answers = other.evaluate("() => document.getElementById('p').textContent")
-            except Exception as exc:  # pragma: no cover - провал теста ниже
-                self.other_answers = exc
+            if other is not None:
+                try:
+                    self.other_answers = other.evaluate("() => document.getElementById('p').textContent")
+                except Exception as exc:  # pragma: no cover - провал теста ниже
+                    self.other_answers = exc
             self.finish.wait(60)
             browser.close()   # отключение — из СВОЕГО потока, как в работе
 
 
-def _run_case(port: int, site: str, path: str, monkeypatch, *, refuse: tuple = ()):
+def _run_case(port: int, site: str, path: str, *, only: bool = False):
     """Поток задания зависает; сторож из этого потока разблокирует его вкладку."""
-    if refuse:
-        real = tw.RawCdp.call
-
-        def call(self, method, params=None, **kw):
-            if method in refuse:
-                raise tw.CdpError(f"{method}: refused by the test")
-            return real(self, method, params, **kw)
-
-        monkeypatch.setattr(tw.RawCdp, "call", call)
     url = site + path
-    job = HungJob(port, url, site + "/other")
+    job = HungJob(port, url, site + "/other", only=only)
     job.thread.start()
     assert job.blocking.wait(60), "the job did not reach the hanging call"
     time.sleep(0.5)
@@ -258,9 +261,10 @@ def _run_case(port: int, site: str, path: str, monkeypatch, *, refuse: tuple = (
     return job, out
 
 
-def _common_asserts(job, out):
+def _common_asserts(job, out, *, only: bool = False):
     result = out["result"]
     assert result["ok"] is True, result
+    assert result["method"] == "close", result
     assert job.error is not None, "the blocked evaluate must raise"
     assert out["blocked_s"] <= UNBLOCK_S + MARGIN_S, out
     assert out["cpu"] <= MAX_CPU_SHARE * out["wall"], f"job thread spun: {out}"
@@ -270,36 +274,38 @@ def _common_asserts(job, out):
     assert out["others"] <= MAX_CPU_SHARE * out["wall"], f"GIL busy: {out}"
     assert job.gone_after is True, "the dead-page guard must see the tab as gone"
     assert job.hung == "ad_destination"
-    assert job.other_answers == "/other", f"the other tab must be untouched: {job.other_answers!r}"
+    if not only:
+        assert job.other_answers == "/other", f"the other tab must be untouched: {job.other_answers!r}"
 
 
-def test_the_default_order_unblocks_a_hung_evaluate(chromium, site, monkeypatch):
-    """Порядок как в работе: terminate → reload → close.
+def _browser_pages(port: int) -> list:
+    cdp = tw.RawCdp.connect(f"http://127.0.0.1:{port}")
+    try:
+        infos = cdp.call("Target.getTargets").get("targetInfos") or []
+    finally:
+        cdp.close()
+    return [t for t in infos if t.get("type") == "page"]
 
-    Замер 07.10 (Chromium 1228): `Runtime.terminateExecution` на вкладке с
-    `while (true) {}` не отвечает за свои 5 с и скрипт не прерывает; вызов
-    возвращается после `Page.reload` («Execution context was destroyed») —
-    за доли секунды. Другая сборка Chromium может справиться уже terminate.
-    """
-    _proc, port = chromium
-    job, out = _run_case(port, site, "/adsmanager/manage/campaigns", monkeypatch)
+
+# Ревью PR #704 (B1): все три — только закрытие, без reload и terminate.
+@pytest.mark.parametrize("path", [
+    "/adsmanager/manage/campaigns",
+    "/adsmanager/manage/simple_create",
+    "/adsmanager/manage/ads/edit",
+])
+def test_close_target_unblocks_a_hung_evaluate(chromium, site, path):
+    proc, port = chromium
+    job, out = _run_case(port, site, path)
     _common_asserts(job, out)
-    assert out["result"]["method"] in ("terminate", "reload")
-    assert out["result"]["tried"][0].startswith("terminate:"), out["result"]
+    assert out["result"]["tried"] == ["close:sent"], out["result"]
+    assert proc.poll() is None, "the browser stays open"
 
 
-def test_reload_unblocks_when_terminate_is_unavailable(chromium, site, monkeypatch):
-    _proc, port = chromium
-    job, out = _run_case(port, site, "/adsmanager/manage/campaigns", monkeypatch,
-                         refuse=("Runtime.terminateExecution",))
-    _common_asserts(job, out)
-    assert out["result"]["method"] in ("reload", "close")
-
-
-def test_close_target_unblocks_an_editor_tab(chromium, site, monkeypatch):
-    _proc, port = chromium
-    job, out = _run_case(port, site, "/adsmanager/manage/ads/edit", monkeypatch,
-                         refuse=("Runtime.terminateExecution",))
-    _common_asserts(job, out)
-    assert "reload:skipped_editor" in out["result"]["tried"]
-    assert out["result"]["method"] == "close"
+def test_the_last_tab_is_closed_only_after_a_spare_one(chromium, site):
+    proc, port = chromium
+    job, out = _run_case(port, site, "/adsmanager/manage/campaigns", only=True)
+    _common_asserts(job, out, only=True)
+    assert out["result"]["tried"] == ["spare_tab:sent", "close:sent"], out["result"]
+    assert proc.poll() is None, "the browser (the Multilogin profile) must stay open"
+    pages = _browser_pages(port)
+    assert [p["url"] for p in pages] == ["about:blank"], pages
