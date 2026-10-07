@@ -968,6 +968,46 @@ def _sidebar_countries(report: dict, amap: dict) -> list[dict]:
     return rows
 
 
+_HISTORY_ACT_CACHE: dict[str, tuple[float, str]] = {}
+
+
+def _history_act_note(entry) -> str:
+    """ACL-1697: заметка, если кабинет в карте не тот, где профиль работал.
+
+    `mlx_profiles.ad_account_id_for` читает последний кабинет из истории
+    браузера профиля (файл, без сети). Расхождение с картой — не ошибка, но
+    повод проверить: робот при запуске сверит открытый кабинет и остановится
+    на чужом (`wrong_ad_account`). Результат кэшируется на 2 минуты —
+    чтение копирует файл истории.
+    """
+    if not entry:
+        return ""
+    want = (entry.ad_account_id or "").strip()
+    pid = (entry.profile_id or "").strip()
+    if not want or not pid:
+        return ""
+    import time as _time
+
+    now = _time.time()
+    hit = _HISTORY_ACT_CACHE.get(pid)
+    if hit and now - hit[0] < 120:
+        seen = hit[1]
+    else:
+        try:
+            from src.fb_ads_rpa import mlx_profiles
+
+            seen = mlx_profiles.ad_account_id_for(pid) or ""
+        except Exception:
+            seen = ""
+        _HISTORY_ACT_CACHE[pid] = (now, seen)
+    digits = lambda v: "".join(ch for ch in str(v) if ch.isdigit())
+    if not seen or digits(seen) == digits(want):
+        return ""
+    return (f"This profile last worked in {seen}, but the map has {want}. "
+            "If its Facebook user has no access to the map's account, the robot will stop "
+            "with wrong_ad_account - check the ad account id on the Accounts page.")
+
+
 def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     """Return preflight info per account:
     {acc_label: {link, link_status, missing_map_fields: [str], has_map_entry}}
@@ -1014,6 +1054,7 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
             "has_map_entry": entry is not None,
             "prefill": prefill,
             "page_name": page_name,
+            "ad_account_note": _history_act_note(entry),
         }
     return result
 

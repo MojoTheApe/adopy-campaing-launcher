@@ -12,7 +12,7 @@ RPA_FLOW_VERSION = "v96"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
-from src.fb_ads_rpa import failure_policy, job_cancel, profile_trouble, retry_policy, run_summary, sentry_signal
+from src.fb_ads_rpa import ad_account_guard, failure_policy, job_cancel, profile_trouble, retry_policy, run_summary, sentry_signal
 from src.fb_ads_rpa import meta_dom as _md
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.page_diagnostics import diagnose_and_recover
@@ -971,6 +971,9 @@ class AdsManagerFlow:
                        diag={"detail": detail[:200], "message": profile_trouble.message(stop.code)})
         except Exception:
             pass
+        if stop.code == profile_trouble.WRONG_AD_ACCOUNT and detail:
+            # ACL-1697: «expected act_X, opened act_Y» видно в ошибке задания.
+            return f"{stop.code}: {detail}"
         return stop.code
 
     def _adopt_page(self, page: Page) -> None:
@@ -1213,6 +1216,7 @@ class AdsManagerFlow:
         act = _act_numeric(draft.ad_account_id or "")
         if not act:
             raise AdsManagerFlowError("ad_account_id missing on draft")
+        self._expected_act = act
         url_tpl = (self.cfg.get("urls") or {}).get("campaigns") or (
             "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act_id}"
         )
@@ -1267,7 +1271,12 @@ class AdsManagerFlow:
         kind, detail = profile_trouble.classify_page(self.page, history=False)
         if kind:
             raise profile_trouble.ProfileStop(kind, detail)
+        # ACL-1697: Meta мог открыть другой кабинет (нет доступа к act из
+        # черновика или помнит прошлый) — до любых действий на странице.
+        ad_account_guard.stop_if_wrong(self.page, draft.ad_account_id or "", "campaigns_open")
         self._ensure_campaigns_ready(draft.name)
+        # ... и снова: готовность могла перезагрузить страницу.
+        ad_account_guard.stop_if_wrong(self.page, draft.ad_account_id or "", "campaigns_ready")
         result.steps_completed.append("open_campaigns")
         # ACL-1313: удачный переход — без PNG (5–7 с при трёх профилях);
         # вернуть: FB_RPA_SHOT_ALL=1.
@@ -1348,6 +1357,10 @@ class AdsManagerFlow:
 
         _wait_for_ads_manager_ready(self.page, timeout_ms=self.nav_timeout)
         result.steps_completed.append("campaigns_ready")
+        # ACL-1697: кабинет — перед каждым Create (страница могла смениться).
+        # (`_expected_act` ставит `_goto_campaigns`, он всегда идёт первым.)
+        if getattr(self, "_expected_act", ""):
+            ad_account_guard.stop_if_wrong(self.page, self._expected_act, "create_wizard")
 
         _click_first(self.page, create_sels, timeout_ms=self.action_timeout)
         pause_medium()
@@ -2422,8 +2435,12 @@ class AdsManagerFlow:
                         additional_ads=additional_ads,
                         soft_fails_out=ad_soft_fails,
                         on_new_page=self._adopt_page,
+                        expected_act=draft.ad_account_id or "",
                         **({"ad_body2": ad.ad_body2} if ad.ad_body2 else {}),
                     )
+                    if fail_step == profile_trouble.WRONG_AD_ACCOUNT and _md.last_wrong_ad_account():
+                        # ACL-1697: в имени отказа — «expected act_X, opened act_Y».
+                        fail_step += ": " + _md.last_wrong_ad_account()
                 finally:
                     # ACL-1614: после Stop окно не трогаем — им может уже
                     # владеть другое задание этого профиля.

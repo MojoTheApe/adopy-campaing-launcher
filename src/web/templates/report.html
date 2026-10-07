@@ -3900,6 +3900,9 @@ async function dashRefresh(ev) {
         {% else %}
           <span style="font-size:0.7rem;color:var(--good)">✓ config ok</span>
         {% endif %}
+        {% if pf.ad_account_note %}
+          <span class="cb-pf-err" style="font-size:0.7rem" title="{{ pf.ad_account_note }}">⚠ ad account differs from this profile's history</span>
+        {% endif %}
         {% if ds and ds.state == 'ready' %}
           <span class="cb-draft-badge" title="{{ ds.campaign_names | join(', ') }}">
             ✓ Draft ready · {{ ds.count }} campaign{{ 's' if ds.count != 1 else '' }}
