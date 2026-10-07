@@ -884,35 +884,50 @@ def front_for_login(page) -> dict:
     за краем — на экран, вкладка — вперёд. Окно не закрывается, процесс не
     трогается, другие профили не затрагиваются. `put_window_back` после этого
     окно не сворачивает (запись о доме снята) — человеку нужно им пользоваться.
-    Любой сбой — молча в журнал: остановка аккаунта важнее окна.
+
+    Только через сессию БРАУЗЕРА (`new_browser_cdp_session`) и id вкладки: она
+    с рендерером не говорит. Сессия на самой вкладке (`context.new_cdp_session`,
+    `page.bring_to_front`) на зависшем рендерере висела 197 с (замер ACL-1320), а
+    сюда зовут как раз после «вкладка не отвечает»: остановка аккаунта не должна
+    ждать окна. Любой сбой — молча в журнал.
     """
     out = {"restored": False, "moved": False, "front": False}
+    session = None
     try:
         context = page.context
         _OFFSCREEN.pop(id(context), None)
-        session = context.new_cdp_session(page)
-        info = session.send("Browser.getWindowForTarget") or {}
-        wid, bounds = info.get("windowId"), info.get("bounds") or {}
-        if wid is not None:
-            if bounds.get("windowState") in ("minimized",):
-                session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}})
-                out["restored"] = True
-                time.sleep(0.4)
-                bounds = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or bounds
-            left = bounds.get("left")
-            if out["restored"] or (isinstance(left, int) and left < 0):
-                width = max(int(bounds.get("width") or 0), 1200)
-                height = max(int(bounds.get("height") or 0), 800)
-                session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {
-                    "left": 40, "top": 40, "width": width, "height": height}})
-                out["moved"] = True
+        session = context.browser.new_browser_cdp_session()
+        url = str(getattr(page, "url", "") or "")
+        infos = [t for t in ((session.send("Target.getTargets") or {}).get("targetInfos") or [])
+                 if t.get("type") == "page"]
+        mine = [t for t in infos if url and t.get("url") == url] or []
+        target = (mine[0] if mine else {}).get("targetId")
+        if target:
+            info = session.send("Browser.getWindowForTarget", {"targetId": target}) or {}
+            wid, bounds = info.get("windowId"), info.get("bounds") or {}
+            if wid is not None:
+                if bounds.get("windowState") == "minimized":
+                    session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}})
+                    out["restored"] = True
+                    time.sleep(0.4)
+                    bounds = (session.send("Browser.getWindowForTarget", {"targetId": target}) or {}).get("bounds") or bounds
+                left = bounds.get("left")
+                if out["restored"] or (isinstance(left, int) and left < 0):
+                    width = max(int(bounds.get("width") or 0), 1200)
+                    height = max(int(bounds.get("height") or 0), 800)
+                    session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {
+                        "left": 40, "top": 40, "width": width, "height": height}})
+                    out["moved"] = True
+            session.send("Target.activateTarget", {"targetId": target})
+            out["front"] = True
     except Exception as exc:
-        log.debug("front_for_login window: %s", exc)
-    try:
-        page.bring_to_front()
-        out["front"] = True
-    except Exception as exc:
-        log.debug("front_for_login front: %s", exc)
+        log.debug("front_for_login: %s", exc)
+    finally:
+        if session is not None:
+            try:
+                session.detach()
+            except Exception:
+                pass
     try:
         from src.fb_ads_rpa import run_telemetry as rt
 

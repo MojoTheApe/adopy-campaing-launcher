@@ -46,6 +46,8 @@ log = logging.getLogger(__name__)
 #: не влияет (с 06.10 не блокирует): только чтобы не пугать старым.
 SIGNAL_TTL_H = 12.0
 ENV_TTL = "ACL_PREFLIGHT_TTL_H"
+#: Статус кабинета старше этого — не блок, а заметка.
+STATUS_FRESH = timedelta(hours=24)
 
 # Устойчивые коды причин.
 NOT_IN_MAP = "not_in_map"
@@ -263,10 +265,13 @@ def classify(account: str, *, entry: Any = None, token: str | None = None,
         v.blocking.append(_reason(NO_PROFILE, "map"))
     if token is not None:
         state = token_state(token)
+        # Профиль уже открыт с портом автоматизации: подключение (attach-only)
+        # токена не требует, так что это заметка, а не блок.
+        bucket = v.notes if open_profile else v.blocking
         if state == "missing":
-            v.blocking.append(_reason(NO_TOKEN, "token"))
+            bucket.append(_reason(NO_TOKEN, "token"))
         elif state == "expired":
-            v.blocking.append(_reason(TOKEN_EXPIRED, "token"))
+            bucket.append(_reason(TOKEN_EXPIRED, "token"))
 
     # Последний сигнал каждого вида — если после него не было успеха и он свежий.
     last_ok = ""
@@ -291,10 +296,20 @@ def classify(account: str, *, entry: Any = None, token: str | None = None,
 
     kind = (status.get("status") or "").lower()
     text = status.get("status_text") or ""
-    if kind == "disabled":
-        v.blocking.append(_reason(DISABLED, "status", status_at))
-    elif kind == "restricted":
-        v.blocking.append(_reason(RESTRICTED, "status", status_at))
+    if kind in ("disabled", "restricted"):
+        code = DISABLED if kind == "disabled" else RESTRICTED
+        read_at = parse_ts(status_at)
+        old = bool(status.get("stale")) or (read_at is not None and now - read_at > STATUS_FRESH)
+        if old:
+            # Старое чтение: кабинет мог быть возвращён в работу — заметка.
+            r = _reason(code, "status", status_at)
+            day = status.get("at_short") or (read_at.astimezone().strftime("%d.%m") if read_at else "")
+            r.message = f"was {kind} at the last read" + (f" ({day})" if day else "")
+            r.hint = "will try; check it in Meta if it fails"
+            r.seen_label = ""
+            v.notes.append(r)
+        else:
+            v.blocking.append(_reason(code, "status", status_at))
     elif kind == "review":
         v.notes.append(_reason(REVIEW, "status", status_at))
     if kind not in ("clear", "") and _CHECKPOINT_RE.search(text) and not any(r.code == CHECKPOINT for r in v.notes):
@@ -311,14 +326,41 @@ def _default_token(instance: str) -> str:
     return (os.environ.get(f"MULTILOGIN_AUTOMATION_TOKEN_{(instance or 'A').strip().upper()}") or "").strip()
 
 
+#: Сколько секунд ждём каждый источник списка открытых профилей: вся проверка
+#: должна укладываться в 8 с таймаута страницы, а зависший лаунчер держит GET 4 с
+#: на каждый слот (A и B подряд).
+OPEN_PROFILES_WAIT_S = 2.5
+
+
 def _default_open_profile_ids() -> set[str]:
-    """Открытые профили по словам самого Multilogin (локальный GET, read-only)."""
-    try:
+    """Открытые профили: локальный GET лаунчера (read-only) и просмотр процессов
+    машины — параллельно, не дольше `OPEN_PROFILES_WAIT_S`. Процессы нужны ещё и
+    тогда, когда токен мёртв и лаунчер не отвечает."""
+    from concurrent.futures import ThreadPoolExecutor, wait
+
+    def launcher() -> set[str]:
         from src.fb_ads_rpa.mlx_profiles import running_profiles_from_launcher
 
         return {p["profile_id"] for p in running_profiles_from_launcher() if p.get("profile_id")}
-    except Exception:
-        return set()
+
+    def machine() -> set[str]:
+        from src.fb_ads_rpa.mlx_profiles import open_profile_ids
+
+        return {str(x) for x in open_profile_ids() if x}
+
+    pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="acl-preflight")
+    try:
+        futures = [pool.submit(launcher), pool.submit(machine)]
+        done, _ = wait(futures, timeout=OPEN_PROFILES_WAIT_S)
+        found: set[str] = set()
+        for f in done:
+            try:
+                found |= f.result()
+            except Exception:
+                pass
+        return found
+    finally:
+        pool.shutdown(wait=False)
 
 
 def _default_telemetry_rows() -> list[dict[str, Any]]:

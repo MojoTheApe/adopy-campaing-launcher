@@ -210,3 +210,42 @@ def test_endpoint_without_accounts_is_empty(monkeypatch, tmp_path):
     monkeypatch.setattr(web, "get_ad_account_map_path", lambda: str(tmp_path / "missing.csv"))
     body = json.loads(asyncio.run(web.api_publish_preflight(accounts="")).body)
     assert body["accounts"] == [] and body["text"] == ""
+
+
+# --- N1 / N5 / N6 -----------------------------------------------------------
+
+def test_dead_token_is_a_note_when_the_profile_is_already_open():
+    """Attach-only подключение токена не требует: открытый профиль работает."""
+    for tok, code in (("", pf.NO_TOKEN), (jwt(time.time() - 5), pf.TOKEN_EXPIRED)):
+        v = verdict(token=tok, open_profile=True)
+        assert v.ready and code in note_codes(v) and pf.OPEN_NOW in note_codes(v)
+        assert codes(verdict(token=tok, open_profile=False)) == [code]
+
+
+def test_old_or_stale_disabled_status_is_a_note_with_the_date():
+    old = {"status": "disabled", "at": iso(30), "at_short": "05.10.26"}
+    v = verdict(status=old)
+    assert v.ready and note_codes(v) == [pf.DISABLED]
+    assert v.notes[0].message == "was disabled at the last read (05.10.26)"
+    v = verdict(status={"status": "restricted", "at": iso(1), "stale": "yes"})
+    assert v.ready and note_codes(v) == [pf.RESTRICTED]
+    # свежий — по-прежнему блок
+    assert codes(verdict(status={"status": "disabled", "at": iso(2)})) == [pf.DISABLED]
+
+
+def test_open_profile_lookup_is_capped_and_parallel(monkeypatch):
+    """Зависший лаунчер не держит проверку дольше лимита; процессы машины читаются рядом."""
+    import threading
+
+    from src.fb_ads_rpa import mlx_profiles
+
+    release = threading.Event()
+    monkeypatch.setattr(pf, "OPEN_PROFILES_WAIT_S", 0.3)
+    monkeypatch.setattr(mlx_profiles, "running_profiles_from_launcher",
+                        lambda: (release.wait(10), [{"profile_id": "slow"}])[1])
+    monkeypatch.setattr(mlx_profiles, "open_profile_ids", lambda: ["by-process"])
+    started = time.monotonic()
+    got = pf._default_open_profile_ids()
+    release.set()
+    assert time.monotonic() - started < 2
+    assert got == {"by-process"}

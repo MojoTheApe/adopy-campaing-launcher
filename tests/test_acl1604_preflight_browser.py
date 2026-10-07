@@ -90,3 +90,21 @@ def test_single_card_publish_is_checked_too(ui):
             break
         p.wait_for_timeout(100)
     assert decisions[-1] == {'queued': ['Demo'], 'skipped': [], 'run_anyway': ['Demo']}
+
+
+def test_single_card_publish_falls_back_to_the_old_confirm_when_the_check_fails(ui):
+    """Проверка отвечает 500: подтверждение без «Not ready», аккаунт уходит, как раньше."""
+    p, state = ui
+    p.route('**/api/publish-preflight**', lambda r: r.fulfill(status=500, json={'error': 'boom'}))
+    add(p, 0)
+    ready(p)
+    press_publish(p, 0)
+    modal = p.locator('#safe-confirm-modal')
+    expect(modal).to_be_visible()
+    expect(modal.locator('.cb-preflight')).to_have_count(0)
+    p.locator('#sfc-ok').click()
+    for _ in range(40):
+        if state['posts']:
+            break
+        p.wait_for_timeout(100)
+    assert [f['account_label'] for f in state['posts']] == ['Demo']

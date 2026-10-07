@@ -12019,6 +12019,24 @@ window.cbPreview = function(form, done, onlySlot) {
  * собранную. Единственная ошибка, которая не держит, — пустая ссылка:
  * её добавляют и после сборки, так решил владелец.
  */
+/* ACL-1604: проверка аккаунтов — один запрос на нажатие, по тем, что идут в
+ * очередь. Любая неудача (сеть, не тот ответ) — null: тогда всё как раньше. */
+window.cbPreflightFetch = function (accounts) {
+  var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+  var timer = ctl ? setTimeout(function () { ctl.abort(); }, 8000) : null;
+  return fetch('/api/publish-preflight?accounts=' + encodeURIComponent(accounts.join(',')), ctl ? { signal: ctl.signal } : {})
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { return d && Array.isArray(d.accounts) ? d : null; })
+    .catch(function () { return null; })
+    .then(function (d) { if (timer) clearTimeout(timer); return d; });
+};
+window.cbPreflightDecision = function (queued, skipped, runAnyway) {
+  try {
+    fetch('/api/publish-preflight/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queued: queued, skipped: skipped, run_anyway: runAnyway }) }).catch(function () {});
+  } catch (e) { /* журнал — не условие запуска */ }
+};
+
 // The drawer checks real server diagnostics without opening a preview panel.
 function cbDrawerRefreshIndicators() {
   if (!window.cbTree) return;
@@ -12216,7 +12234,9 @@ window.cbPublishAll = function (onProgress, picked) {
 
   // ACL-1604: до подтверждения — быстрая проверка аккаунтов по уже известным
   // данным (профили не открываются). Не ответила — прежнее подтверждение.
-  cbPreflightFetch(forms.map(cbFormAccount)).then(function (pf) {
+  // Помощник живёт на window: выдернутый из страницы кусок кода (тесты) его
+  // не видит — тогда проверки нет, и подтверждение открывается сразу, как раньше.
+  var pfAsk = function (pf) {
   var bad = {}, badList = [];
   ((pf && pf.accounts) || []).forEach(function (a) {
     if (a && a.ready === false) { bad[String(a.account).toLowerCase()] = a; badList.push(a); }
@@ -12259,35 +12279,19 @@ window.cbPublishAll = function (onProgress, picked) {
     + 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook</span>',
     function () {
       var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
-      if (pf) cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
+      if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
       if (!go.length) { window.alert('No account is ready to run. Fix the listed accounts or tick "Run anyway".'); return; }
       var got = _runPublishQueue(go, onProgress || function () {},
         only ? function (form) { return cbPickedIn(form, only); } : null);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     },
     { confirmLabel: only ? 'Publish selected → drafts' : 'Publish all → drafts' });
-  var box = document.getElementById('cb-pf-anyway');
+  var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
-  });
+  };
+  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch(forms.map(cbFormAccount)).then(pfAsk);
+  else pfAsk(null);
 };
-
-/* ACL-1604: проверка аккаунтов — один запрос на нажатие, по тем, что идут в
- * очередь. Любая неудача (сеть, не тот ответ) — null: тогда всё как раньше. */
-function cbPreflightFetch(accounts) {
-  var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
-  var timer = ctl ? setTimeout(function () { ctl.abort(); }, 8000) : null;
-  return fetch('/api/publish-preflight?accounts=' + encodeURIComponent(accounts.join(',')), ctl ? { signal: ctl.signal } : {})
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (d) { return d && Array.isArray(d.accounts) ? d : null; })
-    .catch(function () { return null; })
-    .then(function (d) { if (timer) clearTimeout(timer); return d; });
-}
-function cbPreflightDecision(queued, skipped, runAnyway) {
-  try {
-    fetch('/api/publish-preflight/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ queued: queued, skipped: skipped, run_anyway: runAnyway }) }).catch(function () {});
-  } catch (e) { /* журнал — не условие запуска */ }
-}
 
 /* Имя карточки для подтверждения. */
 function cbSlotTitle(slot) {
@@ -13185,7 +13189,7 @@ window.cbPublish = function(form) {
   }
 
   // ACL-1604: та же проверка аккаунта, что у «Publish all», — один запрос на нажатие.
-  cbPreflightFetch([accLabel]).then(function (pf) {
+  var pfAsk = function (pf) {
   var mine = (((pf && pf.accounts) || []).filter(function (x) { return x && x.ready === false; }))[0];
   var anyway = false;
   if (mine) bodyHtml = '<div class="cb-preflight" style="border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin:0.5rem 0;font-size:0.82rem">'
@@ -13195,7 +13199,7 @@ window.cbPublish = function(form) {
       }).join('; '))
     + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway"> Run anyway</label></div>' + bodyHtml;
   _safeConfirm(ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?', bodyHtml, function() {
-    if (pf) cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
+    if (pf && window.cbPreflightDecision) window.cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
     if (mine && !anyway) { window.alert(accLabel + ' is not ready — fix it, or tick "Run anyway".'); return; }
     if (onlySlot || ticked.length) {
       var got = _runPublishQueue([form], window.cbTree.showQueue, onlySlot || ticked);
@@ -13203,9 +13207,11 @@ window.cbPublish = function(form) {
     }
     else _doCbPublish(form);
   }, { confirmLabel: (warn || lostTargeting.length) ? 'Build anyway' : 'Publish → draft' });
-  var box = document.getElementById('cb-pf-anyway');
+  var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
-  });
+  };
+  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch([accLabel]).then(pfAsk);
+  else pfAsk(null);
 };
 
 // Весь аккаунт без превью — кнопка Publish на странице страны. Идёт через
