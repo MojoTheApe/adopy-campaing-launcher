@@ -8950,7 +8950,7 @@
             "session": "run_s1705a_1007"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1705A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -8968,7 +8968,8 @@
           "report": "# ACL-1705 handoff\nPR #706 into stage, head cc42994959aed277306865c9f029bf09745e5aac, 41 files.\nChanged: logo/favicon/ico assets; header stacked lockup; titles, ?v=acm, FastAPI title, visible ACL strings -> ACM; launcher/wizard titles; release title/notes; build_manifest product (nothing compares it); bat/ps1 titles + old .lnk deletion; READMEs/DISTRIBUTION/INTEGRATIONS; Inter Medium woff2 + OFL bundled.\nKept: ACL.exe, /healthz ACL, ACL_* env, LOCALAPPDATA\\ACL, installer/shortcut names, AppId, CI names, ids/classes, SETUP-NEW-PC.md.\nTests: test_header, test_stage_badge, test_release_updates, test_web_acl_update, test_build_manifest, test_launcher, test_multilogin_is_connected_in_the_dashboard - all pass. No browser tests.\nHeader HTML: div.brand-mark > img.brand-logo(34px) + h1.brand-name \"Adopy Campaign Manager\"; then div.brand-text (meta dl). CSS: .brand-mark column flex centered; @font-face 'ACM Inter' 500; h1.brand-name 12px var(--muted).\nNote: scripts/convert_favicon_to_ico.py still draws the old mark; docstring warns not to run it."
         },
         "pr": 706,
-        "queued_at": "2026-10-07T17:23:01+00:00"
+        "queued_at": "2026-10-07T17:23:01+00:00",
+        "reviewer": "Reviewer-R1705Q"
       },
       "710": {
         "implementers": [
@@ -9713,6 +9714,10 @@
       },
       "Reviewer-R1702Q": {
         "session": "rev_r1702q_1007",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1705Q": {
+        "session": "rev_r1705q_1007",
         "role": "Reviewer"
       }
     },
@@ -11701,10 +11706,20 @@
       653,
       651,
       652,
-      705,
       710
     ],
-    "review": null,
+    "review": {
+      "id": "6ef19b959a9349f49f5abcef93ecfc0b",
+      "pr": 706,
+      "issues": [
+        705
+      ],
+      "actor": "Reviewer-R1705Q",
+      "session": "rev_r1705q_1007",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-07T23:14:10+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -16484,6 +16499,13 @@
         "prs": [
           714
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T23:14:10+00:00",
+        "pr": 706,
+        "lane": "6ef19b959a9349f49f5abcef93ecfc0b",
+        "actor": "Reviewer-R1705Q"
       }
     ],
     "policy": {
