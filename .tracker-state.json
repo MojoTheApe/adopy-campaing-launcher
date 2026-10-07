@@ -5951,22 +5951,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "705": {
-        "actor": "Worker-S1705A",
-        "session": "run_s1705a_1007",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1705-rebrand",
-        "worktree": "C:\\acl-1705-rebrand",
-        "id": "95084f0259904f088303c26419e58790",
-        "issue": 705,
-        "state": "handoff",
-        "started_at": "2026-10-07T17:13:45+00:00",
-        "from_status": "status:todo",
-        "pr": 706,
-        "report": "# ACL-1705 handoff\nPR #706 into stage, head cc42994959aed277306865c9f029bf09745e5aac, 41 files.\nChanged: logo/favicon/ico assets; header stacked lockup; titles, ?v=acm, FastAPI title, visible ACL strings -> ACM; launcher/wizard titles; release title/notes; build_manifest product (nothing compares it); bat/ps1 titles + old .lnk deletion; READMEs/DISTRIBUTION/INTEGRATIONS; Inter Medium woff2 + OFL bundled.\nKept: ACL.exe, /healthz ACL, ACL_* env, LOCALAPPDATA\\ACL, installer/shortcut names, AppId, CI names, ids/classes, SETUP-NEW-PC.md.\nTests: test_header, test_stage_badge, test_release_updates, test_web_acl_update, test_build_manifest, test_launcher, test_multilogin_is_connected_in_the_dashboard - all pass. No browser tests.\nHeader HTML: div.brand-mark > img.brand-logo(34px) + h1.brand-name \"Adopy Campaign Manager\"; then div.brand-text (meta dl). CSS: .brand-mark column flex centered; @font-face 'ACM Inter' 500; h1.brand-name 12px var(--muted).\nNote: scripts/convert_favicon_to_ico.py still draws the old mark; docstring warns not to run it."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -8685,9 +8670,25 @@
             "session": "run_s1705a_1007"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1705A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1705A",
+          "session": "run_s1705a_1007",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1705-rebrand",
+          "worktree": "C:\\acl-1705-rebrand",
+          "id": "95084f0259904f088303c26419e58790",
+          "issue": 705,
+          "state": "handoff",
+          "started_at": "2026-10-07T17:13:45+00:00",
+          "from_status": "status:todo",
+          "pr": 706,
+          "report": "# ACL-1705 handoff\nPR #706 into stage, head cc42994959aed277306865c9f029bf09745e5aac, 41 files.\nChanged: logo/favicon/ico assets; header stacked lockup; titles, ?v=acm, FastAPI title, visible ACL strings -> ACM; launcher/wizard titles; release title/notes; build_manifest product (nothing compares it); bat/ps1 titles + old .lnk deletion; READMEs/DISTRIBUTION/INTEGRATIONS; Inter Medium woff2 + OFL bundled.\nKept: ACL.exe, /healthz ACL, ACL_* env, LOCALAPPDATA\\ACL, installer/shortcut names, AppId, CI names, ids/classes, SETUP-NEW-PC.md.\nTests: test_header, test_stage_badge, test_release_updates, test_web_acl_update, test_build_manifest, test_launcher, test_multilogin_is_connected_in_the_dashboard - all pass. No browser tests.\nHeader HTML: div.brand-mark > img.brand-logo(34px) + h1.brand-name \"Adopy Campaign Manager\"; then div.brand-text (meta dl). CSS: .brand-mark column flex centered; @font-face 'ACM Inter' 500; h1.brand-name 12px var(--muted).\nNote: scripts/convert_favicon_to_ico.py still draws the old mark; docstring warns not to run it."
+        },
+        "pr": 706,
+        "queued_at": "2026-10-07T17:23:01+00:00"
       }
     },
     "actors": {
@@ -11256,7 +11257,8 @@
       675,
       693,
       697,
-      702
+      702,
+      705
     ],
     "review": {
       "id": "4da862ab01e5473387d78b0f1ee1467e",
@@ -15904,6 +15906,13 @@
         "at": "2026-10-07T17:13:45+00:00",
         "issue": 705,
         "claim": "95084f0259904f088303c26419e58790",
+        "actor": "Worker-S1705A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-07T17:23:01+00:00",
+        "issue": 705,
+        "pr": 706,
         "actor": "Worker-S1705A"
       }
     ],
