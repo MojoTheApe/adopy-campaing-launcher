@@ -88,9 +88,14 @@ def unblock_after_s() -> float:
 
 
 def stacks_dir() -> Path:
-    from config.paths import get_runtime_workspace
+    """`output/stuck_stacks` рядом с журналом телеметрии (`<workspace>/output`).
 
-    return Path(get_runtime_workspace()) / "output" / "stuck_stacks"
+    От `run_telemetry.TELEMETRY_PATH`, а не заново от рабочей папки: тесты
+    подменяют этот путь (conftest), и стеки уходят туда же, а не в `output/`.
+    """
+    from src.fb_ads_rpa import run_telemetry
+
+    return Path(run_telemetry.TELEMETRY_PATH).parent / "stuck_stacks"
 
 
 # ── Поток задания ─────────────────────────────────────────────────────────────
@@ -359,15 +364,47 @@ def dump_stack(job: JobThread, *, run_id: str, step: str, reason: str,
             lines.append(f"blocked_call: {call.api or '?'} at {call.where or '?'}")
         lines.append(f"page_url: {_safe_url(url) or '-'}")
         body = "\n".join(lines) + "\n\n" + format_stack(job)
-        folder = out_dir or stacks_dir()
-        folder.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        safe_run = "".join(ch for ch in (run_id or "norun") if ch.isalnum() or ch in "-_")[:40]
-        path = folder / f"{safe_run}_{stamp}.txt"
-        path.write_text(body, encoding="utf-8")
-        return path
+        return _write(body, run_id, out_dir)
     except Exception:
         return None
+
+
+def dump_exception(exc: BaseException, *, run_id: str, step: str, reason: str,
+                   detail: dict | None = None, page=None, out_dir: Path | None = None) -> Path | None:
+    """Стек остановки, брошенной в САМОМ потоке задания (срок кампании/шага, ACL-1702).
+
+    Зовёт поток задания в `except`: трассировка исключения доходит до места,
+    где сработал срок (какой цикл ожидания или вызов его съел), плюс внешний
+    стек до точки перехвата. Файл — тот же `output/stuck_stacks/<run>_<ts>.txt`.
+    Не бросает.
+    """
+    try:
+        lines = [
+            f"reason: {reason}",
+            f"run: {run_id or '-'}",
+            f"time_utc: {datetime.now(timezone.utc).isoformat()}",
+            f"last_step: {step or '-'}",
+        ]
+        for key, value in (detail or {}).items():
+            lines.append(f"{key}: {value}")
+        if page is not None:
+            lines.append(f"page_url: {_safe_url(page_url(page)) or '-'}")
+        body = ("\n".join(lines) + "\n\n-- where the stop was raised --\n"
+                + "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                + "\n-- caught at --\n" + "".join(traceback.format_stack()))
+        return _write(body, run_id, out_dir)
+    except Exception:
+        return None
+
+
+def _write(body: str, run_id: str, out_dir: Path | None) -> Path:
+    folder = out_dir or stacks_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    safe_run = "".join(ch for ch in (run_id or "norun") if ch.isalnum() or ch in "-_")[:40]
+    path = folder / f"{safe_run}_{stamp}.txt"
+    path.write_text(body, encoding="utf-8")
+    return path
 
 
 def _safe_url(url: str) -> str:

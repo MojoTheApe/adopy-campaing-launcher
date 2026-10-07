@@ -203,7 +203,11 @@ def test_a_thread_running_python_has_no_blocked_call(tmp_path):
         t.join(2)
 
 
-def test_step_stuck_writes_the_stack_from_the_watcher(tmp_path, monkeypatch):
+# Шаги живых зависаний: B97 (ad_destination), Doc120 (next_to_adset),
+# Sentry PYTHON-6C (campaigns_list_ready), PYTHON-6D (advantage_plus_off).
+@pytest.mark.parametrize("last_step", ["ad_destination", "next_to_adset",
+                                       "campaigns_list_ready", "advantage_plus_off"])
+def test_step_stuck_writes_the_stack_from_the_watcher(tmp_path, monkeypatch, last_step):
     from src.fb_ads_rpa import run_telemetry as rt
     from src.fb_ads_rpa import sentry_signal
     from src.web import publish_jobs as pj
@@ -212,7 +216,7 @@ def test_step_stuck_writes_the_stack_from_the_watcher(tmp_path, monkeypatch):
     monkeypatch.setattr(sentry_signal, "report_step_stuck", lambda *a, **k: "")
     rows: list = []
     monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, kw)))
-    monkeypatch.setattr(rt, "last_activity", lambda job: (0.0, "ad_destination"))
+    monkeypatch.setattr(rt, "last_activity", lambda job: (0.0, last_step))
     monkeypatch.setattr(rt, "last_run_id", lambda job: "0ab4aecb8e3b")
     monkeypatch.setattr(rt, "clock", lambda: 400.0)
     with FakeJob() as fj:
@@ -227,9 +231,48 @@ def test_step_stuck_writes_the_stack_from_the_watcher(tmp_path, monkeypatch):
     step, kw = rows[-1]
     assert step == "step_stuck"
     assert kw["run_id"] == "0ab4aecb8e3b"
+    assert kw["diag"]["last_step"] == last_step
     files = list(tmp_path.glob("0ab4aecb8e3b_*.txt"))
     assert len(files) == 1 and kw["diag"]["stack_file"] == files[0].name
-    assert "my_step_function" in files[0].read_text(encoding="utf-8")
+    text = files[0].read_text(encoding="utf-8")
+    assert f"last_step: {last_step}" in text
+    assert "blocked_call: Page.evaluate at" in text and "my_step_function" in text
+
+
+def test_a_budget_stop_writes_the_stack_where_it_fired(tmp_path, monkeypatch):
+    """Doc124 e3f55897e533 (PYTHON-6E): campaign_budget_exceeded после next_to_ad.
+
+    Срок срабатывает в самом потоке задания; стек — до места срабатывания
+    (какой цикл съел время), файл — в diag строки остановки.
+    """
+    from src.fb_ads_rpa import meta_dom as md
+    from src.fb_ads_rpa import run_telemetry as rt
+
+    monkeypatch.setattr(tw, "stacks_dir", lambda: tmp_path)
+    rows: list = []
+    monkeypatch.setattr(md._telemetry, "record", lambda step, ok=None, **kw: rows.append((step, ok, kw)))
+    monkeypatch.setattr(rt, "current_run_id", lambda: "e3f55897e533")
+    detail = {"after_step": "next_to_ad", "campaign_s": 2768.9, "step_s": 170.2,
+              "frozen_episodes": 3, "budget_s": 2700.0}
+
+    def the_wait_loop_that_ate_the_time():
+        raise md.FlowBudgetExceeded("campaign_budget_exceeded", detail)
+
+    @md._under_flow_budget
+    def flow(page):
+        the_wait_loop_that_ate_the_time()
+
+    page = _sync_api_page(Page("https://adsmanager.facebook.com/adsmanager/manage/ads/edit?act=1"))
+    assert flow(page) == "campaign_budget_exceeded"
+    step, ok, kw = rows[-1]
+    assert step == "campaign_budget_exceeded" and ok is False
+    files = list(tmp_path.glob("e3f55897e533_*.txt"))
+    assert len(files) == 1 and kw["diag"]["stack_file"] == files[0].name
+    assert kw["diag"]["after_step"] == "next_to_ad"
+    text = files[0].read_text(encoding="utf-8")
+    assert "reason: campaign_budget_exceeded" in text and "last_step: next_to_ad" in text
+    assert "the_wait_loop_that_ate_the_time" in text, "стек называет место срабатывания"
+    assert "page_url: https://adsmanager.facebook.com/adsmanager/manage/ads/edit" in text
 
 
 # ── Когда разблокировать ──────────────────────────────────────────────────

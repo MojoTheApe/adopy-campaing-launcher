@@ -5239,9 +5239,24 @@ def _under_flow_budget(flow):
         try:
             return _windows.attach_block(flow(*args, **kwargs))
         except FlowBudgetExceeded as stop:
+            # ACL-1702: стек места, где сработал срок (Doc124 e3f55897e533,
+            # campaign_budget_exceeded после next_to_ad: без него не видно,
+            # какой цикл съел время). Файл — в diag строки остановки.
+            diag = dict(stop.detail)
+            try:
+                from src.fb_ads_rpa import tab_watchdog
+
+                path = tab_watchdog.dump_exception(
+                    stop, run_id=_telemetry.current_run_id(), reason=stop.reason,
+                    step=str(stop.detail.get("after_step", "")), detail=stop.detail,
+                    page=args[0] if args else kwargs.get("page"))
+                if path is not None:
+                    diag["stack_file"] = path.name
+            except Exception:
+                pass
             try:
                 _telemetry.record(stop.reason, False, note=str(stop.detail.get("after_step", "")),
-                                  diag=stop.detail)
+                                  diag=diag)
             except Exception:
                 pass
             return stop.reason
