@@ -5510,20 +5510,6 @@
   },
   "execution": {
     "claims": {
-      "649": {
-        "actor": "Worker-S1649A",
-        "session": "run_s1649a_1006",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1649-ci-cost",
-        "worktree": "C:\\acl-1649-ci-cost",
-        "id": "4864b9141e3d497a95df437846a703e5",
-        "issue": 649,
-        "state": "handoff",
-        "started_at": "2026-10-06T18:47:23+00:00",
-        "from_status": "status:idea",
-        "pr": 666,
-        "report": "# ACL-1649 handoff (Worker-S1649A) - BLOCKED at commit\n\nState: all code and tests done in C:\\acl-1649-ci-cost (branch codex/acl-1649-ci-cost, base work/stage), UNCOMMITTED.\nThe Bash permission layer denied `git add ... && git commit` (twice, also with -F file). Not worked around.\nCommit message is ready: scratchpad\\commit_msg.txt.\n\nFiles: .github/workflows/{ci,delivery-check,windows-installer}.yml, scripts/{acl_ci_reuse,acl_ci_scope,acl_publish_release,acl_ci_minutes}.py,\ntests/{test_acl_ci_reuse,test_acl_ci_scope,test_acl_ci_workflows,test_ci_layout,test_acl_ci_chain,test_acl_ci_minutes}.py\n\nTests (foreground, --noconftest): chain 25 passed; reuse 80 (79 + the fixed admission case, re-verified 17 related); publish_release 45; ci_layout+workflows 49 passed 1 skipped\n(admission bash test skipped on Windows; the script was exercised manually with bash: ok); minutes 11; scope+platform 268+100 passed after linux-ok marks.\n\nFix during finish: a run now counts as proof only if its own admission job (ACL verification / Installer verification) passed.\n\nRemaining: commit, git fetch work + merge work/stage, push to work, open PR into stage (Tracker issues: ACL-1649), execution handoff --apply.\nSee the handback message for numbers, root cause and expected savings."
-      },
       "652": {
         "actor": "Worker-S1652A",
         "session": "run_s1652a_1006",
@@ -7787,9 +7773,25 @@
             "session": "run_s1649a_1006"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1649A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1649A",
+          "session": "run_s1649a_1006",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1649-ci-cost",
+          "worktree": "C:\\acl-1649-ci-cost",
+          "id": "4864b9141e3d497a95df437846a703e5",
+          "issue": 649,
+          "state": "handoff",
+          "started_at": "2026-10-06T18:47:23+00:00",
+          "from_status": "status:idea",
+          "pr": 666,
+          "report": "# ACL-1649 handoff (Worker-S1649A) - BLOCKED at commit\n\nState: all code and tests done in C:\\acl-1649-ci-cost (branch codex/acl-1649-ci-cost, base work/stage), UNCOMMITTED.\nThe Bash permission layer denied `git add ... && git commit` (twice, also with -F file). Not worked around.\nCommit message is ready: scratchpad\\commit_msg.txt.\n\nFiles: .github/workflows/{ci,delivery-check,windows-installer}.yml, scripts/{acl_ci_reuse,acl_ci_scope,acl_publish_release,acl_ci_minutes}.py,\ntests/{test_acl_ci_reuse,test_acl_ci_scope,test_acl_ci_workflows,test_ci_layout,test_acl_ci_chain,test_acl_ci_minutes}.py\n\nTests (foreground, --noconftest): chain 25 passed; reuse 80 (79 + the fixed admission case, re-verified 17 related); publish_release 45; ci_layout+workflows 49 passed 1 skipped\n(admission bash test skipped on Windows; the script was exercised manually with bash: ok); minutes 11; scope+platform 268+100 passed after linux-ok marks.\n\nFix during finish: a run now counts as proof only if its own admission job (ACL verification / Installer verification) passed.\n\nRemaining: commit, git fetch work + merge work/stage, push to work, open PR into stage (Tracker issues: ACL-1649), execution handoff --apply.\nSee the handback message for numbers, root cause and expected savings."
+        },
+        "pr": 666,
+        "queued_at": "2026-10-07T06:02:16+00:00"
       },
       "641": {
         "implementers": [
@@ -10229,7 +10231,8 @@
       604,
       653,
       641,
-      651
+      651,
+      649
     ],
     "review": null,
     "history": [
@@ -14491,6 +14494,13 @@
         "issue": 651,
         "pr": 665,
         "actor": "Worker-S1651A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-07T06:02:16+00:00",
+        "issue": 649,
+        "pr": 666,
+        "actor": "Worker-S1649A"
       }
     ],
     "policy": {
