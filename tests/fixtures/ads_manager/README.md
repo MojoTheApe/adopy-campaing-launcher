@@ -299,6 +299,19 @@ Coverage limit: no Meta JS or CSS; unknown windows (unsafe-only buttons, a safe 
 
 Coverage limit: no Meta JS or CSS — `tests/test_bench_audience_card_collapsed_drawer.py` emulates the card opening (click on either button presses both and un-hides the body). Only the "Advantage+ on, no custom audiences" state was captured; a collapsed card with Advantage+ off or filled audiences was not.
 
+## ACL-1613 create-campaign dialog "Meta AI-guided setup" (live run 2026-10-06)
+
+`ai_guided_setup_dialog_2026_10_05.html` — one fragment, `dialog`: the whole `role=dialog` "Choose how to create your new campaign" from `fb358fda8aab/00_stall_objective_wait` (campaign list, Create clicked): two radios "Meta AI-guided setup" (checked) and "Manual campaign setup", a prompt box with suggested-prompt buttons, Cancel / Continue. Real capture. Cut with `scripts/capture_to_fixture.py`; `--review` read, only UI strings remain. UI language: English. The Doc21 "Ad set name - Template" dialog has no page.html capture (only screenshots), so `tests/test_ai_rescue.py` uses the same hand-written markup as `tests/test_foreign_windows_are_closed_or_named.py`.
+## ACL-1629 placements on the layouts of 2026-10-05/06 (live runs 2026-10-06)
+
+`placements_button_expanders_2026_10_06.html` — b40ba4e8c2d6/00_placements (KLD_BFL_B90, classic ad set editor, 08:14 UTC; 34bf0d6c2262/00_placements has the same card). Capture truncated at 3.98 MB; the card is whole. One fragment, `card`: the whole Placements card with "Show more settings" open, the "Placements" node and the Feeds, "Stories, Status, Reels" and "In-stream ads for reels" category blocks (`ads_placement_expandable_list_item_*`) with their real subitem rows. The category expander is a plain `<button aria-label="Expand|Collapse">` inside the category `li`, without `aria-expanded`. The card also carries Meta's "Changes to placement settings are coming soon" notice. The capture is the page at the end of the step (all three lists open; "Ads on Facebook Reels" already unchecked).
+
+`placements_collapsed_card_standalone_2026_10_06.html` — ab33293af6d7/05_placements (Facebook_9403A, classic standalone ad set editor, 09:33 UTC). Capture truncated at 3.98 MB; the card is whole. One fragment, `card`: the Placements card collapsed into a summary — header and summary ("Account controls: None set · Platforms · Placements: Advantage+ placements") as two `role=button aria-pressed=false`; the body (notice, "Placement value rules", "Account controls · Excluded placements: None", "Edit placement controls") under `<div hidden>`.
+
+Both cut with `scripts/capture_to_fixture.py` (classes, inline styles, SVG, ids, `act=`, URLs, campaign names removed; render ids to `syn_N`; `--review` read, only UI strings remain). No account, campaign or creative data in the blocks. UI language: English. Meta build identifier and browser version: not recorded.
+
+Coverage limit: no Meta JS or CSS. `tests/test_bench_placements_1629.py` emulates the category buttons (fold/unfold, a fold after the first save, a row disabled for a while after its category opens), the card opening (a click on either button presses both and un-hides the body) and the "Placement controls for this ad account" dialog, whose markup is synthetic (it was not in either capture). What the opened 9403A card offers beyond "Advantage+ placements · Edit" was not captured.
+
 
 ## ACL-1630 single-screen editor Locations and ad tree (live runs 2026-10-06)
 
