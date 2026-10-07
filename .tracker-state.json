@@ -5527,7 +5527,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "669": {
+        "actor": "Worker-L1669B",
+        "session": "run_l1669b_1007",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "codex/acl-1669-b97-pick",
+        "worktree": "C:\\acl-1669-b97-pick",
+        "id": "3ee2bfe5f64a488a8d690bd87a2613f5",
+        "issue": 669,
+        "state": "implementing",
+        "started_at": "2026-10-07T07:28:59+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -7960,6 +7973,17 @@
         },
         "pr": 665,
         "queued_at": "2026-10-07T05:53:55+00:00"
+      },
+      "669": {
+        "implementers": [
+          {
+            "actor": "Worker-L1669B",
+            "session": "run_l1669b_1007"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-L1669B",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -8582,6 +8606,10 @@
       "Reviewer-R1650Q": {
         "session": "rev_r1650q_1007",
         "role": "Reviewer"
+      },
+      "Worker-L1669B": {
+        "session": "run_l1669b_1007",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -14552,6 +14580,13 @@
         "issue": 652,
         "pr": 667,
         "actor": "Worker-S1652A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-07T07:28:59+00:00",
+        "issue": 669,
+        "claim": "3ee2bfe5f64a488a8d690bd87a2613f5",
+        "actor": "Worker-L1669B"
       }
     ],
     "policy": {
