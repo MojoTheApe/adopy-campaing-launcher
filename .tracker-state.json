@@ -5545,20 +5545,6 @@
         "state": "implementing",
         "started_at": "2026-10-06T20:56:28+00:00",
         "from_status": "status:idea"
-      },
-      "653": {
-        "actor": "Worker-S1653A",
-        "session": "run_s1653a_1006",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1653-kld-names",
-        "worktree": "C:\\acl-1653-kld-names",
-        "id": "096baf3dc3164e56b070d80cb59282f3",
-        "issue": 653,
-        "state": "handoff",
-        "started_at": "2026-10-07T05:49:38+00:00",
-        "from_status": "status:idea",
-        "pr": 663,
-        "report": "# ACL-1653 handoff (Worker-S1653A)\nPR #663 into stage, branch codex/acl-1653-kld-names, head c3ef385c (feature commit b1bafbfd + merge of work/stage).\nRule in config/account_name_rules.json, wired via normalize_account_alias, workbook_alias_for/_alias_by_tail, profile_name_key, builder alias map.\nTests: test_account_name_rules 8; alias_join 9; account_drill 5; dashboard_review 9; review_period_regressions 5; mlx_profiles 20; multilogin profiles 30; review_ui 7; linked_country 18; acl_test_platform 100; account_map_view 8 (alone; earlier PermissionError on splits.json was a Windows file-lock flake in tmp, passes alone).\nAudit: B94/B96/B97 have no workbook rows; \"Failed to fetch\" is the browser fetch error; B94/B98 spend reads fail with MLX 403 / load timeouts."
       }
     },
     "tasks": {
@@ -7898,9 +7884,25 @@
             "session": "run_s1653a_1006"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1653A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1653A",
+          "session": "run_s1653a_1006",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1653-kld-names",
+          "worktree": "C:\\acl-1653-kld-names",
+          "id": "096baf3dc3164e56b070d80cb59282f3",
+          "issue": 653,
+          "state": "handoff",
+          "started_at": "2026-10-07T05:49:38+00:00",
+          "from_status": "status:idea",
+          "pr": 663,
+          "report": "# ACL-1653 handoff (Worker-S1653A)\nPR #663 into stage, branch codex/acl-1653-kld-names, head c3ef385c (feature commit b1bafbfd + merge of work/stage).\nRule in config/account_name_rules.json, wired via normalize_account_alias, workbook_alias_for/_alias_by_tail, profile_name_key, builder alias map.\nTests: test_account_name_rules 8; alias_join 9; account_drill 5; dashboard_review 9; review_period_regressions 5; mlx_profiles 20; multilogin profiles 30; review_ui 7; linked_country 18; acl_test_platform 100; account_map_view 8 (alone; earlier PermissionError on splits.json was a Windows file-lock flake in tmp, passes alone).\nAudit: B94/B96/B97 have no workbook rows; \"Failed to fetch\" is the browser fetch error; B94/B98 spend reads fail with MLX 403 / load timeouts."
+        },
+        "pr": 663,
+        "queued_at": "2026-10-07T05:50:17+00:00"
       }
     },
     "actors": {
@@ -10187,7 +10189,8 @@
       633,
       642,
       650,
-      604
+      604,
+      653
     ],
     "review": null,
     "history": [
@@ -14421,6 +14424,13 @@
         "issue": 604,
         "pr": 662,
         "actor": "Worker-S1604A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-07T05:50:17+00:00",
+        "issue": 653,
+        "pr": 663,
+        "actor": "Worker-S1653A"
       }
     ],
     "policy": {
