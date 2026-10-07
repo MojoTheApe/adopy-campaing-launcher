@@ -259,6 +259,13 @@ def test_a_changed_ad_set_name_blocks_the_step_with_a_reason(page, monkeypatch, 
     assert md.last_conversion_failure_reason() == note.split(": ", 1)[1]
 
 
+@pytest.fixture(autouse=True)
+def _fresh_open_state():
+    md._OPEN_STATE.clear()
+    yield
+    md._OPEN_STATE.clear()
+
+
 def test_a_page_script_that_fails_everywhere_is_a_read_error_not_an_absent_field(monkeypatch):
     class _Boom:
         def evaluate(self, *a, **k):
