@@ -8671,7 +8671,7 @@
             "session": "run_s1697a_1007"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1697A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -8689,7 +8689,8 @@
           "report": "# ACL-1697 handoff (Worker-S1697A)\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/699  SHA: 4276ec9842e896e1caa870772e9eda0cde367c97\nOpened account is read from act= in page.url (after redirects); unreadable or different -> ProfileStop wrong_ad_account before Create.\nChecks: _goto_campaigns (after goto, after ready reload), _start_create_wizard, every Create press in recorded flow (_press_create in run_recorded_campaign_flow).\nPolicy: blocking + GUIDE, account-level stop (ACCOUNT_STOPS), non-retryable. Preflight note: web.app._history_act_note.\nTests: new tests/test_wrong_ad_account_stops_before_create.py (17), plus failure_policy, recorded_retry_contract, acl_test_platform (100), campaign-open/Create files, workbook_review, sentry/run_summary, single-screen etc. all green. Full suite left to CI.\nNot verified live: switcher DOM fallback not implemented (URL only; captures show act= on every Ads Manager URL)."
         },
         "pr": 699,
-        "queued_at": "2026-10-07T14:43:10+00:00"
+        "queued_at": "2026-10-07T14:43:10+00:00",
+        "reviewer": "Reviewer-R1697Q"
       },
       "702": {
         "implementers": [
@@ -9442,6 +9443,10 @@
       "Worker-S1705A": {
         "session": "run_s1705a_1007",
         "role": "Worker"
+      },
+      "Reviewer-R1697Q": {
+        "session": "rev_r1697q_1007",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -11335,11 +11340,21 @@
       652,
       675,
       693,
-      697,
       702,
       705
     ],
-    "review": null,
+    "review": {
+      "id": "d7ad077fce424287ae981f14cccacc32",
+      "pr": 699,
+      "issues": [
+        697
+      ],
+      "actor": "Reviewer-R1697Q",
+      "session": "rev_r1697q_1007",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-07T18:02:39+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -16001,6 +16016,13 @@
         "prs": [
           707
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T18:02:39+00:00",
+        "pr": 699,
+        "lane": "d7ad077fce424287ae981f14cccacc32",
+        "actor": "Reviewer-R1697Q"
       }
     ],
     "policy": {
