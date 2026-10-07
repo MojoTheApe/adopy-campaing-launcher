@@ -172,6 +172,7 @@ def test_ad_2_is_created_by_hovering_the_row_then_the_menu(env):
     assert len(presses) == 2, presses
     assert "Action menu" in presses[0] and "Create ad" in presses[1], presses
     assert page.evaluate("window.focuses") == []
+    assert md.last_create_block() == ""
     assert page.get_by_placeholder("Enter your ad name here...").is_visible()
     assert [r for r in env["rows"] if r[0] == "create_additional_ad"] == []
 
@@ -201,6 +202,7 @@ def test_a_row_that_shows_no_button_under_the_cursor_blocks_with_a_reason(env):
     assert page.evaluate("window.entries") == md._CLASSIC_WAKE_TRIES == 3
     assert page.evaluate("window.presses") == []
     assert page.evaluate("window.focuses") == []
+    assert md.last_create_block() == "adset_action_menu_not_shown"
     row = [r for r in env["rows"] if r[0] == "create_additional_ad"][-1]
     assert row[1] is False and row[2] == "adset_action_menu_not_shown"
     assert "no Action menu button" in row[3]["reason"]
@@ -249,3 +251,13 @@ def test_a_tree_that_remounts_after_the_first_menu_is_hovered_again(env):
     assert page.evaluate("window.mounted") == 2
     assert page.evaluate("window.menu_opened") == 2
     assert page.evaluate("window.press_pts") == []  # по-прежнему ни одного нажатия мышью
+
+
+def test_a_later_call_that_does_not_block_clears_the_reason(env):
+    page = env["page"]
+    page.evaluate("() => { window.hover_mounts = false; }")
+    assert md.create_additional_ad(page, ADSET) is False
+    assert md.last_create_block() == "adset_action_menu_not_shown"
+    page.evaluate("() => { window.hover_mounts = true; }")
+    assert md.create_additional_ad(page, ADSET) is True
+    assert md.last_create_block() == ""

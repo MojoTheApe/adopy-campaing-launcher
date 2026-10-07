@@ -3312,15 +3312,22 @@ _ERROR_PAGE_JS = r"""
 
 def _chrome_error_page(page: Page) -> str:
     """Код ошибки, если во вкладке вместо Ads Manager — страница ошибки Chrome."""
+    on_error_url = False
     try:
-        if (page.url or "").startswith("chrome-error://"):
-            got = page.evaluate("() => (document.body && document.body.innerText || '').match(/ERR_[A-Z_]+/)")
+        on_error_url = (page.url or "").startswith("chrome-error://")
+        if on_error_url:
+            got = _eval_bounded(page, "() => (document.body && document.body.innerText || '').match(/ERR_[A-Z_]+/)")
             return (got or ["ERR_UNKNOWN"])[0] if isinstance(got, list) else "ERR_UNKNOWN"
         # Адрес может остаться прежним (SSL-ошибка) — смотрим саму страницу.
-        return page.evaluate(_ERROR_PAGE_JS) or ""
+        # ACL-1641: голый `page.evaluate` на зависшей вкладке не возвращался
+        # никогда (573ab2cf3646: 19 минут после отказа create_additional_ad).
+        return _eval_bounded(page, _ERROR_PAGE_JS) or ""
     except Exception:
         pass
-    return ""
+    # ACL-1641: адрес chrome-error://, а прочитать страницу не вышло — это всё
+    # равно страница ошибки, а не «живой Ads Manager» (иначе медленная свежая
+    # перезагрузка сошла бы за успешную).
+    return "ERR_UNKNOWN" if on_error_url else ""
 
 
 #: Спиннер маршрута вместо редактора (ACL-1313, 7364047ef03c/05, 24.09):
@@ -3745,6 +3752,10 @@ def _simple_create_ready(page: Page) -> bool:
 
 
 def _all_edits_saved(page: Page) -> bool:
+    # ACL-1641: `is_visible` таймаута не соблюдает — на зависшей вкладке не
+    # спрашиваем вовсе (`_tab_frozen` проверяет и срок шага).
+    if _tab_frozen(page):
+        return False
     try:
         return page.get_by_text(re.compile(r"^All edits saved$", re.I)).first.is_visible(timeout=500)
     except Exception:
@@ -3759,6 +3770,8 @@ def _component_failed(page: Page) -> bool:
     page», и подряд отказали placements и devices_ios. Meta сама просит
     перезагрузить — это тот же случай, что и ACL-1233.
     """
+    if _tab_frozen(page):  # ACL-1641: см. `_all_edits_saved`
+        return False
     try:
         return page.get_by_text(
             re.compile(r"component failed to load", re.I)).first.is_visible(timeout=500)
@@ -3933,8 +3946,16 @@ def _eval_bounded(page: Page, js: str, arg=None, timeout_s: float = LIVENESS_PRO
     через `timeout_s`, а не вечное ожидание. Остаток риска — чтение
     результата (`json_value`) сразу после ответа страницы.
     """
-    handle = page.wait_for_function(f"(arg) => ({{ v: ({js})(arg) }})", arg=arg,
-                                    timeout=int(timeout_s * 1000))
+    try:
+        handle = page.wait_for_function(f"(arg) => ({{ v: ({js})(arg) }})", arg=arg,
+                                        timeout=int(timeout_s * 1000))
+    except Exception:
+        # ACL-1641: вкладка не ответила — срок шага мог выйти за время ожидания;
+        # без проверки цикл из таких вызовов тянул шаг бесконечно.
+        _job_cancel.check()  # как в `_sleep_h`: Stop слышен и на зависшей вкладке
+        if not getattr(_flow_budget, "defer", False):
+            _flow_budget_check()
+        raise
     try:
         got = handle.json_value()
     finally:
@@ -4190,7 +4211,13 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = Fa
     * Под `_reloads_blocked` (ACL-1353, объявления 2+ нового редактора) —
       никогда: False и строка `loading_modal_reload` (note `refused:<причина>`).
     """
+    _flow_budget_check()  # ACL-1641: срок шага — до любых обращений к вкладке
     if _reload_refused(page, where):
+        return False
+    # ACL-1641: вкладка не ответила на ограниченную пробу — она зависла, и
+    # классифицировать нечего; дальше только неограниченные вызовы
+    # (`is_visible`, `get_by_text`). `_tab_frozen` заодно проверяет срок шага.
+    if _tab_frozen(page):
         return False
     err = _chrome_error_page(page)
     reason = ""
@@ -6530,8 +6557,12 @@ def run_recorded_campaign_flow(
                         shells_before = _tree_new_ad_shells(page)
                         try:
                             created = create_additional_ad(page, adset_name)
+                            block = last_create_block()  # read once: skip decision and label
+                            retried = False
                             if not created and recover_stuck_page(page, f"{tag}_create", editor=True):
                                 created = create_additional_ad(page, adset_name)
+                                block = last_create_block()
+                                retried = True
                             if not created:
                                 # A reported failure does not mean no ad was born:
                                 # Meta names every fresh ad "New Leads Ad", so if
@@ -6546,20 +6577,19 @@ def run_recorded_campaign_flow(
                                 # entirely — the only fill step with no retry path.
                                 #
                                 # ACL-1691: after the honest block (nothing was clicked) there
-                                # is no new shell to adopt — an existing "New Leads Ad" is
-                                # another ad. Neither adopt nor retry; keep the reason.
-                                if _LAST_CREATE_BLOCK == "adset_action_menu_not_shown":
-                                    pass
-                                elif _open_tree_ad(page, "New Leads Ad"):
-                                    _close_creative_setup_modal(page)
-                                    created = True
+                                # is no new shell to adopt - an existing "New Leads Ad" is
+                                # another ad. Skip the adopt; one clean re-create is still safe.
+                                if block:
+                                    if (not retried and
+                                            0 <= _tree_new_ad_shells(page) <= max(shells_before, 0)):
+                                        created = create_additional_ad(page, adset_name)
+                                        block = last_create_block()
                                 else:
-                                    created = create_additional_ad(page, adset_name)
+                                    created = _adopt_shell_or_recreate(page, adset_name, shells_before)
                             if not created:
                                 _shot(f"fail_{tag}_create")
                                 ad_level_fails.append(
-                                    f"{tag}_create:{_LAST_CREATE_BLOCK}" if _LAST_CREATE_BLOCK
-                                    else f"{tag}_create")
+                                    f"{tag}_create:{block}" if block else f"{tag}_create")
                                 continue
                             _shot(f"after_{tag}_create")
                             # 17.09 00:02 (Doc20, cbe566db70b2): один «Create ad» дал
@@ -9501,8 +9531,18 @@ def select_devices_ios_only(page: Page) -> bool:
     )
 
 
-#: Reason of the last honest block in `create_additional_ad` (nothing clicked), "" otherwise.
-_LAST_CREATE_BLOCK = ""
+#: Reason of the last honest block in `create_additional_ad` (nothing clicked), per thread:
+#: two accounts publish at once in threads of one process.
+_create_tls = threading.local()
+
+
+def last_create_block() -> str:
+    """Block reason of this thread's last `create_additional_ad` call, "" if it did not block."""
+    return getattr(_create_tls, "block", "")
+
+
+def _set_create_block(reason: str) -> None:
+    _create_tls.block = reason
 
 
 def create_additional_ad(page: Page, adset_name: str) -> bool:
@@ -9541,6 +9581,10 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     sequence (upload_ad_creative / fill_ad_copy / set_ad_destination_
     website) can run completely unmodified for every additional ad.
     """
+    # ACL-1641: на зависшей вкладке повтор создания упёрся бы в неограниченные
+    # вызовы ниже — отказ сразу, срок шага проверит `_tab_frozen`.
+    if _tab_frozen(page):
+        return False
     # Preferred path: click the ad-set row's action-menu button by its own
     # stable data-surface, no coordinates at all.
     #
@@ -9562,8 +9606,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     # d3e690189a6e/08): шаг стартовал на странице, где дерева ещё нет —
     # `AdsPERouteLoadPlaceholder` после смены маршрута или сразу после
     # перезагрузки (есть только шапка nav-header-*). Сначала ждём дерево.
-    global _LAST_CREATE_BLOCK
-    _LAST_CREATE_BLOCK = ""
+    _set_create_block("")
     click_point = None
     tree_ready = _wait_tree_ready(page)
     shells_before = _tree_new_ad_shells(page)
@@ -9577,8 +9620,9 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     if surface_clicked:
         _sleep_h(0.6)
 
-    click_point = page.evaluate(
-        """(adsetName) => {
+    # ACL-1641: ограниченное чтение — голый `page.evaluate` вис на зависшей вкладке.
+    click_point = _eval_bounded(
+        page, """(adsetName) => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
           // Confirmed live 2026-07-29 (Test142): when the browser window is
           // in NARROW restored bounds (e.g. it was un-maximized before
@@ -9712,7 +9756,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
             # Строка группы в дереве есть, курсор над ней побывал, а «Action
             # menu» не нарисовано. Вслепую по строке не нажимаем: нажатие на
             # неё выбирает группу и уводит редактор с объявления. Блокируем.
-            _LAST_CREATE_BLOCK = "adset_action_menu_not_shown"
+            _set_create_block("adset_action_menu_not_shown")
             _diag("adset_action_menu_not_shown", {
                 "hover": hover,
                 "reason": ("The ad set row in the left tree shows no Action menu button, "
@@ -16113,8 +16157,8 @@ def _audience_already_manual(page: Page) -> bool:
 def _tree_new_ad_shells(page: Page) -> int:
     """Сколько строк «New Leads ad» в левом дереве (-1 — не прочитать)."""
     try:
-        return int(page.evaluate(
-            r"""() => {
+        return int(_eval_bounded(
+            page, r"""() => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
               return [...document.querySelectorAll('*')].filter(e => {
                 if (e.children.length !== 0 || !/^New Leads ad$/i.test(norm(e.textContent))) return false;
@@ -16125,6 +16169,28 @@ def _tree_new_ad_shells(page: Page) -> int:
         ))
     except Exception:
         return -1
+
+
+def _adopt_shell_or_recreate(page: Page, adset_name: str, shells_before: int = 0) -> bool:
+    """Отказ создания объявления: взять уже родившуюся заготовку или создать заново.
+
+    ACL-1641 (ревью PR #664, B3): `_open_tree_ad` вернул False и когда дерево
+    не прочиталось (вкладка отвечает дольше 5 с) — повторное создание тогда
+    могло добавить второе объявление рядом с живой заготовкой. Перед повтором
+    дерево должно читаться; не читается — исключение, и обычный `except`
+    вызывающего пишет `fail_adN_create`.
+    """
+    if _open_tree_ad(page, "New Leads Ad"):
+        _close_creative_setup_modal(page)
+        return True
+    shells = _tree_new_ad_shells(page)
+    if shells < 0:
+        raise RuntimeError("tree unreadable: not re-creating the ad")
+    if shells > max(shells_before, 0):
+        # Заготовка уже есть, но открыть её не вышло: второй create дал бы
+        # дубликат рядом с ней. Отказ шага (`fail_adN_create`), не повтор.
+        return False
+    return create_additional_ad(page, adset_name)
 
 
 def _open_tree_ad(page: Page, ad_name: str) -> bool:
@@ -16139,30 +16205,33 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
         # ACL-1353 (ревью PR #365, F2): объявления 2+ нового редактора —
         # щелчок по строке дерева заново открыл бы (и портил) объявление.
         return False
-    point = page.evaluate(
-        """(adName) => {
-          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-          // Без учёта регистра: Doc20 называет заготовку «New Leads ad»,
-          // S15/Doc21 — «New Leads Ad». Точное сравнение не находило
-          // заготовку, и вызывающий создавал второе объявление (17.09).
-          const want = adName.toLowerCase();
-          const nameMatches = (raw) => {
-            const t = norm(raw).replace(/[…\\u2026]+$/, '').toLowerCase();
-            if (!t) return false;
-            if (t === want) return true;
-            return t.length >= 10 && want.startsWith(t);
-          };
-          const cands = [...document.querySelectorAll('*')].filter(e =>
-            e.offsetParent !== null && e.children.length === 0 && nameMatches(e.textContent));
-          let best = null, bx = Infinity;
-          for (const c of cands) {
-            const r = c.getBoundingClientRect();
-            if (r.width > 0 && r.x < bx) { bx = r.x; best = r; }
-          }
-          return best ? {x: best.x + best.width / 2, y: best.y + best.height / 2} : null;
-        }""",
-        ad_name,
-    )
+    try:
+        point = _eval_bounded(
+            page, """(adName) => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              // Без учёта регистра: Doc20 называет заготовку «New Leads ad»,
+              // S15/Doc21 — «New Leads Ad». Точное сравнение не находило
+              // заготовку, и вызывающий создавал второе объявление (17.09).
+              const want = adName.toLowerCase();
+              const nameMatches = (raw) => {
+                const t = norm(raw).replace(/[…\\u2026]+$/, '').toLowerCase();
+                if (!t) return false;
+                if (t === want) return true;
+                return t.length >= 10 && want.startsWith(t);
+              };
+              const cands = [...document.querySelectorAll('*')].filter(e =>
+                e.offsetParent !== null && e.children.length === 0 && nameMatches(e.textContent));
+              let best = null, bx = Infinity;
+              for (const c of cands) {
+                const r = c.getBoundingClientRect();
+                if (r.width > 0 && r.x < bx) { bx = r.x; best = r; }
+              }
+              return best ? {x: best.x + best.width / 2, y: best.y + best.height / 2} : null;
+            }""",
+            ad_name,
+        )
+    except Exception:
+        return False  # ACL-1641: вкладка не ответила — строки дерева не прочитать
     if not point:
         return False
     try:
