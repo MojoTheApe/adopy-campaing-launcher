@@ -2706,7 +2706,10 @@
       display: flex; align-items: baseline; gap: var(--space-sm);
       margin: var(--space-lg) 0 var(--space-xs);
       font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em;
-      text-transform: uppercase; color: var(--muted);
+      text-transform: uppercase;
+      /* ACL-1650: заголовок страны был --muted и терялся на фоне ящика;
+         акцентный синий держит 4.5:1+ в обеих темах. */
+      color: var(--accent);
     }
     .cbd-country:first-child { margin-top: 0; }
     .cbd-country::after {
