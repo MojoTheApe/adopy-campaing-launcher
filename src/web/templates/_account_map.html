@@ -141,7 +141,7 @@
       <span></span>
       <span class="amap-cell-name">Total</span>
       <span class="amap-cell-read"
-            title="The accounts' own spend, added up once per account. Shown only when every account was read in the same currency; otherwise a dash.">
+            title="{{ tt.read_count }} of {{ tt.accounts }} accounts read. The accounts' own spend, added up once per account; shown only when every read account is in the same currency{% if tt.mixed %} — mixed currencies here, so not added up{% endif %}, otherwise a dash.">
         {%- if tt.read %}<b>{{ tt.read.spend | fmt_summary_amount(tt.read.currency) }}</b>{% else %}<b>—</b>{% endif %}</span>
       {{ mx.spans(tt.spend, tt.leads, tt.deposits) }}
       <span class="num"><b>{{ amap.countries | sum(attribute='rows', start=[]) | length }}</b></span>
@@ -160,7 +160,7 @@
       <summary class="amap-cm-title"><h3>Campaign managers</h3>
         <span class="amap-note">every manager in each country · you are highlighted</span></summary>
       <div class="amap-grid-head" aria-hidden="true">
-        <span></span><span>Country</span><span></span>
+        <span></span><span>Country / manager</span><span></span>
         {{ mx.span_headers() }}
         <span></span><span></span>
       </div>

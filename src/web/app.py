@@ -912,6 +912,7 @@ def _amap_totals(countries: list[dict], live: dict) -> dict:
     seen: set[str] = set()
     sums: dict[str, float] = {}
     mixed = False
+    read_ok = 0
     for mc in countries:
         for r in mc.get("rows") or []:
             acc = r.get("account")
@@ -927,6 +928,7 @@ def _amap_totals(countries: list[dict], live: dict) -> dict:
                 continue
             if not math.isfinite(amount):
                 continue
+            read_ok += 1
             cur = str(lr.get("currency") or "").strip()
             if not re.fullmatch(r"[A-Za-z]{3}", cur):
                 mixed = True  # знак без кода не говорит, какая это валюта
@@ -936,7 +938,11 @@ def _amap_totals(countries: list[dict], live: dict) -> dict:
     if sums and not mixed and len(sums) == 1:
         (cur, amount), = sums.items()
         read = {"currency": cur, "spend": amount}
-    return {"spend": spend, "leads": int(leads), "deposits": int(deposits), "read": read}
+    return {
+        "spend": spend, "leads": int(leads), "deposits": int(deposits), "read": read,
+        # для подсказки: сколько кабинетов прочитано из скольких и почему «—»
+        "read_count": read_ok, "accounts": len(seen), "mixed": bool(mixed or len(sums) > 1),
+    }
 
 
 def _amap_cm_section(report: dict) -> list[dict]:

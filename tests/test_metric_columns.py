@@ -83,6 +83,9 @@ CASES = [
     (400, 40, 8), (100, 0, 0), (100, 10, 0), (100, 0, 3), (0, 10, 2), (0, 0, 0),
     (71, 10, 1), (1044.2, 138, 11), (7.0000001, 1, 1), (123456.78, 987, 12),
     (None, None, None), (50, None, 5), (10.5, 3, 0),
+    # CR на точных «половинках»: 6.25, 18.75, 31.25, 3.125 — обе стороны округляют вверх
+    (10, 16, 1), (10, 16, 3), (10, 16, 5), (10, 32, 1),
+    (-0.4, 5, 1), (-0.4, 0, 0),  # отрицательный спенд между -1 и 0 — «$0», не «$-0»
 ]
 
 
@@ -342,3 +345,49 @@ def test_the_drills_have_no_date_and_no_cart_button():
         html = _render_fragment(section, [ROW])
         assert "cb-cart-btn" not in html and "2026-10-05" not in html
     assert "td.date" not in REPORT
+
+
+def test_cr_rounds_half_up_on_both_sides_at_ties():
+    # 1/16 = 6.25% -> 6.3, 3/16 = 18.75% -> 18.8, 5/16 = 31.25% -> 31.3, 1/32 = 3.125% -> 3.1
+    assert [mc.metric_values(1, l, f)[5] for l, f in ((16, 1), (16, 3), (16, 5), (32, 1))] == [
+        "6.3%", "18.8%", "31.3%", "3.1%"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is needed to run the JS twin")
+def test_cr_agrees_between_python_and_js_for_every_lead_count_up_to_400(tmp_path):
+    script = _js_twin() + """
+const out = [];
+for (let l = 1; l <= 400; l++) for (let f = 0; f <= l; f++) out.push(acl6Metrics(1, l, f)[5]);
+console.log(JSON.stringify(out));
+"""
+    js_file = tmp_path / "sweep.js"
+    js_file.write_text(script, encoding="utf-8")
+    out = subprocess.run(["node", str(js_file)], capture_output=True, timeout=120, check=True)
+    js = json.loads(out.stdout.decode("utf-8"))
+    py = [mc.metric_values(1, l, f)[5] for l in range(1, 401) for f in range(0, l + 1)]
+    assert len(js) == len(py) == 80_600
+    bad = [(i, a, b) for i, (a, b) in enumerate(zip(js, py)) if a != b]
+    assert not bad, f"{len(bad)} расхождений, первое: {bad[0]}"
+
+
+def test_totals_account_read_says_how_many_accounts_were_read():
+    from src.web.app import _amap_totals
+
+    countries = [_country("A", 1, 1, 1, rows=[_acc("X", 1, 1, 1), _acc("Y", 1, 1, 1), _acc("Z", 1, 1, 1)])]
+    live = {"X": {"state": "ok", "spend": 1, "currency": "USD"}, "Y": {"state": "ok", "spend": 2, "currency": "KWD"}}
+    t = _amap_totals(countries, live)
+    assert (t["read_count"], t["accounts"], t["mixed"], t["read"]) == (2, 3, True, None)
+    html = _home(countries, live=live)
+    tip = re.search(r'id="amap-totals".*?title="([^"]*)"', html, re.S).group(1)
+    assert "2 of 3 accounts read" in tip and "mixed currencies" in tip
+
+
+def test_the_campaign_managers_header_names_both_levels_and_the_section_is_last():
+    cm = [{"country": "Colombia", "cm_comparison": [{"cm": "Me", "is_me": True, "spend": 1, "leads": 1, "deposits": 1}]}]
+    html = _home([_country("Colombia", 100, 10, 2)], cm=cm)
+    section = html[html.index('id="amap-cm"'):]
+    assert "<span>Country / manager</span>" in section
+    # последняя вещь на Home: после неё нет ни Available accounts, ни Totals
+    assert html.index('id="amap-totals"') < html.index("amap-available") < html.index('id="amap-cm"')
+    assert section.count("</details>") == 2 and section.rstrip().endswith("</div>")
+    assert "amap-available" not in section and 'id="amap-totals"' not in section

@@ -12,6 +12,7 @@ this module by tests/test_metric_columns.py.
 from __future__ import annotations
 
 import math
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
 
 from src.analysis_agent.money_format import fmt_usd
@@ -64,7 +65,12 @@ def fmt_count(value: Any) -> str:
 def fmt_cr(value: Any) -> str:
     """Процент с одним знаком. None — прочерк, 0.0 — «0.0%»."""
     n = _num(value)
-    return DASH if n is None else f"{n:.1f}%"
+    if n is None:
+        return DASH
+    # Округление «половина вверх» — как у JS `toFixed(1)` в двойнике `acl6Metrics`.
+    # Python-овское `f"{n:.1f}"` округляет половину к чётному (6.25 -> 6.2), и
+    # серверная таблица с JS-таблицей показывали разный CR для одного лендинга.
+    return f"{Decimal(n).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)}%"
 
 
 def metric_values(spend: Any, leads: Any, ftds: Any) -> list[str]:

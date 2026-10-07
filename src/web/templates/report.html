@@ -6426,7 +6426,7 @@ var ACL_METRIC_HEADERS = ['Spend', 'Leads', 'FTDs', 'CPL', 'CPA', 'CR'];
 function acl6Metrics(spend, leads, ftds) {
   var num = function(v) { v = Number(v); return isFinite(v) ? v : null; };
   var s = num(spend) || 0, l = num(leads) || 0, f = num(ftds) || 0;
-  var money = function(v) { return v === null ? '—' : '$' + Math.ceil(v).toLocaleString('en-US'); };
+  var money = function(v) { return v === null ? '—' : '$' + (Math.ceil(v) || 0).toLocaleString('en-US'); };
   return [
     money(s),
     String(Math.trunc(l)),
@@ -6837,6 +6837,12 @@ function amapApply(from, to, span) {
    Блоки свёрнуты по умолчанию, но дешборд перезагружает себя сам, и человек,
    работающий внутри страны, терял бы её на каждом обновлении. Хранится только
    список раскрытых ключей и только в этом браузере. */
+/* Owner, 07.10: «Copy for group» скрыта флагом SHOW_COPY_FOR_GROUP (app.py). Тот же
+   флаг гасит и пересборку ячейки после живого Read (amapStatusTail ниже).
+   Флаг — отдельным присваиванием window и ВЫШЕ amapMoney: тестовые стенды
+   вырезают исходник кусками от неё, и Jinja-выражение в куске ломало бы им
+   разбор. */
+window.AMAP_SHOW_COPY_FOR_GROUP = {{ SHOW_COPY_FOR_GROUP | tojson }};
 var AMAP_OPEN_KEY = 'acl.amap.open';
 
 function amapOpenList() {
@@ -7351,7 +7357,7 @@ function amapStatusTail(account, s) {
       + esc(s.status_shot_at) + '. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>';
   }
   var word = AMAP_STATUS_WORDS[s.status];
-  if (word) {
+  if (word && typeof window === 'object' && window.AMAP_SHOW_COPY_FOR_GROUP === true) {
     /* Время в полосе — время чтения, как в шаблоне (st.at). */
     var at = s.finished_at || s.status_shot_at || '';
     var head = String(account || '').split(' - ')[0] + ' — ' + word + (at ? ' · ' + at : '');
