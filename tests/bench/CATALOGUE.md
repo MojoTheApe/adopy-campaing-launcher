@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**22 robot steps × 113 layouts, 62 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**22 robot steps × 115 layouts, 63 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -17,7 +17,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | campaign_name / budget / adset_name | 1 | 1 | 0 | 0 |
 | conversion_event | 3 | 3 | 0 | 0 |
 | advantage_plus_audience | 8 | 8 | 0 | 0 |
-| further_limit_reach (Suggest an audience) | 7 | 7 | 0 | 0 |
+| further_limit_reach (Suggest an audience) | 9 | 9 | 0 | 0 |
 | audience_location | 5 | 5 | 0 | 0 |
 | audience_age | 4 | 4 | 0 | 0 |
 | languages | 5 | 5 | 0 | 0 |
@@ -99,6 +99,8 @@ Robot: gear row 'Further limit the reach of your ads', suggestion age checkbox
 | Same card with custom audiences expanded (6540 FX) | 97370c743f44/00_further_limit_reach_click | `audience_suggest_layout_2026_09_26.html` · suggest_fx | `tests/test_suggest_an_audience_layout.py` | covered gear row still opened by its own element | pass |
 | Controls with 'Your suggestion' age | 7cfdc772376d/02_advantage_plus_audience | `audience_suggest_layout_2026_09_26.html` · controls_suggestion_on | `tests/test_suggest_an_audience_layout.py` | suggestion unchecked once, badge goes off | pass |
 | Controls off summary | 8c6496e50815/01_placements | `audience_suggest_layout_2026_09_26.html` · controls_off | `tests/test_suggest_an_audience_layout.py` | reads off with age and language from the summary | pass |
+| WhatsApp campaign: Age collapsed to '35 - 65+ · Unknown age on WhatsApp: Excluded' with 'Your suggestion' (Doc120) | 573ab2cf3646/00_advantage_plus_audience | `audience_whatsapp_suggestions_2026_10_06.html` · whatsapp_suggestion_collapsed | `tests/test_bench_audience_whatsapp_suggestions.py` | row opened, suggestion unchecked once, badge goes off; if Meta keeps it on the step still fails | pass |
+| WhatsApp campaign: hard age 35 - 65+ (suggestion unchecked), badge still 'Advantage+ on' (9403A) | d4f9d5f016c1/03_advantage_plus_audience | `audience_whatsapp_suggestions_2026_10_06.html` · whatsapp_age_hard_badge_on | `tests/test_bench_audience_whatsapp_suggestions.py` | nothing clicked; blocked still_on with age_suggestion_checked=false and mode=controls in diag (cause of the flip not known) | pass |
 | Age field open with 'Use as a suggestion' | 543dc9daad53/00_languages | `audience_suggest_layout_2026_09_26.html` · age_open_suggestion | `tests/test_suggest_an_audience_layout.py` | checkbox found only inside the age field | pass |
 | Editor drawer window (9403A, adsets/edit/standalone): Audience collapsed into a read-only summary card, no Edit button, Further limit row in the hidden body | 6ebd77ccaf6a/02_further_limit_reach_click | `audience_card_collapsed_drawer_2026_10_05.html` · card_run_a | `tests/test_bench_audience_card_collapsed_drawer.py` | card opened by one click on its title (never About audiences / a button inside); controls verified; simple_card ok | pass |
 | Same card, second run | e89bda52e7a5/03_further_limit_reach_click | `audience_card_collapsed_drawer_2026_10_05.html` · card_run_b | `tests/test_bench_audience_card_collapsed_drawer.py` | same as above | pass |

@@ -114,6 +114,17 @@ def test_the_fresh_shell_is_scrolled_into_view_before_the_click(page, monkeypatc
     assert page.clicks == [FRESH], "клик ушёл мимо строки за краем экрана"
 
 
+def test_rows_marked_adgroup_are_read_without_the_aria_fallback(page):
+    """Живая страница: `data-objecttype="ADGROUP"` — основной признак строки
+    объявления (сохранённые снимки его теряют, там работает aria-label)."""
+    html = (_tree(above=True, below=True)
+            .replace('aria-label="Ad" id=', 'data-objecttype="ADGROUP" id=')
+            .replace('aria-label="Ad set" id=', 'data-objecttype="CAMPAIGN" id='))
+    assert 'aria-label="Ad"' not in html and 'data-objecttype="ADGROUP"' in html
+    page.set_content(html)
+    assert md._tree_shell_ids(page) == frozenset({ABOVE, FRESH, BELOW})
+
+
 def test_only_leftovers_in_the_tree_means_nothing_to_adopt_and_a_clean_create(page, monkeypatch):
     page.set_content(_tree(above=True, below=True))
     created = []
@@ -234,6 +245,16 @@ def test_a_shell_that_shows_up_late_never_gets_a_third_create(flow, monkeypatch)
     flow["run"]()
     assert seen["create"] == 2
     assert seen["open"] == [FRESH]
+
+
+def test_a_clean_tree_at_the_retry_and_at_the_outer_adopt_creates_exactly_twice(flow, monkeypatch):
+    """Повтор после перезагрузки создал (дерево чистое) и упал; снаружи дерево
+    снова чистое — третьего create нет (`may_create=not retried`): всего два."""
+    seen = _wire(monkeypatch, [frozenset()], [False, False, True])
+    flow["fail_upload"] = set()
+    _result, soft = flow["run"]()
+    assert seen["create"] == 2
+    assert any(s.startswith("ad2_create") for s in soft)
 
 
 def test_the_next_ad_does_not_take_the_leftover_shell(monkeypatch):
