@@ -5140,10 +5140,12 @@ def run_recorded_campaign_flow(
         if not (page_state["closed"] or _page_read_trouble(page) == "closed"):
             return False
         _telemetry.record("browser_closed", False, note="page_closed", diag={"where": where})
-        if soft_fails_out is not None:
-            # ACL-1673: причина остановки названа шагом (`page_closed:<шаг>`) —
-            # по этой строке человек видит, где вкладка ушла.
-            soft_fails_out.extend([*(fails or []), f"page_closed:{where}"])
+        # ACL-1673: шаг — только в diag.where этой строки и в метке «tab closed»
+        # страницы здоровья робота. В список отказов `page_closed:<шаг>` не
+        # кладём: у политики сбоев такого имени нет («Unclassified step» и
+        # второе событие Sentry на каждую закрытую вкладку).
+        if soft_fails_out is not None and fails:
+            soft_fails_out.extend(fails)
         return True
 
     def _shot(label: str, diag: dict | None = None, note: str | None = None) -> None:
@@ -5179,13 +5181,15 @@ def run_recorded_campaign_flow(
         # 9 сентября `diag` был пуст, и сказать про них было нечего — ни
         # человеку, ни будущему агенту. Собранное в одном месте не разойдётся
         # с вызовами, и новый шаг получит контекст, ничего для этого не делая.
-        if ok is False and not frozen:
+        # ACL-1673: на ушедшей вкладке контекст, разметку и снимок не берём.
+        gone = _tab_gone(page)
+        if ok is False and not frozen and not gone:
             diag = _telemetry.merge_diag(_telemetry.page_context(page), diag)
         # Разметка упавшего шага — на диск, рядом со скриншотом. По картинке
         # селектор не напишешь: на вопрос «почему не нашлась кнопка» отвечает
         # то, что было в DOM. Тот же снимок нужен стенду `acl-340`, без
         # которого `meta_dom` не покрыть тестами.
-        if ok is False and not frozen:
+        if ok is False and not frozen and not gone:
             try:
                 from src.fb_ads_rpa import page_capture as _pages
 
@@ -5211,7 +5215,7 @@ def run_recorded_campaign_flow(
             _flow_budget_check()
         if ok is not False and not _shot_worth_a_picture(label):
             return
-        if frozen:
+        if frozen or gone:
             return
         try:
             from src.fb_ads_rpa.screenshots import capture as _capture
@@ -6030,7 +6034,7 @@ def run_recorded_campaign_flow(
         «закрыто»), без единого вызова страницы. Свежую вкладку в объявлении
         не открываем: повторное открытие редактора Leads-объявления само его
         портит (ACL-1353), а продолжать «с последнего проверенного» нечем —
-        останов, `browser_closed` с `page_closed:<шаг>`.
+        останов, `browser_closed` (шаг — в `diag.where`).
         """
         if not (page_state["closed"] or _tab_gone(page)):
             return False
@@ -6095,6 +6099,8 @@ def run_recorded_campaign_flow(
             name_try: dict = {}
             if not _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), final_ad_name, where="ad_name",
                          info=name_try):
+                if _dead_page_stop("ad_name"):
+                    return "browser_closed"
                 # ACL-1371: отказ имени — с названной причиной (PYTHON-1W «silent»).
                 name_diag = ad_name_failure(page, name_try)
                 _shot("fail_ad_name", name_diag, note=name_diag.get("why"))
@@ -6102,6 +6108,8 @@ def run_recorded_campaign_flow(
                 copy_ad_name = _name_in_the_field(page, final_ad_name)
             else:
                 _shot("after_ad_name")
+            if _dead_page_stop("ad_name"):
+                return "browser_closed"
 
         creative_uploaded = False
         if reached_ad_level:
@@ -6139,7 +6147,7 @@ def run_recorded_campaign_flow(
         # текста: Meta ставит в Browser add-ons «Instant form», а формы нет.
         # Назначение (внутри него и выбор «None») теперь идёт ДО текста, и
         # блокировке взяться неоткуда.
-        if reached_ad_level and _dead_page_stop("ad_destination"):
+        if reached_ad_level and _dead_page_stop("ad_creative_upload"):
             return "browser_closed"
         if reached_ad_level and destination_url:
             try:
@@ -6338,6 +6346,8 @@ def run_recorded_campaign_flow(
                     name_ok = _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), extra_name,
                                     where=f"{tag}_name", info=name_try)
                     if not name_ok:
+                        if _dead_page_stop(f"{tag}_name"):
+                            return "browser_closed"
                         name_diag = ad_name_failure(page, name_try)
                         _shot(f"fail_{tag}_name", name_diag, note=name_diag.get("why"))
                         ad_level_fails.append(f"{tag}_name")
@@ -15651,6 +15661,11 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
         ):
             return _destination_failed(page, "url_field_missing", destination_url)
         url_box = page.locator('[data-rpa-field="dest"]').first
+        # ACL-1673: проба — ДО фокуса, а не между фокусом и вводом: за время
+        # пробы на разбуженной вкладке Meta могла перерисоваться, и Ctrl+A с
+        # URL ушли бы не в то поле.
+        if _destination_stop(page, destination_url):
+            return False
         if not url_box.count():
             return _destination_failed(page, "url_field_missing", destination_url)
         url_handle = _focus_via_cdp_click(page, url_box)
@@ -15667,8 +15682,6 @@ def set_ad_destination_website(page: Page, destination_url: str) -> bool:
         # the field grew url+url+url... until Meta's "Your website URL
         # exceeds 1024 characters" error — which is also why the read-back
         # equality check kept failing and the repair loops never converged.
-        if _destination_stop(page, destination_url):
-            return False
         page.keyboard.press("Control+A")
         # Fast insert here, NOT _type_human. This is a 255-char tracking
         # URL — a technical value nobody types by hand, so there is nothing
