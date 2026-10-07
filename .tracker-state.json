@@ -8560,7 +8560,7 @@
             "session": "run_k1691h_1007"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-K1691H",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -8578,7 +8578,8 @@
           "report": "# ACL-1691 handoff\n\nPR #692, head 5fbfdeb9 (base stage). Classic editor, ads 2-4.\n\nDiagnosis (07.10 captures f2c513f0a22d 07/08/10/13): the classic tree draws row buttons only under the cursor (empty div where Action menu belongs), so the step waited 30 s for the button, then fell back to a coordinate click. That fallback took the first text equal to the ad set name sorted by y, which was the breadcrumb (y=22), and clicked the breadcrumb's ad name.\n\nFix: tree ready once the ad set row exists; mouse-move-only hover on the tree row (no press, no focus, max 3 tries, stops when the button appears); then the existing Action menu -> Create ad path; no button even under the cursor blocks with adset_action_menu_not_shown (English reason, nothing clicked); legacy fallback ignores breadcrumbs. ACL-1675 handling untouched.\n\nTests: tests/test_bench_classic_adset_row_hover.py (browser, CI only; not run locally) on a scrubbed 07.10 fixture; test_bench_catalogue.py passes locally; secret scan clean.\nLive check: separate task after merge (checkbox left unchecked)."
         },
         "pr": 692,
-        "queued_at": "2026-10-07T12:53:28+00:00"
+        "queued_at": "2026-10-07T12:53:28+00:00",
+        "reviewer": "Reviewer-R1691T"
       },
       "693": {
         "implementers": [
@@ -9349,6 +9350,10 @@
       },
       "Reviewer-R1684Q": {
         "session": "rev_r1684q_1007",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1691T": {
+        "session": "rev_r1691t_1007",
         "role": "Reviewer"
       }
     },
@@ -11218,12 +11223,22 @@
       651,
       652,
       675,
-      691,
       693,
       697,
       702
     ],
-    "review": null,
+    "review": {
+      "id": "4da862ab01e5473387d78b0f1ee1467e",
+      "pr": 692,
+      "issues": [
+        691
+      ],
+      "actor": "Reviewer-R1691T",
+      "session": "rev_r1691t_1007",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-07T17:10:28+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -15845,6 +15860,13 @@
         "prs": [
           703
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T17:10:28+00:00",
+        "pr": 692,
+        "lane": "4da862ab01e5473387d78b0f1ee1467e",
+        "actor": "Reviewer-R1691T"
       }
     ],
     "policy": {
