@@ -36,6 +36,7 @@ RESTART_FAILED = "profile_restart_failed"
 OPEN_BY_HAND = "profile_open_by_hand"
 SIMPLE_CREATE = "simple_create_layout"
 LEAD_TERMS = "lead_terms_not_accepted"
+WRONG_AD_ACCOUNT = "wrong_ad_account"
 
 #: Что сказать человеку — английский, это видно в дешборде.
 MESSAGES = {
@@ -62,6 +63,10 @@ MESSAGES = {
     # жмёт. Страница у кампаний аккаунта одна — следующая упрётся в то же.
     LEAD_TERMS: "Lead Generation terms are not accepted on the Page (Meta's Lead Ads Terms) - "
                 "open the Page's lead ads terms in Meta, accept them, then publish again",
+    # ACL-1697: Ads Manager открыл не тот рекламный кабинет, что в черновике.
+    WRONG_AD_ACCOUNT: "This profile's Facebook user has no access to that ad account, or Meta opened "
+                      "another one. Check the ad account id on the Accounts page and that the "
+                      "account is visible in this profile",
 }
 
 #: Остановки, после которых остальные кампании задания этого аккаунта не

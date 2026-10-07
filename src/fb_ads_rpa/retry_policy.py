@@ -93,6 +93,8 @@ NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "br
                                       "profile_logged_out", "profile_network",
                                       "simple_create_layout", "lead_terms_not_accepted",
                                       "objective_inline",
+                                      # ACL-1697: не тот кабинет — повтор откроет тот же.
+                                      "wrong_ad_account",
                                       # ACL-1572: имя ad set'а изменилось, пока выбирали Website.
                                       "conversion_website_name_changed",
                                       # ACL-1693: Next нажат, редактор остался на ad set.
@@ -131,6 +133,7 @@ BLOCKING_REVIEW_STEPS = frozenset(
         "profile_open_by_hand",
         "simple_create_layout",
         "lead_terms_not_accepted",
+        "wrong_ad_account",
         "objective_inline",
         "simple_create_more_ads",
         # ACL-1354: time budgets of the recorded flow.
