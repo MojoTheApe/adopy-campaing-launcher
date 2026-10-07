@@ -5748,22 +5748,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "693": {
-        "actor": "Worker-V1693L",
-        "session": "run_v1693l_1007",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "codex/acl-1693-ad-level",
-        "worktree": "C:\\acl-1693-ad-level",
-        "id": "a2474cd6c5f8468d9a66ccee7e1ae319",
-        "issue": 693,
-        "state": "handoff",
-        "started_at": "2026-10-07T13:32:25+00:00",
-        "from_status": "status:idea",
-        "pr": 695,
-        "report": "# Handoff ACL-1693 (PR #695)\n\nHead: f2c0c8d5. Robot only; no live checks; Live checkbox left unchecked.\n\n## Diagnosis (from Sentry run 81c1bfbb5456 telemetry + PYTHON-69)\n- next_to_ad was recorded ok, but the editor stayed on the ad set (levels [\"ad_set\"], title \"Ad sets - Edit\", no dialogs; snapshot = ad set Placements section).\n- Before it: placements failed (placement_categories_not_reached, ACL-1629 fixed in main) with dialogs 1; after it, overlays_cleared closed \"WhatsApp Status included\". Most likely the Next press landed on that notice (same family as the Doc20 toast). NOT proven: no capture at the moment of the press.\n- Viewport 1536x730 is not shown to be the cause (window_bounds passed at every level; min 1168). Window was also reported covered by 3 other windows at the ad step.\n\n## Change\nreach_ad_level in meta_dom.py: after Next, read the editor level; if still ad set, clear covering overlays and press Next again (max 3 presses); otherwise fail at next_to_ad with a page capture and reason (next_covered, next_outside_viewport, dialog_open, next_not_found, next_clicked_no_change). Unreadable page keeps old behaviour. Zoom untouched.\n\n## Captures to request if it recurs\nrpa_pages\\81c1bfbb5456\\ captures for placements and just after next_to_ad, full 03_ad_name capture, rpa_screenshots\\81c1bfbb5456\\ around 13:19-13:20 UTC.\n\n## Tests\ntests/test_next_to_ad_confirms_the_ad_level.py (10, no browser); also passed locally: test_destination_and_ad_name_say_why, test_a_campaign_has_a_time_budget, test_recorded_retry_contract, test_blocking_overlays_are_cleared, test_the_single_screen_editor_flow. CI: tracker-link failed only because the task was not yet in Review (before handoff); linux/windows tests pending at handoff time."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -8397,9 +8382,25 @@
             "session": "run_v1693l_1007"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-V1693L",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-V1693L",
+          "session": "run_v1693l_1007",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "codex/acl-1693-ad-level",
+          "worktree": "C:\\acl-1693-ad-level",
+          "id": "a2474cd6c5f8468d9a66ccee7e1ae319",
+          "issue": 693,
+          "state": "handoff",
+          "started_at": "2026-10-07T13:32:25+00:00",
+          "from_status": "status:idea",
+          "pr": 695,
+          "report": "# Handoff ACL-1693 (PR #695)\n\nHead: f2c0c8d5. Robot only; no live checks; Live checkbox left unchecked.\n\n## Diagnosis (from Sentry run 81c1bfbb5456 telemetry + PYTHON-69)\n- next_to_ad was recorded ok, but the editor stayed on the ad set (levels [\"ad_set\"], title \"Ad sets - Edit\", no dialogs; snapshot = ad set Placements section).\n- Before it: placements failed (placement_categories_not_reached, ACL-1629 fixed in main) with dialogs 1; after it, overlays_cleared closed \"WhatsApp Status included\". Most likely the Next press landed on that notice (same family as the Doc20 toast). NOT proven: no capture at the moment of the press.\n- Viewport 1536x730 is not shown to be the cause (window_bounds passed at every level; min 1168). Window was also reported covered by 3 other windows at the ad step.\n\n## Change\nreach_ad_level in meta_dom.py: after Next, read the editor level; if still ad set, clear covering overlays and press Next again (max 3 presses); otherwise fail at next_to_ad with a page capture and reason (next_covered, next_outside_viewport, dialog_open, next_not_found, next_clicked_no_change). Unreadable page keeps old behaviour. Zoom untouched.\n\n## Captures to request if it recurs\nrpa_pages\\81c1bfbb5456\\ captures for placements and just after next_to_ad, full 03_ad_name capture, rpa_screenshots\\81c1bfbb5456\\ around 13:19-13:20 UTC.\n\n## Tests\ntests/test_next_to_ad_confirms_the_ad_level.py (10, no browser); also passed locally: test_destination_and_ad_name_say_why, test_a_campaign_has_a_time_budget, test_recorded_retry_contract, test_blocking_overlays_are_cleared, test_the_single_screen_editor_flow. CI: tracker-link failed only because the task was not yet in Review (before handoff); linux/windows tests pending at handoff time."
+        },
+        "pr": 695,
+        "queued_at": "2026-10-07T13:42:50+00:00"
       }
     },
     "actors": {
@@ -10845,7 +10846,8 @@
       675,
       673,
       684,
-      691
+      691,
+      693
     ],
     "review": {
       "id": "d70549dfa714440db60789f05e4567e0",
@@ -15347,6 +15349,13 @@
         "at": "2026-10-07T13:32:25+00:00",
         "issue": 693,
         "claim": "a2474cd6c5f8468d9a66ccee7e1ae319",
+        "actor": "Worker-V1693L"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-07T13:42:50+00:00",
+        "issue": 693,
+        "pr": 695,
         "actor": "Worker-V1693L"
       }
     ],
