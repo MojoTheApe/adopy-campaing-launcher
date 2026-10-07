@@ -2512,6 +2512,7 @@ class AdsManagerFlow:
                 # ACL-1313: остановку, которую повтор не лечит (account_blocked),
                 # человек должен понять из самой ошибки, без разбора телеметрии.
                 if (fail_step.split(":", 1)[0] in ("account_blocked", "browser_closed",
+                                                   "conversion_website_name_changed",
                                                    "profile_unresponsive", "simple_create_layout",
                                                    *retry_policy.FLOW_BUDGET_STOPS)
                         or fail_step.split(":", 1)[0] in profile_trouble.ACCOUNT_STOPS):

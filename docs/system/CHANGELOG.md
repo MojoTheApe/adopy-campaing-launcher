@@ -1,13 +1,12 @@
 # System history
 
-## Conversion location: the menu is opened by click, keyboard or script, and a failure names its reason — ACL-1572
+## Conversion location: the menu is opened by click or script, and a failure names its reason — ACL-1572
 
 `conversion_website_pick: not_selected` failed campaigns on Doc21, Elf403, KLD_BFL_B91 and
 Facebook_5265 (01-06.10). Telemetry showed `menu_closed: 8, reopened: 0`: the menu never opened,
 so none of the eight pick methods ever ran against an open menu.
 
-- Opening the menu now escalates: the existing click, then focus + Enter on the trigger, then a
-  script press; the next opener runs only when the previous one left the menu closed.
+- Opening the menu now escalates: the existing click, then a single script press; the next opener runs only when the previous one left the menu closed.
 - "Menu is open" also reads the trigger's `aria-expanded`, not only the Single/Multiple headings
   (a menu without those headings was taken for closed and then clicked shut).
 - Focus is released from the ad set name field before the trigger is pressed (its suggestion list
@@ -16,7 +15,7 @@ so none of the eight pick methods ever ran against an open menu.
 - A failed pick says why, in English, in the `conversion_website_pick` note: the menu would not
   stay open; Website is not offered in the open menu; Conversion location is not on this screen
   (the ad editor was showing, as on Facebook_5265).
-- Review fixes: the script press is one click (two would close a toggle trigger); Enter is pressed only after the trigger is confirmed focused and focus has left the name field (re-read after the blur, blur runs in the frame that holds the field); the ad set name is re-read and a change blocks the step; "not on this screen" is returned only when the field is truly absent (a page script failing in every frame is its own read-error reason); "would not stay open" only after all openers pressed and failed; the reason is added to the step's error text, not only telemetry.
+- Review fixes: the script press is one click (two would close a toggle trigger). The keyboard (focus + Enter) opener was dropped entirely: Enter could accept a suggestion in the ad set name field and rename the ad set, so the only openers are the click and the script press, and the name field is blurred first (in the frame that holds it). As a single safety check, the ad set name is read once at the start of the Conversion location step and compared at its end, across all retries; a change stops the step (the recorded flow returns the blocking, never replayed `conversion_website_name_changed`) and says only that the name changed, never the names. "Not on this screen" is returned only when the field is truly absent (a page script failing in every frame is its own read-error reason); "would not stay open" only after both openers pressed and failed; the reason is added to the step's error text, not only telemetry; the step state is per thread.
 
 ## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
 

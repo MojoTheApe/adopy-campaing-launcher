@@ -38,12 +38,10 @@ _MENU = """
 _MENU_NO_WEBSITE = _MENU.replace(
     '<div class="opt" role="radio" aria-checked="false"><span id="web">Website</span></div>', "")
 
-#: mode: dead_click — клик (мышь и скрипт) не открывает меню, Enter открывает;
+#: mode: dead_click — настоящий клик мышью (isTrusted) не открывает меню, скриптовый открывает;
 #:       name_focus — клик не открывает, пока фокус в поле имени; триггер не
 #:         фокусируется, а mousedown не трогает фокус (preventDefault), так что
 #:         одно нажатие мыши фокус из поля не уберёт — только явный blur;
-#:       focus_stuck — поле имени возвращает себе фокус, у него активная
-#:         подсказка, Enter в нём принимает её (имя меняется); считаются Enter;
 #:       renames_on_open — открытие меню заодно меняет имя (подсказка принята);
 #:       dead — меню не открывается ничем; ok — обычный триггер.
 _EMULATION = """
@@ -54,16 +52,9 @@ _EMULATION = """
     .find((e) => /Website and instant forms/.test(e.textContent));
   trigger.id = 'trigger';
   const nameInput = document.querySelector("input[placeholder*='ad set name' i]");
-  window.__enters = 0;
-  document.addEventListener('keydown', (e) => { if (e.key === 'Enter') window.__enters += 1; }, true);
   if (MODE === 'name_focus') {
     trigger.removeAttribute('tabindex');
     trigger.addEventListener('mousedown', (e) => e.preventDefault());
-  }
-  if (MODE === 'focus_stuck') {
-    nameInput.setAttribute('aria-activedescendant', 'sugg1');
-    nameInput.addEventListener('blur', () => setTimeout(() => nameInput.focus(), 0));
-    nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameInput.value = 'SUGGESTION'; });
   }
   trigger.parentElement.appendChild(menu);
   const setOpen = (open) => {
@@ -79,15 +70,12 @@ _EMULATION = """
     setOpen(menu.style.display === 'none');
     if (MODE === 'renames_on_open') nameInput.value = 'SUGGESTION';
   };
-  trigger.addEventListener('click', () => {
-    if (MODE === 'dead_click' || MODE === 'dead') return;
+  trigger.addEventListener('click', (e) => {
+    if (MODE === 'dead') return;
+    if (MODE === 'dead_click' && e.isTrusted) return;
     if (MODE === 'name_focus' && document.activeElement &&
         document.activeElement.tagName === 'INPUT') return;
     toggle();
-  });
-  trigger.addEventListener('keydown', (e) => {
-    if (MODE === 'dead') return;
-    if (e.key === 'Enter' && MODE === 'dead_click') toggle();
   });
   for (const o of document.querySelectorAll('.opt')) o.addEventListener('click', () => {
     leaf.nodeValue = o.textContent.trim();
@@ -175,8 +163,8 @@ def test_an_open_menu_without_group_headings_is_seen_by_the_trigger(page):
 
 # ── открытие ─────────────────────────────────────────────────────────────────
 
-def test_a_click_that_never_arrives_is_followed_by_the_keyboard(page, monkeypatch, rows):
-    """8 из 8 отказов: клик по триггеру не открывал меню. Enter с фокусом — открывает."""
+def test_a_click_that_never_arrives_is_followed_by_the_script_press(page, monkeypatch, rows):
+    """8 из 8 отказов: клик по триггеру не открывал меню. Скриптовое нажатие — открывает."""
     page.set_content(_page_html("dead_click"))
     _fake_methods(monkeypatch, _clicks_website)
     assert md._pick_website_from_open_menu(page) is True
@@ -190,12 +178,11 @@ def test_the_focus_in_the_name_field_is_released_before_the_trigger_is_pressed(p
     """162a95a64776 / 87d43d6202af: фокус в поле имени — первое нажатие по меню пропадало.
 
     Триггер не фокусируется и не отнимает фокус при mousedown: нажатие мыши само
-    фокус из поля не уберёт. Остальные способы открытия отключены — открыть меню
-    может только клик после явного blur (без blur тест падает)."""
+    фокус из поля не уберёт. Скриптовый способ отключён — открыть меню может
+    только клик после явного blur (без blur тест падает)."""
     page.set_content(_page_html("name_focus"))
     page.focus("input[placeholder*='ad set name' i]")
     assert md._conversion_trigger_state(page)["name_focus"] is True
-    monkeypatch.setattr(md, "_open_conversion_menu_via_keyboard", lambda p: False)
     monkeypatch.setattr(md, "_open_conversion_menu_via_js", lambda p: False)
     _fake_methods(monkeypatch, _clicks_website)
     assert md._pick_website_from_open_menu(page) is True
@@ -208,45 +195,31 @@ def test_without_the_blur_the_name_focus_swallows_the_click(page, monkeypatch):
     page.set_content(_page_html("name_focus"))
     page.focus("input[placeholder*='ad set name' i]")
     monkeypatch.setattr(md, "_release_name_focus", lambda p: True)
-    monkeypatch.setattr(md, "_open_conversion_menu_via_keyboard", lambda p: False)
     monkeypatch.setattr(md, "_open_conversion_menu_via_js", lambda p: False)
     assert md._ensure_conversion_menu_open(page) is False
 
 
 def test_only_the_script_press_opens_the_menu_with_one_click(page, monkeypatch):
-    """Клик и клавиатура отключены; триггер — переключатель: два click закрыли бы меню."""
+    """Клик отключён; триггер — переключатель: два click закрыли бы меню."""
     page.set_content(_page_html("ok"))
     monkeypatch.setattr(md, "click_conversion_location_dropdown", lambda p: False)
-    monkeypatch.setattr(md, "_open_conversion_menu_via_keyboard", lambda p: False)
     page.evaluate("() => { window.__clicks = 0; document.getElementById('trigger')"
                   ".addEventListener('click', () => window.__clicks++); }")
     assert md._ensure_conversion_menu_open(page) is True
     assert page.evaluate("window.__clicks") == 1
 
 
-def test_a_failing_first_opener_does_not_stop_the_next_ones(page, monkeypatch):
-    """`continue`, а не `return False`: первый способ не нашёл триггер — идёт второй."""
-    page.set_content(_page_html("ok"))
-    monkeypatch.setattr(md, "click_conversion_location_dropdown", lambda p: False)
-    monkeypatch.setattr(md, "_open_conversion_menu_via_keyboard", lambda p: False)
-    assert md._ensure_conversion_menu_open(page) is True
+def test_there_is_no_keyboard_opener():
+    assert not hasattr(md, "_open_conversion_menu_via_keyboard")
 
 
-def test_enter_is_not_pressed_while_the_focus_stays_in_the_name_field(page, monkeypatch):
-    """Фокус возвращается в поле имени, подсказка активна: Enter принял бы её и сменил имя."""
-    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: time.sleep(0.1))
-    page.set_content(_page_html("focus_stuck"))
-    page.focus("input[placeholder*='ad set name' i]")
-    page.fill("input[placeholder*='ad set name' i]", "Ad set one")
-    page.focus("input[placeholder*='ad set name' i]")
-    assert md._open_conversion_menu_via_keyboard(page) is False
-    assert page.evaluate("window.__enters") == 0
-    assert page.input_value("input[placeholder*='ad set name' i]") == "Ad set one"
-
-
-def test_enter_is_not_pressed_when_the_trigger_is_missing(page):
+def test_a_missing_trigger_causes_no_keyboard_events_at_all(page):
+    """Поля нет: ни Enter, ни другая клавиша не уходит на страницу."""
     page.set_content(_page_html("ok", with_section=False))
-    assert md._open_conversion_menu_via_keyboard(page) is False
+    page.evaluate("() => { window.__keys = 0; document.addEventListener('keydown', () => window.__keys++, true);"
+                  " document.addEventListener('keyup', () => window.__keys++, true); }")
+    assert md._ensure_conversion_menu_open(page) is False
+    assert page.evaluate("window.__keys") == 0
 
 
 def test_a_changed_ad_set_name_blocks_the_step_with_a_reason(page, monkeypatch, rows):
@@ -255,15 +228,98 @@ def test_a_changed_ad_set_name_blocks_the_step_with_a_reason(page, monkeypatch, 
     _fake_methods(monkeypatch, _clicks_website)
     assert md._pick_website_from_open_menu(page) is False
     note = rows[-1][2]["note"]
-    assert note.startswith("not_selected: The ad set name changed")
-    assert md.last_conversion_failure_reason() == note.split(": ", 1)[1]
+    assert note == "not_selected: " + md.NAME_CHANGED_REASON
+    assert "Ad set one" not in note and "SUGGESTION" not in note
+    assert md.last_conversion_failure_reason() == md.NAME_CHANGED_REASON
+
+
+def test_select_conversion_location_website_blocks_a_name_changed_during_its_retries(page, monkeypatch):
+    """Имя меряется один раз на шаг: смена в любой из попыток (два выбора) блокирует шаг."""
+    page.set_content(_page_html("ok"))
+    name = "input[placeholder*='ad set name' i]"
+    page.fill(name, "Ad set one")
+    _fake_methods(monkeypatch, _clicks_website)
+
+    def steps(pg, *, skip_open=False):
+        pg.evaluate("() => { document.querySelector(\"input[placeholder*='ad set name' i]\").value = 'Other'; }")
+        md._pick_website_from_open_menu(pg)
+        md._pick_website_from_open_menu(pg)
+        return True
+
+    monkeypatch.setattr(md, "_select_conversion_location_website_steps", steps)
+    assert md.select_conversion_location_website(page) is False
+    assert md.last_conversion_failure_reason() == md.NAME_CHANGED_REASON
+
+
+def test_select_conversion_location_website_keeps_a_stable_name(page, monkeypatch):
+    page.set_content(_page_html("ok"))
+    page.fill("input[placeholder*='ad set name' i]", "Ad set one")
+    monkeypatch.setattr(md, "_select_conversion_location_website_steps", lambda pg, **k: True)
+    assert md.select_conversion_location_website(page) is True
+
+
+def test_the_recorded_flow_step_for_a_renamed_ad_set_is_blocking_and_never_replayed():
+    from src.fb_ads_rpa import failure_policy, retry_policy
+
+    step = "conversion_website_name_changed"
+    assert step in retry_policy.BLOCKING_REVIEW_STEPS
+    assert step not in retry_policy.CAMPAIGN_RETRY_STEPS
+    assert retry_policy.disposition(step).action == retry_policy.BLOCK_AND_REVIEW
+    assert retry_policy.should_retry_campaign(step, completed_attempts=0) is False
+    assert failure_policy.severity(step) == failure_policy.BLOCKING
+    assert "unclassified" not in failure_policy.reason(step)
+
+
+def test_a_renamed_ad_set_blocks_the_campaign_with_a_reason_and_no_names(monkeypatch):
+    from tests.test_objective_dialog_waits_while_loading import _publish_with_failures
+    from src.fb_ads_rpa import failure_policy
+
+    result, sleeps = _publish_with_failures(monkeypatch, ["conversion_website_name_changed"])
+    assert sleeps == [], "не повторяется"
+    assert result.success is False
+    assert "conversion_website_name_changed" in result.blocking_failures
+    assert failure_policy.reason("conversion_website_name_changed") in result.error
+
+
+def test_the_reason_reaches_the_step_error_text(monkeypatch):
+    """M18: причина отказа Website — в `result.error`, а не только в телеметрии."""
+    from tests.test_objective_dialog_waits_while_loading import _publish_with_failures
+
+    md._conv_tls.reason = "Website is not offered in the open Conversion location menu"
+    result, _ = _publish_with_failures(monkeypatch, ["conversion_website"] * 3)
+    assert result.success is False
+    assert result.error.startswith("Recorded flow failed at: conversion_website")
+    assert "Website is not offered in the open Conversion location menu" in result.error
+
+
+def test_the_reason_is_kept_per_thread():
+    import threading
+
+    md._conv_tls.reason = "main reason"
+    seen = {}
+
+    def worker(tag):
+        md._conv_tls.reason = f"reason {tag}"
+        time.sleep(0.05)
+        seen[tag] = md.last_conversion_failure_reason()
+
+    threads = [threading.Thread(target=worker, args=(t,)) for t in ("a", "b")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert seen == {"a": "reason a", "b": "reason b"}
+    assert md.last_conversion_failure_reason() == "main reason"
 
 
 @pytest.fixture(autouse=True)
 def _fresh_open_state():
-    md._OPEN_STATE.clear()
+    md._open_state().clear()
+    md._conv_tls.reason = ""
+    md._conv_tls.name_changed = False
+    md._conv_tls.guard_active = False
     yield
-    md._OPEN_STATE.clear()
+    md._open_state().clear()
 
 
 def test_a_page_script_that_fails_everywhere_is_a_read_error_not_an_absent_field(monkeypatch):
@@ -307,9 +363,9 @@ def test_a_menu_that_never_opens_stops_early_and_says_so(page, monkeypatch, rows
 
 
 def test_a_menu_that_could_not_be_pressed_is_not_called_unstable(page, monkeypatch, rows):
-    """«Would not stay open» — только когда нажаты все три способа."""
+    """«Would not stay open» — только когда нажаты оба способа."""
     page.set_content(_page_html("dead"))
-    monkeypatch.setattr(md, "_open_conversion_menu_via_keyboard", lambda p: False)
+    monkeypatch.setattr(md, "_open_conversion_menu_via_js", lambda p: False)
     _fake_methods(monkeypatch, _clicks_website)
     assert md._pick_website_from_open_menu(page) is False
     note = rows[-1][2]["note"]

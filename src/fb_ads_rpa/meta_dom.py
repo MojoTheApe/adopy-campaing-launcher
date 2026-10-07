@@ -2863,8 +2863,63 @@ def _conversion_trigger_state(page: Page, action: str = "") -> dict:
     return absent if absent is not None else {"read_error": True}
 
 
-#: Сведения о последней попытке открыть меню — для причины отказа и защиты имени.
-_OPEN_STATE: dict = {}
+#: Состояние шага Conversion location — своё у каждого потока (как `_upload_diag_tls`):
+#: сведения о последней попытке открыть меню, причина отказа, имя ad set'а в начале шага.
+_conv_tls = threading.local()
+
+#: Причина, когда имя ad set'а за шаг изменилось (без самих имён: в Sentry их не шлём).
+NAME_CHANGED_REASON = ("The ad set name changed while the Conversion location step was running; "
+                       "stopped so the changed name is not saved")
+
+
+def _open_state() -> dict:
+    """Сведения о последней попытке открыть меню (в этом потоке)."""
+    d = getattr(_conv_tls, "open", None)
+    if d is None:
+        d = _conv_tls.open = {}
+    return d
+
+
+class _NameGuard:
+    """Имя ad set'а в начале шага и в конце: один замер на шаг, не на каждый выбор."""
+
+    def __init__(self, page: Page) -> None:
+        self.page = page
+        self.owner = False
+
+    def __enter__(self) -> "_NameGuard":
+        if not getattr(_conv_tls, "guard_active", False):
+            self.owner = True
+            _conv_tls.guard_active = True
+            _conv_tls.name_changed = False
+            _conv_tls.reason = ""
+            try:
+                _conv_tls.baseline = _adset_name_value(self.page)
+            except Exception:
+                _conv_tls.baseline = None
+        return self
+
+    def __exit__(self, *exc) -> None:
+        if self.owner:
+            _conv_tls.guard_active = False
+
+
+def conversion_name_changed(page: Page) -> bool:
+    """Имя ad set'а теперь не то, что в начале шага (True запоминается до следующего шага)."""
+    if getattr(_conv_tls, "name_changed", False):
+        return True
+    base = getattr(_conv_tls, "baseline", None)
+    if base is None:
+        return False
+    try:
+        now = _adset_name_value(page)
+    except Exception:
+        return False
+    if now is not None and now != base:
+        _conv_tls.name_changed = True
+        _conv_tls.reason = NAME_CHANGED_REASON
+        return True
+    return False
 
 _ADSET_NAME_JS = r"""
   () => {
@@ -2921,38 +2976,6 @@ def _release_name_focus(page: Page) -> bool:
         return False
 
 
-def _open_conversion_menu_via_keyboard(page: Page) -> bool:
-    """Открыть меню с клавиатуры: фокус на триггер + Enter (мышь по CDP не всегда доходит).
-
-    Enter уходит только если фокус действительно на триггере и покинул поле
-    имени: иначе он принял бы активную подсказку и переименовал ad set."""
-    def _focused_on_trigger() -> bool | None:
-        """None — триггера нет; иначе фокус на нём и ушёл из поля имени (перечитано после паузы)."""
-        if not _conversion_trigger_state(page, "focus").get("trigger"):
-            return None
-        _sleep_h(0.15)
-        again = _conversion_trigger_state(page)
-        return bool(again.get("trigger") and again.get("focused") and not again.get("name_focus"))
-
-    got = _focused_on_trigger()
-    if got is None:
-        return False
-    if not got:
-        _release_name_focus(page)
-        if not _focused_on_trigger():
-            return False
-    before = _adset_name_value(page)
-    try:
-        page.keyboard.press("Enter")
-    except Exception:
-        return False
-    _sleep_h(0.8)
-    after = _adset_name_value(page)
-    if before is not None and after is not None and before != after:
-        _OPEN_STATE["name_changed"] = (before, after)
-    return True
-
-
 def _open_conversion_menu_via_js(page: Page) -> bool:
     """Открыть меню скриптовым нажатием на триггер (один click)."""
     got = _conversion_trigger_state(page, "click")
@@ -2986,15 +3009,15 @@ def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str
     # ACL-1572: способы открыть триггер сменяют друг друга (клик по CDP не
     # всегда доходит, 8 из 8 отказов 04-06.10 — меню так и не открывалось);
     # следующий способ — только если меню после предыдущего не открылось.
+    # Enter убран: он мог принять подсказку поля имени и переименовать ad set.
     openers = (click_conversion_location_dropdown,
-               _open_conversion_menu_via_keyboard,
                _open_conversion_menu_via_js)
     attempts: list[tuple[str, bool]] = []
-    _OPEN_STATE["attempts"] = attempts
-    for opener in openers[:max(1, tries + 1)]:
+    _open_state()["attempts"] = attempts
+    for opener in openers[:max(1, tries)]:
         if _conversion_location_menu_open(page):
             return True
-        if _OPEN_STATE.get("name_changed"):
+        if conversion_name_changed(page):
             return False
         dismiss_publish_draft_dialog(page)
         # ACL-1573 / ACL-1572: окно поверх (панель Notifications, шаблон
@@ -3039,10 +3062,8 @@ def _website_value_shows(page: Page, timeout_s: float | None = None) -> bool:
 def _conversion_failure_reason(page: Page, *, reopen_failed: int = 0) -> str:
     """Почему Website не выбран — одной фразой по-английски; "" — причина неясна."""
     try:
-        changed = _OPEN_STATE.get("name_changed")
-        if changed:
-            return (f"The ad set name changed while the Conversion location menu was being "
-                    f"opened (from '{changed[0]}' to '{changed[1]}'): stopped so it is not saved")
+        if conversion_name_changed(page):
+            return NAME_CHANGED_REASON
         state = _conversion_trigger_state(page)
         if state.get("read_error"):
             return ("Could not read the Conversion location field: the page script failed "
@@ -3054,12 +3075,12 @@ def _conversion_failure_reason(page: Page, *, reopen_failed: int = 0) -> str:
             if not _is_website_option_visible(page, timeout_ms=300):
                 return "Website is not offered in the open Conversion location menu"
             return ""
-        attempts = _OPEN_STATE.get("attempts") or []
-        if reopen_failed and _OPEN_STATE.get("last_open_failed") and attempts:
+        attempts = _open_state().get("attempts") or []
+        if reopen_failed and _open_state().get("last_open_failed") and attempts:
             unpressed = [n for n, ok in attempts if not ok]
-            if not unpressed and len(attempts) >= 3:
+            if not unpressed and len(attempts) >= 2:
                 return ("The Conversion location menu would not stay open: it closed after "
-                        "click, keyboard and script presses")
+                        "click and script presses")
             return ("The Conversion location menu did not open: the trigger could not be "
                     "pressed by " + ", ".join(n.replace("_open_conversion_menu_via_", "")
                                               .replace("click_conversion_location_dropdown", "click")
@@ -3069,15 +3090,19 @@ def _conversion_failure_reason(page: Page, *, reopen_failed: int = 0) -> str:
     return ""
 
 
-#: Причина последнего отказа выбора Website — для текста ошибки шага.
-LAST_CONVERSION_FAILURE_REASON = ""
-
-
 def last_conversion_failure_reason() -> str:
-    return LAST_CONVERSION_FAILURE_REASON
+    """Причина последнего отказа выбора Website (в этом потоке) — для текста ошибки шага."""
+    return getattr(_conv_tls, "reason", "")
 
 
 def _pick_website_from_open_menu(page: Page) -> bool:
+    """Выбрать Website из открытого меню; имя ad set'а за шаг не должно измениться."""
+    with _NameGuard(page):
+        got = _pick_website_from_open_menu_steps(page)
+        return got and not conversion_name_changed(page)
+
+
+def _pick_website_from_open_menu_steps(page: Page) -> bool:
     """Expand Single (if needed) then click Website — fully automatic.
 
     Research (Playwright #41286, Multilogin CDP): mouse clicks over connect_over_cdp
@@ -3121,19 +3146,15 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     windows_closed: list[str] = []
     reopen_failed = 0
 
-    name_before = _adset_name_value(page)
-    _OPEN_STATE.clear()
-    global LAST_CONVERSION_FAILURE_REASON
-    LAST_CONVERSION_FAILURE_REASON = ""
+    _open_state().clear()
 
     def _done(method: str | None, ok: bool) -> bool:
-        global LAST_CONVERSION_FAILURE_REASON
         try:
-            # ACL-1572: страховка — имя ad set'а после шага то же, что до него.
-            name_after = _adset_name_value(page)
-            if name_before is not None and name_after is not None and name_before != name_after:
-                _OPEN_STATE["name_changed"] = (name_before, name_after)
+            # ACL-1572: имя ad set'а должно остаться таким, каким было в начале шага.
+            if conversion_name_changed(page):
                 ok = False
+            elif ok:
+                _conv_tls.reason = ""
         except Exception:
             pass
         try:
@@ -3147,7 +3168,7 @@ def _pick_website_from_open_menu(page: Page) -> bool:
                 if why:
                     note = f"not_selected: {why}"
                     diag["reason"] = why
-                    LAST_CONVERSION_FAILURE_REASON = why
+                    _conv_tls.reason = why
             _telemetry.record(
                 "conversion_website_pick", ok,
                 note=note,
@@ -3163,7 +3184,7 @@ def _pick_website_from_open_menu(page: Page) -> bool:
             return _done(tried[-1] if tried else "already", True)
         # ACL-1572: меню три раза подряд не открылось всеми способами —
         # остальные способы жали бы в пустоту (62-187 с до отказа).
-        if reopen_failed >= 3 or _OPEN_STATE.get("name_changed"):
+        if reopen_failed >= 3 or conversion_name_changed(page):
             break
         # ACL-1573 / ACL-1572: между способами — закрыть чужие окна реестра
         # (панель Notifications, шаблон имени): они забирают фокус, и меню
@@ -3173,13 +3194,13 @@ def _pick_website_from_open_menu(page: Page) -> bool:
         if not was_open:
             menu_closed += 1
             opened = _ensure_conversion_menu_open(page, closed=windows_closed)
-            _OPEN_STATE["last_open_failed"] = not opened
+            _open_state()["last_open_failed"] = not opened
             if not opened and _windows.after_failure(page, "conversion_website"):
                 # Меню не открылось — запасной ход сторожа (раз на шаг):
                 # закрыли окно над ним — открыть ещё раз.
                 windows_closed.append("fallback")
                 opened = _ensure_conversion_menu_open(page, closed=windows_closed)
-                _OPEN_STATE["last_open_failed"] = not opened
+                _open_state()["last_open_failed"] = not opened
             if not opened:
                 # Меню не открыть — способ жал бы в пустоту; следующий
                 # способ снова попробует открыть.
@@ -5874,7 +5895,14 @@ def run_recorded_campaign_flow(
     # (Multiple) option instead. pick_website_conversion_option() already
     # handles expanding Single first and tries several verified click
     # strategies, so use it directly instead of a fragile inline attempt.
-    if not pick_website_conversion_option(page):
+    with _NameGuard(page):
+        picked = pick_website_conversion_option(page)
+        renamed = conversion_name_changed(page)
+    if renamed:
+        # ACL-1572: имя ad set'а изменилось за шаг — стоп без повтора, имена не логируем.
+        _shot("fail_conversion_website_name_changed")
+        return "conversion_website_name_changed"
+    if not picked:
         _shot("fail_conversion_website")
         return "conversion_website"
 
@@ -16909,6 +16937,16 @@ def _dismiss_floating_banners(page: Page) -> list[str]:
     return _close_banners(page)
 
 def select_conversion_location_website(page: Page, *, skip_open: bool = False) -> bool:
+    """Pick 'Website' under Conversion -> Conversion location (ACL-1572: the ad set
+    name is measured once per step and must be unchanged at its end, over all retries)."""
+    with _NameGuard(page):
+        got = _select_conversion_location_website_steps(page, skip_open=skip_open)
+        if conversion_name_changed(page):
+            return False
+        return got
+
+
+def _select_conversion_location_website_steps(page: Page, *, skip_open: bool = False) -> bool:
     """Pick 'Website' under Conversion → Conversion location on Ad Set level.
 
     Fully automatic. Uses keyboard + raw CDP clicks to work around Playwright's
