@@ -5620,7 +5620,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "675": {
+        "actor": "Worker-S1675A",
+        "session": "run_s1675a_1007",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1675-dup-shell",
+        "worktree": "C:\\acl-1675-dup-shell",
+        "id": "03f4c7b8161a4dcab61ca3649b53abd8",
+        "issue": 675,
+        "state": "implementing",
+        "started_at": "2026-10-07T10:57:53+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -8135,6 +8148,17 @@
         },
         "pr": 671,
         "queued_at": "2026-10-07T07:55:22+00:00"
+      },
+      "675": {
+        "implementers": [
+          {
+            "actor": "Worker-S1675A",
+            "session": "run_s1675a_1007"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1675A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -8773,6 +8797,10 @@
       "Reviewer-R1649Q": {
         "session": "rev_r1649q_1007",
         "role": "Reviewer"
+      },
+      "Worker-S1675A": {
+        "session": "run_s1675a_1007",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -14869,6 +14897,13 @@
         "prs": [
           679
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-07T10:57:53+00:00",
+        "issue": 675,
+        "claim": "03f4c7b8161a4dcab61ca3649b53abd8",
+        "actor": "Worker-S1675A"
       }
     ],
     "policy": {
