@@ -141,6 +141,12 @@ POLICY: dict[str, tuple[str, str]] = {
         "the draft is incomplete and was not retried - check it in Ads Manager and finish or "
         "delete it",
     ),
+    "tab_hung": (
+        BLOCKING,
+        "the profile's browser tab stopped answering inside one step for minutes, so the "
+        "robot closed that tab (the profile stays open) and stopped the campaign; the draft is "
+        "incomplete and was not retried - check it in Ads Manager and finish or delete it",
+    ),
     "step_budget_exceeded": (
         BLOCKING,
         "one step of this campaign took longer than the robot's time limit, so the campaign "
@@ -368,6 +374,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     "campaign_budget_exceeded": (
         "Campaign build took too long",
         "The build hit the robot's time limit, so the draft is incomplete.",
+        "Open the draft in Ads Manager and finish or delete it.",
+    ),
+    "tab_hung": (
+        "Browser tab hung during a step",
+        "The robot closed the frozen tab and stopped, so the draft is incomplete.",
         "Open the draft in Ads Manager and finish or delete it.",
     ),
     "step_budget_exceeded": (

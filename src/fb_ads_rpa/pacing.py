@@ -182,7 +182,23 @@ def _slow() -> bool:
     return os.environ.get("FB_RPA_SLOW_PACING", "").strip() in ("1", "true", "yes")
 
 
+def _stop_if_tab_hung() -> None:
+    """ACL-1702 (ревью PR #704, B2): вкладку закрыл сторож — не нажимать дальше.
+
+    До `check_human_takeover`: тот спрашивает страницу. Отметки нет — одно
+    чтение dict; есть — `meta_dom.FlowBudgetExceeded("tab_hung")` внутри
+    потока кампании.
+    """
+    from src.fb_ads_rpa import tab_watchdog
+
+    if tab_watchdog.peek_hung():
+        from src.fb_ads_rpa import meta_dom
+
+        meta_dom._flow_budget_hung_check()
+
+
 def pause_short(page: "Page | None" = None) -> None:
+    _stop_if_tab_hung()
     if check_human_takeover(page):
         wait_for_human_release(page)
     time.sleep(random.uniform(0.4, 0.9) if _slow() else random.uniform(0.25, 0.6))
@@ -190,6 +206,7 @@ def pause_short(page: "Page | None" = None) -> None:
 
 
 def pause_medium(page: "Page | None" = None) -> None:
+    _stop_if_tab_hung()
     if check_human_takeover(page):
         wait_for_human_release(page)
     time.sleep(random.uniform(1.0, 2.2) if _slow() else random.uniform(0.6, 1.3))
@@ -197,6 +214,7 @@ def pause_medium(page: "Page | None" = None) -> None:
 
 
 def pause_long(page: "Page | None" = None) -> None:
+    _stop_if_tab_hung()
     if check_human_takeover(page):
         wait_for_human_release(page)
     time.sleep(random.uniform(2.5, 4.5) if _slow() else random.uniform(1.0, 1.8))
@@ -204,6 +222,7 @@ def pause_long(page: "Page | None" = None) -> None:
 
 
 def pause_after_navigation(page: "Page | None" = None) -> None:
+    _stop_if_tab_hung()
     if check_human_takeover(page):
         wait_for_human_release(page)
     time.sleep(random.uniform(2.0, 3.5) if _slow() else random.uniform(1.0, 1.7))

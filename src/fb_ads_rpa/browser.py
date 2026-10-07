@@ -1295,6 +1295,15 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
     _pw_tls.playwright = pw
     try:
         browser = pw.chromium.connect_over_cdp(cdp_url)
+        try:
+            # ACL-1702: сторож вкладки задания откроет к этому браузеру СВОЁ
+            # соединение CDP — адрес запоминаем за потоком задания сразу после
+            # подключения, до первых вызовов страницы (они тоже могут зависнуть).
+            from src.fb_ads_rpa import tab_watchdog
+
+            tab_watchdog.note_endpoint(cdp_url)
+        except Exception:
+            pass
         restored = [d for d in _unminimize_before_attach(browser) if "window" in d]
         if browser.contexts:
             context = browser.contexts[0]

@@ -1857,8 +1857,32 @@ def _flow_budget_note_frozen() -> None:
     _flow_budget.frozen_last = now
 
 
+def _flow_budget_hung_check() -> None:
+    """ACL-1702 (ревью PR #704, B2): сторож закрыл зависшую вкладку — жёсткая остановка.
+
+    `FlowBudgetExceeded("tab_hung")` — от BaseException: помощник с
+    `except Exception`, проглотивший ошибку разблокированного вызова, не
+    пойдёт нажимать дальше. Только внутри потока кампании (`armed`): снаружи
+    её некому поймать. Зовут паузы (`_sleep_h`, `pacing.pause_*`) и проверки
+    сроков.
+    """
+    if not getattr(_flow_budget, "armed", False):
+        return
+    from src.fb_ads_rpa import tab_watchdog
+
+    hung = tab_watchdog.peek_hung()
+    if not hung:
+        return
+    _flow_budget.fired = True
+    now = time.time()
+    raise FlowBudgetExceeded("tab_hung", {
+        "after_step": hung, "campaign_s": round(now - _flow_budget.start, 1),
+        "step_s": round(now - _flow_budget.step_start, 1)})
+
+
 def _flow_budget_check() -> None:
     """Бросить `FlowBudgetExceeded`, если срок вышел (один раз на кампанию)."""
+    _flow_budget_hung_check()
     if not getattr(_flow_budget, "armed", False) or getattr(_flow_budget, "fired", False):
         return
     now = time.time()
@@ -5245,9 +5269,25 @@ def _under_flow_budget(flow):
         try:
             return _windows.attach_block(flow(*args, **kwargs))
         except FlowBudgetExceeded as stop:
+            # ACL-1702: стек места, где сработал срок (Doc124 e3f55897e533,
+            # campaign_budget_exceeded после next_to_ad: без него не видно,
+            # какой цикл съел время). Файл — в diag строки остановки.
+            diag = dict(stop.detail)
+            try:
+                from src.fb_ads_rpa import tab_watchdog
+
+                # tab_hung: стек уже снял сторож (до закрытия вкладки).
+                path = None if stop.reason == "tab_hung" else tab_watchdog.dump_exception(
+                    stop, run_id=_telemetry.current_run_id(), reason=stop.reason,
+                    step=str(stop.detail.get("after_step", "")), detail=stop.detail,
+                    page=args[0] if args else kwargs.get("page"))
+                if path is not None:
+                    diag["stack_file"] = path.name
+            except Exception:
+                pass
             try:
                 _telemetry.record(stop.reason, False, note=str(stop.detail.get("after_step", "")),
-                                  diag=stop.detail)
+                                  diag=diag)
             except Exception:
                 pass
             return stop.reason
