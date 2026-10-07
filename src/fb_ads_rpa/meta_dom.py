@@ -2795,6 +2795,201 @@ _CONVERSION_MENU_OPEN_JS = r"""
 """
 
 
+_CONVERSION_TRIGGER_JS = r"""
+  (action) => {
+    // ACL-1572: состояние триггера Conversion location — есть ли подпись,
+    // сам триггер и его aria-expanded (надёжнее заголовков «Single»/
+    // «Multiple»: они есть не во всякой разметке открытого меню), а также
+    // держит ли фокус поле имени (его список подсказок съедает первый клик).
+    // action: '' — только прочитать; 'focus' — сфокусировать триггер;
+    // 'click' — нажать его скриптом (ОДИН click(): второй закрыл бы меню-переключатель).
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const shown = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    const vals = ['website and instant forms', 'website and calls', 'instant forms and messenger',
+      'website', 'instant forms', 'sitio web', 'formularios instantáneos'];
+    const out = { label: false, trigger: false, expanded: null, name_focus: false, focused: false };
+    const nameFocus = () => {
+      const ae = document.activeElement;
+      if (!ae || ae.tagName !== 'INPUT') return false;
+      const ph = norm(ae.getAttribute('placeholder'));
+      return ph.includes('ad set name') || ae.getAttribute('aria-haspopup') === 'listbox';
+    };
+    out.name_focus = nameFocus();
+    let label = null;
+    for (const el of document.querySelectorAll('label, span, div, [role=heading]')) {
+      if (el.children.length > 2) continue;
+      const t = norm(el.textContent);
+      if ((t === 'conversion location' || t === 'ubicación de la conversión') && shown(el)) {
+        label = el; break;
+      }
+    }
+    if (!label) return out;
+    out.label = true;
+    for (const el of document.querySelectorAll('[role=combobox], [aria-haspopup]')) {
+      if (!shown(el)) continue;
+      if (!(label.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+      const t = norm(el.textContent);
+      if (!vals.some(v => t === v || t.startsWith(v))) continue;
+      out.trigger = true;
+      const ex = el.getAttribute('aria-expanded');
+      out.expanded = ex === null ? null : ex === 'true';
+      if (action === 'focus') { el.scrollIntoView({ block: 'nearest' }); el.focus(); }
+      if (action === 'click') {
+        el.scrollIntoView({ block: 'nearest' });
+        if (typeof el.click === 'function') el.click();
+        else el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      }
+      out.focused = document.activeElement === el;
+      out.name_focus = nameFocus();
+      break;
+    }
+    return out;
+  }
+"""
+
+
+def _conversion_trigger_state(page: Page, action: str = "") -> dict:
+    """Состояние триггера Conversion location (`_CONVERSION_TRIGGER_JS`).
+
+    Поля нет на экране — словарь с label=False; скрипт не отработал ни в одном
+    кадре — {"read_error": True} (это не «поля нет»)."""
+    absent: dict | None = None
+    for root in _roots(page):
+        try:
+            got = root.evaluate(_CONVERSION_TRIGGER_JS, action)
+        except Exception:
+            continue
+        if not isinstance(got, dict):
+            continue
+        if got.get("label") or got.get("trigger"):
+            return got
+        absent = absent or got
+    return absent if absent is not None else {"read_error": True}
+
+
+#: Состояние шага Conversion location — своё у каждого потока (как `_upload_diag_tls`):
+#: сведения о последней попытке открыть меню, причина отказа, имя ad set'а в начале шага.
+_conv_tls = threading.local()
+
+#: Причина, когда имя ad set'а за шаг изменилось (без самих имён: в Sentry их не шлём).
+NAME_CHANGED_REASON = ("The ad set name changed while the Conversion location step was running; "
+                       "stopped so the changed name is not saved")
+
+
+def _open_state() -> dict:
+    """Сведения о последней попытке открыть меню (в этом потоке)."""
+    d = getattr(_conv_tls, "open", None)
+    if d is None:
+        d = _conv_tls.open = {}
+    return d
+
+
+class _NameGuard:
+    """Имя ad set'а в начале шага и в конце: один замер на шаг, не на каждый выбор."""
+
+    def __init__(self, page: Page) -> None:
+        self.page = page
+        self.owner = False
+
+    def __enter__(self) -> "_NameGuard":
+        if not getattr(_conv_tls, "guard_active", False):
+            self.owner = True
+            _conv_tls.guard_active = True
+            _conv_tls.name_changed = False
+            _conv_tls.reason = ""
+            try:
+                _conv_tls.baseline = _adset_name_value(self.page)
+            except Exception:
+                _conv_tls.baseline = None
+        return self
+
+    def __exit__(self, *exc) -> None:
+        if self.owner:
+            _conv_tls.guard_active = False
+
+
+def conversion_name_changed(page: Page) -> bool:
+    """Имя ad set'а теперь не то, что в начале шага (True запоминается до следующего шага)."""
+    if getattr(_conv_tls, "name_changed", False):
+        return True
+    base = getattr(_conv_tls, "baseline", None)
+    if base is None:
+        return False
+    try:
+        now = _adset_name_value(page)
+    except Exception:
+        return False
+    if now is not None and now != base:
+        _conv_tls.name_changed = True
+        _conv_tls.reason = NAME_CHANGED_REASON
+        return True
+    return False
+
+_ADSET_NAME_JS = r"""
+  () => {
+    for (const el of document.querySelectorAll('input')) {
+      const ph = (el.getAttribute('placeholder') || '').toLowerCase();
+      if (ph.includes('ad set name')) return el.value || '';
+    }
+    return null;
+  }
+"""
+
+_BLUR_NAME_JS = r"""
+  () => {
+    const a = document.activeElement;
+    if (!a || a.tagName !== 'INPUT') return false;
+    const ph = (a.getAttribute('placeholder') || '').toLowerCase();
+    if (!(ph.includes('ad set name') || a.getAttribute('aria-haspopup') === 'listbox')) return false;
+    a.blur();
+    return true;
+  }
+"""
+
+
+def _adset_name_value(page: Page) -> str | None:
+    """Текущее имя ad set'а в поле (None — поля не видно)."""
+    for root in _roots(page):
+        try:
+            got = root.evaluate(_ADSET_NAME_JS)
+        except Exception:
+            continue
+        if got is not None:
+            return str(got)
+    return None
+
+
+def _release_name_focus(page: Page) -> bool:
+    """Снять фокус с поля имени ad set'а: его список подсказок (aria-expanded)
+    съедает первый клик мимо — меню Conversion location открывалось и тут же
+    закрывалось (ACL-1572, 04-06.10: фокус на поле имени на снимках отказов).
+    Блюр идёт в том кадре, где поле, затем фокус перечитывается: True — фокус
+    ушёл. Без Escape: он закрывает весь мастер."""
+    try:
+        if not _conversion_trigger_state(page).get("name_focus"):
+            return True
+        for root in _roots(page):
+            try:
+                if root.evaluate(_BLUR_NAME_JS):
+                    break
+            except Exception:
+                continue
+        _sleep_h(0.2)
+        return not _conversion_trigger_state(page).get("name_focus")
+    except Exception:
+        return False
+
+
+def _open_conversion_menu_via_js(page: Page) -> bool:
+    """Открыть меню скриптовым нажатием на триггер (один click)."""
+    got = _conversion_trigger_state(page, "click")
+    _sleep_h(0.8)
+    return bool(got.get("trigger"))
+
+
 def _conversion_location_menu_open(page: Page) -> bool:
     """Открыто ли сейчас меню Conversion location (без ожиданий)."""
     for root in _roots(page):
@@ -2803,7 +2998,8 @@ def _conversion_location_menu_open(page: Page) -> bool:
                 return True
         except Exception:
             continue
-    return False
+    # ACL-1572: открытое меню без заголовков «Single»/«Multiple» — по триггеру.
+    return _conversion_trigger_state(page).get("expanded") is True
 
 
 def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str] | None = None) -> bool:
@@ -2817,17 +3013,33 @@ def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str
     способом меню проверяется и при необходимости открывается заново — только
     когда оно закрыто: клик по открытому триггеру его бы закрыл.
     """
-    for _ in range(max(1, tries)):
+    # ACL-1572: способы открыть триггер сменяют друг друга (клик по CDP не
+    # всегда доходит, 8 из 8 отказов 04-06.10 — меню так и не открывалось);
+    # следующий способ — только если меню после предыдущего не открылось.
+    # Enter убран: он мог принять подсказку поля имени и переименовать ad set.
+    openers = (click_conversion_location_dropdown,
+               _open_conversion_menu_via_js)
+    attempts: list[tuple[str, bool]] = []
+    _open_state()["attempts"] = attempts
+    for opener in openers[:max(1, tries)]:
         if _conversion_location_menu_open(page):
             return True
+        if conversion_name_changed(page):
+            return False
         dismiss_publish_draft_dialog(page)
         # ACL-1573 / ACL-1572: окно поверх (панель Notifications, шаблон
         # имени «Ad set name») забирает клик по триггеру — сперва закрыть.
         got = _windows.before_step(page, "conversion_menu")
         if closed is not None:
             closed.extend(got)
-        if not click_conversion_location_dropdown(page):
-            return False
+        _release_name_focus(page)
+        try:
+            pressed = bool(opener(page))
+        except Exception:
+            pressed = False
+        attempts.append((getattr(opener, "__name__", "opener"), pressed))
+        if not pressed:
+            continue
         for _poll in range(8):
             if _conversion_location_menu_open(page):
                 return True
@@ -2854,7 +3066,50 @@ def _website_value_shows(page: Page, timeout_s: float | None = None) -> bool:
         time.sleep(0.05)
 
 
+def _conversion_failure_reason(page: Page, *, reopen_failed: int = 0) -> str:
+    """Почему Website не выбран — одной фразой по-английски; "" — причина неясна."""
+    try:
+        if conversion_name_changed(page):
+            return NAME_CHANGED_REASON
+        state = _conversion_trigger_state(page)
+        if state.get("read_error"):
+            return ("Could not read the Conversion location field: the page script failed "
+                    "in every frame (the page may be loading or navigating)")
+        if not state.get("label") and not state.get("trigger"):
+            return ("Conversion location is not on this screen: the editor shows another "
+                    "level (for example the ad instead of the ad set)")
+        if _conversion_location_menu_open(page):
+            if not _is_website_option_visible(page, timeout_ms=300):
+                return "Website is not offered in the open Conversion location menu"
+            return ""
+        attempts = _open_state().get("attempts") or []
+        if reopen_failed and _open_state().get("last_open_failed") and attempts:
+            unpressed = [n for n, ok in attempts if not ok]
+            if not unpressed and len(attempts) >= 2:
+                return ("The Conversion location menu would not stay open: it closed after "
+                        "click and script presses")
+            return ("The Conversion location menu did not open: the trigger could not be "
+                    "pressed by " + ", ".join(n.replace("_open_conversion_menu_via_", "")
+                                              .replace("click_conversion_location_dropdown", "click")
+                                              for n in unpressed))
+    except Exception:
+        pass
+    return ""
+
+
+def last_conversion_failure_reason() -> str:
+    """Причина последнего отказа выбора Website (в этом потоке) — для текста ошибки шага."""
+    return getattr(_conv_tls, "reason", "")
+
+
 def _pick_website_from_open_menu(page: Page) -> bool:
+    """Выбрать Website из открытого меню; имя ad set'а за шаг не должно измениться."""
+    with _NameGuard(page):
+        got = _pick_website_from_open_menu_steps(page)
+        return got and not conversion_name_changed(page)
+
+
+def _pick_website_from_open_menu_steps(page: Page) -> bool:
     """Expand Single (if needed) then click Website — fully automatic.
 
     Research (Playwright #41286, Multilogin CDP): mouse clicks over connect_over_cdp
@@ -2898,23 +3153,46 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     windows_closed: list[str] = []
     reopen_failed = 0
 
+    _open_state().clear()
+
     def _done(method: str | None, ok: bool) -> bool:
+        try:
+            # ACL-1572: имя ad set'а должно остаться таким, каким было в начале шага.
+            if conversion_name_changed(page):
+                ok = False
+            elif ok:
+                _conv_tls.reason = ""
+        except Exception:
+            pass
         try:
             diag = {"tried": tried, "reopened": reopened, "menu_closed": menu_closed}
             if windows_closed or reopen_failed:
                 diag.update(windows_closed=windows_closed, reopen_failed=reopen_failed)
+            note = method or "not_selected"
+            if not ok:
+                # ACL-1572: причина отказа по-английски (в Sentry уходит note).
+                why = _conversion_failure_reason(page, reopen_failed=reopen_failed)
+                if why:
+                    note = f"not_selected: {why}"
+                    diag["reason"] = why
+                    _conv_tls.reason = why
             _telemetry.record(
                 "conversion_website_pick", ok,
-                note=method or "not_selected",
+                note=note,
                 diag=diag,
             )
         except Exception:
             pass
         return ok
 
+    _release_name_focus(page)
     for name, method in methods:
         if is_website_conversion_selected(page):
             return _done(tried[-1] if tried else "already", True)
+        # ACL-1572: меню три раза подряд не открылось всеми способами —
+        # остальные способы жали бы в пустоту (62-187 с до отказа).
+        if reopen_failed >= 3 or conversion_name_changed(page):
+            break
         # ACL-1573 / ACL-1572: между способами — закрыть чужие окна реестра
         # (панель Notifications, шаблон имени): они забирают фокус, и меню
         # закрывается само.
@@ -2923,11 +3201,13 @@ def _pick_website_from_open_menu(page: Page) -> bool:
         if not was_open:
             menu_closed += 1
             opened = _ensure_conversion_menu_open(page, closed=windows_closed)
+            _open_state()["last_open_failed"] = not opened
             if not opened and _windows.after_failure(page, "conversion_website"):
                 # Меню не открылось — запасной ход сторожа (раз на шаг):
                 # закрыли окно над ним — открыть ещё раз.
                 windows_closed.append("fallback")
                 opened = _ensure_conversion_menu_open(page, closed=windows_closed)
+                _open_state()["last_open_failed"] = not opened
             if not opened:
                 # Меню не открыть — способ жал бы в пустоту; следующий
                 # способ снова попробует открыть.
@@ -3039,15 +3319,22 @@ _ERROR_PAGE_JS = r"""
 
 def _chrome_error_page(page: Page) -> str:
     """Код ошибки, если во вкладке вместо Ads Manager — страница ошибки Chrome."""
+    on_error_url = False
     try:
-        if (page.url or "").startswith("chrome-error://"):
-            got = page.evaluate("() => (document.body && document.body.innerText || '').match(/ERR_[A-Z_]+/)")
+        on_error_url = (page.url or "").startswith("chrome-error://")
+        if on_error_url:
+            got = _eval_bounded(page, "() => (document.body && document.body.innerText || '').match(/ERR_[A-Z_]+/)")
             return (got or ["ERR_UNKNOWN"])[0] if isinstance(got, list) else "ERR_UNKNOWN"
         # Адрес может остаться прежним (SSL-ошибка) — смотрим саму страницу.
-        return page.evaluate(_ERROR_PAGE_JS) or ""
+        # ACL-1641: голый `page.evaluate` на зависшей вкладке не возвращался
+        # никогда (573ab2cf3646: 19 минут после отказа create_additional_ad).
+        return _eval_bounded(page, _ERROR_PAGE_JS) or ""
     except Exception:
         pass
-    return ""
+    # ACL-1641: адрес chrome-error://, а прочитать страницу не вышло — это всё
+    # равно страница ошибки, а не «живой Ads Manager» (иначе медленная свежая
+    # перезагрузка сошла бы за успешную).
+    return "ERR_UNKNOWN" if on_error_url else ""
 
 
 #: Спиннер маршрута вместо редактора (ACL-1313, 7364047ef03c/05, 24.09):
@@ -3472,6 +3759,10 @@ def _simple_create_ready(page: Page) -> bool:
 
 
 def _all_edits_saved(page: Page) -> bool:
+    # ACL-1641: `is_visible` таймаута не соблюдает — на зависшей вкладке не
+    # спрашиваем вовсе (`_tab_frozen` проверяет и срок шага).
+    if _tab_frozen(page):
+        return False
     try:
         return page.get_by_text(re.compile(r"^All edits saved$", re.I)).first.is_visible(timeout=500)
     except Exception:
@@ -3486,6 +3777,8 @@ def _component_failed(page: Page) -> bool:
     page», и подряд отказали placements и devices_ios. Meta сама просит
     перезагрузить — это тот же случай, что и ACL-1233.
     """
+    if _tab_frozen(page):  # ACL-1641: см. `_all_edits_saved`
+        return False
     try:
         return page.get_by_text(
             re.compile(r"component failed to load", re.I)).first.is_visible(timeout=500)
@@ -3660,8 +3953,16 @@ def _eval_bounded(page: Page, js: str, arg=None, timeout_s: float = LIVENESS_PRO
     через `timeout_s`, а не вечное ожидание. Остаток риска — чтение
     результата (`json_value`) сразу после ответа страницы.
     """
-    handle = page.wait_for_function(f"(arg) => ({{ v: ({js})(arg) }})", arg=arg,
-                                    timeout=int(timeout_s * 1000))
+    try:
+        handle = page.wait_for_function(f"(arg) => ({{ v: ({js})(arg) }})", arg=arg,
+                                        timeout=int(timeout_s * 1000))
+    except Exception:
+        # ACL-1641: вкладка не ответила — срок шага мог выйти за время ожидания;
+        # без проверки цикл из таких вызовов тянул шаг бесконечно.
+        _job_cancel.check()  # как в `_sleep_h`: Stop слышен и на зависшей вкладке
+        if not getattr(_flow_budget, "defer", False):
+            _flow_budget_check()
+        raise
     try:
         got = handle.json_value()
     finally:
@@ -3917,7 +4218,13 @@ def recover_stuck_page(page: Page, where: str, *, editor: bool, force: bool = Fa
     * Под `_reloads_blocked` (ACL-1353, объявления 2+ нового редактора) —
       никогда: False и строка `loading_modal_reload` (note `refused:<причина>`).
     """
+    _flow_budget_check()  # ACL-1641: срок шага — до любых обращений к вкладке
     if _reload_refused(page, where):
+        return False
+    # ACL-1641: вкладка не ответила на ограниченную пробу — она зависла, и
+    # классифицировать нечего; дальше только неограниченные вызовы
+    # (`is_visible`, `get_by_text`). `_tab_frozen` заодно проверяет срок шага.
+    if _tab_frozen(page):
         return False
     err = _chrome_error_page(page)
     reason = ""
@@ -5622,7 +5929,14 @@ def run_recorded_campaign_flow(
     # (Multiple) option instead. pick_website_conversion_option() already
     # handles expanding Single first and tries several verified click
     # strategies, so use it directly instead of a fragile inline attempt.
-    if not pick_website_conversion_option(page):
+    with _NameGuard(page):
+        picked = pick_website_conversion_option(page)
+        renamed = conversion_name_changed(page)
+    if renamed:
+        # ACL-1572: имя ad set'а изменилось за шаг — стоп без повтора, имена не логируем.
+        _shot("fail_conversion_website_name_changed")
+        return "conversion_website_name_changed"
+    if not picked:
         _shot("fail_conversion_website")
         return "conversion_website"
 
@@ -5807,6 +6121,7 @@ def run_recorded_campaign_flow(
     except Exception as exc:
         _shot("fail_audience_age")
         soft_fails.append(f"audience_age:{str(exc)[:60]}")
+    _probe_audience_badge(page, "age")
 
     if country:
         # Ничей выпадающий список (возраст и т. п.) не должен накрывать
@@ -5837,6 +6152,7 @@ def run_recorded_campaign_flow(
             soft_fails.append(f"audience_location:{str(exc)[:60]}")
         if page_state["closed"] and _closed_stop("audience_location", soft_fails):
             return "browser_closed"
+    _probe_audience_badge(page, "location")
 
     # Languages — wired to the real per-country language from the Upload
     # FB.xlsx "Countries" sheet (see enrich_draft.py's lookup_country()),
@@ -5856,6 +6172,8 @@ def run_recorded_campaign_flow(
             soft_fails.append(f"languages:{str(exc)[:60]}")
         if page_state["closed"] and _closed_stop("languages", soft_fails):
             return "browser_closed"
+
+    _probe_audience_badge(page, "languages")
 
     # Detailed targeting: paste each comma-separated interest term and pick
     # the first autocomplete suggestion — same pattern the old recipe_player
@@ -5913,6 +6231,8 @@ def run_recorded_campaign_flow(
         # «нечего было вводить» от «не нашёл поле» было нечем — оба исхода
         # выглядели одинаково, то есть никак.
         _shot("skip_targeting", {"why": "в черновике нет интересов"})
+
+    _probe_audience_badge(page, "targeting")
 
     # ACL-1313: Advantage+ audience — итог, а не действие. Проверяется после
     # возраста, локации, языков и интересов. Включённая = возраст лишь
@@ -6260,11 +6580,7 @@ def run_recorded_campaign_flow(
                                 # Confirmed need live 2026-07-29 (Test146, B ad2):
                                 # create failed once, leaving the ad missing
                                 # entirely — the only fill step with no retry path.
-                                if _open_tree_ad(page, "New Leads Ad"):
-                                    _close_creative_setup_modal(page)
-                                    created = True
-                                else:
-                                    created = create_additional_ad(page, adset_name)
+                                created = _adopt_shell_or_recreate(page, adset_name, shells_before)
                             if not created:
                                 _shot(f"fail_{tag}_create")
                                 ad_level_fails.append(f"{tag}_create")
@@ -9247,6 +9563,10 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     sequence (upload_ad_creative / fill_ad_copy / set_ad_destination_
     website) can run completely unmodified for every additional ad.
     """
+    # ACL-1641: на зависшей вкладке повтор создания упёрся бы в неограниченные
+    # вызовы ниже — отказ сразу, срок шага проверит `_tab_frozen`.
+    if _tab_frozen(page):
+        return False
     # Preferred path: click the ad-set row's action-menu button by its own
     # stable data-surface, no coordinates at all.
     #
@@ -9275,8 +9595,9 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     if surface_clicked:
         _sleep_h(0.6)
 
-    click_point = page.evaluate(
-        """(adsetName) => {
+    # ACL-1641: ограниченное чтение — голый `page.evaluate` вис на зависшей вкладке.
+    click_point = _eval_bounded(
+        page, """(adsetName) => {
           const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
           // Confirmed live 2026-07-29 (Test142): when the browser window is
           // in NARROW restored bounds (e.g. it was un-maximized before
@@ -15809,8 +16130,8 @@ def _audience_already_manual(page: Page) -> bool:
 def _tree_new_ad_shells(page: Page) -> int:
     """Сколько строк «New Leads ad» в левом дереве (-1 — не прочитать)."""
     try:
-        return int(page.evaluate(
-            r"""() => {
+        return int(_eval_bounded(
+            page, r"""() => {
               const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
               return [...document.querySelectorAll('*')].filter(e => {
                 if (e.children.length !== 0 || !/^New Leads ad$/i.test(norm(e.textContent))) return false;
@@ -15821,6 +16142,28 @@ def _tree_new_ad_shells(page: Page) -> int:
         ))
     except Exception:
         return -1
+
+
+def _adopt_shell_or_recreate(page: Page, adset_name: str, shells_before: int = 0) -> bool:
+    """Отказ создания объявления: взять уже родившуюся заготовку или создать заново.
+
+    ACL-1641 (ревью PR #664, B3): `_open_tree_ad` вернул False и когда дерево
+    не прочиталось (вкладка отвечает дольше 5 с) — повторное создание тогда
+    могло добавить второе объявление рядом с живой заготовкой. Перед повтором
+    дерево должно читаться; не читается — исключение, и обычный `except`
+    вызывающего пишет `fail_adN_create`.
+    """
+    if _open_tree_ad(page, "New Leads Ad"):
+        _close_creative_setup_modal(page)
+        return True
+    shells = _tree_new_ad_shells(page)
+    if shells < 0:
+        raise RuntimeError("tree unreadable: not re-creating the ad")
+    if shells > max(shells_before, 0):
+        # Заготовка уже есть, но открыть её не вышло: второй create дал бы
+        # дубликат рядом с ней. Отказ шага (`fail_adN_create`), не повтор.
+        return False
+    return create_additional_ad(page, adset_name)
 
 
 def _open_tree_ad(page: Page, ad_name: str) -> bool:
@@ -15835,30 +16178,33 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
         # ACL-1353 (ревью PR #365, F2): объявления 2+ нового редактора —
         # щелчок по строке дерева заново открыл бы (и портил) объявление.
         return False
-    point = page.evaluate(
-        """(adName) => {
-          const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-          // Без учёта регистра: Doc20 называет заготовку «New Leads ad»,
-          // S15/Doc21 — «New Leads Ad». Точное сравнение не находило
-          // заготовку, и вызывающий создавал второе объявление (17.09).
-          const want = adName.toLowerCase();
-          const nameMatches = (raw) => {
-            const t = norm(raw).replace(/[…\\u2026]+$/, '').toLowerCase();
-            if (!t) return false;
-            if (t === want) return true;
-            return t.length >= 10 && want.startsWith(t);
-          };
-          const cands = [...document.querySelectorAll('*')].filter(e =>
-            e.offsetParent !== null && e.children.length === 0 && nameMatches(e.textContent));
-          let best = null, bx = Infinity;
-          for (const c of cands) {
-            const r = c.getBoundingClientRect();
-            if (r.width > 0 && r.x < bx) { bx = r.x; best = r; }
-          }
-          return best ? {x: best.x + best.width / 2, y: best.y + best.height / 2} : null;
-        }""",
-        ad_name,
-    )
+    try:
+        point = _eval_bounded(
+            page, """(adName) => {
+              const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              // Без учёта регистра: Doc20 называет заготовку «New Leads ad»,
+              // S15/Doc21 — «New Leads Ad». Точное сравнение не находило
+              // заготовку, и вызывающий создавал второе объявление (17.09).
+              const want = adName.toLowerCase();
+              const nameMatches = (raw) => {
+                const t = norm(raw).replace(/[…\\u2026]+$/, '').toLowerCase();
+                if (!t) return false;
+                if (t === want) return true;
+                return t.length >= 10 && want.startsWith(t);
+              };
+              const cands = [...document.querySelectorAll('*')].filter(e =>
+                e.offsetParent !== null && e.children.length === 0 && nameMatches(e.textContent));
+              let best = null, bx = Infinity;
+              for (const c of cands) {
+                const r = c.getBoundingClientRect();
+                if (r.width > 0 && r.x < bx) { bx = r.x; best = r; }
+              }
+              return best ? {x: best.x + best.width / 2, y: best.y + best.height / 2} : null;
+            }""",
+            ad_name,
+        )
+    except Exception:
+        return False  # ACL-1641: вкладка не ответила — строки дерева не прочитать
     if not point:
         return False
     try:
@@ -16743,6 +17089,16 @@ def _dismiss_floating_banners(page: Page) -> list[str]:
     return _close_banners(page)
 
 def select_conversion_location_website(page: Page, *, skip_open: bool = False) -> bool:
+    """Pick 'Website' under Conversion -> Conversion location (ACL-1572: the ad set
+    name is measured once per step and must be unchanged at its end, over all retries)."""
+    with _NameGuard(page):
+        got = _select_conversion_location_website_steps(page, skip_open=skip_open)
+        if conversion_name_changed(page):
+            return False
+        return got
+
+
+def _select_conversion_location_website_steps(page: Page, *, skip_open: bool = False) -> bool:
     """Pick 'Website' under Conversion → Conversion location on Ad Set level.
 
     Fully automatic. Uses keyboard + raw CDP clicks to work around Playwright's
@@ -19918,6 +20274,24 @@ def _audience_badge_on(page: Page) -> bool | None:
     return None
 
 
+def _probe_audience_badge(page: Page, after: str) -> None:
+    """Только читает бейдж карточки Audience и пишет строку телеметрии.
+
+    ACL-1638, Facebook_9403A (d4f9d5f016c1, 327c0b934cb3, 06.10): бейдж был
+    «off» до возраста, а в итоговой проверке — «on» при жёстком возрасте.
+    Какой из шагов (возраст, локация, языки, интересы) его перевернул,
+    телеметрия не говорила; эта строка после каждого шага говорит.
+    Ничего не нажимает и не влияет на ход шага.
+    """
+    try:
+        state = _audience_badge_on(page)
+        _telemetry.record("audience_badge_probe", None,
+                          note={True: "on", False: "off"}.get(state, "unknown"),
+                          diag={"after": after})
+    except Exception:
+        pass
+
+
 def verify_audience_advantage_off(page: Page) -> bool:
     """Итог: карточка Audience читает «Advantage+ off». Звать ПОСЛЕ возраста.
 
@@ -19950,6 +20324,11 @@ def verify_audience_advantage_off(page: Page) -> bool:
                 break
     ok = state is False
     diag["age"] = _age_range_read(page)
+    if state is True:
+        # ACL-1638: «on» при жёстком возрасте (галочка снята) — не то же, что
+        # «on» при возрасте-подсказке; по диагностике отказ читается сразу.
+        diag["age_suggestion_checked"] = _age_suggestion_read(page).get("checkbox")
+        diag["mode"] = _audience_mode(page)["mode"]
     _telemetry.record(
         "advantage_plus_audience", ok,
         note="off" if ok else ("still_on" if state else "badge_not_found"),
@@ -20228,7 +20607,8 @@ def _uncheck_age_suggestion(page: Page) -> bool | None:
 _AGE_SUMMARY_READ_JS = "(value) => {" + _AUDIENCE_FIELD_DOM + r"""
   const field = summaryField(/^(Age|Edad)$/i, new RegExp(value));
   if (!field) return [];
-  return norm(field.summary.textContent).split(/\s*[-–—]\s*/).map(norm);
+  // Пометка после границ («· Unknown age on WhatsApp: Excluded», ACL-1638) — не граница.
+  return norm(field.summary.textContent).split(/\s*[·•|]\s*/)[0].split(/\s*[-–—]\s*/).map(norm);
 }
 """
 """Границы из свёрнутой сводки поля Age («35 - 65+» → ["35", "65+"])."""
@@ -20477,7 +20857,12 @@ def _measure_age_trigger(root, value: str, tries: int = 3) -> dict | None:
 
 
 #: Сводка свёрнутого поля Age: «18 - 65+», «35 – 65+».
-_AGE_SUMMARY_RE = r"^(?:1[3-9]|[2-5][0-9]|6[0-5])\+?\s*[-–—]\s*(?:1[3-9]|[2-5][0-9]|6[0-5])\+?$"
+# ACL-1638 (06.10, FacebookDoc120, 573ab2cf3646/00): на WhatsApp-кампаниях в
+# той же строке после границ стоит пометка — «35 - 65+ · Unknown age on
+# WhatsApp: Excluded». Якорь `$` без неё не пускал такую сводку: строка Age
+# не раскрывалась, «Use as a suggestion» не снималась (`age_row_opened: false`).
+_AGE_SUMMARY_RE = (r"^(?:1[3-9]|[2-5][0-9]|6[0-5])\+?\s*[-–—]\s*(?:1[3-9]|[2-5][0-9]|6[0-5])\+?"
+                   r"(?:\s*[·•|]\s*\S.*)?$")
 
 
 def _open_collapsed_age_row(page: Page, wait_s: float = 6.0) -> bool:
