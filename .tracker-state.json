@@ -8228,7 +8228,7 @@
             "session": "run_l1669b_1007"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-L1669B",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -8246,7 +8246,8 @@
           "report": "# Handoff ACL-1669 (PR #670)\n\nCause: B97's Meta draws step bodies late and the robot read them once. Run 3edaf71b0613: the media counter was read 0.1 s after the Media step opened, found nothing and refused (`selection_state_unavailable`), so no ad got media; `url_field_missing` followed as a consequence. Run bc4302862ee7: the pick worked, but Crop was read while Meta still showed loading placeholders (no cards) and ended `crop_replace_button_missing`. ACL-1637 did not cause it (the counter rule dates from 17.09; ad 1 never uses the 1637 path).\n\nFix: wait up to 4 s for the counter; if still missing and no tile marked, click nothing and upload the file once (ACL-1637 rule kept); a marked tile without a counter is still refused as `library_selection_unreadable`. Crop waits up to 20 s for its cards. `url_field_missing` on an ad without media is labelled `url_field_missing_no_media` (a consequence).\n\nTests: tests/test_bench_b97_picker_and_crop_1007.py (8 no-browser tests passed locally; 3 bench tests need Chromium and run in CI only); tests/test_library_rollback_requires_visible_counter.py updated (CI only). Fixture crop_cards_loading_2026_10_07.html is hand-reduced from the capture; the picker bench reuses the 04.10 fragment without footer counters because the 07.10 captures were taken after the wizard closed.\n\nOpen: the hypothesis that the footer counter is merely late is not proven by markup; needs a live B97 check (Live checkbox left unchecked). When the counter is truly absent, ads 2-3 each upload fresh instead of reusing the library copy."
         },
         "pr": 670,
-        "queued_at": "2026-10-07T07:51:59+00:00"
+        "queued_at": "2026-10-07T07:51:59+00:00",
+        "reviewer": "Reviewer-R1669M"
       },
       "638": {
         "implementers": [
@@ -9108,6 +9109,10 @@
       "Worker-V1693L": {
         "session": "run_v1693l_1007",
         "role": "Worker"
+      },
+      "Reviewer-R1669M": {
+        "session": "rev_r1669m_1007",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -10903,14 +10908,24 @@
       653,
       651,
       652,
-      669,
       675,
       673,
       684,
       691,
       693
     ],
-    "review": null,
+    "review": {
+      "id": "17693233ea264778b1deb0ac6021399a",
+      "pr": 670,
+      "issues": [
+        669
+      ],
+      "actor": "Reviewer-R1669M",
+      "session": "rev_r1669m_1007",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-07T14:01:38+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -15426,6 +15441,13 @@
         "prs": [
           694
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T14:01:38+00:00",
+        "pr": 670,
+        "lane": "17693233ea264778b1deb0ac6021399a",
+        "actor": "Reviewer-R1669M"
       }
     ],
     "policy": {
