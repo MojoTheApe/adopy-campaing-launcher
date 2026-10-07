@@ -2147,29 +2147,16 @@
       }
     },
     "stage": {
-      "pr": 682,
+      "pr": 695,
       "issues": [
-        675
+        693
       ],
-      "tree_sha": "c38765c5160c0797d41544bca08f41316a8ef304",
-      "source_sha": "e178cca33b1cccc8f188cc1b4ec858afe1d1ac4a",
-      "main_tree": "33920a83d60be90bea68c00c830a6d90e6856191",
+      "tree_sha": "d6f87afa40918372f27c4459c29e9d5748f2e033",
+      "source_sha": "c69a746440f6761b048db04d56e34eba201bb8f1",
+      "main_tree": "c38765c5160c0797d41544bca08f41316a8ef304",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-07T21:17:53+00:00",
-      "verification": {
-        "kind": "stage-verification",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "source_sha": "e178cca33b1cccc8f188cc1b4ec858afe1d1ac4a",
-        "tree_sha": "c38765c5160c0797d41544bca08f41316a8ef304",
-        "checks": [
-          "Git checks on actual stage e178cca: CI run 37688300316 success (sharded, Python 3.11/3.13)",
-          "Windows installer run 37688300355 success"
-        ],
-        "report": "ACL-1675 stage verification: Git and installer checks green on the actual stage e178cca. Independent review: scratchpad/review_682.md."
-      },
-      "verified_at": "2026-10-07T21:19:20+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-07T21:58:48+00:00"
     },
     "tasks": {
       "248": {
