@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 
 from src.fb_ads_rpa import meta_dom as md
+from tests.bench_support import browser  # noqa: F401
 from tests.test_bench_placements_1629 import _load_b, page  # noqa: F401
 
 STORIES = "Stories, Status, Reels"
