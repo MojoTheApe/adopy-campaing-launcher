@@ -1003,7 +1003,7 @@ def _history_act_note(entry) -> str:
     digits = lambda v: "".join(ch for ch in str(v) if ch.isdigit())
     if not seen or digits(seen) == digits(want):
         return ""
-    return (f"This profile last worked in {seen}, but the map has {want}. "
+    return (f"The most visited account in this profile's recent history is {seen}, but the map has {want}. "
             "If its Facebook user has no access to the map's account, the robot will stop "
             "with wrong_ad_account - check the ad account id on the Accounts page.")
 

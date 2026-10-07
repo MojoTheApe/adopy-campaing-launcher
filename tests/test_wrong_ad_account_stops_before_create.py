@@ -46,7 +46,7 @@ def test_the_opened_account_is_read_from_the_url():
 def test_same_account_continues():
     assert guard.mismatch(_page(URL.format(WANT)), "act_" + WANT) == ""
     assert guard.mismatch(_page(URL.format(WANT)), WANT) == ""
-    guard.stop_if_wrong(_page(URL.format(WANT)), "act_" + WANT)  # без исключения
+    assert guard.stop_if_wrong(_page(URL.format(WANT)), "act_" + WANT) is True
 
 
 def test_another_account_stops_with_the_spec_reason():
@@ -57,11 +57,18 @@ def test_another_account_stops_with_the_spec_reason():
     assert "no access to that ad account" in str(exc.value)
 
 
-def test_an_unreadable_account_stops():
-    for url in ("https://adsmanager.facebook.com/adsmanager/manage/campaigns", "", None):
-        with pytest.raises(profile_trouble.ProfileStop) as exc:
-            guard.stop_if_wrong(_page(url), "act_" + WANT)
-        assert exc.value.detail == f"expected act_{WANT}, opened unknown"
+def test_an_ads_manager_page_without_act_stops():
+    url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
+    with pytest.raises(profile_trouble.ProfileStop) as exc:
+        guard.stop_if_wrong(_page(url), "act_" + WANT)
+    assert exc.value.detail == f"expected act_{WANT}, opened unknown"
+
+
+def test_a_page_that_is_not_ads_manager_is_not_judged():
+    """Обрыв сети, пустая вкладка, чужой хост: не `wrong_ad_account`, но и не «можно жать»."""
+    for url in ("chrome-error://chromewebdata/", "about:blank", "", None,
+                "https://www.facebook.com/login?next=adsmanager"):
+        assert guard.stop_if_wrong(_page(url), "act_" + WANT) is False
 
 
 def test_a_dead_page_is_unreadable():
@@ -257,3 +264,112 @@ def test_preflight_notes_a_profile_history_that_differs_from_the_map(monkeypatch
     web._HISTORY_ACT_CACHE.clear()
     monkeypatch.setattr(mlx_profiles, "ad_account_id_for", lambda pid: "")
     assert web._history_act_note(entry) == ""
+
+
+# -- ложные остановки: обрыв сети не «чужой кабинет» (ревью PR #699, B1) --------
+
+CHROME_ERROR = "chrome-error://chromewebdata/"
+
+
+def _fake_clock(monkeypatch):
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(dom, "time", SimpleNamespace(
+        time=lambda: clock["now"], sleep=lambda s: clock.__setitem__("now", clock["now"] + s)))
+
+
+@pytest.mark.parametrize("url", [CHROME_ERROR, "about:blank"])
+def test_an_offsite_page_at_the_press_gets_no_click_and_no_account_stop(flow, monkeypatch, url):
+    presses = _spy_create(flow)
+    _fake_clock(monkeypatch)
+    flow["page"].url = url
+    out = _run(flow, "act_" + WANT)
+    assert out != "wrong_ad_account"
+    assert presses == []
+    # восстановление шло: список открывали заново
+    assert any(e[0] == "goto" for e in flow["events"])
+
+
+def _reload_lands_on(flow, first_url):
+    page = flow["page"]
+    page.url = URL.format(WANT)
+    flow["waits"][:] = [False, True]
+    base_goto = page.goto.side_effect
+    landed = []
+
+    def goto(url, **kw):
+        base_goto(url, **kw)
+        landed.append(url)
+        # первая перезагрузка списка — сбой, дальше — список нужного кабинета
+        page.url = first_url if len(landed) == 1 else URL.format(WANT)
+
+    page.goto.side_effect = goto
+
+
+def test_a_reload_that_lands_on_a_blank_page_then_recovers_continues(flow, monkeypatch):
+    presses = _spy_create(flow)
+    _fake_clock(monkeypatch)
+    _reload_lands_on(flow, "about:blank")
+    out = _run(flow, "act_" + WANT)
+    assert out != "wrong_ad_account"
+    assert len(presses) >= 2, "после восстановления Create не нажат"
+
+
+def test_a_reload_that_lands_on_chrome_error_goes_to_network_diagnosis(flow, monkeypatch):
+    """Обрыв сети на перезагрузке: прежняя диагностика сети, не чужой кабинет и не слепой клик."""
+    presses = _spy_create(flow)
+    _fake_clock(monkeypatch)
+    _reload_lands_on(flow, CHROME_ERROR)
+    out = _run(flow, "act_" + WANT)
+    assert out == "profile_network"
+    assert presses == ["create"], "на странице ошибки сети Create нажат"
+
+
+# -- мутации ревью: обе проверки должны быть подключены (N1) ---------------------
+
+def test_the_classic_wizard_never_clicks_create_in_another_account(monkeypatch):
+    f = amf.AdsManagerFlow.__new__(amf.AdsManagerFlow)
+    f.page = _page(URL.format(OTHER))
+    f.cfg = {}
+    f.nav_timeout = f.action_timeout = 1000
+    f._expected_act = WANT
+    clicked = MagicMock()
+    monkeypatch.setattr(amf, "_wait_for_ads_manager_ready", lambda *a, **kw: None)
+    monkeypatch.setattr(amf, "_click_first", clicked)
+    with pytest.raises(profile_trouble.ProfileStop):
+        f._start_create_wizard(SimpleNamespace(steps_completed=[]))
+    clicked.assert_not_called()
+
+
+def test_the_classic_wizard_does_not_click_on_an_offsite_page(monkeypatch):
+    f = amf.AdsManagerFlow.__new__(amf.AdsManagerFlow)
+    f.page = _page(CHROME_ERROR)
+    f.cfg = {}
+    f.nav_timeout = f.action_timeout = 1000
+    f._expected_act = WANT
+    clicked = MagicMock()
+    monkeypatch.setattr(amf, "_wait_for_ads_manager_ready", lambda *a, **kw: None)
+    monkeypatch.setattr(amf, "_click_first", clicked)
+    with pytest.raises(amf.AdsManagerFlowError):
+        f._start_create_wizard(SimpleNamespace(steps_completed=[]))
+    clicked.assert_not_called()
+
+
+def test_publish_campaign_passes_the_draft_account_to_the_recorded_flow(monkeypatch):
+    from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft
+
+    monkeypatch.setenv("FB_RPA_ENGINE", "recorded_flow")
+    monkeypatch.setattr(amf.AdsManagerFlow, "_goto_campaigns", lambda self, draft, result: None)
+    from src.fb_ads_rpa import browser as br
+    monkeypatch.setattr(br, "put_window_back", lambda page: None)
+    seen: list = []
+
+    def flow_run(page, **kw):
+        seen.append(kw)
+        return ""
+
+    monkeypatch.setattr(amf, "run_recorded_campaign_flow", flow_run)
+    flow = amf.AdsManagerFlow("page")
+    draft = CampaignDraft("Campaign A", "MX", "Account", ad_account_id="act_" + WANT,
+                          ad_sets=[AdSetDraft("Set A", ads=[AdDraft(ad_title="t", ad_body="b")])])
+    flow.publish_campaign(draft)
+    assert seen and seen[0].get("expected_act") == "act_" + WANT

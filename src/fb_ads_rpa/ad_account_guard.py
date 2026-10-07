@@ -15,6 +15,7 @@ Meta помнит прошлый кабинет), Ads Manager молча отк�
 from __future__ import annotations
 
 import re
+from urllib.parse import urlsplit
 
 from src.fb_ads_rpa import profile_trouble
 
@@ -39,6 +40,15 @@ def opened_act(page) -> str:
     return m.group(1) if m else ""
 
 
+def on_ads_manager(page) -> bool:
+    """Страница сейчас на adsmanager.facebook.com (иначе кабинет не судим)."""
+    try:
+        host = (urlsplit(page.url or "").hostname or "").lower()
+    except Exception:
+        return False
+    return host == "adsmanager.facebook.com"
+
+
 def mismatch(page, expected: str) -> str:
     """"" — открыт нужный кабинет; иначе описание для отказа.
 
@@ -53,11 +63,20 @@ def mismatch(page, expected: str) -> str:
     return f"expected act_{want}, opened " + (f"act_{got}" if got else "unknown")
 
 
-def stop_if_wrong(page, expected: str, where: str = "") -> None:
-    """Бросить `ProfileStop(wrong_ad_account)`, если открыт не тот кабинет."""
+def stop_if_wrong(page, expected: str, where: str = "") -> bool:
+    """Можно ли жать Create: True — открыт нужный кабинет.
+
+    False — страница не на Ads Manager (chrome-error://, about:blank, чужой
+    хост: обрыв сети после перезагрузки, свежая вкладка без перехода). Кабинет
+    тут не «чужой», он просто не открыт: Create не жмём, а восстановление
+    (список заново, свежая вкладка, диагноз сети) делает вызывающий.
+    Ads Manager открыт, а `act=` нет или он другой — `ProfileStop(wrong_ad_account)`.
+    """
+    if not on_ads_manager(page):
+        return False
     bad = mismatch(page, expected)
     if not bad:
-        return
+        return True
     try:
         from src.fb_ads_rpa import run_telemetry as _rt
 

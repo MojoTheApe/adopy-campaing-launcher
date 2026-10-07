@@ -1275,7 +1275,8 @@ class AdsManagerFlow:
         # черновика или помнит прошлый) — до любых действий на странице.
         ad_account_guard.stop_if_wrong(self.page, draft.ad_account_id or "", "campaigns_open")
         self._ensure_campaigns_ready(draft.name)
-        # ... и снова: готовность могла перезагрузить страницу.
+        # ... и снова: готовность могла перезагрузить страницу. Не на Ads
+        # Manager (обрыв сети) — не судим: каждый Create проверит сам.
         ad_account_guard.stop_if_wrong(self.page, draft.ad_account_id or "", "campaigns_ready")
         result.steps_completed.append("open_campaigns")
         # ACL-1313: удачный переход — без PNG (5–7 с при трёх профилях);
@@ -1360,7 +1361,8 @@ class AdsManagerFlow:
         # ACL-1697: кабинет — перед каждым Create (страница могла смениться).
         # (`_expected_act` ставит `_goto_campaigns`, он всегда идёт первым.)
         if getattr(self, "_expected_act", ""):
-            ad_account_guard.stop_if_wrong(self.page, self._expected_act, "create_wizard")
+            if not ad_account_guard.stop_if_wrong(self.page, self._expected_act, "create_wizard"):
+                raise AdsManagerFlowError("Ads Manager is not open on the campaigns page; Create was not pressed")
 
         _click_first(self.page, create_sels, timeout_ms=self.action_timeout)
         pause_medium()

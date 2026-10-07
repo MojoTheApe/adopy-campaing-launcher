@@ -5621,8 +5621,10 @@ def run_recorded_campaign_flow(
         # ACL-1697: кабинет сверяется перед КАЖДЫМ нажатием Create — и в
         # повторах, и после перезагрузки списка или свежей вкладки (`p` — та
         # страница, на которой жмём). Не тот кабинет — ProfileStop, без клика.
-        if expected_act:
-            _ad_account_guard.stop_if_wrong(p, expected_act, where)
+        # Не на Ads Manager (обрыв сети, пустая вкладка) — не жмём и не «чужой
+        # кабинет»: False, дальше идёт прежнее восстановление раундов.
+        if expected_act and not _ad_account_guard.stop_if_wrong(p, expected_act, where):
+            return False
         return _click(p.get_by_role("button", name="Create", exact=True), where=where)
 
     try:
