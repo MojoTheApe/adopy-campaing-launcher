@@ -1,5 +1,53 @@
 # System history
 
+## next_to_ad confirms the ad level and names the reason on that step — ACL-1693
+
+Manager laptop LAPTOP-UA006, run 81c1bfbb5456 (07.10, window 1536x730 at dpr 1.25): `next_to_ad`
+was recorded ok, but the editor stayed on "Ad sets - Edit" (`levels: ["ad_set"]`). Five `ad_name`
+tries ended in `not_on_ad_level`, then every creative upload ended in `wizard_not_opened` - about
+four minutes lost, and the failure was named on the wrong step.
+
+- After the Next press the robot reads the editor level. Still on the ad set: it closes the
+  notices that may cover Next (the "WhatsApp Status included" notice was open over the page) and
+  presses Next again, up to three presses in all.
+- Still on the ad set after all presses: the campaign stops at `next_to_ad_stuck_on_adset` with a page
+  capture and a reason (`next_covered`, `next_outside_viewport`, `dialog_open`, `next_not_found` or
+  `next_clicked_no_change`). The stop is blocking and never replayed: a rebuild would leave another
+  partial draft in a live account. Plain `next_to_ad` (retryable) stays for a page that cannot be read.
+- The level is re-read after every press and before failing, so a slow transition is not a failure.
+  Page markers (`/editor:<level>`) decide; the wizard sidebar guess is used only without markers.
+- A page whose level cannot be read is not pressed blindly (the old behaviour is kept).
+- The browser zoom is not touched. Evidence is not enough to pin the cause (see the PR for the
+  captures to request from the laptop).
+
+## Classic editor: ads 2-4 are created again, the ad set row's Action menu is opened by hover — ACL-1691
+
+On 07.10 (Facebook_5265 run f2c513f0a22d, KW_TRL on 9403A) `create_additional_ad` failed with
+`create_menu_item_not_found` (`menuSurfaces: []`, click point on an ad's text) and ads 2-4 were not created.
+Two causes on the captures:
+
+- The classic tree draws the row buttons only under the cursor (as the single-screen editor did, ACL-1630):
+  there is no "Action menu" in the DOM until the pointer is over the row. The step waited 30 s for it
+  to appear and then fell back to a blind coordinate click.
+- That fallback took the first text equal to the ad set name, sorted by height. The breadcrumb header above the
+  tree carries the same name (y = 22), so the click landed on the breadcrumb's ad name, not on the row.
+
+Fix: the tree counts as ready once the ad set row is there; the robot hovers that row (mouse move only, no
+press, no focus, at most 3 tries, stopping as soon as the button appears), then the existing Action menu ->
+"Create ad" path runs. If the row still shows no button the step blocks with `adset_action_menu_not_shown`
+("The ad set row in the left tree shows no Action menu button, even with the cursor over it; nothing was
+clicked.") instead of clicking blindly. The legacy coordinate fallback now ignores the breadcrumb.
+
+After that block the caller does not adopt an existing "New Leads Ad" row (ACL-1641's `_adopt_shell_or_recreate` is
+not called): nothing was clicked, so there is no new shell, and adopting another ad would report a false "created" and
+overwrite it. It makes one clean re-create instead (only when the tree shows no new shell), and if that blocks too the
+ad fails as `adN_create:adset_action_menu_not_shown`. The reason is kept per thread (`last_create_block()`), because two
+accounts publish at once in threads of one process; the caller reads it once per attempt.
+
+Where the blind coordinate fallback is still reachable: when the tree readiness check times out (30 s, no ad set
+row) or when the hover finds no ad set row (`hidden`, or no point after a timeout). With the breadcrumb and
+left-third filters the only thing it can click there is the ad set row itself; it cannot reach a breadcrumb or an ad row.
+
 ## Placements: a complete Stories list that flickers is still read as "not offered" — ACL-1684
 
 On FacebookDoc120 (run 4e4969867d28) "Messenger Stories" was judged missing and a good run became a

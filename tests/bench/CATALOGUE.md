@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**23 robot steps × 119 layouts, 64 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**23 robot steps × 121 layouts, 66 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -24,13 +24,13 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | languages | 5 | 5 | 0 | 0 |
 | detailed_targeting (interests) | 2 | 2 | 0 | 0 |
 | placements | 11 | 11 | 0 | 0 |
-| next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
+| next_to_ad / additional ad (classic) | 4 | 4 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 5 | 5 | 0 | 0 |
 | creative_wizard | 17 | 17 | 0 | 0 |
 | ad_copy | 7 | 7 | 0 | 0 |
 | ad_destination / destination_sweep | 10 | 9 | 0 | 1 |
-| ads 2-3 (single-screen editor) | 4 | 4 | 0 | 0 |
+| ads 2-3 (single-screen editor) | 5 | 5 | 0 | 0 |
 | editor gone under the robot | 1 | 1 | 0 | 0 |
 | banners and blocks (any step) | 2 | 2 | 0 | 0 |
 | foreign windows (any step, ACL-1573) | 9 | 9 | 0 | 0 |
@@ -184,6 +184,7 @@ Robot: Next to the ad level; create_additional_ad via the tree's ad set menu
 | Layout | Seen live | Fixture · fragment | Test | Expected | Status |
 | --- | --- | --- | --- | --- | --- |
 | Left tree: campaign, ad set (action menu), ad | d3e690189a6e/04_create_additional_ad, 0afc79a410c6/04_create_additional_ad | `editor_tree_adset_2026_09_24.html` | `tests/test_additional_ad_waits_for_tree.py` | ad set menu opens, ad created | pass |
+| Left tree with a fresh "New Leads Ad" row in the middle (ACL-1675): ad rows are told apart by row id, not by place | 4e4969867d28/12_ad4_create | `editor_tree_new_shell_between_2026_10_07.html` | `tests/test_a_failed_ad_leaves_no_duplicate_shell.py` | only a row id that was not in the pre-create snapshot is adopted | pass |
 | AdsPERouteLoadPlaceholder spinner instead of the editor | 7364047ef03c/05_create_additional_ad | `route_placeholder_2026_09_24.html` | `tests/test_route_placeholder_is_loading.py` | not ready; spinner wins over a stale tree | pass |
 | Breadcrumb header only, no tree rows | 7d2ce3ab1161/05_create_additional_ad | `breadcrumb_only_2026_09_24.html` | `tests/test_additional_ad_waits_for_tree.py` | not ready, no blind click | pass |
 
@@ -273,6 +274,7 @@ Robot: simple_create.create_next_ad
 | Tree before, ad set Action menu, tree after Create ad, new ad name/media | f9b9fc8d7bb3/01-03, 8ce1b9985046/02-04, b3a333ff43ab/03-04, d1755a59e139/03-04, d66a22d0fa30/02-03, df5344da3a17/02 | `simple_create_more_ads_2026_09_30.html` · tree_before, adset_menu, tree_after_create, ad1_name, new_ad_name, new_ad_media | `tests/test_simple_create_more_ads.py` | Create ad from the ad set menu opens the new ad; 'Creating...' dialog waited out | pass |
 | New ad's form gone after the media wizard: Ad heading with an empty /am/editor:ad surface (no name field, no Media block) and 'Verifying your changes' with the #100 lead_gen_form_id preflight error | 4121938e6dc3/11_ad2_creative_upload, 04c8c214d2ba/01_ad2_creative_upload, 0bd520418dbe/01_ad2_creative_upload | `ad_form_gone_verifying_2026_10_01.html` · ad_form_gone_verifying | `tests/test_ad_form_gone_after_media.py` | named ad_form_gone_after_media after 30 s; no second media check or wizard (ACL-1426) | pass |
 | Single-screen editor 06.10: tree rows carry no Action menu / default buttons until the cursor is over them | aa99ab40d397/07_simple_create_more_ads, fab05371305f/08_simple_create_more_ads, da07f392ff1f/08_simple_create_more_ads | `editor_tree_no_action_buttons_2026_10_06.html` · tree | `tests/test_bench_single_screen_adset_row_hover.py` | no buttons as captured; after the robot hovers the ad set row the Action menu is found and ad 2 is created; a row that never shows it stays no_create_control after exactly 3 hovers; the hover never presses or focuses anything and stops once the buttons appear; a tab frozen during the hover is tab_frozen | pass |
+| Classic editor 07.10: tree rows carry no Action menu until the cursor is over them; breadcrumb header above the tree repeats the ad set name | f2c513f0a22d/07_create_additional_ad, f2c513f0a22d/08_create_additional_ad, f2c513f0a22d/10_create_additional_ad, f2c513f0a22d/13_create_additional_ad | `classic_editor_tree_hover_only_2026_10_07.html` · tree, breadcrumb | `tests/test_bench_classic_adset_row_hover.py` | tree counts as ready without the button; the robot hovers the tree row (never the breadcrumb), no press and no focus, stops once the button appears; then Action menu -> Create ad are the only two clicks; a row that shows no button after 3 hovers blocks with adset_action_menu_not_shown and presses nothing | pass |
 
 ## editor gone under the robot
 

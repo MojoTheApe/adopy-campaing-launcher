@@ -103,6 +103,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "them in Meta, so the campaign was stopped and not retried - a partial draft is left "
         "in Ads Manager - " + _profile.MESSAGES[_profile.LEAD_TERMS],
     ),
+    # ACL-1697: Ads Manager opened another ad account than the draft's.
+    _profile.WRONG_AD_ACCOUNT: (
+        BLOCKING,
+        "Ads Manager opened a different ad account than the one in the draft (or the opened "
+        "account could not be read), so the campaign was stopped before Create and nothing "
+        "was built - " + _profile.MESSAGES[_profile.WRONG_AD_ACCOUNT],
+    ),
     # ACL-1327 (review of PR #340, F4): the draft already exists when the
     # objective is checked inside the single-screen editor.
     "objective_inline": (
@@ -133,6 +140,12 @@ POLICY: dict[str, tuple[str, str]] = {
         "building this campaign took longer than the robot's time limit, so it was stopped; "
         "the draft is incomplete and was not retried - check it in Ads Manager and finish or "
         "delete it",
+    ),
+    "tab_hung": (
+        BLOCKING,
+        "the profile's browser tab stopped answering inside one step for minutes, so the "
+        "robot closed that tab (the profile stays open) and stopped the campaign; the draft is "
+        "incomplete and was not retried - check it in Ads Manager and finish or delete it",
     ),
     "step_budget_exceeded": (
         BLOCKING,
@@ -174,6 +187,12 @@ POLICY: dict[str, tuple[str, str]] = {
         BLOCKING,
         "the ad set name changed while Conversion location was being set; the draft was "
         "stopped so a changed name is not published - check the ad set name in Ads Manager",
+    ),
+    "next_to_ad_stuck_on_adset": (
+        BLOCKING,
+        "the editor stayed on the ad set after Next was pressed several times, so the ad was not "
+        "built; the draft was not retried (a retry would leave another partial draft) - open it in "
+        "Ads Manager and finish or delete it",
     ),
     "conversion_event": (
         BLOCKING,
@@ -331,6 +350,12 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Only a person can accept Meta's Lead Ads Terms, so the build stopped with a partial draft.",
         "Accept the Page's Lead Ads Terms in Meta, then publish again.",
     ),
+    _profile.WRONG_AD_ACCOUNT: (
+        "Wrong ad account opened",
+        "Ads Manager showed another ad account than the draft's, so nothing was created.",
+        "Check the ad account id on the Accounts page and that the account is visible in "
+        "this profile, then publish again.",
+    ),
     "objective_inline": (
         "Objective — not switched to Leads",
         "The draft may run with the wrong campaign objective.",
@@ -349,6 +374,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     "campaign_budget_exceeded": (
         "Campaign build took too long",
         "The build hit the robot's time limit, so the draft is incomplete.",
+        "Open the draft in Ads Manager and finish or delete it.",
+    ),
+    "tab_hung": (
+        "Browser tab hung during a step",
+        "The robot closed the frozen tab and stopped, so the draft is incomplete.",
         "Open the draft in Ads Manager and finish or delete it.",
     ),
     "step_budget_exceeded": (
@@ -387,6 +417,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Ad set name changed",
         "The name changed while Conversion location was being set, so the build was stopped.",
         "Check the ad set name in Ads Manager, then publish again.",
+    ),
+    "next_to_ad_stuck_on_adset": (
+        "Editor stayed on the ad set",
+        "Next was pressed several times but the ad was not opened, so the draft has no ad.",
+        "Open the draft in Ads Manager and finish or delete it.",
     ),
     "conversion_event": (
         "Conversion event — not verified",
