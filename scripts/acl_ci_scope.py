@@ -18,7 +18,24 @@ TRACKER_METADATA = {"tracker/config.json", "tracker/engine.json"}
 
 # ACL-1581: PR проверяется на одной версии Python, полный набор — push-прогоны
 # (stage/main/master) и ручной запуск, они же доказательство для ACL-1565 и релиза.
-PR_PYTHON_VERSIONS = ("3.13",)
+PR_PYTHON_VERSIONS = reuse.BASE_PYTHON_VERSIONS
+# ACL-1649: «лёгкий» контур — PR в stage и push в stage: одна версия Python и Windows-установщик
+# только при изменении его входов. 3.11 и установщик обязательны перед main: PR в main/master,
+# push в main/master, релизные теги и ручной запуск. Неизвестная база — тоже полный контур.
+LIGHT_BRANCH = "stage"
+# Входы установщика, поставки и зависимостей: их изменение требует сборки и проверки установщика
+# уже на PR в stage. Содержимое приложения (src/, config/, knowledge_base/) сюда не входит:
+# собранный пакет проверяется всегда на пути в main (ACL-1649, spec 2).
+INSTALLER_PREFIXES = ("packaging/", ".github/workflows/", "assets/")
+INSTALLER_FILES = {
+    "delivery.json", ".env.example", "pyproject.toml", "setup.py", "setup.cfg", ".python-version",
+    "src/web/acl_update.py", "src/web/machine_paths.py", "src/web/release_signing.py",
+    "src/web/release_updates.py",
+}
+INSTALLER_SCRIPT_PREFIXES = (
+    "scripts/acl_publish_release", "scripts/acl_release_", "scripts/acl_sign_release", "scripts/acl_smoke",
+    "scripts/acl_update_gate", "scripts/acl_scan_secrets", "scripts/acl_ci_",
+)
 # Входы зависимостей и бутстрапа: PR, задевший любой из них, гоняет обе версии.
 DEPENDENCY_FILES = {
     "pyproject.toml", "setup.py", "setup.cfg", "pytest.ini", "conftest.py", "tests/conftest.py",
@@ -35,32 +52,65 @@ def touches_dependencies(name):
     """Путь из зависимостей/бутстрапа: requirements*, установщик, .bat-установка, CI."""
     if name in DEPENDENCY_FILES or name.startswith(DEPENDENCY_PREFIXES):
         return True
+    return root_dependency_file(name)
+
+
+def root_dependency_file(name):
+    """Корень: requirements*.txt/.in, constraints*.txt и .bat-скрипты установки/запуска."""
     if "/" in name:
         return False
-    # Корень: requirements*.txt/.in, constraints*.txt и .bat-скрипты установки/запуска.
     return (name.startswith("requirements") and name.endswith((".txt", ".in"))
             or name.startswith("constraints") and name.endswith(".txt")
             or name.lower().endswith(".bat"))
 
 
-def python_versions(paths, event_name):
+def light_context(event_name, base_ref=None, branch=None):
+    """Лёгкий контур: PR в stage или push в stage (ACL-1649). Всё остальное — путь в main."""
+    if event_name == "pull_request":
+        return base_ref == LIGHT_BRANCH
+    return event_name == "push" and branch == LIGHT_BRANCH
+
+
+def python_versions(paths, event_name, base_ref=None, branch=None):
     """Версии Python матрицы ci.yml; при любом сомнении — полный набор."""
-    if event_name != "pull_request" or not paths or any(touches_dependencies(p) for p in paths):
+    if not light_context(event_name, base_ref, branch) or not paths or any(touches_dependencies(p) for p in paths):
         return list(reuse.FULL_PYTHON_VERSIONS)
     return list(PR_PYTHON_VERSIONS)
 
 
-def classify(paths, event_name):
-    python = python_versions(paths, event_name)
-    if event_name != "pull_request" or not paths:
-        return {"windows": True, "reason": "full-base-or-manual-validation", "python": python}
-    for name in paths:
-        document = name in ROOT_DOCS or name.startswith("docs/") and name.endswith(".md")
-        if not document and name not in TRACKER_METADATA:
-            return {"windows": True, "reason": "product-build-or-unknown-change", "python": python}
-    # Windows не запускается; список версий полный, чтобы матрица никогда не была пустой.
-    return {"windows": False, "reason": "documentation-and-tracker-metadata-only",
+def is_documentation(name):
+    return name in ROOT_DOCS or name.startswith("docs/") and name.endswith(".md") or name in TRACKER_METADATA
+
+
+def classify(paths, event_name, base_ref=None, branch=None):
+    python = python_versions(paths, event_name, base_ref, branch)
+    # Документы без кода пропускают тесты на PR (в любую ветку) и на push в stage.
+    skippable = event_name == "pull_request" or light_context(event_name, None, branch)
+    if not skippable or not paths:
+        return {"windows": True, "linux": True, "reason": "full-base-or-manual-validation", "python": python}
+    if not all(is_documentation(name) for name in paths):
+        return {"windows": True, "linux": True, "reason": "product-build-or-unknown-change", "python": python}
+    # Тесты не запускаются; список версий полный, чтобы матрица никогда не была пустой.
+    return {"windows": False, "linux": False, "reason": "documentation-and-tracker-metadata-only",
             "python": list(reuse.FULL_PYTHON_VERSIONS)}
+
+
+def touches_installer(name):
+    """Путь, из-за которого нужна сборка и проверка установщика (поставка, упаковка, зависимости)."""
+    if name in INSTALLER_FILES or name.startswith(INSTALLER_PREFIXES + INSTALLER_SCRIPT_PREFIXES):
+        return True
+    return root_dependency_file(name)
+
+
+def classify_installer(paths, event_name, base_ref=None, branch=None):
+    """Нужен ли workflow «Windows installer». На пути в main — всегда; в лёгком контуре — по входам."""
+    python = list(reuse.FULL_PYTHON_VERSIONS)
+    if not light_context(event_name, base_ref, branch) or not paths:
+        return {"windows": True, "linux": False, "reason": "main-release-or-manual-path", "python": python}
+    if any(touches_installer(name) for name in paths):
+        return {"windows": True, "linux": False, "reason": "installer-packaging-delivery-or-dependency-change",
+                "python": python}
+    return {"windows": False, "linux": False, "reason": "no-installer-inputs-changed", "python": python}
 
 
 def changed_paths(root, base, head):
@@ -72,39 +122,84 @@ def changed_paths(root, base, head):
     return [p.decode("utf-8", errors="surrogateescape") for p in output.split(b"\0") if p]
 
 
-def select(root, event_name, event):
-    try:
-        if event_name != "pull_request":
-            return classify([], event_name)
+def branch_of(ref):
+    """Имя ветки из GITHUB_REF; теги и прочее — пустая строка (полный контур)."""
+    ref = str(ref or "")
+    return ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ""
+
+
+def event_paths(root, event_name, event):
+    """Список изменённых путей: PR — база..голова; push в stage — before..after; иначе None (полный контур)."""
+    if event_name == "pull_request":
         pr = event["pull_request"]
-        return classify(changed_paths(root, pr["base"]["sha"], pr["head"]["sha"]), event_name)
+        return changed_paths(root, pr["base"]["sha"], pr["head"]["sha"])
+    if event_name == "push":
+        return changed_paths(root, event["before"], event["after"])
+    return None
+
+
+def select(root, event_name, event, *, ref="", workflow="ci.yml"):
+    classifier = classify_installer if workflow == "windows-installer.yml" else classify
+    base_ref = branch = None
+    try:
+        if event_name == "pull_request":
+            base_ref = event["pull_request"]["base"]["ref"]
+        branch = branch_of(ref)
+        paths = event_paths(root, event_name, event) if light_context(event_name, base_ref, branch) else []
+        return classifier(paths, event_name, base_ref, branch)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        return {"windows": True, "reason": "classification-unavailable-run-full",
-                "python": list(reuse.FULL_PYTHON_VERSIONS)}
+        return {"windows": True, "linux": workflow != "windows-installer.yml",
+                "reason": "classification-unavailable-run-full", "python": list(reuse.FULL_PYTHON_VERSIONS)}
 
 
-def decide(root, event_name, event, *, ref="", workflow="ci.yml", repo="", api=None, run_id=None):
-    """Классификация, затем (ACL-1565) переиспользование полного зелёного прогона того же дерева.
+def wanted_jobs(workflow, result):
+    """Задания, которые этот контекст требует (без итогового ``ACL verification``)."""
+    if workflow == "ci.yml":
+        return reuse.required_jobs(workflow, result["python"], windows=result["windows"], linux=result.get("linux", False))
+    return set(reuse.REQUIRED_JOBS[workflow]) if result["windows"] else set()
 
+
+def decide(root, event_name, event, *, ref="", workflow="ci.yml", repo="", api=None, run_id=None, fetch=None):
+    """Классификация, затем (ACL-1565/1649) переиспользование зелёных прогонов того же дерева.
+
+    Покрытие складывается из нескольких прогонов (stage: 3.13 + Windows, PR в main: 3.11).
     Теги релизов и ручной запуск всегда идут полностью; любая ошибка — тоже."""
-    result = select(root, event_name, event)
-    if not result["windows"]:
+    result = select(root, event_name, event, ref=ref, workflow=workflow)
+    if not result["windows"] and not result.get("linux"):
         return result
     if event_name not in ("push", "pull_request") or str(ref).startswith("refs/tags/") or api is None:
         return result
     try:
         tree = reuse.tree_of(root, "HEAD")
-        proof = reuse.find_reuse(root, api, repo, workflow, tree, exclude_run_id=run_id) if tree else None
+        if not tree:
+            return dict(result, reuse="no-proven-full-run")
+        # ACL-1649: головы влитых PR всех коммитов с этим деревом (stage, main, merge-коммит PR).
+        heads = reuse.collect_pr_heads(root, api, repo, tree, [reuse._git(root, "rev-parse", "HEAD")],
+                                       **({"fetch": fetch} if fetch else {}))
+        coverage = reuse.find_coverage(root, api, repo, workflow, tree, exclude_run_id=run_id, pr_heads=heads)
     except Exception:  # noqa: BLE001 — сомнение означает полный прогон
         return dict(result, reuse="lookup-failed-run-full")
-    if not proof:
+    if not coverage["runs"]:
         return dict(result, reuse="no-proven-full-run")
+    proof = coverage["runs"][0]
     # Ссылка уходит в GITHUB_OUTPUT и сводку: только точный URL запуска этого репозитория.
-    if not reuse.valid_run_url(proof.get("run_url"), repo, proof.get("run_id")):
+    if not all(reuse.valid_run_url(r.get("run_url"), repo, r.get("run_id")) for r in coverage["runs"]):
         return dict(result, reuse="invalid-run-url-run-full")
-    return {"windows": False, "reason": "reused-green-full-run-of-same-tree",
-            "reused_from": proof["run_url"], "tree": proof["tree"], "commit": proof["commit"],
-            "python": list(reuse.FULL_PYTHON_VERSIONS)}
+    wanted = wanted_jobs(workflow, result)
+    missing = wanted - coverage["covered"]
+    if missing == wanted:
+        return dict(result, reuse="no-proven-full-run")   # ничего из нужного не покрыто
+    shared = {"reused_from": proof["run_url"], "tree": proof["tree"], "commit": proof["commit"],
+              "reused_runs": [r["run_url"] for r in coverage["runs"]]}
+    if not missing:
+        return dict(shared, windows=False, linux=False, reason="reused-green-full-run-of-same-tree",
+                    python=list(reuse.FULL_PYTHON_VERSIONS))
+    # Частичное покрытие: запускаем только недостающее (например, 3.11 на PR в main).
+    pythons = [v for v in result["python"]
+               if any(n in missing for n in reuse.required_jobs(workflow, (v,), windows=False))] or list(result["python"])
+    windows = any(n.startswith("windows tests") for n in missing) if workflow == "ci.yml" else True
+    return dict(shared, windows=windows, linux=any(n.startswith("linux tests") for n in missing),
+                reason="partly-reused-green-runs-of-same-tree", python=pythons)
 
 
 def main():
@@ -127,18 +222,21 @@ def main():
     if args.output:
         with args.output.open("a", encoding="utf-8") as f:
             f.write("windows=" + str(result["windows"]).lower() + "\n")
+            f.write("linux=" + str(bool(result.get("linux"))).lower() + "\n")
             f.write("reused_from=" + result.get("reused_from", "") + "\n")
             # JSON-список для fromJSON в матрице ci.yml; только известные версии, иначе полный набор.
             versions = [v for v in result.get("python") or () if v in reuse.FULL_PYTHON_VERSIONS]
             f.write("python=" + json.dumps(versions or list(reuse.FULL_PYTHON_VERSIONS)) + "\n")
     if args.summary:
         with args.summary.open("a", encoding="utf-8") as f:
-            if result.get("reused_from"):
+            if result.get("reused_from") and not result["windows"] and not result.get("linux"):
                 f.write(reuse.summary_line(result["reused_from"], result["tree"]) + "\n")
             else:
-                f.write(f"Scope: windows={str(result['windows']).lower()} ({result['reason']}"
-                        + (f", {result['reuse']}" if result.get("reuse") else "") + ")"
-                        + (f", Python {', '.join(result['python'])}" if result.get("windows") else "") + "\n")
+                f.write(f"Scope: windows={str(result['windows']).lower()} linux={str(bool(result.get('linux'))).lower()}"
+                        f" ({result['reason']}" + (f", {result['reuse']}" if result.get("reuse") else "") + ")"
+                        + (f", Python {', '.join(result['python'])}" if result.get("linux") else "") + "\n")
+                for url in result.get("reused_runs") or ():
+                    f.write(f"Reused passed jobs of the same tree from run {url}\n")
     print(json.dumps(result))
 
 

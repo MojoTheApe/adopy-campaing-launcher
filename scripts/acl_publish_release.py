@@ -61,14 +61,19 @@ def verify_promotion(tag: str, source_repo: str, report=print) -> str:
         return sha
     tree = _git("rev-parse", f"{sha}^{{tree}}")
     try:
-        proof = reuse.find_reuse(Path.cwd(), _api, source_repo, "ci.yml", tree, exclude_run_id=run["id"])
+        # ACL-1649: полный набор (3.11 + 3.13 + Windows) может быть собран из нескольких прогонов
+        # этого дерева — stage, PR в main — и из прогона PR, доказуемо связанного с main-коммитом.
+        heads = reuse.collect_pr_heads(Path.cwd(), _api, source_repo, tree, [sha])
+        proof = reuse.find_reuse(Path.cwd(), _api, source_repo, "ci.yml", tree, exclude_run_id=run["id"],
+                                 pr_heads=heads)
     except Exception as error:  # noqa: BLE001 — недоказанный прогон = отказ
         raise ValueError("Recorded main CI reused a run that could not be proven: " + type(error).__name__) from error
     if not proof:
         raise ValueError("Recorded main CI neither ran the full test matrix nor reused "
                          "a provable successful full run of the same tree")
     # В журнал релиза — запуск, который на самом деле прогнал тесты этого дерева.
-    report(f"Main run {main_url} reused full results of run {proof['run_url']} "
+    urls = [r["run_url"] for r in proof.get("runs") or [proof]]
+    report(f"Main run {main_url} reused full results of {'run' if len(urls) == 1 else 'runs'} {', '.join(urls)} "
            f"(commit {proof['commit']}, same tree {tree})")
     return sha
 
