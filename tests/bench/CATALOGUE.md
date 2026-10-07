@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**23 robot steps × 117 layouts, 63 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**23 robot steps × 119 layouts, 65 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -27,7 +27,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | next_to_ad / additional ad (classic) | 4 | 4 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 5 | 5 | 0 | 0 |
-| creative_wizard | 15 | 15 | 0 | 0 |
+| creative_wizard | 17 | 17 | 0 | 0 |
 | ad_copy | 7 | 7 | 0 | 0 |
 | ad_destination / destination_sweep | 10 | 9 | 0 | 1 |
 | ads 2-3 (single-screen editor) | 4 | 4 | 0 | 0 |
@@ -229,6 +229,8 @@ Robot: _creative_wizard_open, _wizard_media_step, _WIZARD_FORWARD_JS (walk), _cr
 | Media step busy after the library pick (04.10): '1 selected', Next and Cancel aria-disabled | 232d398471bd/00_wizard_media | `wizard_crop_story_missing_2026_10_04.html` · media_busy | `tests/test_bench_wizard_exit_1004.py` | the walk waits while the wizard is busy (bounded) instead of four quick misses (ACL-1551) | pass |
 | Media-first wizard opened on Media (04.10) with the media picker still loading: three 'Loading...' progressbars, no Upload/tabs/Search media/grid; footer Next aria-disabled, Cancel enabled | 2f140fa687fa/00_ad_creative_media_step, 2f140fa687fa/02_ad_creative_media_step | `wizard_media_picker_2026_10_04.html` · loading | `tests/test_bench_wizard_media_picker_1004.py` | picker read as loading (3 placeholders); the current Media step is not clicked and Next is not pressed; read-only wait, then media_picker_loading (not upload_button_missing); picker that loads during the wait goes on to the library (ACL-1559) | pass |
 | The same Media step loaded (04.10): tabs Account/Video URL/Page, Search media, Filters 1, Upload (role=button, asset-picker data-surface), drop zone, library grid with 2 tiles | 232d398471bd/00_wizard_media | `wizard_media_picker_2026_10_04.html` · loaded | `tests/test_bench_wizard_media_picker_1004.py` | picker read as loaded (upload, search, 2 tiles); exactly one Upload, inside the wizard dialog; the step goes straight to library reuse without clicks (ACL-1559) | pass |
+| Media step of the wizard opened by an upload, B97 (07.10, bc4302862ee7, 0.1 s): tabs, Search media, Upload, library grid with the one uploaded tile wrapped in data-test-decoration="selected"; the footer counters ('1 selected' / '0 selected') removed for this fixture | bc4302862ee7/00_wizard_media | `wizard_media_picker_selected_2026_10_07.html` · selected_no_counter | `tests/test_bench_b97_picker_and_crop_1007.py` | counter read as unavailable, selected tile marked -> REFUSED (library_selection_unreadable): no click, no upload over a selection the robot cannot count (ACL-1669) | pass |
+| Crop step opened while Meta still draws it (07.10, B97 bc4302862ee7): step row on Crop, heading, three role=progressbar Loading placeholders, no Square/Vertical cards, no Replace | bc4302862ee7/03_wizard_crop, bc4302862ee7/10_wizard_crop, bc4302862ee7/16_wizard_crop | `crop_cards_loading_2026_10_07.html` · cards_loading | `tests/test_bench_b97_picker_and_crop_1007.py` | read as found with empty cards; the step waits for the cards instead of answering crop_replace_button_missing (ACL-1669) | pass |
 
 ## ad_copy
 
