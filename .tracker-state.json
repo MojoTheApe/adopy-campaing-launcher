@@ -5534,20 +5534,6 @@
         "started_at": "2026-10-06T18:51:14+00:00",
         "from_status": "status:idea"
       },
-      "604": {
-        "actor": "Worker-S1604A",
-        "session": "run_s1604a_1006",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1604-preflight",
-        "worktree": "C:\\acl-1604-preflight",
-        "id": "3187b024a3a24738a3057da5e5a87ca8",
-        "issue": 604,
-        "state": "handoff",
-        "started_at": "2026-10-06T18:52:28+00:00",
-        "from_status": "status:idea",
-        "pr": 662,
-        "report": "# ACL-1604 handoff (Worker-S1604A)\n\nCommit 87de8b20 on codex/acl-1604-preflight (worktree C:\\acl-1604-preflight, base work/stage 39a9cb1b). Not pushed, no PR.\n\nFiles: src/web/publish_preflight.py (new), src/web/app.py (2 endpoints), src/web/templates/report.html (cbPublishAll), tests/test_acl1604_preflight.py, tests/test_acl1604_preflight_browser.py.\n\nSee the final reply for detection scope, test counts and open questions."
-      },
       "652": {
         "actor": "Worker-S1652A",
         "session": "run_s1652a_1006",
@@ -7845,9 +7831,25 @@
             "session": "run_s1604a_1006"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1604A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1604A",
+          "session": "run_s1604a_1006",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1604-preflight",
+          "worktree": "C:\\acl-1604-preflight",
+          "id": "3187b024a3a24738a3057da5e5a87ca8",
+          "issue": 604,
+          "state": "handoff",
+          "started_at": "2026-10-06T18:52:28+00:00",
+          "from_status": "status:idea",
+          "pr": 662,
+          "report": "# ACL-1604 handoff (Worker-S1604A)\n\nCommit 87de8b20 on codex/acl-1604-preflight (worktree C:\\acl-1604-preflight, base work/stage 39a9cb1b). Not pushed, no PR.\n\nFiles: src/web/publish_preflight.py (new), src/web/app.py (2 endpoints), src/web/templates/report.html (cbPublishAll), tests/test_acl1604_preflight.py, tests/test_acl1604_preflight_browser.py.\n\nSee the final reply for detection scope, test counts and open questions."
+        },
+        "pr": 662,
+        "queued_at": "2026-10-07T05:49:58+00:00"
       },
       "650": {
         "implementers": [
@@ -10182,7 +10184,8 @@
       529,
       633,
       642,
-      650
+      650,
+      604
     ],
     "review": null,
     "history": [
@@ -14409,6 +14412,13 @@
         "issue": 653,
         "claim": "096baf3dc3164e56b070d80cb59282f3",
         "actor": "Worker-S1653A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-07T05:49:58+00:00",
+        "issue": 604,
+        "pr": 662,
+        "actor": "Worker-S1604A"
       }
     ],
     "policy": {
