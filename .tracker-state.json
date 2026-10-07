@@ -8172,7 +8172,7 @@
             "session": "run_c1572w_1007"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-C1572W",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -8190,7 +8190,8 @@
           "report": "# Handoff ACL-1572 (PR #671)\n\nConversion location menu did not open or stay open on Doc21, Elf403, KLD_BFL_B91 and Facebook_5265 (Sentry PYTHON-3F).\n\nDiagnosis: two causes. (1) Classic ad set editor: closed combobox trigger, focus left in the Ad set name field, \"menu open\" check relied only on Single/Multiple headings, and the only opener was a CDP click. (2) Facebook_5265: the ad editor was on screen, there was no Conversion location field (named in the failure reason, not repaired).\n\nChange (meta_dom.py, conversion step only): opener escalation click -> keyboard -> script; aria-expanded as an open signal; name-field focus released (no Escape); stop after 3 failed openings; English failure reason in the conversion_website_pick note and diag.reason.\n\nTests: tests/test_conversion_menu_opens_in_every_layout_1572.py (browser bench on the scrubbed Doc21 fixture; run by CI only, not locally). tests/test_bench_catalogue.py passes locally. Catalogue regenerated, secrets scan clean.\n\nOpen: the open-menu behaviour on Meta is inferred from captures of the closed state, so the Live checkbox is unchecked. The Facebook_5265 wrong-screen cause is only named, not repaired."
         },
         "pr": 671,
-        "queued_at": "2026-10-07T07:55:22+00:00"
+        "queued_at": "2026-10-07T07:55:22+00:00",
+        "reviewer": "Reviewer-R1572N"
       },
       "675": {
         "implementers": [
@@ -8925,6 +8926,10 @@
       },
       "Reviewer-R1638P": {
         "session": "rev_r1638p_1007",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1572N": {
+        "session": "rev_r1572n_1007",
         "role": "Reviewer"
       }
     },
@@ -10675,12 +10680,22 @@
       651,
       652,
       669,
-      572,
       675,
       673,
       684
     ],
-    "review": null,
+    "review": {
+      "id": "7be8b6cd455d45428352ef4b917839a6",
+      "pr": 671,
+      "issues": [
+        572
+      ],
+      "actor": "Reviewer-R1572N",
+      "session": "rev_r1572n_1007",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-07T12:13:14+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -15116,6 +15131,13 @@
         "prs": [
           689
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T12:13:14+00:00",
+        "pr": 671,
+        "lane": "7be8b6cd455d45428352ef4b917839a6",
+        "actor": "Reviewer-R1572N"
       }
     ],
     "policy": {
