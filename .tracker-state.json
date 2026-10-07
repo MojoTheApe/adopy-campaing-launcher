@@ -8490,7 +8490,7 @@
             "session": "run_s1684p_1007"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1684P",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -8508,7 +8508,8 @@
           "report": "# ACL-1684 handoff\n\nPR #685 (base stage), branch codex/acl-1684-doc120-stories.\n\nDiagnosis: on Doc120 (run 4e4969867d28) the Stories list was complete (end true, at_bottom true, busy false, hidden 0, rows 5) but Meta folded it twice; each re-opening used the 6 s wait counted from the first read, and the changing row count restarted the quiet window, so the check ended `stable: false`. Fixed in the not-offered check only: the wait restarts after each re-opening (hard limit 15 s), `rows` is out of the stability key.\n\nTests (CI only, bench): tests/test_bench_placements_1684.py - flickering complete list is not offered; never-proven end still blocks; never-settling list stops at the hard limit; offered but hidden row is never not offered. Bench catalogue updated, secrets scan clean, catalogue test passes locally.\n\nNot run locally (laptop rules): the browser bench tests. Live checkbox left unchecked; live check is a separate task after merge."
         },
         "pr": 685,
-        "queued_at": "2026-10-07T11:30:32+00:00"
+        "queued_at": "2026-10-07T11:30:32+00:00",
+        "reviewer": "Reviewer-R1684Q"
       },
       "691": {
         "implementers": [
@@ -9287,6 +9288,10 @@
       "Worker-O1702A": {
         "session": "run_o1702a_1007",
         "role": "Worker"
+      },
+      "Reviewer-R1684Q": {
+        "session": "rev_r1684q_1007",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -11131,12 +11136,22 @@
       651,
       652,
       675,
-      684,
       691,
       693,
       697
     ],
-    "review": null,
+    "review": {
+      "id": "bc55851b6925423c9602f5ea910ff833",
+      "pr": 685,
+      "issues": [
+        684
+      ],
+      "actor": "Reviewer-R1684Q",
+      "session": "rev_r1684q_1007",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-07T16:12:57+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -15725,6 +15740,13 @@
         "prs": [
           701
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T16:12:57+00:00",
+        "pr": 685,
+        "lane": "bc55851b6925423c9602f5ea910ff833",
+        "actor": "Reviewer-R1684Q"
       }
     ],
     "policy": {
