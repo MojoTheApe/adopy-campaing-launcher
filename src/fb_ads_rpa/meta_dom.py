@@ -13,6 +13,7 @@ from typing import Any
 from playwright.sync_api import Error as _PlaywrightError
 from playwright.sync_api import Frame, Page
 
+from src.fb_ads_rpa import ad_account_guard as _ad_account_guard
 from src.fb_ads_rpa import job_cancel as _job_cancel
 from src.fb_ads_rpa import page_liveness as _liveness
 from src.fb_ads_rpa import profile_trouble as _trouble
@@ -3121,6 +3122,11 @@ def _conversion_failure_reason(page: Page, *, reopen_failed: int = 0) -> str:
     return ""
 
 
+def last_wrong_ad_account() -> str:
+    """ACL-1697: «expected act_X, opened act_Y» последнего стопа `wrong_ad_account`."""
+    return getattr(_conv_tls, "wrong_act", "")
+
+
 def last_conversion_failure_reason() -> str:
     """Причина последнего отказа выбора Website (в этом потоке) — для текста ошибки шага."""
     return getattr(_conv_tls, "reason", "")
@@ -5314,6 +5320,7 @@ def run_recorded_campaign_flow(
     soft_fails_out: list[str] | None = None,
     on_new_page=None,
     ad_body2: str = "",
+    expected_act: str = "",
 ) -> str:
     """Create -> Website -> ... -> Ad level, using the exact locators from a
     verified human Playwright codegen recording (2026-07-21) instead of the
@@ -5663,10 +5670,25 @@ def run_recorded_campaign_flow(
 
     # ACL-1320: Create и окно цели — под жёстким бюджетом `_open_campaign`
     # (~45 с на раунд, ~2 мин всего; третий раунд — в свежей вкладке).
-    opened = _open_campaign(
-        page, list_url,
-        press=lambda p, where: _click(p.get_by_role("button", name="Create", exact=True), where=where),
-        shot=_shot, on_new_page=_adopt)
+    def _press_create(p: Page, where: str) -> bool:
+        # ACL-1697: кабинет сверяется перед КАЖДЫМ нажатием Create — и в
+        # повторах, и после перезагрузки списка или свежей вкладки (`p` — та
+        # страница, на которой жмём). Не тот кабинет — ProfileStop, без клика.
+        # Не на Ads Manager (обрыв сети, пустая вкладка) — не жмём и не «чужой
+        # кабинет»: False, дальше идёт прежнее восстановление раундов.
+        if expected_act and not _ad_account_guard.stop_if_wrong(p, expected_act, where):
+            return False
+        return _click(p.get_by_role("button", name="Create", exact=True), where=where)
+
+    try:
+        opened = _open_campaign(
+            page, list_url, press=_press_create, shot=_shot, on_new_page=_adopt)
+    except _trouble.ProfileStop as stop:
+        if stop.code != _trouble.WRONG_AD_ACCOUNT:
+            raise
+        _conv_tls.wrong_act = stop.detail
+        _shot("fail_wrong_ad_account", note=stop.detail)
+        return "wrong_ad_account"
     if opened == "profile_unresponsive":
         _shot("fail_profile_unresponsive")
         return "profile_unresponsive"
@@ -6651,8 +6673,12 @@ def run_recorded_campaign_flow(
                         shells_before = _tree_new_ad_shells(page)
                         try:
                             created = create_additional_ad(page, adset_name)
+                            block = last_create_block()  # read once: skip decision and label
+                            retried = False
                             if not created and recover_stuck_page(page, f"{tag}_create", editor=True):
                                 created = create_additional_ad(page, adset_name)
+                                block = last_create_block()
+                                retried = True
                             if not created:
                                 # A reported failure does not mean no ad was born:
                                 # Meta names every fresh ad "New Leads Ad", so if
@@ -6665,10 +6691,21 @@ def run_recorded_campaign_flow(
                                 # Confirmed need live 2026-07-29 (Test146, B ad2):
                                 # create failed once, leaving the ad missing
                                 # entirely — the only fill step with no retry path.
-                                created = _adopt_shell_or_recreate(page, adset_name, shells_before)
+                                #
+                                # ACL-1691: after the honest block (nothing was clicked) there
+                                # is no new shell to adopt - an existing "New Leads Ad" is
+                                # another ad. Skip the adopt; one clean re-create is still safe.
+                                if block:
+                                    if (not retried and
+                                            0 <= _tree_new_ad_shells(page) <= max(shells_before, 0)):
+                                        created = create_additional_ad(page, adset_name)
+                                        block = last_create_block()
+                                else:
+                                    created = _adopt_shell_or_recreate(page, adset_name, shells_before)
                             if not created:
                                 _shot(f"fail_{tag}_create")
-                                ad_level_fails.append(f"{tag}_create")
+                                ad_level_fails.append(
+                                    f"{tag}_create:{block}" if block else f"{tag}_create")
                                 continue
                             _shot(f"after_{tag}_create")
                             # 17.09 00:02 (Doc20, cbe566db70b2): один «Create ad» дал
@@ -7304,6 +7341,10 @@ _SUBITEM_CATEGORY = {x: cat for cat, xs in _SUBITEMS_BY_CATEGORY.items() for x i
 #: подряд; дольше `_SUBITEMS_SETTLE_MAX_S` не ждём (ACL-1445).
 _SUBITEMS_SETTLE_QUIET_S = 1.5
 _SUBITEMS_SETTLE_MAX_S = 6.0
+#: Жёсткий потолок ожидания от первого ответа страницы, что бы ни происходило
+#: (ACL-1684): окно ожидания продлевается после каждого перераскрытия раздела,
+#: но не бесконечно.
+_SUBITEMS_SETTLE_HARD_S = 15.0
 
 #: Сколько ждать, пока тело карточки Placements перестанет быть «Loading...»
 #: (ACL-1445, cb854b07857b 30.09: карточка нового редактора открыта, а внутри
@@ -9198,6 +9239,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # медленный первый ответ съедал все шесть секунд, второго чтения не
         # было, список «не устоялся», и «Messenger Stories» оставалась пропажей.
         first_read_at: float | None = None
+        last_reopen_at: float | None = None
         labels: list[str] = []
         end: dict = {}
         stable = False
@@ -9216,6 +9258,9 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                 reopened += 1
                 _expand_category(name)
                 _sleep_h(0.6, spread=0.0)
+                # ACL-1684: перераскрытие — новая точка отсчёта. Окно ожидания и
+                # окно тишины считаются от него, иначе свёртки съедают бюджет.
+                last, last_reopen_at = None, time.monotonic()
                 continue
             fresh = [x for x in labels if not _label_on_page(x, here)]
             if fresh:
@@ -9224,14 +9269,21 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                     x for x in fresh if not _label_on_page(x, report["subitems_seen"]))
                 _pass(fresh)
                 _settle_visible(fresh)
-            key = (tuple(labels), bool(end.get("end")), end.get("rows"), end.get("hidden"))
+            # ACL-1684 (Doc120, 4e4969867d28: `stable: false, reads: 6,
+            # waited_s: 6.4, reopened: 2`, при этом `end: true, hidden: 0`):
+            # число строк (`rows`) в ключ не входит — оно «дрожит», пока Meta
+            # перемонтирует список, а полноту список доказывает `end`
+            # (последняя строка видна, `hidden` 0, дно, нет загрузки).
+            key = (tuple(labels), bool(end.get("end")), end.get("hidden"))
             now = time.monotonic()
             if key != last:
                 last, quiet_from = key, now
             elif now - quiet_from >= _SUBITEMS_SETTLE_QUIET_S and end.get("end"):
                 stable = True
                 break
-            if reads >= 2 and now - first_read_at >= _SUBITEMS_SETTLE_MAX_S:
+            window_from = max(first_read_at, last_reopen_at or first_read_at)
+            if ((reads >= 2 and now - window_from >= _SUBITEMS_SETTLE_MAX_S)
+                    or now - first_read_at >= _SUBITEMS_SETTLE_HARD_S):
                 break
             _sleep_h(0.25, spread=0.0)
         on_unseen = [x for x in own if x in _SUBITEMS_ON and not _label_on_page(x, here)]
@@ -9626,6 +9678,20 @@ def select_devices_ios_only(page: Page) -> bool:
     )
 
 
+#: Reason of the last honest block in `create_additional_ad` (nothing clicked), per thread:
+#: two accounts publish at once in threads of one process.
+_create_tls = threading.local()
+
+
+def last_create_block() -> str:
+    """Block reason of this thread's last `create_additional_ad` call, "" if it did not block."""
+    return getattr(_create_tls, "block", "")
+
+
+def _set_create_block(reason: str) -> None:
+    _create_tls.block = reason
+
+
 def create_additional_ad(page: Page, adset_name: str) -> bool:
     """Add another ad to the ad set that's already open (for campaigns with
     more than one ad per ad set), landing on the same "Set up creative"
@@ -9687,10 +9753,17 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     # d3e690189a6e/08): шаг стартовал на странице, где дерева ещё нет —
     # `AdsPERouteLoadPlaceholder` после смены маршрута или сразу после
     # перезагрузки (есть только шапка nav-header-*). Сначала ждём дерево.
+    _set_create_block("")
     click_point = None
     tree_ready = _wait_tree_ready(page)
     shells_before = _tree_new_ad_shells(page)
     surface_clicked = _click_adset_action_menu(page) if tree_ready else False
+    hover: dict | None = None
+    if tree_ready and not surface_clicked:
+        # ACL-1691: кнопки строки рисуются под курсором — сперва навести его.
+        hover = _wake_classic_adset_row(page)
+        if hover.get("woke"):
+            surface_clicked = _click_adset_action_menu(page)
     if surface_clicked:
         _sleep_h(0.6)
 
@@ -9725,7 +9798,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
           };
           const candidates = [...document.querySelectorAll('*')].filter(e =>
             e.offsetParent !== null && nameMatches(e.textContent) && e.children.length === 0
-            && inTree(e))
+            && inTree(e) && !e.closest('[data-testid^="nav-header"]'))
             .sort((a, b) => a.getBoundingClientRect().y - b.getBoundingClientRect().y);
           const rows = [];
           const seen = new Set();
@@ -9826,6 +9899,17 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         )
 
     if not surface_clicked:
+        if hover and hover.get("row"):
+            # Строка группы в дереве есть, курсор над ней побывал, а «Action
+            # menu» не нарисовано. Вслепую по строке не нажимаем: нажатие на
+            # неё выбирает группу и уводит редактор с объявления. Блокируем.
+            _set_create_block("adset_action_menu_not_shown")
+            _diag("adset_action_menu_not_shown", {
+                "hover": hover,
+                "reason": ("The ad set row in the left tree shows no Action menu button, "
+                           "even with the cursor over it; nothing was clicked."),
+            })
+            return False
         if not click_point or not isinstance(click_point, dict) or "x" not in click_point:
             _diag("no_click_point" if tree_ready else "tree_not_ready")
             return False
@@ -9848,7 +9932,11 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         # раз: ад-сет уже выбран, второй клик только открывает меню.
         if _wait_tree_ready(page):
             wait_editor_saved(page)
-            if _click_adset_action_menu(page):
+            # Перемонтированное дерево снова без кнопок до наведения (ACL-1691).
+            again = _click_adset_action_menu(page)
+            if not again and _wake_classic_adset_row(page).get("woke"):
+                again = _click_adset_action_menu(page)
+            if again:
                 _sleep_h(0.6)
                 create_clicked = _click_create_menu_item(page)
     if not create_clicked:
@@ -9949,8 +10037,11 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
 _TREE_READY_JS = r"""() => {
   // Маршрут ещё грузится: вместо редактора один спиннер (снимки 24.09).
   if (document.querySelector('[data-non-int-surface*="AdsPERouteLoadPlaceholder"]')) return false;
-  return !!document.querySelector(
-    '[data-surface*="editor_tree:adset"][data-surface*="campaign-structure-action-menu-item"]');
+  // ACL-1691 (07.10): Meta рисует кнопки строки только под курсором, так что
+  // дерево готово и без «Action menu» — достаточно строки группы в нём.
+  return !!(document.querySelector(
+    '[data-surface*="editor_tree:adset"][data-surface*="campaign-structure-action-menu-item"]')
+    || document.querySelector('[data-surface$="editor_tree:adset"] [role=rowheader]'));
 }"""
 
 
@@ -9981,6 +10072,72 @@ def _wait_tree_ready(page: Page, timeout_s: float = 30.0) -> bool:
             pass
         _sleep_h(1.0, 0.1)
     return False
+
+
+_CLASSIC_ROW_POINT_JS = r"""
+  () => {
+    const row = document.querySelector('[data-surface$="editor_tree:adset"] [role=rowheader]');
+    if (!row) return { why: 'no_row' };
+    row.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const r = row.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return { why: 'hidden' };
+    // Кнопки строки стоят справа; точка — внутри строки, левее края.
+    return { x: r.x + Math.max(10, r.width - 40), y: r.y + r.height / 2,
+             x0: r.x + Math.min(r.width / 2, 80) };
+  }
+"""
+"""Точка над строкой группы в дереве классического редактора (движение мыши).
+
+Берётся строка самого дерева (`editor_tree:adset`), а не первый текст с именем
+группы на странице: ту же надпись несёт шапка-«хлебные крошки» (ACL-1691)."""
+
+#: Сколько раз навести курсор на строку группы, прежде чем признать, что кнопок нет.
+_CLASSIC_WAKE_TRIES = 3
+
+
+def _wake_classic_adset_row(page: Page) -> dict:
+    """Навести курсор на строку группы, чтобы Meta нарисовала «Action menu».
+
+    ACL-1691 (07.10, Facebook_5265 f2c513f0a22d и KW_TRL на 9403A): как и в
+    новом редакторе (ACL-1630), строки дерева классического редактора несут на
+    месте кнопок пустой `<div></div>` — кнопка в DOM появляется под курсором.
+    Только `mouse.move`: ни нажатия, ни фокуса на строку (фокус строки дерева
+    может её выбрать и увести редактор на группу). Наведение прекращается, как
+    только кнопка появилась. Возвращает {"row", "tries", "woke", "why"?}:
+    `row` False — строки группы в дереве нет (старая раскладка).
+    """
+    hover: dict = {"row": False, "tries": 0, "woke": False}
+    for n in range(_CLASSIC_WAKE_TRIES):
+        try:
+            pt = _eval_bounded(page, _CLASSIC_ROW_POINT_JS) or {}
+        except Exception:
+            pt = {}
+        if "x" not in pt:
+            hover["why"] = pt.get("why") or "no_point"
+            return hover
+        hover["row"] = True
+        hover["tries"] = n + 1
+        try:
+            # Сначала в сторону, потом на строку: `mouseover` приходит при
+            # входе курсора, а не при стоянии над ней.
+            page.mouse.move(pt["x0"], pt["y"] + 90)
+            page.mouse.move(pt["x0"], pt["y"], steps=4)
+            page.mouse.move(pt["x"], pt["y"], steps=4)
+        except Exception:
+            hover["why"] = "mouse_error"
+            return hover
+        _sleep_h(0.5)
+        try:
+            if page.evaluate(
+                """() => !!document.querySelector(
+                  '[data-surface*="editor_tree:adset"][data-surface*="campaign-structure-action-menu-item"]')"""
+            ):
+                hover["woke"] = True
+                return hover
+        except Exception:
+            hover["why"] = "read_error"
+            return hover
+    return hover
 
 
 def _click_adset_action_menu(page: Page) -> bool:
