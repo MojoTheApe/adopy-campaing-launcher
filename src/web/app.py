@@ -1272,6 +1272,10 @@ templates.env.filters["fmt_summary_amount"] = fmt_summary_amount
 # ACL-1652: шесть метрик одним кодом. Макросы `_metrics.html` берут отсюда и
 # заголовки, и ячейки — таблицы не могут разойтись друг с другом.
 templates.env.globals["metric_values"] = metric_columns.metric_values
+# Owner, 2026-10-07: the "Copy for group" button and its hint under a red account
+# status are hidden for now. True brings them back (template: _account_map_country.html).
+SHOW_COPY_FOR_GROUP = False
+templates.env.globals["SHOW_COPY_FOR_GROUP"] = SHOW_COPY_FOR_GROUP
 templates.env.globals["METRIC_HEADERS"] = metric_columns.METRIC_HEADERS
 templates.env.globals["HOME_ACCOUNT_HEADERS"] = metric_columns.HOME_ACCOUNT_HEADERS
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")

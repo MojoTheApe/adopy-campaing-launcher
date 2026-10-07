@@ -23,7 +23,7 @@ TPL = ROOT / "src" / "web" / "templates"
 HINT = "Copy for group — paste it into the provider's group"
 
 
-def _render(account: str, status: dict) -> str:
+def _render(account: str, status: dict, show: bool = True) -> str:
     from src.analysis_agent.money_format import fmt_currency
 
     env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)
@@ -32,8 +32,10 @@ def _render(account: str, status: dict) -> str:
     country = {"country": "Kuwait", "key": "KW", "virtual": False,
                "rows": [{"account": account, "has_data": False, "ready": True,
                          "in_workbook": True, "status": status, "to_do": ""}]}
+    # ACL-1652 (owner, 07.10): the button is hidden by default; these tests check the
+    # markup it has when the flag is on, so they switch it on explicitly.
     html = env.get_template("_account_map_country.html").render(
-        mc=country, mlx={},
+        SHOW_COPY_FOR_GROUP=show, mc=country, mlx={},
         amap={"countries": [country], "available": [], "all_accounts": [], "live": {},
               "splits": {}, "fallback": {}, "dates": [], "date_from": "2026-09-01",
               "date_to": "2026-09-28", "span": ""})

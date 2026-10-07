@@ -24,6 +24,8 @@ names, formulas and number format. Decisions: owner, 2026-10-06 (issue #652).
   read account is in one currency; otherwise "—".
 - **Campaign managers** (ACL-1656) at the bottom of Home, collapsed by default (state in localStorage):
   country rows are the sum of all managers, the current manager is highlighted. Same rows as CM Comparison.
+- **Ad drills**: the Date column and the dead "+ 🛒" button are gone.
+- **Copy for group** (button and hint under a red account status) is hidden for now; `SHOW_COPY_FOR_GROUP = True` in `app.py` brings it back. Screenshot and status code are unchanged.
 - Python edits (`morning_report.py` trend builder, `app.py`) need a `serve.py` restart.
 
 ## Placements on Meta's layouts of 2026-10-05/06 in the classic ad set editor — ACL-1629
