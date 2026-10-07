@@ -695,7 +695,9 @@ def unblock_tab(cdp_url: str, url: str, done: Callable[[], bool], *,
         except Exception as exc:
             out["why"] = f"targets:{type(exc).__name__}"
             return out
-        pages = [t for t in infos if t.get("type") == "page"]
+        # Цели с `subtype` (prerender и т. п.) — не вкладки: ни нашей, ни
+        # «ещё одной вкладки», которая держала бы браузер открытым (ревью PR #704).
+        pages = [t for t in infos if t.get("type") == "page" and not t.get("subtype")]
         mine = [t for t in pages if t.get("url") == url]
         if len(mine) != 1:
             out["why"] = "no_target" if not mine else "ambiguous_target"

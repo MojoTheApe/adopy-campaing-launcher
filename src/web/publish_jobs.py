@@ -1116,12 +1116,14 @@ def _start_stuck_watch(job_id: str, account_label: str) -> None:
         from src.fb_ads_rpa import run_telemetry as _rt
         from src.fb_ads_rpa import tab_watchdog
 
-        job_thread = tab_watchdog.this_thread()
-        state: dict[str, Any] = {"fired": False, "since": _rt.clock(), "job_thread": job_thread,
-                                 "watch": tab_watchdog.Watch(job=job_thread)}
         ended = _job_ended.get(job_id)
         if ended is None:
             return
+        # Ревью PR #704 (C2): поток задания регистрируем, только когда сторож
+        # точно запускается, — его `forget_thread` в конце и снимает запись.
+        job_thread = tab_watchdog.this_thread()
+        state: dict[str, Any] = {"fired": False, "since": _rt.clock(), "job_thread": job_thread,
+                                 "watch": tab_watchdog.Watch(job=job_thread)}
 
         def watch() -> None:
             _rt.set_current_job(job_id)    # строка сигнала несёт номер задания

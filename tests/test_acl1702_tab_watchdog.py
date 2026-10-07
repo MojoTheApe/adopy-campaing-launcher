@@ -130,6 +130,7 @@ class FakeJob:
         except BaseException as exc:  # pragma: no cover - диагностика
             self.error = exc
         self.hung_seen = tw.take_hung()
+        tw.forget_thread(self.job.tid)
 
     def my_step_function(self, fiber):
         page = self.page  # noqa: F841 — как в meta_dom: локальная `page`
@@ -146,18 +147,26 @@ class FakeJob:
         self.thread.join(5)
 
 
+def _clear_registries():
+    with tw._lock:
+        tw._HUNG.clear()
+        tw._ENDPOINTS.clear()
+        tw._JOB_TIDS.clear()
+
+
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
+    # Ревью PR #704 (C2): id потоков ОС раздаёт заново (Linux — сразу), и
+    # запись одного теста не должна решать за следующий.
     monkeypatch.delenv("ACL_STUCK_UNBLOCK", raising=False)
     monkeypatch.delenv("ACL_STUCK_UNBLOCK_S", raising=False)
     pacing.release_takeover()
     pacing.end_teach_wait()
+    _clear_registries()
     yield
     pacing.release_takeover()
     pacing.end_teach_wait()
-    with tw._lock:
-        tw._HUNG.clear()
-        tw._ENDPOINTS.clear()
+    _clear_registries()
 
 
 # ── Стек ────────────────────────────────────────────────────────────────────
@@ -190,6 +199,7 @@ def test_a_thread_running_python_has_no_blocked_call(tmp_path):
         box["job"] = tw.this_thread()
         while not stop.wait(0.01):
             pass
+        tw.forget_thread(box["job"].tid)
 
     t = threading.Thread(target=run, daemon=True)
     t.start()
@@ -548,13 +558,13 @@ def test_the_watchdog_never_uses_the_jobs_playwright_objects():
 
 def test_dump_exception_strips_queries_and_ids(tmp_path):
     exc = RuntimeError("Page.goto: net::ERR at https://adsmanager.facebook.com/adsmanager/manage/"
-                       "campaigns?act=1234567890123&business_id=987654321012 (act 1234567890123)")
+                       "campaigns?act=1234567890123456&business_id=987654321012 (ad account 1234567890123456)")
     path = tw.dump_exception(exc, run_id="r1", step="campaigns_list_ready", reason="step_budget_exceeded",
                              detail={"url": "https://x.test/p?token=SECRET", "ad": 120211234567890},
                              out_dir=tmp_path)
     text = path.read_text(encoding="utf-8")
     assert "https://adsmanager.facebook.com/adsmanager/manage/campaigns" in text
-    for leak in ("1234567890123", "987654321012", "120211234567890", "SECRET", "act="):
+    for leak in ("1234567890123456", "987654321012", "120211234567890", "SECRET", "act="):
         assert leak not in text, leak
 
 
@@ -784,3 +794,15 @@ def test_an_unblock_outside_a_campaign_does_not_brand_the_next_one(monkeypatch):
     got = p.publish_draft(_Draft("B"))
     assert flags == [""], "отметка снята в начале кампании"
     assert got.success is True and not got.blocking_failures
+
+
+def test_a_prerender_target_does_not_count_as_another_tab():
+    """Prerender (`subtype`) — не вкладка: последняя настоящая получает запасную."""
+    only = [t for t in _targets() if t["targetId"] != "T-other"]
+    only.append({"type": "page", "subtype": "prerender", "targetId": "T-pre",
+                 "url": "https://www.facebook.com/", "browserContextId": "C1"})
+    cdp = FakeCdp(only)
+    got = _run(cdp)
+    assert got["ok"] and _methods(cdp) == ["Target.getTargets", "Target.createTarget",
+                                           "Target.closeTarget"]
+    assert ("Target.closeTarget", {"targetId": "T-me"}, "") in cdp.sent

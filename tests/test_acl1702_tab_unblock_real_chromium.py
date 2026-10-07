@@ -214,6 +214,7 @@ class HungJob:
                     self.other_answers = exc
             self.finish.wait(60)
             browser.close()   # отключение — из СВОЕГО потока, как в работе
+        tw.forget_thread(self.job.tid)
 
 
 def _run_case(port: int, site: str, path: str, *, only: bool = False):
