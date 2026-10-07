@@ -16,6 +16,7 @@ so none of the eight pick methods ever ran against an open menu.
 - A failed pick says why, in English, in the `conversion_website_pick` note: the menu would not
   stay open; Website is not offered in the open menu; Conversion location is not on this screen
   (the ad editor was showing, as on Facebook_5265).
+- Review fixes: the script press is one click (two would close a toggle trigger); Enter is pressed only after the trigger is confirmed focused and focus has left the name field (re-read after the blur, blur runs in the frame that holds the field); the ad set name is re-read and a change blocks the step; "not on this screen" is returned only when the field is truly absent (a page script failing in every frame is its own read-error reason); "would not stay open" only after all openers pressed and failed; the reason is added to the step's error text, not only telemetry.
 
 ## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
 

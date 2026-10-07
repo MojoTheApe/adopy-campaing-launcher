@@ -2795,7 +2795,7 @@ _CONVERSION_TRIGGER_JS = r"""
     // «Multiple»: они есть не во всякой разметке открытого меню), а также
     // держит ли фокус поле имени (его список подсказок съедает первый клик).
     // action: '' — только прочитать; 'focus' — сфокусировать триггер;
-    // 'click' — нажать его скриптом (mousedown/up/click + click()).
+    // 'click' — нажать его скриптом (ОДИН click(): второй закрыл бы меню-переключатель).
     const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
     const shown = (el) => {
       const r = el.getBoundingClientRect();
@@ -2803,12 +2803,14 @@ _CONVERSION_TRIGGER_JS = r"""
     };
     const vals = ['website and instant forms', 'website and calls', 'instant forms and messenger',
       'website', 'instant forms', 'sitio web', 'formularios instantáneos'];
-    const out = { label: false, trigger: false, expanded: null, name_focus: false };
-    const ae = document.activeElement;
-    if (ae && ae.tagName === 'INPUT') {
+    const out = { label: false, trigger: false, expanded: null, name_focus: false, focused: false };
+    const nameFocus = () => {
+      const ae = document.activeElement;
+      if (!ae || ae.tagName !== 'INPUT') return false;
       const ph = norm(ae.getAttribute('placeholder'));
-      out.name_focus = ph.includes('ad set name') || ae.getAttribute('aria-haspopup') === 'listbox';
-    }
+      return ph.includes('ad set name') || ae.getAttribute('aria-haspopup') === 'listbox';
+    };
+    out.name_focus = nameFocus();
     let label = null;
     for (const el of document.querySelectorAll('label, span, div, [role=heading]')) {
       if (el.children.length > 2) continue;
@@ -2830,10 +2832,11 @@ _CONVERSION_TRIGGER_JS = r"""
       if (action === 'focus') { el.scrollIntoView({ block: 'nearest' }); el.focus(); }
       if (action === 'click') {
         el.scrollIntoView({ block: 'nearest' });
-        for (const t2 of ['mousedown', 'mouseup', 'click'])
-          el.dispatchEvent(new MouseEvent(t2, { bubbles: true, cancelable: true, view: window }));
         if (typeof el.click === 'function') el.click();
+        else el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
       }
+      out.focused = document.activeElement === el;
+      out.name_focus = nameFocus();
       break;
     }
     return out;
@@ -2842,44 +2845,116 @@ _CONVERSION_TRIGGER_JS = r"""
 
 
 def _conversion_trigger_state(page: Page, action: str = "") -> dict:
-    """Состояние триггера Conversion location (`_CONVERSION_TRIGGER_JS`); пустое — не прочли."""
+    """Состояние триггера Conversion location (`_CONVERSION_TRIGGER_JS`).
+
+    Поля нет на экране — словарь с label=False; скрипт не отработал ни в одном
+    кадре — {"read_error": True} (это не «поля нет»)."""
+    absent: dict | None = None
     for root in _roots(page):
         try:
             got = root.evaluate(_CONVERSION_TRIGGER_JS, action)
         except Exception:
             continue
-        if isinstance(got, dict) and (got.get("label") or got.get("trigger")):
+        if not isinstance(got, dict):
+            continue
+        if got.get("label") or got.get("trigger"):
             return got
-    return {}
+        absent = absent or got
+    return absent if absent is not None else {"read_error": True}
 
 
-def _release_name_focus(page: Page) -> None:
+#: Сведения о последней попытке открыть меню — для причины отказа и защиты имени.
+_OPEN_STATE: dict = {}
+
+_ADSET_NAME_JS = r"""
+  () => {
+    for (const el of document.querySelectorAll('input')) {
+      const ph = (el.getAttribute('placeholder') || '').toLowerCase();
+      if (ph.includes('ad set name')) return el.value || '';
+    }
+    return null;
+  }
+"""
+
+_BLUR_NAME_JS = r"""
+  () => {
+    const a = document.activeElement;
+    if (!a || a.tagName !== 'INPUT') return false;
+    const ph = (a.getAttribute('placeholder') || '').toLowerCase();
+    if (!(ph.includes('ad set name') || a.getAttribute('aria-haspopup') === 'listbox')) return false;
+    a.blur();
+    return true;
+  }
+"""
+
+
+def _adset_name_value(page: Page) -> str | None:
+    """Текущее имя ad set'а в поле (None — поля не видно)."""
+    for root in _roots(page):
+        try:
+            got = root.evaluate(_ADSET_NAME_JS)
+        except Exception:
+            continue
+        if got is not None:
+            return str(got)
+    return None
+
+
+def _release_name_focus(page: Page) -> bool:
     """Снять фокус с поля имени ad set'а: его список подсказок (aria-expanded)
     съедает первый клик мимо — меню Conversion location открывалось и тут же
     закрывалось (ACL-1572, 04-06.10: фокус на поле имени на снимках отказов).
-    Без Escape: он закрывает весь мастер."""
+    Блюр идёт в том кадре, где поле, затем фокус перечитывается: True — фокус
+    ушёл. Без Escape: он закрывает весь мастер."""
     try:
-        if _conversion_trigger_state(page).get("name_focus"):
-            page.evaluate("() => { const a = document.activeElement; if (a && a.blur) a.blur(); }")
-            _sleep_h(0.2)
+        if not _conversion_trigger_state(page).get("name_focus"):
+            return True
+        for root in _roots(page):
+            try:
+                if root.evaluate(_BLUR_NAME_JS):
+                    break
+            except Exception:
+                continue
+        _sleep_h(0.2)
+        return not _conversion_trigger_state(page).get("name_focus")
     except Exception:
-        pass
+        return False
 
 
 def _open_conversion_menu_via_keyboard(page: Page) -> bool:
-    """Открыть меню с клавиатуры: фокус на триггер + Enter (мышь по CDP не всегда доходит)."""
-    if not _conversion_trigger_state(page, "focus").get("trigger"):
+    """Открыть меню с клавиатуры: фокус на триггер + Enter (мышь по CDP не всегда доходит).
+
+    Enter уходит только если фокус действительно на триггере и покинул поле
+    имени: иначе он принял бы активную подсказку и переименовал ad set."""
+    def _focused_on_trigger() -> bool | None:
+        """None — триггера нет; иначе фокус на нём и ушёл из поля имени (перечитано после паузы)."""
+        if not _conversion_trigger_state(page, "focus").get("trigger"):
+            return None
+        _sleep_h(0.15)
+        again = _conversion_trigger_state(page)
+        return bool(again.get("trigger") and again.get("focused") and not again.get("name_focus"))
+
+    got = _focused_on_trigger()
+    if got is None:
         return False
+    if not got:
+        _release_name_focus(page)
+        if not _focused_on_trigger():
+            return False
+    before = _adset_name_value(page)
     try:
         page.keyboard.press("Enter")
     except Exception:
         return False
     _sleep_h(0.8)
+    after = _adset_name_value(page)
+    if before is not None and after is not None and before != after:
+        _OPEN_STATE["name_changed"] = (before, after)
     return True
 
 
 def _open_conversion_menu_via_js(page: Page) -> bool:
-    """Открыть меню скриптовым нажатием на триггер."""
+    """Открыть меню скриптовым нажатием на триггер (один click)."""
     got = _conversion_trigger_state(page, "click")
     _sleep_h(0.8)
     return bool(got.get("trigger"))
@@ -2914,9 +2989,13 @@ def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str
     openers = (click_conversion_location_dropdown,
                _open_conversion_menu_via_keyboard,
                _open_conversion_menu_via_js)
+    attempts: list[tuple[str, bool]] = []
+    _OPEN_STATE["attempts"] = attempts
     for opener in openers[:max(1, tries + 1)]:
         if _conversion_location_menu_open(page):
             return True
+        if _OPEN_STATE.get("name_changed"):
+            return False
         dismiss_publish_draft_dialog(page)
         # ACL-1573 / ACL-1572: окно поверх (панель Notifications, шаблон
         # имени «Ad set name») забирает клик по триггеру — сперва закрыть.
@@ -2925,9 +3004,10 @@ def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str
             closed.extend(got)
         _release_name_focus(page)
         try:
-            pressed = opener(page)
+            pressed = bool(opener(page))
         except Exception:
             pressed = False
+        attempts.append((getattr(opener, "__name__", "opener"), pressed))
         if not pressed:
             continue
         for _poll in range(8):
@@ -2959,7 +3039,14 @@ def _website_value_shows(page: Page, timeout_s: float | None = None) -> bool:
 def _conversion_failure_reason(page: Page, *, reopen_failed: int = 0) -> str:
     """Почему Website не выбран — одной фразой по-английски; "" — причина неясна."""
     try:
+        changed = _OPEN_STATE.get("name_changed")
+        if changed:
+            return (f"The ad set name changed while the Conversion location menu was being "
+                    f"opened (from '{changed[0]}' to '{changed[1]}'): stopped so it is not saved")
         state = _conversion_trigger_state(page)
+        if state.get("read_error"):
+            return ("Could not read the Conversion location field: the page script failed "
+                    "in every frame (the page may be loading or navigating)")
         if not state.get("label") and not state.get("trigger"):
             return ("Conversion location is not on this screen: the editor shows another "
                     "level (for example the ad instead of the ad set)")
@@ -2967,12 +3054,27 @@ def _conversion_failure_reason(page: Page, *, reopen_failed: int = 0) -> str:
             if not _is_website_option_visible(page, timeout_ms=300):
                 return "Website is not offered in the open Conversion location menu"
             return ""
-        if reopen_failed:
-            return ("The Conversion location menu would not stay open: it closed after "
-                    "click, keyboard and script presses")
+        attempts = _OPEN_STATE.get("attempts") or []
+        if reopen_failed and _OPEN_STATE.get("last_open_failed") and attempts:
+            unpressed = [n for n, ok in attempts if not ok]
+            if not unpressed and len(attempts) >= 3:
+                return ("The Conversion location menu would not stay open: it closed after "
+                        "click, keyboard and script presses")
+            return ("The Conversion location menu did not open: the trigger could not be "
+                    "pressed by " + ", ".join(n.replace("_open_conversion_menu_via_", "")
+                                              .replace("click_conversion_location_dropdown", "click")
+                                              for n in unpressed))
     except Exception:
         pass
     return ""
+
+
+#: Причина последнего отказа выбора Website — для текста ошибки шага.
+LAST_CONVERSION_FAILURE_REASON = ""
+
+
+def last_conversion_failure_reason() -> str:
+    return LAST_CONVERSION_FAILURE_REASON
 
 
 def _pick_website_from_open_menu(page: Page) -> bool:
@@ -3019,7 +3121,21 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     windows_closed: list[str] = []
     reopen_failed = 0
 
+    name_before = _adset_name_value(page)
+    _OPEN_STATE.clear()
+    global LAST_CONVERSION_FAILURE_REASON
+    LAST_CONVERSION_FAILURE_REASON = ""
+
     def _done(method: str | None, ok: bool) -> bool:
+        global LAST_CONVERSION_FAILURE_REASON
+        try:
+            # ACL-1572: страховка — имя ad set'а после шага то же, что до него.
+            name_after = _adset_name_value(page)
+            if name_before is not None and name_after is not None and name_before != name_after:
+                _OPEN_STATE["name_changed"] = (name_before, name_after)
+                ok = False
+        except Exception:
+            pass
         try:
             diag = {"tried": tried, "reopened": reopened, "menu_closed": menu_closed}
             if windows_closed or reopen_failed:
@@ -3031,6 +3147,7 @@ def _pick_website_from_open_menu(page: Page) -> bool:
                 if why:
                     note = f"not_selected: {why}"
                     diag["reason"] = why
+                    LAST_CONVERSION_FAILURE_REASON = why
             _telemetry.record(
                 "conversion_website_pick", ok,
                 note=note,
@@ -3046,7 +3163,7 @@ def _pick_website_from_open_menu(page: Page) -> bool:
             return _done(tried[-1] if tried else "already", True)
         # ACL-1572: меню три раза подряд не открылось всеми способами —
         # остальные способы жали бы в пустоту (62-187 с до отказа).
-        if reopen_failed >= 3:
+        if reopen_failed >= 3 or _OPEN_STATE.get("name_changed"):
             break
         # ACL-1573 / ACL-1572: между способами — закрыть чужие окна реестра
         # (панель Notifications, шаблон имени): они забирают фокус, и меню
@@ -3056,11 +3173,13 @@ def _pick_website_from_open_menu(page: Page) -> bool:
         if not was_open:
             menu_closed += 1
             opened = _ensure_conversion_menu_open(page, closed=windows_closed)
+            _OPEN_STATE["last_open_failed"] = not opened
             if not opened and _windows.after_failure(page, "conversion_website"):
                 # Меню не открылось — запасной ход сторожа (раз на шаг):
                 # закрыли окно над ним — открыть ещё раз.
                 windows_closed.append("fallback")
                 opened = _ensure_conversion_menu_open(page, closed=windows_closed)
+                _OPEN_STATE["last_open_failed"] = not opened
             if not opened:
                 # Меню не открыть — способ жал бы в пустоту; следующий
                 # способ снова попробует открыть.
