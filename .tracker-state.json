@@ -5523,9 +5523,11 @@
         "worktree": "C:\\acl-1669-b97-pick",
         "id": "3ee2bfe5f64a488a8d690bd87a2613f5",
         "issue": 669,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-07T07:28:59+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 670,
+        "report": "# Handoff ACL-1669 (PR #670)\n\nCause: B97's Meta draws step bodies late and the robot read them once. Run 3edaf71b0613: the media counter was read 0.1 s after the Media step opened, found nothing and refused (`selection_state_unavailable`), so no ad got media; `url_field_missing` followed as a consequence. Run bc4302862ee7: the pick worked, but Crop was read while Meta still showed loading placeholders (no cards) and ended `crop_replace_button_missing`. ACL-1637 did not cause it (the counter rule dates from 17.09; ad 1 never uses the 1637 path).\n\nFix: wait up to 4 s for the counter; if still missing and no tile marked, click nothing and upload the file once (ACL-1637 rule kept); a marked tile without a counter is still refused as `library_selection_unreadable`. Crop waits up to 20 s for its cards. `url_field_missing` on an ad without media is labelled `url_field_missing_no_media` (a consequence).\n\nTests: tests/test_bench_b97_picker_and_crop_1007.py (8 no-browser tests passed locally; 3 bench tests need Chromium and run in CI only); tests/test_library_rollback_requires_visible_counter.py updated (CI only). Fixture crop_cards_loading_2026_10_07.html is hand-reduced from the capture; the picker bench reuses the 04.10 fragment without footer counters because the 07.10 captures were taken after the wizard closed.\n\nOpen: the hypothesis that the footer counter is merely late is not proven by markup; needs a live B97 check (Live checkbox left unchecked). When the counter is truly absent, ads 2-3 each upload fresh instead of reusing the library copy."
       },
       "638": {
         "actor": "Worker-A1638D",
