@@ -8227,7 +8227,7 @@
             "session": "run_c1572w_1007"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-C1572W",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -10751,6 +10751,30 @@
         "coordinator": "Coordinator-T1004Q",
         "started_at": "2026-10-07T11:24:10+00:00",
         "state": "reviewing"
+      },
+      "690": {
+        "id": "7be8b6cd455d45428352ef4b917839a6",
+        "pr": 671,
+        "issues": [
+          572
+        ],
+        "actor": "Reviewer-R1572N",
+        "session": "rev_r1572n_1007",
+        "coordinator": "Coordinator-T1004Q",
+        "started_at": "2026-10-07T12:13:14+00:00",
+        "state": "reviewing"
+      },
+      "671": {
+        "id": "7be8b6cd455d45428352ef4b917839a6",
+        "pr": 671,
+        "issues": [
+          572
+        ],
+        "actor": "Reviewer-R1572N",
+        "session": "rev_r1572n_1007",
+        "coordinator": "Coordinator-T1004Q",
+        "started_at": "2026-10-07T12:13:14+00:00",
+        "state": "reviewing"
       }
     },
     "review_queue": [
@@ -10771,18 +10795,7 @@
       684,
       691
     ],
-    "review": {
-      "id": "7be8b6cd455d45428352ef4b917839a6",
-      "pr": 671,
-      "issues": [
-        572
-      ],
-      "actor": "Reviewer-R1572N",
-      "session": "rev_r1572n_1007",
-      "coordinator": "Coordinator-T1004Q",
-      "started_at": "2026-10-07T12:13:14+00:00",
-      "state": "reviewing"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -15239,6 +15252,25 @@
         "issue": 691,
         "pr": 692,
         "actor": "Worker-K1691H"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-07T13:14:46+00:00",
+        "review": {
+          "id": "7be8b6cd455d45428352ef4b917839a6",
+          "pr": 671,
+          "issues": [
+            572
+          ],
+          "actor": "Reviewer-R1572N",
+          "session": "rev_r1572n_1007",
+          "coordinator": "Coordinator-T1004Q",
+          "started_at": "2026-10-07T12:13:14+00:00",
+          "state": "reviewing"
+        },
+        "prs": [
+          690
+        ]
       }
     ],
     "policy": {
