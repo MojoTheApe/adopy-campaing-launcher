@@ -2788,6 +2788,103 @@ _CONVERSION_MENU_OPEN_JS = r"""
 """
 
 
+_CONVERSION_TRIGGER_JS = r"""
+  (action) => {
+    // ACL-1572: состояние триггера Conversion location — есть ли подпись,
+    // сам триггер и его aria-expanded (надёжнее заголовков «Single»/
+    // «Multiple»: они есть не во всякой разметке открытого меню), а также
+    // держит ли фокус поле имени (его список подсказок съедает первый клик).
+    // action: '' — только прочитать; 'focus' — сфокусировать триггер;
+    // 'click' — нажать его скриптом (mousedown/up/click + click()).
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const shown = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    const vals = ['website and instant forms', 'website and calls', 'instant forms and messenger',
+      'website', 'instant forms', 'sitio web', 'formularios instantáneos'];
+    const out = { label: false, trigger: false, expanded: null, name_focus: false };
+    const ae = document.activeElement;
+    if (ae && ae.tagName === 'INPUT') {
+      const ph = norm(ae.getAttribute('placeholder'));
+      out.name_focus = ph.includes('ad set name') || ae.getAttribute('aria-haspopup') === 'listbox';
+    }
+    let label = null;
+    for (const el of document.querySelectorAll('label, span, div, [role=heading]')) {
+      if (el.children.length > 2) continue;
+      const t = norm(el.textContent);
+      if ((t === 'conversion location' || t === 'ubicación de la conversión') && shown(el)) {
+        label = el; break;
+      }
+    }
+    if (!label) return out;
+    out.label = true;
+    for (const el of document.querySelectorAll('[role=combobox], [aria-haspopup]')) {
+      if (!shown(el)) continue;
+      if (!(label.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+      const t = norm(el.textContent);
+      if (!vals.some(v => t === v || t.startsWith(v))) continue;
+      out.trigger = true;
+      const ex = el.getAttribute('aria-expanded');
+      out.expanded = ex === null ? null : ex === 'true';
+      if (action === 'focus') { el.scrollIntoView({ block: 'nearest' }); el.focus(); }
+      if (action === 'click') {
+        el.scrollIntoView({ block: 'nearest' });
+        for (const t2 of ['mousedown', 'mouseup', 'click'])
+          el.dispatchEvent(new MouseEvent(t2, { bubbles: true, cancelable: true, view: window }));
+        if (typeof el.click === 'function') el.click();
+      }
+      break;
+    }
+    return out;
+  }
+"""
+
+
+def _conversion_trigger_state(page: Page, action: str = "") -> dict:
+    """Состояние триггера Conversion location (`_CONVERSION_TRIGGER_JS`); пустое — не прочли."""
+    for root in _roots(page):
+        try:
+            got = root.evaluate(_CONVERSION_TRIGGER_JS, action)
+        except Exception:
+            continue
+        if isinstance(got, dict) and (got.get("label") or got.get("trigger")):
+            return got
+    return {}
+
+
+def _release_name_focus(page: Page) -> None:
+    """Снять фокус с поля имени ad set'а: его список подсказок (aria-expanded)
+    съедает первый клик мимо — меню Conversion location открывалось и тут же
+    закрывалось (ACL-1572, 04-06.10: фокус на поле имени на снимках отказов).
+    Без Escape: он закрывает весь мастер."""
+    try:
+        if _conversion_trigger_state(page).get("name_focus"):
+            page.evaluate("() => { const a = document.activeElement; if (a && a.blur) a.blur(); }")
+            _sleep_h(0.2)
+    except Exception:
+        pass
+
+
+def _open_conversion_menu_via_keyboard(page: Page) -> bool:
+    """Открыть меню с клавиатуры: фокус на триггер + Enter (мышь по CDP не всегда доходит)."""
+    if not _conversion_trigger_state(page, "focus").get("trigger"):
+        return False
+    try:
+        page.keyboard.press("Enter")
+    except Exception:
+        return False
+    _sleep_h(0.8)
+    return True
+
+
+def _open_conversion_menu_via_js(page: Page) -> bool:
+    """Открыть меню скриптовым нажатием на триггер."""
+    got = _conversion_trigger_state(page, "click")
+    _sleep_h(0.8)
+    return bool(got.get("trigger"))
+
+
 def _conversion_location_menu_open(page: Page) -> bool:
     """Открыто ли сейчас меню Conversion location (без ожиданий)."""
     for root in _roots(page):
@@ -2796,7 +2893,8 @@ def _conversion_location_menu_open(page: Page) -> bool:
                 return True
         except Exception:
             continue
-    return False
+    # ACL-1572: открытое меню без заголовков «Single»/«Multiple» — по триггеру.
+    return _conversion_trigger_state(page).get("expanded") is True
 
 
 def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str] | None = None) -> bool:
@@ -2810,7 +2908,13 @@ def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str
     способом меню проверяется и при необходимости открывается заново — только
     когда оно закрыто: клик по открытому триггеру его бы закрыл.
     """
-    for _ in range(max(1, tries)):
+    # ACL-1572: способы открыть триггер сменяют друг друга (клик по CDP не
+    # всегда доходит, 8 из 8 отказов 04-06.10 — меню так и не открывалось);
+    # следующий способ — только если меню после предыдущего не открылось.
+    openers = (click_conversion_location_dropdown,
+               _open_conversion_menu_via_keyboard,
+               _open_conversion_menu_via_js)
+    for opener in openers[:max(1, tries + 1)]:
         if _conversion_location_menu_open(page):
             return True
         dismiss_publish_draft_dialog(page)
@@ -2819,8 +2923,13 @@ def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str
         got = _windows.before_step(page, "conversion_menu")
         if closed is not None:
             closed.extend(got)
-        if not click_conversion_location_dropdown(page):
-            return False
+        _release_name_focus(page)
+        try:
+            pressed = opener(page)
+        except Exception:
+            pressed = False
+        if not pressed:
+            continue
         for _poll in range(8):
             if _conversion_location_menu_open(page):
                 return True
@@ -2845,6 +2954,25 @@ def _website_value_shows(page: Page, timeout_s: float | None = None) -> bool:
         _sleep_h(0.25)
         # Под _sleep_h=0 в тестах цикл не должен крутиться вхолостую.
         time.sleep(0.05)
+
+
+def _conversion_failure_reason(page: Page, *, reopen_failed: int = 0) -> str:
+    """Почему Website не выбран — одной фразой по-английски; "" — причина неясна."""
+    try:
+        state = _conversion_trigger_state(page)
+        if not state.get("label") and not state.get("trigger"):
+            return ("Conversion location is not on this screen: the editor shows another "
+                    "level (for example the ad instead of the ad set)")
+        if _conversion_location_menu_open(page):
+            if not _is_website_option_visible(page, timeout_ms=300):
+                return "Website is not offered in the open Conversion location menu"
+            return ""
+        if reopen_failed:
+            return ("The Conversion location menu would not stay open: it closed after "
+                    "click, keyboard and script presses")
+    except Exception:
+        pass
+    return ""
 
 
 def _pick_website_from_open_menu(page: Page) -> bool:
@@ -2896,18 +3024,30 @@ def _pick_website_from_open_menu(page: Page) -> bool:
             diag = {"tried": tried, "reopened": reopened, "menu_closed": menu_closed}
             if windows_closed or reopen_failed:
                 diag.update(windows_closed=windows_closed, reopen_failed=reopen_failed)
+            note = method or "not_selected"
+            if not ok:
+                # ACL-1572: причина отказа по-английски (в Sentry уходит note).
+                why = _conversion_failure_reason(page, reopen_failed=reopen_failed)
+                if why:
+                    note = f"not_selected: {why}"
+                    diag["reason"] = why
             _telemetry.record(
                 "conversion_website_pick", ok,
-                note=method or "not_selected",
+                note=note,
                 diag=diag,
             )
         except Exception:
             pass
         return ok
 
+    _release_name_focus(page)
     for name, method in methods:
         if is_website_conversion_selected(page):
             return _done(tried[-1] if tried else "already", True)
+        # ACL-1572: меню три раза подряд не открылось всеми способами —
+        # остальные способы жали бы в пустоту (62-187 с до отказа).
+        if reopen_failed >= 3:
+            break
         # ACL-1573 / ACL-1572: между способами — закрыть чужие окна реестра
         # (панель Notifications, шаблон имени): они забирают фокус, и меню
         # закрывается само.

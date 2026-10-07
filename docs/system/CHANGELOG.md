@@ -1,5 +1,22 @@
 # System history
 
+## Conversion location: the menu is opened by click, keyboard or script, and a failure names its reason — ACL-1572
+
+`conversion_website_pick: not_selected` failed campaigns on Doc21, Elf403, KLD_BFL_B91 and
+Facebook_5265 (01-06.10). Telemetry showed `menu_closed: 8, reopened: 0`: the menu never opened,
+so none of the eight pick methods ever ran against an open menu.
+
+- Opening the menu now escalates: the existing click, then focus + Enter on the trigger, then a
+  script press; the next opener runs only when the previous one left the menu closed.
+- "Menu is open" also reads the trigger's `aria-expanded`, not only the Single/Multiple headings
+  (a menu without those headings was taken for closed and then clicked shut).
+- Focus is released from the ad set name field before the trigger is pressed (its suggestion list
+  swallowed the first press on the failing captures; no Escape, it closes the wizard).
+- After three failed openings the step stops instead of spending 60-190 s on the remaining methods.
+- A failed pick says why, in English, in the `conversion_website_pick` note: the menu would not
+  stay open; Website is not offered in the open menu; Conversion location is not on this screen
+  (the ad editor was showing, as on Facebook_5265).
+
 ## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
 
 The last rung of the fallback ladder: when a step fails on a screen the robot does not know (a
