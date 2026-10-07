@@ -6087,6 +6087,7 @@ def run_recorded_campaign_flow(
     except Exception as exc:
         _shot("fail_audience_age")
         soft_fails.append(f"audience_age:{str(exc)[:60]}")
+    _probe_audience_badge(page, "age")
 
     if country:
         # Ничей выпадающий список (возраст и т. п.) не должен накрывать
@@ -6117,6 +6118,7 @@ def run_recorded_campaign_flow(
             soft_fails.append(f"audience_location:{str(exc)[:60]}")
         if page_state["closed"] and _closed_stop("audience_location", soft_fails):
             return "browser_closed"
+    _probe_audience_badge(page, "location")
 
     # Languages — wired to the real per-country language from the Upload
     # FB.xlsx "Countries" sheet (see enrich_draft.py's lookup_country()),
@@ -6136,6 +6138,8 @@ def run_recorded_campaign_flow(
             soft_fails.append(f"languages:{str(exc)[:60]}")
         if page_state["closed"] and _closed_stop("languages", soft_fails):
             return "browser_closed"
+
+    _probe_audience_badge(page, "languages")
 
     # Detailed targeting: paste each comma-separated interest term and pick
     # the first autocomplete suggestion — same pattern the old recipe_player
@@ -6193,6 +6197,8 @@ def run_recorded_campaign_flow(
         # «нечего было вводить» от «не нашёл поле» было нечем — оба исхода
         # выглядели одинаково, то есть никак.
         _shot("skip_targeting", {"why": "в черновике нет интересов"})
+
+    _probe_audience_badge(page, "targeting")
 
     # ACL-1313: Advantage+ audience — итог, а не действие. Проверяется после
     # возраста, локации, языков и интересов. Включённая = возраст лишь
@@ -20122,6 +20128,24 @@ def _audience_badge_on(page: Page) -> bool | None:
     return None
 
 
+def _probe_audience_badge(page: Page, after: str) -> None:
+    """Только читает бейдж карточки Audience и пишет строку телеметрии.
+
+    ACL-1638, Facebook_9403A (d4f9d5f016c1, 327c0b934cb3, 06.10): бейдж был
+    «off» до возраста, а в итоговой проверке — «on» при жёстком возрасте.
+    Какой из шагов (возраст, локация, языки, интересы) его перевернул,
+    телеметрия не говорила; эта строка после каждого шага говорит.
+    Ничего не нажимает и не влияет на ход шага.
+    """
+    try:
+        state = _audience_badge_on(page)
+        _telemetry.record("audience_badge_probe", None,
+                          note={True: "on", False: "off"}.get(state, "unknown"),
+                          diag={"after": after})
+    except Exception:
+        pass
+
+
 def verify_audience_advantage_off(page: Page) -> bool:
     """Итог: карточка Audience читает «Advantage+ off». Звать ПОСЛЕ возраста.
 
@@ -20154,6 +20178,11 @@ def verify_audience_advantage_off(page: Page) -> bool:
                 break
     ok = state is False
     diag["age"] = _age_range_read(page)
+    if state is True:
+        # ACL-1638: «on» при жёстком возрасте (галочка снята) — не то же, что
+        # «on» при возрасте-подсказке; по диагностике отказ читается сразу.
+        diag["age_suggestion_checked"] = _age_suggestion_read(page).get("checkbox")
+        diag["mode"] = _audience_mode(page)["mode"]
     _telemetry.record(
         "advantage_plus_audience", ok,
         note="off" if ok else ("still_on" if state else "badge_not_found"),
@@ -20432,7 +20461,8 @@ def _uncheck_age_suggestion(page: Page) -> bool | None:
 _AGE_SUMMARY_READ_JS = "(value) => {" + _AUDIENCE_FIELD_DOM + r"""
   const field = summaryField(/^(Age|Edad)$/i, new RegExp(value));
   if (!field) return [];
-  return norm(field.summary.textContent).split(/\s*[-–—]\s*/).map(norm);
+  // Пометка после границ («· Unknown age on WhatsApp: Excluded», ACL-1638) — не граница.
+  return norm(field.summary.textContent).split(/\s*[·•|]\s*/)[0].split(/\s*[-–—]\s*/).map(norm);
 }
 """
 """Границы из свёрнутой сводки поля Age («35 - 65+» → ["35", "65+"])."""
@@ -20681,7 +20711,12 @@ def _measure_age_trigger(root, value: str, tries: int = 3) -> dict | None:
 
 
 #: Сводка свёрнутого поля Age: «18 - 65+», «35 – 65+».
-_AGE_SUMMARY_RE = r"^(?:1[3-9]|[2-5][0-9]|6[0-5])\+?\s*[-–—]\s*(?:1[3-9]|[2-5][0-9]|6[0-5])\+?$"
+# ACL-1638 (06.10, FacebookDoc120, 573ab2cf3646/00): на WhatsApp-кампаниях в
+# той же строке после границ стоит пометка — «35 - 65+ · Unknown age on
+# WhatsApp: Excluded». Якорь `$` без неё не пускал такую сводку: строка Age
+# не раскрывалась, «Use as a suggestion» не снималась (`age_row_opened: false`).
+_AGE_SUMMARY_RE = (r"^(?:1[3-9]|[2-5][0-9]|6[0-5])\+?\s*[-–—]\s*(?:1[3-9]|[2-5][0-9]|6[0-5])\+?"
+                   r"(?:\s*[·•|]\s*\S.*)?$")
 
 
 def _open_collapsed_age_row(page: Page, wait_s: float = 6.0) -> bool:

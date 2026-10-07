@@ -16,6 +16,23 @@ so none of the eight pick methods ever ran against an open menu.
   stay open; Website is not offered in the open menu; Conversion location is not on this screen
   (the ad editor was showing, as on Facebook_5265).
 - Review fixes: the script press is one click (two would close a toggle trigger). The keyboard (focus + Enter) opener was dropped entirely: Enter could accept a suggestion in the ad set name field and rename the ad set, so the only openers are the click and the script press, and the name field is blurred first (in the frame that holds it). As a single safety check, the ad set name is read once at the start of the Conversion location step and compared at its end, across all retries; a change stops the step (the recorded flow returns the blocking, never replayed `conversion_website_name_changed`) and says only that the name changed, never the names. "Not on this screen" is returned only when the field is truly absent (a page script failing in every frame is its own read-error reason); "would not stay open" only after both openers pressed and failed; the reason is added to the step's error text, not only telemetry; the step state is per thread.
+## Advantage+ audience on WhatsApp campaigns: a collapsed Age row with a note is opened again — ACL-1638
+
+The classic ad set editor failed the `advantage_plus_audience` step (`still_on`, campaign not published)
+on 06.10 on FacebookDoc120 and Facebook_9403A. These were two different failures.
+
+- Doc120 (and 4285247f763a on 05.10): on WhatsApp campaigns Meta writes the collapsed Age row as
+  "35 - 65+ · Unknown age on WhatsApp: Excluded" with a "Your suggestion" label. The robot only
+  recognised a summary that ended right after the bounds, so it never opened the row
+  (`age_row_opened: false`, `age: []`) and never unchecked "Use as a suggestion". The summary now
+  accepts a note after the bounds, so the row is opened, the suggestion is unchecked and the badge is
+  re-read as before.
+- 9403A (d4f9d5f016c1, 327c0b934cb3): the age was already a hard 35 - 65+ and the checkbox was off, but
+  the badge read "Advantage+ on" again after reading "off" before the age step. Nothing is left for the
+  robot to click, and the cause of the flip is not known from the captures, so the step still blocks the
+  draft. A failure now carries `age_suggestion_checked` and `mode` in its telemetry, and a read-only
+  `audience_badge_probe` row after the age, location, languages and targeting steps shows which step
+  flips the badge on the next occurrence.
 
 ## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
 
