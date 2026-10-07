@@ -1926,6 +1926,24 @@
           628
         ],
         "recorded_at": "2026-10-06T21:46:59+00:00"
+      },
+      "661": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1650Q",
+        "review_session": "rev_r1650q_1007",
+        "execution_lane": "5a641cf36a22467aba73cb490f030034",
+        "implementer": "Worker-S1650A",
+        "head_sha": "8db911ee4406c3d456599bbe83d455d3eeb7eceb",
+        "base_sha": "9f592b540519edf94cff5e6ce94625c25deca00b",
+        "tree_sha": "859ee9d57600615abee533d52a32f20549617eb9",
+        "report": "Independent review of PR #661 (ACL-1650, Issue #650), head be435c90b98852d005f688bea4ddc901c62acc0d, base work/stage 9f592b540519edf94cff5e6ce94625c25deca00b.\n\nVerdict: APPROVED.\n\n1. Scope. git diff work/stage...HEAD touches only src/web/templates/report.html (+4/-1): in .cbd-country, `color: var(--muted)` becomes `color: var(--accent)`, with a two-line Russian comment (ACL-1650). Commits: 0902a994 (the change) and be435c90 (merge of work/stage). work/stage is an ancestor of HEAD, and the two-dot diff is identical. Nothing else changed.\n2. Contrast (WCAG relative luminance). .cbd-country sits in .cbd-body inside .cbd-panel, whose background is var(--bg-elev). Light: #2563eb on #ffffff = 5.17:1. Dark: #7aa9ff on #1a1f27 = 7.05:1. Both are >= 4.5:1, which matches the handoff. For reference, page bg is 4.74 light and 8.0 dark. Only --bg-subtle in light (4.33) would fall below, but the heading is not rendered on that surface.\n3. Tests. No test asserts the old colour. The only test reference to cbd-country is tests/builder_tree_harness.cjs:22, a code-slice sanity check that does not involve colour. tests/test_acl_test_platform.py: 100 passed locally in the detached worktree.\n4. git merge-tree --write-tree work/stage HEAD is clean (rc=0). The result tree is 859ee9d57600615abee533d52a32f20549617eb9, equal to the head tree.\n5. CI. All 13 checks are green on the first run with no reruns: linux tests x3, windows tests, installer build/install/repair/uninstall, ACL verification, Installer verification, tracker-link, tooling, descriptors.\n\nNon-blocking notes: none.\n",
+        "main_sha": "592cb9fba248b5c57383189ae80273967f732b30",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          650
+        ],
+        "recorded_at": "2026-10-07T06:06:08+00:00"
       }
     },
     "stage": {
