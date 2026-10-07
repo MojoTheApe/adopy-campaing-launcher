@@ -2788,6 +2788,201 @@ _CONVERSION_MENU_OPEN_JS = r"""
 """
 
 
+_CONVERSION_TRIGGER_JS = r"""
+  (action) => {
+    // ACL-1572: состояние триггера Conversion location — есть ли подпись,
+    // сам триггер и его aria-expanded (надёжнее заголовков «Single»/
+    // «Multiple»: они есть не во всякой разметке открытого меню), а также
+    // держит ли фокус поле имени (его список подсказок съедает первый клик).
+    // action: '' — только прочитать; 'focus' — сфокусировать триггер;
+    // 'click' — нажать его скриптом (ОДИН click(): второй закрыл бы меню-переключатель).
+    const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const shown = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    const vals = ['website and instant forms', 'website and calls', 'instant forms and messenger',
+      'website', 'instant forms', 'sitio web', 'formularios instantáneos'];
+    const out = { label: false, trigger: false, expanded: null, name_focus: false, focused: false };
+    const nameFocus = () => {
+      const ae = document.activeElement;
+      if (!ae || ae.tagName !== 'INPUT') return false;
+      const ph = norm(ae.getAttribute('placeholder'));
+      return ph.includes('ad set name') || ae.getAttribute('aria-haspopup') === 'listbox';
+    };
+    out.name_focus = nameFocus();
+    let label = null;
+    for (const el of document.querySelectorAll('label, span, div, [role=heading]')) {
+      if (el.children.length > 2) continue;
+      const t = norm(el.textContent);
+      if ((t === 'conversion location' || t === 'ubicación de la conversión') && shown(el)) {
+        label = el; break;
+      }
+    }
+    if (!label) return out;
+    out.label = true;
+    for (const el of document.querySelectorAll('[role=combobox], [aria-haspopup]')) {
+      if (!shown(el)) continue;
+      if (!(label.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+      const t = norm(el.textContent);
+      if (!vals.some(v => t === v || t.startsWith(v))) continue;
+      out.trigger = true;
+      const ex = el.getAttribute('aria-expanded');
+      out.expanded = ex === null ? null : ex === 'true';
+      if (action === 'focus') { el.scrollIntoView({ block: 'nearest' }); el.focus(); }
+      if (action === 'click') {
+        el.scrollIntoView({ block: 'nearest' });
+        if (typeof el.click === 'function') el.click();
+        else el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      }
+      out.focused = document.activeElement === el;
+      out.name_focus = nameFocus();
+      break;
+    }
+    return out;
+  }
+"""
+
+
+def _conversion_trigger_state(page: Page, action: str = "") -> dict:
+    """Состояние триггера Conversion location (`_CONVERSION_TRIGGER_JS`).
+
+    Поля нет на экране — словарь с label=False; скрипт не отработал ни в одном
+    кадре — {"read_error": True} (это не «поля нет»)."""
+    absent: dict | None = None
+    for root in _roots(page):
+        try:
+            got = root.evaluate(_CONVERSION_TRIGGER_JS, action)
+        except Exception:
+            continue
+        if not isinstance(got, dict):
+            continue
+        if got.get("label") or got.get("trigger"):
+            return got
+        absent = absent or got
+    return absent if absent is not None else {"read_error": True}
+
+
+#: Состояние шага Conversion location — своё у каждого потока (как `_upload_diag_tls`):
+#: сведения о последней попытке открыть меню, причина отказа, имя ad set'а в начале шага.
+_conv_tls = threading.local()
+
+#: Причина, когда имя ad set'а за шаг изменилось (без самих имён: в Sentry их не шлём).
+NAME_CHANGED_REASON = ("The ad set name changed while the Conversion location step was running; "
+                       "stopped so the changed name is not saved")
+
+
+def _open_state() -> dict:
+    """Сведения о последней попытке открыть меню (в этом потоке)."""
+    d = getattr(_conv_tls, "open", None)
+    if d is None:
+        d = _conv_tls.open = {}
+    return d
+
+
+class _NameGuard:
+    """Имя ad set'а в начале шага и в конце: один замер на шаг, не на каждый выбор."""
+
+    def __init__(self, page: Page) -> None:
+        self.page = page
+        self.owner = False
+
+    def __enter__(self) -> "_NameGuard":
+        if not getattr(_conv_tls, "guard_active", False):
+            self.owner = True
+            _conv_tls.guard_active = True
+            _conv_tls.name_changed = False
+            _conv_tls.reason = ""
+            try:
+                _conv_tls.baseline = _adset_name_value(self.page)
+            except Exception:
+                _conv_tls.baseline = None
+        return self
+
+    def __exit__(self, *exc) -> None:
+        if self.owner:
+            _conv_tls.guard_active = False
+
+
+def conversion_name_changed(page: Page) -> bool:
+    """Имя ad set'а теперь не то, что в начале шага (True запоминается до следующего шага)."""
+    if getattr(_conv_tls, "name_changed", False):
+        return True
+    base = getattr(_conv_tls, "baseline", None)
+    if base is None:
+        return False
+    try:
+        now = _adset_name_value(page)
+    except Exception:
+        return False
+    if now is not None and now != base:
+        _conv_tls.name_changed = True
+        _conv_tls.reason = NAME_CHANGED_REASON
+        return True
+    return False
+
+_ADSET_NAME_JS = r"""
+  () => {
+    for (const el of document.querySelectorAll('input')) {
+      const ph = (el.getAttribute('placeholder') || '').toLowerCase();
+      if (ph.includes('ad set name')) return el.value || '';
+    }
+    return null;
+  }
+"""
+
+_BLUR_NAME_JS = r"""
+  () => {
+    const a = document.activeElement;
+    if (!a || a.tagName !== 'INPUT') return false;
+    const ph = (a.getAttribute('placeholder') || '').toLowerCase();
+    if (!(ph.includes('ad set name') || a.getAttribute('aria-haspopup') === 'listbox')) return false;
+    a.blur();
+    return true;
+  }
+"""
+
+
+def _adset_name_value(page: Page) -> str | None:
+    """Текущее имя ad set'а в поле (None — поля не видно)."""
+    for root in _roots(page):
+        try:
+            got = root.evaluate(_ADSET_NAME_JS)
+        except Exception:
+            continue
+        if got is not None:
+            return str(got)
+    return None
+
+
+def _release_name_focus(page: Page) -> bool:
+    """Снять фокус с поля имени ad set'а: его список подсказок (aria-expanded)
+    съедает первый клик мимо — меню Conversion location открывалось и тут же
+    закрывалось (ACL-1572, 04-06.10: фокус на поле имени на снимках отказов).
+    Блюр идёт в том кадре, где поле, затем фокус перечитывается: True — фокус
+    ушёл. Без Escape: он закрывает весь мастер."""
+    try:
+        if not _conversion_trigger_state(page).get("name_focus"):
+            return True
+        for root in _roots(page):
+            try:
+                if root.evaluate(_BLUR_NAME_JS):
+                    break
+            except Exception:
+                continue
+        _sleep_h(0.2)
+        return not _conversion_trigger_state(page).get("name_focus")
+    except Exception:
+        return False
+
+
+def _open_conversion_menu_via_js(page: Page) -> bool:
+    """Открыть меню скриптовым нажатием на триггер (один click)."""
+    got = _conversion_trigger_state(page, "click")
+    _sleep_h(0.8)
+    return bool(got.get("trigger"))
+
+
 def _conversion_location_menu_open(page: Page) -> bool:
     """Открыто ли сейчас меню Conversion location (без ожиданий)."""
     for root in _roots(page):
@@ -2796,7 +2991,8 @@ def _conversion_location_menu_open(page: Page) -> bool:
                 return True
         except Exception:
             continue
-    return False
+    # ACL-1572: открытое меню без заголовков «Single»/«Multiple» — по триггеру.
+    return _conversion_trigger_state(page).get("expanded") is True
 
 
 def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str] | None = None) -> bool:
@@ -2810,17 +3006,33 @@ def _ensure_conversion_menu_open(page: Page, *, tries: int = 2, closed: list[str
     способом меню проверяется и при необходимости открывается заново — только
     когда оно закрыто: клик по открытому триггеру его бы закрыл.
     """
-    for _ in range(max(1, tries)):
+    # ACL-1572: способы открыть триггер сменяют друг друга (клик по CDP не
+    # всегда доходит, 8 из 8 отказов 04-06.10 — меню так и не открывалось);
+    # следующий способ — только если меню после предыдущего не открылось.
+    # Enter убран: он мог принять подсказку поля имени и переименовать ad set.
+    openers = (click_conversion_location_dropdown,
+               _open_conversion_menu_via_js)
+    attempts: list[tuple[str, bool]] = []
+    _open_state()["attempts"] = attempts
+    for opener in openers[:max(1, tries)]:
         if _conversion_location_menu_open(page):
             return True
+        if conversion_name_changed(page):
+            return False
         dismiss_publish_draft_dialog(page)
         # ACL-1573 / ACL-1572: окно поверх (панель Notifications, шаблон
         # имени «Ad set name») забирает клик по триггеру — сперва закрыть.
         got = _windows.before_step(page, "conversion_menu")
         if closed is not None:
             closed.extend(got)
-        if not click_conversion_location_dropdown(page):
-            return False
+        _release_name_focus(page)
+        try:
+            pressed = bool(opener(page))
+        except Exception:
+            pressed = False
+        attempts.append((getattr(opener, "__name__", "opener"), pressed))
+        if not pressed:
+            continue
         for _poll in range(8):
             if _conversion_location_menu_open(page):
                 return True
@@ -2847,7 +3059,50 @@ def _website_value_shows(page: Page, timeout_s: float | None = None) -> bool:
         time.sleep(0.05)
 
 
+def _conversion_failure_reason(page: Page, *, reopen_failed: int = 0) -> str:
+    """Почему Website не выбран — одной фразой по-английски; "" — причина неясна."""
+    try:
+        if conversion_name_changed(page):
+            return NAME_CHANGED_REASON
+        state = _conversion_trigger_state(page)
+        if state.get("read_error"):
+            return ("Could not read the Conversion location field: the page script failed "
+                    "in every frame (the page may be loading or navigating)")
+        if not state.get("label") and not state.get("trigger"):
+            return ("Conversion location is not on this screen: the editor shows another "
+                    "level (for example the ad instead of the ad set)")
+        if _conversion_location_menu_open(page):
+            if not _is_website_option_visible(page, timeout_ms=300):
+                return "Website is not offered in the open Conversion location menu"
+            return ""
+        attempts = _open_state().get("attempts") or []
+        if reopen_failed and _open_state().get("last_open_failed") and attempts:
+            unpressed = [n for n, ok in attempts if not ok]
+            if not unpressed and len(attempts) >= 2:
+                return ("The Conversion location menu would not stay open: it closed after "
+                        "click and script presses")
+            return ("The Conversion location menu did not open: the trigger could not be "
+                    "pressed by " + ", ".join(n.replace("_open_conversion_menu_via_", "")
+                                              .replace("click_conversion_location_dropdown", "click")
+                                              for n in unpressed))
+    except Exception:
+        pass
+    return ""
+
+
+def last_conversion_failure_reason() -> str:
+    """Причина последнего отказа выбора Website (в этом потоке) — для текста ошибки шага."""
+    return getattr(_conv_tls, "reason", "")
+
+
 def _pick_website_from_open_menu(page: Page) -> bool:
+    """Выбрать Website из открытого меню; имя ad set'а за шаг не должно измениться."""
+    with _NameGuard(page):
+        got = _pick_website_from_open_menu_steps(page)
+        return got and not conversion_name_changed(page)
+
+
+def _pick_website_from_open_menu_steps(page: Page) -> bool:
     """Expand Single (if needed) then click Website — fully automatic.
 
     Research (Playwright #41286, Multilogin CDP): mouse clicks over connect_over_cdp
@@ -2891,23 +3146,46 @@ def _pick_website_from_open_menu(page: Page) -> bool:
     windows_closed: list[str] = []
     reopen_failed = 0
 
+    _open_state().clear()
+
     def _done(method: str | None, ok: bool) -> bool:
+        try:
+            # ACL-1572: имя ad set'а должно остаться таким, каким было в начале шага.
+            if conversion_name_changed(page):
+                ok = False
+            elif ok:
+                _conv_tls.reason = ""
+        except Exception:
+            pass
         try:
             diag = {"tried": tried, "reopened": reopened, "menu_closed": menu_closed}
             if windows_closed or reopen_failed:
                 diag.update(windows_closed=windows_closed, reopen_failed=reopen_failed)
+            note = method or "not_selected"
+            if not ok:
+                # ACL-1572: причина отказа по-английски (в Sentry уходит note).
+                why = _conversion_failure_reason(page, reopen_failed=reopen_failed)
+                if why:
+                    note = f"not_selected: {why}"
+                    diag["reason"] = why
+                    _conv_tls.reason = why
             _telemetry.record(
                 "conversion_website_pick", ok,
-                note=method or "not_selected",
+                note=note,
                 diag=diag,
             )
         except Exception:
             pass
         return ok
 
+    _release_name_focus(page)
     for name, method in methods:
         if is_website_conversion_selected(page):
             return _done(tried[-1] if tried else "already", True)
+        # ACL-1572: меню три раза подряд не открылось всеми способами —
+        # остальные способы жали бы в пустоту (62-187 с до отказа).
+        if reopen_failed >= 3 or conversion_name_changed(page):
+            break
         # ACL-1573 / ACL-1572: между способами — закрыть чужие окна реестра
         # (панель Notifications, шаблон имени): они забирают фокус, и меню
         # закрывается само.
@@ -2916,11 +3194,13 @@ def _pick_website_from_open_menu(page: Page) -> bool:
         if not was_open:
             menu_closed += 1
             opened = _ensure_conversion_menu_open(page, closed=windows_closed)
+            _open_state()["last_open_failed"] = not opened
             if not opened and _windows.after_failure(page, "conversion_website"):
                 # Меню не открылось — запасной ход сторожа (раз на шаг):
                 # закрыли окно над ним — открыть ещё раз.
                 windows_closed.append("fallback")
                 opened = _ensure_conversion_menu_open(page, closed=windows_closed)
+                _open_state()["last_open_failed"] = not opened
             if not opened:
                 # Меню не открыть — способ жал бы в пустоту; следующий
                 # способ снова попробует открыть.
@@ -5643,7 +5923,14 @@ def run_recorded_campaign_flow(
     # (Multiple) option instead. pick_website_conversion_option() already
     # handles expanding Single first and tries several verified click
     # strategies, so use it directly instead of a fragile inline attempt.
-    if not pick_website_conversion_option(page):
+    with _NameGuard(page):
+        picked = pick_website_conversion_option(page)
+        renamed = conversion_name_changed(page)
+    if renamed:
+        # ACL-1572: имя ad set'а изменилось за шаг — стоп без повтора, имена не логируем.
+        _shot("fail_conversion_website_name_changed")
+        return "conversion_website_name_changed"
+    if not picked:
         _shot("fail_conversion_website")
         return "conversion_website"
 
@@ -16842,6 +17129,16 @@ def _dismiss_floating_banners(page: Page) -> list[str]:
     return _close_banners(page)
 
 def select_conversion_location_website(page: Page, *, skip_open: bool = False) -> bool:
+    """Pick 'Website' under Conversion -> Conversion location (ACL-1572: the ad set
+    name is measured once per step and must be unchanged at its end, over all retries)."""
+    with _NameGuard(page):
+        got = _select_conversion_location_website_steps(page, skip_open=skip_open)
+        if conversion_name_changed(page):
+            return False
+        return got
+
+
+def _select_conversion_location_website_steps(page: Page, *, skip_open: bool = False) -> bool:
     """Pick 'Website' under Conversion → Conversion location on Ad Set level.
 
     Fully automatic. Uses keyboard + raw CDP clicks to work around Playwright's
