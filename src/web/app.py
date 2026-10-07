@@ -1749,13 +1749,6 @@ def _render_report(
             label = acc.get("account_label")
             if alias and label:
                 alias_map[alias] = label
-        # Под явным правилом имён (account_name_rules.json) тот же аккаунт
-        # знают и под вторым именем: KLD_BFL_B98 -> подпись FacebookMKTOBFLB98.
-        from src.analysis_agent.account_names import rule_alternates
-
-        for alias, label in list(alias_map.items()):
-            for alt in rule_alternates(alias):
-                alias_map.setdefault(alt, label)
         account_alias_map[cid] = alias_map
 
     return templates.TemplateResponse(
@@ -1817,11 +1810,13 @@ def _alias_by_tail(label: str, known: dict) -> str:
     как правильное, и проверить его человеку будет нечем.
     """
     # Явное правило имён побеждает догадку по хвосту и не считается догадкой.
-    from src.analysis_agent.account_names import exact_alias
+    from src.analysis_agent.account_names import exact_alias, has_own_name
 
     exact = exact_alias(label, known)
     if exact:
         return exact
+    if has_own_name(label, known):
+        return ""  # своё имя в книге есть — альтернатива не нужна
     tail = _account_tail(label)
     if not tail:
         return ""
@@ -1863,10 +1858,9 @@ def workbook_alias_for(df, country: str, label: str) -> str:
         # оно точное, а не догадка.
         from src.analysis_agent.account_names import exact_alias
 
-        if label not in names:
-            exact = exact_alias(label, names)
-            if exact:
-                return exact
+        exact = exact_alias(label, names)  # "" если своё имя в книге есть
+        if exact:
+            return exact
         if bool(alias_matches(sub["Account Alias"], label).any()):
             return label
         return _alias_by_tail(label, names) or label
