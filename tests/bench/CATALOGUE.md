@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**23 robot steps × 120 layouts, 65 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**23 robot steps × 121 layouts, 66 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -24,7 +24,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | languages | 5 | 5 | 0 | 0 |
 | detailed_targeting (interests) | 2 | 2 | 0 | 0 |
 | placements | 11 | 11 | 0 | 0 |
-| next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
+| next_to_ad / additional ad (classic) | 4 | 4 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 5 | 5 | 0 | 0 |
 | creative_wizard | 17 | 17 | 0 | 0 |
@@ -184,6 +184,7 @@ Robot: Next to the ad level; create_additional_ad via the tree's ad set menu
 | Layout | Seen live | Fixture · fragment | Test | Expected | Status |
 | --- | --- | --- | --- | --- | --- |
 | Left tree: campaign, ad set (action menu), ad | d3e690189a6e/04_create_additional_ad, 0afc79a410c6/04_create_additional_ad | `editor_tree_adset_2026_09_24.html` | `tests/test_additional_ad_waits_for_tree.py` | ad set menu opens, ad created | pass |
+| Left tree with a fresh "New Leads Ad" row in the middle (ACL-1675): ad rows are told apart by row id, not by place | 4e4969867d28/12_ad4_create | `editor_tree_new_shell_between_2026_10_07.html` | `tests/test_a_failed_ad_leaves_no_duplicate_shell.py` | only a row id that was not in the pre-create snapshot is adopted | pass |
 | AdsPERouteLoadPlaceholder spinner instead of the editor | 7364047ef03c/05_create_additional_ad | `route_placeholder_2026_09_24.html` | `tests/test_route_placeholder_is_loading.py` | not ready; spinner wins over a stale tree | pass |
 | Breadcrumb header only, no tree rows | 7d2ce3ab1161/05_create_additional_ad | `breadcrumb_only_2026_09_24.html` | `tests/test_additional_ad_waits_for_tree.py` | not ready, no blind click | pass |
 
