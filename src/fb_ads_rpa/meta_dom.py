@@ -5669,6 +5669,7 @@ def run_recorded_campaign_flow(
         return "create"
     # ACL-1354: кампания открыта — дальше сроки кампании, шага и зависшей вкладки.
     _flow_budget_arm()
+    _ADOPTED_SHELL_IDS.clear()   # ACL-1675: набор живёт одну кампанию
 
     # ACL-1327: новый редактор Meta «в один экран» (кампания, группа и
     # объявление — разделы одной страницы). Прежде (ACL-1320) здесь была
@@ -6649,15 +6650,27 @@ def run_recorded_campaign_flow(
                             ad_level_fails.append(f"{tag}_extra_empty_ad")
                         simple_open_ad = (tag, "")
                     else:
-                        shells_before = _tree_new_ad_shells(page)
+                        ids_before = _tree_shell_ids(page)
+                        if ids_before:
+                            # ACL-1675: безымянные заготовки остались от прошлых
+                            # объявлений (их создание упало, а имя не легло).
+                            # Не удаляем и не усыновляем — отдельной строкой
+                            # телеметрии для итогового аудита; это объявление
+                            # берёт только заготовку с новым id.
+                            _telemetry.record(f"{tag}_leftover_shell", None, note="leftover_shell",
+                                              diag={"row_ids": sorted(ids_before)})
+                        retried = False
+                        block = ""
                         try:
                             created = create_additional_ad(page, adset_name)
-                            block = last_create_block()  # read once: skip decision and label
-                            retried = False
+                            block = last_create_block()  # read once: label of the refusal
                             if not created and recover_stuck_page(page, f"{tag}_create", editor=True):
-                                created = create_additional_ad(page, adset_name)
-                                block = last_create_block()
+                                # ACL-1675: после перезагрузки первая попытка могла
+                                # оставить заготовку — сначала смотрим дерево, id
+                                # решает, своя ли она; чистое дерево — повторное создание.
                                 retried = True
+                                created = _adopt_shell_or_recreate(page, adset_name, ids_before)
+                                block = last_create_block()
                             if not created:
                                 # A reported failure does not mean no ad was born:
                                 # Meta names every fresh ad "New Leads Ad", so if
@@ -6670,17 +6683,16 @@ def run_recorded_campaign_flow(
                                 # Confirmed need live 2026-07-29 (Test146, B ad2):
                                 # create failed once, leaving the ad missing
                                 # entirely — the only fill step with no retry path.
+                                # Одно создание на объявление: если повтор после
+                                # перезагрузки уже создавал, здесь только усыновление.
                                 #
-                                # ACL-1691: after the honest block (nothing was clicked) there
-                                # is no new shell to adopt - an existing "New Leads Ad" is
-                                # another ad. Skip the adopt; one clean re-create is still safe.
-                                if block:
-                                    if (not retried and
-                                            0 <= _tree_new_ad_shells(page) <= max(shells_before, 0)):
-                                        created = create_additional_ad(page, adset_name)
-                                        block = last_create_block()
-                                else:
-                                    created = _adopt_shell_or_recreate(page, adset_name, shells_before)
+                                # ACL-1691: после честного отказа (ничего не нажато) новой
+                                # заготовки нет, а существующая «New Leads Ad» — чужое
+                                # объявление. По id это и так видно: усыновляется только id,
+                                # которого не было до «Create ad»; иначе одно чистое создание.
+                                created = _adopt_shell_or_recreate(page, adset_name, ids_before,
+                                                                   may_create=not retried)
+                                block = last_create_block()
                             if not created:
                                 _shot(f"fail_{tag}_create")
                                 ad_level_fails.append(
@@ -6691,17 +6703,23 @@ def run_recorded_campaign_flow(
                             # ДВА «New Leads ad» — лишнее осталось пустым в кампании.
                             # Удалять сами не берёмся; отказ шага с именем причины,
                             # чтобы черновик не ушёл в публикацию с пустым объявлением.
-                            shells_after = _tree_new_ad_shells(page)
-                            if shells_before >= 0 and shells_after - shells_before > 1:
+                            ids_after = _tree_shell_ids(page)
+                            new_ids = (ids_after - ids_before
+                                       if ids_after is not None and ids_before is not None else frozenset())
+                            if new_ids:
+                                _ADOPTED_SHELL_IDS.add(max(new_ids, key=_shell_id_number))
+                            if len(new_ids) > 1:
                                 _telemetry.record(f"{tag}_create", False, note="extra_ad_shell",
-                                                  diag={"before": shells_before, "after": shells_after})
+                                                  diag={"before": len(ids_before), "after": len(ids_after)})
                                 ad_level_fails.append(f"{tag}_extra_empty_ad")
                         except Exception as exc:
                             if _page_gone(page, exc):
                                 _browser_closed(f"{tag}_create", exc)
                                 return "browser_closed"
                             _shot(f"fail_{tag}_create")
-                            ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
+                            # ACL-1691: дерево не прочиталось уже после честного отказа — причина
+                            # отказа важнее текста исключения.
+                            ad_level_fails.append(f"{tag}_create:{block or str(exc)[:60]}")
                             continue
 
                     if not ensure_editor_window(page, tag):
@@ -9735,7 +9753,7 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
     _set_create_block("")
     click_point = None
     tree_ready = _wait_tree_ready(page)
-    shells_before = _tree_new_ad_shells(page)
+    ids_before = _tree_shell_ids(page)
     surface_clicked = _click_adset_action_menu(page) if tree_ready else False
     hover: dict | None = None
     if tree_ready and not surface_clicked:
@@ -10002,9 +10020,16 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
                 return True
         except Exception:
             pass
-        if not adopted and shells_before >= 0 and _tree_new_ad_shells(page) > shells_before:
-            adopted = _open_tree_ad(page, "New Leads Ad")
-            _close_creative_setup_modal(page)
+        if not adopted and ids_before is not None:
+            # ACL-1675: усыновляем только id, которого не было до «Create ad».
+            now = _tree_shell_ids(page)
+            fresh = (now - ids_before) if now is not None else None
+            if fresh:
+                row_id = max(fresh, key=_shell_id_number)
+                adopted = _open_shell_by_id(page, row_id)
+                if adopted:
+                    _ADOPTED_SHELL_IDS.add(row_id)
+                _close_creative_setup_modal(page)
         _sleep_h(1.0, 0.1)
     # Объявление к этому моменту уже создано — отказ здесь значит «поле
     # имени не показалось», а не «ничего не случилось». Doc20 17.09:
@@ -16410,24 +16435,130 @@ def _tree_new_ad_shells(page: Page) -> int:
         return -1
 
 
-def _adopt_shell_or_recreate(page: Page, adset_name: str, shells_before: int = 0) -> bool:
-    """Отказ создания объявления: взять уже родившуюся заготовку или создать заново.
+_SHELL_ROW_PREFIX = "ads_campaign_structure_item_"
 
-    ACL-1641 (ревью PR #664, B3): `_open_tree_ad` вернул False и когда дерево
-    не прочиталось (вкладка отвечает дольше 5 с) — повторное создание тогда
-    могло добавить второе объявление рядом с живой заготовкой. Перед повтором
-    дерево должно читаться; не читается — исключение, и обычный `except`
-    вызывающего пишет `fail_adN_create`.
+# Только для диагностики и тестов: id заготовок, усыновлённых объявлениями текущей
+# кампании. Решений по нему не принимается; сбрасывается в начале каждой кампании.
+_ADOPTED_SHELL_IDS: set[str] = set()
+
+
+def _tree_shell_ids(page: Page):
+    """Id строк «New Leads ad» в левом дереве; `None` — дерево не прочиталось.
+
+    ACL-1675: заготовку опознаём по id строки (`data-objecttype="ADGROUP"`,
+    `id="ads_campaign_structure_item_<id>"`), а не по месту в дереве: в живых
+    снимках свежая строка то сверху, то посередине, то снизу.
     """
-    if _open_tree_ad(page, "New Leads Ad"):
-        _close_creative_setup_modal(page)
-        return True
-    shells = _tree_new_ad_shells(page)
-    if shells < 0:
+    try:
+        ids = _eval_bounded(
+            page, r"""() => {
+              const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+              return [...document.querySelectorAll('[id^="ads_campaign_structure_item_"]')]
+                .filter(row => {
+                  // Строка объявления: ADGROUP (живая страница) или aria-label="Ad"
+                  // (в сохранённых снимках `data-*` вырезаны).
+                  if (row.getAttribute('data-objecttype') !== 'ADGROUP'
+                      && row.getAttribute('aria-label') !== 'Ad') return false;
+                  const r = row.getBoundingClientRect();
+                  if (!(r.width > 0 && r.x < window.innerWidth * 0.34)) return false;
+                  return [...row.querySelectorAll('*')].some(e =>
+                    e.children.length === 0 && /^New Leads ad$/i.test(norm(e.textContent)));
+                })
+                .map(row => row.id);
+            }"""
+        )
+    except Exception:
+        return None
+    if not isinstance(ids, list):
+        return None
+    return frozenset(i for i in ids if isinstance(i, str) and i.startswith(_SHELL_ROW_PREFIX))
+
+
+def _shell_id_number(row_id: str) -> int:
+    tail = row_id[len(_SHELL_ROW_PREFIX):]
+    return int(tail) if tail.isdigit() else 0
+
+
+def _open_shell_by_id(page: Page, row_id: str) -> bool:
+    """Открыть заготовку по id строки: прокрутить к ней, кликнуть, проверить.
+
+    ACL-1675: клик по координатам строки мог уйти за экран (дерево прокручено)
+    и всё равно считался успехом. Здесь строка найдена по id, прокручена в
+    видимую область, и после клика поле имени (если оно видно) обязано
+    показывать «New Leads ad» — чужое объявление открылось бы с другим именем,
+    и это отказ.
+    """
+    if _tree_open_refused("open_tree_ad", row_id):
+        return False
+    try:
+        point = _eval_bounded(
+            page, """(rowId) => {
+              const row = document.getElementById(rowId);
+              if (!row) return null;
+              row.scrollIntoView({block: 'center', inline: 'nearest'});
+              const r = row.getBoundingClientRect();
+              if (!(r.width > 0 && r.height > 0)) return null;
+              if (r.bottom < 0 || r.top > window.innerHeight) return null;
+              return {x: r.x + Math.min(r.width / 2, 120), y: r.y + r.height / 2};
+            }""",
+            row_id,
+        )
+    except Exception:
+        return False
+    if not point:
+        return False
+    try:
+        _cdp_mouse_click(page, point["x"], point["y"])
+    except Exception:
+        return False
+    _sleep_h(1.5)
+    wait_editor_saved(page)
+    try:
+        name = _eval_bounded(
+            page, """() => {
+              const box = document.querySelector("input[placeholder='Enter your ad name here...']");
+              if (!box) return null;
+              const r = box.getBoundingClientRect();
+              return r.width > 0 ? box.value : null;
+            }"""
+        )
+    except Exception:
+        name = None
+    if isinstance(name, str) and not re.match(r"^\s*New Leads ad\s*$", name, re.I):
+        return False   # открылось другое объявление
+    return True
+
+
+def _adopt_shell_or_recreate(page: Page, adset_name: str, ids_before,
+                             may_create: bool = True) -> bool:
+    """Отказ создания объявления: взять родившуюся заготовку или создать заново.
+
+    ACL-1641 (ревью PR #664, B3): дерево не прочиталось — повторное создание
+    могло добавить второе объявление рядом с живой заготовкой; теперь исключение,
+    и обычный `except` вызывающего пишет `fail_adN_create`.
+
+    ACL-1675: «своя» заготовка — только id, которого не было в `ids_before`
+    (снимок перед созданием этого объявления). Старые заготовки упавших
+    объявлений не усыновляются и не удаляются. `ids_before is None` (снимок не
+    прочитан) — тоже исключение. `may_create=False` — одно создание на объявление
+    уже потрачено: заготовка, появившаяся поздно, усыновляется, но третьего
+    create не будет.
+    """
+    ids = _tree_shell_ids(page)
+    if ids is None or ids_before is None:
         raise RuntimeError("tree unreadable: not re-creating the ad")
-    if shells > max(shells_before, 0):
-        # Заготовка уже есть, но открыть её не вышло: второй create дал бы
+    fresh = ids - ids_before
+    if fresh:
+        # Новых несколько — берём самую свежую: id Meta растёт со временем.
+        row_id = max(fresh, key=_shell_id_number)
+        if _open_shell_by_id(page, row_id):
+            _close_creative_setup_modal(page)
+            _ADOPTED_SHELL_IDS.add(row_id)
+            return True
+        # Заготовка есть, но открыть её не вышло: второй create дал бы
         # дубликат рядом с ней. Отказ шага (`fail_adN_create`), не повтор.
+        return False
+    if not may_create:
         return False
     return create_additional_ad(page, adset_name)
 
