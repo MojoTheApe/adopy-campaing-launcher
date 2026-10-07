@@ -25,8 +25,13 @@ from scripts import acl_ci_scope as scope  # noqa: E402
 
 CI = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
 JOBS = CI["jobs"]
-GATE = ("${{ always() && !cancelled() && (needs.scope.result != 'success' "
-        "|| needs.scope.outputs.windows != 'false') }}")
+# ACL-1649: Linux и Windows решаются отдельно (scope.outputs.linux / scope.outputs.windows).
+GATES = {
+    "test-linux": ("${{ always() && !cancelled() && (needs.scope.result != 'success' "
+                   "|| needs.scope.outputs.linux != 'false') }}"),
+    "test-windows": ("${{ always() && !cancelled() && (needs.scope.result != 'success' "
+                     "|| needs.scope.outputs.windows != 'false') }}"),
+}
 
 
 def _render(template: str, **matrix) -> str:
@@ -81,7 +86,7 @@ def test_the_windows_job_runs_the_marked_files_the_smoke_set_and_the_app_smoke_c
 @pytest.mark.parametrize("job", ["test-linux", "test-windows"])
 def test_both_test_jobs_follow_the_scope_decision(job):
     assert JOBS[job]["needs"] == "scope"
-    assert JOBS[job]["if"] == GATE
+    assert JOBS[job]["if"] == GATES[job]
     assert JOBS[job]["strategy"]["fail-fast"] is False
 
 
@@ -121,12 +126,21 @@ def _admission(**env) -> bool:
 @pytest.mark.skipif(sys.platform == "win32" or not shutil.which("bash"),  # linux-ok: runs in the Ubuntu scope job
                     reason="the admission script is bash on ubuntu-latest")
 def test_acl_verification_fails_closed_unless_both_test_jobs_passed():
-    full = {"SCOPE": "success", "WINDOWS": "true", "REUSED": "", "LINUX_TESTS": "success", "WINDOWS_TESTS": "success"}
-    light = dict(full, WINDOWS="false", LINUX_TESTS="skipped", WINDOWS_TESTS="skipped")
-    assert _admission(**full) and _admission(**light)
+    full = {"SCOPE": "success", "WINDOWS": "true", "LINUX": "true", "REUSED": "",
+            "LINUX_TESTS": "success", "WINDOWS_TESTS": "success"}
+    light = dict(full, WINDOWS="false", LINUX="false", LINUX_TESTS="skipped", WINDOWS_TESTS="skipped")
+    only_linux = dict(full, WINDOWS="false", WINDOWS_TESTS="skipped")           # PR into main: 3.11 only
+    only_windows = dict(full, LINUX="false", LINUX_TESTS="skipped")
+    assert all(_admission(**case) for case in (full, light, only_linux, only_windows))
     for field in ("LINUX_TESTS", "WINDOWS_TESTS"):
         for bad in ("failure", "cancelled", "skipped", ""):
             assert not _admission(**dict(full, **{field: bad})), (field, bad)
         assert not _admission(**dict(light, **{field: "success"})), field   # light run cannot hide a job
+        assert not _admission(**dict(light, **{field: "failure"})), field
+    for case in (only_linux, only_windows):
+        for field in ("LINUX_TESTS", "WINDOWS_TESTS"):
+            for bad in ("failure", "cancelled", ""):
+                assert not _admission(**dict(case, **{field: bad})), (field, bad)
     assert not _admission(**dict(full, SCOPE="failure"))
     assert not _admission(**dict(full, WINDOWS=""))
+    assert not _admission(**dict(full, LINUX=""))
