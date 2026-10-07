@@ -11,6 +11,35 @@ false do-not-publish: the list was complete (end proven, nothing hidden) but nev
 - The row count no longer takes part in "stable" (it flickers while Meta remounts the list; the
   end proof already covers hidden rows).
 - Unchanged: an incomplete list, or an offered but hidden placement, is never "not offered".
+
+## B97: when Meta shows no media counter the robot refuses honestly; it waits for the Crop cards — ACL-1669
+
+Two live B97 runs of the same build (07.10) failed in the media step. In both the robot read a step body once, immediately. Only the Crop case is established as a late draw.
+
+- Library pick (run 3edaf71b0613): the "N selected" counter was read 0.1 s after the Media step opened, found nothing and refused (`selection_state_unavailable`), so no ad got media and `url_field_missing` followed on each. The robot now waits up to 4 s for the counter. If it is still missing, the robot refuses honestly instead of guessing: it neither clicks a tile nor uploads, and the ad ends with the named blocking reason `library_selection_unreadable` (the media must be attached by hand). A safe automatic fallback needs a live capture of the missing-counter state; that is follow-up work. Two review rounds found that an upload "when no tile is marked" cannot be proven safe from the markup we have (hidden or unrendered selections), so it was removed.
+- What is NOT established: that the counter was merely "late" in run 3edaf71b0613. The real 07.10 picker capture of the other run (bc4302862ee7, wizard open on Media at 0.1 s) shows the counter readable ("1 selected" / "0 selected") and the selected tile wrapped in `data-test-decoration="selected"`. Why the counter was not found in 3edaf71b0613 is unknown: no picker markup of that run exists. The 4 s wait is a bounded response, not a proven fix.
+- When the counter is missing the robot does not search the library for a known copy. A reuse-only ad that reaches that point is named `library_not_searched_counter_unreadable`, not `library_has_no_copy`, and it does NOT trigger the ACL-1637 re-upload (that stays for a searched library that answered "no copy"). The `counter_missing` flag is per call, so per ad: it is reset at the start of every `upload_ad_creative`.
+- Crop (run bc4302862ee7): the pick worked, but Crop was read while Meta still showed loading placeholders (no Square/Vertical cards) and ended `crop_replace_button_missing`. The step now waits up to 20 s for the cards; if they never appear it names the missing card. The 20 s figure is a cap, not a measured load time.
+- `url_field_missing` is reported as `<ad>_destination:url_field_missing_no_media` (still blocking, with a sentence for the dashboard) only when the creative step failed AND the empty Media state is positively seen on the page (Meta's "Please specify the media" text, or the single-screen editor's `empty` state on a mounted block). A Media block that cannot be read or is unmounted keeps the plain `url_field_missing`.
+- ACL-1637 did not cause this: the counter check dates from 17.09 and ad 1 never goes through the ACL-1637 path.
+- Bench: `wizard_media_picker_selected_2026_10_07.html` is cut from the real 07.10 capture (counters emptied; expected result is a REFUSAL). `scripts/capture_to_fixture.py` now keeps `data-test-decoration`, only when its value is `selected` (the scrubber used to drop Meta's selected mark, which is why the old 04.10 picker fixture looked unmarked). The Crop-loading fixture is hand-reduced from the real captures and keeps their three `role=progressbar` placeholders.
+
+## Conversion location: the menu is opened by click or script, and a failure names its reason — ACL-1572
+
+`conversion_website_pick: not_selected` failed campaigns on Doc21, Elf403, KLD_BFL_B91 and
+Facebook_5265 (01-06.10). Telemetry showed `menu_closed: 8, reopened: 0`: the menu never opened,
+so none of the eight pick methods ever ran against an open menu.
+
+- Opening the menu now escalates: the existing click, then a single script press; the next opener runs only when the previous one left the menu closed.
+- "Menu is open" also reads the trigger's `aria-expanded`, not only the Single/Multiple headings
+  (a menu without those headings was taken for closed and then clicked shut).
+- Focus is released from the ad set name field before the trigger is pressed (its suggestion list
+  swallowed the first press on the failing captures; no Escape, it closes the wizard).
+- After three failed openings the step stops instead of spending 60-190 s on the remaining methods.
+- A failed pick says why, in English, in the `conversion_website_pick` note: the menu would not
+  stay open; Website is not offered in the open menu; Conversion location is not on this screen
+  (the ad editor was showing, as on Facebook_5265).
+- Review fixes: the script press is one click (two would close a toggle trigger). The keyboard (focus + Enter) opener was dropped entirely: Enter could accept a suggestion in the ad set name field and rename the ad set, so the only openers are the click and the script press, and the name field is blurred first (in the frame that holds it). As a single safety check, the ad set name is read once at the start of the Conversion location step and compared at its end, across all retries; a change stops the step (the recorded flow returns the blocking, never replayed `conversion_website_name_changed`) and says only that the name changed, never the names. "Not on this screen" is returned only when the field is truly absent (a page script failing in every frame is its own read-error reason); "would not stay open" only after both openers pressed and failed; the reason is added to the step's error text, not only telemetry; the step state is per thread.
 ## Advantage+ audience on WhatsApp campaigns: a collapsed Age row with a note is opened again — ACL-1638
 
 The classic ad set editor failed the `advantage_plus_audience` step (`still_on`, campaign not published)

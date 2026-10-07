@@ -644,6 +644,17 @@ _CREATIVE_WHY_TEXT = {
     "same_file_already_failed_this_run": ("This ad has no media: the same video already failed to "
                                           "upload for an earlier ad and was not accepted again for "
                                           "this ad; the ad is left in the draft for review."),
+    # ACL-1669 (B97, 07.10): the library grid showed no selection counter.
+    "library_selection_unreadable": ("This ad has no media: Meta's media library showed no "
+                                     "selection counter, so the robot could not tell what is "
+                                     "selected and neither clicked a tile nor uploaded over it; "
+                                     "attach the media to this ad by hand (the ad is left in the "
+                                     "draft for review)."),
+    "library_not_searched_counter_unreadable": (
+        "This ad has no media: Meta's media library showed no selection counter, so the robot "
+        "did not search it for a copy of the video (this is not a 'no copy' answer) and did "
+        "not upload again; attach the media to this ad by hand (the ad is left in the draft for "
+        "review)."),
     "file_not_landed": ("This ad has no media: the browser did not accept the video file in "
                         "Meta's upload dialog; the ad is left in the draft for review."),
     "wizard_not_opened": ("This ad has no media: Meta's 'Set up creative' wizard did not open "
@@ -667,6 +678,11 @@ _DESTINATION_WHY_TEXT = {
                                   "not switch it back to Website, so the website URL is not set. The "
                                   "robot never accepts Lead Ads Terms or creates an instant form - "
                                   "select Website (Browser add-ons: None) and enter the URL by hand."),
+    # ACL-1669 (B97, 07.10): no media on the ad, so Meta showed no URL field.
+    "url_field_missing_no_media": ("The website URL field is missing because this ad has no media "
+                                   "(Meta shows no destination fields without it) - a consequence "
+                                   "of the media step, not a separate destination problem; fix the "
+                                   "media first."),
 }
 
 
