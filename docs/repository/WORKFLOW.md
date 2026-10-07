@@ -136,6 +136,7 @@ The Windows job always uses 3.13. Only a full push or manual run proves a tree f
 reuse and releases. A new push to a PR branch cancels that PR's superseded CI and
 installer runs; stage/main/master pushes and manual runs are never cancelled or
 replaced. The installer build/install job stops at 15 minutes.
+The Chromium install step (Linux and Windows) runs through `scripts/ci_retry.sh`: 3 attempts, each cut at 300 s (Windows 180 s), apt locks cleaned between attempts, the browser download cached by Playwright version, and a hard step limit (16 / 12 min). The Linux test job stops at 25 minutes, the Windows one at 30 (ACL-1710: an `apt-get update` hang used to burn 35 minutes per job).
 `--dist loadfile` keeps every test file on one worker: more than 80 files start
 their own Chromium in a module fixture, and spreading one file over all workers
 starts that browser once per worker (on the owner's laptop the test-by-test
