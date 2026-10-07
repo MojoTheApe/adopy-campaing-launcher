@@ -1,5 +1,17 @@
 # System history
 
+## Placements: a complete Stories list that flickers is still read as "not offered" — ACL-1684
+
+On FacebookDoc120 (run 4e4969867d28) "Messenger Stories" was judged missing and a good run became a
+false do-not-publish: the list was complete (end proven, nothing hidden) but never read as stable.
+
+- Meta folded the Stories list twice while it was read; each re-opening spent the wait counted from
+  the first read, so the 1.5 s quiet window never fitted. The wait is now counted from the last
+  re-opening, with a hard limit of 15 s from the first read.
+- The row count no longer takes part in "stable" (it flickers while Meta remounts the list; the
+  end proof already covers hidden rows).
+- Unchanged: an incomplete list, or an offered but hidden placement, is never "not offered".
+
 ## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
 
 The last rung of the fallback ladder: when a step fails on a screen the robot does not know (a

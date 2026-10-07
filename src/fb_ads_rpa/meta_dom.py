@@ -6878,6 +6878,10 @@ _SUBITEM_CATEGORY = {x: cat for cat, xs in _SUBITEMS_BY_CATEGORY.items() for x i
 #: подряд; дольше `_SUBITEMS_SETTLE_MAX_S` не ждём (ACL-1445).
 _SUBITEMS_SETTLE_QUIET_S = 1.5
 _SUBITEMS_SETTLE_MAX_S = 6.0
+#: Жёсткий потолок ожидания от первого ответа страницы, что бы ни происходило
+#: (ACL-1684): окно ожидания продлевается после каждого перераскрытия раздела,
+#: но не бесконечно.
+_SUBITEMS_SETTLE_HARD_S = 15.0
 
 #: Сколько ждать, пока тело карточки Placements перестанет быть «Loading...»
 #: (ACL-1445, cb854b07857b 30.09: карточка нового редактора открыта, а внутри
@@ -8772,6 +8776,7 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
         # медленный первый ответ съедал все шесть секунд, второго чтения не
         # было, список «не устоялся», и «Messenger Stories» оставалась пропажей.
         first_read_at: float | None = None
+        last_reopen_at: float | None = None
         labels: list[str] = []
         end: dict = {}
         stable = False
@@ -8790,6 +8795,9 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                 reopened += 1
                 _expand_category(name)
                 _sleep_h(0.6, spread=0.0)
+                # ACL-1684: перераскрытие — новая точка отсчёта. Окно ожидания и
+                # окно тишины считаются от него, иначе свёртки съедают бюджет.
+                last, last_reopen_at = None, time.monotonic()
                 continue
             fresh = [x for x in labels if not _label_on_page(x, here)]
             if fresh:
@@ -8798,14 +8806,21 @@ def fill_placements(page: Page, report: dict | None = None) -> bool:
                     x for x in fresh if not _label_on_page(x, report["subitems_seen"]))
                 _pass(fresh)
                 _settle_visible(fresh)
-            key = (tuple(labels), bool(end.get("end")), end.get("rows"), end.get("hidden"))
+            # ACL-1684 (Doc120, 4e4969867d28: `stable: false, reads: 6,
+            # waited_s: 6.4, reopened: 2`, при этом `end: true, hidden: 0`):
+            # число строк (`rows`) в ключ не входит — оно «дрожит», пока Meta
+            # перемонтирует список, а полноту список доказывает `end`
+            # (последняя строка видна, `hidden` 0, дно, нет загрузки).
+            key = (tuple(labels), bool(end.get("end")), end.get("hidden"))
             now = time.monotonic()
             if key != last:
                 last, quiet_from = key, now
             elif now - quiet_from >= _SUBITEMS_SETTLE_QUIET_S and end.get("end"):
                 stable = True
                 break
-            if reads >= 2 and now - first_read_at >= _SUBITEMS_SETTLE_MAX_S:
+            window_from = max(first_read_at, last_reopen_at or first_read_at)
+            if ((reads >= 2 and now - window_from >= _SUBITEMS_SETTLE_MAX_S)
+                    or now - first_read_at >= _SUBITEMS_SETTLE_HARD_S):
                 break
             _sleep_h(0.25, spread=0.0)
         on_unseen = [x for x in own if x in _SUBITEMS_ON and not _label_on_page(x, here)]

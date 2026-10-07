@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**22 robot steps × 112 layouts, 61 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**22 robot steps × 113 layouts, 61 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -22,7 +22,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | audience_age | 4 | 4 | 0 | 0 |
 | languages | 5 | 5 | 0 | 0 |
 | detailed_targeting (interests) | 2 | 2 | 0 | 0 |
-| placements | 10 | 10 | 0 | 0 |
+| placements | 11 | 11 | 0 | 0 |
 | next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 5 | 5 | 0 | 0 |
@@ -163,6 +163,7 @@ Robot: fill_placements
 | Single-screen editor: placements set, list collapsed to 'Included: 7, Allowed with limited spend: 0, Excluded: 13' (no capture, screenshot text) | SA_ARC_All_Video_IPO_35_01.10 (tester, 01.10) | `placements_simple_create_summary_2026_10_01.html` · card | `tests/test_bench_placements.py` | counts are not proof: the summary is opened and its rows set and read back; a summary that does not open, or right counts over a wrong set, fails (review of PR #449) | pass |
 | Classic editor (05-06.10): category expanders are plain `button[aria-label=Expand\|Collapse]` in the category `li`, no aria-expanded | b40ba4e8c2d6/00_placements, 34bf0d6c2262/00_placements | `placements_button_expanders_2026_10_06.html` · card | `tests/test_bench_placements_1629.py` | every offered placement set and read back; 'Messenger Stories' named not offered; a category folded after a click is reopened; a row or a category box disabled while Meta saves is set once it unlocks (a box that never unlocks fails); a final read-back of every row catches a late revert; a row locked in the wrong state fails and is named (ACL-1629) | pass |
 | Classic standalone editor (06.10): Placements card collapsed to a summary (aria-pressed=false), body hidden; account controls dialog | ab33293af6d7/05_placements | `placements_collapsed_card_standalone_2026_10_06.html` · card | `tests/test_bench_placements_1629.py` | the card is opened first (a card that does not open fails, named); account exclusions applied and verified by the card summary or, when it stays 'None', by reopening the dialog; a lost save or a lost switch fails; no 'Edit placement controls' is a named warning; the opened card without categories and with Meta's 'no longer available' notice is named as ACL-1336 (ACL-1629) | pass |
+| Classic editor, Doc120 (07.10): the Stories list folds twice while read and its row count flickers; five rows, no 'Messenger Stories' in the DOM | 4e4969867d28/00_placements | `placements_button_expanders_2026_10_06.html` · card | `tests/test_bench_placements_1684.py` | a complete list (end, at bottom, not busy, nothing hidden) with 'Messenger Stories' absent is 'not offered' after folds and a flickering row count; a list that never proves its end, or never settles by the hard limit, still blocks; an offered but hidden row is never 'not offered' (ACL-1684) | pass |
 
 ## next_to_ad / additional ad (classic)
 
