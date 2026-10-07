@@ -16,31 +16,49 @@ from src.fb_ads_rpa import meta_dom as dom
 from tests.test_additional_ad_without_creative_has_no_text import flow  # noqa: F401
 
 BLOCK = "adset_action_menu_not_shown"
+# ACL-1675: заготовки опознаются по id строки дерева. OTHER — «New Leads Ad» чужого
+# (упавшего раньше) объявления: она есть в снимке до создания и усыновляться не должна.
+OTHER = dom._SHELL_ROW_PREFIX + "100000000000007"
+NEW = dom._SHELL_ROW_PREFIX + "100000000000009"
+
+
+def _tree(monkeypatch, *, other: bool, new_after_create=None):
+    """Стаб дерева: `other` — чужая заготовка видна всегда; `new_after_create()` — True,
+    когда после упавшего создания в дереве появилась своя (новая) заготовка."""
+    opened: list[str] = []
+
+    def ids(p):
+        rows = {OTHER} if other else set()
+        if new_after_create is not None and new_after_create():
+            rows.add(NEW)
+        return frozenset(rows)
+
+    monkeypatch.setattr(dom, "_tree_shell_ids", ids)
+    monkeypatch.setattr(dom, "_open_shell_by_id", lambda p, rid: opened.append(rid) or True)
+    monkeypatch.setattr(dom, "_close_creative_setup_modal", lambda p: None)
+    return opened
 
 
 def test_a_block_twice_is_not_adopted_and_fails_with_its_reason(flow, monkeypatch):
-    calls = {"create": 0, "adopt": 0}
+    calls = {"create": 0}
+    opened = _tree(monkeypatch, other=True)
 
     def create(p, name):
         calls["create"] += 1
         dom._set_create_block(BLOCK)
         return False
 
-    def adopt(p, name):
-        calls["adopt"] += 1
-        return True
-
     monkeypatch.setattr(dom, "create_additional_ad", create)
-    monkeypatch.setattr(dom, "_open_tree_ad", adopt)
     _result, soft = flow["run"]()
-    assert calls["adopt"] == 0, "an existing ad was adopted after the block"
+    assert opened == [], "an existing ad was adopted after the block"
     assert calls["create"] == 2, "exactly one clean retry after the block"
     assert f"ad2_create:{BLOCK}" in soft, soft
     assert flow["uploads"] == ["a.png"], "ad 2 was filled although it was not created"
 
 
 def test_a_block_then_a_successful_retry_creates_the_ad(flow, monkeypatch):
-    calls = {"create": 0, "adopt": 0}
+    calls = {"create": 0}
+    opened = _tree(monkeypatch, other=True)
 
     def create(p, name):
         calls["create"] += 1
@@ -51,26 +69,44 @@ def test_a_block_then_a_successful_retry_creates_the_ad(flow, monkeypatch):
         return True
 
     monkeypatch.setattr(dom, "create_additional_ad", create)
-    monkeypatch.setattr(dom, "_open_tree_ad", lambda p, name: calls.__setitem__("adopt", calls["adopt"] + 1) or True)
     _result, soft = flow["run"]()
-    assert calls == {"create": 2, "adopt": 0}
+    assert calls == {"create": 2} and opened == []
     assert not any(s.startswith("ad2_create") for s in soft), soft
     assert "b.png" in flow["uploads"]
 
 
 def test_an_ordinary_failed_create_still_adopts_the_shell(flow, monkeypatch):
     """Остальные отказы — прежнее поведение (усыновление строки)."""
-    adopted = []
+    made = {"n": 0}
+    adopted = _tree(monkeypatch, other=True, new_after_create=lambda: made["n"] > 0)
 
     def create(p, name):
+        made["n"] += 1          # create нажал кнопку и оставил свою заготовку, но сообщил отказ
         dom._set_create_block("")
         return False
 
     monkeypatch.setattr(dom, "create_additional_ad", create)
-    monkeypatch.setattr(dom, "_open_tree_ad", lambda p, name: adopted.append(name) or True)
-    monkeypatch.setattr(dom, "_close_creative_setup_modal", lambda p: None)
     flow["run"]()
-    assert adopted == ["New Leads Ad"]
+    assert adopted == [NEW], "ровно своя новая заготовка, не чужая OTHER"
+    assert made["n"] == 1
+
+
+def test_an_unreadable_tree_after_a_block_keeps_the_block_reason(flow, monkeypatch):
+    """N1: дерево не прочиталось после честного отказа — в отказе шага остаётся причина."""
+    reads = {"n": 0}
+
+    def ids(p):
+        reads["n"] += 1
+        return frozenset() if reads["n"] == 1 else None      # снимок до create читается, дальше нет
+
+    def create(p, name):
+        dom._set_create_block(BLOCK)
+        return False
+
+    monkeypatch.setattr(dom, "_tree_shell_ids", ids)
+    monkeypatch.setattr(dom, "create_additional_ad", create)
+    _result, soft = flow["run"]()
+    assert f"ad2_create:{BLOCK}" in soft, soft
 
 
 def test_a_block_of_one_account_is_not_wiped_by_another_thread(flow, monkeypatch):
@@ -93,12 +129,19 @@ def test_a_block_of_one_account_is_not_wiped_by_another_thread(flow, monkeypatch
         b_called.set()
         return False
 
-    def adopt(p, name):
+    def ids(p):
+        who = threading.current_thread().name
+        if who == "A":
+            return frozenset({OTHER})                 # чужая заготовка всегда в дереве
+        return frozenset({NEW}) if creates["B"] > 0 else frozenset()   # у B своя появилась после create
+
+    def open_by_id(p, rid):
         adopts[threading.current_thread().name] += 1
         return True
 
     monkeypatch.setattr(dom, "create_additional_ad", create)
-    monkeypatch.setattr(dom, "_open_tree_ad", adopt)
+    monkeypatch.setattr(dom, "_tree_shell_ids", ids)
+    monkeypatch.setattr(dom, "_open_shell_by_id", open_by_id)
     monkeypatch.setattr(dom, "_close_creative_setup_modal", lambda p: None)
 
     def work(who):

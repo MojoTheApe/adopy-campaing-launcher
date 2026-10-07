@@ -188,6 +188,12 @@ POLICY: dict[str, tuple[str, str]] = {
         "the ad set name changed while Conversion location was being set; the draft was "
         "stopped so a changed name is not published - check the ad set name in Ads Manager",
     ),
+    "next_to_ad_stuck_on_adset": (
+        BLOCKING,
+        "the editor stayed on the ad set after Next was pressed several times, so the ad was not "
+        "built; the draft was not retried (a retry would leave another partial draft) - open it in "
+        "Ads Manager and finish or delete it",
+    ),
     "conversion_event": (
         BLOCKING,
         "optimising for the wrong event spends the budget on the wrong people; "
@@ -411,6 +417,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Ad set name changed",
         "The name changed while Conversion location was being set, so the build was stopped.",
         "Check the ad set name in Ads Manager, then publish again.",
+    ),
+    "next_to_ad_stuck_on_adset": (
+        "Editor stayed on the ad set",
+        "Next was pressed several times but the ad was not opened, so the draft has no ad.",
+        "Open the draft in Ads Manager and finish or delete it.",
     ),
     "conversion_event": (
         "Conversion event — not verified",
