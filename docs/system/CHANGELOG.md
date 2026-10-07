@@ -1,5 +1,25 @@
 # System history
 
+## next_to_ad confirms the ad level and names the reason on that step — ACL-1693
+
+Manager laptop LAPTOP-UA006, run 81c1bfbb5456 (07.10, window 1536x730 at dpr 1.25): `next_to_ad`
+was recorded ok, but the editor stayed on "Ad sets - Edit" (`levels: ["ad_set"]`). Five `ad_name`
+tries ended in `not_on_ad_level`, then every creative upload ended in `wizard_not_opened` - about
+four minutes lost, and the failure was named on the wrong step.
+
+- After the Next press the robot reads the editor level. Still on the ad set: it closes the
+  notices that may cover Next (the "WhatsApp Status included" notice was open over the page) and
+  presses Next again, up to three presses in all.
+- Still on the ad set after all presses: the campaign stops at `next_to_ad_stuck_on_adset` with a page
+  capture and a reason (`next_covered`, `next_outside_viewport`, `dialog_open`, `next_not_found` or
+  `next_clicked_no_change`). The stop is blocking and never replayed: a rebuild would leave another
+  partial draft in a live account. Plain `next_to_ad` (retryable) stays for a page that cannot be read.
+- The level is re-read after every press and before failing, so a slow transition is not a failure.
+  Page markers (`/editor:<level>`) decide; the wizard sidebar guess is used only without markers.
+- A page whose level cannot be read is not pressed blindly (the old behaviour is kept).
+- The browser zoom is not touched. Evidence is not enough to pin the cause (see the PR for the
+  captures to request from the laptop).
+
 ## Classic editor: ads 2-4 are created again, the ad set row's Action menu is opened by hover — ACL-1691
 
 On 07.10 (Facebook_5265 run f2c513f0a22d, KW_TRL on 9403A) `create_additional_ad` failed with
