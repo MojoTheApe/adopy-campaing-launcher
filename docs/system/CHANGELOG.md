@@ -1,5 +1,17 @@
 # System history
 
+## Placements: a complete Stories list that flickers is still read as "not offered" — ACL-1684
+
+On FacebookDoc120 (run 4e4969867d28) "Messenger Stories" was judged missing and a good run became a
+false do-not-publish: the list was complete (end proven, nothing hidden) but never read as stable.
+
+- Meta folded the Stories list twice while it was read; each re-opening spent the wait counted from
+  the first read, so the 1.5 s quiet window never fitted. The wait is now counted from the last
+  re-opening, with a hard limit of 15 s from the first read.
+- The row count no longer takes part in "stable" (it flickers while Meta remounts the list; the
+  end proof already covers hidden rows).
+- Unchanged: an incomplete list, or an offered but hidden placement, is never "not offered".
+
 ## B97: when Meta shows no media counter the robot refuses honestly; it waits for the Crop cards — ACL-1669
 
 Two live B97 runs of the same build (07.10) failed in the media step. In both the robot read a step body once, immediately. Only the Crop case is established as a late draw.
@@ -11,6 +23,7 @@ Two live B97 runs of the same build (07.10) failed in the media step. In both th
 - `url_field_missing` is reported as `<ad>_destination:url_field_missing_no_media` (still blocking, with a sentence for the dashboard) only when the creative step failed AND the empty Media state is positively seen on the page (Meta's "Please specify the media" text, or the single-screen editor's `empty` state on a mounted block). A Media block that cannot be read or is unmounted keeps the plain `url_field_missing`.
 - ACL-1637 did not cause this: the counter check dates from 17.09 and ad 1 never goes through the ACL-1637 path.
 - Bench: `wizard_media_picker_selected_2026_10_07.html` is cut from the real 07.10 capture (counters emptied; expected result is a REFUSAL). `scripts/capture_to_fixture.py` now keeps `data-test-decoration`, only when its value is `selected` (the scrubber used to drop Meta's selected mark, which is why the old 04.10 picker fixture looked unmarked). The Crop-loading fixture is hand-reduced from the real captures and keeps their three `role=progressbar` placeholders.
+
 ## Conversion location: the menu is opened by click or script, and a failure names its reason — ACL-1572
 
 `conversion_website_pick: not_selected` failed campaigns on Doc21, Elf403, KLD_BFL_B91 and
