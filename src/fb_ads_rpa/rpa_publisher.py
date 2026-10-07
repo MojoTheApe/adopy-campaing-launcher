@@ -638,6 +638,20 @@ class RpaPublisher:
         try:
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
         except Exception as exc:
+            # ACL-1702: вкладку разблокировал сторож (зависла в одном вызове) —
+            # кампания кончена красным `tab_hung`, без переподключения и
+            # повтора: черновик частичный, повтор наплодил бы дубли.
+            from src.fb_ads_rpa import failure_policy, tab_watchdog
+
+            hung = tab_watchdog.take_hung()
+            if hung:
+                step = f"tab_hung:{hung}"
+                return RpaPublishResult(
+                    campaign_name=campaign_name, success=False,
+                    error=f"Recorded flow failed at: {step} - {failure_policy.reason(step)}",
+                    steps_completed=[f"recorded_flow_fail:{step}"],
+                    blocking_failures=[step],
+                    run_id=_telemetry.current_run_id() or None)
             if not self._browser_closed_error(exc):
                 raise
             # A dead PAGE usually does not mean a dead BROWSER — confirmed

@@ -128,6 +128,10 @@ BLOCKING_REVIEW_STEPS = frozenset(
         "lead_terms_not_accepted",
         "objective_inline",
         "simple_create_more_ads",
+        # ACL-1702: the tab watchdog unblocked a tab stuck in one call; the
+        # draft is partial and a replay would duplicate it. Decided by the
+        # flow's caller (tab_watchdog.take_hung), not returned by the flow.
+        "tab_hung",
         # ACL-1354: time budgets of the recorded flow.
         "tab_frozen_budget_exceeded",
         "campaign_budget_exceeded",

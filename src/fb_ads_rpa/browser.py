@@ -1334,6 +1334,14 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
             window_visibility.remember_cdp_url(context, cdp_url)
         except Exception:
             pass
+        try:
+            # ACL-1702: сторож вкладки задания откроет к этому браузеру СВОЁ
+            # соединение CDP — адрес запоминаем за потоком задания.
+            from src.fb_ads_rpa import tab_watchdog
+
+            tab_watchdog.note_endpoint(cdp_url)
+        except Exception:
+            pass
         _disable_background_throttling(context, page)
         _ensure_wide_window(context, page)
         from src.fb_ads_rpa import run_telemetry as rt

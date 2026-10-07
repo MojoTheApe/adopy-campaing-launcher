@@ -1006,8 +1006,21 @@ def _step_stuck_tick(job_id: str, state: dict[str, Any], account_label: str) -> 
     state["fired"] = True
     campaign = names[done] if done < len(names) else ""
     step = step or "job_start"
+    diag: dict[str, Any] = {"last_step": step, "idle_s": round(idle, 1)}
+    # ACL-1702: стек потока задания — какой именно вызов держит его.
+    job_thread = state.get("job_thread")
+    if job_thread is not None:
+        try:
+            from src.fb_ads_rpa import tab_watchdog
+
+            path = tab_watchdog.dump_stack(job_thread, run_id=_rt.last_run_id(job_id), step=step,
+                                           reason="step_stuck", idle_s=idle)
+            if path is not None:
+                diag["stack_file"] = path.name
+        except Exception:
+            pass
     try:
-        _rt.record("step_stuck", None, campaign=campaign, diag={"last_step": step, "idle_s": round(idle, 1)})
+        _rt.record("step_stuck", None, run_id=_rt.last_run_id(job_id), campaign=campaign, diag=diag)
     except Exception:
         pass
     try:
@@ -1020,21 +1033,107 @@ def _step_stuck_tick(job_id: str, state: dict[str, Any], account_label: str) -> 
     return True
 
 
+def _unblock_tick(job_id: str, state: dict[str, Any], account_label: str) -> dict[str, Any] | None:
+    """ACL-1702: поток задания стоит в одном вызове Playwright дольше порога —
+    разблокировать его вкладку через своё соединение CDP (`tab_watchdog`).
+
+    Только для идущего задания. Итог — строка `tab_unblocked` (шаг, способ,
+    сколько стояли) и одно событие Sentry; отказ из-за человека у браузера —
+    строка `tab_unblock_skipped`, одна на причину.
+    """
+    from src.fb_ads_rpa import run_telemetry as _rt
+    from src.fb_ads_rpa import tab_watchdog
+
+    watch = state.get("watch")
+    if watch is None:
+        return None
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None or job.get("abandoned") or job.get("status") not in ("running", "cancelling"):
+            return None
+        names = list(job.get("campaign_names") or [])
+        done = int(job.get("done_count") or 0)
+    seen = _rt.last_activity(job_id)
+    last_t, step = seen if seen else (state["since"], "")
+    last_t = max(last_t, state["since"])
+    now = _rt.clock()
+    idle = now - last_t
+    step = step or "job_start"
+    result = tab_watchdog.unblock_tick(watch, idle_s=idle, step=step, now=now)
+    if result is None:
+        return None
+    campaign = names[done] if done < len(names) else ""
+    run_id = _rt.last_run_id(job_id)
+    if "skipped" in result:
+        why = str(result["skipped"])
+        if why not in state.setdefault("skips", set()):
+            state["skips"].add(why)
+            try:
+                _rt.record("tab_unblock_skipped", None, run_id=run_id, campaign=campaign, note=why,
+                           diag={"last_step": step, "idle_s": round(idle, 1)})
+            except Exception:
+                pass
+        return result
+    stack = tab_watchdog.dump_stack(watch.job, run_id=run_id, step=step, reason="tab_unblock",
+                                    idle_s=idle)
+    diag = {"last_step": step, "stuck_s": round(idle, 1), "method": result.get("method") or "",
+            "tried": result.get("tried") or [], "why": result.get("why") or "",
+            "api": result.get("api") or "", "where": result.get("where") or "",
+            "seconds": result.get("seconds"), "url": result.get("url") or ""}
+    if stack is not None:
+        diag["stack_file"] = stack.name
+    try:
+        _rt.record("tab_unblocked", bool(result.get("ok")), run_id=run_id, campaign=campaign,
+                   note=result.get("method") or result.get("why") or "failed", diag=diag)
+    except Exception:
+        pass
+    try:
+        from src.fb_ads_rpa import sentry_signal
+
+        sentry_signal.report_tab_unblocked(step, result.get("method") or "", idle,
+                                           ok=bool(result.get("ok")), job=job_id,
+                                           account=account_label, campaign=campaign,
+                                           api=diag["api"], where=diag["where"], tried=diag["tried"])
+    except Exception:
+        pass
+    return result
+
+
+def _watch_poll_s() -> float:
+    from src.fb_ads_rpa import tab_watchdog
+
+    return max(0.05, min(_STUCK_POLL_S, _step_stuck_s() / 2, tab_watchdog.unblock_after_s() / 4))
+
+
 def _start_stuck_watch(job_id: str, account_label: str) -> None:
-    """Сторож тишины: свой поток на задание, в браузер не ходит."""
+    """Сторож тишины: свой поток на задание.
+
+    Зовёт ПОТОК ЗАДАНИЯ: здесь запоминается он сам (id и главный greenlet) —
+    по нему сторож снимает стек (ACL-1702). В браузер сторож ходит только
+    своим соединением CDP и только для разблокировки (`_unblock_tick`).
+    """
     try:
         from src.fb_ads_rpa import run_telemetry as _rt
+        from src.fb_ads_rpa import tab_watchdog
 
-        state: dict[str, Any] = {"fired": False, "since": _rt.clock()}
+        job_thread = tab_watchdog.this_thread()
+        state: dict[str, Any] = {"fired": False, "since": _rt.clock(), "job_thread": job_thread,
+                                 "watch": tab_watchdog.Watch(job=job_thread)}
         ended = _job_ended.get(job_id)
         if ended is None:
             return
 
         def watch() -> None:
             _rt.set_current_job(job_id)    # строка сигнала несёт номер задания
-            while not ended.wait(max(0.05, min(_STUCK_POLL_S, _step_stuck_s() / 2))):
-                if _step_stuck_tick(job_id, state, account_label):
-                    return
+            try:
+                while not ended.wait(_watch_poll_s()):
+                    _step_stuck_tick(job_id, state, account_label)
+                    try:
+                        _unblock_tick(job_id, state, account_label)
+                    except Exception:
+                        pass
+            finally:
+                tab_watchdog.forget_thread(job_thread.tid)
 
         threading.Thread(target=watch, daemon=True, name=f"stuck-watch-{job_id[:8]}").start()
     except Exception:
