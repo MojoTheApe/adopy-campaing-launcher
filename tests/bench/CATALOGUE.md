@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**22 robot steps × 114 layouts, 62 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**23 robot steps × 116 layouts, 62 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -15,6 +15,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | objective | 5 | 5 | 0 | 0 |
 | simple_create_layout | 2 | 2 | 0 | 0 |
 | campaign_name / budget / adset_name | 1 | 1 | 0 | 0 |
+| conversion_website (Conversion location -> Website, ACL-1572) | 2 | 2 | 0 | 0 |
 | conversion_event | 3 | 3 | 0 | 0 |
 | advantage_plus_audience | 8 | 8 | 0 | 0 |
 | further_limit_reach (Suggest an audience) | 9 | 9 | 0 | 0 |
@@ -63,6 +64,15 @@ Robot: level name fields and daily budget (simple_create NAME_FIELDS, budget inp
 | Layout | Seen live | Fixture · fragment | Test | Expected | Status |
 | --- | --- | --- | --- | --- | --- |
 | Single-screen editor: Campaign name, Budget (expanded), Ad set name | 9e7d67471c6b/00_next_to_adset | `simple_create_2026_09_27.html` | `tests/test_the_single_screen_editor_is_walked.py` | each name field and the budget input unique on the page | pass |
+
+## conversion_website (Conversion location -> Website, ACL-1572)
+
+Robot: _pick_website_from_open_menu / _ensure_conversion_menu_open: trigger state (aria-expanded), name-field focus release, click -> keyboard -> script openers, English failure reason
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| Doc21 classic ad set editor, closed Conversion location trigger (combobox, aria-expanded=false); open menu synthetic, no Single/Multiple headings | 87d43d6202af/00_conversion_website, 254ee3b3e0c7/00_conversion_website, 18d15b75d1eb/00_conversion_website, 308c4f7c8a5a/00_conversion_website, 162a95a64776/00_conversion_website | `foreign_windows_doc21_2026_10_04.html` · adset_name_section, conversion_section | `tests/test_conversion_menu_opens_in_every_layout_1572.py` | menu opened by click, else keyboard, else script press; focus released from the ad set name field; Website selected and read back from the trigger; a menu closed by a method is reopened before the next one | pass |
+| Same editor, menu never opens / Website row missing / Conversion location absent (ad editor on screen) | e2df3122c39f/01_conversion_website | `foreign_windows_doc21_2026_10_04.html` · adset_name_section, conversion_section | `tests/test_conversion_menu_opens_in_every_layout_1572.py` | stops after 3 failed openings; note names the reason in English | pass |
 
 ## conversion_event
 

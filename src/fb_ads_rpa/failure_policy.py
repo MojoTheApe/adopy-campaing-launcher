@@ -170,6 +170,11 @@ POLICY: dict[str, tuple[str, str]] = {
         "the robot set it on a second pass at the end of the campaign and read it back "
         "from Locations",
     ),
+    "conversion_website_name_changed": (
+        BLOCKING,
+        "the ad set name changed while Conversion location was being set; the draft was "
+        "stopped so a changed name is not published - check the ad set name in Ads Manager",
+    ),
     "conversion_event": (
         BLOCKING,
         "optimising for the wrong event spends the budget on the wrong people; "
@@ -377,6 +382,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Meta's location search stalled; the robot set the country at the end "
         "of the campaign and read it back.",
         "Check \"Locations\" on the ad set before publishing.",
+    ),
+    "conversion_website_name_changed": (
+        "Ad set name changed",
+        "The name changed while Conversion location was being set, so the build was stopped.",
+        "Check the ad set name in Ads Manager, then publish again.",
     ),
     "conversion_event": (
         "Conversion event — not verified",

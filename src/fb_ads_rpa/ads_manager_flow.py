@@ -13,6 +13,7 @@ RPA_FLOW_VERSION = "v96"
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
 from src.fb_ads_rpa import failure_policy, job_cancel, profile_trouble, retry_policy, run_summary, sentry_signal
+from src.fb_ads_rpa import meta_dom as _md
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.page_diagnostics import diagnose_and_recover
 from src.fb_ads_rpa.meta_dom import (
@@ -1869,6 +1870,10 @@ class AdsManagerFlow:
             pass
 
         result.steps_completed.append("conversion_location_website_skipped")
+        # ACL-1572: причина отказа — в текст шага, а не только в телеметрию.
+        why = _md.last_conversion_failure_reason()
+        if why:
+            result.steps_completed.append(f"conversion_location_website_reason:{why}")
         fail_shot = self._shot("04d_conversion_location_fail", result)
         if menu_shot:
             result.steps_completed.append(f"screenshot_menu_open:{menu_shot}")
@@ -2499,9 +2504,15 @@ class AdsManagerFlow:
             result.success = not fail_step
             if fail_step:
                 result.error = f"Recorded flow failed at: {fail_step}"
+                if fail_step.split(":", 1)[0] in ("conversion_website", "conversion_website_verify"):
+                    # ACL-1572: почему Website не выбран (меню не открылось, поля нет...).
+                    _why = _md.last_conversion_failure_reason()
+                    if _why:
+                        result.error += " - " + _why
                 # ACL-1313: остановку, которую повтор не лечит (account_blocked),
                 # человек должен понять из самой ошибки, без разбора телеметрии.
                 if (fail_step.split(":", 1)[0] in ("account_blocked", "browser_closed",
+                                                   "conversion_website_name_changed",
                                                    "profile_unresponsive", "simple_create_layout",
                                                    *retry_policy.FLOW_BUDGET_STOPS)
                         or fail_step.split(":", 1)[0] in profile_trouble.ACCOUNT_STOPS):
