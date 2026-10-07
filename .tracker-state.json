@@ -5803,22 +5803,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "697": {
-        "actor": "Worker-S1697A",
-        "session": "run_s1697a_1007",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1697-wrong-act",
-        "worktree": "C:\\acl-1697-wrong-act",
-        "id": "a47adb6477134cb3b4832ccf30e6994b",
-        "issue": 697,
-        "state": "handoff",
-        "started_at": "2026-10-07T14:23:59+00:00",
-        "from_status": "status:idea",
-        "pr": 699,
-        "report": "# ACL-1697 handoff (Worker-S1697A)\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/699  SHA: 4276ec9842e896e1caa870772e9eda0cde367c97\nOpened account is read from act= in page.url (after redirects); unreadable or different -> ProfileStop wrong_ad_account before Create.\nChecks: _goto_campaigns (after goto, after ready reload), _start_create_wizard, every Create press in recorded flow (_press_create in run_recorded_campaign_flow).\nPolicy: blocking + GUIDE, account-level stop (ACCOUNT_STOPS), non-retryable. Preflight note: web.app._history_act_note.\nTests: new tests/test_wrong_ad_account_stops_before_create.py (17), plus failure_policy, recorded_retry_contract, acl_test_platform (100), campaign-open/Create files, workbook_review, sentry/run_summary, single-screen etc. all green. Full suite left to CI.\nNot verified live: switcher DOM fallback not implemented (URL only; captures show act= on every Ads Manager URL)."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -8480,9 +8465,25 @@
             "session": "run_s1697a_1007"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1697A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1697A",
+          "session": "run_s1697a_1007",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1697-wrong-act",
+          "worktree": "C:\\acl-1697-wrong-act",
+          "id": "a47adb6477134cb3b4832ccf30e6994b",
+          "issue": 697,
+          "state": "handoff",
+          "started_at": "2026-10-07T14:23:59+00:00",
+          "from_status": "status:idea",
+          "pr": 699,
+          "report": "# ACL-1697 handoff (Worker-S1697A)\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/699  SHA: 4276ec9842e896e1caa870772e9eda0cde367c97\nOpened account is read from act= in page.url (after redirects); unreadable or different -> ProfileStop wrong_ad_account before Create.\nChecks: _goto_campaigns (after goto, after ready reload), _start_create_wizard, every Create press in recorded flow (_press_create in run_recorded_campaign_flow).\nPolicy: blocking + GUIDE, account-level stop (ACCOUNT_STOPS), non-retryable. Preflight note: web.app._history_act_note.\nTests: new tests/test_wrong_ad_account_stops_before_create.py (17), plus failure_policy, recorded_retry_contract, acl_test_platform (100), campaign-open/Create files, workbook_review, sentry/run_summary, single-screen etc. all green. Full suite left to CI.\nNot verified live: switcher DOM fallback not implemented (URL only; captures show act= on every Ads Manager URL)."
+        },
+        "pr": 699,
+        "queued_at": "2026-10-07T14:43:10+00:00"
       }
     },
     "actors": {
@@ -10960,7 +10961,8 @@
       673,
       684,
       691,
-      693
+      693,
+      697
     ],
     "review": {
       "id": "17693233ea264778b1deb0ac6021399a",
@@ -15502,6 +15504,13 @@
         "at": "2026-10-07T14:23:59+00:00",
         "issue": 697,
         "claim": "a47adb6477134cb3b4832ccf30e6994b",
+        "actor": "Worker-S1697A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-07T14:43:10+00:00",
+        "issue": 697,
+        "pr": 699,
         "actor": "Worker-S1697A"
       }
     ],
