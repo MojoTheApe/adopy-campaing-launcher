@@ -5533,6 +5533,18 @@
         "state": "implementing",
         "started_at": "2026-10-06T20:56:28+00:00",
         "from_status": "status:idea"
+      },
+      "651": {
+        "actor": "Worker-S1651A",
+        "session": "run_s1651a_1006",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1651-creatives-fresh",
+        "worktree": "C:\\acl-1651-creatives-fresh",
+        "id": "eaa2ecb6ad5d4886b6d121dbfc6752a8",
+        "issue": 651,
+        "state": "implementing",
+        "started_at": "2026-10-07T05:52:10+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -7907,6 +7919,17 @@
         },
         "pr": 663,
         "queued_at": "2026-10-07T05:50:17+00:00"
+      },
+      "651": {
+        "implementers": [
+          {
+            "actor": "Worker-S1651A",
+            "session": "run_s1651a_1006"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1651A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -8520,6 +8543,10 @@
       },
       "Worker-S1653A": {
         "session": "run_s1653a_1006",
+        "role": "Worker"
+      },
+      "Worker-S1651A": {
+        "session": "run_s1651a_1006",
         "role": "Worker"
       }
     },
@@ -14443,6 +14470,13 @@
         "issue": 641,
         "pr": 664,
         "actor": "Worker-S1641A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-07T05:52:10+00:00",
+        "issue": 651,
+        "claim": "eaa2ecb6ad5d4886b6d121dbfc6752a8",
+        "actor": "Worker-S1651A"
       }
     ],
     "policy": {
