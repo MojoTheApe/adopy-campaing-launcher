@@ -6641,6 +6641,7 @@ def run_recorded_campaign_flow(
                             _telemetry.record(f"{tag}_leftover_shell", None, note="leftover_shell",
                                               diag={"row_ids": sorted(ids_before)})
                         retried = False
+                        block = ""
                         try:
                             created = create_additional_ad(page, adset_name)
                             block = last_create_block()  # read once: label of the refusal
@@ -6697,7 +6698,9 @@ def run_recorded_campaign_flow(
                                 _browser_closed(f"{tag}_create", exc)
                                 return "browser_closed"
                             _shot(f"fail_{tag}_create")
-                            ad_level_fails.append(f"{tag}_create:{str(exc)[:60]}")
+                            # ACL-1691: дерево не прочиталось уже после честного отказа — причина
+                            # отказа важнее текста исключения.
+                            ad_level_fails.append(f"{tag}_create:{block or str(exc)[:60]}")
                             continue
 
                     if not ensure_editor_window(page, tag):
