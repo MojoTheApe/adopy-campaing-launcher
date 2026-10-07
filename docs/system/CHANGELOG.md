@@ -1,5 +1,96 @@
 # System history
 
+## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
+
+The last rung of the fallback ladder: when a step fails on a screen the robot does not know (a
+collapsed card, a stray dialog, a moved button), `src/fb_ads_rpa/ai_rescue.py` can ask Claude what
+to do. This first PR is the standalone module only; nothing in the flow calls it, and
+`ACL_AI_RESCUE` defaults to `off`.
+
+- The model gets text only, never a screenshot: open dialogs, headings and up to 150 visible
+  controls (12k characters at most) with role, label, state and section, each with a stable index.
+- Everything sent is scrubbed first: ids, `act=` and URLs, e-mails, tokens, account labels,
+  every word that contains a digit, the text after a `|` in a name, field values (Page, Pixel,
+  account comboboxes), links and campaign-list rows (never shown to the model). Free names
+  without digits are replaced only when the caller passes them in `names=`.
+- The model answers with exactly one action: click, expand, close dialog, press Escape, scroll to,
+  or give up. Safety is in code, not in the prompt, and when in doubt it refuses:
+  - a positive allowlist is the primary gate (`allow` in `config/rpa_forbidden_zones.yaml`, EN/ES/PT):
+    expand only a collapsed section card whose name is on a short list (Audience, Placements, Budget,
+    Locations, ... and the ES/PT names; never Create new, Share, Advantage+ toggles); links are never targets;
+    field labels show only the placeholder; close a real dialog only with Close/Cancel/Not now/Skip/
+    Dismiss/Got it/Later/No thanks (never when the dialog mentions discard, unsaved or leaving); click
+    only "Show more"/"See more" buttons and a few named tabs; Escape only over a real clean dialog;
+    scroll always. Anything else is `not_allowlisted:<label>`, logged for the owner to widen later;
+  - the denylist is the second layer, matched on word stems (deleted, eliminara, unpublished) after
+    stripping soft hyphens and zero-width characters (publish, delete, remove, discard, terms,
+    instant forms, log out, payment, "leave", duplicate, edit, on/off);
+  - the check covers every label source of the target and its descendants (text, aria-label,
+    title, alt, value, aria-labelledby), the text next to it and the FULL text of the dialog around it;
+  - only buttons and tabs are clicked; switches, checkboxes, radios, fields and links never; nothing
+    inside a list row; a list page gives up without calling the model;
+  - Close works only as "close dialog" inside a visible dialog with no edited fields; Escape needs a
+    visible dialog without edited fields;
+  - a refused pick never scrolls the page; an allowed one is scrolled instantly, must stand still for
+    two frames, is vetted again, and is clicked with `locator.click(position, timeout=1s)` at a point
+    checked with `elementFromPoint`;
+  - a dialog is always a real dialog (a nested one too); the editor counts as the editor only when it
+    holds the name field and covers half the screen; a list page (a wide table or grid) gives up
+    before the model is called; shadow DOM targets are refused.
+- `ACL_AI_RESCUE=suggest` logs the answer and leaves the page untouched; `act` performs the one
+  action and returns, the caller re-runs its own check. Model: `ACL_AI_RESCUE_MODEL`
+  (default `claude-sonnet-5-5`), 20 second limit, no retries. No key or SDK means the rung is skipped.
+- At most 2 calls per step and 4 per campaign, counted by an object the caller passes in.
+- Telemetry: new step `ai_rescue` (mapped to "hold" in the build progress model).
+- Tests: `tests/test_ai_rescue.py` with a fake model; fixture `ai_guided_setup_dialog_2026_10_05.html`
+  (live capture fb358fda8aab).
+
+## Placements on Meta's layouts of 2026-10-05/06 in the classic ad set editor — ACL-1629
+
+Since 05.10 the placements step failed on several accounts (B90, B91, 9403A, Doc120), and every
+failed campaign ended as do-not-publish. Two new layouts, both in the classic editor:
+
+- **Category expanders as plain buttons** (B90, B91): each category row has a
+  `<button aria-label="Expand|Collapse">` without `aria-expanded`. The robot set the checkboxes,
+  but its "Meta does not offer this placement" check only knew the old expanders, answered
+  "collapsed" for ever, and "Messenger Stories" stayed a missing placement. The check now reads
+  both expander kinds. A category Meta folds again after a save is reopened; the settle budget
+  counts from the first page answer, not from entry (B91: one slow read used the whole budget).
+- **A second cause of the same B90/B91 failures: a category box disabled while Meta saves.**
+  After a category ("Search results", "Apps and sites") is clicked off, Meta keeps its box
+  disabled and still `aria-checked=true` for a few seconds. The step read it once and failed,
+  although the box ended in the wanted state (11 of 29 failed runs; every run that also failed
+  on "Ads on Facebook Reels" had it). The finish pass now re-reads such a category and clicks it
+  again once it is enabled, within the shared reopen cap and time limit; a box that stays disabled
+  and checked still fails and is named (`categories_failed`).
+- **Final read-back**: after all clicks the step reads every planned sub-item row and the fully-off
+  categories (Search results, Apps and sites) from the page once more and passes only if all match
+  the plan; a late revert fails the step (`final_readback.mismatch`). A category the plan wants on is
+  judged only by its rows: Meta shows its box as unchecked while only some of its placements are on,
+  so the finish pass never clicks it (a click would turn all its placements on).
+  The ACL-1336 reason is used only when the opened card has no manual-placement entry and carries
+  Meta's notice (B90 shows the notice and still offers manual placements).
+- **A row disabled while Meta saves** ("Ads on Facebook Reels", 13 runs on 05.10): before a seen
+  placement is called missing, the step reads it again, reopens its category and sets it, for up
+  to 6 s.
+- **Collapsed Placements card in the standalone editor** (9403A): a summary button
+  (`aria-pressed=false`) over a hidden body. It was only opened on the single-screen editor path;
+  the step now opens it in any editor, and a card that does not open fails as
+  `placements_card_not_opened` with an English reason. This is not a fix for 9403A: the opened
+  card has no categories at all, only Meta's notice that excluding placements "will no longer be
+  available for your ad sets". It is most likely the same cause as ACL-1336 and stays
+  do-not-publish; the blocking reason now says "Meta no longer offers manual placement exclusions
+  on this ad set (ACL-1336); placements left as Meta set them." The owner decides the policy in
+  ACL-1336.
+- **Account placement exclusions**: when the card summary still reads "None" after Confirm, the
+  step reopens "Placement controls for this ad account" and reads the switch and the four boxes
+  back (`excluded_verified_in_dialog`); a lost save stays a failure. When the card has no
+  "Account controls" row or "Edit placement controls" button, the report says Meta no longer
+  offers them (`account_controls_not_offered`) and the blocking reason names it. If the page call
+  itself fails while the row is looked for, the report says it was a read error
+  (`account_controls_row_read_error`), not that Meta does not offer the exclusions.
+- Tests: `tests/test_bench_placements_1629.py` on two scrubbed captures; bench catalogue rows
+  added.
 ## The same video on several ads gets media on every ad — ACL-1637
 
 06.10, Doc120 (45b9778e65df) and B97 (5f05cf961d37, 152f7df4ef6a): the first ad got the video,

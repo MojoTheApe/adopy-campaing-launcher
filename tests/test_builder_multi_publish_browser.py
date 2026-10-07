@@ -125,7 +125,13 @@ def add(page, account=0, count=1):
       const f=(''' + FORM_JS + ''')(['Demo','Other'][account]);
       for(let i=0;i<count;i++) {
         cbAddSlot(f); const s=f.querySelector('.cb-slot:last-child');
-        s.querySelector('[name$="_asset"]').value=['Gold','Silver','Crude','Wheat'][account*2+i];
+        // ACL-1628: актив вводят как человек — событием input на самом поле. Тогда
+        // имя кампании (`cbUpdateName`, oninput) готово ещё до первой отрисовки
+        // ящика; с голым `.value` имя дописывалось только проверкой через 350 мс,
+        // а подпись чекбокса в ящике оставалась со старым именем.
+        const asset=s.querySelector('[name$="_asset"]');
+        asset.value=['Gold','Silver','Crude','Wheat'][account*2+i];
+        asset.dispatchEvent(new Event('input',{bubbles:true}));
         s.querySelector('[name$="_ad_0_creative_file"]').value='offline-'+i+'.png';
       }
       f.dispatchEvent(new Event('input',{bubbles:true}));
