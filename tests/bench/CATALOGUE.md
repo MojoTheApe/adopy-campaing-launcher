@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**22 robot steps × 112 layouts, 61 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**23 robot steps × 118 layouts, 64 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -15,9 +15,10 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | objective | 5 | 5 | 0 | 0 |
 | simple_create_layout | 2 | 2 | 0 | 0 |
 | campaign_name / budget / adset_name | 1 | 1 | 0 | 0 |
+| conversion_website (Conversion location -> Website, ACL-1572) | 2 | 2 | 0 | 0 |
 | conversion_event | 3 | 3 | 0 | 0 |
 | advantage_plus_audience | 8 | 8 | 0 | 0 |
-| further_limit_reach (Suggest an audience) | 7 | 7 | 0 | 0 |
+| further_limit_reach (Suggest an audience) | 9 | 9 | 0 | 0 |
 | audience_location | 5 | 5 | 0 | 0 |
 | audience_age | 4 | 4 | 0 | 0 |
 | languages | 5 | 5 | 0 | 0 |
@@ -26,7 +27,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 5 | 5 | 0 | 0 |
-| creative_wizard | 15 | 15 | 0 | 0 |
+| creative_wizard | 17 | 17 | 0 | 0 |
 | ad_copy | 7 | 7 | 0 | 0 |
 | ad_destination / destination_sweep | 10 | 9 | 0 | 1 |
 | ads 2-3 (single-screen editor) | 4 | 4 | 0 | 0 |
@@ -64,6 +65,15 @@ Robot: level name fields and daily budget (simple_create NAME_FIELDS, budget inp
 | --- | --- | --- | --- | --- | --- |
 | Single-screen editor: Campaign name, Budget (expanded), Ad set name | 9e7d67471c6b/00_next_to_adset | `simple_create_2026_09_27.html` | `tests/test_the_single_screen_editor_is_walked.py` | each name field and the budget input unique on the page | pass |
 
+## conversion_website (Conversion location -> Website, ACL-1572)
+
+Robot: _pick_website_from_open_menu / _ensure_conversion_menu_open: trigger state (aria-expanded), name-field focus release, click -> keyboard -> script openers, English failure reason
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| Doc21 classic ad set editor, closed Conversion location trigger (combobox, aria-expanded=false); open menu synthetic, no Single/Multiple headings | 87d43d6202af/00_conversion_website, 254ee3b3e0c7/00_conversion_website, 18d15b75d1eb/00_conversion_website, 308c4f7c8a5a/00_conversion_website, 162a95a64776/00_conversion_website | `foreign_windows_doc21_2026_10_04.html` · adset_name_section, conversion_section | `tests/test_conversion_menu_opens_in_every_layout_1572.py` | menu opened by click, else keyboard, else script press; focus released from the ad set name field; Website selected and read back from the trigger; a menu closed by a method is reopened before the next one | pass |
+| Same editor, menu never opens / Website row missing / Conversion location absent (ad editor on screen) | e2df3122c39f/01_conversion_website | `foreign_windows_doc21_2026_10_04.html` · adset_name_section, conversion_section | `tests/test_conversion_menu_opens_in_every_layout_1572.py` | stops after 3 failed openings; note names the reason in English | pass |
+
 ## conversion_event
 
 Robot: select_conversion_event_lead (conversion_event_field_present, is_lead_conversion_event_selected)
@@ -99,6 +109,8 @@ Robot: gear row 'Further limit the reach of your ads', suggestion age checkbox
 | Same card with custom audiences expanded (6540 FX) | 97370c743f44/00_further_limit_reach_click | `audience_suggest_layout_2026_09_26.html` · suggest_fx | `tests/test_suggest_an_audience_layout.py` | covered gear row still opened by its own element | pass |
 | Controls with 'Your suggestion' age | 7cfdc772376d/02_advantage_plus_audience | `audience_suggest_layout_2026_09_26.html` · controls_suggestion_on | `tests/test_suggest_an_audience_layout.py` | suggestion unchecked once, badge goes off | pass |
 | Controls off summary | 8c6496e50815/01_placements | `audience_suggest_layout_2026_09_26.html` · controls_off | `tests/test_suggest_an_audience_layout.py` | reads off with age and language from the summary | pass |
+| WhatsApp campaign: Age collapsed to '35 - 65+ · Unknown age on WhatsApp: Excluded' with 'Your suggestion' (Doc120) | 573ab2cf3646/00_advantage_plus_audience | `audience_whatsapp_suggestions_2026_10_06.html` · whatsapp_suggestion_collapsed | `tests/test_bench_audience_whatsapp_suggestions.py` | row opened, suggestion unchecked once, badge goes off; if Meta keeps it on the step still fails | pass |
+| WhatsApp campaign: hard age 35 - 65+ (suggestion unchecked), badge still 'Advantage+ on' (9403A) | d4f9d5f016c1/03_advantage_plus_audience | `audience_whatsapp_suggestions_2026_10_06.html` · whatsapp_age_hard_badge_on | `tests/test_bench_audience_whatsapp_suggestions.py` | nothing clicked; blocked still_on with age_suggestion_checked=false and mode=controls in diag (cause of the flip not known) | pass |
 | Age field open with 'Use as a suggestion' | 543dc9daad53/00_languages | `audience_suggest_layout_2026_09_26.html` · age_open_suggestion | `tests/test_suggest_an_audience_layout.py` | checkbox found only inside the age field | pass |
 | Editor drawer window (9403A, adsets/edit/standalone): Audience collapsed into a read-only summary card, no Edit button, Further limit row in the hidden body | 6ebd77ccaf6a/02_further_limit_reach_click | `audience_card_collapsed_drawer_2026_10_05.html` · card_run_a | `tests/test_bench_audience_card_collapsed_drawer.py` | card opened by one click on its title (never About audiences / a button inside); controls verified; simple_card ok | pass |
 | Same card, second run | e89bda52e7a5/03_further_limit_reach_click | `audience_card_collapsed_drawer_2026_10_05.html` · card_run_b | `tests/test_bench_audience_card_collapsed_drawer.py` | same as above | pass |
@@ -216,6 +228,8 @@ Robot: _creative_wizard_open, _wizard_media_step, _WIZARD_FORWARD_JS (walk), _cr
 | Media step busy after the library pick (04.10): '1 selected', Next and Cancel aria-disabled | 232d398471bd/00_wizard_media | `wizard_crop_story_missing_2026_10_04.html` · media_busy | `tests/test_bench_wizard_exit_1004.py` | the walk waits while the wizard is busy (bounded) instead of four quick misses (ACL-1551) | pass |
 | Media-first wizard opened on Media (04.10) with the media picker still loading: three 'Loading...' progressbars, no Upload/tabs/Search media/grid; footer Next aria-disabled, Cancel enabled | 2f140fa687fa/00_ad_creative_media_step, 2f140fa687fa/02_ad_creative_media_step | `wizard_media_picker_2026_10_04.html` · loading | `tests/test_bench_wizard_media_picker_1004.py` | picker read as loading (3 placeholders); the current Media step is not clicked and Next is not pressed; read-only wait, then media_picker_loading (not upload_button_missing); picker that loads during the wait goes on to the library (ACL-1559) | pass |
 | The same Media step loaded (04.10): tabs Account/Video URL/Page, Search media, Filters 1, Upload (role=button, asset-picker data-surface), drop zone, library grid with 2 tiles | 232d398471bd/00_wizard_media | `wizard_media_picker_2026_10_04.html` · loaded | `tests/test_bench_wizard_media_picker_1004.py` | picker read as loaded (upload, search, 2 tiles); exactly one Upload, inside the wizard dialog; the step goes straight to library reuse without clicks (ACL-1559) | pass |
+| Media step of the wizard opened by an upload, B97 (07.10, bc4302862ee7, 0.1 s): tabs, Search media, Upload, library grid with the one uploaded tile wrapped in data-test-decoration="selected"; the footer counters ('1 selected' / '0 selected') removed for this fixture | bc4302862ee7/00_wizard_media | `wizard_media_picker_selected_2026_10_07.html` · selected_no_counter | `tests/test_bench_b97_picker_and_crop_1007.py` | counter read as unavailable, selected tile marked -> REFUSED (library_selection_unreadable): no click, no upload over a selection the robot cannot count (ACL-1669) | pass |
+| Crop step opened while Meta still draws it (07.10, B97 bc4302862ee7): step row on Crop, heading, three role=progressbar Loading placeholders, no Square/Vertical cards, no Replace | bc4302862ee7/03_wizard_crop, bc4302862ee7/10_wizard_crop, bc4302862ee7/16_wizard_crop | `crop_cards_loading_2026_10_07.html` · cards_loading | `tests/test_bench_b97_picker_and_crop_1007.py` | read as found with empty cards; the step waits for the cards instead of answering crop_replace_button_missing (ACL-1669) | pass |
 
 ## ad_copy
 
