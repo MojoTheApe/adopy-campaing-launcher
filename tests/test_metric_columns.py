@@ -205,13 +205,13 @@ ROW = {"account": "A1", "adset": "AS1", "ad_title": "T", "ad_asset": "X", "spend
 def test_the_drill_tables_end_in_the_six_metrics():
     # ads under an ad set
     h = _th(_render_fragment("optimization", [ROW]))
-    assert h[:2] == ["Ad title", "Asset"] and h[2:8] == TARGET
+    assert h == ["Ad title", "Asset"] + TARGET, "в раскрытии объявлений нет ни Date, ни кнопки «+»"
     # ad sets under a CM or an account
     h = _th(_render_fragment("account", [ROW]))
     assert h[:2] == ["Campaign / Ad set", "Account"] and h[2:8] == TARGET
     # everything else
     h = _th(_render_fragment("trend", [ROW]))
-    assert h[:5] == ["Account", "CM", "Adset", "Ad title", "Asset"] and h[5:11] == TARGET
+    assert h == ["Account", "CM", "Adset", "Ad title", "Asset"] + TARGET
 
 
 def test_a_zero_divisor_in_a_drill_row_is_a_dash_not_dollar_zero():
@@ -329,3 +329,15 @@ def test_the_tree_rows_use_the_same_labels_in_the_same_order():
     fields = re.findall(r"'(\w+)'", cols)
     labels = dict(re.findall(r"(\w+): '(\w+)'", re.search(r"var AMAP_ATTR_LABELS = \{(.*?)\};", REPORT, re.S).group(1)))
     assert [labels[f] for f in fields] == TARGET
+
+
+def test_the_drills_have_no_date_and_no_cart_button():
+    """Решение владельца 07.10: Date и «+ 🛒» из раскрытия объявлений убраны.
+
+    Обработчика кнопки на странице давно нет (корзину убрали раньше), так что
+    она была мёртвой.
+    """
+    for section in ("optimization", "account", "trend"):
+        html = _render_fragment(section, [ROW])
+        assert "cb-cart-btn" not in html and "2026-10-05" not in html
+    assert "td.date" not in REPORT

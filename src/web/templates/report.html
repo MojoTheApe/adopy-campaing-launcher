@@ -679,7 +679,6 @@
     .drill-scroll { overflow-x: auto; max-width: 100%; }
     td.adset { font-size: 0.78rem; color: var(--muted); max-width: 320px;
                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    td.date { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
     td.good { color: var(--good); }
     td.bad  { color: var(--bad); }
 
@@ -718,6 +717,8 @@
     table.drill-table { font-size: 0.8125rem; background: transparent; box-shadow: none; border: none; }
     table.drill-table th { background: transparent; font-size: 0.75rem; }
     table.drill-table td { border-bottom: 1px solid var(--border); }
+    /* Числа не липнут друг к другу: у колонки CR был только общий отступ 0.75rem. */
+    table.drill-table th.num, table.drill-table td.num { padding-left: 1rem; }
 
     pre.text-block {
       background: var(--bg-elev);

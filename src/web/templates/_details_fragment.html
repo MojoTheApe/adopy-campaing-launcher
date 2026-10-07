@@ -43,8 +43,6 @@
               <th>Ad title</th>
               <th>Asset</th>
               {{ mx.headers() }}
-              <th>Date</th>
-              <th></th>
               {% elif section in ('cm_comparison', 'account') %}
               <th>Campaign / Ad set</th>
               <th>Account</th>
@@ -56,7 +54,6 @@
               <th>Ad title</th>
               <th>Asset</th>
               {{ mx.headers() }}
-              <th>Date</th>
               {% endif %}
             </tr>
           </thead>
@@ -80,11 +77,6 @@
               <td>{{ r.ad_title or '' }}</td>
               <td>{{ r.ad_asset or '' }}</td>
               {{ mx.cells(r.spend, r.leads, r.ftds, 'good' if (r.ftds or 0) > 0 else '') }}
-              <td class="date">{{ r.date or '' }}</td>
-              <td><button type="button" class="cb-cart-btn" data-kind="ad" data-source="ad"
-                          data-country="{{ country | anchor_slug }}" data-country-name="{{ country }}"
-                          data-payload='{{ r | tojson | e }}'
-                          title="Add to build: ad in the last campaign">+ 🛒</button></td>
               {% elif section in ('cm_comparison', 'account') %}
               <td class="adset" style="max-width:300px;word-break:break-word">
                 {{ r.adset or '' }}
@@ -112,7 +104,6 @@
               <td>{{ r.ad_title or '' }}</td>
               <td>{{ r.ad_asset or '' }}</td>
               {{ mx.cells(r.spend, r.leads, r.ftds, 'good' if (r.ftds or 0) > 0 else '') }}
-              <td class="date">{{ r.date or '' }}</td>
               {% endif %}
             </tr>
           {% endfor %}
