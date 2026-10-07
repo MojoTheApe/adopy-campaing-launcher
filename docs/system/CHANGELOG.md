@@ -1,5 +1,23 @@
 # System history
 
+## Classic editor: ads 2-4 are created again, the ad set row's Action menu is opened by hover — ACL-1691
+
+On 07.10 (Facebook_5265 run f2c513f0a22d, KW_TRL on 9403A) `create_additional_ad` failed with
+`create_menu_item_not_found` (`menuSurfaces: []`, click point on an ad's text) and ads 2-4 were not created.
+Two causes on the captures:
+
+- The classic tree draws the row buttons only under the cursor (as the single-screen editor did, ACL-1630):
+  there is no "Action menu" in the DOM until the pointer is over the row. The step waited 30 s for it
+  to appear and then fell back to a blind coordinate click.
+- That fallback took the first text equal to the ad set name, sorted by height. The breadcrumb header above the
+  tree carries the same name (y = 22), so the click landed on the breadcrumb's ad name, not on the row.
+
+Fix: the tree counts as ready once the ad set row is there; the robot hovers that row (mouse move only, no
+press, no focus, at most 3 tries, stopping as soon as the button appears), then the existing Action menu ->
+"Create ad" path runs. If the row still shows no button the step blocks with `adset_action_menu_not_shown`
+("The ad set row in the left tree shows no Action menu button, even with the cursor over it; nothing was
+clicked.") instead of clicking blindly. The legacy coordinate fallback now ignores the breadcrumb.
+
 ## Conversion location: the menu is opened by click or script, and a failure names its reason — ACL-1572
 
 `conversion_website_pick: not_selected` failed campaigns on Doc21, Elf403, KLD_BFL_B91 and
