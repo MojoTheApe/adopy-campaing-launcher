@@ -6262,10 +6262,20 @@ def run_recorded_campaign_flow(
                         simple_open_ad = (tag, "")
                     else:
                         shells_before = _tree_new_ad_shells(page)
+                        if shells_before > 0:
+                            # ACL-1675: безымянная заготовка осталась от прошлого
+                            # объявления (его создание упало, а имя не легло).
+                            # Не удаляем и не усыновляем — отмечаем для итогового
+                            # аудита; это объявление берёт только свою новую.
+                            _telemetry.record(f"{tag}_create", False, note="leftover_shell",
+                                              diag={"leftover_shells": shells_before})
                         try:
                             created = create_additional_ad(page, adset_name)
                             if not created and recover_stuck_page(page, f"{tag}_create", editor=True):
-                                created = create_additional_ad(page, adset_name)
+                                # ACL-1675: после перезагрузки первая попытка могла
+                                # оставить заготовку — сначала смотрим дерево.
+                                created = _adopt_shell_or_recreate(page, adset_name, shells_before,
+                                                                   after_reload=True)
                             if not created:
                                 # A reported failure does not mean no ad was born:
                                 # Meta names every fresh ad "New Leads Ad", so if
@@ -9533,7 +9543,8 @@ def create_additional_ad(page: Page, adset_name: str) -> bool:
         except Exception:
             pass
         if not adopted and shells_before >= 0 and _tree_new_ad_shells(page) > shells_before:
-            adopted = _open_tree_ad(page, "New Leads Ad")
+            adopted = (_open_tree_ad(page, "New Leads Ad", newest=True) if shells_before > 0
+                       else _open_tree_ad(page, "New Leads Ad"))
             _close_creative_setup_modal(page)
         _sleep_h(1.0, 0.1)
     # Объявление к этому моменту уже создано — отказ здесь значит «поле
@@ -15758,7 +15769,8 @@ def _tree_new_ad_shells(page: Page) -> int:
         return -1
 
 
-def _adopt_shell_or_recreate(page: Page, adset_name: str, shells_before: int = 0) -> bool:
+def _adopt_shell_or_recreate(page: Page, adset_name: str, shells_before: int = 0,
+                             after_reload: bool = False) -> bool:
     """Отказ создания объявления: взять уже родившуюся заготовку или создать заново.
 
     ACL-1641 (ревью PR #664, B3): `_open_tree_ad` вернул False и когда дерево
@@ -15766,27 +15778,46 @@ def _adopt_shell_or_recreate(page: Page, adset_name: str, shells_before: int = 0
     могло добавить второе объявление рядом с живой заготовкой. Перед повтором
     дерево должно читаться; не читается — исключение, и обычный `except`
     вызывающего пишет `fail_adN_create`.
+
+    ACL-1675: если до этого объявления в дереве уже висели заготовки
+    (`shells_before` > 0 — хвост упавших объявлений), «New Leads Ad» по имени
+    нашёл бы самую левую, то есть чужую. Тогда сначала читаем дерево: новой
+    заготовки нет — создаём, есть — открываем самую нижнюю (свежую).
+    `after_reload` — вызов после перезагрузки: дерево читаем до любого
+    клика, а старая заготовка не считается новой.
     """
-    if _open_tree_ad(page, "New Leads Ad"):
-        _close_creative_setup_modal(page)
-        return True
+    leftovers = shells_before > 0
+    if not leftovers and not after_reload:
+        if _open_tree_ad(page, "New Leads Ad"):
+            _close_creative_setup_modal(page)
+            return True
     shells = _tree_new_ad_shells(page)
     if shells < 0:
         raise RuntimeError("tree unreadable: not re-creating the ad")
     if shells > max(shells_before, 0):
+        if leftovers:
+            opened = _open_tree_ad(page, "New Leads Ad", newest=True)
+        else:
+            opened = _open_tree_ad(page, "New Leads Ad")
+        if opened:
+            _close_creative_setup_modal(page)
+            return True
         # Заготовка уже есть, но открыть её не вышло: второй create дал бы
         # дубликат рядом с ней. Отказ шага (`fail_adN_create`), не повтор.
         return False
     return create_additional_ad(page, adset_name)
 
 
-def _open_tree_ad(page: Page, ad_name: str) -> bool:
+def _open_tree_ad(page: Page, ad_name: str, newest: bool = False) -> bool:
     """Select an ad in the left campaign-structure tree by name.
 
     Prefix-tolerant (narrow layouts truncate row names — same finding as
     create_additional_ad, 2026-07-29). The current ad's name also appears
     in the top breadcrumb, so among all matches the LEFTMOST one is taken:
     the tree panel hugs the left edge, the breadcrumb does not.
+
+    ACL-1675: `newest=True` — среди строк дерева берётся самая нижняя (свежая),
+    а не первая сверху: выше могут висеть заготовки упавших объявлений.
     """
     if _tree_open_refused("open_tree_ad", ad_name):
         # ACL-1353 (ревью PR #365, F2): объявления 2+ нового редактора —
@@ -15794,7 +15825,7 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
         return False
     try:
         point = _eval_bounded(
-            page, """(adName) => {
+            page, """(arg) => {const adName = arg.adName, newest = arg.newest;
               const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
               // Без учёта регистра: Doc20 называет заготовку «New Leads ad»,
               // S15/Doc21 — «New Leads Ad». Точное сравнение не находило
@@ -15813,9 +15844,17 @@ def _open_tree_ad(page: Page, ad_name: str) -> bool:
                 const r = c.getBoundingClientRect();
                 if (r.width > 0 && r.x < bx) { bx = r.x; best = r; }
               }
+              if (newest && best) {
+                // Строки дерева лежат в одной колонке: берём самую нижнюю.
+                let by = -Infinity;
+                for (const c of cands) {
+                  const r = c.getBoundingClientRect();
+                  if (r.width > 0 && r.x < window.innerWidth * 0.34 && r.y > by) { by = r.y; best = r; }
+                }
+              }
               return best ? {x: best.x + best.width / 2, y: best.y + best.height / 2} : null;
             }""",
-            ad_name,
+            {"adName": ad_name, "newest": bool(newest)},
         )
     except Exception:
         return False  # ACL-1641: вкладка не ответила — строки дерева не прочитать
