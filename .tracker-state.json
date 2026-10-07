@@ -5518,9 +5518,11 @@
         "worktree": "C:\\acl-1649-ci-cost",
         "id": "4864b9141e3d497a95df437846a703e5",
         "issue": 649,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-06T18:47:23+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 666,
+        "report": "# ACL-1649 handoff (Worker-S1649A) - BLOCKED at commit\n\nState: all code and tests done in C:\\acl-1649-ci-cost (branch codex/acl-1649-ci-cost, base work/stage), UNCOMMITTED.\nThe Bash permission layer denied `git add ... && git commit` (twice, also with -F file). Not worked around.\nCommit message is ready: scratchpad\\commit_msg.txt.\n\nFiles: .github/workflows/{ci,delivery-check,windows-installer}.yml, scripts/{acl_ci_reuse,acl_ci_scope,acl_publish_release,acl_ci_minutes}.py,\ntests/{test_acl_ci_reuse,test_acl_ci_scope,test_acl_ci_workflows,test_ci_layout,test_acl_ci_chain,test_acl_ci_minutes}.py\n\nTests (foreground, --noconftest): chain 25 passed; reuse 80 (79 + the fixed admission case, re-verified 17 related); publish_release 45; ci_layout+workflows 49 passed 1 skipped\n(admission bash test skipped on Windows; the script was exercised manually with bash: ok); minutes 11; scope+platform 268+100 passed after linux-ok marks.\n\nFix during finish: a run now counts as proof only if its own admission job (ACL verification / Installer verification) passed.\n\nRemaining: commit, git fetch work + merge work/stage, push to work, open PR into stage (Tracker issues: ACL-1649), execution handoff --apply.\nSee the handback message for numbers, root cause and expected savings."
       },
       "652": {
         "actor": "Worker-S1652A",
