@@ -1259,7 +1259,7 @@ _NCOLS_BY_SECTION = {
     "optimization": 7,    # adset, spend, leads, ftds, cpl, cpa, reason
 }
 
-app = FastAPI(title="Adopy Campaigns Launcher")
+app = FastAPI(title="Adopy Campaign Manager")
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
@@ -1625,7 +1625,7 @@ async def acl_update_apply() -> JSONResponse:
         return JSONResponse(
             {
                 "ok": False,
-                "error": "ACL was not started by its launcher, so nothing would "
+                "error": "ACM was not started by its launcher, so nothing would "
                          "bring it back. Start it from the desktop shortcut and "
                          "try again.",
             },
@@ -1638,7 +1638,7 @@ async def acl_update_apply() -> JSONResponse:
             {
                 "ok": False,
                 "error": f"{busy} campaign job(s) still running. Updating restarts "
-                         "ACL, which would abandon them half-built.",
+                         "ACM, which would abandon them half-built.",
             },
             status_code=409,
         )
@@ -1682,7 +1682,7 @@ async def _apply_release_update(active_jobs) -> JSONResponse:
         restarting = True
         return JSONResponse({"ok": True, "target": manifest["version"]})
     except (release_updates.UpdateError, OSError, ValueError, TypeError, KeyError) as exc:
-        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACL is still running."
+        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACM is still running."
         return JSONResponse({"ok": False, "error": message}, status_code=400)
     finally:
         # A successful handoff deliberately keeps the reservations until exit.
@@ -4711,7 +4711,7 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     request_id = (form.get("request_id") or "").strip()
     if activate:
         return JSONResponse(
-            {"error": "Live activation is disabled: ACL creates draft-only campaigns."},
+            {"error": "Live activation is disabled: ACM creates draft-only campaigns."},
             status_code=403,
         )
     if not user_confirmed:
