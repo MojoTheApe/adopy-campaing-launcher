@@ -74,8 +74,8 @@ def test_ticked_campaigns_only_are_sent_one_job_per_account(ui):
     p.keyboard.press('Space')
     expect(box(p, 1, 0)).to_be_checked()
     expect(publish_button(p)).to_have_text('Publish selected → drafts (2)')
-    label = box(p, 1, 0).get_attribute('aria-label') or ''
-    assert other_a in label, label
+    # ACL-1628: подпись берётся из отрисовки ящика — ждём её, а не читаем сразу.
+    expect(box(p, 1, 0)).to_have_attribute('aria-label', 'Select %s to publish' % other_a)
 
     publish_button(p).click()
     modal = p.locator('#safe-confirm-modal')

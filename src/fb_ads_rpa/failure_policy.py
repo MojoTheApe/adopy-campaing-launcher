@@ -514,6 +514,33 @@ PER_AD_DETAIL: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Open the ad in Ads Manager, add its media by hand (Set up creative - Media), "
         "or run the campaign again later.",
     ),
+    # ACL-1637 (live 06.10): ads 2-4 of one campaign use the same video; the
+    # robot could neither take a copy from Meta's library nor upload it again.
+    # BLOCKING: the ad has no media, so the campaign is do-not-publish.
+    **{("creative_upload", why): (
+        reason,
+        "Ad media - " + title,
+        "This ad has no media, so the campaign must not be published.",
+        "Open the ad in Ads Manager, add its media by hand (Set up creative - Media), "
+        "or run the campaign again.",
+    ) for why, reason, title in (
+        ("library_has_no_copy",
+         "the same video was used by an earlier ad, Meta's media library showed no copy of it "
+         "and the robot's re-upload for this ad did not attach it",
+         "no library copy of the shared video"),
+        ("same_file_already_uploaded_this_run",
+         "the same video was uploaded for an earlier ad but could not be attached to this ad",
+         "shared video not attached"),
+        ("same_file_already_failed_this_run",
+         "the same video already failed to upload for an earlier ad and was not accepted again",
+         "shared video failed earlier"),
+        ("file_not_landed",
+         "the browser did not hand the video file to Meta's upload dialog for this ad",
+         "video file not accepted by the upload dialog"),
+        ("wizard_not_opened",
+         "Meta's 'Set up creative' wizard did not open for this ad",
+         "creative wizard did not open"),
+    )},
     # ACL-1551: the wizard of the previous ad was still open and its own Close
     # did not close it, so the ad set's Action menu could not be used.
     ("create", "creative_wizard_left_open"): (
