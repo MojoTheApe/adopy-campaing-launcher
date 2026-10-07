@@ -8589,7 +8589,7 @@
             "session": "run_s1675a_1007"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1675A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -8607,7 +8607,8 @@
           "report": "# ACL-1675 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/682 (into stage, depends on #664)\nBranch: codex/acl-1675-dup-shell, commit d720898410596719339a7c8e0bbd59c09c7d6acf\n\n## Changes (src/fb_ads_rpa/meta_dom.py)\n- After a reload, the retry goes through `_adopt_shell_or_recreate(..., after_reload=True)`: bounded tree read first, a new shell is adopted, an unreadable tree raises (no create), a clean tree retries create.\n- With leftover shells (shells_before > 0) the fresh shell is chosen as the bottom-most row (`_open_tree_ad(newest=True)`), never the leftmost old one; also in the 45 s adoption loop of create_additional_ad.\n- Leftovers are recorded in telemetry as `leftover_shell`; nothing is deleted.\n\n## Tests (foreground, one file at a time)\n- test_a_failed_ad_leaves_no_duplicate_shell.py: 6 passed (new)\n- test_a_campaign_has_a_time_budget.py: 22 passed\n- test_additional_ad_waits_for_tree.py: 7 passed\n- test_reload_on_an_additional_ad_keeps_that_ad.py: 6 passed\n- test_acl_test_platform.py: 100 passed\n- test_additional_ad_without_creative_has_no_text.py: 3 passed\nTotal 144 passed, 0 failed. No Meta/Multilogin touched."
         },
         "pr": 682,
-        "queued_at": "2026-10-07T11:13:21+00:00"
+        "queued_at": "2026-10-07T11:13:21+00:00",
+        "reviewer": "Reviewer-R1675S"
       },
       "673": {
         "implementers": [
@@ -9534,6 +9535,10 @@
       "Worker-S1710A": {
         "session": "run_s1710a_1007",
         "role": "Worker"
+      },
+      "Reviewer-R1675S": {
+        "session": "rev_r1675s_1007",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -11449,13 +11454,23 @@
       653,
       651,
       652,
-      675,
       693,
       702,
       705,
       710
     ],
-    "review": null,
+    "review": {
+      "id": "1956c9bf1b594361975d01562bac0a2f",
+      "pr": 682,
+      "issues": [
+        675
+      ],
+      "actor": "Reviewer-R1675S",
+      "session": "rev_r1675s_1007",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-07T20:57:34+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -16157,6 +16172,13 @@
         "prs": [
           709
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T20:57:34+00:00",
+        "pr": 682,
+        "lane": "1956c9bf1b594361975d01562bac0a2f",
+        "actor": "Reviewer-R1675S"
       }
     ],
     "policy": {
