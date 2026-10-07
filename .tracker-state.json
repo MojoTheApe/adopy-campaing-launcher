@@ -8394,7 +8394,7 @@
             "session": "run_s1673a_1007"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1673A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -8412,7 +8412,8 @@
           "report": "# ACL-1673 handoff (Worker-S1673A)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/683 (base stage), branch codex/acl-1673-page-closed, commit 6a0dc8ec.\n\n## Changes\n- meta_dom.py: `_dead_page_stop` at each ad step boundary -> `browser_closed`, `page_closed:<step>`; `_closed_stop` adds that reason; `_destination_stop` (gone / frozen + step budget) before unbounded sub-steps of `set_ad_destination_website`; `wait_editor_saved` skips a gone/frozen tab.\n- browser.py: `ensure_editor_window` returns at once on a gone tab (row `window_bounds` note page_closed, no CDP).\n- robot_health.py / robot_health.html: \"tab closed at <step>\" label.\n- No fresh-tab continuation: re-opening the Leads ad editor corrupts the ad and there is no resume-from-verified-ad path.\n- tests/test_page_closed_stops_the_ad_work.py (10 tests).\n\n## Who closed the page (read-only evidence, run 7641d7b3d86a)\nserve-live.log is local time UTC+3 (10:43:07 = 07:43:07 UTC).\n- No own close: no \"stopped through the MLX API\", no put_window_back, front_for_login or ACL-1614 abandon line for this profile; the log has no entry about B96 between 07:28 and 07:44. Not proven absent (put_window_back may not log), but nothing points to us.\n- The memory floor of 1.5 GB per profile was in force. slot_decision rows 07:35-07:43 (other job queued behind it): total 32188 MB, available 3286 -> 4472 MB, B96's profile measured 3.2-3.7 GB (growth ~460-480 MB), reserve 3072. Machine sat just above the reserve the whole time.\n- Available memory rose from 4472 MB (07:43:07) to 5037 MB (07:43:13) and 5901 MB (07:44:51): ~0.6 GB freed within 6 s of the TargetClosedError, consistent with the browser/renderer process dying.\n- Warning signs before it: asyncio \"Future exception was never retrieved: TargetClosedError\" x3 at 07:31:03-04, WinError 10054 connection reset at 07:32:55, ad3 crop to creative upload gap of 3.5 min (07:30:56 -> 07:34:22) ending in `tab_frozen:covered` (page did not answer), then 8 min silence.\n- Conclusion: most likely the tab/renderer died or hung under memory pressure (frozen from ~07:31, driver connection reset at 07:32, closed at 07:43); a hand close is not excluded (no window evidence). Not confirmed. Suggest: keep the floor at the old value for one more day, or log Chrome exit codes / Windows Application event log on the machine for 07:43 UTC.\n\n## 8 min silence in ad3_destination\nStep budget is 10 min (STEP_BUDGET_S) so an 8 min hang did not trip it. Sub-steps of `set_ad_destination_website` (`url_box.count()`, `keyboard.press`, `insert_text`, `is_visible()` in `wait_editor_saved`) ignore timeouts and block on a frozen renderer until the browser dies. Now each is preceded by `_tab_gone` / `_tab_frozen` (5 s probe + budget check). Does not depend on ACL-1641 (#664) helpers; `_tab_frozen` and `_eval_bounded` already exist on stage. #664 edits `_eval_bounded` and other spots in meta_dom.py, so a textual merge is expected to be clean but should be rechecked.\n\n## PYTHON-63 step_stuck next_to_adset (Doc120 job 864790a1, 07:55-08:01 UTC)\nTelemetry: `next_to_adset ok` 07:55:23 right after `tab_frozen:covered` (page did not answer, window covered); next row `window_bounds` (section adset) at 08:01:02, so ~5.6 min passed between the click and `ensure_editor_window(adset)`, where the only calls are `_wait_loading` (guarded), `_shot(\"after_next_to_adset\")` and `ensure_editor_window`. I did not find a single unbounded call to fix with certainty; likely a hang inside `_shot` (page title / screenshot / CDP) or `rt.window_state` on a covered tab. Not changed; needs its own ticket with a py-spy or a repro (window_state and the `_shot` capture path are the suspects). The stage-1 watchdog (ACL-1614) fired as designed.\n\n## Tests\nNew file 10 passed. Neighbours, one file at a time: single_screen_editor_flow 29, destination_and_ad_name_say_why 74, robot_health 42, a_campaign_has_a_time_budget 14, sentry_gets_only_campaign_failures 42 passed. single_screen_editor_failures_are_named: 18 passed, `table_modal` real-browser test failed once under load (219 s run) and passed in isolation; code untouched by this change.\nFull suite not run locally (CI only)."
         },
         "pr": 683,
-        "queued_at": "2026-10-07T11:20:48+00:00"
+        "queued_at": "2026-10-07T11:20:48+00:00",
+        "reviewer": "Reviewer-R1673Q"
       },
       "684": {
         "implementers": [
@@ -9199,6 +9200,10 @@
       "Worker-S1697A": {
         "session": "run_s1697a_1007",
         "role": "Worker"
+      },
+      "Reviewer-R1673Q": {
+        "session": "rev_r1673q_1007",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -11019,13 +11024,23 @@
       651,
       652,
       675,
-      673,
       684,
       691,
       693,
       697
     ],
-    "review": null,
+    "review": {
+      "id": "6921017529664b38aa23ebe524b0d675",
+      "pr": 683,
+      "issues": [
+        673
+      ],
+      "actor": "Reviewer-R1673Q",
+      "session": "rev_r1673q_1007",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-07T15:04:24+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -15581,6 +15596,13 @@
         "prs": [
           698
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-07T15:04:24+00:00",
+        "pr": 683,
+        "lane": "6921017529664b38aa23ebe524b0d675",
+        "actor": "Reviewer-R1673Q"
       }
     ],
     "policy": {
