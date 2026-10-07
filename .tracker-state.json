@@ -5533,20 +5533,6 @@
         "state": "implementing",
         "started_at": "2026-10-06T20:56:28+00:00",
         "from_status": "status:idea"
-      },
-      "651": {
-        "actor": "Worker-S1651A",
-        "session": "run_s1651a_1006",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1651-creatives-fresh",
-        "worktree": "C:\\acl-1651-creatives-fresh",
-        "id": "eaa2ecb6ad5d4886b6d121dbfc6752a8",
-        "issue": 651,
-        "state": "handoff",
-        "started_at": "2026-10-07T05:52:10+00:00",
-        "from_status": "status:idea",
-        "pr": 665,
-        "report": "# ACL-1651 handoff\nBranch codex/acl-1651-creatives-fresh, worktree C:\\acl-1651-creatives-fresh, local commit 96934d2d (not pushed).\nRoot cause: report.html fetched /api/creatives once at load into CREATIVES; cbCreativeSearch filtered the stale list. Server scans fresh each call (no cache).\nType switch (cbAdTypeChange) does NOT refetch: it only sets wrap.dataset.ctype and clears the field. So it \"helped\" only by clearing the stale query / re-filtering by type (a file of the other type is hidden by the ctype filter) - no code path sees a new file. Both paths now share one list.\nFix: cbRefreshCreatives(minGap): in-flight dedupe, no-store fetch, error response keeps old list, redraw only if list changed. Triggers: focusin on search (10 s), miss (2 s separate throttle, one fetch, then re-search), window focus (10 s). Test hook window.cbCreativesAge.\nTests: tests/test_builder_creatives_fresh_browser.py 4 passed; test_builder_story_label 2; test_builder_review_browser 4; test_acl_test_platform 100.\nNote: tracker claim failed (\"All implementation slots are occupied\") twice; claim not registered.\nMachine very loaded (many other chromiums); runs took 2-9 min, pytest teardown can hang."
       }
     },
     "tasks": {
@@ -7929,9 +7915,25 @@
             "session": "run_s1651a_1006"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1651A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1651A",
+          "session": "run_s1651a_1006",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1651-creatives-fresh",
+          "worktree": "C:\\acl-1651-creatives-fresh",
+          "id": "eaa2ecb6ad5d4886b6d121dbfc6752a8",
+          "issue": 651,
+          "state": "handoff",
+          "started_at": "2026-10-07T05:52:10+00:00",
+          "from_status": "status:idea",
+          "pr": 665,
+          "report": "# ACL-1651 handoff\nBranch codex/acl-1651-creatives-fresh, worktree C:\\acl-1651-creatives-fresh, local commit 96934d2d (not pushed).\nRoot cause: report.html fetched /api/creatives once at load into CREATIVES; cbCreativeSearch filtered the stale list. Server scans fresh each call (no cache).\nType switch (cbAdTypeChange) does NOT refetch: it only sets wrap.dataset.ctype and clears the field. So it \"helped\" only by clearing the stale query / re-filtering by type (a file of the other type is hidden by the ctype filter) - no code path sees a new file. Both paths now share one list.\nFix: cbRefreshCreatives(minGap): in-flight dedupe, no-store fetch, error response keeps old list, redraw only if list changed. Triggers: focusin on search (10 s), miss (2 s separate throttle, one fetch, then re-search), window focus (10 s). Test hook window.cbCreativesAge.\nTests: tests/test_builder_creatives_fresh_browser.py 4 passed; test_builder_story_label 2; test_builder_review_browser 4; test_acl_test_platform 100.\nNote: tracker claim failed (\"All implementation slots are occupied\") twice; claim not registered.\nMachine very loaded (many other chromiums); runs took 2-9 min, pytest teardown can hang."
+        },
+        "pr": 665,
+        "queued_at": "2026-10-07T05:53:55+00:00"
       }
     },
     "actors": {
@@ -10224,7 +10226,8 @@
       650,
       604,
       653,
-      641
+      641,
+      651
     ],
     "review": null,
     "history": [
@@ -14478,6 +14481,13 @@
         "at": "2026-10-07T05:52:10+00:00",
         "issue": 651,
         "claim": "eaa2ecb6ad5d4886b6d121dbfc6752a8",
+        "actor": "Worker-S1651A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-07T05:53:55+00:00",
+        "issue": 651,
+        "pr": 665,
         "actor": "Worker-S1651A"
       }
     ],
