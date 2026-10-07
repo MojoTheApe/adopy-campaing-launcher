@@ -103,6 +103,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "them in Meta, so the campaign was stopped and not retried - a partial draft is left "
         "in Ads Manager - " + _profile.MESSAGES[_profile.LEAD_TERMS],
     ),
+    # ACL-1697: Ads Manager opened another ad account than the draft's.
+    _profile.WRONG_AD_ACCOUNT: (
+        BLOCKING,
+        "Ads Manager opened a different ad account than the one in the draft (or the opened "
+        "account could not be read), so the campaign was stopped before Create and nothing "
+        "was built - " + _profile.MESSAGES[_profile.WRONG_AD_ACCOUNT],
+    ),
     # ACL-1327 (review of PR #340, F4): the draft already exists when the
     # objective is checked inside the single-screen editor.
     "objective_inline": (
@@ -330,6 +337,12 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Lead Ads Terms not accepted on the Page",
         "Only a person can accept Meta's Lead Ads Terms, so the build stopped with a partial draft.",
         "Accept the Page's Lead Ads Terms in Meta, then publish again.",
+    ),
+    _profile.WRONG_AD_ACCOUNT: (
+        "Wrong ad account opened",
+        "Ads Manager showed another ad account than the draft's, so nothing was created.",
+        "Check the ad account id on the Accounts page and that the account is visible in "
+        "this profile, then publish again.",
     ),
     "objective_inline": (
         "Objective — not switched to Leads",
