@@ -350,6 +350,14 @@ def test_a_failed_tree_read_does_not_create_a_second_ad(monkeypatch):
     monkeypatch.setattr(md, "_tree_new_ad_shells", lambda page: 0)   # дерево читается, заготовки нет
     assert md._adopt_shell_or_recreate(object(), "adset") is True
     assert created == [1]
+    # Ревью PR #664 (B3'): заготовка видна, но открыть её не вышло — не создавать.
+    created.clear()
+    monkeypatch.setattr(md, "_tree_new_ad_shells", lambda page: 1)
+    assert md._adopt_shell_or_recreate(object(), "adset") is False
+    assert created == []
+    # Заготовка была ещё до отказа (shells_before=1), новой нет — повтор безопасен.
+    assert md._adopt_shell_or_recreate(object(), "adset", shells_before=1) is True
+    assert created == [1]
 
 
 def test_an_unreadable_chrome_error_page_is_still_an_error_page(clock):
@@ -362,3 +370,31 @@ def test_an_unreadable_chrome_error_page_is_still_an_error_page(clock):
     assert md._chrome_error_page(Tab()) == "ERR_UNKNOWN"
     Tab.url = "https://adsmanager.facebook.com/x"
     assert md._chrome_error_page(Tab()) == ""
+
+
+def test_component_failed_and_all_edits_saved_skip_a_frozen_tab(clock, stuck):
+    start = clock.now
+    assert md._component_failed(stuck) is False
+    assert md._all_edits_saved(stuck) is False
+    assert clock.now - start < HANG_S           # до `is_visible` не дошли
+
+
+def test_create_additional_ad_refuses_at_once_on_a_frozen_tab(clock, stuck):
+    start = clock.now
+    assert md.create_additional_ad(stuck, "adset") is False
+    assert clock.now - start < HANG_S
+
+
+def test_eval_bounded_hears_stop_on_a_hung_tab(clock, stuck):
+    """ACL-1641 (N5): Stop (`JobCancelled`) слышен и на вкладке, что не отвечает."""
+    import threading
+    from src.fb_ads_rpa import job_cancel
+
+    event = threading.Event()
+    event.set()
+    job_cancel.bind(event)
+    try:
+        with pytest.raises(job_cancel.JobCancelled):
+            md._eval_bounded(stuck, "() => 1")
+    finally:
+        job_cancel.unbind()

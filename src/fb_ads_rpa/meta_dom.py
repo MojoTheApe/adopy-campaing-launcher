@@ -6278,7 +6278,7 @@ def run_recorded_campaign_flow(
                                 # Confirmed need live 2026-07-29 (Test146, B ad2):
                                 # create failed once, leaving the ad missing
                                 # entirely — the only fill step with no retry path.
-                                created = _adopt_shell_or_recreate(page, adset_name)
+                                created = _adopt_shell_or_recreate(page, adset_name, shells_before)
                             if not created:
                                 _shot(f"fail_{tag}_create")
                                 ad_level_fails.append(f"{tag}_create")
@@ -15758,7 +15758,7 @@ def _tree_new_ad_shells(page: Page) -> int:
         return -1
 
 
-def _adopt_shell_or_recreate(page: Page, adset_name: str) -> bool:
+def _adopt_shell_or_recreate(page: Page, adset_name: str, shells_before: int = 0) -> bool:
     """Отказ создания объявления: взять уже родившуюся заготовку или создать заново.
 
     ACL-1641 (ревью PR #664, B3): `_open_tree_ad` вернул False и когда дерево
@@ -15770,8 +15770,13 @@ def _adopt_shell_or_recreate(page: Page, adset_name: str) -> bool:
     if _open_tree_ad(page, "New Leads Ad"):
         _close_creative_setup_modal(page)
         return True
-    if _tree_new_ad_shells(page) < 0:
+    shells = _tree_new_ad_shells(page)
+    if shells < 0:
         raise RuntimeError("tree unreadable: not re-creating the ad")
+    if shells > max(shells_before, 0):
+        # Заготовка уже есть, но открыть её не вышло: второй create дал бы
+        # дубликат рядом с ней. Отказ шага (`fail_adN_create`), не повтор.
+        return False
     return create_additional_ad(page, adset_name)
 
 
