@@ -5803,7 +5803,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "697": {
+        "actor": "Worker-S1697A",
+        "session": "run_s1697a_1007",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1697-wrong-act",
+        "worktree": "C:\\acl-1697-wrong-act",
+        "id": "a47adb6477134cb3b4832ccf30e6994b",
+        "issue": 697,
+        "state": "implementing",
+        "started_at": "2026-10-07T14:23:59+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -8457,6 +8470,17 @@
         },
         "pr": 695,
         "queued_at": "2026-10-07T13:42:50+00:00"
+      },
+      "697": {
+        "implementers": [
+          {
+            "actor": "Worker-S1697A",
+            "session": "run_s1697a_1007"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1697A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -9131,6 +9155,10 @@
       "Reviewer-R1669M": {
         "session": "rev_r1669m_1007",
         "role": "Reviewer"
+      },
+      "Worker-S1697A": {
+        "session": "run_s1697a_1007",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -15466,6 +15494,13 @@
         "pr": 670,
         "lane": "17693233ea264778b1deb0ac6021399a",
         "actor": "Reviewer-R1669M"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-07T14:23:59+00:00",
+        "issue": 697,
+        "claim": "a47adb6477134cb3b4832ccf30e6994b",
+        "actor": "Worker-S1697A"
       }
     ],
     "policy": {
