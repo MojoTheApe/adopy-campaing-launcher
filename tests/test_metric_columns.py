@@ -222,7 +222,8 @@ def test_a_zero_divisor_in_a_drill_row_is_a_dash_not_dollar_zero():
 
 def test_the_drill_scrolls_inside_when_the_builder_is_open():
     assert 'class="drill-scroll"' in _render_fragment("optimization", [ROW])
-    assert re.search(r"\.drill-scroll\s*\{[^}]*overflow-x:\s*auto", REPORT)
+    rule = REPORT[REPORT.index(".drill-scroll {"):]
+    assert "overflow-x: auto" in rule[: rule.index("}")]
 
 
 def test_the_nested_drill_uses_the_parent_column_count():
