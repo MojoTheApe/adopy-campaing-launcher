@@ -4,7 +4,7 @@ Issues remain in MojoTheApe/adopy-campaing-launcher; the existing board identity
 at https://tracker.team7.cloud/projects/acl/. Keep the six established modules,
 71 historical aliases and +1000 numbering. Never renumber Issues or start a second board.
 
-The candidate pins Task Tracker a4ea3cfb0c1be1760ae0923c8232779532c25a7b. Run
+The candidate pins Task Tracker e6013f8ad641bd99061f7db82bceeb705f8c150a. Run
 `python scripts/task_tracker.py guide` for that guide; helpers live in .workflow/tools
 and existing scripts paths remain wrappers. The active client uses that exact
 clean shared engine. `.workflow/legacy` retains the original configs for audit and
@@ -13,12 +13,22 @@ Do not return to the retired master client. ACL-1248's original adoption is reco
 in ADOPTION.md. The bounded ACL-1383 old-policy source handoff and ACL-1382 live
 execution migration are described in PARALLEL_EXECUTION.md.
 
-Follow WORKFLOW.md and the pinned command guide: claimed work -> handoff ->
-review-acquire -> independent review -> record-review -> check-merge -> stage ->
-verify-stage -> promotion -> merged -> verified package delivery. Keep five
-implementation slots and one review/integration lane, explicit Release membership and Archive
-semantics. Description explains the human outcome; Specifications retains full verified
-context, criteria, references, checks, decisions and current handoff. Read both.
+Follow [WORKFLOW.md](WORKFLOW.md), [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) and
+the exact pinned command guide. Once the guarded v2 migration succeeds: claimed
+one-task source -> handoff -> independent review -> Approved -> frozen Coordinator
+batch -> additional combined review/checks -> Stage -> exact target verification
+-> unchanged main promotion -> per-task Merged -> verified package delivery.
+Keep implementation_limit 5, review_limit 1 and batch_limit 5. The Approved backlog
+has no size cap. Source approval frees the review lane; only one batch owns stage.
+New source PRs target main and remain open until verified batch inclusion. Retained
+queued stage PRs are approval-only, preserving actual authors/history.
+
+The source child ACL-1747 still completes its old-policy route before migration.
+The new pin contains TT-73's large-state read fix; the bounded old-v1 operator use
+is documented in the adoption runbook. New pin/config/skill alone is not activation.
+Preserve explicit Release membership and Archive semantics. Description explains
+the human outcome; Specifications retains full context, criteria, decisions and
+handoff. Read both in full.
 
 The board's Worker is the actual implementation owner, with Coordinator and
 Reviewer recorded separately. Use platform-neutral opaque actor/session identities,

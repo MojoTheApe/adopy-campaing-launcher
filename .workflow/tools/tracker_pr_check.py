@@ -36,7 +36,7 @@ def linked_numbers(body, config):
     return numbers
 
 
-def check(request, config, pr_number, *, allow_transition=False, admission=False):
+def check(request, config, pr_number, *, allow_transition=False, admission=False, approval_recovery=False):
     repo=config['project']['repository'];root='repos/'+repo
     pr=request(root+f'/pulls/{pr_number}')
     direction = delivery_policy.route(config, pr)
@@ -54,10 +54,15 @@ def check(request, config, pr_number, *, allow_transition=False, admission=False
         allowed={'review','merged'}|({'in_progress'} if pr.get('draft') else set())
         if delivery_policy.policy(config):
             allowed.add('stage')
+            if delivery_policy.batch_mode(config):
+                allowed.add('approved')
             if direction == 'promotion' and not pr.get('draft'):
                 allowed = {'stage', 'merged'}
         resuming_merge = (allow_transition and pr.get('merged') and len(status)==2
-                          and {stages.get(s) for s in status} in ({'review','merged'}, {'stage','merged'}, {'review','stage'}))
+                          and {stages.get(s) for s in status} in ({'review','merged'}, {'stage','merged'}, {'review','stage'}, {'approved','stage'}))
+        resuming_merge = resuming_merge or (approval_recovery and delivery_policy.batch_mode(config)
+                                            and direction == 'approval' and len(status) == 2
+                                            and {stages.get(s) for s in status} == {'review', 'approved'})
         if not resuming_merge and (len(status)!=1 or stages.get(status[0]) not in allowed):
             raise ValueError(f'#{n}: start and implement the task, then move it to Review before a ready PR')
         closed_by_merge = allow_transition and pr.get('merged') and issue.get('state_reason')=='completed'
