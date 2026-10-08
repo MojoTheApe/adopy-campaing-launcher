@@ -6502,7 +6502,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "721": {
+        "actor": "Worker-W1721N",
+        "session": "w1721n_1008",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "codex/acl-1721-notes",
+        "worktree": "C:\\acl-1721-notes",
+        "id": "76b52a65638c499fb8790d61fc8c26d0",
+        "issue": 721,
+        "state": "implementing",
+        "started_at": "2026-10-08T05:33:43+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -9276,6 +9289,17 @@
         },
         "pr": 711,
         "queued_at": "2026-10-07T20:01:21+00:00"
+      },
+      "721": {
+        "implementers": [
+          {
+            "actor": "Worker-W1721N",
+            "session": "w1721n_1008"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1721N",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -10014,6 +10038,10 @@
       "Reviewer-R1633Q": {
         "session": "rev_r1633q_1007",
         "role": "Reviewer"
+      },
+      "Worker-W1721N": {
+        "session": "w1721n_1008",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -17029,6 +17057,13 @@
         "prs": [
           720
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-08T05:33:43+00:00",
+        "issue": 721,
+        "claim": "76b52a65638c499fb8790d61fc8c26d0",
+        "actor": "Worker-W1721N"
       }
     ],
     "policy": {
