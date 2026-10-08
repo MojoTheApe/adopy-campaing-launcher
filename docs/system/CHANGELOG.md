@@ -5,9 +5,11 @@
 - Run 4db2039f760d (Facebook_9403A): a minimised window was restored to its normal size
   (inner 1117 px, minimum 1168) and the run stopped at `window_too_small`.
 - Now, when the window is un-minimised but still below the minimum, recovery enlarges it through
-  CDP `Browser.setWindowBounds` (maximise on the monitor it is on; a window parked off-screen only
-  grows in size and keeps its position), measures again, and stops with `window_too_small` only
-  if it is still too small.
+  CDP `Browser.setWindowBounds` and measures again; `window_too_small` is recorded only if it is
+  still too small. The branch is chosen from the real window bounds: a window on screen is
+  maximised in place; a window parked off-screen grows proportionally and is re-parked so its right
+  edge stays at or left of 0; an already maximised or fullscreen window is not touched. A Mimic
+  scale drop (dpr below 0.85 of before) is undone and not retried.
 - The `window_bounds` diag records `enlarged: true` and `enlarged_to` (the new size). No new
   windows are opened and the window is never moved to another monitor.
 

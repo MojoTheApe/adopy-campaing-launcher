@@ -660,6 +660,7 @@ def _ensure_wide_window(context, page) -> None:
             except Exception:
                 pass
             note = "reverted_scale_drop"
+            _SCALE_REVERTED.add(id(page.context))
             dpr_after, inner_after = _page_scale()
         try:
             from src.fb_ads_rpa import run_telemetry as _rt
@@ -704,6 +705,9 @@ def _ensure_wide_window(context, page) -> None:
 # Browser bounds/screen.availWidth may be spoofed by the profile: use innerWidth.
 MIN_EDITOR_WIDTH = 1168
 
+#: Контексты, где откат падения масштаба Mimic уже сделан: окно заново не растим.
+_SCALE_REVERTED: set[int] = set()
+
 
 def _widen_parked_window(session, window_id, page, was_minimized, state, bounds,
                          dpr_before, inner_before, page_scale) -> None:
@@ -743,6 +747,7 @@ def _widen_parked_window(session, window_id, page, was_minimized, state, bounds,
             except Exception:
                 pass
             note = "reverted_scale_drop"
+            _SCALE_REVERTED.add(id(page.context))
             dpr_after, inner_after = page_scale()
     try:
         from src.fb_ads_rpa import run_telemetry as _rt
@@ -1319,35 +1324,71 @@ def _small_but_alive(state: dict) -> bool:
 
 
 def _enlarge_small_window(page) -> dict | None:
-    """Увеличить уже обычное (не свёрнутое) окно, не сдвигая его с монитора.
+    """Увеличить уже обычное (не свёрнутое) окно, не выводя его на чужой экран.
 
-    Окно на нашей парковке за краем экрана растёт только размером (left/top
-    те же, как в `_widen_parked_window`), остальные разворачиваются
-    (`windowState: maximized`) — Chrome берёт тот монитор, где окно стоит.
-    Новых окон не открываем и окно на другой монитор не переносим. Возвращает
-    размер окна после увеличения или None, если не получилось.
+    ACL-1727, ревью: ветку выбираем по настоящим границам окна, а не по
+    `_OFFSCREEN`. Свёрнутое окно, которое было развёрнуто на весь экран,
+    после нашего `windowState: normal` возвращается на экран в старом размере
+    (854×502), хотя контекст числится в `_OFFSCREEN`.
+    - стоит за краем экрана (наша парковка, `left + width <= 0`) — растёт
+      пропорционально, как в `_widen_parked_window`, и ставится на парковку
+      заново по новой ширине: правый край остаётся за экраном;
+    - стоит на экране — разворачивается на месте (Chrome берёт тот же монитор);
+    - уже развёрнуто или на весь экран — не трогаем (на маленьком экране
+      шире не станет, а из полноэкранного режима окно не выводим).
+    Падение масштаба Mimic (dpr < 0.85 прежнего) откатываем, как
+    `_ensure_wide_window`; окно, откат которого сделали они, не трогаем.
+    Возвращает размер окна после увеличения или None.
     """
+    if id(page.context) in _SCALE_REVERTED:
+        return None
     session = None
     try:
         session = page.context.new_cdp_session(page)
         info = session.send("Browser.getWindowForTarget") or {}
         window_id = info.get("windowId")
         bounds = info.get("bounds") or {}
-        if window_id is None or bounds.get("windowState") == "minimized":
+        state = bounds.get("windowState")
+        if window_id is None or state in ("minimized", "maximized", "fullscreen"):
             return None
-        if id(page.context) in _OFFSCREEN:
-            width = max(int(bounds.get("width") or 0), 1) * 2
-            target = {"width": min(max(width, MIN_EDITOR_WIDTH + 200), 4000),
-                      "height": max(int(bounds.get("height") or 0), 900)}
+        left, top = bounds.get("left"), bounds.get("top")
+        width = int(bounds.get("width") or 0)
+        height = int(bounds.get("height") or 0)
+        try:
+            got = page.evaluate("() => [devicePixelRatio, innerWidth]")
+            dpr_before, inner_before = float(got[0] or 0), int(got[1] or 0)
+        except Exception:
+            dpr_before, inner_before = 0.0, 0
+        parked = (isinstance(left, int) and isinstance(top, int) and width > 0
+                  and (_parked_by_us(left, top, width) or left + width <= 0))
+        if parked:
+            if not inner_before:
+                return None
+            new_width = min(int(width * MIN_EDITOR_WIDTH / inner_before) + 40, 4000)
+            new_left, new_top = _park_spot(new_width)
+            target = {"left": new_left, "top": new_top, "width": new_width,
+                      "height": max(height, 900)}
         else:
             target = {"windowState": "maximized"}
-        if bounds.get("windowState") != "normal":
-            session.send("Browser.setWindowBounds",
-                         {"windowId": window_id, "bounds": {"windowState": "normal"}})
-            time.sleep(0.4)
         session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": target})
         time.sleep(1.0)
         new = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+        try:
+            got = page.evaluate("() => [devicePixelRatio, innerWidth]")
+            dpr_after = float(got[0] or 0)
+        except Exception:
+            dpr_after = 0.0
+        if dpr_before and dpr_after and dpr_after < dpr_before * 0.85:
+            _SCALE_REVERTED.add(id(page.context))
+            back = {"left": left, "top": top, "width": width, "height": height} if parked else None
+            session.send("Browser.setWindowBounds",
+                         {"windowId": window_id, "bounds": {"windowState": "normal"}})
+            if back is None:
+                back = {"width": width, "height": height}
+            time.sleep(0.6)
+            session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": back})
+            time.sleep(1.0)
+            return None
         return {"width": new.get("width"), "height": new.get("height"),
                 "state": new.get("windowState")}
     finally:
