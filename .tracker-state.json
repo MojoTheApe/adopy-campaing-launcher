@@ -2429,7 +2429,7 @@
       "source_sha": "3ec4c0fa30782c15a06a1cbe653c96ae5721ab72",
       "main_tree": "febad16557c04063628548280d4bc3a8b30f6898",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-08T20:06:59+00:00",
       "verification": {
         "kind": "stage-verification",
@@ -3963,6 +3963,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-08T19:15:14+00:00"
+      },
+      "750": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 752,
+            "merge_sha": "659a3fb3fe3265428624ed529ef5540fa59035c7",
+            "tree_sha": "1cd90f124b17310f0c099782580bb0ebeab4f82f"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-08T20:12:34+00:00"
       }
     },
     "promotions": {
@@ -6972,6 +6984,37 @@
           "report": "Isolated package-mechanism proof from https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/37782617095 ; artifact ACL-update-recovery-1021/id11554090360; report SHA256 86891e4a98aa4190013bddf3234529027fc23d441033271589aa42454063028e. Packages built from approved source9ca195df3e6f580e66a0f537571e95cafb76cff9, identical tree to actual stage66f00efd2ad83e578e74c048c2f8905cf1ef3549. Previous installer SHA256 631c47711d6c55b2bdc5ea11c0b78996d8c3176592d6832ea67bf15dd8f82b0d; new installer SHA256 3f499c2b5a34ab75f4ae3b549daeba28abea2f9c905e60198243b0586db9185b. Actual helper advanced pointers/shortcuts, restarted, then recovered deliberately mismatched expected version and preserved synthetic data. No stable release/download-channel, employee installation or deferred live Multilogin pilot is attested."
         },
         "verified_at": "2026-10-08T13:35:46+00:00"
+      },
+      "752": {
+        "pr": 751,
+        "issues": [
+          750
+        ],
+        "tree_sha": "1cd90f124b17310f0c099782580bb0ebeab4f82f",
+        "source_sha": "3ec4c0fa30782c15a06a1cbe653c96ae5721ab72",
+        "main_tree": "febad16557c04063628548280d4bc3a8b30f6898",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-08T20:06:59+00:00",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "3ec4c0fa30782c15a06a1cbe653c96ae5721ab72",
+          "tree_sha": "1cd90f124b17310f0c099782580bb0ebeab4f82f",
+          "checks": [
+            "Actual Stage merge preserves the reviewed a1746822 source tree and current frozen main 6e077c5b baseline.",
+            "All six Linux Python 3.11/3.13 shards, Windows Python 3.13, named policy checks and both verification aggregates passed for the exact source head.",
+            "Actual Windows build, install, launch, repair and uninstall passed in run 37832063876.",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+            "Recovered application restarts and synthetic data remains byte-identical"
+          ],
+          "report": "Isolated Windows package-mechanism verification from https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/37832063876, artifact ACL-update-recovery-1026 (11574452167), archive SHA256 abb3f29f50d76379fc857f4747f1e7a87ec57dd6648cacb00e3ada7a7d639704 and report SHA256 e96e5cff956549197d4613bfb9131dba186c5709870522417a6ad78a395cdc04. The actual tested synthetic merge 43ec4876d56d825161045d63cba51cd13c406831 has parents 66f00efd2ad83e578e74c048c2f8905cf1ef3549 and a1746822e12e23400f2b2e423b486e3a43a67d05, and its tree 1cd90f124b17310f0c099782580bb0ebeab4f82f equals the actual Stage merge 3ec4c0fa30782c15a06a1cbe653c96ae5721ab72; the artifact was not built from that later Stage commit. Test package SHA256 values: 0.0.0-ci.1026 c23b8441243d2657161468daee919b31c1df65d800d26a73f0213f09b86f9035, 0.1.0-alpha.1026 5c49f5b90ad7468e7f2fa05618e5d93c70f5f8e922c8a29f1b0f4dc5169b4ca1. Full CI run 37832063902, installer run 37832063876, descriptor run 37832063928 and post-handoff linkage run 37832221684 passed at the reviewed source head. This records isolated synthetic-data installer/update/recovery behavior only; published stable package, download channel, employee and live Multilogin pilot proof remain pending."
+        },
+        "verified_at": "2026-10-08T20:08:08+00:00"
       }
     }
   },
