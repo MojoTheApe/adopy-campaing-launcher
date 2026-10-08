@@ -6529,9 +6529,11 @@
         "worktree": "C:\\acl-1723-logo-only",
         "id": "f24c179e8704405498eec52dcbfe9aca",
         "issue": 723,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-08T06:00:58+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 725,
+        "report": "ACL-1723: header shows the logo only. Removed h1.brand-name caption and the 'ACM Inter' @font-face in report.html; logo img has alt=\"Adopy Campaign Manager\"; size/position unchanged. tests/test_header.py (7 passed) and tests/test_stage_badge.py (14 passed) green. No browser check run. PR #725, head 997824117daa28aeb2161c85be3bb8cf92321193."
       }
     },
     "tasks": {
