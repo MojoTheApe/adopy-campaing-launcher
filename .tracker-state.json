@@ -10181,7 +10181,7 @@
             "session": "acl_process_worker_20261008"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-PROC01",
         "coordinator": "Coordinator-PROC00",
         "handoff": {
@@ -13329,6 +13329,30 @@
         "state": "reviewing",
         "report": "ACL-1750 independent source review: changes requested for current-main reconciliation.\n\nActual source PR751 is ready at immutable head a3afaffe8959ec70111d9a2c9e021a57f53814bb, base/stage66f00efd2ad83e578e74c048c2f8905cf1ef3549, tree1cd90f124b17310f0c099782580bb0ebeab4f82f. Actual current main is6e077c5bf07148a442e5a76377066bc12198ccd3 after reviewed PR749 promotion.\n\nFinding P2: the current working head does not include actual current main. The official compare of current main to this exact source head is diverged. The maintained old-v1 record-review gate requires the reviewed working branch to include current main; this unmerged source therefore cannot receive final approval at its current ancestry. No source content defect is asserted by this finding.\n\nThe actual non-implementing Reviewer acquired the genuine old-v1 lane after the prior747 lane completed normally. Required source checks are green at the current source head. Prior bounded content preparation found both preliminary fixes resolved, canonical compatible helper exports and pristine/local-control preservation. That preparation is not reused as final review approval.\n\nReturn for the original actual author to acquire a fresh implementation claim, merge actual current main on the retained source branch, verify resulting content and applicable current-head checks, and hand off normally. Preserve existing source/Stage/main refs, authors, task scope and original nine queued Reviews. After fresh handoff, independently review and record the new actual immutable head/base/tree/full scope under the genuine review lane. No stage/main admission, migration, package delivery or activation is approved by this return.",
         "keep_lane": true
+      },
+      "754": {
+        "id": "3d22bdfb373b407a8595bb1758224d91",
+        "pr": 754,
+        "issues": [
+          753
+        ],
+        "actor": "Reviewer-BATCH02",
+        "session": "acl_batch_master_review_20261008",
+        "coordinator": "Coordinator-BATCH01",
+        "started_at": "2026-10-08T21:49:39+00:00",
+        "state": "reviewing"
+      },
+      "755": {
+        "id": "3d22bdfb373b407a8595bb1758224d91",
+        "pr": 754,
+        "issues": [
+          753
+        ],
+        "actor": "Reviewer-BATCH02",
+        "session": "acl_batch_master_review_20261008",
+        "coordinator": "Coordinator-BATCH01",
+        "started_at": "2026-10-08T21:49:39+00:00",
+        "state": "reviewing"
       }
     },
     "review_queue": [
@@ -13342,18 +13366,7 @@
       728,
       739
     ],
-    "review": {
-      "id": "3d22bdfb373b407a8595bb1758224d91",
-      "pr": 754,
-      "issues": [
-        753
-      ],
-      "actor": "Reviewer-BATCH02",
-      "session": "acl_batch_master_review_20261008",
-      "coordinator": "Coordinator-BATCH01",
-      "started_at": "2026-10-08T21:49:39+00:00",
-      "state": "reviewing"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -18798,6 +18811,25 @@
         "pr": 754,
         "lane": "3d22bdfb373b407a8595bb1758224d91",
         "actor": "Reviewer-BATCH02"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-08T22:13:21+00:00",
+        "review": {
+          "id": "3d22bdfb373b407a8595bb1758224d91",
+          "pr": 754,
+          "issues": [
+            753
+          ],
+          "actor": "Reviewer-BATCH02",
+          "session": "acl_batch_master_review_20261008",
+          "coordinator": "Coordinator-BATCH01",
+          "started_at": "2026-10-08T21:49:39+00:00",
+          "state": "reviewing"
+        },
+        "prs": [
+          755
+        ]
       }
     ],
     "policy": {
