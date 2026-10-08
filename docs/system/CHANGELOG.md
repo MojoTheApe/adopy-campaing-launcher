@@ -1,5 +1,12 @@
 # System history
 
+## Account map: notes only per account, Enter saves — ACL-1721
+
+- Country rows on the account map no longer show or edit a note. Stored country notes are kept in
+  `account_notes.json` untouched (the backend and the `countries` map are unchanged).
+- Account notes work as before, except in the editor: Enter saves and closes, Shift+Enter inserts a
+  newline. Esc, outside click and Ctrl+Enter behave as before.
+
 ## Notes: a country note, and nothing on screen when a note is empty — ACL-1633
 
 Owner review of ACL-1620 (06.10).
