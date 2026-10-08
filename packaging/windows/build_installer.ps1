@@ -71,4 +71,4 @@ $Installer = Join-Path $OutputDirectory "Adopy-Campaign-Launcher-Setup-$Version.
 if (-not (Test-Path $Installer -PathType Leaf)) {
     throw "Expected installer was not produced: $Installer"
 }
-Write-Host "Adopy Campaign Launcher per-user installer created: $Installer"
+Write-Host "Adopy Campaign Manager per-user installer created: $Installer"
