@@ -44,7 +44,7 @@ def source(request, config, approval, baseline, *, phases=('approved',), pending
     pr = request(root + f'/pulls/{approval["pr"]}')
     review = approval.get('review', {})
     if (pr.get('merged') or pr.get('draft') or pr.get('state') != 'open' and not completed
-            or rules.route(config, pr) != 'approval'
+            or rules.route(config, pr, request) != 'approval'
             or pr_checks.linked_numbers(pr.get('body'), config) != [number]
             or pr['head']['ref'] != approval.get('branch')
             or pr['head']['sha'] != approval.get('head_sha')
@@ -52,7 +52,7 @@ def source(request, config, approval, baseline, *, phases=('approved',), pending
             or approval.get('main_sha') != baseline
             or approval.get('policy') != rules.fingerprint(config)):
         raise ValueError(f'#{number}: source approval is stale for its PR, main or policy')
-    rules.naming(config, pr, [number])
+    rules.naming(config, pr, [number], request)
     content = rules.tree(request, root, pr['head']['sha'])
     # A PR's live base follows main after promotion. Frozen member proof retains
     # its reviewed baseline; a later intake must revalidate the new live base.
@@ -102,38 +102,7 @@ def batch_id(pr):
 
 
 def dependencies_ready(request, config, numbers, shared):
-    project = config['project']; root = 'repos/' + project['repository']
-    stages = {s if isinstance(s, str) else s['id']: s if isinstance(s, str) else s['phase'] for s in config['workflow']}
-    for number in numbers:
-        issue = request(root + f'/issues/{number}')
-        for identifier in rules.dependencies(issue.get('body') or '', project['repository']):
-            n = None
-            if identifier.startswith('#'):
-                n = int(identifier[1:])
-            else:
-                n = next((int(k) for k,v in project.get('legacy_task_ids', {}).items() if v.lower() == identifier.lower()), None)
-                if n is None and re.fullmatch(re.escape(project['id_prefix']) + r'-[1-9]\d*', identifier, re.I):
-                    n = int(identifier.split('-')[1]) - project.get('id_offset', 0)
-            if not n or n <= 0:
-                raise ValueError(f'#{number}: dependency cannot be verified: {identifier}')
-            dependency = request(root + f'/issues/{n}')
-            labels = {x['name'] for x in dependency['labels']}
-            statuses = [stages.get(x[7:]) for x in labels if x.startswith('status:')]
-            if ('pull_request' in dependency or statuses != ['merged'] or 'flag:archived' in labels
-                    or 'flag:blocked' in labels or dependency.get('state_reason') == 'not_planned'):
-                raise ValueError(f'#{number}: dependency is unfinished: {identifier}')
-            receipt = shared.get('delivery_workflow', {}).get('tasks', {}).get(str(n), {})
-            historical = config.get('historical_completion', {})
-            accepted = historical.get('tasks', {}).get(str(n), {})
-            expected_id = project.get('legacy_task_ids', {}).get(str(n), f"{project['id_prefix']}-{n + project.get('id_offset', 0)}")
-            if (not receipt and historical.get('policy') == rules.fingerprint(config)
-                    and accepted.get('id') == expected_id and accepted.get('issue_sha256') == rules.accepted_scope_digest(dependency)):
-                continue
-            summary = rules.summary(receipt)
-            if (summary.get('policy') != rules.fingerprint(config) or not summary.get('admitted')
-                    or rules.policy(config)['completion'] != 'reviewed-merge'
-                    and not summary.get('non_code') and not summary.get('verified')):
-                raise ValueError(f'#{number}: dependency delivery is unfinished: {identifier}')
+    return rules.dependencies_ready(request, config, numbers, shared)
 
 
 def validate_candidate(request, config, pr, numbers, batch, shared, *, completed=False):
@@ -141,7 +110,7 @@ def validate_candidate(request, config, pr, numbers, batch, shared, *, completed
     if (batch_id(pr) != batch.get('id') or set(numbers) != set(batch.get('issues', []))
             or not numbers or len(numbers) > rules.execution_policy(config)['batch_limit']):
         raise ValueError('Candidate does not match the frozen task set or configured batch limit')
-    direction = rules.route(config, pr)
+    direction = rules.route(config, pr, request)
     if direction == 'stage' and pr['head']['ref'] != batch.get('branch'):
         raise ValueError('Candidate must use the reserved integration branch')
     if direction == 'stage' and not completed and batch.get('state') == 'fixing':
@@ -165,13 +134,15 @@ def validate_candidate(request, config, pr, numbers, batch, shared, *, completed
         if stage and stage.get('state') != 'promoted' and stage.get('batch_id') != batch['id']:
             raise ValueError('Another candidate owns stage')
         if not stage or stage.get('state') == 'promoted':
-            if rules.tree(request, root, pr['base']['sha']) != rules.tree(request, root, baseline):
-                raise ValueError('Stage must start with the current main tree')
+            base = rules.merge_base(request, root, pr) if pr.get('merged') else pr['base']['sha']
+            if (rules.tree(request, root, base) != rules.tree(request, root, baseline)
+                    and not ('process_instructions' in config and rules.process_module().stage_base_compatible(request, config, base, baseline, shared))):
+                raise ValueError('Stage must start with current main or an exactly receipted instruction-only gap')
     return direction
 
 
 def admit(request, config, pr, numbers, shared):
-    direction = rules.route(config, pr)
+    direction = rules.route(config, pr, request)
     if direction == 'approval':
         raise ValueError('Source PRs are approved independently; merge the frozen batch into stage')
     section = rules.execution_state(shared, config)

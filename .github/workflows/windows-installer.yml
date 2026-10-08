@@ -43,6 +43,8 @@ jobs:
       # combined batch/actual stage/promotion requires the full installer workflow.
       # Reuse accepts only applicable successful jobs of the exact tested Git tree;
       # manual/release paths always run and uncertainty falls back to full checks.
+      # ACL-1750: proven instruction-only sources into already-opted-in main skip
+      # installer jobs; policy adoption itself and mixed/unknown files do not.
       - id: scope
         run: python3 scripts/acl_ci_scope.py --workflow windows-installer.yml
         env:
