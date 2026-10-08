@@ -6575,7 +6575,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "726": {
+        "actor": "Worker-W1726C",
+        "session": "w1726c_1008",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "codex/acl-1726-ai-chooser",
+        "worktree": "C:\\acl-1726-ai-chooser",
+        "id": "34b6e1118f684f828cb641a5c6e6763f",
+        "issue": 726,
+        "state": "implementing",
+        "started_at": "2026-10-08T06:29:45+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -9405,6 +9418,17 @@
         "pr": 725,
         "queued_at": "2026-10-08T06:03:08+00:00",
         "reviewer": "Reviewer-R1723Q"
+      },
+      "726": {
+        "implementers": [
+          {
+            "actor": "Worker-W1726C",
+            "session": "w1726c_1008"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1726C",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -10159,6 +10183,10 @@
       "Reviewer-R1723Q": {
         "session": "rev_r1723q_1008",
         "role": "Reviewer"
+      },
+      "Worker-W1726C": {
+        "session": "w1726c_1008",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -17270,6 +17298,13 @@
         "pr": 725,
         "lane": "4b69e861484d452dac7316d44fd462bf",
         "actor": "Reviewer-R1723Q"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-08T06:29:45+00:00",
+        "issue": 726,
+        "claim": "34b6e1118f684f828cb641a5c6e6763f",
+        "actor": "Worker-W1726C"
       }
     ],
     "policy": {
