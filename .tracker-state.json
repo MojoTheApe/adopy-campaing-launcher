@@ -9998,7 +9998,7 @@
             "session": "acl_batch_root_20261008"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-BATCH01",
         "coordinator": "Coordinator-BATCH01",
         "handoff": {
@@ -13122,6 +13122,30 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-08T10:43:29+00:00",
         "state": "reviewing"
+      },
+      "748": {
+        "id": "53caa32c6ed24ae6846ebe6a7e0d1979",
+        "pr": 748,
+        "issues": [
+          747
+        ],
+        "actor": "Reviewer-BATCH02",
+        "session": "acl_batch_master_review_20261008",
+        "coordinator": "Coordinator-BATCH01",
+        "started_at": "2026-10-08T12:50:31+00:00",
+        "state": "reviewing"
+      },
+      "749": {
+        "id": "53caa32c6ed24ae6846ebe6a7e0d1979",
+        "pr": 748,
+        "issues": [
+          747
+        ],
+        "actor": "Reviewer-BATCH02",
+        "session": "acl_batch_master_review_20261008",
+        "coordinator": "Coordinator-BATCH01",
+        "started_at": "2026-10-08T12:50:31+00:00",
+        "state": "reviewing"
       }
     },
     "review_queue": [
@@ -13136,18 +13160,7 @@
       739,
       750
     ],
-    "review": {
-      "id": "53caa32c6ed24ae6846ebe6a7e0d1979",
-      "pr": 748,
-      "issues": [
-        747
-      ],
-      "actor": "Reviewer-BATCH02",
-      "session": "acl_batch_master_review_20261008",
-      "coordinator": "Coordinator-BATCH01",
-      "started_at": "2026-10-08T12:50:31+00:00",
-      "state": "reviewing"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -18478,6 +18491,25 @@
         "issue": 750,
         "pr": 751,
         "actor": "Worker-PROC01"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-08T19:15:23+00:00",
+        "review": {
+          "id": "53caa32c6ed24ae6846ebe6a7e0d1979",
+          "pr": 748,
+          "issues": [
+            747
+          ],
+          "actor": "Reviewer-BATCH02",
+          "session": "acl_batch_master_review_20261008",
+          "coordinator": "Coordinator-BATCH01",
+          "started_at": "2026-10-08T12:50:31+00:00",
+          "state": "reviewing"
+        },
+        "prs": [
+          749
+        ]
       }
     ],
     "policy": {
