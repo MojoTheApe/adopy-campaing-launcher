@@ -6798,7 +6798,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "743": {
+        "actor": "Worker-S1743A",
+        "session": "run_s1743a_1008",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1743-release-utf8",
+        "worktree": "C:\\acl-1743-release-utf8",
+        "id": "c9204a0438b34df1b996f45e920793eb",
+        "issue": 743,
+        "state": "implementing",
+        "started_at": "2026-10-08T10:01:11+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -9794,6 +9807,17 @@
         },
         "pr": 740,
         "queued_at": "2026-10-08T08:34:10+00:00"
+      },
+      "743": {
+        "implementers": [
+          {
+            "actor": "Worker-S1743A",
+            "session": "run_s1743a_1008"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1743A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -10588,6 +10612,10 @@
       "Reviewer-R1736V": {
         "session": "rev_r1736v_1008",
         "role": "Reviewer"
+      },
+      "Worker-S1743A": {
+        "session": "run_s1743a_1008",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -17985,6 +18013,13 @@
         "pr": 737,
         "lane": "d04dc9042c6a428ab95ef2acd5135900",
         "actor": "Reviewer-R1736V"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-08T10:01:11+00:00",
+        "issue": 743,
+        "claim": "c9204a0438b34df1b996f45e920793eb",
+        "actor": "Worker-S1743A"
       }
     ],
     "policy": {
