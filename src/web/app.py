@@ -1981,6 +1981,52 @@ def _alias_by_tail(label: str, known: dict) -> str:
     return hits[0] if len(hits) == 1 else ""
 
 
+#: ACL-1729: индекс алиасов книги по странам — один слот на одну книгу.
+#: Держим сильную ссылку на df, поэтому совпадение по `is` надёжно (id() мог бы
+#: переиспользоваться); новая книга из кэша отчёта сбрасывает индекс.
+_ALIAS_INDEX: dict = {"df": None, "rules": None, "by_country": {}}
+_ALIAS_INDEX_LOCK = threading.Lock()
+
+
+def _account_key(name) -> str:
+    from src.analysis_agent.account_names import account_key
+
+    return account_key(name)
+
+
+def _country_alias_index(df, country: str):
+    """{"names": отсортированные алиасы, "keys": множество account_key} или None.
+
+    None — в книге нет строк этой страны (как `sub.empty` раньше).
+    """
+    # Ключи зависят от правил имён: правка config/account_name_rules.json
+    # (горячая перезагрузка ACL-1653) обязана сбросить и индекс.
+    from src.analysis_agent import account_names
+
+    account_names._snapshot()
+    rules_stamp = account_names._CACHE["stamp"]
+    with _ALIAS_INDEX_LOCK:
+        if _ALIAS_INDEX["df"] is not df or _ALIAS_INDEX["rules"] != rules_stamp:
+            _ALIAS_INDEX["df"] = df
+            _ALIAS_INDEX["rules"] = rules_stamp
+            _ALIAS_INDEX["by_country"] = {}
+        cache = _ALIAS_INDEX["by_country"]
+        if country in cache:
+            return cache[country]
+    sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
+    if sub.empty:
+        idx = None
+    else:
+        col = sub["Account Alias"]
+        names = sorted({str(a).strip() for a in col.dropna().unique() if str(a).strip()})
+        keys = {_account_key(v) for v in col.fillna("").astype(str).unique()}
+        idx = {"names": names, "keys": keys}
+    with _ALIAS_INDEX_LOCK:
+        if _ALIAS_INDEX["df"] is df and _ALIAS_INDEX["rules"] == rules_stamp:
+            _ALIAS_INDEX["by_country"][country] = idx
+    return idx
+
+
 def workbook_alias_for(df, country: str, label: str) -> str:
     """Имя, под которым книга знает подключённый аккаунт.
 
@@ -1996,14 +2042,12 @@ def workbook_alias_for(df, country: str, label: str) -> str:
     if df is None or not label:
         return label
     try:
-        from src.analysis_agent.analyze_fb_stats import alias_matches
-
-        sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
-        if sub.empty:
+        # ACL-1729: имена и ключи книги по стране считаются один раз на книгу,
+        # а не на каждый аккаунт (раньше — проход по ~2M ячеек на вызов).
+        idx = _country_alias_index(df, country)
+        if idx is None:
             return label
-        names = sorted(
-            {str(a).strip() for a in sub["Account Alias"].dropna() if str(a).strip()}
-        )
+        names = idx["names"]
         # Явное правило имён: если в книге аккаунт записан под другим префиксом
         # (FacebookMKTOBFLB98 для KLD_BFL_B98), отдаём настоящее имя из книги —
         # оно точное, а не догадка.
@@ -2012,7 +2056,7 @@ def workbook_alias_for(df, country: str, label: str) -> str:
         exact = exact_alias(label, names)  # "" если своё имя в книге есть
         if exact:
             return exact
-        if bool(alias_matches(sub["Account Alias"], label).any()):
+        if _account_key(label) in idx["keys"]:
             return label
         return _alias_by_tail(label, names) or label
     except Exception:  # pragma: no cover - перевод имени не должен ронять страницу
@@ -2022,9 +2066,10 @@ def workbook_alias_for(df, country: str, label: str) -> str:
 def _workbook_has_account(df, country: str, label: str) -> bool:
     if df is None or "Account Alias" not in df.columns:
         return False
-    from src.analysis_agent.analyze_fb_stats import alias_matches
-    sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
-    return bool(alias_matches(sub["Account Alias"], workbook_alias_for(df, country, label)).any())
+    idx = _country_alias_index(df, country)
+    if idx is None:
+        return False
+    return _account_key(workbook_alias_for(df, country, label)) in idx["keys"]
 
 
 def _country_code(name: str) -> str:
