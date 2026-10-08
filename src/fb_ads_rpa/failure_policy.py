@@ -322,7 +322,7 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     _profile.LOGGED_OUT: (
         "Facebook logged out in this profile",
         "Facebook showed its login page, so no draft was created.",
-        "Log in to Facebook in this Multilogin profile, close it, then publish again.",
+        "Log in to Facebook in the profile window that was brought to the front, then publish again.",
     ),
     _profile.NETWORK: (
         "Profile cannot reach Facebook",
