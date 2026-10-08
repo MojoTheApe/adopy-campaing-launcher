@@ -2363,6 +2363,24 @@
           736
         ],
         "recorded_at": "2026-10-08T09:57:46+00:00"
+      },
+      "744": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1743Q",
+        "review_session": "rev_r1743q_1008",
+        "execution_lane": "bffbebba04fd4da1b580842929d221fa",
+        "implementer": "Worker-S1743A",
+        "head_sha": "5f11c8e3f677bd27829aa7686ef4229081435ba5",
+        "base_sha": "857a179c73b2946aef042dfe82fb2e8dfd686c3c",
+        "tree_sha": "929be209efdc98c9f2e4c17592d8fe1083cc6422",
+        "report": "APPROVED. (1) Coverage: the publish path's _git/_gh and ci_reuse's _git/gh_api were the only text=True subprocess calls lacking encoding; all fixed. acl_release_manifest.py already passes encoding=utf-8; acl_sign_release.py has no subprocess. errors=replace is safe: SHAs/tree ids are ASCII hex (git output; a replaced char would fail the SHA regex/equality = fail closed); JSON keys/job names compared are ASCII, a non-ASCII job name can only fail to match required names (fail closed), never forge a match; non-ASCII appears only in display text (commit/PR titles, annotation). (2) End-to-end on Windows, cp1252 default, PYTHONUTF8 unset: at PR head, reuse proof for main commit b219f019 / run 37759632936 succeeded: proved by run 37757128740 (stage, 3.11 + verification) + run 37754406008 (3.13 + windows), same tree 9b41ef55. Old code (work/main) reproduces UnicodeDecodeError cp1252 byte 0x8f. (3) tests/test_publish_release.py 48 passed; tests/test_acl_ci_reuse.py 80 passed. (4) CI: all green at last poll except tracker-link (fails: #743 not yet in Review - process state, not code) and two linux 3.x shard-2 jobs still pending at last check; merge-tree vs work/stage clean. Note: PYTHONUTF8 in release.yml is belt-and-braces; code fix alone suffices.",
+        "main_sha": "a6e91a3501345ae8af01a8c6f8dfc0bb98216dd8",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          743
+        ],
+        "recorded_at": "2026-10-08T10:43:52+00:00"
       }
     },
     "stage": {
