@@ -676,9 +676,24 @@
       font-size: 0.75rem;
     }
     td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    /* ACL-1652: Trends — последние дни жирным, период серым под ним. */
+    td.num.two { line-height: 1.25; }
+    td.num.two b { display: block; font-weight: 600; }
+    td.num.two small { display: block; color: var(--muted); font-size: 0.68rem; }
+    /* ACL-1652: Combos — одна ячейка на комбинацию, значок категории. */
+    td.combo-id { line-height: 1.3; min-width: 0; }
+    td.combo-id .l1 { font-weight: 600; font-size: 0.82rem; }
+    td.combo-id .l2 { font-size: 0.74rem; color: var(--muted); max-width: 22rem;
+                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .combo-chip { display: inline-block; font-size: 0.68rem; font-weight: 500; padding: 0.05rem 0.4rem;
+                  border-radius: 9px; margin-left: 0.25rem; }
+    .combo-chip.cat-strong { background: var(--good-soft); color: var(--good); }
+    .combo-chip.cat-interesting { background: var(--warn-soft); color: var(--warn); }
+    /* ACL-1652: раскрытие внутри таблицы листается по горизонтали, когда не
+       хватает ширины (ноутбук 1280px с открытым билдером). */
+    .drill-scroll { overflow-x: auto; max-width: 100%; }
     td.adset { font-size: 0.78rem; color: var(--muted); max-width: 320px;
                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    td.date { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
     td.good { color: var(--good); }
     td.bad  { color: var(--bad); }
 
@@ -717,6 +732,8 @@
     table.drill-table { font-size: 0.8125rem; background: transparent; box-shadow: none; border: none; }
     table.drill-table th { background: transparent; font-size: 0.75rem; }
     table.drill-table td { border-bottom: 1px solid var(--border); }
+    /* Числа не липнут друг к другу: у колонки CR был только общий отступ 0.75rem. */
+    table.drill-table th.num, table.drill-table td.num { padding-left: 1rem; }
 
     pre.text-block {
       background: var(--bg-elev);
@@ -1676,19 +1693,48 @@
        числа стоят столбиками, а не россыпью чипов. Первая колонка — под
        каретку ::before у summary. Ноль аккаунтов при живых деньгах — красным:
        спенд идёт, а картой не покрыт. ── */
-    .amap-grid-head, .amap-country > summary.amap-row {
+    /* ACL-1652: шесть метрик (Spend · Leads · FTDs · CPL · CPA · CR) вместо
+       пяти — на одну колонку больше. На 1280px таблица 984px, минимум по
+       ширине колонок ~969px. Строка Totals и менеджеры (ACL-1654/1656) стоят
+       на той же сетке, поэтому числа выровнены по построению. */
+    .amap-grid-head, .amap-country > summary.amap-row,
+    .amap-total-row, .amap-cm-row, .amap-cm > .amap-grid-head {
       display: grid;
       grid-template-columns: 1rem minmax(7rem, 1.1fr) minmax(9.5rem, 1.4fr)
-        repeat(5, minmax(4.2rem, 0.7fr)) minmax(4.5rem, 0.6fr) 4.2rem;
+        repeat(6, minmax(4.2rem, 0.7fr)) minmax(4.5rem, 0.6fr) 4.2rem;
       gap: 0 var(--space-md);
       align-items: center;
     }
     .amap-grid-head {
       padding: 0.45rem 0.85rem 0.3rem;
       font-size: 0.68rem; font-weight: 600; letter-spacing: 0.02em;
-      text-transform: uppercase; color: var(--muted);
+      text-transform: none; color: var(--muted);
       border-bottom: 1px solid var(--border);
     }
+    /* ACL-1654: итог. Тот же вид, что у свёрнутой страны, но отделён линией. */
+    .amap-total-row {
+      padding: 0.55rem 0.85rem; margin: 0 0 var(--space-md);
+      border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+      background: var(--bg-subtle); font-weight: 700; font-size: 0.9rem;
+    }
+    /* ACL-1656: Campaign managers — свёрнуто, как Available accounts. */
+    .amap-cm { margin-top: var(--space-lg); border: 1px solid var(--border);
+      border-radius: var(--radius-md); background: var(--bg-elev); overflow: hidden; }
+    .amap-cm > summary { display: flex; align-items: baseline; gap: var(--space-md);
+      padding: 0.55rem 0.85rem; cursor: pointer; user-select: none; background: var(--bg-subtle); }
+    .amap-cm > summary h3 { margin: 0; font-size: 0.95rem; }
+    .amap-cm > summary::before { content: '▸'; color: var(--muted); font-size: 0.75rem; }
+    .amap-cm[open] > summary::before { content: '▾'; }
+    .amap-cm-title .amap-note { font-size: 0.78rem; color: var(--muted); }
+    .amap-cm-country > summary.amap-cm-row { cursor: pointer; background: var(--bg-subtle);
+      font-weight: 600; font-size: 0.9rem; padding: 0.5rem 0.85rem; list-style: none; }
+    .amap-cm-country > summary::-webkit-details-marker { display: none; }
+    .amap-cm-country > summary::before { content: '▸'; color: var(--muted); font-size: 0.75rem; }
+    .amap-cm-country[open] > summary::before { content: '▾'; }
+    .amap-cm-person { padding: 0.35rem 0.85rem; font-size: 0.85rem; border-top: 1px solid var(--border); }
+    .amap-cm-row .amap-cell-name { grid-column: 2 / 4; }  /* имя менеджера занимает и пустую колонку Account read */
+    .amap-cm-person .amap-cell-name { padding-left: 0.2rem; }
+    .amap-cm-person.me .amap-cell-name { color: var(--good); font-weight: 600; }
     .amap-grid-head .num, .amap-row .num { text-align: right; }
     .amap-row .num b { color: var(--text); font-weight: 600; }
     .amap-cell-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1736,7 +1782,7 @@
     .amap table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
     .amap th {
       text-align: left; font-weight: 500; font-size: 0.7rem;
-      text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+      text-transform: none; letter-spacing: 0.02em; color: var(--muted);
       padding: 0.4rem 0.85rem; border-bottom: 1px solid var(--border);
     }
     /* Число под своим заголовком. Общее правило `th.num` есть с самого начала,
@@ -3419,6 +3465,8 @@ async function dashRefresh(ev) {
    filter, and place the notice before the dashboard rather than below it. #}
 {%- set book_covers_period = namespace(value=(not account_map) or
       (not account_map.date_from and not account_map.date_to)) %}
+{#- ACL-1652: шесть метрик (заголовки и ячейки) — из одного места. -#}
+{% import "_metrics.html" as mx %}
 {% if account_map %}
 {% for day in account_map.dates or [] %}
 {% if (not account_map.date_from or day >= account_map.date_from)
@@ -3770,11 +3818,8 @@ async function dashRefresh(ev) {
 <table>
   <thead><tr>
     <th>CM</th>
-    <th class="num">Deposits</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
+    {{ mx.headers() }}
     <th class="num">Net</th>
-    <th class="num">CPA</th>
     <th class="num">ROI</th>
     {# Пустой заголовок — над колонкой каретки «▸», а не над корзиной:
        строк восемь, и без него таблица съезжает на колонку. #}
@@ -3791,11 +3836,8 @@ async function dashRefresh(ev) {
         hx-trigger="click"
         {% endif %}>
       <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits) }}
       <td class="num">{{ row.net | fmt_usd }}</td>
-      <td class="num">{{ row.cpa | fmt_usd }}</td>
       <td class="num {% if row.roi > 1 %}roi-pos{% elif row.roi and row.roi < 1 %}roi-neg{% endif %}">
         {% if row.roi %}{{ '%.2f' % row.roi }}{% else %}—{% endif %}
       </td>
@@ -4139,20 +4181,15 @@ async function dashRefresh(ev) {
 <table>
   <thead><tr>
     <th>Ad Asset</th>
-    <th class="num">Leads</th>
-    <th class="num">Deposits</th>
-    <th class="num">CR</th>
+    {{ mx.headers() }}
     <th class="num">Player Value</th>
   </tr></thead>
   <tbody id="asset-tbody-{{ cid }}">
   {% for row in c.asset_summary %}
-    {% set cr = (row.deposits / row.leads * 100) if row.leads > 0 else 0 %}
     <tr class="asset-row" onclick="assetVariantToggle(this, '{{ cid }}')" data-offer="{{ row.offer | e }}"
         title="Show the breakdown by landing page">
       <td>{{ row.offer }} <span class="asset-caret">▸</span></td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ '%.1f' % cr }}%</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits) }}
       <td class="num">{{ row.net | fmt_usd }}</td>
     </tr>
   {% endfor %}
@@ -4168,24 +4205,14 @@ async function dashRefresh(ev) {
 <table>
   <thead><tr>
     <th>Landing</th>
-    <th class="num">Leads</th>
-    <th class="num">Deposits</th>
-    <th class="num">CR</th>
-    <th class="num">Spend</th>
-    <th class="num">CPL</th>
-    <th class="num">CPA</th>
+    {{ mx.headers() }}
     <th class="num">Net</th>
   </tr></thead>
   <tbody>
   {% for row in c.variants %}
     <tr{% if row.is_untagged %} class="lp-untagged"{% endif %}>
       <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num {% if row.deposits > 0 %}good{% elif row.spend > 0 %}bad{% endif %}">{{ row.deposits }}</td>
-      <td class="num">{% if row.cr is not none %}{{ '%.1f' % row.cr }}%{% else %}—{% endif %}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td class="num">{% if row.cpl is not none %}{{ row.cpl | fmt_usd }}{% else %}—{% endif %}</td>
-      <td class="num">{% if row.cpa is not none %}{{ row.cpa | fmt_usd }}{% else %}—{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, 'good' if row.deposits > 0 else ('bad' if row.spend > 0 else '')) }}
       <td class="num">{{ row.net | fmt_usd }}</td>
     </tr>
   {% endfor %}
@@ -4201,7 +4228,8 @@ async function dashRefresh(ev) {
 {% if c.trend.has_date %}
 <div id="view-country-{{ cid }}-trend" class="view-panel" data-country="{{ cid }}">
 <h2 class="view-title">{{ c.country }}: {{ n_trend }} Recent Trend <span class="hint">{{ c.trend.period_label }}</span></h2>
-{% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable')] %}
+<p class="hint" style="margin:0.2rem 0 0">Every number: last {{ report.trend_days | int }} days in bold, the whole period in grey underneath.</p>
+{% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable'), ('Trending down', 'trending_down')] %}
   {% set rows = c.trend[key] %}
   {% if rows %}
     <h3 class="section" style="margin-top:0.8rem">↪ {{ label }} ({{ rows|length }})</h3>
@@ -4211,8 +4239,7 @@ async function dashRefresh(ev) {
         <th>Device</th>
         <th>Interest</th>
         <th>Creative</th>
-        <th class="num">Total dep</th>
-        <th class="num">Recent dep</th>
+        {{ mx.headers() }}
       </tr></thead>
       <tbody>
       {% for row in rows %}
@@ -4221,8 +4248,7 @@ async function dashRefresh(ev) {
           <td>{{ row.device or '—' }}</td>
           <td>{{ row.interest or '—' }}</td>
           <td>{{ row.creative or '—' }}</td>
-          <td class="num">{{ row.deposits_total }}</td>
-          <td class="num">{{ row.deposits_recent }}</td>
+          {{ mx.pair_cells(metric_values(row.spend_recent, row.leads_recent, row.deposits_recent), metric_values(row.spend_total, row.leads_total, row.deposits_total)) }}
         </tr>
       {% endfor %}
       </tbody>
@@ -4237,28 +4263,20 @@ async function dashRefresh(ev) {
 <h2 class="view-title">{{ c.country }}: {{ n_combos }} Top Combos</h2>
 <table>
   <thead><tr>
-    <th>Offer</th>
-    <th>Device</th>
-    <th>Interest</th>
-    <th>Age</th>
-    <th>Creative</th>
-    <th>Cat</th>
-    <th class="num">Dep</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
+    <th>Combo</th>
+    {{ mx.headers() }}
   </tr></thead>
   <tbody>
   {% for row in c.top_combos %}
     <tr>
-      <td>{{ row.offer or '—' }}</td>
-      <td>{{ row.device or '—' }}</td>
-      <td>{{ row.interest or '—' }}</td>
-      <td>{{ row.age or '—' }}</td>
-      <td class="adset">{{ row.creative or '—' }}</td>
-      <td>{{ row.category }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
+      {#- ACL-1652 (вариант A): одна ячейка на всю комбинацию, чтобы шесть метрик
+          встали в стандартные колонки. Cat — значок рядом с именем. -#}
+      <td class="combo-id" title="{{ row.category }}">
+        <div class="l1">{{ row.offer or '—' }} · {{ row.device or '—' }} · {{ row.age or '—' }}
+          <span class="combo-chip {{ 'cat-strong' if row.category == 'Strong' else 'cat-interesting' }}">{{ row.category }}</span></div>
+        <div class="l2">{{ row.interest or '—' }} · {{ row.creative or '—' }}</div>
+      </td>
+      {{ mx.cells(row.spend, row.leads, row.deposits) }}
     </tr>
   {% endfor %}
   </tbody>
@@ -4272,19 +4290,13 @@ async function dashRefresh(ev) {
 <table class="table-targeting">
   <thead><tr>
     <th>Target</th>
-    <th class="num">Dep</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
-    <th class="num">CPA</th>
+    {{ mx.headers() }}
   </tr></thead>
   <tbody>
   {% for row in c.targeting %}
     <tr>
       <td class="interest-cell" title="{{ row.interest }}">{{ row.interest }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td class="num">{{ row.cpa | fmt_usd }}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits) }}
     </tr>
   {% endfor %}
   </tbody>
@@ -4300,10 +4312,7 @@ async function dashRefresh(ev) {
   <thead><tr>
     <th>Creative</th>
     <th>Text</th>
-    <th class="num">Deposits</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
-    <th class="num">CPA</th>
+    {{ mx.headers() }}
   </tr></thead>
   <tbody>
   {% for row in c.creatives %}
@@ -4311,20 +4320,14 @@ async function dashRefresh(ev) {
     <tr title="{{ row.ad_title }}"{% if row.has_variants %} class="creative-group" style="cursor:pointer" onclick="var n=this.nextElementSibling;while(n&&n.classList.contains('creative-variant')){n.hidden=!n.hidden;n=n.nextElementSibling;}"{% endif %}>
       <td>{% if row.has_variants %}&#9656; {% endif %}{{ row.creative_id or row.ad_title }}</td>
       <td>{{ row.text_name or '—' }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td class="num">{{ row.cpa | fmt_usd }}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits) }}
     </tr>
     {% if row.has_variants %}
     {% for v in row.variants %}
     <tr class="creative-variant" hidden>
       <td style="padding-left:1.5em">{{ v.label }}</td>
       <td>{{ row.text_name or '—' }}</td>
-      <td class="num">{{ v.deposits }}</td>
-      <td class="num">{{ v.leads }}</td>
-      <td class="num">{{ v.spend | fmt_usd }}</td>
-      <td class="num">{{ v.cpa | fmt_usd }}</td>
+      {{ mx.cells(v.spend, v.leads, v.deposits) }}
     </tr>
     {% endfor %}
     {% endif %}
@@ -4348,11 +4351,7 @@ async function dashRefresh(ev) {
     <table>
       <thead><tr>
         <th>Ad set name</th>
-        <th class="num">Spend</th>
-        <th class="num">Leads</th>
-        <th class="num">FTDs</th>
-        <th class="num">CPL</th>
-        <th class="num">CPA</th>
+        {{ mx.headers() }}
         <th>Reason</th>
       </tr></thead>
       <tbody>
@@ -4366,11 +4365,7 @@ async function dashRefresh(ev) {
             hx-trigger="click"
             {% endif %}>
           <td class="adset">{{ r.adset_name[:60] }}</td>
-          <td class="num">{{ r.spend | fmt_usd }}</td>
-          <td class="num">{{ r.leads }}</td>
-          <td class="num {% if r.deposits == 0 and r.spend > 0 %}bad{% elif r.deposits > 0 %}good{% endif %}">{{ r.deposits }}</td>
-          <td class="num">{{ r.cpl | fmt_usd }}</td>
-          <td class="num">{{ r.cpa | fmt_usd }}</td>
+          {{ mx.cells(r.spend, r.leads, r.deposits, 'bad' if (r.deposits == 0 and r.spend > 0) else ('good' if r.deposits > 0 else '')) }}
           <td class="{% if r.reason %}bad{% endif %}">{{ r.reason or '' }}</td>
         </tr>
       {% endfor %}
@@ -6447,6 +6442,26 @@ function aclCountryBuilder(country) {
 // Aggregates are embedded per-country as JSON (offer x variant rows);
 // untagged history (variant "") shows as "— (no landing)" so the
 // breakdown always adds up to the asset's totals.
+// ── Шесть метрик (ACL-1652) ───────────────────────────────────────────
+// JS-двойник src/analysis_agent/metric_columns.py: те же заголовки, те же
+// формулы, тот же вид чисел. Сравнивает их tests/test_metric_columns.py —
+// правя одно, правь другое. Делитель ноль даёт «—», доллары целыми с
+// округлением вверх, CR с одним знаком (0.0% при лидах — настоящее число).
+var ACL_METRIC_HEADERS = ['Spend', 'Leads', 'FTDs', 'CPL', 'CPA', 'CR'];
+function acl6Metrics(spend, leads, ftds) {
+  var num = function(v) { v = Number(v); return isFinite(v) ? v : null; };
+  var s = num(spend) || 0, l = num(leads) || 0, f = num(ftds) || 0;
+  var money = function(v) { return v === null ? '—' : '$' + (Math.ceil(v) || 0).toLocaleString('en-US'); };
+  return [
+    money(s),
+    String(Math.trunc(l)),
+    String(Math.trunc(f)),
+    money(l > 0 ? s / l : null),
+    money(f > 0 ? s / f : null),
+    l > 0 ? (f / l * 100).toFixed(1) + '%' : '—'
+  ];
+}
+
 function assetVariantToggle(tr, cid) {
   var next = tr.nextElementSibling;
   if (next && next.classList.contains('asset-variant-detail')) {
@@ -6465,10 +6480,6 @@ function assetVariantToggle(tr, cid) {
     d.textContent = s == null ? '' : String(s);
     return d.innerHTML;
   };
-  var fmtUsd = function(v) {
-    if (v == null || isNaN(v)) return '—';
-    return '$' + Math.round(v).toLocaleString('en-US');
-  };
   // untagged last, then by deposits / leads / spend desc
   rows.sort(function(x, y) {
     if (!x.variant !== !y.variant) return x.variant ? -1 : 1;
@@ -6476,16 +6487,11 @@ function assetVariantToggle(tr, cid) {
   });
   var render = function(r, cls) {
     var name = r.variant ? esc(r.variant) : '— (no landing)';
-    var cr = r.leads > 0 ? (r.deposits / r.leads * 100).toFixed(1) + '%' : '—';
-    var cpl = r.leads > 0 ? fmtUsd(r.spend / r.leads) : '—';
-    var cpa = r.deposits > 0 ? fmtUsd(r.spend / r.deposits) : '—';
+    var m = acl6Metrics(r.spend, r.leads, r.deposits);
     return '<tr class="' + (cls || '') + '"><td>' + name + '</td>'
-      + '<td class="num">' + (r.leads || 0) + '</td>'
-      + '<td class="num' + (r.deposits > 0 ? ' good' : '') + '">' + (r.deposits || 0) + '</td>'
-      + '<td class="num">' + cr + '</td>'
-      + '<td class="num">' + fmtUsd(r.spend) + '</td>'
-      + '<td class="num">' + cpl + '</td>'
-      + '<td class="num">' + cpa + '</td></tr>';
+      + m.map(function(x, i) {
+          return '<td class="num' + (i === 2 && r.deposits > 0 ? ' good' : '') + '">' + x + '</td>';
+        }).join('') + '</tr>';
   };
   var total = rows.reduce(function(a, r) {
     a.leads += r.leads || 0; a.deposits += r.deposits || 0; a.spend += r.spend || 0;
@@ -6495,10 +6501,10 @@ function assetVariantToggle(tr, cid) {
     || '<tr><td colspan="7" style="color:var(--muted)">No landing data</td></tr>';
   var detail = document.createElement('tr');
   detail.className = 'asset-variant-detail';
-  detail.innerHTML = '<td colspan="5"><div class="asset-variant-inner">'
+  // colspan = число колонок таблицы Assets: имя, шесть метрик, Player Value.
+  detail.innerHTML = '<td colspan="8"><div class="asset-variant-inner">'
     + '<table class="asset-variant-table"><thead><tr>'
-    + '<th>Landing</th><th class="num">Leads</th><th class="num">Deposits</th>'
-    + '<th class="num">CR</th><th class="num">Spend</th><th class="num">CPL</th><th class="num">CPA</th>'
+    + '<th>Landing</th>' + ACL_METRIC_HEADERS.map(function(h) { return '<th class="num">' + h + '</th>'; }).join('')
     + '</tr></thead><tbody>' + body + (rows.length > 1 ? render(total, 'asset-variant-total') : '')
     + '</tbody></table>'
     + '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem">Landing tagging started on 30.07 — older rows fall into "— (no landing)".</div>'
@@ -6856,6 +6862,12 @@ function amapApply(from, to, span) {
    Блоки свёрнуты по умолчанию, но дешборд перезагружает себя сам, и человек,
    работающий внутри страны, терял бы её на каждом обновлении. Хранится только
    список раскрытых ключей и только в этом браузере. */
+/* Owner, 07.10: «Copy for group» скрыта флагом SHOW_COPY_FOR_GROUP (app.py). Тот же
+   флаг гасит и пересборку ячейки после живого Read (amapStatusTail ниже).
+   Флаг — отдельным присваиванием window и ВЫШЕ amapMoney: тестовые стенды
+   вырезают исходник кусками от неё, и Jinja-выражение в куске ломало бы им
+   разбор. */
+window.AMAP_SHOW_COPY_FOR_GROUP = {{ SHOW_COPY_FOR_GROUP | tojson }};
 var AMAP_OPEN_KEY = 'acl.amap.open';
 
 function amapOpenList() {
@@ -6870,7 +6882,7 @@ function amapOpenList() {
 
 function amapWatchOpen() {
   var known = amapOpenList();
-  var blocks = document.querySelectorAll('details.amap-country[data-country]');
+  var blocks = document.querySelectorAll('details.amap-country[data-country], details.amap-cm[data-country], details.amap-cm-country[data-country]');
   Array.prototype.forEach.call(blocks, function (d) {
     var key = d.getAttribute('data-country');
     if (known.indexOf(key) !== -1) d.open = true;
@@ -7142,6 +7154,10 @@ function amapRefreshCountryLines(per) {
           if (previous) previous.remove();
         }
       });
+      // ACL-1654: Totals — число «Account read» меняется после чтения кабинетов.
+      var totWas = map.querySelector('#amap-totals .amap-cell-read');
+      var totNow = fresh.querySelector('#amap-totals .amap-cell-read');
+      if (totWas && totNow) totWas.innerHTML = totNow.innerHTML;
       var count = map.querySelector('.amap-head > .amap-note');
       if (count) count.textContent = map.querySelectorAll('details.amap-country[data-country]').length + ' countries · numbers from the stats workbook';
       if (typeof amapWatchOpen === 'function') amapWatchOpen();
@@ -7366,7 +7382,7 @@ function amapStatusTail(account, s) {
       + esc(s.status_shot_at) + '. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>';
   }
   var word = AMAP_STATUS_WORDS[s.status];
-  if (word) {
+  if (word && typeof window === 'object' && window.AMAP_SHOW_COPY_FOR_GROUP === true) {
     /* Время в полосе — время чтения, как в шаблоне (st.at). */
     var at = s.finished_at || s.status_shot_at || '';
     var head = String(account || '').split(' - ')[0] + ' — ' + word + (at ? ' · ' + at : '');
@@ -7600,7 +7616,7 @@ var AMAP_ATTR_COLS = ['spend', 'leads', 'deposits', 'cpl', 'cpa', 'cr'];
 
 /* Подписи для узкой раскладки — теми же словами, что в шапке таблицы
    (ACL-1277). В обычной раскладке они не видны: там слово стоит в шапке. */
-var AMAP_ATTR_LABELS = {spend: 'Spend', leads: 'Leads', deposits: 'FTD',
+var AMAP_ATTR_LABELS = {spend: 'Spend', leads: 'Leads', deposits: 'FTDs',
                         cpl: 'CPL', cpa: 'CPA', cr: 'CR'};
 
 function amapAttrCell(field) {

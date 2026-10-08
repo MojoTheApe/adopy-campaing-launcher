@@ -3,6 +3,7 @@
   clickable <tr>. It MUST emit exactly ONE <tr> with ONE <td colspan="N">,
   or the browser foster-parents it out of the table.
 #}
+{% import "_metrics.html" as mx %}
 <tr class="drill-detail">
   <td colspan="{{ ncols }}">
     <div class="drill-inner">
@@ -33,36 +34,26 @@
         </button>
       </div>
       {% if rows %}
+        {#- ACL-1652: с открытым билдером таблица шире окна — листается внутри. -#}
+        <div class="drill-scroll">
         <table class="drill-table">
           <thead>
             <tr>
               {% if section == 'optimization' %}
               <th>Ad title</th>
               <th>Asset</th>
-              <th class="num">Spend</th>
-              <th class="num">Leads</th>
-              <th class="num">FTDs</th>
-              <th class="num">CPL</th>
-              <th class="num">CPA</th>
-              <th>Date</th>
-              <th></th>
+              {{ mx.headers() }}
               {% elif section in ('cm_comparison', 'account') %}
               <th>Campaign / Ad set</th>
               <th>Account</th>
-              <th class="num">Dep</th>
-              <th class="num">Leads</th>
-              <th class="num">Spend</th>
-              <th class="num">CPA</th>
+              {{ mx.headers() }}
               {% else %}
               <th>Account</th>
               <th>CM</th>
               <th>Adset</th>
               <th>Ad title</th>
               <th>Asset</th>
-              <th class="num">Spend</th>
-              <th class="num">Leads</th>
-              <th class="num">FTDs</th>
-              <th>Date</th>
+              {{ mx.headers() }}
               {% endif %}
             </tr>
           </thead>
@@ -72,7 +63,7 @@
               {% if section in ('cm_comparison', 'account') and r.adset %}
               class="drillable"
               data-drill="optimization"
-              hx-get="/details?section=optimization&country={{ country | urlencode }}&account={{ r.account | urlencode }}&adset={{ r.adset | urlencode }}&ncols=6"
+              hx-get="/details?section=optimization&country={{ country | urlencode }}&account={{ r.account | urlencode }}&adset={{ r.adset | urlencode }}&ncols=8"
               hx-target="closest tr"
               hx-swap="afterend"
               hx-trigger="click"
@@ -85,16 +76,7 @@
               {% if section == 'optimization' %}
               <td>{{ r.ad_title or '' }}</td>
               <td>{{ r.ad_asset or '' }}</td>
-              <td class="num">{{ r.spend | fmt_usd }}</td>
-              <td class="num">{{ r.leads or 0 }}</td>
-              <td class="num {% if (r.ftds or 0) > 0 %}good{% endif %}">{{ r.ftds or 0 }}</td>
-              <td class="num">{{ r.cpl | fmt_usd }}</td>
-              <td class="num">{{ r.cpa | fmt_usd }}</td>
-              <td class="date">{{ r.date or '' }}</td>
-              <td><button type="button" class="cb-cart-btn" data-kind="ad" data-source="ad"
-                          data-country="{{ country | anchor_slug }}" data-country-name="{{ country }}"
-                          data-payload='{{ r | tojson | e }}'
-                          title="Add to build: ad in the last campaign">+ 🛒</button></td>
+              {{ mx.cells(r.spend, r.leads, r.ftds, 'good' if (r.ftds or 0) > 0 else '') }}
               {% elif section in ('cm_comparison', 'account') %}
               <td class="adset" style="max-width:300px;word-break:break-word">
                 {{ r.adset or '' }}
@@ -114,25 +96,20 @@
                 {% endif %}
               </td>
               <td>{{ r.account or '' }}</td>
-              <td class="num good">{{ r.ftds or 0 }}</td>
-              <td class="num">{{ r.leads or 0 }}</td>
-              <td class="num">{{ r.spend | fmt_usd }}</td>
-              <td class="num">{{ r.cpa | fmt_usd }}</td>
+              {{ mx.cells(r.spend, r.leads, r.ftds, 'good') }}
               {% else %}
               <td>{{ r.account or '' }}</td>
               <td>{{ r.cm or '' }}</td>
               <td class="adset">{{ r.adset or '' }}</td>
               <td>{{ r.ad_title or '' }}</td>
               <td>{{ r.ad_asset or '' }}</td>
-              <td class="num">{{ r.spend | fmt_usd }}</td>
-              <td class="num">{{ r.leads or 0 }}</td>
-              <td class="num {% if (r.ftds or 0) > 0 %}good{% endif %}">{{ r.ftds or 0 }}</td>
-              <td class="date">{{ r.date or '' }}</td>
+              {{ mx.cells(r.spend, r.leads, r.ftds, 'good' if (r.ftds or 0) > 0 else '') }}
               {% endif %}
             </tr>
           {% endfor %}
           </tbody>
         </table>
+        </div>
       {% endif %}
     </div>
   </td>

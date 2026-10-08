@@ -1,5 +1,32 @@
 # System history
 
+## One metric set in every attribution table, Totals and Campaign managers on Home — ACL-1652, ACL-1654, ACL-1656
+
+Every attribution table now shows **Spend, Leads, FTDs, CPL, CPA, CR** in this order, with the same
+names, formulas and number format. Decisions: owner, 2026-10-06 (issue #652).
+
+- **One source.** `src/analysis_agent/metric_columns.py` holds the header lists, the three formulas and the
+  number format; templates take headers and cells from `_metrics.html`; the JS twin `acl6Metrics` in
+  `report.html` is pinned to the Python helper by `tests/test_metric_columns.py`.
+- **Formulas.** CPL = Spend / Leads, CPA = Spend / FTDs, CR = FTDs / Leads, "—" when the divisor is 0.
+  Money is whole dollars rounded up everywhere (the asset-landing drill used to round to nearest).
+- **Fixed.** A zero CPA showed "$0" in Targeting, Creatives and CM Comparison; CR 0.0% showed "—" in the
+  account row and tree rows (it is a real number when there are leads).
+- **Tables.** Home country rows (+CPL), Home and Manage account table ("FTD" is now "FTDs", Account spend stays),
+  tree rows, CM Comparison, Assets, the asset-landing drill, Landings, Trends, Combos, Targeting, Creatives,
+  Optimization ad sets and the three drills. Net, ROI and Player Value stay after the six metrics.
+- **Trends**: two-line cells (last days bold, whole period grey), and "Trending down" is shown.
+  **Combos**: one identity cell (offer, device, age, category chip; interest and creative below).
+- **Drills** scroll horizontally inside the table when the builder is open.
+- **Home headers** are in normal case (they were upper case, which turned "FTDs" into "FTDS").
+- **Totals row** (ACL-1654) under the country rows, before Available accounts: Spend, Leads and FTDs are summed,
+  CPL/CPA/CR are computed from the sums. "Account read" is summed once per account and only when every
+  read account is in one currency; otherwise "—".
+- **Campaign managers** (ACL-1656) at the bottom of Home, collapsed by default (state in localStorage):
+  country rows are the sum of all managers, the current manager is highlighted. Same rows as CM Comparison.
+- **Ad drills**: the Date column and the dead "+ 🛒" button are gone.
+- **Copy for group** (button and hint under a red account status) is hidden for now; `SHOW_COPY_FOR_GROUP = True` in `app.py` brings it back. Screenshot and status code are unchanged.
+- Python edits (`morning_report.py` trend builder, `app.py`) need a `serve.py` restart.
 ## next_to_ad confirms the ad level and names the reason on that step — ACL-1693
 
 Manager laptop LAPTOP-UA006, run 81c1bfbb5456 (07.10, window 1536x730 at dpr 1.25): `next_to_ad`
