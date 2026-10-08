@@ -6511,9 +6511,11 @@
         "worktree": "C:\\acl-1721-notes",
         "id": "76b52a65638c499fb8790d61fc8c26d0",
         "issue": 721,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-08T05:33:43+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 722,
+        "report": "Removed country-row notes from the account map (stored notes kept). Account note editor: Enter saves and closes, Shift+Enter newline. PR #722, head 7420b04d. Tests: test_acl1633_country_notes 30, test_acl1620_account_notes 17, test_manage_accounts_table 7 passed."
       }
     },
     "tasks": {
