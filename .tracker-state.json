@@ -2374,8 +2374,21 @@
       "source_sha": "857a179c73b2946aef042dfe82fb2e8dfd686c3c",
       "main_tree": "9b41ef5571dc769b2871b6cd8a6840ee76d08086",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-10-08T10:18:10+00:00"
+      "state": "passed",
+      "recorded_at": "2026-10-08T10:18:10+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "result": "passed",
+        "target": "ACL isolated Windows stage installation",
+        "source_sha": "857a179c73b2946aef042dfe82fb2e8dfd686c3c",
+        "tree_sha": "bb7d6f3bd9d6dabd52d3d7a8fea306101ed9081e",
+        "checks": [
+          "Git checks on actual stage 857a179: CI run 37762498053 success (sharded, Python 3.11/3.13)",
+          "Windows installer run 37762497852 success"
+        ],
+        "report": "ACL-1736 stage verification: Git and installer checks green on the actual stage 857a179. Independent review: scratchpad/review_737.md."
+      },
+      "verified_at": "2026-10-08T10:19:41+00:00"
     },
     "tasks": {
       "248": {
