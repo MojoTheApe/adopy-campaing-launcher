@@ -9284,7 +9284,7 @@
             "session": "w1721n_1008"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1721N",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -9302,7 +9302,8 @@
           "report": "Removed country-row notes from the account map (stored notes kept). Account note editor: Enter saves and closes, Shift+Enter newline. PR #722, head 7420b04d. Tests: test_acl1633_country_notes 30, test_acl1620_account_notes 17, test_manage_accounts_table 7 passed."
         },
         "pr": 722,
-        "queued_at": "2026-10-08T05:35:39+00:00"
+        "queued_at": "2026-10-08T05:35:39+00:00",
+        "reviewer": "Reviewer-R1721V"
       }
     },
     "actors": {
@@ -10045,6 +10046,10 @@
       "Worker-W1721N": {
         "session": "w1721n_1008",
         "role": "Worker"
+      },
+      "Reviewer-R1721V": {
+        "session": "rev_r1721v_1008",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -12148,10 +12153,20 @@
       529,
       642,
       651,
-      710,
-      721
+      710
     ],
-    "review": null,
+    "review": {
+      "id": "80d9fe74cafa4e5fba7efcd10d7bfd13",
+      "pr": 722,
+      "issues": [
+        721
+      ],
+      "actor": "Reviewer-R1721V",
+      "session": "rev_r1721v_1008",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-08T05:39:29+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -17075,6 +17090,13 @@
         "issue": 721,
         "pr": 722,
         "actor": "Worker-W1721N"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-08T05:39:29+00:00",
+        "pr": 722,
+        "lane": "80d9fe74cafa4e5fba7efcd10d7bfd13",
+        "actor": "Reviewer-R1721V"
       }
     ],
     "policy": {
