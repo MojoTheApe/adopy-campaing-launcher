@@ -173,19 +173,18 @@ def _map(account_notes=None, country_notes=None, rows=None, country="Mexico"):
 
 def test_an_empty_note_renders_no_text_anywhere():
     html = _map()
-    country = re.search(r'<span class="amap-country-note empty"[^>]*>(.*?</span>)</span>', html, re.S)
     cell = re.search(r'<td class="amap-acct-note empty"[^>]*>(.*?)</td>', html, re.S)
     strip = lambda x: re.sub(r"<[^>]+>", "", x).strip()
-    assert country and strip(country.group(1)) == "" and cell and strip(cell.group(1)) == ""
+    assert cell and strip(cell.group(1)) == ""
     # ACL-1633 v2: у пустой заметки есть коробка (поле ввода), только без текста.
-    assert 'class="amap-note-box"' in country.group(1) and 'class="amap-note-box"' in cell.group(1)
+    assert 'class="amap-note-box"' in cell.group(1)
     assert "add note" not in html.lower() and "✎" not in html
 
 
 def test_a_filled_note_shows_its_first_line_and_the_full_text_in_the_tooltip():
     long = "first line " * 12 + "\nsecond line"
     html = _map({"Demo": long}, {notes.country_key("Mexico"): long})
-    for pattern in (r'<td class="amap-acct-note"[^>]*>(.*?)</td>', r'<span class="amap-country-note"[^>]*>(.*?</span>)</span>'):
+    for pattern in (r'<td class="amap-acct-note"[^>]*>(.*?)</td>',):
         shown = re.sub(r"<[^>]+>", "", re.search(pattern, html, re.S).group(1)).strip()
         assert "second line" not in shown and shown.endswith("…")
     assert 'title="' + long.replace("\n", "&#13;&#10;") + '"' in html.replace("\r", "").replace("\n", "&#13;&#10;") or "second line" in html
@@ -195,7 +194,7 @@ def test_note_text_is_escaped_in_both_places():
     evil = '"><img src=x onerror=alert(1)><script>alert(2)</script>'
     html = _map({"Demo": evil}, {notes.country_key("Mexico"): evil})
     assert "<img" not in html and "<script>alert" not in html
-    assert html.count("&lt;img") >= 4
+    assert html.count("&lt;img") >= 2
 
 
 def test_column_widths_and_count_are_kept():
@@ -264,10 +263,6 @@ def _acct(page, name="Demo"):
     return page.locator(f'td.amap-acct-note[data-account="{name}"]')
 
 
-def _country(page, name="Mexico"):
-    return page.locator(f'.amap-country-note[data-account="{name}"]')
-
-
 def _gone(page):
     page.wait_for_function("document.querySelector('.amap-note-pop').hidden")
 
@@ -286,27 +281,35 @@ def test_the_editor_opens_by_click_and_by_enter_with_the_cursor_at_the_end(brows
     page.keyboard.press("Enter")
     assert page.locator(".amap-note-pop").is_visible() and ta.input_value() == ""
     page.keyboard.press("Escape")
-    _country(page).focus()
-    page.keyboard.press("Enter")
-    assert page.locator(".amap-note-pop").is_visible()
     assert not errors, errors
     page.close()
 
 
-def test_a_country_note_saves_on_esc_and_does_not_toggle_the_country(browser):
+def test_enter_saves_and_closes_and_shift_enter_adds_a_newline(browser):
+    # ACL-1721: Enter сохраняет и закрывает редактор, Shift+Enter — перенос строки.
     page, errors = _open(browser)
-    opened_before = page.evaluate("document.querySelector('details.amap-country').open")
-    _country(page).click()
-    assert page.evaluate("document.querySelector('details.amap-country').open") == opened_before
-    page.locator(".amap-note-pop textarea").fill("Mexico: ask about limits")
-    page.keyboard.press("Escape")
+    _acct(page).click()
+    ta = page.locator(".amap-note-pop textarea")
+    ta.fill("line one")
+    page.keyboard.press("Shift+Enter")
+    page.keyboard.type("line two")
+    assert ta.input_value() == "line one\nline two"
+    page.keyboard.press("Enter")
     _gone(page)
-    assert notes.load_countries() == {notes.country_key("Mexico"): "Mexico: ask about limits"}
-    assert "Mexico: ask about limits" in _country(page).inner_text()
-    page.reload()
-    assert "Mexico: ask about limits" in _country(page).inner_text()
+    assert notes.load() == {"Demo": "line one\nline two"}
     assert not errors, errors
     page.close()
+
+
+def test_country_rows_have_no_note_and_the_account_map_has_no_country_note_code():
+    html = _map(notes.load(), {notes.country_key("Mexico"): "stored but hidden"})
+    assert "amap-country-note" not in html and "stored but hidden" not in html
+    assert 'data-note-kind="country"' not in html
+    report = (TPL / "report.html").read_text(encoding="utf-8")
+    assert "amap-country-note" not in report
+    assert "SEL = 'td.amap-acct-note';" in report
+    # Enter без Shift сохраняет, Shift+Enter не перехватывается
+    assert "e.key === 'Enter' && !e.shiftKey" in _js_block()
 
 
 def test_outside_click_and_ctrl_enter_save(browser):
@@ -386,7 +389,7 @@ def test_a_failed_save_says_save_failed_and_keeps_the_text(browser):
 
     page.route("**/*", route)
     page.goto("http://acl.test/")
-    _country(page).click()
+    _acct(page).click()
     page.locator(".amap-note-pop textarea").fill("must not be lost")
     page.keyboard.press("Control+Enter")
     page.wait_for_function("document.querySelector('.amap-note-state').textContent === 'Save failed'")
@@ -413,20 +416,17 @@ def test_the_note_is_drawn_as_an_input_box_of_equal_height(browser):
       const cs = (e) => getComputedStyle(e);
       const filled = q('td.amap-acct-note[data-account="Demo"] .amap-note-box');
       const empty = q('td.amap-acct-note[data-account="Quiet"] .amap-note-box');
-      const country = q('.amap-country-note .amap-note-box');
       const cell = q('td.amap-acct-note[data-account="Quiet"]');
       return {
         border: cs(empty).borderTopWidth, radius: cs(empty).borderTopLeftRadius, cursor: cs(empty).cursor,
         hf: filled.getBoundingClientRect().height, he: empty.getBoundingClientRect().height,
         full: empty.getBoundingClientRect().width / cell.getBoundingClientRect().width,
-        countryW: country.getBoundingClientRect().width, italic: cs(empty).fontStyle,
-        countryBorder: cs(country).borderTopWidth };
+        italic: cs(empty).fontStyle };
     }""")
-    assert info["border"] == "1px" and info["countryBorder"] == "1px" and info["cursor"] == "text"
+    assert info["border"] == "1px" and info["cursor"] == "text"
     assert info["radius"] != "0px" and info["italic"] == "normal"
     assert abs(info["hf"] - info["he"]) < 0.5, info
     assert info["full"] > 0.8, info  # в строке аккаунта коробка занимает ячейку
-    assert info["countryW"] <= 18 * 16 + 1, info  # в заголовке страны — компактная
     assert not errors, errors
     page.close()
 
@@ -454,11 +454,11 @@ def test_old_country_keys_migrate_on_read_and_on_write_without_loss():
     assert set(data["countries"]) == {cr, "narnia"} and data["notes"] == {"A": "a", "B": "b"}
 
 
-def test_the_template_looks_the_country_note_up_by_the_canonical_key():
+def test_country_notes_stay_stored_but_are_not_rendered():
     notes.set_note("Costa Rica", "tico", "country")
     for shown in ("CR", "Costa Rica"):
         html = _map(notes.load(), notes.load_countries(), country=shown)
-        assert 'data-note="tico"' in html and f'data-key="{notes.country_key("CR")}"' in html
+        assert 'data-note="tico"' not in html  # ACL-1721: заметки стран не показываются
 
 
 def test_a_conditional_write_refuses_when_the_note_is_no_longer_empty():

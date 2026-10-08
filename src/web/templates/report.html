@@ -1876,13 +1876,12 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: border-color .12s;
     }
     .amap-note-box::after { content: '\270E'; position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); opacity: 0; color: var(--muted); }
-    .amap-acct-note:hover .amap-note-box, .amap-country-note:hover .amap-note-box,
-    .amap-acct-note:focus-visible .amap-note-box, .amap-country-note:focus-visible .amap-note-box { border-color: var(--text, currentColor); }
-    .amap-acct-note:hover .amap-note-box::after, .amap-country-note:hover .amap-note-box::after,
-    .amap-acct-note:focus-visible .amap-note-box::after, .amap-country-note:focus-visible .amap-note-box::after { opacity: 0.6; }
+    .amap-acct-note:hover .amap-note-box,
+    .amap-acct-note:focus-visible .amap-note-box { border-color: var(--text, currentColor); }
+    .amap-acct-note:hover .amap-note-box::after,
+    .amap-acct-note:focus-visible .amap-note-box::after { opacity: 0.6; }
     .amap table.amap-grid td.amap-acct-note { cursor: text; padding-top: 0.15rem; padding-bottom: 0.15rem; }
-    .amap-country-note { display: inline-block; vertical-align: middle; margin-left: 0.5rem; width: 18rem; max-width: 40%; font-size: 0.78rem; }
-    .amap-country-note:focus-visible, .amap-acct-note:focus-visible { outline: none; }
+    .amap-acct-note:focus-visible { outline: none; }
     .amap-note-pop {
       position: fixed; z-index: 1000; width: min(24rem, calc(100vw - 1rem));
       background: var(--bg, #fff); color: inherit; border: 1px solid var(--field-border);
@@ -8893,7 +8892,7 @@ async function amapSend(body, msgEl) {
    только через textContent/value. Заметки никуда не отправляются, кроме
    локального POST /api/account-notes. */
 (function () {
-  var MAX = 10000, SEL = 'td.amap-acct-note, .amap-country-note';
+  var MAX = 10000, SEL = 'td.amap-acct-note';
   var pop = null, toast = null, cur = null, saving = 0, hideTimer = null, toastTimer = null;
   // cur: {kind, label, original, cell}; undo: то, что вернёт Undo (одна запись за раз)
   var undo = null;
@@ -9023,7 +9022,8 @@ async function amapSend(body, msgEl) {
   }, true);
   document.addEventListener('keydown', function (e) {
     if (cur && e.key === 'Escape') { e.preventDefault(); close(); return; }
-    if (cur && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); close(); return; }
+    // ACL-1721: Enter сохраняет и закрывает, Shift+Enter — перенос строки (Ctrl/Cmd+Enter по-прежнему сохраняют).
+    if (cur && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); close(); return; }
     var el = e.target.closest && e.target.closest(SEL);
     if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(el); }
   });
