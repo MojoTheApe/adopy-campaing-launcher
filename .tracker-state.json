@@ -6687,22 +6687,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "739": {
-        "actor": "Worker-W1739F",
-        "session": "w1739f_1008",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "codex/acl-1739-doc124-frozen",
-        "worktree": "C:\\acl-1739-doc124-frozen",
-        "id": "d9262967653e4d319d1e55a5250d5c11",
-        "issue": 739,
-        "state": "handoff",
-        "started_at": "2026-10-08T08:22:30+00:00",
-        "from_status": "status:idea",
-        "pr": 740,
-        "report": "# ACL-1739 handoff\nPR #740, head 681100a3. Cause: profile window covered by 4-7 windows; 5 s probe missed on alive-but-slow tab (stall_evidence responsive=true, heap ~500MB, 6.3k nodes), each miss counted toward the 1702 budget. Not video-specific. Fix: _tab_frozen confirms with the 10 s probe before counting. Tests: new unit file + 11 affected files pass (fakes only)."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -9677,9 +9662,25 @@
             "session": "w1739f_1008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1739F",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-W1739F",
+          "session": "w1739f_1008",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "codex/acl-1739-doc124-frozen",
+          "worktree": "C:\\acl-1739-doc124-frozen",
+          "id": "d9262967653e4d319d1e55a5250d5c11",
+          "issue": 739,
+          "state": "handoff",
+          "started_at": "2026-10-08T08:22:30+00:00",
+          "from_status": "status:idea",
+          "pr": 740,
+          "report": "# ACL-1739 handoff\nPR #740, head 681100a3. Cause: profile window covered by 4-7 windows; 5 s probe missed on alive-but-slow tab (stall_evidence responsive=true, heap ~500MB, 6.3k nodes), each miss counted toward the 1702 budget. Not video-specific. Fix: _tab_frozen confirms with the 10 s probe before counting. Tests: new unit file + 11 affected files pass (fakes only)."
+        },
+        "pr": 740,
+        "queued_at": "2026-10-08T08:34:10+00:00"
       }
     },
     "actors": {
@@ -12644,7 +12645,8 @@
       710,
       728,
       729,
-      736
+      736,
+      739
     ],
     "review": {
       "id": "63efa02d77574b48aaa2e4d77c3e6e04",
@@ -17756,6 +17758,13 @@
         "at": "2026-10-08T08:22:30+00:00",
         "issue": 739,
         "claim": "d9262967653e4d319d1e55a5250d5c11",
+        "actor": "Worker-W1739F"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T08:34:10+00:00",
+        "issue": 739,
+        "pr": 740,
         "actor": "Worker-W1739F"
       }
     ],
