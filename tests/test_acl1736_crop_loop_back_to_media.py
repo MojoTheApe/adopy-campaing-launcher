@@ -142,3 +142,25 @@ def test_trail_names_the_loop_in_the_wizard_row(monkeypatch):
     t.finish(True)
     diag = rows[0][1]["diag"]
     assert diag["looped_back_to"] == "Media" and diag["exit"]["looped_back_to"] == "Media"
+
+
+def test_crop_then_crop_without_a_step_before_is_still_next_did_not_advance(monkeypatch):
+    """F1: an 'advanced' from one empty read, then the same Crop - no second Next."""
+    page = FakePage(["Crop", "Crop", "Text"])
+    applies, left = _wire(monkeypatch, page)
+    trail = FakeTrail()
+    md._walk_creative_wizard_rounds(page, 16, trail)
+    assert page.nexts.count("Crop") == 1 and left == [1]
+    assert trail.exit["why"] == "next_did_not_advance"
+    assert crop_step.outcome() == crop_step.WIZARD_STUCK
+
+
+def test_forward_stuck_set_before_the_loop_blocks_the_retry(monkeypatch):
+    page = FakePage(["Crop", "Media", "Crop", "Text"])
+    applies, left = _wire(monkeypatch, page)
+    crop_step.note_forward_stuck()
+    trail = FakeTrail()
+    md._walk_creative_wizard_rounds(page, 16, trail)
+    assert left == [1] and trail.exit["why"] == "next_did_not_advance"
+    assert page.nexts.count("Crop") == 0, "ACL-1551: Next is not pressed on a Crop that already hung"
+    assert crop_step.outcome() == crop_step.WIZARD_STUCK

@@ -12285,6 +12285,8 @@ def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
     crop_next = 0   # нажатий «вперёд» на Crop в этом обходе
     left_crop = False   # ACL-1736: Next с Crop увёл мастер с Crop (виден другой шаг)
     crop_returns = 0    # сколько раз мастер вернулся на Crop после ухода
+    went_back = False   # ACL-1736 F1: после Crop реально виден шаг ДО него
+    crop_pressed = ""   # подпись, нажатая на Crop (для выхода)
     for _ in range(rounds):
         if not _creative_wizard_open(page):
             return True
@@ -12293,8 +12295,12 @@ def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
         if left_crop and not on_crop and trail.current:
             if trail.current in _WIZARD_STEPS_BEFORE_CROP:
                 trail.loop_back(trail.current)   # Meta вернула назад, а не вперёд
+                went_back = True
             else:
                 left_crop = False   # обычный ход вперёд (Text и дальше)
+        if on_crop and left_crop and not went_back:
+            # Шаг до Crop не виден (один пустой read): это тот же Crop - охрана ACL-1551.
+            left_crop = False
         if on_crop and left_crop:
             # ACL-1736 (445fa5460ce6, 5265 ad 2): Next на Crop привёл на Media,
             # дальше мастер дошёл до Crop снова. Это НЕ тот же Crop, на котором
@@ -12303,11 +12309,12 @@ def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
             # для одиночного плана; пара (Replace) и второй возврат — честный
             # `crop_wizard_stuck` с `looped_back_to`.
             left_crop = False
+            went_back = False
             crop_returns += 1
             plan_now = _crop.current_plan()
             pair = plan_now is not None and getattr(plan_now, "replace_vertical", False)
             if crop_returns > 1 or pair or _crop.forward_stuck():
-                return _leave_stuck_wizard(page, trail, "looped_back", crop_next,
+                return _leave_stuck_wizard(page, trail, "looped_back", crop_next, crop_pressed,
                                            looped_back_to=trail.looped_back_to)
             crop_next = 0
             _crop.reopen()   # Meta могла сбросить рамки по дороге — Original снова
@@ -12343,6 +12350,7 @@ def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
         misses = 0
         if on_crop:
             crop_next += 1
+            crop_pressed = pressed
             got = _await_crop_advance(page)
             if got == "closed":
                 trail.closed_by = pressed
