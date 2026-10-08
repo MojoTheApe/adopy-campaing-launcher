@@ -1,7 +1,7 @@
 # Approved tasks and batches of at most five
 
 Parent [ACL-1566](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/566)
-retains actual migration, fresh shared-board verification and a real two-task batch.
+records actual migration, fresh shared-board verification and remaining deferred scope.
 Source child [ACL-1747](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/747)
 prepares the reviewed source and completes its existing execution-v1 stage/main route.
 **Source preparation is not live activation.** Preserve the dated v1 activation
@@ -10,8 +10,10 @@ record in [PARALLEL_EXECUTION.md](PARALLEL_EXECUTION.md).
 The later [ACL-1750](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/750)
 source prepares the separate instruction-only route. It changes policy and CI and
 therefore uses the ordinary old-policy stage route after ACL-1747; keep its genuine
-claim/review/handoff distinct. Complete both adopted-source handoffs before the
-coordinated live v2 cutover. The original nine queued source tasks remain preserved.
+claim/review/handoff distinct. Both adopted-source handoffs have completed normally.
+The required [ACL-1753](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/753)
+compatible-pin refresh follows its own old-policy source route before the coordinated
+live v2 cutover. The original nine queued source tasks remain preserved.
 
 ## Selected contract and reading map
 
@@ -20,10 +22,14 @@ ACL-1747 originally selected reviewed Master
 `e6013f8ad641bd99061f7db82bceeb705f8c150a` (TT-77 / PR78). ACL-1750 advances
 the source to reviewed, merged Master `d24db185ebdff2cadcecf89f5b28061d6cd19564`
 (MR-16 / PR17) and Tracker `d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76`
-(TT-79 / PR80), including the instruction-only admission contract. Both ACL
+(TT-79 / PR80), including the instruction-only admission contract. ACL-1753 selects
+reviewed merged Master `fe9241152cb466dfbafa3bcd3070f877c1b1b9c4` (MR-18 / PR19)
+and Tracker `086aaa98f2e807d640105be2929714d0b7331f21` (TT-85 / PR86), adding the
+explicit preserved-closed-handoff cutover option without changing live approval guards.
+Both ACL
 execution objects explicitly select schema 2, implementation_limit 5,
 review_limit 1 and batch_limit 5. The shared skill was installed locally from
-the latter immutable Master source with a backup; each other agent environment needs
+Master `d24db185ebdff2cadcecf89f5b28061d6cd19564` with a backup; each other agent environment needs
 its own installation. Installing the skill does not migrate project state.
 
 Read the pinned Tracker's `docs/BATCH_INTEGRATION.md` and `guide` for exact commands.
@@ -169,9 +175,9 @@ authors, task scope and handoffs; none is automatically approved or completed.
    into stage under that old config, verify the actual exact-stage Windows package
    mechanism. Verify the shared-service publication in step 3 before main promotion;
    then promote unchanged into main and complete its normal old-policy
-   Merged handoff. The separately reviewed ACL-1750 automation/policy source follows
-   its own ordinary old-policy stage/main/Merged route with the final compatible
-   shared pins before the coordinated live migration. Original queued work stays
+   Merged handoff. ACL-1750 completed its separate old-policy source handoff; the
+   required ACL-1753 compatibility refresh also completes its own ordinary
+   old-policy stage/main/Merged route before coordinated live migration. Original queued work stays
    idle and preserved through the cutover.
    The new head config is prepared but cannot mutate old v1 state as v2.
 3. Publish the reviewed compatible shared Tracker service through its maintained
@@ -181,9 +187,15 @@ authors, task scope and handoffs; none is automatically approved or completed.
    a reviewed Tracker companion; config merge alone is not live-board proof.
 4. Verify no active Worker/Reviewer, unpromoted stage, active batch/intake or unrecorded
    Review. Save a private before-state snapshot. From the reviewed merged ACL checkout
-   and exact new engine, preview `execution migrate --preserve-review-queue`, inspect
-   its exact retained queue, then apply. It supports only unchanged-capacity v1->v2
-   with ready durable one-task handoffs. Never clear, edit or overwrite state to pass.
+   and exact new engine, preview both explicit preservation flags:
+   `execution migrate --preserve-review-queue --preserve-closed-review-handoffs`.
+   Inspect its exact retained queue and `preserved_closed_review_handoffs` pairs,
+   then apply the same options. The second flag requires the first. It supports only
+   unchanged-capacity v1->v2 with verified durable one-task handoffs, including the
+   original closed unmerged PR 407 for Task 406 and PR 439 for Task 433. These stay
+   unfinished; no Issue/PR is reopened or automatically approved. Review acquisition,
+   approval and batch admission still require a current open ready source. Never
+   clear, edit or overwrite state to pass.
 5. Compare private before/after state: only execution policy/new approval-batch sections
    and migration history may change. Preserve Issues/labels/source PRs/authors/handoffs,
    delivery/history, six modules, 71 aliases, +1000 IDs and the 74-task manifest.
@@ -192,9 +204,10 @@ authors, task scope and handoffs; none is automatically approved or completed.
 6. Verify a fresh digest-covered shared ACL board with Approved, limit5, distinct
    ownership, retained queue and correct package/delivery projection. Browser verification
    is excluded by the existing owner decision; report server-side snapshot evidence
-   and preserved access controls accurately. Only then claim the parent and its bounded
-   real second task using genuine separate Workers, perform the reviewed two-task batch,
-   and record actual receipts/live-board proof. Parent remains unfinished until then.
+   and preserved access controls accurately. The owner selected the shortest cutover
+   and cancelled extra tools and demonstration work. Do not create such tasks or
+   manufacture a real-batch receipt; retain unresolved scope in the parent and resume
+   useful application work only under its separate authorization.
 
 The genuine pristine upstream template baseline stays legacy at its recorded inputs;
 v2 is an explicit local opt-in. Draft standard validation remains because VERSION1.0.0
