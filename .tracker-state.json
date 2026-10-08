@@ -6891,22 +6891,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "747": {
-        "actor": "Worker-BATCH01",
-        "session": "acl_batch_root_20261008",
-        "coordinator": "Coordinator-BATCH01",
-        "branch": "codex/acl-1747-approved-batches",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-batch-integration",
-        "id": "8a5ccb77bf7f4656bcc3cd14088039fc",
-        "issue": 747,
-        "state": "handoff",
-        "started_at": "2026-10-08T12:44:58+00:00",
-        "from_status": "status:todo",
-        "pr": 748,
-        "report": "ACL-1747 corrected source handoff.\n\nExact source head: 9ca195df3e6f580e66a0f537571e95cafb76cff9; original main48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496 and stage49dc50a1139d7f1e62d1556a33ee6500d94f9788 are the reviewed baseline (same tree).\n\nThe initial independent P1 was returned normally; the actual Worker reacquired the old-v1 implementation claim before edits. Replace append recovery with fresh detached baseline/current-tip composition, preserved local and atomic remote evidence, exact ownership/head leases, repeated rebuild and unpublished partial-conflict recovery. No engine weakening or source/permanent-branch rewrite. Tests: final14 actual-Git cases pass against the pinned portable composition,18 batch classifier cases pass,200 affected CI/adoption regressions pass; secret scan and diff checks pass. Initial full hosted matrix/Windows installer was green on the superseded head; corrected-head hosted CI is required anew.\n\nReviewed shared pins/explicit5-1-5 policy, Approved, preserved genuine template lineage/namespace/history/delivery fingerprint and package/advertising boundaries stay intact. Isolated runtime smoke/all46 packaging unit checks passed before this tooling correction; no application/package implementation changed in this correction. ParentACL-1566 retains actual migration/fresh shared board/real two-task batch proof. The source child follows its genuine old-v1 route; live server publication awaits explicit owner approval and blocks main config promotion/state activation. No stable release, employee installation or live pilot.\n\nThe second independent return reproduced a failed detached build whose manifest superseded the unchanged published candidate. Actual author reclaimed before edits; matching now requires a retained same-member exact pinned composition for that previous head. The newest history entry is insufficient. Actual failed-build/author-fix/refresh/retry regression passes while preserving stage and prior worktrees; unknown old implementation still fails. Corrected-head hosted CI and final independent approval are pending."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -9946,7 +9931,7 @@
             "session": "acl_batch_root_20261008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-BATCH01",
         "coordinator": "Coordinator-BATCH01",
         "handoff": {
@@ -9955,16 +9940,16 @@
           "coordinator": "Coordinator-BATCH01",
           "branch": "codex/acl-1747-approved-batches",
           "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-batch-integration",
-          "id": "38b53df5ad794b28a49779476579e9e5",
+          "id": "8a5ccb77bf7f4656bcc3cd14088039fc",
           "issue": 747,
           "state": "handoff",
-          "started_at": "2026-10-08T12:20:58+00:00",
+          "started_at": "2026-10-08T12:44:58+00:00",
           "from_status": "status:todo",
           "pr": 748,
-          "report": "ACL-1747 corrected source handoff.\n\nExact source head: dfb6cd587ac73507b16c494bd47bca18cd0ce993; original main48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496 and stage49dc50a1139d7f1e62d1556a33ee6500d94f9788 are the reviewed baseline (same tree).\n\nThe initial independent P1 was returned normally; the actual Worker reacquired the old-v1 implementation claim before edits. Replace append recovery with fresh detached baseline/current-tip composition, preserved local and atomic remote evidence, exact ownership/head leases, repeated rebuild and unpublished partial-conflict recovery. No engine weakening or source/permanent-branch rewrite. Tests: final13 actual-Git cases pass against the pinned portable composition,18 batch classifier cases pass,200 affected CI/adoption regressions pass; secret scan and diff checks pass. Initial full hosted matrix/Windows installer was green on the superseded head; corrected-head hosted CI is required anew.\n\nReviewed shared pins/explicit5-1-5 policy, Approved, preserved genuine template lineage/namespace/history/delivery fingerprint and package/advertising boundaries stay intact. Isolated runtime smoke/all46 packaging unit checks passed before this tooling correction; no application/package implementation changed in this correction. ParentACL-1566 retains actual migration/fresh shared board/real two-task batch proof. The source child follows its genuine old-v1 route; live server publication awaits explicit owner approval and blocks main config promotion/state activation. No stable release, employee installation or live pilot."
+          "report": "ACL-1747 corrected source handoff.\n\nExact source head: 9ca195df3e6f580e66a0f537571e95cafb76cff9; original main48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496 and stage49dc50a1139d7f1e62d1556a33ee6500d94f9788 are the reviewed baseline (same tree).\n\nThe initial independent P1 was returned normally; the actual Worker reacquired the old-v1 implementation claim before edits. Replace append recovery with fresh detached baseline/current-tip composition, preserved local and atomic remote evidence, exact ownership/head leases, repeated rebuild and unpublished partial-conflict recovery. No engine weakening or source/permanent-branch rewrite. Tests: final14 actual-Git cases pass against the pinned portable composition,18 batch classifier cases pass,200 affected CI/adoption regressions pass; secret scan and diff checks pass. Initial full hosted matrix/Windows installer was green on the superseded head; corrected-head hosted CI is required anew.\n\nReviewed shared pins/explicit5-1-5 policy, Approved, preserved genuine template lineage/namespace/history/delivery fingerprint and package/advertising boundaries stay intact. Isolated runtime smoke/all46 packaging unit checks passed before this tooling correction; no application/package implementation changed in this correction. ParentACL-1566 retains actual migration/fresh shared board/real two-task batch proof. The source child follows its genuine old-v1 route; live server publication awaits explicit owner approval and blocks main config promotion/state activation. No stable release, employee installation or live pilot.\n\nThe second independent return reproduced a failed detached build whose manifest superseded the unchanged published candidate. Actual author reclaimed before edits; matching now requires a retained same-member exact pinned composition for that previous head. The newest history entry is insufficient. Actual failed-build/author-fix/refresh/retry regression passes while preserving stage and prior worktrees; unknown old implementation still fails. Corrected-head hosted CI and final independent approval are pending."
         },
         "pr": 748,
-        "queued_at": "2026-10-08T12:36:06+00:00",
+        "queued_at": "2026-10-08T12:49:23+00:00",
         "review_report": "Independent source review: ACL-1747 / Issue747 / PR748\n\nVerdict: CHANGES REQUESTED for the source candidate. This is a separate non-implementing review; no source files, stage/main branches, installations or live state were changed.\n\nReviewed immutable head: dfb6cd587ac73507b16c494bd47bca18cd0ce993\nActual PR base: 49dc50a1139d7f1e62d1556a33ee6500d94f9788\nMain baseline: 48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496\nThe PR base and main baseline have identical trees. The working checkout is clean. Reviewed the full Issue747 source scope, linked parent Issue566, reading maps and entire source diff, with renewed inspection of all correction files.\n\nActionable finding [P2]: select the retained manifest that matches the exact previous candidate when retrying an unsuccessful rebuild.\nLocation: scripts/acl_batch.py lines 86-97 (particularly old = snapshots[-1]).\nThe helper always chooses the newest retained source manifest to validate the previous integration head. A published candidate can remain unchanged through more than one refresh when a detached rebuild conflicts before publication. After the author fixes the conflict and another refresh appends the failed build's manifest, that newest manifest no longer describes the still-published candidate. The next supported --rebuild retry rejects legitimate previous source commits as unapproved work and cannot recover the held batch. This matters after stage entry, when cancellation or replacing the held member set is forbidden.\n\nIndependent actual Git reproduction on the immutable head: assemble and publish the original two-task candidate; refresh approved author tips; update both independently approved tips to conflict in app.py; run a fresh detached --rebuild, which aborts its own merge and leaves the published original candidate unchanged; append the next refresh's exact previous manifest after an author reconciliation; retry --rebuild with the unchanged published head. First rebuild reports the expected merge conflict; second retry reports: Integration branch contains work outside the approved source tips. No source refs or permanent branches were rewritten by the experiment. Existing successful repeated-rebuild and unpublished-original-conflict tests do not cover this failed-detached-rebuild path.\n\nRecommended bounded fix: retain/select an exact manifest validated against the previous head rather than assuming the newest history entry was published. Preserve same ordered membership, pinned composition, rejection of foreign implementation, archive/ref leases and old worktrees. Add an actual Git regression for failed detached rebuild -> author fix -> second refresh -> successful retry, including the unchanged remote candidate/evidence and full pinned composition of the new result.\n\nResolved prior finding: fresh detached assembly replaces the inadmissible append recovery. Existing recovery tests prove exact pinned composition for initial/refreshed candidates, successful repeated publication, unpublished partial initial assembly, unknown local drift rejection, old unapproved implementation rejection, exact generated-ref/expected-absent evidence leases, and atomic failure without partial remote backup publication.\n\nIndependent checks on this head: 103 affected tests passed in 81.04 seconds (test_acl_batch, test_acl_batch_ci_scope, test_master_adoption, test_ci_layout, test_acl_ci_workflows), including 13 actual Git cases and 18 classifier cases; pinned standard validation with allow-draft passed with the expected unpublished-standard setup limitation; secret scan passed; diff-check passed. Exact helper closure, descriptor/config pins and preserved project/history/delivery fingerprint were reviewed. The new correction changes only scripts/acl_batch.py, tests/test_acl_batch.py and docs/repository/BATCH_INTEGRATION.md relative to the previously reviewed initial candidate.\n\nThe selected pins remain Master cd79a7699cb108c517e5729590a57cab85ab1083 and Tracker e6013f8ad641bd99061f7db82bceeb705f8c150a. Source schema2 opt-in agrees at implementation_limit5, review_limit1, batch_limit5. Genuine legacy template ancestry, six modules, 71 aliases, +1000 namespace, 74 historical completions, fingerprint, nine queued handoffs, draft adoption and local package/backup/recovery/advertising controls remain preserved. The supported unchanged-capacity queue-preserving migration and real two-task proof remain with parent Issue566 after the child's old-v1 stage/main/Merged route.\n\nValidation limits: corrected-head full hosted CI/Windows installer checks were still running during review. Its initial tracker-link failure happened while the real author claim was In Progress; the author handoff is now Review and the failed linkage run was rerun by the Coordinator. No successful corrected-head full CI, stage admission/verification, main promotion, shared-service publication, live migration or consumer activation is attested by this report. Source review alone does not approve those later gates.\n\nReview ownership: the genuine old-v1 Reviewer lane was independently reacquired after the real Worker handoff using the reviewed TT-73 bounded operator and unchanged genuine v1 policy. This finding requires returning that lane before the author claims and edits. Private lane identity and credentials are retained separately and omitted here."
       }
     },
@@ -13049,7 +13034,8 @@
       651,
       710,
       728,
-      739
+      739,
+      747
     ],
     "review": null,
     "history": [
@@ -18353,6 +18339,13 @@
         "at": "2026-10-08T12:44:58+00:00",
         "issue": 747,
         "claim": "8a5ccb77bf7f4656bcc3cd14088039fc",
+        "actor": "Worker-BATCH01"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T12:49:23+00:00",
+        "issue": 747,
+        "pr": 748,
         "actor": "Worker-BATCH01"
       }
     ],
