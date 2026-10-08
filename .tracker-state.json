@@ -6900,9 +6900,11 @@
         "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-batch-integration",
         "id": "38b53df5ad794b28a49779476579e9e5",
         "issue": 747,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-08T12:20:58+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 748,
+        "report": "ACL-1747 corrected source handoff.\n\nExact source head: dfb6cd587ac73507b16c494bd47bca18cd0ce993; original main48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496 and stage49dc50a1139d7f1e62d1556a33ee6500d94f9788 are the reviewed baseline (same tree).\n\nThe initial independent P1 was returned normally; the actual Worker reacquired the old-v1 implementation claim before edits. Replace append recovery with fresh detached baseline/current-tip composition, preserved local and atomic remote evidence, exact ownership/head leases, repeated rebuild and unpublished partial-conflict recovery. No engine weakening or source/permanent-branch rewrite. Tests: final13 actual-Git cases pass against the pinned portable composition,18 batch classifier cases pass,200 affected CI/adoption regressions pass; secret scan and diff checks pass. Initial full hosted matrix/Windows installer was green on the superseded head; corrected-head hosted CI is required anew.\n\nReviewed shared pins/explicit5-1-5 policy, Approved, preserved genuine template lineage/namespace/history/delivery fingerprint and package/advertising boundaries stay intact. Isolated runtime smoke/all46 packaging unit checks passed before this tooling correction; no application/package implementation changed in this correction. ParentACL-1566 retains actual migration/fresh shared board/real two-task batch proof. The source child follows its genuine old-v1 route; live server publication awaits explicit owner approval and blocks main config promotion/state activation. No stable release, employee installation or live pilot."
       }
     },
     "tasks": {
