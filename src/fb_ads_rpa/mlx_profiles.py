@@ -377,7 +377,10 @@ def ad_account_id_for(profile_id: str) -> str:
     if hist is None:
         return ""
 
-    tmp = _os.path.join(_tempfile.gettempdir(), f"acl_hist_{pid[:8]}.db")
+    # ACL-1697: свой временный файл на каждый вызов — параллельные отрисовки
+    # дашборда не должны затирать копию друг друга.
+    tmp = _os.path.join(
+        _tempfile.gettempdir(), f"acl_hist_{pid[:8]}_{_os.getpid()}_{_os.urandom(4).hex()}.db")
     try:
         # The live file is locked by the running browser; work on a copy.
         _shutil.copyfile(hist, tmp)

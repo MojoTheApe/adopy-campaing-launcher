@@ -515,6 +515,11 @@ def current_campaign() -> str:
 # должен дописывать строки в уже закрытое задание.
 _clock = time.monotonic
 _LAST_BY_JOB: dict[str, tuple[float, str]] = {}
+#: ACL-1702: задание → номер его прогона (сторож пишет из своего потока, где
+#: номера прогона нет: он в ContextVar потока задания).
+_RUN_BY_JOB: dict[str, str] = {}
+#: ACL-1702: строки сторожа задания — тишину задания они не сбрасывают.
+WATCHER_STEPS = frozenset({"step_stuck", "tab_unblocked", "tab_unblock_skipped"})
 _ABANDONED: set[str] = set()
 _JOBS_LOCK = threading.Lock()
 _JOBS_MAX = 256
@@ -530,6 +535,12 @@ def last_activity(job_id: str) -> tuple[float, str] | None:
         return _LAST_BY_JOB.get(str(job_id))
 
 
+def last_run_id(job_id: str) -> str:
+    """Номер прогона последней строки задания (ACL-1702) — или ""."""
+    with _JOBS_LOCK:
+        return _RUN_BY_JOB.get(str(job_id), "")
+
+
 def abandon_job(job_id: str) -> None:
     """Задание брошено: строки его потока больше не пишутся."""
     with _JOBS_LOCK:
@@ -541,6 +552,7 @@ def abandon_job(job_id: str) -> None:
 def forget_job(job_id: str) -> None:
     with _JOBS_LOCK:
         _LAST_BY_JOB.pop(str(job_id), None)
+        _RUN_BY_JOB.pop(str(job_id), None)
 
 
 def beat() -> None:
@@ -553,11 +565,15 @@ def beat() -> None:
         _LAST_BY_JOB[job] = (_clock(), seen[1] if seen else "")
 
 
-def _touch_job(job_id: str, step: str) -> None:
+def _touch_job(job_id: str, step: str, run_id: str = "") -> None:
     with _JOBS_LOCK:
         _LAST_BY_JOB[job_id] = (_clock(), step)
         while len(_LAST_BY_JOB) > _JOBS_MAX:
             _LAST_BY_JOB.pop(next(iter(_LAST_BY_JOB)))
+        if run_id:
+            _RUN_BY_JOB[job_id] = run_id
+            while len(_RUN_BY_JOB) > _JOBS_MAX:
+                _RUN_BY_JOB.pop(next(iter(_RUN_BY_JOB)))
 
 
 def record(
@@ -579,8 +595,9 @@ def record(
             if _job in _ABANDONED:
                 return
             # Сама `step_stuck` тишину не сбрасывает: сигнал один на простой.
-            if step != "step_stuck":
-                _touch_job(_job, step)
+            # ACL-1702: и строки сторожа вкладки (`WATCHER_STEPS`) тоже.
+            if step not in WATCHER_STEPS:
+                _touch_job(_job, step, run_id or current_run_id())
     except Exception:
         pass
     try:

@@ -451,7 +451,11 @@ def build_trend(
     def _agg(sub: pd.DataFrame) -> pd.DataFrame:
         return (
             sub.groupby(combo_cols, dropna=False)
-            .agg(Deposits=("# FTDs", "sum"), Spend=("$ Spend", "sum"))
+            .agg(
+                Deposits=("# FTDs", "sum"),
+                Leads=("# Leads", "sum"),
+                Spend=("$ Spend", "sum"),
+            )
             .reset_index()
         )
 
@@ -459,11 +463,15 @@ def build_trend(
     overall = _agg(df_c)
 
     merged = overall.merge(
-        recent.rename(columns={"Deposits": "RecentDep", "Spend": "RecentSpend"}),
+        recent.rename(columns={
+            "Deposits": "RecentDep", "Spend": "RecentSpend", "Leads": "RecentLeads",
+        }),
         on=combo_cols,
         how="left",
     )
     merged["RecentDep"] = merged["RecentDep"].fillna(0).astype(int)
+    merged["RecentLeads"] = merged["RecentLeads"].fillna(0)
+    merged["RecentSpend"] = merged["RecentSpend"].fillna(0.0)
 
     def _row_to_dict(r) -> Dict[str, Any]:
         full_creative = _display_value(r.get("Creative"))
@@ -474,6 +482,12 @@ def build_trend(
             "creative": full_creative[:40],  # display: truncated to 40 chars
             "deposits_total": _safe_int(r.get("Deposits")),
             "deposits_recent": _safe_int(r.get("RecentDep")),
+            # ACL-1652: все шесть метрик за период и за последние дни. Счётчики,
+            # а не готовые CPL/CPA/CR: их считает metric_columns.ratios.
+            "spend_total": _safe_float(r.get("Spend")),
+            "leads_total": _safe_int(r.get("Leads")),
+            "spend_recent": _safe_float(r.get("RecentSpend")),
+            "leads_recent": _safe_int(r.get("RecentLeads")),
             "aggregate_key": {
                 "section": "trend",
                 "country": country,

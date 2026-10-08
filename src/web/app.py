@@ -59,6 +59,7 @@ from src.web.cache import (
 )
 from concurrent.futures import ThreadPoolExecutor
 from src.analysis_agent.money_format import fmt_usd, fmt_currency, fmt_summary_amount
+from src.analysis_agent import metric_columns
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
 from src.creative_agent.audience_builder import build_audience_profile
 from src.creative_agent.stats_correlator import correlate
@@ -877,6 +878,10 @@ def _build_account_map_view(
     available = _with_assets(buckets["shown"])
     return {
         "countries": countries,
+        # ACL-1654: строка Totals под странами.
+        "totals": _amap_totals(countries, live),
+        # ACL-1656: «Campaign managers» внизу Home.
+        "cm_section": _amap_cm_section(report),
         "available": available,
         "available_inactive": _with_assets(buckets["inactive"]),
         "available_hidden": buckets["hidden"],
@@ -897,6 +902,95 @@ def _build_account_map_view(
         "span": span,
     }
 
+
+
+def _amap_totals(countries: list[dict], live: dict) -> dict:
+    """Итог по строкам стран карты (ACL-1654).
+
+    Spend, Leads и FTDs — суммы книжных тоталов стран; CPL, CPA и CR считает
+    шаблон по этим суммам (`metric_values`), а не усредняет их по странам.
+
+    `read` — суммарное чтение кабинетов, и считается оно по *различным*
+    аккаунтам: один кабинет может быть привязан к нескольким странам, а
+    сводка страны показывает весь его спенд, так что сложение по странам
+    посчитало бы его дважды. Складывается только когда все прочитанные
+    кабинеты в одной валюте (решение владельца 06.10); иначе None — прочерк.
+    """
+    spend = leads = deposits = 0.0
+    for mc in countries:
+        bk = mc.get("book") or {}
+        spend += float(bk.get("spend") or 0)
+        leads += float(bk.get("leads") or 0)
+        deposits += float(bk.get("deposits") or 0)
+    seen: set[str] = set()
+    sums: dict[str, float] = {}
+    mixed = False
+    read_ok = 0
+    for mc in countries:
+        for r in mc.get("rows") or []:
+            acc = r.get("account")
+            if not acc or acc in seen:
+                continue
+            seen.add(acc)
+            lr = (live or {}).get(acc) or {}
+            if lr.get("state") != "ok" or lr.get("spend") is None:
+                continue
+            try:
+                amount = float(lr["spend"])
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(amount):
+                continue
+            read_ok += 1
+            cur = str(lr.get("currency") or "").strip()
+            if not re.fullmatch(r"[A-Za-z]{3}", cur):
+                mixed = True  # знак без кода не говорит, какая это валюта
+                continue
+            sums[cur.upper()] = sums.get(cur.upper(), 0.0) + amount
+    read = None
+    if sums and not mixed and len(sums) == 1:
+        (cur, amount), = sums.items()
+        read = {"currency": cur, "spend": amount}
+    return {
+        "spend": spend, "leads": int(leads), "deposits": int(deposits), "read": read,
+        # для подсказки: сколько кабинетов прочитано из скольких и почему «—»
+        "read_count": read_ok, "accounts": len(seen), "mixed": bool(mixed or len(sums) > 1),
+    }
+
+
+def _amap_cm_section(report: dict) -> list[dict]:
+    """Менеджеры по странам для секции внизу Home (ACL-1656).
+
+    Те же строки, что у CM Comparison в Manage (`cm_comparison`): один источник,
+    поэтому две таблицы не разойдутся. Строка страны — сумма *всех* менеджеров
+    (решение владельца 06.10: это сравнение, а не «мои числа»), CPL/CPA/CR из
+    этих сумм считает шаблон. Текущий менеджер помечен `is_me`.
+    """
+    out: list[dict] = []
+    for c in (report or {}).get("countries", []):
+        cms = c.get("cm_comparison") or []
+        if not cms:
+            continue
+        rows = [
+            {
+                "cm": (r.get("cm") or "").strip() or "(unknown)",
+                "is_me": bool(r.get("is_me")),
+                "spend": float(r.get("spend") or 0),
+                "leads": int(r.get("leads") or 0),
+                "deposits": int(r.get("deposits") or 0),
+            }
+            for r in cms
+        ]
+        rows.sort(key=lambda r: (not r["is_me"], -r["spend"], r["cm"].lower()))
+        out.append({
+            "country": c.get("country") or "",
+            "spend": sum(r["spend"] for r in rows),
+            "leads": sum(r["leads"] for r in rows),
+            "deposits": sum(r["deposits"] for r in rows),
+            "rows": rows,
+        })
+    out.sort(key=lambda x: (-x["spend"], x["country"].lower()))
+    return out
 
 
 def _live_spend(date_from: str = "", date_to: str = "") -> dict[str, dict]:
@@ -981,6 +1075,46 @@ def _sidebar_countries(report: dict, amap: dict) -> list[dict]:
     return rows
 
 
+_HISTORY_ACT_CACHE: dict[str, tuple[float, str]] = {}
+
+
+def _history_act_note(entry) -> str:
+    """ACL-1697: заметка, если кабинет в карте не тот, где профиль работал.
+
+    `mlx_profiles.ad_account_id_for` читает последний кабинет из истории
+    браузера профиля (файл, без сети). Расхождение с картой — не ошибка, но
+    повод проверить: робот при запуске сверит открытый кабинет и остановится
+    на чужом (`wrong_ad_account`). Результат кэшируется на 2 минуты —
+    чтение копирует файл истории.
+    """
+    if not entry:
+        return ""
+    want = (entry.ad_account_id or "").strip()
+    pid = (entry.profile_id or "").strip()
+    if not want or not pid:
+        return ""
+    import time as _time
+
+    now = _time.time()
+    hit = _HISTORY_ACT_CACHE.get(pid)
+    if hit and now - hit[0] < 120:
+        seen = hit[1]
+    else:
+        try:
+            from src.fb_ads_rpa import mlx_profiles
+
+            seen = mlx_profiles.ad_account_id_for(pid) or ""
+        except Exception:
+            seen = ""
+        _HISTORY_ACT_CACHE[pid] = (now, seen)
+    digits = lambda v: "".join(ch for ch in str(v) if ch.isdigit())
+    if not seen or digits(seen) == digits(want):
+        return ""
+    return (f"The most visited account in this profile's recent history is {seen}, but the map has {want}. "
+            "If its Facebook user has no access to the map's account, the robot will stop "
+            "with wrong_ad_account - check the ad account id on the Accounts page.")
+
+
 def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     """Return preflight info per account:
     {acc_label: {link, link_status, missing_map_fields: [str], has_map_entry}}
@@ -1027,6 +1161,7 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
             "has_map_entry": entry is not None,
             "prefill": prefill,
             "page_name": page_name,
+            "ad_account_note": _history_act_note(entry),
         }
     return result
 
@@ -1194,6 +1329,15 @@ templates.env.filters["anchor_slug"] = _anchor_slug
 templates.env.filters["fmt_usd"] = fmt_usd
 templates.env.filters["fmt_currency"] = fmt_currency
 templates.env.filters["fmt_summary_amount"] = fmt_summary_amount
+# ACL-1652: шесть метрик одним кодом. Макросы `_metrics.html` берут отсюда и
+# заголовки, и ячейки — таблицы не могут разойтись друг с другом.
+templates.env.globals["metric_values"] = metric_columns.metric_values
+# Owner, 2026-10-07: the "Copy for group" button and its hint under a red account
+# status are hidden for now. True brings them back (template: _account_map_country.html).
+SHOW_COPY_FOR_GROUP = False
+templates.env.globals["SHOW_COPY_FOR_GROUP"] = SHOW_COPY_FOR_GROUP
+templates.env.globals["METRIC_HEADERS"] = metric_columns.METRIC_HEADERS
+templates.env.globals["HOME_ACCOUNT_HEADERS"] = metric_columns.HOME_ACCOUNT_HEADERS
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 templates.env.filters["creative_type"] = lambda name: parse_creative_from_ad_title(name)[0]
 templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title(name)[1]
@@ -1223,15 +1367,16 @@ templates.env.filters["geo_language"] = _geo_language
 # table headers. The detail <td colspan> must match the parent table's
 # column count or the layout breaks.
 _NCOLS_BY_SECTION = {
-    "cm_comparison": 8,   # CM, Dep, Leads, Spend, Net, CPA, ROI, (drill col)
-    "trend": 6,           # offer, device, interest, creative, deposits_total/recent
-    "top_combos": 10,     # offer, device, interest, age, creative, category, deposits, leads, spend, (builder col)
-    "targeting": 5,       # interest, deposits, leads, spend, cpa
-    "creatives": 5,       # ad_title, deposits, leads, spend, cpa
-    "optimization": 7,    # adset, spend, leads, ftds, cpl, cpa, reason
+    # ACL-1652: шесть метрик в каждой таблице, поэтому и числа новые.
+    "cm_comparison": 10,  # CM, Spend, Leads, FTDs, CPL, CPA, CR, Net, ROI, (drill col)
+    "trend": 10,          # offer, device, interest, creative, six metrics
+    "top_combos": 7,      # combo, six metrics
+    "targeting": 7,       # target, six metrics
+    "creatives": 8,       # creative, text, six metrics
+    "optimization": 8,    # adset, six metrics, reason
 }
 
-app = FastAPI(title="Adopy Campaigns Launcher")
+app = FastAPI(title="Adopy Campaign Manager")
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
@@ -1597,7 +1742,7 @@ async def acl_update_apply() -> JSONResponse:
         return JSONResponse(
             {
                 "ok": False,
-                "error": "ACL was not started by its launcher, so nothing would "
+                "error": "ACM was not started by its launcher, so nothing would "
                          "bring it back. Start it from the desktop shortcut and "
                          "try again.",
             },
@@ -1610,7 +1755,7 @@ async def acl_update_apply() -> JSONResponse:
             {
                 "ok": False,
                 "error": f"{busy} campaign job(s) still running. Updating restarts "
-                         "ACL, which would abandon them half-built.",
+                         "ACM, which would abandon them half-built.",
             },
             status_code=409,
         )
@@ -1654,7 +1799,7 @@ async def _apply_release_update(active_jobs) -> JSONResponse:
         restarting = True
         return JSONResponse({"ok": True, "target": manifest["version"]})
     except (release_updates.UpdateError, OSError, ValueError, TypeError, KeyError) as exc:
-        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACL is still running."
+        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACM is still running."
         return JSONResponse({"ok": False, "error": message}, status_code=400)
     finally:
         # A successful handoff deliberately keeps the reservations until exit.
@@ -3879,13 +4024,17 @@ def account_attribution(
         return JSONResponse({"ok": False, "error": f"Workbook numbers failed: {exc}"}, status_code=500)
 
     def _shown(m: dict) -> dict:
+        # ACL-1652: те же шесть значений, что в таблицах; прочерк — это null,
+        # его рисует сам экран (`nodata`). CR 0.0% при лидах — настоящее число.
+        spend, _l, _f, cpl, cpa, cr = metric_columns.metric_values(m["spend"], m["leads"], m["deposits"])
+        dash = metric_columns.DASH
         return {
-            "spend": fmt_usd(m["spend"]),
+            "spend": spend,
             "leads": m["leads"],
             "deposits": m["deposits"],
-            "cpl": fmt_usd(m["cpl"]) if m["cpl"] else None,
-            "cpa": fmt_usd(m["cpa"]) if m["cpa"] else None,
-            "cr": f"{m['cr']:.1f}%" if m["cr"] else None,
+            "cpl": None if cpl == dash else cpl,
+            "cpa": None if cpa == dash else cpa,
+            "cr": None if cr == dash else cr,
         }
 
     return JSONResponse({
@@ -4699,7 +4848,7 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     request_id = (form.get("request_id") or "").strip()
     if activate:
         return JSONResponse(
-            {"error": "Live activation is disabled: ACL creates draft-only campaigns."},
+            {"error": "Live activation is disabled: ACM creates draft-only campaigns."},
             status_code=403,
         )
     if not user_confirmed:

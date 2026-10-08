@@ -301,3 +301,22 @@ def test_update_step_outlives_the_update_cycle_script_wait():
     step = next(s for s in installer_job()["steps"] if s["name"] == name)
     limit_s = step["timeout-minutes"] * 60
     assert limit_s >= STEP_MAX[name] + max(waits) + 60
+
+
+# --- ACL-1649: no automatic whole-workflow retries ----------------------------------------------------
+
+import re  # noqa: E402
+
+RETRY = re.compile(r"gh\s+run\s+rerun|nick-fields/retry|retry-action|run_attempt\s*<|rerun", re.I)
+
+
+@pytest.mark.parametrize("name", ["ci.yml", "windows-installer.yml", "release.yml", "tracker-link.yml", "delivery-check.yml"])
+def test_no_workflow_reruns_or_retries_itself(name):
+    text = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
+    assert not RETRY.search(text), name
+    assert "workflow_run" not in workflow(name)[True]          # nothing chains full workflows after each other
+
+
+def test_the_scope_job_runs_the_chain_tests_too():
+    run = workflow("ci.yml")["jobs"]["scope"]["steps"][-1]["run"]
+    assert "tests/test_acl_ci_chain.py" in run and "tests/test_acl_ci_minutes.py" in run

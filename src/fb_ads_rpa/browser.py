@@ -1190,6 +1190,15 @@ def ensure_editor_window(page, section: str) -> bool:
             and inner[0] >= MIN_EDITOR_WIDTH
         )
 
+    # ACL-1673 (7641d7b3d86a): на ушедшей вкладке ширину окна не спрашиваем и
+    # окно не двигаем — CDP-вызовы зря ждут, а пустые границы читались как
+    # «окно слишком узкое». Одна строка с причиной, без `window_too_small`.
+    from src.fb_ads_rpa.page_liveness import tab_gone
+
+    if tab_gone(page):
+        rt.record("window_bounds", False, note="page_closed", diag={"section": section})
+        return False
+
     before = rt.window_state(page)
     after = before
     if not readable(before):
@@ -1286,6 +1295,15 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
     _pw_tls.playwright = pw
     try:
         browser = pw.chromium.connect_over_cdp(cdp_url)
+        try:
+            # ACL-1702: сторож вкладки задания откроет к этому браузеру СВОЁ
+            # соединение CDP — адрес запоминаем за потоком задания сразу после
+            # подключения, до первых вызовов страницы (они тоже могут зависнуть).
+            from src.fb_ads_rpa import tab_watchdog
+
+            tab_watchdog.note_endpoint(cdp_url)
+        except Exception:
+            pass
         restored = [d for d in _unminimize_before_attach(browser) if "window" in d]
         if browser.contexts:
             context = browser.contexts[0]
