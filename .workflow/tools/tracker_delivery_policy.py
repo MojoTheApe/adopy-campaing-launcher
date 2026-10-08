@@ -165,7 +165,19 @@ def pr_tree(request, root, pr):
     return tree(request, root, pr['merge_commit_sha'] if pr.get('merged') else pr['head']['sha'])
 
 
-def route(config, pr):
+def process_module():
+    try:
+        from . import process_instructions
+    except ImportError:
+        import tracker_process_instructions as process_instructions
+    return process_instructions
+
+
+def route(config, pr, request=None):
+    # Only an authoritative Git proof can choose this exception. Ordinary callers
+    # without a request retain their previous delivery route.
+    if request and 'process_instructions' in config and process_module().classify(request, config, pr):
+        return 'process'
     value = policy(config)
     main = config['project']['base_branch']
     if not value:
@@ -199,8 +211,9 @@ def route(config, pr):
     return 'main'
 
 
-def naming(config, pr, numbers):
-    if not policy(config):
+def naming(config, pr, numbers, request=None):
+    direction = route(config, pr, request) if policy(config) or 'process_instructions' in config else None
+    if not policy(config) and direction != 'process':
         return
     project = config['project']
     prefix = project['id_prefix']
@@ -208,13 +221,13 @@ def naming(config, pr, numbers):
     title = re.match(r'^\[([^]]+)\]\s+\S', pr.get('title', ''))
     if not title or set(x.strip() for x in title[1].split(',')) != set(ids):
         raise ValueError('PR title must start with all linked IDs: [ID, ID] Summary')
-    if batch_mode(config) and route(config, pr) == 'stage':
+    if batch_mode(config) and direction == 'stage':
         if not re.fullmatch(r'codex/batch-[a-f0-9]{32}', pr['head']['ref']):
             raise ValueError('Stage accepts only a reserved codex/batch-<ID> candidate')
         reject_closing(pr.get('body', '') + '\n' + pr.get('title', ''))
         return
     prefix = '(?:work|codex)/' if execution_policy(config) else 'codex/'
-    if route(config, pr) != 'promotion' and not any(
+    if direction != 'promotion' and not any(
             re.fullmatch(prefix + re.escape(i.lower()) + r'-[a-z0-9]+(?:-[a-z0-9]+)*', pr['head']['ref']) for i in ids):
         raise ValueError('Working branch must use the configured ticket naming convention')
     reject_closing(pr.get('body', '') + '\n' + pr.get('title', ''))
@@ -235,13 +248,27 @@ def merge_base(request, root, pr):
 
 def summary(receipt):
     """Minimal completion projection, excluding reports, environment and history."""
-    if set(receipt) <= {'policy', 'state', 'admitted', 'verified', 'non_code'}:
+    if set(receipt) <= {'policy', 'state', 'admitted', 'verified', 'non_code', 'process'}:
         return receipt
     non_code = bool(receipt.get('non_code') and receipt.get('report'))
     admitted = bool(receipt.get('sources') or non_code)
-    return {'policy': receipt.get('policy'), 'state': receipt.get('state', 'pending'),
+    result = {'policy': receipt.get('policy'), 'state': receipt.get('state', 'pending'),
             'admitted': admitted, 'non_code': non_code,
             'verified': admitted and receipt.get('state') == 'verified' and bool(receipt.get('verification') or non_code)}
+    if receipt.get('process'):
+        proof = receipt.get('verification') or {}
+        sources = receipt.get('sources', [])
+        valid = (isinstance(proof, dict) and proof.get('route') == 'process'
+                 and proof.get('policy') == receipt.get('policy')
+                 and all(isinstance(proof.get(k), str) and SHA.fullmatch(proof[k]) for k in ('tree_sha', 'main_sha'))
+                 and isinstance(proof.get('process_policy'), str) and re.fullmatch(r'[0-9a-f]{64}', proof['process_policy'])
+                 and len(sources) == 1 and sources[0].get('tree_sha') == proof.get('tree_sha')
+                 and type(sources[0].get('pr')) is int and sources[0]['pr'] > 0
+                 and isinstance(sources[0].get('merge_sha'), str) and SHA.fullmatch(sources[0]['merge_sha']))
+        result['verified'] = result['verified'] and bool(valid)
+        if valid:
+            result['process'] = True
+    return result
 
 
 def checked(request, root, head, required):
@@ -278,7 +305,8 @@ def review_matches(receipt, config, pr, content, numbers):
 
 def admit(request, config, pr, numbers):
     value = policy(config)
-    if not value:
+    process = process_module() if 'process_instructions' in config else None
+    if not value and not process:
         return None
     if pr.get('draft') or (pr.get('state') == 'closed' and not pr.get('merged')):
         raise ValueError('A draft or abandoned PR cannot be admitted')
@@ -286,6 +314,10 @@ def admit(request, config, pr, numbers):
     content = pr_tree(request, root, pr)
     shared = read_full_state(request, config['project']['repository'])
     execution = execution_state(shared, config)
+    if process and process.classify(request, config, pr):
+        return process.admit(request, config, pr, numbers, shared)
+    if not value:
+        return None
     if batch_mode(config):
         try:
             from . import batch_policy
@@ -335,8 +367,9 @@ def admit(request, config, pr, numbers):
             if active and active.get('state') != 'promoted' and set(active.get('issues', [])) != set(numbers):
                 raise ValueError('Another task set owns stage; finish its promotion first')
             if not active or active.get('state') == 'promoted':
-                if tree(request, root, receipt['base_sha']) != tree(request, root, main_ref['object']['sha']):
-                    raise ValueError('Stage must start from the current main content')
+                if (tree(request, root, receipt['base_sha']) != tree(request, root, main_ref['object']['sha'])
+                        and not (process and process.stage_base_compatible(request, config, receipt['base_sha'], main_ref['object']['sha'], shared))):
+                    raise ValueError('Stage must start from current main or an exactly receipted instruction-only gap')
     page = 1
     while True:
         commits = request(root + f'/pulls/{pr["number"]}/commits?per_page=100&page={page}')
@@ -350,3 +383,40 @@ def admit(request, config, pr, numbers):
     checked(request, root, pr['head']['sha'], value['required_checks'])
     return {'tree_sha': content, 'policy': fingerprint(config), 'route': direction,
             'main_sha': main_ref['object']['sha'] if direction == 'stage' else None}
+
+
+def dependencies_ready(request, config, numbers, shared):
+    project = config['project']; root = 'repos/' + project['repository']
+    stages = {s if isinstance(s, str) else s['id']: s if isinstance(s, str) else s['phase'] for s in config['workflow']}
+    for number in numbers:
+        issue = request(root + f'/issues/{number}')
+        for identifier in dependencies(issue.get('body') or '', project['repository']):
+            n = None
+            if identifier.startswith('#'):
+                n = int(identifier[1:])
+            else:
+                n = next((int(k) for k,v in project.get('legacy_task_ids', {}).items() if v.lower() == identifier.lower()), None)
+                if n is None and re.fullmatch(re.escape(project['id_prefix']) + r'-[1-9]\d*', identifier, re.I):
+                    n = int(identifier.split('-')[1]) - project.get('id_offset', 0)
+            if not n or n <= 0:
+                raise ValueError(f'#{number}: dependency cannot be verified: {identifier}')
+            dependency = request(root + f'/issues/{n}')
+            labels = {x['name'] for x in dependency['labels']}
+            statuses = [stages.get(x[7:]) for x in labels if x.startswith('status:')]
+            if ('pull_request' in dependency or statuses != ['merged'] or 'flag:archived' in labels
+                    or 'flag:blocked' in labels or dependency.get('state_reason') == 'not_planned'):
+                raise ValueError(f'#{number}: dependency is unfinished: {identifier}')
+            if not policy(config):
+                continue
+            receipt = shared.get('delivery_workflow', {}).get('tasks', {}).get(str(n), {})
+            historical = config.get('historical_completion', {})
+            accepted = historical.get('tasks', {}).get(str(n), {})
+            expected_id = project.get('legacy_task_ids', {}).get(str(n), f"{project['id_prefix']}-{n + project.get('id_offset', 0)}")
+            if (not receipt and historical.get('policy') == fingerprint(config)
+                    and accepted.get('id') == expected_id and accepted.get('issue_sha256') == accepted_scope_digest(dependency)):
+                continue
+            projected = summary(receipt)
+            if (projected.get('policy') != fingerprint(config) or not projected.get('admitted')
+                    or policy(config)['completion'] != 'reviewed-merge'
+                    and not projected.get('non_code') and not projected.get('verified')):
+                raise ValueError(f'#{number}: dependency delivery is unfinished: {identifier}')

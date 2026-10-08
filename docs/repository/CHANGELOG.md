@@ -1,5 +1,25 @@
 # Repository process history
 
+## ACL-1750 — Separate instruction-only main admission
+
+Prepare an explicit matching process-instruction opt-in. Normal AGENTS.md, CLAUDE.md
+and docs/repository Markdown source tasks use actual independent Review/checks ->
+main -> Merged. The portable pinned classifier verifies complete immutable Git data
+and base-policy opt-in; product/runtime/mixed/unknown/CI/config changes retain
+Approved/batch/stage and complete applicable checks. The named Process instructions
+check retains secret/tooling and local Markdown-link validation when application
+and installer jobs are inapplicable. Main pushes use the same closed proof;
+stage/batch/promotion/manual/release verification is preserved. A later stage
+candidate may prove its instruction-only gap to main through the pinned read-only
+stage_base_compatible receipt/first-parent/scope/policy/tree gate, without rewriting
+or force-updating permanent branches.
+
+This source adoption changes automation and policy and therefore uses ordinary
+stage delivery. It does not promote ACL-1747, deploy the shared Tracker, migrate
+state, release an employee package or complete parent ACL-1566. Preserve the nine
+queued Reviews, six modules, 71 aliases, +1000 namespace, 74-task historical manifest
+and delivery fingerprint. See [PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md).
+
 ## ACL-1747 — Prepare independent approval and five-task batches
 
 Pin reviewed Master cd79a7699cb108c517e5729590a57cab85ab1083 and Tracker
