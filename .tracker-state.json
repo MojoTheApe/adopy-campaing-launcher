@@ -2411,8 +2411,27 @@
       "source_sha": "66f00efd2ad83e578e74c048c2f8905cf1ef3549",
       "main_tree": "929be209efdc98c9f2e4c17592d8fe1083cc6422",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-10-08T13:32:18+00:00"
+      "state": "passed",
+      "recorded_at": "2026-10-08T13:32:18+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "result": "passed",
+        "target": "ACL isolated Windows stage installation",
+        "source_sha": "66f00efd2ad83e578e74c048c2f8905cf1ef3549",
+        "tree_sha": "febad16557c04063628548280d4bc3a8b30f6898",
+        "checks": [
+          "Actual stage merge tree matches the independently reviewed source and the exact tested package tree; main baseline remains unchanged",
+          "Full Linux Python3.11/3.13 and Windows3.13 checks passed on this tree in run37779508488",
+          "Exact-source Windows build/install/launch/repair/uninstall and update/restart/recovery passed in isolated run37782617095",
+          "Previous actual package installs and starts with isolated data",
+          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+          "Updated installed application restarts with preserved machine/workspace/creative data",
+          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+          "Recovered application restarts and synthetic data remains byte-identical"
+        ],
+        "report": "Isolated package-mechanism proof from https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/37782617095 ; artifact ACL-update-recovery-1021/id11554090360; report SHA256 86891e4a98aa4190013bddf3234529027fc23d441033271589aa42454063028e. Packages built from approved source9ca195df3e6f580e66a0f537571e95cafb76cff9, identical tree to actual stage66f00efd2ad83e578e74c048c2f8905cf1ef3549. Previous installer SHA256 631c47711d6c55b2bdc5ea11c0b78996d8c3176592d6832ea67bf15dd8f82b0d; new installer SHA256 3f499c2b5a34ab75f4ae3b549daeba28abea2f9c905e60198243b0586db9185b. Actual helper advanced pointers/shortcuts, restarted, then recovered deliberately mismatched expected version and preserved synthetic data. No stable release/download-channel, employee installation or deferred live Multilogin pilot is attested."
+      },
+      "verified_at": "2026-10-08T13:35:46+00:00"
     },
     "tasks": {
       "248": {
