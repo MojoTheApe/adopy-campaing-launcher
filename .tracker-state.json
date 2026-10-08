@@ -2270,6 +2270,24 @@
           721
         ],
         "recorded_at": "2026-10-08T05:40:34+00:00"
+      },
+      "725": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1723Q",
+        "review_session": "rev_r1723q_1008",
+        "execution_lane": "4b69e861484d452dac7316d44fd462bf",
+        "implementer": "Worker-S1723A",
+        "head_sha": "64989616cb3f0cb9ff68f3fb4f40b81f52159987",
+        "base_sha": "81fd92d8a9e4e0d6c75513fd16c49b704848a11d",
+        "tree_sha": "486a545d7dc27f814a1ccc60ea789b95399a73c8",
+        "report": "Verdict: approved. 1) grep src/tests: no remaining refs to brand-name/ACM Inter outside the new test; font files kept, @font-face gone; no JS/print CSS/other template refs. 2) No code queries h1 on the report page (only RPA scrapers of Meta pages, other templates have their own h1); no browser test uses locator h1/get_by_role heading on report. Page has zero h1 now (accepted by Issue #723). 3) Static header render (old=work/stage vs new), 1280/375, light/dark, shots in C:/rev-1723-shots: no text under logo, no horizontal scroll, logo 34x34 same y; NOTE logo x moves 80->24 px (previously centred over the wider caption, now flush to the gutter) and header 16px shorter at 1280 - natural consequence, not a defect. 4) test_header 7 passed, test_stage_badge 14 passed (ACL_LIBRARY_* blank). 5) merge-tree vs work/stage clean. CI: linux 1/2/3 pass; tracker-link fail = race (Issue #723 moved to status:review 06:03:03, check ran 06:02:51) - rerun; windows tests fail = single unrelated test_acl1702_tab_unblock_real_chromium timing assert (316 passed) - rerun, not this diff.",
+        "main_sha": "631e0accaf7fcb8b1e6e6fe256a1e73506634b34",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          723
+        ],
+        "recorded_at": "2026-10-08T06:29:23+00:00"
       }
     },
     "stage": {
