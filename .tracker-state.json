@@ -6915,22 +6915,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "750": {
-        "actor": "Worker-PROC01",
-        "session": "acl_process_worker_20261008",
-        "coordinator": "Coordinator-PROC00",
-        "branch": "codex/acl-1750-process-instructions",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-process-instructions",
-        "id": "7e2e55dde384493ebb0c4278d5447683",
-        "issue": 750,
-        "state": "handoff",
-        "started_at": "2026-10-08T14:02:29+00:00",
-        "from_status": "status:backlog",
-        "pr": 751,
-        "report": "ACL-1750 source preparation self-check; this is not independent approval.\n\nDurable source: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/751\nSource head: a3afaffe8959ec70111d9a2c9e021a57f53814bb\nSource base: 66f00efd2ad83e578e74c048c2f8905cf1ef3549 (permanent stage)\nActual merged shared pins: Master d24db185ebdff2cadcecf89f5b28061d6cd19564; Tracker d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76.\n\nImplemented matching explicit process-instruction policy and canonical portable proof; source/current-main and actual main-push adapters; named Process instructions check consumed by aggregate admission; maintained route/history/read maps. Only complete immutable regular fixed instruction paths, with policy already in base, may skip application/installer jobs. Mixed, adoption, automation/config/runtime, unsafe, unknown and stage/batch/manual/release routes preserve ordinary checks. Independent review, source ownership and integration/stage gates remain mandatory. Current source adoption itself follows the genuine old-v1 stage route.\n\nMeasured final checks: complete affected tooling suite: 574 passed in 291.71 seconds, including 32 actual Git/CI/link/default-config invocation cases. Instruction check: 13 files / 40 links PASS; draft descriptor validation PASS; secrets/diff PASS. Pristine baseline equals actual canonical render, repeat upgrade has zero changed files/conflicts, portable helpers exactly match canonical relocated exports. Six modules, 71 aliases,+1000 offset,74 historical completion records and delivery fingerprint 302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21 preserved. Original guarded clients/adoption marker/runtime/application unchanged.\n\nRemaining gates: hosted complete applicable source CI and independent final review of this exact head/base; wait for the held ACL-1747 review/integration lane and old main promotion. The original nine Reviews stay queued. Shared-service installation, registry publication, coordinated v2 state migration and subsequent real two-task integration proof are separate uncompleted gates. No source stage/main merge, service install, activation, stable package or employee-delivery proof is asserted."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -9999,9 +9984,25 @@
             "session": "acl_process_worker_20261008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-PROC01",
-        "coordinator": "Coordinator-PROC00"
+        "coordinator": "Coordinator-PROC00",
+        "handoff": {
+          "actor": "Worker-PROC01",
+          "session": "acl_process_worker_20261008",
+          "coordinator": "Coordinator-PROC00",
+          "branch": "codex/acl-1750-process-instructions",
+          "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-process-instructions",
+          "id": "7e2e55dde384493ebb0c4278d5447683",
+          "issue": 750,
+          "state": "handoff",
+          "started_at": "2026-10-08T14:02:29+00:00",
+          "from_status": "status:backlog",
+          "pr": 751,
+          "report": "ACL-1750 source preparation self-check; this is not independent approval.\n\nDurable source: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/751\nSource head: a3afaffe8959ec70111d9a2c9e021a57f53814bb\nSource base: 66f00efd2ad83e578e74c048c2f8905cf1ef3549 (permanent stage)\nActual merged shared pins: Master d24db185ebdff2cadcecf89f5b28061d6cd19564; Tracker d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76.\n\nImplemented matching explicit process-instruction policy and canonical portable proof; source/current-main and actual main-push adapters; named Process instructions check consumed by aggregate admission; maintained route/history/read maps. Only complete immutable regular fixed instruction paths, with policy already in base, may skip application/installer jobs. Mixed, adoption, automation/config/runtime, unsafe, unknown and stage/batch/manual/release routes preserve ordinary checks. Independent review, source ownership and integration/stage gates remain mandatory. Current source adoption itself follows the genuine old-v1 stage route.\n\nMeasured final checks: complete affected tooling suite: 574 passed in 291.71 seconds, including 32 actual Git/CI/link/default-config invocation cases. Instruction check: 13 files / 40 links PASS; draft descriptor validation PASS; secrets/diff PASS. Pristine baseline equals actual canonical render, repeat upgrade has zero changed files/conflicts, portable helpers exactly match canonical relocated exports. Six modules, 71 aliases,+1000 offset,74 historical completion records and delivery fingerprint 302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21 preserved. Original guarded clients/adoption marker/runtime/application unchanged.\n\nRemaining gates: hosted complete applicable source CI and independent final review of this exact head/base; wait for the held ACL-1747 review/integration lane and old main promotion. The original nine Reviews stay queued. Shared-service installation, registry publication, coordinated v2 state migration and subsequent real two-task integration proof are separate uncompleted gates. No source stage/main merge, service install, activation, stable package or employee-delivery proof is asserted."
+        },
+        "pr": 751,
+        "queued_at": "2026-10-08T18:08:17+00:00"
       }
     },
     "actors": {
@@ -13089,7 +13090,8 @@
       651,
       710,
       728,
-      739
+      739,
+      750
     ],
     "review": {
       "id": "53caa32c6ed24ae6846ebe6a7e0d1979",
@@ -18425,6 +18427,13 @@
         "at": "2026-10-08T14:02:29+00:00",
         "issue": 750,
         "claim": "7e2e55dde384493ebb0c4278d5447683",
+        "actor": "Worker-PROC01"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T18:08:17+00:00",
+        "issue": 750,
+        "pr": 751,
         "actor": "Worker-PROC01"
       }
     ],
