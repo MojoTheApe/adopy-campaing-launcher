@@ -794,6 +794,11 @@ def reset_attempt() -> None:
     _tls.warning = ""
 
 
+def reopen() -> None:
+    """ACL-1736: мастер вернулся на Crop через другой шаг - рамки проверить снова."""
+    _tls.done = False
+
+
 def failure_pending() -> bool:
     """A Crop failure is stored and not yet taken (read without taking it)."""
     return bool(getattr(_tls, "failure", None))

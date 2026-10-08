@@ -1,5 +1,19 @@
 # System history
 
+## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
+
+Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
+Creative setup -> Media -> Creative setup -> Crop. The captures show the library pick was NOT lost
+(the tile is still "selected", "1 selected" on Media), and the second Crop was a fresh arrival where
+Next had not been pressed. The ACL-1551 guard ("Next on Crop was already pressed") took it for the
+Crop where Next hung and closed the wizard with Close, leaving the ad without media.
+
+- When the wizard leaves Crop and later comes back to it through another step, the Crop step is
+  re-checked (Original, no expansion) and Next is pressed once more, for a single-file plan.
+- A second return to Crop, a post/story pair (Replace) or a Crop where Next already hung still
+  ends in the honest `crop_wizard_stuck`, with the exit reason `looped_back`.
+- The wizard telemetry row gets `looped_back_to` (first earlier step the wizard went back to, e.g.
+  `Media`), also inside `exit`. No new clicks: only the existing Next on a Crop that is on screen.
 ## Window recovery enlarges a window restored below the editor minimum — ACL-1727
 
 - Run 4db2039f760d (Facebook_9403A): a minimised window was restored to its normal size
