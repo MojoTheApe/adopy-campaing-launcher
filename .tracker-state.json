@@ -6578,20 +6578,6 @@
   },
   "execution": {
     "claims": {
-      "726": {
-        "actor": "Worker-W1726C",
-        "session": "w1726c_1008",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "codex/acl-1726-ai-chooser",
-        "worktree": "C:\\acl-1726-ai-chooser",
-        "id": "34b6e1118f684f828cb641a5c6e6763f",
-        "issue": 726,
-        "state": "handoff",
-        "started_at": "2026-10-08T06:29:45+00:00",
-        "from_status": "status:idea",
-        "pr": 730,
-        "report": "Added the AI-guided/Manual chooser as Create taken (note ai_manual_chooser); objective wait returns at once. Tests: 4 new + 31 existing objective-wait tests pass, no browser."
-      },
       "727": {
         "actor": "Worker-W1727W",
         "session": "w1727w_1008",
@@ -9454,9 +9440,25 @@
             "session": "w1726c_1008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1726C",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-W1726C",
+          "session": "w1726c_1008",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "codex/acl-1726-ai-chooser",
+          "worktree": "C:\\acl-1726-ai-chooser",
+          "id": "34b6e1118f684f828cb641a5c6e6763f",
+          "issue": 726,
+          "state": "handoff",
+          "started_at": "2026-10-08T06:29:45+00:00",
+          "from_status": "status:idea",
+          "pr": 730,
+          "report": "Added the AI-guided/Manual chooser as Create taken (note ai_manual_chooser); objective wait returns at once. Tests: 4 new + 31 existing objective-wait tests pass, no browser."
+        },
+        "pr": 730,
+        "queued_at": "2026-10-08T06:35:38+00:00"
       },
       "727": {
         "implementers": [
@@ -12372,7 +12374,8 @@
       529,
       642,
       651,
-      710
+      710,
+      726
     ],
     "review": {
       "id": "4b69e861484d452dac7316d44fd462bf",
@@ -17377,6 +17380,13 @@
         "issue": 728,
         "claim": "3a620a5df55649699056ded091f884eb",
         "actor": "Worker-S1728A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T06:35:38+00:00",
+        "issue": 726,
+        "pr": 730,
+        "actor": "Worker-W1726C"
       }
     ],
     "policy": {
