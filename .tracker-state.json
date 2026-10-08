@@ -6632,7 +6632,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "736": {
+        "actor": "Worker-W1736L",
+        "session": "w1736l_1008",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "codex/acl-1736-crop-loop",
+        "worktree": "C:\\acl-1736-crop-loop",
+        "id": "8ba3619e78984fe7b07753d0256306ce",
+        "issue": 736,
+        "state": "implementing",
+        "started_at": "2026-10-08T07:23:24+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -9571,6 +9584,17 @@
         },
         "pr": 733,
         "queued_at": "2026-10-08T06:51:29+00:00"
+      },
+      "736": {
+        "implementers": [
+          {
+            "actor": "Worker-W1736L",
+            "session": "w1736l_1008"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1736L",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -10345,6 +10369,10 @@
       "Reviewer-R1726V": {
         "session": "rev_r1726v_1008",
         "role": "Reviewer"
+      },
+      "Worker-W1736L": {
+        "session": "w1736l_1008",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -17565,6 +17593,13 @@
         "pr": 730,
         "lane": "8ff64acef19a4c22bd470bfa071cb37d",
         "actor": "Reviewer-R1726V"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-08T07:23:24+00:00",
+        "issue": 736,
+        "claim": "8ba3619e78984fe7b07753d0256306ce",
+        "actor": "Worker-W1736L"
       }
     ],
     "policy": {
