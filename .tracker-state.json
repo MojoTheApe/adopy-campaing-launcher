@@ -7020,7 +7020,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "753": {
+        "actor": "Worker-PROC01",
+        "session": "acl_process_worker_20261008",
+        "coordinator": "Coordinator-PROC00",
+        "branch": "codex/acl-1753-compatible-cutover-pins",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-process-instructions",
+        "id": "6ff00c00fa584b5391f83d67d9dc12a7",
+        "issue": 753,
+        "state": "implementing",
+        "started_at": "2026-10-08T21:45:34+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -10120,9 +10133,13 @@
           {
             "actor": "Worker-PROC01",
             "session": "acl_process_worker_20261008"
+          },
+          {
+            "actor": "Worker-PROC01",
+            "session": "acl_process_worker_20261008"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-PROC01",
         "coordinator": "Coordinator-PROC00",
         "handoff": {
@@ -18703,6 +18720,13 @@
         "issue": 753,
         "actor": "Worker-PROC01",
         "report": "Owner-stopped ACL-1753: unfinished source preserved.\n\nThe owner explicitly stopped implementation/review/admission and requested only rules. Do not continue this source, review, merge, Stage/Main handoff, migration or activation. Source PR754 and branch are retained at head512c77d2bd198aa5ed16ae3cc27e957cf276407e/treef0a9183dbf0b4babc358c0127ba4efb49b7fde03. The six pin/provenance/guide/history files are preserved unchanged. Local54 checks are historical author self-check evidence only; no final independent approval, source admission, Merged completion or live change is claimed.\n\nUse the maintained genuine old-policy stop to release only this author's implementation claim and mark the task blocked/ToDo/unfinished. Retain original queue, all source/history/branches and all other owners. PR754 is converted to draft. No new review, CI rerun/wait, VPS work, migration, activation or source edits are authorized. Any future resumption needs new explicit owner authorization and the maintained genuine claim/review procedure."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-08T21:45:34+00:00",
+        "issue": 753,
+        "claim": "6ff00c00fa584b5391f83d67d9dc12a7",
+        "actor": "Worker-PROC01"
       }
     ],
     "policy": {
