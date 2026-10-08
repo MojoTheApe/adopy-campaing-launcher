@@ -9452,7 +9452,7 @@
             "session": "w1726c_1008"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1726C",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -9470,7 +9470,8 @@
           "report": "Added the AI-guided/Manual chooser as Create taken (note ai_manual_chooser); objective wait returns at once. Tests: 4 new + 31 existing objective-wait tests pass, no browser."
         },
         "pr": 730,
-        "queued_at": "2026-10-08T06:35:38+00:00"
+        "queued_at": "2026-10-08T06:35:38+00:00",
+        "reviewer": "Reviewer-R1726V"
       },
       "727": {
         "implementers": [
@@ -10322,6 +10323,10 @@
       "Worker-S1729A": {
         "session": "run_s1729a_1008",
         "role": "Worker"
+      },
+      "Reviewer-R1726V": {
+        "session": "rev_r1726v_1008",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -12474,12 +12479,22 @@
       642,
       651,
       710,
-      726,
       727,
       728,
       729
     ],
-    "review": null,
+    "review": {
+      "id": "8ff64acef19a4c22bd470bfa071cb37d",
+      "pr": 730,
+      "issues": [
+        726
+      ],
+      "actor": "Reviewer-R1726V",
+      "session": "rev_r1726v_1008",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-08T07:20:37+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -17525,6 +17540,13 @@
         "prs": [
           734
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-08T07:20:37+00:00",
+        "pr": 730,
+        "lane": "8ff64acef19a4c22bd470bfa071cb37d",
+        "actor": "Reviewer-R1726V"
       }
     ],
     "policy": {
