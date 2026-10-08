@@ -6502,22 +6502,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "721": {
-        "actor": "Worker-W1721N",
-        "session": "w1721n_1008",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "codex/acl-1721-notes",
-        "worktree": "C:\\acl-1721-notes",
-        "id": "76b52a65638c499fb8790d61fc8c26d0",
-        "issue": 721,
-        "state": "handoff",
-        "started_at": "2026-10-08T05:33:43+00:00",
-        "from_status": "status:idea",
-        "pr": 722,
-        "report": "Removed country-row notes from the account map (stored notes kept). Account note editor: Enter saves and closes, Shift+Enter newline. PR #722, head 7420b04d. Tests: test_acl1633_country_notes 30, test_acl1620_account_notes 17, test_manage_accounts_table 7 passed."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -9299,9 +9284,25 @@
             "session": "w1721n_1008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1721N",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-W1721N",
+          "session": "w1721n_1008",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "codex/acl-1721-notes",
+          "worktree": "C:\\acl-1721-notes",
+          "id": "76b52a65638c499fb8790d61fc8c26d0",
+          "issue": 721,
+          "state": "handoff",
+          "started_at": "2026-10-08T05:33:43+00:00",
+          "from_status": "status:idea",
+          "pr": 722,
+          "report": "Removed country-row notes from the account map (stored notes kept). Account note editor: Enter saves and closes, Shift+Enter newline. PR #722, head 7420b04d. Tests: test_acl1633_country_notes 30, test_acl1620_account_notes 17, test_manage_accounts_table 7 passed."
+        },
+        "pr": 722,
+        "queued_at": "2026-10-08T05:35:39+00:00"
       }
     },
     "actors": {
@@ -12147,7 +12148,8 @@
       529,
       642,
       651,
-      710
+      710,
+      721
     ],
     "review": null,
     "history": [
@@ -17065,6 +17067,13 @@
         "at": "2026-10-08T05:33:43+00:00",
         "issue": 721,
         "claim": "76b52a65638c499fb8790d61fc8c26d0",
+        "actor": "Worker-W1721N"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T05:35:39+00:00",
+        "issue": 721,
+        "pr": 722,
         "actor": "Worker-W1721N"
       }
     ],
