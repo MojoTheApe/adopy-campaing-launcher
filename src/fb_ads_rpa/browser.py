@@ -875,6 +875,74 @@ def _restore_offscreen(context, page) -> bool:
     return True
 
 
+def front_for_login(page) -> dict:
+    """Окно разлогиненного профиля — на экран, вперёд (ACL-1604).
+
+    Робот держит окна свёрнутыми или за краем экрана, и человек не видел, что
+    профиль ждёт входа: задание вставало с `profile_logged_out`, а окно было
+    спрятано. Здесь только ЭТО окно: свёрнутое — в обычное состояние, стоящее
+    за краем — на экран, вкладка — вперёд. Окно не закрывается, процесс не
+    трогается, другие профили не затрагиваются. `put_window_back` после этого
+    окно не сворачивает (запись о доме снята) — человеку нужно им пользоваться.
+
+    Только через сессию БРАУЗЕРА (`new_browser_cdp_session`) и id вкладки: она
+    с рендерером не говорит. Сессия на самой вкладке (`context.new_cdp_session`,
+    `page.bring_to_front`) на зависшем рендерере висела 197 с (замер ACL-1320), а
+    сюда зовут как раз после «вкладка не отвечает»: остановка аккаунта не должна
+    ждать окна. Любой сбой — молча в журнал.
+    """
+    out = {"restored": False, "moved": False, "front": False}
+    session = None
+    try:
+        context = page.context
+        _OFFSCREEN.pop(id(context), None)
+        session = context.browser.new_browser_cdp_session()
+        url = str(getattr(page, "url", "") or "")
+        infos = [t for t in ((session.send("Target.getTargets") or {}).get("targetInfos") or [])
+                 if t.get("type") == "page"]
+        mine = [t for t in infos if url and t.get("url") == url] or []
+        target = (mine[0] if mine else {}).get("targetId")
+        if target:
+            info = session.send("Browser.getWindowForTarget", {"targetId": target}) or {}
+            wid, bounds = info.get("windowId"), info.get("bounds") or {}
+            if wid is not None:
+                if bounds.get("windowState") == "minimized":
+                    session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}})
+                    out["restored"] = True
+                    time.sleep(0.4)
+                    bounds = (session.send("Browser.getWindowForTarget", {"targetId": target}) or {}).get("bounds") or bounds
+                left = bounds.get("left")
+                if out["restored"] or (isinstance(left, int) and left < 0):
+                    width = max(int(bounds.get("width") or 0), 1200)
+                    height = max(int(bounds.get("height") or 0), 800)
+                    session.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {
+                        "left": 40, "top": 40, "width": width, "height": height}})
+                    out["moved"] = True
+            session.send("Target.activateTarget", {"targetId": target})
+            out["front"] = True
+    except Exception as exc:
+        log.debug("front_for_login: %s", exc)
+    finally:
+        if session is not None:
+            try:
+                session.detach()
+            except Exception:
+                pass
+    try:
+        from src.fb_ads_rpa import run_telemetry as rt
+
+        rt.record("profile_front_for_login", out["front"] or out["moved"] or out["restored"], diag=dict(out))
+    except Exception:
+        pass
+    return out
+
+
+def front_if_logged_out(page, kind: str) -> None:
+    """Вызывается там, где робот только что узнал вход Facebook (kind)."""
+    if kind == profile_trouble.LOGGED_OUT and page is not None:
+        front_for_login(page)
+
+
 def put_window_back(page) -> None:
     """Вернуть окно, выведенное за край экрана, на место и свернуть."""
     saved = _OFFSCREEN.pop(id(page.context), None)
@@ -1096,6 +1164,7 @@ def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
                     profile_trouble.note_net_error(new, detail)
                 if kind:
                     diag["why"], diag["detail"] = kind, detail
+                    front_if_logged_out(new, kind)
                     raise profile_trouble.ProfileStop(kind, detail) from exc
                 if "timeout" not in type(exc).__name__.lower() and "Timeout" not in str(exc):
                     raise
@@ -1112,6 +1181,7 @@ def fresh_tab(page, url: str, *, goto_timeout_s: float = 30.0):
             kind, detail = profile_trouble.classify_page(new, history=False)
             if kind:
                 diag["why"], diag["detail"] = kind, detail
+                front_if_logged_out(new, kind)
                 raise profile_trouble.ProfileStop(kind, detail)
         if page_answers(new, 5.0) is False:
             diag["why"] = "meta_silent_in_new_tab"
@@ -1189,6 +1259,15 @@ def ensure_editor_window(page, section: str) -> bool:
             and all(type(v) in (int, float) and v > 0 for v in inner)
             and inner[0] >= MIN_EDITOR_WIDTH
         )
+
+    # ACL-1673 (7641d7b3d86a): на ушедшей вкладке ширину окна не спрашиваем и
+    # окно не двигаем — CDP-вызовы зря ждут, а пустые границы читались как
+    # «окно слишком узкое». Одна строка с причиной, без `window_too_small`.
+    from src.fb_ads_rpa.page_liveness import tab_gone
+
+    if tab_gone(page):
+        rt.record("window_bounds", False, note="page_closed", diag={"section": section})
+        return False
 
     before = rt.window_state(page)
     after = before
@@ -1286,6 +1365,15 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
     _pw_tls.playwright = pw
     try:
         browser = pw.chromium.connect_over_cdp(cdp_url)
+        try:
+            # ACL-1702: сторож вкладки задания откроет к этому браузеру СВОЁ
+            # соединение CDP — адрес запоминаем за потоком задания сразу после
+            # подключения, до первых вызовов страницы (они тоже могут зависнуть).
+            from src.fb_ads_rpa import tab_watchdog
+
+            tab_watchdog.note_endpoint(cdp_url)
+        except Exception:
+            pass
         restored = [d for d in _unminimize_before_attach(browser) if "window" in d]
         if browser.contexts:
             context = browser.contexts[0]
@@ -1307,6 +1395,7 @@ def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, 
                     # вкладки, ни перезапуска профиля через MLX API).
                     kind, detail = profile_trouble.classify_page(page)
                     if kind:
+                        front_if_logged_out(page, kind)
                         raise profile_trouble.ProfileStop(kind, detail)
                     replacement = fresh_tab(page, page.url if (page.url or "").startswith("http") else "")
                     if replacement is None:

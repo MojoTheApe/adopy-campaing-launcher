@@ -140,10 +140,19 @@ def test_ci_admission_runs_fail_closed(workflow, success_fields):
     import os
     data = yaml.safe_load((ROOT / '.github/workflows' / workflow).read_text())
     script = data['jobs']['admission']['steps'][0]['run']
-    success = {'SCOPE': 'success', 'WINDOWS': 'true', **{k: 'success' for k in success_fields}}
-    metadata = {'SCOPE': 'success', 'WINDOWS': 'false', **{k: 'skipped' for k in success_fields}}
+    # ACL-1649: ci.yml decides Linux and Windows separately (LINUX output next to WINDOWS).
+    flags = {'LINUX': 'true'} if workflow == 'ci.yml' else {}
+    off = {'LINUX': 'false'} if workflow == 'ci.yml' else {}
+    success = {'SCOPE': 'success', 'WINDOWS': 'true', **flags, **{k: 'success' for k in success_fields}}
+    metadata = {'SCOPE': 'success', 'WINDOWS': 'false', **off, **{k: 'skipped' for k in success_fields}}
     cases = [(success, True), (metadata, True), (dict(success, SCOPE='failure'), False),
              (dict(success, WINDOWS=''), False)]
+    if workflow == 'ci.yml':
+        only_linux = dict(success, WINDOWS='false', WINDOWS_TESTS='skipped')   # PR into main: 3.11 only
+        cases += [(only_linux, True), (dict(success, LINUX=''), False), (dict(success, LINUX='garbage'), False),
+                  (dict(metadata, LINUX_TESTS='success'), False), (dict(metadata, LINUX_TESTS='failure'), False),
+                  (dict(only_linux, WINDOWS_TESTS='failure'), False), (dict(only_linux, LINUX_TESTS='failure'), False)]
+        cases += [(dict(success, LINUX='false'), False)]        # Linux declared off but its job ran green: mismatch
     for field in success_fields:
         for failed in ['failure', 'cancelled', 'skipped']:
             cases.append((dict(success, **{field: failed}), False))

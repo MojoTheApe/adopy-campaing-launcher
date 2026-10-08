@@ -19,7 +19,7 @@ TPL = (
 #: затем лиды, депозиты и производные, и состояние кабинета последним.
 #: «On account» переименовано в «Account spend» — прежнее название читалось
 #: как состояние, а состояние теперь стоит рядом отдельной колонкой.
-WANT = ["Account", "Spend", "Account spend", "Leads", "FTD", "CPL", "CPA", "CR", "Status"]
+WANT = ["Account", "Spend", "Account spend", "Leads", "FTDs", "CPL", "CPA", "CR", "Status"]
 
 
 def _head() -> list[str]:

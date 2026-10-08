@@ -125,7 +125,7 @@ def build(*, tag: str, installer: Path, repo: str, commit: str, previous: str, p
 
 
 def notes(release: dict) -> str:
-    lines = [f"Adopy Campaign Launcher {release['version']}", "",
+    lines = [f"Adopy Campaign Manager {release['version']}", "",
              f"Installer: `{release['installer']['name']}`  ",
              f"SHA-256: `{release['installer']['sha256']}`", ""]
     if release["fixed"]:

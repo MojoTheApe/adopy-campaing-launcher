@@ -230,10 +230,12 @@ def test_template_renders_variant_rows():
     html = (Path(__file__).resolve().parents[1] / "src/web/templates/report.html").read_text(encoding="utf-8")
     start = html.index("{% for row in c.creatives %}")
     block = html[start:html.index("</tbody>", start)]
-    env = jinja2.Environment()
-    env.filters["fmt_usd"] = lambda v: f"${v:,.2f}"
+    # ACL-1652: строки берут ячейки из `_metrics.html`, поэтому рисуем окружением
+    # самого дашборда (оно знает макросы и `metric_values`), а не голым Jinja.
+    from src.web.app import templates
+    env = templates.env
     rows = build_creative_breakdown(_frame(ROWS), "Colombia")
-    out = env.from_string(block).render(c={"creatives": rows})
+    out = env.from_string('{% import "_metrics.html" as mx %}' + block).render(c={"creatives": rows})
     for label in ("1962 · 1", "1962 · 2", "1962 · no variant", "2403"):
         assert label in out
     assert out.count('class="creative-variant"') == 3  # у 2403 вариантов нет — строк нет
