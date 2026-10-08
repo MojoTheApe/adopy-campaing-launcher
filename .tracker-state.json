@@ -6577,22 +6577,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "729": {
-        "actor": "Worker-S1729A",
-        "session": "run_s1729a_1008",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1729-slow-home",
-        "worktree": "C:\\acl-1729-slow-home",
-        "id": "ac9efdf3e8b44b13b7ff1b4fbb9e06ca",
-        "issue": 729,
-        "state": "handoff",
-        "started_at": "2026-10-08T06:43:33+00:00",
-        "from_status": "status:todo",
-        "pr": 733,
-        "report": "Tracker issues: ACL-1729\n\n## Root cause\nHome for one date took 84-125 s on live build 1011. A read-only `py-spy dump --pid 47972` (4 snapshots, 15 s apart, taken during one timed GET) showed the event loop idle and the `acl-report_1` thread active every time in:\n\n`_render_report` -> `_build_account_map_view` -> `workbook_alias_for` / `_workbook_has_account` -> `alias_matches` -> `Series.map(account_key)` -> `rule_split` -> `_snapshot` -> `Path.stat`\n\n`alias_matches` computed `account_key` for every workbook row of the country slice, and each call also stat'ed `account_name_rules.json`. It runs several times per account in the map. So it is our render path, not GIL starvation from RPA threads.\n\n## Fix\n`alias_matches` computes the key once per unique alias value and masks with `isin`. Behaviour is unchanged.\n\n## Timing\n| Measurement | Before | After |\n|---|---|---|\n| Live GET `/?date_from=2026-10-07&date_to=2026-10-07` on 9090 (build 1011) | 84.3 s, 1285061 B | not measurable on the live server (it was not restarted) |\n| `alias_matches`, 60k rows, 300 unique aliases, 10 calls (synthetic) | did not finish in over 5 min | 2.4 s |\n\nThe test `tests/test_alias_matches_perf.py` pins that `account_key` is called at most once per unique value (20000 rows, 50 aliases, at most 51 calls).\n\nTests run: `test_alias_matches_perf.py`, `test_account_map_alias_join.py` (11 passed).\n\nNot changed: the per-call `stat` in `account_names._snapshot` (now negligible).\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)"
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -9511,9 +9496,25 @@
             "session": "run_s1729a_1008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1729A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1729A",
+          "session": "run_s1729a_1008",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1729-slow-home",
+          "worktree": "C:\\acl-1729-slow-home",
+          "id": "ac9efdf3e8b44b13b7ff1b4fbb9e06ca",
+          "issue": 729,
+          "state": "handoff",
+          "started_at": "2026-10-08T06:43:33+00:00",
+          "from_status": "status:todo",
+          "pr": 733,
+          "report": "Tracker issues: ACL-1729\n\n## Root cause\nHome for one date took 84-125 s on live build 1011. A read-only `py-spy dump --pid 47972` (4 snapshots, 15 s apart, taken during one timed GET) showed the event loop idle and the `acl-report_1` thread active every time in:\n\n`_render_report` -> `_build_account_map_view` -> `workbook_alias_for` / `_workbook_has_account` -> `alias_matches` -> `Series.map(account_key)` -> `rule_split` -> `_snapshot` -> `Path.stat`\n\n`alias_matches` computed `account_key` for every workbook row of the country slice, and each call also stat'ed `account_name_rules.json`. It runs several times per account in the map. So it is our render path, not GIL starvation from RPA threads.\n\n## Fix\n`alias_matches` computes the key once per unique alias value and masks with `isin`. Behaviour is unchanged.\n\n## Timing\n| Measurement | Before | After |\n|---|---|---|\n| Live GET `/?date_from=2026-10-07&date_to=2026-10-07` on 9090 (build 1011) | 84.3 s, 1285061 B | not measurable on the live server (it was not restarted) |\n| `alias_matches`, 60k rows, 300 unique aliases, 10 calls (synthetic) | did not finish in over 5 min | 2.4 s |\n\nThe test `tests/test_alias_matches_perf.py` pins that `account_key` is called at most once per unique value (20000 rows, 50 aliases, at most 51 calls).\n\nTests run: `test_alias_matches_perf.py`, `test_account_map_alias_join.py` (11 passed).\n\nNot changed: the per-call `stat` in `account_names._snapshot` (now negligible).\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)"
+        },
+        "pr": 733,
+        "queued_at": "2026-10-08T06:51:29+00:00"
       }
     },
     "actors": {
@@ -12414,7 +12415,8 @@
       710,
       726,
       727,
-      728
+      728,
+      729
     ],
     "review": {
       "id": "4b69e861484d452dac7316d44fd462bf",
@@ -17447,6 +17449,13 @@
         "issue": 728,
         "pr": 732,
         "actor": "Worker-S1728A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T06:51:29+00:00",
+        "issue": 729,
+        "pr": 733,
+        "actor": "Worker-S1729A"
       }
     ],
     "policy": {
