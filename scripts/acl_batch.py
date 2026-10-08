@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Assemble an owned frozen Tracker batch locally; never merge, publish or deploy."""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY = "MojoTheApe/adopy-campaing-launcher"
+SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def git(root, *args):
+    return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
+
+
+def github(path):
+    return json.loads(subprocess.check_output(["gh", "api", "repos/" + REPOSITORY + path], text=True))
+
+
+def execution(root):
+    result = subprocess.check_output([sys.executable, str(root / "scripts/task_tracker.py"),
+                                      "execution", "show"], cwd=root, text=True)
+    return json.loads(result)["execution"]
+
+
+def owned_batch(section, config, actor, session, claim):
+    policy = config["execution_policy"]
+    batch = section.get("integration")
+    if (policy.get("schema_version") != 2 or section.get("policy") != policy
+            or not batch or (batch.get("actor"), batch.get("session"), batch.get("id")) != (actor, session, claim)
+            or not re.fullmatch(r"[0-9a-f]{32}", claim)
+            or batch.get("branch") != "codex/batch-" + claim
+            or batch.get("state") != "assembling" or batch.get("pr") is not None
+            or not SHA.fullmatch(batch.get("main_sha", ""))):
+        raise ValueError("Inspect the active assembling batch and use its owning Coordinator claim")
+    members = batch["members"]
+    if (not members or len(members) > policy["batch_limit"]
+            or [m["issue"] for m in members] != batch["issues"]
+            or len(set(batch["issues"])) != len(members)
+            or any(not SHA.fullmatch(m["head_sha"]) for m in members)):
+        raise ValueError("Frozen batch membership or source revisions are invalid")
+    if section.get("review"):
+        raise ValueError("Finish the active review before assembling a candidate")
+    return batch
+
+
+def validate_remote(batch, request):
+    if request("/git/ref/heads/main")["object"]["sha"] != batch["main_sha"]:
+        raise ValueError("Main changed; refresh approvals and the held batch before rebuilding")
+    for member in batch["members"]:
+        pr = request("/pulls/" + str(member["pr"]))
+        if (pr.get("state") != "open" or pr.get("merged") or pr.get("draft")
+                or pr["head"]["sha"] != member["head_sha"] or pr["head"]["ref"] != member["branch"]
+                or pr["head"]["repo"]["full_name"].lower() != REPOSITORY.lower()):
+            raise ValueError("Source PR changed; retain the claim and return the affected author")
+
+
+def prepare(root, destination, actor, session, claim, *, apply=False, resume=False, read=execution, request=github):
+    root, destination = Path(root).resolve(), Path(destination).absolute()
+    config = json.loads((root / "tracker/config.json").read_text())
+    if config["project"]["repository"] != REPOSITORY:
+        raise ValueError("Use the ACL checkout")
+    batch = owned_batch(read(root), config, actor, session, claim)
+    validate_remote(batch, request)
+    remote = git(root, "remote", "get-url", "origin").removesuffix(".git")
+    if remote not in ("https://github.com/" + REPOSITORY, "git@github.com:" + REPOSITORY):
+        raise ValueError("Use the official ACL origin; do not copy historical push destinations")
+    if destination.exists() and not resume:
+        raise ValueError("Use a new isolated worktree path; existing work is preserved")
+    if resume:
+        common = lambda path: (path / git(path, "rev-parse", "--git-common-dir")).resolve()
+        if (not destination.is_dir() or common(destination) != common(root)
+                or git(destination, "branch", "--show-current") != batch["branch"]
+                or git(destination, "status", "--porcelain")):
+            raise ValueError("Resume only the clean linked worktree on this owned batch branch")
+        subprocess.run(["git", "-C", str(destination), "merge-base", "--is-ancestor", batch["main_sha"], "HEAD"], check=True)
+    ids = [config["project"].get("legacy_task_ids", {}).get(str(n),
+           config["project"]["id_prefix"] + "-" + str(n + config["project"].get("id_offset", 0))) for n in batch["issues"]]
+    result = {"applied": False, "branch": batch["branch"], "base": "stage", "main_sha": batch["main_sha"],
+              "title": "[" + ", ".join(ids) + "] Integrate approved tasks",
+              "body": "Tracker issues: " + ", ".join(ids) + "\nTracker batch: " + batch["id"] + "\n\n"
+                      + "Frozen approved sources: " + ", ".join("#" + str(m["pr"]) for m in batch["members"])
+                      + ". Independent integration review and complete applicable CI are required.\n"}
+    if not apply:
+        return result
+    if git(root, "status", "--porcelain"):
+        raise ValueError("Use a clean checkout before assembling the integration worktree")
+    git(root, "fetch", "origin", "main", "stage")
+    for member in batch["members"]:
+        git(root, "fetch", "origin", member["branch"])
+        if git(root, "rev-parse", "FETCH_HEAD") != member["head_sha"]:
+            raise ValueError("Source branch changed while fetching; retain its history and refresh")
+    if owned_batch(read(root), config, actor, session, claim) != batch:
+        raise ValueError("Batch changed during preparation; inspect the current ownership")
+    validate_remote(batch, request)
+    if not resume:
+        git(root, "worktree", "add", "-b", batch["branch"], str(destination), batch["main_sha"])
+    for member in batch["members"]:
+        try:
+            git(destination, "-c", "commit.gpgsign=false", "merge", "--no-ff", "--no-edit", member["head_sha"])
+        except subprocess.CalledProcessError as error:
+            # This helper owns this new worktree. Abort only its unfinished merge;
+            # preserve prior assembled commits, source branches and the batch claim.
+            git(destination, "merge", "--abort")
+            raise ValueError("Merge conflict: the worktree is preserved. Return the affected author; "
+                             "do not resolve implementation changes in the batch branch") from error
+    if owned_batch(read(root), config, actor, session, claim) != batch:
+        raise ValueError("Batch changed during assembly; preserve the local worktree and inspect")
+    validate_remote(batch, request)
+    result.update(applied=True, head_sha=git(destination, "rev-parse", "HEAD"),
+                  tree=git(destination, "rev-parse", "HEAD^{tree}"), worktree=str(destination))
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--actor", required=True)
+    parser.add_argument("--session", required=True)
+    parser.add_argument("--claim", required=True)
+    parser.add_argument("--worktree", type=Path, required=True)
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--resume", action="store_true", help="Append refreshed approved tips in the same clean owned batch worktree")
+    args = parser.parse_args()
+    try:
+        print(json.dumps(prepare(ROOT, args.worktree, args.actor, args.session, args.claim,
+                                 apply=args.apply, resume=args.resume), indent=2))
+        return 0
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        print("Batch assembly stopped: " + str(error), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

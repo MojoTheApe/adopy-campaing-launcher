@@ -64,8 +64,9 @@ jobs:
           fetch-depth: 0
       # windows/linux=false also when this exact tree already passed these jobs in earlier
       # runs (PR -> stage -> main, ACL-1565/1649); release tags and manual runs always run
-      # in full. python: ["3.13"] for a PR or push to stage that does not touch
-      # dependency/bootstrap inputs, ["3.11", "3.13"] on the way to main (ACL-1581/1649).
+      # in full. Explicit v2: one-task approval sources retain affected checks;
+      # a combined batch, actual stage and promotion/main require both Linux
+      # versions, Windows and installer (ACL-1747). Unknown routes fail to full.
       - id: scope
         run: python3 scripts/acl_ci_scope.py --workflow ci.yml
         env:
@@ -78,7 +79,7 @@ jobs:
         run: |
           python3 -m json.tool tracker/config.json > /dev/null
           python3 -m json.tool tracker/engine.json > /dev/null
-          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_acl_ci_workflows.py tests/test_acl_ci_chain.py tests/test_acl_ci_minutes.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py tests/test_acl_test_platform.py tests/test_ci_layout.py -q
+          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_batch_ci_scope.py tests/test_acl_batch.py tests/test_acl_ci_reuse.py tests/test_acl_ci_workflows.py tests/test_acl_ci_chain.py tests/test_acl_ci_minutes.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py tests/test_acl_test_platform.py tests/test_ci_layout.py -q
 
   # ACL-1582: the job names are spelled out (`name:`) because the reuse proof
   # (scripts/acl_ci_reuse.py REQUIRED_JOBS) and the release gate
@@ -100,9 +101,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # ACL-1581/1649: a PR into stage and a push to stage test Python 3.13 only,
-        # unless they touch dependency or bootstrap inputs (scripts/acl_ci_scope.py).
-        # 3.11 runs only on the way to main: PRs into main, pushes to main/master,
+        # ACL-1747 v2: individual approval sources retain affected checks; a
+        # combined batch and actual stage require 3.11/3.13. Exact-tree proof
+        # can reuse already passed jobs; source trees cannot prove a batch.
+        # Promotion/main, pushes to main/master,
         # release tags and manual runs. The release gate (scripts/acl_publish_release.py)
         # still requires every Linux job of REQUIRED_JOBS, from this run or from
         # earlier runs of the same tree. The fallback list is the full matrix, for a

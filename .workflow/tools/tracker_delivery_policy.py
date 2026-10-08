@@ -55,14 +55,39 @@ def execution_policy(config):
     value = config.get('execution_policy')
     if 'execution_policy' not in config:
         return None
-    if (not isinstance(value, dict) or set(value) != {'schema_version', 'implementation_limit', 'review_limit'}
-            or type(value['schema_version']) is not int or value['schema_version'] != 1
+    fields = {'schema_version', 'implementation_limit', 'review_limit'}
+    version = value.get('schema_version') if isinstance(value, dict) else None
+    if (not isinstance(value, dict) or set(value) != fields | ({'batch_limit'} if version == 2 else set())
+            or type(version) is not int or version not in (1, 2)
             or type(value['implementation_limit']) is not int or not 1 <= value['implementation_limit'] <= 16
             or type(value['review_limit']) is not int or value['review_limit'] != 1):
-        raise ValueError('Execution policy needs schema_version 1, implementation_limit 1..16 and review_limit 1')
+        raise ValueError('Execution policy needs schema_version 1 or 2, implementation_limit 1..16 and review_limit 1')
     if not policy(config):
         raise ValueError('Parallel execution requires the independent-review delivery policy')
+    if version == 2 and (type(value['batch_limit']) is not int or not 1 <= value['batch_limit'] <= 16
+                         or not policy(config)['staging']['enabled']):
+        raise ValueError('Approved batches require staging and batch_limit 1..16')
     return value
+
+
+def batch_mode(config):
+    return bool(execution_policy(config) and execution_policy(config)['schema_version'] == 2)
+
+
+def dependencies(body, repo):
+    marker = r'\bneeds(?:\*\*)?\s*:\s*(?:\*\*)?\s*`?'
+    pattern = marker + r'(?:#(\d+)|([a-z][a-z0-9]*-\d+[a-z]?)|https://github\.com/' + re.escape(repo) + r'/issues/(\d+))'
+    local = ['#' + (a or c) if (a or c) else b.lower() for a,b,c in re.findall(pattern, body, re.I)]
+    external = [url for url in re.findall(marker + r'(https://github\.com/[\w.-]+/[\w.-]+/issues/\d+)\b', body, re.I)
+                if not url.lower().startswith('https://github.com/' + repo.lower() + '/issues/')]
+    return list(dict.fromkeys(local + external))
+
+
+def accepted_scope_digest(issue):
+    labels = sorted(x['name'] if isinstance(x, dict) else x for x in issue.get('labels', []))
+    fields = {k: issue.get(k) for k in ('number', 'title', 'body', 'state', 'state_reason', 'created_at', 'closed_at')}
+    fields['labels'] = [x for x in labels if not x.startswith(('release:', 'priority:'))]
+    return hashlib.sha256(json.dumps(fields, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
 def execution_state(state, config):
@@ -84,12 +109,39 @@ def execution_state(state, config):
         raise ValueError('Invalid review lane')
     if state.get('active') or len(section['claims']) > value['implementation_limit']:
         raise ValueError('Conflicting execution owners; inspect shared state')
+    if value['schema_version'] == 2:
+        if not isinstance(section.get('approvals'), dict) or not isinstance(section.get('batches'), dict):
+            raise ValueError('Invalid approval/batch state')
+        for key in ('integration', 'intake'):
+            if section.get(key) is not None and not isinstance(section[key], dict):
+                raise ValueError('Invalid batch ownership: ' + key)
     return section
 
 
+def file_bytes(request, root, row):
+    """Decode a contents-API file row; files over 1 MB come back without inline content."""
+    if not isinstance(row, dict) or row.get("type", "file") != "file":
+        raise ValueError("Expected a repository file")
+    content, encoding = row.get("content"), row.get("encoding")
+    if content and encoding in ("base64", None):
+        return base64.b64decode(content, validate=False)
+    # GitHub returns encoding "none" and empty content for 1–100 MB files; the Git blob API still serves them.
+    sha = row.get("sha")
+    if not isinstance(sha, str) or not SHA.fullmatch(sha):
+        raise ValueError("Cannot establish repository file revision")
+    blob = request(root + "/git/blobs/" + sha)
+    if not isinstance(blob, dict) or blob.get("encoding") != "base64" or not isinstance(blob.get("content"), str):
+        raise ValueError("Unexpected repository blob response")
+    data = base64.b64decode(blob["content"], validate=False)
+    if isinstance(row.get("size"), int) and len(data) != row["size"]:
+        raise ValueError("Repository blob size does not match its file")
+    return data
+
+
 def read_full_state(request, repo):
-    row = request('repos/' + repo + '/contents/.tracker-state.json?ref=tracker-state')
-    state = json.loads(base64.b64decode(row['content'], validate=False))
+    root = 'repos/' + repo
+    row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
+    state = json.loads(file_bytes(request, root, row))
     if state.get('schema_version') not in (1, 2):
         raise ValueError('Invalid tracker state')
     return state
@@ -121,6 +173,17 @@ def route(config, pr):
             raise ValueError('PR must target the configured project integration branch')
         return 'main'
     stage = value['staging']
+    if batch_mode(config):
+        local = pr['head'].get('repo', {}).get('full_name', '').lower() == config['project']['repository'].lower()
+        if not local:
+            raise ValueError('Batch work must use this repository branches')
+        if pr['base']['ref'] == main and pr['head']['ref'] != stage['branch']:
+            return 'approval'
+        if (pr['base']['ref'] == stage['branch'] and pr['head']['ref'] not in (main, stage['branch'])
+                and not re.fullmatch(r'codex/batch-[a-f0-9]{32}', pr['head']['ref'])):
+            # Preserve handed-off v1 source PRs. They become approval-only and
+            # cannot enter stage individually under schema 2.
+            return 'approval'
     if stage['enabled']:
         if pr['base']['ref'] == stage['branch']:
             if pr['head']['ref'] in (main, stage['branch']):
@@ -145,6 +208,11 @@ def naming(config, pr, numbers):
     title = re.match(r'^\[([^]]+)\]\s+\S', pr.get('title', ''))
     if not title or set(x.strip() for x in title[1].split(',')) != set(ids):
         raise ValueError('PR title must start with all linked IDs: [ID, ID] Summary')
+    if batch_mode(config) and route(config, pr) == 'stage':
+        if not re.fullmatch(r'codex/batch-[a-f0-9]{32}', pr['head']['ref']):
+            raise ValueError('Stage accepts only a reserved codex/batch-<ID> candidate')
+        reject_closing(pr.get('body', '') + '\n' + pr.get('title', ''))
+        return
     prefix = '(?:work|codex)/' if execution_policy(config) else 'codex/'
     if route(config, pr) != 'promotion' and not any(
             re.fullmatch(prefix + re.escape(i.lower()) + r'-[a-z0-9]+(?:-[a-z0-9]+)*', pr['head']['ref']) for i in ids):
@@ -218,6 +286,12 @@ def admit(request, config, pr, numbers):
     content = pr_tree(request, root, pr)
     shared = read_full_state(request, config['project']['repository'])
     execution = execution_state(shared, config)
+    if batch_mode(config):
+        try:
+            from . import batch_policy
+        except ImportError:
+            import tracker_batch_policy as batch_policy
+        return batch_policy.admit(request, config, pr, numbers, shared)
     state = shared.get('delivery_workflow', {})
     direction = route(config, pr)
     if execution is not None:

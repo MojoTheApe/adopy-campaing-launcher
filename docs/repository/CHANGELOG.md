@@ -1,5 +1,31 @@
 # Repository process history
 
+## ACL-1747 — Prepare independent approval and five-task batches
+
+Pin reviewed Master cd79a7699cb108c517e5729590a57cab85ab1083 and Tracker
+e6013f8ad641bd99061f7db82bceeb705f8c150a (MR-14/TT-77). Explicit mirrored
+execution schema2 selects implementation5, review1, batch5 and Approved between
+Review and Stage. Preserve genuine pristine legacy template ancestry and resolve
+only the draft Action/workflow conflicts; local machine/package/recovery controls,
+IDs, modules, historical completion and delivery fingerprint stay unchanged.
+
+Source review releases its lane at Approved. A separate Coordinator freezes
+intake/batch and assembles approved tips with merge commits using acl_batch.py;
+additional combined review and full applicable CI bind the final tree. V2 source
+PRs retain affected checks, while combined batch/actual stage/promotion requires
+the complete matrix and installer. Existing exact-tree reuse remains valid.
+Before-stage exclusion uses cancellation plus a smaller fixed-intake subset;
+after-stage recovery keeps the same members and Coordinator claim through actual
+author fixes, fresh approvals/review/reverification. No stage reset or fake authors.
+
+Source integration and actual activation are separate. Parent ACL-1566 retains
+supported queue-preserving migration, fresh shared-board proof and a real two-task
+batch. The nine existing Review handoffs and all source PRs/authors remain intact.
+See [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) for the old-v1 source cutover,
+large-state TT-73 operator support and explicit live rollout prerequisites.
+No stable release, employee update or live Multilogin/advertising action is claimed.
+
+
 ## Activate five implementation slots — 2026-09-29 / ACL-1382
 
 After reviewed source PR 384 and promotion 385, drain the old child claim and
