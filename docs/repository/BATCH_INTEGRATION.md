@@ -100,9 +100,28 @@ Before actual stage entry, `batch cancel` preserves real author claims/status/hi
 begin a smaller subset of the same intake to leave a failed member for later. After
 stage entry retain the Coordinator lock and same members. Return only affected authors,
 refresh after fresh approval, rebuild, independently review and reverify exact stage.
-`acl_batch.py --resume --apply` appends refreshed tips in the same clean linked batch
-worktree only if the frozen main is still its ancestor. If the baseline changed, use
-the documented claimed reconciliation first. Never force-reset/delete stage or
+After `batch refresh`, use a **new** isolated path with
+`acl_batch.py --rebuild --previous-head EXACT_OLD_HEAD --apply` and the same owning
+actor/session/claim arguments. The helper validates the retained previous manifest
+and exact generated head, saves a local evidence ref, and assembles a fresh detached
+candidate from frozen main and current approved tips. The previous local branch,
+worktree and index stay intact. Appending new tips to the old graph retains superseded
+tips and fails the pinned composition gate; it is not a recovery method.
+
+Inspect the printed `replacement.push_argv`, recheck the actual held claim/current
+sources, then run that exact atomic push. It creates a remote evidence branch at the
+old head and replaces **only the owned generated integration ref**, with explicit
+expected-old-head and expected-absent-evidence leases. If either lease fails, neither
+remote update happens: inspect the changed ownership/ref, preserve evidence and stop.
+For an unpublished partial assembly, the old head must match the owned local branch;
+the generated remote ref must still be absent. The printed atomic push uses an
+expected-absent lease for its first publication and archives the partial head too.
+Further rebuilds archive each previous remote candidate while keeping the original
+local branch/worktree and all earlier evidence intact.
+Never use an unqualified force push. The old evidence refs are retained; source
+branches, main, permanent stage and release tags are never rewritten by this operation.
+The rebuilt candidate needs fresh combined review, CI and exact stage verification.
+If the baseline changed, use the documented claimed reconciliation first. Never force-reset/delete stage or
 invent new members in a rebuilding batch. Selective post-stage exclusion needs a
 separately reviewed supported recovery implementation.
 
