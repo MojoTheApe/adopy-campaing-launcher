@@ -6632,22 +6632,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "736": {
-        "actor": "Worker-W1736L",
-        "session": "w1736l_1008",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "codex/acl-1736-crop-loop",
-        "worktree": "C:\\acl-1736-crop-loop",
-        "id": "8ba3619e78984fe7b07753d0256306ce",
-        "issue": 736,
-        "state": "handoff",
-        "started_at": "2026-10-08T07:23:24+00:00",
-        "from_status": "status:idea",
-        "pr": 737,
-        "report": "Cause: library pick not lost (tile selected, '1 selected'); Meta bounced Crop -> Media; the later fresh Crop was mistaken by the ACL-1551 guard for a hung Crop, wizard closed without Next. Fix: one extra Next on a revisited Crop (single plan, crop re-checked), honest stop otherwise with looped_back_to in diag. PR #737, fake-based unit tests (5 passed)."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -9594,9 +9579,25 @@
             "session": "w1736l_1008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1736L",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-W1736L",
+          "session": "w1736l_1008",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "codex/acl-1736-crop-loop",
+          "worktree": "C:\\acl-1736-crop-loop",
+          "id": "8ba3619e78984fe7b07753d0256306ce",
+          "issue": 736,
+          "state": "handoff",
+          "started_at": "2026-10-08T07:23:24+00:00",
+          "from_status": "status:idea",
+          "pr": 737,
+          "report": "Cause: library pick not lost (tile selected, '1 selected'); Meta bounced Crop -> Media; the later fresh Crop was mistaken by the ACL-1551 guard for a hung Crop, wizard closed without Next. Fix: one extra Next on a revisited Crop (single plan, crop re-checked), honest stop otherwise with looped_back_to in diag. PR #737, fake-based unit tests (5 passed)."
+        },
+        "pr": 737,
+        "queued_at": "2026-10-08T07:28:40+00:00"
       }
     },
     "actors": {
@@ -12529,7 +12530,8 @@
       710,
       727,
       728,
-      729
+      729,
+      736
     ],
     "review": {
       "id": "8ff64acef19a4c22bd470bfa071cb37d",
@@ -17601,6 +17603,13 @@
         "at": "2026-10-08T07:23:24+00:00",
         "issue": 736,
         "claim": "8ba3619e78984fe7b07753d0256306ce",
+        "actor": "Worker-W1736L"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T07:28:40+00:00",
+        "issue": 736,
+        "pr": 737,
         "actor": "Worker-W1736L"
       }
     ],
