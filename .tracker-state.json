@@ -6900,9 +6900,11 @@
         "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-batch-integration",
         "id": "8a5ccb77bf7f4656bcc3cd14088039fc",
         "issue": 747,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-08T12:44:58+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 748,
+        "report": "ACL-1747 corrected source handoff.\n\nExact source head: 9ca195df3e6f580e66a0f537571e95cafb76cff9; original main48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496 and stage49dc50a1139d7f1e62d1556a33ee6500d94f9788 are the reviewed baseline (same tree).\n\nThe initial independent P1 was returned normally; the actual Worker reacquired the old-v1 implementation claim before edits. Replace append recovery with fresh detached baseline/current-tip composition, preserved local and atomic remote evidence, exact ownership/head leases, repeated rebuild and unpublished partial-conflict recovery. No engine weakening or source/permanent-branch rewrite. Tests: final14 actual-Git cases pass against the pinned portable composition,18 batch classifier cases pass,200 affected CI/adoption regressions pass; secret scan and diff checks pass. Initial full hosted matrix/Windows installer was green on the superseded head; corrected-head hosted CI is required anew.\n\nReviewed shared pins/explicit5-1-5 policy, Approved, preserved genuine template lineage/namespace/history/delivery fingerprint and package/advertising boundaries stay intact. Isolated runtime smoke/all46 packaging unit checks passed before this tooling correction; no application/package implementation changed in this correction. ParentACL-1566 retains actual migration/fresh shared board/real two-task batch proof. The source child follows its genuine old-v1 route; live server publication awaits explicit owner approval and blocks main config promotion/state activation. No stable release, employee installation or live pilot.\n\nThe second independent return reproduced a failed detached build whose manifest superseded the unchanged published candidate. Actual author reclaimed before edits; matching now requires a retained same-member exact pinned composition for that previous head. The newest history entry is insufficient. Actual failed-build/author-fix/refresh/retry regression passes while preserving stage and prior worktrees; unknown old implementation still fails. Corrected-head hosted CI and final independent approval are pending."
       }
     },
     "tasks": {
