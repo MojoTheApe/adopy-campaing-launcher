@@ -6589,6 +6589,18 @@
         "state": "implementing",
         "started_at": "2026-10-08T06:34:31+00:00",
         "from_status": "status:todo"
+      },
+      "729": {
+        "actor": "Worker-S1729A",
+        "session": "run_s1729a_1008",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1729-slow-home",
+        "worktree": "C:\\acl-1729-slow-home",
+        "id": "ac9efdf3e8b44b13b7ff1b4fbb9e06ca",
+        "issue": 729,
+        "state": "implementing",
+        "started_at": "2026-10-08T06:43:33+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -9485,6 +9497,17 @@
         "state": "implementing",
         "worker": "Worker-S1728A",
         "coordinator": "Coordinator-C0930A"
+      },
+      "729": {
+        "implementers": [
+          {
+            "actor": "Worker-S1729A",
+            "session": "run_s1729a_1008"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1729A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -10250,6 +10273,10 @@
       },
       "Worker-S1728A": {
         "session": "run_s1728a_1008",
+        "role": "Worker"
+      },
+      "Worker-S1729A": {
+        "session": "run_s1729a_1008",
         "role": "Worker"
       }
     },
@@ -17399,6 +17426,13 @@
         "issue": 727,
         "pr": 731,
         "actor": "Worker-W1727W"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-08T06:43:33+00:00",
+        "issue": 729,
+        "claim": "ac9efdf3e8b44b13b7ff1b4fbb9e06ca",
+        "actor": "Worker-S1729A"
       }
     ],
     "policy": {
