@@ -53,7 +53,15 @@
              data-country="{{ (mc.key or mc.country) | e }}"
              data-country-name="{{ mc.country | e }}">
       <summary class="amap-row">
-        <span class="amap-cell-name">{{ mc.country }}</span>
+        <span class="amap-cell-name">{{ mc.country }}
+          {#- ACL-1633: заметка страны. Внутри ячейки имени, а не отдельным
+              span'ом: строка заголовка — сетка по колонкам, лишний элемент
+              сдвинул бы все числа. Пустая не пишет ничего, карандаш рисует
+              CSS при наведении или фокусе. -#}
+          {%- set cname = (mc.country or '') | trim -%}
+          {%- set ckey = mc.note_key or cname -%}
+          {%- set cn = (amap.country_notes or {}).get(ckey, '') -%}
+          <span class="amap-country-note{{ ' empty' if not cn }}" tabindex="0" role="button" data-note-kind="country" data-key="{{ ckey | e }}" data-account="{{ cname | e }}" data-note="{{ cn | e }}" title="{{ cn | e }}" aria-label="Note for {{ cname | e }}"><span class="amap-note-box">{{ cn.split('\n')[0] | truncate(50, True, '…') | e if cn }}</span></span></span>
         {#- Спенд, снятый с самих кабинетов (Read). Прочерк значит «никто не
             читал», это не ноль.
 
