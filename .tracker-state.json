@@ -6958,22 +6958,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "750": {
-        "actor": "Worker-PROC01",
-        "session": "acl_process_worker_20261008",
-        "coordinator": "Coordinator-PROC00",
-        "branch": "codex/acl-1750-process-instructions",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-process-instructions",
-        "id": "0ce3cb9906684f1ca362fc06a87af446",
-        "issue": 750,
-        "state": "handoff",
-        "started_at": "2026-10-08T19:24:00+00:00",
-        "from_status": "status:todo",
-        "pr": 751,
-        "report": "ACL-1750 actual claimed author reconciliation and normal handoff\n\nThe non-implementing Reviewer genuinely returned the existing task under the held old-v1 fixing lane. The original actual Worker then acquired a fresh implementation claim before touching the retained branch. Actual current main 6e077c5bf07148a442e5a76377066bc12198ccd3 was fetched and merged into the same source branch.\n\nActual new source head: a1746822e12e23400f2b2e423b486e3a43a67d05.\nActual unchanged source base/stage: 66f00efd2ad83e578e74c048c2f8905cf1ef3549.\nExact source tree: 1cd90f124b17310f0c099782580bb0ebeab4f82f.\nParents: a3afaffe8959ec70111d9a2c9e021a57f53814bb and actual current main 6e077c5bf07148a442e5a76377066bc12198ccd3.\nGit verifies current main is an ancestor, zero changed files from a3afaffe, and clean retained worktree.\n\nFresh author checks after reconciliation:\n- 54 affected process/adoption tests passed in 50.99 seconds, including actual Git classifier, main-push, instruction-link, default checker invocation and local preservation checks.\n- Named instruction checker: 13 maintained files and 40 local Markdown links passed.\n- Fresh canonical rendering verifies genuine pristine legacy-input baseline, four exact relocated portable helpers and unchanged local controls; repeat guarded upgrade has zero changed files/conflicts.\n- Six modules, 71 aliases, +1000 IDs, 74 historical completions, guarded clients and adoption marker remain exact.\n- Config SHA256 remains 9e7e633fce4f54ac60644bd422443095f3decdae02c13d4eb3ae50966d264d1a. Delivery fingerprint remains 302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21.\n- Diff whitespace and immutable ancestry/tree checks passed. No application/runtime/installer content changed.\n\nActual pins remain independently reviewed merged Master d24db185ebdff2cadcecf89f5b28061d6cd19564 and Tracker d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76. Earlier full 574-case author suite and all 16 hosted source checks passed at a3afaffe, whose exact file tree is retained. They are historical evidence, not hosted approval for this new head; fresh full applicable hosted checks are pending.\n\nThe implementation claim is handed off normally to the retained genuine Reviewer lane for independent full-scope review of this new immutable head/base/tree. No final review approval, stage/main merge, delivery record, migration, activation, stable package or employee rollout is asserted. Original nine queued Reviews, public task scope, permanent branches and parent ACL-1566 remain preserved."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -10046,7 +10031,7 @@
             "session": "acl_process_worker_20261008"
           }
         ],
-        "state": "implementing",
+        "state": "reviewing",
         "worker": "Worker-PROC01",
         "coordinator": "Coordinator-PROC00",
         "handoff": {
@@ -10055,17 +10040,18 @@
           "coordinator": "Coordinator-PROC00",
           "branch": "codex/acl-1750-process-instructions",
           "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-process-instructions",
-          "id": "7e2e55dde384493ebb0c4278d5447683",
+          "id": "0ce3cb9906684f1ca362fc06a87af446",
           "issue": 750,
           "state": "handoff",
-          "started_at": "2026-10-08T14:02:29+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-08T19:24:00+00:00",
+          "from_status": "status:todo",
           "pr": 751,
-          "report": "ACL-1750 source preparation self-check; this is not independent approval.\n\nDurable source: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/751\nSource head: a3afaffe8959ec70111d9a2c9e021a57f53814bb\nSource base: 66f00efd2ad83e578e74c048c2f8905cf1ef3549 (permanent stage)\nActual merged shared pins: Master d24db185ebdff2cadcecf89f5b28061d6cd19564; Tracker d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76.\n\nImplemented matching explicit process-instruction policy and canonical portable proof; source/current-main and actual main-push adapters; named Process instructions check consumed by aggregate admission; maintained route/history/read maps. Only complete immutable regular fixed instruction paths, with policy already in base, may skip application/installer jobs. Mixed, adoption, automation/config/runtime, unsafe, unknown and stage/batch/manual/release routes preserve ordinary checks. Independent review, source ownership and integration/stage gates remain mandatory. Current source adoption itself follows the genuine old-v1 stage route.\n\nMeasured final checks: complete affected tooling suite: 574 passed in 291.71 seconds, including 32 actual Git/CI/link/default-config invocation cases. Instruction check: 13 files / 40 links PASS; draft descriptor validation PASS; secrets/diff PASS. Pristine baseline equals actual canonical render, repeat upgrade has zero changed files/conflicts, portable helpers exactly match canonical relocated exports. Six modules, 71 aliases,+1000 offset,74 historical completion records and delivery fingerprint 302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21 preserved. Original guarded clients/adoption marker/runtime/application unchanged.\n\nRemaining gates: hosted complete applicable source CI and independent final review of this exact head/base; wait for the held ACL-1747 review/integration lane and old main promotion. The original nine Reviews stay queued. Shared-service installation, registry publication, coordinated v2 state migration and subsequent real two-task integration proof are separate uncompleted gates. No source stage/main merge, service install, activation, stable package or employee-delivery proof is asserted."
+          "report": "ACL-1750 actual claimed author reconciliation and normal handoff\n\nThe non-implementing Reviewer genuinely returned the existing task under the held old-v1 fixing lane. The original actual Worker then acquired a fresh implementation claim before touching the retained branch. Actual current main 6e077c5bf07148a442e5a76377066bc12198ccd3 was fetched and merged into the same source branch.\n\nActual new source head: a1746822e12e23400f2b2e423b486e3a43a67d05.\nActual unchanged source base/stage: 66f00efd2ad83e578e74c048c2f8905cf1ef3549.\nExact source tree: 1cd90f124b17310f0c099782580bb0ebeab4f82f.\nParents: a3afaffe8959ec70111d9a2c9e021a57f53814bb and actual current main 6e077c5bf07148a442e5a76377066bc12198ccd3.\nGit verifies current main is an ancestor, zero changed files from a3afaffe, and clean retained worktree.\n\nFresh author checks after reconciliation:\n- 54 affected process/adoption tests passed in 50.99 seconds, including actual Git classifier, main-push, instruction-link, default checker invocation and local preservation checks.\n- Named instruction checker: 13 maintained files and 40 local Markdown links passed.\n- Fresh canonical rendering verifies genuine pristine legacy-input baseline, four exact relocated portable helpers and unchanged local controls; repeat guarded upgrade has zero changed files/conflicts.\n- Six modules, 71 aliases, +1000 IDs, 74 historical completions, guarded clients and adoption marker remain exact.\n- Config SHA256 remains 9e7e633fce4f54ac60644bd422443095f3decdae02c13d4eb3ae50966d264d1a. Delivery fingerprint remains 302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21.\n- Diff whitespace and immutable ancestry/tree checks passed. No application/runtime/installer content changed.\n\nActual pins remain independently reviewed merged Master d24db185ebdff2cadcecf89f5b28061d6cd19564 and Tracker d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76. Earlier full 574-case author suite and all 16 hosted source checks passed at a3afaffe, whose exact file tree is retained. They are historical evidence, not hosted approval for this new head; fresh full applicable hosted checks are pending.\n\nThe implementation claim is handed off normally to the retained genuine Reviewer lane for independent full-scope review of this new immutable head/base/tree. No final review approval, stage/main merge, delivery record, migration, activation, stable package or employee rollout is asserted. Original nine queued Reviews, public task scope, permanent branches and parent ACL-1566 remain preserved."
         },
         "pr": 751,
-        "queued_at": "2026-10-08T18:08:17+00:00",
-        "review_report": "ACL-1750 independent source review: changes requested for current-main reconciliation.\n\nActual source PR751 is ready at immutable head a3afaffe8959ec70111d9a2c9e021a57f53814bb, base/stage66f00efd2ad83e578e74c048c2f8905cf1ef3549, tree1cd90f124b17310f0c099782580bb0ebeab4f82f. Actual current main is6e077c5bf07148a442e5a76377066bc12198ccd3 after reviewed PR749 promotion.\n\nFinding P2: the current working head does not include actual current main. The official compare of current main to this exact source head is diverged. The maintained old-v1 record-review gate requires the reviewed working branch to include current main; this unmerged source therefore cannot receive final approval at its current ancestry. No source content defect is asserted by this finding.\n\nThe actual non-implementing Reviewer acquired the genuine old-v1 lane after the prior747 lane completed normally. Required source checks are green at the current source head. Prior bounded content preparation found both preliminary fixes resolved, canonical compatible helper exports and pristine/local-control preservation. That preparation is not reused as final review approval.\n\nReturn for the original actual author to acquire a fresh implementation claim, merge actual current main on the retained source branch, verify resulting content and applicable current-head checks, and hand off normally. Preserve existing source/Stage/main refs, authors, task scope and original nine queued Reviews. After fresh handoff, independently review and record the new actual immutable head/base/tree/full scope under the genuine review lane. No stage/main admission, migration, package delivery or activation is approved by this return."
+        "queued_at": "2026-10-08T19:28:04+00:00",
+        "review_report": "ACL-1750 independent source review: changes requested for current-main reconciliation.\n\nActual source PR751 is ready at immutable head a3afaffe8959ec70111d9a2c9e021a57f53814bb, base/stage66f00efd2ad83e578e74c048c2f8905cf1ef3549, tree1cd90f124b17310f0c099782580bb0ebeab4f82f. Actual current main is6e077c5bf07148a442e5a76377066bc12198ccd3 after reviewed PR749 promotion.\n\nFinding P2: the current working head does not include actual current main. The official compare of current main to this exact source head is diverged. The maintained old-v1 record-review gate requires the reviewed working branch to include current main; this unmerged source therefore cannot receive final approval at its current ancestry. No source content defect is asserted by this finding.\n\nThe actual non-implementing Reviewer acquired the genuine old-v1 lane after the prior747 lane completed normally. Required source checks are green at the current source head. Prior bounded content preparation found both preliminary fixes resolved, canonical compatible helper exports and pristine/local-control preservation. That preparation is not reused as final review approval.\n\nReturn for the original actual author to acquire a fresh implementation claim, merge actual current main on the retained source branch, verify resulting content and applicable current-head checks, and hand off normally. Preserve existing source/Stage/main refs, authors, task scope and original nine queued Reviews. After fresh handoff, independently review and record the new actual immutable head/base/tree/full scope under the genuine review lane. No stage/main admission, migration, package delivery or activation is approved by this return.",
+        "reviewer": "Reviewer-BATCH02"
       }
     },
     "actors": {
@@ -13189,7 +13175,7 @@
       "session": "acl_batch_master_review_20261008",
       "coordinator": "Coordinator-BATCH01",
       "started_at": "2026-10-08T19:18:29+00:00",
-      "state": "fixing",
+      "state": "reviewing",
       "report": "ACL-1750 independent source review: changes requested for current-main reconciliation.\n\nActual source PR751 is ready at immutable head a3afaffe8959ec70111d9a2c9e021a57f53814bb, base/stage66f00efd2ad83e578e74c048c2f8905cf1ef3549, tree1cd90f124b17310f0c099782580bb0ebeab4f82f. Actual current main is6e077c5bf07148a442e5a76377066bc12198ccd3 after reviewed PR749 promotion.\n\nFinding P2: the current working head does not include actual current main. The official compare of current main to this exact source head is diverged. The maintained old-v1 record-review gate requires the reviewed working branch to include current main; this unmerged source therefore cannot receive final approval at its current ancestry. No source content defect is asserted by this finding.\n\nThe actual non-implementing Reviewer acquired the genuine old-v1 lane after the prior747 lane completed normally. Required source checks are green at the current source head. Prior bounded content preparation found both preliminary fixes resolved, canonical compatible helper exports and pristine/local-control preservation. That preparation is not reused as final review approval.\n\nReturn for the original actual author to acquire a fresh implementation claim, merge actual current main on the retained source branch, verify resulting content and applicable current-head checks, and hand off normally. Preserve existing source/Stage/main refs, authors, task scope and original nine queued Reviews. After fresh handoff, independently review and record the new actual immutable head/base/tree/full scope under the genuine review lane. No stage/main admission, migration, package delivery or activation is approved by this return.",
       "keep_lane": true
     },
@@ -18573,6 +18559,13 @@
         "at": "2026-10-08T19:24:00+00:00",
         "issue": 750,
         "claim": "0ce3cb9906684f1ca362fc06a87af446",
+        "actor": "Worker-PROC01"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T19:28:04+00:00",
+        "issue": 750,
+        "pr": 751,
         "actor": "Worker-PROC01"
       }
     ],
