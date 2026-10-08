@@ -1062,6 +1062,46 @@ def _sidebar_countries(report: dict, amap: dict) -> list[dict]:
     return rows
 
 
+_HISTORY_ACT_CACHE: dict[str, tuple[float, str]] = {}
+
+
+def _history_act_note(entry) -> str:
+    """ACL-1697: заметка, если кабинет в карте не тот, где профиль работал.
+
+    `mlx_profiles.ad_account_id_for` читает последний кабинет из истории
+    браузера профиля (файл, без сети). Расхождение с картой — не ошибка, но
+    повод проверить: робот при запуске сверит открытый кабинет и остановится
+    на чужом (`wrong_ad_account`). Результат кэшируется на 2 минуты —
+    чтение копирует файл истории.
+    """
+    if not entry:
+        return ""
+    want = (entry.ad_account_id or "").strip()
+    pid = (entry.profile_id or "").strip()
+    if not want or not pid:
+        return ""
+    import time as _time
+
+    now = _time.time()
+    hit = _HISTORY_ACT_CACHE.get(pid)
+    if hit and now - hit[0] < 120:
+        seen = hit[1]
+    else:
+        try:
+            from src.fb_ads_rpa import mlx_profiles
+
+            seen = mlx_profiles.ad_account_id_for(pid) or ""
+        except Exception:
+            seen = ""
+        _HISTORY_ACT_CACHE[pid] = (now, seen)
+    digits = lambda v: "".join(ch for ch in str(v) if ch.isdigit())
+    if not seen or digits(seen) == digits(want):
+        return ""
+    return (f"The most visited account in this profile's recent history is {seen}, but the map has {want}. "
+            "If its Facebook user has no access to the map's account, the robot will stop "
+            "with wrong_ad_account - check the ad account id on the Accounts page.")
+
+
 def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     """Return preflight info per account:
     {acc_label: {link, link_status, missing_map_fields: [str], has_map_entry}}
@@ -1108,6 +1148,7 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
             "has_map_entry": entry is not None,
             "prefill": prefill,
             "page_name": page_name,
+            "ad_account_note": _history_act_note(entry),
         }
     return result
 
@@ -1322,7 +1363,7 @@ _NCOLS_BY_SECTION = {
     "optimization": 8,    # adset, six metrics, reason
 }
 
-app = FastAPI(title="Adopy Campaigns Launcher")
+app = FastAPI(title="Adopy Campaign Manager")
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
@@ -1688,7 +1729,7 @@ async def acl_update_apply() -> JSONResponse:
         return JSONResponse(
             {
                 "ok": False,
-                "error": "ACL was not started by its launcher, so nothing would "
+                "error": "ACM was not started by its launcher, so nothing would "
                          "bring it back. Start it from the desktop shortcut and "
                          "try again.",
             },
@@ -1701,7 +1742,7 @@ async def acl_update_apply() -> JSONResponse:
             {
                 "ok": False,
                 "error": f"{busy} campaign job(s) still running. Updating restarts "
-                         "ACL, which would abandon them half-built.",
+                         "ACM, which would abandon them half-built.",
             },
             status_code=409,
         )
@@ -1745,7 +1786,7 @@ async def _apply_release_update(active_jobs) -> JSONResponse:
         restarting = True
         return JSONResponse({"ok": True, "target": manifest["version"]})
     except (release_updates.UpdateError, OSError, ValueError, TypeError, KeyError) as exc:
-        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACL is still running."
+        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACM is still running."
         return JSONResponse({"ok": False, "error": message}, status_code=400)
     finally:
         # A successful handoff deliberately keeps the reservations until exit.
@@ -4778,7 +4819,7 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     request_id = (form.get("request_id") or "").strip()
     if activate:
         return JSONResponse(
-            {"error": "Live activation is disabled: ACL creates draft-only campaigns."},
+            {"error": "Live activation is disabled: ACM creates draft-only campaigns."},
             status_code=403,
         )
     if not user_confirmed:

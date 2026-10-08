@@ -27,6 +27,94 @@ names, formulas and number format. Decisions: owner, 2026-10-06 (issue #652).
 - **Ad drills**: the Date column and the dead "+ 🛒" button are gone.
 - **Copy for group** (button and hint under a red account status) is hidden for now; `SHOW_COPY_FOR_GROUP = True` in `app.py` brings it back. Screenshot and status code are unchanged.
 - Python edits (`morning_report.py` trend builder, `app.py`) need a `serve.py` restart.
+## next_to_ad confirms the ad level and names the reason on that step — ACL-1693
+
+Manager laptop LAPTOP-UA006, run 81c1bfbb5456 (07.10, window 1536x730 at dpr 1.25): `next_to_ad`
+was recorded ok, but the editor stayed on "Ad sets - Edit" (`levels: ["ad_set"]`). Five `ad_name`
+tries ended in `not_on_ad_level`, then every creative upload ended in `wizard_not_opened` - about
+four minutes lost, and the failure was named on the wrong step.
+
+- After the Next press the robot reads the editor level. Still on the ad set: it closes the
+  notices that may cover Next (the "WhatsApp Status included" notice was open over the page) and
+  presses Next again, up to three presses in all.
+- Still on the ad set after all presses: the campaign stops at `next_to_ad_stuck_on_adset` with a page
+  capture and a reason (`next_covered`, `next_outside_viewport`, `dialog_open`, `next_not_found` or
+  `next_clicked_no_change`). The stop is blocking and never replayed: a rebuild would leave another
+  partial draft in a live account. Plain `next_to_ad` (retryable) stays for a page that cannot be read.
+- The level is re-read after every press and before failing, so a slow transition is not a failure.
+  Page markers (`/editor:<level>`) decide; the wizard sidebar guess is used only without markers.
+- A page whose level cannot be read is not pressed blindly (the old behaviour is kept).
+- The browser zoom is not touched. Evidence is not enough to pin the cause (see the PR for the
+  captures to request from the laptop).
+
+## Classic editor: ads 2-4 are created again, the ad set row's Action menu is opened by hover — ACL-1691
+
+On 07.10 (Facebook_5265 run f2c513f0a22d, KW_TRL on 9403A) `create_additional_ad` failed with
+`create_menu_item_not_found` (`menuSurfaces: []`, click point on an ad's text) and ads 2-4 were not created.
+Two causes on the captures:
+
+- The classic tree draws the row buttons only under the cursor (as the single-screen editor did, ACL-1630):
+  there is no "Action menu" in the DOM until the pointer is over the row. The step waited 30 s for it
+  to appear and then fell back to a blind coordinate click.
+- That fallback took the first text equal to the ad set name, sorted by height. The breadcrumb header above the
+  tree carries the same name (y = 22), so the click landed on the breadcrumb's ad name, not on the row.
+
+Fix: the tree counts as ready once the ad set row is there; the robot hovers that row (mouse move only, no
+press, no focus, at most 3 tries, stopping as soon as the button appears), then the existing Action menu ->
+"Create ad" path runs. If the row still shows no button the step blocks with `adset_action_menu_not_shown`
+("The ad set row in the left tree shows no Action menu button, even with the cursor over it; nothing was
+clicked.") instead of clicking blindly. The legacy coordinate fallback now ignores the breadcrumb.
+
+After that block the caller does not adopt an existing "New Leads Ad" row (ACL-1641's `_adopt_shell_or_recreate` is
+not called): nothing was clicked, so there is no new shell, and adopting another ad would report a false "created" and
+overwrite it. It makes one clean re-create instead (only when the tree shows no new shell), and if that blocks too the
+ad fails as `adN_create:adset_action_menu_not_shown`. The reason is kept per thread (`last_create_block()`), because two
+accounts publish at once in threads of one process; the caller reads it once per attempt.
+
+Where the blind coordinate fallback is still reachable: when the tree readiness check times out (30 s, no ad set
+row) or when the hover finds no ad set row (`hidden`, or no point after a timeout). With the breadcrumb and
+left-third filters the only thing it can click there is the ad set row itself; it cannot reach a breadcrumb or an ad row.
+
+## Placements: a complete Stories list that flickers is still read as "not offered" — ACL-1684
+
+On FacebookDoc120 (run 4e4969867d28) "Messenger Stories" was judged missing and a good run became a
+false do-not-publish: the list was complete (end proven, nothing hidden) but never read as stable.
+
+- Meta folded the Stories list twice while it was read; each re-opening spent the wait counted from
+  the first read, so the 1.5 s quiet window never fitted. The wait is now counted from the last
+  re-opening, with a hard limit of 15 s from the first read.
+- The row count no longer takes part in "stable" (it flickers while Meta remounts the list; the
+  end proof already covers hidden rows).
+- Unchanged: an incomplete list, or an offered but hidden placement, is never "not offered".
+
+## B97: when Meta shows no media counter the robot refuses honestly; it waits for the Crop cards — ACL-1669
+
+Two live B97 runs of the same build (07.10) failed in the media step. In both the robot read a step body once, immediately. Only the Crop case is established as a late draw.
+
+- Library pick (run 3edaf71b0613): the "N selected" counter was read 0.1 s after the Media step opened, found nothing and refused (`selection_state_unavailable`), so no ad got media and `url_field_missing` followed on each. The robot now waits up to 4 s for the counter. If it is still missing, the robot refuses honestly instead of guessing: it neither clicks a tile nor uploads, and the ad ends with the named blocking reason `library_selection_unreadable` (the media must be attached by hand). A safe automatic fallback needs a live capture of the missing-counter state; that is follow-up work. Two review rounds found that an upload "when no tile is marked" cannot be proven safe from the markup we have (hidden or unrendered selections), so it was removed.
+- What is NOT established: that the counter was merely "late" in run 3edaf71b0613. The real 07.10 picker capture of the other run (bc4302862ee7, wizard open on Media at 0.1 s) shows the counter readable ("1 selected" / "0 selected") and the selected tile wrapped in `data-test-decoration="selected"`. Why the counter was not found in 3edaf71b0613 is unknown: no picker markup of that run exists. The 4 s wait is a bounded response, not a proven fix.
+- When the counter is missing the robot does not search the library for a known copy. A reuse-only ad that reaches that point is named `library_not_searched_counter_unreadable`, not `library_has_no_copy`, and it does NOT trigger the ACL-1637 re-upload (that stays for a searched library that answered "no copy"). The `counter_missing` flag is per call, so per ad: it is reset at the start of every `upload_ad_creative`.
+- Crop (run bc4302862ee7): the pick worked, but Crop was read while Meta still showed loading placeholders (no Square/Vertical cards) and ended `crop_replace_button_missing`. The step now waits up to 20 s for the cards; if they never appear it names the missing card. The 20 s figure is a cap, not a measured load time.
+- `url_field_missing` is reported as `<ad>_destination:url_field_missing_no_media` (still blocking, with a sentence for the dashboard) only when the creative step failed AND the empty Media state is positively seen on the page (Meta's "Please specify the media" text, or the single-screen editor's `empty` state on a mounted block). A Media block that cannot be read or is unmounted keeps the plain `url_field_missing`.
+- ACL-1637 did not cause this: the counter check dates from 17.09 and ad 1 never goes through the ACL-1637 path.
+- Bench: `wizard_media_picker_selected_2026_10_07.html` is cut from the real 07.10 capture (counters emptied; expected result is a REFUSAL). `scripts/capture_to_fixture.py` now keeps `data-test-decoration`, only when its value is `selected` (the scrubber used to drop Meta's selected mark, which is why the old 04.10 picker fixture looked unmarked). The Crop-loading fixture is hand-reduced from the real captures and keeps their three `role=progressbar` placeholders.
+
+## Conversion location: the menu is opened by click or script, and a failure names its reason — ACL-1572
+
+`conversion_website_pick: not_selected` failed campaigns on Doc21, Elf403, KLD_BFL_B91 and
+Facebook_5265 (01-06.10). Telemetry showed `menu_closed: 8, reopened: 0`: the menu never opened,
+so none of the eight pick methods ever ran against an open menu.
+
+- Opening the menu now escalates: the existing click, then a single script press; the next opener runs only when the previous one left the menu closed.
+- "Menu is open" also reads the trigger's `aria-expanded`, not only the Single/Multiple headings
+  (a menu without those headings was taken for closed and then clicked shut).
+- Focus is released from the ad set name field before the trigger is pressed (its suggestion list
+  swallowed the first press on the failing captures; no Escape, it closes the wizard).
+- After three failed openings the step stops instead of spending 60-190 s on the remaining methods.
+- A failed pick says why, in English, in the `conversion_website_pick` note: the menu would not
+  stay open; Website is not offered in the open menu; Conversion location is not on this screen
+  (the ad editor was showing, as on Facebook_5265).
+- Review fixes: the script press is one click (two would close a toggle trigger). The keyboard (focus + Enter) opener was dropped entirely: Enter could accept a suggestion in the ad set name field and rename the ad set, so the only openers are the click and the script press, and the name field is blurred first (in the frame that holds it). As a single safety check, the ad set name is read once at the start of the Conversion location step and compared at its end, across all retries; a change stops the step (the recorded flow returns the blocking, never replayed `conversion_website_name_changed`) and says only that the name changed, never the names. "Not on this screen" is returned only when the field is truly absent (a page script failing in every frame is its own read-error reason); "would not stay open" only after both openers pressed and failed; the reason is added to the step's error text, not only telemetry; the step state is per thread.
 ## Advantage+ audience on WhatsApp campaigns: a collapsed Age row with a note is opened again — ACL-1638
 
 The classic ad set editor failed the `advantage_plus_audience` step (`still_on`, campaign not published)

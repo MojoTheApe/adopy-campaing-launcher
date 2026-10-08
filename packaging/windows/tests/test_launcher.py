@@ -38,7 +38,7 @@ class LauncherTests(unittest.TestCase):
                     result = launcher._print_version()
 
         self.assertEqual(result, 0)
-        self.assertIn("Adopy Campaign Launcher 0.1.0-test", output.getvalue())
+        self.assertIn("Adopy Campaign Manager 0.1.0-test", output.getvalue())
         self.assertIn("a" * 40, output.getvalue())
         self.assertIn("b" * 40, output.getvalue())
 

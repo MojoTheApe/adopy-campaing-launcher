@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <link rel="icon" href="/favicon.ico?v=acl" sizes="32x32">
+  <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   {#- ACL-1267: вкладку версии владельца не спутать со сборкой менеджеров. #}
-  <title>{% if (stage_status or {}).channel == 'stage' %}STAGE · {% endif %}Adopy Campaigns Launcher — {{ report.date }}</title>
+  <title>{% if (stage_status or {}).channel == 'stage' %}STAGE · {% endif %}Adopy Campaign Manager — {{ report.date }}</title>
   <script>
     // Apply before paint. Only a click pins the theme; otherwise follow the OS.
     (function () {
@@ -432,11 +432,37 @@
       gap: 0.7rem;
       min-width: 0;
     }
-    .brand-logo {
-      width: 36px;
-      height: 36px;
+    /* ACM: метка сверху, подпись под ней. Метка плоская (#2563eb, без плитки),
+       поэтому без скругления и без фона — одинаково читается на обеих темах. */
+    .brand-mark {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.2rem;
       flex-shrink: 0;
-      border-radius: 9px;
+    }
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      flex-shrink: 0;
+    }
+    /* Шрифт лежит в репозитории (OFL, см. static/fonts/OFL-Inter.txt): дешборд
+       работает офлайн, CDN нельзя. Только для подписи бренда. */
+    @font-face {
+      font-family: 'ACM Inter';
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+      src: url('/static/fonts/inter-medium-latin.woff2') format('woff2');
+    }
+    header.page-header h1.brand-name {
+      margin: 0;
+      font-family: 'ACM Inter', "Segoe UI", system-ui, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.1;
+      color: var(--muted);
+      white-space: nowrap;
     }
     .brand-text {
       display: flex;
@@ -444,17 +470,6 @@
       gap: 0.15rem;
       min-width: 0;
     }
-    /* Начертание: «Adopy» несёт вес, остальное — спокойнее. Одно название, а
-       не два слова подряд одинаковой громкости. */
-    header.page-header h1 {
-      font-size: 1.02rem;
-      font-weight: 650;
-      letter-spacing: -0.012em;
-      margin: 0;
-      color: var(--text);
-      white-space: nowrap;
-    }
-    header.page-header h1 span { font-weight: 500; color: var(--muted); }
 
     /* Две подписанные величины. Подпись приглушена, значение — нет: читают
        здесь значение, а подпись только объясняет, какое именно. */
@@ -3141,9 +3156,13 @@
 <div class="page-top">
 <header class="page-header">
   <div class="brand-lockup">
-    <img src="/static/logo.svg" alt="" class="brand-logo" width="36" height="36">
+    {#- ACM: метка Adopy и под ней подпись — «стопка». Подпись — HTML-текст,
+        а не SVG-локвап, чтобы цвет шёл из переменных светлой/тёмной темы. -#}
+    <div class="brand-mark">
+      <img src="/static/logo.svg" alt="" class="brand-logo" width="34" height="34">
+      <h1 class="brand-name">Adopy Campaign Manager</h1>
+    </div>
     <div class="brand-text">
-      <h1>Adopy <span>Campaigns Launcher</span></h1>
       {#- Две подписанные величины вместо ленты через точки. Обе нужны в один
           и тот же момент — когда обновление сломало работу и надо понять, что
           стоит и когда встало, чтобы откатиться. Без подписи «Updated 2026-09-08
@@ -3152,7 +3171,7 @@
         <dt>Last updated:</dt>
         <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd>
         <dt>Version:</dt>
-        <dd id="acl-version" title="Installed ACL release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd>
+        <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd>
         {%- set st = stage_status or {} %}
         {%- if st.channel == 'stage' %}
         <dd id="acl-stage" class="acl-stage{% if not st.known %} unknown{% endif %}"
@@ -3207,7 +3226,7 @@
     {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
         с Refresh намеренно: беда случается на экране, и идти за ней в другое
         место человек не станет. -#}
-    <button type="button" id="report-problem-btn" title="Tell us what went wrong — ACL attaches the machine's own facts">Report a problem</button>
+    <button type="button" id="report-problem-btn" title="Tell us what went wrong — ACM attaches the machine's own facts">Report a problem</button>
     <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
     <button type="submit" id="dash-refresh-btn">Refresh</button>
   </form>
@@ -3217,7 +3236,7 @@
     последние отказавшие шаги прикладывает ACL сам. -#}
 <dialog id="report-problem-box" class="report-box">
   <h3>Report a problem</h3>
-  <p class="report-hint">Write what happened in your own words. ACL attaches its
+  <p class="report-hint">Write what happened in your own words. ACM attaches its
      version, this machine, the dates on screen and the last failed steps —
      account and profile numbers are removed before sending.</p>
   <textarea id="report-problem-text" rows="6" maxlength="4000" placeholder="The campaign stopped at the creative and nothing happened for ten minutes…"></textarea>
@@ -3338,7 +3357,7 @@ async function dashRefresh(ev) {
         var fixed = (s.fixed || []).map(function (f) {
           return '• ' + f.issue + (f.notes && f.notes.length ? ' — ' + f.notes.join('; ') : '');
         });
-        btn.textContent = name && s.channel === 'release' ? 'Update to ' + name : 'Update ACL';
+        btn.textContent = name && s.channel === 'release' ? 'Update to ' + name : 'Update ACM';
         btn.title = 'A newer release is available' + (name ? ': ' + name : '')
           + (fixed.length ? '\n\nWhat changed:\n' + fixed.join('\n') : '')
           + '\n\nInstalling takes a few minutes and restarts the dashboard.';
@@ -3355,7 +3374,7 @@ async function dashRefresh(ev) {
     if (btn.disabled) return;
     var name = btn.dataset.target || 'the latest release';
     var fixed = btn.dataset.fixed || '';
-    if (!confirm('Update ACL to ' + name + '?\n\n'
+    if (!confirm('Update ACM to ' + name + '?\n\n'
       + (fixed ? 'What changed:\n' + fixed + '\n\n' : '')
       + 'The dashboard will restart and this page will reload by itself. '
       + 'It takes a few minutes. If the new version does not start, the current one comes back by itself.')) return;
@@ -3371,7 +3390,7 @@ async function dashRefresh(ev) {
       .then(function (data) {
         if (!data || data.ok !== true) {
           btn.disabled = false;
-          btn.textContent = 'Update ACL';
+          btn.textContent = 'Update ACM';
           alert('Update not started: ' + ((data && data.error) || 'unknown error'));
           return;
         }
@@ -3391,9 +3410,9 @@ async function dashRefresh(ev) {
     var key = 'acl-update-seen:' + a.finished_at;
     try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { /* без памяти — покажем снова */ }
     alert(a.result === 'rollback_failed'
-      ? 'The update failed and ACL could not fully restore the previous version. Open the previous installer or contact support.\n\n' + (a.reason || '')
+      ? 'The update failed and ACM could not fully restore the previous version. Open the previous installer or contact support.\n\n' + (a.reason || '')
       : a.result === 'rolled_back'
-      ? 'The update to ' + (a.to || 'the new version') + ' did not work, so ACL went back to '
+      ? 'The update to ' + (a.to || 'the new version') + ' did not work, so ACM went back to '
         + (a.from || 'the previous version') + '.\n\n' + (a.reason || '')
         + '\n\nNothing else changed. Use Report a problem so it gets fixed.'
       : 'The update to ' + (a.to || 'the new version') + ' did not start: ' + (a.reason || 'unknown reason'));
@@ -3411,8 +3430,8 @@ async function dashRefresh(ev) {
       btn.textContent = 'Updating… ' + secs + 's';
       if (Date.now() - started > LIMIT_MS) {
         btn.disabled = false;
-        btn.textContent = 'Update ACL';
-        alert('ACL did not come back within 10 minutes. Open it again from the desktop '
+        btn.textContent = 'Update ACM';
+        alert('ACM did not come back within 10 minutes. Open it again from the desktop '
           + 'shortcut. If the new version did not start, the previous one is restored '
           + 'automatically; use Report a problem if it still does not open.');
         return;
@@ -3538,7 +3557,7 @@ async function dashRefresh(ev) {
       дальше менеджер меняет их здесь, а не в .env. -#}
   <section class="acc-connect" id="mp-box">
     <h3>This computer</h3>
-    <p class="acc-sub">Where ACL reads your stats and looks for creatives. Paste a path from Explorer (Shift + right-click → Copy as path).</p>
+    <p class="acc-sub">Where ACM reads your stats and looks for creatives. Paste a path from Explorer (Shift + right-click → Copy as path).</p>
     <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:70ch">
       {#- ACL-1447: имя менеджера — тег `manager` у событий Sentry этой машины. -#}
       <label>
@@ -3941,6 +3960,9 @@ async function dashRefresh(ev) {
           <span class="cb-pf-err" style="font-size:0.7rem">⚠ missing: {{ pf.missing_map_fields | join(', ') }}</span>
         {% else %}
           <span style="font-size:0.7rem;color:var(--good)">✓ config ok</span>
+        {% endif %}
+        {% if pf.ad_account_note %}
+          <span class="cb-pf-err" style="font-size:0.7rem" title="{{ pf.ad_account_note }}">⚠ ad account differs from this profile's history</span>
         {% endif %}
         {% if ds and ds.state == 'ready' %}
           <span class="cb-draft-badge" title="{{ ds.campaign_names | join(', ') }}">
@@ -5758,10 +5780,10 @@ window.cbTree = (function () {
   "derived": {"rows": 951, "attempts": 19, "until": "2026-09-28"},
   "stages": [["profile", 18], ["campaign", 57], ["adset", 178], ["ad", 175], ["final", 6]],
   "rules": [
-    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|spend_profile_|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
+    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
     ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error)", "profile"],
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
-    ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad$|simple_ad_section$)", "adset"],
+    ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad(_stuck_on_adset)?$|simple_ad_section$)", "adset"],
     ["^(ad_level_summary$|destination_sweep|simple_create_draft$)", "final"],
     ["^(ad\\d*_|creative_|text_variations_off$|text_generation_off$|simple_create_more_ads$|simple_reentry$|loading_modal_reload$|destination_website_selected$|destination_instant_form_off$)", "ad"]
   ],
@@ -7083,7 +7105,7 @@ function amapAwaitSplit(account, per, tries) {
           if (!s) throw new Error('the reading disappeared before it finished');
           if (typeof amapHandWait === 'function') amapHandWait(account, s.state === 'running' ? (j.waiting || '') : '');
           if (s.state !== 'running') { resolve(s); return; }
-          if (tries > 120) throw new Error('no answer after six minutes — check the launcher window');
+          if (tries > 120) throw new Error('no answer after six minutes — check the Adopy Campaign Manager window');
           resolve(amapAwaitSplit(account, per, tries + 1));
         })
         .catch(reject);
@@ -7400,9 +7422,9 @@ function amapHandWait(account, note) {
       ? 'Read all opens closed profiles one after another: this one waits until the '
         + 'computer has memory for another profile (the same queue as Publish).'
       : /^Opening the /.test(note)
-      ? 'The profile was closed. ACL opens it with automation for this read and closes '
+      ? 'The profile was closed. ACM opens it with automation for this read and closes '
         + 'it again afterwards; profiles that were already open stay open.'
-      : 'The profile window was opened by hand. ACL closes it through Multilogin '
+      : 'The profile window was opened by hand. ACM closes it through Multilogin '
         + '(nothing is killed) and reopens it with automation.';
   });
 }
@@ -8413,7 +8435,7 @@ function amapPollSpend(account, cell, btn, tries, per, pressed) {
   per = per || amapPeriod();
   if (!per.from || per.span === 'all') return;
   if (tries > 120) {
-    amapApplyReading(account, {state: 'failed', error: 'no answer after six minutes — check the launcher window'});
+    amapApplyReading(account, {state: 'failed', error: 'no answer after six minutes — check the Adopy Campaign Manager window'});
     return;
   }
   setTimeout(function () {
@@ -8600,7 +8622,7 @@ async function amapQueueRead(job, per) {
     }
     return done.state;
   } catch (e) {
-    var message = e && e.name === 'AbortError' ? 'Read request timed out — check the launcher window' : String(e && e.message || e);
+    var message = e && e.name === 'AbortError' ? 'Read request timed out — check the Adopy Campaign Manager window' : String(e && e.message || e);
     amapApplyReading(job.account, {state: 'failed', error: message});
     return 'failed';
   }
@@ -8621,7 +8643,7 @@ async function amapAwaitReading(account, per, tries) {
       return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null};
     }
   }
-  throw new Error('no answer after six minutes — check the launcher window');
+  throw new Error('no answer after six minutes — check the Adopy Campaign Manager window');
 }
 
 function amapSpendFailed(btn, cell, why, shot, how, code) {

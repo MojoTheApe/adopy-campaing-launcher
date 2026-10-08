@@ -171,7 +171,7 @@ def _draw(screen: str) -> list[tuple[str, str]]:
     w.configuration = SimpleNamespace(accounts=("one",))
     w.stats_path = SimpleNamespace(get=lambda: "stats.xlsx")
     w.creatives_path = SimpleNamespace(get=lambda: "creatives")
-    w.version_text = "Adopy Campaign Launcher 1.2.3"
+    w.version_text = "Adopy Campaign Manager 1.2.3"
     w.body = object()
     drawn: list[tuple[str, str]] = []
     w._text = lambda value, *, bold=False, color="#273248": drawn.append((value, color))
