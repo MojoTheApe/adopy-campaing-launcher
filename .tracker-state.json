@@ -2448,8 +2448,24 @@
       "source_sha": "f35bdaa6cff4be31f2e376b55130f24edc44f8cd",
       "main_tree": "1cd90f124b17310f0c099782580bb0ebeab4f82f",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
-      "recorded_at": "2026-10-08T22:01:08+00:00"
+      "state": "passed",
+      "recorded_at": "2026-10-08T22:01:08+00:00",
+      "verification": {
+        "kind": "stage-verification",
+        "result": "passed",
+        "tree_sha": "f0a9183dbf0b4babc358c0127ba4efb49b7fde03",
+        "source_sha": "f35bdaa6cff4be31f2e376b55130f24edc44f8cd",
+        "target": "ACL isolated Windows stage installation",
+        "checks": [
+          "Previous actual package installs and starts with isolated data",
+          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+          "Updated installed application restarts with preserved machine/workspace/creative data",
+          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+          "Recovered application restarts and synthetic data remains byte-identical"
+        ],
+        "report": "Actual Stage f35bdaa6cff4be31f2e376b55130f24edc44f8cd has approved tree f0a9183dbf0b4babc358c0127ba4efb49b7fde03. Isolated Windows installer/update/restart/recovery report from successful source run37847694255 (ACL-update-recovery-1030, artifact11581756062) tested actual GitHub PR merge aeb34e5367f951386946727a6922ee2409a480c1, parents reviewed base3ec4c0fa30782c15a06a1cbe653c96ae5721ab72 and source512c77d2bd198aa5ed16ae3cc27e957cf276407e, with this identical tree. The artifact was not built from the later Stage SHA. Its five real isolated package checks passed, preserving synthetic data/pointers/shortcuts during update and deliberate failure recovery. ZIP SHA256 3a348fc1580796b45f0ff7e698b3206706f3d2d894d3c93ffd869f7952b4f2e1; report SHA256 b1bae27bb73adcc896f89609100b2d0c9b55bac797237e250887223adcd00f3d. Current-head full applicable source Linux/Windows/installer checks passed and unchanged-tree evidence is reused under the maintained Stage procedure. No stable release/download-channel, employee rollout or deferred live pilot proof is claimed."
+      },
+      "verified_at": "2026-10-08T22:02:13+00:00"
     },
     "tasks": {
       "248": {
