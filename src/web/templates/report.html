@@ -5308,13 +5308,39 @@ window.cbTree = (function () {
     }
   }
 
+  /* ACL-1728: нижняя панель (страна / аккаунт / «new country…») не должна
+     перерисовываться под руками. Опрос заданий дёргает paintFoot каждые
+     пару секунд; innerHTML заменял открытый <select> новым узлом, и список
+     закрывался сам, а недопечатанная страна пропадала. Теперь:
+       - пока в панели фокус на поле или списке, перерисовка откладывается
+         и выполняется, когда фокус ушёл;
+       - если разметка не изменилась, узлы не трогаем вовсе;
+       - при настоящей перерисовке выбранный аккаунт и набранный текст
+         переносятся в новые узлы. */
+  var footPending = false, footHtml = '';
+
+  function footBusy() {
+    var a = document.activeElement;
+    return !!(a && a !== foot && foot.contains(a) && /^(SELECT|INPUT|TEXTAREA)$/.test(a.tagName));
+  }
+
+  foot.addEventListener('focusout', function (e) {
+    if (e.relatedTarget && foot.contains(e.relatedTarget)) return;
+    setTimeout(function () { if (footPending && !footBusy()) paintFoot(); }, 0);
+  });
+
   function paintFoot() {
+    if (footBusy()) { footPending = true; refreshTicks(); return; }
+    footPending = false;
     var list = places();
-    foot.hidden = false;
     var chosen = foot.querySelector('.cbd-pick-country');
     var keep = (chosen && chosen.value) || currentCountry();
+    var acctOld = foot.querySelector('.cbd-pick-account');
+    var keepAccount = acctOld ? acctOld.value : '';
+    var typedOld = foot.querySelector('.cbd-new-country');
+    var keepTyped = typedOld ? typedOld.value : '';
     var t = ticks();
-    foot.innerHTML = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
+    var html = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
         ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
           + aclEscHtml(publishLabel(t)) + '</button>'
           + '<div class="cbd-queue" hidden></div>'
@@ -5336,7 +5362,21 @@ window.cbTree = (function () {
       + '<button type="button" class="cbd-add" data-act="add-country">+ Country</button>'
       + '<span class="cbd-new-msg"></span>'
       + '</div>';
-    paintAccounts();
+    foot.hidden = false;
+    // Та же разметка, что и в прошлый раз, - узлы остаются теми же.
+    if (!(foot.firstChild && html === footHtml)) {
+      foot.innerHTML = html;
+      footHtml = html;
+      paintAccounts();
+      var acctNew = foot.querySelector('.cbd-pick-account');
+      if (acctNew && keepAccount) {
+        for (var i = 0; i < acctNew.options.length; i += 1) {
+          if (acctNew.options[i].value === keepAccount) { acctNew.value = keepAccount; break; }
+        }
+      }
+      var typedNew = foot.querySelector('.cbd-new-country');
+      if (typedNew && keepTyped) typedNew.value = keepTyped;
+    }
     if (window.CB_QUEUE && window.CB_QUEUE.progress) showQueue(window.CB_QUEUE.progress);
     refreshTicks();
   }
