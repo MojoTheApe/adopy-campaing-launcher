@@ -6578,20 +6578,6 @@
   },
   "execution": {
     "claims": {
-      "727": {
-        "actor": "Worker-W1727W",
-        "session": "w1727w_1008",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "codex/acl-1727-window-enlarge",
-        "worktree": "C:\\acl-1727-window-enlarge",
-        "id": "e341fcedb48e47afbeb04f8c5c27e2a6",
-        "issue": 727,
-        "state": "handoff",
-        "started_at": "2026-10-08T06:30:18+00:00",
-        "from_status": "status:idea",
-        "pr": 731,
-        "report": "PR #731 (head eb36a6a1). ensure_editor_window now enlarges a restored-but-small window (CDP maximise, or size-only growth for parked windows), re-measures, and stops with window_too_small only if still small; diag has enlarged/enlarged_to. Tests: tests/test_editor_window_guards.py (19), plus 3 neighbouring window files, all pass; no browser tests."
-      },
       "728": {
         "actor": "Worker-S1728A",
         "session": "run_s1728a_1008",
@@ -9469,9 +9455,25 @@
             "session": "w1727w_1008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1727W",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-W1727W",
+          "session": "w1727w_1008",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "codex/acl-1727-window-enlarge",
+          "worktree": "C:\\acl-1727-window-enlarge",
+          "id": "e341fcedb48e47afbeb04f8c5c27e2a6",
+          "issue": 727,
+          "state": "handoff",
+          "started_at": "2026-10-08T06:30:18+00:00",
+          "from_status": "status:idea",
+          "pr": 731,
+          "report": "PR #731 (head eb36a6a1). ensure_editor_window now enlarges a restored-but-small window (CDP maximise, or size-only growth for parked windows), re-measures, and stops with window_too_small only if still small; diag has enlarged/enlarged_to. Tests: tests/test_editor_window_guards.py (19), plus 3 neighbouring window files, all pass; no browser tests."
+        },
+        "pr": 731,
+        "queued_at": "2026-10-08T06:36:33+00:00"
       },
       "728": {
         "implementers": [
@@ -12377,7 +12379,8 @@
       642,
       651,
       710,
-      726
+      726,
+      727
     ],
     "review": {
       "id": "4b69e861484d452dac7316d44fd462bf",
@@ -17389,6 +17392,13 @@
         "issue": 726,
         "pr": 730,
         "actor": "Worker-W1726C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T06:36:33+00:00",
+        "issue": 727,
+        "pr": 731,
+        "actor": "Worker-W1727W"
       }
     ],
     "policy": {
