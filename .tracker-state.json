@@ -9839,7 +9839,7 @@
             "session": "run_s1743a_1008"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1743A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -9857,7 +9857,8 @@
           "report": "# ACL-1743 handoff\nPR #744, head 56cd37e97729c7be5fc288bb0b661c8bc0b38cbc.\nRoot cause: subprocess text=True on windows-latest decoded gh/git output as cp1252 (UnicodeDecodeError, byte 0x8f) in acl_publish_release._gh and acl_ci_reuse.gh_api/_git.\nFix: explicit encoding=\"utf-8\", errors=\"replace\" in those calls; PYTHONUTF8=1 added to release.yml env; proof logic unchanged.\nTest: tests/test_publish_release.py -> 48 passed (incl. new non-ASCII test)."
         },
         "pr": 744,
-        "queued_at": "2026-10-08T10:06:51+00:00"
+        "queued_at": "2026-10-08T10:06:51+00:00",
+        "reviewer": "Reviewer-R1743Q"
       }
     },
     "actors": {
@@ -10656,6 +10657,10 @@
       "Worker-S1743A": {
         "session": "run_s1743a_1008",
         "role": "Worker"
+      },
+      "Reviewer-R1743Q": {
+        "session": "rev_r1743q_1008",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -12905,10 +12910,20 @@
       651,
       710,
       728,
-      739,
-      743
+      739
     ],
-    "review": null,
+    "review": {
+      "id": "bffbebba04fd4da1b580842929d221fa",
+      "pr": 744,
+      "issues": [
+        743
+      ],
+      "actor": "Reviewer-R1743Q",
+      "session": "rev_r1743q_1008",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-08T10:43:29+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -18100,6 +18115,13 @@
         "prs": [
           745
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-08T10:43:29+00:00",
+        "pr": 744,
+        "lane": "bffbebba04fd4da1b580842929d221fa",
+        "actor": "Reviewer-R1743Q"
       }
     ],
     "policy": {
