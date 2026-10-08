@@ -2290,6 +2290,24 @@
           723
         ],
         "recorded_at": "2026-10-08T06:29:23+00:00"
+      },
+      "730": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1726V",
+        "review_session": "rev_r1726v_1008",
+        "execution_lane": "8ff64acef19a4c22bd470bfa071cb37d",
+        "implementer": "Worker-W1726C",
+        "head_sha": "9a4403cf2b324b3f4ccbc35877e50252a6ae2258",
+        "base_sha": "6f63a570699e90f10fb424cd990393509bbff193",
+        "tree_sha": "14e616f32f6ee2d841c00a87d35927b3fe864681",
+        "report": "C:/acl-tools/evidence/review_730.md",
+        "main_sha": "ec7bffc16cd920a86dd76aa1390cb939d388d2c7",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          726
+        ],
+        "recorded_at": "2026-10-08T07:22:13+00:00"
       }
     },
     "stage": {
