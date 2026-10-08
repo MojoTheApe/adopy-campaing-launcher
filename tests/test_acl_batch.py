@@ -247,6 +247,40 @@ def test_unpublished_partial_candidate_rebuilds_after_author_reconciliation(fixt
     assert (Path(result["worktree"]) / "worker2.txt").is_file()
 
 
+def test_failed_detached_rebuild_then_author_fix_refresh_retries_unchanged_published_candidate(fixture):
+    root, remote, section, prs, assemble = fixture
+    first = refresh(fixture)
+    batch = section["integration"]
+    subprocess.run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/stage", first["head_sha"]], check=True)
+    for member in batch["members"]:
+        acl_batch.git(root, "checkout", member["branch"])
+        (root / "app.py").write_text("conflicting " + str(member["issue"]) + "\n")
+        acl_batch.git(root, "commit", "-am", "fresh approved author change")
+        member["head_sha"] = acl_batch.git(root, "rev-parse", "HEAD")
+        prs[member["pr"]]["head"]["sha"] = member["head_sha"]
+        acl_batch.git(root, "push", str(remote), member["branch"])
+    acl_batch.git(root, "checkout", "main")
+    with pytest.raises(ValueError, match="Merge conflict"):
+        assemble(apply=True, rebuild=True, previous_head=first["head_sha"], worktree=root.parent/"failed")
+    failed_head = acl_batch.git(root.parent/"failed", "rev-parse", "HEAD")
+    batch["history"].append({"members": copy.deepcopy(batch["members"]), "main_sha": batch["main_sha"], "pr": None})
+    member = batch["members"][1]
+    acl_batch.git(root, "checkout", member["branch"])
+    (root / "app.py").write_text("conflicting 1\n")
+    acl_batch.git(root, "commit", "-am", "author reconciles failed rebuild")
+    member["head_sha"] = acl_batch.git(root, "rev-parse", "HEAD")
+    prs[member["pr"]]["head"]["sha"] = member["head_sha"]
+    acl_batch.git(root, "push", str(remote), member["branch"])
+    acl_batch.git(root, "checkout", "main")
+    result = assemble(apply=True, rebuild=True, previous_head=first["head_sha"], worktree=root.parent/"retry")
+    acl_batch.composition(Path(result["worktree"]), result["head_sha"], batch["main_sha"], [m["head_sha"] for m in batch["members"]])
+    subprocess.run(publish_argv(result, remote), check=True)
+    assert acl_batch.git(root.parent/"failed", "rev-parse", "HEAD") == failed_head
+    assert not acl_batch.git(root.parent/"failed", "status", "--porcelain")
+    assert subprocess.check_output(["git", "--git-dir", str(remote), "rev-parse", "stage"], text=True).strip() == first["head_sha"]
+    assert acl_batch.git(root, "rev-parse", "main") == batch["main_sha"]
+
+
 @pytest.mark.parametrize("failure", ["wrong-head", "missing-history", "foreign-local-ref"])
 def test_rebuild_requires_exact_previous_manifest_and_ref(fixture, failure):
     root, _, section, _, assemble = fixture

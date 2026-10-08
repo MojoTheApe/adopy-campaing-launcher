@@ -86,15 +86,23 @@ def previous_candidate(root, batch, previous_head, published):
     snapshots = [row for row in batch.get("history", []) if "members" in row and "main_sha" in row]
     if not snapshots:
         raise ValueError("Refresh the held batch before rebuilding; its previous manifest must be retained")
-    old = snapshots[-1]
-    if [m["issue"] for m in old["members"]] != batch["issues"]:
-        raise ValueError("Previous manifest does not preserve the held member set")
-    # An aborted initial assembly may contain only a subset. Every visited node
-    # still has to be the old baseline, an old approved tip or a merge commit.
-    included = [m["head_sha"] for m in old["members"] if subprocess.run(
-        ["git", "-C", str(root), "merge-base", "--is-ancestor", m["head_sha"], previous_head],
-        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0]
-    composition(root, previous_head, old["main_sha"], included)
+    for old in reversed(snapshots):
+        if [m["issue"] for m in old["members"]] != batch["issues"]:
+            continue
+        # A failed detached build never changes the published ref. Its exact
+        # prior composition may therefore match an earlier retained manifest.
+        # An aborted initial assembly may contain only a subset; every visited
+        # node must still be that manifest's baseline, tips or merge commits.
+        included = [m["head_sha"] for m in old["members"] if subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", m["head_sha"], previous_head],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0]
+        try:
+            composition(root, previous_head, old["main_sha"], included)
+        except ValueError:
+            continue
+        break
+    else:
+        raise ValueError("Previous candidate contains work outside the approved retained same-member manifests")
     local = subprocess.run(["git", "-C", str(root), "show-ref", "--verify", "--hash",
                             "refs/heads/" + batch["branch"]], text=True, capture_output=True)
     local_head = local.stdout.strip() if local.returncode == 0 else None

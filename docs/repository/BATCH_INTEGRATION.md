@@ -107,6 +107,10 @@ and exact generated head, saves a local evidence ref, and assembles a fresh deta
 candidate from frozen main and current approved tips. The previous local branch,
 worktree and index stay intact. Appending new tips to the old graph retains superseded
 tips and fails the pinned composition gate; it is not a recovery method.
+If a detached rebuild failed without publication, the remote still holds an earlier
+candidate: the helper must find a retained same-member manifest whose exact composition
+matches that head. The latest refreshed manifest alone does not establish its history.
+An unknown old implementation commit is rejected; keep the failed worktree as evidence.
 
 Inspect the printed `replacement.push_argv`, recheck the actual held claim/current
 sources, then run that exact atomic push. It creates a remote evidence branch at the
