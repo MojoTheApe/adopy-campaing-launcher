@@ -6891,22 +6891,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "747": {
-        "actor": "Worker-BATCH01",
-        "session": "acl_batch_root_20261008",
-        "coordinator": "Coordinator-BATCH01",
-        "branch": "codex/acl-1747-approved-batches",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-batch-integration",
-        "id": "7c3fd677489444c9b58eed362e9e2bbf",
-        "issue": 747,
-        "state": "handoff",
-        "started_at": "2026-10-08T11:38:31+00:00",
-        "from_status": "status:todo",
-        "pr": 748,
-        "report": "Prepared source-only ACL1747 candidate: explicit Approved/batch5 policy, reviewed compatible pins, portable helper closure, preserved genuine template ancestry/local controls, affected source CI versus complete combined proof, local owner-checked assembly and guarded queue-preserving cutover.\nLocal focused/tooling suite532 passed; final18 classifier cases and six actual-Git assembly/recovery cases pass. Exact descriptor/pinned guide/upgrade-idempotence/unchanged namespace-history-delivery fingerprint checks pass. Isolated pinned-runtime smoke and all46 packaging unit tests pass. Required hosted Linux/Windows/installer and independent source/base/scope review remain pending.\nThe actual Worker hands off its old-v1 claim. The original nine queued reviews are preserved. Shared service publication awaits explicit live-installation approval; no main config promotion or activation before its verification. Parent1566 stays unfinished until actual migration/board/two-task batch acceptance. No stable release, employee rollout or live advertising/pilot operation."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -9938,9 +9923,25 @@
             "session": "acl_batch_root_20261008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-BATCH01",
-        "coordinator": "Coordinator-BATCH01"
+        "coordinator": "Coordinator-BATCH01",
+        "handoff": {
+          "actor": "Worker-BATCH01",
+          "session": "acl_batch_root_20261008",
+          "coordinator": "Coordinator-BATCH01",
+          "branch": "codex/acl-1747-approved-batches",
+          "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-batch-integration",
+          "id": "7c3fd677489444c9b58eed362e9e2bbf",
+          "issue": 747,
+          "state": "handoff",
+          "started_at": "2026-10-08T11:38:31+00:00",
+          "from_status": "status:todo",
+          "pr": 748,
+          "report": "Prepared source-only ACL1747 candidate: explicit Approved/batch5 policy, reviewed compatible pins, portable helper closure, preserved genuine template ancestry/local controls, affected source CI versus complete combined proof, local owner-checked assembly and guarded queue-preserving cutover.\nLocal focused/tooling suite532 passed; final18 classifier cases and six actual-Git assembly/recovery cases pass. Exact descriptor/pinned guide/upgrade-idempotence/unchanged namespace-history-delivery fingerprint checks pass. Isolated pinned-runtime smoke and all46 packaging unit tests pass. Required hosted Linux/Windows/installer and independent source/base/scope review remain pending.\nThe actual Worker hands off its old-v1 claim. The original nine queued reviews are preserved. Shared service publication awaits explicit live-installation approval; no main config promotion or activation before its verification. Parent1566 stays unfinished until actual migration/board/two-task batch acceptance. No stable release, employee rollout or live advertising/pilot operation."
+        },
+        "pr": 748,
+        "queued_at": "2026-10-08T12:13:16+00:00"
       }
     },
     "actors": {
@@ -13020,7 +13021,8 @@
       651,
       710,
       728,
-      739
+      739,
+      747
     ],
     "review": null,
     "history": [
@@ -18246,6 +18248,13 @@
         "at": "2026-10-08T11:38:31+00:00",
         "issue": 747,
         "claim": "7c3fd677489444c9b58eed362e9e2bbf",
+        "actor": "Worker-BATCH01"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T12:13:16+00:00",
+        "issue": 747,
+        "pr": 748,
         "actor": "Worker-BATCH01"
       }
     ],
