@@ -6601,6 +6601,18 @@
         "state": "implementing",
         "started_at": "2026-10-08T06:30:18+00:00",
         "from_status": "status:idea"
+      },
+      "728": {
+        "actor": "Worker-S1728A",
+        "session": "run_s1728a_1008",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1728-builder-select",
+        "worktree": "C:\\acl-1728-builder-select",
+        "id": "3a620a5df55649699056ded091f884eb",
+        "issue": 728,
+        "state": "implementing",
+        "started_at": "2026-10-08T06:34:31+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -9454,6 +9466,17 @@
         "state": "implementing",
         "worker": "Worker-W1727W",
         "coordinator": "Coordinator-T1004Q"
+      },
+      "728": {
+        "implementers": [
+          {
+            "actor": "Worker-S1728A",
+            "session": "run_s1728a_1008"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1728A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -10215,6 +10238,10 @@
       },
       "Worker-W1727W": {
         "session": "w1727w_1008",
+        "role": "Worker"
+      },
+      "Worker-S1728A": {
+        "session": "run_s1728a_1008",
         "role": "Worker"
       }
     },
@@ -17341,6 +17368,13 @@
         "issue": 727,
         "claim": "e341fcedb48e47afbeb04f8c5c27e2a6",
         "actor": "Worker-W1727W"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-08T06:34:31+00:00",
+        "issue": 728,
+        "claim": "3a620a5df55649699056ded091f884eb",
+        "actor": "Worker-S1728A"
       }
     ],
     "policy": {
