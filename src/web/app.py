@@ -59,6 +59,7 @@ from src.web.cache import (
 )
 from concurrent.futures import ThreadPoolExecutor
 from src.analysis_agent.money_format import fmt_usd, fmt_currency, fmt_summary_amount
+from src.analysis_agent import metric_columns
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
 from src.creative_agent.audience_builder import build_audience_profile
 from src.creative_agent.stats_correlator import correlate
@@ -864,6 +865,10 @@ def _build_account_map_view(
     available = _with_assets(buckets["shown"])
     return {
         "countries": countries,
+        # ACL-1654: строка Totals под странами.
+        "totals": _amap_totals(countries, live),
+        # ACL-1656: «Campaign managers» внизу Home.
+        "cm_section": _amap_cm_section(report),
         "available": available,
         "available_inactive": _with_assets(buckets["inactive"]),
         "available_hidden": buckets["hidden"],
@@ -884,6 +889,95 @@ def _build_account_map_view(
         "span": span,
     }
 
+
+
+def _amap_totals(countries: list[dict], live: dict) -> dict:
+    """Итог по строкам стран карты (ACL-1654).
+
+    Spend, Leads и FTDs — суммы книжных тоталов стран; CPL, CPA и CR считает
+    шаблон по этим суммам (`metric_values`), а не усредняет их по странам.
+
+    `read` — суммарное чтение кабинетов, и считается оно по *различным*
+    аккаунтам: один кабинет может быть привязан к нескольким странам, а
+    сводка страны показывает весь его спенд, так что сложение по странам
+    посчитало бы его дважды. Складывается только когда все прочитанные
+    кабинеты в одной валюте (решение владельца 06.10); иначе None — прочерк.
+    """
+    spend = leads = deposits = 0.0
+    for mc in countries:
+        bk = mc.get("book") or {}
+        spend += float(bk.get("spend") or 0)
+        leads += float(bk.get("leads") or 0)
+        deposits += float(bk.get("deposits") or 0)
+    seen: set[str] = set()
+    sums: dict[str, float] = {}
+    mixed = False
+    read_ok = 0
+    for mc in countries:
+        for r in mc.get("rows") or []:
+            acc = r.get("account")
+            if not acc or acc in seen:
+                continue
+            seen.add(acc)
+            lr = (live or {}).get(acc) or {}
+            if lr.get("state") != "ok" or lr.get("spend") is None:
+                continue
+            try:
+                amount = float(lr["spend"])
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(amount):
+                continue
+            read_ok += 1
+            cur = str(lr.get("currency") or "").strip()
+            if not re.fullmatch(r"[A-Za-z]{3}", cur):
+                mixed = True  # знак без кода не говорит, какая это валюта
+                continue
+            sums[cur.upper()] = sums.get(cur.upper(), 0.0) + amount
+    read = None
+    if sums and not mixed and len(sums) == 1:
+        (cur, amount), = sums.items()
+        read = {"currency": cur, "spend": amount}
+    return {
+        "spend": spend, "leads": int(leads), "deposits": int(deposits), "read": read,
+        # для подсказки: сколько кабинетов прочитано из скольких и почему «—»
+        "read_count": read_ok, "accounts": len(seen), "mixed": bool(mixed or len(sums) > 1),
+    }
+
+
+def _amap_cm_section(report: dict) -> list[dict]:
+    """Менеджеры по странам для секции внизу Home (ACL-1656).
+
+    Те же строки, что у CM Comparison в Manage (`cm_comparison`): один источник,
+    поэтому две таблицы не разойдутся. Строка страны — сумма *всех* менеджеров
+    (решение владельца 06.10: это сравнение, а не «мои числа»), CPL/CPA/CR из
+    этих сумм считает шаблон. Текущий менеджер помечен `is_me`.
+    """
+    out: list[dict] = []
+    for c in (report or {}).get("countries", []):
+        cms = c.get("cm_comparison") or []
+        if not cms:
+            continue
+        rows = [
+            {
+                "cm": (r.get("cm") or "").strip() or "(unknown)",
+                "is_me": bool(r.get("is_me")),
+                "spend": float(r.get("spend") or 0),
+                "leads": int(r.get("leads") or 0),
+                "deposits": int(r.get("deposits") or 0),
+            }
+            for r in cms
+        ]
+        rows.sort(key=lambda r: (not r["is_me"], -r["spend"], r["cm"].lower()))
+        out.append({
+            "country": c.get("country") or "",
+            "spend": sum(r["spend"] for r in rows),
+            "leads": sum(r["leads"] for r in rows),
+            "deposits": sum(r["deposits"] for r in rows),
+            "rows": rows,
+        })
+    out.sort(key=lambda x: (-x["spend"], x["country"].lower()))
+    return out
 
 
 def _live_spend(date_from: str = "", date_to: str = "") -> dict[str, dict]:
@@ -1222,6 +1316,15 @@ templates.env.filters["anchor_slug"] = _anchor_slug
 templates.env.filters["fmt_usd"] = fmt_usd
 templates.env.filters["fmt_currency"] = fmt_currency
 templates.env.filters["fmt_summary_amount"] = fmt_summary_amount
+# ACL-1652: шесть метрик одним кодом. Макросы `_metrics.html` берут отсюда и
+# заголовки, и ячейки — таблицы не могут разойтись друг с другом.
+templates.env.globals["metric_values"] = metric_columns.metric_values
+# Owner, 2026-10-07: the "Copy for group" button and its hint under a red account
+# status are hidden for now. True brings them back (template: _account_map_country.html).
+SHOW_COPY_FOR_GROUP = False
+templates.env.globals["SHOW_COPY_FOR_GROUP"] = SHOW_COPY_FOR_GROUP
+templates.env.globals["METRIC_HEADERS"] = metric_columns.METRIC_HEADERS
+templates.env.globals["HOME_ACCOUNT_HEADERS"] = metric_columns.HOME_ACCOUNT_HEADERS
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 templates.env.filters["creative_type"] = lambda name: parse_creative_from_ad_title(name)[0]
 templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title(name)[1]
@@ -1251,12 +1354,13 @@ templates.env.filters["geo_language"] = _geo_language
 # table headers. The detail <td colspan> must match the parent table's
 # column count or the layout breaks.
 _NCOLS_BY_SECTION = {
-    "cm_comparison": 8,   # CM, Dep, Leads, Spend, Net, CPA, ROI, (drill col)
-    "trend": 6,           # offer, device, interest, creative, deposits_total/recent
-    "top_combos": 10,     # offer, device, interest, age, creative, category, deposits, leads, spend, (builder col)
-    "targeting": 5,       # interest, deposits, leads, spend, cpa
-    "creatives": 5,       # ad_title, deposits, leads, spend, cpa
-    "optimization": 7,    # adset, spend, leads, ftds, cpl, cpa, reason
+    # ACL-1652: шесть метрик в каждой таблице, поэтому и числа новые.
+    "cm_comparison": 10,  # CM, Spend, Leads, FTDs, CPL, CPA, CR, Net, ROI, (drill col)
+    "trend": 10,          # offer, device, interest, creative, six metrics
+    "top_combos": 7,      # combo, six metrics
+    "targeting": 7,       # target, six metrics
+    "creatives": 8,       # creative, text, six metrics
+    "optimization": 8,    # adset, six metrics, reason
 }
 
 app = FastAPI(title="Adopy Campaign Manager")
@@ -3891,13 +3995,17 @@ def account_attribution(
         return JSONResponse({"ok": False, "error": f"Workbook numbers failed: {exc}"}, status_code=500)
 
     def _shown(m: dict) -> dict:
+        # ACL-1652: те же шесть значений, что в таблицах; прочерк — это null,
+        # его рисует сам экран (`nodata`). CR 0.0% при лидах — настоящее число.
+        spend, _l, _f, cpl, cpa, cr = metric_columns.metric_values(m["spend"], m["leads"], m["deposits"])
+        dash = metric_columns.DASH
         return {
-            "spend": fmt_usd(m["spend"]),
+            "spend": spend,
             "leads": m["leads"],
             "deposits": m["deposits"],
-            "cpl": fmt_usd(m["cpl"]) if m["cpl"] else None,
-            "cpa": fmt_usd(m["cpa"]) if m["cpa"] else None,
-            "cr": f"{m['cr']:.1f}%" if m["cr"] else None,
+            "cpl": None if cpl == dash else cpl,
+            "cpa": None if cpa == dash else cpa,
+            "cr": None if cr == dash else cr,
         }
 
     return JSONResponse({
