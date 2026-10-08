@@ -2252,6 +2252,24 @@
           633
         ],
         "recorded_at": "2026-10-08T02:26:01+00:00"
+      },
+      "722": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1721V",
+        "review_session": "rev_r1721v_1008",
+        "execution_lane": "80d9fe74cafa4e5fba7efcd10d7bfd13",
+        "implementer": "Worker-W1721N",
+        "head_sha": "46db0fb6c5c04f0ca4db3bfc71496719cc32b0fb",
+        "base_sha": "2a78b6e63b276891c9314631de655f79b106a798",
+        "tree_sha": "cc3189ae1f9b2a1f4d17459ab01a39fa009c1a8f",
+        "report": "C:/acl-tools/evidence/review_722.md",
+        "main_sha": "0d4eee12ca23d224e2798d7be23122076e3b8007",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          721
+        ],
+        "recorded_at": "2026-10-08T05:40:21+00:00"
       }
     },
     "stage": {
