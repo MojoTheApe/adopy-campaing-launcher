@@ -6520,22 +6520,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "723": {
-        "actor": "Worker-S1723A",
-        "session": "run_s1723a_1008",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1723-logo-only",
-        "worktree": "C:\\acl-1723-logo-only",
-        "id": "f24c179e8704405498eec52dcbfe9aca",
-        "issue": 723,
-        "state": "handoff",
-        "started_at": "2026-10-08T06:00:58+00:00",
-        "from_status": "status:todo",
-        "pr": 725,
-        "report": "ACL-1723: header shows the logo only. Removed h1.brand-name caption and the 'ACM Inter' @font-face in report.html; logo img has alt=\"Adopy Campaign Manager\"; size/position unchanged. tests/test_header.py (7 passed) and tests/test_stage_badge.py (14 passed) green. No browser check run. PR #725, head 997824117daa28aeb2161c85be3bb8cf92321193."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -9345,9 +9330,25 @@
             "session": "run_s1723a_1008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1723A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1723A",
+          "session": "run_s1723a_1008",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1723-logo-only",
+          "worktree": "C:\\acl-1723-logo-only",
+          "id": "f24c179e8704405498eec52dcbfe9aca",
+          "issue": 723,
+          "state": "handoff",
+          "started_at": "2026-10-08T06:00:58+00:00",
+          "from_status": "status:todo",
+          "pr": 725,
+          "report": "ACL-1723: header shows the logo only. Removed h1.brand-name caption and the 'ACM Inter' @font-face in report.html; logo img has alt=\"Adopy Campaign Manager\"; size/position unchanged. tests/test_header.py (7 passed) and tests/test_stage_badge.py (14 passed) green. No browser check run. PR #725, head 997824117daa28aeb2161c85be3bb8cf92321193."
+        },
+        "pr": 725,
+        "queued_at": "2026-10-08T06:03:08+00:00"
       }
     },
     "actors": {
@@ -12201,7 +12202,8 @@
       529,
       642,
       651,
-      710
+      710,
+      723
     ],
     "review": {
       "id": "80d9fe74cafa4e5fba7efcd10d7bfd13",
@@ -17151,6 +17153,13 @@
         "at": "2026-10-08T06:00:58+00:00",
         "issue": 723,
         "claim": "f24c179e8704405498eec52dcbfe9aca",
+        "actor": "Worker-S1723A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T06:03:08+00:00",
+        "issue": 723,
+        "pr": 725,
         "actor": "Worker-S1723A"
       }
     ],
