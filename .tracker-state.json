@@ -6891,22 +6891,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "747": {
-        "actor": "Worker-BATCH01",
-        "session": "acl_batch_root_20261008",
-        "coordinator": "Coordinator-BATCH01",
-        "branch": "codex/acl-1747-approved-batches",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-batch-integration",
-        "id": "38b53df5ad794b28a49779476579e9e5",
-        "issue": 747,
-        "state": "handoff",
-        "started_at": "2026-10-08T12:20:58+00:00",
-        "from_status": "status:todo",
-        "pr": 748,
-        "report": "ACL-1747 corrected source handoff.\n\nExact source head: dfb6cd587ac73507b16c494bd47bca18cd0ce993; original main48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496 and stage49dc50a1139d7f1e62d1556a33ee6500d94f9788 are the reviewed baseline (same tree).\n\nThe initial independent P1 was returned normally; the actual Worker reacquired the old-v1 implementation claim before edits. Replace append recovery with fresh detached baseline/current-tip composition, preserved local and atomic remote evidence, exact ownership/head leases, repeated rebuild and unpublished partial-conflict recovery. No engine weakening or source/permanent-branch rewrite. Tests: final13 actual-Git cases pass against the pinned portable composition,18 batch classifier cases pass,200 affected CI/adoption regressions pass; secret scan and diff checks pass. Initial full hosted matrix/Windows installer was green on the superseded head; corrected-head hosted CI is required anew.\n\nReviewed shared pins/explicit5-1-5 policy, Approved, preserved genuine template lineage/namespace/history/delivery fingerprint and package/advertising boundaries stay intact. Isolated runtime smoke/all46 packaging unit checks passed before this tooling correction; no application/package implementation changed in this correction. ParentACL-1566 retains actual migration/fresh shared board/real two-task batch proof. The source child follows its genuine old-v1 route; live server publication awaits explicit owner approval and blocks main config promotion/state activation. No stable release, employee installation or live pilot."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -9942,7 +9927,7 @@
             "session": "acl_batch_root_20261008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-BATCH01",
         "coordinator": "Coordinator-BATCH01",
         "handoff": {
@@ -9951,16 +9936,16 @@
           "coordinator": "Coordinator-BATCH01",
           "branch": "codex/acl-1747-approved-batches",
           "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-batch-integration",
-          "id": "7c3fd677489444c9b58eed362e9e2bbf",
+          "id": "38b53df5ad794b28a49779476579e9e5",
           "issue": 747,
           "state": "handoff",
-          "started_at": "2026-10-08T11:38:31+00:00",
+          "started_at": "2026-10-08T12:20:58+00:00",
           "from_status": "status:todo",
           "pr": 748,
-          "report": "Prepared source-only ACL1747 candidate: explicit Approved/batch5 policy, reviewed compatible pins, portable helper closure, preserved genuine template ancestry/local controls, affected source CI versus complete combined proof, local owner-checked assembly and guarded queue-preserving cutover.\nLocal focused/tooling suite532 passed; final18 classifier cases and six actual-Git assembly/recovery cases pass. Exact descriptor/pinned guide/upgrade-idempotence/unchanged namespace-history-delivery fingerprint checks pass. Isolated pinned-runtime smoke and all46 packaging unit tests pass. Required hosted Linux/Windows/installer and independent source/base/scope review remain pending.\nThe actual Worker hands off its old-v1 claim. The original nine queued reviews are preserved. Shared service publication awaits explicit live-installation approval; no main config promotion or activation before its verification. Parent1566 stays unfinished until actual migration/board/two-task batch acceptance. No stable release, employee rollout or live advertising/pilot operation."
+          "report": "ACL-1747 corrected source handoff.\n\nExact source head: dfb6cd587ac73507b16c494bd47bca18cd0ce993; original main48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496 and stage49dc50a1139d7f1e62d1556a33ee6500d94f9788 are the reviewed baseline (same tree).\n\nThe initial independent P1 was returned normally; the actual Worker reacquired the old-v1 implementation claim before edits. Replace append recovery with fresh detached baseline/current-tip composition, preserved local and atomic remote evidence, exact ownership/head leases, repeated rebuild and unpublished partial-conflict recovery. No engine weakening or source/permanent-branch rewrite. Tests: final13 actual-Git cases pass against the pinned portable composition,18 batch classifier cases pass,200 affected CI/adoption regressions pass; secret scan and diff checks pass. Initial full hosted matrix/Windows installer was green on the superseded head; corrected-head hosted CI is required anew.\n\nReviewed shared pins/explicit5-1-5 policy, Approved, preserved genuine template lineage/namespace/history/delivery fingerprint and package/advertising boundaries stay intact. Isolated runtime smoke/all46 packaging unit checks passed before this tooling correction; no application/package implementation changed in this correction. ParentACL-1566 retains actual migration/fresh shared board/real two-task batch proof. The source child follows its genuine old-v1 route; live server publication awaits explicit owner approval and blocks main config promotion/state activation. No stable release, employee installation or live pilot."
         },
         "pr": 748,
-        "queued_at": "2026-10-08T12:13:16+00:00",
+        "queued_at": "2026-10-08T12:36:06+00:00",
         "review_report": "# Independent review of ACL-1747 / PR 748\n\nCandidate: 320019822b9efbb9d68c42f8291e1bdda3f74db4.\nMain baseline: 48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496.\nActual stage PR base: 49dc50a1139d7f1e62d1556a33ee6500d94f9788; same baseline tree.\n\nChanges requested: P1 at scripts/acl_batch.py lines 103-105. The documented --resume recovery appends refreshed source tips to an existing integration graph, retaining earlier source tips as merge parents. The pinned Tracker composition traversal stops only at current approved source tips and main. An older superseded source tip remains reachable through the previous batch merge and is rejected as a one-parent implementation commit outside those stops. Thus an ordinary reviewed author fix produces a candidate that this helper reports as assembled but check-merge cannot admit.\n\nIndependent reproduction used the actual Git fixture, the candidate's exact portable e601 batch_policy.composition, two approved sources, initial assembly, one ordinary author fix, and --resume. Initial composition passed; resumed composition raised 'Integration branch contains work outside the approved source tips'. The existing resume test only checks files and ancestry, so it misses admission failure.\n\nUse a recovery construction compatible with the pinned admission graph while preserving source branches, actual stage and prior evidence, or separately review compatible engine support. Verify the rebuilt real Git graph through the actual pinned composition/admission function; do not weaken the gate or reset permanent stage.\n\nReview is returned under the genuine old execution-v1 policy so the recorded author can reacquire its implementation claim before source edits. No implementation edits, source merge, activation or deployment were performed."
       }
     },
@@ -13045,7 +13030,8 @@
       651,
       710,
       728,
-      739
+      739,
+      747
     ],
     "review": null,
     "history": [
@@ -18310,6 +18296,13 @@
         "at": "2026-10-08T12:20:58+00:00",
         "issue": 747,
         "claim": "38b53df5ad794b28a49779476579e9e5",
+        "actor": "Worker-BATCH01"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T12:36:06+00:00",
+        "issue": 747,
+        "pr": 748,
         "actor": "Worker-BATCH01"
       }
     ],
