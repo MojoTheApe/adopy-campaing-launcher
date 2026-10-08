@@ -173,12 +173,54 @@ def event_paths(root, event_name, event):
     return None
 
 
+def batch_context(root, event_name, event):
+    """Dispatch only explicit matching v2 policy; uncertain routes run in full."""
+    descriptor = Path(root) / "delivery.json"
+    if not descriptor.exists():
+        return "legacy"
+    data = json.loads(descriptor.read_text(encoding="utf-8"))
+    execution = data["workflow"].get("execution")
+    if execution is not None and not isinstance(execution, dict):
+        raise ValueError("Execution policy must be an object")
+    if execution is None or execution.get("schema_version") == 1:
+        config_path = Path(root) / "tracker/config.json"
+        if config_path.exists():
+            policy = json.loads(config_path.read_text(encoding="utf-8")).get("execution_policy")
+            if isinstance(policy, dict) and policy.get("schema_version") == 2:
+                raise ValueError("Descriptor and Tracker batch policies differ")
+        return "legacy"
+    expected = {"schema_version", "implementation_limit", "review_limit", "batch_limit"}
+    if (set(execution) != expected or type(execution["schema_version"]) is not int
+            or execution["schema_version"] != 2 or execution["review_limit"] != 1
+            or type(execution["review_limit"]) is not int
+            or any(type(execution[key]) is not int or not 1 <= execution[key] <= 16
+                   for key in ("implementation_limit", "batch_limit"))
+            or data["workflow"]["staging"] is not True):
+        raise ValueError("Invalid explicit batch policy")
+    config = json.loads((Path(root) / "tracker/config.json").read_text(encoding="utf-8"))
+    if config.get("execution_policy") != execution or "approved" not in config["workflow"]:
+        raise ValueError("Descriptor and Tracker batch policies differ")
+    if event_name != "pull_request":
+        return "full"
+    pr = event["pull_request"]
+    base, head = pr["base"]["ref"], pr["head"]["ref"]
+    prefix = re.escape(config["project"]["id_prefix"].lower())
+    # Retained v1 stage-targeted source PRs are approval-only after migration.
+    if base in ("main", "stage") and re.fullmatch(r"(?:work|codex)/" + prefix + r"-[1-9]\d*(?:-[a-z0-9-]+)?", head):
+        return "source"
+    return "full"  # combined batch, promotion, unknown branch or release route
+
+
 def select(root, event_name, event, *, ref="", workflow="ci.yml"):
     classifier = classify_installer if workflow == "windows-installer.yml" else classify
     base_ref = branch = None
     try:
+        context = batch_context(root, event_name, event)
+        if context == "full":
+            return {"windows": True, "linux": workflow != "windows-installer.yml",
+                    "reason": "batch-integration-promotion-or-unknown-route", "python": list(reuse.FULL_PYTHON_VERSIONS)}
         if event_name == "pull_request":
-            base_ref = event["pull_request"]["base"]["ref"]
+            base_ref = "stage" if context == "source" else event["pull_request"]["base"]["ref"]
         branch = branch_of(ref)
         light = light_context(event_name, base_ref, branch)
         paths = event_paths(root, event_name, event) if light else []
@@ -186,7 +228,7 @@ def select(root, event_name, event, *, ref="", workflow="ci.yml"):
             structural = event_structural(root, event_name, event) if light else []
             return classifier(paths, event_name, base_ref, branch, structural)
         return classifier(paths, event_name, base_ref, branch)
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError):
         return {"windows": True, "linux": workflow != "windows-installer.yml",
                 "reason": "classification-unavailable-run-full", "python": list(reuse.FULL_PYTHON_VERSIONS)}
 

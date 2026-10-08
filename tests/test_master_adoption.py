@@ -130,7 +130,8 @@ def test_existing_ids_and_modules_are_preserved():
     new = json.loads((ROOT / 'tracker/config.json').read_text())
     assert new['project'] == dict(old['project'], base_branch='main')
     assert new['modules'] == old['modules']
-    assert new['workflow'] == old['workflow'][:-1] + ['stage', 'merged']
+    assert new['workflow'] == old['workflow'][:-1] + ['approved', 'stage', 'merged']
+    assert new['execution_policy'] == {'schema_version':2, 'implementation_limit':5, 'review_limit':1, 'batch_limit':5}
 
 
 @pytest.mark.parametrize('workflow,success_fields', [

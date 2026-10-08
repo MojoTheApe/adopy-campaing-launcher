@@ -1,4 +1,8 @@
-# Five implementations, one review and integration lane
+# Execution-v1 activation history — five implementations and one lane
+
+The dated v1 evidence below is retained. Current v2 approval/batch behavior and
+its separate activation gate are in [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md).
+Until that guarded migration succeeds, the live v1 lifecycle remains in force.
 
 Parent: [ACL-1382](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/382).
 Source child: [ACL-1383](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/383).

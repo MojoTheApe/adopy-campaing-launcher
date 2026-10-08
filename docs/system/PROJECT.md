@@ -52,6 +52,11 @@ activates ordinary use through its separately reviewed stage/main promotion and
 normal Tracker handoff. See the current repository adoption record. This change organizes engineering; it does not change campaign behavior,
 credentials, library setup or employee installations.
 
+Engineering delivery now has an explicitly prepared Approved/batch policy;
+actual state activation is separately verified under
+[ACL-1566](../repository/BATCH_INTEGRATION.md). Campaign runtime, employee
+installations and stable-package publication retain their existing boundaries.
+
 ## Maintaining this document
 
 Describe implemented behavior and limitations here when changing the system. Preserve
