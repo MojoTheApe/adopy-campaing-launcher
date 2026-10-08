@@ -1,5 +1,14 @@
 # System history
 
+## Campaign open: the AI-guided / Manual chooser counts as Create taken - ACL-1726
+
+- Run 4db2039f760d (Facebook_9403A, 08.10): Create now opens Meta's "Create new campaign" chooser
+  ("Meta AI-guided setup" / "Manual campaign setup"). It was not recognised, so Create was pressed
+  again and the open budget ran out (`objective_leads` after 103 s, about 2 minutes lost per campaign).
+- The chooser is now `create_took` with note `ai_manual_chooser` (ok), and `_wait_objective_dialog`
+  returns at once while it is on screen. The existing `manual` step then picks Manual setup. The
+  AI-guided option is never chosen.
+
 ## Account map: notes only per account, Enter saves — ACL-1721
 
 - Country rows on the account map no longer show or edit a note. Stored country notes are kept in
