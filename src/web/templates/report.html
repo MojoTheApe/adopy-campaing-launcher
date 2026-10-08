@@ -8886,7 +8886,7 @@ async function amapSend(body, msgEl) {
 }
 
 /* ACL-1620 notes { */
-/* Заметка к аккаунту (ячейка таблицы) и к стране (строка заголовка страны).
+/* Заметка к аккаунту (ячейка таблицы).
    Делегирование на document: строки дерева и ячейки, пришедшие через htmx или
    перерисовку карты, работают без повторной подписки. Текст попадает в DOM
    только через textContent/value. Заметки никуда не отправляются, кроме
@@ -9023,7 +9023,11 @@ async function amapSend(body, msgEl) {
   document.addEventListener('keydown', function (e) {
     if (cur && e.key === 'Escape') { e.preventDefault(); close(); return; }
     // ACL-1721: Enter сохраняет и закрывает, Shift+Enter — перенос строки (Ctrl/Cmd+Enter по-прежнему сохраняют).
-    if (cur && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); close(); return; }
+    if (cur && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); close(); return; }
+    // Простой Enter — только из textarea редактора: на кнопке Delete и других контролах он работает как обычно.
+    if (cur && e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && pop && e.target === pop.querySelector('textarea')) {
+      e.preventDefault(); if (!saving) close(); return;
+    }
     var el = e.target.closest && e.target.closest(SEL);
     if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(el); }
   });

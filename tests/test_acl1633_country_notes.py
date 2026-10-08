@@ -301,6 +301,19 @@ def test_enter_saves_and_closes_and_shift_enter_adds_a_newline(browser):
     page.close()
 
 
+def test_enter_on_the_delete_button_deletes_instead_of_saving(browser):
+    notes.set_note("Demo", "to delete")
+    page, errors = _open(browser)
+    _acct(page).click()
+    page.locator(".amap-note-pop textarea").fill("edited but not saved")
+    page.locator(".amap-note-del").focus()
+    page.keyboard.press("Enter")
+    _gone(page)
+    assert notes.load() == {}
+    assert not errors, errors
+    page.close()
+
+
 def test_country_rows_have_no_note_and_the_account_map_has_no_country_note_code():
     html = _map(notes.load(), {notes.country_key("Mexico"): "stored but hidden"})
     assert "amap-country-note" not in html and "stored but hidden" not in html
@@ -310,6 +323,7 @@ def test_country_rows_have_no_note_and_the_account_map_has_no_country_note_code(
     assert "SEL = 'td.amap-acct-note';" in report
     # Enter без Shift сохраняет, Shift+Enter не перехватывается
     assert "e.key === 'Enter' && !e.shiftKey" in _js_block()
+    assert "e.target === pop.querySelector('textarea')" in _js_block()
 
 
 def test_outside_click_and_ctrl_enter_save(browser):
