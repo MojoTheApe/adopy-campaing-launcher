@@ -500,7 +500,7 @@ def flow(monkeypatch, tmp_path):
     monkeypatch.setattr(md, "write_ad_copy", lambda *a, **k: True)
     monkeypatch.setattr(md, "create_additional_ad", lambda p, name: True)
     monkeypatch.setattr(md, "_open_tree_ad", lambda p, name: False)
-    monkeypatch.setattr(md, "_tree_new_ad_shells", lambda p: 0)
+    monkeypatch.setattr(md, "_tree_shell_ids", lambda p: frozenset())
     monkeypatch.setattr(md, "verify_and_fix_ad_destinations", lambda p, names, url: [])
     monkeypatch.setattr(md, "recover_stuck_page", lambda *a, **k: False)
     monkeypatch.setattr(md, "_loading_visible", lambda p: False)

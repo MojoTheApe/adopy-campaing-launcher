@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Creates an "Adopy Campaigns Launcher" shortcut on the desktop.
+    Creates an "Adopy Campaign Manager" shortcut on the desktop.
 
 .DESCRIPTION
     The shortcut runs start_dashboard.bat directly: opens a console window,
@@ -33,19 +33,26 @@ if (-not (Test-Path $IcoFile)) {
 
 # ── Create shortcut ──────────────────────────────────────────────────────────
 $DesktopPath  = [Environment]::GetFolderPath("Desktop")
-$ShortcutPath = Join-Path $DesktopPath "Adopy Campaigns Launcher.lnk"
+$ShortcutPath = Join-Path $DesktopPath "Adopy Campaign Manager.lnk"
 $LegacyPath   = Join-Path $DesktopPath "Morning Dashboard.lnk"
+$OldNamePath  = Join-Path $DesktopPath "Adopy Campaigns Launcher.lnk"
 
 if (Test-Path $LegacyPath) {
     Remove-Item -LiteralPath $LegacyPath -Force
     Write-Host "  Removed legacy shortcut: Morning Dashboard.lnk" -ForegroundColor Yellow
 }
 
+# Ярлык до ребрендинга (ACL-1705) удаляем, чтобы не было двух значков
+if (Test-Path $OldNamePath) {
+    Remove-Item -LiteralPath $OldNamePath -Force
+    Write-Host "  Removed old shortcut: Adopy Campaigns Launcher.lnk" -ForegroundColor Yellow
+}
+
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath       = $DashboardBat
 $Shortcut.WorkingDirectory = $ProjectRoot
-$Shortcut.Description      = "Launch Adopy Campaigns Launcher (ACL)"
+$Shortcut.Description      = "Launch Adopy Campaign Manager"
 $Shortcut.IconLocation     = (Resolve-Path $IcoFile).Path + ",0"
 $Shortcut.Save()
 
