@@ -9535,7 +9535,7 @@
             "session": "w1727w_1008"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1727W",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -9553,7 +9553,8 @@
           "report": "PR #731 (head eb36a6a1). ensure_editor_window now enlarges a restored-but-small window (CDP maximise, or size-only growth for parked windows), re-measures, and stops with window_too_small only if still small; diag has enlarged/enlarged_to. Tests: tests/test_editor_window_guards.py (19), plus 3 neighbouring window files, all pass; no browser tests."
         },
         "pr": 731,
-        "queued_at": "2026-10-08T06:36:33+00:00"
+        "queued_at": "2026-10-08T06:36:33+00:00",
+        "reviewer": "Reviewer-R1727V"
       },
       "728": {
         "implementers": [
@@ -10413,6 +10414,10 @@
       "Worker-W1736L": {
         "session": "w1736l_1008",
         "role": "Worker"
+      },
+      "Reviewer-R1727V": {
+        "session": "rev_r1727v_1008",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -12589,12 +12594,22 @@
       642,
       651,
       710,
-      727,
       728,
       729,
       736
     ],
-    "review": null,
+    "review": {
+      "id": "63efa02d77574b48aaa2e4d77c3e6e04",
+      "pr": 731,
+      "issues": [
+        727
+      ],
+      "actor": "Reviewer-R1727V",
+      "session": "rev_r1727v_1008",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-08T08:18:35+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -17680,6 +17695,13 @@
         "prs": [
           738
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-08T08:18:35+00:00",
+        "pr": 731,
+        "lane": "63efa02d77574b48aaa2e4d77c3e6e04",
+        "actor": "Reviewer-R1727V"
       }
     ],
     "policy": {
