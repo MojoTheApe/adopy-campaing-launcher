@@ -7,13 +7,23 @@ prepares the reviewed source and completes its existing execution-v1 stage/main 
 **Source preparation is not live activation.** Preserve the dated v1 activation
 record in [PARALLEL_EXECUTION.md](PARALLEL_EXECUTION.md).
 
+The later [ACL-1750](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/750)
+source prepares the separate instruction-only route. It changes policy and CI and
+therefore uses the ordinary old-policy stage route after ACL-1747; keep its genuine
+claim/review/handoff distinct. Complete both adopted-source handoffs before the
+coordinated live v2 cutover. The original nine queued source tasks remain preserved.
+
 ## Selected contract and reading map
 
-Reviewed Master `cd79a7699cb108c517e5729590a57cab85ab1083` (MR-14 / PR15) selects
-Tracker `e6013f8ad641bd99061f7db82bceeb705f8c150a` (TT-77 / PR78). Both ACL
+ACL-1747 originally selected reviewed Master
+`cd79a7699cb108c517e5729590a57cab85ab1083` (MR-14 / PR15) and Tracker
+`e6013f8ad641bd99061f7db82bceeb705f8c150a` (TT-77 / PR78). ACL-1750 advances
+the source to reviewed, merged Master `d24db185ebdff2cadcecf89f5b28061d6cd19564`
+(MR-16 / PR17) and Tracker `d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76`
+(TT-79 / PR80), including the instruction-only admission contract. Both ACL
 execution objects explicitly select schema 2, implementation_limit 5,
 review_limit 1 and batch_limit 5. The shared skill was installed locally from
-that immutable Master source with a backup; each other agent environment needs
+the latter immutable Master source with a backup; each other agent environment needs
 its own installation. Installing the skill does not migrate project state.
 
 Read the pinned Tracker's `docs/BATCH_INTEGRATION.md` and `guide` for exact commands.
@@ -23,9 +33,12 @@ The newly required batch helper travels with the reviewed pin; v2 validation
 refuses a missing implementation or compatibility entry point.
 
 Each task keeps one source PR, its actual Worker/branch and independent Reviewer.
-New source PRs target main and remain open. Direct source merging is refused.
-Individual review checks the complete current scope, main/base, content and required
-source CI. `batch approve` verifies the report and moves Review -> Approved, releasing
+Ordinary batch source PRs target main and remain open. Their direct merging is refused.
+The separately opted-in [instruction-only route](PROCESS_INSTRUCTIONS.md) instead
+holds independent source review through direct main admission; no batch is created.
+For ordinary batch work, individual review checks the complete current scope,
+main/base, content and required source CI. `batch approve` verifies the report and
+moves Review -> Approved, releasing
 the source-review lane. Approved is waiting for integration, not completion.
 
 On an authorized "ship all Approved" request, freeze the currently eligible intake.
@@ -87,6 +100,11 @@ merge and full task-scope review, use `merged ID ID --pr MAIN_PR` dry run then
 integration claim only after completion. `batch close-sources --batch-id BATCH_ID`
 closes superseded source PRs only with actual inclusion evidence, preserving branches.
 Reconcile stage/main and revalidate the next intake members against current main.
+After admitted instruction-only main merges, the engine's read-only
+`stage_base_compatible` verifies actual process receipts and a bounded current
+first-parent/scope/policy/tree chain before permitting the next batch. This proof
+changes no branch refs; unexplained or mixed divergence remains blocked. See
+[PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md).
 
 ## Fixes and recovery
 
@@ -151,7 +169,10 @@ authors, task scope and handoffs; none is automatically approved or completed.
    into stage under that old config, verify the actual exact-stage Windows package
    mechanism. Verify the shared-service publication in step 3 before main promotion;
    then promote unchanged into main and complete its normal old-policy
-   Merged handoff. Original queued work stays idle and preserved through the cutover.
+   Merged handoff. The separately reviewed ACL-1750 automation/policy source follows
+   its own ordinary old-policy stage/main/Merged route with the final compatible
+   shared pins before the coordinated live migration. Original queued work stays
+   idle and preserved through the cutover.
    The new head config is prepared but cannot mutate old v1 state as v2.
 3. Publish the reviewed compatible shared Tracker service through its maintained
    guarded deployment. It preserves authentication, last-good snapshots and the single

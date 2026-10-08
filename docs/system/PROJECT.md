@@ -62,3 +62,9 @@ installations and stable-package publication retain their existing boundaries.
 Describe implemented behavior and limitations here when changing the system. Preserve
 plans under original specs, label them as plans, and record what/why and ticket/PR
 links in CHANGELOG.md. Process-only changes belong in ../repository/CHANGELOG.md.
+
+Repository instructions have a separately prepared direct-main route described in
+[PROCESS_INSTRUCTIONS.md](../repository/PROCESS_INSTRUCTIONS.md). Eligibility uses
+normal fixed Markdown paths and complete Git proof, with independent review and
+applicable instruction checks. This policy/automation source is not yet active in
+main; it changes no campaign-launching behavior or employee-installed version.

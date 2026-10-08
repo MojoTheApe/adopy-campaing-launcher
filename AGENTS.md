@@ -1,6 +1,8 @@
 # ACL project instructions
 
-**Use the shared workflow on `main` and permanent `stage`.** Read
+**Use the shared workflow on `main` and permanent `stage`.**
+[Instruction-only tasks](docs/repository/PROCESS_INSTRUCTIONS.md) have a separately
+opted-in reviewed main route; application/mixed/policy/automation changes keep stage. Read
 [adoption](docs/repository/ADOPTION.md) for the verified cutover and remaining
 release boundaries. `master` is a frozen compatibility channel for old source
 installations. The project client loads the exact pinned shared Tracker. During

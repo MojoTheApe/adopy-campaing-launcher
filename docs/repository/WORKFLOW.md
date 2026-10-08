@@ -10,6 +10,17 @@ activation keeps ordinary admissions paused until its verified promotion and
 normal Tracker `merged` handoff. Retired master clients are historical only;
 package publication and employee updates retain their separate release rules.
 
+## Select the route by actual changed files
+
+Read [PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md). Once its explicit policy
+is already adopted in main, normal `AGENTS.md`, `CLAUDE.md` and repository-process
+Markdown changes can use one-task Review -> independently reviewed/checks -> main
+-> Merged. They hold the source review lane through merge and do not enter Approved.
+No active integration/stage candidate may be displaced. Runtime/system/product,
+unknown/mixed, policy/helper/CI/config changes retain the batch/stage route below.
+Initial adoption itself cannot enable its own shortcut. Current source and live
+activation remain distinct; follow the existing cutover gates.
+
 ## Tasks, branches and review
 
 Ideas start Idea; accepted tasks start Backlog. The owner selects To Do. Starting
@@ -36,12 +47,14 @@ create their PRs and explicitly hand off their claims, freeing implementation sl
 Review labels alone do not release claims. Record Worker, Coordinator and Reviewer
 separately with neutral opaque identities; GitHub Assignees remain real accounts.
 
-Execution schema 2 separates source approval from integration. A separate real,
+For ordinary/application work, execution schema 2 separates source approval from
+integration. A separate real,
 non-implementing Reviewer acquires the single source-review lane and reviews the
 complete current scope/head/base. Record the report, keep required source checks,
 then use `batch approve` to move Review -> Approved and release that lane. Each
 source keeps its genuine Worker and independent Reviewer. Labels cannot approve
-work. New source PRs target main and remain open; direct source merging is refused.
+work. Ordinary batch source PRs target main and remain open; their direct merge is refused.
+The proven instruction-only route is the explicit exception described above.
 Existing queued stage-targeted PRs become approval-only after the supported migration.
 
 For changes before approval, the Reviewer returns review and the author takes a
@@ -69,7 +82,13 @@ make the repository public as an implicit part of adoption.
 
 ## Stage, main and completion
 
-Approved source branches -> reserved `codex/batch-ID` integration branch ->
+The sequence below applies to ordinary/application work. Proven adopted
+instruction-only tasks hold their independent source review through direct main
+admission and complete with the normal verified process receipt, as described in
+[PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md). They do not enter Stage or
+require an application installer/delivery receipt.
+
+Approved ordinary source branches -> reserved `codex/batch-ID` integration branch ->
 permanent stage -> permanent main. Only the frozen integration PR enters stage,
 after additional independent combined review and complete applicable CI. Record
 all members as Stage, then verify the exact isolated Windows target/tree in
@@ -81,11 +100,14 @@ of the same intake to leave a failed task for later. After stage entry keep the
 Coordinator claim and same member set through author fixes, fresh approvals,
 rebuild, independent review and stage verification. Do not reset stage or drop
 already integrated work. Reconcile stage/main and revalidate source approvals
-before the next batch. Exact tree reuse prevents redundant successful test runs.
+before the next batch. A gap caused only by admitted process merges uses the pinned
+read-only `stage_base_compatible` receipt/first-parent/tree proof described in
+[PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md); it does not rewrite stage.
+Exact tree reuse prevents redundant successful test runs.
 The adoption source child still finishes its old v1 route before live migration.
 
 Merged means all of a ticket's implemented code scope is actually included in main.
-Package completion additionally requires an immutable published installer and the
+For ordinary/application tasks, package completion additionally requires an immutable published installer and the
 agreed installation/update verification. Record delivery against the exact merged
 content. Do not wait for every employee to update; do not claim all have updated.
 A partial task stays active even after a partial PR. A Blocked ticket cannot pass

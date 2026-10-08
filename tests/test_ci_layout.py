@@ -56,7 +56,7 @@ def _run(job: str) -> str:
 
 def test_the_old_all_windows_test_job_is_gone():
     assert "test" not in JOBS
-    assert set(JOBS) == {"scope", "test-linux", "test-windows", "admission"}
+    assert set(JOBS) == {"scope", "process-instructions", "test-linux", "test-windows", "admission"}
 
 
 def test_the_linux_job_runs_every_unmarked_file_on_ubuntu_in_shards():
@@ -106,10 +106,11 @@ def test_acl_verification_aggregates_scope_and_both_test_jobs():
     admission = JOBS["admission"]
     assert admission["name"] == "ACL verification"
     assert admission["if"] == "${{ always() }}"
-    assert admission["needs"] == ["scope", "test-linux", "test-windows"]
+    assert admission["needs"] == ["scope", "process-instructions", "test-linux", "test-windows"]
     env = admission["steps"][0]["env"]
     assert env["LINUX_TESTS"] == "${{ needs.test-linux.result }}"
     assert env["WINDOWS_TESTS"] == "${{ needs.test-windows.result }}"
+    assert env["PROCESS_INSTRUCTIONS"] == "${{ needs.process-instructions.result }}"
 
 
 def test_the_guard_runs_in_the_fast_scope_job():
@@ -126,7 +127,7 @@ def _admission(**env) -> bool:
 @pytest.mark.skipif(sys.platform == "win32" or not shutil.which("bash"),  # linux-ok: runs in the Ubuntu scope job
                     reason="the admission script is bash on ubuntu-latest")
 def test_acl_verification_fails_closed_unless_both_test_jobs_passed():
-    full = {"SCOPE": "success", "WINDOWS": "true", "LINUX": "true", "REUSED": "",
+    full = {"SCOPE": "success", "PROCESS_INSTRUCTIONS": "success", "WINDOWS": "true", "LINUX": "true", "REUSED": "",
             "LINUX_TESTS": "success", "WINDOWS_TESTS": "success"}
     light = dict(full, WINDOWS="false", LINUX="false", LINUX_TESTS="skipped", WINDOWS_TESTS="skipped")
     only_linux = dict(full, WINDOWS="false", WINDOWS_TESTS="skipped")           # PR into main: 3.11 only
@@ -142,5 +143,16 @@ def test_acl_verification_fails_closed_unless_both_test_jobs_passed():
             for bad in ("failure", "cancelled", ""):
                 assert not _admission(**dict(case, **{field: bad})), (field, bad)
     assert not _admission(**dict(full, SCOPE="failure"))
+    for bad in ("failure", "cancelled", "skipped", ""):
+        assert not _admission(**dict(full, PROCESS_INSTRUCTIONS=bad))
+        assert not _admission(**dict(light, PROCESS_INSTRUCTIONS=bad))
     assert not _admission(**dict(full, WINDOWS=""))
     assert not _admission(**dict(full, LINUX=""))
+
+
+def test_process_instruction_check_requires_actual_fast_tooling_success():
+    job = JOBS["process-instructions"]
+    assert job["name"] == "Process instructions"
+    assert job["needs"] == "scope" and job["if"] == "${{ always() }}"
+    assert "python3 scripts/acl_process_instructions.py" in _run("process-instructions")
+    assert 'test "$SCOPE" = success' in _run("process-instructions")

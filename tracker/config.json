@@ -486,5 +486,13 @@
     "implementation_limit": 5,
     "review_limit": 1,
     "batch_limit": 5
+  },
+  "process_instructions": {
+    "schema_version": 1,
+    "required_checks": [
+      "descriptor",
+      "tracker-link",
+      "Process instructions"
+    ]
   }
 }
