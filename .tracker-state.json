@@ -18830,12 +18830,48 @@
         "prs": [
           755
         ]
+      },
+      {
+        "event": "policy-adopted",
+        "at": "2026-10-08T22:18:04+00:00",
+        "policy": {
+          "schema_version": 2,
+          "implementation_limit": 5,
+          "review_limit": 1,
+          "batch_limit": 5
+        },
+        "preserved_review_queue": [
+          406,
+          433,
+          526,
+          529,
+          642,
+          651,
+          710,
+          728,
+          739
+        ],
+        "preserved_closed_review_handoffs": [
+          {
+            "issue": 406,
+            "pr": 407
+          },
+          {
+            "issue": 433,
+            "pr": 439
+          }
+        ]
       }
     ],
     "policy": {
-      "schema_version": 1,
+      "schema_version": 2,
       "implementation_limit": 5,
-      "review_limit": 1
-    }
+      "review_limit": 1,
+      "batch_limit": 5
+    },
+    "approvals": {},
+    "batches": {},
+    "integration": null,
+    "intake": null
   }
 }
