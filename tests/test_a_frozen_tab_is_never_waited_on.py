@@ -83,7 +83,8 @@ def rows(monkeypatch):
 def test_the_probe_is_bounded_by_the_driver(rows):
     page = _FrozenPage()
     assert md._tab_frozen(page) is True
-    assert page.probes == [int(md.LIVENESS_PROBE_S * 1000)]
+    # ACL-1739: после неотвеченной короткой пробы — одна длинная (подтверждение).
+    assert page.probes == [int(md.LIVENESS_PROBE_S * 1000), int(md.FROZEN_CONFIRM_S * 1000)]
 
 
 def test_loading_is_not_asked_of_a_frozen_tab(rows):
@@ -108,7 +109,8 @@ def test_the_drafts_counter_is_read_with_a_timeout(rows):
 def test_create_took_says_frozen_at_once(rows):
     page = _FrozenPage()
     assert md._create_took(page, page.url, timeout_s=30) == "frozen"
-    assert len(page.probes) == 1 and page.unbounded == []
+    # ACL-1739: короткая проба + одна длинная (подтверждение), без вызовов без таймаута.
+    assert len(page.probes) == 2 and page.unbounded == []
 
 
 def test_no_cdp_click_is_sent_to_a_frozen_tab(rows):

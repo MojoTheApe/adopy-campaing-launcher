@@ -3965,6 +3965,19 @@ def _tab_frozen(page: Page) -> bool:
             woke = {}
         if woke.get("woke") and _page_responsive(page, LIVENESS_PROBE_S) is True:
             return False
+    if frozen and _page_responsive(page, FROZEN_CONFIRM_S) is True:
+        # ACL-1739 (Doc124, df8549045b4a и др.): одна неотвеченная 5-секундная
+        # проба — ещё не застой. Окно профиля под 4–7 другими окнами, Chrome
+        # придерживает рендерер; вкладка занята, но живая (через минуту
+        # stall_evidence: responsive=true). Длинная проба ответила — эпизод
+        # не считаем, иначе 5 таких «застоев» останавливали живую кампанию
+        # (tab_frozen_budget_exceeded). Настоящий застой не ответит и на ней.
+        try:
+            _telemetry.record("tab_frozen", None, note="confirm_answered",
+                              diag={"where": "probe"})
+        except Exception:
+            pass
+        return False
     if frozen:
         _flow_budget_note_frozen()
         if not getattr(_flow_budget, "defer", False):
