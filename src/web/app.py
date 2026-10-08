@@ -4901,6 +4901,51 @@ async def publish_jobs_slots() -> JSONResponse:
     return JSONResponse(slots_snapshot())
 
 
+@app.get("/api/publish-preflight")
+async def api_publish_preflight(accounts: str = "") -> JSONResponse:
+    """Кто из аккаунтов не сможет работать — до постановки в очередь (ACL-1604).
+
+    Один разбор на нажатие «Publish all», только по перечисленным аккаунтам.
+    Профили не открываются и не трогаются: читаются карта, срок токена, статус
+    кабинета, журнал прошлых прогонов и список открытых профилей (см.
+    `publish_preflight`).
+    """
+    from src.web import publish_preflight as pf
+
+    names = [a.strip() for a in (accounts or "").split(",") if a.strip()][:60]
+
+    def run() -> dict:
+        map_path = get_ad_account_map_path()
+        amap = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+        result = pf.summary(pf.preflight(names, amap=amap))
+        pf.record(result)
+        return result
+
+    return JSONResponse(await asyncio.to_thread(run))
+
+
+@app.post("/api/publish-preflight/decision")
+async def api_publish_preflight_decision(request: Request) -> JSONResponse:
+    """Что владелец решил по списку «Not ready»: в телеметрию, для разбора потом."""
+    from src.web import publish_preflight as pf
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    body = body if isinstance(body, dict) else {}
+
+    def names(key: str) -> list[str]:
+        raw = body.get(key)
+        return [str(x)[:80] for x in raw][:60] if isinstance(raw, list) else []
+
+    queued, skipped, anyway = names("queued"), names("skipped"), names("run_anyway")
+    pf.record({"accounts": [], "ready": queued, "not_ready": skipped + anyway},
+              step="publish_preflight_decision",
+              extra={"queued": len(queued), "skipped": skipped, "run_anyway": anyway})
+    return JSONResponse({"ok": True})
+
+
 @app.post("/publish-jobs/kept/release")
 async def publish_jobs_release_kept(request: Request) -> JSONResponse:
     """«Release» у оставленного окна в очереди: снять с него место (ACL-1603).
