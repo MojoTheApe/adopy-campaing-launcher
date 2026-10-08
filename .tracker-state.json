@@ -6578,20 +6578,6 @@
   },
   "execution": {
     "claims": {
-      "728": {
-        "actor": "Worker-S1728A",
-        "session": "run_s1728a_1008",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1728-builder-select",
-        "worktree": "C:\\acl-1728-builder-select",
-        "id": "3a620a5df55649699056ded091f884eb",
-        "issue": 728,
-        "state": "handoff",
-        "started_at": "2026-10-08T06:34:31+00:00",
-        "from_status": "status:todo",
-        "pr": 732,
-        "report": "# ACL-1728 handoff\n\nPR #732, head 22b98ba2. Root cause: job-progress polling repainted the builder drawer footer (paintFoot, innerHTML), replacing the open country select, account select and the \"new country...\" input. Fix: defer repaint while a footer control has focus (repaint on focusout), skip DOM changes when markup is unchanged, carry over account choice and typed text on real repaints.\n\nTests: new tests/test_builder_foot_stays_put_browser.py (3 tests, fail before fix, pass after); test_builder_multi_publish_browser + test_builder_publish_selected_browser 24 passed; test_the_builder_drawer 7 passed. Free RAM was about 6.2 GB when run."
-      },
       "729": {
         "actor": "Worker-S1729A",
         "session": "run_s1729a_1008",
@@ -9496,9 +9482,25 @@
             "session": "run_s1728a_1008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1728A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1728A",
+          "session": "run_s1728a_1008",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1728-builder-select",
+          "worktree": "C:\\acl-1728-builder-select",
+          "id": "3a620a5df55649699056ded091f884eb",
+          "issue": 728,
+          "state": "handoff",
+          "started_at": "2026-10-08T06:34:31+00:00",
+          "from_status": "status:todo",
+          "pr": 732,
+          "report": "# ACL-1728 handoff\n\nPR #732, head 22b98ba2. Root cause: job-progress polling repainted the builder drawer footer (paintFoot, innerHTML), replacing the open country select, account select and the \"new country...\" input. Fix: defer repaint while a footer control has focus (repaint on focusout), skip DOM changes when markup is unchanged, carry over account choice and typed text on real repaints.\n\nTests: new tests/test_builder_foot_stays_put_browser.py (3 tests, fail before fix, pass after); test_builder_multi_publish_browser + test_builder_publish_selected_browser 24 passed; test_the_builder_drawer 7 passed. Free RAM was about 6.2 GB when run."
+        },
+        "pr": 732,
+        "queued_at": "2026-10-08T06:50:28+00:00"
       },
       "729": {
         "implementers": [
@@ -12409,7 +12411,8 @@
       651,
       710,
       726,
-      727
+      727,
+      728
     ],
     "review": {
       "id": "4b69e861484d452dac7316d44fd462bf",
@@ -17435,6 +17438,13 @@
         "issue": 729,
         "claim": "ac9efdf3e8b44b13b7ff1b4fbb9e06ca",
         "actor": "Worker-S1729A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T06:50:28+00:00",
+        "issue": 728,
+        "pr": 732,
+        "actor": "Worker-S1728A"
       }
     ],
     "policy": {
