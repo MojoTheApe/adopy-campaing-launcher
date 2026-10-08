@@ -6586,9 +6586,11 @@
         "worktree": "C:\\acl-1727-window-enlarge",
         "id": "e341fcedb48e47afbeb04f8c5c27e2a6",
         "issue": 727,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-08T06:30:18+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 731,
+        "report": "PR #731 (head eb36a6a1). ensure_editor_window now enlarges a restored-but-small window (CDP maximise, or size-only growth for parked windows), re-measures, and stops with window_too_small only if still small; diag has enlarged/enlarged_to. Tests: tests/test_editor_window_guards.py (19), plus 3 neighbouring window files, all pass; no browser tests."
       },
       "728": {
         "actor": "Worker-S1728A",
