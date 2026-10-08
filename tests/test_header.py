@@ -71,8 +71,16 @@ def test_the_logo_is_the_blue_adopy_mark():
     assert 'aria-label="Adopy Campaign Manager"' in svg
 
 
-def test_the_header_caption_is_the_product_name():
-    """ACL-1705: подпись под знаком — «Adopy Campaign Manager», слова Launcher в шапке нет."""
+def test_the_header_shows_the_logo_only():
+    """ACL-1723: под знаком нет видимой подписи; имя продукта — в alt у логотипа.
+
+    Слова Launcher в шапке по-прежнему нет, шрифт подписи больше не грузится.
+    """
     head = _header()
-    assert re.search(r'<h1 class="brand-name">Adopy Campaign Manager</h1>', head)
+    assert 'brand-name' not in head, "под знаком вернулась подпись"
+    assert "<h1" not in head, "в шапке появился заголовок-подпись"
+    assert re.search(r'<img[^>]*class="brand-logo"[^>]*alt="Adopy Campaign Manager"|'
+                     r'<img[^>]*alt="Adopy Campaign Manager"[^>]*class="brand-logo"', head)
     assert "Launcher" not in head
+    tpl = TPL.read_text(encoding="utf-8")
+    assert "ACM Inter" not in tpl, "неиспользуемый @font-face вернулся"
