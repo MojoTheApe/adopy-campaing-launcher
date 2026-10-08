@@ -2237,29 +2237,16 @@
       }
     },
     "stage": {
-      "pr": 663,
+      "pr": 662,
       "issues": [
-        653
+        604
       ],
-      "tree_sha": "bd9b73d8aaa871f0866c02b0c05661b33816b8c6",
-      "source_sha": "adb91306443ea34e55565444d4254171a8e839db",
-      "main_tree": "c4bc66af97c3eb8d72570dd2ff8643040f9e5880",
+      "tree_sha": "f7a77b1943063182503ddd57da91d7e4c1ed5217",
+      "source_sha": "d0c637e5a017e3df92a9a31dd12711c76b4aa3b9",
+      "main_tree": "bd9b73d8aaa871f0866c02b0c05661b33816b8c6",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-08T01:24:30+00:00",
-      "verification": {
-        "kind": "stage-verification",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "source_sha": "adb91306443ea34e55565444d4254171a8e839db",
-        "tree_sha": "bd9b73d8aaa871f0866c02b0c05661b33816b8c6",
-        "checks": [
-          "Git checks on actual stage adb9130: CI run 37712749744 success (sharded, Python 3.11/3.13)",
-          "Windows installer run 37712749770 success"
-        ],
-        "report": "ACL-1653 stage verification: Git and installer checks green on the actual stage adb9130. Independent review: scratchpad/review_663.md."
-      },
-      "verified_at": "2026-10-08T01:25:46+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-08T02:01:52+00:00"
     },
     "tasks": {
       "248": {
