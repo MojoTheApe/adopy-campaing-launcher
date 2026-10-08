@@ -1284,13 +1284,78 @@ def ensure_editor_window(page, section: str) -> bool:
             except Exception as exc:
                 log.debug("editor window recovery failed: %s", exc)
         after = rt.window_state(page)
+    enlarged = None
+    # ACL-1727 (4db2039f760d): окно вывели из свёрнутого, но оно вернулось в
+    # обычный размер (внутри 1117 < 1168). Сначала увеличиваем, потом
+    # измеряем ещё раз, и только после этого решаем про `window_too_small`.
+    if not readable(after) and _small_but_alive(after):
+        try:
+            enlarged = _enlarge_small_window(page)
+        except Exception as exc:
+            log.debug("editor window enlarge failed: %s", exc)
+        if enlarged:
+            after = rt.window_state(page)
     ok = readable(after)
     diag = {"section": section, "minimum_width": MIN_EDITOR_WIDTH,
             "before": before, "after": after, "visibility": _visibility(page)}
+    if enlarged:
+        diag["enlarged"] = True
+        diag["enlarged_to"] = enlarged
     rt.record("window_bounds", ok, diag=diag)
     if not ok:
         rt.record("window_too_small", False, diag=diag)
     return ok
+
+
+def _small_but_alive(state: dict) -> bool:
+    """Окно не свёрнуто, ширина страницы измерена, но меньше минимума."""
+    inner = state.get("inner")
+    return (
+        not state.get("minimized")
+        and isinstance(inner, (list, tuple)) and len(inner) == 2
+        and all(type(v) in (int, float) and v > 0 for v in inner)
+        and inner[0] < MIN_EDITOR_WIDTH
+    )
+
+
+def _enlarge_small_window(page) -> dict | None:
+    """Увеличить уже обычное (не свёрнутое) окно, не сдвигая его с монитора.
+
+    Окно на нашей парковке за краем экрана растёт только размером (left/top
+    те же, как в `_widen_parked_window`), остальные разворачиваются
+    (`windowState: maximized`) — Chrome берёт тот монитор, где окно стоит.
+    Новых окон не открываем и окно на другой монитор не переносим. Возвращает
+    размер окна после увеличения или None, если не получилось.
+    """
+    session = None
+    try:
+        session = page.context.new_cdp_session(page)
+        info = session.send("Browser.getWindowForTarget") or {}
+        window_id = info.get("windowId")
+        bounds = info.get("bounds") or {}
+        if window_id is None or bounds.get("windowState") == "minimized":
+            return None
+        if id(page.context) in _OFFSCREEN:
+            width = max(int(bounds.get("width") or 0), 1) * 2
+            target = {"width": min(max(width, MIN_EDITOR_WIDTH + 200), 4000),
+                      "height": max(int(bounds.get("height") or 0), 900)}
+        else:
+            target = {"windowState": "maximized"}
+        if bounds.get("windowState") != "normal":
+            session.send("Browser.setWindowBounds",
+                         {"windowId": window_id, "bounds": {"windowState": "normal"}})
+            time.sleep(0.4)
+        session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": target})
+        time.sleep(1.0)
+        new = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+        return {"width": new.get("width"), "height": new.get("height"),
+                "state": new.get("windowState")}
+    finally:
+        if session is not None:
+            try:
+                session.detach()
+            except Exception:
+                pass
 
 
 def _unminimize_before_attach(browser) -> list[dict]:

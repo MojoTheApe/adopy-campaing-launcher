@@ -1,5 +1,16 @@
 # System history
 
+## Window recovery enlarges a window restored below the editor minimum — ACL-1727
+
+- Run 4db2039f760d (Facebook_9403A): a minimised window was restored to its normal size
+  (inner 1117 px, minimum 1168) and the run stopped at `window_too_small`.
+- Now, when the window is un-minimised but still below the minimum, recovery enlarges it through
+  CDP `Browser.setWindowBounds` (maximise on the monitor it is on; a window parked off-screen only
+  grows in size and keeps its position), measures again, and stops with `window_too_small` only
+  if it is still too small.
+- The `window_bounds` diag records `enlarged: true` and `enlarged_to` (the new size). No new
+  windows are opened and the window is never moved to another monitor.
+
 ## Account map: notes only per account, Enter saves — ACL-1721
 
 - Country rows on the account map no longer show or edit a note. Stored country notes are kept in
