@@ -6696,9 +6696,11 @@
         "worktree": "C:\\acl-1739-doc124-frozen",
         "id": "d9262967653e4d319d1e55a5250d5c11",
         "issue": 739,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-08T08:22:30+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 740,
+        "report": "# ACL-1739 handoff\nPR #740, head 681100a3. Cause: profile window covered by 4-7 windows; 5 s probe missed on alive-but-slow tab (stall_evidence responsive=true, heap ~500MB, 6.3k nodes), each miss counted toward the 1702 budget. Not video-specific. Fix: _tab_frozen confirms with the 10 s probe before counting. Tests: new unit file + 11 affected files pass (fakes only)."
       }
     },
     "tasks": {
