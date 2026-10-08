@@ -6807,9 +6807,11 @@
         "worktree": "C:\\acl-1743-release-utf8",
         "id": "c9204a0438b34df1b996f45e920793eb",
         "issue": 743,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-08T10:01:11+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 744,
+        "report": "# ACL-1743 handoff\nPR #744, head 56cd37e97729c7be5fc288bb0b661c8bc0b38cbc.\nRoot cause: subprocess text=True on windows-latest decoded gh/git output as cp1252 (UnicodeDecodeError, byte 0x8f) in acl_publish_release._gh and acl_ci_reuse.gh_api/_git.\nFix: explicit encoding=\"utf-8\", errors=\"replace\" in those calls; PYTHONUTF8=1 added to release.yml env; proof logic unchanged.\nTest: tests/test_publish_release.py -> 48 passed (incl. new non-ASCII test)."
       }
     },
     "tasks": {
