@@ -9367,7 +9367,7 @@
             "session": "run_s1723a_1008"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1723A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -9385,7 +9385,8 @@
           "report": "ACL-1723: header shows the logo only. Removed h1.brand-name caption and the 'ACM Inter' @font-face in report.html; logo img has alt=\"Adopy Campaign Manager\"; size/position unchanged. tests/test_header.py (7 passed) and tests/test_stage_badge.py (14 passed) green. No browser check run. PR #725, head 997824117daa28aeb2161c85be3bb8cf92321193."
         },
         "pr": 725,
-        "queued_at": "2026-10-08T06:03:08+00:00"
+        "queued_at": "2026-10-08T06:03:08+00:00",
+        "reviewer": "Reviewer-R1723Q"
       }
     },
     "actors": {
@@ -10136,6 +10137,10 @@
       "Worker-S1723A": {
         "session": "run_s1723a_1008",
         "role": "Worker"
+      },
+      "Reviewer-R1723Q": {
+        "session": "rev_r1723q_1008",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -12263,10 +12268,20 @@
       529,
       642,
       651,
-      710,
-      723
+      710
     ],
-    "review": null,
+    "review": {
+      "id": "4b69e861484d452dac7316d44fd462bf",
+      "pr": 725,
+      "issues": [
+        723
+      ],
+      "actor": "Reviewer-R1723Q",
+      "session": "rev_r1723q_1008",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-08T06:28:40+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -17230,6 +17245,13 @@
         "prs": [
           724
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-08T06:28:40+00:00",
+        "pr": 725,
+        "lane": "4b69e861484d452dac7316d44fd462bf",
+        "actor": "Reviewer-R1723Q"
       }
     ],
     "policy": {
