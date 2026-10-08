@@ -6586,9 +6586,11 @@
         "worktree": "C:\\acl-1726-ai-chooser",
         "id": "34b6e1118f684f828cb641a5c6e6763f",
         "issue": 726,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-08T06:29:45+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 730,
+        "report": "Added the AI-guided/Manual chooser as Create taken (note ai_manual_chooser); objective wait returns at once. Tests: 4 new + 31 existing objective-wait tests pass, no browser."
       },
       "727": {
         "actor": "Worker-W1727W",
