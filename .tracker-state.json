@@ -8588,7 +8588,7 @@
             "session": "run_s1633a_1006"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1633A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -8606,7 +8606,8 @@
           "report": "# ACL-1633 handoff (Worker-S1633A, run_s1633a_1006)\n\nPR #635 into stage, head c0a521680eb0234605e7533aca34e10b599fb237, branch codex/acl-1633-notes, worktree C:\\acl-1633-notes.\n\nChanges: countries map in account_notes.json (old file migrates without loss), set_note(kind), GET returns notes+countries, POST takes {account,text} or {country,text}; country note inside the country name cell; empty note renders nothing and CSS draws a pencil on hover/focus; editor is textarea + Delete + one-word state, saves on outside click/Esc/Ctrl+Enter, Delete shows Deleted - Undo for 5 s; ACL-1620 guarantees kept (escaping, strict read + .corrupt backup, in-flight guard, widths 28/9).\n\nTests (foreground, one file per process): test_acl1633_country_notes + test_acl1620_account_notes 38 passed; country_read 18; manage_accounts_table 7; september_review 19; account_map_view 8; account_tree_on_screen 107; acl_test_platform 100; secrets scan clean.\n\nPreview: scratchpad\\acl-1633-preview.png\n\nClaim id: 71e08678b28c426dab8dc08ca193e666 (actor Worker-S1633A)."
         },
         "pr": 635,
-        "queued_at": "2026-10-06T13:36:02+00:00"
+        "queued_at": "2026-10-06T13:36:02+00:00",
+        "reviewer": "Reviewer-R1633Q"
       },
       "637": {
         "implementers": [
@@ -9953,6 +9954,10 @@
       },
       "Reviewer-R1604Q": {
         "session": "rev_r1604q_1007",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1633Q": {
+        "session": "rev_r1633q_1007",
         "role": "Reviewer"
       }
     },
@@ -12031,12 +12036,22 @@
       433,
       526,
       529,
-      633,
       642,
       651,
       710
     ],
-    "review": null,
+    "review": {
+      "id": "d361e9420e46417689812363e592a078",
+      "pr": 635,
+      "issues": [
+        633
+      ],
+      "actor": "Reviewer-R1633Q",
+      "session": "rev_r1633q_1007",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-08T02:25:41+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -16920,6 +16935,13 @@
         "prs": [
           718
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-08T02:25:41+00:00",
+        "pr": 635,
+        "lane": "d361e9420e46417689812363e592a078",
+        "actor": "Reviewer-R1633Q"
       }
     ],
     "policy": {
