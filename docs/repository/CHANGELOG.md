@@ -1,5 +1,18 @@
 # Repository process history
 
+## ACL-1753 — Compatible pins for the preserved review queue
+
+Adopt reviewed merged Master `fe9241152cb466dfbafa3bcd3070f877c1b1b9c4` and
+Tracker `086aaa98f2e807d640105be2929714d0b7331f21`, retaining genuine template
+provenance, local controls and unchanged portable helpers. Document explicit
+`--preserve-review-queue --preserve-closed-review-handoffs` for the guarded cutover.
+Closed unmerged PR 407 / Task 406 and PR 439 / Task 433 stay unfinished; current
+open ready sources remain mandatory for review, approval and batch admission.
+This source uses its own old-policy Stage/Main/Merged handoff and does not perform
+state migration, VPS operations, extra tools, demonstration work or package rollout.
+The original nine handoffs, IDs, modules, historical completions and delivery
+fingerprint remain preserved.
+
 ## ACL-1750 — Separate instruction-only main admission
 
 Prepare an explicit matching process-instruction opt-in. Normal AGENTS.md, CLAUDE.md
