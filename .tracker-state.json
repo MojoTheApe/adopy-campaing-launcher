@@ -13038,7 +13038,9 @@
       "session": "acl_batch_master_review_20261008",
       "coordinator": "Coordinator-BATCH01",
       "started_at": "2026-10-08T12:15:11+00:00",
-      "state": "reviewing"
+      "state": "returning",
+      "report": "# Independent review of ACL-1747 / PR 748\n\nCandidate: 320019822b9efbb9d68c42f8291e1bdda3f74db4.\nMain baseline: 48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496.\nActual stage PR base: 49dc50a1139d7f1e62d1556a33ee6500d94f9788; same baseline tree.\n\nChanges requested: P1 at scripts/acl_batch.py lines 103-105. The documented --resume recovery appends refreshed source tips to an existing integration graph, retaining earlier source tips as merge parents. The pinned Tracker composition traversal stops only at current approved source tips and main. An older superseded source tip remains reachable through the previous batch merge and is rejected as a one-parent implementation commit outside those stops. Thus an ordinary reviewed author fix produces a candidate that this helper reports as assembled but check-merge cannot admit.\n\nIndependent reproduction used the actual Git fixture, the candidate's exact portable e601 batch_policy.composition, two approved sources, initial assembly, one ordinary author fix, and --resume. Initial composition passed; resumed composition raised 'Integration branch contains work outside the approved source tips'. The existing resume test only checks files and ancestry, so it misses admission failure.\n\nUse a recovery construction compatible with the pinned admission graph while preserving source branches, actual stage and prior evidence, or separately review compatible engine support. Verify the rebuilt real Git graph through the actual pinned composition/admission function; do not weaken the gate or reset permanent stage.\n\nReview is returned under the genuine old execution-v1 policy so the recorded author can reacquire its implementation claim before source edits. No implementation edits, source merge, activation or deployment were performed.",
+      "keep_lane": false
     },
     "history": [
       {
