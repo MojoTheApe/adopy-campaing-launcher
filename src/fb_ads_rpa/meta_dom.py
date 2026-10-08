@@ -3524,6 +3524,28 @@ def _objective_missing_reason(page: Page) -> str:
     return "no_objective_dialog:" + (last or "unknown")
 
 
+_AI_CHOOSER_AI_RE = re.compile(r"Meta AI.guided setup", re.I)
+_AI_CHOOSER_MANUAL_RE = re.compile(
+    r"Manual campaign setup|Configuraci[oó]n manual de campa", re.I)
+
+
+def _ai_manual_chooser_visible(page: Page) -> bool:
+    """ACL-1726: открыт выбор «Meta AI-guided setup / Manual campaign setup».
+
+    С 08.10 (9403A, `convergence_alt_modal_geo`) Create открывает его вместо
+    окна цели: радио Leads на экране нет, пока не выбран Manual. Это удачное
+    нажатие Create — шаг `manual` ниже выберет ручную настройку. AI-режим
+    никогда не выбираем. Только мгновенные проверки, без ожиданий.
+    """
+    try:
+        if _visible_now(page.get_by_role("radio", name="Leads")):
+            return False
+        return (_visible_now(page.get_by_text(_AI_CHOOSER_AI_RE))
+                and _visible_now(page.get_by_text(_AI_CHOOSER_MANUAL_RE)))
+    except Exception:
+        return False
+
+
 def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
     """Отозвалась ли страница на Create: "ok" / "left_list" / "nothing" /
     "frozen" (вкладка не ответила на проверку живости, ACL-1320) / "gone"
@@ -3553,6 +3575,9 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
             return "ok"
         except Exception:
             pass
+        # ACL-1726: выбор AI/Manual вместо окна цели — нажатие взялось.
+        if _ai_manual_chooser_visible(page):
+            return "ai_manual_chooser"
         if _loading_visible(page):
             # ACL-1354 (9d113c3d6ac3): «Loading...» модалки самой таблицы
             # списка — не след нажатия Create; окно цели за ней не пришло.
@@ -3668,6 +3693,10 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
             pass
         if _tab_gone(page):
             outcome = "gone"
+            break
+        # ACL-1726: выбор AI/Manual — окно открыто, дальше шаг `manual`.
+        if _ai_manual_chooser_visible(page):
+            found, outcome = True, "ai_manual_chooser"
             break
         # ACL-1327: Create открыл сразу новый редактор — цель выбирается в
         # нём самом, окна не будет. Ждём, пока отрисуется поле имени.
@@ -5176,8 +5205,8 @@ def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page
         took = "ok"
         while True:
             took = _create_took(page, list_url)
-            _telemetry.record("create_took", took == "ok", note=took)
-            if took in ("ok", "frozen", "gone") or quick_left <= 0 or _left() < CAMPAIGN_OPEN_MIN_PRESS_S:
+            _telemetry.record("create_took", took in ("ok", "ai_manual_chooser"), note=took)
+            if took in ("ok", "frozen", "gone", "ai_manual_chooser") or quick_left <= 0 or _left() < CAMPAIGN_OPEN_MIN_PRESS_S:
                 break
             # ACL-1313: промах виден за секунды — повторяем нажатие сразу.
             # Не больше двух быстрых повторов за открытие; за последним
