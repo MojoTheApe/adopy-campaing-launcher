@@ -6641,9 +6641,11 @@
         "worktree": "C:\\acl-1736-crop-loop",
         "id": "8ba3619e78984fe7b07753d0256306ce",
         "issue": 736,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-08T07:23:24+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 737,
+        "report": "Cause: library pick not lost (tile selected, '1 selected'); Meta bounced Crop -> Media; the later fresh Crop was mistaken by the ACL-1551 guard for a hung Crop, wizard closed without Next. Fix: one extra Next on a revisited Crop (single plan, crop re-checked), honest stop otherwise with looped_back_to in diag. PR #737, fake-based unit tests (5 passed)."
       }
     },
     "tasks": {
