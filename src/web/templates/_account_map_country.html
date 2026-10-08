@@ -81,7 +81,7 @@
               {# Числа подставлены по совпадению хвоста имён — говорим, по
                  какому именно. Молчаливое совпадение выглядит так же, как
                  собственные данные аккаунта, и проверить его было бы нечем. #}
-              {% if r.workbook_alias %}<span class="amap-alias" title="Numbers come from {{ r.workbook_alias }} in the workbook — matched on the trailing {{ r.workbook_alias[-3:] }}">= {{ r.workbook_alias }}</span>{% endif %}
+              {% if r.workbook_alias %}<span class="amap-alias" title="Numbers come from {{ r.workbook_alias }} in the workbook — {% if r.workbook_alias_exact %}same account by naming rule{% else %}matched on the trailing {{ r.workbook_alias[-3:] }}{% endif %}">= {{ r.workbook_alias }}</span>{% endif %}
               {# «Строк нет» и «строки есть, но под другой страной» — разные
                  вещи, а прочерк у них один. Во втором случае чинить надо
                  привязку, а не искать данные. #}

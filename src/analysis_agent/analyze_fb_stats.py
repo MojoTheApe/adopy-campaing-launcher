@@ -75,8 +75,12 @@ def normalize_account_alias(alias) -> str:
 
 def alias_matches(series, alias):
     """Boolean mask: rows of `series` whose alias matches `alias`, suffix-blind."""
-    target = normalize_account_alias(alias)
-    return series.fillna("").astype(str).map(normalize_account_alias) == target
+    # Сравнение — единственное место, где работает явное правило имён
+    # (config/account_name_rules.json) и где регистр не важен.
+    from src.analysis_agent.account_names import account_key
+
+    target = account_key(alias)
+    return series.fillna("").astype(str).map(account_key) == target
 
 
 # A creative is identified by a 3-4 digit number; everything else in the
