@@ -6891,7 +6891,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "747": {
+        "actor": "Worker-BATCH01",
+        "session": "acl_batch_root_20261008",
+        "coordinator": "Coordinator-BATCH01",
+        "branch": "codex/acl-1747-approved-batches",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-batch-integration",
+        "id": "7c3fd677489444c9b58eed362e9e2bbf",
+        "issue": 747,
+        "state": "implementing",
+        "started_at": "2026-10-08T11:38:31+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -9915,6 +9928,17 @@
         "pr": 744,
         "queued_at": "2026-10-08T10:06:51+00:00",
         "reviewer": "Reviewer-R1743Q"
+      },
+      "747": {
+        "implementers": [
+          {
+            "actor": "Worker-BATCH01",
+            "session": "acl_batch_root_20261008"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-BATCH01",
+        "coordinator": "Coordinator-BATCH01"
       }
     },
     "actors": {
@@ -10717,6 +10741,10 @@
       "Reviewer-R1743Q": {
         "session": "rev_r1743q_1008",
         "role": "Reviewer"
+      },
+      "Worker-BATCH01": {
+        "session": "acl_batch_root_20261008",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -18210,6 +18238,13 @@
         "prs": [
           746
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-08T11:38:31+00:00",
+        "issue": 747,
+        "claim": "7c3fd677489444c9b58eed362e9e2bbf",
+        "actor": "Worker-BATCH01"
       }
     ],
     "policy": {
