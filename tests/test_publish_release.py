@@ -334,3 +334,23 @@ def test_the_release_is_refused_when_python_3_11_ran_nowhere(reused_release):
     reused_release["main_jobs"] = _only(jobs_of(42, "skipped"), lambda n: n == "ACL verification")
     with pytest.raises(ValueError, match="neither ran the full test matrix"):
         pub.verify_promotion("acl-release-2026-10-04", "test/source")
+
+
+def test_gh_and_git_output_decoded_as_utf8(monkeypatch, tmp_path):
+    """ACL-1743: на windows-latest вывод gh/git не должен декодироваться как cp1252."""
+    from scripts import acl_ci_reuse as reuse
+
+    payload = {"title": "Release — релиз", "note": "тест \u044f"}
+    raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")  # содержит байт 0x8f
+
+    def fake_check_output(cmd, **kwargs):
+        # имитируем Windows: без явной кодировки текст читается как cp1252
+        assert kwargs.get("encoding") == "utf-8", "subprocess должен декодировать вывод как UTF-8"
+        return raw.decode(kwargs["encoding"], kwargs.get("errors", "strict")) + "\n"
+
+    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
+    assert pub._api("repos/x/y") == payload
+    assert pub._gh("api", "x").startswith("{")
+    assert pub._git("log").startswith("{")
+    assert reuse.gh_api("repos/x/y") == payload
+    assert reuse._git(tmp_path, "log").startswith("{")
