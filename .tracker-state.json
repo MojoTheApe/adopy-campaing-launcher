@@ -8699,7 +8699,7 @@
             "session": "run_s1604a_1006"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1604A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -8717,7 +8717,8 @@
           "report": "# ACL-1604 handoff (Worker-S1604A)\n\nCommit 87de8b20 on codex/acl-1604-preflight (worktree C:\\acl-1604-preflight, base work/stage 39a9cb1b). Not pushed, no PR.\n\nFiles: src/web/publish_preflight.py (new), src/web/app.py (2 endpoints), src/web/templates/report.html (cbPublishAll), tests/test_acl1604_preflight.py, tests/test_acl1604_preflight_browser.py.\n\nSee the final reply for detection scope, test counts and open questions."
         },
         "pr": 662,
-        "queued_at": "2026-10-07T05:49:58+00:00"
+        "queued_at": "2026-10-07T05:49:58+00:00",
+        "reviewer": "Reviewer-R1604Q"
       },
       "650": {
         "implementers": [
@@ -9893,6 +9894,10 @@
       },
       "Reviewer-R1653Q": {
         "session": "rev_r1653q_1007",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1604Q": {
+        "session": "rev_r1604q_1007",
         "role": "Reviewer"
       }
     },
@@ -11949,11 +11954,21 @@
       529,
       633,
       642,
-      604,
       651,
       710
     ],
-    "review": null,
+    "review": {
+      "id": "8080c94864c04b65a3176345bf27fb99",
+      "pr": 662,
+      "issues": [
+        604
+      ],
+      "actor": "Reviewer-R1604Q",
+      "session": "rev_r1604q_1007",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-08T01:43:15+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -16811,6 +16826,13 @@
         "prs": [
           717
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-08T01:43:15+00:00",
+        "pr": 662,
+        "lane": "8080c94864c04b65a3176345bf27fb99",
+        "actor": "Reviewer-R1604Q"
       }
     ],
     "policy": {
