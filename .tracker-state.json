@@ -8727,7 +8727,7 @@
             "session": "run_s1653a_1006"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1653A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -8745,7 +8745,8 @@
           "report": "# ACL-1653 handoff (Worker-S1653A)\nPR #663 into stage, branch codex/acl-1653-kld-names, head c3ef385c (feature commit b1bafbfd + merge of work/stage).\nRule in config/account_name_rules.json, wired via normalize_account_alias, workbook_alias_for/_alias_by_tail, profile_name_key, builder alias map.\nTests: test_account_name_rules 8; alias_join 9; account_drill 5; dashboard_review 9; review_period_regressions 5; mlx_profiles 20; multilogin profiles 30; review_ui 7; linked_country 18; acl_test_platform 100; account_map_view 8 (alone; earlier PermissionError on splits.json was a Windows file-lock flake in tmp, passes alone).\nAudit: B94/B96/B97 have no workbook rows; \"Failed to fetch\" is the browser fetch error; B94/B98 spend reads fail with MLX 403 / load timeouts."
         },
         "pr": 663,
-        "queued_at": "2026-10-07T05:50:17+00:00"
+        "queued_at": "2026-10-07T05:50:17+00:00",
+        "reviewer": "Reviewer-R1653Q"
       },
       "651": {
         "implementers": [
@@ -9833,6 +9834,10 @@
       },
       "Reviewer-R1652Q": {
         "session": "rev_r1652q_1007",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1653Q": {
+        "session": "rev_r1653q_1007",
         "role": "Reviewer"
       }
     },
@@ -11866,11 +11871,21 @@
       633,
       642,
       604,
-      653,
       651,
       710
     ],
-    "review": null,
+    "review": {
+      "id": "94b21384510546ed94f48f7790e51c31",
+      "pr": 663,
+      "issues": [
+        653
+      ],
+      "actor": "Reviewer-R1653Q",
+      "session": "rev_r1653q_1007",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-08T01:03:49+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -16702,6 +16717,13 @@
         "prs": [
           716
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-08T01:03:49+00:00",
+        "pr": 663,
+        "lane": "94b21384510546ed94f48f7790e51c31",
+        "actor": "Reviewer-R1653Q"
       }
     ],
     "policy": {
