@@ -9728,7 +9728,7 @@
             "session": "w1736l_1008"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1736L",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -9746,7 +9746,8 @@
           "report": "Cause: library pick not lost (tile selected, '1 selected'); Meta bounced Crop -> Media; the later fresh Crop was mistaken by the ACL-1551 guard for a hung Crop, wizard closed without Next. Fix: one extra Next on a revisited Crop (single plan, crop re-checked), honest stop otherwise with looped_back_to in diag. PR #737, fake-based unit tests (5 passed)."
         },
         "pr": 737,
-        "queued_at": "2026-10-08T07:28:40+00:00"
+        "queued_at": "2026-10-08T07:28:40+00:00",
+        "reviewer": "Reviewer-R1736V"
       },
       "739": {
         "implementers": [
@@ -10563,6 +10564,10 @@
       },
       "Reviewer-R1729Q": {
         "session": "rev_r1729q_1008",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1736V": {
+        "session": "rev_r1736v_1008",
         "role": "Reviewer"
       }
     },
@@ -12789,10 +12794,20 @@
       651,
       710,
       728,
-      736,
       739
     ],
-    "review": null,
+    "review": {
+      "id": "d04dc9042c6a428ab95ef2acd5135900",
+      "pr": 737,
+      "issues": [
+        736
+      ],
+      "actor": "Reviewer-R1736V",
+      "session": "rev_r1736v_1008",
+      "coordinator": "Coordinator-T1004Q",
+      "started_at": "2026-10-08T09:55:28+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -17944,6 +17959,13 @@
         "prs": [
           742
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-08T09:55:28+00:00",
+        "pr": 737,
+        "lane": "d04dc9042c6a428ab95ef2acd5135900",
+        "actor": "Reviewer-R1736V"
       }
     ],
     "policy": {
