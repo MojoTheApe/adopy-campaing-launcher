@@ -3694,10 +3694,6 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
         if _tab_gone(page):
             outcome = "gone"
             break
-        # ACL-1726: выбор AI/Manual — окно открыто, дальше шаг `manual`.
-        if _ai_manual_chooser_visible(page):
-            found, outcome = True, "ai_manual_chooser"
-            break
         # ACL-1327: Create открыл сразу новый редактор — цель выбирается в
         # нём самом, окна не будет. Ждём, пока отрисуется поле имени.
         if _simple_create_ready(page):
@@ -3719,6 +3715,12 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                 break
             continue
         frozen_run = 0
+        # ACL-1726: выбор AI/Manual — окно открыто, дальше шаг `manual`.
+        # Только после проверки живости: на зависшей вкладке разметку не
+        # спрашиваем (ACL-1641/1320).
+        if _ai_manual_chooser_visible(page):
+            found, outcome = True, "ai_manual_chooser"
+            break
         if now - poll_start > OBJECTIVE_SLOW_POLL_FACTOR * poll_s:
             slow_polls += 1
             last_busy = now
@@ -5244,7 +5246,8 @@ def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page
                       max(_left(), OBJECTIVE_POLL_S))
         if _wait_objective_dialog(page, first_s=first_s,
                                   loading_max_s=max(_left(), OBJECTIVE_POLL_S), out=out):
-            outcome = "radio"
+            outcome = ("ai_manual_chooser" if out.get("outcome") == "ai_manual_chooser"
+                       else "radio")
             break
         outcome = out.get("outcome") or "no_dialog"
         if outcome == "gone":
@@ -5261,7 +5264,7 @@ def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page
                 break
     else:
         result = "objective_leads" if pressed else "create"
-    if outcome != "radio" and not result:
+    if outcome not in ("radio", "ai_manual_chooser") and not result:
         result = "objective_leads" if pressed else "create"
     if result == "profile_unresponsive":
         # Перед перезапуском профиля — диагноз: не вход ли это и не сеть ли.
