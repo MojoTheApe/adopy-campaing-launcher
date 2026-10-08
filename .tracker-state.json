@@ -7020,22 +7020,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "753": {
-        "actor": "Worker-PROC01",
-        "session": "acl_process_worker_20261008",
-        "coordinator": "Coordinator-PROC00",
-        "branch": "codex/acl-1753-compatible-cutover-pins",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-process-instructions",
-        "id": "6ff00c00fa584b5391f83d67d9dc12a7",
-        "issue": 753,
-        "state": "handoff",
-        "started_at": "2026-10-08T21:45:34+00:00",
-        "from_status": "status:todo",
-        "pr": 754,
-        "report": "ACL-1753 genuine minimum compatibility source handoff\n\nA real platform/improvement Task was created and an authentic old-policy Worker implementation claim acquired before edits. The new retained source branch starts at actual main 659a3fb3fe3265428624ed529ef5540fa59035c7; the prior 1750 branch is untouched.\n\nActual ready source PR 754 head 512c77d2bd198aa5ed16ae3cc27e957cf276407e, Stage base 3ec4c0fa30782c15a06a1cbe653c96ae5721ab72, tree f0a9183dbf0b4babc358c0127ba4efb49b7fde03. Current main is an ancestor and worktree is clean.\n\nFull bounded source: descriptor/engine/Action pins select actually merged Master fe9241152cb466dfbafa3bcd3070f877c1b1b9c4 and Tracker 086aaa98f2e807d640105be2929714d0b7331f21. A fresh canonical pristine baseline keeps identical genuine legacy inputs. The sole Action conflict is explicitly resolved to retain exact ACL branch filter/allow-draft controls. Four portable helpers and guarded clients are byte-identical. Concise BATCH_INTEGRATION documents both explicit preservation flags and closed unmerged PR 407/439 for unfinished Tasks 406/433; one bounded required repository-process history entry is recorded. No product/runtime/system/parent/tool or demonstration changes.\n\nFresh checks: 54 process/adoption tests PASS in 51.18 seconds; named instruction checker 13 files/40 local Markdown links PASS; actual 086 CLI help exposes both flags; canonical descriptor/export/pristine-baseline and no-change repeat upgrade PASS; whitespace/source scope/ancestry checks PASS. Config remains 9e7e633fce4f54ac60644bd422443095f3decdae02c13d4eb3ae50966d264d1a; six modules, 71 aliases, +1000 IDs, 74 historical completions and delivery fingerprint 302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21 preserved. All existing source and task history is retained.\n\nFull applicable current-head hosted checks are pending. The initial tracker-link check ran before handoff while the real Task was In Progress; any retry must follow the actual normal Review transition. No independent final approval, Stage/Main merge, Merged completion, state migration, VPS operation, board activation, stable package or employee rollout is claimed. The normal handoff releases the author claim into the existing old-policy review queue for a distinct actual non-implementing Reviewer; original nine queue entries remain preserved. The owner alone performs the later supported cutover and ACL-board check.\n\n\nExplicit owner resumption: the earlier stopped claim was released normally and is historical. After the owner instructed completion, only its blocker was cleared and the same actual Worker acquired a fresh genuine implementation claim. The unchanged source is ready again. No new code or local suite was added; the existing 54 affected checks and preservation proofs concern this exact unchanged head/tree. A normal handoff now releases this new author claim for an actual independent Reviewer. Current-head hosted checks are pending, so no final approval or admission is asserted."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -10141,7 +10126,7 @@
             "session": "acl_process_worker_20261008"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-PROC01",
         "coordinator": "Coordinator-PROC00",
         "handoff": {
@@ -10150,13 +10135,16 @@
           "coordinator": "Coordinator-PROC00",
           "branch": "codex/acl-1753-compatible-cutover-pins",
           "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-process-instructions",
-          "id": "3a703295a90e493b9ab5e4fd34a75ade",
+          "id": "6ff00c00fa584b5391f83d67d9dc12a7",
           "issue": 753,
-          "state": "stopping",
-          "started_at": "2026-10-08T21:25:03+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-08T21:45:34+00:00",
           "from_status": "status:todo",
-          "report": "Owner-stopped ACL-1753: unfinished source preserved.\n\nThe owner explicitly stopped implementation/review/admission and requested only rules. Do not continue this source, review, merge, Stage/Main handoff, migration or activation. Source PR754 and branch are retained at head512c77d2bd198aa5ed16ae3cc27e957cf276407e/treef0a9183dbf0b4babc358c0127ba4efb49b7fde03. The six pin/provenance/guide/history files are preserved unchanged. Local54 checks are historical author self-check evidence only; no final independent approval, source admission, Merged completion or live change is claimed.\n\nUse the maintained genuine old-policy stop to release only this author's implementation claim and mark the task blocked/ToDo/unfinished. Retain original queue, all source/history/branches and all other owners. PR754 is converted to draft. No new review, CI rerun/wait, VPS work, migration, activation or source edits are authorized. Any future resumption needs new explicit owner authorization and the maintained genuine claim/review procedure."
-        }
+          "pr": 754,
+          "report": "ACL-1753 genuine minimum compatibility source handoff\n\nA real platform/improvement Task was created and an authentic old-policy Worker implementation claim acquired before edits. The new retained source branch starts at actual main 659a3fb3fe3265428624ed529ef5540fa59035c7; the prior 1750 branch is untouched.\n\nActual ready source PR 754 head 512c77d2bd198aa5ed16ae3cc27e957cf276407e, Stage base 3ec4c0fa30782c15a06a1cbe653c96ae5721ab72, tree f0a9183dbf0b4babc358c0127ba4efb49b7fde03. Current main is an ancestor and worktree is clean.\n\nFull bounded source: descriptor/engine/Action pins select actually merged Master fe9241152cb466dfbafa3bcd3070f877c1b1b9c4 and Tracker 086aaa98f2e807d640105be2929714d0b7331f21. A fresh canonical pristine baseline keeps identical genuine legacy inputs. The sole Action conflict is explicitly resolved to retain exact ACL branch filter/allow-draft controls. Four portable helpers and guarded clients are byte-identical. Concise BATCH_INTEGRATION documents both explicit preservation flags and closed unmerged PR 407/439 for unfinished Tasks 406/433; one bounded required repository-process history entry is recorded. No product/runtime/system/parent/tool or demonstration changes.\n\nFresh checks: 54 process/adoption tests PASS in 51.18 seconds; named instruction checker 13 files/40 local Markdown links PASS; actual 086 CLI help exposes both flags; canonical descriptor/export/pristine-baseline and no-change repeat upgrade PASS; whitespace/source scope/ancestry checks PASS. Config remains 9e7e633fce4f54ac60644bd422443095f3decdae02c13d4eb3ae50966d264d1a; six modules, 71 aliases, +1000 IDs, 74 historical completions and delivery fingerprint 302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21 preserved. All existing source and task history is retained.\n\nFull applicable current-head hosted checks are pending. The initial tracker-link check ran before handoff while the real Task was In Progress; any retry must follow the actual normal Review transition. No independent final approval, Stage/Main merge, Merged completion, state migration, VPS operation, board activation, stable package or employee rollout is claimed. The normal handoff releases the author claim into the existing old-policy review queue for a distinct actual non-implementing Reviewer; original nine queue entries remain preserved. The owner alone performs the later supported cutover and ACL-board check.\n\n\nExplicit owner resumption: the earlier stopped claim was released normally and is historical. After the owner instructed completion, only its blocker was cleared and the same actual Worker acquired a fresh genuine implementation claim. The unchanged source is ready again. No new code or local suite was added; the existing 54 affected checks and preservation proofs concern this exact unchanged head/tree. A normal handoff now releases this new author claim for an actual independent Reviewer. Current-head hosted checks are pending, so no final approval or admission is asserted."
+        },
+        "pr": 754,
+        "queued_at": "2026-10-08T21:47:30+00:00"
       }
     },
     "actors": {
@@ -13296,7 +13284,8 @@
       651,
       710,
       728,
-      739
+      739,
+      753
     ],
     "review": null,
     "history": [
@@ -18728,6 +18717,13 @@
         "at": "2026-10-08T21:45:34+00:00",
         "issue": 753,
         "claim": "6ff00c00fa584b5391f83d67d9dc12a7",
+        "actor": "Worker-PROC01"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-08T21:47:30+00:00",
+        "issue": 753,
+        "pr": 754,
         "actor": "Worker-PROC01"
       }
     ],
