@@ -7125,22 +7125,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "756": {
-        "actor": "Worker-O1756A",
-        "session": "run_o1756a_1009",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1756-api-in-profile",
-        "worktree": "C:\\acl-api-inprofile",
-        "id": "bd772ec713574dc3a7905b76e9c1bf95",
-        "issue": 756,
-        "state": "handoff",
-        "started_at": "2026-10-09T17:39:19+00:00",
-        "from_status": "status:todo",
-        "pr": 759,
-        "report": "ACL-1756 fix after batch return (live pilot B90: Graph error 1 \"Invalid request\" on the first read with credentials omit). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head df86432b (on top of e21bd6c4). Five files: src/fb_api/token_capture.py, src/fb_api/graph.py, scripts/fb_api_pilot.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n- The page helper copies Ads Manager's cookie mode (fetch credentials, XHR withCredentials) for our GET; the HTML/Resource Timing fallback uses include. It records am_request: via, method, credentials, path and parameter names only (no values, no token). Calls stay GET-only with redirect: 'error', the key whitelist and denylist, and no retry.\n- GraphError messages carry Meta's type, error_subcode, fbtrace_id, is_transient and user title/msg, plus the host, version and cookie mode used and the HTTP status, all scrubbed. Error 1 still does not stop the client.\n- New pilot flags (fixed lists): --graph-host captured|public and --credentials captured|include|omit. They are checked in Python (ValueError) and in the page (bad_option, no fetch). The pilot prints Ads Manager's own request shape and our endpoint.\n\nTests (each file run separately): test_acl1756_fb_api.py 68 passed; test_acl1756_page_helper_node.py 6 passed (Node ran); test_acl1702_tab_watchdog.py 35 passed; test_acl_test_shard.py 14 passed (spread [36, 35, 36]); acl_scan_secrets clean. --run was not used."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -10299,7 +10284,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10308,16 +10293,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1756-api-in-profile",
           "worktree": "C:\\acl-api-inprofile",
-          "id": "163a0b24c34e48b5b5a9139f2a57985f",
+          "id": "bd772ec713574dc3a7905b76e9c1bf95",
           "issue": 756,
           "state": "handoff",
-          "started_at": "2026-10-09T15:34:47+00:00",
+          "started_at": "2026-10-09T17:39:19+00:00",
           "from_status": "status:todo",
           "pr": 759,
-          "report": "ACL-1756 review round 3 (CI shard balance). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head e21bd6c4 (on top of bcdb03be). Tests only; no product code changed.\n\n- The Node page-helper tests move from tests/test_acl1756_fb_api.py to tests/test_acl1756_page_helper_node.py. Shard costs are now 73 and 29 instead of 77 in one file. The shard tolerance was not touched.\n- Browser files across the 3 Linux shards (scripts/acl_test_shard.py): now [37, 34, 36]; before the split [37, 33, 37] (failed); work/main 646044f2 [35, 37, 35].\n- The page now refuses the empty parameter name \"\" (asserted in Node).\n\nLocal checks, each file run separately: test_acl_test_shard.py 14 passed; test_acl1756_fb_api.py 63 passed; test_acl1756_page_helper_node.py 3 passed (Node ran); test_acl1702_tab_watchdog.py 35 passed; acl_scan_secrets clean. --run was not used."
+          "report": "ACL-1756 fix after batch return (live pilot B90: Graph error 1 \"Invalid request\" on the first read with credentials omit). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head df86432b (on top of e21bd6c4). Five files: src/fb_api/token_capture.py, src/fb_api/graph.py, scripts/fb_api_pilot.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n- The page helper copies Ads Manager's cookie mode (fetch credentials, XHR withCredentials) for our GET; the HTML/Resource Timing fallback uses include. It records am_request: via, method, credentials, path and parameter names only (no values, no token). Calls stay GET-only with redirect: 'error', the key whitelist and denylist, and no retry.\n- GraphError messages carry Meta's type, error_subcode, fbtrace_id, is_transient and user title/msg, plus the host, version and cookie mode used and the HTTP status, all scrubbed. Error 1 still does not stop the client.\n- New pilot flags (fixed lists): --graph-host captured|public and --credentials captured|include|omit. They are checked in Python (ValueError) and in the page (bad_option, no fetch). The pilot prints Ads Manager's own request shape and our endpoint.\n\nTests (each file run separately): test_acl1756_fb_api.py 68 passed; test_acl1756_page_helper_node.py 6 passed (Node ran); test_acl1702_tab_watchdog.py 35 passed; test_acl_test_shard.py 14 passed (spread [36, 35, 36]); acl_scan_secrets clean. --run was not used."
         },
         "pr": 759,
-        "queued_at": "2026-10-09T15:35:47+00:00",
+        "queued_at": "2026-10-09T17:40:50+00:00",
         "review_report": "Return of an Approved task for a live-pilot fix (Coordinator-C0930A, 2026-10-09).\n\nLive pilot on KLD_BFL_B90, run with the owner's permission: the profile attached, Ads Manager loaded and the token was captured in the page. The first Graph call, GET /me/adaccounts, failed with \"Graph API error 1: Invalid request\". The client stopped as designed and made no more calls.\n\nMost likely cause: the in-page fetch used credentials:'omit', while the Ads Manager session token is cookie-bound. The error message also dropped Meta's details (type, subcode, fbtrace_id).\n\nFix requested:\n- Copy Ads Manager's own credentials mode, host and version.\n- Record names-only metadata of Ads Manager's own Graph request.\n- Carry Meta's scrubbed error details in the stop message.\n- Add closed-list diagnostic flags --graph-host and --credentials.\n- Keep it GET-only, with the same key whitelist and denylist and no retries.",
         "return_operation": {
           "id": "0aa70bff8c3840f79459ae04070e8775",
@@ -13511,7 +13496,8 @@
       642,
       651,
       710,
-      739
+      739,
+      756
     ],
     "review": null,
     "history": [
@@ -19331,6 +19317,13 @@
         "at": "2026-10-09T17:39:19+00:00",
         "issue": 756,
         "claim": "bd772ec713574dc3a7905b76e9c1bf95",
+        "actor": "Worker-O1756A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-09T17:40:50+00:00",
+        "issue": 756,
+        "pr": 759,
         "actor": "Worker-O1756A"
       }
     ],
