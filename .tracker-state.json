@@ -7101,7 +7101,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "756": {
+        "actor": "Worker-O1756A",
+        "session": "run_o1756a_1009",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1756-api-in-profile",
+        "worktree": "C:\\acl-api-inprofile",
+        "id": "7f4a5345c0f14135b3c2d1fd02ddb5a7",
+        "issue": 756,
+        "state": "implementing",
+        "started_at": "2026-10-09T17:56:48+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -10258,9 +10271,13 @@
           {
             "actor": "Worker-O1756A",
             "session": "run_o1756a_1009"
+          },
+          {
+            "actor": "Worker-O1756A",
+            "session": "run_o1756a_1009"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10285,8 +10302,7 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "Return of an Approved task for a live-pilot fix (Coordinator-C0930A, 2026-10-09).\n\nLive pilot on KLD_BFL_B90, run with the owner's permission: the profile attached, Ads Manager loaded and the token was captured in the page. The first Graph call, GET /me/adaccounts, failed with \"Graph API error 1: Invalid request\". The client stopped as designed and made no more calls.\n\nMost likely cause: the in-page fetch used credentials:'omit', while the Ads Manager session token is cookie-bound. The error message also dropped Meta's details (type, subcode, fbtrace_id).\n\nFix requested:\n- Copy Ads Manager's own credentials mode, host and version.\n- Record names-only metadata of Ads Manager's own Graph request.\n- Carry Meta's scrubbed error details in the stop message.\n- Add closed-list diagnostic flags --graph-host and --credentials.\n- Keep it GET-only, with the same key whitelist and denylist and no retries."
-        },
-        "reviewer": "Reviewer-R1756S"
+        }
       }
     },
     "actors": {
@@ -19326,6 +19342,13 @@
           "report": "# Round 5 (head df86432bf2985131b69ddc6587b50d2fd6149152, delta e21bd6c4..df86432b): REQUEST CHANGES (tests only, plus one scrub)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent reviewer.\n\nCode behaviour is correct on every point I could probe; the blockers are test gaps on the exact boundary that now carries cookies.\n\n## Probes (real helper under Node, real Python)\n- Host anchor, capture from an Ads Manager request carrying a token (cookies are sent only to the captured host). Captured: `adsmanager-graph.facebook.com`, `graph.facebook.com`, `GRAPH.FACEBOOK.COM` (normalized). NOT captured: `adsmanager.facebook.com`, `www.facebook.com`, `graph.facebook.com.evil.com`, `evil.com/graph.facebook.com/\u2026`, `graph.facebook.com@evil.com`, `evil.com@graph.facebook.com`, `graph.facebook.com:8443`, `a.graph.facebook.com`, `http://graph.facebook.com`, backslash/`%2f` userinfo tricks, `/../` paths. Residual (same as rounds 1-4, but now cookies go with it): `[a-z0-9-]*graph.facebook.com` has no separator, so any facebook.com label ending in `graph` (e.g. `evilgraph.facebook.com`) is accepted. Only reachable if Ads Manager's own page issues the token request to such a host, so the trust boundary is unchanged; I recommend tightening it to `(?:[a-z0-9]+-)?graph.facebook.com`.\n- `host`/`credentials` spec: anything but `captured|public` / `captured|include|omit` returns `bad_option` with 0 fetches (also `evil.example.com`, `same-origin`); Python rejects bad modes in the constructor. `public` uses `graph.facebook.com`. Still GET-only, `redirect:'error'`, key whitelist intact (probes from rounds 2-3 re-run, 13 refused keys).\n- `am_request`: names only (values and body values dropped, `access_token` removed, key regex-filtered, max 40), path without query. No values/token in the output; pilot output goes through `scrub`.\n- Error details: message path is scrubbed (act ids, business/long ids, tokens, even a truncated token fragment became `<token>`). Finding: `GraphError.details` holds the RAW strings (e.g. an `act_\u2026` id or business id from `error_user_msg`). Nothing reads or logs the dict today, but it is a latent leak for the next consumer; scrub the values when building the dict.\n- Flags: no retry or switching anywhere; `--graph-host`/`--credentials` just pass through. Auto-retry-on-error-1 mutation is killed.\n\n## Tests and checks\n- tests/test_acl1756_fb_api.py + test_acl1756_page_helper_node.py: 68 + 6 passed; tests/test_acl1702_tab_watchdog.py 35 passed (separately); acl_scan_secrets clean. Dry run without --run, sockets blocked: 0 network attempts, exit 0. git merge-tree vs work/main clean (tree equals head tree 9b3c677e).\n\n## Mutations (22 new patterns): 18 killed, 4+1 survived\n- SURVIVED (blockers): `GRAPH_RE` without the leading `^` anchor; host allowed to be any `*.facebook.com`; host allowed to be any host at all; `http:` scheme accepted. No test pins that capture refuses non-Graph hosts, so a regression here would send cookies to an arbitrary host unnoticed. Add a Node test that feeds the probe URLs above and asserts `has_token` is false and no later call fetches them.\n- SURVIVED: pilot ignores `--graph-host/--credentials` (passes constants). Add a test that `run_pilot`/`main` forwards both flags to `InPageGraph`.\n- KILLED: am_request leaks query/body values, keeps `access_token`, keeps query in path; bad host/credentials option accepted (JS and Python); custom host passthrough; captured credentials ignored; default flips to `omit`; redirect follow; omit mode lost; details/fbtrace/endpoint dropped; auto-retry on error 1.\n\n## Requested changes\n1. Node test for the capture host anchor (cases above), killing the four host mutations.\n2. Test that the pilot forwards the two flags.\n3. Scrub the values in `error_details` (and test that `.details` has no `act_` id, 8+ digit id or token).\n4. Optional hardening: tighten `GRAPH_RE` as above.\n\n## CI at df86432b\nwindows tests (3.13) pass; linux 3.13 shards 1-3 were running; tracker-link fails because of task state at the time of the run (re-run after review-acquire). Not approved, so no batch approve.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-09T17:56:48+00:00",
+        "issue": 756,
+        "claim": "7f4a5345c0f14135b3c2d1fd02ddb5a7",
+        "actor": "Worker-O1756A"
       }
     ],
     "policy": {
