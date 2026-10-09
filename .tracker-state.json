@@ -7101,22 +7101,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "756": {
-        "actor": "Worker-O1756A",
-        "session": "run_o1756a_1009",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1756-api-in-profile",
-        "worktree": "C:\\acl-api-inprofile",
-        "id": "70ddc3057c8149a0877f1b010d2af0db",
-        "issue": 756,
-        "state": "handoff",
-        "started_at": "2026-10-09T18:18:56+00:00",
-        "from_status": "status:todo",
-        "pr": 759,
-        "report": "ACL-1756 round 6 fix for the Windows CI job. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile. Test file only: tests/test_acl1756_fb_api.py.\n\ntest_acl_test_platform::test_no_unmarked_test_file_uses_windows_only_apis flagged r\"act_\\d\" and r\"\\d{8,}\" (backslash-path). They are now module constants ACT_ID_RE = re.compile(r\"act_[0-9]\") and LONG_ID_RE = re.compile(r\"[0-9]{8,}\"), with no backslash. Behaviour is unchanged.\n\nChecks: tests/test_acl_test_platform.py 100 passed; tests/test_acl1756_fb_api.py 70 passed. --run was not used."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -10283,7 +10268,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10292,16 +10277,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1756-api-in-profile",
           "worktree": "C:\\acl-api-inprofile",
-          "id": "7f4a5345c0f14135b3c2d1fd02ddb5a7",
+          "id": "70ddc3057c8149a0877f1b010d2af0db",
           "issue": 756,
           "state": "handoff",
-          "started_at": "2026-10-09T17:56:48+00:00",
+          "started_at": "2026-10-09T18:18:56+00:00",
           "from_status": "status:todo",
           "pr": 759,
-          "report": "ACL-1756 review round 5 fixes. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 10568956 (on top of df86432b). Files: src/fb_api/token_capture.py, src/fb_api/graph.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n1. Host anchor tests: a Node probe test with 15 URLs that must not yield a token: adsmanager.facebook.com, www.facebook.com, graph.facebook.com.evil.com, evil.com/graph.facebook.com/..., graph.facebook.com@evil.com, user:pw@graph.facebook.com, :8443, a.graph.facebook.com, http:, a backslash URL, %2f, /../, evilgraph.facebook.com, and a Graph URL embedded in a foreign URL (query and path). For each: has_token false, the next call is refused with no_token and makes no fetch. Positive controls: graph.facebook.com, adsmanager-graph.facebook.com and an upper-case HTTPS URL are captured, and exactly one call goes to that host.\n2. GRAPH_RE is now /^https:\\/\\/((?:[a-z0-9]+-)?graph\\.facebook\\.com)(?:\\/(v\\d+\\.\\d+))?(?:\\/|$)/i. The version is optional; an unversioned URL gives an empty version.\n3. Pilot flags: a test checks that --graph-host and --credentials reach InPageGraph through run_pilot (the page specs carry host and credentials) and through main \u2192 run_pilot.\n4. GraphError.details values are scrubbed when the dict is built; a test asserts no act_ id, no 8+ digit id and no token.\n\nMutations (run one at a time, files restored), all killed: dropping ^ from GRAPH_RE, any *.facebook.com, any host, accepting http:, the old permissive regex (evilgraph), the pilot ignoring flags in make_graph, main dropping the flags, unscrubbed details.\n\nChecks (each file run separately): test_acl1756_fb_api.py 70 passed; test_acl1756_page_helper_node.py 7 passed; test_acl1702_tab_watchdog.py 35 passed; test_acl_test_shard.py 14 passed (spread [36, 35, 36]); acl_scan_secrets clean. --run was not used."
+          "report": "ACL-1756 round 6 fix for the Windows CI job. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile. Test file only: tests/test_acl1756_fb_api.py.\n\ntest_acl_test_platform::test_no_unmarked_test_file_uses_windows_only_apis flagged r\"act_\\d\" and r\"\\d{8,}\" (backslash-path). They are now module constants ACT_ID_RE = re.compile(r\"act_[0-9]\") and LONG_ID_RE = re.compile(r\"[0-9]{8,}\"), with no backslash. Behaviour is unchanged.\n\nChecks: tests/test_acl_test_platform.py 100 passed; tests/test_acl1756_fb_api.py 70 passed. --run was not used."
         },
         "pr": 759,
-        "queued_at": "2026-10-09T18:06:10+00:00",
+        "queued_at": "2026-10-09T18:20:02+00:00",
         "review_report": "# Round 6 (head 105689562b6f8e572126762fe6441a4bbe142e6c, delta df86432b..10568956): REQUEST CHANGES (one CI line)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Code and round-5 blockers are fixed; required Windows CI is red on one test line.\n\n- Round-5 blockers: re-ran the 5 surviving mutations plus 6 variants (host `^` dropped, any `*.facebook.com`, any host, old no-separator regex, dotted subdomain, `http:` allowed, end anchor dropped, pilot flags ignored, `details` unscrubbed in text and endpoint): all KILLED. The only survivor is \"version undefined instead of empty string\", an equivalent mutant (falsy either way).\n- Probe set re-run against `GRAPH_RE = ^https://((?:[a-z0-9]+-)?graph.facebook.com)(?:/(v\\d+\\.\\d+))?(?:/|$)`: accepted only `graph.facebook.com`, `adsmanager-graph.facebook.com`, uppercase (normalized), default port 443 and the backslash form (both normalize to the same host). Refused: `evilgraph`, `x-y-graph`, `a.graph`, `adsmanager.facebook.com`, `www`, suffix host, userinfo both ways, `:8443`, `http:`, trailing-dot host, `%2f@`, and a Graph URL embedded in the query, path or fragment of a foreign host (all 0 captures).\n- Unversioned URLs: an empty version no longer breaks anything. The call URL is `https://<host>` + (version ? \"/\"+version : \"\") + path, so it is unversioned (Meta applies the app default version); `state().version` is empty and the pilot prints \"(unversioned)\". Note for the live run: unversioned calls follow Meta's default version, which can differ from the one Ads Manager used.\n- `GraphError.details` is scrubbed at construction (text and endpoint values).\n- Tests: test_acl1756_fb_api.py 70 passed; test_acl1756_page_helper_node.py 7 passed; test_acl1702_tab_watchdog.py 35 passed; acl_scan_secrets clean. git merge-tree vs work/main clean (tree 22b2e9ec = head tree).\n\n## Blocker: required CI is red\nwindows tests (3.13) FAILED: `tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis`:\n`test_acl1756_fb_api.py:449 [backslash-path] assert not re.search(r\"act_\\d\", blob) and not re.search(r\"\\d{8,}\", blob), blob`\nThe platform lint reads the regex backslash as a Windows path. Fix: add `# linux-ok: regex, not a path` to that line (or move the patterns to constants without the backslash form). Tests-only change; I will re-check the small delta, wait for ACL verification, then record and approve. tracker-link also fails on a run made before the task was back in Review (re-run after review-acquire).",
         "return_operation": {
           "id": "0aa70bff8c3840f79459ae04070e8775",
@@ -13495,7 +13480,8 @@
       642,
       651,
       710,
-      739
+      739,
+      756
     ],
     "review": null,
     "history": [
@@ -19393,6 +19379,13 @@
         "at": "2026-10-09T18:18:56+00:00",
         "issue": 756,
         "claim": "70ddc3057c8149a0877f1b010d2af0db",
+        "actor": "Worker-O1756A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-09T18:20:02+00:00",
+        "issue": 756,
+        "pr": 759,
         "actor": "Worker-O1756A"
       }
     ],
