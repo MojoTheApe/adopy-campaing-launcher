@@ -7110,9 +7110,10 @@
         "worktree": "C:\\acl-api-inprofile",
         "id": "e7e7e8fc18c649d6891f7d56ba191011",
         "issue": 756,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-09T14:15:07+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "report": "ACL-1756 claim stopped only to change the recorded working branch (Coordinator-C0930A instruction). The branch feature/api-in-profile predates the v2 naming rule; handoff refused PR #758 (\"Working branch must use the configured ticket naming convention\"). Same commit 441ef6e9 is pushed as codex/acl-1756-api-in-profile, PR #759 into main replaces #758 (closed, branch kept). Implementation is complete; the same worker reclaims immediately on the new branch and hands off PR #759. Nothing else is blocked."
       }
     },
     "tasks": {
