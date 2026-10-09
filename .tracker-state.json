@@ -9969,7 +9969,7 @@
             "session": "run_s1728a_1008"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1728A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -9987,7 +9987,8 @@
           "report": "# ACL-1728 handoff\n\nPR #732, head 22b98ba2. Root cause: job-progress polling repainted the builder drawer footer (paintFoot, innerHTML), replacing the open country select, account select and the \"new country...\" input. Fix: defer repaint while a footer control has focus (repaint on focusout), skip DOM changes when markup is unchanged, carry over account choice and typed text on real repaints.\n\nTests: new tests/test_builder_foot_stays_put_browser.py (3 tests, fail before fix, pass after); test_builder_multi_publish_browser + test_builder_publish_selected_browser 24 passed; test_the_builder_drawer 7 passed. Free RAM was about 6.2 GB when run."
         },
         "pr": 732,
-        "queued_at": "2026-10-08T06:50:28+00:00"
+        "queued_at": "2026-10-08T06:50:28+00:00",
+        "reviewer": "Reviewer-R1728Q"
       },
       "729": {
         "implementers": [
@@ -11015,6 +11016,10 @@
       "Worker-PROC01": {
         "session": "acl_process_worker_20261008",
         "role": "Worker"
+      },
+      "Reviewer-R1728Q": {
+        "session": "rev_r1728q_1008",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -13363,10 +13368,20 @@
       642,
       651,
       710,
-      728,
       739
     ],
-    "review": null,
+    "review": {
+      "id": "f413822abeff4cc98600b5f96fad0fa1",
+      "pr": 732,
+      "issues": [
+        728
+      ],
+      "actor": "Reviewer-R1728Q",
+      "session": "rev_r1728q_1008",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-09T07:40:52+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -18861,6 +18876,13 @@
             "pr": 439
           }
         ]
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-09T07:40:52+00:00",
+        "pr": 732,
+        "lane": "f413822abeff4cc98600b5f96fad0fa1",
+        "actor": "Reviewer-R1728Q"
       }
     ],
     "policy": {
