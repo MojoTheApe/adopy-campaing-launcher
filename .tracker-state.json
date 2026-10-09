@@ -7110,9 +7110,11 @@
         "worktree": "C:\\acl-api-inprofile",
         "id": "ea07e59297af4e6c9d5ead77595c7674",
         "issue": 756,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-09T14:51:41+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 759,
+        "report": "ACL-1756 fix round after review of PR #759 (Reviewer-R1756Q). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 18b4e19b (one commit on top of 441ef6e9).\n\nFixed:\n- B1: test fixtures now use the scanner's placeholders (act_1234567890, act_1234567890123456, act=1234567890, UUID 550e8400-\u2026). scripts/acl_scan_secrets.py passes locally.\n- S1: the page helper and InPageGraph.request refuse method/_method/batch/suppress_http_code/access_token params (case-insensitive). InPageGraph.request refuses any method except GET. The in-page fetch uses redirect: 'error'. Node and Python tests added.\n- S2: the pilot never stops a profile. The stop path is removed; a profile the pilot started is left open with \"Profile left open \u2014 close it in Multilogin when done.\" Tests: stop_profile raises if ever called, and no stop_profile appears in src/fb_api or the pilot.\n- O3: 190 with subcode 459/464 stops as checkpoint at once, with no reload.\n- O4: one fetch per call with no credentials fallback; a network failure is reported and the client stops (Node and Python tests).\n- O6: the dry-run test redirects journal_path to tmp_path and asserts no journal is written.\n- O1: wrapper toString/length/name match the native functions; the global stays non-enumerable with a random name. What remains detectable is noted in the PR body.\n- O2: the pilot prints usage_headers_seen (tracked across all calls), for checking on the live run.\n\nTests: test_acl1756_fb_api.py 57 passed; test_acl1702_tab_watchdog.py 35 passed (run separately); secret scan clean. --run was not used.\nPilot for the coordinator (with the owner's permission): python scripts/fb_api_pilot.py --account KLD_BFL_B93 --run"
       }
     },
     "tasks": {
