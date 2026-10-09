@@ -1,0 +1,293 @@
+"""Graph API только на чтение — поверх `fetch()` во вкладке профиля.
+
+Транспорт — `token_capture.InPageGraph`: запрос уходит с IP, отпечатком и
+куками профиля, токен из вкладки не выходит.
+
+Политика (решение владельца, ACL-1756):
+- ни опроса, ни таймеров — вызов только по явному запросу; между вызовами
+  пауза не меньше `min_interval_s`, всего не больше `max_calls`;
+- 190 (и 102) — токен умер: ОДИН раз переснять во вкладке и повторить; снова
+  190 — стоп «logged out / checkpoint»;
+- 4/17/32/613/80000–80014 — лимит: не повторяем, стоп с подсказкой, сколько
+  ждать (`estimated_time_to_regain_access`);
+- 368 — блок по правилам: стоп сразу, никогда не повторяем;
+- страница ушла на checkpoint/логин — стоп;
+- заголовки `x-business-use-case-usage` / `x-ad-account-usage` /
+  `x-app-usage`: от `SLOW_PCT` паузы втрое длиннее, от `STOP_PCT` — стоп
+  до следующего вызова.
+
+После любого стопа клиент больше не делает вызовов: решает человек.
+"""
+from __future__ import annotations
+
+import json
+import re
+import time
+from typing import Any, Callable
+
+from src.fb_api.telemetry import scrub
+
+TOKEN_CODES = {102, 190}
+RATE_CODES = {4, 17, 32, 613} | set(range(80000, 80015))
+POLICY_CODES = {368}
+
+SLOW_PCT = 50.0
+STOP_PCT = 80.0
+
+_ACT_RE = re.compile(r"^(?:act_)?(\d{5,})$")
+
+
+class GraphError(RuntimeError):
+    """Graph вернул ошибку, после которой можно продолжать (не стоп)."""
+
+    def __init__(self, message: str, *, code: int | None = None, subcode: int | None = None,
+                 status: int | None = None):
+        super().__init__(scrub(message))
+        self.code = code
+        self.subcode = subcode
+        self.status = status
+
+
+class GraphStop(RuntimeError):
+    """Остановка: дальше этот клиент не зовёт Graph вовсе."""
+
+    kind = "stopped"
+
+    def __init__(self, message: str, *, code: int | None = None, subcode: int | None = None,
+                 retry_after_s: float | None = None):
+        super().__init__(scrub(message))
+        self.code = code
+        self.subcode = subcode
+        self.retry_after_s = retry_after_s
+
+
+class LoggedOut(GraphStop):
+    kind = "logged_out"
+
+
+class Checkpoint(GraphStop):
+    kind = "checkpoint"
+
+
+class RateLimited(GraphStop):
+    kind = "rate_limited"
+
+
+class PolicyBlocked(GraphStop):
+    kind = "policy_block"
+
+
+class PageFailed(GraphStop):
+    kind = "page_failed"
+
+
+def classify(code: int | None) -> str:
+    if code in TOKEN_CODES:
+        return "token"
+    if code in RATE_CODES:
+        return "rate_limit"
+    if code in POLICY_CODES:
+        return "policy"
+    return "other"
+
+
+def normalize_act(act_id: str) -> str:
+    m = _ACT_RE.match((act_id or "").strip())
+    if not m:
+        raise ValueError("ad account id must look like act_<digits>")
+    return f"act_{m.group(1)}"
+
+
+def _as_json(raw: Any) -> Any:
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def usage_from_headers(headers: dict | None) -> dict:
+    """Самый нагруженный лимит из заголовков и сколько ждать (сек).
+
+    Номера бизнесов (ключи `x-business-use-case-usage`) наружу не идут.
+    """
+    headers = {str(k).lower(): v for k, v in (headers or {}).items()}
+    pcts: list[float] = []
+    wait_min = 0.0
+
+    app = _as_json(headers.get("x-app-usage"))
+    if isinstance(app, dict):
+        pcts += [float(app.get(k) or 0) for k in ("call_count", "total_cputime", "total_time")]
+
+    acc = _as_json(headers.get("x-ad-account-usage"))
+    if isinstance(acc, dict):
+        pcts.append(float(acc.get("acc_id_util_pct") or 0))
+
+    buc = _as_json(headers.get("x-business-use-case-usage"))
+    if isinstance(buc, dict):
+        for items in buc.values():
+            for item in items if isinstance(items, list) else [items]:
+                if not isinstance(item, dict):
+                    continue
+                pcts += [float(item.get(k) or 0) for k in ("call_count", "total_cputime", "total_time")]
+                wait_min = max(wait_min, float(item.get("estimated_time_to_regain_access") or 0))
+
+    return {"max_pct": max(pcts) if pcts else None, "wait_s": wait_min * 60.0,
+            "seen": bool(pcts)}
+
+
+class GraphClient:
+    """Чтения Graph API для пилота. Одна вкладка — один клиент."""
+
+    def __init__(self, transport: Any, *, min_interval_s: float = 2.0, max_calls: int = 40,
+                 reacquire_timeout_s: float = 60.0,
+                 sleep: Callable[[float], None] = time.sleep,
+                 clock: Callable[[], float] = time.monotonic):
+        self.transport = transport
+        self.min_interval_s = float(min_interval_s)
+        self.max_calls = int(max_calls)
+        self.reacquire_timeout_s = reacquire_timeout_s
+        self._sleep = sleep
+        self._clock = clock
+        self._last_call: float | None = None
+        self._slow = False
+        self._reacquired = False
+        self.calls = 0
+        self.stopped: GraphStop | None = None
+        self.last_usage: dict = {}
+
+    # -- служебное
+    def _stop(self, exc: GraphStop) -> GraphStop:
+        self.stopped = exc
+        return exc
+
+    def _pace(self) -> None:
+        if self._last_call is None:
+            return
+        interval = self.min_interval_s * (3 if self._slow else 1)
+        wait = self._last_call + interval - self._clock()
+        if wait > 0:
+            self._sleep(wait)
+
+    def _check_page(self) -> None:
+        state = self.transport.state() or {}
+        kind = state.get("kind")
+        if kind == "checkpoint":
+            raise self._stop(Checkpoint("the profile is on a Facebook checkpoint"))
+        if kind == "login":
+            raise self._stop(LoggedOut("the profile is logged out of Facebook"))
+
+    # -- один вызов
+    def get(self, path: str, params: dict | None = None) -> dict:
+        if self.stopped is not None:
+            raise self.stopped
+        if self.calls >= self.max_calls:
+            raise self._stop(RateLimited(f"call budget of {self.max_calls} reached"))
+        self._pace()
+        self.calls += 1
+        self._last_call = self._clock()
+        reply = self.transport.request("GET", path, params or {})
+        self._last_call = self._clock()
+
+        err = reply.get("error")
+        if isinstance(err, str):
+            if err == "no_token":
+                self._check_page()
+                return self._token_dead(path, params, None, None)
+            if err == "network":
+                self._check_page()
+            raise self._stop(PageFailed(f"the page could not call Graph API ({err})"))
+
+        usage = usage_from_headers(reply.get("headers"))
+        self.last_usage = usage
+        body = reply.get("body") if isinstance(reply.get("body"), dict) else {}
+        status = reply.get("status")
+
+        gerr = body.get("error") if isinstance(body, dict) else None
+        if isinstance(gerr, dict):
+            code = _int(gerr.get("code"))
+            sub = _int(gerr.get("error_subcode"))
+            msg = str(gerr.get("message") or "Graph API error")
+            kind = classify(code)
+            if kind == "policy":
+                raise self._stop(PolicyBlocked(f"Graph API refused (368): {msg}", code=code, subcode=sub))
+            if kind == "rate_limit":
+                raise self._stop(RateLimited(f"Graph API rate limit ({code}): {msg}", code=code,
+                                             subcode=sub, retry_after_s=usage["wait_s"] or None))
+            if kind == "token":
+                self._check_page()
+                return self._token_dead(path, params, code, sub)
+            raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status)
+
+        if "non_json" in body:
+            # HTML вместо JSON — чаще всего перенаправление на логин/checkpoint.
+            self._check_page()
+            raise self._stop(PageFailed("Graph API answered with a page instead of JSON"))
+
+        if usage["wait_s"] > 0:
+            raise self._stop(RateLimited("Meta asked to wait before the next call",
+                                         retry_after_s=usage["wait_s"]))
+        pct = usage["max_pct"]
+        if pct is not None and pct >= STOP_PCT:
+            # Этот ответ отдаём, а следующий вызов уже не делаем.
+            self._stop(RateLimited(f"API usage at {pct:.0f}% — stopping before the limit"))
+        elif pct is not None and pct >= SLOW_PCT:
+            self._slow = True
+        return body
+
+    def _token_dead(self, path: str, params: dict | None, code: int | None, sub: int | None) -> dict:
+        if self._reacquired:
+            raise self._stop(LoggedOut("the session token is no longer valid (logged out or checkpoint)",
+                                       code=code, subcode=sub))
+        self._reacquired = True
+        state = self.transport.reacquire(timeout=self.reacquire_timeout_s) or {}
+        if state.get("kind") == "checkpoint":
+            raise self._stop(Checkpoint("the profile is on a Facebook checkpoint", code=code, subcode=sub))
+        if state.get("kind") == "login" or not state.get("has_token"):
+            raise self._stop(LoggedOut("could not get a fresh session token (logged out or checkpoint)",
+                                       code=code, subcode=sub))
+        return self.get(path, params)
+
+    # -- постраничное чтение
+    def get_all(self, path: str, params: dict | None = None, *, max_pages: int = 5) -> list[dict]:
+        rows: list[dict] = []
+        query = dict(params or {})
+        for _ in range(max_pages):
+            body = self.get(path, query)
+            rows += [r for r in (body.get("data") or []) if isinstance(r, dict)]
+            after = ((body.get("paging") or {}).get("cursors") or {}).get("after")
+            if not after or not (body.get("paging") or {}).get("next") or self.stopped is not None:
+                break
+            query = {**query, "after": after}
+        return rows
+
+    # -- чтения пилота
+    def ad_accounts(self) -> list[dict]:
+        return self.get_all("/me/adaccounts", {
+            "fields": "account_id,name,account_status,currency,timezone_name",
+            "limit": 50,
+        }, max_pages=3)
+
+    def campaigns(self, act_id: str) -> list[dict]:
+        return self.get_all(f"/{normalize_act(act_id)}/campaigns", {
+            "fields": "name,status,effective_status,objective",
+            "limit": 100,
+        }, max_pages=5)
+
+    def insights(self, act_id: str, date_preset: str) -> dict:
+        if date_preset not in {"yesterday", "last_7d"}:
+            raise ValueError("date_preset must be yesterday or last_7d")
+        rows = self.get_all(f"/{normalize_act(act_id)}/insights", {
+            "level": "account",
+            "date_preset": date_preset,
+            "fields": "spend,impressions,clicks,actions,account_currency",
+        }, max_pages=1)
+        return rows[0] if rows else {}
+
+
+def _int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
