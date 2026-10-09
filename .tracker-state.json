@@ -10298,7 +10298,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10323,7 +10323,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "Return of an Approved task after a live-pilot incident (Coordinator-C0930A, 2026-10-09).\n\nOn Facebook_5265, the pilot attached and opened its own Ads Manager tab, then \"CDP read timed out\" before it captured a token or made any Graph call. Minutes later the account was logged out of Facebook; the owner logged back in.\n\nDiagnosis: the token wait was awaited inside a single Runtime.evaluate, past RawCdp's 5 s read, and the background tab was throttled. The fetch/XHR wrappers are never removed if no token is seen, which is a plausible way to disturb Ads Manager's own auth or refresh traffic.\n\nFix requested:\n- Anti-throttling on our tab (focus emulation and lifecycle active, no visible window).\n- Named, bounded step timeouts.\n- Token wait polled from Python.\n- Fail-safe helper: wrappers can never throw into the page, and a safety timer always removes them after a short window.\n- Our tab is closed on any failure."
-        }
+        },
+        "reviewer": "Reviewer-R1756S"
       },
       "760": {
         "implementers": [
@@ -13525,10 +13526,20 @@
       642,
       651,
       710,
-      739,
-      756
+      739
     ],
-    "review": null,
+    "review": {
+      "id": "54042ea6335a41c298c3ad1b35470fe6",
+      "pr": 759,
+      "issues": [
+        756
+      ],
+      "actor": "Reviewer-R1756S",
+      "session": "rev_r1756s_1009",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-09T21:02:52+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -19654,6 +19665,13 @@
         "issue": 760,
         "claim": "32081179f10e45fd901593d95ffc1842",
         "actor": "Worker-S1760A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-09T21:02:52+00:00",
+        "pr": 759,
+        "lane": "54042ea6335a41c298c3ad1b35470fe6",
+        "actor": "Reviewer-R1756S"
       }
     ],
     "policy": {
