@@ -13,11 +13,23 @@ Multilogin руками. kill — тем более никогда.
 
 Профиль, открытый руками в MLX Desktop, не трогаем: у него нет порта CDP,
 MLX ответит «уже запущен» без порта — это отказ с понятной причиной.
+
+Сначала — процессы на этой машине (как `attach_existing_only` робота): живой
+пилот 5414 показал, что MLX `/profile/running` может не перечислить профиль,
+чей Mimic уже работает с портом отладки (а `start` тогда отвечает 400 «browser
+process is running»). Ищем процесс Mimic ИМЕННО этого профиля (по его
+`--user-data-dir`, как `browser._discover_owned_debug_port`, без Playwright) и
+его порт, который этот процесс действительно слушает. Нашли — цепляемся, профиль
+«уже работал, не наш». Процесс есть, порта нет — окно открыто руками: отказ.
+Только если процесса нет — MLX `/profile/running`, затем `start`.
 """
 from __future__ import annotations
 
+import os
+import socket
 from dataclasses import dataclass
-from typing import Any, Callable
+from pathlib import Path
+from typing import Any, Callable, Iterable
 
 
 class ProfileError(RuntimeError):
@@ -84,16 +96,138 @@ def running_state(launcher: Any, profile_id: str) -> tuple[str, str | None]:
     return ("not_running", None) if answered else ("unknown", None)
 
 
+def _mlx_home() -> Path:
+    return Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx")))
+
+
+def find_profile_dir(profile_id: str) -> Path | None:
+    """Папка профиля в `~/mlx/profiles/…/<profile_id>` (как `browser._find_mlx_profile_dir`)."""
+    root = _mlx_home() / "profiles"
+    if not root.is_dir() or not profile_id:
+        return None
+    for path in root.rglob(profile_id):
+        if path.is_dir():
+            return path
+    return None
+
+
+def _norm(value: str) -> str:
+    # Короткие имена 8.3 Windows раскрываем (realpath), сравниваем без регистра.
+    value = (value or "").strip('"')
+    try:
+        value = os.path.realpath(value)
+    except (OSError, ValueError):
+        value = os.path.abspath(value)
+    return os.path.normcase(value).replace("\\", "/").rstrip("/").lower()
+
+
+def _accepting(port: int) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+def _arg_value(args: list, flag: str) -> str:
+    val = next((a.split("=", 1)[1] for a in args if isinstance(a, str) and a.startswith(flag + "=")), "")
+    if not val and flag in args:
+        i = args.index(flag)
+        if i + 1 < len(args):
+            val = str(args[i + 1])
+    return val
+
+
+def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any]] | None = None,
+                     profile_dir: Path | str | None = None,
+                     accepting: Callable[[int], bool] = _accepting,
+                     listens: Callable[[Any, int], bool] | None = None) -> tuple[str, int | None]:
+    """Mimic ЭТОГО профиля на машине: ("port", N) / ("no_port", None) / ("none", None).
+
+    Совпадение только по своему профилю: `--user-data-dir` равен папке профиля
+    (или её последний компонент — это `profile_id`). Порт — из
+    `--remote-debugging-port` (или `DevToolsActivePort`), и его должен СЛУШАТЬ
+    этот процесс. Процесс есть, порта нет — открыт руками.
+    """
+    pid = (profile_id or "").strip().lower()
+    if not pid:
+        return "none", None
+    want_dir = _norm(str(profile_dir)) if profile_dir else ""
+    if process_iter is None:
+        try:
+            import psutil  # type: ignore
+        except Exception:
+            return "none", None  # нечем посмотреть — идём через MLX
+
+        def process_iter():
+            return psutil.process_iter(["name", "exe", "cmdline"])
+
+        def listens(proc, port):
+            try:
+                return any(c.status == psutil.CONN_LISTEN and c.laddr.port == port
+                           for c in proc.net_connections(kind="tcp"))
+            except Exception:
+                return False
+    listens = listens or (lambda proc, port: True)
+
+    found_process = False
+    for proc in process_iter():
+        try:
+            info = getattr(proc, "info", None) or {}
+            exe = str(info.get("exe") or "").lower().replace("\\", "/")
+            if "mimic" not in exe and "/mlx/" not in exe:
+                continue
+            args = list(info.get("cmdline") or [])
+            udd = _arg_value(args, "--user-data-dir")
+            if not udd:
+                continue
+            nudd = _norm(udd)
+            if not ((want_dir and nudd == want_dir) or nudd.rsplit("/", 1)[-1] == pid):
+                continue
+            found_process = True
+            raw = _arg_value(args, "--remote-debugging-port")
+            port = int(raw) if raw.isdigit() else 0
+            if port == 0:
+                for f in (Path(udd) / "DevToolsActivePort", Path(udd) / "Default" / "DevToolsActivePort"):
+                    try:
+                        if f.is_file():
+                            first = f.read_text(encoding="utf-8").splitlines()[0].strip()
+                            port = int(first) if first.isdigit() else 0
+                            break
+                    except (OSError, IndexError, ValueError):
+                        continue
+            if port > 0 and listens(proc, port) and accepting(port):
+                return "port", port
+        except Exception:
+            continue
+    return ("no_port", None) if found_process else ("none", None)
+
+
 def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
-                 launcher_factory: Callable[[str], Any] | None = None) -> OpenedProfile:
+                 launcher_factory: Callable[[str], Any] | None = None,
+                 local_probe: Callable[[str], tuple[str, int | None]] | None = None) -> OpenedProfile:
     """Профиль с портом отладки от MLX: уже работающий или поднятый нами."""
     profile_id = (profile_id or "").strip()
     folder_id = (folder_id or "").strip()
     instance = (instance or "A").strip().upper() or "A"
     if not profile_id:
         raise ProfileError("no Multilogin profile id for this account")
-    launcher = (launcher_factory or _default_launcher)(instance)
 
+    # 1. Процесс Mimic этого профиля на машине (как attach_existing_only робота).
+    if local_probe is None:
+        def local_probe(pid: str) -> tuple[str, int | None]:
+            return local_debug_port(pid, profile_dir=find_profile_dir(pid))
+    kind, local_port = local_probe(profile_id)
+    if kind == "port" and local_port:
+        return OpenedProfile(profile_id, folder_id, instance, str(local_port), None, False, None)
+    if kind == "no_port":
+        raise ProfileError(
+            "the profile is open but has no automation port (opened by hand in MLX Desktop?). "
+            "Close it in MLX Desktop or open it from the dashboard, then retry. Nothing was stopped."
+        )
+
+    # 2. Процесса нет — спрашиваем MLX и поднимаем.
+    launcher = (launcher_factory or _default_launcher)(instance)
     state, port = running_state(launcher, profile_id)
     if state == "running":
         if not port:

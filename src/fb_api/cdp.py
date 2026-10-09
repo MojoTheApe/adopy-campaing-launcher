@@ -5,7 +5,8 @@ Websocket-клиент не пишем второй раз: берём `RawCdp` 
 браузеру, свой срок на каждый вызов). Здесь — только то, что нужно Graph-вызовам
 изнутри профиля:
 
-- вкладка всегда СВОЯ (`Target.createTarget`, фоновая) и закрывается за собой:
+- вкладка всегда СВОЯ (`Target.createTarget`, как у Playwright — без
+  `background`) и закрывается за собой:
   если робот или человек в этот момент работает в том же профиле, их вкладки
   мы не трогаем;
 - подключение к ней — `Target.attachToTarget` с `flatten`, команды идут с
@@ -96,8 +97,13 @@ class PageTab:
             raise CdpTimeout(f"connect: the browser did not answer within {call_s:.0f} s") from exc
         target_id = ""
         try:
-            created = _call(cdp, "Target.createTarget",
-                            {"url": "about:blank", "background": True}, timeout=call_s)
+            # Ровно как Playwright (`crBrowser`: {url:"about:blank", browserContextId}),
+            # без `background`. Проба ревьюера на настоящем Chrome: вкладка с
+            # background:true НИКОГДА не отвечает на Page.enable (живой 5414/5265).
+            # Свёрнутое окно остаётся свёрнутым и на экран не выходит; наша вкладка
+            # лишь становится активной в нём, а при закрытии браузер сам
+            # активирует соседнюю.
+            created = _call(cdp, "Target.createTarget", {"url": "about:blank"}, timeout=call_s)
             target_id = str(created.get("targetId") or "")
             if not target_id:
                 raise CdpError("the browser did not open a tab")
@@ -107,6 +113,21 @@ class PageTab:
             if not session_id:
                 raise CdpError("could not attach to the new tab")
             tab = cls(cdp, target_id, session_id, cdp_url=cdp_url)
+            # Живой пилот 5414: «Page.enable: the browser did not answer». Мы
+            # уже на ОДНОМ websocket браузера с flatten-сессией (как Playwright),
+            # отдельный websocket страницы не открываем. Но если в браузере кто-то
+            # держит Target.setAutoAttach{waitForDebuggerOnStart:true} (агент
+            # Multilogin/Mimic, сессия робота), новая цель стартует НА ПАУЗЕ, и
+            # рендерер не отвечает на Page.enable, пока её не отпустят. Playwright
+            # шлёт Runtime.runIfWaitingForDebugger после подключения — делаем так
+            # же, на НАШЕЙ сессии. Если цель не на паузе, команда — пустая. Это не
+            # Runtime.enable: домен Runtime не включается.
+            try:
+                tab.call("Runtime.runIfWaitingForDebugger")
+            except CdpTimeout:
+                raise
+            except CdpError:
+                pass
             # Runtime.enable не зовём: Runtime.evaluate работает и без него, а
             # включённый домен Runtime — известный признак автоматизации.
             tab.call("Page.enable")

@@ -803,7 +803,8 @@ class FakeLauncher:
 def test_profile_is_never_stopped(monkeypatch, state, port, started_by_us, release):
     launcher = FakeLauncher()
     monkeypatch.setattr(prof, "running_state", lambda l, p: (state, port))
-    opened = prof.open_profile("P1", "F1", "A", launcher_factory=lambda i: launcher)
+    opened = prof.open_profile("P1", "F1", "A", launcher_factory=lambda i: launcher,
+                               local_probe=lambda pid: ("none", None))
     assert opened.started_by_us is started_by_us
     assert launcher.started == ([] if state == "running" else ["P1"])
     assert prof.release_profile(opened) == release
@@ -814,8 +815,92 @@ def test_hand_opened_profile_is_refused_and_left_alone(monkeypatch):
     launcher = FakeLauncher()
     monkeypatch.setattr(prof, "running_state", lambda l, p: ("running", None))
     with pytest.raises(prof.ProfileError):
-        prof.open_profile("P1", "F1", "A", launcher_factory=lambda i: launcher)
+        prof.open_profile("P1", "F1", "A", launcher_factory=lambda i: launcher,
+                          local_probe=lambda pid: ("none", None))
     assert launcher.started == [] and launcher.stopped == []
+
+
+def _no_launcher(instance):
+    raise AssertionError("MLX must not be asked when the local process is found")
+
+
+def test_local_process_with_port_is_attached_without_mlx():
+    # Живой 5414: MLX /profile/running его не перечислял, start давал 400.
+    opened = prof.open_profile("P1", "F1", "A", launcher_factory=_no_launcher,
+                               local_probe=lambda pid: ("port", 63405))
+    assert opened.port == "63405" and opened.started_by_us is False
+    assert opened.cdp_url == "http://127.0.0.1:63405"
+    assert prof.release_profile(opened) == "left_running"
+
+
+def test_local_process_without_port_is_a_hand_opened_window():
+    with pytest.raises(prof.ProfileError):
+        prof.open_profile("P1", "F1", "A", launcher_factory=_no_launcher,
+                          local_probe=lambda pid: ("no_port", None))
+
+
+def test_no_local_process_falls_back_to_mlx(monkeypatch):
+    launcher = FakeLauncher()
+    monkeypatch.setattr(prof, "running_state", lambda l, p: ("not_running", None))
+    opened = prof.open_profile("P1", "F1", "A", launcher_factory=lambda i: launcher,
+                               local_probe=lambda pid: ("none", None))
+    assert launcher.started == ["P1"] and opened.port == "7777"
+
+
+class _Proc:
+    def __init__(self, exe, cmdline):
+        self.info = {"name": "chrome.exe", "exe": exe, "cmdline": cmdline}
+
+
+MIMIC = "C:/Users/u/mlx/deps/mimic_154/chrome.exe"
+PID = "550e8400-e29b-41d4-a716-446655440000"
+OTHER = "another-profile"  # не UUID: сканер секретов разрешает только одну заглушку
+
+
+def _udd(pid):
+    return f"C:/Users/u/mlx/profiles/ws/folder/{pid}"
+
+
+def test_local_debug_port_matches_only_this_profile():
+    procs = [
+        _Proc(MIMIC, ["chrome.exe", f"--user-data-dir={_udd(OTHER)}", "--remote-debugging-port=65442"]),
+        _Proc(MIMIC, ["chrome.exe", f"--user-data-dir={_udd(PID)}", "--remote-debugging-port=63405"]),
+        _Proc("C:/Program Files/Google/Chrome/chrome.exe",
+              ["chrome.exe", f"--user-data-dir={_udd(PID)}", "--remote-debugging-port=9999"]),
+    ]
+    got = prof.local_debug_port(PID, process_iter=lambda: procs, accepting=lambda p: True,
+                                listens=lambda proc, port: True)
+    assert got == ("port", 63405)                  # не чужой 65442 и не обычный Chrome
+
+
+def test_local_debug_port_requires_the_process_to_listen_on_the_port():
+    procs = [_Proc(MIMIC, ["chrome.exe", f"--user-data-dir={_udd(PID)}", "--remote-debugging-port=63405"])]
+    got = prof.local_debug_port(PID, process_iter=lambda: procs, accepting=lambda p: True,
+                                listens=lambda proc, port: False)
+    assert got == ("no_port", None)               # порт не его — не цепляемся
+
+
+def test_local_debug_port_hand_opened_has_no_port():
+    procs = [_Proc(MIMIC, ["chrome.exe", f"--user-data-dir={_udd(PID)}"])]
+    got = prof.local_debug_port(PID, process_iter=lambda: procs, accepting=lambda p: True,
+                                listens=lambda proc, port: True)
+    assert got == ("no_port", None)
+
+
+def test_local_debug_port_none_when_profile_not_running():
+    procs = [_Proc(MIMIC, ["chrome.exe", f"--user-data-dir={_udd(OTHER)}", "--remote-debugging-port=65442"])]
+    got = prof.local_debug_port(PID, process_iter=lambda: procs, accepting=lambda p: True,
+                                listens=lambda proc, port: True)
+    assert got == ("none", None)
+
+
+def test_local_debug_port_does_not_match_a_prefix_of_the_profile_id():
+    # Совпадение по ЦЕЛОМУ компоненту пути, не по подстроке.
+    procs = [_Proc(MIMIC, ["chrome.exe", f"--user-data-dir={_udd(PID + 'x')}",
+                           "--remote-debugging-port=63405"])]
+    got = prof.local_debug_port(PID, process_iter=lambda: procs, accepting=lambda p: True,
+                                listens=lambda proc, port: True)
+    assert got == ("none", None)
 
 
 def test_cdp_url_from_mlx_answer():
@@ -981,6 +1066,70 @@ def test_isolated_world_does_not_grant_universal_access():
     gr._ensure()
     worlds = [p for m, p, _ in cdp.sent if m == "Page.createIsolatedWorld"]
     assert worlds and all(w.get("grantUniveralAccess") is False for w in worlds)
+
+
+class _PausedTargetCdp(FakeCdp):
+    """Новая цель стартует НА ПАУЗЕ (waitForDebuggerOnStart): рендерер молчит
+    на Page.enable, пока на нашей сессии не придёт runIfWaitingForDebugger."""
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.released = False
+
+    def call(self, method, params=None, *, session_id="", timeout=5.0):
+        if method == "Runtime.runIfWaitingForDebugger" and session_id == "S-mine":
+            self.released = True
+        if method == "Page.enable" and not self.released:
+            raise CdpTimeout("Page.enable: the browser did not answer within 10 s")
+        return super().call(method, params, session_id=session_id, timeout=timeout)
+
+
+def test_open_releases_a_paused_target_before_page_enable():
+    # Живой пилот 5414: Page.enable висел. Отпускаем паузу, как Playwright.
+    cdp = _PausedTargetCdp(FakePage([]))
+    tab = PageTab.open("http://127.0.0.1:1", connect=lambda u, timeout: cdp)
+    methods = [(m, sid) for m, _, sid in cdp.sent]
+    run = methods.index(("Runtime.runIfWaitingForDebugger", "S-mine"))
+    enable = methods.index(("Page.enable", "S-mine"))
+    assert run < enable                                 # сначала отпустить, потом Page.enable
+    assert ("Runtime.enable", "S-mine") not in methods  # домен Runtime НЕ включаем
+    tab.close()
+
+
+def test_create_target_is_not_background_like_playwright():
+    # Ревьюер на настоящем Chrome: background:true → Page.enable не отвечает
+    # никогда. Шлём то же, что Playwright: {url:"about:blank"}, без background.
+    cdp = FakeCdp(FakePage([]))
+    tab = PageTab.open("http://127.0.0.1:1", connect=lambda u, timeout: cdp)
+    created = [p for m, p, _ in cdp.sent if m == "Target.createTarget"]
+    assert created and not created[0].get("background", False)
+    assert created[0].get("url") == "about:blank"
+    methods = [(m, sid) for m, _, sid in cdp.sent]
+    assert (methods.index(("Runtime.runIfWaitingForDebugger", "S-mine"))
+            < methods.index(("Page.enable", "S-mine")))
+    tab.close()
+
+
+def test_open_uses_one_browser_websocket_and_a_flatten_session():
+    # Один websocket браузера; отдельный websocket страницы (/devtools/page/…)
+    # не открываем — все команды вкладки идут с sessionId нашей flatten-сессии.
+    connects = []
+
+    def connect(url, timeout):
+        connects.append(url)
+        if "/devtools/page/" in url:
+            raise TimeoutError("page websocket never answers")
+        return FakeCdp(FakePage([]))
+
+    tab = PageTab.open("http://127.0.0.1:9321", connect=connect)
+    assert connects == ["http://127.0.0.1:9321"]        # ровно одно подключение — к браузеру
+    attach = [p for m, p, _ in tab._cdp.sent if m == "Target.attachToTarget"]
+    assert attach and attach[0].get("flatten") is True
+    tab_cmds = [(m, sid) for m, _, sid in tab._cdp.sent
+                if m in ("Runtime.runIfWaitingForDebugger", "Page.enable",
+                         "Emulation.setFocusEmulationEnabled", "Page.setWebLifecycleState")]
+    assert tab_cmds and all(sid == "S-mine" for _, sid in tab_cmds)
+    tab.close()
 
 
 def test_page_tab_call_wraps_raw_timeout_with_the_method_name():
