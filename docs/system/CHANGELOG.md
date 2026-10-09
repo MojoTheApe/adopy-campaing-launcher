@@ -1,5 +1,40 @@
 # System history
 
+## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
+
+Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
+Creative setup -> Media -> Creative setup -> Crop. The captures show the library pick was NOT lost
+(the tile is still "selected", "1 selected" on Media), and the second Crop was a fresh arrival where
+Next had not been pressed. The ACL-1551 guard ("Next on Crop was already pressed") took it for the
+Crop where Next hung and closed the wizard with Close, leaving the ad without media.
+
+- When the wizard leaves Crop and later comes back to it through another step, the Crop step is
+  re-checked (Original, no expansion) and Next is pressed once more, for a single-file plan.
+- A second return to Crop, a post/story pair (Replace) or a Crop where Next already hung still
+  ends in the honest `crop_wizard_stuck`, with the exit reason `looped_back`.
+- The wizard telemetry row gets `looped_back_to` (first earlier step the wizard went back to, e.g.
+  `Media`), also inside `exit`. No new clicks: only the existing Next on a Crop that is on screen.
+## Window recovery enlarges a window restored below the editor minimum — ACL-1727
+
+- Run 4db2039f760d (Facebook_9403A): a minimised window was restored to its normal size
+  (inner 1117 px, minimum 1168) and the run stopped at `window_too_small`.
+- Now, when the window is un-minimised but still below the minimum, recovery enlarges it through
+  CDP `Browser.setWindowBounds` and measures again; `window_too_small` is recorded only if it is
+  still too small. The branch is chosen from the real window bounds: a window on screen is
+  maximised in place; a window parked off-screen grows proportionally and is re-parked so its right
+  edge stays at or left of 0; an already maximised or fullscreen window is not touched. A Mimic
+  scale drop (dpr below 0.85 of before) is undone and not retried.
+- The `window_bounds` diag records `enlarged: true` and `enlarged_to` (the new size). No new
+  windows are opened and the window is never moved to another monitor.
+## Campaign open: the AI-guided / Manual chooser counts as Create taken - ACL-1726
+
+- Run 4db2039f760d (Facebook_9403A, 08.10): Create now opens Meta's "Create new campaign" chooser
+  ("Meta AI-guided setup" / "Manual campaign setup"). It was not recognised, so Create was pressed
+  again and the open budget ran out (`objective_leads` after 103 s, about 2 minutes lost per campaign).
+- The chooser is now `create_took` with note `ai_manual_chooser` (ok), and `_wait_objective_dialog`
+  returns at once while it is on screen. The existing `manual` step then picks Manual setup. The
+  AI-guided option is never chosen.
+
 ## Account map: notes only per account, Enter saves — ACL-1721
 
 - Country rows on the account map no longer show or edit a note. Stored country notes are kept in

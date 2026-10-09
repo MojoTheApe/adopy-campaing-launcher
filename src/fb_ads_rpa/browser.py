@@ -660,6 +660,7 @@ def _ensure_wide_window(context, page) -> None:
             except Exception:
                 pass
             note = "reverted_scale_drop"
+            _SCALE_REVERTED.add(id(page.context))
             dpr_after, inner_after = _page_scale()
         try:
             from src.fb_ads_rpa import run_telemetry as _rt
@@ -704,6 +705,9 @@ def _ensure_wide_window(context, page) -> None:
 # Browser bounds/screen.availWidth may be spoofed by the profile: use innerWidth.
 MIN_EDITOR_WIDTH = 1168
 
+#: Контексты, где откат падения масштаба Mimic уже сделан: окно заново не растим.
+_SCALE_REVERTED: set[int] = set()
+
 
 def _widen_parked_window(session, window_id, page, was_minimized, state, bounds,
                          dpr_before, inner_before, page_scale) -> None:
@@ -743,6 +747,7 @@ def _widen_parked_window(session, window_id, page, was_minimized, state, bounds,
             except Exception:
                 pass
             note = "reverted_scale_drop"
+            _SCALE_REVERTED.add(id(page.context))
             dpr_after, inner_after = page_scale()
     try:
         from src.fb_ads_rpa import run_telemetry as _rt
@@ -1284,13 +1289,114 @@ def ensure_editor_window(page, section: str) -> bool:
             except Exception as exc:
                 log.debug("editor window recovery failed: %s", exc)
         after = rt.window_state(page)
+    enlarged = None
+    # ACL-1727 (4db2039f760d): окно вывели из свёрнутого, но оно вернулось в
+    # обычный размер (внутри 1117 < 1168). Сначала увеличиваем, потом
+    # измеряем ещё раз, и только после этого решаем про `window_too_small`.
+    if not readable(after) and _small_but_alive(after):
+        try:
+            enlarged = _enlarge_small_window(page)
+        except Exception as exc:
+            log.debug("editor window enlarge failed: %s", exc)
+        if enlarged:
+            after = rt.window_state(page)
     ok = readable(after)
     diag = {"section": section, "minimum_width": MIN_EDITOR_WIDTH,
             "before": before, "after": after, "visibility": _visibility(page)}
+    if enlarged:
+        diag["enlarged"] = True
+        diag["enlarged_to"] = enlarged
     rt.record("window_bounds", ok, diag=diag)
     if not ok:
         rt.record("window_too_small", False, diag=diag)
     return ok
+
+
+def _small_but_alive(state: dict) -> bool:
+    """Окно не свёрнуто, ширина страницы измерена, но меньше минимума."""
+    inner = state.get("inner")
+    return (
+        not state.get("minimized")
+        and isinstance(inner, (list, tuple)) and len(inner) == 2
+        and all(type(v) in (int, float) and v > 0 for v in inner)
+        and inner[0] < MIN_EDITOR_WIDTH
+    )
+
+
+def _enlarge_small_window(page) -> dict | None:
+    """Увеличить уже обычное (не свёрнутое) окно, не выводя его на чужой экран.
+
+    ACL-1727, ревью: ветку выбираем по настоящим границам окна, а не по
+    `_OFFSCREEN`. Свёрнутое окно, которое было развёрнуто на весь экран,
+    после нашего `windowState: normal` возвращается на экран в старом размере
+    (854×502), хотя контекст числится в `_OFFSCREEN`.
+    - стоит за краем экрана (наша парковка, `left + width <= 0`) — растёт
+      пропорционально, как в `_widen_parked_window`, и ставится на парковку
+      заново по новой ширине: правый край остаётся за экраном;
+    - стоит на экране — разворачивается на месте (Chrome берёт тот же монитор);
+    - уже развёрнуто или на весь экран — не трогаем (на маленьком экране
+      шире не станет, а из полноэкранного режима окно не выводим).
+    Падение масштаба Mimic (dpr < 0.85 прежнего) откатываем, как
+    `_ensure_wide_window`; окно, откат которого сделали они, не трогаем.
+    Возвращает размер окна после увеличения или None.
+    """
+    if id(page.context) in _SCALE_REVERTED:
+        return None
+    session = None
+    try:
+        session = page.context.new_cdp_session(page)
+        info = session.send("Browser.getWindowForTarget") or {}
+        window_id = info.get("windowId")
+        bounds = info.get("bounds") or {}
+        state = bounds.get("windowState")
+        if window_id is None or state in ("minimized", "maximized", "fullscreen"):
+            return None
+        left, top = bounds.get("left"), bounds.get("top")
+        width = int(bounds.get("width") or 0)
+        height = int(bounds.get("height") or 0)
+        try:
+            got = page.evaluate("() => [devicePixelRatio, innerWidth]")
+            dpr_before, inner_before = float(got[0] or 0), int(got[1] or 0)
+        except Exception:
+            dpr_before, inner_before = 0.0, 0
+        parked = (isinstance(left, int) and isinstance(top, int) and width > 0
+                  and (_parked_by_us(left, top, width) or left + width <= 0))
+        if parked:
+            if not inner_before:
+                return None
+            new_width = min(int(width * MIN_EDITOR_WIDTH / inner_before) + 40, 4000)
+            new_left, new_top = _park_spot(new_width)
+            target = {"left": new_left, "top": new_top, "width": new_width,
+                      "height": max(height, 900)}
+        else:
+            target = {"windowState": "maximized"}
+        session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": target})
+        time.sleep(1.0)
+        new = (session.send("Browser.getWindowForTarget") or {}).get("bounds") or {}
+        try:
+            got = page.evaluate("() => [devicePixelRatio, innerWidth]")
+            dpr_after = float(got[0] or 0)
+        except Exception:
+            dpr_after = 0.0
+        if dpr_before and dpr_after and dpr_after < dpr_before * 0.85:
+            _SCALE_REVERTED.add(id(page.context))
+            back = {"left": left, "top": top, "width": width, "height": height} if parked else None
+            session.send("Browser.setWindowBounds",
+                         {"windowId": window_id, "bounds": {"windowState": "normal"}})
+            if back is None:
+                back = {"width": width, "height": height}
+            time.sleep(0.6)
+            session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": back})
+            time.sleep(1.0)
+            return None
+        return {"width": new.get("width"), "height": new.get("height"),
+                "state": new.get("windowState")}
+    finally:
+        if session is not None:
+            try:
+                session.detach()
+            except Exception:
+                pass
 
 
 def _unminimize_before_attach(browser) -> list[dict]:

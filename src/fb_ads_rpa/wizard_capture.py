@@ -201,6 +201,13 @@ class Trail:
         self.dialog_left: bool | None = None
         self.exit: dict[str, Any] | None = None
         self.busy_waits: list[float] = []
+        #: ACL-1736: первый шаг ДО Crop, на который мастер вернулся с Crop.
+        self.looped_back_to = ""
+
+    def loop_back(self, step: str) -> None:
+        """ACL-1736: Next на Crop привёл на более ранний шаг (Media и т.п.)."""
+        if not self.looped_back_to:
+            self.looped_back_to = step
 
     def see(self, page) -> None:
         """Прочитать текущий шаг и, если он новый для обхода, снять его."""
@@ -236,7 +243,7 @@ class Trail:
         """ACL-1551: мастер покинут своей кнопкой (Save/Done или Close)."""
         try:
             self.exit = {k: out.get(k) for k in ("closed_by", "closed", "dialog_left", "tried",
-                                                   "why", "step", "next_presses")}
+                                                   "why", "step", "next_presses", "looped_back_to")}
             if out.get("closed"):
                 self.closed_by = out.get("closed_by")
         except Exception:
@@ -269,6 +276,8 @@ class Trail:
                     "captures": {k: bool(v) for k, v in self.captured.items()}}
             if self.exit:
                 diag["exit"] = self.exit
+            if self.looped_back_to:
+                diag["looped_back_to"] = self.looped_back_to
             if self.busy_waits:
                 diag["busy_s"] = self.busy_waits
             _telemetry.record(

@@ -130,7 +130,8 @@ def test_existing_ids_and_modules_are_preserved():
     new = json.loads((ROOT / 'tracker/config.json').read_text())
     assert new['project'] == dict(old['project'], base_branch='main')
     assert new['modules'] == old['modules']
-    assert new['workflow'] == old['workflow'][:-1] + ['stage', 'merged']
+    assert new['workflow'] == old['workflow'][:-1] + ['approved', 'stage', 'merged']
+    assert new['execution_policy'] == {'schema_version':2, 'implementation_limit':5, 'review_limit':1, 'batch_limit':5}
 
 
 @pytest.mark.parametrize('workflow,success_fields', [
@@ -141,8 +142,8 @@ def test_ci_admission_runs_fail_closed(workflow, success_fields):
     data = yaml.safe_load((ROOT / '.github/workflows' / workflow).read_text())
     script = data['jobs']['admission']['steps'][0]['run']
     # ACL-1649: ci.yml decides Linux and Windows separately (LINUX output next to WINDOWS).
-    flags = {'LINUX': 'true'} if workflow == 'ci.yml' else {}
-    off = {'LINUX': 'false'} if workflow == 'ci.yml' else {}
+    flags = {'LINUX': 'true', 'PROCESS_INSTRUCTIONS': 'success'} if workflow == 'ci.yml' else {}
+    off = {'LINUX': 'false', 'PROCESS_INSTRUCTIONS': 'success'} if workflow == 'ci.yml' else {}
     success = {'SCOPE': 'success', 'WINDOWS': 'true', **flags, **{k: 'success' for k in success_fields}}
     metadata = {'SCOPE': 'success', 'WINDOWS': 'false', **off, **{k: 'skipped' for k in success_fields}}
     cases = [(success, True), (metadata, True), (dict(success, SCOPE='failure'), False),

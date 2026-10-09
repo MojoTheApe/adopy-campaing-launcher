@@ -3524,6 +3524,28 @@ def _objective_missing_reason(page: Page) -> str:
     return "no_objective_dialog:" + (last or "unknown")
 
 
+_AI_CHOOSER_AI_RE = re.compile(r"Meta AI.guided setup", re.I)
+_AI_CHOOSER_MANUAL_RE = re.compile(
+    r"Manual campaign setup|Configuraci[oó]n manual de campa", re.I)
+
+
+def _ai_manual_chooser_visible(page: Page) -> bool:
+    """ACL-1726: открыт выбор «Meta AI-guided setup / Manual campaign setup».
+
+    С 08.10 (9403A, `convergence_alt_modal_geo`) Create открывает его вместо
+    окна цели: радио Leads на экране нет, пока не выбран Manual. Это удачное
+    нажатие Create — шаг `manual` ниже выберет ручную настройку. AI-режим
+    никогда не выбираем. Только мгновенные проверки, без ожиданий.
+    """
+    try:
+        if _visible_now(page.get_by_role("radio", name="Leads")):
+            return False
+        return (_visible_now(page.get_by_text(_AI_CHOOSER_AI_RE))
+                and _visible_now(page.get_by_text(_AI_CHOOSER_MANUAL_RE)))
+    except Exception:
+        return False
+
+
 def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
     """Отозвалась ли страница на Create: "ok" / "left_list" / "nothing" /
     "frozen" (вкладка не ответила на проверку живости, ACL-1320) / "gone"
@@ -3553,6 +3575,9 @@ def _create_took(page: Page, list_url: str, timeout_s: float = 8.0) -> str:
             return "ok"
         except Exception:
             pass
+        # ACL-1726: выбор AI/Manual вместо окна цели — нажатие взялось.
+        if _ai_manual_chooser_visible(page):
+            return "ai_manual_chooser"
         if _loading_visible(page):
             # ACL-1354 (9d113c3d6ac3): «Loading...» модалки самой таблицы
             # списка — не след нажатия Create; окно цели за ней не пришло.
@@ -3690,6 +3715,12 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
                 break
             continue
         frozen_run = 0
+        # ACL-1726: выбор AI/Manual — окно открыто, дальше шаг `manual`.
+        # Только после проверки живости: на зависшей вкладке разметку не
+        # спрашиваем (ACL-1641/1320).
+        if _ai_manual_chooser_visible(page):
+            found, outcome = True, "ai_manual_chooser"
+            break
         if now - poll_start > OBJECTIVE_SLOW_POLL_FACTOR * poll_s:
             slow_polls += 1
             last_busy = now
@@ -5176,8 +5207,8 @@ def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page
         took = "ok"
         while True:
             took = _create_took(page, list_url)
-            _telemetry.record("create_took", took == "ok", note=took)
-            if took in ("ok", "frozen", "gone") or quick_left <= 0 or _left() < CAMPAIGN_OPEN_MIN_PRESS_S:
+            _telemetry.record("create_took", took in ("ok", "ai_manual_chooser"), note=took)
+            if took in ("ok", "frozen", "gone", "ai_manual_chooser") or quick_left <= 0 or _left() < CAMPAIGN_OPEN_MIN_PRESS_S:
                 break
             # ACL-1313: промах виден за секунды — повторяем нажатие сразу.
             # Не больше двух быстрых повторов за открытие; за последним
@@ -5215,7 +5246,8 @@ def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page
                       max(_left(), OBJECTIVE_POLL_S))
         if _wait_objective_dialog(page, first_s=first_s,
                                   loading_max_s=max(_left(), OBJECTIVE_POLL_S), out=out):
-            outcome = "radio"
+            outcome = ("ai_manual_chooser" if out.get("outcome") == "ai_manual_chooser"
+                       else "radio")
             break
         outcome = out.get("outcome") or "no_dialog"
         if outcome == "gone":
@@ -5232,7 +5264,7 @@ def _open_campaign_rounds(page: Page, list_url: str, *, press, shot, on_new_page
                 break
     else:
         result = "objective_leads" if pressed else "create"
-    if outcome != "radio" and not result:
+    if outcome not in ("radio", "ai_manual_chooser") and not result:
         result = "objective_leads" if pressed else "create"
     if result == "profile_unresponsive":
         # Перед перезапуском профиля — диагноз: не вход ли это и не сеть ли.
@@ -12222,7 +12254,8 @@ def _leave_wizard(page: Page, *, allow_complete: bool = True, skip: str = "") ->
     return out
 
 
-def _leave_stuck_wizard(page: Page, trail, why: str, presses: int, pressed: str = "") -> bool:
+def _leave_stuck_wizard(page: Page, trail, why: str, presses: int, pressed: str = "",
+                        looped_back_to: str = "") -> bool:
     """Next на Crop не довёл мастер дальше: выйти своей кнопкой мастера.
 
     Save/Done мастера — мастер завершён, как обычным обходом. Только Close
@@ -12232,6 +12265,8 @@ def _leave_stuck_wizard(page: Page, trail, why: str, presses: int, pressed: str 
     """
     out = _leave_wizard(page, skip=pressed if pressed in _WIZARD_COMPLETE_LABELS else "")
     out.update({"why": why, "step": "Crop", "next_presses": presses})
+    if looped_back_to:
+        out["looped_back_to"] = looped_back_to   # ACL-1736: Crop -> Media -> ... -> Crop
     completed = bool(out["closed"]) and out["closed_by"] in _WIZARD_COMPLETE_LABELS
     if not completed:
         _crop.mark_wizard_stuck()
@@ -12240,6 +12275,10 @@ def _leave_stuck_wizard(page: Page, trail, why: str, presses: int, pressed: str 
     except Exception:
         pass
     return bool(out["closed"])
+
+
+#: ACL-1736: шаги мастера, которые идут ДО Crop (возврат на них = петля).
+_WIZARD_STEPS_BEFORE_CROP = ("Media", "Creative setup", "Trim")
 
 
 def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
@@ -12276,11 +12315,41 @@ def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
     # ACL-1551: ожидание «занятого» мастера — не промах, но в пределах срока.
     busy_left = _WIZARD_BUSY_WAIT_S
     crop_next = 0   # нажатий «вперёд» на Crop в этом обходе
+    left_crop = False   # ACL-1736: Next с Crop увёл мастер с Crop (виден другой шаг)
+    crop_returns = 0    # сколько раз мастер вернулся на Crop после ухода
+    went_back = False   # ACL-1736 F1: после Crop реально виден шаг ДО него
+    crop_pressed = ""   # подпись, нажатая на Crop (для выхода)
     for _ in range(rounds):
         if not _creative_wizard_open(page):
             return True
         trail.see(page)
         on_crop = _on_crop_step_now(page, trail.current)
+        if left_crop and not on_crop and trail.current:
+            if trail.current in _WIZARD_STEPS_BEFORE_CROP:
+                trail.loop_back(trail.current)   # Meta вернула назад, а не вперёд
+                went_back = True
+            else:
+                left_crop = False   # обычный ход вперёд (Text и дальше)
+        if on_crop and left_crop and not went_back:
+            # Шаг до Crop не виден (один пустой read): это тот же Crop - охрана ACL-1551.
+            left_crop = False
+        if on_crop and left_crop:
+            # ACL-1736 (445fa5460ce6, 5265 ad 2): Next на Crop привёл на Media,
+            # дальше мастер дошёл до Crop снова. Это НЕ тот же Crop, на котором
+            # Next завис (ACL-1551): выбор в библиотеке цел (плитка selected,
+            # «1 selected»), Next не нажимали. Один повторный проход разрешён
+            # для одиночного плана; пара (Replace) и второй возврат — честный
+            # `crop_wizard_stuck` с `looped_back_to`.
+            left_crop = False
+            went_back = False
+            crop_returns += 1
+            plan_now = _crop.current_plan()
+            pair = plan_now is not None and getattr(plan_now, "replace_vertical", False)
+            if crop_returns > 1 or pair or _crop.forward_stuck():
+                return _leave_stuck_wizard(page, trail, "looped_back", crop_next, crop_pressed,
+                                           looped_back_to=trail.looped_back_to)
+            crop_next = 0
+            _crop.reopen()   # Meta могла сбросить рамки по дороге — Original снова
         if on_crop and (crop_next or _crop.forward_stuck()):
             # ACL-1551: Next на Crop уже нажимали, а мастер с Crop не ушёл —
             # второй раз Next не жмём (живьём 04.10 он завис больше минуты).
@@ -12313,11 +12382,13 @@ def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
         misses = 0
         if on_crop:
             crop_next += 1
+            crop_pressed = pressed
             got = _await_crop_advance(page)
             if got == "closed":
                 trail.closed_by = pressed
                 return True
             if got == "advanced":
+                left_crop = True
                 continue
             _crop.note_forward_stuck()
             return _leave_stuck_wizard(page, trail, "busy" if got == "busy" else "next_did_not_advance",

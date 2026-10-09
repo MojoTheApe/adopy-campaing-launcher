@@ -14,11 +14,11 @@ except ImportError:  # запуск как python scripts/acl_publish_release.py
 
 
 def _git(*args: str) -> str:
-    return subprocess.check_output(["git", *args], text=True).strip()
+    return subprocess.check_output(["git", *args], text=True, encoding="utf-8", errors="replace").strip()
 
 
 def _gh(*args: str) -> str:
-    return subprocess.check_output(["gh", *args], text=True).strip()
+    return subprocess.check_output(["gh", *args], text=True, encoding="utf-8", errors="replace").strip()
 
 
 def _api(path: str) -> dict:

@@ -432,37 +432,18 @@
       gap: 0.7rem;
       min-width: 0;
     }
-    /* ACM: метка сверху, подпись под ней. Метка плоская (#2563eb, без плитки),
-       поэтому без скругления и без фона — одинаково читается на обеих темах. */
+    /* ACM: в шапке только метка, без подписи под ней (ACL-1723). Метка плоская
+       (#2563eb, без плитки), поэтому без скругления и фона — одинаково читается
+       на обеих темах. Название продукта живёт в alt у картинки. */
     .brand-mark {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 0.2rem;
       flex-shrink: 0;
     }
     .brand-logo {
       width: 34px;
       height: 34px;
       flex-shrink: 0;
-    }
-    /* Шрифт лежит в репозитории (OFL, см. static/fonts/OFL-Inter.txt): дешборд
-       работает офлайн, CDN нельзя. Только для подписи бренда. */
-    @font-face {
-      font-family: 'ACM Inter';
-      font-weight: 500;
-      font-style: normal;
-      font-display: swap;
-      src: url('/static/fonts/inter-medium-latin.woff2') format('woff2');
-    }
-    header.page-header h1.brand-name {
-      margin: 0;
-      font-family: 'ACM Inter', "Segoe UI", system-ui, sans-serif;
-      font-size: 12px;
-      font-weight: 500;
-      line-height: 1.1;
-      color: var(--muted);
-      white-space: nowrap;
     }
     .brand-text {
       display: flex;
@@ -3171,11 +3152,10 @@
 <div class="page-top">
 <header class="page-header">
   <div class="brand-lockup">
-    {#- ACM: метка Adopy и под ней подпись — «стопка». Подпись — HTML-текст,
-        а не SVG-локвап, чтобы цвет шёл из переменных светлой/тёмной темы. -#}
+    {#- ACM: только метка Adopy, без подписи (ACL-1723). Имя продукта для
+        скринридеров — в alt; h1 на странице не нужен. -#}
     <div class="brand-mark">
-      <img src="/static/logo.svg" alt="" class="brand-logo" width="34" height="34">
-      <h1 class="brand-name">Adopy Campaign Manager</h1>
+      <img src="/static/logo.svg" alt="Adopy Campaign Manager" class="brand-logo" width="34" height="34">
     </div>
     <div class="brand-text">
       {#- Две подписанные величины вместо ленты через точки. Обе нужны в один

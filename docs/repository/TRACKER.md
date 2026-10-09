@@ -4,7 +4,9 @@ Issues remain in MojoTheApe/adopy-campaing-launcher; the existing board identity
 at https://tracker.team7.cloud/projects/acl/. Keep the six established modules,
 71 historical aliases and +1000 numbering. Never renumber Issues or start a second board.
 
-The candidate pins Task Tracker a4ea3cfb0c1be1760ae0923c8232779532c25a7b. Run
+ACL-1750 pins reviewed, merged Task Tracker
+`d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76` (TT-79 / PR80) with Master
+`d24db185ebdff2cadcecf89f5b28061d6cd19564` (MR-16 / PR17). Run
 `python scripts/task_tracker.py guide` for that guide; helpers live in .workflow/tools
 and existing scripts paths remain wrappers. The active client uses that exact
 clean shared engine. `.workflow/legacy` retains the original configs for audit and
@@ -13,12 +15,29 @@ Do not return to the retired master client. ACL-1248's original adoption is reco
 in ADOPTION.md. The bounded ACL-1383 old-policy source handoff and ACL-1382 live
 execution migration are described in PARALLEL_EXECUTION.md.
 
-Follow WORKFLOW.md and the pinned command guide: claimed work -> handoff ->
-review-acquire -> independent review -> record-review -> check-merge -> stage ->
-verify-stage -> promotion -> merged -> verified package delivery. Keep five
-implementation slots and one review/integration lane, explicit Release membership and Archive
-semantics. Description explains the human outcome; Specifications retains full verified
-context, criteria, references, checks, decisions and current handoff. Read both.
+Follow [WORKFLOW.md](WORKFLOW.md), [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) and
+the exact pinned command guide. Once the guarded v2 migration succeeds, ordinary
+application/batch work follows: claimed one-task source -> handoff -> independent review -> Approved -> frozen Coordinator
+batch -> additional combined review/checks -> Stage -> exact target verification
+-> unchanged main promotion -> per-task Merged -> verified package delivery.
+The explicit [instruction-only route](PROCESS_INSTRUCTIONS.md) uses its current
+independent source review and direct main receipt instead of Approved/batch/stage.
+It cannot displace an active batch or staged candidate. Policy/automation adoption
+itself remains on the old source route until activated.
+
+Keep implementation_limit 5, review_limit 1 and batch_limit 5. The Approved backlog
+has no size cap. Ordinary batch-source approval frees the review lane; only one
+batch owns stage. Ordinary source PRs target main and remain open until verified
+batch inclusion. Retained
+queued stage PRs are approval-only, preserving actual authors/history.
+
+The source children ACL-1747 and ACL-1750 complete their distinct old-policy
+stage/main handoffs before the coordinated migration.
+The new pin contains TT-73's large-state read fix; the bounded old-v1 operator use
+is documented in the adoption runbook. New pin/config/skill alone is not activation.
+Preserve explicit Release membership and Archive semantics. Description explains
+the human outcome; Specifications retains full context, criteria, decisions and
+handoff. Read both in full.
 
 The board's Worker is the actual implementation owner, with Coordinator and
 Reviewer recorded separately. Use platform-neutral opaque actor/session identities,
@@ -27,8 +46,9 @@ labels and per-chat counters cannot reserve capacity. A stopped session requires
 an explicit inspected handoff/transfer; elapsed time alone never authorizes takeover.
 See the pinned engine's `docs/PARALLEL_EXECUTION.md` for command arguments.
 
-For new work, a Merged label means source integration; the delivery receipt decides
-package completion. Partial scope, failed delivery and missing evidence remain unfinished.
+For ordinary/application work, a Merged label means source integration; the
+delivery receipt decides package completion. A proven instruction-only task instead
+completes through its admitted verified process receipt after the reviewed main merge. Partial scope, failed delivery and missing evidence remain unfinished.
 The owner-approved 74-task manifest preserves prior completion separately as Completed
 before adoption; see HISTORICAL_COMPLETION.md. It supplies no current delivery evidence.
 Never use non-code completion or issue-closing keywords to bypass missing code or delivery.

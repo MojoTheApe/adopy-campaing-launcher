@@ -80,7 +80,12 @@ def alias_matches(series, alias):
     from src.analysis_agent.account_names import account_key
 
     target = account_key(alias)
-    return series.fillna("").astype(str).map(account_key) == target
+    # ACL-1729: в книге десятки тысяч строк, но алиасов — сотни. Ключ считался
+    # на каждую строку (и каждый раз stat файла правил) — страница Home
+    # собиралась 90 с. Считаем один раз на уникальное значение.
+    text = series.fillna("").astype(str)
+    hits = {v for v in text.unique() if account_key(v) == target}
+    return text.isin(hits)
 
 
 # A creative is identified by a 3-4 digit number; everything else in the
