@@ -56,23 +56,25 @@ class FakePage:
         self.loaded = False
         self.retired = False
         self.reloads = 0
+        self.installs = 0
         self.state_value = state or {"kind": "ads_manager", "has_token": True, "source": "network"}
         self.after_reload = after_reload
 
     def evaluate(self, expression: str):
+        # Установка помощника в отдельном мире — большой IIFE; принимаем молча.
+        if expression.lstrip().startswith("(() =>"):
+            self.installs += 1
+            return None
+        assert ".ready(" not in expression, "wait must never await an in-page promise"
         if ".call(" in expression:
             spec = json.loads(expression.split(".call(", 1)[1].rsplit(")", 1)[0])
             self.specs.append(spec)
             reply = self.replies.pop(0) if self.replies else {"status": 200, "body": {"data": []}}
             return json.loads(json.dumps(reply).replace("__TOKEN__", self._token))
-        if ".ready(" in expression:
-            return dict(self.state_value)
         if ".retire()" in expression:
             self.retired = True
             return True
-        if "!h.state().retired" in expression:
-            return self.loaded
-        if "h.state()" in expression:
+        if ".state()" in expression or ".probe()" in expression:
             return dict(self.state_value)
         raise AssertionError(f"unexpected expression {expression[:80]}")
 
@@ -95,6 +97,7 @@ class FakeCdp:
         self.other_tabs = other_tabs
         self.closed = False
         self.closed_targets: list[str] = []
+        self.worlds = 0
 
     def call(self, method, params=None, *, session_id="", timeout=5.0):
         params = params or {}
@@ -115,8 +118,14 @@ class FakeCdp:
         if method == "Page.reload":
             self.page.reload()
             return {}
+        if method == "Page.getFrameTree":
+            return {"frameTree": {"frame": {"id": "F"}}}
+        if method == "Page.createIsolatedWorld":
+            self.worlds += 1
+            return {"executionContextId": 100 + self.worlds}
         if method == "Runtime.evaluate":
             assert session_id == "S-mine"
+            assert "contextId" in params, "helper must run in the isolated world"
             return {"result": {"value": self.page.evaluate(params["expression"])}}
         return {}
 
@@ -248,12 +257,15 @@ def test_python_sends_only_request_specs_to_the_page():
     gr, cdp = _graph(page)
     gr.start(ACT)
     gr.request("GET", "/me/adaccounts", {"fields": "id"})
-    init = [p for m, p, _ in cdp.sent if m == "Page.addScriptToEvaluateOnNewDocument"]
-    assert len(init) == 1 and gr.name in init[0]["source"]
+    # Помощник ставится в отдельном мире, не главном: без addScriptToEvaluateOnNewDocument.
+    assert not any(m == "Page.addScriptToEvaluateOnNewDocument" for m, _, _ in cdp.sent)
+    assert any(m == "Page.createIsolatedWorld" for m, _, _ in cdp.sent)
     navs = [p["url"] for m, p, _ in cdp.sent if m == "Page.navigate"]
     assert navs == ["https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1234567890"]
     # CDP-события сети не включаются: токен из трафика в Python не читается.
     assert not any(m.startswith("Network.") for m, _, _ in cdp.sent)
+    # Python видит только описания запросов, без токена.
+    assert gr.name  # имя мира/помощника случайное, в главный мир не попадает
 
 
 @pytest.mark.parametrize("method,params", [
@@ -292,6 +304,14 @@ def test_no_network_capture_or_token_api_in_python_sources():
         src = path.read_text(encoding="utf-8")
         assert "Network.enable" not in src and "requestWillBeSent" not in src, path.name
         assert "getRequestPostData" not in src, path.name
+
+
+def test_no_fetch_or_xhr_wrapping_in_sources():
+    # Ревью r8: страницу не оборачиваем; помощник живёт в отдельном мире.
+    helper = (ROOT / "src" / "fb_api" / "token_capture.py").read_text(encoding="utf-8")
+    assert "window.fetch =" not in helper and "XHR.open =" not in helper, "no fetch/XHR wrapping"
+    assert "addScriptToEvaluateOnNewDocument" not in helper, "no main-world init script"
+    assert "createIsolatedWorld" in (ROOT / "src" / "fb_api" / "cdp.py").read_text(encoding="utf-8")
 
 
 # ───────────────────────── разбор ошибок ─────────────────────────
@@ -775,15 +795,124 @@ def test_last_browser_tab_is_not_closed_on_failure():
     assert cdp.closed_targets == [] and cdp.closed
 
 
-def test_tab_open_disables_background_throttling():
+def test_tab_open_disables_background_throttling_on_our_session():
     page = FakePage([])
     cdp = FakeCdp(page)
     tab = PageTab.open("http://127.0.0.1:1", connect=lambda u, timeout: cdp)
-    methods = [m for m, _, _ in cdp.sent]
-    assert "Emulation.setFocusEmulationEnabled" in methods
-    assert "Page.setWebLifecycleState" in methods
+    anti = [(m, sid) for m, _, sid in cdp.sent
+            if m in ("Emulation.setFocusEmulationEnabled", "Page.setWebLifecycleState")]
+    assert {m for m, _ in anti} == {"Emulation.setFocusEmulationEnabled", "Page.setWebLifecycleState"}
+    # На НАШЕЙ сессии, не на сессии браузера (ревью r8).
+    assert all(sid == "S-mine" for _, sid in anti) and anti
     assert tab.throttle == {"focus": True, "lifecycle": True}
     tab.close()
+
+
+def test_wait_ready_polls_state_and_never_awaits_a_page_promise():
+    # Опрос — это state(); обещание внутри страницы (.ready()) запрещено
+    # (FakePage.evaluate упадёт на .ready(). Ревью r8, инцидент 5265).
+    page = FakePage([], state={"kind": "ads_manager", "has_token": False})
+    gr, _ = _graph(page)
+    now = [0.0]
+    gr._clock = lambda: now[0]
+    gr._sleep = lambda s: now.__setitem__(0, now[0] + s)
+    out = gr.wait_ready(timeout=3.0, poll_s=1.0)
+    assert out.get("has_token") is False
+
+
+def test_wait_ready_runs_final_probe_once_when_no_token():
+    calls = {"state": 0, "probe": 0}
+
+    class CountingGraph(tc.InPageGraph):
+        def _eval(self, tail, *, timeout=60.0):
+            if ".probe()" in tail:
+                calls["probe"] += 1
+            elif ".state()" in tail:
+                calls["state"] += 1
+            return {"kind": "ads_manager", "has_token": False}
+
+    tab, _ = _tab(FakePage([]))
+    gr = CountingGraph(tab)
+    now = [0.0]
+    gr._clock = lambda: now[0]
+    gr._sleep = lambda s: now.__setitem__(0, now[0] + s)
+    gr.wait_ready(timeout=2.0, poll_s=1.0)
+    assert calls["probe"] == 1 and calls["state"] >= 1
+
+
+def test_wait_ready_propagates_cdp_timeout_with_the_method():
+    class TimingOutGraph(tc.InPageGraph):
+        def _eval(self, tail, *, timeout=60.0):
+            raise CdpTimeout("Runtime.evaluate: the browser did not answer within 10 s")
+
+    tab, _ = _tab(FakePage([]))
+    gr = TimingOutGraph(tab)
+    with pytest.raises(CdpTimeout) as ei:
+        gr.wait_ready(timeout=5.0)
+    assert "Runtime.evaluate" in str(ei.value)
+
+
+def test_page_tab_call_wraps_raw_timeout_with_the_method_name():
+    page = FakePage([])
+
+    class SlowCdp(FakeCdp):
+        def call(self, method, params=None, *, session_id="", timeout=5.0):
+            if method == "Page.getFrameTree":
+                raise TimeoutError("CDP read timed out")  # сырой клиент: без имени метода
+            return super().call(method, params, session_id=session_id, timeout=timeout)
+
+    tab = PageTab.open("http://127.0.0.1:1", connect=lambda u, timeout: SlowCdp(page))
+    with pytest.raises(CdpTimeout) as ei:
+        tab.main_frame_id()
+    assert "Page.getFrameTree" in str(ei.value)
+    tab.close()
+
+
+def test_close_falls_back_to_http_when_the_socket_times_out():
+    page = FakePage([])
+
+    class StuckCdp(FakeCdp):
+        def call(self, method, params=None, *, session_id="", timeout=5.0):
+            if method == "Target.getTargets":  # сокет завис на закрытии
+                raise CdpTimeout("Target.getTargets: the browser did not answer within 10 s")
+            return super().call(method, params, session_id=session_id, timeout=timeout)
+
+    cdp = StuckCdp(page, other_tabs=1)
+    tab = PageTab.open("http://127.0.0.1:9321", connect=lambda u, timeout: cdp)
+    http = {"listed": False, "closed": None}
+
+    def fake_http(host, port, path, *, timeout=10.0):
+        if path == "/json/list":
+            http["listed"] = True
+            return [{"type": "page", "id": "T-mine"}, {"type": "page", "id": "T-0"}]
+        if path.startswith("/json/close/"):
+            http["closed"] = path.rsplit("/", 1)[1]
+        return ""
+
+    tab._http = staticmethod(fake_http)
+    tab.close()
+    assert http["listed"] is True and http["closed"] == "T-mine"
+
+
+def test_close_catches_keyboard_interrupt_and_still_tries_http():
+    page = FakePage([])
+
+    class InterruptingCdp(FakeCdp):
+        def call(self, method, params=None, *, session_id="", timeout=5.0):
+            if method == "Target.getTargets":
+                raise KeyboardInterrupt()
+            return super().call(method, params, session_id=session_id, timeout=timeout)
+
+    cdp = InterruptingCdp(page, other_tabs=1)
+    tab = PageTab.open("http://127.0.0.1:9321", connect=lambda u, timeout: cdp)
+    tried = {"closed": None}
+    tab._http = staticmethod(lambda host, port, path, *, timeout=10.0:
+                             [{"type": "page", "id": "T-mine"}, {"type": "page", "id": "T-0"}]
+                             if path == "/json/list"
+                             else tried.__setitem__("closed", path.rsplit("/", 1)[1]))
+    with pytest.raises(KeyboardInterrupt):
+        tab.close()
+    assert tried["closed"] == "T-mine"
 
 
 def test_pilot_default_is_a_dry_run(monkeypatch, capsys, tmp_path):

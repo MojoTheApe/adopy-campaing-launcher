@@ -1,11 +1,13 @@
-"""ACL-1756: помощник страницы (JS) в Node — токен остаётся во вкладке.
+"""ACL-1756: помощник ОТДЕЛЬНОГО мира (JS) в Node — без обёрток на странице.
 
 Отдельно от tests/test_acl1756_fb_api.py: здесь настоящий JS помощника
-выполняется в процессе Node (пропуск, если Node нет), там — Python-сторона с
-поддельным браузером. Проверяется захват токена из собственных запросов Ads
-Manager (XHR, fetch, HTML), снятие обёрток и их сходство с родными функциями,
-только GET, белый и запретный списки имён параметров, `redirect: 'error'`,
-один запрос на сбой сети и то, что токен не возвращается из страницы.
+выполняется в процессе Node (пропуск, если Node нет). Ревью r8: страница не
+оборачивается вовсе; токен берётся из Resource Timing и инлайнового HTML, а
+`fetch()` к Graph идёт из отдельного мира. Проверяется: захват без запросов,
+якорь хоста Graph, только GET, белый и запретный списки имён параметров,
+`redirect: 'error'`, один запрос на сбой сети, что токен не возвращается, и
+что помощник не создаёт ничего, кроме своего свойства в своём globalThis и
+не трогает fetch/XHR.
 """
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -23,360 +26,85 @@ sys.path.insert(0, str(ROOT))
 
 from src.fb_api import token_capture as tc  # noqa: E402
 
-TOKEN = "EAAB" + "Zx9" * 20          # «токен» страницы
+TOKEN = "EAAB" + "Zx9" * 20
 TOKEN_LIKE = re.compile(r"EAA[A-Za-z0-9]{10,}")
 
-
-_NODE_HARNESS = r"""
-const fetched = [];
-let failNext = false;
-const listeners = [];
-class FakeFormData { constructor(){ this.m = new Map(); } append(k,v){ this.m.set(k,v); } get(k){ return this.m.has(k)?this.m.get(k):null; } }
-class FakeXHR { open(m,u,a,b,c){ this._u=u; } send(){ this._b=arguments[0]; } }
-const scripts = SCRIPTS;
-const origSend = FakeXHR.prototype.send, origOpen = FakeXHR.prototype.open;
-const win = {
-  location: { href: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1',
-              hostname: 'adsmanager.facebook.com', pathname: '/adsmanager/manage/campaigns' },
-  fetch: async function fetch(url) {
-    const init = arguments[1];
-    fetched.push({ url: String(url), init: init || {} });
-    if (failNext) { failNext = false; throw new TypeError('Failed to fetch'); }
-    const body = JSON.stringify({ data: [{ id: 'act_1' }],
-      paging: { next: 'https://graph.facebook.com/v22.0/act_1/campaigns?access_token=' + TOKEN + '&after=x' },
-      echo: TOKEN });
-    return { status: 200, text: async () => body,
-             headers: { get: (h) => h === 'x-ad-account-usage' ? '{"acc_id_util_pct":12}' : null } };
-  },
-  XMLHttpRequest: FakeXHR,
-  performance: { getEntriesByType: () => [] },
-  setTimeout: (f, ms) => (ms < 5000 ? setTimeout(f, 0) : 0),  // 20s sweep not auto-fired
+# Помощник выполняется с нашим поддельным globalThis (параметр `globalThis`
+# затеняет настоящий в теле функции), поэтому его свойство не попадает ни в
+# какой общий объект — как в отдельном мире вкладки.
+_HARNESS = r"""
+const RESOURCES = __RESOURCES__;
+const SCRIPTS = __SCRIPTS__;
+const HTML = __HTML__;
+const NET = __NET__;            // 'ok' | 'fail'
+const calls = [];
+const fakeFetch = async (url, init) => {
+  calls.push({ url: String(url), init: init || {} });
+  if (NET === 'fail') throw new TypeError('Failed to fetch');
+  const body = JSON.stringify({ data: [{ id: 'act_1', leak: TOKENV }],
+    paging: { next: 'https://graph.facebook.com/v22.0/act_1/campaigns?access_token=' + TOKENV } });
+  return { status: 200, text: async () => body,
+           headers: { get: (h) => h === 'x-ad-account-usage' ? '{"acc_id_util_pct":12}' : null } };
 };
-win.window = win; win.top = win;
-const nativeFetch = win.fetch;
-const doc = { readyState: 'complete', querySelector: () => null, scripts: scripts };
-const run = new Function('window','location','document','XMLHttpRequest','URL','URLSearchParams',
-  'FormData','performance','setTimeout', HELPER);
-run(win, win.location, doc, FakeXHR, URL, URLSearchParams, FakeFormData, win.performance, win.setTimeout);
-win.URL = URL; win.URLSearchParams = URLSearchParams;
-const h = win[NAME];
+const loc = { href: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1',
+              hostname: 'adsmanager.facebook.com', pathname: '/adsmanager/manage/campaigns' };
+const doc = { readyState: 'complete', querySelector: () => null, scripts: SCRIPTS,
+              documentElement: { innerHTML: HTML } };
+const perf = { getEntriesByType: (t) => t === 'resource' ? RESOURCES.map((n) => ({ name: n })) : [] };
+const G = {};                   // отдельный «мир»: свой globalThis
+const fn = new Function('globalThis','location','document','performance','fetch','URL','URLSearchParams',
+                        HELPER);
+fn(G, loc, doc, perf, fakeFetch, URL, URLSearchParams);
+const h = G[NAME];
 (async () => {
   const out = {};
+  // Ничего, кроме помощника, в «мир» не добавлено; fetch/XHR не трогаются.
+  out.world_keys = Object.getOwnPropertyNames(G);
+  out.scan_made_no_fetch = (calls.length === 0);
   out.before = h.state();
-  out.wrapped = win.fetch !== nativeFetch && FakeXHR.prototype.send !== origSend;
-  out.lengths = [win.fetch.length, nativeFetch.length, FakeXHR.prototype.send.length,
-                 origSend.length, FakeXHR.prototype.open.length, origOpen.length];
-  out.wrap = {
-    fetch_len: win.fetch.length === nativeFetch.length,
-    fetch_name: win.fetch.name === nativeFetch.name,
-    fetch_str: win.fetch.toString() === Function.prototype.toString.call(nativeFetch),
-    send_len: FakeXHR.prototype.send.length === origSend.length,
-    open_len: FakeXHR.prototype.open.length === origOpen.length,
-    send_str: FakeXHR.prototype.send.toString() === Function.prototype.toString.call(origSend),
-    tostring_enum: Object.keys(win.fetch).length === 0,
-  };
-  out.no_token_call = await h.call({ method: 'GET', path: '/me', params: {} });
-  if (MODE === 'xhr') {
-    const x = new win.XMLHttpRequest();
-    x.open('POST', 'https://graph.facebook.com/v22.0/act_1/insights');
-    x.send('fields=spend&access_token=' + TOKEN);
-  } else if (MODE === 'fetch') {
-    await win.fetch('https://graph.facebook.com/v21.0/me/adaccounts?access_token=' + TOKEN);
-    fetched.length = 0;
-  } else if (MODE === 'xhr_am') {
-    // Как Ads Manager: свой хост Graph, POST с method=get в теле, куки сессии.
-    const x = new win.XMLHttpRequest();
-    x.withCredentials = true;
-    x.open('POST', 'https://adsmanager-graph.facebook.com/v23.0/act_1/insights?_reqName=adaccount%2Finsights&_reqSrc=AdsReportBuilder');
-    x.send('method=get&pretty=0&suppress_http_code=1&locale=en_US&access_token=' + TOKEN);
-  } else if (MODE === 'fetch_inc') {
-    await win.fetch('https://adsmanager-graph.facebook.com/v22.0/me?_reqName=me&access_token=' + TOKEN,
-                    { credentials: 'include' });
-    fetched.length = 0;
-  }
-  out.after = await h.ready(MODE === 'html' ? 10 : 1000);
-  out.unhooked = FakeXHR.prototype.send === origSend && FakeXHR.prototype.open === origOpen;
-  out.post = await h.call({ method: 'POST', path: '/act_1/campaigns', params: {} });
+  out.scan_still_no_fetch = (calls.length === 0);
+  out.post = await h.call({ method: 'POST', path: '/me', params: {} });
   out.bad = await h.call({ method: 'GET', path: '/../oauth', params: {} });
-  out.got = await h.call({ method: 'GET', path: '/act_1/campaigns', params: { fields: 'name', limit: 5 } });
-  out.fetched_has_token = fetched.length === 1 && fetched[0].url.includes('access_token=' + TOKEN);
-  out.fetched_url_head = fetched.length ? fetched[0].url.split('?')[0] : '';
-  out.credentials = fetched.length ? fetched[0].init.credentials : '';
-  out.redirect = fetched.length ? fetched[0].init.redirect : '';
-  out.method = fetched.length ? fetched[0].init.method : '';
-  // Ручные варианты пилота: публичный хост и явный режим куки; чужие значения — отказ.
-  const n0 = fetched.length;
-  out.opt_public = await h.call({ method: 'GET', path: '/me', params: {}, host: 'public', credentials: 'omit' });
-  out.opt_public_url = fetched.length > n0 ? fetched[n0].url.split('?')[0] : '';
-  out.opt_public_cred = fetched.length > n0 ? fetched[n0].init.credentials : '';
-  out.opt_public_method = fetched.length > n0 ? fetched[n0].init.method : '';
-  out.opt_bad_host = await h.call({ method: 'GET', path: '/me', params: {}, host: 'evil.example.com' });
-  out.opt_bad_cred = await h.call({ method: 'GET', path: '/me', params: {}, credentials: 'same-origin' });
-  out.opt_fetches = fetched.length - n0;
   out.forbidden = {};
-  const before = fetched.length;
-  for (const k of ['method', '_method', 'batch', 'suppress_http_code', 'access_token', 'Method',
-                   ' method', 'method ', '\tmethod', 'method\u0000', 'method[]', '\uff4dethod', '']) {
+  for (const k of ['method','_method','batch','suppress_http_code','access_token','Method',
+                   ' method','method ','\tmethod','method\u0000','method[]','ｍethod','']) {
     out.forbidden[k] = await h.call({ method: 'GET', path: '/me', params: { [k]: 'post' } });
   }
-  out.forbidden_fetches = fetched.length - before;
-  failNext = true;
-  out.net = await h.call({ method: 'GET', path: '/me', params: {} });
-  out.net_fetches = fetched.length - before;
+  out.forbidden_fetches = calls.length;
+  out.got = await h.call({ method: 'GET', path: '/act_1/campaigns', params: { fields: 'name', limit: 5 } });
+  out.fetch_count = calls.length;
+  out.fetched_head = calls.length ? calls[calls.length - 1].url.split('?')[0] : '';
+  out.fetched_has_token = calls.length ? calls[calls.length - 1].url.includes('access_token=' + TOKENV) : false;
+  out.fetched_cred = calls.length ? calls[calls.length - 1].init.credentials : '';
+  out.fetched_method = calls.length ? calls[calls.length - 1].init.method : '';
+  out.fetched_redirect = calls.length ? calls[calls.length - 1].init.redirect : '';
+  out.opt_public = await h.call({ method: 'GET', path: '/me', params: {}, host: 'public', credentials: 'omit' });
+  out.opt_public_head = calls.length ? calls[calls.length - 1].url.split('?')[0] : '';
+  out.opt_public_cred = calls.length ? calls[calls.length - 1].init.credentials : '';
+  out.opt_bad_host = await h.call({ method: 'GET', path: '/me', params: {}, host: 'evil.example.com' });
+  out.opt_bad_cred = await h.call({ method: 'GET', path: '/me', params: {}, credentials: 'same-origin' });
   h.retire();
   out.after_retire = await h.call({ method: 'GET', path: '/me', params: {} });
-  out.keys = Object.keys(win).filter(k => k.startsWith('__acl'));
+  out.retired_state = h.state().retired;
+  out.token_in_output = JSON.stringify(out).includes(TOKENV);
   process.stdout.write(JSON.stringify(out));
 })();
 """
 
 
-_HOST_HARNESS = r"""
-const results = {};
-class FakeFormData { get(){ return null; } }
-class FakeXHR { open(){ } send(){ } }
-async function probe(url) {
-  const fetched = [];
-  const win = {
-    location: { href: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns',
-                hostname: 'adsmanager.facebook.com', pathname: '/adsmanager/manage/campaigns' },
-    fetch: async function fetch(u) {
-      fetched.push(String(u));
-      return { status: 200, text: async () => '{"data":[]}', headers: { get: () => null } };
-    },
-    XMLHttpRequest: FakeXHR,
-    performance: { getEntriesByType: () => [] },
-  };
-  win.window = win; win.top = win;
-  const doc = { readyState: 'complete', querySelector: () => null, scripts: [] };
-  const run = new Function('window','location','document','XMLHttpRequest','URL','URLSearchParams',
-    'FormData','performance','setTimeout', HELPER);
-  run(win, win.location, doc, FakeXHR, URL, URLSearchParams, FakeFormData, win.performance,
-      (f, ms) => (ms < 5000 ? setTimeout(f, 0) : 0));
-  const h = win[NAME];
-  // Страница сама шлёт запрос с токеном на этот адрес (через обёртку fetch).
-  await win.fetch(url + (url.includes('?') ? '&' : '?') + 'access_token=' + TOKEN);
-  const st = await h.ready(5);
-  const before = fetched.length;
-  const reply = await h.call({ method: 'GET', path: '/me', params: {} });
-  return { has_token: st.has_token, graph_host: st.graph_host, later: fetched.slice(before),
-           reply_error: reply.error || null };
-}
-(async () => {
-  for (const url of __PROBE_URLS__) results[url] = await probe(url);
-  process.stdout.write(JSON.stringify(results));
-})();
-"""
-
-#: Адреса, с которых токен брать нельзя (ревью r5): не тот хост, подделки
-#: через userinfo, порт, поддомен, http:, обратная косая, %2f, `/../`.
-BAD_HOSTS = [
-    "https://adsmanager.facebook.com/v22.0/me",
-    "https://www.facebook.com/v22.0/me",
-    "https://graph.facebook.com.evil.com/v22.0/me",
-    "https://evil.com/graph.facebook.com/v22.0/me",
-    "https://graph.facebook.com@evil.com/v22.0/me",
-    "https://user:pw@graph.facebook.com/v22.0/me",
-    "https://graph.facebook.com:8443/v22.0/me",
-    "https://a.graph.facebook.com/v22.0/me",
-    "http://graph.facebook.com/v22.0/me",
-    "https://evil.com\\graph.facebook.com/v22.0/me",
-    "https://evil.com%2fgraph.facebook.com/v22.0/me",
-    "https://evil.com/../graph.facebook.com/v22.0/me",
-    "https://evilgraph.facebook.com/v22.0/me",
-    # Адрес Graph внутри чужого адреса: ловит потерю якоря `^`.
-    "https://evil.com/r?u=https://graph.facebook.com/v22.0/me",
-    "https://evil.com/https://graph.facebook.com/v22.0/me",
-]
-GOOD_HOSTS = {
-    "https://graph.facebook.com/v22.0/me": "graph.facebook.com",
-    "https://adsmanager-graph.facebook.com/v23.0/act_1/insights": "adsmanager-graph.facebook.com",
-    "HTTPS://Graph.Facebook.com/v21.0/me": "graph.facebook.com",
-}
-
-
-def _run_host_probes(urls: list[str]) -> dict:
+def _run(resources=None, scripts=None, html="", net="ok") -> dict:
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
-    name = "__acl_graph_probe"
-    src = (_HOST_HARNESS
-           .replace("__PROBE_URLS__", json.dumps(urls))
-           .replace("TOKEN", json.dumps(TOKEN))
+    name = "__acl_graph_iso"
+    src = (_HARNESS
+           .replace("__RESOURCES__", json.dumps(resources or []))
+           .replace("__SCRIPTS__", json.dumps(scripts or []))
+           .replace("__HTML__", json.dumps(html))
+           .replace("__NET__", json.dumps(net))
+           .replace("TOKENV", json.dumps(TOKEN))
            .replace("NAME", json.dumps(name))
            .replace("HELPER", json.dumps(tc.helper_source(name))))
-    done = subprocess.run([node, "-e", src], capture_output=True, encoding="utf-8", timeout=60)
-    assert done.returncode == 0, done.stderr[-2000:]
-    return json.loads(done.stdout)
-
-
-def test_helper_takes_tokens_only_from_the_graph_hosts():
-    out = _run_host_probes(BAD_HOSTS + list(GOOD_HOSTS))
-    for url in BAD_HOSTS:
-        got = out[url]
-        assert got["has_token"] is False, (url, got)
-        # Токена нет — ни одного нашего запроса после, ни на какой хост.
-        assert got["later"] == [] and got["reply_error"] == "no_token", (url, got)
-    for url, host in GOOD_HOSTS.items():
-        got = out[url]
-        assert got["has_token"] is True and got["graph_host"] == host, (url, got)
-        assert len(got["later"]) == 1 and got["later"][0].startswith(f"https://{host}/"), (url, got)
-    assert TOKEN not in json.dumps({u: {k: v for k, v in r.items() if k != "later"} for u, r in out.items()})
-
-
-def _run_node(mode: str, scripts: list[dict] | None = None) -> dict:
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("node is not installed")
-    name = "__acl_graph_test"
-    src = (_NODE_HARNESS
-           .replace("SCRIPTS", json.dumps(scripts or []))
-           .replace("TOKEN", json.dumps(TOKEN))
-           .replace("NAME", json.dumps(name))
-           .replace("MODE", json.dumps(mode))
-           .replace("HELPER", json.dumps(tc.helper_source(name))))
-    done = subprocess.run([node, "-e", src], capture_output=True, encoding="utf-8", timeout=60)
-    assert done.returncode == 0, done.stderr[-2000:]
-    return json.loads(done.stdout)
-
-
-@pytest.mark.parametrize("mode,source,version", [("xhr", "network", "v22.0"), ("fetch", "network", "v21.0")])
-def test_helper_takes_the_token_from_ads_manager_requests_and_keeps_it(mode, source, version):
-    out = _run_node(mode)
-    assert out["before"]["has_token"] is False
-    assert out["no_token_call"]["error"] == "no_token"
-    assert out["after"]["has_token"] is True and out["after"]["source"] == source
-    assert out["after"]["version"] == version
-    assert out["unhooked"] is True                 # обёртки сняты после захвата
-    assert out["post"] == {"error": "read_only"}
-    assert out["bad"] == {"error": "bad_path"}
-    assert out["fetched_has_token"] is True        # токен приложила сама страница
-    assert out["fetched_url_head"] == f"https://graph.facebook.com/{version}/act_1/campaigns"
-    assert out["credentials"] == "omit"
-    assert out["redirect"] == "error" and out["method"] == "GET"
-    # Глагол не подменить параметрами Graph (ревью S1): отказ без запроса.
-    assert all(v == {"error": "forbidden_param"} for v in out["forbidden"].values()), out["forbidden"]
-    assert out["forbidden_fetches"] == 0
-    # Сбой сети — ровно один запрос, без второго GET (ревью O4).
-    assert out["net"]["error"] == "network" and out["net_fetches"] == 1
-    # Обёртки выглядят как родные: toString, length, name (ревью O1).
-    assert out["wrapped"] is True
-    assert all(out["wrap"].values()), out["wrap"]
-    # Длины родных функций нарочно не совпадают с числом параметров обёрток.
-    assert out["lengths"] == [1, 1, 0, 0, 5, 5], out["lengths"]
-    assert len(out["forbidden"]) == 13 and out["forbidden"][""] == {"error": "forbidden_param"}
-    assert out["got"]["status"] == 200
-    assert out["got"]["headers"] == {"x-ad-account-usage": '{"acc_id_util_pct":12}'}
-    assert out["after_retire"] == {"error": "retired"}
-    assert out["keys"] == []                       # свойство помощника не перечисляется
-    # Ни одно значение, вернувшееся из страницы, не несёт токен.
-    blob = json.dumps(out)
-    assert TOKEN not in blob and not TOKEN_LIKE.search(blob)
-    assert "access_token=<hidden>" in json.dumps(out["got"])
-
-
-@pytest.mark.parametrize("mode,host,version,am", [
-    ("xhr_am", "adsmanager-graph.facebook.com", "v23.0",
-     {"via": "xhr", "method": "POST", "credentials": "include", "path": "/v23.0/act_1/insights",
-      "params": ["_reqName", "_reqSrc", "locale", "method", "pretty", "suppress_http_code"]}),
-    ("fetch_inc", "adsmanager-graph.facebook.com", "v22.0",
-     {"via": "fetch", "method": "GET", "credentials": "include", "path": "/v22.0/me",
-      "params": ["_reqName"]}),
-])
-def test_helper_mirrors_ads_manager_cookie_mode_and_stays_get_only(mode, host, version, am):
-    out = _run_node(mode)
-    # Как ходил сам Ads Manager — только имена параметров, без значений и токена.
-    assert out["after"]["am_request"] == am
-    assert out["after"]["graph_host"] == host and out["after"]["credentials"] == "include"
-    # Наш вызов: тот же хост и режим куки, но всегда GET и без method/suppress_http_code.
-    assert out["fetched_url_head"] == f"https://{host}/{version}/act_1/campaigns"
-    assert out["credentials"] == "include" and out["method"] == "GET"
-    assert out["got"]["endpoint"] == {"host": host, "version": version, "credentials": "include"}
-    blob = json.dumps(out)
-    assert TOKEN not in blob and not TOKEN_LIKE.search(blob)
-
-
-def test_helper_manual_options_are_a_closed_list():
-    out = _run_node("fetch_inc")
-    assert out["opt_public_url"] == "https://graph.facebook.com/v22.0/me"
-    assert out["opt_public_cred"] == "omit" and out["opt_public_method"] == "GET"
-    assert out["opt_bad_host"] == {"error": "bad_option"}
-    assert out["opt_bad_cred"] == {"error": "bad_option"}
-    assert out["opt_fetches"] == 1
-
-
-_FAILSAFE_HARNESS = r"""
-const calls = { fetch: [], open: [], send: [] };
-class FakeFormData { get(){ return null; } forEach(){ throw new Error('describe boom'); } }
-class FakeXHR { open(){ calls.open.push(Array.from(arguments)); } send(){ calls.send.push(Array.from(arguments)); } }
-const SENTINEL = { sentinel: true };
-const win = {
-  location: { href: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns',
-              hostname: 'adsmanager.facebook.com', pathname: '/adsmanager/manage/campaigns' },
-  fetch: function fetch(a, b) { calls.fetch.push([a, b]); return SENTINEL; },
-  XMLHttpRequest: FakeXHR,
-  performance: { getEntriesByType: () => [] },
-};
-win.window = win; win.top = win;
-const nativeFetch = win.fetch, nativeOpen = FakeXHR.prototype.open, nativeSend = FakeXHR.prototype.send;
-const doc = { readyState: 'complete', querySelector: () => null, scripts: [] };
-const run = new Function('window','location','document','XMLHttpRequest','URL','URLSearchParams',
-  'FormData','performance','setTimeout', HELPER);
-run(win, win.location, doc, FakeXHR, URL, URLSearchParams, FakeFormData, win.performance,
-    (f, ms) => (ms < 5000 ? setTimeout(f, 0) : 0));
-const h = win[NAME];
-const out = {};
-// 1. input.url getter throws inside take(): fetch must still return the real result.
-const throwingInput = {}; Object.defineProperty(throwingInput, 'url', { get() { throw new Error('url boom'); } });
-out.fetch_ret_is_sentinel = (win.fetch(throwingInput, { method: 'GET' }) === SENTINEL);
-out.fetch_got_original = calls.fetch.length === 1 && calls.fetch[0][0] === throwingInput
-                         && calls.fetch[0][1].method === 'GET';
-// 2. describe() throws on a captured graph request (FormData.forEach boom): result untouched, no throw.
-let threw = false;
-try {
-  win.fetch('https://graph.facebook.com/v22.0/me?access_token=' + TOKEN,
-            { method: 'GET', body: new FakeFormData() });
-} catch (e) { threw = true; }
-out.describe_no_throw = (threw === false);
-out.captured_despite_describe = h.state().has_token === true;
-// 3. sweep removes the wrappers and restores natives by identity.
-const sweptNoToken = (() => {
-  const w = { location: win.location, fetch: function fetch(){ return SENTINEL; },
-              XMLHttpRequest: FakeXHR, performance: { getEntriesByType: () => [] } };
-  w.window = w; w.top = w;
-  const nf = w.fetch, no = FakeXHR.prototype.open, ns = FakeXHR.prototype.send;
-  const NM = NAME;
-  const SECOND = NM + '2';
-  const run2 = new Function('window','location','document','XMLHttpRequest','URL','URLSearchParams',
-    'FormData','performance','setTimeout',
-    HELPER.split(JSON.stringify(NM)).join(JSON.stringify(SECOND)));
-  run2(w, w.location, { readyState: 'complete', querySelector: () => null, scripts: [] },
-       FakeXHR, URL, URLSearchParams, FakeFormData, w.performance, (f) => setTimeout(f, 0));
-  const wrapped = w.fetch !== nf;
-  const res = w[SECOND].sweep();
-  return { wrapped: wrapped, has_token: res.has_token, still_hooked: res.hooked,
-           fetch_identity: w.fetch === nf, open_identity: FakeXHR.prototype.open === no,
-           send_identity: FakeXHR.prototype.send === ns };
-})();
-out.sweep = sweptNoToken;
-out.token_in_output = JSON.stringify(out).includes(TOKEN);
-process.stdout.write(JSON.stringify(out));
-"""
-
-
-def _run_failsafe() -> dict:
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("node is not installed")
-    name = "__acl_graph_fs"
-    src = (_FAILSAFE_HARNESS
-           .replace("TOKEN", json.dumps(TOKEN))
-           .replace("NAME", json.dumps(name))
-           .replace("HELPER", json.dumps(tc.helper_source(name))))
-    # Через файл, а не -e: harness встраивает помощника дважды, и -e упёрся бы
-    # в предел длины команды Windows.
-    import tempfile
-
     with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as fh:
         fh.write(src)
         script = fh.name
@@ -391,29 +119,97 @@ def _run_failsafe() -> dict:
     return json.loads(done.stdout)
 
 
-def test_helper_wrappers_never_disturb_the_pages_own_requests():
-    out = _run_failsafe()
-    # Исключение в take()/describe() не ломает и не меняет запрос страницы.
-    assert out["fetch_ret_is_sentinel"] is True and out["fetch_got_original"] is True
-    assert out["describe_no_throw"] is True and out["captured_despite_describe"] is True
+# Адрес запроса Ads Manager к Graph с токеном в строке запроса (Resource Timing).
+GRAPH_WITH_TOKEN = f"https://graph.facebook.com/v22.0/act_1/campaigns?fields=name&access_token={TOKEN}"
 
 
-def test_helper_sweep_removes_wrappers_and_restores_natives():
-    out = _run_failsafe()["sweep"]
-    assert out["wrapped"] is True            # обёртки стояли
-    assert out["has_token"] is False and out["still_hooked"] is False
-    # Родные функции возвращены по идентичности.
-    assert out["fetch_identity"] and out["open_identity"] and out["send_identity"]
+def test_helper_takes_token_from_resource_timing_without_any_request():
+    out = _run(resources=["https://cdn.example.com/x.js", GRAPH_WITH_TOKEN])
+    assert out["world_keys"] == ["__acl_graph_iso"]          # один ключ, свой мир
+    assert out["scan_made_no_fetch"] and out["scan_still_no_fetch"]
+    st = out["before"]
+    assert st["has_token"] is True and st["source"] == "resource_timing"
+    assert st["graph_host"] == "graph.facebook.com" and st["version"] == "v22.0"
+    assert st["am_request"] == {"via": "resource_timing", "method": "GET", "credentials": "include",
+                                "path": "/v22.0/act_1/campaigns", "params": ["fields"]}
+    # GET-only, пути и варианты закрыты; один запрос; токен приложен страницей.
+    assert out["post"] == {"error": "read_only"} and out["bad"] == {"error": "bad_path"}
+    assert all(v == {"error": "forbidden_param"} for v in out["forbidden"].values())
+    assert out["forbidden_fetches"] == 0
+    assert out["got"]["status"] == 200
+    assert out["fetched_head"] == "https://graph.facebook.com/v22.0/act_1/campaigns"
+    assert out["fetched_has_token"] and out["fetched_cred"] == "include"
+    assert out["fetched_method"] == "GET" and out["fetched_redirect"] == "error"
+    assert out["got"]["headers"] == {"x-ad-account-usage": '{"acc_id_util_pct":12}'}
+    assert "access_token=<hidden>" in json.dumps(out["got"]) and "<token>" in json.dumps(out["got"])
+    assert out["opt_public_head"] == "https://graph.facebook.com/v22.0/me"
+    assert out["opt_public_cred"] == "omit"
+    assert out["opt_bad_host"] == {"error": "bad_option"} and out["opt_bad_cred"] == {"error": "bad_option"}
+    assert out["after_retire"] == {"error": "retired"} and out["retired_state"] is True
+    assert out["token_in_output"] is False
 
 
-def test_helper_failsafe_output_has_no_token():
-    assert _run_failsafe()["token_in_output"] is False
+def test_helper_takes_token_from_inline_html():
+    out = _run(html='<script>window.__x={"accessToken":"' + TOKEN + '"}</script>')
+    assert out["before"]["has_token"] is True and out["before"]["source"] == "html"
+    assert out["got"]["status"] == 200
+    assert out["token_in_output"] is False
 
 
-def test_helper_html_fallback_keeps_the_token_in_page():
-    out = _run_node("html", [{"src": "", "textContent": 'x={"accessToken":"' + TOKEN + '"}'}])
-    assert out["after"]["has_token"] is True and out["after"]["source"] == "html"
-    assert out["fetched_url_head"] == "https://graph.facebook.com/act_1/campaigns"
-    # Токен взят из HTML — запроса Ads Manager не видели: куки сессии включены.
-    assert out["credentials"] == "include" and out["after"]["am_request"] is None
-    assert TOKEN not in json.dumps(out)
+def test_helper_takes_token_from_inline_script_text():
+    out = _run(scripts=[{"src": "", "textContent": 'require({"accessToken":"' + TOKEN + '"})'}])
+    assert out["before"]["has_token"] is True and out["before"]["source"] == "html"
+
+
+def test_helper_reports_no_token_and_makes_no_request_when_none_present():
+    out = _run(resources=["https://graph.facebook.com/v22.0/me?fields=id"])  # нет access_token
+    assert out["before"]["has_token"] is False
+    assert out["got"] == {"error": "no_token", "state": out["got"].get("state")} or out["got"]["error"] == "no_token"
+    assert out["fetch_count"] == 0
+
+
+def test_helper_network_failure_makes_one_request_and_no_retry():
+    out = _run(resources=[GRAPH_WITH_TOKEN], net="fail")
+    assert out["got"]["error"] == "network"
+    assert out["fetch_count"] == 1
+
+
+# --- якорь хоста Graph: токен только с graph.facebook.com / <слово>-graph.facebook.com ---
+
+BAD_HOSTS = [
+    "https://adsmanager.facebook.com/v22.0/me?access_token=" + TOKEN,
+    "https://www.facebook.com/v22.0/me?access_token=" + TOKEN,
+    "https://graph.facebook.com.evil.com/v22.0/me?access_token=" + TOKEN,
+    "https://evil.com/graph.facebook.com/v22.0/me?access_token=" + TOKEN,
+    "https://graph.facebook.com@evil.com/v22.0/me?access_token=" + TOKEN,
+    "https://user:pw@graph.facebook.com/v22.0/me?access_token=" + TOKEN,
+    "https://graph.facebook.com:8443/v22.0/me?access_token=" + TOKEN,
+    "https://a.graph.facebook.com/v22.0/me?access_token=" + TOKEN,
+    "http://graph.facebook.com/v22.0/me?access_token=" + TOKEN,
+    "https://evilgraph.facebook.com/v22.0/me?access_token=" + TOKEN,
+    "https://evil.com/r?u=https://graph.facebook.com/v22.0/me?access_token=" + TOKEN,
+    # Адрес Graph внутри чужого адреса + НАСТОЯЩИЙ параметр access_token:
+    # ловит потерю якоря ^ (без него regex нашёл бы вложенный graph-хост).
+    "https://evil.com/x?next=https://graph.facebook.com/v22.0/me&access_token=" + TOKEN,
+]
+GOOD_HOSTS = {
+    "https://graph.facebook.com/v22.0/me?access_token=" + TOKEN: ("graph.facebook.com", "v22.0"),
+    "https://adsmanager-graph.facebook.com/v23.0/act_1/x?access_token=" + TOKEN:
+        ("adsmanager-graph.facebook.com", "v23.0"),
+    "HTTPS://Graph.Facebook.com/v21.0/me?access_token=" + TOKEN: ("graph.facebook.com", "v21.0"),
+}
+
+
+@pytest.mark.parametrize("url", BAD_HOSTS)
+def test_helper_refuses_token_from_a_non_graph_host(url):
+    out = _run(resources=[url])
+    assert out["before"]["has_token"] is False, url
+    assert out["fetch_count"] == 0, url
+
+
+@pytest.mark.parametrize("url,expected", list(GOOD_HOSTS.items()))
+def test_helper_takes_token_from_the_graph_hosts(url, expected):
+    out = _run(resources=[url])
+    host, version = expected
+    assert out["before"]["has_token"] is True, url
+    assert out["before"]["graph_host"] == host and out["before"]["version"] == version
