@@ -7110,9 +7110,11 @@
         "worktree": "C:\\acl-api-inprofile",
         "id": "7f4a5345c0f14135b3c2d1fd02ddb5a7",
         "issue": 756,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-09T17:56:48+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 759,
+        "report": "ACL-1756 review round 5 fixes. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 10568956 (on top of df86432b). Files: src/fb_api/token_capture.py, src/fb_api/graph.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n1. Host anchor tests: a Node probe test with 15 URLs that must not yield a token: adsmanager.facebook.com, www.facebook.com, graph.facebook.com.evil.com, evil.com/graph.facebook.com/..., graph.facebook.com@evil.com, user:pw@graph.facebook.com, :8443, a.graph.facebook.com, http:, a backslash URL, %2f, /../, evilgraph.facebook.com, and a Graph URL embedded in a foreign URL (query and path). For each: has_token false, the next call is refused with no_token and makes no fetch. Positive controls: graph.facebook.com, adsmanager-graph.facebook.com and an upper-case HTTPS URL are captured, and exactly one call goes to that host.\n2. GRAPH_RE is now /^https:\\/\\/((?:[a-z0-9]+-)?graph\\.facebook\\.com)(?:\\/(v\\d+\\.\\d+))?(?:\\/|$)/i. The version is optional; an unversioned URL gives an empty version.\n3. Pilot flags: a test checks that --graph-host and --credentials reach InPageGraph through run_pilot (the page specs carry host and credentials) and through main \u2192 run_pilot.\n4. GraphError.details values are scrubbed when the dict is built; a test asserts no act_ id, no 8+ digit id and no token.\n\nMutations (run one at a time, files restored), all killed: dropping ^ from GRAPH_RE, any *.facebook.com, any host, accepting http:, the old permissive regex (evilgraph), the pilot ignoring flags in make_graph, main dropping the flags, unscrubbed details.\n\nChecks (each file run separately): test_acl1756_fb_api.py 70 passed; test_acl1756_page_helper_node.py 7 passed; test_acl1702_tab_watchdog.py 35 passed; test_acl_test_shard.py 14 passed (spread [36, 35, 36]); acl_scan_secrets clean. --run was not used."
       }
     },
     "tasks": {
