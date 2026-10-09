@@ -13505,7 +13505,9 @@
       "session": "rev_r1756s_1009",
       "coordinator": "Coordinator-C0930A",
       "started_at": "2026-10-09T20:35:12+00:00",
-      "state": "reviewing"
+      "state": "returning",
+      "report": "superseded by live-diagnostic fixes (runIfWaitingForDebugger, local debug-port attach, background:false like Playwright); re-review on next head",
+      "keep_lane": false
     },
     "history": [
       {
