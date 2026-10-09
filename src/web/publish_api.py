@@ -37,7 +37,7 @@ from src.fb_api.creator import (
     plan_from_draft,
     preflight_account,
 )
-from src.fb_api.graph import GraphClient, GraphError, GraphStop, normalize_act
+from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, normalize_act
 
 log = logging.getLogger(__name__)
 
@@ -45,8 +45,10 @@ BACKEND_ENV = "ACL_FB_BACKEND"
 CREATE_MAX_CALLS_ENV = "ACL_FB_API_CREATE_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
 #: Потолок вызовов Graph на одну кампанию: предпроверка, поиск, медиа,
-#: ожидание видео, запись, сверка — с запасом на 4 объявления с видео.
-DEFAULT_CREATE_MAX_CALLS = 90
+#: ожидание видео, запись, проверка меток, сверка — с запасом на 4 объявления
+#: с видео (4 × (20 опросов + ~10) + ~20). Свой потолок кончает только эту
+#: кампанию, следующие идут со своим (ревью, minor 5).
+DEFAULT_CREATE_MAX_CALLS = 140
 #: Потолок на предпроверку кабинета (один раз на задание).
 PREFLIGHT_MAX_CALLS = 12
 READY_TIMEOUT_S = 90.0
@@ -94,9 +96,12 @@ def _open_tab(cdp_url: str):
     return PageTab.open(cdp_url)
 
 
-def _make_graph(tab, act: str):
+def _make_graph(tab, act: str, *, writes: bool = True):
     from src.fb_api.token_capture import InPageGraph
 
+    if not writes:
+        # Пробный запуск: помощник без политики записи — POST невозможен вовсе.
+        return InPageGraph(tab)
     return InPageGraph(tab, allow_writes=True, write_act=act)
 
 
@@ -164,6 +169,20 @@ class ApiPublishError(RuntimeError):
         self.code = code
 
 
+def dry_run_result(outcome: Outcome) -> dict[str, Any]:
+    """Итог пробного запуска: план и предпроверка, ничего не создано (ревью M3)."""
+    ok = not outcome.error
+    return {
+        "campaign_name": outcome.campaign_name, "backend": "api", "dry_run": True, "status": "",
+        "success": ok, "publishable": False,
+        "warnings": list(outcome.warnings) + (["Dry run: nothing was created"] if ok else []),
+        "blocking_failures": [], "problems": [], "run_id": None, "campaign_id": None,
+        "adset_id": None, "creative_id": None, "ad_id": None, "ad_ids": [],
+        "error": outcome.error or None, "steps_completed": list(outcome.steps), "screenshots": [],
+        "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
+    }
+
+
 def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
     """Итог кампании в виде, который рисует панель задания (как `to_job_dict`)."""
     created = bool(outcome.campaign_id)
@@ -204,7 +223,13 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
 class ApiPublisher:
     """Создатель кампаний задания: профиль → своя вкладка → Graph с записью."""
 
-    def __init__(self, *, progress: Callable[[str], None] = lambda _s: None):
+    def __init__(self, *, progress: Callable[[str], None] = lambda _s: None, dry_run: bool = False):
+        #: Пробный запуск: клиент и помощник без права записи, только план.
+        self.dry_run = bool(dry_run)
+        #: Результат прошлой записи неизвестен и не сверен — дальше не пишем (M4).
+        self.blocked = ""
+        #: Точка подмены в тестах (паузы опроса видео и сверки).
+        self.sleep: Callable[[float], None] = time.sleep
         self.cancel_event = threading.Event()
         self.progress = progress
         self._tab = None
@@ -259,7 +284,7 @@ class ApiPublisher:
                                   f"{_tm.scrub(str(exc))}") from exc
         self.progress("profile attached")
         self._tab = _open_tab(self._opened.cdp_url)
-        graph = _make_graph(self._tab, self.act)
+        graph = _make_graph(self._tab, self.act, writes=not self.dry_run)
         graph.install()
         graph.navigate(self.act, timeout=60.0)
         state = graph.wait_ready(timeout=READY_TIMEOUT_S)
@@ -273,7 +298,7 @@ class ApiPublisher:
             raise ApiPublishError(f"{account_label}: Ads Manager did not finish loading "
                                   "(no Graph session in the page); nothing was created")
         self._client = GraphClient(
-            graph, allow_writes=True,
+            graph, allow_writes=not self.dry_run,
             min_interval_s=_env_number(MIN_INTERVAL_ENV, 1.0, 0.5, 10.0),
             max_calls=PREFLIGHT_MAX_CALLS)
         self.progress("Ads Manager session ready")
@@ -302,6 +327,12 @@ class ApiPublisher:
         if self.stop is not None:
             return result_dict(Outcome(campaign_name=name),
                                error=f"Not started: Graph API stopped earlier ({self.stop.kind})")
+        if self.blocked or (self._client is not None and self._client.unreconciled is not None):
+            # Ревью M4: пока прошлая неизвестная запись не сверена, новых нет.
+            return result_dict(Outcome(campaign_name=name), error=(
+                "Not started: an earlier write in this run has an unknown result "
+                f"({self.blocked or 'not reconciled'}). Check Ads Manager, then publish again "
+                "(a re-run does not duplicate)."))
         try:
             plan = plan_from_draft(draft)
         except PlanError as exc:
@@ -317,9 +348,20 @@ class ApiPublisher:
             _record("api_create_step", True, campaign=name, diag={"step": text})
 
         creator = CampaignCreator(self._client, self._facts, self._resolver,
-                                  cancelled=self.cancelled, progress=step)
+                                  cancelled=self.cancelled, progress=step, sleep=self.sleep)
+        if self.dry_run:
+            outcome = creator.plan_only(plan)
+            if self._client.writes:
+                raise AssertionError("dry run must not write")  # структурно невозможно
+            res = dry_run_result(outcome)
+            _record("api_create_dry_run", not outcome.error, campaign=name,
+                    duration_s=round(time.monotonic() - began, 1),
+                    diag={"calls": self._client.calls, "stop": outcome.stop_kind})
+            return res
         outcome = creator.run(plan)
-        if self._client.stopped is not None:
+        if outcome.stop_kind == "unknown" or self._client.unreconciled is not None:
+            self.blocked = outcome.campaign_name
+        if self._client.stopped is not None and not isinstance(self._client.stopped, CallBudget):
             self.stop = self._client.stopped
             _start_cooldown(self.account_label, self.stop)
             _tm.report_stop(self.stop.kind, str(self.stop), {"source": "publish", "code": self.stop.code})
@@ -349,6 +391,8 @@ class ApiPublisher:
     def finish_job(self, account_label: str, *, clean: bool, other_job_waits: bool = False) -> str:
         """Вкладку закрыть; профиль — только если его подняли мы и всё чисто."""
         self.close()
+        if self.dry_run:
+            clean = False   # после пробного запуска окно остаётся: настоящий запуск следом
         opened = self._opened
         if not (opened is not None and getattr(opened, "started_now", False)):
             _record("profile_closed_after_job", None, diag={"note": "not_started_by_job"})

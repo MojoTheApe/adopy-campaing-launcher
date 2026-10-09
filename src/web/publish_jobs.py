@@ -638,7 +638,8 @@ def _run_job_inner(
             with keep_display_awake(account_label), _watch_screen_lock(job_id):
                 if _fb_backend() == "api":
                     # ACL-1761: Graph API в профиле, всё на паузе.
-                    _run_api(job_id, slots, account_label=account_label, country=country)
+                    _run_api(job_id, slots, account_label=account_label, country=country,
+                             dry_run=dry_run)
                     return
                 _run_rpa(
                     job_id,
@@ -985,7 +986,8 @@ def _fb_backend() -> str:
     return publish_api.backend()
 
 
-def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, country: str) -> None:
+def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, country: str,
+             dry_run: bool = False) -> None:
     """ACL-1761: те же черновики, но кампании создаёт Graph API, всё PAUSED.
 
     Место по памяти и замок профиля уже взяты (`_run_job_inner`). Итоги — в том
@@ -999,7 +1001,8 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             if job is not None and not job.get("abandoned"):
                 job["progress"] = str(text)[:200]
 
-    publisher = publish_api.ApiPublisher(progress=progress)
+    # Ревью M3: dry_run — предпроверка и план без единой записи (клиент без права записи).
+    publisher = publish_api.ApiPublisher(progress=progress, dry_run=dry_run)
     with _jobs_lock:
         _active_publishers[job_id] = publisher  # type: ignore[assignment]
     job_cancel.bind(publisher.cancel_event)

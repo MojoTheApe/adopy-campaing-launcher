@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from src.fb_api.graph import GraphClient, GraphError, GraphStop, WriteUnknown, normalize_act
+from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
 
 PAUSED = "PAUSED"
 OBJECTIVE = "OUTCOME_LEADS"
@@ -52,6 +52,10 @@ VIDEO_MAX_BYTES = 200 * 1024 * 1024
 VIDEO_WAIT_S = 300.0
 VIDEO_POLL_S = 15.0
 VIDEO_MAX_POLLS = 20
+#: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
+RECONCILE_WAIT_S = 5.0
+#: Цель кампании из билдера, которую умеет API-путь (как у RPA: Leads → сайт).
+SUPPORTED_OBJECTIVES = frozenset({"leads"})
 
 #: Что таблица показывает (архив и удалённое не считаем «существующим»).
 LIVE_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED",
@@ -113,6 +117,8 @@ class CampaignPlan:
     pixel_id: str
     daily_budget: float
     ad_sets: list[AdSetPlan] = field(default_factory=list)
+    #: Предупреждения черновика (смешанный таргетинг/бюджет) — в итог (ревью, minor 7).
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def label(self) -> str:
@@ -149,6 +155,10 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
     except ValueError:
         problems.append("ad_account_id is missing or malformed in the account map")
         act = ""
+    objective = str(getattr(draft, "objective", "") or "Leads").strip()
+    if objective.casefold() not in SUPPORTED_OBJECTIVES:
+        problems.append(f"Objective {objective!r} is not supported by the API backend "
+                        "(only Leads with a website conversion)")
     link = str(getattr(draft, "link", "") or "").strip()
     if not link:
         problems.append("Tracking link is empty; the API backend needs it for the ads")
@@ -181,6 +191,16 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
                 path=path, title=str(ad.ad_title or "").strip(), body=str(ad.ad_body or "").strip(),
                 description=str(ad.ad_link_description or "").strip()))
         ad_sets.append(plan_set)
+    # Ревью M2: одинаковые имена схлопнули бы объявления (поиск, сверка, повтор).
+    set_names = [x.name for x in ad_sets]
+    for dup in sorted({n for n in set_names if set_names.count(n) > 1}):
+        problems.append(f"Two ad sets are named {dup!r}; ad set names in a campaign must differ")
+    for x in ad_sets:
+        names = [a.name for a in x.ads]
+        for dup in sorted({n for n in names if names.count(n) > 1}):
+            idx = ", ".join(str(a.index) for a in x.ads if a.name == dup)
+            problems.append(f"Ads {idx} would all be named {dup!r}; give them different creatives "
+                            "or ad texts (names must differ inside a campaign)")
     if problems:
         raise PlanError("; ".join(problems))
     name = str(draft.name).strip()
@@ -189,7 +209,8 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
         language=str(getattr(draft, "language", "") or "").strip(), link=link,
         page_id=str(getattr(draft, "page_id", "") or "").strip(),
         pixel_id=str(getattr(draft, "pixel_id", "") or "").strip(),
-        daily_budget=float(budget), ad_sets=ad_sets)
+        daily_budget=float(budget), ad_sets=ad_sets,
+        warnings=[str(w) for w in (getattr(draft, "warnings", None) or [])])
 
 
 def budget_minor(amount: float, currency: str) -> int:
@@ -368,7 +389,18 @@ def _labels(row: dict) -> set[str]:
 
 
 def _md5(data: bytes) -> str:
-    return hashlib.md5(data).hexdigest()  # noqa: S324 — так Meta считает хэш картинки
+    return hashlib.md5(data).hexdigest()  # noqa: S324 — только имя/поиск, не защита
+
+
+def image_name(path: str, data: bytes) -> str:
+    """Имя картинки в библиотеке кабинета: `acl-<md5[:16]><ext>` (помощник его не меняет)."""
+    ext = Path(path).suffix.lower()
+    ext = ext if ext in IMAGE_EXT else ".jpg"
+    return f"acl-{_md5(data)[:16]}{ext}"
+
+
+def video_title(tag: str, data: bytes) -> str:
+    return f"acl-{tag}-{_md5(data)[:12]}"
 
 
 @dataclass
@@ -384,6 +416,10 @@ class Outcome:
     readback: dict = field(default_factory=dict)
     error: str = ""
     stop_kind: str = ""
+    #: Объявление → что мы ему дали: creative_id, image_hash / video_id (для сверки, B2).
+    ad_media: dict = field(default_factory=dict)
+    #: Пробный запуск: что было бы создано (ни одной записи).
+    plan: dict = field(default_factory=dict)
 
     @property
     def mismatches(self) -> list[dict]:
@@ -400,6 +436,7 @@ class CampaignCreator:
                  clock: Callable[[], float] = time.monotonic,
                  video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
                  video_max_polls: int = VIDEO_MAX_POLLS,
+                 reconcile_wait_s: float | None = None,
                  progress: Callable[[str], None] = lambda _s: None):
         self.client = client
         self.facts = facts
@@ -411,6 +448,7 @@ class CampaignCreator:
         self.video_wait_s = video_wait_s
         self.video_poll_s = video_poll_s
         self.video_max_polls = video_max_polls
+        self.reconcile_wait_s = RECONCILE_WAIT_S if reconcile_wait_s is None else reconcile_wait_s
         self.progress = progress
 
     # -- служебное
@@ -429,7 +467,10 @@ class CampaignCreator:
         try:
             body = self.client.post(path, params, files=files, filename=filename)
         except WriteUnknown as exc:
+            # `WritesBlocked` сюда не попадает: та запись не уходила (ревью M4).
             self._step(out, f"{what}: result unknown — reconciling by readback")
+            if self.reconcile_wait_s > 0:
+                self.sleep(self.reconcile_wait_s)
             try:
                 found = find()
             except (GraphStop, GraphError) as rexc:
@@ -442,7 +483,7 @@ class CampaignCreator:
                     f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                     "Nothing else was written; publish again later (a re-run does not duplicate).",
                     created=out.created, kind="unknown") from exc
-            self.client.reconciled()
+            self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
             return str(found)
         got = id_of(body)
@@ -453,12 +494,18 @@ class CampaignCreator:
             if not found:
                 raise CreationStopped(f"{what}: Graph answered without an id and nothing was found "
                                       "by readback.", created=out.created, kind="unknown")
-            self.client.reconciled()
+            self.client.reconciled(path)
             return str(found)
         return str(got)
 
     # -- поиск существующего
-    def _find_campaign(self, plan: CampaignPlan) -> dict | None:
+    def _find_campaign(self, plan: CampaignPlan, *, after_unknown: bool = False) -> dict | None:
+        """Наша кампания: точное имя + метка.
+
+        `after_unknown` — сверка нашей же записи: до неё кампании с таким именем
+        не было вовсе (иначе мы бы её не создавали), значит найденная — наша,
+        даже если Meta не сохранил метку. Это и говорим прямо (ревью B1).
+        """
         rows = self.client.get_all(f"/{plan.act}/campaigns", {
             "fields": "id,name,status,adlabels{name}",
             "filtering": [{"field": "name", "operator": "CONTAIN", "value": plan.name}],
@@ -467,6 +514,11 @@ class CampaignCreator:
         ours = [r for r in same if plan.label in _labels(r)]
         if ours:
             return ours[0]
+        if same and after_unknown:
+            raise CreationStopped(
+                f"The campaign {plan.name!r} was created (PAUSED) but Meta did not keep the ACL tag "
+                f"({plan.label}) on it. Stopped before any further write: without the tag a re-run "
+                "could not recognise it. Check it in Ads Manager.", kind="label_missing")
         if same:
             raise CreationStopped(
                 f"A campaign named {plan.name!r} already exists on the ad account and was not "
@@ -478,10 +530,22 @@ class CampaignCreator:
         return self.client.get_all(f"/{parent_id}/{edge}", {
             "fields": fields, "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
 
-    def _find_child(self, parent_id: str, edge: str, name: str, label: str) -> dict | None:
+    def _find_child(self, parent_id: str, edge: str, name: str) -> dict | None:
+        """Группа в НАШЕЙ кампании, объявление в НАШЕЙ группе — по точному имени.
+
+        Метка ребёнку не нужна: владение доказывает родитель с меткой (ревью B1a).
+        """
         rows = self._children(parent_id, edge, "id,name,status,adlabels{name}")
-        return next((r for r in rows if str(r.get("name") or "").strip() == name
-                     and label in _labels(r)), None)
+        return next((r for r in rows if str(r.get("name") or "").strip() == name), None)
+
+    def _verify_label(self, out: Outcome, what: str, object_id: str, label: str) -> None:
+        """Метка на созданном объекте; нет — стоп до следующей записи (ревью B1b)."""
+        row = self.client.get(f"/{object_id}", {"fields": "adlabels{name}"})
+        if label not in _labels(row):
+            raise CreationStopped(
+                f"{what} was created (PAUSED) but Meta did not keep the ACL tag ({label}) on it. "
+                "Stopped before any further write so a re-run cannot duplicate anything. "
+                "Check it in Ads Manager.", created=out.created, kind="label_missing")
 
     def _find_creative(self, plan: CampaignPlan, name: str) -> str | None:
         rows = self.client.get_all(f"/{plan.act}/adcreatives", {
@@ -503,8 +567,6 @@ class CampaignCreator:
         if find():
             self._step(out, f"ad {ad.index}: image already in the ad account")
             return md5
-        stage = self.client.transport.stage_file(data)
-
         def hash_of(body: dict) -> str | None:
             images = body.get("images") if isinstance(body, dict) else None
             for v in (images or {}).values():
@@ -512,18 +574,19 @@ class CampaignCreator:
                     return str(v["hash"])
             return None
 
+        # Имя в библиотеке несёт md5 файла: по нему сверка узнаёт картинку и при повторе.
         got = self._write(out, f"ad {ad.index}: image upload", f"/{plan.act}/adimages", {}, find,
-                          files={"filename": stage}, filename=Path(ad.path).name, id_of=hash_of)
+                          files={"filename": data}, filename=image_name(ad.path, data), id_of=hash_of)
         out.created.setdefault("images", []).append(got)
         self._step(out, f"ad {ad.index}: image uploaded")
         return got
 
     def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes) -> tuple[str, str]:
-        title = f"acl-{plan.tag}-{_md5(data)[:12]}"
+        title = video_title(plan.tag, data)
 
         def find() -> str | None:
             rows = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id,title", "limit": 100},
-                                       max_pages=1)
+                                       max_pages=10)
             hit = next((r for r in rows if str(r.get("title") or "") == title), None)
             return str(hit["id"]) if hit else None
 
@@ -531,9 +594,8 @@ class CampaignCreator:
         if vid:
             self._step(out, f"ad {ad.index}: video already in the ad account")
         else:
-            stage = self.client.transport.stage_file(data)
             vid = self._write(out, f"ad {ad.index}: video upload", f"/{plan.act}/advideos",
-                              {"name": title, "title": title}, find, files={"source": stage},
+                              {"name": title, "title": title}, find, files={"source": data},
                               filename=Path(ad.path).name)
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"ad {ad.index}: video uploaded")
@@ -598,13 +660,15 @@ class CampaignCreator:
 
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
-        out = Outcome(campaign_name=plan.name)
+        out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         try:
             self._run(plan, out)
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
         except PlanError as exc:
             out.error, out.stop_kind = str(exc) + " Nothing more was created.", "plan"
+        except WritesBlocked as exc:
+            out.error, out.stop_kind = f"Not written: {exc}", "blocked"
         except GraphStop as exc:
             out.error, out.stop_kind = f"Graph API stopped: {exc}", exc.kind
         except GraphError as exc:
@@ -613,8 +677,8 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
 
-    def _run(self, plan: CampaignPlan, out: Outcome) -> None:
-        # 1. Всё, что можно проверить до записи.
+    def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
+        """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
         out.warnings += resolve_page_pixel(plan, self.facts)
         targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
         self._step(out, "preflight: targeting resolved")
@@ -631,23 +695,67 @@ class CampaignCreator:
                                     f"{limit // (1024 * 1024)} MB")
                 files[ad.path] = data
         self._step(out, "preflight: creatives read")
+        return targetings, files
 
-        # 2. Кампания.
+    def plan_only(self, plan: CampaignPlan) -> Outcome:
+        """Пробный запуск (ревью M3): предпроверка и план, НИ ОДНОЙ записи.
+
+        Клиент пробного запуска создаётся без права записи вовсе; здесь же
+        `post` не зовётся ни разу.
+        """
+        out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
+        try:
+            targetings, files = self._prepare(plan, out)
+            existing = self._find_campaign(plan)
+            sets = []
+            for ad_set, targeting in zip(plan.ad_sets, targetings):
+                ads = []
+                for ad in ad_set.ads:
+                    data = files[ad.path]
+                    media = ({"video_id": "<uploaded video>", "thumb": "<video thumbnail>"} if ad.kind == "video"
+                             else {"image_hash": "<uploaded image>"})
+                    ads.append({"name": ad.name, "status": PAUSED, "format": ad.kind,
+                                "file": Path(ad.path).name, "bytes": len(data),
+                                "library_name": (video_title(plan.tag, data) if ad.kind == "video"
+                                                 else image_name(ad.path, data)),
+                                "creative": self.story_spec(plan, ad, media)})
+                sets.append({**self.adset_params(plan, ad_set, "<campaign>", targeting), "ads": ads})
+            out.plan = {"campaign": self.campaign_params(plan),
+                        "existing_campaign_id": str(existing["id"]) if existing else "",
+                        "ad_sets": sets}
+            self._step(out, "dry run: preflight passed, nothing was written")
+        except CreationStopped as exc:
+            out.error, out.stop_kind = str(exc), exc.kind
+        except PlanError as exc:
+            out.error, out.stop_kind = str(exc), "plan"
+        except GraphStop as exc:
+            out.error, out.stop_kind = f"Graph API stopped: {exc}", exc.kind
+        except GraphError as exc:
+            out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
+        return out
+
+    def _run(self, plan: CampaignPlan, out: Outcome) -> None:
+        # 1. Всё, что можно проверить до записи.
+        targetings, files = self._prepare(plan, out)
+
+        # 2. Кампания (наша — по имени и метке).
         existing = self._find_campaign(plan)
         if existing:
             out.campaign_id = str(existing["id"])
             out.reused["campaign"] = out.campaign_id
             self._step(out, "campaign: found from a previous run")
         else:
-            out.campaign_id = self._write(out, "campaign", f"/{plan.act}/campaigns",
-                                          self.campaign_params(plan),
-                                          lambda: (self._find_campaign(plan) or {}).get("id"))
+            out.campaign_id = self._write(
+                out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
+                lambda: (self._find_campaign(plan, after_unknown=True) or {}).get("id"))
             out.created["campaign"] = out.campaign_id
-            self._step(out, "campaign: created PAUSED")
+            self._verify_label(out, f"The campaign {plan.name!r}", out.campaign_id, plan.label)
+            self._step(out, "campaign: created PAUSED, tag kept")
 
-        # 3. Группы и объявления.
+        # 3. Группы и объявления (дети нашей кампании — по точному имени, B1a).
+        creative_label_checked = ad_label_checked = False
         for ad_set, targeting in zip(plan.ad_sets, targetings):
-            found = self._find_child(out.campaign_id, "adsets", ad_set.name, plan.label)
+            found = self._find_child(out.campaign_id, "adsets", ad_set.name)
             if found:
                 adset_id = str(found["id"])
                 out.reused.setdefault("adsets", []).append(adset_id)
@@ -656,27 +764,32 @@ class CampaignCreator:
                 adset_id = self._write(
                     out, f"ad set {ad_set.name!r}", f"/{plan.act}/adsets",
                     self.adset_params(plan, ad_set, out.campaign_id, targeting),
-                    lambda: (self._find_child(out.campaign_id, "adsets", ad_set.name, plan.label) or {}).get("id"))
+                    lambda: (self._find_child(out.campaign_id, "adsets", ad_set.name) or {}).get("id"))
                 out.created.setdefault("adsets", []).append(adset_id)
-                self._step(out, f"ad set {ad_set.name!r}: created PAUSED")
+                self._verify_label(out, f"The ad set {ad_set.name!r}", adset_id, plan.label)
+                self._step(out, f"ad set {ad_set.name!r}: created PAUSED, tag kept")
             out.adset_ids.append(adset_id)
 
             have = {str(r.get("name") or "").strip(): str(r["id"])
-                    for r in self._children(adset_id, "ads", "id,name,adlabels{name}")
-                    if plan.label in _labels(r)}
+                    for r in self._children(adset_id, "ads", "id,name")}
             for ad in ad_set.ads:
                 if ad.name in have:
                     out.ad_ids.append(have[ad.name])
                     out.reused.setdefault("ads", []).append(have[ad.name])
+                    out.ad_media[ad.index] = {"ad_id": have[ad.name], "reused": True}
                     self._step(out, f"ad {ad.index}: found from a previous run")
                     continue
                 data = files[ad.path]
+                rec: dict[str, Any] = {}
                 if ad.kind == "video":
                     vid, thumb = self._video(out, plan, ad, data)
                     media = {"video_id": vid, "thumb": thumb}
+                    rec["video_id"] = vid
                 else:
                     media = {"image_hash": self._image_hash(out, plan, ad, data)}
-                creative_name = f"{ad.name} [{plan.label}]"
+                    rec["image_hash"] = media["image_hash"]
+                # Номер объявления в имени креатива: два объявления не делят креатив (M2).
+                creative_name = f"{ad.name} #{ad.index} [{plan.label}]"
                 creative_id = self._find_creative(plan, creative_name)
                 if creative_id:
                     self._step(out, f"ad {ad.index}: creative found from a previous run")
@@ -687,28 +800,41 @@ class CampaignCreator:
                          "adlabels": [{"name": plan.label}]},
                         lambda: self._find_creative(plan, creative_name))
                     out.created.setdefault("creatives", []).append(creative_id)
+                    if not creative_label_checked:
+                        self._verify_label(out, f"The creative of ad {ad.index}", creative_id, plan.label)
+                        creative_label_checked = True
                     self._step(out, f"ad {ad.index}: creative created")
                 ad_id = self._write(
                     out, f"ad {ad.index}", f"/{plan.act}/ads",
                     {"name": ad.name, "adset_id": adset_id, "creative": {"creative_id": creative_id},
                      "status": PAUSED, "adlabels": [{"name": plan.label}]},
-                    lambda: (self._find_child(adset_id, "ads", ad.name, plan.label) or {}).get("id"))
+                    lambda: (self._find_child(adset_id, "ads", ad.name) or {}).get("id"))
                 out.ad_ids.append(ad_id)
                 out.created.setdefault("ads", []).append(ad_id)
+                rec.update({"ad_id": ad_id, "creative_id": creative_id})
+                out.ad_media[ad.index] = rec
+                if not ad_label_checked:
+                    self._verify_label(out, f"The ad {ad.index}", ad_id, plan.label)
+                    ad_label_checked = True
                 self._step(out, f"ad {ad.index}: created PAUSED")
 
         # 4. Сверка.
-        out.readback = self.readback(plan, out, targetings)
+        out.readback = self.readback(plan, out, targetings, files)
         n = len(out.mismatches)
         self._step(out, "readback: all fields match" if not n else f"readback: {n} mismatch(es)")
 
     # ───────────────────────── сверка ─────────────────────────
-    def readback(self, plan: CampaignPlan, out: Outcome, targetings: list[dict]) -> dict:
+    def readback(self, plan: CampaignPlan, out: Outcome, targetings: list[dict],
+                 files: dict[str, bytes] | None = None) -> dict:
         checks: list[dict] = []
+        files = files or {}
 
         def check(obj: str, fld: str, expected: Any, actual: Any) -> None:
             checks.append({"object": obj, "field": fld, "expected": expected, "actual": actual,
                            "ok": _same(expected, actual)})
+
+        def tag(obj: str, row: dict) -> None:
+            check(obj, "tag", plan.label, plan.label if plan.label in _labels(row) else "")
 
         camp = self.client.get(f"/{out.campaign_id}", {
             "fields": "name,objective,status,daily_budget,bid_strategy,adlabels{name}"})
@@ -718,16 +844,18 @@ class CampaignCreator:
         check("campaign", "objective", OBJECTIVE, camp.get("objective"))
         check("campaign", "daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
         check("campaign", "bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
-        check("campaign", "tag", plan.label, plan.label if plan.label in _labels(camp) else "")
+        tag("campaign", camp)
 
+        image_ads: list[tuple[str, AdPlan, str]] = []    # (объект, объявление, hash в объявлении)
         for ad_set, adset_id, targeting in zip(plan.ad_sets, out.adset_ids, targetings):
             obj = f"ad set {ad_set.name}"
             row = self.client.get(f"/{adset_id}", {
                 "fields": "name,status,campaign_id,optimization_goal,billing_event,destination_type,"
-                          "promoted_object,targeting,start_time,end_time"})
+                          "promoted_object,targeting,start_time,end_time,adlabels{name}"})
             check(obj, "name", ad_set.name, row.get("name"))
             check(obj, "status", PAUSED, row.get("status"))
             check(obj, "campaign_id", out.campaign_id, str(row.get("campaign_id") or ""))
+            tag(obj, row)
             check(obj, "optimization_goal", OPTIMIZATION_GOAL, row.get("optimization_goal"))
             check(obj, "billing_event", BILLING_EVENT, row.get("billing_event"))
             check(obj, "destination_type", DESTINATION, row.get("destination_type"))
@@ -750,32 +878,70 @@ class CampaignCreator:
                   t.get("device_platforms") or "automatic")
 
             ads = self.client.get_all(f"/{adset_id}/ads", {
-                "fields": "id,name,status,adset_id,creative{id,object_story_spec}",
+                "fields": "id,name,status,adset_id,adlabels{name},"
+                          "creative{id,adlabels{name},object_story_spec}",
                 "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
-            by_name = {str(a.get("name") or "").strip(): a for a in ads}
+            by_name: dict[str, list[dict]] = {}
+            for a in ads:
+                by_name.setdefault(str(a.get("name") or "").strip(), []).append(a)
             for ad in ad_set.ads:
                 aobj = f"ad {ad.index} ({ad.name})"
-                got = by_name.get(ad.name)
-                if got is None:
-                    check(aobj, "exists", True, False)
+                rec = out.ad_media.get(ad.index) or {}
+                rows = by_name.get(ad.name) or []
+                check(aobj, "count", 1, len(rows))
+                if not rows:
                     continue
+                got = rows[0]
+                if rec.get("ad_id"):
+                    check(aobj, "ad_id", rec["ad_id"], str(got.get("id") or ""))
                 check(aobj, "status", PAUSED, got.get("status"))
-                spec = ((got.get("creative") or {}).get("object_story_spec")) or {}
+                check(aobj, "adset_id", adset_id, str(got.get("adset_id") or ""))
+                tag(aobj, got)
+                creative = got.get("creative") or {}
+                if rec.get("creative_id"):
+                    check(aobj, "creative_id", rec["creative_id"], str(creative.get("id") or ""))
+                tag(aobj + " creative", creative)
+                spec = creative.get("object_story_spec") or {}
                 check(aobj, "page", plan.page_id, str(spec.get("page_id") or ""))
+                data = files.get(ad.path, b"")
                 if ad.kind == "video":
                     vd = spec.get("video_data") or {}
+                    cta = vd.get("call_to_action") or {}
                     check(aobj, "format", "video", "video" if vd else "image")
-                    check(aobj, "link", plan.link, ((vd.get("call_to_action") or {}).get("value") or {}).get("link"))
+                    vid = str(vd.get("video_id") or "")
+                    if rec.get("video_id"):
+                        check(aobj, "video_id", rec["video_id"], vid)
+                    if data and vid:
+                        title = self.client.get(f"/{vid}", {"fields": "title"}).get("title")
+                        check(aobj, "video_file", video_title(plan.tag, data), title)
+                    check(aobj, "call_to_action", CTA_TYPE, cta.get("type"))
+                    check(aobj, "link", plan.link, (cta.get("value") or {}).get("link"))
                     check(aobj, "headline", ad.title, vd.get("title") or "")
                     check(aobj, "primary_text", ad.body, vd.get("message") or "")
                     check(aobj, "description", ad.description, vd.get("link_description") or "")
                 else:
                     ld = spec.get("link_data") or {}
+                    cta = ld.get("call_to_action") or {}
                     check(aobj, "format", "image", "image" if ld.get("image_hash") else "video")
+                    h = str(ld.get("image_hash") or "")
+                    if rec.get("image_hash"):
+                        # Хэш — тот, что Meta вернула при загрузке (или нашла), не md5.
+                        check(aobj, "image_hash", rec["image_hash"], h)
+                    if data and h:
+                        image_ads.append((aobj, ad, h))
+                    check(aobj, "call_to_action", CTA_TYPE, cta.get("type"))
+                    check(aobj, "cta_link", plan.link, (cta.get("value") or {}).get("link"))
                     check(aobj, "link", plan.link, ld.get("link"))
                     check(aobj, "headline", ad.title, ld.get("name") or "")
                     check(aobj, "primary_text", ad.body, ld.get("message") or "")
                     check(aobj, "description", ad.description, ld.get("description") or "")
+        if image_ads:
+            # Какой файл за хэшем: имя в библиотеке несёт md5 нашего файла.
+            rows = self.client.get_all(f"/{plan.act}/adimages", {
+                "hashes": sorted({h for _, _, h in image_ads}), "fields": "hash,name"}, max_pages=1)
+            names = {str(r.get("hash")): str(r.get("name") or "") for r in rows}
+            for aobj, ad, h in image_ads:
+                check(aobj, "image_file", image_name(ad.path, files[ad.path]), names.get(h, ""))
         mismatches = [c for c in checks if not c["ok"]]
         return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches}
 

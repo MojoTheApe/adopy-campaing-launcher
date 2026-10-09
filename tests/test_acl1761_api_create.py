@@ -63,6 +63,31 @@ def test_policy_rejects_status_side_doors(key):
         wp.check(ACT, "POST", f"/{ACT}/campaigns", _camp(**{key: "PAUSED"}))
 
 
+@pytest.mark.parametrize("edge,params", [
+    ("adcreatives", {"name": "x", "object_story_spec": {"link_data": {"lead_gen_form_id": "1"}}}),
+    ("adsets", {"name": "x", "status": "PAUSED", "targeting": {"effective_status": "PAUSED"}}),
+    ("ads", {"name": "x", "status": "PAUSED", "creative": {"configured_status": "PAUSED"}}),
+])
+def test_policy_forbidden_keys_are_refused_at_any_depth_even_with_paused(edge, params):
+    with pytest.raises(wp.WriteRefused):
+        wp.check(ACT, "POST", f"/{ACT}/{edge}", params)
+
+
+@pytest.mark.parametrize("value", [
+    '{"link_data": {"status": "ACTIVE"}}',
+    '{"link_data": {"effective_status": "PAUSED"}}',
+    "not json", "42", 42,
+])
+def test_policy_json_typed_values_are_parsed_before_the_checks(value):
+    with pytest.raises(wp.WriteRefused):
+        wp.check(ACT, "POST", f"/{ACT}/adcreatives", {"name": "x", "object_story_spec": value})
+
+
+def test_policy_accepts_a_clean_json_string():
+    assert wp.check(ACT, "POST", f"/{ACT}/adcreatives",
+                    {"name": "x", "object_story_spec": '{"page_id": "1"}'}) == "adcreatives"
+
+
 def test_policy_rejects_active_deep_inside_a_value():
     with pytest.raises(wp.WriteRefused):
         wp.check(ACT, "POST", f"/{ACT}/adcreatives",
@@ -105,10 +130,15 @@ def test_policy_rejects_unknown_keys_and_wrong_file_fields():
 class StubTab:
     """Вкладка: помощник ставится молча, вызовы записываются."""
 
-    def __init__(self, call_reply=None, call_exc=None):
+    def __init__(self, call_reply=None, call_exc=None, stale_at_stage: int | None = None,
+                 short_by: int = 0):
         self.exprs: list[str] = []
         self.call_reply = call_reply if call_reply is not None else {"status": 200, "body": {"id": "1"}}
         self.call_exc = call_exc
+        self.stale_at_stage = stale_at_stage
+        self.short_by = short_by
+        self.staged: dict[str, int] = {}
+        self.stage_calls = 0
 
     def create_isolated_world(self, name):
         return 7
@@ -120,7 +150,16 @@ class StubTab:
         if ".state()" in expr:
             return {"kind": "ads_manager", "has_token": True}
         if ".stage(" in expr:
-            return {"ok": True, "bytes": 1}
+            import base64
+
+            self.stage_calls += 1
+            if self.stale_at_stage is not None and self.stage_calls == self.stale_at_stage:
+                self.staged.clear()                  # новый документ — пустой помощник
+                raise tc.StaleContextError("Cannot find context with specified id")
+            sid, chunk = json.loads("[" + expr.split(".stage(", 1)[1].rsplit(")", 1)[0] + "]")
+            n = len(base64.b64decode(chunk)) - self.short_by
+            self.staged[sid] = self.staged.get(sid, 0) + n
+            return {"ok": True, "bytes": self.staged[sid]}
         if ".call(" in expr:
             if self.call_exc:
                 raise self.call_exc
@@ -173,10 +212,34 @@ def test_files_are_staged_in_chunks_without_calling_meta():
     tab = StubTab()
     t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
     t.STAGE_CHUNK = 4
-    sid = t.stage_file(b"0123456789")
+    _ctx, sid = t.stage_file(b"0123456789")
     assert sid.startswith("f") and len([e for e in tab.exprs if ".stage(" in e]) == 3
-    assert tab.calls() == []
+    assert tab.staged[sid] == 10 and tab.calls() == []
 
+
+def test_a_stale_world_mid_staging_restarts_from_zero_never_resends_one_chunk():
+    tab = StubTab(stale_at_stage=2)
+    t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
+    t.STAGE_CHUNK = 4
+    _ctx, sid = t.stage_file(b"0123456789")
+    # 1 кусок, сбой на 2-м, затем все 3 заново под НОВЫМ id
+    assert tab.stage_calls == 5 and tab.staged == {sid: 10}
+
+
+def test_a_short_staging_is_refused_and_nothing_is_sent():
+    tab = StubTab(short_by=1)
+    t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
+    got = t.write(f"/{ACT}/adimages", {}, files={"filename": b"0123456789"}, filename="a.png")
+    assert got["error"] == "no_file" and tab.calls() == []
+
+
+def test_the_write_carries_the_expected_size_and_sha256():
+    tab = StubTab(call_reply={"status": 200, "body": {"images": {"a.png": {"hash": "h"}}}})
+    t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
+    t.write(f"/{ACT}/adimages", {}, files={"filename": b"0123456789"}, filename="a.png")
+    spec = json.loads(tab.calls()[0].split(".call(", 1)[1].rsplit(")", 1)[0])
+    assert spec["expect"] == {"bytes": 10, "sha256": hashlib.sha256(b"0123456789").hexdigest()}
+    assert list(spec["files"]) == ["filename"] and spec["files"]["filename"].startswith("f")
 
 # ───────────────────────── GraphClient.post ─────────────────────────
 
@@ -226,12 +289,29 @@ def test_unknown_results_are_never_retried_and_block_further_writes(reply):
     with pytest.raises(g.WriteUnknown):
         c.post(f"/{ACT}/campaigns", _camp())
     assert len(c.transport.writes) == 1
-    with pytest.raises(g.WriteUnknown):
-        c.post(f"/{ACT}/campaigns", _camp())          # не сверено — записей нет
+    with pytest.raises(g.WritesBlocked) as blocked:
+        c.post(f"/{ACT}/adsets", _camp())             # не сверено — записей нет
+    assert not isinstance(blocked.value, g.WriteUnknown)
     assert len(c.transport.writes) == 1
     c.get("/x")                                       # чтения для сверки — можно
-    c.reconciled()
+    assert c.reconciled(f"/{ACT}/adsets") is False    # чужая запись флаг не снимает
+    assert c.unreconciled == f"/{ACT}/campaigns"
+    assert c.reconciled(f"/{ACT}/campaigns") is True
     assert c.post(f"/{ACT}/campaigns", _camp())["id"] == "9"
+
+
+def test_own_call_cap_ends_only_this_campaign_meta_stops_stay():
+    c = _client([{"status": 200, "body": {"id": "1"}}] * 3, max_calls=1)
+    c.post(f"/{ACT}/campaigns", _camp())
+    with pytest.raises(g.CallBudget):
+        c.post(f"/{ACT}/campaigns", _camp())
+    c.reset_budget(5)
+    assert c.stopped is None and c.post(f"/{ACT}/campaigns", _camp())["id"] == "1"
+    c2 = _client([{"status": 400, "body": {"error": {"code": 17, "message": "slow"}}}])
+    with pytest.raises(g.RateLimited):
+        c2.post(f"/{ACT}/campaigns", _camp())
+    c2.reset_budget(5)
+    assert isinstance(c2.stopped, g.RateLimited)
 
 
 def test_token_error_on_a_write_stops_without_recapture_or_retry():
@@ -284,10 +364,9 @@ def test_call_cap_counts_writes():
 class FakeMeta:
     """Graph API в памяти: тот же интерфейс, что `InPageGraph` (request/write/stage_file)."""
 
-    def __init__(self, *, video_states=("processing", "ready")):
+    def __init__(self, *, video_states=("processing", "ready"), hash_fn=None, drop_labels=()):
         self.objects: dict[str, dict] = {}
         self.images: dict[str, str] = {}
-        self.staged: dict[str, bytes] = {}
         self.posts: list[tuple[str, dict]] = []
         self.gets: list[tuple[str, dict]] = []
         self.video_states = list(video_states)
@@ -295,6 +374,12 @@ class FakeMeta:
         #: путь записи → режим: "lost" (создано, ответ потерян), "unsent" (не создано, ответ потерян)
         self.fail_next: dict[str, str] = {}
         self.mutate_on_read: dict = {}
+        #: Правки строк `/{adset}/ads` при чтении: "a.b.c" → значение.
+        self.mutate_ads: dict = {}
+        #: Хэш картинки у «Meta» (по умолчанию md5; бывает и не md5).
+        self.hash_fn = hash_fn or (lambda d: hashlib.md5(d).hexdigest())
+        #: Виды объектов, на которых «Meta» не сохраняет adlabels.
+        self.drop_labels = set(drop_labels)
 
     # -- служебное
     def _new(self, kind, **fields):
@@ -320,10 +405,11 @@ class FakeMeta:
     def reacquire(self, timeout=60.0):
         return self.state()
 
-    def stage_file(self, data):
-        sid = f"f{len(self.staged)}"
-        self.staged[sid] = data
-        return sid
+    def _store(self, kind, params):
+        p = dict(params)
+        if kind in self.drop_labels:
+            p.pop("adlabels", None)
+        return self._new(kind, **p)
 
     def write(self, path, params, files=None, filename=""):
         wp.check(ACT, "POST", path, params, files)       # та же политика, что у страницы
@@ -333,8 +419,9 @@ class FakeMeta:
         if mode == "unsent":
             return {"error": "call_unknown"}
         if edge == "adimages":
-            data = self.staged[files["filename"]]
-            h = hashlib.md5(data).hexdigest()
+            data = files["filename"]
+            assert isinstance(data, bytes)
+            h = self.hash_fn(data)
             self.images[h] = filename
             body = {"images": {filename: {"hash": h}}}
         elif edge == "advideos":
@@ -343,13 +430,13 @@ class FakeMeta:
         elif edge == "campaigns":
             p = dict(params)
             p["daily_budget"] = str(p["daily_budget"])
-            body = {"id": self._new("campaign", **p)}
+            body = {"id": self._store("campaign", p)}
         elif edge == "adsets":
-            body = {"id": self._new("adset", **params)}
+            body = {"id": self._store("adset", params)}
         elif edge == "adcreatives":
-            body = {"id": self._new("creative", **params)}
+            body = {"id": self._store("creative", params)}
         elif edge == "ads":
-            body = {"id": self._new("ad", **params)}
+            body = {"id": self._store("ad", params)}
         else:
             raise AssertionError(path)
         if mode == "lost":
@@ -385,7 +472,8 @@ class FakeMeta:
             if edge == "adspixels":
                 return {"data": [{"id": "222"}]}
             if edge == "adimages":
-                return {"data": [{"hash": h} for h in params.get("hashes", []) if h in self.images]}
+                return {"data": [{"hash": h, "name": self.images[h]}
+                                 for h in params.get("hashes", []) if h in self.images]}
             if edge == "advideos":
                 return {"data": [self._out(o) for o in self._of("video")]}
             kind = {"campaigns": "campaign", "adcreatives": "creative"}[edge]
@@ -399,13 +487,22 @@ class FakeMeta:
                 rows = []
                 for o in self._of("ad", "adset_id", oid):
                     row = self._out(o)
-                    cre = self.objects[o["creative"]["creative_id"]]
-                    row["creative"] = {"id": cre["id"], "object_story_spec": cre["object_story_spec"]}
+                    cre = self._out(self.objects[o["creative"]["creative_id"]])
+                    row["creative"] = {k: cre[k] for k in ("id", "object_story_spec", "adlabels") if k in cre}
+                    row = json.loads(json.dumps(row))
+                    for key, value in self.mutate_ads.items():
+                        target = row
+                        *head, last = key.split(".")
+                        for k in head:
+                            target = target[k]
+                        target[last] = value
                     rows.append(row)
                 return {"data": rows}
             if parts[1] == "thumbnails":
                 return {"data": [{"uri": "https://example.invalid/t.jpg", "is_preferred": True}]}
         obj = self.objects[oid]
+        if obj["_kind"] == "video" and params.get("fields") == "title":
+            return {"id": oid, "title": obj.get("title")}
         if obj["_kind"] == "video":
             obj["_polls"] += 1
             state = self.video_states[min(obj["_polls"] - 1, len(self.video_states) - 1)]
@@ -613,6 +710,196 @@ def test_budget_minor_units():
     assert cr.budget_minor(5000, "CLP") == 5000
 
 
+# ───────────────────────── ревью #765: метки, сверка, пробный запуск ─────────────────────────
+
+def test_label_dropped_on_the_ad_set_stops_before_any_ad_write(tmp_path):
+    meta = FakeMeta(drop_labels={"adset"})
+    out, _ = _run(meta, _draft(tmp_path, ads=2))
+    assert out.stop_kind == "label_missing" and "ad set" in out.error.lower()
+    assert [p.rsplit("/", 1)[1] for p, _ in meta.posts] == ["campaigns", "adsets"]
+
+
+def test_label_dropped_on_the_campaign_stops_right_after_it(tmp_path):
+    meta = FakeMeta(drop_labels={"campaign"})
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert out.stop_kind == "label_missing"
+    assert [p.rsplit("/", 1)[1] for p, _ in meta.posts] == ["campaigns"]
+
+
+def test_unknown_campaign_write_with_a_dropped_label_says_the_true_reason(tmp_path):
+    meta = FakeMeta(drop_labels={"campaign"})
+    meta.fail_next["campaigns"] = "lost"
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert out.stop_kind == "label_missing" and "not created by ACL" not in out.error
+    assert len(meta.posts) == 1
+
+
+@pytest.mark.parametrize("kind", ["creative", "ad"])
+def test_label_dropped_on_the_first_creative_or_ad_stops(tmp_path, kind):
+    meta = FakeMeta(drop_labels={kind})
+    out, _ = _run(meta, _draft(tmp_path, ads=2))
+    assert out.stop_kind == "label_missing"
+    edges = [p.rsplit("/", 1)[1] for p, _ in meta.posts]
+    assert edges.count("ads") <= 1 and edges.count("adcreatives") == 1
+
+
+def test_children_of_our_campaign_are_matched_by_name_without_their_label(tmp_path):
+    meta = FakeMeta()
+    _run(meta, _draft(tmp_path, ads=2))
+    for o in meta.objects.values():
+        if o["_kind"] in ("adset", "ad"):
+            o.pop("adlabels", None)            # Meta «потеряла» метки детей
+    n_posts = len(meta.posts)
+    out, client = _run(meta, _draft(tmp_path, ads=2))
+    assert client.writes == 0 and len(meta.posts) == n_posts
+    # а сверка всё равно называет потерю меток
+    assert {m["object"].split(" (")[0] for m in out.mismatches if m["field"] == "tag"} >= {"ad 1", "ad 2"}
+
+
+@pytest.mark.parametrize("key,value,field", [
+    ("creative.object_story_spec.link_data.image_hash", "other", "image_hash"),
+    ("creative.object_story_spec.link_data.call_to_action.type", "SIGN_UP", "call_to_action"),
+    ("creative.id", "999", "creative_id"),
+    ("adset_id", "998", "adset_id"),
+    ("adlabels", {"data": []}, "tag"),
+])
+def test_readback_checks_media_cta_creative_adset_and_tags(tmp_path, key, value, field):
+    meta = FakeMeta()
+    meta.mutate_ads[key] = value
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert field in {m["field"] for m in out.mismatches}, out.mismatches
+
+
+def test_readback_checks_the_video_id(tmp_path):
+    meta = FakeMeta()
+    meta.mutate_ads["creative.object_story_spec.video_data.video_id"] = "997"
+    meta.objects["997"] = {"id": "997", "_kind": "video", "title": "someone else's", "_polls": 0}
+    out, _ = _run(meta, _draft(tmp_path, video=True, ads=1))
+    fields = {m["field"] for m in out.mismatches}
+    assert {"video_id", "video_file"} <= fields
+
+
+def test_image_hash_is_compared_with_what_meta_returned_not_with_md5(tmp_path):
+    meta = FakeMeta(hash_fn=lambda d: hashlib.sha1(d).hexdigest())
+    out, _ = _run(meta, _draft(tmp_path, ads=2))
+    assert out.error == "" and out.readback["ok"] is True, out.mismatches
+
+
+def test_duplicate_ad_names_are_refused_before_any_call(tmp_path):
+    d = _draft(tmp_path, ads=2)
+    a, b = d.ad_sets[0].ads
+    b.creative_id, b.copy_name = a.creative_id, a.copy_name
+    with pytest.raises(cr.PlanError, match="different"):
+        cr.plan_from_draft(d)
+
+
+def test_duplicate_ad_set_names_are_refused(tmp_path):
+    import copy
+
+    d = _draft(tmp_path, ads=1)
+    d.ad_sets.append(copy.deepcopy(d.ad_sets[0]))
+    with pytest.raises(cr.PlanError, match="ad sets are named"):
+        cr.plan_from_draft(d)
+
+
+@pytest.mark.parametrize("objective", ["Traffic", "Sales", "Awareness"])
+def test_only_leads_objective_is_accepted(tmp_path, objective):
+    d = _draft(tmp_path, ads=1)
+    d.objective = objective
+    with pytest.raises(cr.PlanError, match="Objective"):
+        cr.plan_from_draft(d)
+
+
+def test_draft_warnings_reach_the_result(tmp_path):
+    from src.web import publish_api
+
+    d = _draft(tmp_path, ads=1)
+    d.warnings.append("Mixed budget in 'MX Leads 1' — using first slot")
+    out, _ = _run(FakeMeta(), d)
+    assert "Mixed budget in 'MX Leads 1' — using first slot" in publish_api.result_dict(out)["warnings"]
+
+
+def test_writes_blocked_is_not_reconciled_and_does_not_clear_the_earlier_flag(tmp_path):
+    meta = FakeMeta()
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=200)
+    facts = cr.preflight_account(client, ACT)
+    client.unreconciled = f"/{ACT}/adsets"           # прошлая кампания оставила неизвестное
+    looked = []
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=lambda s: None)
+    orig = creator._find_campaign
+
+    def spy(plan, **kw):
+        looked.append(kw)
+        return orig(plan, **kw)
+
+    creator._find_campaign = spy
+    out = creator.run(cr.plan_from_draft(_draft(tmp_path, ads=1)))
+    assert out.stop_kind == "blocked" and meta.posts == []
+    assert client.unreconciled == f"/{ACT}/adsets"
+    assert all(not kw.get("after_unknown") for kw in looked)
+
+
+def _publisher(meta, *, dry_run=False):
+    from src.web import publish_api
+
+    pub = publish_api.ApiPublisher(dry_run=dry_run)
+    pub.act = ACT
+    pub.account_label = "Test"
+    pub._client = g.GraphClient(meta, allow_writes=not dry_run, sleep=lambda s: None, min_interval_s=0.0,
+                                max_calls=200)
+    pub._facts = cr.preflight_account(pub._client, ACT)
+    pub._resolver = cr.TargetingResolver(pub._client)
+    pub.sleep = lambda _s: None
+    return pub
+
+
+def test_after_an_unknown_result_the_rest_of_the_job_is_refused(tmp_path):
+    meta = FakeMeta()
+    meta.fail_next["adsets"] = "unsent"
+    pub = _publisher(meta)
+    first = pub.publish_draft(_draft(tmp_path, ads=1))
+    assert "unknown" in (first["error"] or "")
+    n = len(meta.posts)
+    d2 = _draft(tmp_path, ads=1)
+    d2.name = d2.ad_sets[0].name = "MX Leads 2"
+    second = pub.publish_draft(d2)
+    assert second["error"].startswith("Not started: an earlier write") and len(meta.posts) == n
+
+
+def test_own_call_cap_does_not_end_later_campaigns(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACL_FB_API_CREATE_MAX_CALLS", "20")
+    meta = FakeMeta(video_states=("processing",))
+    pub = _publisher(meta)
+    first = pub.publish_draft(_draft(tmp_path, video=True, ads=1))
+    assert "call budget" in (first["error"] or "") and pub.stop is None
+    d2 = _draft(tmp_path, ads=1)
+    d2.name = d2.ad_sets[0].name = "MX Leads 2"
+    second = pub.publish_draft(d2)
+    assert second["success"] is True, second["error"]
+
+
+def test_dry_run_runs_preflight_and_returns_the_plan_with_zero_writes(tmp_path):
+    meta = FakeMeta()
+    pub = _publisher(meta, dry_run=True)
+    res = pub.publish_draft(_draft(tmp_path, video=True, ads=2))
+    assert meta.posts == [] and pub._client.writes == 0
+    assert res["dry_run"] is True and res["success"] is True and res["publishable"] is False
+    plan = res["plan"]
+    assert plan["campaign"]["status"] == "PAUSED" and plan["existing_campaign_id"] == ""
+    ads = plan["ad_sets"][0]["ads"]
+    assert [a["format"] for a in ads] == ["image", "video"] and all(a["status"] == "PAUSED" for a in ads)
+    assert plan["ad_sets"][0]["targeting"]["geo_locations"] == {"countries": ["MX"]}
+
+
+def test_dry_run_client_cannot_write_at_all(tmp_path):
+    from src.web import publish_api
+
+    page = publish_api._make_graph(StubTab(), ACT, writes=False)
+    with pytest.raises(ValueError):
+        page.write(f"/{ACT}/campaigns", _camp())
+    assert "const WRITE = null;" in tc.helper_source(page.name, page._write_policy)
+
+
 # ───────────────────────── дешборд ─────────────────────────
 
 def test_result_dict_shape_and_publishability(tmp_path):
@@ -646,9 +933,10 @@ def test_backend_switch(monkeypatch):
 class FakeApiPublisher:
     instances: list = []
 
-    def __init__(self, progress=lambda s: None):
+    def __init__(self, progress=lambda s: None, dry_run=False):
         import threading
 
+        self.dry_run = dry_run
         self.cancel_event = threading.Event()
         self.opened = False
         self.finished = None
@@ -700,6 +988,12 @@ def test_publish_job_routes_to_the_api_only_when_switched(monkeypatch):
     assert snap["fb_backend"] == "api" and called["rpa"] == 0
     assert snap["publishable"] is True and [r["status"] for r in snap["results"]] == ["PAUSED", "PAUSED"]
     assert FakeApiPublisher.instances[0].finished is True and snap.get("profile_closed") is True
+    assert FakeApiPublisher.instances[0].dry_run is False
+
+    job3 = publish_jobs.create_job("Acc Dry", "MX", [{"name": "C1"}], dry_run=True)
+    publish_jobs._run_job(job3, [{"name": "C1"}], account_label="Acc Dry", country="MX",
+                          via_multilogin=True, activate=False, dry_run=True)
+    assert FakeApiPublisher.instances[-1].dry_run is True    # ревью M3: dry_run доходит до API
 
     monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     job2 = publish_jobs.create_job("Acc RPA", "MX", [{"name": "C1"}])
@@ -739,9 +1033,26 @@ const h = G[NAME];
   out.del = await h.call({ method: 'DELETE', path: '/' + ACT + '/campaigns', params: {} });
   out.key = await h.call({ method: 'POST', path: '/' + ACT + '/campaigns', params: { ...camp, spend_cap: 1 } });
   out.nofile = await h.call({ method: 'POST', path: '/' + ACT + '/adimages', params: {}, files: { filename: 'fx' } });
-  out.stage = h.stage('fx', Buffer.from('hello').toString('base64'));
+  // Ревью: каждый мутант проверок в помощнике должен ронять свой случай.
+  out.missing = await h.call({ method: 'POST', path: '/' + ACT + '/campaigns',
+                               params: { name: 'C', objective: 'OUTCOME_LEADS' } });
+  out.nested_active = await h.call({ method: 'POST', path: '/' + ACT + '/adsets',
+                                     params: { name: 's', status: 'PAUSED', targeting: { status: 'ACTIVE' } } });
+  out.nested_forbidden = await h.call({ method: 'POST', path: '/' + ACT + '/ads',
+                                        params: { name: 'a', status: 'PAUSED', creative: { lead_gen_form_id: '1' } } });
+  out.json_active = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
+                                   params: { name: 'x', object_story_spec: '{"link_data":{"status":"ACTIVE"}}' } });
+  out.json_bad = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
+                                params: { name: 'x', object_story_spec: 'not json' } });
+  const hello = Buffer.from('hello');
+  const sha = require('crypto').createHash('sha256').update(hello).digest('hex');
+  out.stage = h.stage('fx', hello.toString('base64'));
+  out.short = await h.call({ method: 'POST', path: '/' + ACT + '/adimages', params: {}, files: { filename: 'fx' },
+                             filename: 'a.png', expect: { bytes: 6, sha256: sha } });
+  out.badsha = await h.call({ method: 'POST', path: '/' + ACT + '/adimages', params: {}, files: { filename: 'fx' },
+                              filename: 'a.png', expect: { bytes: 5, sha256: 'ff' } });
   out.img = await h.call({ method: 'POST', path: '/' + ACT + '/adimages', params: {}, files: { filename: 'fx' },
-                           filename: 'a b.png' });
+                           filename: 'a b.png', expect: { bytes: 5, sha256: sha } });
   out.calls = calls;
   process.stdout.write(JSON.stringify(out));
 })();
@@ -771,8 +1082,11 @@ def _node_run(write_policy):
 def test_page_helper_write_mode_in_node():
     out = _node_run(wp.policy_for_page(ACT))
     assert out["ok"]["body"] == {"id": "5"}
-    for k in ("active", "deep", "other", "forms", "key"):
+    for k in ("active", "deep", "other", "forms", "key", "missing", "nested_active",
+              "nested_forbidden", "json_active", "json_bad", "short", "badsha"):
         assert out[k]["error"] == "write_refused", k
+    assert out["missing"]["why"] == "status" and out["nested_active"]["why"] == "status"
+    assert out["short"]["why"] == "file_size" and out["badsha"]["why"] == "file_hash"
     assert out["del"]["error"] == "read_only"
     assert out["nofile"]["error"] == "no_file"
     assert out["stage"]["ok"] is True and out["img"]["body"] == {"id": "5"}

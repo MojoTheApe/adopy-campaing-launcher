@@ -13459,6 +13459,11 @@ function cbProblemsHtml(r) {
 function cbApiReadbackHtml(r) {
   var rb = r.readback || {};
   var h = '<div class="cb-status-steps" style="font-size:0.72rem;margin-top:0.2rem">';
+  if (r.dry_run && r.plan && Object.keys(r.plan).length) {
+    h += '<details open><summary>Dry-run plan (nothing was created)</summary><pre style="'
+      + 'font-size:0.66rem;white-space:pre-wrap;max-height:24rem;overflow:auto">'
+      + aclEscHtml(JSON.stringify(r.plan, null, 2)) + '</pre></details>';
+  }
   if (r.status === 'PAUSED') {
     h += '<span style="font-weight:600">Status: PAUSED</span> — nothing was activated. ';
   }
@@ -13572,7 +13577,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           ? (job.fb_backend === 'api'
             ? 'created PAUSED via the API — readback matches; a person activates it in Ads Manager'
             : 'draft ready — the campaign is in Ads Manager, Publish was not clicked')
-          : (hasFatal ? 'errors — do not publish'
+          : (job.fb_backend === 'api' && job.dry_run && !hasFatal
+            ? 'dry run via the API — nothing was created; see the plan below'
+            : hasFatal ? 'errors — do not publish'
             : 'draft blocked — do not publish'))
         : 'running… (can take 1–3 min)'));
     var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';

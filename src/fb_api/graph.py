@@ -144,6 +144,19 @@ class WriteUnknown(RuntimeError):
         self.path = path
 
 
+class WritesBlocked(RuntimeError):
+    """Новая запись не отправлена: у прошлой результат неизвестен и не сверен (ревью M4).
+
+    Отдельно от `WriteUnknown`: эта запись к Meta точно НЕ уходила, сверять её
+    нечего, и снимать флаг прошлой записи нельзя.
+    """
+
+    def __init__(self, path: str = ""):
+        super().__init__(scrub("an earlier write has an unknown result and was not reconciled; "
+                               "no further writes until it is"))
+        self.path = path
+
+
 #: Ответы Graph, после которых неизвестно, создан ли объект: «неизвестная
 #: ошибка», «сервис временно недоступен», 5xx.
 UNKNOWN_RESULT_CODES = {1, 2}
@@ -238,13 +251,26 @@ class GraphClient:
         self.writes = 0
 
     def reset_budget(self, max_calls: int) -> None:
-        """Новый потолок вызовов (на одну кампанию). Стоп не снимается."""
+        """Новый потолок вызовов (на одну кампанию).
+
+        Снимается только стоп по СВОЕМУ потолку (`CallBudget`, Meta молчала):
+        он не должен кончать следующие кампании задания (ревью, minor 5).
+        Стопы Meta (190/368/лимит/checkpoint) остаются.
+        """
         self.max_calls = int(max_calls)
         self.calls = 0
+        if type(self.stopped) is CallBudget:
+            self.stopped = None
 
-    def reconciled(self) -> None:
-        """Сверка чтением сделана: можно продолжать записи."""
-        self.unreconciled = None
+    def reconciled(self, path: str) -> bool:
+        """Сверка чтением нашла объект ИМЕННО этой записи — снять её флаг.
+
+        Флаг другой записи не трогается (ревью M4). True — снят.
+        """
+        if self.unreconciled is not None and self.unreconciled == path:
+            self.unreconciled = None
+            return True
+        return False
 
     # -- служебное
     def _stop(self, exc: GraphStop) -> GraphStop:
@@ -347,8 +373,7 @@ class GraphClient:
         if self.stopped is not None:
             raise self.stopped
         if self.unreconciled is not None:
-            raise WriteUnknown("a previous write has an unknown result and was not reconciled",
-                               path=self.unreconciled)
+            raise WritesBlocked(self.unreconciled)
         if self.calls >= self.max_calls:
             raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
         self._pace()

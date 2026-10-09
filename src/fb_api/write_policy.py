@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -35,6 +36,10 @@ FORBIDDEN_ANYWHERE = frozenset({"effective_status", "configured_status", "execut
                                 "access_token", "method", "_method", "batch",
                                 "suppress_http_code", "lead_gen_form_id", "tos_accepted"})
 PAUSED = "PAUSED"
+#: Ключи, которые Graph читает как JSON. Строку в них Graph разберёт сам —
+#: поэтому и мы разбираем её до проверок статуса (ревью, minor 1).
+JSON_KEYS = frozenset({"special_ad_categories", "adlabels", "promoted_object", "targeting",
+                       "object_story_spec", "creative"})
 
 _PATH_RE = re.compile(r"^/(act_\d{5,})/([a-z]+)$")
 
@@ -51,10 +56,24 @@ def policy_for_page(act: str) -> dict:
         "paused_required": sorted(PAUSED_REQUIRED),
         "files": dict(FILE_FIELDS),
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
+        "json_keys": sorted(JSON_KEYS),
     }
 
 
+def _parsed(value: Any, where: str, *, required: bool = False) -> Any:
+    """Строку, похожую на JSON, разобрать (Graph сделает так же). Неразборная — отказ."""
+    if isinstance(value, str):
+        text = value.strip()
+        if required or text[:1] in ("{", "["):
+            try:
+                return json.loads(text)
+            except ValueError as exc:
+                raise WriteRefused(f"write refused: a JSON value is malformed ({where})") from exc
+    return value
+
+
 def _walk(value: Any, where: str) -> None:
+    value = _parsed(value, where)
     if isinstance(value, dict):
         for key, item in value.items():
             low = str(key).lower()
@@ -87,6 +106,9 @@ def check(act: str, method: str, path: str, params: dict | None,
         raise WriteRefused(f"write refused: key {extra[0]!r} is not allowed on {edge}")
     if edge in PAUSED_REQUIRED and params.get("status") != PAUSED:
         raise WriteRefused(f"write refused: {edge} must be created with status PAUSED")
+    for key in JSON_KEYS & set(params):
+        if not isinstance(_parsed(params[key], f"{edge}.{key}", required=True), (dict, list)):
+            raise WriteRefused(f"write refused: {key} must be a JSON object or list")
     _walk(params, edge)
     files = dict(files or {})
     want = FILE_FIELDS.get(edge)

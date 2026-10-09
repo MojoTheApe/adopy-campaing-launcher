@@ -189,7 +189,19 @@ _HELPER_JS = r"""
   }
   function unstage(id) { delete staged[String(id)]; return true; }
 
+  // Строку-JSON Graph разберёт сам — разбираем и мы до проверок (ревью, minor 1).
+  function parsed(value) {
+    if (typeof value === 'string') {
+      const t = value.trim();
+      if (t[0] === '{' || t[0] === '[') {
+        try { return JSON.parse(t); } catch (e) { return undefined; }
+      }
+    }
+    return value;
+  }
   function statusOk(value) {
+    value = parsed(value);
+    if (value === undefined) return false;
     if (Array.isArray(value)) { for (const v of value) if (!statusOk(v)) return false; return true; }
     if (value && typeof value === 'object') {
       for (const k of Object.keys(value)) {
@@ -217,6 +229,12 @@ _HELPER_JS = r"""
       if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
     }
     if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED') return refused('status');
+    for (const k of WRITE.json_keys) {
+      if (!(k in params)) continue;
+      let v = params[k];
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { return refused('json'); } }
+      if (v === null || typeof v !== 'object') return refused('json');
+    }
     if (!statusOk(params)) return refused('status');
     const want = WRITE.files[edge];
     const files = spec.files || {};
@@ -228,6 +246,14 @@ _HELPER_JS = r"""
       const parts = staged[String(files[want])];
       if (!parts || !parts.length) return { error: 'no_file' };
       blob = new Blob(parts);
+      // Ревью M1: ушло бы не то, что положил Python — отказ ДО отправки.
+      const expect = spec.expect || {};
+      if (typeof expect.bytes !== 'number' || blob.size !== expect.bytes) return refused('file_size');
+      try {
+        const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+        const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        if (hex !== String(expect.sha256 || '')) return refused('file_hash');
+      } catch (e) { return refused('file_hash'); }
     }
     scanFast(); scanHtml();
     if (!token) return { error: 'no_token', state: state() };
@@ -517,37 +543,78 @@ class InPageGraph:
     #: Размер куска файла, который кладётся в помощник за один вызов CDP.
     STAGE_CHUNK = 768 * 1024
 
-    def stage_file(self, data: bytes, *, timeout: float = 30.0) -> str:
-        """Положить файл в помощник кусками. К Meta ничего не уходит."""
-        if not self.allow_writes:
-            raise ValueError("read-only: staging a file needs allow_writes")
+    def _stage_once(self, ctx: int, data: bytes, timeout: float) -> str:
+        """Один проход складывания файла в помощник. Устаревший мир — исключение."""
         import base64
 
         stage_id = "f" + secrets.token_hex(8)
+        total = 0
         for start in range(0, max(1, len(data)), self.STAGE_CHUNK):
             chunk = base64.b64encode(data[start:start + self.STAGE_CHUNK]).decode("ascii")
-            got = self._eval_helper(f".stage({json.dumps(stage_id)}, {json.dumps(chunk)})",
-                                    timeout=timeout)
+            expr = (f"globalThis[{json.dumps(self.name)}].stage("
+                    f"{json.dumps(stage_id)}, {json.dumps(chunk)})")
+            got = self.tab.evaluate_in(ctx, expr, timeout=timeout)
             if not isinstance(got, dict) or not got.get("ok"):
-                err = (got or {}).get("error") if isinstance(got, dict) else "bad_reply"
+                err = got.get("error") if isinstance(got, dict) else "bad_reply"
                 raise PageError(f"could not stage the file in the page ({err})")
+            total = int(got.get("bytes") or 0)
+        if total != len(data):
+            raise PageError(f"staged {total} bytes instead of {len(data)}")
         return stage_id
+
+    def stage_file(self, data: bytes, *, timeout: float = 30.0) -> tuple[int, str]:
+        """Положить файл в помощник кусками. К Meta ничего не уходит (ревью M1).
+
+        Мир исчез посреди складывания — начинаем С НУЛЯ в новом мире (один
+        раз): кусок не переотправляется в пустой новый мир под старым id.
+        Итоговое число байт сверяется с `len(data)`. Возвращает (мир, id).
+        """
+        if not self.allow_writes:
+            raise ValueError("read-only: staging a file needs allow_writes")
+        for attempt in (0, 1):
+            self._ready_for_call()
+            ctx = self._ensure()
+            try:
+                return ctx, self._stage_once(ctx, data, timeout)
+            except StaleContextError:
+                self._reset_world()
+                if attempt:
+                    raise
+        raise CdpError("staging failed")  # недостижимо
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
               filename: str = "", timeout: float = 120.0) -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
-        Политика проверяется здесь (`write_policy.check`) и ещё раз в помощнике.
+        `files` — {поле: bytes}. Файл складывается в помощник прямо перед
+        вызовом, в том же мире; помощник сверяет размер и SHA-256 перед
+        отправкой. Политика проверяется здесь (`write_policy.check`) и ещё раз
+        в помощнике.
         """
         if not self.allow_writes:
             raise ValueError("read-only: writes are not enabled for this page")
+        import hashlib
+
         from src.fb_api import write_policy as _wp
 
         _wp.check(self.write_act, "POST", path, params, files)
-        spec = {"method": "POST", "path": path, "params": params or {}, "files": files or {},
-                "filename": filename, "host": self.graph_host, "credentials": self.credentials}
-        self._ready_for_call()
-        ctx = self._ensure()
+        spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
+                                "filename": filename, "host": self.graph_host,
+                                "credentials": self.credentials}
+        if files:
+            (field_name, data), = files.items()
+            if not isinstance(data, (bytes, bytearray)):
+                raise ValueError("file content must be bytes")
+            try:
+                ctx, stage_id = self.stage_file(bytes(data))
+            except (PageError, CdpError) as exc:
+                # Ничего не отправлено: отказ страницы до записи.
+                return {"error": "no_file", "why": str(exc)[:120]}
+            spec["files"] = {field_name: stage_id}
+            spec["expect"] = {"bytes": len(data), "sha256": hashlib.sha256(bytes(data)).hexdigest()}
+        else:
+            self._ready_for_call()
+            ctx = self._ensure()
         expr = f"globalThis[{json.dumps(self.name)}].call({json.dumps(spec)})"
         try:
             got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
