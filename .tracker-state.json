@@ -243,7 +243,8 @@
     },
     "86a09941d9f776ef35d8f1da46d34bc18d9086bcd94687000c171131e52a60d8": {
       "title": "Graph API inside the Multilogin profile: CDP transport, token capture, read-only pilot",
-      "state": "creating"
+      "state": "created",
+      "issue": 756
     }
   },
   "delivery_workflow": {
