@@ -7134,9 +7134,11 @@
         "worktree": "C:\\acl-api-inprofile",
         "id": "3c3e6b14069446be95c95efba61118cd",
         "issue": 756,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-09T18:58:46+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 759,
+        "report": "ACL-1756 option (b): reliable Ads Manager load + fail-safe helper + close-on-failure. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 02bbde60 (on top of 7048d940). Files: src/fb_api/cdp.py, src/fb_api/token_capture.py, scripts/fb_api_pilot.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n1. Timeout/throttling: our own tab disables background throttling over CDP (Emulation.setFocusEmulationEnabled + Page.setWebLifecycleState active), no window shown, no focus taken; screencast keep-alive not used (raw client reads no events). Every CDP call that times out raises CdpTimeout naming method+budget; a Steps tracker tags each exception with the step and duration; the token wait polls state() from Python on a 90 s budget; no retries.\n2. Fail-safe helper: fetch/XHR wrappers guard all helper code in try/catch and always run the original call with the original arguments, returning its result/promise untouched. A page-side safety timer removes the wrappers after at most 20 s (SWEEP_MS), token or not; with no token it runs the no-wrap fallbacks (Resource Timing, inline HTML). Keeps Ads Manager's own auth/refresh traffic (fb_dtsg, token refresh) on native fetch/XHR.\n   Tests: an exception in take()/describe() does not change the page's fetch result and does not throw; after sweep the wrappers are gone and window.fetch / XHR.open / XHR.send are restored by identity; no token in output.\n3. On any failure or stop the pilot closes its own target only (Target.closeTarget of our target; the browser's last tab is never closed). Tests: a wait_for_token timeout closes T-mine (with other tabs present) and, when ours is the only tab, closes nothing; the tab disables throttling on open.\n4. \"No wrapping at all\" redesign NOT done; noted as a follow-up option in the PR body.\n\nChecks, each run separately: test_acl1756_fb_api 73 passed; test_acl1756_page_helper_node 10 passed (Node ran); test_acl1702_tab_watchdog 35 passed; test_acl_test_platform 100 passed; test_acl_test_shard 14 passed; acl_scan_secrets clean. No command was denied. --run was not used."
       }
     },
     "tasks": {
