@@ -257,6 +257,10 @@ def test_python_sends_only_request_specs_to_the_page():
     ("POST", {}), ("DELETE", {}), ("get", {}),
     ("GET", {"method": "post"}), ("GET", {"_method": "delete"}), ("GET", {"batch": "[]"}),
     ("GET", {"suppress_http_code": "1"}), ("GET", {"access_token": "x"}), ("GET", {"METHOD": "post"}),
+    # Имена, которые сервер мог бы нормализовать в `method` (ревью, раунд 2).
+    ("GET", {" method": "post"}), ("GET", {"method ": "post"}), ("GET", {"\tmethod": "post"}),
+    ("GET", {"method\u0000": "post"}), ("GET", {"method[]": "post"}), ("GET", {"\uff4dethod": "post"}),
+    ("GET", {"fields.x": "id"}), ("GET", {"": "x"}),
 ])
 def test_in_page_graph_refuses_writes_before_touching_the_page(method, params):
     page = FakePage([OK])
@@ -265,6 +269,13 @@ def test_in_page_graph_refuses_writes_before_touching_the_page(method, params):
     with pytest.raises(ValueError):
         gr.request(method, "/me", params)
     assert page.specs == [] and len(cdp.sent) == sent
+
+
+def test_in_page_graph_accepts_plain_read_params():
+    page = FakePage([OK])
+    gr, _ = _graph(page)
+    gr.request("GET", "/act_1/insights", {"fields": "spend", "date_preset": "last_7d", "limit": 5})
+    assert page.specs[0]["params"]["date_preset"] == "last_7d"
 
 
 def test_no_profile_stop_anywhere_in_the_pilot():
@@ -287,13 +298,14 @@ const fetched = [];
 let failNext = false;
 const listeners = [];
 class FakeFormData { constructor(){ this.m = new Map(); } append(k,v){ this.m.set(k,v); } get(k){ return this.m.has(k)?this.m.get(k):null; } }
-class FakeXHR { open(m,u){ this._u=u; } send(b){ this._b=b; } }
+class FakeXHR { open(m,u,a,b,c){ this._u=u; } send(){ this._b=arguments[0]; } }
 const scripts = SCRIPTS;
 const origSend = FakeXHR.prototype.send, origOpen = FakeXHR.prototype.open;
 const win = {
   location: { href: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1',
               hostname: 'adsmanager.facebook.com', pathname: '/adsmanager/manage/campaigns' },
-  fetch: async (url, init) => {
+  fetch: async function fetch(url) {
+    const init = arguments[1];
     fetched.push({ url: String(url), init: init || {} });
     if (failNext) { failNext = false; throw new TypeError('Failed to fetch'); }
     const body = JSON.stringify({ data: [{ id: 'act_1' }],
@@ -318,6 +330,8 @@ const h = win[NAME];
   const out = {};
   out.before = h.state();
   out.wrapped = win.fetch !== nativeFetch && FakeXHR.prototype.send !== origSend;
+  out.lengths = [win.fetch.length, nativeFetch.length, FakeXHR.prototype.send.length,
+                 origSend.length, FakeXHR.prototype.open.length, origOpen.length];
   out.wrap = {
     fetch_len: win.fetch.length === nativeFetch.length,
     fetch_name: win.fetch.name === nativeFetch.name,
@@ -348,7 +362,8 @@ const h = win[NAME];
   out.method = fetched.length ? fetched[0].init.method : '';
   out.forbidden = {};
   const before = fetched.length;
-  for (const k of ['method', '_method', 'batch', 'suppress_http_code', 'access_token', 'Method']) {
+  for (const k of ['method', '_method', 'batch', 'suppress_http_code', 'access_token', 'Method',
+                   ' method', 'method ', '\tmethod', 'method\u0000', 'method[]', '\uff4dethod']) {
     out.forbidden[k] = await h.call({ method: 'GET', path: '/me', params: { [k]: 'post' } });
   }
   out.forbidden_fetches = fetched.length - before;
@@ -374,7 +389,7 @@ def _run_node(mode: str, scripts: list[dict] | None = None) -> dict:
            .replace("NAME", json.dumps(name))
            .replace("MODE", json.dumps(mode))
            .replace("HELPER", json.dumps(tc.helper_source(name))))
-    done = subprocess.run([node, "-e", src], capture_output=True, text=True, timeout=60)
+    done = subprocess.run([node, "-e", src], capture_output=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0, done.stderr[-2000:]
     return json.loads(done.stdout)
 
@@ -401,6 +416,9 @@ def test_helper_takes_the_token_from_ads_manager_requests_and_keeps_it(mode, sou
     # Обёртки выглядят как родные: toString, length, name (ревью O1).
     assert out["wrapped"] is True
     assert all(out["wrap"].values()), out["wrap"]
+    # Длины родных функций нарочно не совпадают с числом параметров обёрток.
+    assert out["lengths"] == [1, 1, 0, 0, 5, 5], out["lengths"]
+    assert len(out["forbidden"]) == 12
     assert out["got"]["status"] == 200
     assert out["got"]["headers"] == {"x-ad-account-usage": '{"acc_id_util_pct":12}'}
     assert out["after_retire"] == {"error": "retired"}

@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import time
 from typing import Any, Callable
@@ -42,6 +43,10 @@ ADS_MANAGER_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?a
 #: Ключи, которыми Graph подменяет глагол или пакует запросы; токен — только у
 #: страницы. Тот же список стоит в помощнике (`FORBIDDEN`).
 FORBIDDEN_PARAMS = frozenset({"method", "_method", "batch", "suppress_http_code", "access_token"})
+#: Имя параметра — только ASCII-буквы, цифры и `_` (тот же `KEY_RE` в помощнике):
+#: пробелы, управляющие символы, `[]`, полноширинные буквы не проходят, и
+#: сервер не нормализует их в запретное имя.
+PARAM_KEY_RE = re.compile(r"[A-Za-z0-9_]+", re.ASCII)
 
 #: Помощник страницы. `__NAME__` заменяется на имя свойства window (со
 #: случайным хвостом). Никаких обращений наружу, кроме `fetch` к Graph API по
@@ -75,6 +80,7 @@ _HELPER_JS = r"""
   // упаковать несколько запросов в один (`method=post`, `batch`, …): срез
   // только читает, такие ключи отказываются целиком.
   const FORBIDDEN = ['method', '_method', 'batch', 'suppress_http_code', 'access_token'];
+  const KEY_RE = /^[A-Za-z0-9_]+$/;
   let hooked = false;
 
   function take(url, body) {
@@ -184,6 +190,10 @@ _HELPER_JS = r"""
     if (!/^\/[A-Za-z0-9_\/.\-]*$/.test(path) || path.indexOf('..') >= 0) return { error: 'bad_path' };
     const params = spec.params || {};
     for (const k of Object.keys(params)) {
+      // Сначала белый список имён (ревью раунд 2): ' method', 'method[]',
+      // 'method\u0000', полноширинная ｍ и т. п. сервер мог бы нормализовать
+      // в `method`. Потом — запретный список поверх.
+      if (!KEY_RE.test(String(k))) return { error: 'forbidden_param' };
       if (FORBIDDEN.indexOf(String(k).toLowerCase()) >= 0) return { error: 'forbidden_param' };
     }
     if (!token) return { error: 'no_token', state: state() };
@@ -320,7 +330,8 @@ class InPageGraph:
                 timeout: float = 60.0) -> dict:
         if method != "GET":
             raise ValueError("read-only: only GET requests are allowed")
-        bad = [k for k in (params or {}) if str(k).lower() in FORBIDDEN_PARAMS]
+        bad = [k for k in (params or {})
+               if not isinstance(k, str) or not PARAM_KEY_RE.fullmatch(k) or k.lower() in FORBIDDEN_PARAMS]
         if bad:
             raise ValueError(f"read-only: parameter {bad[0]!r} is not allowed")
         spec = {"method": method, "path": path, "params": params or {}}
