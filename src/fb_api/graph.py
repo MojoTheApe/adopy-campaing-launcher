@@ -7,7 +7,9 @@
 - ни опроса, ни таймеров — вызов только по явному запросу; между вызовами
   пауза не меньше `min_interval_s`, всего не больше `max_calls`;
 - 190 (и 102) — токен умер: ОДИН раз переснять во вкладке и повторить; снова
-  190 — стоп «logged out / checkpoint»;
+  190 — стоп «logged out / checkpoint»; 190 с подкодом checkpoint (459, 464) —
+  стоп сразу, без перезагрузки;
+- сбой сети при вызове — стоп, без повтора;
 - 4/17/32/613/80000–80014 — лимит: не повторяем, стоп с подсказкой, сколько
   ждать (`estimated_time_to_regain_access`);
 - 368 — блок по правилам: стоп сразу, никогда не повторяем;
@@ -30,6 +32,9 @@ from src.fb_api.telemetry import scrub
 TOKEN_CODES = {102, 190}
 RATE_CODES = {4, 17, 32, 613} | set(range(80000, 80015))
 POLICY_CODES = {368}
+#: Подкоды 190, при которых сессия стоит на checkpoint: перезагрузка Ads
+#: Manager не поможет, только лишний заход в кабинет — стоп сразу (ревью O3).
+CHECKPOINT_SUBCODES = {459, 464}
 
 SLOW_PCT = 50.0
 STOP_PCT = 80.0
@@ -156,6 +161,8 @@ class GraphClient:
         self.calls = 0
         self.stopped: GraphStop | None = None
         self.last_usage: dict = {}
+        #: Видел ли клиент хоть раз заголовки лимитов (CORS может их прятать).
+        self.usage_headers_seen = False
 
     # -- служебное
     def _stop(self, exc: GraphStop) -> GraphStop:
@@ -201,6 +208,7 @@ class GraphClient:
 
         usage = usage_from_headers(reply.get("headers"))
         self.last_usage = usage
+        self.usage_headers_seen = self.usage_headers_seen or bool(usage["seen"])
         body = reply.get("body") if isinstance(reply.get("body"), dict) else {}
         status = reply.get("status")
 
@@ -216,6 +224,9 @@ class GraphClient:
                 raise self._stop(RateLimited(f"Graph API rate limit ({code}): {msg}", code=code,
                                              subcode=sub, retry_after_s=usage["wait_s"] or None))
             if kind == "token":
+                if sub in CHECKPOINT_SUBCODES:
+                    raise self._stop(Checkpoint(f"the session is on a Facebook checkpoint ({code}/{sub})",
+                                                code=code, subcode=sub))
                 self._check_page()
                 return self._token_dead(path, params, code, sub)
             raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status)

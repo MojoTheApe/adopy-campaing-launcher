@@ -170,7 +170,9 @@ def run_pilot(target: Target, *, emit: Callable[[str], None], timeout: float = 6
 
             summary["calls"] = client.calls
             summary["usage_max_pct"] = (client.last_usage or {}).get("max_pct")
-            summary["usage_headers_seen"] = (client.last_usage or {}).get("seen")
+            summary["usage_headers_seen"] = bool(client.usage_headers_seen)
+            emit(f"Graph calls: {client.calls}; usage_headers_seen: {summary['usage_headers_seen']}; "
+                 f"usage_max_pct: {summary['usage_max_pct']}")
             if client.stopped is not None:
                 summary["stopped"] = client.stopped.kind
                 emit(f"Stopped early: {client.stopped}")
@@ -178,7 +180,10 @@ def run_pilot(target: Target, *, emit: Callable[[str], None], timeout: float = 6
             tab.close()
     finally:
         summary["profile_release"] = release_profile(opened)
-        emit(f"Profile: {summary['profile_release']}")
+        if summary["profile_release"] == "left_open_started_by_pilot":
+            emit("Profile left open — close it in Multilogin when done.")
+        else:
+            emit("Profile was already running; left as it was.")
     return summary
 
 
@@ -209,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
          f"Multilogin profile {mask_id(target.profile_id)} (slot {target.instance})")
     emit("Plan: open/attach the profile via the MLX launcher; open one own tab with Ads Manager; "
          "read /me/adaccounts, campaigns, insights (yesterday, last 7 days); close the tab; "
-         "stop the profile only if the pilot started it. Read-only, no writes to Meta.")
+         "never stop the profile. Read-only, no writes to Meta.")
     if not args.run:
         emit("DRY RUN: nothing was contacted. Add --run to execute.")
         return 0

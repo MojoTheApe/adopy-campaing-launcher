@@ -20,7 +20,9 @@
 
 Токен НИКОГДА не возвращается в Python: ни значением, ни в исключении, ни в
 логе. Python видит только `has_token: true/false` и откуда он взят.
-Помощник принимает только GET: этот срез только читает.
+Помощник принимает только GET, без `method`/`_method`/`batch`/
+`suppress_http_code`/`access_token` в параметрах, и не идёт по
+перенаправлениям: этот срез только читает. Python проверяет то же до вызова.
 
 Переснять токен (ошибка 190) — перезагрузить вкладку: новый документ, новое
 замыкание, старого токена нет нигде (`InPageGraph.reacquire`).
@@ -36,6 +38,10 @@ from src.fb_api.cdp import CdpError, PageError
 from src.fb_api.telemetry import strip_tokens
 
 ADS_MANAGER_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act}"
+
+#: Ключи, которыми Graph подменяет глагол или пакует запросы; токен — только у
+#: страницы. Тот же список стоит в помощнике (`FORBIDDEN`).
+FORBIDDEN_PARAMS = frozenset({"method", "_method", "batch", "suppress_http_code", "access_token"})
 
 #: Помощник страницы. `__NAME__` заменяется на имя свойства window (со
 #: случайным хвостом). Никаких обращений наружу, кроме `fetch` к Graph API по
@@ -65,7 +71,10 @@ _HELPER_JS = r"""
   let host = 'graph.facebook.com';
   let version = '';
   let retired = false;
-  let credentials = 'omit';
+  // Параметры, которыми Graph позволяет подменить глагол запроса или
+  // упаковать несколько запросов в один (`method=post`, `batch`, …): срез
+  // только читает, такие ключи отказываются целиком.
+  const FORBIDDEN = ['method', '_method', 'batch', 'suppress_http_code', 'access_token'];
   let hooked = false;
 
   function take(url, body) {
@@ -88,11 +97,20 @@ _HELPER_JS = r"""
     }
   }
 
+  // Дешёвая маскировка обёрток (ревью O1): свой toString отдаёт текст
+  // родной функции, `length` и `name` — как у родной. Остаётся видно:
+  // `Function.prototype.toString.call(обёртка)` и наличие собственного
+  // свойства `toString`; окно — только до захвата токена.
   function disguise(wrapper, original) {
-    try {
-      Object.defineProperty(wrapper, 'toString',
-        { value: () => Function.prototype.toString.call(original), configurable: true });
-    } catch (e) {}
+    const props = {
+      toString: { value: function toString() { return Function.prototype.toString.call(original); },
+                  configurable: true, writable: true, enumerable: false },
+      length: { value: original.length, configurable: true },
+      name: { value: original.name, configurable: true },
+    };
+    for (const k of Object.keys(props)) {
+      try { Object.defineProperty(wrapper, k, props[k]); } catch (e) {}
+    }
     return wrapper;
   }
 
@@ -164,28 +182,28 @@ _HELPER_JS = r"""
     if (!spec || spec.method !== 'GET') return { error: 'read_only' };
     const path = String(spec.path || '');
     if (!/^\/[A-Za-z0-9_\/.\-]*$/.test(path) || path.indexOf('..') >= 0) return { error: 'bad_path' };
+    const params = spec.params || {};
+    for (const k of Object.keys(params)) {
+      if (FORBIDDEN.indexOf(String(k).toLowerCase()) >= 0) return { error: 'forbidden_param' };
+    }
     if (!token) return { error: 'no_token', state: state() };
     if (!realFetch) return { error: 'no_fetch' };
     const q = new URLSearchParams();
-    const params = spec.params || {};
     for (const k of Object.keys(params)) {
-      if (k === 'access_token') continue;
       const v = params[k];
       q.set(k, typeof v === 'string' ? v : JSON.stringify(v));
     }
     q.set('access_token', token);
     const url = 'https://' + host + (version ? '/' + version : '') + path + '?' + q.toString();
+    // Один запрос, без повтора: сбой сети — отчёт и стоп (ревью O4).
+    // Перенаправления не идём (`redirect: 'error'`): ответ — только сам Graph.
     let resp = null;
-    for (const mode of (credentials === 'omit' ? ['omit', 'include'] : ['include', 'omit'])) {
-      try {
-        resp = await realFetch(url, { method: 'GET', credentials: mode, mode: 'cors', cache: 'no-store' });
-        credentials = mode;
-        break;
-      } catch (e) {
-        resp = null;
-      }
+    try {
+      resp = await realFetch(url, { method: 'GET', credentials: 'omit', mode: 'cors',
+                                    cache: 'no-store', redirect: 'error' });
+    } catch (e) {
+      return { error: 'network', state: state() };
     }
-    if (!resp) return { error: 'network', state: state() };
     let text = '';
     try { text = await resp.text(); } catch (e) { return { error: 'network', status: resp.status }; }
     text = clean(text);
@@ -300,6 +318,11 @@ class InPageGraph:
 
     def request(self, method: str, path: str, params: dict | None = None, *,
                 timeout: float = 60.0) -> dict:
+        if method != "GET":
+            raise ValueError("read-only: only GET requests are allowed")
+        bad = [k for k in (params or {}) if str(k).lower() in FORBIDDEN_PARAMS]
+        if bad:
+            raise ValueError(f"read-only: parameter {bad[0]!r} is not allowed")
         spec = {"method": method, "path": path, "params": params or {}}
         got = self._eval(self._js(f".call({json.dumps(spec)})"), timeout=timeout)
         return got if isinstance(got, dict) else {"error": "bad_reply"}

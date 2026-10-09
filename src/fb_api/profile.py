@@ -4,13 +4,12 @@
 дешборда; он на `requests`, без Playwright. Аккаунт вне Multilogin не
 открываем никогда: нет порта отладки от MLX — нет работы.
 
-Правила остановки:
-- профиль уже работал (робот, дешборд, человек) — к нему цепляемся и
-  оставляем как был;
-- останавливаем только то, что подняли сами, и только мягко через MLX API
-  (`stop_profile`); kill — никогда;
-- если до запуска не удалось надёжно узнать, работал ли профиль, считаем,
-  что работал: лучше оставить окно открытым, чем остановить чужое.
+Остановки нет вовсе (решение координатора, ревью PR #759, S2): пилот только
+цепляется к работающему профилю или поднимает его, и НИКОГДА не останавливает.
+Список «запущенных» MLX может не показать профиль робота, дешборда или
+человека (схема ответа, гонка) — тогда «наш» профиль оказался бы чужим.
+Поднятый пилотом профиль остаётся открытым, пилот просит закрыть его в
+Multilogin руками. kill — тем более никогда.
 
 Профиль, открытый руками в MLX Desktop, не трогаем: у него нет порта CDP,
 MLX ответит «уже запущен» без порта — это отказ с понятной причиной.
@@ -19,10 +18,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable
-
-import logging
-
-log = logging.getLogger(__name__)
 
 
 class ProfileError(RuntimeError):
@@ -117,21 +112,16 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
         instance=instance,
         port=str(started.port),
         ws_endpoint=started.ws_endpoint,
-        # «unknown» до запуска — не наш: такой профиль не останавливаем.
+        # Только для сообщения человеку: остановки всё равно нет.
         started_by_us=(state == "not_running"),
         launcher=launcher,
     )
 
 
 def release_profile(opened: OpenedProfile | None) -> str:
-    """Мягкая остановка через MLX API — только если профиль подняли мы."""
+    """Профиль не останавливается никогда; ответ — что сказать человеку."""
     if opened is None:
         return "nothing"
-    if not opened.started_by_us:
-        return "left_running"
-    try:
-        opened.launcher.stop_profile(opened.profile_id, folder_id=opened.folder_id or None)
-        return "stopped"
-    except Exception as exc:  # остановить не вышло — оставляем как есть, без kill
-        log.warning("Graceful MLX stop failed: %s", type(exc).__name__)
-        return "stop_failed"
+    if opened.started_by_us:
+        return "left_open_started_by_pilot"
+    return "left_running"

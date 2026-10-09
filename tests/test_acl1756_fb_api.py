@@ -29,7 +29,9 @@ from src.fb_api import token_capture as tc  # noqa: E402
 from src.fb_api.cdp import PageTab  # noqa: E402
 
 TOKEN = "EAAB" + "Zx9" * 20          # «токен» страницы — живёт только в FakePage
-ACT = "act_120211223344"
+ACT = "act_1234567890"          # заглушки из acl_scan_secrets._PLACEHOLDERS
+ACT2 = "act_1234567890123456"
+PROFILE_UUID = "550e8400-e29b-41d4-a716-446655440000"
 BIZ = "987654321012345"
 TOKEN_LIKE = re.compile(r"EAA[A-Za-z0-9]{10,}")
 
@@ -165,7 +167,7 @@ def _pilot_replies():
                     "estimated_time_to_regain_access": 0}]})},
          "body": {"data": [{"id": ACT, "account_id": ACT[4:], "account_status": 1,
                             "leak": "__TOKEN__"},
-                           {"id": "act_555566667777", "account_id": "555566667777"}],
+                           {"id": ACT2, "account_id": ACT2[4:]}],
                   "paging": {"cursors": {"after": "x"}}}},
         {"status": 200, "headers": {},
          "body": {"data": [{"id": "1", "effective_status": "ACTIVE"},
@@ -203,7 +205,7 @@ def test_pilot_end_to_end_python_never_holds_the_token(tmp_path, caplog, capsys,
     summary = pilot.run_pilot(
         target, emit=lambda s: (lines.append(tm.scrub(s)), print(tm.scrub(s))),
         open_profile=lambda *a: opened,
-        release_profile=lambda o: released.append(o) or "stopped",
+        release_profile=lambda o: released.append(o) or "left_open_started_by_pilot",
         open_tab=lambda url: PageTab.open(url, connect=lambda u, timeout: cdp),
         make_graph=lambda tab: Spy(tab, sleep=lambda s: None),
         make_client=lambda tr: g.GraphClient(tr, sleep=lambda s: None),
@@ -233,7 +235,9 @@ def test_pilot_end_to_end_python_never_holds_the_token(tmp_path, caplog, capsys,
     # Номера в выводе — только последние 4 цифры.
     out_text = "\n".join(lines) + journal.read_text(encoding="utf-8")
     assert ACT not in out_text and ACT[4:] not in out_text and BIZ not in out_text
-    assert "act_…3344" in "\n".join(lines)
+    assert "act_…7890" in "\n".join(lines)
+    assert "Profile left open — close it in Multilogin when done." in lines
+    assert any("usage_headers_seen: True" in line for line in lines)
 
 
 def test_python_sends_only_request_specs_to_the_page():
@@ -244,9 +248,29 @@ def test_python_sends_only_request_specs_to_the_page():
     init = [p for m, p, _ in cdp.sent if m == "Page.addScriptToEvaluateOnNewDocument"]
     assert len(init) == 1 and gr.name in init[0]["source"]
     navs = [p["url"] for m, p, _ in cdp.sent if m == "Page.navigate"]
-    assert navs == ["https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=120211223344"]
+    assert navs == ["https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1234567890"]
     # CDP-события сети не включаются: токен из трафика в Python не читается.
     assert not any(m.startswith("Network.") for m, _, _ in cdp.sent)
+
+
+@pytest.mark.parametrize("method,params", [
+    ("POST", {}), ("DELETE", {}), ("get", {}),
+    ("GET", {"method": "post"}), ("GET", {"_method": "delete"}), ("GET", {"batch": "[]"}),
+    ("GET", {"suppress_http_code": "1"}), ("GET", {"access_token": "x"}), ("GET", {"METHOD": "post"}),
+])
+def test_in_page_graph_refuses_writes_before_touching_the_page(method, params):
+    page = FakePage([OK])
+    gr, cdp = _graph(page)
+    sent = len(cdp.sent)
+    with pytest.raises(ValueError):
+        gr.request(method, "/me", params)
+    assert page.specs == [] and len(cdp.sent) == sent
+
+
+def test_no_profile_stop_anywhere_in_the_pilot():
+    for path in [*(ROOT / "src" / "fb_api").glob("*.py"), ROOT / "scripts" / "fb_api_pilot.py"]:
+        src = path.read_text(encoding="utf-8")
+        assert "stop_profile" not in src and "terminate" not in src.lower(), path.name
 
 
 def test_no_network_capture_or_token_api_in_python_sources():
@@ -260,6 +284,7 @@ def test_no_network_capture_or_token_api_in_python_sources():
 
 _NODE_HARNESS = r"""
 const fetched = [];
+let failNext = false;
 const listeners = [];
 class FakeFormData { constructor(){ this.m = new Map(); } append(k,v){ this.m.set(k,v); } get(k){ return this.m.has(k)?this.m.get(k):null; } }
 class FakeXHR { open(m,u){ this._u=u; } send(b){ this._b=b; } }
@@ -270,6 +295,7 @@ const win = {
               hostname: 'adsmanager.facebook.com', pathname: '/adsmanager/manage/campaigns' },
   fetch: async (url, init) => {
     fetched.push({ url: String(url), init: init || {} });
+    if (failNext) { failNext = false; throw new TypeError('Failed to fetch'); }
     const body = JSON.stringify({ data: [{ id: 'act_1' }],
       paging: { next: 'https://graph.facebook.com/v22.0/act_1/campaigns?access_token=' + TOKEN + '&after=x' },
       echo: TOKEN });
@@ -281,6 +307,7 @@ const win = {
   setTimeout: (f, ms) => setTimeout(f, 0),
 };
 win.window = win; win.top = win;
+const nativeFetch = win.fetch;
 const doc = { readyState: 'complete', querySelector: () => null, scripts: scripts };
 const run = new Function('window','location','document','XMLHttpRequest','URL','URLSearchParams',
   'FormData','performance','setTimeout', HELPER);
@@ -290,6 +317,16 @@ const h = win[NAME];
 (async () => {
   const out = {};
   out.before = h.state();
+  out.wrapped = win.fetch !== nativeFetch && FakeXHR.prototype.send !== origSend;
+  out.wrap = {
+    fetch_len: win.fetch.length === nativeFetch.length,
+    fetch_name: win.fetch.name === nativeFetch.name,
+    fetch_str: win.fetch.toString() === Function.prototype.toString.call(nativeFetch),
+    send_len: FakeXHR.prototype.send.length === origSend.length,
+    open_len: FakeXHR.prototype.open.length === origOpen.length,
+    send_str: FakeXHR.prototype.send.toString() === Function.prototype.toString.call(origSend),
+    tostring_enum: Object.keys(win.fetch).length === 0,
+  };
   out.no_token_call = await h.call({ method: 'GET', path: '/me', params: {} });
   if (MODE === 'xhr') {
     const x = new win.XMLHttpRequest();
@@ -307,6 +344,17 @@ const h = win[NAME];
   out.fetched_has_token = fetched.length === 1 && fetched[0].url.includes('access_token=' + TOKEN);
   out.fetched_url_head = fetched.length ? fetched[0].url.split('?')[0] : '';
   out.credentials = fetched.length ? fetched[0].init.credentials : '';
+  out.redirect = fetched.length ? fetched[0].init.redirect : '';
+  out.method = fetched.length ? fetched[0].init.method : '';
+  out.forbidden = {};
+  const before = fetched.length;
+  for (const k of ['method', '_method', 'batch', 'suppress_http_code', 'access_token', 'Method']) {
+    out.forbidden[k] = await h.call({ method: 'GET', path: '/me', params: { [k]: 'post' } });
+  }
+  out.forbidden_fetches = fetched.length - before;
+  failNext = true;
+  out.net = await h.call({ method: 'GET', path: '/me', params: {} });
+  out.net_fetches = fetched.length - before;
   h.retire();
   out.after_retire = await h.call({ method: 'GET', path: '/me', params: {} });
   out.keys = Object.keys(win).filter(k => k.startsWith('__acl'));
@@ -344,6 +392,15 @@ def test_helper_takes_the_token_from_ads_manager_requests_and_keeps_it(mode, sou
     assert out["fetched_has_token"] is True        # токен приложила сама страница
     assert out["fetched_url_head"] == f"https://graph.facebook.com/{version}/act_1/campaigns"
     assert out["credentials"] == "omit"
+    assert out["redirect"] == "error" and out["method"] == "GET"
+    # Глагол не подменить параметрами Graph (ревью S1): отказ без запроса.
+    assert all(v == {"error": "forbidden_param"} for v in out["forbidden"].values()), out["forbidden"]
+    assert out["forbidden_fetches"] == 0
+    # Сбой сети — ровно один запрос, без второго GET (ревью O4).
+    assert out["net"]["error"] == "network" and out["net_fetches"] == 1
+    # Обёртки выглядят как родные: toString, length, name (ревью O1).
+    assert out["wrapped"] is True
+    assert all(out["wrap"].values()), out["wrap"]
     assert out["got"]["status"] == 200
     assert out["got"]["headers"] == {"x-ad-account-usage": '{"acc_id_util_pct":12}'}
     assert out["after_retire"] == {"error": "retired"}
@@ -404,6 +461,25 @@ def test_190_twice_stops_as_logged_out():
     with pytest.raises(g.LoggedOut):
         c.get("/me/adaccounts")
     assert len(tr.requests) == 2           # после стопа вызовов нет
+
+
+@pytest.mark.parametrize("subcode", [459, 464])
+def test_190_with_checkpoint_subcode_stops_without_reload(subcode):
+    tr = FakeTransport([_err(190, subcode), OK])
+    c, _ = _client(tr)
+    with pytest.raises(g.Checkpoint):
+        c.get("/me")
+    assert tr.reacquires == 0 and len(tr.requests) == 1
+
+
+def test_network_failure_stops_without_a_second_call():
+    tr = FakeTransport([{"error": "network"}, OK])
+    c, _ = _client(tr)
+    with pytest.raises(g.PageFailed):
+        c.get("/me")
+    with pytest.raises(g.PageFailed):
+        c.get("/me")
+    assert len(tr.requests) == 1
 
 
 def test_190_when_reload_lands_on_checkpoint_stops():
@@ -540,10 +616,10 @@ def test_bad_act_is_refused_before_any_call():
 
 def test_scrub_masks_token_acts_and_business_ids():
     text = (f"token {TOKEN} url https://graph.facebook.com/v22.0/{ACT}/x?access_token={TOKEN}&a=1 "
-            f"biz {BIZ} act=120211223344")
+            f"biz {BIZ} act=1234567890")
     out = tm.scrub(text)
     assert TOKEN not in out and "EAA" not in out
-    assert "120211223344" not in out and BIZ not in out
+    assert "1234567890" not in out and BIZ not in out
     assert "act_<id>" in out
 
 
@@ -561,7 +637,7 @@ def test_strip_tokens_keeps_ids_but_drops_tokens():
 
 
 def test_mask_id_keeps_last_four():
-    assert tm.mask_id(ACT) == "act_…3344"
+    assert tm.mask_id(ACT) == "act_…7890"
     assert tm.mask_id("prof-uuid-abcd") == "…abcd"
 
 
@@ -640,21 +716,22 @@ class FakeLauncher:
 
     def stop_profile(self, profile_id, folder_id=None):
         self.stopped.append(profile_id)
+        raise AssertionError("the pilot must never stop a profile")
 
 
 @pytest.mark.parametrize("state,port,started_by_us,release", [
     ("running", "6000", False, "left_running"),
-    ("not_running", None, True, "stopped"),
+    ("not_running", None, True, "left_open_started_by_pilot"),
     ("unknown", None, False, "left_running"),
 ])
-def test_profile_is_stopped_only_if_the_pilot_started_it(monkeypatch, state, port, started_by_us, release):
+def test_profile_is_never_stopped(monkeypatch, state, port, started_by_us, release):
     launcher = FakeLauncher()
     monkeypatch.setattr(prof, "running_state", lambda l, p: (state, port))
     opened = prof.open_profile("P1", "F1", "A", launcher_factory=lambda i: launcher)
     assert opened.started_by_us is started_by_us
     assert launcher.started == ([] if state == "running" else ["P1"])
     assert prof.release_profile(opened) == release
-    assert launcher.stopped == (["P1"] if release == "stopped" else [])
+    assert launcher.stopped == []
 
 
 def test_hand_opened_profile_is_refused_and_left_alone(monkeypatch):
@@ -673,15 +750,17 @@ def test_cdp_url_from_mlx_answer():
 
 # ───────────────────────── пилот: сухой прогон, разрешение аккаунта ─────────────────────────
 
-def test_pilot_default_is_a_dry_run(monkeypatch, capsys):
+def test_pilot_default_is_a_dry_run(monkeypatch, capsys, tmp_path):
     from scripts import fb_api_pilot as pilot
 
     monkeypatch.setattr("config.paths.load_env", lambda: [])
     monkeypatch.setattr(pilot, "run_pilot", lambda *a, **k: (_ for _ in ()).throw(AssertionError("ran")))
-    assert pilot.main(["--profile-id", "11111111-2222-3333-4444-555566667777", "--act", ACT]) == 0
+    monkeypatch.setattr(tm, "journal_path", lambda: tmp_path / "j.jsonl")
+    assert pilot.main(["--profile-id", PROFILE_UUID, "--act", ACT]) == 0
     out = capsys.readouterr().out
-    assert "DRY RUN" in out and ACT not in out and "act_…3344" in out
-    assert "555566667777" not in out
+    assert "DRY RUN" in out and ACT not in out and "act_…7890" in out
+    assert PROFILE_UUID not in out and "…0000" in out
+    assert not (tmp_path / "j.jsonl").exists()
 
 
 def test_pilot_resolves_account_from_the_map(tmp_path, monkeypatch, capsys):
@@ -689,7 +768,7 @@ def test_pilot_resolves_account_from_the_map(tmp_path, monkeypatch, capsys):
 
     csv_path = tmp_path / "map.csv"
     csv_path.write_text("account_name,ad_account_id,profile_id,folder_id,multilogin_instance\n"
-                        "KLD_TEST_B1,120211223344,prof-1-abcd,fold-1,B\n", encoding="utf-8")
+                        "KLD_TEST_B1,1234567890,prof-1-abcd,fold-1,B\n", encoding="utf-8")
     monkeypatch.setenv("META_AD_ACCOUNT_MAP_PATH", str(csv_path))
     t = pilot.resolve_target(pilot._parse(["--account", "kld_test_b1"]))
     assert (t.act, t.profile_id, t.folder_id, t.instance) == (ACT, "prof-1-abcd", "fold-1", "B")
