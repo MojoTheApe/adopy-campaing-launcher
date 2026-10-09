@@ -7102,7 +7102,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "760": {
+        "actor": "Worker-S1760A",
+        "session": "run_s1760a_1009",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1760-api-read",
+        "worktree": "C:\\acl-1760-api-read",
+        "id": "32081179f10e45fd901593d95ffc1842",
+        "issue": 760,
+        "state": "implementing",
+        "started_at": "2026-10-09T20:53:20+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -10311,6 +10324,17 @@
           "session": "coord_c0930a_1009",
           "report": "Return of an Approved task after a live-pilot incident (Coordinator-C0930A, 2026-10-09).\n\nOn Facebook_5265, the pilot attached and opened its own Ads Manager tab, then \"CDP read timed out\" before it captured a token or made any Graph call. Minutes later the account was logged out of Facebook; the owner logged back in.\n\nDiagnosis: the token wait was awaited inside a single Runtime.evaluate, past RawCdp's 5 s read, and the background tab was throttled. The fetch/XHR wrappers are never removed if no token is seen, which is a plausible way to disturb Ads Manager's own auth or refresh traffic.\n\nFix requested:\n- Anti-throttling on our tab (focus emulation and lifecycle active, no visible window).\n- Named, bounded step timeouts.\n- Token wait polled from Python.\n- Fail-safe helper: wrappers can never throw into the page, and a safety timer always removes them after a short window.\n- Our tab is closed on any failure."
         }
+      },
+      "760": {
+        "implementers": [
+          {
+            "actor": "Worker-S1760A",
+            "session": "run_s1760a_1009"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1760A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -11149,6 +11173,10 @@
       "Coordinator-C0930A": {
         "session": "coord_c0930a_1009",
         "role": "Coordinator"
+      },
+      "Worker-S1760A": {
+        "session": "run_s1760a_1009",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -19619,6 +19647,13 @@
         "issue": 756,
         "pr": 759,
         "actor": "Worker-O1756A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-09T20:53:20+00:00",
+        "issue": 760,
+        "claim": "32081179f10e45fd901593d95ffc1842",
+        "actor": "Worker-S1760A"
       }
     ],
     "policy": {
