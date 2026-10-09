@@ -7101,7 +7101,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "756": {
+        "actor": "Worker-API1009",
+        "session": "7109230c",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "feature/api-in-profile",
+        "worktree": "C:\\acl-api-inprofile",
+        "id": "923409c948514a2ba32db49dc19f6878",
+        "issue": 756,
+        "state": "implementing",
+        "started_at": "2026-10-09T13:40:18+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -10228,6 +10241,17 @@
         "pr": 754,
         "queued_at": "2026-10-08T21:47:30+00:00",
         "reviewer": "Reviewer-BATCH02"
+      },
+      "756": {
+        "implementers": [
+          {
+            "actor": "Worker-API1009",
+            "session": "7109230c"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-API1009",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -11046,6 +11070,10 @@
       "Reviewer-R1728Q": {
         "session": "rev_r1728q_1008",
         "role": "Reviewer"
+      },
+      "Worker-API1009": {
+        "session": "7109230c",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -18960,6 +18988,13 @@
             "approved_at": "2026-10-09T08:00:01+00:00"
           }
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-09T13:40:18+00:00",
+        "issue": 756,
+        "claim": "923409c948514a2ba32db49dc19f6878",
+        "actor": "Worker-API1009"
       }
     ],
     "policy": {
