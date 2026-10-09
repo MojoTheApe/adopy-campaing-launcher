@@ -10298,7 +10298,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10317,7 +10317,7 @@
         },
         "pr": 759,
         "queued_at": "2026-10-09T20:43:00+00:00",
-        "review_report": "superseded by live-diagnostic fixes (runIfWaitingForDebugger, local debug-port attach, background:false like Playwright); re-review on next head",
+        "review_report": "# Round 11 (head 5aec8c273fa38a4e2e820b8086eae71439c92db9, delta 6c33e452..5aec8c27): REQUEST CHANGES (tests only)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Code is correct on all four of your points; three guards are not pinned by tests, in the same way as earlier rounds.\n\n## Code review\n1. Process matching (`local_debug_port`): requires `--user-data-dir` equal to the profile folder or whose last component equals the profile id exactly (no prefix, no substring), exe containing \"mimic\" or \"/mlx/\", the port from `--remote-debugging-port` or `DevToolsActivePort`, and the same process LISTENING on it (psutil), plus a loopback accept. Different profile (5265 vs 5414) has a different id/dir, so cannot match; renderer children of the right profile carry no port and are skipped; a profile with a process but no port is refused as hand-opened. If psutil is missing or errors, it falls back to MLX or refuses (fail-safe).\n2. Listen-check: `_accepting` connects only to 127.0.0.1:<port> of the very process that matched and is listening there, with a 1 s timeout, then closes. No other host or port is touched; `_http` now bypasses the system proxy.\n3. No focus stealing: no `Target.activateTarget`, `Page.bringToFront`, `setAutoAttach` or `Runtime.enable` anywhere in `src/fb_api` or the pilot (grep). `createTarget` is `{url:'about:blank'}`; `runIfWaitingForDebugger` is sent on our own session before `Page.enable` and is not `Runtime.enable`. Focus emulation and lifecycle (existing, from the robot) act on our session only. Residual: a non-minimized window will show our tab as the active tab for the few seconds of the call; the live run on 5414 was owner-confirmed.\n4. Six checks separately: test_acl1756_fb_api 99, page_helper_node 22, tab_watchdog 35, test_acl_test_platform 100, test_acl_test_shard 14 passed; acl_scan_secrets clean. `git merge-tree` vs work/main clean (tree c53cce41 = head tree).\n\n## Mutations (new code, 16): 12 killed, 4 survived\nKilled: `background:true`, runIfWaiting dropped, runIfWaiting after Page.enable, `Runtime.enable` instead, prefix/startswith match, substring match, no udd check, listen check dropped, hand-opened not refused (two variants), local attach marked \"ours\", local probe skipped.\nSURVIVED (add tests):\n- `Target.activateTarget` added to `PageTab.open`;\n- `Page.bringToFront` added to `PageTab.open`;\n  (assert the fake CDP never receives them, as the existing tests do for `Network.enable` and `Runtime.enable`);\n- exe filter dropped (a non-Mimic process with the same `--user-data-dir` would match): add a test with a plain chrome.exe whose cmdline has the right udd and a listening port, expect `none`;\n- (minor) the loopback `accepting` check dropped (the listen check covers it; optional test).\n\n## CI\nwindows tests (3.13) passed; linux shards pending; tracker-link failed on a run before the lane. Not approved, so no record/approve.",
         "return_operation": {
           "id": "60974a1db3874b1889e16899588f6435",
           "actor": "Coordinator-C0930A",
@@ -13528,20 +13528,7 @@
       710,
       739
     ],
-    "review": {
-      "id": "54042ea6335a41c298c3ad1b35470fe6",
-      "pr": 759,
-      "issues": [
-        756
-      ],
-      "actor": "Reviewer-R1756S",
-      "session": "rev_r1756s_1009",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-10-09T21:02:52+00:00",
-      "state": "returning",
-      "report": "# Round 11 (head 5aec8c273fa38a4e2e820b8086eae71439c92db9, delta 6c33e452..5aec8c27): REQUEST CHANGES (tests only)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Code is correct on all four of your points; three guards are not pinned by tests, in the same way as earlier rounds.\n\n## Code review\n1. Process matching (`local_debug_port`): requires `--user-data-dir` equal to the profile folder or whose last component equals the profile id exactly (no prefix, no substring), exe containing \"mimic\" or \"/mlx/\", the port from `--remote-debugging-port` or `DevToolsActivePort`, and the same process LISTENING on it (psutil), plus a loopback accept. Different profile (5265 vs 5414) has a different id/dir, so cannot match; renderer children of the right profile carry no port and are skipped; a profile with a process but no port is refused as hand-opened. If psutil is missing or errors, it falls back to MLX or refuses (fail-safe).\n2. Listen-check: `_accepting` connects only to 127.0.0.1:<port> of the very process that matched and is listening there, with a 1 s timeout, then closes. No other host or port is touched; `_http` now bypasses the system proxy.\n3. No focus stealing: no `Target.activateTarget`, `Page.bringToFront`, `setAutoAttach` or `Runtime.enable` anywhere in `src/fb_api` or the pilot (grep). `createTarget` is `{url:'about:blank'}`; `runIfWaitingForDebugger` is sent on our own session before `Page.enable` and is not `Runtime.enable`. Focus emulation and lifecycle (existing, from the robot) act on our session only. Residual: a non-minimized window will show our tab as the active tab for the few seconds of the call; the live run on 5414 was owner-confirmed.\n4. Six checks separately: test_acl1756_fb_api 99, page_helper_node 22, tab_watchdog 35, test_acl_test_platform 100, test_acl_test_shard 14 passed; acl_scan_secrets clean. `git merge-tree` vs work/main clean (tree c53cce41 = head tree).\n\n## Mutations (new code, 16): 12 killed, 4 survived\nKilled: `background:true`, runIfWaiting dropped, runIfWaiting after Page.enable, `Runtime.enable` instead, prefix/startswith match, substring match, no udd check, listen check dropped, hand-opened not refused (two variants), local attach marked \"ours\", local probe skipped.\nSURVIVED (add tests):\n- `Target.activateTarget` added to `PageTab.open`;\n- `Page.bringToFront` added to `PageTab.open`;\n  (assert the fake CDP never receives them, as the existing tests do for `Network.enable` and `Runtime.enable`);\n- exe filter dropped (a non-Mimic process with the same `--user-data-dir` would match): add a test with a plain chrome.exe whose cmdline has the right udd and a listening port, expect `none`;\n- (minor) the loopback `accepting` check dropped (the listen check covers it; optional test).\n\n## CI\nwindows tests (3.13) passed; linux shards pending; tracker-link failed on a run before the lane. Not approved, so no record/approve.",
-      "keep_lane": false
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -19674,6 +19661,24 @@
         "pr": 759,
         "lane": "54042ea6335a41c298c3ad1b35470fe6",
         "actor": "Reviewer-R1756S"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-09T21:03:09+00:00",
+        "review": {
+          "id": "54042ea6335a41c298c3ad1b35470fe6",
+          "pr": 759,
+          "issues": [
+            756
+          ],
+          "actor": "Reviewer-R1756S",
+          "session": "rev_r1756s_1009",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-09T21:02:52+00:00",
+          "state": "returning",
+          "report": "# Round 11 (head 5aec8c273fa38a4e2e820b8086eae71439c92db9, delta 6c33e452..5aec8c27): REQUEST CHANGES (tests only)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Code is correct on all four of your points; three guards are not pinned by tests, in the same way as earlier rounds.\n\n## Code review\n1. Process matching (`local_debug_port`): requires `--user-data-dir` equal to the profile folder or whose last component equals the profile id exactly (no prefix, no substring), exe containing \"mimic\" or \"/mlx/\", the port from `--remote-debugging-port` or `DevToolsActivePort`, and the same process LISTENING on it (psutil), plus a loopback accept. Different profile (5265 vs 5414) has a different id/dir, so cannot match; renderer children of the right profile carry no port and are skipped; a profile with a process but no port is refused as hand-opened. If psutil is missing or errors, it falls back to MLX or refuses (fail-safe).\n2. Listen-check: `_accepting` connects only to 127.0.0.1:<port> of the very process that matched and is listening there, with a 1 s timeout, then closes. No other host or port is touched; `_http` now bypasses the system proxy.\n3. No focus stealing: no `Target.activateTarget`, `Page.bringToFront`, `setAutoAttach` or `Runtime.enable` anywhere in `src/fb_api` or the pilot (grep). `createTarget` is `{url:'about:blank'}`; `runIfWaitingForDebugger` is sent on our own session before `Page.enable` and is not `Runtime.enable`. Focus emulation and lifecycle (existing, from the robot) act on our session only. Residual: a non-minimized window will show our tab as the active tab for the few seconds of the call; the live run on 5414 was owner-confirmed.\n4. Six checks separately: test_acl1756_fb_api 99, page_helper_node 22, tab_watchdog 35, test_acl_test_platform 100, test_acl_test_shard 14 passed; acl_scan_secrets clean. `git merge-tree` vs work/main clean (tree c53cce41 = head tree).\n\n## Mutations (new code, 16): 12 killed, 4 survived\nKilled: `background:true`, runIfWaiting dropped, runIfWaiting after Page.enable, `Runtime.enable` instead, prefix/startswith match, substring match, no udd check, listen check dropped, hand-opened not refused (two variants), local attach marked \"ours\", local probe skipped.\nSURVIVED (add tests):\n- `Target.activateTarget` added to `PageTab.open`;\n- `Page.bringToFront` added to `PageTab.open`;\n  (assert the fake CDP never receives them, as the existing tests do for `Network.enable` and `Runtime.enable`);\n- exe filter dropped (a non-Mimic process with the same `--user-data-dir` would match): add a test with a plain chrome.exe whose cmdline has the right udd and a listening port, expect `none`;\n- (minor) the loopback `accepting` check dropped (the listen check covers it; optional test).\n\n## CI\nwindows tests (3.13) passed; linux shards pending; tracker-link failed on a run before the lane. Not approved, so no record/approve.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
