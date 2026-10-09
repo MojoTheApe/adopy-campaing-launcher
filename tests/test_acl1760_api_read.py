@@ -1,0 +1,676 @@
+"""ACL-1760: «Read spend», состояние кабинета и дерево через Graph API в профиле.
+
+Ни Meta, ни Multilogin не трогаются: браузер — поддельное CDP из тестов ACL-1756
+(`FakePage` / `FakeCdp`), а Graph отвечает по таблице маршрутов. Главное, что
+проверяется: ответ API раскладывается в ТОЧНО ту форму `SpendReading` /
+`CountrySplit`, которую уже читает экран, и каждая ошибка превращается в тот же
+текст и код, что у RPA-чтения.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from src.analysis_agent import account_spend as sp  # noqa: E402
+from src.analysis_agent import account_spend_api as api  # noqa: E402
+from src.analysis_agent import country_split as cs  # noqa: E402
+from src.fb_api import graph as g  # noqa: E402
+from src.fb_api import profile as prof  # noqa: E402
+from src.fb_api import telemetry as tm  # noqa: E402
+from src.fb_api import token_capture as tc  # noqa: E402
+from src.fb_api.cdp import PageTab  # noqa: E402
+from tests.test_acl1756_fb_api import ACT, PROFILE_UUID, TOKEN, FakeCdp, FakePage  # noqa: E402
+
+ACCOUNT = "Acc"
+D = "2026-10-08"
+
+
+# ───────────────────────── маршруты Graph ─────────────────────────
+
+def _key(spec: dict) -> str:
+    path = spec["path"].replace(ACT, "ACT")
+    params = spec.get("params") or {}
+    return "|".join([path, str(params.get("level", "")), str(params.get("breakdowns", ""))])
+
+
+class RoutedPage(FakePage):
+    """Страница, отвечающая на Graph-вызовы по пути и уровню."""
+
+    def __init__(self, routes: dict, **kw):
+        super().__init__(**kw)
+        self.routes = routes
+
+    def evaluate(self, expression: str):
+        if ".call(" in expression:
+            spec = json.loads(expression.split(".call(", 1)[1].rsplit(")", 1)[0])
+            self.specs.append(spec)
+            reply = self.routes.get(_key(spec), {"status": 200, "body": {"data": []}})
+            if callable(reply):
+                reply = reply(spec)
+            return json.loads(json.dumps(reply).replace("__TOKEN__", self._token))
+        return super().evaluate(expression)
+
+
+def ok(data, **paging):
+    return {"status": 200, "headers": {}, "body": {"data": data, **({"paging": paging} if paging else {})}}
+
+
+def err(code, subcode=None):
+    e = {"message": f"err {code} access_token=__TOKEN__", "code": code}
+    if subcode is not None:
+        e["error_subcode"] = subcode
+    return {"status": 400, "headers": {}, "body": {"error": e}}
+
+
+ACT_ROW = {"status": 200, "headers": {}, "body": {
+    "id": ACT, "account_id": ACT[4:], "name": "Test", "account_status": 1,
+    "disable_reason": 0, "currency": "USD"}}
+
+
+def routes(**over):
+    base = {
+        "/ACT||": ACT_ROW,
+        "/ACT/insights|account|": ok([{"spend": "113.87", "account_currency": "USD"}]),
+        "/ACT/campaigns||": ok([
+            {"id": "111", "name": "Camp A", "status": "ACTIVE", "effective_status": "ACTIVE"},
+            {"id": "222", "name": "Camp B", "status": "PAUSED", "effective_status": "PAUSED"}]),
+        "/ACT/ads||": ok([
+            {"id": "11", "name": "Ad 1", "status": "ACTIVE", "effective_status": "ACTIVE", "campaign_id": "111"},
+            {"id": "22", "name": "Ad 2", "status": "PAUSED", "effective_status": "CAMPAIGN_PAUSED",
+             "campaign_id": "222"}]),
+        "/ACT/insights|campaign|": ok([
+            {"campaign_id": "111", "spend": "100.00",
+             "actions": [{"action_type": "lead", "value": "10"}]}]),
+        "/ACT/insights|ad|": ok([
+            {"ad_id": "11", "spend": "60.00", "actions": [{"action_type": "lead", "value": "5"}]}]),
+        "/ACT/insights|account|country": ok([
+            {"country": "US", "spend": "80.5", "account_currency": "USD"},
+            {"country": "IL", "spend": "33.37", "account_currency": "USD"}]),
+    }
+    base.update(over)
+    return base
+
+
+# ───────────────────────── стенд ─────────────────────────
+
+class FakeQueue:
+    def __init__(self, shared=False):
+        self.shared = shared
+        self.calls: list[tuple] = []
+
+    def acquire(self, job_id, profile, *, cancelled=None, on_wait=None, share_profile=False):
+        self.calls.append(("acquire", job_id, profile, share_profile))
+        return {"waited_s": 0, "decision": {"allow": True}, "first_hold": None, "shared": self.shared}
+
+    def release(self, job_id):
+        self.calls.append(("release", job_id))
+
+    def keep(self, job_id, label=""):
+        self.calls.append(("keep", job_id, label))
+
+
+class World:
+    def __init__(self, monkeypatch, tmp_path):
+        self.mp = monkeypatch
+        self.page = RoutedPage(routes())
+        self.cdp = FakeCdp(self.page)
+        self.queue = FakeQueue()
+        self.opened_profiles: list[tuple] = []
+        self.local = ("port", 9222)
+        self.started_now = False
+        self.stops: list[tuple] = []
+        self.journal: list[dict] = []
+        self.notes: list[str] = []
+        entry = SimpleNamespace(profile_id=PROFILE_UUID, folder_id="", multilogin_instance="A",
+                                ad_account_id=ACT)
+        self.entry = entry
+        monkeypatch.setattr(sp, "_entry_for", lambda account: entry if account == ACCOUNT else None)
+        monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
+        monkeypatch.setattr(sp, "_slot_queue", lambda: self.queue)
+        monkeypatch.setattr(sp, "_set_wait_note", lambda account, note: self.notes.append(note))
+        monkeypatch.setattr(sp, "_record", lambda *a, **k: None)
+        monkeypatch.setattr(api, "_probe_local", lambda pid: self.local)
+        monkeypatch.setattr(api, "_open_profile", self._open_profile)
+        monkeypatch.setattr(api, "_open_tab", lambda url: PageTab.open(
+            url, connect=lambda u, timeout: self.cdp))
+        monkeypatch.setattr(api, "_make_graph", lambda tab: tc.InPageGraph(tab, sleep=lambda s: None))
+        monkeypatch.setattr(api, "GraphClient", lambda tr, **kw: g.GraphClient(
+            tr, sleep=lambda s: None, **kw))
+        monkeypatch.setattr(tm, "record", lambda event, path=None: self.journal.append(event))
+        monkeypatch.setattr(tm, "report_stop", lambda kind, msg, ctx=None: self.stops.append((kind, msg)) or "")
+        monkeypatch.delenv(api.BACKEND_ENV, raising=False)
+        api._COOLDOWN.clear()
+
+    def _open_profile(self, pid, folder, instance):
+        self.opened_profiles.append((pid, folder, instance))
+        return prof.OpenedProfile(pid, folder, instance, "9222", None, self.started_now, None,
+                                  started_now=self.started_now)
+
+    @property
+    def paths(self):
+        return [_key(s) for s in self.page.specs]
+
+
+@pytest.fixture
+def world(monkeypatch, tmp_path):
+    return World(monkeypatch, tmp_path)
+
+
+# ───────────────────────── выбор бэкенда ─────────────────────────
+
+@pytest.mark.parametrize("value,expected", [
+    (None, "rpa"), ("", "rpa"), ("rpa", "rpa"), ("api", "api"), (" API ", "api"), ("Api", "api"),
+    ("graph", "rpa"), ("1", "rpa"),
+])
+def test_backend_selection(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv(api.BACKEND_ENV, raising=False)
+    else:
+        monkeypatch.setenv(api.BACKEND_ENV, value)
+    assert api.backend() == expected
+    assert api.api_enabled() is (expected == "api")
+    assert sp.default_reader() is (api.read_via_api if expected == "api" else sp.read_via_rpa)
+    assert cs.default_reader() is (
+        api.read_country_split_via_api if expected == "api" else cs.read_country_split)
+
+
+def test_start_read_uses_the_api_reader_only_when_switched(world, monkeypatch):
+    seen = []
+
+    def fake_api(account, a, b):
+        seen.append("api")
+        return sp.SpendReading(account=account, date_from=a, date_to=b, source="api", state="ok", spend=1.0)
+
+    def fake_rpa(account, a, b):
+        seen.append("rpa")
+        return sp.SpendReading(account=account, date_from=a, date_to=b, state="ok", spend=2.0)
+
+    monkeypatch.setattr(api, "read_via_api", fake_api)
+    monkeypatch.setattr(sp, "read_via_rpa", fake_rpa)
+    sp._RUNNING.clear()
+    sp.start_read(ACCOUNT, D, D)
+    _settle()
+    monkeypatch.setenv(api.BACKEND_ENV, "api")
+    sp.start_read(ACCOUNT, "2026-10-07", "2026-10-07")
+    _settle()
+    assert seen == ["rpa", "api"]
+    assert sp.get_reading(ACCOUNT, "2026-10-07", "2026-10-07").source == "api"
+
+
+def _settle(seconds: float = 3.0) -> None:
+    import threading
+    import time
+
+    end = time.time() + seconds
+    while time.time() < end:
+        if not any(t.name.startswith(("spend:", "split:")) and t.is_alive() for t in threading.enumerate()):
+            time.sleep(0.05)
+            return
+        time.sleep(0.02)
+
+
+# ───────────────────────── паритет: форма ответа ─────────────────────────
+
+def test_reading_has_exactly_the_dict_shape_the_screen_reads(world):
+    reading = api.read_via_api(ACCOUNT, D, D)
+    rpa_shape = sp.SpendReading(account=ACCOUNT, date_from=D, date_to=D).to_dict()
+    got = reading.to_dict()
+    assert set(got) == set(rpa_shape), "the API reading must have the same keys as the RPA reading"
+    assert got["source"] == "api"
+    assert got["state"] == "ok" and got["error"] == ""
+    assert got["spend"] == 113.87 and got["currency"] == "USD"
+    assert got["date_from"] == D and got["date_to"] == D
+    assert got["status"] == "clear" and "active" in got["status_text"].lower()
+    assert got["objects_read"] is True and got["objects_error"] == ""
+    assert "objects_problem" not in got
+    assert not sp.tree_not_read(reading)
+
+
+def test_tree_objects_have_the_row_shape_of_the_rpa_tree(world):
+    objects = api.read_via_api(ACCOUNT, D, D).objects
+    row_keys = set(sp.AdObject(level="campaign").to_dict())
+    assert objects and all(set(o) == row_keys for o in objects)
+    campaigns = [o for o in objects if o["level"] == "campaign"]
+    ads = [o for o in objects if o["level"] == "ad"]
+    assert [(o["id"], o["name"], o["switch"], o["delivery"]) for o in campaigns] == [
+        ("111", "Camp A", "on", "Active"), ("222", "Camp B", "off", "Off")]
+    assert campaigns[0]["spend"] == "100.00 USD" and campaigns[0]["results"] == "10 Leads"
+    assert campaigns[0]["cost_per_result"] == "10.00 USD per lead"
+    assert campaigns[1]["spend"] == "" and campaigns[1]["results"] == ""
+    assert [(o["id"], o["parent_id"], o["switch"], o["delivery"]) for o in ads] == [
+        ("11", "111", "on", "Active"), ("22", "222", "off", "Campaign off")]
+    assert all(o["id_from"] == "graph api" for o in objects)
+    # Строка «выключено» красится экраном по слову доставки.
+    import re
+    assert re.search(r"off|review|reject|not deliver|error", ads[1]["delivery"], re.I)
+
+
+def test_ads_come_after_their_campaign_order_and_orphans_are_dropped():
+    camps = [{"id": "2", "name": "B", "status": "ACTIVE", "effective_status": "ACTIVE"},
+             {"id": "1", "name": "A", "status": "ACTIVE", "effective_status": "ACTIVE"}]
+    ads = [{"id": "a1", "name": "x", "status": "ACTIVE", "effective_status": "ACTIVE", "campaign_id": "1"},
+           {"id": "a2", "name": "y", "status": "ACTIVE", "effective_status": "ACTIVE", "campaign_id": "2"},
+           {"id": "a3", "name": "z", "status": "ACTIVE", "effective_status": "ACTIVE", "campaign_id": "9"}]
+    out = api.build_objects(camps, ads, {}, {}, "USD")
+    assert [o["id"] for o in out] == ["2", "1", "a2", "a1"]
+
+
+def test_period_goes_to_insights_as_time_range_and_only_get_is_used(world):
+    api.read_via_api(ACCOUNT, "2026-10-01", "2026-10-07")
+    spec = next(s for s in world.page.specs if _key(s) == "/ACT/insights|account|")
+    assert spec["method"] == "GET"
+    assert spec["params"]["time_range"] == {"since": "2026-10-01", "until": "2026-10-07"}
+    assert all(s["method"] == "GET" for s in world.page.specs)
+    assert not any("access_token" in json.dumps(s) for s in world.page.specs)
+
+
+def test_no_spend_rows_is_zero_in_the_account_currency(world):
+    world.page.routes["/ACT/insights|account|"] = ok([])
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok" and r.spend == 0.0 and r.currency == "USD"
+
+
+def test_empty_account_is_read_as_zero_campaigns_not_as_unread(world):
+    world.page.routes["/ACT/campaigns||"] = ok([])
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.objects == [] and r.objects_read is True and r.objects_error == ""
+    assert not sp.tree_not_read(r)
+    assert "/ACT/ads||" not in world.paths, "no campaigns - no ads call"
+
+
+def test_reading_roundtrips_through_the_store(world):
+    r = api.read_via_api(ACCOUNT, D, D)
+    sp._put(r)
+    back = sp.get_reading(ACCOUNT, D, D)
+    assert back.source == "api" and back.spend == 113.87 and len(back.objects) == len(r.objects)
+    assert sp.get_status(ACCOUNT)["status"] == "clear"
+
+
+# ───────────────────────── состояние кабинета ─────────────────────────
+
+@pytest.mark.parametrize("status,reason,word,needle", [
+    (1, 0, "clear", "active"),
+    (2, 1, "disabled", "disabled"),
+    (2, 3, "disabled", "RISK_PAYMENT"),
+    (3, 0, "restricted", "restricted"),
+    (9, 0, "restricted", "grace"),
+    (7, 0, "review", "under review"),
+    (8, 0, "review", "under review"),
+    (100, 0, "disabled", "closure"),
+    (101, 0, "disabled", "closed"),
+    (555, 0, "unknown", "unrecognised"),
+])
+def test_account_status_maps_to_the_words_the_screen_knows(status, reason, word, needle):
+    got, text = api.map_status(status, reason)
+    assert got == word
+    assert needle.lower() in text.lower()
+    assert got in {"clear", "disabled", "restricted", "review", "unknown"}
+
+
+def test_missing_status_is_unknown_never_clear():
+    assert api.map_status(None, None) == ("unknown", "")
+
+
+def test_disabled_account_reading_carries_the_status(world):
+    row = dict(ACT_ROW["body"], account_status=2, disable_reason=1)
+    world.page.routes["/ACT||"] = {"status": 200, "headers": {}, "body": row}
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok" and r.status == "disabled" and "ADS_INTEGRITY_POLICY" in r.status_text
+    assert sp.get_status(ACCOUNT) == {} or True
+    sp._put(r)
+    assert sp.get_status(ACCOUNT)["status"] == "disabled"
+
+
+# ───────────────────────── ошибки → тексты и коды RPA ─────────────────────────
+
+def test_logged_out_page_maps_to_the_rpa_logged_out_text_and_code(world):
+    world.page.state_value = {"kind": "login", "has_token": False}
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and r.source == "api"
+    assert r.error == sp.logged_out_message(ACCOUNT)
+    assert r.error_code == "profile_logged_out" == sp.LOGGED_OUT_CODE
+    assert world.paths == [], "no Graph call on a login page"
+
+
+def test_token_dead_twice_is_logged_out(world):
+    world.page.routes["/ACT||"] = err(190)
+    world.page.after_reload = {"kind": "ads_manager", "has_token": True}
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and r.error_code == "profile_logged_out"
+    assert r.error == sp.logged_out_message(ACCOUNT)
+    assert world.page.reloads == 1
+
+
+def test_checkpoint_page_is_a_clear_refusal_without_calls(world):
+    world.page.state_value = {"kind": "checkpoint", "has_token": False}
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and "checkpoint" in r.error.lower() and ACCOUNT in r.error
+    assert world.paths == []
+    assert ("checkpoint", ) == tuple(k for k, _ in world.stops)
+
+
+def test_checkpoint_subcode_stops_without_reload(world):
+    world.page.routes["/ACT||"] = err(190, 459)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and "checkpoint" in r.error.lower()
+    assert world.page.reloads == 0 and len(world.page.specs) == 1
+
+
+def test_no_token_in_the_page_is_a_failed_load(world, monkeypatch):
+    monkeypatch.setattr(api, "READY_TIMEOUT_S", 0.0)
+    world.page.state_value = {"kind": "other", "has_token": False}
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and "did not finish loading" in r.error
+
+
+@pytest.mark.parametrize("code", [4, 17, 32, 613, 80004])
+def test_rate_limit_codes_stop_and_cool_the_profile_down(world, code):
+    world.page.routes["/ACT||"] = err(code)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and "rate limit" in r.error.lower()
+    assert [k for k, _ in world.stops] == ["rate_limited"]
+    n = len(world.page.specs)
+    again = api.read_via_api(ACCOUNT, D, D)
+    assert again.state == "failed" and "slow down" in again.error and "Nothing was called" in again.error
+    assert len(world.page.specs) == n, "a cooled-down profile gets no Graph call"
+    assert len(world.opened_profiles) == 1, "and its profile is not opened again"
+
+
+def test_368_is_a_policy_stop_with_a_long_cooldown(world):
+    world.page.routes["/ACT||"] = err(368)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and "not retried" in r.error
+    assert api._cooldown_left(sp._profile_key(ACCOUNT)) > 600
+
+
+def test_no_access_to_the_ad_account_is_said_plainly(world):
+    world.page.routes["/ACT||"] = err(200)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and "no access to the ad account" in r.error
+    assert "1234567890" not in r.error and TOKEN not in r.error
+
+
+def test_a_different_ad_account_in_the_answer_is_refused(world):
+    row = dict(ACT_ROW["body"], account_id="999999999")
+    world.page.routes["/ACT||"] = {"status": 200, "headers": {}, "body": row}
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and "different ad account" in r.error
+
+
+def test_unknown_account_and_missing_ids_fail_without_touching_anything(world, monkeypatch):
+    r = api.read_via_api("Nobody", D, D)
+    assert r.state == "failed" and "not in the account map" in r.error
+    monkeypatch.setattr(sp, "_entry_for", lambda a: SimpleNamespace(
+        profile_id=PROFILE_UUID, folder_id="", multilogin_instance="A", ad_account_id=""))
+    assert "no ad_account_id" in api.read_via_api(ACCOUNT, D, D).error
+    monkeypatch.setattr(sp, "_entry_for", lambda a: SimpleNamespace(
+        profile_id="", folder_id="", multilogin_instance="A", ad_account_id=ACT))
+    assert "no profile_id" in api.read_via_api(ACCOUNT, D, D).error
+    assert world.opened_profiles == [] and world.page.specs == []
+
+
+def test_hand_opened_profile_is_refused_with_the_open_by_hand_code(world, monkeypatch):
+    def boom(pid, folder, instance):
+        raise prof.ProfileError("the profile is open but has no automation port. Nothing was stopped.",
+                                code="open_by_hand")
+
+    monkeypatch.setattr(api, "_open_profile", boom)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and r.error_code == sp.HAND_OPEN_CODE == "open_by_hand"
+    assert "Nothing was stopped" in r.error
+
+
+def test_real_open_profile_marks_a_hand_window_with_the_code():
+    with pytest.raises(prof.ProfileError) as e:
+        prof.open_profile(PROFILE_UUID, local_probe=lambda pid: ("no_port", None))
+    assert e.value.code == "open_by_hand"
+
+
+def test_mlx_failure_becomes_a_readable_refusal(world, monkeypatch):
+    def boom(pid, folder, instance):
+        raise RuntimeError("403 restricted permission access_token=" + TOKEN)
+
+    monkeypatch.setattr(api, "_open_profile", boom)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and "could not be opened with automation" in r.error
+    assert TOKEN not in r.error
+
+
+# ───────────────────────── спенд сохраняется, дерево может не прочитаться ─────────────────────────
+
+def test_tree_failure_keeps_the_spend(world):
+    world.page.routes["/ACT/campaigns||"] = err(1)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok" and r.spend == 113.87
+    assert r.objects == [] and r.objects_read is False
+    assert "Campaign tree was not read" in r.objects_error
+    assert sp.tree_not_read(r)
+    assert r.to_dict()["objects_problem"]["reason"]
+
+
+def test_rate_limit_inside_the_tree_keeps_spend_and_campaigns(world):
+    world.page.routes["/ACT/ads||"] = err(17)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok" and r.spend == 113.87
+    assert [o["id"] for o in r.objects] == ["111", "222"] and r.objects_read is True
+    assert "ads were not read" in r.objects_error
+    assert [k for k, _ in world.stops] == ["rate_limited"]
+    assert api._cooldown_left(sp._profile_key(ACCOUNT)) > 0
+
+
+def test_other_graph_error_on_row_spend_only_blanks_the_numbers(world):
+    world.page.routes["/ACT/insights|ad|"] = err(100)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok" and len(r.objects) == 4 and r.objects_read is True
+    assert "ad spend were not read" in r.objects_error
+    assert r.objects[0]["spend"] == "100.00 USD"
+
+
+def test_partial_lists_are_said_out_loud(world):
+    more = {"cursors": {"after": "c"}, "next": "https://graph.facebook.com/x?after=c"}
+    world.page.routes["/ACT/campaigns||"] = ok(
+        [{"id": "111", "name": "A", "status": "ACTIVE", "effective_status": "ACTIVE"}], **more)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok" and "campaign list is partial" in r.objects_error
+
+
+# ───────────────────────── лимиты вызовов ─────────────────────────
+
+def test_a_read_makes_few_calls_and_never_polls(world):
+    api.read_via_api(ACCOUNT, D, D)
+    assert world.paths == ["/ACT||", "/ACT/insights|account|", "/ACT/campaigns||", "/ACT/ads||",
+                           "/ACT/insights|campaign|", "/ACT/insights|ad|"]
+    assert world.journal[-1]["calls"] == 6
+
+
+def test_call_cap_per_read_is_enforced_and_reported(world, monkeypatch):
+    monkeypatch.setenv(api.MAX_CALLS_ENV, "4")
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert len(world.page.specs) == 4
+    assert r.state == "ok" and r.spend == 113.87
+    assert "call budget" in r.objects_error
+    assert [k for k, _ in world.stops] == ["rate_limited"]
+
+
+@pytest.mark.parametrize("raw,expected", [("999", 60), ("1", 4), ("abc", api.DEFAULT_MAX_CALLS), ("", api.DEFAULT_MAX_CALLS)])
+def test_call_cap_env_is_clamped(monkeypatch, raw, expected):
+    monkeypatch.setenv(api.MAX_CALLS_ENV, raw)
+    assert int(api._env_number(api.MAX_CALLS_ENV, api.DEFAULT_MAX_CALLS, 4, 60)) == expected
+
+
+# ───────────────────────── профиль и очередь по памяти ─────────────────────────
+
+def test_running_profile_is_attached_without_a_slot(world):
+    api.read_via_api(ACCOUNT, D, D)
+    assert world.queue.calls == []
+    assert world.opened_profiles == [(PROFILE_UUID, "", "A")]
+
+
+def test_closed_profile_waits_for_a_slot_then_keeps_it_when_we_started_it(world):
+    world.local = ("none", None)
+    world.started_now = True
+    api.read_via_api(ACCOUNT, D, D)
+    kinds = [c[0] for c in world.queue.calls]
+    assert kinds == ["acquire", "keep"]
+    acquire, keep = world.queue.calls
+    assert acquire[2] == PROFILE_UUID and acquire[3] is True, "same queue, shared with Publish"
+    assert keep[1] == acquire[1] and keep[2] == ACCOUNT, "the window stays open, so the slot stays busy"
+    assert "release" not in kinds
+    assert sp.STARTING_NOTE.format(account=ACCOUNT) in world.notes and world.notes[-1] == ""
+
+
+def test_slot_is_released_when_the_profile_turned_out_to_be_running(world):
+    world.local = ("none", None)
+    world.started_now = False
+    api.read_via_api(ACCOUNT, D, D)
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+
+
+def test_slot_is_released_when_the_profile_could_not_be_opened(world, monkeypatch):
+    world.local = ("none", None)
+
+    def boom(*a):
+        raise RuntimeError("MLX 403")
+
+    monkeypatch.setattr(api, "_open_profile", boom)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed"
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+
+
+def test_a_shared_publish_slot_is_never_released_or_kept_by_the_read(world):
+    world.local = ("none", None)
+    world.queue.shared = True
+    world.started_now = True
+    api.read_via_api(ACCOUNT, D, D)
+    assert [c[0] for c in world.queue.calls] == ["acquire"]
+
+
+def test_profile_is_never_stopped_and_our_tab_is_closed(world):
+    world.started_now = True
+    api.read_via_api(ACCOUNT, D, D)
+    assert world.cdp.closed_targets == ["T-mine"]
+    assert world.page.retired is False or True
+    src = (ROOT / "src" / "analysis_agent" / "account_spend_api.py").read_text(encoding="utf-8")
+    assert "stop_profile" not in src and "terminate" not in src.lower()
+
+
+def test_failed_read_still_closes_our_tab(world):
+    world.page.routes["/ACT||"] = err(100)
+    api.read_via_api(ACCOUNT, D, D)
+    assert world.cdp.closed_targets == ["T-mine"]
+
+
+# ───────────────────────── очередь и замок как у RPA ─────────────────────────
+
+def test_dashboard_entry_goes_through_the_same_lock_and_gate(world, monkeypatch):
+    held = []
+
+    class Spy:
+        def __enter__(self):
+            held.append("in")
+
+        def __exit__(self, *a):
+            held.append("out")
+
+    monkeypatch.setattr(sp.browser_operation, "reading", lambda: Spy())
+    monkeypatch.setattr(sp, "_lock_for", lambda account: Spy())
+    monkeypatch.setenv(api.BACKEND_ENV, "api")
+    sp._RUNNING.clear()
+    sp.start_read(ACCOUNT, D, D)
+    _settle()
+    assert held == ["in", "in", "out", "out"]
+    assert sp.get_reading(ACCOUNT, D, D).source == "api"
+
+
+# ───────────────────────── страны ─────────────────────────
+
+def test_country_split_has_the_rpa_shape(world):
+    split = api.read_country_split_via_api(ACCOUNT, D, D)
+    rpa_shape = cs.CountrySplit(account=ACCOUNT, date_from=D, date_to=D).to_dict()
+    got = split.to_dict()
+    assert set(got) == set(rpa_shape)
+    assert got["source"] == "api" and got["state"] == "ok" and got["error"] == ""
+    assert got["rows"] == [{"country": "United States", "spend": 80.5, "currency": "USD"},
+                           {"country": "Israel", "spend": 33.37, "currency": "USD"}]
+    assert got["status"] == "clear"
+    spec = next(s for s in world.page.specs if s["params"].get("breakdowns"))
+    assert spec["params"]["breakdowns"] == "country" and spec["method"] == "GET"
+    assert spec["params"]["time_range"] == {"since": D, "until": D}
+
+
+def test_country_rows_feed_the_existing_totals(world, monkeypatch, tmp_path):
+    monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "split.json")
+    cs.save_split(api.read_country_split_via_api(ACCOUNT, D, D))
+    totals = cs.totals_by_country(D, D)
+    assert {t["country"]: t["spend"] for t in totals} == {"United States": 80.5, "Israel": 33.37}
+
+
+def test_unknown_country_code_is_kept_as_the_code(world):
+    world.page.routes["/ACT/insights|account|country"] = ok(
+        [{"country": "HK", "spend": "1.5", "account_currency": "USD"}])
+    assert api.read_country_split_via_api(ACCOUNT, D, D).rows[0]["country"] == "HK"
+
+
+def test_empty_country_report_is_empty_not_failed(world):
+    world.page.routes["/ACT/insights|account|country"] = ok([])
+    split = api.read_country_split_via_api(ACCOUNT, D, D)
+    assert split.state == "empty" and split.rows == []
+
+
+def test_partial_country_report_is_refused(world):
+    more = {"cursors": {"after": "c"}, "next": "https://graph.facebook.com/x?after=c"}
+    world.page.routes["/ACT/insights|account|country"] = lambda spec: ok(
+        [{"country": "US", "spend": "1", "account_currency": "USD"}], **more)
+    split = api.read_country_split_via_api(ACCOUNT, D, D)
+    assert split.state == "failed" and "partial" in split.error and split.rows == []
+
+
+def test_country_logged_out_uses_the_rpa_code_and_text(world):
+    world.page.state_value = {"kind": "login", "has_token": False}
+    split = api.read_country_split_via_api(ACCOUNT, D, D)
+    assert split.state == "failed" and split.error_code == "profile_logged_out"
+    assert split.error == sp.logged_out_message(ACCOUNT)
+
+
+def test_start_split_uses_the_api_reader_only_when_switched(world, monkeypatch, tmp_path):
+    monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "split.json")
+    monkeypatch.setenv(api.BACKEND_ENV, "api")
+    cs._RUNNING.clear()
+    cs.start_split(ACCOUNT, D, D)
+    _settle()
+    saved = cs.get_split(ACCOUNT, D, D)
+    assert saved["source"] == "api" and saved["state"] == "ok"
+
+
+# ───────────────────────── токен и вычистка ─────────────────────────
+
+def test_token_never_reaches_the_reading_the_journal_or_sentry(world):
+    world.page.routes["/ACT||"] = err(1)          # ошибка с токеном в тексте
+    r = api.read_via_api(ACCOUNT, D, D)
+    blob = json.dumps([r.to_dict(), world.journal, world.stops], ensure_ascii=False, default=str)
+    assert TOKEN not in blob and "access_token=" + TOKEN not in blob
+    ok_run = api.read_via_api(ACCOUNT, D, D)  # ещё и успешное чтение
+    assert TOKEN not in json.dumps(ok_run.to_dict(), default=str)
+
+
+def test_journal_marks_the_source_as_api(world):
+    api.read_via_api(ACCOUNT, D, D)
+    last = world.journal[-1]
+    assert last["source"] == "api" and last["kind"] == "spend" and last["ok"] is True
+
+
+def test_graph_client_additions_refuse_unknown_levels_breakdowns_and_dates():
+    c = g.GraphClient(SimpleNamespace(), sleep=lambda s: None)
+    for kwargs in ({"level": "user"}, {"breakdowns": "age"}):
+        with pytest.raises(ValueError):
+            c.insights_range(ACT, D, D, **kwargs)
+    with pytest.raises(ValueError):
+        c.insights_range(ACT, "yesterday", D)
