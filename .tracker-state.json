@@ -7114,20 +7114,6 @@
         "state": "implementing",
         "started_at": "2026-10-09T20:53:20+00:00",
         "from_status": "status:todo"
-      },
-      "756": {
-        "actor": "Worker-O1756A",
-        "session": "run_o1756a_1009",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1756-api-in-profile",
-        "worktree": "C:\\acl-api-inprofile",
-        "id": "14899a18a2ee43b3aa3fb42b64241843",
-        "issue": 756,
-        "state": "handoff",
-        "started_at": "2026-10-09T21:04:01+00:00",
-        "from_status": "status:todo",
-        "pr": 759,
-        "report": "ACL-1756 review round 11 (tests only). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head e68607be (on top of 5aec8c27). File: tests/test_acl1756_fb_api.py only.\n\n1. Focus guards: the fake CDP never receives Target.activateTarget or Page.bringToFront during PageTab.open (open + close) or during a whole run_pilot flow (which also asserts no Network.enable / Runtime.enable).\n2. Process scan: a plain chrome.exe (Google Chrome path, not Mimic/mlx) with this profile's --user-data-dir and a listening port gives (\"none\", None).\n3. Loopback accept check: prof._accepting is True for a listening 127.0.0.1 socket and False after it is closed.\n\nChecks, each run separately: test_acl1756_fb_api 103; test_acl1756_page_helper_node 22; test_acl1702_tab_watchdog 35; test_acl_test_platform 100; test_acl_test_shard 14; acl_scan_secrets clean. --run not used."
       }
     },
     "tasks": {
@@ -10316,7 +10302,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10325,16 +10311,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1756-api-in-profile",
           "worktree": "C:\\acl-api-inprofile",
-          "id": "c27f4c28da1d420c913918706d33afd3",
+          "id": "14899a18a2ee43b3aa3fb42b64241843",
           "issue": 756,
           "state": "handoff",
-          "started_at": "2026-10-09T20:37:39+00:00",
+          "started_at": "2026-10-09T21:04:01+00:00",
           "from_status": "status:todo",
           "pr": 759,
-          "report": "ACL-1756: open our tab like Playwright + attach to the profile's local Mimic process. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 5aec8c27 (on top of 6c33e452). Files: src/fb_api/cdp.py, src/fb_api/profile.py, tests/test_acl1756_fb_api.py.\n\nLive 5414: Page.enable timed out (5265's \"CDP read timed out\" was the same step), and MLX start gave 400 \"browser process is running\" while /profile/running did not list the profile.\n\n1. createTarget: now exactly Playwright's params ({url:\"about:blank\"}; checked in the installed driver: crBrowser sends {url:\"about:blank\", browserContextId}), no background. The reviewer's real-Chrome probe showed background:true tabs never answer Page.enable. A minimised window stays minimised; our tab only becomes the active tab in it, and on close we close only ours.\n2. Runtime.runIfWaitingForDebugger on our session right after the flatten attach, before Page.enable (Playwright does the same); harmless if the target is not paused; not Runtime.enable.\n3. Local attach (profile.py): before MLX, look for THIS profile's Mimic process on the machine (Playwright-free version of browser._discover_owned_debug_port): exact --user-data-dir match (profile dir, or its last path component equals the profile id; no prefix matches), port from --remote-debugging-port or DevToolsActivePort, and the process must LISTEN on it. Found with port \u2192 attach to 127.0.0.1:<port>, \"already running, not ours\". Process without port \u2192 hand-opened, refused. No process \u2192 MLX /profile/running, then start (unchanged).\nWe already used one browser websocket + Target.attachToTarget flatten + sessionId routing (no /devtools/page websocket); a test pins that.\n\nTests: createTarget not background; runIfWaitingForDebugger before Page.enable; paused target answers only after release; one browser websocket with flatten session; local attach without MLX, hand-opened refused, MLX fallback; local matching only this profile, requiring a listening port, no prefix match.\n\nChecks, each run separately: test_acl1756_fb_api 99; test_acl1756_page_helper_node 22; test_acl1702_tab_watchdog 35; test_acl_test_platform 100; test_acl_test_shard 14; acl_scan_secrets clean (a second fake UUID was replaced with a non-UUID id). --run not used.\n\nDiagnostic (scratchpad fb_api_cdp_diag.py) updated: it uses profile.open_profile (new local attach path, prints \"via=local process\" or \"MLX launcher\") and the same createTarget params as the product. It opens one about:blank tab only, never navigates to Facebook, never calls .call(), closes only its own tab (never the last), never stops the profile."
+          "report": "ACL-1756 review round 11 (tests only). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head e68607be (on top of 5aec8c27). File: tests/test_acl1756_fb_api.py only.\n\n1. Focus guards: the fake CDP never receives Target.activateTarget or Page.bringToFront during PageTab.open (open + close) or during a whole run_pilot flow (which also asserts no Network.enable / Runtime.enable).\n2. Process scan: a plain chrome.exe (Google Chrome path, not Mimic/mlx) with this profile's --user-data-dir and a listening port gives (\"none\", None).\n3. Loopback accept check: prof._accepting is True for a listening 127.0.0.1 socket and False after it is closed.\n\nChecks, each run separately: test_acl1756_fb_api 103; test_acl1756_page_helper_node 22; test_acl1702_tab_watchdog 35; test_acl_test_platform 100; test_acl_test_shard 14; acl_scan_secrets clean. --run not used."
         },
         "pr": 759,
-        "queued_at": "2026-10-09T20:43:00+00:00",
+        "queued_at": "2026-10-09T21:11:07+00:00",
         "review_report": "# Round 11 (head 5aec8c273fa38a4e2e820b8086eae71439c92db9, delta 6c33e452..5aec8c27): REQUEST CHANGES (tests only)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Code is correct on all four of your points; three guards are not pinned by tests, in the same way as earlier rounds.\n\n## Code review\n1. Process matching (`local_debug_port`): requires `--user-data-dir` equal to the profile folder or whose last component equals the profile id exactly (no prefix, no substring), exe containing \"mimic\" or \"/mlx/\", the port from `--remote-debugging-port` or `DevToolsActivePort`, and the same process LISTENING on it (psutil), plus a loopback accept. Different profile (5265 vs 5414) has a different id/dir, so cannot match; renderer children of the right profile carry no port and are skipped; a profile with a process but no port is refused as hand-opened. If psutil is missing or errors, it falls back to MLX or refuses (fail-safe).\n2. Listen-check: `_accepting` connects only to 127.0.0.1:<port> of the very process that matched and is listening there, with a 1 s timeout, then closes. No other host or port is touched; `_http` now bypasses the system proxy.\n3. No focus stealing: no `Target.activateTarget`, `Page.bringToFront`, `setAutoAttach` or `Runtime.enable` anywhere in `src/fb_api` or the pilot (grep). `createTarget` is `{url:'about:blank'}`; `runIfWaitingForDebugger` is sent on our own session before `Page.enable` and is not `Runtime.enable`. Focus emulation and lifecycle (existing, from the robot) act on our session only. Residual: a non-minimized window will show our tab as the active tab for the few seconds of the call; the live run on 5414 was owner-confirmed.\n4. Six checks separately: test_acl1756_fb_api 99, page_helper_node 22, tab_watchdog 35, test_acl_test_platform 100, test_acl_test_shard 14 passed; acl_scan_secrets clean. `git merge-tree` vs work/main clean (tree c53cce41 = head tree).\n\n## Mutations (new code, 16): 12 killed, 4 survived\nKilled: `background:true`, runIfWaiting dropped, runIfWaiting after Page.enable, `Runtime.enable` instead, prefix/startswith match, substring match, no udd check, listen check dropped, hand-opened not refused (two variants), local attach marked \"ours\", local probe skipped.\nSURVIVED (add tests):\n- `Target.activateTarget` added to `PageTab.open`;\n- `Page.bringToFront` added to `PageTab.open`;\n  (assert the fake CDP never receives them, as the existing tests do for `Network.enable` and `Runtime.enable`);\n- exe filter dropped (a non-Mimic process with the same `--user-data-dir` would match): add a test with a plain chrome.exe whose cmdline has the right udd and a listening port, expect `none`;\n- (minor) the loopback `accepting` check dropped (the listen check covers it; optional test).\n\n## CI\nwindows tests (3.13) passed; linux shards pending; tracker-link failed on a run before the lane. Not approved, so no record/approve.",
         "return_operation": {
           "id": "60974a1db3874b1889e16899588f6435",
@@ -13543,7 +13529,8 @@
       642,
       651,
       710,
-      739
+      739,
+      756
     ],
     "review": null,
     "history": [
@@ -19702,6 +19689,13 @@
         "at": "2026-10-09T21:04:01+00:00",
         "issue": 756,
         "claim": "14899a18a2ee43b3aa3fb42b64241843",
+        "actor": "Worker-O1756A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-09T21:11:07+00:00",
+        "issue": 756,
+        "pr": 759,
         "actor": "Worker-O1756A"
       }
     ],
