@@ -7123,9 +7123,11 @@
         "worktree": "C:\\acl-api-inprofile",
         "id": "14899a18a2ee43b3aa3fb42b64241843",
         "issue": 756,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-09T21:04:01+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 759,
+        "report": "ACL-1756 review round 11 (tests only). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head e68607be (on top of 5aec8c27). File: tests/test_acl1756_fb_api.py only.\n\n1. Focus guards: the fake CDP never receives Target.activateTarget or Page.bringToFront during PageTab.open (open + close) or during a whole run_pilot flow (which also asserts no Network.enable / Runtime.enable).\n2. Process scan: a plain chrome.exe (Google Chrome path, not Mimic/mlx) with this profile's --user-data-dir and a listening port gives (\"none\", None).\n3. Loopback accept check: prof._accepting is True for a listening 127.0.0.1 socket and False after it is closed.\n\nChecks, each run separately: test_acl1756_fb_api 103; test_acl1756_page_helper_node 22; test_acl1702_tab_watchdog 35; test_acl_test_platform 100; test_acl_test_shard 14; acl_scan_secrets clean. --run not used."
       }
     },
     "tasks": {
