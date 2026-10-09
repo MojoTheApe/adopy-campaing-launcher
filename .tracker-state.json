@@ -7101,22 +7101,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "756": {
-        "actor": "Worker-O1756A",
-        "session": "run_o1756a_1009",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1756-api-in-profile",
-        "worktree": "C:\\acl-api-inprofile",
-        "id": "163a0b24c34e48b5b5a9139f2a57985f",
-        "issue": 756,
-        "state": "handoff",
-        "started_at": "2026-10-09T15:34:47+00:00",
-        "from_status": "status:todo",
-        "pr": 759,
-        "report": "ACL-1756 review round 3 (CI shard balance). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head e21bd6c4 (on top of bcdb03be). Tests only; no product code changed.\n\n- The Node page-helper tests move from tests/test_acl1756_fb_api.py to tests/test_acl1756_page_helper_node.py. Shard costs are now 73 and 29 instead of 77 in one file. The shard tolerance was not touched.\n- Browser files across the 3 Linux shards (scripts/acl_test_shard.py): now [37, 34, 36]; before the split [37, 33, 37] (failed); work/main 646044f2 [35, 37, 35].\n- The page now refuses the empty parameter name \"\" (asserted in Node).\n\nLocal checks, each file run separately: test_acl_test_shard.py 14 passed; test_acl1756_fb_api.py 63 passed; test_acl1756_page_helper_node.py 3 passed (Node ran); test_acl1702_tab_watchdog.py 35 passed; acl_scan_secrets clean. --run was not used."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -10271,7 +10256,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10280,16 +10265,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1756-api-in-profile",
           "worktree": "C:\\acl-api-inprofile",
-          "id": "001d1febf57a42738f11c768b514dcff",
+          "id": "163a0b24c34e48b5b5a9139f2a57985f",
           "issue": 756,
           "state": "handoff",
-          "started_at": "2026-10-09T15:12:10+00:00",
+          "started_at": "2026-10-09T15:34:47+00:00",
           "from_status": "status:todo",
           "pr": 759,
-          "report": "ACL-1756 review round 2 fix. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head bcdb03be (on top of 18b4e19b).\n\n- Param names: the page helper (KEY_RE) and InPageGraph.request (PARAM_KEY_RE) now accept only ^[A-Za-z0-9_]+$ ASCII keys, then apply the method/_method/batch/suppress_http_code/access_token denylist. Values stay URL-encoded.\n- Tests: Node and Python both cover \" method\", \"method \", \"\\tmethod\", \"method\\u0000\", \"method[]\" and fullwidth \"\uff4dethod\". The page refuses them with no fetch; Python refuses them before touching the page. Ordinary read params (fields, date_preset, limit) still pass.\n- Length mimic: the Node fakes now use native lengths that differ from the wrappers' arity (fetch 1, send 0, open 5), and the test asserts the wrappers match them.\n- Node output is decoded as UTF-8 in the test.\n\nChecks: test_acl1756_fb_api.py 66 passed; test_acl1702_tab_watchdog.py 35 passed (run separately); acl_scan_secrets clean. --run was not used."
+          "report": "ACL-1756 review round 3 (CI shard balance). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head e21bd6c4 (on top of bcdb03be). Tests only; no product code changed.\n\n- The Node page-helper tests move from tests/test_acl1756_fb_api.py to tests/test_acl1756_page_helper_node.py. Shard costs are now 73 and 29 instead of 77 in one file. The shard tolerance was not touched.\n- Browser files across the 3 Linux shards (scripts/acl_test_shard.py): now [37, 34, 36]; before the split [37, 33, 37] (failed); work/main 646044f2 [35, 37, 35].\n- The page now refuses the empty parameter name \"\" (asserted in Node).\n\nLocal checks, each file run separately: test_acl_test_shard.py 14 passed; test_acl1756_fb_api.py 63 passed; test_acl1756_page_helper_node.py 3 passed (Node ran); test_acl1702_tab_watchdog.py 35 passed; acl_scan_secrets clean. --run was not used."
         },
         "pr": 759,
-        "queued_at": "2026-10-09T15:15:13+00:00",
+        "queued_at": "2026-10-09T15:35:47+00:00",
         "review_report": "# Round 3 (head bcdb03be7f9ea3ad28e187327df52b32852686cf, delta 18b4e19b..bcdb03be): code APPROVED, required CI red, lane returned\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent reviewer.\n\n- Fix verified: helper `KEY_RE` /^[A-Za-z0-9_]+$/ and Python `PARAM_KEY_RE` (ASCII, fullmatch, non-str refused) run before the denylist. Bypass set re-run in Node and Python: padded/tab/NUL/`[]`/fullwidth/`m\u00e9thod`/`method<U+200B>`/empty/`method\\n`/Kelvin sign/`%6dethod`/`method.`/`me thod` all refused with 0 fetches; `fields`, `_ok1`, `1` still pass; path injection (`?method=`, `&method=`, `#`, `%3f`, `;`) still `bad_path`.\n- Mutations on the delta: 11 of 12 killed, including the previously surviving wrapper `.length` mutation. Survivor: JS `KEY_RE` allowing an empty key (harmless, Python layer kills it; add a Node empty-key test if convenient).\n- Tests: test_acl1756_fb_api.py 66 passed; test_acl1702_tab_watchdog.py 35 passed (separately); acl_scan_secrets clean. merge-tree vs work/main 646044f2 clean, tree cbcfee9d = head tree.\n- CI: windows 3.13, tooling/secret scan, Process instructions, Installer verification, descriptor pass; tracker-link passes after a re-run (first run predated Review). linux 3.13 shard 1 FAILED: tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards, counts [37, 33, 37] (limit 3), most likely the new test file shifting shard weights. Required \"ACL verification\" therefore not green; batch approve refused.\n- Review recorded (record-review --pr 759 applied, evidence review_759_evidence_r3.json). Lane returned so the worker can fix tests/shard only; re-acquire and re-check the small delta afterwards."
       }
     },
@@ -13473,7 +13458,8 @@
       642,
       651,
       710,
-      739
+      739,
+      756
     ],
     "review": null,
     "history": [
@@ -19195,6 +19181,13 @@
         "at": "2026-10-09T15:34:47+00:00",
         "issue": 756,
         "claim": "163a0b24c34e48b5b5a9139f2a57985f",
+        "actor": "Worker-O1756A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-09T15:35:47+00:00",
+        "issue": 756,
+        "pr": 759,
         "actor": "Worker-O1756A"
       }
     ],
