@@ -7101,7 +7101,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "756": {
+        "actor": "Worker-O1756A",
+        "session": "run_o1756a_1009",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1756-api-in-profile",
+        "worktree": "C:\\acl-api-inprofile",
+        "id": "c27f4c28da1d420c913918706d33afd3",
+        "issue": 756,
+        "state": "implementing",
+        "started_at": "2026-10-09T20:37:39+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -10278,9 +10291,13 @@
           {
             "actor": "Worker-O1756A",
             "session": "run_o1756a_1009"
+          },
+          {
+            "actor": "Worker-O1756A",
+            "session": "run_o1756a_1009"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10305,8 +10322,7 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "Return of an Approved task after a live-pilot incident (Coordinator-C0930A, 2026-10-09).\n\nOn Facebook_5265, the pilot attached and opened its own Ads Manager tab, then \"CDP read timed out\" before it captured a token or made any Graph call. Minutes later the account was logged out of Facebook; the owner logged back in.\n\nDiagnosis: the token wait was awaited inside a single Runtime.evaluate, past RawCdp's 5 s read, and the background tab was throttled. The fetch/XHR wrappers are never removed if no token is seen, which is a plausible way to disturb Ads Manager's own auth or refresh traffic.\n\nFix requested:\n- Anti-throttling on our tab (focus emulation and lifecycle active, no visible window).\n- Named, bounded step timeouts.\n- Token wait polled from Python.\n- Fail-safe helper: wrappers can never throw into the page, and a safety timer always removes them after a short window.\n- Our tab is closed on any failure."
-        },
-        "reviewer": "Reviewer-R1756S"
+        }
       }
     },
     "actors": {
@@ -19600,6 +19616,13 @@
           "report": "superseded by live-diagnostic fixes (runIfWaitingForDebugger, local debug-port attach, background:false like Playwright); re-review on next head",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-09T20:37:39+00:00",
+        "issue": 756,
+        "claim": "c27f4c28da1d420c913918706d33afd3",
+        "actor": "Worker-O1756A"
       }
     ],
     "policy": {
