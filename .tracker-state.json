@@ -2488,6 +2488,35 @@
         "issue_scopes": {
           "756": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7"
         }
+      },
+      "763": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-B763Q",
+        "review_session": "rev_b763q_1010",
+        "execution_lane": "098887cfdc4845a587d522e419c6b8ff",
+        "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
+        "implementer": "Coordinator-C0930A",
+        "source_heads": [
+          "5e93218e70df3d173ae36373785e9d0c9a6725cd",
+          "e68607be31d9fb5c865f34e865420c396f9f5778"
+        ],
+        "pr": 763,
+        "head_sha": "cf3ac90ab34e13ffbf6105945051728bf040aae2",
+        "base_sha": "f35bdaa6cff4be31f2e376b55130f24edc44f8cd",
+        "tree_sha": "295c4bf5b7911fc3b5f417d429d84d0d927629a3",
+        "report": "# Review PR 763 (batch 3b8ca0b6, ACL-1728 + ACL-1756 into stage)\n\nReviewer-B763Q (session rev_b763q_1010), independent integration reviewer. Implementer of the integration = Coordinator-C0930A (coord_c0930a_1009). Members: ACL-1728 PR 732 (Worker-S1728A, source reviewer Reviewer-R1728Q) and ACL-1756 PR 759 (Workers Worker-O1756A / Worker-API1009, source reviewers Reviewer-R1756Q / Reviewer-R1756S). I implemented none of them.\n\nVerdict: APPROVED.\n\n1. Composition. Head cf3ac90a = merge commit (parents 0db661b, e68607be). 0db661b = merge of 5e93218e (PR 732 tip) into main 646044f2. Both frozen tips are present as merge parents and equal the live PR heads: 732 = 5e93218e, 759 = e68607be. Only 2 merge commits above main (plus the 12 preserved source commits); no extra commits, no manual edits. Merge base with main is 646044f2 (= base).\n2. Final tree. Tree 295c4bf5 is exactly what `git merge-tree --write-tree 5e93218e e68607be` produces: no conflict, no hand resolution. Diff vs main = 11 files (2 for 1728: src/web/templates/report.html, tests/test_builder_foot_stays_put_browser.py; 9 for 1756: src/fb_api/*, scripts/fb_api_pilot.py, tests/test_acl1756_*.py). The two file sets are disjoint. 1756 does not touch report.html or the builder; 1728 does not touch src/fb_api. No interaction.\n3. Source approvals match the tips: 732 approved at head 5e93218e (R1728Q, evidence tree 89ff420b); 759 approved round 12 at head e68607be (R1756S, evidence tree bb3f57c7), base 646044f2 in both. Both bases equal the batch base.\n4. Tests in a detached worktree of cf3ac90a, one file at a time: test_the_builder_drawer 7 passed; test_acl1756_fb_api 103 passed; test_acl1756_page_helper_node 22 passed; test_acl1702_tab_watchdog 35 passed; test_acl_test_platform 100 passed; test_acl_test_shard 14 passed; scripts/acl_scan_secrets.py clean. test_builder_foot_stays_put_browser.py NOT run locally: free RAM 5.5 GB < 6 GB (it ran in CI shards).\n5. Combined CI on exact head cf3ac90a, all green, nothing reused: scope classifier reported reason batch-integration-promotion-or-unknown-route, reuse no-proven-full-run, so every job ran on this tree. Linux 3.11 shards 1-3 and 3.13 shards 1-3, windows 3.13, ACL verification, descriptor/Delivery setup, Tracker linkage, Process instructions, Classify and tooling, Verify build inputs, Build/install/repair/uninstall (11m), Installer verification. No rerun was needed.\nNon-blocking: nothing new. Source follow-ups from review_732 (accounts not in the footer signature) are unchanged.\n6. Base. PR base is stage f35bdaa6 whose tree (f0a9183d) equals main 646044f2's tree, so the frozen main baseline is unchanged; the evidence base_sha is the PR base f35bdaa6 (the tracker rejected main's sha as 'does not match current base_sha'); the merge base of the members is main 646044f2.\n",
+        "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          728,
+          756
+        ],
+        "recorded_at": "2026-10-09T22:10:42+00:00",
+        "issue_scopes": {
+          "728": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828",
+          "756": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7"
+        }
       }
     },
     "stage": {
