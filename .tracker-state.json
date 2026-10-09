@@ -7101,22 +7101,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "756": {
-        "actor": "Worker-O1756A",
-        "session": "run_o1756a_1009",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1756-api-in-profile",
-        "worktree": "C:\\acl-api-inprofile",
-        "id": "c27f4c28da1d420c913918706d33afd3",
-        "issue": 756,
-        "state": "handoff",
-        "started_at": "2026-10-09T20:37:39+00:00",
-        "from_status": "status:todo",
-        "pr": 759,
-        "report": "ACL-1756: open our tab like Playwright + attach to the profile's local Mimic process. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 5aec8c27 (on top of 6c33e452). Files: src/fb_api/cdp.py, src/fb_api/profile.py, tests/test_acl1756_fb_api.py.\n\nLive 5414: Page.enable timed out (5265's \"CDP read timed out\" was the same step), and MLX start gave 400 \"browser process is running\" while /profile/running did not list the profile.\n\n1. createTarget: now exactly Playwright's params ({url:\"about:blank\"}; checked in the installed driver: crBrowser sends {url:\"about:blank\", browserContextId}), no background. The reviewer's real-Chrome probe showed background:true tabs never answer Page.enable. A minimised window stays minimised; our tab only becomes the active tab in it, and on close we close only ours.\n2. Runtime.runIfWaitingForDebugger on our session right after the flatten attach, before Page.enable (Playwright does the same); harmless if the target is not paused; not Runtime.enable.\n3. Local attach (profile.py): before MLX, look for THIS profile's Mimic process on the machine (Playwright-free version of browser._discover_owned_debug_port): exact --user-data-dir match (profile dir, or its last path component equals the profile id; no prefix matches), port from --remote-debugging-port or DevToolsActivePort, and the process must LISTEN on it. Found with port \u2192 attach to 127.0.0.1:<port>, \"already running, not ours\". Process without port \u2192 hand-opened, refused. No process \u2192 MLX /profile/running, then start (unchanged).\nWe already used one browser websocket + Target.attachToTarget flatten + sessionId routing (no /devtools/page websocket); a test pins that.\n\nTests: createTarget not background; runIfWaitingForDebugger before Page.enable; paused target answers only after release; one browser websocket with flatten session; local attach without MLX, hand-opened refused, MLX fallback; local matching only this profile, requiring a listening port, no prefix match.\n\nChecks, each run separately: test_acl1756_fb_api 99; test_acl1756_page_helper_node 22; test_acl1702_tab_watchdog 35; test_acl_test_platform 100; test_acl_test_shard 14; acl_scan_secrets clean (a second fake UUID was replaced with a non-UUID id). --run not used.\n\nDiagnostic (scratchpad fb_api_cdp_diag.py) updated: it uses profile.open_profile (new local attach path, prints \"via=local process\" or \"MLX launcher\") and the same createTarget params as the product. It opens one about:blank tab only, never navigates to Facebook, never calls .call(), closes only its own tab (never the last), never stops the profile."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -10299,7 +10284,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10308,16 +10293,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1756-api-in-profile",
           "worktree": "C:\\acl-api-inprofile",
-          "id": "9495795c870b4c0fa6cf3352c49a167e",
+          "id": "c27f4c28da1d420c913918706d33afd3",
           "issue": 756,
           "state": "handoff",
-          "started_at": "2026-10-09T19:52:53+00:00",
+          "started_at": "2026-10-09T20:37:39+00:00",
           "from_status": "status:todo",
           "pr": 759,
-          "report": "ACL-1756 review round 9. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 6c33e452 (on top of 9495ac21). Files: src/fb_api/cdp.py, src/fb_api/token_capture.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\nR9-1 (blocker): the Graph GET is now sent exactly once. _eval was split:\n- _eval_helper(state/probe/retire) may retry, but ONLY on StaleContextError, which evaluate_in now actually raises (wired _looks_stale on a stale-context CDP error). Nothing on that path goes to Meta.\n- request() prepares the world (_ready_for_call: _ensure + one .state(), retries OK, no Meta), then evaluates .call() EXACTLY once. Any error after it (StaleContextError/PageError/CdpError) returns {\"error\":\"call_unknown\"}; GraphClient maps that to a PageFailed stop, never retried. CdpTimeout propagates (also a stop, not retried). Dead StaleContextError/_looks_stale are now used.\nTest: one CdpError on the call \u2192 exactly one .call evaluation and a stop; plus a helper .state() stale-context retried once in a new world.\n\nR9-2: the 1 s poll runs only scanFast (Resource Timing). scanHtml (innerHTML + inline scripts) runs only in the final probe(). The bare /(EAA\u2026)/ script fallback is dropped; only \"accessToken\":\"EAA\u2026\" remains. The Resource Timing path keeps TOKEN_RE. Tests: inline HTML/script captured in probe, not the poll; a bare EAA outside the accessToken key is ignored; a Resource Timing access_token that is not token-shaped is refused.\n\nR9-3: HTTP close fallback pinned by tests \u2014 only our tab open \u2192 nothing closed; our tab absent \u2192 nothing; our tab not first \u2192 only ours closed; grantUniveralAccess:false asserted. The HTTP opener now bypasses the system proxy (loopback debug port).\n\nMutations (files restored after each):\n- mut1756_r9_adapted.py: 17 of 17 killed (incl. \"graph call retried after error\" for R9-1, the two R9-2 patterns, the four R9-3/grant mutations, and strip_tokens on both paths).\n- mut1756_r8b.py (design set adapted to no-wrap): all applicable killed; obsolete wrapper/sweep entries do not apply to the no-wrap design.\n\nChecks, each run separately: test_acl1756_fb_api 88; test_acl1756_page_helper_node 22 (Node ran); test_acl1702_tab_watchdog 35; test_acl_test_platform 100; test_acl_test_shard 14 (spread [36,35,36]); acl_scan_secrets clean. No command denied. --run was not used, no pilot on any account."
+          "report": "ACL-1756: open our tab like Playwright + attach to the profile's local Mimic process. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 5aec8c27 (on top of 6c33e452). Files: src/fb_api/cdp.py, src/fb_api/profile.py, tests/test_acl1756_fb_api.py.\n\nLive 5414: Page.enable timed out (5265's \"CDP read timed out\" was the same step), and MLX start gave 400 \"browser process is running\" while /profile/running did not list the profile.\n\n1. createTarget: now exactly Playwright's params ({url:\"about:blank\"}; checked in the installed driver: crBrowser sends {url:\"about:blank\", browserContextId}), no background. The reviewer's real-Chrome probe showed background:true tabs never answer Page.enable. A minimised window stays minimised; our tab only becomes the active tab in it, and on close we close only ours.\n2. Runtime.runIfWaitingForDebugger on our session right after the flatten attach, before Page.enable (Playwright does the same); harmless if the target is not paused; not Runtime.enable.\n3. Local attach (profile.py): before MLX, look for THIS profile's Mimic process on the machine (Playwright-free version of browser._discover_owned_debug_port): exact --user-data-dir match (profile dir, or its last path component equals the profile id; no prefix matches), port from --remote-debugging-port or DevToolsActivePort, and the process must LISTEN on it. Found with port \u2192 attach to 127.0.0.1:<port>, \"already running, not ours\". Process without port \u2192 hand-opened, refused. No process \u2192 MLX /profile/running, then start (unchanged).\nWe already used one browser websocket + Target.attachToTarget flatten + sessionId routing (no /devtools/page websocket); a test pins that.\n\nTests: createTarget not background; runIfWaitingForDebugger before Page.enable; paused target answers only after release; one browser websocket with flatten session; local attach without MLX, hand-opened refused, MLX fallback; local matching only this profile, requiring a listening port, no prefix match.\n\nChecks, each run separately: test_acl1756_fb_api 99; test_acl1756_page_helper_node 22; test_acl1702_tab_watchdog 35; test_acl_test_platform 100; test_acl_test_shard 14; acl_scan_secrets clean (a second fake UUID was replaced with a non-UUID id). --run not used.\n\nDiagnostic (scratchpad fb_api_cdp_diag.py) updated: it uses profile.open_profile (new local attach path, prints \"via=local process\" or \"MLX launcher\") and the same createTarget params as the product. It opens one about:blank tab only, never navigates to Facebook, never calls .call(), closes only its own tab (never the last), never stops the profile."
         },
         "pr": 759,
-        "queued_at": "2026-10-09T20:21:24+00:00",
+        "queued_at": "2026-10-09T20:43:00+00:00",
         "review_report": "superseded by live-diagnostic fixes (runIfWaitingForDebugger, local debug-port attach, background:false like Playwright); re-review on next head",
         "return_operation": {
           "id": "60974a1db3874b1889e16899588f6435",
@@ -13511,7 +13496,8 @@
       642,
       651,
       710,
-      739
+      739,
+      756
     ],
     "review": null,
     "history": [
@@ -19624,6 +19610,13 @@
         "at": "2026-10-09T20:37:39+00:00",
         "issue": 756,
         "claim": "c27f4c28da1d420c913918706d33afd3",
+        "actor": "Worker-O1756A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-09T20:43:00+00:00",
+        "issue": 756,
+        "pr": 759,
         "actor": "Worker-O1756A"
       }
     ],
