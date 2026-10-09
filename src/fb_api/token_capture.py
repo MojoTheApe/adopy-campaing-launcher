@@ -189,19 +189,9 @@ _HELPER_JS = r"""
   }
   function unstage(id) { delete staged[String(id)]; return true; }
 
-  // Строку-JSON Graph разберёт сам — разбираем и мы до проверок (ревью, minor 1).
-  function parsed(value) {
-    if (typeof value === 'string') {
-      const t = value.trim();
-      if (t[0] === '{' || t[0] === '[') {
-        try { return JSON.parse(t); } catch (e) { return undefined; }
-      }
-    }
-    return value;
-  }
+  // Вложенные строки — обычный текст (ревью R2-B1): разбираются только
+  // JSON-ключи верхнего уровня, в `write()` до проверок.
   function statusOk(value) {
-    value = parsed(value);
-    if (value === undefined) return false;
     if (Array.isArray(value)) { for (const v of value) if (!statusOk(v)) return false; return true; }
     if (value && typeof value === 'object') {
       for (const k of Object.keys(value)) {
@@ -229,13 +219,15 @@ _HELPER_JS = r"""
       if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
     }
     if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED') return refused('status');
+    const checked = Object.assign({}, params);
     for (const k of WRITE.json_keys) {
       if (!(k in params)) continue;
       let v = params[k];
       if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { return refused('json'); } }
       if (v === null || typeof v !== 'object') return refused('json');
+      checked[k] = v;
     }
-    if (!statusOk(params)) return refused('status');
+    if (!statusOk(checked)) return refused('status');
     const want = WRITE.files[edge];
     const files = spec.files || {};
     const fk = Object.keys(files);

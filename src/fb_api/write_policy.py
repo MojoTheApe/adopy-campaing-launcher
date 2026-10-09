@@ -60,20 +60,22 @@ def policy_for_page(act: str) -> dict:
     }
 
 
-def _parsed(value: Any, where: str, *, required: bool = False) -> Any:
-    """Строку, похожую на JSON, разобрать (Graph сделает так же). Неразборная — отказ."""
+def _parsed(value: Any, where: str) -> Any:
+    """Значение JSON-ключа верхнего уровня: строку Graph разберёт сам — разбираем и мы.
+
+    Только для `JSON_KEYS` верхнего уровня (ревью R2-B1): строки ВНУТРИ
+    разобранного объекта — обычный текст («[TEST] Camp», «{Free} gift»), Graph
+    их не разбирает, и мы не трогаем.
+    """
     if isinstance(value, str):
-        text = value.strip()
-        if required or text[:1] in ("{", "["):
-            try:
-                return json.loads(text)
-            except ValueError as exc:
-                raise WriteRefused(f"write refused: a JSON value is malformed ({where})") from exc
+        try:
+            return json.loads(value)
+        except ValueError as exc:
+            raise WriteRefused(f"write refused: {where} is not valid JSON") from exc
     return value
 
 
 def _walk(value: Any, where: str) -> None:
-    value = _parsed(value, where)
     if isinstance(value, dict):
         for key, item in value.items():
             low = str(key).lower()
@@ -106,10 +108,12 @@ def check(act: str, method: str, path: str, params: dict | None,
         raise WriteRefused(f"write refused: key {extra[0]!r} is not allowed on {edge}")
     if edge in PAUSED_REQUIRED and params.get("status") != PAUSED:
         raise WriteRefused(f"write refused: {edge} must be created with status PAUSED")
+    checked = dict(params)
     for key in JSON_KEYS & set(params):
-        if not isinstance(_parsed(params[key], f"{edge}.{key}", required=True), (dict, list)):
+        checked[key] = _parsed(params[key], f"{edge}.{key}")
+        if not isinstance(checked[key], (dict, list)):
             raise WriteRefused(f"write refused: {key} must be a JSON object or list")
-    _walk(params, edge)
+    _walk(checked, edge)
     files = dict(files or {})
     want = FILE_FIELDS.get(edge)
     if files:

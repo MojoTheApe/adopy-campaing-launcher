@@ -695,7 +695,35 @@ class CampaignCreator:
                                     f"{limit // (1024 * 1024)} MB")
                 files[ad.path] = data
         self._step(out, "preflight: creatives read")
+        self._check_planned(plan, targetings)
         return targetings, files
+
+    def _check_planned(self, plan: CampaignPlan, targetings: list[dict]) -> None:
+        """Политика записи над КАЖДЫМ запланированным объектом — до первой записи (R2-B1).
+
+        Отказ здесь — `PlanError` этой кампании: к Meta ничего не ушло, и клиент
+        не останавливается для остальных кампаний задания. Пробный запуск
+        проходит ту же проверку, что и настоящий.
+        """
+        from src.fb_api import write_policy as _wp
+
+        def ok(edge: str, params: dict, what: str) -> None:
+            try:
+                _wp.check(plan.act, "POST", f"/{plan.act}/{edge}", params)
+            except _wp.WriteRefused as exc:
+                raise PlanError(f"{what}: {exc}") from exc
+
+        ok("campaigns", self.campaign_params(plan), "campaign")
+        for ad_set, targeting in zip(plan.ad_sets, targetings):
+            ok("adsets", self.adset_params(plan, ad_set, "0", targeting), f"ad set {ad_set.name!r}")
+            for ad in ad_set.ads:
+                media = ({"video_id": "0", "thumb": "https://example.invalid/t.jpg"} if ad.kind == "video"
+                         else {"image_hash": "0"})
+                ok("adcreatives", {"name": f"{ad.name} #{ad.index} [{plan.label}]",
+                                   "object_story_spec": self.story_spec(plan, ad, media),
+                                   "adlabels": [{"name": plan.label}]}, f"ad {ad.index} creative")
+                ok("ads", {"name": ad.name, "adset_id": "0", "creative": {"creative_id": "0"},
+                           "status": PAUSED, "adlabels": [{"name": plan.label}]}, f"ad {ad.index}")
 
     def plan_only(self, plan: CampaignPlan) -> Outcome:
         """Пробный запуск (ревью M3): предпроверка и план, НИ ОДНОЙ записи.
@@ -927,7 +955,9 @@ class CampaignCreator:
                     if rec.get("image_hash"):
                         # Хэш — тот, что Meta вернула при загрузке (или нашла), не md5.
                         check(aobj, "image_hash", rec["image_hash"], h)
-                    if data and h:
+                    # R2-M1: хэш равен md5 нашего файла — содержимое доказано, имя в
+                    # библиотеке (старая загрузка RPA или руками) не проверяем.
+                    if data and h and h != _md5(data):
                         image_ads.append((aobj, ad, h))
                     check(aobj, "call_to_action", CTA_TYPE, cta.get("type"))
                     check(aobj, "cta_link", plan.link, (cta.get("value") or {}).get("link"))

@@ -900,6 +900,152 @@ def test_dry_run_client_cannot_write_at_all(tmp_path):
     assert "const WRITE = null;" in tc.helper_source(page.name, page._write_policy)
 
 
+# ───────────────────────── ревью #765, раунд 2 ─────────────────────────
+
+FREE_TEXTS = ["[TEST] Camp", "[Offer] buy now", "{Free} gift", "[1,2] promo"]
+
+
+@pytest.mark.parametrize("text", FREE_TEXTS)
+def test_policy_free_text_starting_with_a_bracket_is_not_json(text):
+    assert wp.check(ACT, "POST", f"/{ACT}/campaigns", _camp(name=text)) == "campaigns"
+    spec = {"page_id": "1", "link_data": {"message": text, "name": text, "description": text}}
+    assert wp.check(ACT, "POST", f"/{ACT}/adcreatives", {"name": text, "object_story_spec": spec})
+    assert wp.check(ACT, "POST", f"/{ACT}/adcreatives",
+                    {"name": text, "object_story_spec": json.dumps(spec)})
+    assert wp.check(ACT, "POST", f"/{ACT}/ads", {"name": text, "status": "PAUSED",
+                                                 "creative": {"creative_id": "1"}})
+
+
+def test_policy_json_keys_still_must_be_json():
+    with pytest.raises(wp.WriteRefused):
+        wp.check(ACT, "POST", f"/{ACT}/adsets", {"name": "s", "status": "PAUSED", "targeting": "[TEST] x"})
+
+
+def test_a_campaign_with_bracketed_names_and_texts_is_created(tmp_path):
+    d = _draft(tmp_path, ads=2)
+    d.name = d.ad_sets[0].name = "[TEST] Camp"
+    a, b = d.ad_sets[0].ads
+    a.ad_body, a.ad_title, a.ad_link_description = "[Offer] buy now", "{Free} gift", "[1,2] promo"
+    b.copy_name = "[B] text"
+    meta = FakeMeta()
+    out, client = _run(meta, d)
+    assert out.error == "" and out.readback["ok"] is True, (out.error, out.mismatches)
+    assert client.stopped is None
+
+
+def _bad_story(monkeypatch):
+    orig = cr.CampaignCreator.story_spec
+
+    def story(plan, ad, media):
+        spec = orig(plan, ad, media)
+        spec["link_data" if "link_data" in spec else "video_data"]["status"] = "ACTIVE"
+        return spec
+
+    monkeypatch.setattr(cr.CampaignCreator, "story_spec", staticmethod(story))
+
+
+def test_dry_run_runs_the_write_policy_on_the_planned_objects(tmp_path, monkeypatch):
+    _bad_story(monkeypatch)
+    meta = FakeMeta()
+    client = g.GraphClient(meta, sleep=lambda s: None, min_interval_s=0.0, max_calls=200)
+    facts = cr.preflight_account(client, ACT)
+    out = cr.CampaignCreator(client, facts, cr.TargetingResolver(client)).plan_only(
+        cr.plan_from_draft(_draft(tmp_path, ads=1)))
+    assert out.stop_kind == "plan" and "PAUSED" in out.error and meta.posts == []
+
+
+def test_a_planned_policy_refusal_writes_nothing_and_does_not_stop_the_job(tmp_path, monkeypatch):
+    _bad_story(monkeypatch)
+    meta = FakeMeta()
+    out, client = _run(meta, _draft(tmp_path, ads=1))
+    assert out.stop_kind == "plan" and meta.posts == [] and client.stopped is None
+
+
+def test_an_image_already_in_the_library_under_another_name_is_not_a_mismatch(tmp_path):
+    d = _draft(tmp_path, ads=1)
+    data = Path(d.ad_sets[0].ads[0].creative_path).read_bytes()
+    meta = FakeMeta()
+    meta.images[hashlib.md5(data).hexdigest()] = "2243_original_from_rpa.png"
+    out, _ = _run(meta, d)
+    assert not [p for p, _ in meta.posts if p.endswith("/adimages")]
+    assert out.readback["ok"] is True, out.mismatches
+
+
+def test_readback_flags_two_ads_with_the_same_name(tmp_path):
+    meta = FakeMeta()
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    ad = next(o for o in meta.objects.values() if o["_kind"] == "ad")
+    meta._new("ad", **{k: v for k, v in ad.items() if k not in ("id", "_kind")})
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=200)
+    facts = cr.preflight_account(client, ACT)
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=lambda s: None)
+    again = creator.run(cr.plan_from_draft(_draft(tmp_path, ads=1)))
+    assert "count" in {m["field"] for m in again.mismatches}
+
+
+def test_reconcile_waits_before_the_readback(tmp_path):
+    meta = FakeMeta()
+    meta.fail_next["campaigns"] = "lost"
+    slept = []
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=200)
+    facts = cr.preflight_account(client, ACT)
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=slept.append)
+    out = creator.run(cr.plan_from_draft(_draft(tmp_path, ads=1)))
+    assert out.error == "" and slept[:1] == [cr.RECONCILE_WAIT_S] and cr.RECONCILE_WAIT_S == 5.0
+
+
+class _PageOverMeta:
+    """Вкладка с помощником поверх FakeMeta — для `ApiPublisher.open`."""
+
+    def __init__(self, meta, writes):
+        self.meta, self.writes = meta, writes
+
+    def install(self):
+        pass
+
+    def navigate(self, act, timeout=60.0):
+        pass
+
+    def wait_ready(self, timeout=90.0):
+        return {"kind": "ads_manager", "has_token": True}
+
+    def state(self):
+        return self.meta.state()
+
+    def request(self, *a, **k):
+        return self.meta.request(*a, **k)
+
+    def write(self, *a, **k):
+        assert self.writes, "a read-only page must never be asked to write"
+        return self.meta.write(*a, **k)
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_open_builds_a_read_only_client_and_page_for_a_dry_run(monkeypatch, dry_run):
+    from types import SimpleNamespace
+
+    from src.web import publish_api
+
+    made = []
+    meta = FakeMeta()
+    monkeypatch.setattr(publish_api, "_resolve_entry", lambda label: SimpleNamespace(
+        ad_account_id=ACT, profile_id="550e8400-e29b-41d4-a716-446655440000", folder_id="",
+        multilogin_instance="A"))
+    monkeypatch.setattr(publish_api, "_cooldown", lambda label: (0.0, ""))
+    monkeypatch.setattr(publish_api, "_open_profile", lambda *a: SimpleNamespace(
+        cdp_url="http://127.0.0.1:1", started_now=False))
+    monkeypatch.setattr(publish_api, "_open_tab", lambda url: SimpleNamespace(close=lambda: None))
+
+    def make(tab, act, *, writes=True):
+        made.append(writes)
+        return _PageOverMeta(meta, writes)
+
+    monkeypatch.setattr(publish_api, "_make_graph", make)
+    pub = publish_api.ApiPublisher(dry_run=dry_run)
+    pub.open("Test")
+    assert made == [not dry_run] and pub._client.allow_writes is (not dry_run)
+
+
 # ───────────────────────── дешборд ─────────────────────────
 
 def test_result_dict_shape_and_publishability(tmp_path):
@@ -1044,6 +1190,19 @@ const h = G[NAME];
                                    params: { name: 'x', object_story_spec: '{"link_data":{"status":"ACTIVE"}}' } });
   out.json_bad = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
                                 params: { name: 'x', object_story_spec: 'not json' } });
+  out.json_num = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
+                                params: { name: 'x', object_story_spec: 42 } });
+  out.json_bracket = await h.call({ method: 'POST', path: '/' + ACT + '/adsets',
+                                    params: { name: 's', status: 'PAUSED', targeting: '[TEST] not json' } });
+  // Ревью R2-B1: обычный текст с «[» / «{» в начале — не JSON и не отказ.
+  out.free_camp = await h.call({ method: 'POST', path: '/' + ACT + '/campaigns',
+                                 params: { ...camp, name: '[TEST] Camp' } });
+  const spec = { page_id: '1', link_data: { message: '[Offer] buy now', name: '{Free} gift',
+                                            description: '[1,2] promo' } };
+  out.free_obj = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
+                                params: { name: '[TEST] ad', object_story_spec: spec } });
+  out.free_str = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
+                                params: { name: '{Free} gift', object_story_spec: JSON.stringify(spec) } });
   const hello = Buffer.from('hello');
   const sha = require('crypto').createHash('sha256').update(hello).digest('hex');
   out.stage = h.stage('fx', hello.toString('base64'));
@@ -1083,15 +1242,19 @@ def test_page_helper_write_mode_in_node():
     out = _node_run(wp.policy_for_page(ACT))
     assert out["ok"]["body"] == {"id": "5"}
     for k in ("active", "deep", "other", "forms", "key", "missing", "nested_active",
-              "nested_forbidden", "json_active", "json_bad", "short", "badsha"):
+              "nested_forbidden", "json_active", "json_bad", "json_num", "json_bracket", "short",
+              "badsha"):
         assert out[k]["error"] == "write_refused", k
+    assert out["json_num"]["why"] == "json" and out["json_bracket"]["why"] == "json"
+    for k in ("free_camp", "free_obj", "free_str"):
+        assert out[k].get("body") == {"id": "5"}, (k, out[k])
     assert out["missing"]["why"] == "status" and out["nested_active"]["why"] == "status"
     assert out["short"]["why"] == "file_size" and out["badsha"]["why"] == "file_hash"
     assert out["del"]["error"] == "read_only"
     assert out["nofile"]["error"] == "no_file"
     assert out["stage"]["ok"] is True and out["img"]["body"] == {"id": "5"}
-    assert len(out["calls"]) == 2                     # только две разрешённые записи ушли
-    first, img = out["calls"]
+    assert len(out["calls"]) == 5                     # только разрешённые записи ушли
+    first, img = out["calls"][0], out["calls"][-1]
     assert first["method"] == "POST" and "access_token" not in first["url"]
     assert "status=PAUSED" in first["body"] and "access_token=" in first["body"]
     assert img["body"].startswith("formdata:") and "filename" in img["body"]
