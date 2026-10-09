@@ -11,11 +11,14 @@ RPA, поэтому экран не меняется; отличается то�
 * очередь и замок — вызов приходит из `account_spend.start_read` /
   `country_split.start_split`, то есть под `browser_operation.reading()` и
   замком профиля, как и RPA-чтение;
-* место по памяти (ACL-1603) — закрытый профиль поднимается только после
-  `publish_jobs._slots.acquire(...)` (та же очередь, `share_profile=True`).
-  Профиль, который подняли мы, остаётся открытым (`fb_api` не останавливает
-  профили никогда), поэтому место остаётся занятым через `keep` — его
-  подберёт следующее задание на этот профиль или снимет человек;
+* место по памяти (ACL-1603) и жизнь профиля — как у RPA-чтения (ACL-1580):
+  закрытый профиль поднимается только после `publish_jobs._slots.acquire(...)`
+  (та же очередь, `share_profile=True`), а после чтения мягко останавливается
+  ТОЛЬКО профиль, который поднял это чтение (`account_spend._finish_started` →
+  `stop_profile_on_request`, `allow_kill=False`), и место отпускается — и при
+  отказе тоже. Удачный Read spend, после которого ещё нужна разбивка стран,
+  держит окно `CLOSE_GRACE_S`; страны подхватывают его (`_take_over_pending`).
+  Уже работавший профиль, окно руками, профиль Publish не останавливаются;
 * открытый профиль цепляем по его локальному порту отладки, без MLX и без
   очереди (как `attach_existing_only` у RPA); окно, открытое руками, не
   трогаем — отказ с кодом `open_by_hand`.
@@ -42,6 +45,7 @@ from src.analysis_agent import account_spend as _as
 from src.fb_api import profile as _fb_profile
 from src.fb_api import telemetry as _tm
 from src.fb_api.graph import (
+    CallBudget,
     Checkpoint,
     GraphClient,
     GraphError,
@@ -68,7 +72,9 @@ DEFAULT_MIN_INTERVAL_S = 1.0
 READY_TIMEOUT_S = 90.0
 
 #: Сколько секунд профиль «остывает» после остановки, чтобы не стучать снова.
-COOLDOWN_S = {"rate_limited": 300.0, "checkpoint": 600.0, "policy_block": 1800.0}
+#: Исчерпанный свой потолок вызовов (`call_budget`) сюда не входит: Meta молчала.
+COOLDOWN_S = {"rate_limited": 300.0, "checkpoint": 600.0, "policy_block": 1800.0,
+              "logged_out": 60.0}
 
 
 def backend() -> str:
@@ -223,14 +229,19 @@ def build_objects(campaigns: list[dict], ads: list[dict], campaign_ins: dict[str
 
 # ───────────────────────── охлаждение после лимита ─────────────────────────
 
-_COOLDOWN: dict[str, float] = {}
+_COOLDOWN: dict[str, tuple[float, str]] = {}
 _COOLDOWN_LOCK = threading.Lock()
 
 
-def _cooldown_left(key: str) -> float:
+def _cooldown_state(key: str) -> tuple[float, str]:
+    """`(сколько секунд ещё остывать, по какой причине)`."""
     with _COOLDOWN_LOCK:
-        until = _COOLDOWN.get(key, 0.0)
-    return max(0.0, until - time.monotonic())
+        until, kind = _COOLDOWN.get(key, (0.0, ""))
+    return max(0.0, until - time.monotonic()), kind
+
+
+def _cooldown_left(key: str) -> float:
+    return _cooldown_state(key)[0]
 
 
 def _start_cooldown(key: str, stop: GraphStop) -> None:
@@ -239,7 +250,7 @@ def _start_cooldown(key: str, stop: GraphStop) -> None:
         return
     secs = max(secs, float(getattr(stop, "retry_after_s", None) or 0))
     with _COOLDOWN_LOCK:
-        _COOLDOWN[key] = time.monotonic() + secs
+        _COOLDOWN[key] = (time.monotonic() + secs, stop.kind)
 
 
 # ───────────────────────── сессия: профиль → вкладка → клиент ─────────────────────────
@@ -253,18 +264,14 @@ class ApiReadError(RuntimeError):
 
 
 @dataclass
-class _Held:
-    account: str
-    slot_id: str = ""
-    started_now: bool = False
-
-
-@dataclass
 class _Session:
     client: GraphClient
     act: str
     account: str
     notes: dict = field(default_factory=dict)
+    #: Профиль, который это чтение подняло, держится ещё `CLOSE_GRACE_S` после
+    #: удачного чтения: за ним придёт чтение стран (ACL-1580).
+    keep_next: bool = False
 
 
 # Точки подмены в тестах: настоящий браузер здесь не нужен.
@@ -288,14 +295,23 @@ def _make_graph(tab):
     return InPageGraph(tab)
 
 
-def _open_gated(entry, account: str, held: _Held):
-    """Профиль с портом отладки; закрытый поднимается только с местом в очереди."""
+def _open_gated(entry, account: str, held: "_as._ReadOpen"):
+    """Профиль с портом отладки; закрытый поднимается только с местом в очереди.
+
+    Что чтение подняло само, отмечается в `held` (`_ReadOpen`, как у RPA):
+    после чтения `_finish_started` мягко остановит ровно его и отпустит место.
+    Профиль, который уже работал, был открыт руками или делится с Publish,
+    `held` не получает — его чтение не закроет.
+    """
     profile_id = (getattr(entry, "profile_id", "") or "").strip()
     if not profile_id:
         raise ApiReadError(f"{account} has no profile_id in the account map")
     folder_id = (getattr(entry, "folder_id", "") or "").strip()
     instance = (getattr(entry, "multilogin_instance", "") or "A").strip() or "A"
 
+    queue = None
+    slot_id = ""
+    shared = False
     gated = False
     kind, _port = _probe_local(profile_id)
     if kind == "none":
@@ -311,31 +327,47 @@ def _open_gated(entry, account: str, held: _Held):
             )
         finally:
             _as._set_wait_note(account, "")
-        if not (grant and grant.get("shared")):
-            held.slot_id = slot_id        # своё место: отпустить или оставить в конце
+        shared = bool(grant and grant.get("shared"))
         gated = True
-        _as._set_wait_note(account, _as.STARTING_NOTE.format(account=account))
+        # Ожидание места долгое, а профиль мог открыть кто-то ещё (Publish,
+        # человек): тогда он не наш, место отпускаем (ревью PR #583, F2).
+        if _probe_local(profile_id)[0] != "none":
+            if not shared:
+                queue.release(slot_id)
+            gated = False
+    began = time.monotonic()
     try:
+        if gated:
+            _as._set_wait_note(account, _as.STARTING_NOTE.format(account=account))
         opened = _open_profile(profile_id, folder_id, instance)
+    except BaseException:
+        if gated and not shared:
+            try:
+                queue.release(slot_id)
+            except Exception:
+                log.exception("Could not release the profile slot of %s", account)
+        raise
     finally:
         if gated:
             _as._set_wait_note(account, "")
-    held.started_now = bool(getattr(opened, "started_now", False))
+
+    if gated and getattr(opened, "started_now", False):
+        # Подняли мы: чтение закроет профиль и отпустит место (если оно своё).
+        held.started = not shared
+        held.slot_id = "" if shared else slot_id
+        held.profile_id = profile_id
+        held.entry = entry
+        held.started_mono = began
+        try:
+            held.grants_seen = int(queue.grants(profile_id))
+        except Exception:
+            held.grants_seen = 0
+    else:
+        if gated and not shared:
+            queue.release(slot_id)           # профиль уже работал — место не нужно
+        # Профиль, поднятый прошлым чтением и ждущий закрытия, закроет это чтение.
+        _as._take_over_pending(profile_id, held)
     return opened
-
-
-def _settle_slot(held: _Held) -> None:
-    """Место в очереди: профиль, поднятый нами, остаётся открытым — место тоже."""
-    if not held.slot_id:
-        return
-    try:
-        queue = _as._slot_queue()
-        if held.started_now:
-            queue.keep(held.slot_id, held.account)
-        else:
-            queue.release(held.slot_id)
-    except Exception:
-        log.exception("Could not settle the profile slot of %s", held.account)
 
 
 @contextmanager
@@ -352,14 +384,22 @@ def _session(account: str):
         raise ApiReadError(str(exc)) from exc
 
     key = _as._profile_key(account)
-    left = _cooldown_left(key)
+    left, why = _cooldown_state(key)
     if left > 0:
+        mins = int(left // 60) + 1
+        if why == "logged_out":
+            raise ApiReadError(_as.logged_out_message(account), code=_as.LOGGED_OUT_CODE)
+        if why == "checkpoint":
+            raise ApiReadError(
+                f"The {account} profile is on a Facebook checkpoint; Ads Manager is not reopened "
+                f"for about {mins} min. Solve it inside Multilogin, then Read again. Nothing was called.")
         raise ApiReadError(
             f"Meta asked to slow down for {account}; waiting before the next read "
-            f"(about {int(left // 60) + 1} min). Nothing was called.")
+            f"(about {mins} min). Nothing was called.")
 
-    held = _Held(account)
+    held = _as._ReadOpen(account)
     tab = None
+    sess: _Session | None = None
     try:
         try:
             opened = _open_gated(entry, account, held)
@@ -377,13 +417,18 @@ def _session(account: str):
         graph.install()
         graph.navigate(act, timeout=60.0)
         state = graph.wait_ready(timeout=READY_TIMEOUT_S)
+        page_stop: GraphStop | None = None
         if state.get("kind") == "checkpoint":
-            raise Checkpoint("the profile is on a Facebook checkpoint")
-        if state.get("kind") == "login":
-            raise LoggedOut("the profile is logged out of Facebook")
-        if not state.get("has_token"):
+            page_stop = Checkpoint("the profile is on a Facebook checkpoint")
+        elif state.get("kind") == "login":
+            page_stop = LoggedOut("the profile is logged out of Facebook")
+        elif not state.get("has_token"):
             raise PageFailed("Ads Manager did not finish loading (no Graph session in the page); "
                              "the profile may be logged out")
+        if page_stop is not None:
+            # Найдено на странице, ещё до клиента: охлаждение тоже (ревью S2).
+            _start_cooldown(key, page_stop)
+            raise page_stop
         client = GraphClient(
             graph,
             min_interval_s=_env_number(MIN_INTERVAL_ENV, DEFAULT_MIN_INTERVAL_S, 0.5, 10.0),
@@ -402,7 +447,12 @@ def _session(account: str):
                 tab.close()
             except Exception:
                 log.exception("Could not close our tab for %s", account)
-        _settle_slot(held)
+        # ACL-1580: профиль, который поднято этим чтением, закрывается мягкой
+        # остановкой (и при отказе тоже) или ждёт `CLOSE_GRACE_S` под страны.
+        try:
+            _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next))
+        except Exception:
+            log.exception("Could not finish the profile the read started (%s)", account)
 
 
 def _failure(account: str, exc: BaseException) -> tuple[str, str]:
@@ -414,6 +464,9 @@ def _failure(account: str, exc: BaseException) -> tuple[str, str]:
     if isinstance(exc, Checkpoint):
         return (f"The {account} profile is on a Facebook checkpoint — solve it inside Multilogin, "
                 "then Read again"), ""
+    if isinstance(exc, CallBudget):
+        return ("Read stopped: call budget reached. Meta did not limit us; "
+                f"raise {MAX_CALLS_ENV} or read again. ({exc})"), "call_budget"
     if isinstance(exc, RateLimited):
         wait = f" Try again in about {int(exc.retry_after_s // 60) + 1} min." if exc.retry_after_s else ""
         return f"Meta rate limit reached; the read was stopped.{wait} ({exc})", ""
@@ -444,7 +497,7 @@ def _telemetry(kind: str, account: str, ok: bool, took_s: float, sess_notes: dic
 
 
 def _report_stop(exc: BaseException, account: str) -> None:
-    if isinstance(exc, GraphStop) and not isinstance(exc, LoggedOut):
+    if isinstance(exc, GraphStop) and not isinstance(exc, (LoggedOut, CallBudget)):
         _tm.report_stop(exc.kind, str(exc), {"account": account, "code": exc.code, "source": "dashboard"})
 
 
@@ -519,6 +572,89 @@ def _truncated(client: GraphClient) -> str:
     return " ".join(getattr(client, "truncated", []) or [])
 
 
+# ───────────────────────── чтение спенда + страны ─────────────────────────
+
+def _country_name(code: str) -> str:
+    """Название страны, как пишет Reporting, если код известен; иначе сам код."""
+    from src.analysis_agent.country_names import COUNTRY_CODES
+
+    code = (code or "").strip().upper()
+    for name, known in COUNTRY_CODES.items():
+        if known == code:
+            return name.title()
+    return code
+
+
+def _country_rows(client: GraphClient, act: str, date_from: str, date_to: str,
+                  fallback_currency: str) -> list[dict]:
+    """Строки `{country, spend, currency}` из `insights?breakdowns=country`.
+
+    Неполный или нечитаемый список — отказ, как у RPA: половина стран выглядела
+    бы целой.
+    """
+    rows = client.insights_range(act, date_from, date_to, breakdowns="country",
+                                 fields="spend,account_currency", max_pages=3)
+    if "level=account" in _truncated(client):
+        raise ApiReadError("The country list is partial (page limit reached); nothing was taken.")
+    parsed = []
+    for row in rows:
+        code = str(row.get("country") or "").strip()
+        if not code:
+            raise ApiReadError("A row of the country report has no country; nothing was taken.")
+        parsed.append({"country": _country_name(code), "spend": round(_num(row.get("spend")), 2),
+                       "currency": str(row.get("account_currency") or fallback_currency)})
+    parsed.sort(key=lambda r: -r["spend"])
+    return parsed
+
+
+def _split_needed(account: str, date_from: str, date_to: str, spend: float, currency: str) -> bool:
+    """Нужна ли разбивка стран сейчас — тем же правилом, что у страницы (ACL-1282).
+
+    Сбой вопроса — «нужна»: лишний вызов дешевле молча потерянной разбивки.
+    """
+    try:
+        from src.analysis_agent import country_split
+        from src.web import account_links
+
+        countries = len({str(v).strip().casefold()
+                         for v in account_links.values_for(account, "country") if str(v).strip()})
+        why = country_split.why_split_is_needed(
+            countries=countries, split=country_split.get_split(account, date_from, date_to),
+            spend_finished_at=_as._now(), spend=spend, currency=currency)
+        return bool(why)
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _split_in_session(sess: _Session, out: "_as.SpendReading", acc: dict) -> None:
+    """Разбивка стран в той же вкладке, что и спенд (ревью S1): второй загрузки нет."""
+    from src.analysis_agent import country_split
+
+    if not _split_needed(sess.account, out.date_from, out.date_to, out.spend or 0.0, out.currency):
+        return
+    split = country_split.CountrySplit(
+        account=sess.account, date_from=out.date_from, date_to=out.date_to, source="api",
+        status=out.status, status_text=out.status_text, started_at=_as._now())
+    try:
+        rows = _country_rows(sess.client, sess.act, out.date_from, out.date_to,
+                             str(acc.get("currency") or out.currency))
+        split.rows = rows
+        split.state = "ok" if rows else "empty"
+        split.how = f"graph api: insights breakdowns=country {out.date_from}..{out.date_to}"
+    except Exception as exc:  # noqa: BLE001 — разбивка спенд не отменяет
+        split.state, split.rows = "failed", []
+        split.error, split.error_code = _failure(sess.account, exc)
+        # Страница спросит страны отдельно: окно держим под это (ACL-1580).
+        sess.keep_next = True
+    # Какой спенд эта разбивка объясняет (ACL-1282).
+    split.finished_at = split.spend_at = _as._now()
+    split.spend, split.spend_currency = out.spend, out.currency
+    try:
+        country_split.save_split(split)
+    except Exception:  # noqa: BLE001
+        log.exception("Could not save the country split of %s", sess.account)
+
+
 def read_via_api(account: str, date_from: str, date_to: str = "") -> "_as.SpendReading":
     """Спенд, состояние кабинета и дерево через Graph API. Тот же ответ, что у `read_via_rpa`."""
     date_to = date_to or date_from
@@ -545,12 +681,15 @@ def read_via_api(account: str, date_from: str, date_to: str = "") -> "_as.SpendR
                     out.objects_read = reached
                     if not reached:
                         out.objects_how = ""
-                    if sess.client.stopped is not None:
-                        stop = sess.client.stopped.kind
-                        _report_stop(sess.client.stopped, account)
                 except Exception as exc:  # noqa: BLE001
                     out.objects_error = f"Campaign tree was not read: {_failure(account, exc)[0]}"
                     out.objects_read = False
+                # Страны — в той же вкладке, если они сейчас нужны (ревью S1).
+                if sess.client.stopped is None:
+                    _split_in_session(sess, out, acc)
+                if sess.client.stopped is not None:
+                    stop = sess.client.stopped.kind
+                    _report_stop(sess.client.stopped, account)
             finally:
                 notes = sess.notes
     except Exception as exc:  # noqa: BLE001 — чтение не должно ронять сервер
@@ -569,22 +708,16 @@ def read_via_api(account: str, date_from: str, date_to: str = "") -> "_as.SpendR
     return out
 
 
-# ───────────────────────── разбивка по странам ─────────────────────────
-
-def _country_name(code: str) -> str:
-    """Название страны, как пишет Reporting, если код известен; иначе сам код."""
-    from src.analysis_agent.country_names import COUNTRY_CODES
-
-    code = (code or "").strip().upper()
-    for name, known in COUNTRY_CODES.items():
-        if known == code:
-            return name.title()
-    return code
-
+# ───────────────────────── разбивка по странам, отдельно ─────────────────────────
 
 @_as.serialized_browser(key=_as._profile_key, reading=True)
 def read_country_split_via_api(account: str, date_from: str, date_to: str = ""):
-    """Разбивка спенда по странам через `insights?breakdowns=country`."""
+    """Разбивка спенда по странам через `insights?breakdowns=country`.
+
+    Отдельный путь: страница просит его, когда разбивка нужна, а в спенде она
+    не прочиталась. Окно, оставленное спенд-чтением на `CLOSE_GRACE_S`,
+    подхватывается (`_take_over_pending`), второй загрузки профиля нет.
+    """
     from src.analysis_agent import country_split
 
     date_to = date_to or date_from
@@ -599,22 +732,9 @@ def read_country_split_via_api(account: str, date_from: str, date_to: str = ""):
                 acc = sess.client.account(sess.act)
                 _check_account(acc, sess.act)
                 out.status, out.status_text = map_status(acc.get("account_status"), acc.get("disable_reason"))
-                rows = sess.client.insights_range(
-                    sess.act, date_from, date_to, breakdowns="country",
-                    fields="spend,account_currency", max_pages=3)
-                if "level=account" in _truncated(sess.client):
-                    raise ApiReadError("The country list is partial (page limit reached); nothing was taken.")
-                fallback = str(acc.get("currency") or "")
-                parsed = []
-                for row in rows:
-                    code = str(row.get("country") or "").strip()
-                    if not code:
-                        raise ApiReadError("A row of the country report has no country; nothing was taken.")
-                    parsed.append({"country": _country_name(code), "spend": round(_num(row.get("spend")), 2),
-                                   "currency": str(row.get("account_currency") or fallback)})
-                parsed.sort(key=lambda r: -r["spend"])
-                out.rows = parsed
-                out.state = "ok" if parsed else "empty"
+                out.rows = _country_rows(sess.client, sess.act, date_from, date_to,
+                                         str(acc.get("currency") or ""))
+                out.state = "ok" if out.rows else "empty"
                 out.how = f"graph api: insights breakdowns=country {date_from}..{date_to}"
             finally:
                 notes = sess.notes

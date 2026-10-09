@@ -103,10 +103,20 @@ def routes(**over):
 class FakeQueue:
     def __init__(self, shared=False):
         self.shared = shared
+        self.others = False
+        self.granted = 0
         self.calls: list[tuple] = []
+
+    def grants(self, profile):
+        return self.granted
+
+    def others_on(self, profile, job_id=""):
+        return self.others
 
     def acquire(self, job_id, profile, *, cancelled=None, on_wait=None, share_profile=False):
         self.calls.append(("acquire", job_id, profile, share_profile))
+        if not self.shared:
+            self.granted += 1
         return {"waited_s": 0, "decision": {"allow": True}, "first_hold": None, "shared": self.shared}
 
     def release(self, job_id):
@@ -147,6 +157,33 @@ class World:
         monkeypatch.setattr(tm, "report_stop", lambda kind, msg, ctx=None: self.stops.append((kind, msg)) or "")
         monkeypatch.delenv(api.BACKEND_ENV, raising=False)
         api._COOLDOWN.clear()
+        sp._PENDING_CLOSE.clear()
+        # Мягкая остановка профиля (ACL-1580) — записываем, MLX не трогаем.
+        from src.fb_ads_rpa import browser as rpa_browser
+
+        self.soft_stops: list[str] = []
+        monkeypatch.setattr(rpa_browser, "stop_profile_on_request",
+                            lambda e, label: self.soft_stops.append(label) or "closed")
+        # Таймер «подержать окно под страны» не запускаем — вызываем вручную.
+        self.timers: list = []
+
+        class _Timer:
+            def __init__(inner, secs, fn, args=()):
+                inner.secs, inner.fn, inner.args = secs, fn, args
+                inner.daemon = False
+                self.timers.append(inner)
+
+            def start(inner):
+                pass
+
+        monkeypatch.setattr(sp.threading, "Timer", _Timer)
+        # Нужна ли разбивка стран, решает правило страницы; страны карты — две.
+        from src.web import account_links
+
+        monkeypatch.setattr(account_links, "values_for", lambda account, kind: ["US", "IL"])
+        from src.analysis_agent import country_split as _cs
+
+        monkeypatch.setattr(_cs, "_store_path", lambda: tmp_path / "split.json")
 
     def _open_profile(self, pid, folder, instance):
         self.opened_profiles.append((pid, folder, instance))
@@ -165,20 +202,18 @@ def world(monkeypatch, tmp_path):
 
 # ───────────────────────── выбор бэкенда ─────────────────────────
 
-@pytest.mark.parametrize("value,expected", [
-    (None, "rpa"), ("", "rpa"), ("rpa", "rpa"), ("api", "api"), (" API ", "api"), ("Api", "api"),
-    ("graph", "rpa"), ("1", "rpa"),
-])
-def test_backend_selection(monkeypatch, value, expected):
-    if value is None:
-        monkeypatch.delenv(api.BACKEND_ENV, raising=False)
-    else:
-        monkeypatch.setenv(api.BACKEND_ENV, value)
-    assert api.backend() == expected
-    assert api.api_enabled() is (expected == "api")
-    assert sp.default_reader() is (api.read_via_api if expected == "api" else sp.read_via_rpa)
-    assert cs.default_reader() is (
-        api.read_country_split_via_api if expected == "api" else cs.read_country_split)
+def test_backend_selection(monkeypatch):
+    for value, expected in [(None, "rpa"), ("", "rpa"), ("rpa", "rpa"), ("api", "api"), (" API ", "api"),
+                            ("Api", "api"), ("graph", "rpa"), ("1", "rpa")]:
+        if value is None:
+            monkeypatch.delenv(api.BACKEND_ENV, raising=False)
+        else:
+            monkeypatch.setenv(api.BACKEND_ENV, value)
+        assert api.backend() == expected, value
+        assert api.api_enabled() is (expected == "api")
+        assert sp.default_reader() is (api.read_via_api if expected == "api" else sp.read_via_rpa)
+        assert cs.default_reader() is (
+            api.read_country_split_via_api if expected == "api" else cs.read_country_split)
 
 
 def test_start_read_uses_the_api_reader_only_when_switched(world, monkeypatch):
@@ -295,23 +330,23 @@ def test_reading_roundtrips_through_the_store(world):
 
 # ───────────────────────── состояние кабинета ─────────────────────────
 
-@pytest.mark.parametrize("status,reason,word,needle", [
-    (1, 0, "clear", "active"),
-    (2, 1, "disabled", "disabled"),
-    (2, 3, "disabled", "RISK_PAYMENT"),
-    (3, 0, "restricted", "restricted"),
-    (9, 0, "restricted", "grace"),
-    (7, 0, "review", "under review"),
-    (8, 0, "review", "under review"),
-    (100, 0, "disabled", "closure"),
-    (101, 0, "disabled", "closed"),
-    (555, 0, "unknown", "unrecognised"),
-])
-def test_account_status_maps_to_the_words_the_screen_knows(status, reason, word, needle):
-    got, text = api.map_status(status, reason)
-    assert got == word
-    assert needle.lower() in text.lower()
-    assert got in {"clear", "disabled", "restricted", "review", "unknown"}
+def test_account_status_maps_to_the_words_the_screen_knows():
+    for status, reason, word, needle in [
+        (1, 0, "clear", "active"),
+        (2, 1, "disabled", "disabled"),
+        (2, 3, "disabled", "RISK_PAYMENT"),
+        (3, 0, "restricted", "restricted"),
+        (9, 0, "restricted", "grace"),
+        (7, 0, "review", "under review"),
+        (8, 0, "review", "under review"),
+        (100, 0, "disabled", "closure"),
+        (101, 0, "disabled", "closed"),
+        (555, 0, "unknown", "unrecognised"),
+    ]:
+        got, text = api.map_status(status, reason)
+        assert got == word, status
+        assert needle.lower() in text.lower(), (status, text)
+        assert got in {"clear", "disabled", "restricted", "review", "unknown"}
 
 
 def test_missing_status_is_unknown_never_clear():
@@ -486,44 +521,112 @@ def test_partial_lists_are_said_out_loud(world):
 def test_a_read_makes_few_calls_and_never_polls(world):
     api.read_via_api(ACCOUNT, D, D)
     assert world.paths == ["/ACT||", "/ACT/insights|account|", "/ACT/campaigns||", "/ACT/ads||",
-                           "/ACT/insights|campaign|", "/ACT/insights|ad|"]
-    assert world.journal[-1]["calls"] == 6
+                           "/ACT/insights|campaign|", "/ACT/insights|ad|",
+                           "/ACT/insights|account|country"]
+    assert world.journal[-1]["calls"] == 7
 
 
-def test_call_cap_per_read_is_enforced_and_reported(world, monkeypatch):
+def test_call_cap_per_read_is_our_own_budget_not_a_meta_rate_limit(world, monkeypatch):
     monkeypatch.setenv(api.MAX_CALLS_ENV, "4")
     r = api.read_via_api(ACCOUNT, D, D)
     assert len(world.page.specs) == 4
     assert r.state == "ok" and r.spend == 113.87
-    assert "call budget" in r.objects_error
-    assert [k for k, _ in world.stops] == ["rate_limited"]
+    assert "call budget" in r.objects_error and "Meta rate limit" not in r.objects_error
+    assert "Read stopped: call budget reached" in r.objects_error
+    assert world.stops == [], "our own cap is not reported as a Meta stop"
+    assert api._cooldown_left(sp._profile_key(ACCOUNT)) == 0, "and starts no cooldown"
+    assert world.journal[-1].get("stop") == "call_budget"
+    # Следующее чтение не отказывает без вызова.
+    monkeypatch.delenv(api.MAX_CALLS_ENV)
+    assert api.read_via_api(ACCOUNT, D, D).state == "ok"
 
 
-@pytest.mark.parametrize("raw,expected", [("999", 60), ("1", 4), ("abc", api.DEFAULT_MAX_CALLS), ("", api.DEFAULT_MAX_CALLS)])
-def test_call_cap_env_is_clamped(monkeypatch, raw, expected):
-    monkeypatch.setenv(api.MAX_CALLS_ENV, raw)
-    assert int(api._env_number(api.MAX_CALLS_ENV, api.DEFAULT_MAX_CALLS, 4, 60)) == expected
+def test_call_budget_alone_reports_a_distinct_code_and_text():
+    exc = g.CallBudget("call budget of 4 reached")
+    assert isinstance(exc, g.RateLimited) and exc.kind == "call_budget"
+    text, code = api._failure(ACCOUNT, exc)
+    assert code == "call_budget" and text.startswith("Read stopped: call budget reached")
+    assert "rate limit" not in text.lower()
 
 
-# ───────────────────────── профиль и очередь по памяти ─────────────────────────
+def test_call_cap_env_is_clamped(monkeypatch):
+    for raw, expected in [("999", 60), ("1", 4), ("abc", api.DEFAULT_MAX_CALLS), ("", api.DEFAULT_MAX_CALLS)]:
+        monkeypatch.setenv(api.MAX_CALLS_ENV, raw)
+        assert int(api._env_number(api.MAX_CALLS_ENV, api.DEFAULT_MAX_CALLS, 4, 60)) == expected
 
-def test_running_profile_is_attached_without_a_slot(world):
+
+# ───────────────────────── профиль и очередь по памяти (ACL-1580) ─────────────────────────
+
+def test_running_profile_is_attached_without_a_slot_and_never_stopped(world):
     api.read_via_api(ACCOUNT, D, D)
     assert world.queue.calls == []
     assert world.opened_profiles == [(PROFILE_UUID, "", "A")]
+    assert world.soft_stops == [], "a profile that was already running is not ours to close"
 
 
-def test_closed_profile_waits_for_a_slot_then_keeps_it_when_we_started_it(world):
+def test_started_profile_is_softly_stopped_and_its_slot_released(world):
     world.local = ("none", None)
     world.started_now = True
-    api.read_via_api(ACCOUNT, D, D)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok"
     kinds = [c[0] for c in world.queue.calls]
-    assert kinds == ["acquire", "keep"]
-    acquire, keep = world.queue.calls
+    assert kinds == ["acquire", "release"], "same queue, slot given back; not kept"
+    acquire, release = world.queue.calls
     assert acquire[2] == PROFILE_UUID and acquire[3] is True, "same queue, shared with Publish"
-    assert keep[1] == acquire[1] and keep[2] == ACCOUNT, "the window stays open, so the slot stays busy"
-    assert "release" not in kinds
+    assert release[1] == acquire[1]
+    assert world.soft_stops == [ACCOUNT], "stopped once, only this profile, through the soft MLX stop"
     assert sp.STARTING_NOTE.format(account=ACCOUNT) in world.notes and world.notes[-1] == ""
+
+
+def test_failed_read_still_stops_what_it_started_and_releases_the_slot(world):
+    world.local = ("none", None)
+    world.started_now = True
+    world.page.state_value = {"kind": "login", "has_token": False}
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed" and r.error_code == "profile_logged_out"
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+    assert world.soft_stops == [ACCOUNT]
+    assert world.cdp.closed_targets == ["T-mine"]
+
+
+def test_tab_failure_after_the_start_still_stops_the_profile(world, monkeypatch):
+    world.local = ("none", None)
+    world.started_now = True
+
+    def boom(url):
+        raise RuntimeError("CDP read timed out")
+
+    monkeypatch.setattr(api, "_open_tab", boom)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed"
+    assert world.soft_stops == [ACCOUNT] and [c[0] for c in world.queue.calls] == ["acquire", "release"]
+
+
+def test_a_profile_touched_by_publish_is_not_stopped(world):
+    world.local = ("none", None)
+    world.started_now = True
+    world.queue.others = True                  # Publish держит или ждёт этот профиль
+    api.read_via_api(ACCOUNT, D, D)
+    assert world.soft_stops == []
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"], "our slot is still given back"
+
+
+def test_a_publish_grant_during_the_read_means_hands_off(world):
+    world.local = ("none", None)
+    world.started_now = True
+    # Publish получает место на этом профиле уже после нашего запуска.
+    world.page.routes["/ACT/insights|ad|"] = lambda spec: (setattr(world.queue, "granted", 99) or ok([]))
+    api.read_via_api(ACCOUNT, D, D)
+    assert world.soft_stops == []
+
+
+def test_a_shared_publish_slot_is_neither_released_nor_closed_by_the_read(world):
+    world.local = ("none", None)
+    world.queue.shared = True
+    world.started_now = True
+    api.read_via_api(ACCOUNT, D, D)
+    assert [c[0] for c in world.queue.calls] == ["acquire"]
+    assert world.soft_stops == []
 
 
 def test_slot_is_released_when_the_profile_turned_out_to_be_running(world):
@@ -531,6 +634,16 @@ def test_slot_is_released_when_the_profile_turned_out_to_be_running(world):
     world.started_now = False
     api.read_via_api(ACCOUNT, D, D)
     assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+    assert world.soft_stops == []
+
+
+def test_a_profile_opened_by_someone_during_the_slot_wait_is_not_ours(world, monkeypatch):
+    probes = iter([("none", None), ("port", 9222)])
+    monkeypatch.setattr(api, "_probe_local", lambda pid: next(probes))
+    world.started_now = False
+    api.read_via_api(ACCOUNT, D, D)
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+    assert world.soft_stops == []
 
 
 def test_slot_is_released_when_the_profile_could_not_be_opened(world, monkeypatch):
@@ -543,29 +656,171 @@ def test_slot_is_released_when_the_profile_could_not_be_opened(world, monkeypatc
     r = api.read_via_api(ACCOUNT, D, D)
     assert r.state == "failed"
     assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+    assert world.soft_stops == [], "nothing was started, nothing to stop"
 
 
-def test_a_shared_publish_slot_is_never_released_or_kept_by_the_read(world):
+def test_a_hand_opened_profile_is_never_stopped(world, monkeypatch):
+    world.local = ("no_port", None)
+
+    def boom(pid, folder, instance):
+        raise prof.ProfileError("open by hand. Nothing was stopped.", code="open_by_hand")
+
+    monkeypatch.setattr(api, "_open_profile", boom)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.error_code == "open_by_hand"
+    assert world.soft_stops == [] and world.queue.calls == []
+
+
+def test_grace_window_lets_the_split_reuse_the_started_profile(world):
+    """Спенд принят, страны в той же вкладке не прочитались: окно держим и отдаём странам."""
     world.local = ("none", None)
-    world.queue.shared = True
     world.started_now = True
-    api.read_via_api(ACCOUNT, D, D)
-    assert [c[0] for c in world.queue.calls] == ["acquire"]
+    world.page.routes["/ACT/insights|account|country"] = err(100)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok"
+    assert world.soft_stops == [], "kept for the country split"
+    assert len(world.timers) == 1 and world.timers[0].secs == sp.CLOSE_GRACE_S == 30.0
+    assert [c[0] for c in world.queue.calls] == ["acquire"], "the slot is held while the window is"
+    pending = world.timers[0].args[0]
+    assert sp._PENDING_CLOSE.get(PROFILE_UUID) is pending
+
+    # Страны приходят в то же окно: профиль теперь работает, второго запуска нет.
+    world.local = ("port", 9222)
+    world.started_now = False
+    world.page.routes["/ACT/insights|account|country"] = ok(
+        [{"country": "US", "spend": "80.5", "account_currency": "USD"}])
+    split = api.read_country_split_via_api(ACCOUNT, D, D)
+    assert split.state == "ok" and split.source == "api"
+    assert len(world.opened_profiles) == 2 and [c[0] for c in world.queue.calls].count("acquire") == 1
+    assert world.soft_stops == [ACCOUNT], "the split took the window over and closed it at its end"
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+    # Таймер срабатывает позже: профиль уже закрыт, второй остановки нет.
+    sp._close_if_still_pending(pending)
+    assert world.soft_stops == [ACCOUNT]
 
 
-def test_profile_is_never_stopped_and_our_tab_is_closed(world):
+def test_grace_window_closes_the_profile_when_nobody_takes_it(world):
+    world.local = ("none", None)
+    world.started_now = True
+    world.page.routes["/ACT/insights|account|country"] = err(100)
+    api.read_via_api(ACCOUNT, D, D)
+    assert world.soft_stops == []
+    sp._close_if_still_pending(world.timers[0].args[0])
+    assert world.soft_stops == [ACCOUNT]
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+
+
+def test_profile_is_not_held_when_the_split_was_read_in_the_same_session(world):
+    world.local = ("none", None)
     world.started_now = True
     api.read_via_api(ACCOUNT, D, D)
-    assert world.cdp.closed_targets == ["T-mine"]
-    assert world.page.retired is False or True
-    src = (ROOT / "src" / "analysis_agent" / "account_spend_api.py").read_text(encoding="utf-8")
-    assert "stop_profile" not in src and "terminate" not in src.lower()
+    assert world.timers == [] and world.soft_stops == [ACCOUNT]
+
+
+def test_real_slots_a_third_sequential_read_is_granted(monkeypatch, tmp_path):
+    """Живая очередь с потолком 2: прежнее «оставить окно» вешало третье чтение навсегда."""
+    import dataclasses
+    import threading
+
+    from src.web import profile_slots as ps
+
+    w = World(monkeypatch, tmp_path)
+    settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=2)
+    open_profiles: set[str] = set()
+    usage = ps.ProfileUsage(lambda profiles: {p: 3000 for p in profiles if p in open_profiles},
+                            clock=lambda: 1000.0, background=False)
+    queue = ps.ProfileSlots(
+        memory=lambda: ps.MemoryReading(total_mb=64000, available_mb=60000),
+        settings=lambda: settings, clock=lambda: 1000.0, tick_s=0.05, usage=usage)
+    monkeypatch.setattr(sp, "_slot_queue", lambda: queue)
+
+    profiles = {f"Acc{i}": SimpleNamespace(profile_id=f"p{i}", folder_id="", multilogin_instance="A",
+                                           ad_account_id=ACT) for i in (1, 2, 3)}
+    monkeypatch.setattr(sp, "_entry_for", lambda account: profiles.get(account))
+    monkeypatch.setattr(api, "_probe_local", lambda pid: ("none", None))
+
+    def start(pid, folder, instance):
+        open_profiles.add(pid)
+        return prof.OpenedProfile(pid, folder, instance, "9222", None, True, None, started_now=True)
+
+    monkeypatch.setattr(api, "_open_profile", start)
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    monkeypatch.setattr(rpa_browser, "stop_profile_on_request",
+                        lambda e, label: open_profiles.discard(e.profile_id) or "closed")
+    done: list[str] = []
+
+    def run():
+        for name in ("Acc1", "Acc2", "Acc3"):
+            r = api.read_via_api(name, D, D)
+            done.append(f"{name}:{r.state}")
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(20)
+    assert not t.is_alive(), "the third read must not wait forever for a kept window"
+    assert done == ["Acc1:ok", "Acc2:ok", "Acc3:ok"]
+    assert open_profiles == set(), "every window the reads opened was closed again"
+    assert queue.snapshot()["running"] == [] or not queue.snapshot().get("running")
 
 
 def test_failed_read_still_closes_our_tab(world):
     world.page.routes["/ACT||"] = err(100)
     api.read_via_api(ACCOUNT, D, D)
     assert world.cdp.closed_targets == ["T-mine"]
+
+
+def test_the_api_module_stops_profiles_only_through_the_rpa_helpers():
+    src = (ROOT / "src" / "analysis_agent" / "account_spend_api.py").read_text(encoding="utf-8")
+    assert "terminate" not in src.lower() and "kill" not in src.replace("allow_kill", "").lower()
+    code = chr(10).join(l for l in src.splitlines() if not l.lstrip().startswith(("#", "*", "`")))
+    assert "_finish_started" in code and "stop_profile_on_request(" not in code
+
+
+# ───────────────────────── страны в той же вкладке (S1) ─────────────────────────
+
+def test_split_is_read_in_the_spend_session_with_no_second_load(world):
+    from src.analysis_agent import country_split as cs_
+
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok"
+    assert world.cdp.sent.count(("Target.createTarget", {"url": "about:blank"}, "")) == 1
+    assert [m for m, _p, _s in world.cdp.sent].count("Page.navigate") == 1, "Ads Manager is loaded once"
+    saved = cs_.get_split(ACCOUNT, D, D)
+    assert saved["state"] == "ok" and saved["source"] == "api"
+    assert [x["country"] for x in saved["rows"]] == ["United States", "Israel"]
+    assert saved["spend"] == 113.87 and saved["spend_currency"] == "USD" and saved["spend_at"]
+    # Страница после чтения спросит «нужна ли разбивка» — и услышит «нет».
+    assert cs_.why_split_is_needed(
+        countries=2, split=saved, spend_finished_at="2026-10-09 12:00:00",
+        spend=r.spend, currency=r.currency) == ""
+
+
+def test_split_is_skipped_when_the_stored_one_still_explains_the_spend(world):
+    api.read_via_api(ACCOUNT, D, D)
+    before = len(world.paths)
+    api.read_via_api(ACCOUNT, D, D)
+    second = world.paths[before:]
+    assert "/ACT/insights|account|country" not in second
+    assert len(second) == 6
+
+
+def test_split_failure_does_not_cancel_the_spend_and_is_stored_as_failed(world):
+    from src.analysis_agent import country_split as cs_
+
+    world.page.routes["/ACT/insights|account|country"] = err(100)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok" and r.spend == 113.87
+    saved = cs_.get_split(ACCOUNT, D, D)
+    assert saved["state"] == "failed" and saved["error"]
+    assert cs_.why_split_is_needed(countries=2, split=saved) != "", "the page will ask again"
+
+
+def test_split_is_not_attempted_after_a_stop(world):
+    world.page.routes["/ACT/ads||"] = err(17)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok"
+    assert "/ACT/insights|account|country" not in world.paths
 
 
 # ───────────────────────── очередь и замок как у RPA ─────────────────────────

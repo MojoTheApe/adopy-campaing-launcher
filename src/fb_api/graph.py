@@ -114,6 +114,16 @@ class RateLimited(GraphStop):
     kind = "rate_limited"
 
 
+class CallBudget(RateLimited):
+    """Свой потолок вызовов на одно чтение исчерпан (ACL-1760).
+
+    Meta ничего не говорила: это не её лимит, охлаждения профиля нет. Наследует
+    `RateLimited`, чтобы прежние `except RateLimited` продолжали ловить стоп.
+    """
+
+    kind = "call_budget"
+
+
 class PolicyBlocked(GraphStop):
     kind = "policy_block"
 
@@ -228,7 +238,7 @@ class GraphClient:
         if self.stopped is not None:
             raise self.stopped
         if self.calls >= self.max_calls:
-            raise self._stop(RateLimited(f"call budget of {self.max_calls} reached"))
+            raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
         self._pace()
         self.calls += 1
         self._last_call = self._clock()

@@ -903,6 +903,59 @@ def test_local_debug_port_does_not_match_a_prefix_of_the_profile_id():
     assert got == ("none", None)
 
 
+FOCUS_STEALERS = ("Target.activateTarget", "Page.bringToFront")
+
+
+def test_tab_open_never_activates_or_brings_to_front():
+    # Ни фокуса, ни окна на экран (правило владельца): только наша вкладка.
+    cdp = FakeCdp(FakePage([]))
+    tab = PageTab.open("http://127.0.0.1:1", connect=lambda u, timeout: cdp)
+    tab.close()
+    assert not any(m in FOCUS_STEALERS for m, _, _ in cdp.sent)
+
+
+def test_pilot_flow_never_activates_or_brings_to_front():
+    from scripts import fb_api_pilot as pilot
+
+    page = FakePage(_pilot_replies())
+    cdp = FakeCdp(page)
+    target = pilot.Target("KLD_TEST", ACT, "prof-uuid-1234", "fold", "A")
+    pilot.run_pilot(
+        target, emit=lambda s: None,
+        open_profile=lambda *a: prof.OpenedProfile("p", "f", "A", "5555", None, False),
+        release_profile=lambda o: "left_running",
+        open_tab=lambda url: PageTab.open(url, connect=lambda u, timeout: cdp),
+        make_client=lambda tr: g.GraphClient(tr, sleep=lambda s: None),
+    )
+    methods = [m for m, _, _ in cdp.sent]
+    assert "Target.createTarget" in methods and "Target.closeTarget" in methods
+    assert not any(m in FOCUS_STEALERS for m in methods)
+    assert "Network.enable" not in methods and "Runtime.enable" not in methods
+
+
+def test_local_debug_port_ignores_a_plain_chrome_with_the_right_profile_dir():
+    # Обычный Chrome (не Mimic/mlx) с той же папкой и слушающим портом — не наш.
+    procs = [_Proc("C:/Program Files/Google/Chrome/Application/chrome.exe",
+                   ["chrome.exe", f"--user-data-dir={_udd(PID)}", "--remote-debugging-port=9222"])]
+    got = prof.local_debug_port(PID, process_iter=lambda: procs, accepting=lambda p: True,
+                                listens=lambda proc, port: True)
+    assert got == ("none", None)
+
+
+def test_loopback_accept_check():
+    import socket
+
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+    try:
+        assert prof._accepting(port) is True
+    finally:
+        srv.close()
+    assert prof._accepting(port) is False
+
+
 def test_cdp_url_from_mlx_answer():
     assert prof.OpenedProfile("p", "f", "A", "5000", None, False).cdp_url == "http://127.0.0.1:5000"
     assert (prof.OpenedProfile("p", "f", "A", "5000", "devtools/browser/x", False).cdp_url
