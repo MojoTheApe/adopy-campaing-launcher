@@ -7101,22 +7101,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "756": {
-        "actor": "Worker-O1756A",
-        "session": "run_o1756a_1009",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1756-api-in-profile",
-        "worktree": "C:\\acl-api-inprofile",
-        "id": "7f4a5345c0f14135b3c2d1fd02ddb5a7",
-        "issue": 756,
-        "state": "handoff",
-        "started_at": "2026-10-09T17:56:48+00:00",
-        "from_status": "status:todo",
-        "pr": 759,
-        "report": "ACL-1756 review round 5 fixes. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 10568956 (on top of df86432b). Files: src/fb_api/token_capture.py, src/fb_api/graph.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n1. Host anchor tests: a Node probe test with 15 URLs that must not yield a token: adsmanager.facebook.com, www.facebook.com, graph.facebook.com.evil.com, evil.com/graph.facebook.com/..., graph.facebook.com@evil.com, user:pw@graph.facebook.com, :8443, a.graph.facebook.com, http:, a backslash URL, %2f, /../, evilgraph.facebook.com, and a Graph URL embedded in a foreign URL (query and path). For each: has_token false, the next call is refused with no_token and makes no fetch. Positive controls: graph.facebook.com, adsmanager-graph.facebook.com and an upper-case HTTPS URL are captured, and exactly one call goes to that host.\n2. GRAPH_RE is now /^https:\\/\\/((?:[a-z0-9]+-)?graph\\.facebook\\.com)(?:\\/(v\\d+\\.\\d+))?(?:\\/|$)/i. The version is optional; an unversioned URL gives an empty version.\n3. Pilot flags: a test checks that --graph-host and --credentials reach InPageGraph through run_pilot (the page specs carry host and credentials) and through main \u2192 run_pilot.\n4. GraphError.details values are scrubbed when the dict is built; a test asserts no act_ id, no 8+ digit id and no token.\n\nMutations (run one at a time, files restored), all killed: dropping ^ from GRAPH_RE, any *.facebook.com, any host, accepting http:, the old permissive regex (evilgraph), the pilot ignoring flags in make_graph, main dropping the flags, unscrubbed details.\n\nChecks (each file run separately): test_acl1756_fb_api.py 70 passed; test_acl1756_page_helper_node.py 7 passed; test_acl1702_tab_watchdog.py 35 passed; test_acl_test_shard.py 14 passed (spread [36, 35, 36]); acl_scan_secrets clean. --run was not used."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -10279,7 +10264,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10288,16 +10273,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1756-api-in-profile",
           "worktree": "C:\\acl-api-inprofile",
-          "id": "bd772ec713574dc3a7905b76e9c1bf95",
+          "id": "7f4a5345c0f14135b3c2d1fd02ddb5a7",
           "issue": 756,
           "state": "handoff",
-          "started_at": "2026-10-09T17:39:19+00:00",
+          "started_at": "2026-10-09T17:56:48+00:00",
           "from_status": "status:todo",
           "pr": 759,
-          "report": "ACL-1756 fix after batch return (live pilot B90: Graph error 1 \"Invalid request\" on the first read with credentials omit). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head df86432b (on top of e21bd6c4). Five files: src/fb_api/token_capture.py, src/fb_api/graph.py, scripts/fb_api_pilot.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n- The page helper copies Ads Manager's cookie mode (fetch credentials, XHR withCredentials) for our GET; the HTML/Resource Timing fallback uses include. It records am_request: via, method, credentials, path and parameter names only (no values, no token). Calls stay GET-only with redirect: 'error', the key whitelist and denylist, and no retry.\n- GraphError messages carry Meta's type, error_subcode, fbtrace_id, is_transient and user title/msg, plus the host, version and cookie mode used and the HTTP status, all scrubbed. Error 1 still does not stop the client.\n- New pilot flags (fixed lists): --graph-host captured|public and --credentials captured|include|omit. They are checked in Python (ValueError) and in the page (bad_option, no fetch). The pilot prints Ads Manager's own request shape and our endpoint.\n\nTests (each file run separately): test_acl1756_fb_api.py 68 passed; test_acl1756_page_helper_node.py 6 passed (Node ran); test_acl1702_tab_watchdog.py 35 passed; test_acl_test_shard.py 14 passed (spread [36, 35, 36]); acl_scan_secrets clean. --run was not used."
+          "report": "ACL-1756 review round 5 fixes. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 10568956 (on top of df86432b). Files: src/fb_api/token_capture.py, src/fb_api/graph.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n1. Host anchor tests: a Node probe test with 15 URLs that must not yield a token: adsmanager.facebook.com, www.facebook.com, graph.facebook.com.evil.com, evil.com/graph.facebook.com/..., graph.facebook.com@evil.com, user:pw@graph.facebook.com, :8443, a.graph.facebook.com, http:, a backslash URL, %2f, /../, evilgraph.facebook.com, and a Graph URL embedded in a foreign URL (query and path). For each: has_token false, the next call is refused with no_token and makes no fetch. Positive controls: graph.facebook.com, adsmanager-graph.facebook.com and an upper-case HTTPS URL are captured, and exactly one call goes to that host.\n2. GRAPH_RE is now /^https:\\/\\/((?:[a-z0-9]+-)?graph\\.facebook\\.com)(?:\\/(v\\d+\\.\\d+))?(?:\\/|$)/i. The version is optional; an unversioned URL gives an empty version.\n3. Pilot flags: a test checks that --graph-host and --credentials reach InPageGraph through run_pilot (the page specs carry host and credentials) and through main \u2192 run_pilot.\n4. GraphError.details values are scrubbed when the dict is built; a test asserts no act_ id, no 8+ digit id and no token.\n\nMutations (run one at a time, files restored), all killed: dropping ^ from GRAPH_RE, any *.facebook.com, any host, accepting http:, the old permissive regex (evilgraph), the pilot ignoring flags in make_graph, main dropping the flags, unscrubbed details.\n\nChecks (each file run separately): test_acl1756_fb_api.py 70 passed; test_acl1756_page_helper_node.py 7 passed; test_acl1702_tab_watchdog.py 35 passed; test_acl_test_shard.py 14 passed (spread [36, 35, 36]); acl_scan_secrets clean. --run was not used."
         },
         "pr": 759,
-        "queued_at": "2026-10-09T17:40:50+00:00",
+        "queued_at": "2026-10-09T18:06:10+00:00",
         "review_report": "# Round 5 (head df86432bf2985131b69ddc6587b50d2fd6149152, delta e21bd6c4..df86432b): REQUEST CHANGES (tests only, plus one scrub)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent reviewer.\n\nCode behaviour is correct on every point I could probe; the blockers are test gaps on the exact boundary that now carries cookies.\n\n## Probes (real helper under Node, real Python)\n- Host anchor, capture from an Ads Manager request carrying a token (cookies are sent only to the captured host). Captured: `adsmanager-graph.facebook.com`, `graph.facebook.com`, `GRAPH.FACEBOOK.COM` (normalized). NOT captured: `adsmanager.facebook.com`, `www.facebook.com`, `graph.facebook.com.evil.com`, `evil.com/graph.facebook.com/\u2026`, `graph.facebook.com@evil.com`, `evil.com@graph.facebook.com`, `graph.facebook.com:8443`, `a.graph.facebook.com`, `http://graph.facebook.com`, backslash/`%2f` userinfo tricks, `/../` paths. Residual (same as rounds 1-4, but now cookies go with it): `[a-z0-9-]*graph.facebook.com` has no separator, so any facebook.com label ending in `graph` (e.g. `evilgraph.facebook.com`) is accepted. Only reachable if Ads Manager's own page issues the token request to such a host, so the trust boundary is unchanged; I recommend tightening it to `(?:[a-z0-9]+-)?graph.facebook.com`.\n- `host`/`credentials` spec: anything but `captured|public` / `captured|include|omit` returns `bad_option` with 0 fetches (also `evil.example.com`, `same-origin`); Python rejects bad modes in the constructor. `public` uses `graph.facebook.com`. Still GET-only, `redirect:'error'`, key whitelist intact (probes from rounds 2-3 re-run, 13 refused keys).\n- `am_request`: names only (values and body values dropped, `access_token` removed, key regex-filtered, max 40), path without query. No values/token in the output; pilot output goes through `scrub`.\n- Error details: message path is scrubbed (act ids, business/long ids, tokens, even a truncated token fragment became `<token>`). Finding: `GraphError.details` holds the RAW strings (e.g. an `act_\u2026` id or business id from `error_user_msg`). Nothing reads or logs the dict today, but it is a latent leak for the next consumer; scrub the values when building the dict.\n- Flags: no retry or switching anywhere; `--graph-host`/`--credentials` just pass through. Auto-retry-on-error-1 mutation is killed.\n\n## Tests and checks\n- tests/test_acl1756_fb_api.py + test_acl1756_page_helper_node.py: 68 + 6 passed; tests/test_acl1702_tab_watchdog.py 35 passed (separately); acl_scan_secrets clean. Dry run without --run, sockets blocked: 0 network attempts, exit 0. git merge-tree vs work/main clean (tree equals head tree 9b3c677e).\n\n## Mutations (22 new patterns): 18 killed, 4+1 survived\n- SURVIVED (blockers): `GRAPH_RE` without the leading `^` anchor; host allowed to be any `*.facebook.com`; host allowed to be any host at all; `http:` scheme accepted. No test pins that capture refuses non-Graph hosts, so a regression here would send cookies to an arbitrary host unnoticed. Add a Node test that feeds the probe URLs above and asserts `has_token` is false and no later call fetches them.\n- SURVIVED: pilot ignores `--graph-host/--credentials` (passes constants). Add a test that `run_pilot`/`main` forwards both flags to `InPageGraph`.\n- KILLED: am_request leaks query/body values, keeps `access_token`, keeps query in path; bad host/credentials option accepted (JS and Python); custom host passthrough; captured credentials ignored; default flips to `omit`; redirect follow; omit mode lost; details/fbtrace/endpoint dropped; auto-retry on error 1.\n\n## Requested changes\n1. Node test for the capture host anchor (cases above), killing the four host mutations.\n2. Test that the pilot forwards the two flags.\n3. Scrub the values in `error_details` (and test that `.details` has no `act_` id, 8+ digit id or token).\n4. Optional hardening: tighten `GRAPH_RE` as above.\n\n## CI at df86432b\nwindows tests (3.13) pass; linux 3.13 shards 1-3 were running; tracker-link fails because of task state at the time of the run (re-run after review-acquire). Not approved, so no batch approve.",
         "return_operation": {
           "id": "0aa70bff8c3840f79459ae04070e8775",
@@ -13491,7 +13476,8 @@
       642,
       651,
       710,
-      739
+      739,
+      756
     ],
     "review": null,
     "history": [
@@ -19350,6 +19336,13 @@
         "at": "2026-10-09T17:56:48+00:00",
         "issue": 756,
         "claim": "7f4a5345c0f14135b3c2d1fd02ddb5a7",
+        "actor": "Worker-O1756A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-09T18:06:10+00:00",
+        "issue": 756,
+        "pr": 759,
         "actor": "Worker-O1756A"
       }
     ],
