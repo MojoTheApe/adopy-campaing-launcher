@@ -2463,30 +2463,6 @@
         "issue_scopes": {
           "728": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828"
         }
-      },
-      "759": {
-        "pr": 759,
-        "issue": 756,
-        "task": "ACL-1756",
-        "execution_lane": "b006b8f617b3425ebce8cc1e70a90050",
-        "reviewer": "Reviewer-R1756S",
-        "review_session": "rev_r1756s_1009",
-        "implementer": "Worker-O1756A",
-        "verdict": "approved",
-        "report": "# Review of PR #759 (ACL-1756): APPROVED (round 3, head bcdb03be)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent; I did not implement this. Implementer: Worker-O1756A.\nHistory: round 1 (Reviewer-R1756Q, Opus) requested changes B1/S1/S2 (review_759.md); round 2 (me, head 18b4e19b) requested one more S1 fix: padded/control/Unicode parameter keys passed the denylist. Round 3 reviewed delta 18b4e19b..bcdb03be.\n\nFixed and verified: helper KEY_RE /^[A-Za-z0-9_]+$/ and Python PARAM_KEY_RE (re.ASCII, fullmatch, non-str refused) run before the case-insensitive denylist. Re-ran the bypass set under Node and Python: ' method', 'method ', tab, NUL, 'method[]', fullwidth, 'meth\u00e9od', 'method<U+200B>', empty key, 'method\n', Kelvin sign, '%6dethod', 'method.', 'me thod', access_token variants: all refused, 0 fetches; valid keys ('fields', '_ok1', '1') still pass. Path injection (?method=, &method=, #, %3f, ;) still bad_path, 0 fetches. Wrapper .length assertion added; the previously surviving length mutation is now KILLED. Node output decoded as UTF-8.\nMutations on the delta: 11 of 12 killed (KEY_RE off/allows space/unicode/unanchored, PARAM_KEY_RE off/match/unicode/allow-empty, denylists off, length disguise off). Survivor: JS KEY_RE changed to allow an empty key; harmless (empty key cannot be 'method'; Python side kills it) but untested in Node - non-blocking.\nTests: tests/test_acl1756_fb_api.py 66 passed; tests/test_acl1702_tab_watchdog.py 35 passed (separately); acl_scan_secrets clean. Round-2 verifications (S2, O1-O6, dry run with 0 network attempts, merge) unchanged by this delta. git merge-tree vs work/main 646044f2 clean, tree cbcfee9d equals head tree.\nCI: windows tests (3.13), tooling/secret scan, Process instructions, Installer verification, descriptor pass; linux 3.13 shards pending at review time; tracker-link had failed on a run made before the task returned to Review.\n",
-        "head_sha": "bcdb03be7f9ea3ad28e187327df52b32852686cf",
-        "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-        "tree_sha": "cbcfee9d675a2aaf36ae830c774f5c65a348cfb4",
-        "kind": "independent-review",
-        "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "issues": [
-          756
-        ],
-        "recorded_at": "2026-10-09T15:24:23+00:00",
-        "issue_scopes": {
-          "756": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7"
-        }
       }
     },
     "stage": {
@@ -13491,7 +13467,9 @@
       "session": "rev_r1756s_1009",
       "coordinator": "Coordinator-C0930A",
       "started_at": "2026-10-09T15:22:59+00:00",
-      "state": "reviewing"
+      "state": "returning",
+      "report": "# Round 3 (head bcdb03be7f9ea3ad28e187327df52b32852686cf, delta 18b4e19b..bcdb03be): code APPROVED, required CI red, lane returned\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent reviewer.\n\n- Fix verified: helper `KEY_RE` /^[A-Za-z0-9_]+$/ and Python `PARAM_KEY_RE` (ASCII, fullmatch, non-str refused) run before the denylist. Bypass set re-run in Node and Python: padded/tab/NUL/`[]`/fullwidth/`m\u00e9thod`/`method<U+200B>`/empty/`method\\n`/Kelvin sign/`%6dethod`/`method.`/`me thod` all refused with 0 fetches; `fields`, `_ok1`, `1` still pass; path injection (`?method=`, `&method=`, `#`, `%3f`, `;`) still `bad_path`.\n- Mutations on the delta: 11 of 12 killed, including the previously surviving wrapper `.length` mutation. Survivor: JS `KEY_RE` allowing an empty key (harmless, Python layer kills it; add a Node empty-key test if convenient).\n- Tests: test_acl1756_fb_api.py 66 passed; test_acl1702_tab_watchdog.py 35 passed (separately); acl_scan_secrets clean. merge-tree vs work/main 646044f2 clean, tree cbcfee9d = head tree.\n- CI: windows 3.13, tooling/secret scan, Process instructions, Installer verification, descriptor pass; tracker-link passes after a re-run (first run predated Review). linux 3.13 shard 1 FAILED: tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards, counts [37, 33, 37] (limit 3), most likely the new test file shifting shard weights. Required \"ACL verification\" therefore not green; batch approve refused.\n- Review recorded (record-review --pr 759 applied, evidence review_759_evidence_r3.json). Lane returned so the worker can fix tests/shard only; re-acquire and re-check the small delta afterwards.",
+      "keep_lane": false
     },
     "history": [
       {
