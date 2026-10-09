@@ -35,7 +35,7 @@ import secrets
 import time
 from typing import Any, Callable
 
-from src.fb_api.cdp import CdpError, PageError
+from src.fb_api.cdp import CdpError, CdpTimeout, PageError
 from src.fb_api.telemetry import strip_tokens
 
 ADS_MANAGER_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act}"
@@ -85,6 +85,7 @@ _HELPER_JS = r"""
   let host = 'graph.facebook.com';
   let version = '';
   let retired = false;
+  const SWEEP_MS = 20000;
   // Как Ads Manager сам отправил запрос с токеном: режим куки, глагол и
   // ИМЕНА параметров (без значений). Наш вызов повторяет его режим куки:
   // токен Ads Manager может быть привязан к куки сессии (живой пилот B90:
@@ -154,6 +155,8 @@ _HELPER_JS = r"""
 
   function hook() {
     if (origFetch) {
+      // Отказоустойчиво (ревью b): что бы ни случилось в нашем коде, родной
+      // запрос уходит с теми же аргументами и его результат не трогаем.
       window.fetch = disguise(function (input, init) {
         try {
           const isReq = input && typeof input === 'object' && 'url' in input;
@@ -168,7 +171,7 @@ _HELPER_JS = r"""
     if (XHR) {
       XHR.open = disguise(function (method, url) {
         try { xhrUrl.set(this, { url: String(url), method: String(method || 'GET') }); } catch (e) {}
-        return origOpen.apply(this, arguments);
+        return origOpen.apply(this, arguments);  // наш код в try — результат не трогаем
       }, origOpen);
       XHR.send = disguise(function (body) {
         try {
@@ -302,9 +305,20 @@ _HELPER_JS = r"""
 
   function retire() { retired = true; token = null; unhook(); return true; }
 
+  // Снять обёртки не позже чем через SWEEP_MS, поймали токен или нет: дальше
+  // собственные запросы Ads Manager (fb_dtsg, обновление токена) идут по родным
+  // fetch/XHR. Нет токена — только беззапросные пути (Resource Timing, HTML).
+  function sweep() {
+    if (!token && !retired) { try { fallbacks(); } catch (e) {} }
+    unhook();
+    return { has_token: !!token, hooked: hooked };
+  }
+
   hook();
+  try { setTimeout(sweep, SWEEP_MS); } catch (e) {}
   Object.defineProperty(window, NAME, {
-    value: Object.freeze({ call: call, ready: ready, state: state, retire: retire }),
+    value: Object.freeze({ call: call, ready: ready, state: state, retire: retire, sweep: sweep,
+                           probe: function () { fallbacks(); return state(); } }),
     enumerable: false, configurable: false, writable: false,
   });
 })();
@@ -353,38 +367,61 @@ class InPageGraph:
     def _eval(self, expression: str, *, timeout: float = 60.0) -> Any:
         return strip_tokens(self.tab.evaluate(expression, timeout=timeout))
 
-    def start(self, act_id: str, *, timeout: float = 60.0) -> dict:
-        """Поставить помощника, открыть Ads Manager кабинета, дождаться токена.
-
-        Одна загрузка страницы, ни одного клика. Возвращает состояние страницы
-        (`kind`, `has_token`, `source`, …) — без токена.
-        """
+    def install(self) -> None:
+        """Поставить помощника в каждый новый документ вкладки (один раз)."""
         if not self._installed:
             self.tab.add_init_script(helper_source(self.name))
             self._installed = True
-        self.tab.navigate(ads_manager_url(act_id))
+
+    def navigate(self, act_id: str, *, timeout: float = 60.0) -> None:
+        """Открыть Ads Manager кабинета в своей вкладке. Одна загрузка, ни одного клика."""
+        self.tab.navigate(ads_manager_url(act_id), timeout=timeout)
+
+    def start(self, act_id: str, *, timeout: float = 90.0) -> dict:
+        """Помощник → Ads Manager → дождаться токена. Состояние страницы — без токена."""
+        self.install()
+        self.navigate(act_id, timeout=min(60.0, timeout))
         return self.wait_ready(timeout=timeout)
 
-    def wait_ready(self, *, timeout: float = 60.0) -> dict:
-        """Дождаться помощника в новом документе, затем — токена (внутри страницы).
+    def wait_ready(self, *, timeout: float = 90.0, poll_s: float = 1.0) -> dict:
+        """Дождаться помощника в новом документе и токена — опросом из Python.
 
-        Цикл здесь — ожидание загрузки своей вкладки, к Meta он не ходит.
+        Ждать обещание внутри страницы (`ready()`) нельзя: в фоновой вкладке
+        свёрнутого окна таймеры страницы душатся, и обещание висит дольше срока
+        чтения (живой пилот 5265: «CDP read timed out»). Здесь каждые
+        `poll_s` — короткий `state()`; к Meta цикл не ходит. Документ меняется
+        под нами (PageError/CdpError) — опрос продолжается; браузер не ответил
+        в срок (CdpTimeout) — стоп с именем шага. Не дождались токена — один
+        раз запасные пути внутри страницы (`probe()`), и ответ.
         """
         deadline = self._clock() + timeout
         probe = (f"(() => {{ const h = {self._js('')}; "
-                 "return h && !h.state().retired && location.href !== 'about:blank'; })()")
+                 "if (!h || location.href === 'about:blank') return null; "
+                 "const s = h.state(); return s.retired ? null : s; })()")
+        loaded = False
         while True:
             try:
-                if self._eval(probe, timeout=10.0):
-                    break
-            except (PageError, CdpError, TimeoutError):
-                pass  # документ меняется под нами — пробуем ещё
+                got = self._eval(probe, timeout=10.0)
+            except CdpTimeout:
+                raise
+            except (PageError, CdpError):
+                got = None  # документ меняется под нами
+            if isinstance(got, dict):
+                loaded = True
+                if got.get("has_token") or got.get("kind") in ("login", "checkpoint"):
+                    return got
             if self._clock() >= deadline:
-                return {"kind": "not_loaded", "has_token": False}
-            self._sleep(0.5)
-        left_ms = max(1000, int((deadline - self._clock()) * 1000))
-        state = self._eval(self._js(f".ready({left_ms})"), timeout=left_ms / 1000 + 10.0)
-        return state if isinstance(state, dict) else {"kind": "other", "has_token": False}
+                break
+            self._sleep(poll_s)
+        if not loaded:
+            return {"kind": "not_loaded", "has_token": False}
+        try:
+            got = self._eval(self._js(".probe()"), timeout=10.0)
+        except CdpTimeout:
+            raise
+        except (PageError, CdpError):
+            got = None
+        return got if isinstance(got, dict) else {"kind": "other", "has_token": False}
 
     def state(self) -> dict:
         try:
@@ -407,7 +444,7 @@ class InPageGraph:
         got = self._eval(self._js(f".call({json.dumps(spec)})"), timeout=timeout)
         return got if isinstance(got, dict) else {"error": "bad_reply"}
 
-    def reacquire(self, *, timeout: float = 60.0) -> dict:
+    def reacquire(self, *, timeout: float = 90.0) -> dict:
         """Переснять токен: старый документ гасит свой, вкладка перезагружается."""
         try:
             self._eval(self._js(".retire()"), timeout=10.0)

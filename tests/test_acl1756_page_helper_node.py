@@ -50,7 +50,7 @@ const win = {
   },
   XMLHttpRequest: FakeXHR,
   performance: { getEntriesByType: () => [] },
-  setTimeout: (f, ms) => setTimeout(f, 0),
+  setTimeout: (f, ms) => (ms < 5000 ? setTimeout(f, 0) : 0),  // 20s sweep not auto-fired
 };
 win.window = win; win.top = win;
 const nativeFetch = win.fetch;
@@ -152,7 +152,7 @@ async function probe(url) {
   const run = new Function('window','location','document','XMLHttpRequest','URL','URLSearchParams',
     'FormData','performance','setTimeout', HELPER);
   run(win, win.location, doc, FakeXHR, URL, URLSearchParams, FakeFormData, win.performance,
-      (f) => setTimeout(f, 0));
+      (f, ms) => (ms < 5000 ? setTimeout(f, 0) : 0));
   const h = win[NAME];
   // Страница сама шлёт запрос с токеном на этот адрес (через обёртку fetch).
   await win.fetch(url + (url.includes('?') ? '&' : '?') + 'access_token=' + TOKEN);
@@ -303,6 +303,111 @@ def test_helper_manual_options_are_a_closed_list():
     assert out["opt_bad_host"] == {"error": "bad_option"}
     assert out["opt_bad_cred"] == {"error": "bad_option"}
     assert out["opt_fetches"] == 1
+
+
+_FAILSAFE_HARNESS = r"""
+const calls = { fetch: [], open: [], send: [] };
+class FakeFormData { get(){ return null; } forEach(){ throw new Error('describe boom'); } }
+class FakeXHR { open(){ calls.open.push(Array.from(arguments)); } send(){ calls.send.push(Array.from(arguments)); } }
+const SENTINEL = { sentinel: true };
+const win = {
+  location: { href: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns',
+              hostname: 'adsmanager.facebook.com', pathname: '/adsmanager/manage/campaigns' },
+  fetch: function fetch(a, b) { calls.fetch.push([a, b]); return SENTINEL; },
+  XMLHttpRequest: FakeXHR,
+  performance: { getEntriesByType: () => [] },
+};
+win.window = win; win.top = win;
+const nativeFetch = win.fetch, nativeOpen = FakeXHR.prototype.open, nativeSend = FakeXHR.prototype.send;
+const doc = { readyState: 'complete', querySelector: () => null, scripts: [] };
+const run = new Function('window','location','document','XMLHttpRequest','URL','URLSearchParams',
+  'FormData','performance','setTimeout', HELPER);
+run(win, win.location, doc, FakeXHR, URL, URLSearchParams, FakeFormData, win.performance,
+    (f, ms) => (ms < 5000 ? setTimeout(f, 0) : 0));
+const h = win[NAME];
+const out = {};
+// 1. input.url getter throws inside take(): fetch must still return the real result.
+const throwingInput = {}; Object.defineProperty(throwingInput, 'url', { get() { throw new Error('url boom'); } });
+out.fetch_ret_is_sentinel = (win.fetch(throwingInput, { method: 'GET' }) === SENTINEL);
+out.fetch_got_original = calls.fetch.length === 1 && calls.fetch[0][0] === throwingInput
+                         && calls.fetch[0][1].method === 'GET';
+// 2. describe() throws on a captured graph request (FormData.forEach boom): result untouched, no throw.
+let threw = false;
+try {
+  win.fetch('https://graph.facebook.com/v22.0/me?access_token=' + TOKEN,
+            { method: 'GET', body: new FakeFormData() });
+} catch (e) { threw = true; }
+out.describe_no_throw = (threw === false);
+out.captured_despite_describe = h.state().has_token === true;
+// 3. sweep removes the wrappers and restores natives by identity.
+const sweptNoToken = (() => {
+  const w = { location: win.location, fetch: function fetch(){ return SENTINEL; },
+              XMLHttpRequest: FakeXHR, performance: { getEntriesByType: () => [] } };
+  w.window = w; w.top = w;
+  const nf = w.fetch, no = FakeXHR.prototype.open, ns = FakeXHR.prototype.send;
+  const NM = NAME;
+  const SECOND = NM + '2';
+  const run2 = new Function('window','location','document','XMLHttpRequest','URL','URLSearchParams',
+    'FormData','performance','setTimeout',
+    HELPER.split(JSON.stringify(NM)).join(JSON.stringify(SECOND)));
+  run2(w, w.location, { readyState: 'complete', querySelector: () => null, scripts: [] },
+       FakeXHR, URL, URLSearchParams, FakeFormData, w.performance, (f) => setTimeout(f, 0));
+  const wrapped = w.fetch !== nf;
+  const res = w[SECOND].sweep();
+  return { wrapped: wrapped, has_token: res.has_token, still_hooked: res.hooked,
+           fetch_identity: w.fetch === nf, open_identity: FakeXHR.prototype.open === no,
+           send_identity: FakeXHR.prototype.send === ns };
+})();
+out.sweep = sweptNoToken;
+out.token_in_output = JSON.stringify(out).includes(TOKEN);
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def _run_failsafe() -> dict:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    name = "__acl_graph_fs"
+    src = (_FAILSAFE_HARNESS
+           .replace("TOKEN", json.dumps(TOKEN))
+           .replace("NAME", json.dumps(name))
+           .replace("HELPER", json.dumps(tc.helper_source(name))))
+    # Через файл, а не -e: harness встраивает помощника дважды, и -e упёрся бы
+    # в предел длины команды Windows.
+    import tempfile
+
+    with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as fh:
+        fh.write(src)
+        script = fh.name
+    try:
+        done = subprocess.run([node, script], capture_output=True, encoding="utf-8", timeout=60)
+    finally:
+        try:
+            Path(script).unlink()
+        except OSError:
+            pass
+    assert done.returncode == 0, done.stderr[-2000:]
+    return json.loads(done.stdout)
+
+
+def test_helper_wrappers_never_disturb_the_pages_own_requests():
+    out = _run_failsafe()
+    # Исключение в take()/describe() не ломает и не меняет запрос страницы.
+    assert out["fetch_ret_is_sentinel"] is True and out["fetch_got_original"] is True
+    assert out["describe_no_throw"] is True and out["captured_despite_describe"] is True
+
+
+def test_helper_sweep_removes_wrappers_and_restores_natives():
+    out = _run_failsafe()["sweep"]
+    assert out["wrapped"] is True            # обёртки стояли
+    assert out["has_token"] is False and out["still_hooked"] is False
+    # Родные функции возвращены по идентичности.
+    assert out["fetch_identity"] and out["open_identity"] and out["send_identity"]
+
+
+def test_helper_failsafe_output_has_no_token():
+    assert _run_failsafe()["token_in_output"] is False
 
 
 def test_helper_html_fallback_keeps_the_token_in_page():

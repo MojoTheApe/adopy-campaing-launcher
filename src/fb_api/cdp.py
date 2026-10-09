@@ -15,6 +15,17 @@ Websocket-клиент не пишем второй раз: берём `RawCdp` 
 
 События CDP (Network.*) не слушаем вовсе: токен Ads Manager в Python не
 попадает (см. `token_capture`).
+
+Троттлинг фона (живой пилот 5265, «CDP read timed out»): вкладка открыта
+фоновой в окне, которое может быть свёрнуто, и Chrome душит её таймеры и
+рендер. Снимаем так же, как робот (`browser._disable_background_throttling`):
+`Emulation.setFocusEmulationEnabled` + `Page.setWebLifecycleState: active` —
+окно не показывается и фокус не забирается. Скринкаст робота
+(`_keep_renderer_active`) не берём: ему нужен ответ на каждый кадр, а сырой
+клиент события не читает.
+
+Каждый вызов CDP, не дождавшийся ответа, — `CdpTimeout` с именем метода и
+сроком: по сообщению видно, на каком шаге встали.
 """
 from __future__ import annotations
 
@@ -22,7 +33,7 @@ from typing import Any, Callable
 
 from src.fb_ads_rpa.tab_watchdog import CdpError, RawCdp
 
-__all__ = ["CdpError", "PageError", "PageTab"]
+__all__ = ["CdpError", "CdpTimeout", "PageError", "PageTab"]
 
 #: Срок одного служебного вызова CDP (создать вкладку, подключиться, …).
 CALL_S = 10.0
@@ -30,6 +41,20 @@ CALL_S = 10.0
 
 class PageError(CdpError):
     """Скрипт во вкладке бросил исключение или вернул не то."""
+
+
+class CdpTimeout(CdpError, TimeoutError):
+    """Браузер не ответил на вызов CDP в срок; в тексте — метод и срок."""
+
+
+def _call(cdp: Any, method: str, params: dict | None = None, *, session_id: str = "",
+          timeout: float = CALL_S) -> dict:
+    try:
+        return cdp.call(method, params or {}, session_id=session_id, timeout=timeout)
+    except TimeoutError as exc:
+        if isinstance(exc, CdpTimeout):
+            raise
+        raise CdpTimeout(f"{method}: the browser did not answer within {timeout:.0f} s") from exc
 
 
 class PageTab:
@@ -40,21 +65,26 @@ class PageTab:
         self.target_id = target_id
         self.session_id = session_id
         self.closed = False
+        #: Удалось ли снять троттлинг фона: {"focus": bool, "lifecycle": bool}.
+        self.throttle: dict = {}
 
     @classmethod
     def open(cls, cdp_url: str, *, connect: Callable[..., Any] | None = None,
              call_s: float = CALL_S) -> "PageTab":
         """Подключиться к браузеру профиля и открыть в нём свою пустую вкладку."""
-        cdp = (connect or RawCdp.connect)(cdp_url, timeout=call_s)
+        try:
+            cdp = (connect or RawCdp.connect)(cdp_url, timeout=call_s)
+        except TimeoutError as exc:
+            raise CdpTimeout(f"connect: the browser did not answer within {call_s:.0f} s") from exc
         target_id = ""
         try:
-            created = cdp.call("Target.createTarget",
-                               {"url": "about:blank", "background": True}, timeout=call_s)
+            created = _call(cdp, "Target.createTarget",
+                            {"url": "about:blank", "background": True}, timeout=call_s)
             target_id = str(created.get("targetId") or "")
             if not target_id:
                 raise CdpError("the browser did not open a tab")
-            attached = cdp.call("Target.attachToTarget",
-                                {"targetId": target_id, "flatten": True}, timeout=call_s)
+            attached = _call(cdp, "Target.attachToTarget",
+                             {"targetId": target_id, "flatten": True}, timeout=call_s)
             session_id = str(attached.get("sessionId") or "")
             if not session_id:
                 raise CdpError("could not attach to the new tab")
@@ -62,6 +92,7 @@ class PageTab:
             # Runtime.enable не зовём: Runtime.evaluate работает и без него, а
             # включённый домен Runtime — известный признак автоматизации.
             tab.call("Page.enable")
+            tab.throttle = tab.keep_active()
             return tab
         except BaseException:
             if target_id:
@@ -79,7 +110,26 @@ class PageTab:
     def call(self, method: str, params: dict | None = None, *, timeout: float = CALL_S) -> dict:
         if self.closed:
             raise CdpError("the tab is closed")
-        return self._cdp.call(method, params or {}, session_id=self.session_id, timeout=timeout)
+        return _call(self._cdp, method, params, session_id=self.session_id, timeout=timeout)
+
+    def keep_active(self) -> dict:
+        """Снять троттлинг фона, не показывая окно (как робот, ACL-1402)."""
+        status = {"focus": False, "lifecycle": False}
+        try:
+            self.call("Emulation.setFocusEmulationEnabled", {"enabled": True})
+            status["focus"] = True
+        except CdpTimeout:
+            raise
+        except Exception:
+            pass
+        try:
+            self.call("Page.setWebLifecycleState", {"state": "active"})
+            status["lifecycle"] = True
+        except CdpTimeout:
+            raise
+        except Exception:
+            pass
+        return status
 
     def add_init_script(self, source: str) -> None:
         """Скрипт, который выполняется в каждом новом документе вкладки ДО скриптов страницы."""

@@ -25,7 +25,7 @@ from src.fb_api import graph as g  # noqa: E402
 from src.fb_api import profile as prof  # noqa: E402
 from src.fb_api import telemetry as tm  # noqa: E402
 from src.fb_api import token_capture as tc  # noqa: E402
-from src.fb_api.cdp import PageTab  # noqa: E402
+from src.fb_api.cdp import CdpTimeout, PageTab  # noqa: E402
 
 TOKEN = "EAAB" + "Zx9" * 20          # «токен» страницы — живёт только в FakePage
 ACT = "act_1234567890"          # заглушки из acl_scan_secrets._PLACEHOLDERS
@@ -721,6 +721,70 @@ def test_cdp_url_from_mlx_answer():
 
 
 # ───────────────────────── пилот: сухой прогон, разрешение аккаунта ─────────────────────────
+
+class _FailingGraph:
+    """Граф, который валится на ожидании токена (как таймаут загрузки)."""
+
+    def __init__(self, tab):
+        self.tab = tab
+
+    def install(self):
+        pass
+
+    def navigate(self, act_id, *, timeout=60.0):
+        pass
+
+    def wait_ready(self, *, timeout=90.0):
+        raise CdpTimeout("wait_for_token: the browser did not answer within 90 s")
+
+
+def test_any_failure_closes_our_own_tab():
+    from scripts import fb_api_pilot as pilot
+
+    page = FakePage([])
+    cdp = FakeCdp(page, other_tabs=2)   # у браузера есть и другие вкладки
+    target = pilot.Target("KLD_TEST", ACT, "prof-uuid-1234", "fold", "A")
+    with pytest.raises(CdpTimeout) as ei:
+        pilot.run_pilot(
+            target, emit=lambda s: None,
+            open_profile=lambda *a: prof.OpenedProfile("p", "f", "A", "5555", None, False),
+            release_profile=lambda o: "left_running",
+            open_tab=lambda url: PageTab.open(url, connect=lambda u, timeout: cdp),
+            make_graph=lambda tab: _FailingGraph(tab),
+        )
+    # Наша вкладка закрыта, и только наша; шаг назван на исключении.
+    assert cdp.closed_targets == ["T-mine"] and cdp.closed
+    assert getattr(ei.value, "pilot_step", "").startswith("wait_for_token")
+
+
+def test_last_browser_tab_is_not_closed_on_failure():
+    from scripts import fb_api_pilot as pilot
+
+    page = FakePage([])
+    cdp = FakeCdp(page, other_tabs=0)   # наша вкладка — единственная
+    target = pilot.Target("KLD_TEST", ACT, "p", "f", "A")
+    with pytest.raises(CdpTimeout):
+        pilot.run_pilot(
+            target, emit=lambda s: None,
+            open_profile=lambda *a: prof.OpenedProfile("p", "f", "A", "5555", None, False),
+            release_profile=lambda o: "left_running",
+            open_tab=lambda url: PageTab.open(url, connect=lambda u, timeout: cdp),
+            make_graph=lambda tab: _FailingGraph(tab),
+        )
+    # Последнюю вкладку не закрываем: Chrome (и профиль MLX) закрылся бы.
+    assert cdp.closed_targets == [] and cdp.closed
+
+
+def test_tab_open_disables_background_throttling():
+    page = FakePage([])
+    cdp = FakeCdp(page)
+    tab = PageTab.open("http://127.0.0.1:1", connect=lambda u, timeout: cdp)
+    methods = [m for m, _, _ in cdp.sent]
+    assert "Emulation.setFocusEmulationEnabled" in methods
+    assert "Page.setWebLifecycleState" in methods
+    assert tab.throttle == {"focus": True, "lifecycle": True}
+    tab.close()
+
 
 def test_pilot_default_is_a_dry_run(monkeypatch, capsys, tmp_path):
     from scripts import fb_api_pilot as pilot
