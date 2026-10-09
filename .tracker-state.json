@@ -7110,9 +7110,11 @@
         "worktree": "C:\\acl-api-inprofile",
         "id": "70ddc3057c8149a0877f1b010d2af0db",
         "issue": 756,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-09T18:18:56+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 759,
+        "report": "ACL-1756 round 6 fix for the Windows CI job. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile. Test file only: tests/test_acl1756_fb_api.py.\n\ntest_acl_test_platform::test_no_unmarked_test_file_uses_windows_only_apis flagged r\"act_\\d\" and r\"\\d{8,}\" (backslash-path). They are now module constants ACT_ID_RE = re.compile(r\"act_[0-9]\") and LONG_ID_RE = re.compile(r\"[0-9]{8,}\"), with no backslash. Behaviour is unchanged.\n\nChecks: tests/test_acl_test_platform.py 100 passed; tests/test_acl1756_fb_api.py 70 passed. --run was not used."
       }
     },
     "tasks": {
