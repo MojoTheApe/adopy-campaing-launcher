@@ -10264,7 +10264,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10289,7 +10289,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "Return of an Approved task for a live-pilot fix (Coordinator-C0930A, 2026-10-09).\n\nLive pilot on KLD_BFL_B90, run with the owner's permission: the profile attached, Ads Manager loaded and the token was captured in the page. The first Graph call, GET /me/adaccounts, failed with \"Graph API error 1: Invalid request\". The client stopped as designed and made no more calls.\n\nMost likely cause: the in-page fetch used credentials:'omit', while the Ads Manager session token is cookie-bound. The error message also dropped Meta's details (type, subcode, fbtrace_id).\n\nFix requested:\n- Copy Ads Manager's own credentials mode, host and version.\n- Record names-only metadata of Ads Manager's own Graph request.\n- Carry Meta's scrubbed error details in the stop message.\n- Add closed-list diagnostic flags --graph-host and --credentials.\n- Keep it GET-only, with the same key whitelist and denylist and no retries."
-        }
+        },
+        "reviewer": "Reviewer-R1756S"
       }
     },
     "actors": {
@@ -13476,10 +13477,20 @@
       642,
       651,
       710,
-      739,
-      756
+      739
     ],
-    "review": null,
+    "review": {
+      "id": "d72ecc44727a44838d087aa8e7209f98",
+      "pr": 759,
+      "issues": [
+        756
+      ],
+      "actor": "Reviewer-R1756S",
+      "session": "rev_r1756s_1009",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-09T18:16:40+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -19344,6 +19355,13 @@
         "issue": 756,
         "pr": 759,
         "actor": "Worker-O1756A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-09T18:16:40+00:00",
+        "pr": 759,
+        "lane": "d72ecc44727a44838d087aa8e7209f98",
+        "actor": "Reviewer-R1756S"
       }
     ],
     "policy": {
