@@ -83,6 +83,16 @@ const h = win[NAME];
   } else if (MODE === 'fetch') {
     await win.fetch('https://graph.facebook.com/v21.0/me/adaccounts?access_token=' + TOKEN);
     fetched.length = 0;
+  } else if (MODE === 'xhr_am') {
+    // Как Ads Manager: свой хост Graph, POST с method=get в теле, куки сессии.
+    const x = new win.XMLHttpRequest();
+    x.withCredentials = true;
+    x.open('POST', 'https://adsmanager-graph.facebook.com/v23.0/act_1/insights?_reqName=adaccount%2Finsights&_reqSrc=AdsReportBuilder');
+    x.send('method=get&pretty=0&suppress_http_code=1&locale=en_US&access_token=' + TOKEN);
+  } else if (MODE === 'fetch_inc') {
+    await win.fetch('https://adsmanager-graph.facebook.com/v22.0/me?_reqName=me&access_token=' + TOKEN,
+                    { credentials: 'include' });
+    fetched.length = 0;
   }
   out.after = await h.ready(MODE === 'html' ? 10 : 1000);
   out.unhooked = FakeXHR.prototype.send === origSend && FakeXHR.prototype.open === origOpen;
@@ -94,6 +104,15 @@ const h = win[NAME];
   out.credentials = fetched.length ? fetched[0].init.credentials : '';
   out.redirect = fetched.length ? fetched[0].init.redirect : '';
   out.method = fetched.length ? fetched[0].init.method : '';
+  // Ручные варианты пилота: публичный хост и явный режим куки; чужие значения — отказ.
+  const n0 = fetched.length;
+  out.opt_public = await h.call({ method: 'GET', path: '/me', params: {}, host: 'public', credentials: 'omit' });
+  out.opt_public_url = fetched.length > n0 ? fetched[n0].url.split('?')[0] : '';
+  out.opt_public_cred = fetched.length > n0 ? fetched[n0].init.credentials : '';
+  out.opt_public_method = fetched.length > n0 ? fetched[n0].init.method : '';
+  out.opt_bad_host = await h.call({ method: 'GET', path: '/me', params: {}, host: 'evil.example.com' });
+  out.opt_bad_cred = await h.call({ method: 'GET', path: '/me', params: {}, credentials: 'same-origin' });
+  out.opt_fetches = fetched.length - n0;
   out.forbidden = {};
   const before = fetched.length;
   for (const k of ['method', '_method', 'batch', 'suppress_http_code', 'access_token', 'Method',
@@ -163,8 +182,40 @@ def test_helper_takes_the_token_from_ads_manager_requests_and_keeps_it(mode, sou
     assert "access_token=<hidden>" in json.dumps(out["got"])
 
 
+@pytest.mark.parametrize("mode,host,version,am", [
+    ("xhr_am", "adsmanager-graph.facebook.com", "v23.0",
+     {"via": "xhr", "method": "POST", "credentials": "include", "path": "/v23.0/act_1/insights",
+      "params": ["_reqName", "_reqSrc", "locale", "method", "pretty", "suppress_http_code"]}),
+    ("fetch_inc", "adsmanager-graph.facebook.com", "v22.0",
+     {"via": "fetch", "method": "GET", "credentials": "include", "path": "/v22.0/me",
+      "params": ["_reqName"]}),
+])
+def test_helper_mirrors_ads_manager_cookie_mode_and_stays_get_only(mode, host, version, am):
+    out = _run_node(mode)
+    # Как ходил сам Ads Manager — только имена параметров, без значений и токена.
+    assert out["after"]["am_request"] == am
+    assert out["after"]["graph_host"] == host and out["after"]["credentials"] == "include"
+    # Наш вызов: тот же хост и режим куки, но всегда GET и без method/suppress_http_code.
+    assert out["fetched_url_head"] == f"https://{host}/{version}/act_1/campaigns"
+    assert out["credentials"] == "include" and out["method"] == "GET"
+    assert out["got"]["endpoint"] == {"host": host, "version": version, "credentials": "include"}
+    blob = json.dumps(out)
+    assert TOKEN not in blob and not TOKEN_LIKE.search(blob)
+
+
+def test_helper_manual_options_are_a_closed_list():
+    out = _run_node("fetch_inc")
+    assert out["opt_public_url"] == "https://graph.facebook.com/v22.0/me"
+    assert out["opt_public_cred"] == "omit" and out["opt_public_method"] == "GET"
+    assert out["opt_bad_host"] == {"error": "bad_option"}
+    assert out["opt_bad_cred"] == {"error": "bad_option"}
+    assert out["opt_fetches"] == 1
+
+
 def test_helper_html_fallback_keeps_the_token_in_page():
     out = _run_node("html", [{"src": "", "textContent": 'x={"accessToken":"' + TOKEN + '"}'}])
     assert out["after"]["has_token"] is True and out["after"]["source"] == "html"
     assert out["fetched_url_head"] == "https://graph.facebook.com/act_1/campaigns"
+    # Токен взят из HTML — запроса Ads Manager не видели: куки сессии включены.
+    assert out["credentials"] == "include" and out["after"]["am_request"] is None
     assert TOKEN not in json.dumps(out)

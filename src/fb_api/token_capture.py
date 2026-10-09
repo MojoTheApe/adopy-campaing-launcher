@@ -48,6 +48,12 @@ FORBIDDEN_PARAMS = frozenset({"method", "_method", "batch", "suppress_http_code"
 #: сервер не нормализует их в запретное имя.
 PARAM_KEY_RE = re.compile(r"[A-Za-z0-9_]+", re.ASCII)
 
+#: Куда идёт наш вызов: 'captured' — хост Graph, которым ходит сам Ads Manager
+#: (например, adsmanager-graph.facebook.com), 'public' — graph.facebook.com.
+GRAPH_HOST_MODES = frozenset({"captured", "public"})
+#: Режим куки: 'captured' — как у запроса Ads Manager с токеном (по умолчанию).
+CREDENTIAL_MODES = frozenset({"captured", "include", "omit"})
+
 #: Помощник страницы. `__NAME__` заменяется на имя свойства window (со
 #: случайным хвостом). Никаких обращений наружу, кроме `fetch` к Graph API по
 #: явному вызову `call()`.
@@ -76,6 +82,12 @@ _HELPER_JS = r"""
   let host = 'graph.facebook.com';
   let version = '';
   let retired = false;
+  // Как Ads Manager сам отправил запрос с токеном: режим куки, глагол и
+  // ИМЕНА параметров (без значений). Наш вызов повторяет его режим куки:
+  // токен Ads Manager может быть привязан к куки сессии (живой пилот B90:
+  // Graph error 1 «Invalid request» при credentials: 'omit').
+  let amCredentials = '';
+  let amRequest = null;
   // Параметры, которыми Graph позволяет подменить глагол запроса или
   // упаковать несколько запросов в один (`method=post`, `batch`, …): срез
   // только читает, такие ключи отказываются целиком.
@@ -83,7 +95,20 @@ _HELPER_JS = r"""
   const KEY_RE = /^[A-Za-z0-9_]+$/;
   let hooked = false;
 
-  function take(url, body) {
+  function describe(u, body, how) {
+    const names = new Set();
+    try { u.searchParams.forEach((v, k) => names.add(k)); } catch (e) {}
+    try {
+      if (typeof body === 'string') new URLSearchParams(body).forEach((v, k) => names.add(k));
+      else if (body instanceof URLSearchParams || body instanceof FormData) body.forEach((v, k) => names.add(k));
+    } catch (e) {}
+    names.delete('access_token');
+    const keys = Array.from(names).filter((k) => KEY_RE.test(k)).sort().slice(0, 40);
+    return { via: how.via, method: String(how.method || 'GET').toUpperCase().slice(0, 10),
+             credentials: how.credentials, path: u.pathname.slice(0, 120), params: keys };
+  }
+
+  function take(url, body, how) {
     if (token || retired) return;
     let u;
     try { u = new URL(String(url), location.href); } catch (e) { return; }
@@ -99,6 +124,10 @@ _HELPER_JS = r"""
     }
     if (t && TOKEN_RE.test(String(t))) {
       token = String(t); source = 'network'; host = m[1].toLowerCase(); version = m[2];
+      if (how) {
+        amCredentials = how.credentials || '';
+        try { amRequest = describe(u, body, how); } catch (e) { amRequest = null; }
+      }
       unhook();
     }
   }
@@ -123,17 +152,27 @@ _HELPER_JS = r"""
   function hook() {
     if (origFetch) {
       window.fetch = disguise(function (input, init) {
-        try { take(typeof input === 'string' ? input : (input && input.url), init && init.body); } catch (e) {}
+        try {
+          const isReq = input && typeof input === 'object' && 'url' in input;
+          const cred = (init && init.credentials) || (isReq && input.credentials) || 'same-origin';
+          const meth = (init && init.method) || (isReq && input.method) || 'GET';
+          take(isReq ? input.url : input, init && init.body,
+               { via: 'fetch', method: meth, credentials: String(cred) });
+        } catch (e) {}
         return origFetch.apply(this, arguments);
       }, origFetch);
     }
     if (XHR) {
       XHR.open = disguise(function (method, url) {
-        try { xhrUrl.set(this, String(url)); } catch (e) {}
+        try { xhrUrl.set(this, { url: String(url), method: String(method || 'GET') }); } catch (e) {}
         return origOpen.apply(this, arguments);
       }, origOpen);
       XHR.send = disguise(function (body) {
-        try { const u = xhrUrl.get(this); if (u) take(u, body); } catch (e) {}
+        try {
+          const o = xhrUrl.get(this);
+          if (o) take(o.url, body, { via: 'xhr', method: o.method,
+                                     credentials: this.withCredentials ? 'include' : 'same-origin' });
+        } catch (e) {}
         return origSend.apply(this, arguments);
       }, origSend);
     }
@@ -174,13 +213,25 @@ _HELPER_JS = r"""
              || !!document.querySelector('input[name="pass"]')) kind = 'login';
     else if (/(^|\.)adsmanager\.facebook\.com$/i.test(h) || p.indexOf('/adsmanager') === 0) kind = 'ads_manager';
     return { kind: kind, host: h, path: p.slice(0, 120), ready_state: document.readyState,
-             has_token: !!token, source: source, version: version, retired: retired };
+             has_token: !!token, source: source, version: version, retired: retired,
+             graph_host: host, credentials: credentialsFor('captured'), am_request: amRequest };
   }
 
   function clean(text) {
     let out = String(text);
     if (token) out = out.split(token).join('<token>');
     return out.replace(PARAM_RE, '$1<hidden>').replace(TOKEN_ANY, '<token>');
+  }
+
+  // Режим куки нашего вызова. 'captured' — как у запроса Ads Manager с
+  // токеном; если токен взят запасным путём (HTML, Resource Timing) — 'include':
+  // Graph и Ads Manager на одном сайте facebook.com, куки сессии свои.
+  // 'same-origin' к другому хосту куки не шлёт, поэтому считается 'omit'.
+  function credentialsFor(mode) {
+    if (mode === 'include' || mode === 'omit') return mode;
+    if (amCredentials === 'include') return 'include';
+    if (amCredentials === 'omit' || amCredentials === 'same-origin') return 'omit';
+    return 'include';
   }
 
   async function call(spec) {
@@ -196,23 +247,30 @@ _HELPER_JS = r"""
       if (!KEY_RE.test(String(k))) return { error: 'forbidden_param' };
       if (FORBIDDEN.indexOf(String(k).toLowerCase()) >= 0) return { error: 'forbidden_param' };
     }
+    const hostMode = spec.host === undefined ? 'captured' : spec.host;
+    const credMode = spec.credentials === undefined ? 'captured' : spec.credentials;
+    if (['captured', 'public'].indexOf(hostMode) < 0) return { error: 'bad_option' };
+    if (['captured', 'include', 'omit'].indexOf(credMode) < 0) return { error: 'bad_option' };
     if (!token) return { error: 'no_token', state: state() };
     if (!realFetch) return { error: 'no_fetch' };
+    const useHost = hostMode === 'public' ? 'graph.facebook.com' : host;
+    const cred = credentialsFor(credMode);
     const q = new URLSearchParams();
     for (const k of Object.keys(params)) {
       const v = params[k];
       q.set(k, typeof v === 'string' ? v : JSON.stringify(v));
     }
     q.set('access_token', token);
-    const url = 'https://' + host + (version ? '/' + version : '') + path + '?' + q.toString();
+    const url = 'https://' + useHost + (version ? '/' + version : '') + path + '?' + q.toString();
+    const endpoint = { host: useHost, version: version, credentials: cred };
     // Один запрос, без повтора: сбой сети — отчёт и стоп (ревью O4).
     // Перенаправления не идём (`redirect: 'error'`): ответ — только сам Graph.
     let resp = null;
     try {
-      resp = await realFetch(url, { method: 'GET', credentials: 'omit', mode: 'cors',
+      resp = await realFetch(url, { method: 'GET', credentials: cred, mode: 'cors',
                                     cache: 'no-store', redirect: 'error' });
     } catch (e) {
-      return { error: 'network', state: state() };
+      return { error: 'network', state: state(), endpoint: endpoint };
     }
     let text = '';
     try { text = await resp.text(); } catch (e) { return { error: 'network', status: resp.status }; }
@@ -223,7 +281,7 @@ _HELPER_JS = r"""
     for (const name of HEADERS) {
       try { const v = resp.headers.get(name); if (v) headers[name] = clean(v); } catch (e) {}
     }
-    return { status: resp.status, body: body, headers: headers };
+    return { status: resp.status, body: body, headers: headers, endpoint: endpoint };
   }
 
   function ready(ms) {
@@ -271,8 +329,15 @@ class InPageGraph:
     """
 
     def __init__(self, tab: Any, *, name: str | None = None,
+                 graph_host: str = "captured", credentials: str = "captured",
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic):
+        if graph_host not in GRAPH_HOST_MODES:
+            raise ValueError(f"graph_host must be one of {sorted(GRAPH_HOST_MODES)}")
+        if credentials not in CREDENTIAL_MODES:
+            raise ValueError(f"credentials must be one of {sorted(CREDENTIAL_MODES)}")
+        self.graph_host = graph_host
+        self.credentials = credentials
         self.tab = tab
         self.name = name or f"__acl_graph_{secrets.token_hex(6)}"
         self._sleep = sleep
@@ -334,7 +399,8 @@ class InPageGraph:
                if not isinstance(k, str) or not PARAM_KEY_RE.fullmatch(k) or k.lower() in FORBIDDEN_PARAMS]
         if bad:
             raise ValueError(f"read-only: parameter {bad[0]!r} is not allowed")
-        spec = {"method": method, "path": path, "params": params or {}}
+        spec = {"method": method, "path": path, "params": params or {},
+                "host": self.graph_host, "credentials": self.credentials}
         got = self._eval(self._js(f".call({json.dumps(spec)})"), timeout=timeout)
         return got if isinstance(got, dict) else {"error": "bad_reply"}
 

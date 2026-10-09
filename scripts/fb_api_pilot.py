@@ -18,6 +18,10 @@ Usage:
   python scripts/fb_api_pilot.py --account KLD_BFL_B93
   python scripts/fb_api_pilot.py --account KLD_BFL_B93 --run
   python scripts/fb_api_pilot.py --profile-id <uuid> --act act_123 [--folder-id <uuid>] [--instance A] --run
+
+Diagnosis options (default: mirror Ads Manager's own token request):
+  --graph-host captured|public       captured = the Graph host Ads Manager uses; public = graph.facebook.com
+  --credentials captured|include|omit   cookie mode of our GET calls
 """
 from __future__ import annotations
 
@@ -56,6 +60,10 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--instance", default="A", help="Multilogin slot A or B (with --profile-id)")
     p.add_argument("--run", action="store_true", help="really open the profile and call Graph API")
     p.add_argument("--timeout", type=float, default=60.0, help="seconds to wait for Ads Manager")
+    p.add_argument("--graph-host", choices=["captured", "public"], default="captured",
+                   help="captured: the Graph host Ads Manager itself uses; public: graph.facebook.com")
+    p.add_argument("--credentials", choices=["captured", "include", "omit"], default="captured",
+                   help="cookie mode of our call; captured mirrors Ads Manager's own token request")
     return p.parse_args(argv)
 
 
@@ -110,7 +118,8 @@ def run_pilot(target: Target, *, emit: Callable[[str], None], timeout: float = 6
               release_profile: Callable[..., Any] | None = None,
               open_tab: Callable[[str], Any] | None = None,
               make_graph: Callable[[Any], Any] | None = None,
-              make_client: Callable[[Any], GraphClient] | None = None) -> dict:
+              make_client: Callable[[Any], GraphClient] | None = None,
+              graph_host: str = "captured", credentials: str = "captured") -> dict:
     """Один проход пилота. Зависимости подменяются в тестах."""
     from src.fb_api import profile as _profile
     from src.fb_api.cdp import PageTab
@@ -119,7 +128,7 @@ def run_pilot(target: Target, *, emit: Callable[[str], None], timeout: float = 6
     open_profile = open_profile or _profile.open_profile
     release_profile = release_profile or _profile.release_profile
     open_tab = open_tab or PageTab.open
-    make_graph = make_graph or InPageGraph
+    make_graph = make_graph or (lambda tab: InPageGraph(tab, graph_host=graph_host, credentials=credentials))
     make_client = make_client or GraphClient
 
     summary: dict[str, Any] = {"account": target.label, "act": mask_id(target.act)}
@@ -132,7 +141,8 @@ def run_pilot(target: Target, *, emit: Callable[[str], None], timeout: float = 6
         try:
             graph = make_graph(tab)
             state = graph.start(target.act, timeout=timeout)
-            summary["page"] = {k: state.get(k) for k in ("kind", "has_token", "source")}
+            summary["page"] = {k: state.get(k) for k in ("kind", "has_token", "source", "graph_host",
+                                                         "version", "credentials", "am_request")}
             if state.get("kind") == "checkpoint":
                 raise Checkpoint("the profile is on a Facebook checkpoint")
             if state.get("kind") == "login":
@@ -142,6 +152,9 @@ def run_pilot(target: Target, *, emit: Callable[[str], None], timeout: float = 6
                                  f"(page: {state.get('kind')}); the profile may be logged out")
             emit(f"Ads Manager loaded; session token found in the page ({state.get('source')}), "
                  "it stays there")
+            emit(f"Ads Manager's own Graph request: {state.get('am_request')}; our calls go to "
+                 f"{state.get('graph_host')}/{state.get('version') or '(unversioned)'} "
+                 f"with credentials={state.get('credentials')}")
 
             client = make_client(graph)
             accounts = client.ad_accounts()
@@ -220,7 +233,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        summary = run_pilot(target, emit=emit, timeout=args.timeout)
+        summary = run_pilot(target, emit=emit, timeout=args.timeout,
+                            graph_host=args.graph_host, credentials=args.credentials)
     except GraphStop as stop:
         emit(f"STOP ({stop.kind}): {stop}"
              + (f" Retry after ~{int(stop.retry_after_s)} s." if stop.retry_after_s else ""))

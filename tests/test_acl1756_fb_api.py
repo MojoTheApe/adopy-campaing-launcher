@@ -399,6 +399,52 @@ def test_html_instead_of_json_checks_the_page():
         c.get("/me")
 
 
+def test_graph_error_message_carries_meta_details_scrubbed():
+    reply = {"status": 400, "headers": {},
+             "endpoint": {"host": "adsmanager-graph.facebook.com", "version": "v23.0", "credentials": "include"},
+             "body": {"error": {"message": "Invalid request.", "code": 1, "type": "OAuthException",
+                                "error_subcode": 33, "fbtrace_id": "AbC123xyz", "is_transient": False,
+                                "error_user_msg": f"see {ACT} token __TOKEN__"}}}
+    tr = FakeTransport([reply, OK])
+    c, _ = _client(tr)
+    with pytest.raises(g.GraphError) as ei:
+        c.get("/me/adaccounts")
+    text = str(ei.value)
+    for part in ("Graph API error 1: Invalid request.", "type=OAuthException", "error_subcode=33",
+                 "fbtrace_id=AbC123xyz", "is_transient=False", "host=adsmanager-graph.facebook.com",
+                 "version=v23.0", "credentials=include", "http_status=400"):
+        assert part in text, (part, text)
+    assert TOKEN not in text and ACT not in text
+    assert ei.value.details["fbtrace_id"] == "AbC123xyz"
+    assert not c.stopped
+
+
+@pytest.mark.parametrize("kw", [{"graph_host": "evil"}, {"credentials": "same-origin"}])
+def test_in_page_graph_options_are_a_closed_list(kw):
+    page = FakePage([OK])
+    tab, _ = _tab(page)
+    with pytest.raises(ValueError):
+        tc.InPageGraph(tab, **kw)
+
+
+def test_in_page_graph_passes_host_and_cookie_mode_to_the_page():
+    page = FakePage([OK])
+    tab, _ = _tab(page)
+    gr = tc.InPageGraph(tab, graph_host="public", credentials="include", sleep=lambda s: None)
+    gr.request("GET", "/me", {"fields": "id"})
+    assert page.specs[0]["host"] == "public" and page.specs[0]["credentials"] == "include"
+
+
+def test_pilot_options_reach_the_transport(monkeypatch):
+    from scripts import fb_api_pilot as pilot
+
+    args = pilot._parse(["--profile-id", "p", "--act", ACT, "--graph-host", "public", "--credentials", "omit"])
+    assert (args.graph_host, args.credentials) == ("public", "omit")
+    assert pilot._parse(["--profile-id", "p", "--act", ACT]).graph_host == "captured"
+    with pytest.raises(SystemExit):
+        pilot._parse(["--profile-id", "p", "--act", ACT, "--credentials", "same-origin"])
+
+
 def test_other_graph_errors_do_not_stop_the_client():
     tr = FakeTransport([_err(100), OK])
     c, _ = _client(tr)

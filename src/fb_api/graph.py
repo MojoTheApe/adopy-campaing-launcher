@@ -46,11 +46,40 @@ class GraphError(RuntimeError):
     """Graph вернул ошибку, после которой можно продолжать (не стоп)."""
 
     def __init__(self, message: str, *, code: int | None = None, subcode: int | None = None,
-                 status: int | None = None):
+                 status: int | None = None, details: dict | None = None):
         super().__init__(scrub(message))
         self.code = code
         self.subcode = subcode
         self.status = status
+        self.details = details or {}
+
+
+def error_details(gerr: dict, reply: dict) -> dict:
+    """Что Meta сказала об ошибке, плюс куда и как мы ходили — для разбора.
+
+    Текст идёт через `scrub` при сборке сообщения; номера не нужны.
+    """
+    out: dict[str, Any] = {}
+    for key in ("type", "error_subcode", "fbtrace_id", "is_transient",
+                "error_user_title", "error_user_msg"):
+        value = gerr.get(key)
+        if value not in (None, ""):
+            out[key] = str(value)[:200]
+    endpoint = reply.get("endpoint")
+    if isinstance(endpoint, dict):
+        for key in ("host", "version", "credentials"):
+            if endpoint.get(key):
+                out[key] = str(endpoint[key])[:80]
+    if reply.get("status") is not None:
+        out["http_status"] = str(reply.get("status"))
+    return out
+
+
+def _with_details(text: str, details: dict) -> str:
+    if not details:
+        return text
+    return text + " [" + ", ".join(f"{k}={v}" for k, v in details.items()) + "]"
+
 
 
 class GraphStop(RuntimeError):
@@ -217,6 +246,8 @@ class GraphClient:
             code = _int(gerr.get("code"))
             sub = _int(gerr.get("error_subcode"))
             msg = str(gerr.get("message") or "Graph API error")
+            details = error_details(gerr, reply)
+            msg = _with_details(msg, details)
             kind = classify(code)
             if kind == "policy":
                 raise self._stop(PolicyBlocked(f"Graph API refused (368): {msg}", code=code, subcode=sub))
@@ -229,7 +260,8 @@ class GraphClient:
                                                 code=code, subcode=sub))
                 self._check_page()
                 return self._token_dead(path, params, code, sub)
-            raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status)
+            raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status,
+                             details=details)
 
         if "non_json" in body:
             # HTML вместо JSON — чаще всего перенаправление на логин/checkpoint.
