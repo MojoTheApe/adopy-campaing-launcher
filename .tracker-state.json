@@ -7125,22 +7125,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "756": {
-        "actor": "Worker-O1756A",
-        "session": "run_o1756a_1009",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1756-api-in-profile",
-        "worktree": "C:\\acl-api-inprofile",
-        "id": "3c3e6b14069446be95c95efba61118cd",
-        "issue": 756,
-        "state": "handoff",
-        "started_at": "2026-10-09T18:58:46+00:00",
-        "from_status": "status:todo",
-        "pr": 759,
-        "report": "ACL-1756 option (b): reliable Ads Manager load + fail-safe helper + close-on-failure. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 02bbde60 (on top of 7048d940). Files: src/fb_api/cdp.py, src/fb_api/token_capture.py, scripts/fb_api_pilot.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n1. Timeout/throttling: our own tab disables background throttling over CDP (Emulation.setFocusEmulationEnabled + Page.setWebLifecycleState active), no window shown, no focus taken; screencast keep-alive not used (raw client reads no events). Every CDP call that times out raises CdpTimeout naming method+budget; a Steps tracker tags each exception with the step and duration; the token wait polls state() from Python on a 90 s budget; no retries.\n2. Fail-safe helper: fetch/XHR wrappers guard all helper code in try/catch and always run the original call with the original arguments, returning its result/promise untouched. A page-side safety timer removes the wrappers after at most 20 s (SWEEP_MS), token or not; with no token it runs the no-wrap fallbacks (Resource Timing, inline HTML). Keeps Ads Manager's own auth/refresh traffic (fb_dtsg, token refresh) on native fetch/XHR.\n   Tests: an exception in take()/describe() does not change the page's fetch result and does not throw; after sweep the wrappers are gone and window.fetch / XHR.open / XHR.send are restored by identity; no token in output.\n3. On any failure or stop the pilot closes its own target only (Target.closeTarget of our target; the browser's last tab is never closed). Tests: a wait_for_token timeout closes T-mine (with other tabs present) and, when ours is the only tab, closes nothing; the tab disables throttling on open.\n4. \"No wrapping at all\" redesign NOT done; noted as a follow-up option in the PR body.\n\nChecks, each run separately: test_acl1756_fb_api 73 passed; test_acl1756_page_helper_node 10 passed (Node ran); test_acl1702_tab_watchdog 35 passed; test_acl_test_platform 100 passed; test_acl_test_shard 14 passed; acl_scan_secrets clean. No command was denied. --run was not used."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -10311,7 +10296,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10320,16 +10305,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1756-api-in-profile",
           "worktree": "C:\\acl-api-inprofile",
-          "id": "70ddc3057c8149a0877f1b010d2af0db",
+          "id": "3c3e6b14069446be95c95efba61118cd",
           "issue": 756,
           "state": "handoff",
-          "started_at": "2026-10-09T18:18:56+00:00",
+          "started_at": "2026-10-09T18:58:46+00:00",
           "from_status": "status:todo",
           "pr": 759,
-          "report": "ACL-1756 round 6 fix for the Windows CI job. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile. Test file only: tests/test_acl1756_fb_api.py.\n\ntest_acl_test_platform::test_no_unmarked_test_file_uses_windows_only_apis flagged r\"act_\\d\" and r\"\\d{8,}\" (backslash-path). They are now module constants ACT_ID_RE = re.compile(r\"act_[0-9]\") and LONG_ID_RE = re.compile(r\"[0-9]{8,}\"), with no backslash. Behaviour is unchanged.\n\nChecks: tests/test_acl_test_platform.py 100 passed; tests/test_acl1756_fb_api.py 70 passed. --run was not used."
+          "report": "ACL-1756 option (b): reliable Ads Manager load + fail-safe helper + close-on-failure. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head 02bbde60 (on top of 7048d940). Files: src/fb_api/cdp.py, src/fb_api/token_capture.py, scripts/fb_api_pilot.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n1. Timeout/throttling: our own tab disables background throttling over CDP (Emulation.setFocusEmulationEnabled + Page.setWebLifecycleState active), no window shown, no focus taken; screencast keep-alive not used (raw client reads no events). Every CDP call that times out raises CdpTimeout naming method+budget; a Steps tracker tags each exception with the step and duration; the token wait polls state() from Python on a 90 s budget; no retries.\n2. Fail-safe helper: fetch/XHR wrappers guard all helper code in try/catch and always run the original call with the original arguments, returning its result/promise untouched. A page-side safety timer removes the wrappers after at most 20 s (SWEEP_MS), token or not; with no token it runs the no-wrap fallbacks (Resource Timing, inline HTML). Keeps Ads Manager's own auth/refresh traffic (fb_dtsg, token refresh) on native fetch/XHR.\n   Tests: an exception in take()/describe() does not change the page's fetch result and does not throw; after sweep the wrappers are gone and window.fetch / XHR.open / XHR.send are restored by identity; no token in output.\n3. On any failure or stop the pilot closes its own target only (Target.closeTarget of our target; the browser's last tab is never closed). Tests: a wait_for_token timeout closes T-mine (with other tabs present) and, when ours is the only tab, closes nothing; the tab disables throttling on open.\n4. \"No wrapping at all\" redesign NOT done; noted as a follow-up option in the PR body.\n\nChecks, each run separately: test_acl1756_fb_api 73 passed; test_acl1756_page_helper_node 10 passed (Node ran); test_acl1702_tab_watchdog 35 passed; test_acl_test_platform 100 passed; test_acl_test_shard 14 passed; acl_scan_secrets clean. No command was denied. --run was not used."
         },
         "pr": 759,
-        "queued_at": "2026-10-09T18:20:02+00:00",
+        "queued_at": "2026-10-09T19:07:00+00:00",
         "review_report": "Return of an Approved task after a live-pilot incident (Coordinator-C0930A, 2026-10-09).\n\nOn Facebook_5265, the pilot attached and opened its own Ads Manager tab, then \"CDP read timed out\" before it captured a token or made any Graph call. Minutes later the account was logged out of Facebook; the owner logged back in.\n\nDiagnosis: the token wait was awaited inside a single Runtime.evaluate, past RawCdp's 5 s read, and the background tab was throttled. The fetch/XHR wrappers are never removed if no token is seen, which is a plausible way to disturb Ads Manager's own auth or refresh traffic.\n\nFix requested:\n- Anti-throttling on our tab (focus emulation and lifecycle active, no visible window).\n- Named, bounded step timeouts.\n- Token wait polled from Python.\n- Fail-safe helper: wrappers can never throw into the page, and a safety timer always removes them after a short window.\n- Our tab is closed on any failure.",
         "return_operation": {
           "id": "60974a1db3874b1889e16899588f6435",
@@ -13523,7 +13508,8 @@
       642,
       651,
       710,
-      739
+      739,
+      756
     ],
     "review": null,
     "history": [
@@ -19519,6 +19505,13 @@
         "at": "2026-10-09T18:58:46+00:00",
         "issue": 756,
         "claim": "3c3e6b14069446be95c95efba61118cd",
+        "actor": "Worker-O1756A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-09T19:07:00+00:00",
+        "issue": 756,
+        "pr": 759,
         "actor": "Worker-O1756A"
       }
     ],
