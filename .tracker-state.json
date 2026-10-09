@@ -7134,9 +7134,11 @@
         "worktree": "C:\\acl-api-inprofile",
         "id": "bd772ec713574dc3a7905b76e9c1bf95",
         "issue": 756,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-09T17:39:19+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 759,
+        "report": "ACL-1756 fix after batch return (live pilot B90: Graph error 1 \"Invalid request\" on the first read with credentials omit). Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head df86432b (on top of e21bd6c4). Five files: src/fb_api/token_capture.py, src/fb_api/graph.py, scripts/fb_api_pilot.py, tests/test_acl1756_fb_api.py, tests/test_acl1756_page_helper_node.py.\n\n- The page helper copies Ads Manager's cookie mode (fetch credentials, XHR withCredentials) for our GET; the HTML/Resource Timing fallback uses include. It records am_request: via, method, credentials, path and parameter names only (no values, no token). Calls stay GET-only with redirect: 'error', the key whitelist and denylist, and no retry.\n- GraphError messages carry Meta's type, error_subcode, fbtrace_id, is_transient and user title/msg, plus the host, version and cookie mode used and the HTTP status, all scrubbed. Error 1 still does not stop the client.\n- New pilot flags (fixed lists): --graph-host captured|public and --credentials captured|include|omit. They are checked in Python (ValueError) and in the page (bad_option, no fetch). The pilot prints Ads Manager's own request shape and our endpoint.\n\nTests (each file run separately): test_acl1756_fb_api.py 68 passed; test_acl1756_page_helper_node.py 6 passed (Node ran); test_acl1702_tab_watchdog.py 35 passed; test_acl_test_shard.py 14 passed (spread [36, 35, 36]); acl_scan_secrets clean. --run was not used."
       }
     },
     "tasks": {
