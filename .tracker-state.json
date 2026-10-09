@@ -9990,7 +9990,7 @@
             "session": "run_s1728a_1008"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-S1728A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13391,62 +13391,7 @@
       710,
       739
     ],
-    "review": {
-      "id": "f413822abeff4cc98600b5f96fad0fa1",
-      "pr": 732,
-      "issues": [
-        728
-      ],
-      "actor": "Reviewer-R1728Q",
-      "session": "rev_r1728q_1008",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-10-09T07:40:52+00:00",
-      "state": "approving",
-      "approval": {
-        "issue": 728,
-        "pr": 732,
-        "branch": "codex/acl-1728-builder-select",
-        "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
-        "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-        "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1728Q",
-          "review_session": "rev_r1728q_1008",
-          "execution_lane": "f413822abeff4cc98600b5f96fad0fa1",
-          "implementer": "Worker-S1728A",
-          "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
-          "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-          "tree_sha": "89ff420b51057565f1cdba1762df41d4d5dad867",
-          "report": "Verdict: approved (v2 re-review of head 5e93218e).\nDelta 22b98ba2..5e93218e is the merge of work/main (646044f2); git show --cc is empty, no hand-resolved hunks. PR diff vs main is only src/web/templates/report.html (+46/-3) and tests/test_builder_foot_stays_put_browser.py (+88): the 1728 files. Code logic unchanged from my earlier review (deferral on focus via activeElement + focusout repaint; unchanged-markup skip; account/typed carry-over validated against rebuilt options; delegated handlers).\nNon-blocking follow-ups: (a) footer markup key omits per-country account lists, so an account-set change inside an unchanged country set would not rebuild the account select (practically unreachable, accounts come from server-rendered panels); (b) body inputs repainted by paint() are not covered here.\nTests (free RAM 6.1 GB): test_the_builder_drawer 7 passed; test_builder_foot_stays_put_browser 3 passed; with report.html reverted to main the 3 tests FAIL; test_builder_publish_selected_browser 12 passed (one at a time).\nCI on new head: windows 3.13, descriptor, tracker-link, process-instructions, installer, classify pass; linux shards pending at record time.",
-          "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            728
-          ],
-          "recorded_at": "2026-10-09T07:45:51+00:00",
-          "issue_scopes": {
-            "728": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828"
-          }
-        },
-        "lane": {
-          "id": "f413822abeff4cc98600b5f96fad0fa1",
-          "pr": 732,
-          "issues": [
-            728
-          ],
-          "actor": "Reviewer-R1728Q",
-          "session": "rev_r1728q_1008",
-          "coordinator": "Coordinator-C0930A",
-          "started_at": "2026-10-09T07:40:52+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-09T08:00:01+00:00"
-      }
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -18948,6 +18893,68 @@
         "pr": 732,
         "lane": "f413822abeff4cc98600b5f96fad0fa1",
         "actor": "Reviewer-R1728Q"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-09T08:00:28+00:00",
+        "issue": 728,
+        "pr": 732,
+        "review": {
+          "id": "f413822abeff4cc98600b5f96fad0fa1",
+          "pr": 732,
+          "issues": [
+            728
+          ],
+          "actor": "Reviewer-R1728Q",
+          "session": "rev_r1728q_1008",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-09T07:40:52+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 728,
+            "pr": 732,
+            "branch": "codex/acl-1728-builder-select",
+            "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
+            "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+            "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1728Q",
+              "review_session": "rev_r1728q_1008",
+              "execution_lane": "f413822abeff4cc98600b5f96fad0fa1",
+              "implementer": "Worker-S1728A",
+              "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
+              "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "tree_sha": "89ff420b51057565f1cdba1762df41d4d5dad867",
+              "report": "Verdict: approved (v2 re-review of head 5e93218e).\nDelta 22b98ba2..5e93218e is the merge of work/main (646044f2); git show --cc is empty, no hand-resolved hunks. PR diff vs main is only src/web/templates/report.html (+46/-3) and tests/test_builder_foot_stays_put_browser.py (+88): the 1728 files. Code logic unchanged from my earlier review (deferral on focus via activeElement + focusout repaint; unchanged-markup skip; account/typed carry-over validated against rebuilt options; delegated handlers).\nNon-blocking follow-ups: (a) footer markup key omits per-country account lists, so an account-set change inside an unchanged country set would not rebuild the account select (practically unreachable, accounts come from server-rendered panels); (b) body inputs repainted by paint() are not covered here.\nTests (free RAM 6.1 GB): test_the_builder_drawer 7 passed; test_builder_foot_stays_put_browser 3 passed; with report.html reverted to main the 3 tests FAIL; test_builder_publish_selected_browser 12 passed (one at a time).\nCI on new head: windows 3.13, descriptor, tracker-link, process-instructions, installer, classify pass; linux shards pending at record time.",
+              "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                728
+              ],
+              "recorded_at": "2026-10-09T07:45:51+00:00",
+              "issue_scopes": {
+                "728": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828"
+              }
+            },
+            "lane": {
+              "id": "f413822abeff4cc98600b5f96fad0fa1",
+              "pr": 732,
+              "issues": [
+                728
+              ],
+              "actor": "Reviewer-R1728Q",
+              "session": "rev_r1728q_1008",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-09T07:40:52+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-09T08:00:01+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -18956,7 +18963,52 @@
       "review_limit": 1,
       "batch_limit": 5
     },
-    "approvals": {},
+    "approvals": {
+      "728": {
+        "issue": 728,
+        "pr": 732,
+        "branch": "codex/acl-1728-builder-select",
+        "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
+        "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+        "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1728Q",
+          "review_session": "rev_r1728q_1008",
+          "execution_lane": "f413822abeff4cc98600b5f96fad0fa1",
+          "implementer": "Worker-S1728A",
+          "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
+          "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+          "tree_sha": "89ff420b51057565f1cdba1762df41d4d5dad867",
+          "report": "Verdict: approved (v2 re-review of head 5e93218e).\nDelta 22b98ba2..5e93218e is the merge of work/main (646044f2); git show --cc is empty, no hand-resolved hunks. PR diff vs main is only src/web/templates/report.html (+46/-3) and tests/test_builder_foot_stays_put_browser.py (+88): the 1728 files. Code logic unchanged from my earlier review (deferral on focus via activeElement + focusout repaint; unchanged-markup skip; account/typed carry-over validated against rebuilt options; delegated handlers).\nNon-blocking follow-ups: (a) footer markup key omits per-country account lists, so an account-set change inside an unchanged country set would not rebuild the account select (practically unreachable, accounts come from server-rendered panels); (b) body inputs repainted by paint() are not covered here.\nTests (free RAM 6.1 GB): test_the_builder_drawer 7 passed; test_builder_foot_stays_put_browser 3 passed; with report.html reverted to main the 3 tests FAIL; test_builder_publish_selected_browser 12 passed (one at a time).\nCI on new head: windows 3.13, descriptor, tracker-link, process-instructions, installer, classify pass; linux shards pending at record time.",
+          "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            728
+          ],
+          "recorded_at": "2026-10-09T07:45:51+00:00",
+          "issue_scopes": {
+            "728": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828"
+          }
+        },
+        "lane": {
+          "id": "f413822abeff4cc98600b5f96fad0fa1",
+          "pr": 732,
+          "issues": [
+            728
+          ],
+          "actor": "Reviewer-R1728Q",
+          "session": "rev_r1728q_1008",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-09T07:40:52+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-09T08:00:01+00:00"
+      }
+    },
     "batches": {},
     "integration": null,
     "intake": null
