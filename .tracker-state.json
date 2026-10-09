@@ -7103,15 +7103,15 @@
   "execution": {
     "claims": {
       "756": {
-        "actor": "Worker-API1009",
-        "session": "7109230c",
+        "actor": "Worker-O1756A",
+        "session": "run_o1756a_1009",
         "coordinator": "Coordinator-C0930A",
         "branch": "feature/api-in-profile",
         "worktree": "C:\\acl-api-inprofile",
-        "id": "923409c948514a2ba32db49dc19f6878",
+        "id": "e7e7e8fc18c649d6891f7d56ba191011",
         "issue": 756,
         "state": "implementing",
-        "started_at": "2026-10-09T13:40:18+00:00",
+        "started_at": "2026-10-09T14:15:07+00:00",
         "from_status": "status:backlog"
       }
     },
@@ -10247,10 +10247,14 @@
           {
             "actor": "Worker-API1009",
             "session": "7109230c"
+          },
+          {
+            "actor": "Worker-O1756A",
+            "session": "run_o1756a_1009"
           }
         ],
         "state": "implementing",
-        "worker": "Worker-API1009",
+        "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A"
       }
     },
@@ -11073,6 +11077,10 @@
       },
       "Worker-API1009": {
         "session": "7109230c",
+        "role": "Worker"
+      },
+      "Worker-O1756A": {
+        "session": "run_o1756a_1009",
         "role": "Worker"
       }
     },
@@ -18995,6 +19003,25 @@
         "issue": 756,
         "claim": "923409c948514a2ba32db49dc19f6878",
         "actor": "Worker-API1009"
+      },
+      {
+        "event": "takeover",
+        "at": "2026-10-09T14:15:07+00:00",
+        "issue": 756,
+        "previous": {
+          "actor": "Worker-API1009",
+          "session": "7109230c",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "feature/api-in-profile",
+          "worktree": "C:\\acl-api-inprofile",
+          "id": "923409c948514a2ba32db49dc19f6878",
+          "issue": 756,
+          "state": "implementing",
+          "started_at": "2026-10-09T13:40:18+00:00",
+          "from_status": "status:backlog"
+        },
+        "claim": "e7e7e8fc18c649d6891f7d56ba191011",
+        "reason": "Owner reassigned ACL-1756 to Coordinator-C0930A on 2026-10-09; previous session is idle with no commits or edits in the worktree (clean, at main 646044f2)."
       }
     ],
     "policy": {
