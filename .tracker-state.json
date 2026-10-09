@@ -7110,9 +7110,11 @@
         "worktree": "C:\\acl-api-inprofile",
         "id": "001d1febf57a42738f11c768b514dcff",
         "issue": 756,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-09T15:12:10+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 759,
+        "report": "ACL-1756 review round 2 fix. Worker-O1756A (run_o1756a_1009), branch codex/acl-1756-api-in-profile, new head bcdb03be (on top of 18b4e19b).\n\n- Param names: the page helper (KEY_RE) and InPageGraph.request (PARAM_KEY_RE) now accept only ^[A-Za-z0-9_]+$ ASCII keys, then apply the method/_method/batch/suppress_http_code/access_token denylist. Values stay URL-encoded.\n- Tests: Node and Python both cover \" method\", \"method \", \"\\tmethod\", \"method\\u0000\", \"method[]\" and fullwidth \"\uff4dethod\". The page refuses them with no fetch; Python refuses them before touching the page. Ordinary read params (fields, date_preset, limit) still pass.\n- Length mimic: the Node fakes now use native lengths that differ from the wrappers' arity (fetch 1, send 0, open 5), and the test asserts the wrappers match them.\n- Node output is decoded as UTF-8 in the test.\n\nChecks: test_acl1756_fb_api.py 66 passed; test_acl1702_tab_watchdog.py 35 passed (run separately); acl_scan_secrets clean. --run was not used."
       }
     },
     "tasks": {
