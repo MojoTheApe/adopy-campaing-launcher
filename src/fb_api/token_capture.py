@@ -107,30 +107,37 @@ _HELPER_JS = r"""
     }
   }
 
-  // Беззапросный поиск токена: Resource Timing, затем инлайновый HTML/скрипты.
-  function scan() {
+  // Дешёвый опрос (ревью r9-2): только Resource Timing, без сериализации DOM.
+  function scanFast() {
     if (token || retired) return;
     try {
       const entries = performance.getEntriesByType('resource');
       for (let i = 0; i < entries.length; i++) { consider(entries[i].name); if (token) return; }
     } catch (e) {}
+  }
+
+  // Полный поиск (только в финальном probe): HTML и инлайновые скрипты. Токен
+  // берём лишь из контекста ключа `"accessToken":"EAA…"` — голый /(EAA…)/
+  // убран (ревью r9-2, O5): он мог подхватить не тот токен и стоил перезагрузки.
+  function scanHtml() {
+    if (token || retired) return;
+    const KEY = /"accessToken"\s*:\s*"(EAA[A-Za-z0-9]{20,})"/;
     try {
       const html = document.documentElement ? document.documentElement.innerHTML : '';
-      const m = /"accessToken"\s*:\s*"(EAA[A-Za-z0-9]{20,})"/.exec(html);
+      const m = KEY.exec(html);
       if (m && TOKEN_RE.test(m[1])) { token = m[1]; source = 'html'; return; }
     } catch (e) {}
     try {
       for (const s of document.scripts) {
         if (s.src) continue;
-        const text = s.textContent || '';
-        const m = /"accessToken"\s*:\s*"(EAA[A-Za-z0-9]{20,})"/.exec(text) || /(EAA[A-Za-z0-9]{20,})/.exec(text);
+        const m = KEY.exec(s.textContent || '');
         if (m && TOKEN_RE.test(m[1])) { token = m[1]; source = 'html'; return; }
       }
     } catch (e) {}
   }
 
   function state() {
-    scan();
+    scanFast();
     const h = location.hostname || '';
     const p = location.pathname || '';
     let kind = 'other';
@@ -168,7 +175,7 @@ _HELPER_JS = r"""
     const credMode = spec.credentials === undefined ? 'captured' : spec.credentials;
     if (['captured', 'public'].indexOf(hostMode) < 0) return { error: 'bad_option' };
     if (['captured', 'include', 'omit'].indexOf(credMode) < 0) return { error: 'bad_option' };
-    scan();
+    scanFast(); scanHtml();
     if (!token) return { error: 'no_token', state: state() };
     if (typeof fetch !== 'function') return { error: 'no_fetch' };
     const useHost = hostMode === 'public' ? 'graph.facebook.com' : host;
@@ -203,7 +210,7 @@ _HELPER_JS = r"""
     return { status: resp.status, body: body, headers: headers, endpoint: endpoint };
   }
 
-  function probe() { scan(); return state(); }
+  function probe() { scanFast(); scanHtml(); return state(); }
   function retire() { retired = true; token = null; return true; }
 
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire });
@@ -264,24 +271,32 @@ class InPageGraph:
             self._injected = True
         return self._ctx
 
-    def _eval(self, tail: str, *, timeout: float = 60.0) -> Any:
-        """Выполнить `globalThis[NAME]<tail>` в отдельном мире; мир пересоздаём при сбое."""
+    def _eval_helper(self, tail: str, *, timeout: float = 60.0) -> Any:
+        """Не-Meta вызов помощника (`state`/`probe`/`retire`): можно повторить.
+
+        Повтор ТОЛЬКО если отдельный мир исчез (`StaleContextError`): это не
+        запрос к Meta, пересоздать мир и попробовать ещё раз безопасно. Прочие
+        ошибки (`PageError`/`CdpError`/`CdpTimeout`) поднимаются как есть — к
+        Graph они не относятся, повторять нечего.
+        """
         expr = f"globalThis[{json.dumps(self.name)}]{tail}"
-        last: Exception | None = None
         for attempt in (0, 1):
             ctx = self._ensure()
             try:
                 return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
-            except CdpTimeout:
-                raise
-            except StaleContextError as exc:
-                last = exc
+            except StaleContextError:
                 self._reset_world()
-            except (PageError, CdpError) as exc:
-                # Документ меняется под нами — мир мог исчезнуть; пробуем заново.
-                last = exc
-                self._reset_world()
-        raise last if last is not None else CdpError("isolated world evaluation failed")
+                if attempt:
+                    raise
+        raise CdpError("isolated world evaluation failed")  # недостижимо
+
+    def _ready_for_call(self, *, timeout: float = 10.0) -> None:
+        """Приготовить отдельный мир к Graph-вызову: помощник на месте, мир живой.
+
+        Повторы допустимы — сюда ничего к Meta не уходит. `.state()` заодно
+        подтверждает, что контекст отвечает (иначе `_eval_helper` его пересоздаст).
+        """
+        self._eval_helper(".state()", timeout=timeout)
 
     # -- жизненный цикл
     def install(self) -> None:
@@ -314,7 +329,7 @@ class InPageGraph:
         loaded = False
         while True:
             try:
-                got = self._eval(".state()", timeout=10.0)
+                got = self._eval_helper(".state()", timeout=10.0)
             except CdpTimeout:
                 raise
             except (PageError, CdpError):
@@ -329,7 +344,7 @@ class InPageGraph:
         if not loaded:
             return {"kind": "not_loaded", "has_token": False}
         try:
-            got = self._eval(".probe()", timeout=10.0)
+            got = self._eval_helper(".probe()", timeout=10.0)
         except CdpTimeout:
             raise
         except (PageError, CdpError):
@@ -338,7 +353,7 @@ class InPageGraph:
 
     def state(self) -> dict:
         try:
-            got = self._eval(".state()", timeout=10.0)
+            got = self._eval_helper(".state()", timeout=10.0)
         except (PageError, CdpError, TimeoutError):
             return {"kind": "unknown", "has_token": False}
         return got if isinstance(got, dict) else {"kind": "unknown", "has_token": False}
@@ -353,13 +368,24 @@ class InPageGraph:
             raise ValueError(f"read-only: parameter {bad[0]!r} is not allowed")
         spec = {"method": method, "path": path, "params": params or {},
                 "host": self.graph_host, "credentials": self.credentials}
-        got = self._eval(f".call({json.dumps(spec)})", timeout=timeout)
+        # Сначала готовим мир (повторы без обращения к Meta)…
+        self._ready_for_call()
+        ctx = self._ensure()
+        expr = f"globalThis[{json.dumps(self.name)}].call({json.dumps(spec)})"
+        # …потом Graph-вызов РОВНО ОДИН раз. Любая ошибка после отправки —
+        # результат неизвестен и НЕ повторяется (ревью r9-1): это стоп.
+        try:
+            got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+        except CdpTimeout:
+            raise
+        except (StaleContextError, PageError, CdpError):
+            return {"error": "call_unknown"}
         return got if isinstance(got, dict) else {"error": "bad_reply"}
 
     def reacquire(self, *, timeout: float = 90.0) -> dict:
         """Переснять токен: гасим помощника, перезагружаем вкладку, новый мир."""
         try:
-            self._eval(".retire()", timeout=10.0)
+            self._eval_helper(".retire()", timeout=10.0)
         except (PageError, CdpError, TimeoutError):
             pass
         self.tab.reload()

@@ -286,6 +286,90 @@ def test_in_page_graph_refuses_writes_before_touching_the_page(method, params):
     assert page.specs == [] and len(cdp.sent) == sent
 
 
+def test_graph_call_is_evaluated_once_and_errors_become_a_stop(monkeypatch):
+    # Ошибка CDP во время .call → ровно одна попытка .call и стоп, без повтора.
+    page = FakePage([OK])
+    call_evals = {"n": 0}
+
+    class CallErrsOnceCdp(FakeCdp):
+        def call(self, method, params=None, *, session_id="", timeout=5.0):
+            if method == "Runtime.evaluate" and ".call(" in (params or {}).get("expression", ""):
+                call_evals["n"] += 1
+                from src.fb_api.cdp import CdpError
+                raise CdpError("Runtime.evaluate: Inspected target navigated or closed")
+            return super().call(method, params, session_id=session_id, timeout=timeout)
+
+    cdp = CallErrsOnceCdp(page)
+    tab = PageTab.open("http://127.0.0.1:1", connect=lambda u, timeout: cdp)
+    gr = tc.InPageGraph(tab, sleep=lambda s: None)
+    reply = gr.request("GET", "/me/adaccounts", {"fields": "id"})
+    assert reply == {"error": "call_unknown"}
+    assert call_evals["n"] == 1                       # отправлено не больше раза
+    # GraphClient превращает это в стоп и больше не зовёт.
+    client, _ = _client(_ReplayTransport([reply]))
+    with pytest.raises(g.PageFailed):
+        client.get("/me/adaccounts")
+
+
+class _ReplayTransport:
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.requests = []
+
+    def request(self, method, path, params=None, **kw):
+        self.requests.append((method, path, dict(params or {})))
+        return self.replies.pop(0)
+
+    def state(self):
+        return {"kind": "ads_manager", "has_token": True}
+
+    def reacquire(self, *, timeout=60.0):
+        return {"kind": "ads_manager", "has_token": True}
+
+
+def test_stale_context_on_a_helper_call_is_retried_once_in_a_new_world():
+    # Не-Meta вызов (.state) при исчезнувшем мире пересоздаётся и проходит.
+    page = FakePage([], state={"kind": "ads_manager", "has_token": False})
+
+    class StaleOnceCdp(FakeCdp):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self._stale_used = False
+
+        def call(self, method, params=None, *, session_id="", timeout=5.0):
+            if (method == "Runtime.evaluate" and ".state()" in (params or {}).get("expression", "")
+                    and not self._stale_used):
+                self._stale_used = True
+                from src.fb_api.cdp import CdpError
+                raise CdpError("Cannot find context with specified id")
+            return super().call(method, params, session_id=session_id, timeout=timeout)
+
+    cdp = StaleOnceCdp(page)
+    tab = PageTab.open("http://127.0.0.1:1", connect=lambda u, timeout: cdp)
+    gr = tc.InPageGraph(tab, sleep=lambda s: None)
+    out = gr.state()                                   # пересоздал мир и вернул state
+    assert out.get("kind") == "ads_manager"
+    assert cdp.worlds >= 2                              # мир создан заново
+
+
+def test_request_strips_tokens_from_the_graph_reply():
+    # Вторая линия в Python: даже если помощник не вычистил, токена в ответе нет.
+    page = FakePage([{"status": 200, "body": {"data": [{"id": ACT, "leak": "__TOKEN__"}],
+                      "paging": {"next": "https://g/x?access_token=__TOKEN__"}}}])
+    gr, _ = _graph(page)
+    reply = gr.request("GET", "/me/adaccounts", {"fields": "id"})
+    blob = json.dumps(reply)
+    assert TOKEN not in blob and not TOKEN_LIKE.search(blob)
+
+
+def test_helper_eval_strips_tokens_from_state():
+    # Не-Meta путь (_eval_helper) тоже вычищает токены на стороне Python.
+    page = FakePage([], state={"kind": "ads_manager", "has_token": True, "leak": TOKEN})
+    gr, _ = _graph(page)
+    blob = json.dumps(gr.state())
+    assert TOKEN not in blob and not TOKEN_LIKE.search(blob)
+
+
 def test_in_page_graph_accepts_plain_read_params():
     page = FakePage([OK])
     gr, _ = _graph(page)
@@ -824,7 +908,7 @@ def test_wait_ready_runs_final_probe_once_when_no_token():
     calls = {"state": 0, "probe": 0}
 
     class CountingGraph(tc.InPageGraph):
-        def _eval(self, tail, *, timeout=60.0):
+        def _eval_helper(self, tail, *, timeout=60.0):
             if ".probe()" in tail:
                 calls["probe"] += 1
             elif ".state()" in tail:
@@ -842,7 +926,7 @@ def test_wait_ready_runs_final_probe_once_when_no_token():
 
 def test_wait_ready_propagates_cdp_timeout_with_the_method():
     class TimingOutGraph(tc.InPageGraph):
-        def _eval(self, tail, *, timeout=60.0):
+        def _eval_helper(self, tail, *, timeout=60.0):
             raise CdpTimeout("Runtime.evaluate: the browser did not answer within 10 s")
 
     tab, _ = _tab(FakePage([]))
@@ -850,6 +934,53 @@ def test_wait_ready_propagates_cdp_timeout_with_the_method():
     with pytest.raises(CdpTimeout) as ei:
         gr.wait_ready(timeout=5.0)
     assert "Runtime.evaluate" in str(ei.value)
+
+
+def _tab_with_stuck_socket(other_tabs, list_pages):
+    page = FakePage([])
+
+    class StuckCdp(FakeCdp):
+        def call(self, method, params=None, *, session_id="", timeout=5.0):
+            if method == "Target.getTargets":
+                raise CdpTimeout("Target.getTargets: the browser did not answer within 10 s")
+            return super().call(method, params, session_id=session_id, timeout=timeout)
+
+    cdp = StuckCdp(page, other_tabs=other_tabs)
+    tab = PageTab.open("http://127.0.0.1:9321", connect=lambda u, timeout: cdp)
+    closed = []
+    tab._http = staticmethod(lambda host, port, path, *, timeout=10.0:
+                             list_pages if path == "/json/list"
+                             else closed.append(path.rsplit("/", 1)[1]))
+    return tab, closed
+
+
+def test_http_close_does_nothing_when_our_tab_is_the_only_page():
+    tab, closed = _tab_with_stuck_socket(0, [{"type": "page", "id": "T-mine"}])
+    tab.close()
+    assert closed == []                                # последнюю вкладку не трогаем
+
+
+def test_http_close_does_nothing_when_our_tab_is_absent():
+    tab, closed = _tab_with_stuck_socket(1, [{"type": "page", "id": "T-0"},
+                                             {"type": "page", "id": "T-1"}])
+    tab.close()
+    assert closed == []                                # нашей цели нет — ничего не закрываем
+
+
+def test_http_close_closes_only_our_id_even_when_not_first():
+    tab, closed = _tab_with_stuck_socket(1, [{"type": "page", "id": "T-0"},
+                                             {"type": "page", "id": "T-mine"}])
+    tab.close()
+    assert closed == ["T-mine"]                        # не pages[0], а именно наша
+
+
+def test_isolated_world_does_not_grant_universal_access():
+    page = FakePage([], state={"kind": "ads_manager", "has_token": False})
+    tab, cdp = _tab(page)
+    gr = tc.InPageGraph(tab, sleep=lambda s: None)
+    gr._ensure()
+    worlds = [p for m, p, _ in cdp.sent if m == "Page.createIsolatedWorld"]
+    assert worlds and all(w.get("grantUniveralAccess") is False for w in worlds)
 
 
 def test_page_tab_call_wraps_raw_timeout_with_the_method_name():

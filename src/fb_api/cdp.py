@@ -171,12 +171,22 @@ class PageTab:
 
     def evaluate_in(self, context_id: int, expression: str, *, timeout: float = 60.0) -> Any:
         """Выполнить JS в отдельном мире (`contextId`); промис дожидается."""
-        got = self.call(
-            "Runtime.evaluate",
-            {"expression": expression, "awaitPromise": True, "returnByValue": True,
-             "contextId": context_id},
-            timeout=timeout + 5.0,
-        )
+        try:
+            got = self.call(
+                "Runtime.evaluate",
+                {"expression": expression, "awaitPromise": True, "returnByValue": True,
+                 "contextId": context_id},
+                timeout=timeout + 5.0,
+            )
+        except CdpTimeout:
+            raise
+        except CdpError as exc:
+            # Отдельный мир исчез (документ сменился) — отдельная ошибка, чтобы
+            # ТОЛЬКО не-Meta вызовы (state/probe) можно было повторить в новом
+            # мире; Graph-вызов не повторяется никогда (ревью r9-1).
+            if _looks_stale(str(exc)):
+                raise StaleContextError(str(exc)) from exc
+            raise
         if got.get("exceptionDetails"):
             details = got["exceptionDetails"]
             text = (details.get("exception") or {}).get("description") or details.get("text") or ""
@@ -254,8 +264,10 @@ class PageTab:
 
     @staticmethod
     def _http(host: str, port: int, path: str, *, timeout: float = CALL_S) -> Any:
+        # Без системного прокси: порт отладки — это 127.0.0.1 профиля.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         req = urllib.request.Request(f"http://{host}:{port}{path}")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with opener.open(req, timeout=timeout) as resp:
             body = resp.read().decode("utf-8", errors="replace")
         try:
             return json.loads(body)

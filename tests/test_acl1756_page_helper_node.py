@@ -61,7 +61,8 @@ const h = G[NAME];
   // Ничего, кроме помощника, в «мир» не добавлено; fetch/XHR не трогаются.
   out.world_keys = Object.getOwnPropertyNames(G);
   out.scan_made_no_fetch = (calls.length === 0);
-  out.before = h.state();
+  out.before = h.state();           // дешёвый опрос: только Resource Timing
+  out.after_probe = h.probe();       // финальный: + HTML/скрипты
   out.scan_still_no_fetch = (calls.length === 0);
   out.post = await h.call({ method: 'POST', path: '/me', params: {} });
   out.bad = await h.call({ method: 'GET', path: '/../oauth', params: {} });
@@ -149,16 +150,33 @@ def test_helper_takes_token_from_resource_timing_without_any_request():
     assert out["token_in_output"] is False
 
 
-def test_helper_takes_token_from_inline_html():
+def test_helper_takes_token_from_inline_html_only_in_probe_not_the_poll():
     out = _run(html='<script>window.__x={"accessToken":"' + TOKEN + '"}</script>')
-    assert out["before"]["has_token"] is True and out["before"]["source"] == "html"
+    # Опрос state() не сериализует DOM: HTML читается только в финальном probe (ревью r9-2).
+    assert out["before"]["has_token"] is False
+    assert out["after_probe"]["has_token"] is True and out["after_probe"]["source"] == "html"
     assert out["got"]["status"] == 200
     assert out["token_in_output"] is False
 
 
 def test_helper_takes_token_from_inline_script_text():
     out = _run(scripts=[{"src": "", "textContent": 'require({"accessToken":"' + TOKEN + '"})'}])
-    assert out["before"]["has_token"] is True and out["before"]["source"] == "html"
+    assert out["after_probe"]["has_token"] is True and out["after_probe"]["source"] == "html"
+
+
+def test_helper_ignores_a_bare_token_outside_the_accessToken_key():
+    # Голый EAA… без ключа "accessToken" НЕ берём (ревью r9-2, O5): убрали /(EAA…)/.
+    out = _run(scripts=[{"src": "", "textContent": 'var t = "' + TOKEN + '";'}],
+               html='<div data-x="' + TOKEN + '"></div>')
+    assert out["before"]["has_token"] is False and out["after_probe"]["has_token"] is False
+    assert out["got"]["error"] == "no_token"
+
+
+def test_helper_resource_timing_requires_a_token_shaped_value():
+    # access_token с не-токеном в Resource Timing не захватываем (TOKEN_RE на пути).
+    out = _run(resources=["https://graph.facebook.com/v22.0/me?access_token=not_a_valid_token"])
+    assert out["before"]["has_token"] is False and out["after_probe"]["has_token"] is False
+    assert out["got"]["error"] == "no_token"
 
 
 def test_helper_reports_no_token_and_makes_no_request_when_none_present():
