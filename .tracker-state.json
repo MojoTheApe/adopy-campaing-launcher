@@ -7101,7 +7101,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "756": {
+        "actor": "Worker-O1756A",
+        "session": "run_o1756a_1009",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1756-api-in-profile",
+        "worktree": "C:\\acl-api-inprofile",
+        "id": "173543c0172f45aeba8cfc6f0a61e16c",
+        "issue": 756,
+        "state": "implementing",
+        "started_at": "2026-10-09T14:34:15+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -10238,9 +10251,13 @@
           {
             "actor": "Worker-O1756A",
             "session": "run_o1756a_1009"
+          },
+          {
+            "actor": "Worker-O1756A",
+            "session": "run_o1756a_1009"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -19029,6 +19046,13 @@
         "issue": 756,
         "actor": "Worker-O1756A",
         "report": "ACL-1756 claim stopped only to change the recorded working branch (Coordinator-C0930A instruction). The branch feature/api-in-profile predates the v2 naming rule; handoff refused PR #758 (\"Working branch must use the configured ticket naming convention\"). Same commit 441ef6e9 is pushed as codex/acl-1756-api-in-profile, PR #759 into main replaces #758 (closed, branch kept). Implementation is complete; the same worker reclaims immediately on the new branch and hands off PR #759. Nothing else is blocked."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-09T14:34:15+00:00",
+        "issue": 756,
+        "claim": "173543c0172f45aeba8cfc6f0a61e16c",
+        "actor": "Worker-O1756A"
       }
     ],
     "policy": {
