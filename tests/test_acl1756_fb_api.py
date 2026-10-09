@@ -33,6 +33,10 @@ ACT2 = "act_1234567890123456"
 PROFILE_UUID = "550e8400-e29b-41d4-a716-446655440000"
 BIZ = "987654321012345"
 TOKEN_LIKE = re.compile(r"EAA[A-Za-z0-9]{10,}")
+#: Номер кабинета и длинный номер (бизнес, кабинет) в вычищенном тексте.
+#: Без обратной косой: проверка платформ (test_acl_test_platform) читает её как путь Windows.
+ACT_ID_RE = re.compile(r"act_[0-9]")
+LONG_ID_RE = re.compile(r"[0-9]{8,}")
 
 
 # ───────────────────────── поддельный браузер ─────────────────────────
@@ -446,7 +450,7 @@ def test_graph_error_details_are_scrubbed_at_build():
         c.get("/me")
     blob = json.dumps(ei.value.details)
     assert TOKEN not in blob and not TOKEN_LIKE.search(blob)
-    assert not re.search(r"act_\d", blob) and not re.search(r"\d{8,}", blob), blob
+    assert not ACT_ID_RE.search(blob) and not LONG_ID_RE.search(blob), blob
 
 
 def test_pilot_flags_reach_in_page_graph(monkeypatch, tmp_path):
