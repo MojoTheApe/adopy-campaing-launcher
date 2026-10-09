@@ -131,6 +131,99 @@ const h = win[NAME];
 """
 
 
+_HOST_HARNESS = r"""
+const results = {};
+class FakeFormData { get(){ return null; } }
+class FakeXHR { open(){ } send(){ } }
+async function probe(url) {
+  const fetched = [];
+  const win = {
+    location: { href: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns',
+                hostname: 'adsmanager.facebook.com', pathname: '/adsmanager/manage/campaigns' },
+    fetch: async function fetch(u) {
+      fetched.push(String(u));
+      return { status: 200, text: async () => '{"data":[]}', headers: { get: () => null } };
+    },
+    XMLHttpRequest: FakeXHR,
+    performance: { getEntriesByType: () => [] },
+  };
+  win.window = win; win.top = win;
+  const doc = { readyState: 'complete', querySelector: () => null, scripts: [] };
+  const run = new Function('window','location','document','XMLHttpRequest','URL','URLSearchParams',
+    'FormData','performance','setTimeout', HELPER);
+  run(win, win.location, doc, FakeXHR, URL, URLSearchParams, FakeFormData, win.performance,
+      (f) => setTimeout(f, 0));
+  const h = win[NAME];
+  // Страница сама шлёт запрос с токеном на этот адрес (через обёртку fetch).
+  await win.fetch(url + (url.includes('?') ? '&' : '?') + 'access_token=' + TOKEN);
+  const st = await h.ready(5);
+  const before = fetched.length;
+  const reply = await h.call({ method: 'GET', path: '/me', params: {} });
+  return { has_token: st.has_token, graph_host: st.graph_host, later: fetched.slice(before),
+           reply_error: reply.error || null };
+}
+(async () => {
+  for (const url of __PROBE_URLS__) results[url] = await probe(url);
+  process.stdout.write(JSON.stringify(results));
+})();
+"""
+
+#: Адреса, с которых токен брать нельзя (ревью r5): не тот хост, подделки
+#: через userinfo, порт, поддомен, http:, обратная косая, %2f, `/../`.
+BAD_HOSTS = [
+    "https://adsmanager.facebook.com/v22.0/me",
+    "https://www.facebook.com/v22.0/me",
+    "https://graph.facebook.com.evil.com/v22.0/me",
+    "https://evil.com/graph.facebook.com/v22.0/me",
+    "https://graph.facebook.com@evil.com/v22.0/me",
+    "https://user:pw@graph.facebook.com/v22.0/me",
+    "https://graph.facebook.com:8443/v22.0/me",
+    "https://a.graph.facebook.com/v22.0/me",
+    "http://graph.facebook.com/v22.0/me",
+    "https://evil.com\\graph.facebook.com/v22.0/me",
+    "https://evil.com%2fgraph.facebook.com/v22.0/me",
+    "https://evil.com/../graph.facebook.com/v22.0/me",
+    "https://evilgraph.facebook.com/v22.0/me",
+    # Адрес Graph внутри чужого адреса: ловит потерю якоря `^`.
+    "https://evil.com/r?u=https://graph.facebook.com/v22.0/me",
+    "https://evil.com/https://graph.facebook.com/v22.0/me",
+]
+GOOD_HOSTS = {
+    "https://graph.facebook.com/v22.0/me": "graph.facebook.com",
+    "https://adsmanager-graph.facebook.com/v23.0/act_1/insights": "adsmanager-graph.facebook.com",
+    "HTTPS://Graph.Facebook.com/v21.0/me": "graph.facebook.com",
+}
+
+
+def _run_host_probes(urls: list[str]) -> dict:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    name = "__acl_graph_probe"
+    src = (_HOST_HARNESS
+           .replace("__PROBE_URLS__", json.dumps(urls))
+           .replace("TOKEN", json.dumps(TOKEN))
+           .replace("NAME", json.dumps(name))
+           .replace("HELPER", json.dumps(tc.helper_source(name))))
+    done = subprocess.run([node, "-e", src], capture_output=True, encoding="utf-8", timeout=60)
+    assert done.returncode == 0, done.stderr[-2000:]
+    return json.loads(done.stdout)
+
+
+def test_helper_takes_tokens_only_from_the_graph_hosts():
+    out = _run_host_probes(BAD_HOSTS + list(GOOD_HOSTS))
+    for url in BAD_HOSTS:
+        got = out[url]
+        assert got["has_token"] is False, (url, got)
+        # Токена нет — ни одного нашего запроса после, ни на какой хост.
+        assert got["later"] == [] and got["reply_error"] == "no_token", (url, got)
+    for url, host in GOOD_HOSTS.items():
+        got = out[url]
+        assert got["has_token"] is True and got["graph_host"] == host, (url, got)
+        assert len(got["later"]) == 1 and got["later"][0].startswith(f"https://{host}/"), (url, got)
+    assert TOKEN not in json.dumps({u: {k: v for k, v in r.items() if k != "later"} for u, r in out.items()})
+
+
 def _run_node(mode: str, scripts: list[dict] | None = None) -> dict:
     node = shutil.which("node")
     if not node:

@@ -435,6 +435,56 @@ def test_in_page_graph_passes_host_and_cookie_mode_to_the_page():
     assert page.specs[0]["host"] == "public" and page.specs[0]["credentials"] == "include"
 
 
+def test_graph_error_details_are_scrubbed_at_build():
+    reply = {"status": 400, "headers": {},
+             "endpoint": {"host": "graph.facebook.com", "version": "v22.0", "credentials": f"x {TOKEN}"},
+             "body": {"error": {"message": "x", "code": 100, "type": f"T {ACT}",
+                                "fbtrace_id": f"{BIZ}", "error_user_title": f"act={ACT[4:]} {TOKEN}",
+                                "error_user_msg": f"see {ACT2} token {TOKEN} biz {BIZ}"}}}
+    c, _ = _client(FakeTransport([reply]))
+    with pytest.raises(g.GraphError) as ei:
+        c.get("/me")
+    blob = json.dumps(ei.value.details)
+    assert TOKEN not in blob and not TOKEN_LIKE.search(blob)
+    assert not re.search(r"act_\d", blob) and not re.search(r"\d{8,}", blob), blob
+
+
+def test_pilot_flags_reach_in_page_graph(monkeypatch, tmp_path):
+    from scripts import fb_api_pilot as pilot
+
+    made: list = []
+
+    class Spy(tc.InPageGraph):
+        def __init__(self, tab, **kw):
+            super().__init__(tab, **kw)
+            made.append((self.graph_host, self.credentials))
+
+    monkeypatch.setattr(tc, "InPageGraph", Spy)
+    page = FakePage(_pilot_replies())
+    cdp = FakeCdp(page)
+    target = pilot.Target("KLD_TEST", ACT, "prof-uuid-1234", "fold", "A")
+    pilot.run_pilot(
+        target, emit=lambda s: None,
+        open_profile=lambda *a: prof.OpenedProfile("p", "f", "A", "5555", None, False),
+        release_profile=lambda o: "left_running",
+        open_tab=lambda url: PageTab.open(url, connect=lambda u, timeout: cdp),
+        make_client=lambda tr: g.GraphClient(tr, sleep=lambda s: None),
+        graph_host="public", credentials="omit",
+    )
+    assert made == [("public", "omit")]
+    sent = [s for s in page.specs]
+    assert sent and all(s["host"] == "public" and s["credentials"] == "omit" for s in sent)
+
+    # И из командной строки до run_pilot.
+    seen = {}
+    monkeypatch.setattr("config.paths.load_env", lambda: [])
+    monkeypatch.setattr(tm, "journal_path", lambda: tmp_path / "j.jsonl")
+    monkeypatch.setattr(pilot, "run_pilot", lambda target, **kw: seen.update(kw) or {})
+    assert pilot.main(["--profile-id", "p-1", "--act", ACT, "--run",
+                       "--graph-host", "public", "--credentials", "include"]) == 0
+    assert (seen["graph_host"], seen["credentials"]) == ("public", "include")
+
+
 def test_pilot_options_reach_the_transport(monkeypatch):
     from scripts import fb_api_pilot as pilot
 

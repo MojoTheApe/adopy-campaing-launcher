@@ -65,7 +65,10 @@ _HELPER_JS = r"""
 
   const TOKEN_RE = /^EAA[A-Za-z0-9]{20,}$/;
   const TOKEN_ANY = /EAA[A-Za-z0-9]{20,}/g;
-  const GRAPH_RE = /^https:\/\/([a-z0-9-]*graph\.facebook\.com)\/(v\d+\.\d+)\//i;
+  // Хост Graph — только graph.facebook.com или <слово>-graph.facebook.com
+  // (adsmanager-graph); якорь на начале нормализованного адреса, сразу за
+  // хостом — `/` (ни порта, ни userinfo, ни поддоменов, ни http:). Ревью r5.
+  const GRAPH_RE = /^https:\/\/((?:[a-z0-9]+-)?graph\.facebook\.com)(?:\/(v\d+\.\d+))?(?:\/|$)/i;
   const PARAM_RE = /(access_token(?:=|%3D|\\u003d))[^&"'\s\\]+/gi;
   const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage',
                    'x-fb-ads-insights-throttle'];
@@ -114,7 +117,7 @@ _HELPER_JS = r"""
     try { u = new URL(String(url), location.href); } catch (e) { return; }
     const m = GRAPH_RE.exec(u.href);
     if (!m) return;
-    if (!version) { host = m[1].toLowerCase(); version = m[2]; }
+    if (!version) { host = m[1].toLowerCase(); version = m[2] || ''; }
     let t = u.searchParams.get('access_token');
     if (!t && body) {
       try {
@@ -123,7 +126,7 @@ _HELPER_JS = r"""
       } catch (e) { t = null; }
     }
     if (t && TOKEN_RE.test(String(t))) {
-      token = String(t); source = 'network'; host = m[1].toLowerCase(); version = m[2];
+      token = String(t); source = 'network'; host = m[1].toLowerCase(); version = m[2] || '';
       if (how) {
         amCredentials = how.credentials || '';
         try { amRequest = describe(u, body, how); } catch (e) { amRequest = null; }

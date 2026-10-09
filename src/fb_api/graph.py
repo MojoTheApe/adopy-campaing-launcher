@@ -57,19 +57,20 @@ class GraphError(RuntimeError):
 def error_details(gerr: dict, reply: dict) -> dict:
     """Что Meta сказала об ошибке, плюс куда и как мы ходили — для разбора.
 
-    Текст идёт через `scrub` при сборке сообщения; номера не нужны.
+    Значения вычищаются сразу при сборке (ревью r5): `.details` уходит дальше
+    как есть, и номера кабинетов, бизнесов и токены там не нужны.
     """
     out: dict[str, Any] = {}
     for key in ("type", "error_subcode", "fbtrace_id", "is_transient",
                 "error_user_title", "error_user_msg"):
         value = gerr.get(key)
         if value not in (None, ""):
-            out[key] = str(value)[:200]
+            out[key] = scrub(str(value)[:200])
     endpoint = reply.get("endpoint")
     if isinstance(endpoint, dict):
         for key in ("host", "version", "credentials"):
             if endpoint.get(key):
-                out[key] = str(endpoint[key])[:80]
+                out[key] = scrub(str(endpoint[key])[:80])
     if reply.get("status") is not None:
         out["http_status"] = str(reply.get("status"))
     return out
