@@ -10313,7 +10313,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13560,65 +13560,7 @@
       739,
       760
     ],
-    "review": {
-      "id": "58b8cd88b4554f7697fe00f3c8723ab8",
-      "pr": 759,
-      "issues": [
-        756
-      ],
-      "actor": "Reviewer-R1756S",
-      "session": "rev_r1756s_1009",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-10-09T21:19:14+00:00",
-      "state": "approving",
-      "approval": {
-        "issue": 756,
-        "pr": 759,
-        "branch": "codex/acl-1756-api-in-profile",
-        "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
-        "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-        "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7",
-        "review": {
-          "kind": "independent-review",
-          "pr": 759,
-          "issue": 756,
-          "task": "ACL-1756",
-          "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
-          "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-          "tree_sha": "bb3f57c716aa9c0c175de32a55ae9340f57219fe",
-          "execution_lane": "58b8cd88b4554f7697fe00f3c8723ab8",
-          "reviewer": "Reviewer-R1756S",
-          "review_session": "rev_r1756s_1009",
-          "implementer": "Worker-O1756A",
-          "verdict": "approved",
-          "report": "# Review of PR #759 (ACL-1756): APPROVED (round 12, head e68607be)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent; I did not implement this. Implementer: Worker-O1756A.\nRounds 1-11: 1 (Reviewer-R1756Q, Opus) secret-scan fixtures, read-only hardening, never stop a profile; 2-3 param-key whitelist; 4 shard balance; 5-7 cookie mode mirrors Ads Manager, error details scrubbed, host anchor and pilot flags pinned; 8-9 (Opus) no-wrap design: isolated world, passive token from Resource Timing/inline HTML, Graph GET sent exactly once; 10 superseded by live diagnostics; 11 createTarget like Playwright, runIfWaitingForDebugger, local Mimic debug-port attach (code approved, 3 test gaps).\nLive result: on the owner-authorized expendable account Facebook_5414 the full pilot attached via the local process, captured the token from Resource Timing, made 4 Graph GETs in about 20 s, and the owner confirmed the numbers match Ads Manager (issue #756 comment).\nRound 12, delta 5aec8c27..e68607be: tests only (tests/test_acl1756_fb_api.py, +53 lines; src/ and scripts/ unchanged). Re-run mutations: Target.activateTarget added, Page.bringToFront added, exe filter dropped: all KILLED. The loopback accept check dropped still survives (the listen check on the same process already covers it, and _accepting itself is tested): accepted as non-blocking. Six checks separately: fb_api 103, page_helper_node 22, tab_watchdog 35, platform 100, shard 14 passed, secret scan clean. git merge-tree vs work/main clean (tree bb3f57c7 = head tree).\nCI note: windows tests failed once on tests/test_acl1702_tab_unblock_real_chromium.py (a real-Chromium timing test unrelated to this change; the same tests passed on 5aec8c27); to be re-run.\n",
-          "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            756
-          ],
-          "recorded_at": "2026-10-09T21:20:06+00:00",
-          "issue_scopes": {
-            "756": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7"
-          }
-        },
-        "lane": {
-          "id": "58b8cd88b4554f7697fe00f3c8723ab8",
-          "pr": 759,
-          "issues": [
-            756
-          ],
-          "actor": "Reviewer-R1756S",
-          "session": "rev_r1756s_1009",
-          "coordinator": "Coordinator-C0930A",
-          "started_at": "2026-10-09T21:19:14+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-09T21:35:37+00:00"
-      }
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -19797,6 +19739,71 @@
         "pr": 759,
         "lane": "58b8cd88b4554f7697fe00f3c8723ab8",
         "actor": "Reviewer-R1756S"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-09T21:36:30+00:00",
+        "issue": 756,
+        "pr": 759,
+        "review": {
+          "id": "58b8cd88b4554f7697fe00f3c8723ab8",
+          "pr": 759,
+          "issues": [
+            756
+          ],
+          "actor": "Reviewer-R1756S",
+          "session": "rev_r1756s_1009",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-09T21:19:14+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 756,
+            "pr": 759,
+            "branch": "codex/acl-1756-api-in-profile",
+            "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
+            "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+            "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7",
+            "review": {
+              "kind": "independent-review",
+              "pr": 759,
+              "issue": 756,
+              "task": "ACL-1756",
+              "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
+              "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "tree_sha": "bb3f57c716aa9c0c175de32a55ae9340f57219fe",
+              "execution_lane": "58b8cd88b4554f7697fe00f3c8723ab8",
+              "reviewer": "Reviewer-R1756S",
+              "review_session": "rev_r1756s_1009",
+              "implementer": "Worker-O1756A",
+              "verdict": "approved",
+              "report": "# Review of PR #759 (ACL-1756): APPROVED (round 12, head e68607be)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent; I did not implement this. Implementer: Worker-O1756A.\nRounds 1-11: 1 (Reviewer-R1756Q, Opus) secret-scan fixtures, read-only hardening, never stop a profile; 2-3 param-key whitelist; 4 shard balance; 5-7 cookie mode mirrors Ads Manager, error details scrubbed, host anchor and pilot flags pinned; 8-9 (Opus) no-wrap design: isolated world, passive token from Resource Timing/inline HTML, Graph GET sent exactly once; 10 superseded by live diagnostics; 11 createTarget like Playwright, runIfWaitingForDebugger, local Mimic debug-port attach (code approved, 3 test gaps).\nLive result: on the owner-authorized expendable account Facebook_5414 the full pilot attached via the local process, captured the token from Resource Timing, made 4 Graph GETs in about 20 s, and the owner confirmed the numbers match Ads Manager (issue #756 comment).\nRound 12, delta 5aec8c27..e68607be: tests only (tests/test_acl1756_fb_api.py, +53 lines; src/ and scripts/ unchanged). Re-run mutations: Target.activateTarget added, Page.bringToFront added, exe filter dropped: all KILLED. The loopback accept check dropped still survives (the listen check on the same process already covers it, and _accepting itself is tested): accepted as non-blocking. Six checks separately: fb_api 103, page_helper_node 22, tab_watchdog 35, platform 100, shard 14 passed, secret scan clean. git merge-tree vs work/main clean (tree bb3f57c7 = head tree).\nCI note: windows tests failed once on tests/test_acl1702_tab_unblock_real_chromium.py (a real-Chromium timing test unrelated to this change; the same tests passed on 5aec8c27); to be re-run.\n",
+              "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                756
+              ],
+              "recorded_at": "2026-10-09T21:20:06+00:00",
+              "issue_scopes": {
+                "756": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7"
+              }
+            },
+            "lane": {
+              "id": "58b8cd88b4554f7697fe00f3c8723ab8",
+              "pr": 759,
+              "issues": [
+                756
+              ],
+              "actor": "Reviewer-R1756S",
+              "session": "rev_r1756s_1009",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-09T21:19:14+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-09T21:35:37+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -19849,6 +19856,53 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-09T08:00:01+00:00"
+      },
+      "756": {
+        "issue": 756,
+        "pr": 759,
+        "branch": "codex/acl-1756-api-in-profile",
+        "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
+        "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+        "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7",
+        "review": {
+          "kind": "independent-review",
+          "pr": 759,
+          "issue": 756,
+          "task": "ACL-1756",
+          "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
+          "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+          "tree_sha": "bb3f57c716aa9c0c175de32a55ae9340f57219fe",
+          "execution_lane": "58b8cd88b4554f7697fe00f3c8723ab8",
+          "reviewer": "Reviewer-R1756S",
+          "review_session": "rev_r1756s_1009",
+          "implementer": "Worker-O1756A",
+          "verdict": "approved",
+          "report": "# Review of PR #759 (ACL-1756): APPROVED (round 12, head e68607be)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent; I did not implement this. Implementer: Worker-O1756A.\nRounds 1-11: 1 (Reviewer-R1756Q, Opus) secret-scan fixtures, read-only hardening, never stop a profile; 2-3 param-key whitelist; 4 shard balance; 5-7 cookie mode mirrors Ads Manager, error details scrubbed, host anchor and pilot flags pinned; 8-9 (Opus) no-wrap design: isolated world, passive token from Resource Timing/inline HTML, Graph GET sent exactly once; 10 superseded by live diagnostics; 11 createTarget like Playwright, runIfWaitingForDebugger, local Mimic debug-port attach (code approved, 3 test gaps).\nLive result: on the owner-authorized expendable account Facebook_5414 the full pilot attached via the local process, captured the token from Resource Timing, made 4 Graph GETs in about 20 s, and the owner confirmed the numbers match Ads Manager (issue #756 comment).\nRound 12, delta 5aec8c27..e68607be: tests only (tests/test_acl1756_fb_api.py, +53 lines; src/ and scripts/ unchanged). Re-run mutations: Target.activateTarget added, Page.bringToFront added, exe filter dropped: all KILLED. The loopback accept check dropped still survives (the listen check on the same process already covers it, and _accepting itself is tested): accepted as non-blocking. Six checks separately: fb_api 103, page_helper_node 22, tab_watchdog 35, platform 100, shard 14 passed, secret scan clean. git merge-tree vs work/main clean (tree bb3f57c7 = head tree).\nCI note: windows tests failed once on tests/test_acl1702_tab_unblock_real_chromium.py (a real-Chromium timing test unrelated to this change; the same tests passed on 5aec8c27); to be re-run.\n",
+          "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            756
+          ],
+          "recorded_at": "2026-10-09T21:20:06+00:00",
+          "issue_scopes": {
+            "756": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7"
+          }
+        },
+        "lane": {
+          "id": "58b8cd88b4554f7697fe00f3c8723ab8",
+          "pr": 759,
+          "issues": [
+            756
+          ],
+          "actor": "Reviewer-R1756S",
+          "session": "rev_r1756s_1009",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-09T21:19:14+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-09T21:35:37+00:00"
       }
     },
     "batches": {},
