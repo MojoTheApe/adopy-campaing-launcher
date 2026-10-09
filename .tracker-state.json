@@ -7125,7 +7125,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "756": {
+        "actor": "Worker-O1756A",
+        "session": "run_o1756a_1009",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1756-api-in-profile",
+        "worktree": "C:\\acl-api-inprofile",
+        "id": "bd772ec713574dc3a7905b76e9c1bf95",
+        "issue": 756,
+        "state": "implementing",
+        "started_at": "2026-10-09T17:39:19+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -10278,9 +10291,13 @@
           {
             "actor": "Worker-O1756A",
             "session": "run_o1756a_1009"
+          },
+          {
+            "actor": "Worker-O1756A",
+            "session": "run_o1756a_1009"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10300,14 +10317,7 @@
         "pr": 759,
         "queued_at": "2026-10-09T15:35:47+00:00",
         "review_report": "Return of an Approved task for a live-pilot fix (Coordinator-C0930A, 2026-10-09).\n\nLive pilot on KLD_BFL_B90, run with the owner's permission: the profile attached, Ads Manager loaded and the token was captured in the page. The first Graph call, GET /me/adaccounts, failed with \"Graph API error 1: Invalid request\". The client stopped as designed and made no more calls.\n\nMost likely cause: the in-page fetch used credentials:'omit', while the Ads Manager session token is cookie-bound. The error message also dropped Meta's details (type, subcode, fbtrace_id).\n\nFix requested:\n- Copy Ads Manager's own credentials mode, host and version.\n- Record names-only metadata of Ads Manager's own Graph request.\n- Carry Meta's scrubbed error details in the stop message.\n- Add closed-list diagnostic flags --graph-host and --credentials.\n- Keep it GET-only, with the same key whitelist and denylist and no retries.",
-        "reviewer": "Reviewer-R1756S",
         "return_operation": {
-          "id": "0aa70bff8c3840f79459ae04070e8775",
-          "actor": "Coordinator-C0930A",
-          "session": "coord_c0930a_1009",
-          "report": "Return of an Approved task for a live-pilot fix (Coordinator-C0930A, 2026-10-09).\n\nLive pilot on KLD_BFL_B90, run with the owner's permission: the profile attached, Ads Manager loaded and the token was captured in the page. The first Graph call, GET /me/adaccounts, failed with \"Graph API error 1: Invalid request\". The client stopped as designed and made no more calls.\n\nMost likely cause: the in-page fetch used credentials:'omit', while the Ads Manager session token is cookie-bound. The error message also dropped Meta's details (type, subcode, fbtrace_id).\n\nFix requested:\n- Copy Ads Manager's own credentials mode, host and version.\n- Record names-only metadata of Ads Manager's own Graph request.\n- Carry Meta's scrubbed error details in the stop message.\n- Add closed-list diagnostic flags --graph-host and --credentials.\n- Keep it GET-only, with the same key whitelist and denylist and no retries."
-        },
-        "return": {
           "id": "0aa70bff8c3840f79459ae04070e8775",
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
@@ -19313,6 +19323,13 @@
           "report": "Return of an Approved task for a live-pilot fix (Coordinator-C0930A, 2026-10-09).\n\nLive pilot on KLD_BFL_B90, run with the owner's permission: the profile attached, Ads Manager loaded and the token was captured in the page. The first Graph call, GET /me/adaccounts, failed with \"Graph API error 1: Invalid request\". The client stopped as designed and made no more calls.\n\nMost likely cause: the in-page fetch used credentials:'omit', while the Ads Manager session token is cookie-bound. The error message also dropped Meta's details (type, subcode, fbtrace_id).\n\nFix requested:\n- Copy Ads Manager's own credentials mode, host and version.\n- Record names-only metadata of Ads Manager's own Graph request.\n- Carry Meta's scrubbed error details in the stop message.\n- Add closed-list diagnostic flags --graph-host and --credentials.\n- Keep it GET-only, with the same key whitelist and denylist and no retries."
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-09T17:39:19+00:00",
+        "issue": 756,
+        "claim": "bd772ec713574dc3a7905b76e9c1bf95",
+        "actor": "Worker-O1756A"
       }
     ],
     "policy": {
