@@ -11215,6 +11215,10 @@
       "Reviewer-R1760Q": {
         "session": "rev_r1760q_1010",
         "role": "Reviewer"
+      },
+      "Reviewer-B763Q": {
+        "session": "rev_b763q_1010",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -13565,7 +13569,20 @@
       710,
       739
     ],
-    "review": null,
+    "review": {
+      "id": "098887cfdc4845a587d522e419c6b8ff",
+      "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
+      "pr": 763,
+      "issues": [
+        728,
+        756
+      ],
+      "actor": "Reviewer-B763Q",
+      "session": "rev_b763q_1010",
+      "coordinator": "Coordinator-C0930A",
+      "state": "reviewing",
+      "started_at": "2026-10-09T21:50:40+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -19969,6 +19986,24 @@
           "entered_stage": false,
           "history": []
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-09T21:50:40+00:00",
+        "review": {
+          "id": "098887cfdc4845a587d522e419c6b8ff",
+          "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
+          "pr": 763,
+          "issues": [
+            728,
+            756
+          ],
+          "actor": "Reviewer-B763Q",
+          "session": "rev_b763q_1010",
+          "coordinator": "Coordinator-C0930A",
+          "state": "reviewing",
+          "started_at": "2026-10-09T21:50:40+00:00"
+        }
       }
     ],
     "policy": {
@@ -20075,7 +20110,7 @@
       "id": "3b8ca0b6359c400c90e4bb3e78a40247",
       "actor": "Coordinator-C0930A",
       "session": "coord_c0930a_1009",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         728,
         756
@@ -20177,7 +20212,7 @@
       "branch": "codex/batch-3b8ca0b6359c400c90e4bb3e78a40247",
       "intake": "17458c7784e84b879dd646f4d4d1dcc6",
       "started_at": "2026-10-09T21:41:31+00:00",
-      "pr": null,
+      "pr": 763,
       "entered_stage": false,
       "history": []
     },
