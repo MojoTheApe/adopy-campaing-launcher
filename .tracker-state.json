@@ -13517,7 +13517,54 @@
       "session": "rev_r1756s_1009",
       "coordinator": "Coordinator-C0930A",
       "started_at": "2026-10-09T18:21:49+00:00",
-      "state": "reviewing"
+      "state": "approving",
+      "approval": {
+        "issue": 756,
+        "pr": 759,
+        "branch": "codex/acl-1756-api-in-profile",
+        "head_sha": "7048d9400ffb0f5d1be6f1f8d535bb2aa8989129",
+        "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+        "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7",
+        "review": {
+          "kind": "independent-review",
+          "pr": 759,
+          "issue": 756,
+          "task": "ACL-1756",
+          "head_sha": "7048d9400ffb0f5d1be6f1f8d535bb2aa8989129",
+          "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+          "tree_sha": "fdc5927429e0aa478660936881cabcef3b5aedba",
+          "execution_lane": "92e4e8387d5048838badaf4aafe19455",
+          "reviewer": "Reviewer-R1756S",
+          "review_session": "rev_r1756s_1009",
+          "implementer": "Worker-O1756A",
+          "verdict": "approved",
+          "report": "# Review of PR #759 (ACL-1756): APPROVED (round 7, head 7048d940)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent; I did not implement this. Implementer: Worker-O1756A.\nRounds: 1 (Reviewer-R1756Q, Opus): B1 scanner fixtures, S1 read-only hardening, S2 never stop a profile. 2: padded/control/Unicode param keys bypassed the denylist. 3: ASCII key whitelist verified; CI red on shard balance. 4: tests-only shard fix verified, approved then returned after the live pilot. 5 (after the live pilot's Graph error 1): cookie mode mirrors Ads Manager, error details, diagnosis flags; blockers were unpinned host anchor, untested pilot flags, unscrubbed GraphError.details. 6: GRAPH_RE tightened to (?:[a-z0-9]+-)?graph, host/flag/details tests added, all survivors killed, probes (foreign hosts with embedded Graph URLs, userinfo, ports, http, subdomains) refused; one Windows platform-lint line failed. 7 (this): delta 10568956..7048d940 touches only tests/test_acl1756_fb_api.py (6 lines): the two regexes became module constants ACT_ID_RE = act_[0-9] and LONG_ID_RE = [0-9]{8,} without a backslash; equivalent on the ASCII json blob, same assertion.\nVerified: test_acl_test_platform + test_acl1756_fb_api pass (100 and 70 passed), secret scan clean, git merge-tree vs work/main clean (tree fdc59274 = head tree). src/ and scripts/ unchanged since 10568956, so the round-6 probe and mutation results stand. Unversioned Graph URLs (empty captured version) use Meta's default version; noted for the live run.\n",
+          "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            756
+          ],
+          "recorded_at": "2026-10-09T18:22:37+00:00",
+          "issue_scopes": {
+            "756": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7"
+          }
+        },
+        "lane": {
+          "id": "92e4e8387d5048838badaf4aafe19455",
+          "pr": 759,
+          "issues": [
+            756
+          ],
+          "actor": "Reviewer-R1756S",
+          "session": "rev_r1756s_1009",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-09T18:21:49+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-09T18:41:35+00:00"
+      }
     },
     "history": [
       {
