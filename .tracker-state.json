@@ -10244,7 +10244,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10262,7 +10262,8 @@
           "report": "ACL-1756 handoff from Worker-O1756A (run_o1756a_1009). PR #759 into main (replaces closed #758), branch codex/acl-1756-api-in-profile, head 441ef6e9.\n\nPrevious uncommitted files:\n- Kept the ideas: Graph host/version regex, the Ads Manager URL, own-tab policy, the error classes and code sets.\n- Rewrote token_capture.py. It used to capture the token into Python via Network.requestWillBeSent; now the token stays in the page.\n- Rewrote cdp.py. The custom websocket is gone; it now uses tab_watchdog.RawCdp, imported and not modified.\n- Rewrote graph.py. It had been truncated.\n- Added profile.py, telemetry.py, scripts/fb_api_pilot.py and tests/test_acl1756_fb_api.py.\n\nToken in the page:\n- A helper is added with Page.addScriptToEvaluateOnNewDocument before Ads Manager is opened in our own background tab.\n- It wraps fetch/XHR and takes access_token from Ads Manager's own graph.facebook.com requests. Fallbacks: Resource Timing, then inline scripts.\n- The token is kept in a closure, and the wrappers are removed once it is taken.\n- Python sends {method, path, params} (GET only). The helper attaches the token, calls fetch, removes tokens from the answer, and returns JSON plus usage headers.\n- Re-acquiring after 190: retire the helper, reload the tab, take the token again in the page.\n\nTests: tests/test_acl1756_fb_api.py, 44 passed locally (Node helper tests included). tab_watchdog was not changed.\n\nNot done: live pilot. The coordinator runs it with the owner's permission:\n  python scripts/fb_api_pilot.py --account KLD_BFL_B93 --run\nDry run without --run: KLD_BFL_B93 resolves to slot B, act \u20264691, profile \u20266595.\nRemaining acceptance #2: numbers match the dashboard, and no checkpoint within 48 h."
         },
         "pr": 759,
-        "queued_at": "2026-10-09T14:35:15+00:00"
+        "queued_at": "2026-10-09T14:35:15+00:00",
+        "reviewer": "Reviewer-R1756Q"
       }
     },
     "actors": {
@@ -11089,6 +11090,10 @@
       "Worker-O1756A": {
         "session": "run_o1756a_1009",
         "role": "Worker"
+      },
+      "Reviewer-R1756Q": {
+        "session": "rev_r1756q_1009",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -13437,10 +13442,20 @@
       642,
       651,
       710,
-      739,
-      756
+      739
     ],
-    "review": null,
+    "review": {
+      "id": "566066f7725040909183e0b05b6565ae",
+      "pr": 759,
+      "issues": [
+        756
+      ],
+      "actor": "Reviewer-R1756Q",
+      "session": "rev_r1756q_1009",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-09T14:48:54+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -19051,6 +19066,13 @@
         "issue": 756,
         "pr": 759,
         "actor": "Worker-O1756A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-09T14:48:54+00:00",
+        "pr": 759,
+        "lane": "566066f7725040909183e0b05b6565ae",
+        "actor": "Reviewer-R1756Q"
       }
     ],
     "policy": {
