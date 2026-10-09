@@ -13414,6 +13414,40 @@ function cbProblemsHtml(r) {
   return h + '</div>';
 }
 
+// ACL-1761: итог кампании, созданной через Graph API: статус PAUSED, что
+// создано/найдено с прошлого запуска и сверка чтением (расхождения — красным).
+function cbApiReadbackHtml(r) {
+  var rb = r.readback || {};
+  var h = '<div class="cb-status-steps" style="font-size:0.72rem;margin-top:0.2rem">';
+  if (r.status === 'PAUSED') {
+    h += '<span style="font-weight:600">Status: PAUSED</span> — nothing was activated. ';
+  }
+  var counts = function(o) {
+    return Object.keys(o || {}).map(function(k) { return o[k] + ' ' + k; }).join(', ');
+  };
+  if (r.created && Object.keys(r.created).length) h += 'Created: ' + aclEscHtml(counts(r.created)) + '. ';
+  if (r.reused && Object.keys(r.reused).length) {
+    h += 'Already there from a previous run: ' + aclEscHtml(counts(r.reused)) + '. ';
+  }
+  if (rb.checked) {
+    var bad = rb.mismatches || [];
+    h += bad.length
+      ? '<span style="color:var(--bad);font-weight:600">Readback: ' + bad.length + ' of ' + rb.checked
+        + ' fields differ from the builder — do not activate before checking.</span>'
+      : '<span style="color:var(--ok)">Readback: all ' + rb.checked + ' fields match the builder.</span>';
+    h += '<details><summary>Readback report</summary><table style="font-size:0.68rem">'
+      + '<tr><th>Object</th><th>Field</th><th>Builder</th><th>Meta</th><th></th></tr>';
+    (rb.checks || []).forEach(function(c) {
+      h += '<tr' + (c.ok ? '' : ' style="color:var(--bad)"') + '><td>' + aclEscHtml(c.object)
+        + '</td><td>' + aclEscHtml(c.field) + '</td><td>' + aclEscHtml(JSON.stringify(c.expected))
+        + '</td><td>' + aclEscHtml(JSON.stringify(c.actual)) + '</td><td>' + (c.ok ? '✓' : '✗')
+        + '</td></tr>';
+    });
+    h += '</table></details>';
+  }
+  return h + '</div>';
+}
+
 // ACL-1444: «Close profile» на панели закончившегося задания. Чистое задание
 // закрывает профиль само; остальные окна (есть что проверить) человек
 // закрывает отсюда. Сервер закрывает мягко, через MLX API, и отказывает
@@ -13495,11 +13529,18 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
         ? (jobPublishable
-          ? 'draft ready — the campaign is in Ads Manager, Publish was not clicked'
+          ? (job.fb_backend === 'api'
+            ? 'created PAUSED via the API — readback matches; a person activates it in Ads Manager'
+            : 'draft ready — the campaign is in Ads Manager, Publish was not clicked')
           : (hasFatal ? 'errors — do not publish'
             : 'draft blocked — do not publish'))
         : 'running… (can take 1–3 min)'));
     var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';
+    // ACL-1761: шаг создателя кампаний через API (профиль, проверка, запись, сверка).
+    if (isRunning && job.fb_backend === 'api' && job.progress) {
+      html += '<div class="cb-status-steps" style="font-size:0.7rem;color:var(--muted)">API: '
+        + aclEscHtml(job.progress) + '</div>';
+    }
     // An observed lock is context, not proof that it caused every failure.
     if (job.screen_was_locked === true && !jobPublishable && job.status === 'done') {
       html += '<div class="cb-status-cause">🔒 The screen was locked during the build. '
@@ -13542,6 +13583,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         html += '<span class="cb-status-id">campaign_id: ' + aclEscHtml(r.campaign_id) + '</span>';
       }
       html += '</div>';
+      if (r.backend === 'api') html += cbApiReadbackHtml(r);
       if (r.error) {
         // Green is reserved for a finished, publishable draft — an
         // informational note such as the dry-run message. Anything blocking
