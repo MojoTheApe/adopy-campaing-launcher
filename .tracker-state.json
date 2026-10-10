@@ -10476,7 +10476,7 @@
             "session": "run_s1760a_1009"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1760A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10501,7 +10501,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "Owner live test on the 9095 test dashboard (2026-10-10): Read spend via the API on Facebook_5414 was fast and worked.\n\nUI issue: the \"Account spend\" cell shows \"USD 179...\" truncated. The API reading stores the ISO currency code, while RPA used the sign (\"$179.47\"), so the value no longer fits the column.\n\nFix:\n- Map common ISO codes to their symbols in the reading (USD $, EUR \u20ac, GBP \u00a3, BRL R$, MXN MX$ or $ as RPA did, etc.), matching what the RPA reading stored. Unknown codes stay as ISO.\n- Keep per-currency sums working.\n- Check that the \"Status\" column text (\"no warni\u2026\") isn't truncated either.\n\nAdd tests."
-        }
+        },
+        "reviewer": "Reviewer-R1760S"
       },
       "761": {
         "implementers": [
@@ -13747,10 +13748,20 @@
       642,
       651,
       710,
-      739,
-      760
+      739
     ],
-    "review": null,
+    "review": {
+      "id": "758b97d4d2134ee5b317971228d6138b",
+      "pr": 762,
+      "issues": [
+        760
+      ],
+      "actor": "Reviewer-R1760S",
+      "session": "rev_r1760s_1010",
+      "coordinator": "Coordinator-C0930A",
+      "started_at": "2026-10-10T08:51:30+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -20464,6 +20475,13 @@
         "issue": 760,
         "pr": 762,
         "actor": "Worker-S1760A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-10T08:51:30+00:00",
+        "pr": 762,
+        "lane": "758b97d4d2134ee5b317971228d6138b",
+        "actor": "Reviewer-R1760S"
       }
     ],
     "policy": {
