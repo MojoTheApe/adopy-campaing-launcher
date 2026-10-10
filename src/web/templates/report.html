@@ -12440,7 +12440,10 @@ window.cbPublishAll = function (onProgress, picked) {
     + '<span style="color:var(--warn);font-size:0.85rem">Do not lock the screen while the build runs — '
     + 'creative uploads stall on a locked screen.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
-    + aclEscHtml(cbPublishMode()) + '</span>',
+    + (cbApiMode() ? aclEscHtml(cbPublishMode())
+       // Режим робота — дословно здесь: вопрос обязан сказать «черновик» и «Publish не нажимается».
+       : 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook')
+    + '</span>',
     function () {
       var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
       if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
