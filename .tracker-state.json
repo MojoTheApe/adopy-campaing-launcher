@@ -2530,7 +2530,7 @@
       "source_sha": "a227497ab04225ab5e7ae52e06c8fb74fcaf57ac",
       "main_tree": "f0a9183dbf0b4babc358c0127ba4efb49b7fde03",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-09T22:13:24+00:00",
       "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
       "verification": {
@@ -4083,6 +4083,30 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-08T22:13:10+00:00"
+      },
+      "728": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 764,
+            "merge_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+            "tree_sha": "295c4bf5b7911fc3b5f417d429d84d0d927629a3"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-10T06:13:48+00:00"
+      },
+      "756": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 764,
+            "merge_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+            "tree_sha": "295c4bf5b7911fc3b5f417d429d84d0d927629a3"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-10T06:13:49+00:00"
       }
     },
     "promotions": {
@@ -7151,6 +7175,33 @@
           "report": "Actual Stage f35bdaa6cff4be31f2e376b55130f24edc44f8cd has approved tree f0a9183dbf0b4babc358c0127ba4efb49b7fde03. Isolated Windows installer/update/restart/recovery report from successful source run37847694255 (ACL-update-recovery-1030, artifact11581756062) tested actual GitHub PR merge aeb34e5367f951386946727a6922ee2409a480c1, parents reviewed base3ec4c0fa30782c15a06a1cbe653c96ae5721ab72 and source512c77d2bd198aa5ed16ae3cc27e957cf276407e, with this identical tree. The artifact was not built from the later Stage SHA. Its five real isolated package checks passed, preserving synthetic data/pointers/shortcuts during update and deliberate failure recovery. ZIP SHA256 3a348fc1580796b45f0ff7e698b3206706f3d2d894d3c93ffd869f7952b4f2e1; report SHA256 b1bae27bb73adcc896f89609100b2d0c9b55bac797237e250887223adcd00f3d. Current-head full applicable source Linux/Windows/installer checks passed and unchanged-tree evidence is reused under the maintained Stage procedure. No stable release/download-channel, employee rollout or deferred live pilot proof is claimed."
         },
         "verified_at": "2026-10-08T22:02:13+00:00"
+      },
+      "764": {
+        "pr": 763,
+        "issues": [
+          728,
+          756
+        ],
+        "tree_sha": "295c4bf5b7911fc3b5f417d429d84d0d927629a3",
+        "source_sha": "a227497ab04225ab5e7ae52e06c8fb74fcaf57ac",
+        "main_tree": "f0a9183dbf0b4babc358c0127ba4efb49b7fde03",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-09T22:13:24+00:00",
+        "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "a227497ab04225ab5e7ae52e06c8fb74fcaf57ac",
+          "tree_sha": "295c4bf5b7911fc3b5f417d429d84d0d927629a3",
+          "checks": [
+            "Git checks on actual stage a227497: CI run 37997956202 success",
+            "Windows installer run 37997956336 success"
+          ],
+          "report": "Batch ACL-1728, ACL-1756 stage verification: Git and installer checks green on the actual stage a227497. Integration review: scratchpad/review_763.md."
+        },
+        "verified_at": "2026-10-09T22:14:45+00:00"
       }
     }
   },
