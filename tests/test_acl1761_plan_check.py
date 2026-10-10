@@ -149,11 +149,7 @@ def _template_js(start: str, end: str) -> str:
 
 
 _PLAN_NODE = r"""
-function aclEscHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
-  });
-}
+ESCAPER
 const RealFD = FormData;
 let lastSkip = null;
 function cbFormDataSkipping(form, skip) { lastSkip = skip; const b = new RealFD(); b.set('camp_count', '1'); return { body: b }; }
@@ -210,13 +206,16 @@ _PLAN_DATA = {
 }
 
 
-def test_plan_html_and_the_button_posting_dry_run_in_node():
+def _run_plan_node(data: dict) -> dict:
+    """Настоящий JS шаблона (план, отправка и `aclEscHtml` самой страницы) в Node."""
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
     js = _template_js("function cbPlanFormData(form, only) {", "/* Имя карточки для подтверждения. */")
-    script = _PLAN_NODE.replace("DATA", "__DATA__").replace("JS\n", js + "\n", 1)
-    script = "const __DATA__ = " + json.dumps(_PLAN_DATA) + ";\n" + script
+    escaper = _template_js("function aclEscHtml(value) {", "  </script>")
+    script = (_PLAN_NODE.replace("DATA", "__DATA__").replace("ESCAPER\n", escaper + "\n", 1)
+              .replace("JS\n", js + "\n", 1))
+    script = "const __DATA__ = " + json.dumps(data) + ";\n" + script
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
         fh.write(script)
         path = fh.name
@@ -225,7 +224,16 @@ def test_plan_html_and_the_button_posting_dry_run_in_node():
     finally:
         Path(path).unlink(missing_ok=True)
     assert done.returncode == 0, done.stderr
-    out = json.loads(done.stdout)
+    return json.loads(done.stdout)
+
+
+def test_the_node_harness_uses_the_templates_own_escaper():
+    assert "function aclEscHtml" not in _PLAN_NODE
+    assert "function aclEscHtml(value) {" in _template_js("function aclEscHtml(value) {", "  </script>")
+
+
+def test_plan_html_and_the_button_posting_dry_run_in_node():
+    out = _run_plan_node(_PLAN_DATA)
     html = out["html"]
     for part in ("MX Leads 1", "PAUSED", "20.00 USD / day", "page 111", "pixel 222", "MX", "age 25-55",
                  "language Spanish", "Day trading, Swing trading AND Stocks", "automatic (Advantage+",
@@ -250,3 +258,97 @@ def test_the_plan_button_is_rendered_only_for_the_api_backend():
     assert "window.cbCheckPlan(selectedForPublish()" in text[j:j + 200]
     # «Publish» не тронут: та же кнопка и тот же обработчик.
     assert "window.cbPublishAll(showQueue, selectedForPublish());" in text
+
+
+# ── ревью #765, раунд 4: каждое поле экранируется, замок чтения, ноль записей ──
+
+#: Каждое поле плана — своя метка с разметкой, `&` и кавычками.
+def _hostile(field: str) -> str:
+    return f"<b>{field}</b>&" + '"' + "'x"
+
+
+def _escaped(field: str) -> str:
+    return f"&lt;b&gt;{field}&lt;/b&gt;&amp;&quot;&#39;x"
+
+
+_ESC_FIELDS = ["account", "data_error", "campaign_name", "result_error", "warning", "currency", "page_id",
+               "pixel_id", "objective", "adset_name", "country", "age", "language", "interest_a",
+               "interest_b", "placements", "ad_name", "format", "file", "headline", "primary_text",
+               "description", "link", "cta"]
+
+
+def test_every_plan_field_is_escaped_by_the_templates_escaper():
+    h = _hostile
+    data = {
+        "account": h("account"), "error": h("data_error"), "dry_run": True,
+        "results": [{
+            "campaign_name": h("campaign_name"), "error": h("result_error"), "warnings": [h("warning")],
+            "plan": {"summary": {
+                "daily_budget": 20.0, "currency": h("currency"), "page_id": h("page_id"),
+                "pixel_id": h("pixel_id"), "objective": h("objective"), "existing": True,
+                "ad_sets": [{
+                    "name": h("adset_name"), "countries": [h("country")], "age": h("age"),
+                    "language": h("language"), "interests": [[h("interest_a")], [h("interest_b")]],
+                    "placements": h("placements"),
+                    "ads": [{"name": h("ad_name"), "format": h("format"), "file": h("file"),
+                             "headline": h("headline"), "primary_text": h("primary_text"),
+                             "description": h("description"), "link": h("link"), "cta": h("cta")}],
+                }],
+            }},
+        }],
+    }
+    html = _run_plan_node(data)["html"]
+    for field in _ESC_FIELDS:
+        assert _escaped(field) in html, field
+        assert f"<b>{field}" not in html, field
+    # Ни одного сырого тега из данных: теги в плане — только свои.
+    assert "<b>" not in html and "</b>" not in html
+
+
+def test_check_plan_holds_the_read_lock_of_the_profile(tmp_path, monkeypatch):
+    from src.analysis_agent import account_spend as _as
+    from src.web import publish_api
+
+    seen = []
+    real = _as.serialized_browser
+
+    def recording(fn=None, *, key=None, reading=False):
+        deco = real(key=key, reading=reading)
+
+        def wrap(func):
+            inner = deco(func)
+
+            def call(*a, **k):
+                seen.append({"key": key, "reading": reading, "args": a})
+                return inner(*a, **k)
+
+            return call
+
+        return wrap
+
+    monkeypatch.setattr(_as, "serialized_browser", recording)
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [_draft(tmp_path, ads=1)])
+    _read_session(monkeypatch, FakeMeta())
+    out = publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")
+    assert out["error"] == ""
+    assert len(seen) == 1 and seen[0]["reading"] is True and seen[0]["key"] is _as._profile_key
+    assert seen[0]["args"][0] == "Test"
+
+
+def test_check_plan_refuses_if_anything_was_written(tmp_path, monkeypatch):
+    from src.web import publish_api
+
+    meta = FakeMeta()
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [_draft(tmp_path, ads=1)])
+    opened = _read_session(monkeypatch, meta)
+    real_publish = publish_api.ApiPublisher.publish_draft
+
+    def sneaky(self, draft):
+        res = real_publish(self, draft)
+        self._client.writes += 1                 # будто что-то ушло записью
+        return res
+
+    monkeypatch.setattr(publish_api.ApiPublisher, "publish_draft", sneaky)
+    out = publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")
+    assert opened[0].writes == 1
+    assert out["results"] == [] and "must not write" in out["error"]
