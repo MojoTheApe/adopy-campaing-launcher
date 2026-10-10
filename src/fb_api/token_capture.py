@@ -37,9 +37,12 @@ import json
 import re
 import secrets
 import time
+import urllib.parse
+from contextlib import contextmanager
 from typing import Any, Callable
 
-from src.fb_api.cdp import CdpError, CdpTimeout, PageError, StaleContextError
+from src.fb_api.cdp import CdpError, CdpTimeout, PageError, StaleContextError, host_and_path
+from src.fb_api.graph import Checkpoint, GraphStop, LoggedOut, PageUnresponsive
 from src.fb_api.telemetry import strip_tokens
 
 ADS_MANAGER_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act}"
@@ -433,20 +436,59 @@ class InPageGraph:
         self._ctx: int | None = None
         self._injected = False
 
+    # -- таймаут вкладки: что на самом деле с ней (F1, ACL-1761)
+    def _timeout_stop(self, exc: BaseException) -> GraphStop | None:
+        """Вкладка не ответила в срок: спросить у БРАУЗЕРА, где она сейчас.
+
+        Логин → `LoggedOut`, checkpoint → `Checkpoint`, иначе `PageUnresponsive`.
+        Браузер тоже молчит (или у вкладки нет такого метода) — `None`, и
+        вызывающий поднимает исходный `CdpTimeout`. Повторов нет.
+        """
+        ask = getattr(self.tab, "browser_url", None)
+        if not callable(ask):
+            return None
+        try:
+            url = str(ask() or "")
+        except Exception:
+            return None
+        if not url:
+            return None
+        path = urllib.parse.urlsplit(url).path.lower()
+        where = host_and_path(url) or "an unknown page"
+        if path.startswith(("/login", "/recover")):
+            return LoggedOut("the profile was logged out while the job ran; log in inside "
+                             "Multilogin, then retry. Nothing more was sent.")
+        if "/checkpoint" in path or "two_step" in path:
+            return Checkpoint(f"the profile is on a Facebook checkpoint (now at {where})")
+        return PageUnresponsive(f"the Ads Manager tab stopped answering (now at {where}); "
+                                "nothing more was sent")
+
+    @contextmanager
+    def _timeouts_as_stops(self):
+        """`CdpTimeout` вкладки → осмысленный стоп; не удалось выяснить — как был."""
+        try:
+            yield
+        except CdpTimeout as exc:
+            stop = self._timeout_stop(exc)
+            if stop is None:
+                raise
+            raise stop from exc
+
     # -- отдельный мир и помощник
     def _reset_world(self) -> None:
         self._ctx = None
         self._injected = False
 
     def _ensure(self) -> int:
-        if self._ctx is None:
-            self._ctx = self.tab.create_isolated_world(self.world_name)
-            self._injected = False
-        if not self._injected:
-            # Повторный вызов безвреден: помощник сам выходит, если уже стоит.
-            self.tab.evaluate_in(self._ctx, helper_source(self.name, self._write_policy), timeout=10.0)
-            self._injected = True
-        return self._ctx
+        with self._timeouts_as_stops():
+            if self._ctx is None:
+                self._ctx = self.tab.create_isolated_world(self.world_name)
+                self._injected = False
+            if not self._injected:
+                # Повторный вызов безвреден: помощник сам выходит, если уже стоит.
+                self.tab.evaluate_in(self._ctx, helper_source(self.name, self._write_policy), timeout=10.0)
+                self._injected = True
+            return self._ctx
 
     def _eval_helper(self, tail: str, *, timeout: float = 60.0) -> Any:
         """Не-Meta вызов помощника (`state`/`probe`/`retire`): можно повторить.
@@ -460,7 +502,8 @@ class InPageGraph:
         for attempt in (0, 1):
             ctx = self._ensure()
             try:
-                return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+                with self._timeouts_as_stops():
+                    return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
             except StaleContextError:
                 self._reset_world()
                 if attempt:
@@ -482,7 +525,8 @@ class InPageGraph:
 
     def navigate(self, act_id: str, *, timeout: float = 60.0) -> None:
         """Открыть Ads Manager кабинета в своей вкладке. Одна загрузка, ни одного клика."""
-        self.tab.navigate(ads_manager_url(act_id), timeout=timeout)
+        with self._timeouts_as_stops():
+            self.tab.navigate(ads_manager_url(act_id), timeout=timeout)
         self._reset_world()
 
     def start(self, act_id: str, *, timeout: float = 90.0) -> dict:
@@ -552,7 +596,10 @@ class InPageGraph:
         # …потом Graph-вызов РОВНО ОДИН раз. Любая ошибка после отправки —
         # результат неизвестен и НЕ повторяется (ревью r9-1): это стоп.
         try:
-            got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+            with self._timeouts_as_stops():
+                got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+        except GraphStop:
+            raise
         except CdpTimeout:
             raise
         except (StaleContextError, PageError, CdpError):

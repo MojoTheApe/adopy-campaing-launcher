@@ -74,7 +74,7 @@ READY_TIMEOUT_S = 90.0
 #: Сколько секунд профиль «остывает» после остановки, чтобы не стучать снова.
 #: Исчерпанный свой потолок вызовов (`call_budget`) сюда не входит: Meta молчала.
 COOLDOWN_S = {"rate_limited": 300.0, "checkpoint": 600.0, "policy_block": 1800.0,
-              "logged_out": 60.0}
+              "logged_out": 60.0, "page_unresponsive": 600.0}
 
 
 def backend() -> str:
@@ -410,6 +410,10 @@ def _session(account: str):
             raise ApiReadError(
                 f"The {account} profile is on a Facebook checkpoint; Ads Manager is not reopened "
                 f"for about {mins} min. Solve it inside Multilogin, then Read again. Nothing was called.")
+        if why == "page_unresponsive":
+            raise ApiReadError(
+                f"The Ads Manager tab for {account} stopped answering on the last read; it is not "
+                f"reopened for about {mins} min. Nothing was called.")
         raise ApiReadError(
             f"Meta asked to slow down for {account}; waiting before the next read "
             f"(about {mins} min). Nothing was called.")
@@ -432,8 +436,13 @@ def _session(account: str):
         tab = _open_tab(opened.cdp_url)
         graph = _make_graph(tab)
         graph.install()
-        graph.navigate(act, timeout=60.0)
-        state = graph.wait_ready(timeout=READY_TIMEOUT_S)
+        try:
+            graph.navigate(act, timeout=60.0)
+            state = graph.wait_ready(timeout=READY_TIMEOUT_S)
+        except GraphStop as exc:
+            # Вкладка не ответила, браузер назвал причину (ACL-1761 F1): охлаждение и стоп.
+            _start_cooldown(key, exc)
+            raise
         page_stop: GraphStop | None = None
         if state.get("kind") == "checkpoint":
             page_stop = Checkpoint("the profile is on a Facebook checkpoint")

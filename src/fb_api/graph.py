@@ -132,6 +132,15 @@ class PageFailed(GraphStop):
     kind = "page_failed"
 
 
+class PageUnresponsive(GraphStop):
+    """Вкладка Ads Manager перестала отвечать (ACL-1761): не логин и не checkpoint.
+
+    Охлаждение профиля 10 минут, повторов нет.
+    """
+
+    kind = "page_unresponsive"
+
+
 class WriteUnknown(RuntimeError):
     """Запись ушла (или могла уйти), а ответа нет (ACL-1761).
 
@@ -286,7 +295,11 @@ class GraphClient:
             self._sleep(wait)
 
     def _check_page(self) -> None:
-        state = self.transport.state() or {}
+        try:
+            state = self.transport.state() or {}
+        except GraphStop as exc:
+            # Транспорт сам распознал причину зависания вкладки (логин/checkpoint/молчит).
+            raise self._stop(exc) from exc
         kind = state.get("kind")
         if kind == "checkpoint":
             raise self._stop(Checkpoint("the profile is on a Facebook checkpoint"))
@@ -302,7 +315,10 @@ class GraphClient:
         self._pace()
         self.calls += 1
         self._last_call = self._clock()
-        reply = self.transport.request("GET", path, params or {})
+        try:
+            reply = self.transport.request("GET", path, params or {})
+        except GraphStop as exc:
+            raise self._stop(exc) from exc
         self._last_call = self._clock()
 
         err = reply.get("error")
@@ -385,6 +401,9 @@ class GraphClient:
         except ValueError as exc:
             # Политика Python: ничего не отправлено.
             raise self._stop(PageFailed(f"write refused before sending: {exc}")) from exc
+        except GraphStop as exc:
+            # Вкладка не отвечала ДО отправки (мир готовится до самого POST).
+            raise self._stop(exc) from exc
         self._last_call = self._clock()
 
         err = reply.get("error") if isinstance(reply, dict) else "bad_reply"

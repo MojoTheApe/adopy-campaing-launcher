@@ -27,16 +27,23 @@ from __future__ import annotations
 
 import os
 import socket
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
+
+
+#: Сколько ждём, пока закрывающийся профиль отпустит порт, и шаг опроса.
+CLOSING_WAIT_S = 6.0
+CLOSING_POLL_S = 2.0
 
 
 class ProfileError(RuntimeError):
     """Профиль не поднят и не найден работающим с портом отладки.
 
     `code` — устойчивое имя отказа для экрана (ACL-1760): "open_by_hand" —
-    окно открыто руками, порта нет, ничего не остановлено.
+    окно открыто руками, порта нет, ничего не остановлено; "profile_closing" —
+    порт ещё указан в командной строке, но уже не слушается (профиль закрывается).
     """
 
     def __init__(self, message: str = "", code: str = ""):
@@ -122,6 +129,25 @@ def find_profile_dir(profile_id: str) -> Path | None:
     return None
 
 
+def _long_path(value: str) -> str:
+    """Запасное раскрытие 8.3 (`GetLongPathNameW`), если realpath оставил `~`.
+
+    Только Windows; любая ошибка — путь как есть.
+    """
+    if os.name != "nt":
+        return value
+    try:
+        import ctypes
+
+        buf = ctypes.create_unicode_buffer(32768)
+        n = ctypes.windll.kernel32.GetLongPathNameW(value, buf, len(buf))  # type: ignore[attr-defined]
+        if 0 < n < len(buf):
+            return buf.value
+    except Exception:
+        pass
+    return value
+
+
 def _norm(value: str) -> str:
     # Короткие имена 8.3 Windows раскрываем (realpath), сравниваем без регистра.
     value = (value or "").strip('"')
@@ -129,6 +155,8 @@ def _norm(value: str) -> str:
         value = os.path.realpath(value)
     except (OSError, ValueError):
         value = os.path.abspath(value)
+    if "~" in value:
+        value = _long_path(value)
     return os.path.normcase(value).replace("\\", "/").rstrip("/").lower()
 
 
@@ -153,12 +181,15 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
                      profile_dir: Path | str | None = None,
                      accepting: Callable[[int], bool] = _accepting,
                      listens: Callable[[Any, int], bool] | None = None) -> tuple[str, int | None]:
-    """Mimic ЭТОГО профиля на машине: ("port", N) / ("no_port", None) / ("none", None).
+    """Mimic ЭТОГО профиля на машине: ("port", N) / ("closing", N) / ("no_port", None) / ("none", None).
 
     Совпадение только по своему профилю: `--user-data-dir` равен папке профиля
     (или её последний компонент — это `profile_id`). Порт — из
     `--remote-debugging-port` (или `DevToolsActivePort`), и его должен СЛУШАТЬ
-    этот процесс. Процесс есть, порта нет — открыт руками.
+    этот процесс. Дочерние процессы Chrome (`--type=…`) пропускаются: у них нет
+    порта, и «открыт руками» из них не выводится. Браузерный процесс без порта
+    вовсе — открыт руками ("no_port"); порт указан, но не слушается — профиль
+    закрывается ("closing"): это не «руками».
     """
     pid = (profile_id or "").strip().lower()
     if not pid:
@@ -182,6 +213,7 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
     listens = listens or (lambda proc, port: True)
 
     found_process = False
+    stale_port = 0
     for proc in process_iter():
         try:
             info = getattr(proc, "info", None) or {}
@@ -192,6 +224,8 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
             udd = _arg_value(args, "--user-data-dir")
             if not udd:
                 continue
+            if any(isinstance(a, str) and a.startswith("--type=") for a in args):
+                continue  # renderer/gpu/utility/crashpad: не браузерный процесс
             nudd = _norm(udd)
             if not ((want_dir and nudd == want_dir) or nudd.rsplit("/", 1)[-1] == pid):
                 continue
@@ -209,14 +243,20 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
                         continue
             if port > 0 and listens(proc, port) and accepting(port):
                 return "port", port
+            if port > 0:
+                stale_port = port
         except Exception:
             continue
+    if stale_port:
+        return "closing", stale_port
     return ("no_port", None) if found_process else ("none", None)
 
 
 def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
                  launcher_factory: Callable[[str], Any] | None = None,
-                 local_probe: Callable[[str], tuple[str, int | None]] | None = None) -> OpenedProfile:
+                 local_probe: Callable[[str], tuple[str, int | None]] | None = None,
+                 sleep: Callable[[float], None] = time.sleep,
+                 closing_wait_s: float = CLOSING_WAIT_S) -> OpenedProfile:
     """Профиль с портом отладки от MLX: уже работающий или поднятый нами."""
     profile_id = (profile_id or "").strip()
     folder_id = (folder_id or "").strip()
@@ -229,6 +269,18 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
         def local_probe(pid: str) -> tuple[str, int | None]:
             return local_debug_port(pid, profile_dir=find_profile_dir(pid))
     kind, local_port = local_probe(profile_id)
+    # Профиль закрывается: несколько секунд ждём, что порт пропадёт вместе с
+    # процессом (тогда идём в MLX) или оживёт; потом отказ, ничего не трогаем.
+    waited = 0.0
+    while kind == "closing" and waited < closing_wait_s:
+        sleep(CLOSING_POLL_S)
+        waited += CLOSING_POLL_S
+        kind, local_port = local_probe(profile_id)
+    if kind == "closing":
+        raise ProfileError(
+            "the profile is closing or starting; retry in a minute. Nothing was stopped.",
+            code="profile_closing",
+        )
     if kind == "port" and local_port:
         return OpenedProfile(profile_id, folder_id, instance, str(local_port), None, False, None)
     if kind == "no_port":

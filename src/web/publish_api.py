@@ -267,6 +267,11 @@ class ApiPublisher:
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
         left, why = _cooldown(account_label)
+        if left > 0 and why == "page_unresponsive":
+            raise ApiPublishError(
+                f"{account_label}: the Ads Manager tab stopped answering on the last run; waiting about "
+                f"{int(left // 60) + 1} min before opening it again. Nothing was created.",
+                code="page_unresponsive")
         if left > 0:
             raise ApiPublishError(
                 f"{account_label}: Meta stopped the last API call ({why}); waiting about "
@@ -285,10 +290,15 @@ class ApiPublisher:
         self.progress("profile attached")
         self._tab = _open_tab(self._opened.cdp_url)
         graph = _make_graph(self._tab, self.act, writes=not self.dry_run)
-        graph.install()
-        graph.navigate(self.act, timeout=60.0)
-        state = graph.wait_ready(timeout=READY_TIMEOUT_S)
         from src.fb_api.graph import Checkpoint, LoggedOut
+
+        try:
+            graph.install()
+            graph.navigate(self.act, timeout=60.0)
+            state = graph.wait_ready(timeout=READY_TIMEOUT_S)
+        except GraphStop as exc:
+            # Вкладка не ответила, браузер сказал почему (логин/checkpoint/молчит): стоп, без повторов.
+            self._halt(exc)
 
         if state.get("kind") == "checkpoint":
             self._halt(Checkpoint("the profile is on a Facebook checkpoint"))
@@ -358,7 +368,22 @@ class ApiPublisher:
                     duration_s=round(time.monotonic() - began, 1),
                     diag={"calls": self._client.calls, "stop": outcome.stop_kind})
             return res
-        outcome = creator.run(plan)
+        try:
+            outcome = creator.run(plan)
+        except Exception as exc:
+            # F2: строка пилота пишется и когда создатель упал исключением.
+            kind = exc.kind if isinstance(exc, GraphStop) else (
+                "cdp_timeout" if isinstance(exc, TimeoutError) else type(exc).__name__)
+            _record("api_create_campaign", False, campaign=name,
+                    duration_s=round(time.monotonic() - began, 1),
+                    diag={"calls": self._client.calls, "writes": self._client.writes, "stop": kind})
+            _tm.record({"event": "fb_api_create", "source": "api", "ok": False,
+                        "took_s": round(time.monotonic() - began, 1), "calls": self._client.calls,
+                        "writes": self._client.writes, "stop": kind, "raised": type(exc).__name__})
+            if isinstance(exc, GraphStop):
+                self.stop = exc
+                _start_cooldown(self.account_label, exc)
+            raise
         if outcome.stop_kind == "unknown" or self._client.unreconciled is not None:
             self.blocked = outcome.campaign_name
         if self._client.stopped is not None and not isinstance(self._client.stopped, CallBudget):
