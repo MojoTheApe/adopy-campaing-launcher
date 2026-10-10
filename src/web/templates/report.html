@@ -5288,13 +5288,39 @@ window.cbTree = (function () {
     }
   }
 
+  /* ACL-1728: нижняя панель (страна / аккаунт / «new country…») не должна
+     перерисовываться под руками. Опрос заданий дёргает paintFoot каждые
+     пару секунд; innerHTML заменял открытый <select> новым узлом, и список
+     закрывался сам, а недопечатанная страна пропадала. Теперь:
+       - пока в панели фокус на поле или списке, перерисовка откладывается
+         и выполняется, когда фокус ушёл;
+       - если разметка не изменилась, узлы не трогаем вовсе;
+       - при настоящей перерисовке выбранный аккаунт и набранный текст
+         переносятся в новые узлы. */
+  var footPending = false, footHtml = '';
+
+  function footBusy() {
+    var a = document.activeElement;
+    return !!(a && a !== foot && foot.contains(a) && /^(SELECT|INPUT|TEXTAREA)$/.test(a.tagName));
+  }
+
+  foot.addEventListener('focusout', function (e) {
+    if (e.relatedTarget && foot.contains(e.relatedTarget)) return;
+    setTimeout(function () { if (footPending && !footBusy()) paintFoot(); }, 0);
+  });
+
   function paintFoot() {
+    if (footBusy()) { footPending = true; refreshTicks(); return; }
+    footPending = false;
     var list = places();
-    foot.hidden = false;
     var chosen = foot.querySelector('.cbd-pick-country');
     var keep = (chosen && chosen.value) || currentCountry();
+    var acctOld = foot.querySelector('.cbd-pick-account');
+    var keepAccount = acctOld ? acctOld.value : '';
+    var typedOld = foot.querySelector('.cbd-new-country');
+    var keepTyped = typedOld ? typedOld.value : '';
     var t = ticks();
-    foot.innerHTML = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
+    var html = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
         ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
           + aclEscHtml(publishLabel(t)) + '</button>'
           + '<div class="cbd-queue" hidden></div>'
@@ -5316,7 +5342,21 @@ window.cbTree = (function () {
       + '<button type="button" class="cbd-add" data-act="add-country">+ Country</button>'
       + '<span class="cbd-new-msg"></span>'
       + '</div>';
-    paintAccounts();
+    foot.hidden = false;
+    // Та же разметка, что и в прошлый раз, - узлы остаются теми же.
+    if (!(foot.firstChild && html === footHtml)) {
+      foot.innerHTML = html;
+      footHtml = html;
+      paintAccounts();
+      var acctNew = foot.querySelector('.cbd-pick-account');
+      if (acctNew && keepAccount) {
+        for (var i = 0; i < acctNew.options.length; i += 1) {
+          if (acctNew.options[i].value === keepAccount) { acctNew.value = keepAccount; break; }
+        }
+      }
+      var typedNew = foot.querySelector('.cbd-new-country');
+      if (typedNew && keepTyped) typedNew.value = keepTyped;
+    }
     if (window.CB_QUEUE && window.CB_QUEUE.progress) showQueue(window.CB_QUEUE.progress);
     refreshTicks();
   }
@@ -5775,7 +5815,7 @@ window.cbTree = (function () {
   "derived": {"rows": 951, "attempts": 19, "until": "2026-09-28"},
   "stages": [["profile", 18], ["campaign", 57], ["adset", 178], ["ad", 175], ["final", 6]],
   "rules": [
-    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
+    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|api_read$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
     ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error)", "profile"],
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
     ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad(_stuck_on_adset)?$|simple_ad_section$)", "adset"],
