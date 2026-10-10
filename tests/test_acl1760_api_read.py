@@ -929,3 +929,22 @@ def test_graph_client_additions_refuse_unknown_levels_breakdowns_and_dates():
             c.insights_range(ACT, D, D, **kwargs)
     with pytest.raises(ValueError):
         c.insights_range(ACT, "yesterday", D)
+
+
+def test_checkpoint_or_logout_seen_during_the_token_wait_starts_the_cooldown(world):
+    """Найдено на странице до клиента (ревью S2): следующее чтение — отказ без вызовов."""
+    for state, code, word in (({"kind": "checkpoint", "has_token": False}, "", "checkpoint"),
+                              ({"kind": "login", "has_token": False}, "profile_logged_out", "logged out")):
+        api._COOLDOWN.clear()
+        world.page.state_value = state
+        first = api.read_via_api(ACCOUNT, D, D)
+        assert first.state == "failed"
+        assert api._cooldown_left(sp._profile_key(ACCOUNT)) > 0, word
+        tabs = world.cdp.sent.count(("Target.createTarget", {"url": "about:blank"}, ""))
+        opened = len(world.opened_profiles)
+        second = api.read_via_api(ACCOUNT, D, D)
+        assert second.state == "failed" and second.error_code == code, word
+        assert world.page.specs == [], "no Graph call at all"
+        assert len(world.opened_profiles) == opened, "and the profile is not opened again"
+        assert world.cdp.sent.count(("Target.createTarget", {"url": "about:blank"}, "")) == tabs
+        assert ("checkpoint" in second.error.lower()) == (word == "checkpoint")
