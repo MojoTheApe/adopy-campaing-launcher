@@ -228,6 +228,30 @@ _HELPER_JS = r"""
       if (v === null || typeof v !== 'object') return refused('json');
       checked[k] = v;
     }
+    // Ревью R5-M1: degrees_of_freedom_spec — только выключение функций из списка.
+    if ('degrees_of_freedom_spec' in checked) {
+      const d = checked.degrees_of_freedom_spec;
+      if (!d || typeof d !== 'object' || Array.isArray(d)) return refused('dof');
+      const dk = Object.keys(d);
+      if (dk.length !== 1 || dk[0] !== 'creative_features_spec') return refused('dof');
+      const spec = d.creative_features_spec;
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec) || !Object.keys(spec).length) return refused('dof');
+      for (const f of Object.keys(spec)) {
+        if (WRITE.dof_features.indexOf(f) < 0) return refused('dof');
+        const it = spec[f];
+        if (!it || typeof it !== 'object' || Array.isArray(it)) return refused('dof');
+        const ik = Object.keys(it);
+        if (ik.length !== 1 || ik[0] !== 'enroll_status' || it.enroll_status !== 'OPT_OUT') return refused('dof');
+      }
+    }
+    // Объявление — только ссылка на готовый креатив.
+    if (edge === 'ads' && 'creative' in checked) {
+      const c = checked.creative;
+      if (!c || typeof c !== 'object' || Array.isArray(c)) return refused('creative');
+      const ck = Object.keys(c);
+      if (ck.length !== 1 || ck[0] !== 'creative_id'
+          || (typeof c.creative_id !== 'string' && typeof c.creative_id !== 'number')) return refused('creative');
+    }
     if (!statusOk(checked)) return refused('status');
     const want = WRITE.files[edge];
     const files = spec.files || {};

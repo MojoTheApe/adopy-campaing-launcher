@@ -1203,8 +1203,8 @@ const h = G[NAME];
                                params: { name: 'C', objective: 'OUTCOME_LEADS' } });
   out.nested_active = await h.call({ method: 'POST', path: '/' + ACT + '/adsets',
                                      params: { name: 's', status: 'PAUSED', targeting: { status: 'ACTIVE' } } });
-  out.nested_forbidden = await h.call({ method: 'POST', path: '/' + ACT + '/ads',
-                                        params: { name: 'a', status: 'PAUSED', creative: { lead_gen_form_id: '1' } } });
+  out.nested_forbidden = await h.call({ method: 'POST', path: '/' + ACT + '/adsets',
+                                        params: { name: 'a', status: 'PAUSED', targeting: { lead_gen_form_id: '1' } } });
   out.json_active = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
                                    params: { name: 'x', object_story_spec: '{"link_data":{"status":"ACTIVE"}}' } });
   out.json_bad = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
@@ -1275,6 +1275,7 @@ def test_page_helper_write_mode_in_node():
     for k in ("free_camp", "free_obj", "free_str"):
         assert out[k].get("body") == {"id": "5"}, (k, out[k])
     assert out["missing"]["why"] == "status" and out["nested_active"]["why"] == "status"
+    assert out["nested_forbidden"]["why"] == "status"
     assert out["short"]["why"] == "file_size" and out["badsha"]["why"] == "file_hash"
     assert out["del"]["error"] == "read_only"
     assert out["nofile"]["error"] == "no_file"

@@ -77,3 +77,14 @@ def test_a_same_name_creative_without_our_tag_is_not_reused(tmp_path):
     assert out.error == "" and out.readback["ok"] is True
     assert out.ad_media[1]["creative_id"] != foreign
     assert len([o for o in meta.objects.values() if o["_kind"] == "creative"]) == 2
+
+
+def test_an_unknown_creative_write_re_reads_the_list_not_the_cache(tmp_path):
+    meta = FakeMeta()
+    meta.fail_next["adcreatives"] = "lost"               # создан, ответ потерян
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert out.error == "" and out.readback["ok"] is True
+    gets = [p for p, _ in meta.gets if p.endswith("/adcreatives")]
+    assert len(gets) == 2                                 # до записи и после неё — заново
+    assert len([o for o in meta.objects.values() if o["_kind"] == "creative"]) == 1
+    assert any("reconciled" in s for s in out.steps)

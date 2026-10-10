@@ -12457,15 +12457,6 @@ window.cbPublishAll = function (onProgress, picked) {
   else pfAsk(null);
 };
 
-/* ACL-1761: что создаёт Publish — черновики робота или кампании на паузе через API. */
-function cbApiMode() { return typeof window !== 'undefined' && window.ACL_FB_BACKEND === 'api'; }
-function cbPublishTarget() { return cbApiMode() ? 'PAUSED campaigns' : 'drafts'; }
-function cbPublishMode() {
-  return cbApiMode()
-    ? 'PAUSED — created through the Graph API; nothing is activated, a person turns it on in Ads Manager'
-    : 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook';
-}
-
 /* ── ACL-1761: «Check plan (no writes)» ─────────────────────────────────
  * Те же отмеченные (или все) кампании, что ушли бы в Publish, — на
  * /publish-plan с dry_run=1. Сервер делает предпроверку и план через Graph
@@ -13428,6 +13419,18 @@ function cbSayAlreadyBuilding(labels) {
   alert(labels.join(', ') + (labels.length > 1 ? ' are' : ' is') + ' already being built in this tab. '
     + 'Wait for that run to finish (or press Stop on it) before publishing '
     + (labels.length > 1 ? 'these accounts' : 'this account') + ' again.');
+}
+
+/* Помощники режима — здесь, рядом с cbPublish: тестовые срезы билдера берут
+ * этот кусок страницы целиком (ревью #765, R5-B1). Имена маркеров срезов
+ * в этом комментарии не писать — срез ищет их по тексту. */
+/* ACL-1761: что создаёт Publish — черновики робота или кампании на паузе через API. */
+function cbApiMode() { return typeof window !== 'undefined' && window.ACL_FB_BACKEND === 'api'; }
+function cbPublishTarget() { return cbApiMode() ? 'PAUSED campaigns' : 'drafts'; }
+function cbPublishMode() {
+  return cbApiMode()
+    ? 'PAUSED — created through the Graph API; nothing is activated, a person turns it on in Ads Manager'
+    : 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook';
 }
 
 window.cbPublish = function(form) {

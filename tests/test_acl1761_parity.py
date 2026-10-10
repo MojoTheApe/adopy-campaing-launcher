@@ -130,6 +130,59 @@ def test_policy_allows_only_opt_out_for_enhancements():
                                                       "degrees_of_freedom_spec": "not json"})
 
 
+#: Ревью R5-M1: всё, кроме «выключить функцию из списка», — отказ (в обоих слоях).
+BAD_DOF = {
+    "dof_type": {"degrees_of_freedom_type": "USER_ENROLLED_AUTOFLOW"},
+    "dof_type_and_spec": {"degrees_of_freedom_type": "USER_ENROLLED_AUTOFLOW",
+                          "creative_features_spec": {"text_optimizations": {"enroll_status": "OPT_OUT"}}},
+    "no_enroll": {"creative_features_spec": {"text_optimizations": {}}},
+    "unknown_feature": {"creative_features_spec": {"image_touchups": {"enroll_status": "OPT_OUT"}}},
+    "extra_item_key": {"creative_features_spec": {"text_optimizations": {"enroll_status": "OPT_OUT",
+                                                                         "action_metadata": {}}}},
+    "empty_spec": {"creative_features_spec": {}},
+    "spec_list": {"creative_features_spec": [{"text_optimizations": {"enroll_status": "OPT_OUT"}}]},
+    "dof_list": [{"creative_features_spec": {"text_optimizations": {"enroll_status": "OPT_OUT"}}}],
+}
+BAD_DOF_WHY = {k: "dof" for k in BAD_DOF}
+#: Объявление — только ссылка на готовый креатив: встроенный креатив провёз бы своё.
+BAD_AD_CREATIVE = {
+    "ad_inline_dof": {"creative_id": "7", "degrees_of_freedom_spec": {
+        "degrees_of_freedom_type": "USER_ENROLLED_AUTOFLOW"}},
+    "ad_inline_story": {"object_story_spec": {"page_id": "1"}},
+    "ad_inline_features": {"creative_id": "7", "degrees_of_freedom_spec": {
+        "creative_features_spec": {"image_touchups": {}}}},
+    "ad_creative_list": [{"creative_id": "7"}],
+}
+BAD_DOF_WHY.update({k: "creative" for k in BAD_AD_CREATIVE})
+
+
+@pytest.mark.parametrize("name", sorted(BAD_DOF))
+@pytest.mark.parametrize("as_string", [False, True])
+def test_policy_refuses_any_dof_other_than_opting_listed_features_out(name, as_string):
+    spec = BAD_DOF[name]
+    params = {"name": "x", "object_story_spec": {"page_id": "1"},
+              "degrees_of_freedom_spec": json.dumps(spec) if as_string else spec}
+    with pytest.raises(wp.WriteRefused):
+        wp.check(ACT, "POST", f"/{ACT}/adcreatives", params)
+
+
+@pytest.mark.parametrize("name", sorted(BAD_AD_CREATIVE))
+@pytest.mark.parametrize("as_string", [False, True])
+def test_policy_an_ad_only_references_a_creative_by_id(name, as_string):
+    creative = BAD_AD_CREATIVE[name]
+    with pytest.raises(wp.WriteRefused):
+        wp.check(ACT, "POST", f"/{ACT}/ads", {"name": "a", "status": "PAUSED",
+                                              "creative": json.dumps(creative) if as_string else creative})
+    assert wp.check(ACT, "POST", f"/{ACT}/ads", {"name": "a", "status": "PAUSED",
+                                                 "creative": {"creative_id": "7"}}) == "ads"
+
+
+def test_the_creator_opts_out_exactly_the_policy_features():
+    assert set(cr.CREATIVE_FEATURES_OPT_OUT) == set(wp.DOF_FEATURES)
+    wp.check(ACT, "POST", f"/{ACT}/adcreatives", {"name": "x", "object_story_spec": {"page_id": "1"},
+                                                  "degrees_of_freedom_spec": cr.creative_features()})
+
+
 _NODE = r"""
 const calls = [];
 const fakeFetch = async (url, init) => { calls.push(String(url)); return { status: 200,
@@ -150,6 +203,16 @@ const creative = (v) => ({ name: 'x', object_story_spec: { page_id: '1' },
   out.opt_in = await h.call({ method: 'POST', path: PATH, params: creative('OPT_IN') });
   out.as_string = await h.call({ method: 'POST', path: PATH,
     params: Object.assign(creative('OPT_OUT'), { degrees_of_freedom_spec: JSON.stringify(creative('OPT_IN').degrees_of_freedom_spec) }) });
+  for (const [k, spec] of Object.entries(BAD_DOF)) {
+    out[k] = await h.call({ method: 'POST', path: PATH, params: { name: 'x', object_story_spec: { page_id: '1' },
+                                                                   degrees_of_freedom_spec: spec } });
+  }
+  const ADS = PATH.replace('/adcreatives', '/ads');
+  for (const [k, creative] of Object.entries(BAD_AD_CREATIVE)) {
+    out[k] = await h.call({ method: 'POST', path: ADS, params: { name: 'a', status: 'PAUSED', creative: creative } });
+  }
+  out.ad_ref = await h.call({ method: 'POST', path: ADS,
+                              params: { name: 'a', status: 'PAUSED', creative: { creative_id: '7' } } });
   out.calls = calls.length;
   process.stdout.write(JSON.stringify(out));
 })();
@@ -163,6 +226,8 @@ def test_page_helper_allows_only_opt_out_for_enhancements():
     name = "__acl_graph_parity"
     script = (_NODE.replace("TOKENV", json.dumps("EAAB" + "Zx9" * 20)).replace("NAME", json.dumps(name))
               .replace("PATH", json.dumps(f"/{ACT}/adcreatives"))
+              .replace("BAD_DOF", "(" + json.dumps(BAD_DOF) + ")")
+              .replace("BAD_AD_CREATIVE", "(" + json.dumps(BAD_AD_CREATIVE) + ")")
               .replace("HELPER", json.dumps(tc.helper_source(name, wp.policy_for_page(ACT)))))
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
         fh.write(script)
@@ -174,6 +239,9 @@ def test_page_helper_allows_only_opt_out_for_enhancements():
     assert done.returncode == 0, done.stderr
     out = json.loads(done.stdout)
     assert out["opt_out"].get("body") == {"id": "5"}
-    assert out["opt_in"] == {"error": "write_refused", "why": "status"}
-    assert out["as_string"] == {"error": "write_refused", "why": "status"}
-    assert out["calls"] == 1
+    assert out["opt_in"] == {"error": "write_refused", "why": "dof"}
+    assert out["as_string"] == {"error": "write_refused", "why": "dof"}
+    for k, why in BAD_DOF_WHY.items():
+        assert out[k] == {"error": "write_refused", "why": why}, k
+    assert out["ad_ref"].get("body") == {"id": "5"}
+    assert out["calls"] == 2

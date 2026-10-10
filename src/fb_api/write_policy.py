@@ -44,6 +44,12 @@ JSON_KEYS = frozenset({"special_ad_categories", "adlabels", "promoted_object", "
 #: Advantage+ creative. Разрешено только выключить (OPT_OUT), никогда — включить.
 OPT_OUT_KEYS = frozenset({"enroll_status"})
 OPT_OUT = "OPT_OUT"
+#: Функции Advantage+ creative, которые можно ВЫКЛЮЧИТЬ (ревью R5-M1). Ключ
+#: `degrees_of_freedom_spec` открыт ровно для одного: ровно
+#: {"creative_features_spec": {<функция>: {"enroll_status": "OPT_OUT"}}}.
+#: `text_optimizations` — в справочнике Graph «Ad Creative Features Spec».
+#: Отдельного документированного ключа «text generation» там нет — не гадаем.
+DOF_FEATURES = frozenset({"text_optimizations"})
 
 _PATH_RE = re.compile(r"^/(act_\d{5,})/([a-z]+)$")
 
@@ -62,6 +68,7 @@ def policy_for_page(act: str) -> dict:
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
+        "dof_features": sorted(DOF_FEATURES),
     }
 
 
@@ -97,6 +104,20 @@ def _walk(value: Any, where: str) -> None:
             _walk(item, where)
 
 
+def _check_dof(value: Any) -> None:
+    """Ровно {"creative_features_spec": {<функция из списка>: {"enroll_status": "OPT_OUT"}}}."""
+    if not (isinstance(value, dict) and set(value) == {"creative_features_spec"}):
+        raise WriteRefused("write refused: degrees_of_freedom_spec may only opt features out")
+    spec = value["creative_features_spec"]
+    if not (isinstance(spec, dict) and spec):
+        raise WriteRefused("write refused: creative_features_spec must list the features to opt out")
+    for feature, item in spec.items():
+        if feature not in DOF_FEATURES:
+            raise WriteRefused(f"write refused: creative feature {feature!r} is not on the opt-out list")
+        if not (isinstance(item, dict) and item == {"enroll_status": OPT_OUT}):
+            raise WriteRefused(f"write refused: creative feature {feature!r} must be exactly OPT_OUT")
+
+
 def check(act: str, method: str, path: str, params: dict | None,
           files: dict | None = None) -> str:
     """Проверить запись. Возвращает ребро; иначе `WriteRefused`."""
@@ -121,6 +142,15 @@ def check(act: str, method: str, path: str, params: dict | None,
         checked[key] = _parsed(params[key], f"{edge}.{key}")
         if not isinstance(checked[key], (dict, list)):
             raise WriteRefused(f"write refused: {key} must be a JSON object or list")
+    if "degrees_of_freedom_spec" in checked:
+        _check_dof(checked["degrees_of_freedom_spec"])
+    if edge == "ads" and "creative" in checked:
+        # Объявление ссылается на готовый креатив — и только (ревью R5-M1:
+        # встроенный креатив провёз бы свой degrees_of_freedom_spec).
+        creative = checked["creative"]
+        if not (isinstance(creative, dict) and set(creative) == {"creative_id"}
+                and isinstance(creative["creative_id"], (str, int))):
+            raise WriteRefused("write refused: an ad may only reference a creative by creative_id")
     _walk(checked, edge)
     files = dict(files or {})
     want = FILE_FIELDS.get(edge)

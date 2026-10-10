@@ -65,6 +65,10 @@ POSITION_LABELS = {
 #: вариантов текста — `text_optimizations`; первая живая сверка это подтвердит
 #: (неизвестный ключ — известный отказ #100, ничего не создаётся).
 CREATIVE_FEATURES_OPT_OUT = ("text_optimizations",)
+#: «Text generation» робота отдельного документированного ключа Graph не имеет
+#: (справочник «Ad Creative Features Spec»: text_optimizations, text_translation,
+#: description_automation, … — без text_generation). Не гадаем; сверка в Ads
+#: Manager после живого запуска покажет, выключено ли и оно.
 OPT_OUT = "OPT_OUT"
 
 #: Валюты без копеек у Meta (смещение 1): бюджет в целых единицах.

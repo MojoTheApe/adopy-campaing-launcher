@@ -474,7 +474,7 @@ def test_api_mode_says_paused_campaigns_not_drafts():
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
-    js = _template_js("function cbApiMode()", "/* ── ACL-1761: «Check plan (no writes)»")
+    js = _template_js("function cbApiMode()", "window.cbPublish = function(form) {")
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
         fh.write(_MODE_NODE.replace("JS\n", js + "\n", 1))
         path = fh.name
@@ -501,3 +501,12 @@ def test_publish_labels_follow_the_backend():
     assert text.count("'Create the selected campaigns as PAUSED campaigns?'") == 2
     # Флаг ставится в голове страницы — раньше любого кода билдера.
     assert text.index("window.ACL_FB_BACKEND = {{") < text.index("function publishLabel(t) {")
+
+
+def test_mode_helpers_live_inside_the_slice_the_builder_harnesses_load():
+    """Ревью R5-B1: срезы страницы в тестах билдера — от cbTrackingWarning до _doCbPublish."""
+    text = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    sliced = text[text.index("window.cbTrackingWarning"):text.index("function _doCbPublish")]
+    for name in ("function cbApiMode()", "function cbPublishTarget()", "function cbPublishMode()"):
+        assert name in sliced, name
+        assert text.count(name) == 1, name
