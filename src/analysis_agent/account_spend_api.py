@@ -174,8 +174,25 @@ def _num(value: Any) -> float:
         return 0.0
 
 
+#: Знак, которым Ads Manager подписывает сумму (RPA записывал его, а не код:
+#: `_written_currency`, ACL-1760 live 10.10). Только четыре знака, которые
+#: знают `money_format.fmt_currency` и `amapMoney`; остальное остаётся кодом
+#: (`BRL 21.61`), а `R$`/`MX$` экран не знает бы и показал «currency unknown».
+_SIGNS = {"USD": "$", "EUR": "€", "GBP": "£", "ILS": "₪"}
+
+
+def display_currency(code: Any) -> str:
+    """ISO-код из Graph → то, что хранило RPA-чтение: знак или код как есть."""
+    text = str(code or "").strip().upper()
+    return _SIGNS.get(text, text)
+
+
 def _money(amount: float, currency: str) -> str:
-    return f"{amount:,.2f} {currency}".strip()
+    """«$100.00» / «BRL 100.00» — как пишет Ads Manager; число разбирает `amapMoneyIn`."""
+    shown = display_currency(currency)
+    if shown in _SIGNS.values():
+        return f"{shown}{amount:,.2f}"
+    return f"{shown} {amount:,.2f}".strip()
 
 
 def _leads(row: dict) -> int:
@@ -671,7 +688,7 @@ def read_via_api(account: str, date_from: str, date_to: str = "") -> "_as.SpendR
                 out.status, out.status_text = map_status(acc.get("account_status"), acc.get("disable_reason"))
                 spend, currency = _period_total(sess.client, sess.act, date_from, date_to,
                                                 str(acc.get("currency") or ""))
-                out.spend, out.currency = spend, currency
+                out.spend, out.currency = spend, display_currency(currency)
                 out.how = f"graph api: insights {date_from}..{date_to}"
                 out.state = "ok"
                 # Дерево — после принятого спенда; его отказ спенд не отменяет.
