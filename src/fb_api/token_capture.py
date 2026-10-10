@@ -197,7 +197,8 @@ _HELPER_JS = r"""
       for (const k of Object.keys(value)) {
         const low = String(k).toLowerCase();
         if (WRITE.forbidden.indexOf(low) >= 0) return false;
-        if (low.indexOf('status') >= 0 && value[k] !== 'PAUSED') return false;
+        if (WRITE.opt_out_keys.indexOf(low) >= 0) { if (value[k] !== 'OPT_OUT') return false; }
+        else if (low.indexOf('status') >= 0 && value[k] !== 'PAUSED') return false;
         if (!statusOk(value[k])) return false;
       }
     }

@@ -22,7 +22,7 @@ EDGE_KEYS: dict[str, frozenset[str]] = {
     "adsets": frozenset({"name", "campaign_id", "status", "optimization_goal", "billing_event",
                          "destination_type", "promoted_object", "targeting", "start_time",
                          "adlabels"}),
-    "adcreatives": frozenset({"name", "object_story_spec", "adlabels"}),
+    "adcreatives": frozenset({"name", "object_story_spec", "degrees_of_freedom_spec", "adlabels"}),
     "ads": frozenset({"name", "adset_id", "creative", "status", "adlabels"}),
     "adimages": frozenset(),
     "advideos": frozenset({"name", "title"}),
@@ -39,7 +39,11 @@ PAUSED = "PAUSED"
 #: Ключи, которые Graph читает как JSON. Строку в них Graph разберёт сам —
 #: поэтому и мы разбираем её до проверок статуса (ревью, minor 1).
 JSON_KEYS = frozenset({"special_ad_categories", "adlabels", "promoted_object", "targeting",
-                       "object_story_spec", "creative"})
+                       "object_story_spec", "creative", "degrees_of_freedom_spec"})
+#: Ключи-«статусы», которые не про показ объявления: участие в улучшениях
+#: Advantage+ creative. Разрешено только выключить (OPT_OUT), никогда — включить.
+OPT_OUT_KEYS = frozenset({"enroll_status"})
+OPT_OUT = "OPT_OUT"
 
 _PATH_RE = re.compile(r"^/(act_\d{5,})/([a-z]+)$")
 
@@ -57,6 +61,7 @@ def policy_for_page(act: str) -> dict:
         "files": dict(FILE_FIELDS),
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": sorted(JSON_KEYS),
+        "opt_out_keys": sorted(OPT_OUT_KEYS),
     }
 
 
@@ -81,7 +86,10 @@ def _walk(value: Any, where: str) -> None:
             low = str(key).lower()
             if low in FORBIDDEN_ANYWHERE:
                 raise WriteRefused(f"write refused: key {key!r} is not allowed ({where})")
-            if "status" in low and item != PAUSED:
+            if low in OPT_OUT_KEYS:
+                if item != OPT_OUT:
+                    raise WriteRefused(f"write refused: {key} may only be OPT_OUT ({where})")
+            elif "status" in low and item != PAUSED:
                 raise WriteRefused(f"write refused: {key} must be PAUSED ({where})")
             _walk(item, where)
     elif isinstance(value, (list, tuple)):

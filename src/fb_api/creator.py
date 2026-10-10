@@ -40,6 +40,33 @@ BID_STRATEGY = "LOWEST_COST_WITHOUT_CAP"
 CUSTOM_EVENT = "LEAD"
 CTA_TYPE = "LEARN_MORE"
 
+#: Площадки — как у робота (ACL-1761, паритет с RPA). Источник правды —
+#: `src/fb_ads_rpa/meta_dom.py`: `_PLACEMENT_CATEGORIES`, `_SUBITEMS_ON`,
+#: `_SUBITEMS_OFF` (Feeds, Stories/Status/Reels, In-stream ads for reels — да;
+#: Search results, Apps and sites — нет). Здесь — зеркало в значениях Graph API
+#: (импортировать meta_dom нельзя: это код RPA и Playwright).
+#: Включено: Facebook Feed, Facebook Stories, Facebook Reels, Facebook in-stream
+#: reels; Instagram feed, Instagram Stories, Instagram Reels.
+#: Выключено (просто не перечислено): профили, Marketplace, правая колонка,
+#: Business Explore, уведомления, поиск, «Ads on Facebook Reels», Explore,
+#: Audience Network, Messenger, Threads, WhatsApp.
+PUBLISHER_PLATFORMS = ("facebook", "instagram")
+FACEBOOK_POSITIONS = ("feed", "story", "facebook_reels", "instream_video")
+INSTAGRAM_POSITIONS = ("stream", "story", "reels")
+#: Подписи площадок для «Check plan».
+POSITION_LABELS = {
+    ("facebook", "feed"): "Facebook Feed", ("facebook", "story"): "Facebook Stories",
+    ("facebook", "facebook_reels"): "Facebook Reels", ("facebook", "instream_video"): "Facebook in-stream reels",
+    ("instagram", "stream"): "Instagram feed", ("instagram", "story"): "Instagram Stories",
+    ("instagram", "reels"): "Instagram Reels",
+}
+#: Advantage+ creative — выключено, как у робота (`disable_text_variations` /
+#: `disable_text_generation`, решение владельца 21.09). Имя функции Graph для
+#: вариантов текста — `text_optimizations`; первая живая сверка это подтвердит
+#: (неизвестный ключ — известный отказ #100, ничего не создаётся).
+CREATIVE_FEATURES_OPT_OUT = ("text_optimizations",)
+OPT_OUT = "OPT_OUT"
+
 #: Валюты без копеек у Meta (смещение 1): бюджет в целых единицах.
 ZERO_DECIMAL = frozenset({"CLP", "COP", "CRC", "HUF", "ISK", "IDR", "JPY", "KRW", "PYG", "TWD", "VND"})
 
@@ -374,11 +401,33 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
         t["locales"] = [loc]
     if ad_set.interest_groups:
         t["flexible_spec"] = resolver.interests(ad_set.interest_groups)
+    # Площадки — вручную, как у робота (не Advantage+ placements).
+    t["publisher_platforms"] = list(PUBLISHER_PLATFORMS)
+    t["facebook_positions"] = list(FACEBOOK_POSITIONS)
+    t["instagram_positions"] = list(INSTAGRAM_POSITIONS)
     os_val = ad_set.os.casefold()
     if os_val in ("ios", "android"):
+        # Как в билдере (решение по Android — за владельцем, пока как было).
         t["user_os"] = ["iOS" if os_val == "ios" else "Android"]
         t["device_platforms"] = ["mobile"]
+    else:
+        t["device_platforms"] = ["mobile", "desktop"]
     return t
+
+
+def placements_text(t: dict) -> str:
+    """«manual: Facebook Feed, …» — что увидит человек в «Check plan»."""
+    names = [POSITION_LABELS.get(("facebook", p), "Facebook " + p) for p in t.get("facebook_positions") or []]
+    names += [POSITION_LABELS.get(("instagram", p), "Instagram " + p) for p in t.get("instagram_positions") or []]
+    devices = t.get("device_platforms") or []
+    tail = ", ".join(t["user_os"]) + " " if t.get("user_os") else ""
+    return ("manual: " + ", ".join(names) + " · devices " + tail + "/".join(devices)) if names \
+        else "automatic (Advantage+ placements)"
+
+
+def creative_features() -> dict:
+    """`degrees_of_freedom_spec`: улучшения Advantage+ creative — выключены."""
+    return {"creative_features_spec": {f: {"enroll_status": OPT_OUT} for f in CREATIVE_FEATURES_OPT_OUT}}
 
 
 # ───────────────────────── создание ─────────────────────────
@@ -738,6 +787,7 @@ class CampaignCreator:
                          else {"image_hash": "0"})
                 ok("adcreatives", {"name": f"{ad.name} #{ad.index} [{plan.label}]",
                                    "object_story_spec": self.story_spec(plan, ad, media),
+                                   "degrees_of_freedom_spec": creative_features(),
                                    "adlabels": [{"name": plan.label}]}, f"ad {ad.index} creative")
                 ok("ads", {"name": ad.name, "adset_id": "0", "creative": {"creative_id": "0"},
                            "status": PAUSED, "adlabels": [{"name": plan.label}]}, f"ad {ad.index}")
@@ -796,8 +846,8 @@ class CampaignCreator:
                 "age": f"{ad_set.age_min}-{ad_set.age_max}",
                 "interests": interests,
                 "os": ad_set.os or "All",
-                "placements": ("mobile only, " + ", ".join(t["user_os"])) if t.get("user_os")
-                else "automatic (Advantage+ placements)",
+                "placements": placements_text(t),
+                "creative_enhancements": "off: " + ", ".join(CREATIVE_FEATURES_OPT_OUT),
                 "optimization": f"{OPTIMIZATION_GOAL} · {CUSTOM_EVENT} on the website pixel",
                 "ads": [{
                     "index": ad.index, "name": ad.name, "status": PAUSED, "format": ad.kind,
@@ -877,6 +927,7 @@ class CampaignCreator:
                     creative_id = self._write(
                         out, f"ad {ad.index}: creative", f"/{plan.act}/adcreatives",
                         {"name": creative_name, "object_story_spec": self.story_spec(plan, ad, media),
+                         "degrees_of_freedom_spec": creative_features(),
                          "adlabels": [{"name": plan.label}]},
                         lambda: self._find_creative(plan, creative_name, fresh=True))
                     out.created.setdefault("creatives", []).append(creative_id)
@@ -954,12 +1005,18 @@ class CampaignCreator:
             check(obj, "detailed_targeting", _flex_ids(targeting.get("flexible_spec")),
                   _flex_ids(t.get("flexible_spec")))
             check(obj, "os", targeting.get("user_os") or [], t.get("user_os") or [])
-            check(obj, "placements", targeting.get("device_platforms") or "automatic",
-                  t.get("device_platforms") or "automatic")
+            # Площадки вручную, как у робота (паритет RPA): платформы, места, устройства.
+            check(obj, "publisher_platforms", targeting.get("publisher_platforms") or [],
+                  t.get("publisher_platforms") or [])
+            check(obj, "facebook_positions", targeting.get("facebook_positions") or [],
+                  t.get("facebook_positions") or [])
+            check(obj, "instagram_positions", targeting.get("instagram_positions") or [],
+                  t.get("instagram_positions") or [])
+            check(obj, "devices", targeting.get("device_platforms") or [], t.get("device_platforms") or [])
 
             ads = self.client.get_all(f"/{adset_id}/ads", {
                 "fields": "id,name,status,adset_id,adlabels{name},"
-                          "creative{id,adlabels{name},object_story_spec}",
+                          "creative{id,adlabels{name},object_story_spec,degrees_of_freedom_spec}",
                 "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
             by_name: dict[str, list[dict]] = {}
             for a in ads:
@@ -981,6 +1038,10 @@ class CampaignCreator:
                 if rec.get("creative_id"):
                     check(aobj, "creative_id", rec["creative_id"], str(creative.get("id") or ""))
                 tag(aobj + " creative", creative)
+                feats = ((creative.get("degrees_of_freedom_spec") or {}).get("creative_features_spec") or {})
+                for feature in CREATIVE_FEATURES_OPT_OUT:
+                    check(aobj, f"enhancement {feature}", OPT_OUT,
+                          (feats.get(feature) or {}).get("enroll_status"))
                 spec = creative.get("object_story_spec") or {}
                 check(aobj, "page", plan.page_id, str(spec.get("page_id") or ""))
                 data = files.get(ad.path, b"")

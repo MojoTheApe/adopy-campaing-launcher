@@ -107,7 +107,9 @@ def test_check_plan_uses_the_read_session_and_writes_nothing(tmp_path, monkeypat
     (aset,) = summary["ad_sets"]
     assert aset["countries"] == ["MX"] and aset["age"] == "25-55" and aset["language"] == "Spanish"
     assert aset["interests"] == [["Day trading", "Swing trading"]]
-    assert aset["placements"].startswith("automatic")
+    assert aset["placements"].startswith("manual: Facebook Feed, Facebook Stories, Facebook Reels")
+    assert "devices mobile/desktop" in aset["placements"]
+    assert aset["creative_enhancements"] == "off: text_optimizations"
     assert [(a["format"], a["cta"], a["link"]) for a in aset["ads"]] == [
         ("image", "LEARN_MORE", "https://example.invalid/l"), ("video", "LEARN_MORE", "https://example.invalid/l")]
     assert aset["ads"][0]["file"] == "1000_img.png" and aset["ads"][0]["headline"] == "Head 0"

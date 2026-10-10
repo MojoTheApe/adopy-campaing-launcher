@@ -506,7 +506,8 @@ class FakeMeta:
                 for o in self._of("ad", "adset_id", oid):
                     row = self._out(o)
                     cre = self._out(self.objects[o["creative"]["creative_id"]])
-                    row["creative"] = {k: cre[k] for k in ("id", "object_story_spec", "adlabels") if k in cre}
+                    row["creative"] = {k: cre[k] for k in ("id", "object_story_spec", "adlabels",
+                                                          "degrees_of_freedom_spec") if k in cre}
                     row = json.loads(json.dumps(row))
                     for key, value in self.mutate_ads.items():
                         target = row
