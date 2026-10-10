@@ -408,3 +408,69 @@ class ApiPublisher:
             return ""
         _record("profile_closed_after_job", True)
         return "closed"
+
+
+# ───────────────────────── «Check plan (no writes)» в билдере ─────────────────────────
+#
+# Кнопка рядом с «Publish selected» (только при ACL_FB_BACKEND=api): те же
+# черновики, предпроверка и план — НИ ОДНОЙ записи. Идёт не через задание
+# публикации, а путём чтения ACL-1760 (`account_spend_api._session`): тот же
+# замок профиля для чтений, место по памяти только если профиль закрыт,
+# закрывается только поднятое этим чтением, вкладка и клиент — без права
+# записи (помощник с WRITE=null, `GraphClient(allow_writes=False)`).
+
+#: Потолок вызовов на предпроверку кабинета внутри «Check plan».
+PLAN_PREFLIGHT_MAX_CALLS = 12
+
+
+def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[str, Any]]:
+    from src.analysis_agent import account_spend_api as _api
+
+    results: list[dict[str, Any]] = []
+    with _api._session(account_label) as sess:
+        client = sess.client
+        if client.allow_writes:
+            raise AssertionError("the read session must not be able to write")
+        client.reset_budget(PLAN_PREFLIGHT_MAX_CALLS)
+        pub = ApiPublisher(dry_run=True)
+        pub.act, pub.account_label, pub._client = sess.act, account_label, client
+        try:
+            pub._facts = preflight_account(client, sess.act)
+        except PlanError as exc:
+            raise ApiPublishError(f"{account_label}: {exc}") from exc
+        pub._resolver = TargetingResolver(client)
+        for draft in drafts:
+            if draft.errors:
+                out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
+                out.error, out.stop_kind = "; ".join(draft.errors), "plan"
+                results.append(dry_run_result(out))
+                continue
+            results.append(pub.publish_draft(draft))
+        if client.writes:
+            raise AssertionError("Check plan must not write")
+    return results
+
+
+def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
+    """Черновики билдера → план каждой кампании. Ничего не создаёт."""
+    from src.analysis_agent import account_spend as _as
+    from src.analysis_agent import account_spend_api as _api
+
+    started = time.monotonic()
+    try:
+        drafts = build_drafts(slots, account_label=account_label, country=country)
+    except Exception as exc:  # noqa: BLE001
+        return {"account": account_label, "results": [], "dry_run": True,
+                "error": f"Failed to build campaign drafts: {_tm.scrub(str(exc))}"}
+    if not drafts:
+        return {"account": account_label, "results": [], "dry_run": True, "error": "No campaigns to check."}
+    run = _as.serialized_browser(key=_as._profile_key, reading=True)(_plan_in_read_session)
+    try:
+        results = run(account_label, drafts)
+        error = ""
+    except Exception as exc:  # noqa: BLE001 — отказ профиля/страницы: текстом
+        results = []
+        error = str(exc) if isinstance(exc, ApiPublishError) else _api._failure(account_label, exc)[0]
+    _record("api_plan_check", not error, diag={"campaigns": len(drafts), "results": len(results)},
+            duration_s=round(time.monotonic() - started, 1))
+    return {"account": account_label, "results": results, "dry_run": True, "error": error}

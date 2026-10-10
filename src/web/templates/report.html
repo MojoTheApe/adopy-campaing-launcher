@@ -5323,6 +5323,12 @@ window.cbTree = (function () {
     var html = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
         ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
           + aclEscHtml(publishLabel(t)) + '</button>'
+          // ACL-1761: план без записей — только при ACL_FB_BACKEND=api.
+          + (window.ACL_FB_BACKEND === 'api' && t.total
+            ? '<button type="button" class="cbd-add cbd-plan" data-act="check-plan"'
+              + ' title="Preflight and plan through the Graph API; nothing is created">'
+              + 'Check plan (no writes)</button><div class="cbd-plan-out" hidden></div>'
+            : '')
           + '<div class="cbd-queue" hidden></div>'
         : '')
       + '<div class="cbd-pick">'
@@ -5640,6 +5646,9 @@ window.cbTree = (function () {
       window.amapSend({ action: 'add', kind: 'country', value: name }, msg);
     } else if (act === 'publish-all') {
       window.cbPublishAll(showQueue, selectedForPublish());
+    } else if (act === 'check-plan') {
+      window.cbCheckPlan(selectedForPublish(), foot.querySelector('.cbd-plan-out'),
+                         foot.querySelector('.cbd-plan'));
     } else if (act === 'tick-all') {
       var t = ticks();
       // Всё отмечено — тот же переключатель снимает; иначе отмечает всё, что можно.
@@ -10501,6 +10510,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // (below) lives in a separate top-level scope, outside this IIFE.
   window.ACCOUNT_PREFLIGHT = {};
   try { window.ACCOUNT_PREFLIGHT = {{ account_preflight_json | tojson }}; } catch(e) {}
+  // ACL-1761: создатель кампаний через Graph API — кнопка «Check plan (no writes)».
+  try { window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}; } catch(e) {}
 
   // Keep in sync with the server-rendered <select> options in report.html's
   // cb-ad-row markup — preview-only, not part of the real publish payload.
@@ -12423,6 +12434,112 @@ window.cbPublishAll = function (onProgress, picked) {
   };
   if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch(forms.map(cbFormAccount)).then(pfAsk);
   else pfAsk(null);
+};
+
+/* ── ACL-1761: «Check plan (no writes)» ─────────────────────────────────
+ * Те же отмеченные (или все) кампании, что ушли бы в Publish, — на
+ * /publish-plan с dry_run=1. Сервер делает предпроверку и план через Graph
+ * API путём чтения: ни одной записи, задания публикации нет. Здесь —
+ * только отправка и отрисовка плана. */
+function cbPlanFormData(form, only) {
+  var fd;
+  if (only) {
+    var names = only.map(cbSlotTitle);
+    var total = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '0'), 10) || 0;
+    var skip = {};
+    for (var i = 0; i < total; i += 1) {
+      var f = form.querySelector('[name="camp_' + i + '_name"]');
+      if (names.indexOf(String(f ? f.value || '' : '').trim()) === -1) skip[i] = true;
+    }
+    fd = cbFormDataSkipping(form, skip).body;
+  } else {
+    fd = new FormData(form);
+  }
+  fd.set('dry_run', '1');
+  fd.set('activate', '0');
+  return fd;
+}
+
+function cbPlanMoney(s) {
+  var n = Number(s && s.daily_budget);
+  return (isFinite(n) ? n.toFixed(2) : '?') + ' ' + ((s && s.currency) || '') + ' / day';
+}
+
+/* Ответ /publish-plan → HTML (чистая функция: её проверяют тесты). */
+function cbPlanHtml(data) {
+  var h = '<div class="cbd-plan-acc"><div class="cbd-plan-head">Plan for <strong>'
+    + aclEscHtml((data && data.account) || '?') + '</strong> — nothing was created</div>';
+  if (data && data.error) {
+    h += '<div class="cbd-plan-err" style="color:var(--bad)">' + aclEscHtml(data.error) + '</div>';
+  }
+  ((data && data.results) || []).forEach(function (r) {
+    var s = (r.plan && r.plan.summary) || null;
+    h += '<div class="cbd-plan-camp" style="margin:0.4rem 0;padding-left:0.4rem;border-left:2px solid '
+      + (r.error ? 'var(--bad)' : 'var(--good)') + '">';
+    h += '<div><strong>' + aclEscHtml(r.campaign_name || '?') + '</strong>'
+      + (s ? ' · PAUSED · ' + aclEscHtml(cbPlanMoney(s))
+           + (s.existing ? ' · <em>already exists; a publish would reuse it</em>' : '') : '')
+      + '</div>';
+    if (r.error) h += '<div class="cbd-plan-err" style="color:var(--bad)">✕ ' + aclEscHtml(r.error) + '</div>';
+    (r.warnings || []).forEach(function (w) {
+      if (w === 'Dry run: nothing was created') return;
+      h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
+    });
+    if (s) {
+      h += '<div class="cbd-plan-meta" style="font-size:0.72rem;color:var(--muted)">page '
+        + aclEscHtml(s.page_id || '—') + ' · pixel ' + aclEscHtml(s.pixel_id || '—')
+        + ' · ' + aclEscHtml(s.objective || '') + '</div>';
+      (s.ad_sets || []).forEach(function (a) {
+        var interests = (a.interests || []).map(function (g) { return g.join(', '); }).join(' AND ');
+        h += '<div class="cbd-plan-set" style="font-size:0.75rem;margin-top:0.2rem">Ad set <strong>'
+          + aclEscHtml(a.name) + '</strong> · ' + aclEscHtml((a.countries || []).join(', '))
+          + ' · age ' + aclEscHtml(a.age) + ' · language ' + aclEscHtml(a.language || 'any')
+          + ' · interests ' + aclEscHtml(interests || 'none') + ' · placements '
+          + aclEscHtml(a.placements || '') + '</div><ol class="cbd-plan-ads" style="font-size:0.72rem;margin:0.1rem 0 0 1rem">';
+        (a.ads || []).forEach(function (ad) {
+          h += '<li><strong>' + aclEscHtml(ad.name) + '</strong> · ' + aclEscHtml(ad.format) + ' '
+            + aclEscHtml(ad.file) + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
+            + aclEscHtml(ad.primary_text) + (ad.description ? ' · description: '
+            + aclEscHtml(ad.description) : '') + '<br>link ' + aclEscHtml(ad.link)
+            + ' · CTA ' + aclEscHtml(ad.cta) + '</li>';
+        });
+        h += '</ol>';
+      });
+    }
+    h += '</div>';
+  });
+  return h + '</div>';
+}
+
+window.cbCheckPlan = function (picked, out, btn) {
+  if (!out) return;
+  var only = picked && picked.length ? picked : null;
+  var forms = [];
+  document.querySelectorAll('form.open-account-form').forEach(function (form) {
+    if (!form.querySelectorAll('.cb-slot').length) return;
+    var mine = only ? cbPickedIn(form, only) : null;
+    if (mine && !mine.length) return;
+    forms.push({ form: form, only: mine });
+  });
+  out.hidden = false;
+  if (!forms.length) { out.innerHTML = '<div class="cbd-plan-err">Nothing is being assembled yet.</div>'; return; }
+  out.innerHTML = '<div class="cbd-plan-head">Checking the plan through the Graph API; nothing is written…</div>';
+  if (btn) btn.disabled = true;
+  var parts = new Array(forms.length);
+  var left = forms.length;
+  forms.forEach(function (x, i) {
+    fetch('/publish-plan', { method: 'POST', body: cbPlanFormData(x.form, x.only) })
+      .then(function (r) { return r.json(); })
+      .catch(function () { return { account: cbFormTitle(x.form), error: 'The server did not answer' }; })
+      .then(function (data) {
+        if (!data.account) data.account = cbFormTitle(x.form);
+        parts[i] = cbPlanHtml(data);
+        left -= 1;
+        out.innerHTML = parts.filter(Boolean).join('')
+          + (left ? '<div class="cbd-plan-head">Still checking ' + left + ' account(s)…</div>' : '');
+        if (!left && btn) btn.disabled = false;
+      });
+  });
 };
 
 /* Имя карточки для подтверждения. */

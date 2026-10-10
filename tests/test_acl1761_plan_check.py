@@ -1,0 +1,252 @@
+"""ACL-1761: «Check plan (no writes)» в билдере — план через Graph API, ни одной записи.
+
+Сервер: /publish-plan только с dry_run=1 и только при ACL_FB_BACKEND=api;
+план идёт путём чтения ACL-1760 (клиент без права записи), у поддельной Meta
+не остаётся ни одной записи. Страница: отрисовка плана и отправка dry_run=1
+проверяются в Node (браузерный тест — при свободной памяти больше 6 ГБ).
+"""
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from src.fb_api import graph as g  # noqa: E402
+from tests.test_acl1761_api_create import ACT, FakeMeta, _draft  # noqa: E402
+
+
+# ───────────────────────── «Check plan (no writes)» ─────────────────────────
+
+class _FormReq:
+    """Запрос с формой — эндпоинт зовётся напрямую, без TestClient."""
+
+    def __init__(self, fields):
+        self._fields = dict(fields)
+
+    async def form(self):
+        return self._fields
+
+
+def _plan_endpoint(monkeypatch, fields, backend="api"):
+    import asyncio
+
+    from src.web import app as web
+    from src.web import publish_api
+
+    calls = []
+    monkeypatch.setenv("ACL_FB_BACKEND", backend)
+    monkeypatch.setattr(web, "_parse_build_upload_form", lambda form: ("MX", "Acc", [{"name": "C1"}]))
+    monkeypatch.setattr(publish_api, "check_plan", lambda slots, **kw: calls.append((slots, kw)) or {
+        "account": kw["account_label"], "results": [], "dry_run": True, "error": ""})
+    resp = asyncio.run(web.publish_plan(_FormReq(fields)))
+    return resp.status_code, json.loads(resp.body), calls
+
+
+def test_plan_endpoint_runs_only_as_a_dry_run(monkeypatch):
+    code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "1"})
+    assert code == 200 and body["dry_run"] is True and calls == [([{"name": "C1"}],
+                                                                  {"account_label": "Acc", "country": "MX"})]
+    code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "0"})
+    assert code == 400 and calls == []
+    code, body, calls = _plan_endpoint(monkeypatch, {})
+    assert code == 400 and calls == []
+
+
+def test_plan_endpoint_needs_the_api_backend(monkeypatch):
+    code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "1"}, backend="rpa")
+    assert code == 409 and "ACL_FB_BACKEND=api" in body["error"] and calls == []
+
+
+def _read_session(monkeypatch, meta, *, writes=False):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from src.analysis_agent import account_spend as _as
+    from src.analysis_agent import account_spend_api as _api
+
+    opened = []
+
+    @contextmanager
+    def session(account):
+        client = g.GraphClient(meta, allow_writes=writes, sleep=lambda s: None, min_interval_s=0.0,
+                               max_calls=24)
+        opened.append(client)
+        yield SimpleNamespace(client=client, act=ACT, account=account, notes={}, keep_next=False)
+
+    monkeypatch.setattr(_api, "_session", session)
+    monkeypatch.setattr(_as, "_profile_key", lambda account, *a, **k: "p-" + account)
+    return opened
+
+
+def test_check_plan_uses_the_read_session_and_writes_nothing(tmp_path, monkeypatch):
+    from src.web import publish_api
+
+    meta = FakeMeta()
+    d = _draft(tmp_path, video=True, ads=2)
+    d.warnings.append("Mixed budget in 'MX Leads 1' — using first slot")
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [d])
+    opened = _read_session(monkeypatch, meta)
+    monkeypatch.setattr(publish_api, "ApiPublisher", publish_api.ApiPublisher)
+    out = publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")
+    assert out["error"] == "" and out["dry_run"] is True
+    assert meta.posts == [] and opened[0].writes == 0 and opened[0].allow_writes is False
+    (res,) = out["results"]
+    assert res["dry_run"] is True and res["success"] is True and res["publishable"] is False
+    assert "Mixed budget in 'MX Leads 1' — using first slot" in res["warnings"]
+    summary = res["plan"]["summary"]
+    assert summary["status"] == "PAUSED" and summary["daily_budget"] == 20.0 and summary["currency"] == "USD"
+    assert summary["page_id"] == "111" and summary["pixel_id"] == "222"
+    (aset,) = summary["ad_sets"]
+    assert aset["countries"] == ["MX"] and aset["age"] == "25-55" and aset["language"] == "Spanish"
+    assert aset["interests"] == [["Day trading", "Swing trading"]]
+    assert aset["placements"].startswith("automatic")
+    assert [(a["format"], a["cta"], a["link"]) for a in aset["ads"]] == [
+        ("image", "LEARN_MORE", "https://example.invalid/l"), ("video", "LEARN_MORE", "https://example.invalid/l")]
+    assert aset["ads"][0]["file"] == "1000_img.png" and aset["ads"][0]["headline"] == "Head 0"
+
+
+def test_check_plan_shows_plan_errors_per_campaign(tmp_path, monkeypatch):
+    from src.web import publish_api
+
+    meta = FakeMeta()
+    bad = _draft(tmp_path, ads=1)
+    bad.link = ""
+    broken = _draft(tmp_path, ads=1)
+    broken.name = broken.ad_sets[0].name = "MX Leads 2"
+    broken.errors.append("Creative file not mapped for 1000")
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [bad, broken])
+    _read_session(monkeypatch, meta)
+    out = publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")
+    assert meta.posts == []
+    assert "Tracking link is empty" in out["results"][0]["error"]
+    assert "Creative file not mapped" in out["results"][1]["error"]
+
+
+def test_check_plan_refuses_a_session_that_could_write(tmp_path, monkeypatch):
+    from src.web import publish_api
+
+    meta = FakeMeta()
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [_draft(tmp_path, ads=1)])
+    _read_session(monkeypatch, meta, writes=True)
+    out = publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")
+    assert out["results"] == [] and "must not be able to write" in out["error"] and meta.posts == []
+
+
+# ── отрисовка плана и отправка dry_run=1 (Node; браузерный тест — при свободной памяти) ──
+
+def _template_js(start: str, end: str) -> str:
+    text = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    i = text.index(start)
+    return text[i:text.index(end, i)]
+
+
+_PLAN_NODE = r"""
+function aclEscHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+const RealFD = FormData;
+let lastSkip = null;
+function cbFormDataSkipping(form, skip) { lastSkip = skip; const b = new RealFD(); b.set('camp_count', '1'); return { body: b }; }
+function cbSlotTitle(slot) { return slot.title; }
+function cbPickedIn(form, picked) { return picked.filter((s) => form.slots.indexOf(s) !== -1); }
+function cbFormTitle(form) { return form.title; }
+const fetched = [];
+globalThis.fetch = async (url, init) => {
+  fetched.push({ url: url, dry_run: init.body.get('dry_run'), activate: init.body.get('activate') });
+  return { json: async () => DATA };
+};
+const fields = { camp_count: '2', camp_0_name: 'MX Leads 1', camp_1_name: 'MX Leads 2' };
+const slotA = { title: 'MX Leads 1' }, slotB = { title: 'MX Leads 2' };
+const form = { title: 'Test', slots: [slotA, slotB],
+  querySelector: (sel) => { const m = /name="([^"]+)"/.exec(sel); return m && m[1] in fields ? { value: fields[m[1]] } : null; },
+  querySelectorAll: (sel) => sel === '.cb-slot' ? form.slots : [] };
+globalThis.document = { querySelectorAll: (sel) => sel === 'form.open-account-form' ? [form] : [] };
+globalThis.window = globalThis;
+JS
+(async () => {
+  const out = {};
+  out.html = cbPlanHtml(DATA);
+  out.errHtml = cbPlanHtml({ account: 'Bad', error: 'profile <closed>', results: [] });
+  const box = { hidden: true, innerHTML: '' };
+  const btn = { disabled: false };
+  window.cbCheckPlan([slotB], box, btn);
+  await new Promise((r) => setTimeout(r, 20));
+  out.fetched = fetched;
+  out.skip = lastSkip;
+  out.box = box.innerHTML;
+  out.btn = btn.disabled;
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+_PLAN_DATA = {
+    "account": "Test", "dry_run": True, "error": "",
+    "results": [
+        {"campaign_name": "MX Leads 1", "dry_run": True, "success": True, "error": None,
+         "warnings": ["Mixed budget — using first slot", "Dry run: nothing was created"],
+         "plan": {"summary": {
+             "campaign": "MX Leads 1", "status": "PAUSED", "objective": "OUTCOME_LEADS",
+             "daily_budget": 20.0, "currency": "USD", "page_id": "111", "pixel_id": "222",
+             "existing": False, "ad_sets": [{
+                 "name": "MX Leads 1", "countries": ["MX"], "language": "Spanish", "age": "25-55",
+                 "interests": [["Day trading", "Swing trading"], ["Stocks"]],
+                 "placements": "automatic (Advantage+ placements)",
+                 "ads": [{"name": "1000 - Text0", "format": "image", "file": "1000_img.png",
+                          "headline": "<b>Head</b>", "primary_text": "[Offer] buy now",
+                          "description": "Desc", "link": "https://example.invalid/l", "cta": "LEARN_MORE"}]}]}}},
+        {"campaign_name": "MX Leads 2", "dry_run": True, "success": False,
+         "error": "Tracking link is empty; the API backend needs it for the ads", "warnings": [], "plan": {}},
+    ],
+}
+
+
+def test_plan_html_and_the_button_posting_dry_run_in_node():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    js = _template_js("function cbPlanFormData(form, only) {", "/* Имя карточки для подтверждения. */")
+    script = _PLAN_NODE.replace("DATA", "__DATA__").replace("JS\n", js + "\n", 1)
+    script = "const __DATA__ = " + json.dumps(_PLAN_DATA) + ";\n" + script
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+        fh.write(script)
+        path = fh.name
+    try:
+        done = subprocess.run([node, path], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    finally:
+        Path(path).unlink(missing_ok=True)
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)
+    html = out["html"]
+    for part in ("MX Leads 1", "PAUSED", "20.00 USD / day", "page 111", "pixel 222", "MX", "age 25-55",
+                 "language Spanish", "Day trading, Swing trading AND Stocks", "automatic (Advantage+",
+                 "1000 - Text0", "image 1000_img.png", "&lt;b&gt;Head&lt;/b&gt;", "[Offer] buy now",
+                 "Desc", "https://example.invalid/l", "CTA LEARN_MORE", "Mixed budget"):
+        assert part in html, part
+    assert "Dry run: nothing was created" not in html               # не шум
+    assert 'cbd-plan-err" style="color:var(--bad)">✕ Tracking link is empty' in html
+    assert "<b>" not in html and "profile &lt;closed&gt;" in out["errHtml"]
+    # Кнопка шлёт только отмеченное, всегда dry_run=1 и activate=0, на /publish-plan.
+    assert out["fetched"] == [{"url": "/publish-plan", "dry_run": "1", "activate": "0"}]
+    assert out["skip"] == {"0": True}
+    assert "Plan for <strong>Test</strong>" in out["box"] and out["btn"] is False
+
+
+def test_the_plan_button_is_rendered_only_for_the_api_backend():
+    text = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    i = text.index("data-act=\"check-plan\"")
+    assert "window.ACL_FB_BACKEND === 'api'" in text[i - 400:i]
+    assert "window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}" in text
+    j = text.index("act === 'check-plan'")
+    assert "window.cbCheckPlan(selectedForPublish()" in text[j:j + 200]
+    # «Publish» не тронут: та же кнопка и тот же обработчик.
+    assert "window.cbPublishAll(showQueue, selectedForPublish());" in text

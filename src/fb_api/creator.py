@@ -750,7 +750,9 @@ class CampaignCreator:
                 sets.append({**self.adset_params(plan, ad_set, "<campaign>", targeting), "ads": ads})
             out.plan = {"campaign": self.campaign_params(plan),
                         "existing_campaign_id": str(existing["id"]) if existing else "",
-                        "ad_sets": sets}
+                        "ad_sets": sets,
+                        "summary": self.plan_summary(plan, targetings, files,
+                                                     existing=bool(existing))}
             self._step(out, "dry run: preflight passed, nothing was written")
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
@@ -761,6 +763,38 @@ class CampaignCreator:
         except GraphError as exc:
             out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
         return out
+
+    def plan_summary(self, plan: CampaignPlan, targetings: list[dict], files: dict[str, bytes], *,
+                     existing: bool = False) -> dict:
+        """Что увидит человек в «Check plan»: читаемые поля, без сырых спецификаций."""
+        sets = []
+        for ad_set, t in zip(plan.ad_sets, targetings):
+            interests = [[i.get("name") or i.get("id") for bucket in g.values() if isinstance(bucket, list)
+                          for i in bucket] for g in (t.get("flexible_spec") or [])]
+            sets.append({
+                "name": ad_set.name, "status": PAUSED,
+                "countries": list((t.get("geo_locations") or {}).get("countries") or []),
+                "language": plan.language, "locales": list(t.get("locales") or []),
+                "age": f"{ad_set.age_min}-{ad_set.age_max}",
+                "interests": interests,
+                "os": ad_set.os or "All",
+                "placements": ("mobile only, " + ", ".join(t["user_os"])) if t.get("user_os")
+                else "automatic (Advantage+ placements)",
+                "optimization": f"{OPTIMIZATION_GOAL} · {CUSTOM_EVENT} on the website pixel",
+                "ads": [{
+                    "index": ad.index, "name": ad.name, "status": PAUSED, "format": ad.kind,
+                    "file": Path(ad.path).name, "bytes": len(files.get(ad.path, b"")),
+                    "headline": ad.title, "primary_text": ad.body, "description": ad.description,
+                    "link": plan.link, "cta": CTA_TYPE,
+                } for ad in ad_set.ads],
+            })
+        return {
+            "campaign": plan.name, "status": PAUSED, "objective": OBJECTIVE,
+            "daily_budget": plan.daily_budget, "currency": self.facts.currency,
+            "budget_minor": budget_minor(plan.daily_budget, self.facts.currency),
+            "page_id": plan.page_id, "pixel_id": plan.pixel_id,
+            "existing": existing, "tag": plan.label, "ad_sets": sets,
+        }
 
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:
         # 1. Всё, что можно проверить до записи.
