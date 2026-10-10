@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -1190,6 +1191,10 @@ const h = G[NAME];
                                    params: { name: 'x', object_story_spec: '{"link_data":{"status":"ACTIVE"}}' } });
   out.json_bad = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
                                 params: { name: 'x', object_story_spec: 'not json' } });
+  // Ревью, раунд 3: ACTIVE, спрятанный в JSON-СТРОКЕ, — помощник разбирает её до проверки.
+  out.json_str_active = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
+    params: { name: 'x', object_story_spec: JSON.stringify({ page_id: '1',
+              link_data: { message: 'hi', call_to_action: { type: 'LEARN_MORE', status: 'ACTIVE' } } }) } });
   out.json_num = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
                                 params: { name: 'x', object_story_spec: 42 } });
   out.json_bracket = await h.call({ method: 'POST', path: '/' + ACT + '/adsets',
@@ -1224,8 +1229,9 @@ def _node_run(write_policy):
         pytest.skip("node is not installed")
     name = "__acl_graph_test"
     # Сначала заглушки шаблона, исходник помощника — последним (его не трогаем).
-    script = (_NODE.replace("TOKENV", json.dumps(TOKEN)).replace("NAME", json.dumps(name))
-              .replace("ACT", json.dumps(ACT))
+    # ACT — только целым словом: «ACTIVE» в шаблоне остаётся как есть.
+    template = re.sub(r"(?<![A-Za-z])ACT(?![A-Za-z])", lambda _m: json.dumps(ACT), _NODE)
+    script = (template.replace("TOKENV", json.dumps(TOKEN)).replace("NAME", json.dumps(name))
               .replace("HELPER", json.dumps(tc.helper_source(name, write_policy))))
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
         fh.write(script)
@@ -1246,6 +1252,8 @@ def test_page_helper_write_mode_in_node():
               "badsha"):
         assert out[k]["error"] == "write_refused", k
     assert out["json_num"]["why"] == "json" and out["json_bracket"]["why"] == "json"
+    assert out["json_str_active"] == {"error": "write_refused", "why": "status"}
+    assert out["json_active"]["why"] == "status"
     for k in ("free_camp", "free_obj", "free_str"):
         assert out[k].get("body") == {"id": "5"}, (k, out[k])
     assert out["missing"]["why"] == "status" and out["nested_active"]["why"] == "status"
