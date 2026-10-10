@@ -395,6 +395,16 @@ class FakeMeta:
             row["adlabels"] = {"data": [{"id": "9", "name": x["name"]} for x in row["adlabels"]]}
         return row
 
+    def _page(self, rows, params):
+        """Постранично, как Graph: `limit`, курсор `after` — номер строки."""
+        limit = int(params.get("limit") or 25)
+        start = int(params.get("after") or 0)
+        chunk = rows[start:start + limit]
+        body = {"data": chunk}
+        if start + limit < len(rows):
+            body["paging"] = {"cursors": {"after": str(start + limit)}, "next": "more"}
+        return body
+
     def _of(self, kind, parent_key=None, parent=None):
         return [o for o in self.objects.values() if o["_kind"] == kind
                 and (parent_key is None or o.get(parent_key) == parent)]
@@ -448,7 +458,8 @@ class FakeMeta:
         assert method == "GET", "no DELETE, no POST through request()"
         params = params or {}
         self.gets.append((path, params))
-        return {"status": 200, "body": self._get(path, params)}
+        body = self._get(path, params)
+        return {"status": 400 if "error" in body else 200, "body": body}
 
     def _get(self, path, params):
         parts = path.strip("/").split("/")
@@ -477,9 +488,15 @@ class FakeMeta:
                                  for h in params.get("hashes", []) if h in self.images]}
             if edge == "advideos":
                 return {"data": [self._out(o) for o in self._of("video")]}
-            kind = {"campaigns": "campaign", "adcreatives": "creative"}[edge]
+            if edge == "adcreatives":
+                # Как живой Meta (5414, job 2fb409d1): фильтр по имени здесь — ошибка #100.
+                if "filtering" in params:
+                    return {"error": {"code": 100, "type": "OAuthException", "message":
+                            "(#100) Filtering field 'name' with operation 'contain' is not supported"}}
+                rows = [self._out(o) for o in reversed(self._of("creative"))]      # новые первыми
+                return self._page(rows, params)
             want = params["filtering"][0]["value"]
-            return {"data": [self._out(o) for o in self._of(kind) if want in o.get("name", "")]}
+            return {"data": [self._out(o) for o in self._of("campaign") if want in o.get("name", "")]}
         oid = parts[0]
         if len(parts) == 2:
             if parts[1] == "adsets":

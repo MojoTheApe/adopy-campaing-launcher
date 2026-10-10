@@ -54,6 +54,8 @@ VIDEO_POLL_S = 15.0
 VIDEO_MAX_POLLS = 20
 #: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
 RECONCILE_WAIT_S = 5.0
+#: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
+CREATIVE_LOOKUP_PAGES = 3
 #: Цель кампании из билдера, которую умеет API-путь (как у RPA: Leads → сайт).
 SUPPORTED_OBJECTIVES = frozenset({"leads"})
 
@@ -449,6 +451,8 @@ class CampaignCreator:
         self.video_poll_s = video_poll_s
         self.video_max_polls = video_max_polls
         self.reconcile_wait_s = RECONCILE_WAIT_S if reconcile_wait_s is None else reconcile_wait_s
+        #: Имя → id наших креативов (список кабинета читается раз на кампанию).
+        self._creatives: dict[str, str] | None = None
         self.progress = progress
 
     # -- служебное
@@ -547,13 +551,25 @@ class CampaignCreator:
                 "Stopped before any further write so a re-run cannot duplicate anything. "
                 "Check it in Ads Manager.", created=out.created, kind="label_missing")
 
-    def _find_creative(self, plan: CampaignPlan, name: str) -> str | None:
-        rows = self.client.get_all(f"/{plan.act}/adcreatives", {
-            "fields": "id,name,adlabels{name}",
-            "filtering": [{"field": "name", "operator": "CONTAIN", "value": name}],
-            "limit": 50}, max_pages=1)
-        hit = next((r for r in rows if str(r.get("name") or "") == name and plan.label in _labels(r)), None)
-        return str(hit["id"]) if hit else None
+    def _find_creative(self, plan: CampaignPlan, name: str, *, fresh: bool = False) -> str | None:
+        """Наш креатив без объявления: точное имя + метка, сверка на нашей стороне.
+
+        Живой запуск 5414 (job 2fb409d1): `/adcreatives` не принимает
+        `filtering` по `name` с `CONTAIN` (#100). Поэтому — постраничный список
+        свежих креативов кабинета (`CREATIVE_LOOKUP_PAGES` × 100, новые первыми)
+        один раз на кампанию; `fresh` — перечитать (сверка неизвестной записи).
+        Не нашли — значит, креатива нет среди свежих: лишний креатив без
+        объявления безвреден, дубля объявления не бывает (объявления ищутся в
+        нашей группе по имени).
+        """
+        if fresh or self._creatives is None:
+            rows = self.client.get_all(f"/{plan.act}/adcreatives", {
+                "fields": "id,name,adlabels{name}", "limit": 100}, max_pages=CREATIVE_LOOKUP_PAGES)
+            self._creatives = {}
+            for r in rows:
+                if plan.label in _labels(r) and r.get("id"):
+                    self._creatives.setdefault(str(r.get("name") or ""), str(r["id"]))
+        return self._creatives.get(name)
 
     # -- медиа
     def _image_hash(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes) -> str:
@@ -660,6 +676,7 @@ class CampaignCreator:
 
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
+        self._creatives = None
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         try:
             self._run(plan, out)
@@ -731,6 +748,7 @@ class CampaignCreator:
         Клиент пробного запуска создаётся без права записи вовсе; здесь же
         `post` не зовётся ни разу.
         """
+        self._creatives = None
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         try:
             targetings, files = self._prepare(plan, out)
@@ -860,7 +878,7 @@ class CampaignCreator:
                         out, f"ad {ad.index}: creative", f"/{plan.act}/adcreatives",
                         {"name": creative_name, "object_story_spec": self.story_spec(plan, ad, media),
                          "adlabels": [{"name": plan.label}]},
-                        lambda: self._find_creative(plan, creative_name))
+                        lambda: self._find_creative(plan, creative_name, fresh=True))
                     out.created.setdefault("creatives", []).append(creative_id)
                     if not creative_label_checked:
                         self._verify_label(out, f"The creative of ad {ad.index}", creative_id, plan.label)
