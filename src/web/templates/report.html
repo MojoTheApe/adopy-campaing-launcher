@@ -12509,6 +12509,13 @@ function cbPlanHtml(data) {
       if (w === 'Dry run: nothing was created') return;
       h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
     });
+    if (s && (s.existing_differences || []).length) {
+      h += '<div class="cbd-plan-diff" style="color:#b45309;margin:0.2rem 0">⚠ Already exists in Ads Manager — differs from the builder:<ul style="margin:0.1rem 0 0 1.1rem">';
+      s.existing_differences.forEach(function (d) {
+        h += '<li><strong>' + aclEscHtml(d.object) + '</strong>: ' + aclEscHtml((d.differences || []).join('; ')) + '</li>';
+      });
+      h += '</ul>A publish would stop before writing anything. Delete or rename the old campaign in Ads Manager, or rename the campaign in the builder.</div>';
+    }
     if (s) {
       h += '<div class="cbd-plan-meta" style="font-size:0.72rem;color:var(--muted)">page '
         + aclEscHtml(s.page_id || '—') + ' · pixel ' + aclEscHtml(s.pixel_id || '—')

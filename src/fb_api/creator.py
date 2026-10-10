@@ -727,6 +727,90 @@ class CampaignCreator:
             data["description"] = ad.description
         return {"page_id": plan.page_id, "link_data": data}
 
+    # -- общие проверки кампании и группы (сверка после записи и предпроверка найденных)
+    @staticmethod
+    def _mk_check(checks: list[dict], obj: str, fld: str, expected: Any, actual: Any) -> None:
+        checks.append({"object": obj, "field": fld, "expected": expected, "actual": actual,
+                       "ok": _same(expected, actual)})
+
+    def _campaign_checks(self, plan: CampaignPlan, camp: dict) -> list[dict]:
+        checks: list[dict] = []
+
+        def check(f: str, e: Any, a: Any) -> None:
+            self._mk_check(checks, "campaign", f, e, a)
+
+        want = self.campaign_params(plan)
+        check("name", want["name"], camp.get("name"))
+        check("status", PAUSED, camp.get("status"))
+        check("objective", OBJECTIVE, camp.get("objective"))
+        check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
+        check("bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
+        check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
+        return checks
+
+    def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,
+                      campaign_id: str) -> list[dict]:
+        obj = f"ad set {ad_set.name}"
+        checks: list[dict] = []
+
+        def check(f: str, e: Any, a: Any) -> None:
+            self._mk_check(checks, obj, f, e, a)
+
+        check("name", ad_set.name, row.get("name"))
+        check("status", PAUSED, row.get("status"))
+        check("campaign_id", campaign_id, str(row.get("campaign_id") or ""))
+        check("tag", plan.label, plan.label if plan.label in _labels(row) else "")
+        check("optimization_goal", OPTIMIZATION_GOAL, row.get("optimization_goal"))
+        check("billing_event", BILLING_EVENT, row.get("billing_event"))
+        check("destination_type", DESTINATION, row.get("destination_type"))
+        po = row.get("promoted_object") or {}
+        check("pixel", plan.pixel_id, str(po.get("pixel_id") or ""))
+        check("conversion_event", CUSTOM_EVENT, po.get("custom_event_type"))
+        check("schedule", "starts on activation, no end date",
+              "starts on activation, no end date" if not row.get("end_time") else
+              f"ends {row.get('end_time')}")
+        t = row.get("targeting") or {}
+        check("geo", targeting["geo_locations"]["countries"], (t.get("geo_locations") or {}).get("countries"))
+        check("age_min", targeting["age_min"], t.get("age_min"))
+        check("age_max", targeting["age_max"], t.get("age_max"))
+        check("languages", targeting.get("locales") or [], t.get("locales") or [])
+        check("detailed_targeting", _flex_ids(targeting.get("flexible_spec")), _flex_ids(t.get("flexible_spec")))
+        check("os", targeting.get("user_os") or [], t.get("user_os") or [])
+        # Площадки вручную, как у робота (паритет RPA): платформы, места, устройства.
+        check("publisher_platforms", targeting.get("publisher_platforms") or [],
+              t.get("publisher_platforms") or [])
+        check("facebook_positions", targeting.get("facebook_positions") or [],
+              t.get("facebook_positions") or [])
+        check("instagram_positions", targeting.get("instagram_positions") or [],
+              t.get("instagram_positions") or [])
+        check("devices", targeting.get("device_platforms") or [], t.get("device_platforms") or [])
+        return checks
+
+    # -- найденные кампания и группы против плана (до любой записи под ними)
+    def _existing_differences(self, plan: CampaignPlan, targetings: list[dict], campaign_id: str,
+                              found_sets: list[dict | None]) -> list[dict]:
+        """Что в уже существующих кампании/группах не совпадает с билдером. Только чтение.
+
+        Имя, метка, campaign_id и расписание не показываем: имя и метку доказал поиск,
+        остальное сверит сверка после записи. Ничего не обновляется и не удаляется.
+        """
+        found: list[dict] = []
+        camp = self.client.get(f"/{campaign_id}", {"fields": CAMPAIGN_FIELDS})
+        diffs = _describe_diffs(self._campaign_checks(plan, camp))
+        if diffs:
+            found.append({"object": f"campaign {plan.name!r}", "kind": "campaign", "differences": diffs})
+        for ad_set, targeting, hit in zip(plan.ad_sets, targetings, found_sets):
+            if not hit:
+                continue
+            row = self.client.get(f"/{hit['id']}", {"fields": ADSET_FIELDS})
+            diffs = _describe_diffs(self._adset_checks(plan, ad_set, targeting, row, campaign_id))
+            if diffs:
+                found.append({"object": f"ad set {ad_set.name!r}", "kind": "adset", "differences": diffs})
+        return found
+
+    def _find_sets(self, plan: CampaignPlan, campaign_id: str) -> list[dict | None]:
+        return [self._find_child(campaign_id, "adsets", s.name) for s in plan.ad_sets]
+
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
         self._creatives = None
@@ -807,6 +891,9 @@ class CampaignCreator:
         try:
             targetings, files = self._prepare(plan, out)
             existing = self._find_campaign(plan)
+            differences = (self._existing_differences(plan, targetings, str(existing["id"]),
+                                                      self._find_sets(plan, str(existing["id"])))
+                           if existing else [])
             sets = []
             for ad_set, targeting in zip(plan.ad_sets, targetings):
                 ads = []
@@ -824,7 +911,8 @@ class CampaignCreator:
                         "existing_campaign_id": str(existing["id"]) if existing else "",
                         "ad_sets": sets,
                         "summary": self.plan_summary(plan, targetings, files,
-                                                     existing=bool(existing))}
+                                                     existing=bool(existing),
+                                                     existing_differences=differences)}
             self._step(out, "dry run: preflight passed, nothing was written")
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
@@ -837,7 +925,7 @@ class CampaignCreator:
         return out
 
     def plan_summary(self, plan: CampaignPlan, targetings: list[dict], files: dict[str, bytes], *,
-                     existing: bool = False) -> dict:
+                     existing: bool = False, existing_differences: list[dict] | None = None) -> dict:
         """Что увидит человек в «Check plan»: читаемые поля, без сырых спецификаций."""
         sets = []
         for ad_set, t in zip(plan.ad_sets, targetings):
@@ -865,7 +953,8 @@ class CampaignCreator:
             "daily_budget": plan.daily_budget, "currency": self.facts.currency,
             "budget_minor": budget_minor(plan.daily_budget, self.facts.currency),
             "page_id": plan.page_id, "pixel_id": plan.pixel_id,
-            "existing": existing, "tag": plan.label, "ad_sets": sets,
+            "existing": existing, "existing_differences": list(existing_differences or []),
+            "tag": plan.label, "ad_sets": sets,
         }
 
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:
@@ -878,7 +967,14 @@ class CampaignCreator:
             out.campaign_id = str(existing["id"])
             out.reused["campaign"] = out.campaign_id
             self._step(out, "campaign: found from a previous run")
+            # Прежде чем что-то добавлять под найденную кампанию/группы — сверить их с планом.
+            found_sets = self._find_sets(plan, out.campaign_id)
+            bad = self._existing_differences(plan, targetings, out.campaign_id, found_sets)
+            if bad:
+                raise CreationStopped(_existing_message(bad), created=out.created, kind="existing_differs")
+            self._step(out, "existing campaign and ad sets match the builder")
         else:
+            found_sets = [None] * len(plan.ad_sets)
             out.campaign_id = self._write(
                 out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
                 lambda: (self._find_campaign(plan, after_unknown=True) or {}).get("id"))
@@ -888,8 +984,7 @@ class CampaignCreator:
 
         # 3. Группы и объявления (дети нашей кампании — по точному имени, B1a).
         creative_label_checked = ad_label_checked = False
-        for ad_set, targeting in zip(plan.ad_sets, targetings):
-            found = self._find_child(out.campaign_id, "adsets", ad_set.name)
+        for ad_set, targeting, found in zip(plan.ad_sets, targetings, found_sets):
             if found:
                 adset_id = str(found["id"])
                 out.reused.setdefault("adsets", []).append(adset_id)
@@ -971,52 +1066,14 @@ class CampaignCreator:
         def tag(obj: str, row: dict) -> None:
             check(obj, "tag", plan.label, plan.label if plan.label in _labels(row) else "")
 
-        camp = self.client.get(f"/{out.campaign_id}", {
-            "fields": "name,objective,status,daily_budget,bid_strategy,adlabels{name}"})
-        want = self.campaign_params(plan)
-        check("campaign", "name", want["name"], camp.get("name"))
-        check("campaign", "status", PAUSED, camp.get("status"))
-        check("campaign", "objective", OBJECTIVE, camp.get("objective"))
-        check("campaign", "daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
-        check("campaign", "bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
-        tag("campaign", camp)
+        camp = self.client.get(f"/{out.campaign_id}", {"fields": CAMPAIGN_FIELDS})
+        checks += self._campaign_checks(plan, camp)
 
         image_ads: list[tuple[str, AdPlan, str]] = []    # (объект, объявление, hash в объявлении)
         for ad_set, adset_id, targeting in zip(plan.ad_sets, out.adset_ids, targetings):
             obj = f"ad set {ad_set.name}"
-            row = self.client.get(f"/{adset_id}", {
-                "fields": "name,status,campaign_id,optimization_goal,billing_event,destination_type,"
-                          "promoted_object,targeting,start_time,end_time,adlabels{name}"})
-            check(obj, "name", ad_set.name, row.get("name"))
-            check(obj, "status", PAUSED, row.get("status"))
-            check(obj, "campaign_id", out.campaign_id, str(row.get("campaign_id") or ""))
-            tag(obj, row)
-            check(obj, "optimization_goal", OPTIMIZATION_GOAL, row.get("optimization_goal"))
-            check(obj, "billing_event", BILLING_EVENT, row.get("billing_event"))
-            check(obj, "destination_type", DESTINATION, row.get("destination_type"))
-            po = row.get("promoted_object") or {}
-            check(obj, "pixel", plan.pixel_id, str(po.get("pixel_id") or ""))
-            check(obj, "conversion_event", CUSTOM_EVENT, po.get("custom_event_type"))
-            check(obj, "schedule", "starts on activation, no end date",
-                  "starts on activation, no end date" if not row.get("end_time") else
-                  f"ends {row.get('end_time')}")
-            t = row.get("targeting") or {}
-            check(obj, "geo", targeting["geo_locations"]["countries"],
-                  (t.get("geo_locations") or {}).get("countries"))
-            check(obj, "age_min", targeting["age_min"], t.get("age_min"))
-            check(obj, "age_max", targeting["age_max"], t.get("age_max"))
-            check(obj, "languages", targeting.get("locales") or [], t.get("locales") or [])
-            check(obj, "detailed_targeting", _flex_ids(targeting.get("flexible_spec")),
-                  _flex_ids(t.get("flexible_spec")))
-            check(obj, "os", targeting.get("user_os") or [], t.get("user_os") or [])
-            # Площадки вручную, как у робота (паритет RPA): платформы, места, устройства.
-            check(obj, "publisher_platforms", targeting.get("publisher_platforms") or [],
-                  t.get("publisher_platforms") or [])
-            check(obj, "facebook_positions", targeting.get("facebook_positions") or [],
-                  t.get("facebook_positions") or [])
-            check(obj, "instagram_positions", targeting.get("instagram_positions") or [],
-                  t.get("instagram_positions") or [])
-            check(obj, "devices", targeting.get("device_platforms") or [], t.get("device_platforms") or [])
+            row = self.client.get(f"/{adset_id}", {"fields": ADSET_FIELDS})
+            checks += self._adset_checks(plan, ad_set, targeting, row, out.campaign_id)
 
             ads = self.client.get_all(f"/{adset_id}/ads", {
                 "fields": "id,name,status,adset_id,adlabels{name},"
@@ -1091,6 +1148,55 @@ class CampaignCreator:
                 check(aobj, "image_file", image_name(ad.path, files[ad.path]), names.get(h, ""))
         mismatches = [c for c in checks if not c["ok"]]
         return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches}
+
+
+CAMPAIGN_FIELDS = "name,objective,status,daily_budget,bid_strategy,adlabels{name}"
+ADSET_FIELDS = ("name,status,campaign_id,optimization_goal,billing_event,destination_type,"
+                "promoted_object,targeting,start_time,end_time,adlabels{name}")
+_PLACEMENT_FIELDS = ("publisher_platforms", "facebook_positions", "instagram_positions", "devices")
+#: Не показываем как «отличие от билдера»: имя и метку доказал поиск, остальное — сверка после записи.
+_SKIP_DIFF = {"name", "tag", "campaign_id", "schedule"}
+_FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maximum age",
+                 "languages": "languages", "detailed_targeting": "detailed targeting",
+                 "os": "operating system", "pixel": "pixel", "conversion_event": "conversion event",
+                 "optimization_goal": "optimization goal", "billing_event": "billing event",
+                 "destination_type": "destination", "daily_budget": "daily budget",
+                 "bid_strategy": "bid strategy"}
+
+
+def _show(value: Any) -> str:
+    if isinstance(value, list):
+        return ", ".join(map(str, value)) if value else "none"
+    return "none" if value in (None, "") else str(value)
+
+
+def _describe_diffs(checks: list[dict]) -> list[str]:
+    """Расхождения одного объекта человеческим языком (площадки — одной строкой)."""
+    bad = [c for c in checks if not c["ok"] and c["field"] not in _SKIP_DIFF]
+    out: list[str] = []
+    place = [c for c in bad if c["field"] in _PLACEMENT_FIELDS]
+    if place:
+        manual = any(c["expected"] for c in place if c["field"] == "publisher_platforms")
+        auto = not any(c["actual"] for c in place if c["field"] != "devices")
+        if manual and auto:
+            out.append("placements (Advantage+ vs manual list)")
+        else:
+            out.append("placements (" + "; ".join(
+                f"{c['field'].replace('_', ' ')}: builder {_show(c['expected'])}, Meta {_show(c['actual'])}"
+                for c in place) + ")")
+    for c in bad:
+        if c["field"] in _PLACEMENT_FIELDS:
+            continue
+        out.append(f"{_FIELD_TITLES.get(c['field'], c['field'])} "
+                   f"(builder: {_show(c['expected'])}, Meta: {_show(c['actual'])})")
+    return out
+
+
+def _existing_message(found: list[dict]) -> str:
+    parts = [f"Existing {f['object']} from an earlier run differs from the builder: "
+             + "; ".join(f["differences"]) + "." for f in found]
+    return (" ".join(parts) + " Nothing was written and nothing in Meta was changed. Delete or rename "
+            "the old campaign in Ads Manager, or rename the campaign in the builder.")
 
 
 def _flex_ids(spec: Any) -> list[list[str]]:
