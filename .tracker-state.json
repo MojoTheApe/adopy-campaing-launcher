@@ -10113,7 +10113,7 @@
             "session": "run_s1728a_1008"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-S1728A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10132,7 +10132,8 @@
         },
         "pr": 732,
         "queued_at": "2026-10-08T06:50:28+00:00",
-        "reviewer": "Reviewer-R1728Q"
+        "reviewer": "Reviewer-R1728Q",
+        "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247"
       },
       "729": {
         "implementers": [
@@ -10406,7 +10407,7 @@
             "session": "run_o1756a_1009"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-O1756A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10432,7 +10433,8 @@
           "session": "coord_c0930a_1009",
           "report": "Return of an Approved task after a live-pilot incident (Coordinator-C0930A, 2026-10-09).\n\nOn Facebook_5265, the pilot attached and opened its own Ads Manager tab, then \"CDP read timed out\" before it captured a token or made any Graph call. Minutes later the account was logged out of Facebook; the owner logged back in.\n\nDiagnosis: the token wait was awaited inside a single Runtime.evaluate, past RawCdp's 5 s read, and the background tab was throttled. The fetch/XHR wrappers are never removed if no token is seen, which is a plausible way to disturb Ads Manager's own auth or refresh traffic.\n\nFix requested:\n- Anti-throttling on our tab (focus emulation and lifecycle active, no visible window).\n- Named, bounded step timeouts.\n- Token wait polled from Python.\n- Fail-safe helper: wrappers can never throw into the page, and a safety timer always removes them after a short window.\n- Our tab is closed on any failure."
         },
-        "reviewer": "Reviewer-R1756S"
+        "reviewer": "Reviewer-R1756S",
+        "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247"
       },
       "760": {
         "implementers": [
@@ -13668,6 +13670,34 @@
         "coordinator": "Coordinator-BATCH01",
         "started_at": "2026-10-08T21:49:39+00:00",
         "state": "reviewing"
+      },
+      "763": {
+        "id": "098887cfdc4845a587d522e419c6b8ff",
+        "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
+        "pr": 763,
+        "issues": [
+          728,
+          756
+        ],
+        "actor": "Reviewer-B763Q",
+        "session": "rev_b763q_1010",
+        "coordinator": "Coordinator-C0930A",
+        "state": "reviewing",
+        "started_at": "2026-10-09T21:50:40+00:00"
+      },
+      "764": {
+        "id": "098887cfdc4845a587d522e419c6b8ff",
+        "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
+        "pr": 763,
+        "issues": [
+          728,
+          756
+        ],
+        "actor": "Reviewer-B763Q",
+        "session": "rev_b763q_1010",
+        "coordinator": "Coordinator-C0930A",
+        "state": "reviewing",
+        "started_at": "2026-10-09T21:50:40+00:00"
       }
     },
     "review_queue": [
@@ -13681,20 +13711,7 @@
       739,
       760
     ],
-    "review": {
-      "id": "098887cfdc4845a587d522e419c6b8ff",
-      "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
-      "pr": 763,
-      "issues": [
-        728,
-        756
-      ],
-      "actor": "Reviewer-B763Q",
-      "session": "rev_b763q_1010",
-      "coordinator": "Coordinator-C0930A",
-      "state": "reviewing",
-      "started_at": "2026-10-09T21:50:40+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -20137,6 +20154,138 @@
         "issue": 761,
         "claim": "9769088ef77d4a5682a1710b4048b065",
         "actor": "Worker-O1761A"
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-10T06:14:07+00:00",
+        "batch": {
+          "id": "3b8ca0b6359c400c90e4bb3e78a40247",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "state": "merged",
+          "issues": [
+            728,
+            756
+          ],
+          "members": [
+            {
+              "issue": 728,
+              "pr": 732,
+              "branch": "codex/acl-1728-builder-select",
+              "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
+              "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1728Q",
+                "review_session": "rev_r1728q_1008",
+                "execution_lane": "f413822abeff4cc98600b5f96fad0fa1",
+                "implementer": "Worker-S1728A",
+                "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
+                "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+                "tree_sha": "89ff420b51057565f1cdba1762df41d4d5dad867",
+                "report": "Verdict: approved (v2 re-review of head 5e93218e).\nDelta 22b98ba2..5e93218e is the merge of work/main (646044f2); git show --cc is empty, no hand-resolved hunks. PR diff vs main is only src/web/templates/report.html (+46/-3) and tests/test_builder_foot_stays_put_browser.py (+88): the 1728 files. Code logic unchanged from my earlier review (deferral on focus via activeElement + focusout repaint; unchanged-markup skip; account/typed carry-over validated against rebuilt options; delegated handlers).\nNon-blocking follow-ups: (a) footer markup key omits per-country account lists, so an account-set change inside an unchanged country set would not rebuild the account select (practically unreachable, accounts come from server-rendered panels); (b) body inputs repainted by paint() are not covered here.\nTests (free RAM 6.1 GB): test_the_builder_drawer 7 passed; test_builder_foot_stays_put_browser 3 passed; with report.html reverted to main the 3 tests FAIL; test_builder_publish_selected_browser 12 passed (one at a time).\nCI on new head: windows 3.13, descriptor, tracker-link, process-instructions, installer, classify pass; linux shards pending at record time.",
+                "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  728
+                ],
+                "recorded_at": "2026-10-09T07:45:51+00:00",
+                "issue_scopes": {
+                  "728": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828"
+                }
+              },
+              "lane": {
+                "id": "f413822abeff4cc98600b5f96fad0fa1",
+                "pr": 732,
+                "issues": [
+                  728
+                ],
+                "actor": "Reviewer-R1728Q",
+                "session": "rev_r1728q_1008",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-09T07:40:52+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-09T08:00:01+00:00"
+            },
+            {
+              "issue": 756,
+              "pr": 759,
+              "branch": "codex/acl-1756-api-in-profile",
+              "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
+              "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7",
+              "review": {
+                "kind": "independent-review",
+                "pr": 759,
+                "issue": 756,
+                "task": "ACL-1756",
+                "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
+                "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+                "tree_sha": "bb3f57c716aa9c0c175de32a55ae9340f57219fe",
+                "execution_lane": "58b8cd88b4554f7697fe00f3c8723ab8",
+                "reviewer": "Reviewer-R1756S",
+                "review_session": "rev_r1756s_1009",
+                "implementer": "Worker-O1756A",
+                "verdict": "approved",
+                "report": "# Review of PR #759 (ACL-1756): APPROVED (round 12, head e68607be)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent; I did not implement this. Implementer: Worker-O1756A.\nRounds 1-11: 1 (Reviewer-R1756Q, Opus) secret-scan fixtures, read-only hardening, never stop a profile; 2-3 param-key whitelist; 4 shard balance; 5-7 cookie mode mirrors Ads Manager, error details scrubbed, host anchor and pilot flags pinned; 8-9 (Opus) no-wrap design: isolated world, passive token from Resource Timing/inline HTML, Graph GET sent exactly once; 10 superseded by live diagnostics; 11 createTarget like Playwright, runIfWaitingForDebugger, local Mimic debug-port attach (code approved, 3 test gaps).\nLive result: on the owner-authorized expendable account Facebook_5414 the full pilot attached via the local process, captured the token from Resource Timing, made 4 Graph GETs in about 20 s, and the owner confirmed the numbers match Ads Manager (issue #756 comment).\nRound 12, delta 5aec8c27..e68607be: tests only (tests/test_acl1756_fb_api.py, +53 lines; src/ and scripts/ unchanged). Re-run mutations: Target.activateTarget added, Page.bringToFront added, exe filter dropped: all KILLED. The loopback accept check dropped still survives (the listen check on the same process already covers it, and _accepting itself is tested): accepted as non-blocking. Six checks separately: fb_api 103, page_helper_node 22, tab_watchdog 35, platform 100, shard 14 passed, secret scan clean. git merge-tree vs work/main clean (tree bb3f57c7 = head tree).\nCI note: windows tests failed once on tests/test_acl1702_tab_unblock_real_chromium.py (a real-Chromium timing test unrelated to this change; the same tests passed on 5aec8c27); to be re-run.\n",
+                "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  756
+                ],
+                "recorded_at": "2026-10-09T21:20:06+00:00",
+                "issue_scopes": {
+                  "756": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7"
+                }
+              },
+              "lane": {
+                "id": "58b8cd88b4554f7697fe00f3c8723ab8",
+                "pr": 759,
+                "issues": [
+                  756
+                ],
+                "actor": "Reviewer-R1756S",
+                "session": "rev_r1756s_1009",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-09T21:19:14+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-09T21:35:37+00:00"
+            }
+          ],
+          "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+          "branch": "codex/batch-3b8ca0b6359c400c90e4bb3e78a40247",
+          "intake": "17458c7784e84b879dd646f4d4d1dcc6",
+          "started_at": "2026-10-09T21:41:31+00:00",
+          "pr": 763,
+          "entered_stage": true,
+          "history": [],
+          "review": {
+            "id": "098887cfdc4845a587d522e419c6b8ff",
+            "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
+            "pr": 763,
+            "issues": [
+              728,
+              756
+            ],
+            "actor": "Reviewer-B763Q",
+            "session": "rev_b763q_1010",
+            "coordinator": "Coordinator-C0930A",
+            "state": "reviewing",
+            "started_at": "2026-10-09T21:50:40+00:00"
+          },
+          "main_prs": [
+            764
+          ],
+          "finished_at": "2026-10-10T06:14:07+00:00"
+        }
       }
     ],
     "policy": {
@@ -20238,131 +20387,150 @@
         "approved_at": "2026-10-09T21:35:37+00:00"
       }
     },
-    "batches": {},
-    "integration": {
-      "id": "3b8ca0b6359c400c90e4bb3e78a40247",
-      "actor": "Coordinator-C0930A",
-      "session": "coord_c0930a_1009",
-      "state": "stage",
-      "issues": [
-        728,
-        756
-      ],
-      "members": [
-        {
-          "issue": 728,
-          "pr": 732,
-          "branch": "codex/acl-1728-builder-select",
-          "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
-          "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-          "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1728Q",
-            "review_session": "rev_r1728q_1008",
-            "execution_lane": "f413822abeff4cc98600b5f96fad0fa1",
-            "implementer": "Worker-S1728A",
+    "batches": {
+      "3b8ca0b6359c400c90e4bb3e78a40247": {
+        "id": "3b8ca0b6359c400c90e4bb3e78a40247",
+        "actor": "Coordinator-C0930A",
+        "session": "coord_c0930a_1009",
+        "state": "merged",
+        "issues": [
+          728,
+          756
+        ],
+        "members": [
+          {
+            "issue": 728,
+            "pr": 732,
+            "branch": "codex/acl-1728-builder-select",
             "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
             "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-            "tree_sha": "89ff420b51057565f1cdba1762df41d4d5dad867",
-            "report": "Verdict: approved (v2 re-review of head 5e93218e).\nDelta 22b98ba2..5e93218e is the merge of work/main (646044f2); git show --cc is empty, no hand-resolved hunks. PR diff vs main is only src/web/templates/report.html (+46/-3) and tests/test_builder_foot_stays_put_browser.py (+88): the 1728 files. Code logic unchanged from my earlier review (deferral on focus via activeElement + focusout repaint; unchanged-markup skip; account/typed carry-over validated against rebuilt options; delegated handlers).\nNon-blocking follow-ups: (a) footer markup key omits per-country account lists, so an account-set change inside an unchanged country set would not rebuild the account select (practically unreachable, accounts come from server-rendered panels); (b) body inputs repainted by paint() are not covered here.\nTests (free RAM 6.1 GB): test_the_builder_drawer 7 passed; test_builder_foot_stays_put_browser 3 passed; with report.html reverted to main the 3 tests FAIL; test_builder_publish_selected_browser 12 passed (one at a time).\nCI on new head: windows 3.13, descriptor, tracker-link, process-instructions, installer, classify pass; linux shards pending at record time.",
             "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              728
-            ],
-            "recorded_at": "2026-10-09T07:45:51+00:00",
-            "issue_scopes": {
-              "728": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828"
-            }
+            "scope": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1728Q",
+              "review_session": "rev_r1728q_1008",
+              "execution_lane": "f413822abeff4cc98600b5f96fad0fa1",
+              "implementer": "Worker-S1728A",
+              "head_sha": "5e93218e70df3d173ae36373785e9d0c9a6725cd",
+              "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "tree_sha": "89ff420b51057565f1cdba1762df41d4d5dad867",
+              "report": "Verdict: approved (v2 re-review of head 5e93218e).\nDelta 22b98ba2..5e93218e is the merge of work/main (646044f2); git show --cc is empty, no hand-resolved hunks. PR diff vs main is only src/web/templates/report.html (+46/-3) and tests/test_builder_foot_stays_put_browser.py (+88): the 1728 files. Code logic unchanged from my earlier review (deferral on focus via activeElement + focusout repaint; unchanged-markup skip; account/typed carry-over validated against rebuilt options; delegated handlers).\nNon-blocking follow-ups: (a) footer markup key omits per-country account lists, so an account-set change inside an unchanged country set would not rebuild the account select (practically unreachable, accounts come from server-rendered panels); (b) body inputs repainted by paint() are not covered here.\nTests (free RAM 6.1 GB): test_the_builder_drawer 7 passed; test_builder_foot_stays_put_browser 3 passed; with report.html reverted to main the 3 tests FAIL; test_builder_publish_selected_browser 12 passed (one at a time).\nCI on new head: windows 3.13, descriptor, tracker-link, process-instructions, installer, classify pass; linux shards pending at record time.",
+              "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                728
+              ],
+              "recorded_at": "2026-10-09T07:45:51+00:00",
+              "issue_scopes": {
+                "728": "8af9d8af0979cf80133a6cc8198dd4455ff9f518ece0159e1dc896e0d9289828"
+              }
+            },
+            "lane": {
+              "id": "f413822abeff4cc98600b5f96fad0fa1",
+              "pr": 732,
+              "issues": [
+                728
+              ],
+              "actor": "Reviewer-R1728Q",
+              "session": "rev_r1728q_1008",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-09T07:40:52+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-09T08:00:01+00:00"
           },
-          "lane": {
-            "id": "f413822abeff4cc98600b5f96fad0fa1",
-            "pr": 732,
-            "issues": [
-              728
-            ],
-            "actor": "Reviewer-R1728Q",
-            "session": "rev_r1728q_1008",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-09T07:40:52+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-09T08:00:01+00:00"
-        },
-        {
-          "issue": 756,
-          "pr": 759,
-          "branch": "codex/acl-1756-api-in-profile",
-          "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
-          "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-          "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7",
-          "review": {
-            "kind": "independent-review",
-            "pr": 759,
+          {
             "issue": 756,
-            "task": "ACL-1756",
+            "pr": 759,
+            "branch": "codex/acl-1756-api-in-profile",
             "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
             "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-            "tree_sha": "bb3f57c716aa9c0c175de32a55ae9340f57219fe",
-            "execution_lane": "58b8cd88b4554f7697fe00f3c8723ab8",
-            "reviewer": "Reviewer-R1756S",
-            "review_session": "rev_r1756s_1009",
-            "implementer": "Worker-O1756A",
-            "verdict": "approved",
-            "report": "# Review of PR #759 (ACL-1756): APPROVED (round 12, head e68607be)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent; I did not implement this. Implementer: Worker-O1756A.\nRounds 1-11: 1 (Reviewer-R1756Q, Opus) secret-scan fixtures, read-only hardening, never stop a profile; 2-3 param-key whitelist; 4 shard balance; 5-7 cookie mode mirrors Ads Manager, error details scrubbed, host anchor and pilot flags pinned; 8-9 (Opus) no-wrap design: isolated world, passive token from Resource Timing/inline HTML, Graph GET sent exactly once; 10 superseded by live diagnostics; 11 createTarget like Playwright, runIfWaitingForDebugger, local Mimic debug-port attach (code approved, 3 test gaps).\nLive result: on the owner-authorized expendable account Facebook_5414 the full pilot attached via the local process, captured the token from Resource Timing, made 4 Graph GETs in about 20 s, and the owner confirmed the numbers match Ads Manager (issue #756 comment).\nRound 12, delta 5aec8c27..e68607be: tests only (tests/test_acl1756_fb_api.py, +53 lines; src/ and scripts/ unchanged). Re-run mutations: Target.activateTarget added, Page.bringToFront added, exe filter dropped: all KILLED. The loopback accept check dropped still survives (the listen check on the same process already covers it, and _accepting itself is tested): accepted as non-blocking. Six checks separately: fb_api 103, page_helper_node 22, tab_watchdog 35, platform 100, shard 14 passed, secret scan clean. git merge-tree vs work/main clean (tree bb3f57c7 = head tree).\nCI note: windows tests failed once on tests/test_acl1702_tab_unblock_real_chromium.py (a real-Chromium timing test unrelated to this change; the same tests passed on 5aec8c27); to be re-run.\n",
             "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              756
-            ],
-            "recorded_at": "2026-10-09T21:20:06+00:00",
-            "issue_scopes": {
-              "756": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7"
-            }
-          },
-          "lane": {
-            "id": "58b8cd88b4554f7697fe00f3c8723ab8",
-            "pr": 759,
-            "issues": [
-              756
-            ],
-            "actor": "Reviewer-R1756S",
-            "session": "rev_r1756s_1009",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-09T21:19:14+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-09T21:35:37+00:00"
-        }
-      ],
-      "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
-      "branch": "codex/batch-3b8ca0b6359c400c90e4bb3e78a40247",
-      "intake": "17458c7784e84b879dd646f4d4d1dcc6",
-      "started_at": "2026-10-09T21:41:31+00:00",
-      "pr": 763,
-      "entered_stage": true,
-      "history": []
+            "scope": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7",
+            "review": {
+              "kind": "independent-review",
+              "pr": 759,
+              "issue": 756,
+              "task": "ACL-1756",
+              "head_sha": "e68607be31d9fb5c865f34e865420c396f9f5778",
+              "base_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "tree_sha": "bb3f57c716aa9c0c175de32a55ae9340f57219fe",
+              "execution_lane": "58b8cd88b4554f7697fe00f3c8723ab8",
+              "reviewer": "Reviewer-R1756S",
+              "review_session": "rev_r1756s_1009",
+              "implementer": "Worker-O1756A",
+              "verdict": "approved",
+              "report": "# Review of PR #759 (ACL-1756): APPROVED (round 12, head e68607be)\n\nReviewer: Reviewer-R1756S (session rev_r1756s_1009). Independent; I did not implement this. Implementer: Worker-O1756A.\nRounds 1-11: 1 (Reviewer-R1756Q, Opus) secret-scan fixtures, read-only hardening, never stop a profile; 2-3 param-key whitelist; 4 shard balance; 5-7 cookie mode mirrors Ads Manager, error details scrubbed, host anchor and pilot flags pinned; 8-9 (Opus) no-wrap design: isolated world, passive token from Resource Timing/inline HTML, Graph GET sent exactly once; 10 superseded by live diagnostics; 11 createTarget like Playwright, runIfWaitingForDebugger, local Mimic debug-port attach (code approved, 3 test gaps).\nLive result: on the owner-authorized expendable account Facebook_5414 the full pilot attached via the local process, captured the token from Resource Timing, made 4 Graph GETs in about 20 s, and the owner confirmed the numbers match Ads Manager (issue #756 comment).\nRound 12, delta 5aec8c27..e68607be: tests only (tests/test_acl1756_fb_api.py, +53 lines; src/ and scripts/ unchanged). Re-run mutations: Target.activateTarget added, Page.bringToFront added, exe filter dropped: all KILLED. The loopback accept check dropped still survives (the listen check on the same process already covers it, and _accepting itself is tested): accepted as non-blocking. Six checks separately: fb_api 103, page_helper_node 22, tab_watchdog 35, platform 100, shard 14 passed, secret scan clean. git merge-tree vs work/main clean (tree bb3f57c7 = head tree).\nCI note: windows tests failed once on tests/test_acl1702_tab_unblock_real_chromium.py (a real-Chromium timing test unrelated to this change; the same tests passed on 5aec8c27); to be re-run.\n",
+              "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                756
+              ],
+              "recorded_at": "2026-10-09T21:20:06+00:00",
+              "issue_scopes": {
+                "756": "f45a36870c8207f68747a7921bbc2e41b9a2a7bbe6c6a146e7c07964297a86c7"
+              }
+            },
+            "lane": {
+              "id": "58b8cd88b4554f7697fe00f3c8723ab8",
+              "pr": 759,
+              "issues": [
+                756
+              ],
+              "actor": "Reviewer-R1756S",
+              "session": "rev_r1756s_1009",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-09T21:19:14+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-09T21:35:37+00:00"
+          }
+        ],
+        "main_sha": "646044f29d4e5e6f67797d2d910441119194aeeb",
+        "branch": "codex/batch-3b8ca0b6359c400c90e4bb3e78a40247",
+        "intake": "17458c7784e84b879dd646f4d4d1dcc6",
+        "started_at": "2026-10-09T21:41:31+00:00",
+        "pr": 763,
+        "entered_stage": true,
+        "history": [],
+        "review": {
+          "id": "098887cfdc4845a587d522e419c6b8ff",
+          "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
+          "pr": 763,
+          "issues": [
+            728,
+            756
+          ],
+          "actor": "Reviewer-B763Q",
+          "session": "rev_b763q_1010",
+          "coordinator": "Coordinator-C0930A",
+          "state": "reviewing",
+          "started_at": "2026-10-09T21:50:40+00:00"
+        },
+        "main_prs": [
+          764
+        ],
+        "finished_at": "2026-10-10T06:14:07+00:00"
+      }
     },
+    "integration": null,
     "intake": {
       "id": "17458c7784e84b879dd646f4d4d1dcc6",
       "actor": "Coordinator-C0930A",
       "session": "coord_c0930a_1009",
-      "state": "running",
+      "state": "finished",
       "issues": [
         728,
         756
       ],
-      "remaining": [
-        728,
-        756
+      "remaining": [],
+      "batches": [
+        "3b8ca0b6359c400c90e4bb3e78a40247"
       ],
-      "batches": [],
       "started_at": "2026-10-09T21:40:13+00:00",
       "ineligible": {}
     }
