@@ -39,6 +39,20 @@ ACT_ID_RE = re.compile(r"act_[0-9]")
 LONG_ID_RE = re.compile(r"[0-9]{8,}")
 
 
+@pytest.fixture(autouse=True)
+def _no_leaked_log_filters():
+    """`fb_api_pilot.main()` вешает `ScrubFilter` на обработчики корневого логгера,
+    а среди них — общий обработчик pytest (caplog). Оставшийся фильтр прятал бы
+    id профиля в чужих тестах файлов, идущих после этого (ACL-1760)."""
+    handlers = list(logging.getLogger().handlers)
+    before = {h: list(h.filters) for h in handlers}
+    yield
+    for h in list(logging.getLogger().handlers):
+        for f in list(h.filters):
+            if h not in before or f not in before[h]:
+                h.removeFilter(f)
+
+
 # ───────────────────────── поддельный браузер ─────────────────────────
 
 class FakePage:
@@ -720,9 +734,15 @@ def test_mask_id_keeps_last_four():
 def test_scrub_filter_cleans_log_records(caplog):
     log = logging.getLogger("acl1756.test")
     caplog.set_level(logging.INFO)
-    caplog.handler.addFilter(tm.ScrubFilter())
-    log.info("token %s act %s", TOKEN, ACT)
-    assert TOKEN not in caplog.text and ACT not in caplog.text
+    scrub = tm.ScrubFilter()
+    caplog.handler.addFilter(scrub)
+    try:
+        log.info("token %s act %s", TOKEN, ACT)
+        assert TOKEN not in caplog.text and ACT not in caplog.text
+    finally:
+        # Обработчик caplog общий для файлов сессии: фильтр, оставшийся на нём,
+        # прятал бы id профиля в чужих тестах (test_the_api_stop_is_asked_first).
+        caplog.handler.removeFilter(scrub)
 
 
 def test_journal_line_is_scrubbed(tmp_path):
