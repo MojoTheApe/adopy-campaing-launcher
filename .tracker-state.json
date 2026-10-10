@@ -7218,20 +7218,6 @@
         "state": "implementing",
         "started_at": "2026-10-09T22:32:02+00:00",
         "from_status": "status:todo"
-      },
-      "760": {
-        "actor": "Worker-S1760A",
-        "session": "run_s1760a_1009",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1760-api-read",
-        "worktree": "C:\\acl-1760-api-read",
-        "id": "13894f4e71874723aa8f2ea99a6e77c4",
-        "issue": 760,
-        "state": "handoff",
-        "started_at": "2026-10-10T08:55:04+00:00",
-        "from_status": "status:todo",
-        "pr": 762,
-        "report": "# ACL-1760 handoff (Worker-S1760A, session run_s1760a_1009)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/762 (base main; depends on #759)\nBranch: codex/acl-1760-api-read, head c20f765fc17c9f7f9cb3a7798357e5d22b2d6f2e\nWorktree: C:\\acl-1760-api-read\n\n## What was built\n- `ACL_FB_BACKEND=api|rpa` (default rpa). With api, `start_read` / `start_split` pick `account_spend_api.read_via_api` / `read_country_split_via_api` through `default_reader()`. Same SpendReading / CountrySplit dict, `source: \"api\"`.\n- Mapping: /act_X account_status+disable_reason -> status words; insights time_range (breakdowns=country for the split); campaigns+ads -> tree rows (ad sets not read: the UI tree has campaign and ad levels only).\n- Gate: runs inside start_read (reading gate + profile lock). Running profile: local debug port, no slot. Closed profile: ACL-1603 queue (`share_profile=True`), MLX start, left open, slot kept with `queue.keep`. Hand-opened window: refused (`open_by_hand`). No profile is ever stopped.\n- Limits: ACL_FB_API_MAX_CALLS (24), ACL_FB_API_MIN_INTERVAL_S (1.0), cooldown after codes 4/17/32/613/80000-80014 (5 min), checkpoint (10), 368 (30). Normal read = 6 Graph calls.\n- Errors: logged out -> profile_logged_out + existing text; tree failure keeps spend (objects_read False).\n\n## Files\nsrc/analysis_agent/account_spend_api.py (new), account_spend.py, country_split.py (default_reader), src/fb_api/graph.py, src/fb_api/profile.py, tests/test_acl1760_api_read.py (73 tests).\n\n## Checked\ntest_acl1760_api_read, test_acl1756_fb_api, test_acl1756_page_helper_node, test_account_spend, test_country_split, test_country_split_safety, test_reads_open_a_closed_profile, test_one_button_reads_what_is_needed, test_acl_test_platform, test_acl_test_shard: all pass. acl_scan_secrets clean. No live Meta/Multilogin run.\n\n## Live check (coordinator)\nTest dashboard on 9095 with its own ACL_CONFIG_DIR and `ACL_FB_BACKEND=api` in that instance's .env, restart serve.py (Python change). Expendable test accounts only (e.g. Facebook_5414, slot A). Press \"Read spend\" on 3 accounts; compare spend, status and campaigns with Ads Manager. Expect seconds per read; `output/fb_api_pilot.jsonl` gets `fb_api_read` lines with source api and call counts. Country split fires from the page after spend when needed.\n\n## Open points\n- Currency is the ISO code (USD), RPA showed the sign as written.\n- Row-level results count leads only (`lead` action); per-row spend/CPL are formatted \"X USD\".\n- Second Ads Manager load for the country split (separate request from the page)."
       }
     },
     "tasks": {
@@ -10473,7 +10459,7 @@
             "session": "run_s1760a_1009"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1760A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10482,16 +10468,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1760-api-read",
           "worktree": "C:\\acl-1760-api-read",
-          "id": "c4118690ec44425081122f938fffff67",
+          "id": "13894f4e71874723aa8f2ea99a6e77c4",
           "issue": 760,
           "state": "handoff",
-          "started_at": "2026-10-10T07:25:46+00:00",
+          "started_at": "2026-10-10T08:55:04+00:00",
           "from_status": "status:todo",
           "pr": 762,
           "report": "# ACL-1760 handoff (Worker-S1760A, session run_s1760a_1009)\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/762 (base main; depends on #759)\nBranch: codex/acl-1760-api-read, head c20f765fc17c9f7f9cb3a7798357e5d22b2d6f2e\nWorktree: C:\\acl-1760-api-read\n\n## What was built\n- `ACL_FB_BACKEND=api|rpa` (default rpa). With api, `start_read` / `start_split` pick `account_spend_api.read_via_api` / `read_country_split_via_api` through `default_reader()`. Same SpendReading / CountrySplit dict, `source: \"api\"`.\n- Mapping: /act_X account_status+disable_reason -> status words; insights time_range (breakdowns=country for the split); campaigns+ads -> tree rows (ad sets not read: the UI tree has campaign and ad levels only).\n- Gate: runs inside start_read (reading gate + profile lock). Running profile: local debug port, no slot. Closed profile: ACL-1603 queue (`share_profile=True`), MLX start, left open, slot kept with `queue.keep`. Hand-opened window: refused (`open_by_hand`). No profile is ever stopped.\n- Limits: ACL_FB_API_MAX_CALLS (24), ACL_FB_API_MIN_INTERVAL_S (1.0), cooldown after codes 4/17/32/613/80000-80014 (5 min), checkpoint (10), 368 (30). Normal read = 6 Graph calls.\n- Errors: logged out -> profile_logged_out + existing text; tree failure keeps spend (objects_read False).\n\n## Files\nsrc/analysis_agent/account_spend_api.py (new), account_spend.py, country_split.py (default_reader), src/fb_api/graph.py, src/fb_api/profile.py, tests/test_acl1760_api_read.py (73 tests).\n\n## Checked\ntest_acl1760_api_read, test_acl1756_fb_api, test_acl1756_page_helper_node, test_account_spend, test_country_split, test_country_split_safety, test_reads_open_a_closed_profile, test_one_button_reads_what_is_needed, test_acl_test_platform, test_acl_test_shard: all pass. acl_scan_secrets clean. No live Meta/Multilogin run.\n\n## Live check (coordinator)\nTest dashboard on 9095 with its own ACL_CONFIG_DIR and `ACL_FB_BACKEND=api` in that instance's .env, restart serve.py (Python change). Expendable test accounts only (e.g. Facebook_5414, slot A). Press \"Read spend\" on 3 accounts; compare spend, status and campaigns with Ads Manager. Expect seconds per read; `output/fb_api_pilot.jsonl` gets `fb_api_read` lines with source api and call counts. Country split fires from the page after spend when needed.\n\n## Open points\n- Currency is the ISO code (USD), RPA showed the sign as written.\n- Row-level results count leads only (`lead` action); per-row spend/CPL are formatted \"X USD\".\n- Second Ads Manager load for the country split (separate request from the page)."
         },
         "pr": 762,
-        "queued_at": "2026-10-10T07:26:37+00:00",
+        "queued_at": "2026-10-10T08:55:52+00:00",
         "review_report": "Round 4 review of head 35c28fed (delta 7a175b2d..35c28fed): the code is APPROVED, but CI is red, so I am returning it.\n\nCI blocker: linux tests (3.13, 3) fails twice (original run and rerun) on tests/test_the_api_stop_is_asked_first.py::test_a_routing_miss_is_logged_with_its_address, and ACL verification fails with it.\nThe cause is test pollution that was already there. tests/test_acl1756_fb_api.py::test_scrub_filter_cleans_log_records does caplog.handler.addFilter(tm.ScrubFilter()) and never removes it. The caplog handler is shared in this pytest, so the filter stays on and later caplog tests see \"<uuid>\" instead of the profile id.\nI reproduced it locally with: pytest tests/test_acl1756_fb_api.py tests/test_the_api_stop_is_asked_first.py. It fails the same way on the previous head 7a175b2d, so the delta did not introduce it. The shard layout now puts these two files in shard 3 in this order.\nFix, in tests only: in test_scrub_filter_cleans_log_records, add the filter, then in a try/finally call caplog.handler.removeFilter(flt), or attach the filter to a private logging.Handler. Then verify that those two files run together and pass. No production code needs to change.\n\nDelta review, all fine:\n- display_currency maps only USD to $, EUR to euro, GBP to pound and ILS to shekel; any other code stays ISO.\n- _money gives \"$100.00\" or \"BRL 21.61\". amapMoneyIn takes the first number and strips commas, so these parse.\n- The per-currency sums in app.py (lines 752-760) put a 3-letter ISO code into live_sums and keep any sign as a separate unknown_sums entry, same as RPA. Row spend and cost text use the same sign mapping.\n- why_split_is_needed compares spend_currency to the reading's currency. Both are now the sign, so it is consistent. The first read after upgrade may see one \"spend changed\" for an old ISO-stored split; that is harmless.\n- The tree is built from the raw ISO and mapped in _money. Country split rows keep ISO.\n- Only account_spend_api.py and tests/test_acl1760_api_read.py changed.\n- Mutations: removing USD makes 9 tests fail; ILS to ISO fails 1; display_currency returning the text unchanged fails 9; storing the raw currency in read_via_api fails 5.\n- Tests, one file at a time: test_acl1760_api_read 74, test_acl1756_fb_api 103, test_account_spend 63, test_country_split 27, test_build_progress_model 30. All passed.\n- merge-tree vs work/main e8e59f83 is clean (tree 6254f36b equals the head tree).\nAfter the test fix this should be a quick re-approval.",
         "return_operation": {
           "id": "96930e73bfcd4cc6bad950e260d799e1",
@@ -13744,7 +13730,8 @@
       642,
       651,
       710,
-      739
+      739,
+      760
     ],
     "review": null,
     "history": [
@@ -20491,6 +20478,13 @@
         "at": "2026-10-10T08:55:04+00:00",
         "issue": 760,
         "claim": "13894f4e71874723aa8f2ea99a6e77c4",
+        "actor": "Worker-S1760A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-10T08:55:52+00:00",
+        "issue": 760,
+        "pr": 762,
         "actor": "Worker-S1760A"
       }
     ],
