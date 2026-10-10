@@ -48,6 +48,9 @@
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
           crossorigin="anonymous"></script>
   <script>
+    // ACL-1761: создатель кампаний через Graph API — «Check plan (no writes)» и
+    // «PAUSED campaigns» вместо «drafts». Раньше любого кода билдера.
+    try { window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}; } catch(e) {}
     function aclEscHtml(value) {
       return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
         return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
@@ -3097,6 +3100,22 @@
       padding: var(--space-sm) var(--space-md);
       border-top: 1px solid var(--border);
     }
+    /* ACL-1761: план «Check plan» живёт в подвале ящика и не закрывает билдер:
+       своя прокрутка, ширина ящика, кнопка «Close plan». */
+    .cbd-plan-out {
+      position: relative; box-sizing: border-box; width: 100%; max-width: 100%;
+      max-height: 40vh; overflow: auto; margin: 0.4rem 0;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--surface, transparent); overflow-wrap: anywhere;
+    }
+    .cbd-plan-out[hidden] { display: none; }
+    .cbd-plan-bar {
+      position: sticky; top: 0; z-index: 1; display: flex; align-items: center;
+      justify-content: space-between; gap: 0.5rem; padding: 0.25rem 0.5rem;
+      background: var(--bg); border-bottom: 1px solid var(--border); font-size: 0.75rem;
+    }
+    .cbd-plan-body { padding: 0.3rem 0.5rem; }
+    .cbd-plan-body[hidden] { display: none; }
 
     /* Открытый ящик раздвигает страницу, а не накрывает её: читать нужно
        ровно то, что сейчас закрыто панелью. Язычок входит в отступ — он
@@ -5128,8 +5147,10 @@ window.cbTree = (function () {
   function publishLabel(t) {
     // K — сколько кампаний уйдёт сейчас: отмеченные у идущей формы не едут
     // (их пропустит и подтверждение), и считать их было бы неправдой.
-    return t.some ? 'Publish selected → drafts (' + t.send.length + ')'
-                  : 'Publish all → drafts (' + t.total + ')';
+    // ACL-1761: через Graph API создаются кампании на паузе, а не черновики.
+    var what = window.ACL_FB_BACKEND === 'api' ? 'PAUSED campaigns' : 'drafts';
+    return t.some ? 'Publish selected → ' + what + ' (' + t.send.length + ')'
+                  : 'Publish all → ' + what + ' (' + t.total + ')';
   }
 
   /* Отметки, кнопка и «Select all» — на месте, без перерисовки дерева:
@@ -10510,8 +10531,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // (below) lives in a separate top-level scope, outside this IIFE.
   window.ACCOUNT_PREFLIGHT = {};
   try { window.ACCOUNT_PREFLIGHT = {{ account_preflight_json | tojson }}; } catch(e) {}
-  // ACL-1761: создатель кампаний через Graph API — кнопка «Check plan (no writes)».
-  try { window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}; } catch(e) {}
 
   // Keep in sync with the server-rendered <select> options in report.html's
   // cb-ad-row markup — preview-only, not part of the real publish payload.
@@ -12401,7 +12420,9 @@ window.cbPublishAll = function (onProgress, picked) {
   if (notes.length) pfHtml += '<div class="cb-preflight-note" style="color:var(--muted);font-size:0.8rem">'
     + aclEscHtml(notes.map(function (a) { return a.account; }).join(', ')) + ': profile is open — the robot will reuse or reopen it.</div>';
 
-  _safeConfirm(only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?',
+  _safeConfirm(cbApiMode()
+      ? (only ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?')
+      : (only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
     pfHtml + (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
     + 'Accounts: <strong>' + forms.length + '</strong><br>'
     + (only
@@ -12419,7 +12440,7 @@ window.cbPublishAll = function (onProgress, picked) {
     + '<span style="color:var(--warn);font-size:0.85rem">Do not lock the screen while the build runs — '
     + 'creative uploads stall on a locked screen.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
-    + 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook</span>',
+    + aclEscHtml(cbPublishMode()) + '</span>',
     function () {
       var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
       if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
@@ -12428,13 +12449,22 @@ window.cbPublishAll = function (onProgress, picked) {
         only ? function (form) { return cbPickedIn(form, only); } : null);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     },
-    { confirmLabel: only ? 'Publish selected → drafts' : 'Publish all → drafts' });
+    { confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget() });
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };
   if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch(forms.map(cbFormAccount)).then(pfAsk);
   else pfAsk(null);
 };
+
+/* ACL-1761: что создаёт Publish — черновики робота или кампании на паузе через API. */
+function cbApiMode() { return typeof window !== 'undefined' && window.ACL_FB_BACKEND === 'api'; }
+function cbPublishTarget() { return cbApiMode() ? 'PAUSED campaigns' : 'drafts'; }
+function cbPublishMode() {
+  return cbApiMode()
+    ? 'PAUSED — created through the Graph API; nothing is activated, a person turns it on in Ads Manager'
+    : 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook';
+}
 
 /* ── ACL-1761: «Check plan (no writes)» ─────────────────────────────────
  * Те же отмеченные (или все) кампании, что ушли бы в Publish, — на
@@ -12511,8 +12541,41 @@ function cbPlanHtml(data) {
   return h + '</div>';
 }
 
+/* Рамка плана: полоса с «Hide/Show» и «Close plan ×», тело прокручивается само. */
+function cbPlanFrame(inner) {
+  return '<div class="cbd-plan-bar"><span>Plan (no writes)</span><span>'
+    + '<button type="button" class="cbd-add cbd-plan-fold" data-act="fold-plan" aria-expanded="true">Hide</button> '
+    + '<button type="button" class="cbd-add cbd-plan-close" data-act="close-plan" aria-label="Close plan"'
+    + ' title="Close plan">Close plan ×</button></span></div>'
+    + '<div class="cbd-plan-body">' + inner + '</div>';
+}
+
+/* Кнопки рамки (полоса — внутри `out`, обработчик один на `out`). */
+function cbPlanBindFrame(out) {
+  if (!out || out._cbPlanBound || typeof out.addEventListener !== 'function') return;
+  out._cbPlanBound = true;
+  out.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
+    if (!b) return;
+    var act = b.getAttribute('data-act');
+    if (act === 'close-plan') {
+      ev.stopPropagation();
+      out.hidden = true;
+      out.innerHTML = '';
+    } else if (act === 'fold-plan') {
+      ev.stopPropagation();
+      var body = out.querySelector('.cbd-plan-body');
+      if (!body) return;
+      body.hidden = !body.hidden;
+      b.textContent = body.hidden ? 'Show' : 'Hide';
+      b.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
+    }
+  });
+}
+
 window.cbCheckPlan = function (picked, out, btn) {
   if (!out) return;
+  cbPlanBindFrame(out);
   var only = picked && picked.length ? picked : null;
   var forms = [];
   document.querySelectorAll('form.open-account-form').forEach(function (form) {
@@ -12522,8 +12585,8 @@ window.cbCheckPlan = function (picked, out, btn) {
     forms.push({ form: form, only: mine });
   });
   out.hidden = false;
-  if (!forms.length) { out.innerHTML = '<div class="cbd-plan-err">Nothing is being assembled yet.</div>'; return; }
-  out.innerHTML = '<div class="cbd-plan-head">Checking the plan through the Graph API; nothing is written…</div>';
+  if (!forms.length) { out.innerHTML = cbPlanFrame('<div class="cbd-plan-err">Nothing is being assembled yet.</div>'); return; }
+  out.innerHTML = cbPlanFrame('<div class="cbd-plan-head">Checking the plan through the Graph API; nothing is written…</div>');
   if (btn) btn.disabled = true;
   var parts = new Array(forms.length);
   var left = forms.length;
@@ -12535,9 +12598,10 @@ window.cbCheckPlan = function (picked, out, btn) {
         if (!data.account) data.account = cbFormTitle(x.form);
         parts[i] = cbPlanHtml(data);
         left -= 1;
-        out.innerHTML = parts.filter(Boolean).join('')
-          + (left ? '<div class="cbd-plan-head">Still checking ' + left + ' account(s)…</div>' : '');
         if (!left && btn) btn.disabled = false;
+        if (out.hidden) return;   // закрыли, пока ждали: не открывать заново
+        out.innerHTML = cbPlanFrame(parts.filter(Boolean).join('')
+          + (left ? '<div class="cbd-plan-head">Still checking ' + left + ' account(s)…</div>' : ''));
       });
   });
 };
@@ -13402,7 +13466,9 @@ window.cbPublish = function(form) {
     + '<span style="color:var(--warn);font-size:0.85rem">Do not lock the screen while the build runs — '
     + 'creative uploads stall on a locked screen.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
-    + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
+    + (cbApiMode() ? aclEscHtml(cbPublishMode())
+       : 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)')
+    + '</span>';
 
   // Таргетинг, набранный руками и не доведённый до выбора, — это кампания
   // без детального таргетинга. Имя при этом выглядит правильным: оно
@@ -13447,7 +13513,9 @@ window.cbPublish = function(form) {
         return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
       }).join('; '))
     + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway"> Run anyway</label></div>' + bodyHtml;
-  _safeConfirm(ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?', bodyHtml, function() {
+  _safeConfirm(cbApiMode()
+      ? (ticked.length ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create this campaign as a PAUSED campaign?')
+      : (ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?'), bodyHtml, function() {
     if (pf && window.cbPreflightDecision) window.cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
     if (mine && !anyway) { window.alert(accLabel + ' is not ready — fix it, or tick "Run anyway".'); return; }
     if (onlySlot || ticked.length) {
@@ -13455,7 +13523,8 @@ window.cbPublish = function(form) {
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     }
     else _doCbPublish(form);
-  }, { confirmLabel: (warn || lostTargeting.length) ? 'Build anyway' : 'Publish → draft' });
+  }, { confirmLabel: (warn || lostTargeting.length) ? 'Build anyway'
+         : (cbApiMode() ? 'Publish → PAUSED campaign' : 'Publish → draft') });
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };

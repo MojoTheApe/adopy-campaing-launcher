@@ -352,3 +352,150 @@ def test_check_plan_refuses_if_anything_was_written(tmp_path, monkeypatch):
     out = publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")
     assert opened[0].writes == 1
     assert out["results"] == [] and "must not write" in out["error"]
+
+
+# ── 9095, отзыв владельца: план не закрывает билдер; «PAUSED campaigns» в режиме api ──
+
+_FRAME_NODE = r"""
+ESCAPER
+const RealFD = FormData;
+globalThis.FormData = function () { return new RealFD(); };   // поддельная форма — пустой FormData
+function cbFormDataSkipping(form, skip) { return { body: new RealFD() }; }
+function cbSlotTitle(slot) { return slot.title; }
+function cbPickedIn(form, picked) { return picked; }
+function cbFormTitle(form) { return form.title; }
+globalThis.window = globalThis;
+JS
+function makeOut() {
+  const listeners = [];
+  const body = { hidden: false };
+  return {
+    hidden: true, innerHTML: '', listeners: listeners, body: body,
+    addEventListener: (type, fn) => listeners.push(fn),
+    querySelector: (sel) => sel === '.cbd-plan-body' ? body : null,
+  };
+}
+function button(act) {
+  const attrs = { 'data-act': act };
+  return { textContent: '', getAttribute: (k) => attrs[k], setAttribute: (k, v) => { attrs[k] = v; },
+           attrs: attrs, closest: function () { return this; } };
+}
+(async () => {
+  const out = {};
+  globalThis.document = { querySelectorAll: () => [] };
+  const box = makeOut();
+  window.cbCheckPlan(null, box, null);                 // нечего проверять — рамка всё равно с «Close»
+  out.frame = box.innerHTML;
+  out.bound = box.listeners.length;
+  window.cbCheckPlan(null, box, null);                 // второй раз — без второго обработчика
+  out.boundAgain = box.listeners.length;
+  const fold = button('fold-plan');
+  box.listeners[0]({ target: fold, stopPropagation: () => {} });
+  out.folded = { body: box.body.hidden, text: fold.textContent, aria: fold.attrs['aria-expanded'] };
+  box.listeners[0]({ target: fold, stopPropagation: () => {} });
+  out.unfolded = { body: box.body.hidden, text: fold.textContent };
+  let stopped = false;
+  box.listeners[0]({ target: button('close-plan'), stopPropagation: () => { stopped = true; } });
+  out.closed = { hidden: box.hidden, html: box.innerHTML, stopped: stopped };
+  // закрыли, пока ждали ответа: панель не открывается заново, кнопка снова доступна
+  let release;
+  globalThis.fetch = () => new Promise((r) => { release = r; });
+  const form = { title: 'Test', querySelectorAll: () => [{}] };
+  globalThis.document = { querySelectorAll: (sel) => sel === 'form.open-account-form' ? [form] : [] };
+  const box2 = makeOut();
+  const btn = { disabled: false };
+  window.cbCheckPlan(null, box2, btn);
+  out.busy = btn.disabled;
+  box2.listeners[0]({ target: button('close-plan'), stopPropagation: () => {} });
+  release({ json: async () => ({ account: 'Test', results: [] }) });
+  await new Promise((r) => setTimeout(r, 20));
+  out.late = { hidden: box2.hidden, html: box2.innerHTML, btn: btn.disabled };
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+
+def _run_frame_node() -> dict:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    js = _template_js("function cbPlanFormData(form, only) {", "/* Имя карточки для подтверждения. */")
+    escaper = _template_js("function aclEscHtml(value) {", "  </script>")
+    script = _FRAME_NODE.replace("ESCAPER\n", escaper + "\n", 1).replace("JS\n", js + "\n", 1)
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+        fh.write(script)
+        path = fh.name
+    try:
+        done = subprocess.run([node, path], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    finally:
+        Path(path).unlink(missing_ok=True)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
+def test_the_plan_panel_can_be_folded_and_closed():
+    out = _run_frame_node()
+    assert 'data-act="close-plan"' in out["frame"] and "Close plan ×" in out["frame"]
+    assert 'data-act="fold-plan"' in out["frame"] and 'class="cbd-plan-body"' in out["frame"]
+    assert out["bound"] == 1 and out["boundAgain"] == 1
+    assert out["folded"] == {"body": True, "text": "Show", "aria": "false"}
+    assert out["unfolded"] == {"body": False, "text": "Hide"}
+    assert out["closed"] == {"hidden": True, "html": "", "stopped": True}
+    assert out["busy"] is True
+    assert out["late"] == {"hidden": True, "html": "", "btn": False}
+
+
+def test_the_plan_panel_scrolls_inside_the_drawer():
+    text = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    i = text.index(".cbd-plan-out {")
+    css = text[i:text.index("}", i)]
+    for rule in ("max-height: 40vh", "overflow: auto", "max-width: 100%", "box-sizing: border-box",
+                 "position: relative"):
+        assert rule in css, rule
+    assert "position: fixed" not in css and "position: absolute" not in css
+    assert ".cbd-plan-out[hidden] { display: none; }" in text
+
+
+_MODE_NODE = r"""
+globalThis.window = globalThis;
+JS
+const out = {};
+for (const backend of ['api', 'rpa', undefined]) {
+  window.ACL_FB_BACKEND = backend;
+  out[String(backend)] = { target: cbPublishTarget(), mode: cbPublishMode(), api: cbApiMode() };
+}
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_api_mode_says_paused_campaigns_not_drafts():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    js = _template_js("function cbApiMode()", "/* ── ACL-1761: «Check plan (no writes)»")
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+        fh.write(_MODE_NODE.replace("JS\n", js + "\n", 1))
+        path = fh.name
+    try:
+        done = subprocess.run([node, path], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    finally:
+        Path(path).unlink(missing_ok=True)
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)
+    assert out["api"]["target"] == "PAUSED campaigns" and out["api"]["api"] is True
+    assert "PAUSED" in out["api"]["mode"] and "draft" not in out["api"]["mode"].lower()
+    for other in ("rpa", "undefined"):
+        assert out[other]["target"] == "drafts" and out[other]["mode"].startswith("Draft")
+
+
+def test_publish_labels_follow_the_backend():
+    text = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    i = text.index("function publishLabel(t) {")
+    label = text[i:text.index("\n  }", i)]
+    assert "window.ACL_FB_BACKEND === 'api' ? 'PAUSED campaigns' : 'drafts'" in label
+    assert "'Publish selected → ' + what" in label and "'Publish all → ' + what" in label
+    assert "confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget()" in text
+    assert "(cbApiMode() ? 'Publish → PAUSED campaign' : 'Publish → draft')" in text
+    assert text.count("'Create the selected campaigns as PAUSED campaigns?'") == 2
+    # Флаг ставится в голове страницы — раньше любого кода билдера.
+    assert text.index("window.ACL_FB_BACKEND = {{") < text.index("function publishLabel(t) {")
