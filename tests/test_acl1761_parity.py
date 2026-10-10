@@ -177,6 +177,30 @@ def test_policy_an_ad_only_references_a_creative_by_id(name, as_string):
                                                  "creative": {"creative_id": "7"}}) == "ads"
 
 
+_VALID_DOF = {"creative_features_spec": {"text_optimizations": {"enroll_status": "OPT_OUT"}}}
+
+
+@pytest.mark.parametrize("story", [
+    {"page_id": "1", "degrees_of_freedom_spec": _VALID_DOF},
+    {"page_id": "1", "link_data": {"degrees_of_freedom_spec": _VALID_DOF}},
+    {"page_id": "1", "link_data": {"child": [{"degrees_of_freedom_spec": _VALID_DOF}]}},
+])
+def test_policy_refuses_degrees_of_freedom_spec_below_the_top(story):
+    with pytest.raises(wp.WriteRefused, match="only allowed at the top"):
+        wp.check(ACT, "POST", f"/{ACT}/adcreatives", {"name": "x", "object_story_spec": story})
+
+
+@pytest.mark.parametrize("edge,params", [
+    ("adcreatives", {"name": "x", "object_story_spec": {"page_id": "1", "link_data": {"enroll_status": "OPT_IN"}}}),
+    ("adcreatives", {"name": "x", "object_story_spec": '{"page_id": "1", "enroll_status": "OPT_IN"}'}),
+    ("adsets", {"name": "s", "status": "PAUSED", "targeting": {"enroll_status": "OPT_IN"}}),
+    ("campaigns", {"name": "c", "status": "PAUSED", "adlabels": [{"name": "l", "enroll_status": "OPT_IN"}]}),
+])
+def test_policy_refuses_opt_in_outside_degrees_of_freedom_spec(edge, params):
+    with pytest.raises(wp.WriteRefused, match="OPT_OUT"):
+        wp.check(ACT, "POST", f"/{ACT}/{edge}", params)
+
+
 def test_the_creator_opts_out_exactly_the_policy_features():
     assert set(cr.CREATIVE_FEATURES_OPT_OUT) == set(wp.DOF_FEATURES)
     wp.check(ACT, "POST", f"/{ACT}/adcreatives", {"name": "x", "object_story_spec": {"page_id": "1"},
@@ -213,6 +237,16 @@ const creative = (v) => ({ name: 'x', object_story_spec: { page_id: '1' },
   }
   out.ad_ref = await h.call({ method: 'POST', path: ADS,
                               params: { name: 'a', status: 'PAUSED', creative: { creative_id: '7' } } });
+  // Ревью R6: вложенный degrees_of_freedom_spec и OPT_IN вне него — отказ.
+  const VALID = { creative_features_spec: { text_optimizations: { enroll_status: 'OPT_OUT' } } };
+  out.nested_dof = await h.call({ method: 'POST', path: PATH,
+    params: { name: 'x', object_story_spec: { page_id: '1', degrees_of_freedom_spec: VALID } } });
+  out.nested_dof_list = await h.call({ method: 'POST', path: PATH,
+    params: { name: 'x', object_story_spec: { page_id: '1', link_data: { child: [{ degrees_of_freedom_spec: VALID }] } } } });
+  out.opt_in_outside = await h.call({ method: 'POST', path: PATH,
+    params: { name: 'x', object_story_spec: { page_id: '1', link_data: { enroll_status: 'OPT_IN' } } } });
+  out.opt_in_targeting = await h.call({ method: 'POST', path: PATH.replace('/adcreatives', '/adsets'),
+    params: { name: 's', status: 'PAUSED', targeting: { enroll_status: 'OPT_IN' } } });
   out.calls = calls.length;
   process.stdout.write(JSON.stringify(out));
 })();
@@ -244,4 +278,6 @@ def test_page_helper_allows_only_opt_out_for_enhancements():
     for k, why in BAD_DOF_WHY.items():
         assert out[k] == {"error": "write_refused", "why": why}, k
     assert out["ad_ref"].get("body") == {"id": "5"}
+    for k in ("nested_dof", "nested_dof_list", "opt_in_outside", "opt_in_targeting"):
+        assert out[k] == {"error": "write_refused", "why": "status"}, k
     assert out["calls"] == 2

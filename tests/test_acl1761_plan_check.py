@@ -488,6 +488,18 @@ def test_api_mode_says_paused_campaigns_not_drafts():
     assert "PAUSED" in out["api"]["mode"] and "draft" not in out["api"]["mode"].lower()
     for other in ("rpa", "undefined"):
         assert out[other]["target"] == "drafts" and out[other]["mode"].startswith("Draft")
+        assert "never clicks Publish" in out[other]["mode"]
+
+
+def test_publish_all_confirm_uses_the_mode_and_keeps_the_rpa_promise_literally():
+    """Ревью R6: вопрос «Publish all» берёт режим из cbPublishMode() в api, а ветка
+    робота дословно говорит «Draft» и «never clicks Publish»."""
+    text = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    ask = text[text.index("window.cbPublishAll"):]
+    ask = ask[:ask.index("function _runPublishQueue")]
+    i = ask.index("cbApiMode() ? aclEscHtml(cbPublishMode())")
+    rpa_branch = ask[i:ask.index("'</span>'", i)]
+    assert "Draft" in rpa_branch and "never clicks Publish" in rpa_branch
 
 
 def test_publish_labels_follow_the_backend():

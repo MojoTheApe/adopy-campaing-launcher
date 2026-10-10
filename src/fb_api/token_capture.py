@@ -191,15 +191,18 @@ _HELPER_JS = r"""
 
   // Вложенные строки — обычный текст (ревью R2-B1): разбираются только
   // JSON-ключи верхнего уровня, в `write()` до проверок.
-  function statusOk(value) {
-    if (Array.isArray(value)) { for (const v of value) if (!statusOk(v)) return false; return true; }
+  function statusOk(value, depth) {
+    depth = depth || 0;
+    if (Array.isArray(value)) { for (const v of value) if (!statusOk(v, depth + 1)) return false; return true; }
     if (value && typeof value === 'object') {
       for (const k of Object.keys(value)) {
         const low = String(k).toLowerCase();
         if (WRITE.forbidden.indexOf(low) >= 0) return false;
+        // Ревью R6: degrees_of_freedom_spec — только на верхнем уровне креатива.
+        if (low === 'degrees_of_freedom_spec' && depth > 0) return false;
         if (WRITE.opt_out_keys.indexOf(low) >= 0) { if (value[k] !== 'OPT_OUT') return false; }
         else if (low.indexOf('status') >= 0 && value[k] !== 'PAUSED') return false;
-        if (!statusOk(value[k])) return false;
+        if (!statusOk(value[k], depth + 1)) return false;
       }
     }
     return true;

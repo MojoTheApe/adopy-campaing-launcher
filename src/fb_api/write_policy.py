@@ -87,21 +87,24 @@ def _parsed(value: Any, where: str) -> Any:
     return value
 
 
-def _walk(value: Any, where: str) -> None:
+def _walk(value: Any, where: str, depth: int = 0) -> None:
     if isinstance(value, dict):
         for key, item in value.items():
             low = str(key).lower()
             if low in FORBIDDEN_ANYWHERE:
                 raise WriteRefused(f"write refused: key {key!r} is not allowed ({where})")
+            if low == "degrees_of_freedom_spec" and depth > 0:
+                # Ревью R6: только на верхнем уровне креатива, где его проверяет `_check_dof`.
+                raise WriteRefused(f"write refused: degrees_of_freedom_spec is only allowed at the top ({where})")
             if low in OPT_OUT_KEYS:
                 if item != OPT_OUT:
                     raise WriteRefused(f"write refused: {key} may only be OPT_OUT ({where})")
             elif "status" in low and item != PAUSED:
                 raise WriteRefused(f"write refused: {key} must be PAUSED ({where})")
-            _walk(item, where)
+            _walk(item, where, depth + 1)
     elif isinstance(value, (list, tuple)):
         for item in value:
-            _walk(item, where)
+            _walk(item, where, depth + 1)
 
 
 def _check_dof(value: Any) -> None:
