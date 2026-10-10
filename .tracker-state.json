@@ -10455,7 +10455,7 @@
             "session": "run_s1760a_1009"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1760A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10474,7 +10474,7 @@
         },
         "pr": 762,
         "queued_at": "2026-10-10T07:26:37+00:00",
-        "review_report": "Owner live test on the 9095 test dashboard (2026-10-10): Read spend via the API on Facebook_5414 was fast and worked.\n\nUI issue: the \"Account spend\" cell shows \"USD 179...\" truncated. The API reading stores the ISO currency code, while RPA used the sign (\"$179.47\"), so the value no longer fits the column.\n\nFix:\n- Map common ISO codes to their symbols in the reading (USD $, EUR \u20ac, GBP \u00a3, BRL R$, MXN MX$ or $ as RPA did, etc.), matching what the RPA reading stored. Unknown codes stay as ISO.\n- Keep per-currency sums working.\n- Check that the \"Status\" column text (\"no warni\u2026\") isn't truncated either.\n\nAdd tests.",
+        "review_report": "Round 4 review of head 35c28fed (delta 7a175b2d..35c28fed): the code is APPROVED, but CI is red, so I am returning it.\n\nCI blocker: linux tests (3.13, 3) fails twice (original run and rerun) on tests/test_the_api_stop_is_asked_first.py::test_a_routing_miss_is_logged_with_its_address, and ACL verification fails with it.\nThe cause is test pollution that was already there. tests/test_acl1756_fb_api.py::test_scrub_filter_cleans_log_records does caplog.handler.addFilter(tm.ScrubFilter()) and never removes it. The caplog handler is shared in this pytest, so the filter stays on and later caplog tests see \"<uuid>\" instead of the profile id.\nI reproduced it locally with: pytest tests/test_acl1756_fb_api.py tests/test_the_api_stop_is_asked_first.py. It fails the same way on the previous head 7a175b2d, so the delta did not introduce it. The shard layout now puts these two files in shard 3 in this order.\nFix, in tests only: in test_scrub_filter_cleans_log_records, add the filter, then in a try/finally call caplog.handler.removeFilter(flt), or attach the filter to a private logging.Handler. Then verify that those two files run together and pass. No production code needs to change.\n\nDelta review, all fine:\n- display_currency maps only USD to $, EUR to euro, GBP to pound and ILS to shekel; any other code stays ISO.\n- _money gives \"$100.00\" or \"BRL 21.61\". amapMoneyIn takes the first number and strips commas, so these parse.\n- The per-currency sums in app.py (lines 752-760) put a 3-letter ISO code into live_sums and keep any sign as a separate unknown_sums entry, same as RPA. Row spend and cost text use the same sign mapping.\n- why_split_is_needed compares spend_currency to the reading's currency. Both are now the sign, so it is consistent. The first read after upgrade may see one \"spend changed\" for an old ISO-stored split; that is harmless.\n- The tree is built from the raw ISO and mapped in _money. Country split rows keep ISO.\n- Only account_spend_api.py and tests/test_acl1760_api_read.py changed.\n- Mutations: removing USD makes 9 tests fail; ILS to ISO fails 1; display_currency returning the text unchanged fails 9; storing the raw currency in read_via_api fails 5.\n- Tests, one file at a time: test_acl1760_api_read 74, test_acl1756_fb_api 103, test_account_spend 63, test_country_split 27, test_build_progress_model 30. All passed.\n- merge-tree vs work/main e8e59f83 is clean (tree 6254f36b equals the head tree).\nAfter the test fix this should be a quick re-approval.",
         "return_operation": {
           "id": "96930e73bfcd4cc6bad950e260d799e1",
           "actor": "Coordinator-C0930A",
@@ -13729,20 +13729,7 @@
       710,
       739
     ],
-    "review": {
-      "id": "758b97d4d2134ee5b317971228d6138b",
-      "pr": 762,
-      "issues": [
-        760
-      ],
-      "actor": "Reviewer-R1760S",
-      "session": "rev_r1760s_1010",
-      "coordinator": "Coordinator-C0930A",
-      "started_at": "2026-10-10T08:51:30+00:00",
-      "state": "returning",
-      "report": "Round 4 review of head 35c28fed (delta 7a175b2d..35c28fed): the code is APPROVED, but CI is red, so I am returning it.\n\nCI blocker: linux tests (3.13, 3) fails twice (original run and rerun) on tests/test_the_api_stop_is_asked_first.py::test_a_routing_miss_is_logged_with_its_address, and ACL verification fails with it.\nThe cause is test pollution that was already there. tests/test_acl1756_fb_api.py::test_scrub_filter_cleans_log_records does caplog.handler.addFilter(tm.ScrubFilter()) and never removes it. The caplog handler is shared in this pytest, so the filter stays on and later caplog tests see \"<uuid>\" instead of the profile id.\nI reproduced it locally with: pytest tests/test_acl1756_fb_api.py tests/test_the_api_stop_is_asked_first.py. It fails the same way on the previous head 7a175b2d, so the delta did not introduce it. The shard layout now puts these two files in shard 3 in this order.\nFix, in tests only: in test_scrub_filter_cleans_log_records, add the filter, then in a try/finally call caplog.handler.removeFilter(flt), or attach the filter to a private logging.Handler. Then verify that those two files run together and pass. No production code needs to change.\n\nDelta review, all fine:\n- display_currency maps only USD to $, EUR to euro, GBP to pound and ILS to shekel; any other code stays ISO.\n- _money gives \"$100.00\" or \"BRL 21.61\". amapMoneyIn takes the first number and strips commas, so these parse.\n- The per-currency sums in app.py (lines 752-760) put a 3-letter ISO code into live_sums and keep any sign as a separate unknown_sums entry, same as RPA. Row spend and cost text use the same sign mapping.\n- why_split_is_needed compares spend_currency to the reading's currency. Both are now the sign, so it is consistent. The first read after upgrade may see one \"spend changed\" for an old ISO-stored split; that is harmless.\n- The tree is built from the raw ISO and mapped in _money. Country split rows keep ISO.\n- Only account_spend_api.py and tests/test_acl1760_api_read.py changed.\n- Mutations: removing USD makes 9 tests fail; ILS to ISO fails 1; display_currency returning the text unchanged fails 9; storing the raw currency in read_via_api fails 5.\n- Tests, one file at a time: test_acl1760_api_read 74, test_acl1756_fb_api 103, test_account_spend 63, test_country_split 27, test_build_progress_model 30. All passed.\n- merge-tree vs work/main e8e59f83 is clean (tree 6254f36b equals the head tree).\nAfter the test fix this should be a quick re-approval.",
-      "keep_lane": false
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -20463,6 +20450,24 @@
         "pr": 762,
         "lane": "758b97d4d2134ee5b317971228d6138b",
         "actor": "Reviewer-R1760S"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-10T08:51:58+00:00",
+        "review": {
+          "id": "758b97d4d2134ee5b317971228d6138b",
+          "pr": 762,
+          "issues": [
+            760
+          ],
+          "actor": "Reviewer-R1760S",
+          "session": "rev_r1760s_1010",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-10T08:51:30+00:00",
+          "state": "returning",
+          "report": "Round 4 review of head 35c28fed (delta 7a175b2d..35c28fed): the code is APPROVED, but CI is red, so I am returning it.\n\nCI blocker: linux tests (3.13, 3) fails twice (original run and rerun) on tests/test_the_api_stop_is_asked_first.py::test_a_routing_miss_is_logged_with_its_address, and ACL verification fails with it.\nThe cause is test pollution that was already there. tests/test_acl1756_fb_api.py::test_scrub_filter_cleans_log_records does caplog.handler.addFilter(tm.ScrubFilter()) and never removes it. The caplog handler is shared in this pytest, so the filter stays on and later caplog tests see \"<uuid>\" instead of the profile id.\nI reproduced it locally with: pytest tests/test_acl1756_fb_api.py tests/test_the_api_stop_is_asked_first.py. It fails the same way on the previous head 7a175b2d, so the delta did not introduce it. The shard layout now puts these two files in shard 3 in this order.\nFix, in tests only: in test_scrub_filter_cleans_log_records, add the filter, then in a try/finally call caplog.handler.removeFilter(flt), or attach the filter to a private logging.Handler. Then verify that those two files run together and pass. No production code needs to change.\n\nDelta review, all fine:\n- display_currency maps only USD to $, EUR to euro, GBP to pound and ILS to shekel; any other code stays ISO.\n- _money gives \"$100.00\" or \"BRL 21.61\". amapMoneyIn takes the first number and strips commas, so these parse.\n- The per-currency sums in app.py (lines 752-760) put a 3-letter ISO code into live_sums and keep any sign as a separate unknown_sums entry, same as RPA. Row spend and cost text use the same sign mapping.\n- why_split_is_needed compares spend_currency to the reading's currency. Both are now the sign, so it is consistent. The first read after upgrade may see one \"spend changed\" for an old ISO-stored split; that is harmless.\n- The tree is built from the raw ISO and mapped in _money. Country split rows keep ISO.\n- Only account_spend_api.py and tests/test_acl1760_api_read.py changed.\n- Mutations: removing USD makes 9 tests fail; ILS to ISO fails 1; display_currency returning the text unchanged fails 9; storing the raw currency in read_via_api fails 5.\n- Tests, one file at a time: test_acl1760_api_read 74, test_acl1756_fb_api 103, test_account_spend 63, test_country_split 27, test_build_progress_model 30. All passed.\n- merge-tree vs work/main e8e59f83 is clean (tree 6254f36b equals the head tree).\nAfter the test fix this should be a quick re-approval.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
