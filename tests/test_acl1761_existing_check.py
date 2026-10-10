@@ -138,3 +138,16 @@ def test_describe_diffs_names_manual_changes_too():
     got = cr._describe_diffs(checks)
     assert got[0].startswith("placements (publisher platforms: builder facebook")
     assert got[1] == "maximum age (builder: 55, Meta: 65)" and len(got) == 2
+
+
+def test_active_reused_adset_or_campaign_stops_before_any_write(tmp_path):
+    # Статус ACTIVE у найденного объекта — расхождение с билдером: стоп до записей.
+    for kind in ("adset", "campaign"):
+        meta = _first_run(tmp_path, ads=1)
+        obj = next(o for o in meta.objects.values() if o["_kind"] == kind)
+        obj["status"] = "ACTIVE"
+        before = _write_count(meta)
+        out, client = _run(meta, _draft(tmp_path, ads=2))
+        assert out.stop_kind == "existing_differs", kind
+        assert "status (builder: PAUSED, Meta: ACTIVE)" in out.error, kind
+        assert _write_count(meta) == before and client.writes == 0, kind
