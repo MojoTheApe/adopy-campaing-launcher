@@ -260,7 +260,7 @@ def test_reading_has_exactly_the_dict_shape_the_screen_reads(world):
     assert set(got) == set(rpa_shape), "the API reading must have the same keys as the RPA reading"
     assert got["source"] == "api"
     assert got["state"] == "ok" and got["error"] == ""
-    assert got["spend"] == 113.87 and got["currency"] == "USD"
+    assert got["spend"] == 113.87 and got["currency"] == "$"
     assert got["date_from"] == D and got["date_to"] == D
     assert got["status"] == "clear" and "active" in got["status_text"].lower()
     assert got["objects_read"] is True and got["objects_error"] == ""
@@ -276,8 +276,8 @@ def test_tree_objects_have_the_row_shape_of_the_rpa_tree(world):
     ads = [o for o in objects if o["level"] == "ad"]
     assert [(o["id"], o["name"], o["switch"], o["delivery"]) for o in campaigns] == [
         ("111", "Camp A", "on", "Active"), ("222", "Camp B", "off", "Off")]
-    assert campaigns[0]["spend"] == "100.00 USD" and campaigns[0]["results"] == "10 Leads"
-    assert campaigns[0]["cost_per_result"] == "10.00 USD per lead"
+    assert campaigns[0]["spend"] == "$100.00" and campaigns[0]["results"] == "10 Leads"
+    assert campaigns[0]["cost_per_result"] == "$10.00 per lead"
     assert campaigns[1]["spend"] == "" and campaigns[1]["results"] == ""
     assert [(o["id"], o["parent_id"], o["switch"], o["delivery"]) for o in ads] == [
         ("11", "111", "on", "Active"), ("22", "222", "off", "Campaign off")]
@@ -309,7 +309,7 @@ def test_period_goes_to_insights_as_time_range_and_only_get_is_used(world):
 def test_no_spend_rows_is_zero_in_the_account_currency(world):
     world.page.routes["/ACT/insights|account|"] = ok([])
     r = api.read_via_api(ACCOUNT, D, D)
-    assert r.state == "ok" and r.spend == 0.0 and r.currency == "USD"
+    assert r.state == "ok" and r.spend == 0.0 and r.currency == "$"
 
 
 def test_empty_account_is_read_as_zero_campaigns_not_as_unread(world):
@@ -347,10 +347,7 @@ def test_account_status_maps_to_the_words_the_screen_knows():
         assert got == word, status
         assert needle.lower() in text.lower(), (status, text)
         assert got in {"clear", "disabled", "restricted", "review", "unknown"}
-
-
-def test_missing_status_is_unknown_never_clear():
-    assert api.map_status(None, None) == ("unknown", "")
+    assert api.map_status(None, None) == ("unknown", ""), "a missing status is unknown, never clear"
 
 
 def test_disabled_account_reading_carries_the_status(world):
@@ -505,7 +502,7 @@ def test_other_graph_error_on_row_spend_only_blanks_the_numbers(world):
     r = api.read_via_api(ACCOUNT, D, D)
     assert r.state == "ok" and len(r.objects) == 4 and r.objects_read is True
     assert "ad spend were not read" in r.objects_error
-    assert r.objects[0]["spend"] == "100.00 USD"
+    assert r.objects[0]["spend"] == "$100.00"
 
 
 def test_partial_lists_are_said_out_loud(world):
@@ -789,7 +786,7 @@ def test_split_is_read_in_the_spend_session_with_no_second_load(world):
     saved = cs_.get_split(ACCOUNT, D, D)
     assert saved["state"] == "ok" and saved["source"] == "api"
     assert [x["country"] for x in saved["rows"]] == ["United States", "Israel"]
-    assert saved["spend"] == 113.87 and saved["spend_currency"] == "USD" and saved["spend_at"]
+    assert saved["spend"] == 113.87 and saved["spend_currency"] == "$" and saved["spend_at"]
     # Страница после чтения спросит «нужна ли разбивка» — и услышит «нет».
     assert cs_.why_split_is_needed(
         countries=2, split=saved, spend_finished_at="2026-10-09 12:00:00",
@@ -948,3 +945,76 @@ def test_checkpoint_or_logout_seen_during_the_token_wait_starts_the_cooldown(wor
         assert len(world.opened_profiles) == opened, "and the profile is not opened again"
         assert world.cdp.sent.count(("Target.createTarget", {"url": "about:blank"}, "")) == tabs
         assert ("checkpoint" in second.error.lower()) == (word == "checkpoint")
+
+
+# ───────────────────────── валюта: как у RPA (live 10.10) ─────────────────────────
+
+def test_currency_is_stored_the_way_rpa_wrote_it_so_the_cell_fits(world):
+    """RPA клал знак («$179.47»); «USD 179.47» не влезало в колонку."""
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.currency == "$"
+    # Тот же текст рисуют и сервер (после перезагрузки), и страница (после Read).
+    from src.analysis_agent import money_format
+
+    assert money_format.fmt_currency(r.spend, r.currency) == "$113.87"
+
+
+def test_only_the_signs_the_screen_knows_are_mapped_the_rest_stays_an_iso_code():
+    from src.analysis_agent import money_format
+
+    for code, shown in [("USD", "$"), ("EUR", "€"), ("GBP", "£"), ("ILS", "₪"), ("usd", "$")]:
+        assert api.display_currency(code) == shown
+    for code in ("BRL", "MXN", "KWD", "CAD", "AUD", "JPY"):
+        # R$ / MX$ экран не знает и показал бы «currency unknown»; код он рисует.
+        assert api.display_currency(code) == code
+        assert money_format.fmt_currency(21.61, api.display_currency(code)) == f"{code} 21.61"
+    assert api.display_currency("") == "" and api.display_currency(None) == ""
+
+
+def test_row_money_reads_like_ads_manager_and_still_parses_as_a_number():
+    assert api._money(100, "USD") == "$100.00"
+    assert api._money(1234.5, "EUR") == "€1,234.50"
+    assert api._money(21.61, "KWD") == "KWD 21.61"
+    # `amapMoneyIn` берёт первое число строки: запятые тысяч и знак ему не мешают.
+    import re
+
+    for text, want in (("€1,234.50", 1234.5), ("KWD 21.61", 21.61), ("$100.00", 100.0)):
+        m = re.search(r"-?\d[\d,\s]*(?:\.\d+)?", text)
+        assert float(m.group(0).replace(",", "").replace(" ", "")) == want
+
+
+def test_per_currency_sums_keep_working_for_codes_and_keep_signs_apart(world):
+    """Код суммируется по кодам; знак, как у RPA, остаётся отдельным значением."""
+    import re
+
+    sums, unknown = {}, []
+    readings = [api.read_via_api(ACCOUNT, D, D)]                    # USD -> «$»
+    world.page.routes["/ACT||"] = {"status": 200, "headers": {}, "body": dict(
+        ACT_ROW["body"], currency="KWD")}
+    world.page.routes["/ACT/insights|account|"] = ok([{"spend": "21.61", "account_currency": "KWD"}])
+    readings.append(api.read_via_api(ACCOUNT, "2026-10-07", "2026-10-07"))
+    readings.append(api.read_via_api(ACCOUNT, "2026-10-06", "2026-10-06"))
+    for r in readings:                                              # то же, что делает app.py
+        cur = str(r.currency or "").upper()
+        if re.fullmatch(r"[A-Z]{3}", cur):
+            sums[cur] = sums.get(cur, 0.0) + r.spend
+        else:
+            unknown.append({"currency": r.currency, "spend": r.spend})
+    assert sums == {"KWD": 43.22}
+    assert unknown == [{"currency": "$", "spend": 113.87}]
+
+
+def test_status_cell_text_is_the_same_word_set_as_rpa_and_the_long_text_is_only_a_tooltip(world):
+    """«no warni…» режет колонка, а не API: слово то же; длинный текст — только title."""
+    import re
+    from pathlib import Path
+
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.status == "clear"                      # экран пишет «no warning» по слову, не по тексту
+    tpl = (ROOT / "src" / "web" / "templates" / "_account_map_country.html").read_text(encoding="utf-8")
+    cell = re.search(r"st\.status == 'clear' -%\}<span[^>]*>([^<]*)</span>", tpl)
+    assert cell and cell.group(1) == "no warning"
+    assert "st.status_text" in tpl.split("{{ st.status }}")[0].rsplit("title=", 1)[-1]
+    for code in (1, 2, 3, 7, 8, 9, 100, 101, 555):
+        word, _text = api.map_status(code, 0)
+        assert word in {"clear", "disabled", "restricted", "review", "unknown"}
