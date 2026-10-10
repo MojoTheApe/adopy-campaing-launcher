@@ -68,7 +68,7 @@ def test_cdp_timeout_on_checkpoint_url_stops_as_checkpoint():
     with pytest.raises(g.Checkpoint) as ei:
         graph.wait_ready(timeout=5)
     assert "SECRETVALUE" not in str(ei.value)
-    assert "www.facebook.com/checkpoint/" in str(ei.value)
+    assert "1501092823525282" not in str(ei.value) and "checkpoint/" not in str(ei.value)
 
 
 def test_cdp_timeout_on_ads_manager_is_page_unresponsive_without_the_query():
@@ -369,3 +369,101 @@ def test_tab_open_failure_still_closes_its_own_tab_when_others_exist():
     with pytest.raises(CdpTimeout):
         PageTab.open("http://127.0.0.1:1", connect=lambda u, timeout: cdp)
     assert ("Target.closeTarget", {"targetId": "T-mine"}) in cdp.sent
+
+
+# ───────────────────────── ревью, раунд 9: запись и F1 ─────────────────────────
+
+ACT = "act_123456789"
+
+
+class WriteStubTab:
+    """Вкладка для записи: помощник цел, `.call(` виснет, браузер называет URL."""
+
+    def __init__(self, url, *, hang_state=False):
+        from tests.test_acl1761_api_create import StubTab
+
+        self.inner = StubTab(call_exc=CdpTimeout("Runtime.evaluate: the browser did not answer"))
+        self.url, self.hang_state, self.asked = url, hang_state, 0
+        self.posted_reply = None
+
+    def create_isolated_world(self, name):
+        return self.inner.create_isolated_world(name)
+
+    def evaluate_in(self, ctx, expr, timeout=60.0):
+        if ".state()" in expr and self.hang_state:
+            raise CdpTimeout("Runtime.evaluate: the browser did not answer")
+        if ".call(" in expr and self.posted_reply is not None:
+            return self.posted_reply
+        return self.inner.evaluate_in(ctx, expr, timeout)
+
+    def browser_url(self, timeout=5.0):
+        self.asked += 1
+        return self.url
+
+
+def _camp():
+    return {"name": "c", "objective": "OUTCOME_LEADS", "status": "PAUSED",
+            "special_ad_categories": "[]", "buying_type": "AUCTION"}
+
+
+@pytest.mark.parametrize("url", [ADSMANAGER, LOGIN])
+@pytest.mark.parametrize("kind", ["json", "image", "video"])
+def test_a_post_or_upload_timeout_stays_call_unknown_then_write_unknown(url, kind):
+    tab = WriteStubTab(url)
+    transport = tc.InPageGraph(tab, allow_writes=True, write_act=ACT, sleep=lambda s: None)
+    client = g.GraphClient(transport, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0)
+    if kind == "json":
+        path, files, params = f"/{ACT}/campaigns", None, _camp()
+    elif kind == "image":
+        path, files, params = f"/{ACT}/adimages", {"filename": b"0123456789"}, {}
+    else:
+        path, files, params = f"/{ACT}/advideos", {"source": b"0123456789"}, {"title": "t"}
+    assert transport.write(path, params, files=files, filename="a.bin") == {"error": "call_unknown"}
+    assert tab.asked == 0                              # POST не классифицируется как зависание вкладки
+    with pytest.raises(g.WriteUnknown):
+        client.post(path, params, files=files, filename="a.bin")
+    assert client.unreconciled == path and client.stopped is None
+
+
+def test_non_json_post_then_hung_state_is_write_unknown_not_a_plain_stop():
+    tab = WriteStubTab(ADSMANAGER, hang_state=True)
+    tab.posted_reply = {"status": 200, "body": {"non_json": "<html>"}}
+    # помощник «установлен» заранее, state() виснет только на проверке страницы после записи
+    transport = tc.InPageGraph(tab, allow_writes=True, write_act=ACT, sleep=lambda s: None)
+    transport._ctx, transport._injected = 7, True
+    transport._ready_for_call = lambda timeout=10.0: None
+    client = g.GraphClient(transport, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0)
+    path = f"/{ACT}/campaigns"
+    with pytest.raises(g.WriteUnknown) as ei:
+        client.post(path, _camp())
+    assert client.unreconciled == path
+    assert "nothing" not in str(ei.value).lower() and "Ads Manager" in str(ei.value)
+    assert client.stopped is not None and "nothing" not in str(client.stopped).lower()
+
+
+def test_publisher_is_blocked_after_non_json_post_and_hung_page(monkeypatch, tmp_path):
+    from tests.test_acl1761_api_create import FakeMeta, _draft, _publisher
+
+    class Meta(FakeMeta):
+        hang = False
+
+        def state(self):
+            if self.hang:
+                raise g.PageUnresponsive("the Ads Manager tab stopped answering")
+            return super().state()
+
+        def write(self, path, params, files=None, filename=""):
+            if path.endswith("/campaigns"):
+                self.hang = True
+                return {"status": 200, "body": {"non_json": "<html>"}}
+            return super().write(path, params, files=files, filename=filename)
+
+    from src.analysis_agent import account_spend_api as api
+
+    monkeypatch.setattr(api, "_COOLDOWN", {})
+    monkeypatch.setattr(tm, "report_stop", lambda *a, **k: "")
+    monkeypatch.setattr(tm, "record", lambda *a, **k: None)
+    pub = _publisher(Meta())
+    res = pub.publish_draft(_draft(tmp_path, ads=1))
+    assert pub.blocked and pub._client.unreconciled
+    assert res["success"] is False and "nothing was sent" not in (res["error"] or "").lower()

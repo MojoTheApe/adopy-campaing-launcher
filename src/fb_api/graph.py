@@ -443,10 +443,27 @@ class GraphClient:
             raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status,
                              details=details)
         if "non_json" in body or (isinstance(status, int) and status >= 500):
-            self._check_page()
+            # Запись могла дойти до Meta: метку ставим ДО любой проверки страницы,
+            # которая теперь может сама кинуть стоп (вкладка молчит, ACL-1761 B1).
             self.unreconciled = path
+            self._check_page_after_write(path)
             raise WriteUnknown("Graph API did not answer the write with JSON; the result is unknown", path=path)
         return body
+
+    def _check_page_after_write(self, path: str) -> None:
+        """Проверка страницы после записи с неизвестным результатом.
+
+        Стоп страницы не превращает запись в «не отправлена»: остаётся
+        `unreconciled`, наружу — `WriteUnknown` (сверка чтением и отчёт
+        «проверьте Ads Manager»), а клиент остановлен честным текстом.
+        """
+        try:
+            self._check_page()
+        except GraphStop as exc:
+            stop = type(exc)(f"the page stopped ({exc.kind}) after a write whose result is unknown; "
+                             "check Ads Manager before publishing again")
+            self.stopped = stop
+            raise WriteUnknown(str(stop), path=path) from exc
 
     def _token_dead(self, path: str, params: dict | None, code: int | None, sub: int | None) -> dict:
         if self._reacquired:

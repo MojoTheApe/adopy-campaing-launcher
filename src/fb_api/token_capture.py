@@ -459,7 +459,7 @@ class InPageGraph:
             return LoggedOut("the profile was logged out while the job ran; log in inside "
                              "Multilogin, then retry. Nothing more was sent.")
         if "/checkpoint" in path or "two_step" in path:
-            return Checkpoint(f"the profile is on a Facebook checkpoint (now at {where})")
+            return Checkpoint("the profile is on a Facebook checkpoint")
         return PageUnresponsive(f"the Ads Manager tab stopped answering (now at {where}); "
                                 "nothing more was sent")
 
