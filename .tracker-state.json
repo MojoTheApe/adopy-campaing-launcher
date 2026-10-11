@@ -7285,20 +7285,6 @@
         "from_status": "status:idea",
         "pr": 794,
         "report": "ACL-1766 handoff (PR #794, branch codex/acl-1766-map-pixel, head f851999f, stacked on #765)\n\nChecks and results:\n- New tests/test_acl1766_map_pixel.py: 9 passed. Covered: map pixel with 2 account pixels, map pixel not on the account (clear error, nothing created), 1 account pixel, 2 account pixels without a map value (previous error), plan_summary pixel/page source, readback \"Not read\" for CTA and locales.\n- Affected suites (fakes only): 174 passed together with test_acl1761_api_create and test_acl1761_plan_check; RPA suites test_second_primary_text_reaches_the_robot, test_september_review, test_account_link_sources and test_rpa_job_start_is_measured: 59 passed.\n- Mutations: removing the enrich pixel line fails test_enrich_carries_map_pixel_and_page; letting the map override the draft fails test_enrich_keeps_what_the_draft_already_has.\n\nRemaining risks:\n- src/fb_ads_rpa/enrich_draft.py is RPA-owned; the change is minimal (two fields set via getattr). No RPA code reads draft.pixel_id. A draft page_id now wins over the map, and the builder never supplies one.\n- The plan-line source text in report.html has no browser test.\n- Full CI is blocked by the GitHub Actions billing outage; re-run before merge.\n\nDurable reference: PR #794."
-      },
-      "783": {
-        "actor": "Worker-M1783B",
-        "session": "c18fd7986a28447daada00e6d2b99f57",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1783-graph-api-version",
-        "worktree": "C:\\acl-1783",
-        "id": "88d5aa3ad01e4971b02cfc1f61b28731",
-        "issue": 783,
-        "state": "handoff",
-        "started_at": "2026-10-11T18:22:37+00:00",
-        "from_status": "status:todo",
-        "pr": 790,
-        "report": "Scope: default Graph/Marketing API version v22.0 -> v26.0 in src/meta_campaign_agent/meta_client.py (one constant DEFAULT_GRAPH_VERSION, META_GRAPH_API_VERSION override kept); src/fb_api uses the Ads Manager page's own version, unchanged. v24-v26 breaking changes reviewed (listed in the Issue); none touch our payloads. Checks: tests/test_meta_campaign_agent.py + tests/test_acl1756_fb_api.py: 112 passed, 2 skipped. PR 790, branch work/acl-1783-graph-api-version, base main. Risks: no live verification (needs owner approval; proposal in the Issue). Claim re-registered 2026-10-11 under Coordinator-M1011A / Worker-M1783B after the first claim used a non-conforming feature/ branch."
       }
     },
     "tasks": {
@@ -10654,22 +10640,25 @@
             "session": "c18fd7986a28447daada00e6d2b99f57"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-M1783B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-M1783A",
-          "session": "ea74af46b9684322a8e4c6b643a049a2",
-          "coordinator": "Coordinator-M1783",
-          "branch": "feature/acl-1783-graph-api-version",
+          "actor": "Worker-M1783B",
+          "session": "c18fd7986a28447daada00e6d2b99f57",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1783-graph-api-version",
           "worktree": "C:\\acl-1783",
-          "id": "7a6e2cf497194c409aeba29814d08572",
+          "id": "88d5aa3ad01e4971b02cfc1f61b28731",
           "issue": 783,
-          "state": "stopping",
-          "started_at": "2026-10-11T18:05:46+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-11T18:22:37+00:00",
           "from_status": "status:todo",
-          "report": "## Stop report: ACL-1783\n\nThe claim was recorded with branch `feature/acl-1783-graph-api-version`. That name breaks the repository rule `work/acl-NNNN-short-name` (docs/repository/WORKFLOW.md), and the coordinator brief caused the mistake. The same work, unchanged, is now on `work/acl-1783-graph-api-version` with PR #790 (PR #789 from the old branch is closed). Stopping this claim so the task can be re-claimed under the correct branch and the dispatching Coordinator-M1011A. No code is lost and nothing was merged."
-        }
+          "pr": 790,
+          "report": "Scope: default Graph/Marketing API version v22.0 -> v26.0 in src/meta_campaign_agent/meta_client.py (one constant DEFAULT_GRAPH_VERSION, META_GRAPH_API_VERSION override kept); src/fb_api uses the Ads Manager page's own version, unchanged. v24-v26 breaking changes reviewed (listed in the Issue); none touch our payloads. Checks: tests/test_meta_campaign_agent.py + tests/test_acl1756_fb_api.py: 112 passed, 2 skipped. PR 790, branch work/acl-1783-graph-api-version, base main. Risks: no live verification (needs owner approval; proposal in the Issue). Claim re-registered 2026-10-11 under Coordinator-M1011A / Worker-M1783B after the first claim used a non-conforming feature/ branch."
+        },
+        "pr": 790,
+        "queued_at": "2026-10-11T18:24:50+00:00"
       },
       "782": {
         "implementers": [
@@ -13970,7 +13959,8 @@
       651,
       710,
       739,
-      761
+      761,
+      783
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -20934,6 +20924,13 @@
         "at": "2026-10-11T18:22:37+00:00",
         "issue": 783,
         "claim": "88d5aa3ad01e4971b02cfc1f61b28731",
+        "actor": "Worker-M1783B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-11T18:24:50+00:00",
+        "issue": 783,
+        "pr": 790,
         "actor": "Worker-M1783B"
       }
     ],
