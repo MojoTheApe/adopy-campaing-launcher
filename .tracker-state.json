@@ -7248,19 +7248,6 @@
         "started_at": "2026-10-11T18:04:36+00:00",
         "from_status": "status:idea"
       },
-      "783": {
-        "actor": "Worker-M1783A",
-        "session": "ea74af46b9684322a8e4c6b643a049a2",
-        "coordinator": "Coordinator-M1783",
-        "branch": "feature/acl-1783-graph-api-version",
-        "worktree": "C:\\acl-1783",
-        "id": "7a6e2cf497194c409aeba29814d08572",
-        "issue": 783,
-        "state": "stopping",
-        "started_at": "2026-10-11T18:05:46+00:00",
-        "from_status": "status:todo",
-        "report": "## Stop report: ACL-1783\n\nThe claim was recorded with branch `feature/acl-1783-graph-api-version`. That name breaks the repository rule `work/acl-NNNN-short-name` (docs/repository/WORKFLOW.md), and the coordinator brief caused the mistake. The same work, unchanged, is now on `work/acl-1783-graph-api-version` with PR #790 (PR #789 from the old branch is closed). Stopping this claim so the task can be re-claimed under the correct branch and the dispatching Coordinator-M1011A. No code is lost and nothing was merged."
-      },
       "782": {
         "actor": "Worker-M1782A",
         "session": "87693cefa8a446598a4984cafafacb7d",
@@ -10647,9 +10634,22 @@
             "session": "ea74af46b9684322a8e4c6b643a049a2"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-M1783A",
-        "coordinator": "Coordinator-M1783"
+        "coordinator": "Coordinator-M1783",
+        "handoff": {
+          "actor": "Worker-M1783A",
+          "session": "ea74af46b9684322a8e4c6b643a049a2",
+          "coordinator": "Coordinator-M1783",
+          "branch": "feature/acl-1783-graph-api-version",
+          "worktree": "C:\\acl-1783",
+          "id": "7a6e2cf497194c409aeba29814d08572",
+          "issue": 783,
+          "state": "stopping",
+          "started_at": "2026-10-11T18:05:46+00:00",
+          "from_status": "status:todo",
+          "report": "## Stop report: ACL-1783\n\nThe claim was recorded with branch `feature/acl-1783-graph-api-version`. That name breaks the repository rule `work/acl-NNNN-short-name` (docs/repository/WORKFLOW.md), and the coordinator brief caused the mistake. The same work, unchanged, is now on `work/acl-1783-graph-api-version` with PR #790 (PR #789 from the old branch is closed). Stopping this claim so the task can be re-claimed under the correct branch and the dispatching Coordinator-M1011A. No code is lost and nothing was merged."
+        }
       },
       "782": {
         "implementers": [
@@ -20897,6 +20897,13 @@
         "issue": 766,
         "claim": "7870855184e44f9388f67ea928445f6b",
         "actor": "Worker-S1766A"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-11T18:19:15+00:00",
+        "issue": 783,
+        "actor": "Worker-M1783A",
+        "report": "## Stop report: ACL-1783\n\nThe claim was recorded with branch `feature/acl-1783-graph-api-version`. That name breaks the repository rule `work/acl-NNNN-short-name` (docs/repository/WORKFLOW.md), and the coordinator brief caused the mistake. The same work, unchanged, is now on `work/acl-1783-graph-api-version` with PR #790 (PR #789 from the old branch is closed). Stopping this claim so the task can be re-claimed under the correct branch and the dispatching Coordinator-M1011A. No code is lost and nothing was merged."
       }
     ],
     "policy": {
