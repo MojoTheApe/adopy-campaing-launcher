@@ -7247,6 +7247,18 @@
         "state": "implementing",
         "started_at": "2026-10-11T19:39:47+00:00",
         "from_status": "status:idea"
+      },
+      "797": {
+        "actor": "Worker-S1797A",
+        "session": "run_s1797a_1011",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1797-design-system",
+        "worktree": "C:\\acl-1797-ds",
+        "id": "5c4e3d8c2db144849734abb6190e0ef9",
+        "issue": 797,
+        "state": "implementing",
+        "started_at": "2026-10-11T19:40:14+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -10737,6 +10749,17 @@
         "state": "implementing",
         "worker": "Worker-S1798A",
         "coordinator": "Coordinator-C0930A"
+      },
+      "797": {
+        "implementers": [
+          {
+            "actor": "Worker-S1797A",
+            "session": "run_s1797a_1011"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1797A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -11638,6 +11661,10 @@
       },
       "Worker-S1798A": {
         "session": "run_s1798a_1011",
+        "role": "Worker"
+      },
+      "Worker-S1797A": {
+        "session": "run_s1797a_1011",
         "role": "Worker"
       }
     },
@@ -21056,6 +21083,13 @@
         "issue": 798,
         "claim": "0d44629f3ec947c992e886efb9553052",
         "actor": "Worker-S1798A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-11T19:40:14+00:00",
+        "issue": 797,
+        "claim": "5c4e3d8c2db144849734abb6190e0ef9",
+        "actor": "Worker-S1797A"
       }
     ],
     "policy": {
