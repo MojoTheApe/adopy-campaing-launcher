@@ -12,6 +12,7 @@ form fields and violated the product's manual-final-publish boundary.
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import threading
 import time
@@ -907,8 +908,11 @@ def _run_rpa(
     try:
         from src.web import publish_preflight as _pf
 
-        meta_errors = _pf.meta_rules_errors(slots, account_label=account_label, country=country)
+        meta_errors = _pf.meta_rules_errors(slots, account_label=account_label, country=country, drafts=drafts)
     except Exception:
+        # Проверка правил Meta не должна ронять публикацию, но и молчать о
+        # своём сбое нельзя: причина остаётся в логе.
+        logging.getLogger(__name__).exception("Meta rules check could not run; campaigns are not blocked by it")
         meta_errors = {}
     for draft in drafts:
         for msg in meta_errors.get(getattr(draft, "name", ""), []):

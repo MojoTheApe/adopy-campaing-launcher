@@ -9,6 +9,10 @@
 `limited/beta/test/announced/deprecated` отклоняются с пометкой «not generally
 available». Чего реестр не знает (нет подходящего правила) — не проверяется:
 выдумывать ограничения нельзя.
+
+Длины текстов Meta лишь рекомендует (не жёсткий лимит), поэтому правил
+`text_limit` в реестре нет: блокировать по рекомендации нельзя. Вид правила
+оставлен для жёстких лимитов, если Meta когда-нибудь их объявит.
 """
 from __future__ import annotations
 
@@ -235,14 +239,55 @@ def _check_allowed(rules: list[dict[str, Any]], kind: str, job: Any) -> list[Vio
     return out
 
 
-def check_job(job: Any, ruleset: RuleSet | None = None) -> list[Violation]:
+#: Как кампанию называет форма / RPA-черновик -> код objective в Marketing API.
+OBJECTIVE_LABELS = {
+    "awareness": "OUTCOME_AWARENESS",
+    "traffic": "OUTCOME_TRAFFIC",
+    "engagement": "OUTCOME_ENGAGEMENT",
+    "leads": "OUTCOME_LEADS",
+    "app promotion": "OUTCOME_APP_PROMOTION",
+    "sales": "OUTCOME_SALES",
+}
+
+
+def objective_code(label: Any) -> str | None:
+    """Код objective по подписи из формы/черновика ("Leads" -> OUTCOME_LEADS).
+
+    Код (OUTCOME_* или старый) возвращается как есть; неизвестная подпись —
+    None, то есть такое поле не проверяется (ложных блокировок нет).
+    """
+    text = str(label or "").strip()
+    if not text:
+        return None
+    mapped = OBJECTIVE_LABELS.get(text.lower())
+    if mapped:
+        return mapped
+    if re.fullmatch(r"[A-Z][A-Z_]+", text):
+        return text
+    return None
+
+
+class DraftView:
+    """То, что RPA-публикация реально отправляет: objective черновика.
+
+    Цель оптимизации, billing event, destination и CTA в RPA выбирает рецепт
+    Ads Manager, черновик их не несёт — поэтому они здесь не заданы и не
+    проверяются (их проверяет `check_job` для Graph API-задания).
+    """
+
+    def __init__(self, draft: Any):
+        self.objective = objective_code(getattr(draft, "objective", None))
+
+
+def check_job(job: Any, ruleset: RuleSet | None = None, *, skip_kinds: tuple[str, ...] = ()) -> list[Violation]:
     """Нарушения правил Meta в задании (PublishJob или похожий объект/словарь).
 
     Пустой список — кампанию можно отправлять. Поле, которого в задании нет
-    или про которое реестр ничего не знает, не проверяется.
+    или про которое реестр ничего не знает, не проверяется. `skip_kinds` —
+    виды правил, которые для этого пути не применимы.
     """
     rs = ruleset or load_rules()
-    rules = list(rs.rules)
+    rules = [r for r in rs.rules if r["kind"] not in skip_kinds]
     out: list[Violation] = []
     for kind in ALLOWED_KINDS:
         out.extend(_check_allowed(rules, kind, job))
