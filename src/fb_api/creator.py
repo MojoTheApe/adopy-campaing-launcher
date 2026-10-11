@@ -312,6 +312,12 @@ def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
 
 # ───────────────────────── таргетинг через /search ─────────────────────────
 
+def _country_names_for(code: str) -> list[str]:
+    """Английские названия страны по ISO-коду из общей карты дешборда (не больше двух)."""
+    from src.analysis_agent.country_names import COUNTRY_CODES
+    return [n.title() for n, c in COUNTRY_CODES.items() if c == code][:2]
+
+
 class TargetingResolver:
     """Гео, языки, интересы → id Meta. Кэш на задание; только чтения."""
 
@@ -328,13 +334,24 @@ class TargetingResolver:
             raise PlanError("No country in the draft")
         if key.upper() in self._geo:
             return self._geo[key.upper()]
-        rows = self.client.get_all("/search", {"type": "adgeolocation", "location_types": ["country"],
-                                               "q": key, "limit": 10}, max_pages=1)
+        up = key.upper()
         code = ""
-        for r in rows:
-            cc = str(r.get("country_code") or r.get("key") or "").upper()
-            if cc == key.upper() or str(r.get("name") or "").casefold() == key.casefold():
-                code = cc
+        # Для двухбуквенного кода «q=AR» отдаёт десятки стран с «ar» в названии, и нужная может
+        # выпасть из страницы, поэтому: сначала код с широкой выдачей, затем английские названия.
+        # Совпадение только точное (country_code == код); близкое никогда не берём (ACL-1761).
+        if len(key) == 2 and key.isalpha():
+            queries = [(key, 100, 3)] + [(n, 25, 1) for n in _country_names_for(up)]
+        else:
+            queries = [(key, 10, 1)]
+        for q, limit, pages in queries:
+            rows = self.client.get_all("/search", {"type": "adgeolocation", "location_types": ["country"],
+                                                   "q": q, "limit": limit}, max_pages=pages)
+            for r in rows:
+                cc = str(r.get("country_code") or r.get("key") or "").upper()
+                if cc == up or str(r.get("name") or "").casefold() == key.casefold():
+                    code = cc
+                    break
+            if code:
                 break
         if not code:
             raise PlanError(f"Country {key!r} was not found by Meta targeting search")
