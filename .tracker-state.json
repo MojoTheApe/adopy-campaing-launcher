@@ -7244,20 +7244,6 @@
         "state": "implementing",
         "started_at": "2026-10-09T22:32:02+00:00",
         "from_status": "status:todo"
-      },
-      "778": {
-        "actor": "Worker-H8D3",
-        "session": "Worker-H8D3",
-        "coordinator": "Coordinator-H8D3",
-        "branch": "codex/acl-1778-header-linear-toolbar",
-        "worktree": "C:\\acl-header-design",
-        "id": "fd905cbebf444b9fb4294dfeb46ab06f",
-        "issue": 778,
-        "state": "handoff",
-        "started_at": "2026-10-11T05:51:20+00:00",
-        "from_status": "status:todo",
-        "pr": 780,
-        "report": "## Fix handoff \u00b7 ACL-1778\n\n- Head c671a6022618032777cd8151f2ae825d5870bd81 on base e8e59f83, same branch codex/acl-1778-header-linear-toolbar, PR #780.\n- Fixed review findings: (1) amapApply closes the picker through _amapClose, so aria-expanded resets on a same-URL hash navigation; (3) the picker popup carries role=\"dialog\" and aria-label \"Date range\".\n- Added tests: picker close path and role, half-open period (\"Oct 1, 2026 \u2013 \u2026\", \"\u2026 \u2013 Oct 9, 2026\"), escaping of a malformed value.\n- Checks: tests/test_header.py 14 passed; header/stage/calendar set 33 passed earlier on the fix.\n- Known, not in scope: below 760 px the open builder drawer covers the header (unchanged from base)."
       }
     },
     "tasks": {
@@ -10553,7 +10539,7 @@
             "session": "Worker-H8D3"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-H8D3",
         "coordinator": "Coordinator-H8D3",
         "handoff": {
@@ -10562,16 +10548,16 @@
           "coordinator": "Coordinator-H8D3",
           "branch": "codex/acl-1778-header-linear-toolbar",
           "worktree": "C:\\acl-header-design",
-          "id": "f7b8dbab1b194389b0aae5076e8b73c6",
+          "id": "fd905cbebf444b9fb4294dfeb46ab06f",
           "issue": 778,
           "state": "handoff",
-          "started_at": "2026-10-11T05:34:41+00:00",
+          "started_at": "2026-10-11T05:51:20+00:00",
           "from_status": "status:todo",
           "pr": 780,
-          "report": "## Implementation handoff \u00b7 ACL-1778\n\n- Branch `codex/acl-1778-header-linear-toolbar`, head ae127e86 on work/main e8e59f83. PR #780 (#779 closed: wrong branch name; claim re-taken on the renamed branch).\n- Changed: src/web/templates/report.html (header markup/CSS, picker aria-expanded + focus return, tab title), src/web/templates/loading.html (tab title), tests/test_header.py (+5), tests/test_stage_badge.py (title).\n- Checks: targeted tests 447 + 87 passed; preview instance 9097 (live 9090 untouched); Playwright 10 layouts (both themes, builder open/closed, 1600\u2013360 px, long values) with no overlap/overflow; every header control exercised.\n- Remaining: independent review; full suite in CI; builder draft preservation not exercised (no drafts on the preview)."
+          "report": "## Fix handoff \u00b7 ACL-1778\n\n- Head c671a6022618032777cd8151f2ae825d5870bd81 on base e8e59f83, same branch codex/acl-1778-header-linear-toolbar, PR #780.\n- Fixed review findings: (1) amapApply closes the picker through _amapClose, so aria-expanded resets on a same-URL hash navigation; (3) the picker popup carries role=\"dialog\" and aria-label \"Date range\".\n- Added tests: picker close path and role, half-open period (\"Oct 1, 2026 \u2013 \u2026\", \"\u2026 \u2013 Oct 9, 2026\"), escaping of a malformed value.\n- Checks: tests/test_header.py 14 passed; header/stage/calendar set 33 passed earlier on the fix.\n- Known, not in scope: below 760 px the open builder drawer covers the header (unchanged from base)."
         },
         "pr": 780,
-        "queued_at": "2026-10-11T05:35:39+00:00",
+        "queued_at": "2026-10-11T05:53:03+00:00",
         "review_report": "# Review of PR #780 (ACL-1778): returned for fixes\n\nReviewed head: ae127e8647f8e199a82eeea53ecce3b95d8d40b0\nBase: e8e59f8376458f2f73089c3f2a8d454837ff033f (work/main)\n\n## Requested fixes\n\n1. (minor) src/web/templates/report.html, amapApply (~line 7001): it removes the popup with `cal.remove()` and bypasses the new close path. On a same-URL navigation that only differs by hash (Update pressed with an unchanged range while the URL has a #fragment), the page does not reload, and the period button keeps aria-expanded=\"true\" and the open styling until the next mousedown. Close through `cal._amapClose` (no refocus needed) so aria-expanded resets.\n2. (nit) report.html:3270: the button declares aria-haspopup=\"dialog\", but the `.amap-cal` popup has no role=\"dialog\". Give the popup role=\"dialog\" (with an accessible name, e.g. aria-label=\"Date range\") so it matches aria-haspopup.\n\n## Approved as-is\n\nEverything else is approved:\n- All header IDs, handlers and routes are kept.\n- The date label formatting is correct, including cross-year, single day, \"All dates\" and escaping of malformed values.\n- The picker's open/close, aria-expanded and focus return work.\n- The layout holds in both themes, with the builder open and closed, from 360 to 1600 px.\n- The targeted tests pass (48).\n\nOptional, not blocking:\n- The drawer still covers the header below 760 px. This is pre-existing; mention it in the PR.\n- Add tests for the only-from / only-to label output and for aria-label escaping."
       }
     },
@@ -13815,7 +13801,8 @@
       642,
       651,
       710,
-      739
+      739,
+      778
     ],
     "review": null,
     "history": [
@@ -20698,6 +20685,13 @@
         "at": "2026-10-11T05:51:20+00:00",
         "issue": 778,
         "claim": "fd905cbebf444b9fb4294dfeb46ab06f",
+        "actor": "Worker-H8D3"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-11T05:53:03+00:00",
+        "issue": 778,
+        "pr": 780,
         "actor": "Worker-H8D3"
       }
     ],
