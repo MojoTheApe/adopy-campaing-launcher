@@ -7259,6 +7259,18 @@
         "state": "implementing",
         "started_at": "2026-10-11T19:40:14+00:00",
         "from_status": "status:idea"
+      },
+      "800": {
+        "actor": "Worker-S1800A",
+        "session": "run_s1800a_1011",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1800-campaign-commands",
+        "worktree": "C:\\acl-1800-cmd",
+        "id": "414c09a2e4bc4d208f31e3ebdfbe204d",
+        "issue": 800,
+        "state": "implementing",
+        "started_at": "2026-10-11T19:50:20+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -10760,6 +10772,17 @@
         "state": "implementing",
         "worker": "Worker-S1797A",
         "coordinator": "Coordinator-C0930A"
+      },
+      "800": {
+        "implementers": [
+          {
+            "actor": "Worker-S1800A",
+            "session": "run_s1800a_1011"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1800A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -11665,6 +11688,10 @@
       },
       "Worker-S1797A": {
         "session": "run_s1797a_1011",
+        "role": "Worker"
+      },
+      "Worker-S1800A": {
+        "session": "run_s1800a_1011",
         "role": "Worker"
       }
     },
@@ -21090,6 +21117,13 @@
         "issue": 797,
         "claim": "5c4e3d8c2db144849734abb6190e0ef9",
         "actor": "Worker-S1797A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-11T19:50:20+00:00",
+        "issue": 800,
+        "claim": "414c09a2e4bc4d208f31e3ebdfbe204d",
+        "actor": "Worker-S1800A"
       }
     ],
     "policy": {
