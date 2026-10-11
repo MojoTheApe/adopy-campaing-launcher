@@ -4041,6 +4041,8 @@ async function dashRefresh(ev) {
      тоталы страны теперь стоят в свёрнутой строке карты, а страна с деньгами
      без размещённых аккаунтов приходит туда красной «виртуальной» строкой. #}
   <div id="amap-slot">{% include "_account_map.html" %}</div>
+  {#- ACL-1798: командная таблица кампаний (только чтение) — под целями и картой стран. -#}
+  {% include "_home_campaigns.html" %}
 </div>
 
 {% for c in report.countries %}
