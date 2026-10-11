@@ -7246,9 +7246,11 @@
         "worktree": "C:\\acl-1797-ds",
         "id": "5c4e3d8c2db144849734abb6190e0ef9",
         "issue": 797,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-11T19:40:14+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 810,
+        "report": "# ACL-1797 report\nPR: #810 (head db59f88, stacked on #796 -> #765; CI blocked).\nChecks: tests/test_acl1797_design_system.py 16 passed; theme/field-contrast/buttons 33 passed; 79 non-browser report.html tests passed after two fixture fixes; builder browser tests (multi-publish, foot, publish-selected, name override, two-column, drawer, duplicate buttons, review, available accounts) passed; header/period tests pass in a scratch merge with #780.\nScreenshots: C:\\acl-notes\\acl-1797-shots\\ (every route, light+dark, 1280 px, plus builder open and with-header views).\nRisks: font-size sweep conflicts textually with #780 (take header side); light --bg-subtle is now #f7f8fa (fainter wells); Home KPI sizes and Country Workbench left to ACL-1798/1799; standalone pages (loading, robot health, brief, error) only rendered, not screenshotted."
       }
     },
     "tasks": {
