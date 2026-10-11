@@ -7236,20 +7236,6 @@
   },
   "execution": {
     "claims": {
-      "761": {
-        "actor": "Worker-O1761A",
-        "session": "run_o1761a_1010",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1761-api-create",
-        "worktree": "C:\\acl-1761-api-create",
-        "id": "9769088ef77d4a5682a1710b4048b065",
-        "issue": 761,
-        "state": "handoff",
-        "started_at": "2026-10-09T22:32:02+00:00",
-        "from_status": "status:todo",
-        "pr": 765,
-        "report": "ACL-1761 handoff (PR #765, branch codex/acl-1761-api-create)\n\nChecks and results:\n- Independent review rounds 1-11 are recorded in C:\\acl-notes\\review_765.md. Round 7 (Opus) approved d25f4f99. Round 8 approved the existing-object pre-check. Round 9 (Opus) requested changes for hang/logout handling; Round 10 approved them. Round 11 approved the country resolver and the currency display.\n- Affected test files pass locally: 426 across the fb_api, 1756, 1760 and 1761 files, plus test_acl1761_country_resolve (5) and test_acl1760_api_read (75). Mutation checks are recorded per round.\n- Live owner test on the 9095 test dashboard, 2026-10-10, account Facebook_5414: campaign SA_ARC_All_Video_GMB_35_10.10 was created PAUSED, readback 43/43, manual placements confirmed in Ads Manager. Owner verdict: \"\u043a\u0430\u043c\u043f\u0430\u043d\u0438\u044f \u0441\u043e\u0437\u0434\u0430\u043d\u0430 \u0438\u0434\u0435\u0430\u043b\u044c\u043d\u043e\".\n- Full CI last ran green on 1b01b79 (all Linux shards and Windows). Since 2026-10-10 ~17:55Z every GitHub Actions run fails with startup_failure because of an account billing block, so CI must be re-run before merge.\n\nRemaining risks:\n- Facebook logout after a hang on 5414 and 5265: the cause is unproven; hang handling now stops with a clear reason (F1-F4).\n- Restarting a profile right after it closed is a possible logout trigger; still open (F5), waiting for an owner decision.\n- An API job keeps the review window even when it wrote nothing (ACL-1784).\n\nDurable references: PR #765; C:\\acl-notes\\acl-1761-report.md; C:\\acl-notes\\acl-1761-hang-logout.md; C:\\acl-notes\\review_765.md.\nMerge plan: one batch with ACL-1760 (PR #762) into main behind ACL_FB_BACKEND=api (default rpa)."
-      },
       "769": {
         "actor": "Worker-S1769A",
         "session": "run_s1769a_1011",
@@ -10573,9 +10559,25 @@
             "session": "run_o1761a_1010"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-O1761A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-O1761A",
+          "session": "run_o1761a_1010",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1761-api-create",
+          "worktree": "C:\\acl-1761-api-create",
+          "id": "9769088ef77d4a5682a1710b4048b065",
+          "issue": 761,
+          "state": "handoff",
+          "started_at": "2026-10-09T22:32:02+00:00",
+          "from_status": "status:todo",
+          "pr": 765,
+          "report": "ACL-1761 handoff (PR #765, branch codex/acl-1761-api-create)\n\nChecks and results:\n- Independent review rounds 1-11 are recorded in C:\\acl-notes\\review_765.md. Round 7 (Opus) approved d25f4f99. Round 8 approved the existing-object pre-check. Round 9 (Opus) requested changes for hang/logout handling; Round 10 approved them. Round 11 approved the country resolver and the currency display.\n- Affected test files pass locally: 426 across the fb_api, 1756, 1760 and 1761 files, plus test_acl1761_country_resolve (5) and test_acl1760_api_read (75). Mutation checks are recorded per round.\n- Live owner test on the 9095 test dashboard, 2026-10-10, account Facebook_5414: campaign SA_ARC_All_Video_GMB_35_10.10 was created PAUSED, readback 43/43, manual placements confirmed in Ads Manager. Owner verdict: \"\u043a\u0430\u043c\u043f\u0430\u043d\u0438\u044f \u0441\u043e\u0437\u0434\u0430\u043d\u0430 \u0438\u0434\u0435\u0430\u043b\u044c\u043d\u043e\".\n- Full CI last ran green on 1b01b79 (all Linux shards and Windows). Since 2026-10-10 ~17:55Z every GitHub Actions run fails with startup_failure because of an account billing block, so CI must be re-run before merge.\n\nRemaining risks:\n- Facebook logout after a hang on 5414 and 5265: the cause is unproven; hang handling now stops with a clear reason (F1-F4).\n- Restarting a profile right after it closed is a possible logout trigger; still open (F5), waiting for an owner decision.\n- An API job keeps the review window even when it wrote nothing (ACL-1784).\n\nDurable references: PR #765; C:\\acl-notes\\acl-1761-report.md; C:\\acl-notes\\acl-1761-hang-logout.md; C:\\acl-notes\\review_765.md.\nMerge plan: one batch with ACL-1760 (PR #762) into main behind ACL_FB_BACKEND=api (default rpa)."
+        },
+        "pr": 765,
+        "queued_at": "2026-10-11T18:13:47+00:00"
       },
       "778": {
         "implementers": [
@@ -13915,7 +13917,8 @@
       642,
       651,
       710,
-      739
+      739,
+      761
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -20852,6 +20855,13 @@
         "issue": 781,
         "claim": "be82d7b2a0af4271a345ff36a5c3f4d6",
         "actor": "Worker-M1781A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-11T18:13:47+00:00",
+        "issue": 761,
+        "pr": 765,
+        "actor": "Worker-O1761A"
       }
     ],
     "policy": {
