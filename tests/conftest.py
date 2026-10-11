@@ -276,3 +276,53 @@ def _row(country, alias, cm, offer, device, interest, age, ad_title,
         "TextSegment": ad_title.split()[0].lower() if ad_title else "",
         "Offer": offer,
     }
+
+
+# Браузерные тесты страницы отдают скрипты `/static/*.js` с диска (ACL-1800).
+#
+# Шаблоны подключают помощников как `<script src="/static/….js">` (сейчас
+# `acm_commands.js` в таблице Home). Заглушки маршрутов Playwright в десятках
+# тестов отвечают на любой запрос не-документа JSON-ом, и браузер исполнял бы
+# JSON как скрипт («Unexpected token ':'»). Эта прослойка стоит перед каждой
+# заглушкой `Page.route` / `BrowserContext.route`: скрипт под `src/web/static/`
+# отдаётся как есть, всё остальное идёт в заглушку теста. Заглушки, которые
+# уже отвечают на `/static/…` сами (и берут маршрут раньше), прослойку не ломают.
+@pytest.fixture(autouse=True)
+def _static_scripts_come_from_disk(monkeypatch):
+    try:
+        from playwright.sync_api import BrowserContext, Page
+    except Exception:
+        yield
+        return
+    from urllib.parse import urlsplit
+
+    static = _PROJ_ROOT / "src" / "web" / "static"
+
+    def wrap(handler):
+        if not callable(handler):
+            return handler
+
+        def serve_or_stub(route, *rest):
+            try:
+                path = urlsplit(route.request.url).path
+            except Exception:
+                path = ""
+            if path.startswith("/static/") and path.endswith(".js"):
+                target = (static / path[len("/static/"):]).resolve()
+                if static.resolve() in target.parents and target.is_file():
+                    return route.fulfill(status=200, content_type="application/javascript",
+                                         body=target.read_text(encoding="utf-8"))
+            return handler(route, *rest)
+
+        serve_or_stub.__wrapped__ = handler
+        return serve_or_stub
+
+    for cls in (Page, BrowserContext):
+        original = cls.route
+
+        def patched(self, url, handler, *args, _orig=original, **kwargs):
+            return _orig(self, url, wrap(handler), *args, **kwargs)
+
+        patched.static_wrap = wrap       # для test_static_scripts_from_disk
+        monkeypatch.setattr(cls, "route", patched)
+    yield
