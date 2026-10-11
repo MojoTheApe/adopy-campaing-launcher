@@ -47,7 +47,10 @@ class Explanation:
         """Одна строка для списка проблем дашборда (ACL-1437)."""
         if not self.known:
             return self.raw_message or "Meta refused the request (no details given)."
-        return f"{self.message_en} {self.action_en}"
+        text = f"{self.message_en} {self.action_en}"
+        if self.code == 2238055 and self.message_en.startswith("Meta uses this code") and self.raw_message:
+            text += f" Meta said: {self.raw_message}"
+        return text
 
 
 _WAIT = "Wait a few minutes and try again."
@@ -101,7 +104,7 @@ CATALOG: dict[tuple[int, int | None], Entry] = {
     (100, 1487694): _e("A targeting category you selected is no longer available.", "Pick another targeting option and publish again.", False, "validation"),
     (100, 1752129): _e("This task combination is not supported for the user role.", _FIX_PERM, False, "permission"),
     (100, 3858258): _e("Meta could not download the image.", "Check that the image URL is public and not blocked, then retry.", True, "validation"),
-    (104, None): _e("Meta says the request signature is incorrect.", "Sign in to the account again, then retry.", False, "token"),
+    (104, None): _e("Meta says the request signature is incorrect.", "Report this to the ACL team.", False, "other"),
     (200, None): _e("Meta denied permission for this action.", _FIX_PERM, False, "permission"),
     (200, 1870034): _e("Custom Audience terms have not been accepted.", "Accept the Custom Audience terms in Ads Manager, then retry.", False, "permission"),
     (200, 1870047): _e("The audience is too small to remove users from it.", "Leave the audience as is.", False, "validation"),
@@ -144,7 +147,7 @@ CATALOG: dict[tuple[int, int | None], Entry] = {
     (1885557, None): _e("The ad promotes a post that is unavailable (deleted or unpublished).", "Pick an available post.", False, "validation"),
     (1885621, None): _e("Set either an ad set budget or a campaign budget, not both.", "Keep one budget level.", False, "validation"),
     (1885650, None): _e("The budget is below the required minimum.", "Raise the budget.", False, "validation"),
-    (2238055, None): _e("Both instagram_user_id and instagram_actor_id were passed.", "Pass only one Instagram identity.", False, "validation"),
+    (2238055, None): _e("Meta uses this code for two different problems (Instagram identity or minimum budget).", "Check the Instagram account settings and the budget minimum, then publish again.", False, "validation"),
     (2446149, None): _e("Both instagram_user_id and instagram_actor_id were passed.", "Pass only one Instagram identity.", False, "validation"),
     (2446173, None): _e("A target rule label does not refer to asset labels.", "Fix the label names.", False, "validation"),
     (2446289, None): _e("The post you selected for the ad is not available.", "Pick another post or check permissions.", False, "validation"),
@@ -188,6 +191,15 @@ OBSERVED_PATTERNS: list[tuple[re.Pattern, Entry]] = [
 ]
 
 
+# Meta в error-reference даёт код 2238055 в двух строках с разным смыслом: выбираем по тексту.
+_AMBIG_2238055 = [
+    (re.compile(r"budget.*at least|minimum.?budget|must be at least", re.I),
+     _e("The campaign budget is below the required minimum.", "Raise the budget to at least the minimum Meta states and publish again.", False, "validation")),
+    (re.compile(r"instagram_(user|actor)_id", re.I),
+     _e("Both instagram_user_id and instagram_actor_id were passed.", "Pass only one Instagram identity.", False, "validation")),
+]
+
+
 def explain(code: int | None, subcode: int | None = None, raw_message: str = "") -> Explanation:
     """Подкод точнее кода; нет в таблице — сырой текст Meta как есть."""
     entry = None
@@ -196,6 +208,11 @@ def explain(code: int | None, subcode: int | None = None, raw_message: str = "")
         if raw_message and pat.search(raw_message):
             entry = e
             break
+    if entry is None and 2238055 in (code, subcode) and raw_message:
+        for pat, e in _AMBIG_2238055:
+            if pat.search(raw_message):
+                entry = e
+                break
     if entry is None and code is not None and subcode is not None:
         entry = CATALOG.get((code, subcode))
     if entry is None and code is not None:

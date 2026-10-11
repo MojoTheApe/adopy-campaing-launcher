@@ -61,3 +61,18 @@ def test_problem_line_from_grapherror():
     err = GraphError("Budget too low", code=1885272)
     assert ec.problem_line(err) == "The budget is too low. Raise the budget and publish again."
     assert ec.problem_line(GraphError("raw text", code=424242)) == "raw text"
+
+
+def test_code_2238055_two_meanings():
+    ig = ec.explain(2238055, None, "You cannot pass both instagram_user_id and instagram_actor_id")
+    assert "instagram_user_id" in ig.message_en
+    bud = ec.explain(2238055, None, "Your campaign budget must be at least $5.00")
+    assert "budget" in bud.message_en and "instagram" not in bud.message_en.lower()
+    amb = ec.explain(2238055, None, "Something else entirely")
+    assert "two different problems" in amb.message_en
+    assert "Something else entirely" in amb.line()
+
+
+def test_code_104_neutral_action():
+    x = ec.explain(104)
+    assert "ACL team" in x.action_en and "sign in" not in x.action_en.lower()
