@@ -37,9 +37,31 @@ def _refusal(exc: _cmd.CommandRefused) -> tuple[dict, int]:
     return {"error": str(exc), "code": exc.code}, exc.status
 
 
+BIND_HOST_ENV = "ACL_BIND_HOST"
+LOOPBACK_REFUSAL = ("Campaign commands are only available when the dashboard listens on this "
+                    "computer alone (127.0.0.1). It is bound to a network address, so nothing "
+                    "was changed.")
+
+
+def bound_to_loopback() -> bool:
+    """Адрес привязки сервера (его ставит `serve.py`) — loopback. Не известен — нет."""
+    import ipaddress
+    import os
+
+    host = (os.environ.get(BIND_HOST_ENV) or "").strip().strip("[]")
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def _guard() -> tuple[dict, int] | None:
     if not api_enabled():
         return {"error": RPA_REFUSAL, "code": "rpa_backend"}, 409
+    if not bound_to_loopback():
+        return {"error": LOOPBACK_REFUSAL, "code": "not_loopback"}, 403
     return None
 
 

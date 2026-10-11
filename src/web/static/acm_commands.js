@@ -116,10 +116,16 @@
   }
 
   function dialogModel(op) {
+    // Родитель, который включается этой же командой, не предупреждение.
+    var switchedOn = {};
+    if (op.command === 'set_status' && op.value === 'ACTIVE') {
+      (op.affected || []).forEach(function (a) { switchedOn[a.id] = true; });
+    }
     var rows = (op.affected || []).map(function (a) {
       return { level: LEVEL_WORD[a.level] || a.level, name: a.name, before: a.before_display,
-               after: a.after_display,
-               notes: (a.constraints || []).map(function (c) { return c.text; }) };
+               after: a.after_display, strategy: a.strategy || '',
+               notes: (a.constraints || []).filter(function (c) { return !(c.id && switchedOn[c.id]); })
+                 .map(function (c) { return c.text; }) };
     });
     var skipped = (op.skipped || []).map(function (s) {
       return { level: LEVEL_WORD[s.level] || s.level, name: s.name, reason: s.reason };
@@ -155,7 +161,7 @@
         var tr = el('tr');
         tr.appendChild(el('td', r.level));
         tr.appendChild(el('td', r.name));
-        tr.appendChild(el('td', r.before + ' → ' + r.after));
+        tr.appendChild(el('td', (r.strategy ? r.strategy + ': ' : '') + r.before + ' → ' + r.after));
         table.appendChild(tr);
       });
       dlg.appendChild(table);

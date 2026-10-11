@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import secrets
 import threading
@@ -62,9 +63,9 @@ AUTOMATIC_BID_TEXT = "Automatic · no manual bid"
 READ_FIELDS = {
     "campaign": "name,account_id,status,effective_status,daily_budget,lifetime_budget,bid_strategy",
     "adset": ("name,account_id,status,effective_status,daily_budget,lifetime_budget,bid_amount,"
-              "bid_strategy,campaign_id,campaign{name,status,effective_status,daily_budget,bid_strategy}"),
+              "bid_strategy,campaign_id,campaign{id,name,status,effective_status,daily_budget,bid_strategy}"),
     "ad": ("name,account_id,status,effective_status,adset_id,campaign_id,"
-           "adset{name,status,effective_status},campaign{name,status,effective_status}"),
+           "adset{id,name,status,effective_status},campaign{id,name,status,effective_status}"),
 }
 STATUS_WORD = {"ACTIVE": "On", "PAUSED": "Off"}
 LEVEL_WORD = {"campaign": "Campaign", "adset": "Ad set", "ad": "Ad"}
@@ -129,12 +130,23 @@ class OperationStore:
                 self._ops[str(op["op_id"])] = op
         for op in list(self._ops.values()):
             if op.get("state") in (RUNNING, VERIFYING):
-                op["state"] = UNKNOWN
-                op["message"] = ("The dashboard stopped before the result was verified. "
-                                 "Check the objects in Ads Manager; nothing was retried.")
-                for item in op.get("affected", []):
-                    if item.get("result") in ("", "sent", "pending"):
-                        item["result"] = "unknown"
+                items = op.get("affected", [])
+                maybe_sent = any(i.get("result") in ("sending", "sent", "unknown") for i in items)
+                if maybe_sent:
+                    # Запись могла уйти: результат не сверен.
+                    op["state"] = UNKNOWN
+                    op["message"] = ("The dashboard stopped before the result was verified. "
+                                     "Check the objects in Ads Manager; nothing was retried.")
+                    for item in items:
+                        if item.get("result") in ("sending", "sent"):
+                            item["result"] = "unknown"
+                        elif item.get("result") in ("", "pending"):
+                            item["result"] = "not_attempted"
+                else:
+                    op["state"] = FAILED
+                    op["message"] = "The dashboard stopped before anything was sent. Nothing was written."
+                    for item in items:
+                        item["result"] = "not_sent"
                 self._persist(op)
 
     def _persist(self, op: dict) -> None:
@@ -143,6 +155,8 @@ class OperationStore:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             with self.path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(op, ensure_ascii=False, sort_keys=True) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())   # след переживает падение процесса
         except OSError:
             pass   # журнал — след, а не условие: ошибка диска не должна ломать результат
 
@@ -176,20 +190,24 @@ class OperationStore:
     def history(self, limit: int = 50) -> list[dict]:
         with self._lock:
             ops = [o for o in self._ops.values() if o.get("state") != PREVIEW]
-        ops.sort(key=lambda o: o.get("created_at", ""), reverse=True)
-        return [snapshot(o) for o in ops[:limit]]
+            ops.sort(key=lambda o: o.get("created_at", ""), reverse=True)
+            return [snapshot(o) for o in ops[:limit]]
 
 
 _STORES: dict[str, OperationStore] = {}
+
+
+_STORES_LOCK = threading.Lock()
 
 
 def get_store() -> OperationStore:
     """Хранилище по текущему пути журнала (в тестах путь задаёт `ACL_CONFIG_DIR`)."""
     path = default_history_path()
     key = str(path)
-    if key not in _STORES:
-        _STORES[key] = OperationStore(path)
-    return _STORES[key]
+    with _STORES_LOCK:          # два первых запроса разом не должны создать два хранилища
+        if key not in _STORES:
+            _STORES[key] = OperationStore(path)
+        return _STORES[key]
 
 
 def snapshot(op: dict) -> dict:
@@ -274,7 +292,8 @@ def read_object(client: Any, act: str, level: str, oid: str) -> dict:
     for key, plevel in (("adset", "adset"), ("campaign", "campaign")):   # ближний родитель первым
         p = raw.get(key)
         if isinstance(p, dict):
-            parents.append({"level": plevel, "name": str(p.get("name") or ""),
+            parents.append({"level": plevel, "id": str(p.get("id") or ""),
+                            "name": str(p.get("name") or ""),
                             "status": str(p.get("status") or ""),
                             "effective_status": str(p.get("effective_status") or ""),
                             "daily_budget": _int(p.get("daily_budget")),
@@ -305,7 +324,7 @@ def _constraints(snap: dict) -> list[dict]:
             word = LEVEL_WORD[p["level"]]
             state = {"PAUSED": "paused", "ARCHIVED": "archived", "DELETED": "deleted"}.get(
                 p["status"], p["status"].lower() or "not active")
-            out.append({"level": p["level"], "name": p["name"],
+            out.append({"level": p["level"], "id": p["id"], "name": p["name"],
                         "text": f"On · {word} {state}"})
     return out
 
@@ -389,9 +408,28 @@ def _revision_id(op: dict) -> str:
 OpenSession = Callable[..., AbstractContextManager]
 
 
+MAX_CALLS_ENV = "ACL_FB_API_MAX_CALLS"
+
+
+def call_ceiling() -> int:
+    """Потолок вызовов сессии — тот же `ACL_FB_API_MAX_CALLS` (по умолчанию 24, 4…60), что у чтений."""
+    try:
+        value = float(os.environ.get(MAX_CALLS_ENV, "") or 24)
+    except ValueError:
+        value = 24
+    return int(max(4, min(60, value)))
+
+
 def call_budget(n_targets: int) -> int:
-    """Вызовы на команду: кабинет + чтение, запись и сверка на каждый объект + запас."""
-    return 1 + 3 * n_targets + 6
+    """Вызовы на команду: кабинет + чтение, запись и сверка на каждый объект + запас.
+
+    Не выше потолка оператора: команда, которой нужно больше, отказывается в превью.
+    """
+    return min(1 + 3 * n_targets + 6, call_ceiling())
+
+
+def max_targets_for_ceiling() -> int:
+    return max(1, (call_ceiling() - 1) // 3)
 
 
 def preview(store: OperationStore, open_session: OpenSession, *, account: str, actor: str,
@@ -402,6 +440,10 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
     if not account:
         raise CommandRefused("Pick an account.")
     items = parse_targets(targets)
+    if len(items) > max_targets_for_ceiling():
+        raise CommandRefused(
+            f"At most {max_targets_for_ceiling()} objects per command with the current call limit "
+            f"({MAX_CALLS_ENV}={call_ceiling()}). Pick fewer objects or split the command.")
     if command == "set_status":
         value = str(value or "").strip()
         if value not in _wp.OBJECT_STATUSES:
@@ -444,7 +486,8 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
     op["revision_id"] = _revision_id(op)
     op["summary"] = _summary(op)
     store.add(op)
-    return snapshot(op)
+    with store._lock:
+        return snapshot(op)
 
 
 def _summary(op: dict) -> str:
@@ -502,7 +545,8 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
         except BaseException as exc:  # noqa: BLE001 — операция не должна остаться в Running
             _finish_after_crash(store, op_id, exc)
 
-    started = snapshot(op)      # ответ — состояние на момент принятия (Running), не итог
+    with store._lock:
+        started = snapshot(op)  # ответ — состояние на момент принятия (Running), не итог
     (spawn or _spawn_thread)(work)
     return started
 
@@ -511,7 +555,7 @@ def _finish_after_crash(store: OperationStore, op_id: str, exc: BaseException) -
     op = store.get(op_id)
     if op is None or op["state"] in FINAL_STATES:
         return
-    sent = any(a["result"] in ("sent", "unknown", "saved") for a in op["affected"])
+    sent = any(a["result"] in ("sending", "sent", "unknown", "saved") for a in op["affected"])
     for a in op["affected"]:
         if a["result"] == "pending":
             a["result"] = "not_attempted"
@@ -552,7 +596,7 @@ def run_op(store: OperationStore, op_id: str, open_session: OpenSession, *,
 
 
 def _stopped(op: dict, message: str) -> None:
-    sent = any(a["result"] in ("sent", "unknown", "saved") for a in op["affected"])
+    sent = any(a["result"] in ("sending", "sent", "unknown", "saved") for a in op["affected"])
     for a in op["affected"]:
         if a["result"] == "pending":
             a["result"] = "not_attempted"
@@ -563,11 +607,17 @@ def _stopped(op: dict, message: str) -> None:
 
 def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], None]) -> None:
     client, act = sess.client, sess.act
+    if act != op["act"]:
+        raise CommandRefused("The session is for a different ad account than the preview; refused.",
+                             status=409, code="stale")
     if not getattr(client, "allow_writes", False):
         raise CommandRefused("This session cannot write.")
     client.reset_budget(call_budget(len(op["affected"])))
     command, currency = op["command"], op["currency"]
-    _check_account(client, act, expect_currency=currency)
+    _currency, acc_status = _check_account(client, act, expect_currency=currency)
+    if command == "set_status" and op["value"] == "ACTIVE" and acc_status != 1:
+        raise CommandRefused("The ad account is no longer active, so nothing can be switched on.",
+                             status=409, code="stale")
 
     # 1) Перечитать ВСЁ до первой записи: изменилось хоть что-то — не пишем ничего.
     for item in op["affected"]:
@@ -575,7 +625,8 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
         new = item["after"]
         entry, why = plan_one(command, snap, new, currency)
         if (entry is None or entry["before"] != item["before"] or entry["after"] != item["after"]
-                or entry["constraints"] != item["constraints"]):
+                or entry["constraints"] != item["constraints"]
+                or entry.get("strategy") != item.get("strategy")):
             now_value = current_value(command, snap)
             item["note"] = (f"was {item['before_display']}, now "
                             f"{why or _display(command, now_value, currency)}")
@@ -592,6 +643,8 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
             continue
         path = f"/{item['id']}"
         item["requested"] = item["after"]
+        item["result"] = "sending"      # до POST: упавший процесс не должен выглядеть как «не отправлено»
+        store.save(op)
         try:
             client.post(path, {item["field"]: item["after"] if item["field"] == "status"
                                else str(item["after"])})
@@ -665,5 +718,6 @@ def _finalize(store: OperationStore, op: dict) -> None:
 
 
 def status(store: OperationStore, op_id: str) -> dict | None:
-    op = store.get(str(op_id or ""))
-    return snapshot(op) if op else None
+    with store._lock:
+        op = store.get(str(op_id or ""))
+        return snapshot(op) if op else None

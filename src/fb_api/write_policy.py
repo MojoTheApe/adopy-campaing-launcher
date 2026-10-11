@@ -51,7 +51,7 @@ OPT_OUT = "OPT_OUT"
 #: Отдельного документированного ключа «text generation» там нет — не гадаем.
 DOF_FEATURES = frozenset({"text_optimizations"})
 
-_PATH_RE = re.compile(r"^/(act_\d{5,})/([a-z]+)$")
+_PATH_RE = re.compile(r"/(act_\d{5,})/([a-z]+)\Z")
 
 
 class WriteRefused(ValueError):
@@ -126,7 +126,7 @@ def check(act: str, method: str, path: str, params: dict | None,
     """Проверить запись. Возвращает ребро; иначе `WriteRefused`."""
     if method != "POST":
         raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
-    m = _PATH_RE.match(path or "")
+    m = _PATH_RE.fullmatch(path or "")
     if not m:
         raise WriteRefused("write refused: path must be /act_<id>/<edge>")
     if m.group(1) != act:
@@ -179,7 +179,7 @@ OBJECT_FIELDS = frozenset({"status", "daily_budget", "bid_amount"})
 OBJECT_STATUSES = frozenset({"ACTIVE", "PAUSED"})
 #: Сумма — целое число мелких единиц валюты, не больше 15 знаков.
 _AMOUNT_RE = re.compile(r"[1-9][0-9]{0,14}", re.ASCII)
-_OBJECT_PATH_RE = re.compile(r"^/([1-9][0-9]{4,})$", re.ASCII)
+_OBJECT_PATH_RE = re.compile(r"/([1-9][0-9]{4,})\Z", re.ASCII)
 _MAX_AMOUNT = 10 ** 15
 
 
@@ -216,7 +216,7 @@ def check_object_update(method: str, path: str, params: dict | None,
     """Проверить правку существующего объекта. Возвращает имя поля; иначе `WriteRefused`."""
     if method != "POST":
         raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
-    if not _OBJECT_PATH_RE.match(path or ""):
+    if not _OBJECT_PATH_RE.fullmatch(path or ""):
         raise WriteRefused("write refused: path must be the id of an existing object "
                            "(no edges, no creation)")
     if files:

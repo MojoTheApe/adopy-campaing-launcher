@@ -180,12 +180,12 @@ class FakeMeta:
             camp = self.objs.get(obj.get("campaign_id", ""))
             if camp:
                 row["campaign"] = {k: camp.get(k) for k in
-                                   ("name", "status", "effective_status", "daily_budget", "bid_strategy")
+                                   ("id", "name", "status", "effective_status", "daily_budget", "bid_strategy")
                                    if camp.get(k) is not None}
         if kind == "ad":
             ads = self.objs.get(obj.get("adset_id", ""))
             if ads:
-                row["adset"] = {k: ads.get(k) for k in ("name", "status", "effective_status")}
+                row["adset"] = {k: ads.get(k) for k in ("id", "name", "status", "effective_status")}
         return row
 
     def write(self, path, params, files=None, filename=""):
@@ -628,6 +628,160 @@ def test_call_budget_is_respected(world):
     assert client.max_calls == cmd.call_budget(2) and client.calls <= client.max_calls
 
 
+# ───────────────────────── ревью #802 ─────────────────────────
+
+def test_stale_when_the_bid_strategy_changed_between_cap_types(world):
+    pv = world.preview("set_bid", "2", [t("adset", SET_BID)])
+    assert pv["affected"][0]["strategy"] == "Bid cap"
+    world.meta.objs[SET_BID]["bid_strategy"] = "COST_CAP"       # bid_amount теперь значит другое
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == "Failed" and done["stale"] is True
+    assert world.meta.posts == []
+
+
+def test_execute_rechecks_the_account_status_for_switching_on(world):
+    pv = world.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
+    world.meta.account_status = 2                                # кабинет отключили после превью
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == "Failed" and done["stale"] is True and "no longer active" in done["message"]
+    assert world.meta.posts == []
+
+
+def test_execute_allows_switching_off_on_an_inactive_account(world):
+    pv = world.preview("set_status", "PAUSED", [t("campaign", CAMP_CBO)])
+    world.meta.account_status = 2
+    world.execute(pv)
+    assert world.final(pv)["state"] == "Succeeded"
+
+
+def test_preview_refuses_switching_on_for_an_inactive_account(world):
+    world.meta.account_status = 2
+    with pytest.raises(cmd.CommandRefused):
+        world.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
+
+
+def test_trailing_newline_in_paths_is_refused():
+    for path in ("/123456\n", "/123456\n\n", "/1000001\n"):
+        with pytest.raises(wp.WriteRefused):
+            wp.check_object_update("POST", path, {"status": "PAUSED"})
+    with pytest.raises(wp.WriteRefused):                         # и политика создания
+        wp.check(ACT, "POST", f"/{ACT}/campaigns\n", {"name": "C", "objective": "OUTCOME_LEADS",
+                                                      "status": "PAUSED"})
+
+
+def test_session_budget_is_capped_by_the_operator_ceiling(world, monkeypatch):
+    monkeypatch.setenv("ACL_FB_API_MAX_CALLS", "10")
+    assert cmd.call_ceiling() == 10 and cmd.call_budget(20) == 10
+    assert cmd.max_targets_for_ceiling() == 3
+    targets = [t("campaign", CAMP_A), t("campaign", CAMP_CBO), t("adset", SET_BID), t("adset", SET_AUTO)]
+    with pytest.raises(cmd.CommandRefused) as ei:
+        world.preview("set_status", "ACTIVE", targets)
+    assert "At most 3 objects" in str(ei.value) and world.sessions == []
+    pv = world.preview("set_status", "ACTIVE", targets[:3])
+    world.execute(pv)
+    assert world.clients[-1].max_calls == 10 and world.final(pv)["state"] == "Succeeded"
+    monkeypatch.setenv("ACL_FB_API_MAX_CALLS", "999")
+    assert cmd.call_ceiling() == 60
+    monkeypatch.setenv("ACL_FB_API_MAX_CALLS", "junk")
+    assert cmd.call_ceiling() == 24
+
+
+def test_get_store_is_created_once_under_concurrency(monkeypatch, tmp_path):
+    import threading
+    import time as _t
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    cmd._STORES.clear()
+    built = []
+    real = cmd.OperationStore
+
+    class Slow(real):
+        def __init__(self, *a, **k):
+            built.append(1)
+            _t.sleep(0.05)
+            super().__init__(*a, **k)
+
+    monkeypatch.setattr(cmd, "OperationStore", Slow)
+    got = []
+    threads = [threading.Thread(target=lambda: got.append(cmd.get_store())) for _ in range(6)]
+    [th.start() for th in threads]
+    [th.join() for th in threads]
+    assert len(built) == 1 and len({id(x) for x in got}) == 1
+    cmd._STORES.clear()
+
+
+def test_session_for_another_account_is_refused_before_any_write(world):
+    pv = world.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
+
+    @contextmanager
+    def other(account, commands):
+        yield SimpleNamespace(client=make_client(world.meta, commands=True), act="act_9999999999")
+
+    cmd.execute(world.store, other, revision_id=pv["revision_id"], idempotency_key="idem-key-0001",
+                spawn=lambda fn: fn())
+    done = world.final(pv)
+    assert done["state"] == "Failed" and done["stale"] is True and world.meta.posts == []
+
+
+def test_history_append_is_fsynced(world, monkeypatch):
+    import os as _os
+
+    synced = []
+    real = _os.fsync
+    monkeypatch.setattr(cmd.os, "fsync", lambda fd: synced.append(fd) or real(fd))
+    pv = world.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
+    world.execute(pv)
+    assert len(synced) >= 3                                       # Running, sending, Verifying, итог
+
+
+def test_restart_without_a_sent_write_is_failed_not_unknown(tmp_path):
+    path = tmp_path / "h.jsonl"
+    store = cmd.OperationStore(path)
+    op = {"op_id": "op_a", "state": cmd.RUNNING, "created_at": "x", "revision_id": "rev_a",
+          "idempotency_key": "idem-key-0001",
+          "affected": [{"id": "1", "result": "pending"}, {"id": "2", "result": "pending"}]}
+    store.add(op)
+    store.save(op)
+    got = cmd.OperationStore(path).get("op_a")
+    assert got["state"] == cmd.FAILED and "Nothing was written" in got["message"]
+    assert [a["result"] for a in got["affected"]] == ["not_sent", "not_sent"]
+    # а запись «в полёте» (sending) могла уйти
+    op2 = {"op_id": "op_b", "state": cmd.RUNNING, "created_at": "y", "revision_id": "rev_b",
+           "idempotency_key": "idem-key-0002",
+           "affected": [{"id": "1", "result": "sending"}, {"id": "2", "result": "pending"}]}
+    store.add(op2)
+    store.save(op2)
+    got = cmd.OperationStore(path).get("op_b")
+    assert got["state"] == cmd.UNKNOWN
+    assert [a["result"] for a in got["affected"]] == ["unknown", "not_attempted"]
+
+
+@pytest.mark.parametrize("host,allowed", [("127.0.0.1", True), ("localhost", True), ("::1", True),
+                                          ("[::1]", True), ("0.0.0.0", False), ("192.168.1.5", False),
+                                          ("", False), ("example.com", False)])
+def test_endpoints_refuse_when_not_bound_to_loopback(web, monkeypatch, host, allowed):
+    cc, w = web
+    monkeypatch.setenv("ACL_FB_BACKEND", "api")
+    monkeypatch.setenv("ACL_BIND_HOST", host)
+    body = {"account": ACCOUNT, "command": "set_status", "value": "ACTIVE",
+            "targets": [t("campaign", CAMP_A)], "revision_id": "rev_x", "idempotency_key": "idem-key-0001"}
+    results = (cc.run_preview(body), cc.run_execute(body), cc.get_status("op_x"))
+    if allowed:
+        assert all(code != 403 for _d, code in results)
+    else:
+        for data, code in results:
+            assert code == 403 and data["code"] == "not_loopback" and "127.0.0.1" in data["error"]
+        assert w.sessions == [] and w.meta.posts == []
+
+
+def test_serve_records_its_bind_host():
+    text = (ROOT / "serve.py").read_text(encoding="utf-8")
+    assert 'os.environ["ACL_BIND_HOST"] = args.host' in text
+    assert text.index('os.environ["ACL_BIND_HOST"]') < text.index("uvicorn.run(")
+
+
 # ───────────────────────── история ─────────────────────────
 
 def test_history_is_persisted_with_actor_and_values(world, tmp_path):
@@ -656,7 +810,7 @@ def test_history_survives_restart_and_marks_interrupted_runs(tmp_path):
     again = cmd.OperationStore(path)
     got = again.get("op_x")
     assert got["state"] == cmd.UNKNOWN and "stopped before the result was verified" in got["message"]
-    assert [a["result"] for a in got["affected"]] == ["unknown", "unknown"]   # что ушло, неизвестно
+    assert [a["result"] for a in got["affected"]] == ["unknown", "not_attempted"]
     assert again.by_key("idem-key-0001")["op_id"] == "op_x"       # тот же ключ после рестарта — не пишет
 
 
@@ -673,6 +827,7 @@ def web(monkeypatch, tmp_path):
     from src.web import campaign_commands as cc
 
     monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("ACL_BIND_HOST", "127.0.0.1")
     cmd._STORES.clear()
     w = World(tmp_path)
     w.store = cmd.get_store()
@@ -966,6 +1121,19 @@ const text = (e) => [e.textContent].concat(e.children.map(text)).join('|');
   cancel.listeners.click();
   out.cancelled = await p;
   out.sent_after_cancel = sent.length - before;
+  // родитель в той же команде не даёт предупреждения; чужой — даёт
+  const both = A.dialogModel({ command: 'set_status', value: 'ACTIVE', account: 'Acc', currency: 'USD', skipped: [],
+    affected: [{ id: '1000001', level: 'campaign', name: 'C', before_display: 'Off', after_display: 'On', constraints: [] },
+               { id: '2000001', level: 'adset', name: 'S', before_display: 'Off', after_display: 'On',
+                 constraints: [{ id: '1000001', text: 'On \u00b7 Campaign paused' }] }] });
+  out.both_warnings = both.warnings;
+  const other = A.dialogModel({ command: 'set_status', value: 'ACTIVE', account: 'Acc', currency: 'USD', skipped: [],
+    affected: [{ id: '2000001', level: 'adset', name: 'S', before_display: 'Off', after_display: 'On',
+                 constraints: [{ id: '1000001', text: 'On \u00b7 Campaign paused' }] }] });
+  out.other_warnings = other.warnings.length;
+  out.bid_row = A.dialogModel({ command: 'set_bid', value: '2', account: 'Acc', currency: 'USD', skipped: [],
+    affected: [{ id: '2000001', level: 'adset', name: 'S', strategy: 'Bid cap', before_display: '1.50 USD',
+                 after_display: '2.00 USD', constraints: [] }] }).rows[0].strategy;
   process.stdout.write(JSON.stringify(out));
 })();
 """
@@ -1002,4 +1170,5 @@ def test_acm_commands_helper_in_node():
     assert out["exec_empty"] == "Preview the command first."
     assert out["seen"] == ["Verifying", "Succeeded"] and out["final"]["state"] == "Succeeded"
     assert out["key"].startswith("k_") and len(out["key"]) == 26
+    assert out["both_warnings"] == [] and out["other_warnings"] == 1 and out["bid_row"] == "Bid cap"
     assert out["cancelled"]["cancelled"] is True and out["sent_after_cancel"] == 1   # только превью
