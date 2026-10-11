@@ -5373,9 +5373,9 @@ window.cbLayout = (function () {
 
   /* ACL-1775: место конверсии набора и выбор формы Страницы. Правила форм
      (чья форма, какой статус годен) решает сервер; здесь только то, что
-     показать. Состояния форм зеркалят src/fb_api/forms.py (UNUSABLE_STATUSES). */
+     показать. Годна только форма ACTIVE, как src/fb_api/forms.py (USABLE_STATUS). */
   var DESTINATIONS = { website: 'Website', instant_form: 'Instant Form' };
-  var UNUSABLE_FORM_STATUSES = ['ARCHIVED', 'DELETED', 'DRAFT'];
+  var USABLE_FORM_STATUS = 'ACTIVE';
 
   function destination(v) { return v === 'instant_form' ? 'instant_form' : 'website'; }
 
@@ -5383,7 +5383,7 @@ window.cbLayout = (function () {
     var out = [], seen = {};
     (forms || []).forEach(function (f) {
       if (!f || !f.id) return;
-      if (UNUSABLE_FORM_STATUSES.indexOf(String(f.status || '').toUpperCase()) !== -1) return;
+      if (String(f.status || '').trim().toUpperCase() !== USABLE_FORM_STATUS) return;
       seen[String(f.id)] = true;
       out.push({ id: String(f.id), label: (f.name || f.id) + ' · ' + f.id });
     });

@@ -44,9 +44,11 @@ const forms = [
   { id: '7000004', name: 'Draft form', status: 'DRAFT' },
   { id: '7000005', name: 'Gone', status: 'deleted' },
   { id: '7000003', name: 'Lead form B', status: 'ACTIVE' },
+  { id: '7000006', name: 'No status' },
+  { id: '7000007', name: 'Pending', status: 'PENDING' },
 ];
 let opts = L.formOptions(forms, '');
-assert.deepEqual(opts.map((o) => o.id), ['7000001', '7000003'], 'архивные/удалённые/черновики не прячутся');
+assert.deepEqual(opts.map((o) => o.id), ['7000001', '7000003'], 'годна только ACTIVE: архивные, черновики, без статуса и незнакомые не показываются');
 assert.equal(opts[0].label, 'Lead form A · 7000001');
 opts = L.formOptions(forms, '7000003');
 assert.equal(opts.length, 2, 'выбранная форма из списка не дублируется');
@@ -177,7 +179,7 @@ const picker = t.rows[0]._.picker;
 const ids = (picker.innerHTML.match(/value="([^"]*)"/g) || []).map((x) => x.slice(7, -1));
 assert.deepEqual(ids, ['', '7000001', '7000003'], 'в списке не те формы: ' + picker.innerHTML);
 assert.equal(picker.value, '7000003');
-assert.equal(t.rows[0]._.fnote.textContent, '5 forms of the Page', 'подпись считает то, что пришло от сервера');
+assert.equal(t.rows[0]._.fnote.textContent, '7 forms of the Page', 'подпись считает то, что пришло от сервера');
 
 // Выбор формы пишет в скрытое поле и сообщает наблюдателю (input, bubbles).
 const row0 = t.rows[0];

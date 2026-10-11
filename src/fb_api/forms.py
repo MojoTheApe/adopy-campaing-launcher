@@ -19,8 +19,9 @@ from typing import Any
 from src.fb_api.graph import GraphClient, GraphError
 
 FORMS_FIELDS = "id,name,status,locale,created_time"
-#: Формы в этих состояниях в объявление не подставить: в выборе их нет.
-UNUSABLE_STATUSES = frozenset({"ARCHIVED", "DELETED", "DRAFT"})
+#: В объявление идёт только форма со статусом ACTIVE; пустой или незнакомый
+#: статус - не годится (ревью m1). Остальных в выборе нет.
+USABLE_STATUS = "ACTIVE"
 PAGE_ID_RE = re.compile(r"^[0-9]{1,25}$")
 
 MSG_UNREADABLE = "This Page's forms can't be read with the current session"
@@ -43,7 +44,7 @@ class PageForm:
 
     @property
     def usable(self) -> bool:
-        return self.status.upper() not in UNUSABLE_STATUSES
+        return self.status.strip().upper() == USABLE_STATUS
 
     def as_dict(self) -> dict[str, Any]:
         return {"id": self.id, "name": self.name, "status": self.status, "locale": self.locale,

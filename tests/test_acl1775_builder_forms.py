@@ -130,9 +130,8 @@ def test_the_page_and_the_server_agree_on_destinations_and_form_statuses():
 
     page = _page()
     assert f"{cr.DEST_WEBSITE}: 'Website'" in page and f"{cr.DEST_FORM}: 'Instant Form'" in page
-    m = re.search(r"var UNUSABLE_FORM_STATUSES = \[([^\]]*)\]", page)
-    js = {s.strip().strip("'") for s in m.group(1).split(",")}
-    assert js == set(fm.UNUSABLE_STATUSES)
+    m = re.search(r"var USABLE_FORM_STATUS = '([^']*)'", page)
+    assert m.group(1) == fm.USABLE_STATUS == "ACTIVE"
     # имя поля, которое разбирает сервер
     src = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
     assert 'f"camp_{idx}_destination"' in src and 'f"camp_{idx}_ad_{a_idx}_form_id"' in src

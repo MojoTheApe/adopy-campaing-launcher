@@ -121,6 +121,16 @@ def _creative(story):
 MATRIX = [
     ("link_data_ok", "adcreatives", _creative(_cta_story("link_data")), True, True),
     ("video_data_ok", "adcreatives", _creative(_cta_story("video_data")), True, True),
+    # Ревью m2: годная форма в CTA + вторая lead_gen_form_id в том же spec - отказ в обеих линиях.
+    ("valid_plus_link_data_level", "adcreatives", _creative({"page_id": PAGE, "link_data": {
+        **_cta_story("link_data")["link_data"], "lead_gen_form_id": FORM}}), True, False),
+    ("valid_plus_story_level", "adcreatives", _creative({**_cta_story("link_data"), "lead_gen_form_id": FORM}), True, False),
+    ("valid_plus_second_format", "adcreatives", _creative({"page_id": PAGE,
+        "link_data": _cta_story("link_data")["link_data"],
+        "video_data": {"call_to_action": {"type": "LEARN_MORE", "value": {"lead_gen_form_id": FORM2}}}}), True, False),
+    ("valid_plus_cta_level", "adcreatives", _creative({"page_id": PAGE, "link_data": {
+        "call_to_action": {"type": "LEARN_MORE", "lead_gen_form_id": FORM,
+                           "value": {"lead_gen_form_id": FORM}}}}), True, False),
     ("link_data_ok_as_string", "adcreatives", {"name": "x", "object_story_spec": json.dumps(_cta_story())}, True, True),
     ("no_on_ad_link", "adcreatives", _creative(_cta_story("link_data")), False, False),
     ("no_on_ad_video", "adcreatives", _creative(_cta_story("video_data")), False, False),
@@ -512,6 +522,47 @@ def test_an_archived_form_is_refused_before_any_write(tmp_path):
     out, client = _run(meta, _instant(tmp_path, forms=(ARCHIVED,)))
     assert out.stop_kind == "plan" and "archived" in out.error
     assert meta.posts == [] and client.writes == 0
+
+
+@pytest.mark.parametrize("status", ["", None, "PENDING", "ARCHIVED", "DRAFT", "DELETED"])
+def test_only_an_active_form_is_usable_and_the_message_is_clear(tmp_path, status):
+    row = {"id": "7000010", "name": "Odd form", "locale": "en_US"}
+    if status is not None:
+        row["status"] = status
+    assert fm.parse_forms([row])[0].usable is False
+    meta = FormMeta(rows=[row])
+    out, client = _run(meta, _instant(tmp_path, forms=("7000010",)))
+    assert out.stop_kind == "plan" and "only ACTIVE forms can be used" in out.error
+    assert (status or "unknown status").lower() in out.error
+    assert meta.posts == [] and client.writes == 0
+    assert fm.parse_forms([{**row, "status": "active"}])[0].usable is True
+
+
+def test_unknown_destination_from_the_web_form_is_refused_out_loud(tmp_path, monkeypatch):
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+    from src.web import app as web
+
+    _c, _a, slots = web._parse_build_upload_form(_fields(camp_0_destination="messenger"))
+    assert all(s["destination"] == "messenger" for s in slots)
+    d, = slots_to_campaign_drafts(slots, account_label="Acc", country="MX")
+    with pytest.raises(cr.PlanError, match="Unknown conversion location"):
+        d.ad_sets[0].ads[0].creative_path = str(tmp_path / "x.png")
+        cr.plan_from_draft(d)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
+    assert web._instant_form_refusal(slots).status_code == 409
+
+
+def test_the_call_budget_covers_the_extra_form_reads():
+    from src.web import publish_api
+
+    assert publish_api.DEFAULT_CREATE_MAX_CALLS >= 150
+
+
+def test_unsupported_objective_message_mentions_instant_form(tmp_path):
+    d = _draft(tmp_path)
+    d.objective = "Traffic"
+    with pytest.raises(cr.PlanError, match="website or Instant Form"):
+        cr.plan_from_draft(d)
 
 
 def test_unreadable_forms_stop_the_plan_with_the_clear_message_and_no_write(tmp_path):

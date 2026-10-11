@@ -2193,8 +2193,11 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
             # другого назначения (сайта) не уходят вовсе, а у сайтовых слотов
             # лишних ключей нет - прежние черновики не меняются ни байтом.
+            if destination != "website":
+                # Незнакомое назначение не превращается в сайт молча: уходит как есть,
+                # и план откажет вслух ("Unknown conversion location").
+                slot["destination"] = destination
             if destination == "instant_form":
-                slot["destination"] = "instant_form"
                 slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
             slots.append(slot)
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
@@ -4889,7 +4892,7 @@ def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
 
     if publish_api.api_enabled():
         return None
-    if any(s.get("destination") == "instant_form" for s in slots):
+    if any(s.get("destination", "website") != "website" for s in slots):
         return JSONResponse({"error": INSTANT_FORM_RPA_ERROR}, status_code=409)
     return None
 

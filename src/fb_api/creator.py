@@ -209,7 +209,7 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
     objective = str(getattr(draft, "objective", "") or "Leads").strip()
     if objective.casefold() not in SUPPORTED_OBJECTIVES:
         problems.append(f"Objective {objective!r} is not supported by the API backend "
-                        "(only Leads with a website conversion)")
+                        "(only Leads with a website or Instant Form conversion)")
     link = str(getattr(draft, "link", "") or "").strip()
     ad_sets_src = list(getattr(draft, "ad_sets", None) or [])
     # Ссылка нужна только сайтовым наборам: у Instant Form своей ссылки нет (ACL-1775).
@@ -952,7 +952,8 @@ class CampaignCreator:
                                     "Page; pick one of the Page's forms (Refresh forms).")
                 if not form.usable:
                     raise PlanError(f"Ad {ad.index}: the Instant Form {form.name!r} is "
-                                    f"{form.status.lower()} and cannot be used; pick another form.")
+                                    f"{form.status.lower() or 'of unknown status'} (only ACTIVE forms can be "
+                                    "used); pick another form.")
         self._page_forms = read
 
     def _check_planned(self, plan: CampaignPlan, targetings: list[dict]) -> None:
