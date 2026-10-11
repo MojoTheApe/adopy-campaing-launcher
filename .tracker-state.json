@@ -7270,9 +7270,11 @@
         "worktree": "C:\\acl-1806",
         "id": "1b7258b21ca64fe6aace6aa0f751d046",
         "issue": 806,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-11T20:38:41+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 808,
+        "report": "Scope: config/paths.py get_obsidian_dashboard_dir() (own commit b7e08234; ACL_OBSIDIAN_DIR, then ~/Desktop/Obsidian/\u0434\u0435\u0448\u0431\u043e\u0440\u0434, then legacy Kuwait Forms path) and OBSIDIAN_MISSING_WARNING. scripts/acl_board.py, acl_telemetry_report.py and build_creative_notes.py now use the resolver and warn when no vault is found. PR 808, branch work/acl-1806-obsidian-path, base main.\nBehavior change (documented in PR): when no vault exists, acl_telemetry_report no longer auto-creates the legacy folder; it prints to stdout and returns 1. No scheduled, CI or packaging callers.\nReview: Sonnet APPROVE (vault present: same files and folders; config change isolated; UTF-8 intact). Tests: test_acl1806_obsidian_path, test_acl_board, test_board_snapshot: 77 passed. Full suite in CI.\nFollow-up: scripts/meta_docs_watch.py (ACL-1782) switches to the resolver in its review fix."
       }
     },
     "tasks": {
