@@ -3269,8 +3269,12 @@
     .cbd-camp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
     .cbd-root .cbd-camp-ads { font-size: var(--adopy-text-sm); }
     .cbd-camp-sub { color: var(--muted); font-size: var(--adopy-text-sm); display: flex; gap: var(--space-sm); }
-    /* «Names only»: остаются имя и значки — счётчик объявлений и бюджет скрыты. */
-    .cbd-col-tree[data-names-only="1"] .cbd-camp-sub { display: none; }
+    /* «Names only», как в дизайне: редакторы свёрнуты — остаётся одно дерево
+       из имён и значков на всю ширину. Выбор кампании выходит из режима. */
+    #cbd-panel[data-names-only="1"] .cbd-camp-sub { display: none; }
+    #cbd-panel[data-names-only="1"] .cbd-cols { grid-template-columns: minmax(0, 1fr); }
+    #cbd-panel[data-names-only="1"] .cbd-col-edit { display: none; }
+    #cbd-panel[data-names-only="1"] .cbd-col-tree { border-right: 0; }
     .cbd-root .cbd-add { font-size: var(--adopy-text-sm); }
 
     /* Правая колонка: редактор выбранного объекта. */
@@ -3320,6 +3324,8 @@
     .cbd-host[data-level="adset"] .cb-lvl:not(.cb-lvl-adset),
     .cbd-host[data-level="ad"] .cb-lvl:not(.cb-lvl-ad) { display: none; }
     .cbd-host .cb-ad-row.cbd-ad-off { display: none; }
+    /* Настройка аккаунта (ссылка, поля карты) — контекст кампании, не набора и не объявления. */
+    .cbd-host[data-level="adset"] .cb-preflight, .cbd-host[data-level="ad"] .cb-preflight { display: none; }
     .cbd-host .cb-lvl { padding-top: var(--space-xs); }
     .cbd-host .cb-label { font-size: var(--adopy-text-sm); }
     .cbd-host .cb-input, .cbd-host .cb-select, .cbd-host .cb-sel-text {
@@ -3333,7 +3339,15 @@
        Ни у одного такого поля нет `name`, так что в форму оно не попадает и
        ничего не подменяет. */
     .cb-future-wrap { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; max-width: 100%; }
-    .cb-future { opacity: 0.65; cursor: not-allowed; }
+    .cb-future { opacity: 1; cursor: not-allowed; }
+    /* Выключенный список не должен выглядеть живым: без стрелки, приглушён,
+       пунктирная рамка — читается как подпись, а не как выбор. */
+    select.cb-future {
+      -webkit-appearance: none; appearance: none; background-image: none;
+      background: var(--bg-hover); color: var(--muted);
+      border: 1px dashed var(--border-strong); padding-right: 0.5rem;
+    }
+    button.cb-future { background: var(--bg-hover); }
     .cb-future-tag {
       font-size: var(--adopy-text-sm); color: var(--muted);
       border: 1px solid var(--border-strong); border-radius: 999px; padding: 0 0.4rem;
@@ -5071,6 +5085,10 @@ window.cbKeep = (function () {
       var f = field(hidden);
       if (f) shown[f] = text.value;
     });
+    /* ACL-1769: своё имя кампании — только в черновике, без `name`: форма
+       уходит на сервер ровно с теми полями, что и раньше. */
+    var ov = slot.querySelector('.cb-name-override');
+    if (ov) fields.name_override = ov.value;
     var hint = slot.querySelector('.cb-targeting-hint');
     var out = {
       fields: fields,
@@ -5107,6 +5125,8 @@ window.cbKeep = (function () {
       if (wrap.classList.contains('cb-text2-sel-wrap'))
         text.classList.toggle('cb-text2-unmatched', !!text.value.trim() && !hidden.value);
     });
+    var ov = slot.querySelector('.cb-name-override');
+    if (ov && typeof data.fields.name_override === 'string') ov.value = data.fields.name_override;
     var hint = slot.querySelector('.cb-targeting-hint');
     if (hint) hint.textContent = data.hint || '';
     slot._cbdPick = data.picked === true;
@@ -5768,6 +5788,8 @@ window.cbTree = (function () {
       body.innerHTML = '<p class="cbd-empty">Nothing is being assembled yet.</p>';
     } else {
       body.dataset.namesOnly = namesOnly ? '1' : '0';
+      var panelEl = document.getElementById('cbd-panel');
+      if (panelEl && panelEl.dataset) panelEl.dataset.namesOnly = namesOnly ? '1' : '0';
       body.innerHTML = '<div class="cbd-treebar">' + (countTotal(tree) ? '<div class="cbd-ticks"></div>' : '')
         + '<button type="button" class="cbd-names-only" data-act="names-only" aria-pressed="' + (namesOnly ? 'true' : 'false') + '"'
         + ' title="Show campaign names only">Names only</button></div>' + busy.map(function (g) {
@@ -5928,6 +5950,8 @@ window.cbTree = (function () {
     var bad = slot.querySelectorAll('.cb-field-error');
     for (var i = 0; i < bad.length; i += 1) {
       if (bad[i].closest('.cb-lvl-' + lv)) return true;
+      // Ошибка в настройке аккаунта (ссылка) показана на вкладке Campaign.
+      if (lv === 'campaign' && bad[i].closest('.cb-preflight')) return true;
     }
     return false;
   }
@@ -6250,7 +6274,11 @@ window.cbTree = (function () {
     var id = card ? card.dataset.camp : '';
 
     if (act === 'toggle') {
-      if (id === openId) closeCampaign(); else openCampaign(id);   // одна за раз
+      if (namesOnly) {   // выбор кампании выводит из «Names only»: редактору нужно место
+        namesOnly = false;
+        store(NAMES_KEY, '0');
+        openCampaign(id);
+      } else if (id === openId) closeCampaign(); else openCampaign(id);   // одна за раз
     } else if (act === 'level') {
       setLevel(hit.dataset.level);
     } else if (act === 'acc-toggle') {
@@ -12094,6 +12122,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         if (a && b) b.value = a.value;
       }
     });
+    // ACL-1769: своё имя живёт вне `name` — копируется отдельно.
+    var srcOv = srcSlot.querySelector('.cb-name-override');
+    var newOv = newSlot.querySelector('.cb-name-override');
+    if (srcOv && newOv) newOv.value = srcOv.value;
     // Пустой язык подсвечивается сразу, а не после первой правки.
     var dupLang = newSlot.querySelector('[name="camp_' + idx + '_language"]');
     if (dupLang && typeof cbLanguageChanged === 'function') cbLanguageChanged(dupLang);
@@ -12227,7 +12259,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<span class="cb-label">Campaign name</span>' +
       '<div class="cb-name-box">' +
       '<div class="cb-name-auto">Auto name: <b data-auto-name></b></div>' +
-      '<input type="text" name="camp_' + idx + '_name_override" class="cb-input cb-name-override" value="" placeholder="Optional: your own name" autocomplete="off" oninput="cbUpdateName(this.closest(\'.cb-slot\'))" title="Used instead of the auto name only if you fill it in">' +
+      '<input type="text" data-keep="name_override" class="cb-input cb-name-override" value="" placeholder="Optional: your own name" autocomplete="off" oninput="cbUpdateName(this.closest(\'.cb-slot\'))" title="Used instead of the auto name only if you fill it in">' +
       '</div>' +
       '<span class="cb-label">Asset / Offer</span>' +
       '<input type="text" name="camp_' + idx + '_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +

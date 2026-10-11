@@ -94,7 +94,9 @@ def test_there_is_no_abo_cbo_choice_and_the_campaign_budget_is_shown():
 def test_the_campaign_name_has_an_optional_override_field():
     page = _page()
     slot = _slot_code()
-    assert "name=\"camp_' + idx + '_name_override\"" in slot
+    assert 'data-keep="name_override"' in slot and "_name_override" not in slot, (
+        "у своего имени снова есть name — сервер получит лишнее поле"
+    )
     assert "data-auto-name" in slot
     upd = page[page.index("window.cbUpdateName = function"):]
     upd = upd[: upd.index("// ── Searchable select")]

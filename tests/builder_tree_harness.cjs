@@ -347,6 +347,7 @@ assert.ok(/class="cbd-acc-add" data-act="add-here" data-country="sa" data-accoun
 clickAct(t, 'names-only');
 assert.equal(t.stored['acl.builder.names-only'], '1', '«Names only» не запомнен');
 assert.equal(t.body.dataset.namesOnly, '1');
+assert.equal(t.panel.dataset.namesOnly, '1', '«Names only» не свернул редакторы (атрибут панели)');
 assert.ok(/aria-pressed="true"/.test(t.body.innerHTML));
 // …и переживает перезагрузку страницы
 assert.equal(boot(SPEC, { stored: t.stored }).body.dataset.namesOnly, '1', '«Names only» забыт после F5');
@@ -428,3 +429,15 @@ assert.ok(!/class="cbd-lv-bad"[^>]*>Campaign</.test(head.innerHTML), 'ошибк
 t.api.close();
 assert.equal(t.editor.children.filter((c) => c.matches('.cbd-host')).length, 0, 'форма осталась в редакторе после закрытия');
 console.log('ok (two columns)');
+
+// ── ACL-1769: выбор кампании выводит из «Names only» ───────────────────
+t = boot(SPEC);
+clickAct(t, 'names-only');
+assert.equal(t.panel.dataset.namesOnly, '1');
+const pickId = /data-camp="([^"]+)"/.exec(t.body.innerHTML)[1];
+const rowHit = { dataset: { act: 'toggle' }, closest: () => ({ dataset: { camp: pickId } }) };
+t.panel.fire('click', { target: { closest: (s) => (s === '[data-act]' ? rowHit : null) } });
+assert.equal(t.panel.dataset.namesOnly, '0', 'выбор кампании оставил «Names only» включённым — редактору негде показаться');
+assert.equal(t.stored['acl.builder.names-only'], '0');
+assert.ok(t.editor.children.some((c) => c.matches('.cbd-host')), 'кампания не открылась');
+console.log('ok (names only exits on select)');
