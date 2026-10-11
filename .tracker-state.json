@@ -7292,9 +7292,11 @@
         "worktree": "C:\\acl-1783",
         "id": "88d5aa3ad01e4971b02cfc1f61b28731",
         "issue": 783,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-11T18:22:37+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 790,
+        "report": "Scope: default Graph/Marketing API version v22.0 -> v26.0 in src/meta_campaign_agent/meta_client.py (one constant DEFAULT_GRAPH_VERSION, META_GRAPH_API_VERSION override kept); src/fb_api uses the Ads Manager page's own version, unchanged. v24-v26 breaking changes reviewed (listed in the Issue); none touch our payloads. Checks: tests/test_meta_campaign_agent.py + tests/test_acl1756_fb_api.py: 112 passed, 2 skipped. PR 790, branch work/acl-1783-graph-api-version, base main. Risks: no live verification (needs owner approval; proposal in the Issue). Claim re-registered 2026-10-11 under Coordinator-M1011A / Worker-M1783B after the first claim used a non-conforming feature/ branch."
       }
     },
     "tasks": {
