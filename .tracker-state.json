@@ -7253,9 +7253,11 @@
         "worktree": "C:\\acl-header-design",
         "id": "fd905cbebf444b9fb4294dfeb46ab06f",
         "issue": 778,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-11T05:51:20+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 780,
+        "report": "## Fix handoff \u00b7 ACL-1778\n\n- Head c671a6022618032777cd8151f2ae825d5870bd81 on base e8e59f83, same branch codex/acl-1778-header-linear-toolbar, PR #780.\n- Fixed review findings: (1) amapApply closes the picker through _amapClose, so aria-expanded resets on a same-URL hash navigation; (3) the picker popup carries role=\"dialog\" and aria-label \"Date range\".\n- Added tests: picker close path and role, half-open period (\"Oct 1, 2026 \u2013 \u2026\", \"\u2026 \u2013 Oct 9, 2026\"), escaping of a malformed value.\n- Checks: tests/test_header.py 14 passed; header/stage/calendar set 33 passed earlier on the fix.\n- Known, not in scope: below 760 px the open builder drawer covers the header (unchanged from base)."
       }
     },
     "tasks": {
