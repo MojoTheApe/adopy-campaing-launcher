@@ -4983,6 +4983,42 @@ async def publish_plan(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# ACL-1800: команды над существующими кампаниями (статус/бюджет/ставка) — только
+# при ACL_FB_BACKEND=api, только по клику человека и с подтверждением превью.
+@app.post("/campaign-commands/preview")
+async def campaign_commands_preview(request: Request) -> JSONResponse:
+    from src.web import campaign_commands
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(campaign_commands.run_preview, body)
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/campaign-commands/execute")
+async def campaign_commands_execute(request: Request) -> JSONResponse:
+    from src.web import campaign_commands
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(campaign_commands.run_execute, body)
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/campaign-commands/{op_id}")
+async def campaign_commands_status(op_id: str) -> JSONResponse:
+    from src.web import campaign_commands
+
+    data, code = campaign_commands.get_status(op_id)
+    return JSONResponse(data, status_code=code)
+
+
+async def _campaign_commands_body(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return body if isinstance(body, dict) else {}
+
+
 @app.get("/publish-jobs/slots")
 async def publish_jobs_slots() -> JSONResponse:
     """Сколько профилей публикуют разом и почему (ACL-1321).

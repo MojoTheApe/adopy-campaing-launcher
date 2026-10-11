@@ -1,5 +1,28 @@
 # System history
 
+## Campaign commands: human-confirmed on/off, budget and bid with readback - ACL-1800
+
+Campaigns are created published and PAUSED through the API; a person switches them on or off and
+adjusts budget or bid from the dashboard. Server side and a confirm-dialog helper only; the Home
+table that calls them is ACL-1798. Only with `ACL_FB_BACKEND=api`; under `rpa` every endpoint answers
+a clear refusal.
+
+- `POST /campaign-commands/preview` returns an immutable diff with a revision id: affected objects,
+  before -> after, currency, skipped objects with the reason (for example "Automatic · no manual
+  bid", "Budget is set on the campaign") and parent constraints ("On · Campaign paused").
+- `POST /campaign-commands/execute` takes the revision id and an idempotency key, re-reads every
+  object first and writes nothing if any value changed since the preview. One write per object,
+  never retried, then a readback. `GET /campaign-commands/{op_id}`: Preview, Running, Verifying,
+  Succeeded, Failed or Outcome unknown. A timeout is reconciled by readback only.
+- Enabling a child never enables its parents. The robot adds no rules and activates nothing.
+- Separate narrow write policy (`write_policy.check_object_update`) and a matching page-helper
+  policy: POST to the id of an existing object, exactly one of `status` (ACTIVE or PAUSED),
+  `daily_budget`, `bid_amount` (positive whole minor units). No edges, no creation, no DELETE.
+- History of operations (actor label, time, object, before, requested, saved, result) is kept in
+  `campaign_command_history.jsonl` in the local config dir. The page helper is `acm_commands.js`
+  (`acmCommands.preview/execute/poll/confirm`).
+- The first live check runs on the 9095 test dashboard with test accounts, after the owner agrees.
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then

@@ -306,9 +306,12 @@ def _open_tab(cdp_url: str):
     return PageTab.open(cdp_url)
 
 
-def _make_graph(tab):
+def _make_graph(tab, *, commands_act: str | None = None):
     from src.fb_api.token_capture import InPageGraph
 
+    if commands_act:
+        # ACL-1800: правка существующих объектов — отдельный режим записи.
+        return InPageGraph(tab, allow_object_updates=True, write_act=commands_act)
     return InPageGraph(tab)
 
 
@@ -388,7 +391,9 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
 
 
 @contextmanager
-def _session(account: str):
+def _session(account: str, *, commands: bool = False):
+    """Профиль → вкладка → клиент. `commands=True` (ACL-1800) — клиент с правом
+    ТОЛЬКО на правку существующих объектов (статус/бюджет/ставка)."""
     entry = _as._entry_for(account)
     if entry is None:
         raise ApiReadError(f"{account} is not in the account map")
@@ -434,7 +439,7 @@ def _session(account: str):
             ) from exc
 
         tab = _open_tab(opened.cdp_url)
-        graph = _make_graph(tab)
+        graph = _make_graph(tab, commands_act=act) if commands else _make_graph(tab)
         graph.install()
         try:
             graph.navigate(act, timeout=60.0)
@@ -457,6 +462,7 @@ def _session(account: str):
             raise page_stop
         client = GraphClient(
             graph,
+            allow_writes=bool(commands),
             min_interval_s=_env_number(MIN_INTERVAL_ENV, DEFAULT_MIN_INTERVAL_S, 0.5, 10.0),
             max_calls=int(_env_number(MAX_CALLS_ENV, DEFAULT_MAX_CALLS, 4, 60)),
         )
