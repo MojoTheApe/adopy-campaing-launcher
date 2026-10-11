@@ -270,15 +270,20 @@ BI = {
 
 def test_bi_join_exact_names_only():
     snap = snapshot()
+    snap.adsets[0]["name"] = snap.adsets[1]["name"] = "Camp A"        # все ad set кампании 1 носят её имя
     joined, summ = ci.join_bi(snap, BI)
     assert joined["campaign:1"]["match"] == "name" and joined["campaign:1"]["spend"] == 90.0
     assert joined["campaign:1"]["cpa"] == pytest.approx(30.0)
-    assert "campaign:2" not in joined or joined["campaign:2"]["match"] != "name"    # «camp b» ≠ «Camp B»
+    assert "campaign:2" not in joined or joined["campaign:2"]["match"] != "name"    # «camp b» != «Camp B»
     assert joined["adset:21"]["match"] == "name" and joined["adset:21"]["ftds"] == 1
-    assert "adset:11" not in joined                                                 # «Set A1» в книге нет
-    assert summ["matched"] == 2
+    assert "adset:11" not in joined                                                 # два одноимённых ad set — неоднозначно
     assert "Camp A (copy)" in summ["evidence_only"] and "camp b" in summ["evidence_only"]
-    assert "Camp A" not in summ["evidence_only"]
+
+
+def test_campaign_with_differently_named_ad_sets_gets_no_name_match():
+    joined, summ = ci.join_bi(snapshot(), BI)
+    assert "campaign:1" not in joined                  # «Camp A» покрывает не все ad set кампании
+    assert "Camp A" in summ["evidence_only"]
 
 
 def test_bi_join_ads_need_a_matched_ad_set_and_unique_title():
@@ -652,8 +657,8 @@ def test_tree_and_children_routes_serve_the_snapshot_with_joined_bi(monkeypatch)
     monkeypatch.setattr(web, "_inventory_bi", lambda account, countries, df, dt, span: (BI, ""))
     body = _body(asyncio.run(web.campaign_inventory_tree(_get_req("account=Acc&country=Kuwait"))))
     assert body["has_snapshot"] is True and [r["id"] for r in body["rows"]] == ["1", "2"]
-    assert body["rows"][0]["bi"]["match"] == "name"
-    assert body["bi"]["matched"] == 2 and "camp b" in body["bi"]["evidence_only"]
+    assert body["rows"][0]["bi"]["match"] == "none"
+    assert body["bi"]["matched"] == 1 and "camp b" in body["bi"]["evidence_only"]
     kids = _body(asyncio.run(web.campaign_inventory_children(_get_req("account=Acc&level=adset&parent=2"))))
     assert kids["state"] == "ok" and [r["id"] for r in kids["rows"]] == ["21"]
     assert kids["rows"][0]["bi"]["match"] == "name"
@@ -740,3 +745,37 @@ def test_tokens_are_scoped_to_the_section_not_root():
     assert ":root {" not in css and ":root{" not in css
     assert "\n  .hc {\n    --adopy-bg" in css
     assert ':root[data-theme="dark"] .hc {' in css
+
+
+def test_campaign_name_match_needs_the_book_row_to_cover_the_whole_campaign():
+    # Duplicate в билдере: ad set `X` и `X - Copy` под кампанией `X`. Строка книги `X` — лишь часть.
+    snap = snapshot()
+    snap.campaigns, _ = ci.parse_inventory([camp(1, "X")], "campaign")
+    snap.adsets, _ = ci.parse_inventory([adset(11, "X", 1), adset(12, "X - Copy", 1)], "adset")
+    snap.ads = []
+    both = {"campaigns": {"X": {"spend": 10.0, "leads": 1, "deposits": 0},
+                          "X - Copy": {"spend": 30.0, "leads": 3, "deposits": 1}}, "ads": {}}
+    c = ci.join_bi(snap, both)[0]["campaign:1"]
+    assert c["match"] == "ad_sets" and c["spend"] == 40.0 and c["coverage"] == "2/2"
+    only_x = {"campaigns": {"X": {"spend": 10.0, "leads": 1, "deposits": 0}}, "ads": {}}
+    c = ci.join_bi(snap, only_x)[0]["campaign:1"]
+    assert c == {"match": "partial", "coverage": "1/2"}          # никогда не $10 «Exact name»
+
+
+def test_campaign_name_match_still_works_with_no_ad_sets_or_all_same_named():
+    snap = snapshot()
+    snap.campaigns, _ = ci.parse_inventory([camp(1, "X")], "campaign")
+    book = {"campaigns": {"X": {"spend": 10.0, "leads": 1, "deposits": 0}}, "ads": {}}
+    snap.adsets, snap.ads = [], []
+    assert ci.join_bi(snap, book)[0]["campaign:1"]["match"] == "name"
+    snap.adsets, _ = ci.parse_inventory([adset(11, "X", 1)], "adset")
+    assert ci.join_bi(snap, book)[0]["campaign:1"]["match"] == "name"
+
+
+def test_status_summaries_parse_the_file_once(monkeypatch):
+    ci.put_result(snapshot())
+    calls = []
+    real = ci._load_all
+    monkeypatch.setattr(ci, "_load_all", lambda: calls.append(1) or real())
+    out = ci.summaries(["Acc", "A2", "A3"])
+    assert len(calls) == 1 and out["Acc"]["state"] == "ok" and out["A2"]["state"] == "idle"

@@ -478,7 +478,7 @@ def join_bi(snap: Snapshot, bi: dict | None) -> tuple[dict[str, dict], dict]:
     # ad set
     for a in snap.adsets:
         n = norm_name(a["name"])
-        if n and adset_names[n] == 1 and n in book_c:
+        if n and adset_names[n] == 1 and n in book_c and whole:
             out[f"adset:{a['id']}"] = {"match": "name", **numbers(book_c[n])}
             used.add(n)
     # объявления под совпавшим ad set
@@ -495,11 +495,16 @@ def join_bi(snap: Snapshot, bi: dict | None) -> tuple[dict[str, dict], dict]:
     # кампании
     for c in snap.campaigns:
         n = norm_name(c["name"])
-        if n and camp_names[n] == 1 and n in book_c:
+        kids = tree["adsets_of"].get(c["id"], [])
+        # Имя кампании = ключ книги (`Adset Name`) годится, только если строка книги
+        # покрывает ВСЮ кампанию: ad set нет вовсе или все они носят это же имя.
+        # Иначе (например, `X` и `X - Copy` после Duplicate) строка книги — лишь
+        # часть кампании, и итог идёт путём по ad set: полное покрытие или partial.
+        whole = all(norm_name(k["name"]) == n for k in kids)
+        if n and camp_names[n] == 1 and n in book_c and whole:
             out[f"campaign:{c['id']}"] = {"match": "name", **numbers(book_c[n])}
             used.add(n)
             continue
-        kids = tree["adsets_of"].get(c["id"], [])
         hit = [k for k in kids if f"adset:{k['id']}" in out]
         if kids and len(hit) == len(kids):
             spend = leads = ftds = None
@@ -606,6 +611,19 @@ def summary(snap: Snapshot | None, attempt: dict | None = None, *, now: float | 
     return out
 
 
+def summaries(accounts: list[str]) -> dict[str, dict]:
+    """Сводки нескольких аккаунтов за ОДИН разбор файла (а не по два на аккаунт)."""
+    with _LOCK:
+        data = _load_all()
+    out = {}
+    for account in accounts:
+        rec = data.get(account) if isinstance(data.get(account), dict) else {}
+        raw = rec.get("snapshot")
+        attempt = rec.get("attempt") if isinstance(rec.get("attempt"), dict) else None
+        out[account] = summary(_snapshot_from(raw) if isinstance(raw, dict) else None, attempt)
+    return out
+
+
 def _age_s(stamp: str, now: float | None = None) -> int | None:
     """Сколько секунд назад было чтение; `None`, если время нечитаемо."""
     try:
@@ -697,7 +715,6 @@ def read_into(snap: Snapshot, client: Any, act: str) -> None:
     if not campaigns:
         return
 
-    stopped = None
     try:
         adsets = fetch("adsets", "adsets", ADSET_FIELDS, "adset")
         if adsets is not None:
@@ -708,12 +725,11 @@ def read_into(snap: Snapshot, client: Any, act: str) -> None:
         insights("campaign", snap.campaigns)
         insights("adset", snap.adsets)
         insights("ad", snap.ads)
-    except GraphStop as exc:
-        stopped = exc
+    except GraphStop:
+        # Стоп Meta (лимит, checkpoint…) не бросаем: прочитанное остаётся, снимок
+        # «неполный»; причина уже в `snap.problems`, клиент больше не зовётся.
+        pass
     snap.calls = int(getattr(client, "calls", 0) or 0)
-    # Стоп Meta (лимит, checkpoint…) не бросаем: прочитанное остаётся, снимок
-    # «неполный»; причина уже в `snap.problems`, клиент больше не зовётся.
-    del stopped
 
 
 def finalize(snap: Snapshot) -> None:

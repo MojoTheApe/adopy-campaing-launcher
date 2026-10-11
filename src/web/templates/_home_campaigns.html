@@ -698,6 +698,11 @@
       accounts.forEach(function (a) { S.fetchedAt[a] = Date.now(); if (j.running.indexOf(a) >= 0) S.running[a] = true; });
       el('hc-body').hidden = false;
       fillCountries(); fillAccounts(); fillCols(); render();
+      /* Страницу перезагрузили во время чтения: дальше ждём его конец у своего сервера. */
+      accounts.filter(function (a) { return S.running[a]; }).forEach(function (a) {
+        awaitDone(a).then(function () { return refreshAccount(a); }).catch(function () { /* статус виден в полосе аккаунта */ })
+          .then(function () { delete S.running[a]; render(); });
+      });
       var seen = accounts.filter(function (a) { return (S.summaries[a] || {}).state && S.summaries[a].state !== 'idle'; });
       return Promise.all(seen.map(loadTree)).then(render);
     }, function (e) {

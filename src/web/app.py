@@ -4143,7 +4143,8 @@ async def campaign_inventory_read(request: Request) -> JSONResponse:
 
 
 @app.get("/campaign-inventory/status")
-async def campaign_inventory_status(request: Request) -> JSONResponse:
+@_off_loop
+def campaign_inventory_status(request: Request) -> JSONResponse:
     """Какие аккаунты читаются сейчас и что сохранено по каждому (сводки, без объектов)."""
     from src.analysis_agent import campaign_inventory as ci
 
@@ -4155,7 +4156,7 @@ async def campaign_inventory_status(request: Request) -> JSONResponse:
         "needs_api": not backend_ok,
         "message": "" if backend_ok else ci.NEEDS_API_MESSAGE,
         "running": ci.running_now(),
-        "accounts": {a: ci.summary(ci.get_snapshot(a), ci.get_attempt(a)) for a in accounts},
+        "accounts": ci.summaries(accounts),
     })
 
 
