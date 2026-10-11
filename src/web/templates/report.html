@@ -6826,6 +6826,8 @@ function amapCalendar(btn) {
 
   var box = document.createElement('div');
   box.className = 'amap-cal';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-label', 'Date range');
   document.body.appendChild(box);
   var r = btn.getBoundingClientRect();
   box.style.left = Math.max(8, Math.min(r.left, innerWidth - 700)) + 'px';
@@ -6999,7 +7001,9 @@ function amapCalendar(btn) {
    момент любые два соседних блока выглядели бы одинаково достоверно. */
 function amapApply(from, to, span) {
   var cal = document.querySelector('.amap-cal');
-  if (cal) cal.remove();
+  /* Тем же закрытием, что Cancel: тот же адрес с якорем — это переход по
+     якорю без перезагрузки, и кнопка осталась бы «открытой» (ACL-1778). */
+  if (cal) { if (cal._amapClose) cal._amapClose(false); else cal.remove(); }
   _amapPick = { from: from, to: to, span: span || '' };
   var q = [];
   if (span === 'all') q.push('span=all');

@@ -150,3 +150,25 @@ def test_no_prototype_leftovers():
     for junk in ("prototype-switcher", "study-bar", "design-linear", "Demo buyer", "demo-build",
                  "Preview only", "date-label"):
         assert junk not in t, junk
+
+
+def test_the_picker_closes_through_one_path():
+    """Ревью ACL-1778: Update тем же адресом — переход по якорю без
+    перезагрузки; закрытие окна обязано сбросить aria-expanded кнопки."""
+    t = TPL.read_text(encoding="utf-8")
+    apply = t[t.index("function amapApply"):]
+    apply = apply[: apply.index("\n}\n")]
+    assert "_amapClose" in apply
+    cal = t[t.index("function amapCalendar"): t.index("function amapApply")]
+    assert "box.setAttribute('role', 'dialog')" in cal
+
+
+def test_a_half_open_period_and_a_strange_value():
+    """Ревью ACL-1778: только начало или только конец — «…» на месте второй
+    даты; нечитаемое значение из адреса показывается как есть и экранируется."""
+    only_from = _render_header(period={"date_from": "2026-10-01", "date_to": "", "span": ""})
+    assert _period_text(only_from) == "Oct 1, 2026 – …"
+    only_to = _render_header(period={"date_from": "", "date_to": "2026-10-09", "span": ""})
+    assert _period_text(only_to) == "… – Oct 9, 2026"
+    odd = _render_header(period={"date_from": '"><b>x', "date_to": '"><b>x', "span": ""})
+    assert "<b>x" not in odd and "&#34;&gt;&lt;b&gt;x" in odd
