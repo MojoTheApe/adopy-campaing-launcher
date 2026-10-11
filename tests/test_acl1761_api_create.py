@@ -369,6 +369,8 @@ class FakeMeta:
         self.objects: dict[str, dict] = {}
         self.images: dict[str, str] = {}
         self.posts: list[tuple[str, dict]] = []
+        #: (путь, передан ли on_ad) по каждой записи - ACL-1775.
+        self.on_ad_posts: list[tuple[str, bool]] = []
         self.gets: list[tuple[str, dict]] = []
         self.video_states = list(video_states)
         self.next_id = 100
@@ -422,9 +424,10 @@ class FakeMeta:
             p.pop("adlabels", None)
         return self._new(kind, **p)
 
-    def write(self, path, params, files=None, filename=""):
-        wp.check(ACT, "POST", path, params, files)       # та же политика, что у страницы
+    def write(self, path, params, files=None, filename="", on_ad=False):
+        wp.check(ACT, "POST", path, params, files, on_ad=on_ad)       # та же политика, что у страницы
         self.posts.append((path, dict(params)))
+        self.on_ad_posts.append((path, bool(on_ad)))
         edge = path.rsplit("/", 1)[1]
         mode = self.fail_next.pop(edge, None)
         if mode == "unsent":
