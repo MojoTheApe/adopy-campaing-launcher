@@ -7253,9 +7253,10 @@
         "worktree": "C:\\acl-header-design",
         "id": "9924902f5fbe4c639447e8089e20736f",
         "issue": 778,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-10T20:10:08+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "report": "## Stop \u00b7 ACL-1778\n\nThe claim was recorded on branch feature/header-linear-toolbar, which does not match the ticket naming convention. The same commit (ae127e86) now lives on codex/acl-1778-header-linear-toolbar with PR #780; PR #779 is closed. Resuming immediately on the renamed branch."
       }
     },
     "tasks": {
