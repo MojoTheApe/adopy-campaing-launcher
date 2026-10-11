@@ -3357,6 +3357,8 @@
       color: var(--muted); font: inherit; font-size: var(--adopy-text-sm); padding: 0.25rem 0.5rem;
     }
     .cb-lvl-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-sm); }
+    .cb-headline-line { color: var(--muted); font-size: var(--adopy-text-sm); margin-top: 0.2rem; overflow-wrap: anywhere; }
+    .cb-headline-line[hidden] { display: none; }
     .cb-api-note { color: var(--warn); font-size: var(--adopy-text-sm); margin-top: 0.15rem; }
 
     /* Подвал: выбор «страна / аккаунт» и «новая страна» в две колонки, чтобы
@@ -5332,7 +5334,7 @@ window.cbLayout = (function () {
      creator.plan_from_draft), а здесь только куда её показать. */
   var ROUTES = [
     [/primary text 2/i, '.cb-text2-search', 'ad'],
-    [/text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text 2'],
+    [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text 2'],
     [/creative|file|image|video/i, '.cb-creative-search', 'ad'],
     [/would all be named|names must differ/i, '.cb-creative-search, .cb-adtitle-search', 'ad'],
     [/budget/i, '[name$="_budget"]', 'campaign'],
@@ -6012,6 +6014,17 @@ window.cbTree = (function () {
         if (t2.disabled) t2.title = 'API backend: a second primary text is not supported yet (ACL-1774)';
       }
       if (note) note.hidden = !api;
+      /* Заголовок выбранной записи — под Primary text 1, только для чтения. */
+      var line = rows[i].querySelector('[data-headline]');
+      var pick = rows[i].querySelector('.cb-adtitle-sel-wrap input[type="hidden"]');
+      if (line) {
+        var entry = pick && pick.value && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(pick.value) : null;
+        line.hidden = !entry;
+        /* Только при изменении: запись в textContent — мутация формы, её слушает
+           наблюдатель дерева, и безусловная запись зациклила бы страницу. */
+        var want = entry ? 'Headline: ' + (entry.headline || entry.ad_title) + ', from the ad-title library' : '';
+        if (line.textContent !== want) line.textContent = want;
+      }
     }
   }
 
@@ -11305,6 +11318,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // ── Ad Title: the local library is shared with RPA draft enrichment.
   var AD_TITLES = [];  // [{ad_title, headline, body, description, asset, language}]
   var AD_TITLES_ERROR = '', adTitlesVersion = 0;
+  /* ACL-1769: заголовок записи библиотеки для строки под «Primary text 1».
+     Пусто — записи нет (библиотека не загружена или имя набрано не из списка). */
+  window.cbAdLibraryEntry = function (name) {
+    var hit = AD_TITLES.filter(function (t) { return t.ad_title === name; });
+    return hit.length === 1 ? hit[0] : null;
+  };
   function replaceAdTitles(rows) {
     AD_TITLES = rows.map(function(t) {
       return {ad_title:t.ad_title || t.name, headline:t.headline, body:t.body,
@@ -11926,11 +11945,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'creative_file" value="">' +
       '</div>' +
-      '<span class="cb-label">Ad Title</span>' +
+      /* ACL-1769: прежний «Ad Title» — это выбор записи библиотеки, из которой
+         в черновик идёт основной текст (body), заголовок (headline) и описание.
+         Подписан по главному, что он даёт: «Primary text 1». Имя поля `copy`
+         не менялось. Заголовок записи показан строкой ниже, чтобы он не прятался. */
+      '<span class="cb-label">Primary text 1</span>' +
       '<div class="cb-sel-wrap cb-adtitle-sel-wrap">' +
-      '<input type="text" class="cb-sel-text cb-adtitle-search" placeholder="— type to search ad title —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)">' +
+      '<input type="text" class="cb-sel-text cb-adtitle-search" placeholder="— type to search primary text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Pick a text from the ad-title library: it gives the primary text, the headline and the description">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy" value="">' +
+      '<div class="cb-headline-line" data-headline hidden></div>' +
       '</div>' +
       // ACL-1344: на месте прежнего «CTA (preview only)» — необязательный
       // второй вариант основного текста. Выбирается так же, как Ad Title, из
@@ -11945,9 +11969,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
          бэкенде API поле гасится, пока пусто, и подпись говорит почему.
          Набранное не теряется: непустое поле остаётся рабочим, а проверка
          покажет ошибку на нём. Гасит cbTree.syncHost. */
-      '<div class="cb-api-note" data-api-only hidden>API backend: a second primary text is not supported yet (ACL-1774). Leave it empty, or publish with RPA.</div>' +
+      '<div class="cb-api-note" data-api-only hidden>Primary text 2 is not supported by the API backend yet (ACL-1774). Leave it empty.</div>' +
       '</div>' +
-      '<span class="cb-label">Text options</span>' + future('texts', 'button', '+ Text option') +
+      '<span class="cb-label">More primary texts</span>' + future('texts', 'button', '+ Primary text 3–5') +
       '<span class="cb-label">CTA</span>' + future('cta', 'select', 'Learn more', 'Every ad uses Learn more today') +
       '<span class="cb-label">Stories / Reels file</span>' + future('media', 'button', 'Choose a vertical file') +
       '</div></div>';
