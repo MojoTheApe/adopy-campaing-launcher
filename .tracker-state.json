@@ -7244,20 +7244,6 @@
         "state": "implementing",
         "started_at": "2026-10-09T22:32:02+00:00",
         "from_status": "status:todo"
-      },
-      "778": {
-        "actor": "Worker-H8D3",
-        "session": "Worker-H8D3",
-        "coordinator": "Coordinator-H8D3",
-        "branch": "codex/acl-1778-header-linear-toolbar",
-        "worktree": "C:\\acl-header-design",
-        "id": "f7b8dbab1b194389b0aae5076e8b73c6",
-        "issue": 778,
-        "state": "handoff",
-        "started_at": "2026-10-11T05:34:41+00:00",
-        "from_status": "status:todo",
-        "pr": 780,
-        "report": "## Implementation handoff \u00b7 ACL-1778\n\n- Branch `codex/acl-1778-header-linear-toolbar`, head ae127e86 on work/main e8e59f83. PR #780 (#779 closed: wrong branch name; claim re-taken on the renamed branch).\n- Changed: src/web/templates/report.html (header markup/CSS, picker aria-expanded + focus return, tab title), src/web/templates/loading.html (tab title), tests/test_header.py (+5), tests/test_stage_badge.py (title).\n- Checks: targeted tests 447 + 87 passed; preview instance 9097 (live 9090 untouched); Playwright 10 layouts (both themes, builder open/closed, 1600\u2013360 px, long values) with no overlap/overflow; every header control exercised.\n- Remaining: independent review; full suite in CI; builder draft preservation not exercised (no drafts on the preview)."
       }
     },
     "tasks": {
@@ -10549,22 +10535,25 @@
             "session": "Worker-H8D3"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-H8D3",
         "coordinator": "Coordinator-H8D3",
         "handoff": {
           "actor": "Worker-H8D3",
           "session": "Worker-H8D3",
           "coordinator": "Coordinator-H8D3",
-          "branch": "feature/header-linear-toolbar",
+          "branch": "codex/acl-1778-header-linear-toolbar",
           "worktree": "C:\\acl-header-design",
-          "id": "9924902f5fbe4c639447e8089e20736f",
+          "id": "f7b8dbab1b194389b0aae5076e8b73c6",
           "issue": 778,
-          "state": "stopping",
-          "started_at": "2026-10-10T20:10:08+00:00",
-          "from_status": "status:backlog",
-          "report": "## Stop \u00b7 ACL-1778\n\nThe claim was recorded on branch feature/header-linear-toolbar, which does not match the ticket naming convention. The same commit (ae127e86) now lives on codex/acl-1778-header-linear-toolbar with PR #780; PR #779 is closed. Resuming immediately on the renamed branch."
-        }
+          "state": "handoff",
+          "started_at": "2026-10-11T05:34:41+00:00",
+          "from_status": "status:todo",
+          "pr": 780,
+          "report": "## Implementation handoff \u00b7 ACL-1778\n\n- Branch `codex/acl-1778-header-linear-toolbar`, head ae127e86 on work/main e8e59f83. PR #780 (#779 closed: wrong branch name; claim re-taken on the renamed branch).\n- Changed: src/web/templates/report.html (header markup/CSS, picker aria-expanded + focus return, tab title), src/web/templates/loading.html (tab title), tests/test_header.py (+5), tests/test_stage_badge.py (title).\n- Checks: targeted tests 447 + 87 passed; preview instance 9097 (live 9090 untouched); Playwright 10 layouts (both themes, builder open/closed, 1600\u2013360 px, long values) with no overlap/overflow; every header control exercised.\n- Remaining: independent review; full suite in CI; builder draft preservation not exercised (no drafts on the preview)."
+        },
+        "pr": 780,
+        "queued_at": "2026-10-11T05:35:39+00:00"
       }
     },
     "actors": {
@@ -13803,7 +13792,8 @@
       642,
       651,
       710,
-      739
+      739,
+      778
     ],
     "review": null,
     "history": [
@@ -20647,6 +20637,13 @@
         "at": "2026-10-11T05:34:41+00:00",
         "issue": 778,
         "claim": "f7b8dbab1b194389b0aae5076e8b73c6",
+        "actor": "Worker-H8D3"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-11T05:35:39+00:00",
+        "issue": 778,
+        "pr": 780,
         "actor": "Worker-H8D3"
       }
     ],
