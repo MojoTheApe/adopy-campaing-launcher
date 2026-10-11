@@ -76,7 +76,10 @@
       --bg: var(--adopy-bg);
       --bg-elev: var(--adopy-surface);
       --bg-hover: var(--adopy-surface-hover);
-      --bg-subtle: var(--adopy-surface-subtle);
+      /* Подложка групп (рамка страны, колодцы): светлая тема темнее токена
+         surface-subtle (#f7f8fa, 1.07:1 к белому) — около 1.13:1, чтобы группа
+         читалась без опоры на волосяную линию. Тёмная берёт токен как есть. */
+      --bg-subtle: #f0f2f6;
       --border: var(--adopy-border);
       --border-strong: var(--adopy-border-strong);
       /* Поля ввода (ACL-1361): рамка — control-border (3:1 к поверхностям,
@@ -135,6 +138,7 @@
        переводится: это изображение ленты Facebook, а не наш интерфейс —
        перекрасить его значит показать байеру то, чего он у себя не увидит. */
     :root[data-theme="dark"] {
+      --bg-subtle: var(--adopy-surface-subtle);
       --field-bg: var(--adopy-surface-raised);
       --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.55);
       --build-orange: #fb923c;

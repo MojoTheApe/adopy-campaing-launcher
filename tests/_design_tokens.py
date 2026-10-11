@@ -1,6 +1,6 @@
 """ACL-1797: токены страницы так, как их видит браузер, — со всеми `var()` раскрытыми.
 
-Палитра лежит в `src/web/static/adopy-tokens.css`, а старые имена шаблона
+Палитра лежит в `src/web/templates/adopy-tokens.css`, а старые имена шаблона
 (`--bg`, `--accent`…) ссылаются на неё через `var(--adopy-*)`. Проверки
 контраста раньше разбирали шаблон регулярным выражением и ждали готовые
 цвета; теперь они берут итоговые значения отсюда.
@@ -24,6 +24,11 @@ def _block(text: str, selector: str) -> dict[str, str]:
     # Закрывающая скобка блока — первая «}» в начале строки (в CSS-комментариях скобок нет).
     end = re.compile(r"^\s*\}", re.M).search(text, at).start()
     return dict(_DECL.findall(text[at:end]))
+
+
+def tokens_css() -> str:
+    """Текст файла токенов — для тестов, которые собирают страницу из кусков CSS шаблона."""
+    return TOKENS_CSS.read_text(encoding="utf-8")
 
 
 def tokens(theme: str) -> dict[str, str]:
