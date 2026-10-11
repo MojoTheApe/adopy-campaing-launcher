@@ -111,7 +111,7 @@ def _header(stage_status):
 
 def test_stage_shows_the_badge_the_gap_and_the_tab_title():
     title, meta = _header({"channel": "stage", "known": True, "ahead": 119, "ref": "work/stage", "why": ""})
-    assert "<title>STAGE · Adopy Campaign Manager" in title
+    assert "<title>STAGE · Adopy</title>" in title
     assert 'id="acl-stage"' in meta and "STAGE" in meta and "+119 not on stage" in meta
     assert "abc123def456" in meta, "версия рядом остаётся"
 
@@ -123,7 +123,7 @@ def test_an_unknown_gap_is_said_not_hidden():
 
 def test_a_release_header_is_unchanged():
     title, meta = _header({"channel": "release"})
-    assert "<title>Adopy Campaign Manager" in title and "STAGE" not in title
+    assert "<title>Adopy</title>" in title and "STAGE" not in title
     assert 'id="acl-stage"' not in meta
 
 
