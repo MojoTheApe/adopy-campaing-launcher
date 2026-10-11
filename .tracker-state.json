@@ -7259,6 +7259,18 @@
         "state": "implementing",
         "started_at": "2026-10-11T18:28:13+00:00",
         "from_status": "status:todo"
+      },
+      "781": {
+        "actor": "Worker-M1781B",
+        "session": "a9f3467038d4400d80d0727275ae2ff4",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1781-meta-rules-registry",
+        "worktree": "C:\\acl-1781",
+        "id": "77eb56ef9d5b4a3cb93b75e48d5370b0",
+        "issue": 781,
+        "state": "implementing",
+        "started_at": "2026-10-11T18:30:15+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -10667,10 +10679,14 @@
           {
             "actor": "Worker-M1781A",
             "session": "0953a1165d92337c4e7dfc2c9a9801a9"
+          },
+          {
+            "actor": "Worker-M1781B",
+            "session": "a9f3467038d4400d80d0727275ae2ff4"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-M1781A",
+        "state": "implementing",
+        "worker": "Worker-M1781B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-M1781A",
@@ -11605,6 +11621,10 @@
       },
       "Worker-M1782B": {
         "session": "a0247198fa5445808b9c6400851e6a62",
+        "role": "Worker"
+      },
+      "Worker-M1781B": {
+        "session": "a9f3467038d4400d80d0727275ae2ff4",
         "role": "Worker"
       }
     },
@@ -20985,6 +21005,13 @@
         "issue": 781,
         "actor": "Worker-M1781A",
         "report": "## Stop report: ACL-1781\n\nThe claim was recorded with branch `feature/acl-1781-meta-rules-registry`. That name breaks the repository rule `work/acl-NNNN-short-name` (docs/repository/WORKFLOW.md), and the coordinator brief caused the mistake. Implementation is on that branch (PR #791). Independent review returned CHANGES REQUIRED: seed the objective->goal and goal->billing mappings, add the missing destination types, cover the hook. The work continues on `work/acl-1781-meta-rules-registry` under a new claim. Nothing is lost or merged."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-11T18:30:15+00:00",
+        "issue": 781,
+        "claim": "77eb56ef9d5b4a3cb93b75e48d5370b0",
+        "actor": "Worker-M1781B"
       }
     ],
     "policy": {
