@@ -452,3 +452,29 @@ def record(summary_: dict[str, Any], *, step: str = "publish_preflight",
         rt.record(step, not summary_.get("not_ready"), note="preflight", diag=diag)
     except Exception:
         log.debug("preflight telemetry failed", exc_info=True)
+
+
+def meta_rules_errors(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, list[str]]:
+    """Нарушения правил Meta по кампаниям формы до загрузки (ACL-1781).
+
+    Возвращает {имя кампании: [сообщения на English]}; пусто — всё проходит.
+    Сети нет: слоты превращаются в задания (как в превью) и сверяются с
+    реестром `config/meta_rules`. Сбой самой проверки (нет реестра, нет
+    книги) кампанию не блокирует — пишется в лог.
+    """
+    try:
+        from src.campaign_bridge import meta_rules
+        from src.campaign_bridge.dashboard_publisher import slots_to_publish_jobs
+
+        ruleset = meta_rules.load_rules()
+        jobs = slots_to_publish_jobs(slots, account_label=account_label, country=country, preview_mode=True)
+        out: dict[str, list[str]] = {}
+        for job in jobs:
+            texts = meta_rules.format_violations(meta_rules.check_job(job, ruleset))
+            if texts:
+                bucket = out.setdefault(job.campaign_name, [])
+                bucket.extend(t for t in texts if t not in bucket)
+        return out
+    except Exception:
+        log.exception("Meta rules check failed; campaigns are not blocked by it")
+        return {}

@@ -902,6 +902,19 @@ def _run_rpa(
             _active_publishers.pop(job_id, None)
         return
 
+    # ACL-1781: кампания, которую Meta отклонит по своим правилам, не идёт в
+    # Ads Manager — причина (English) показывается в карточке кампании.
+    try:
+        from src.web import publish_preflight as _pf
+
+        meta_errors = _pf.meta_rules_errors(slots, account_label=account_label, country=country)
+    except Exception:
+        meta_errors = {}
+    for draft in drafts:
+        for msg in meta_errors.get(getattr(draft, "name", ""), []):
+            if msg not in draft.errors:
+                draft.errors.append(msg)
+
     ready: list[Any] = []
     for draft in drafts:
         if _is_cancelled(job_id):
