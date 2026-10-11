@@ -10535,7 +10535,7 @@
             "session": "Worker-H8D3"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-H8D3",
         "coordinator": "Coordinator-H8D3",
         "handoff": {
@@ -10553,7 +10553,8 @@
           "report": "## Implementation handoff \u00b7 ACL-1778\n\n- Branch `codex/acl-1778-header-linear-toolbar`, head ae127e86 on work/main e8e59f83. PR #780 (#779 closed: wrong branch name; claim re-taken on the renamed branch).\n- Changed: src/web/templates/report.html (header markup/CSS, picker aria-expanded + focus return, tab title), src/web/templates/loading.html (tab title), tests/test_header.py (+5), tests/test_stage_badge.py (title).\n- Checks: targeted tests 447 + 87 passed; preview instance 9097 (live 9090 untouched); Playwright 10 layouts (both themes, builder open/closed, 1600\u2013360 px, long values) with no overlap/overflow; every header control exercised.\n- Remaining: independent review; full suite in CI; builder draft preservation not exercised (no drafts on the preview)."
         },
         "pr": 780,
-        "queued_at": "2026-10-11T05:35:39+00:00"
+        "queued_at": "2026-10-11T05:35:39+00:00",
+        "reviewer": "Reviewer-R7Q2"
       }
     },
     "actors": {
@@ -11416,6 +11417,10 @@
       "Worker-H8D3": {
         "session": "Worker-H8D3",
         "role": "Worker"
+      },
+      "Reviewer-R7Q2": {
+        "session": "review_r7q2_1011",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -13792,10 +13797,20 @@
       642,
       651,
       710,
-      739,
-      778
+      739
     ],
-    "review": null,
+    "review": {
+      "id": "a01fab64e76e46408d7f30698add96b3",
+      "pr": 780,
+      "issues": [
+        778
+      ],
+      "actor": "Reviewer-R7Q2",
+      "session": "review_r7q2_1011",
+      "coordinator": "Coordinator-H8D3",
+      "started_at": "2026-10-11T05:50:03+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -20645,6 +20660,13 @@
         "issue": 778,
         "pr": 780,
         "actor": "Worker-H8D3"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-11T05:50:03+00:00",
+        "pr": 780,
+        "lane": "a01fab64e76e46408d7f30698add96b3",
+        "actor": "Reviewer-R7Q2"
       }
     ],
     "policy": {
