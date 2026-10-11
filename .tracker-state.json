@@ -7271,6 +7271,18 @@
         "state": "implementing",
         "started_at": "2026-10-11T18:05:46+00:00",
         "from_status": "status:todo"
+      },
+      "782": {
+        "actor": "Worker-M1782A",
+        "session": "87693cefa8a446598a4984cafafacb7d",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "feature/acl-1782-meta-docs-watcher",
+        "worktree": "C:\\acl-1782",
+        "id": "b4cb0892e93f4bb5b794fb8979891595",
+        "issue": 782,
+        "state": "implementing",
+        "started_at": "2026-10-11T18:07:28+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -10609,6 +10621,17 @@
         "state": "implementing",
         "worker": "Worker-M1783A",
         "coordinator": "Coordinator-M1783"
+      },
+      "782": {
+        "implementers": [
+          {
+            "actor": "Worker-M1782A",
+            "session": "87693cefa8a446598a4984cafafacb7d"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-M1782A",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -11482,6 +11505,10 @@
       },
       "Worker-M1783A": {
         "session": "ea74af46b9684322a8e4c6b643a049a2",
+        "role": "Worker"
+      },
+      "Worker-M1782A": {
+        "session": "87693cefa8a446598a4984cafafacb7d",
         "role": "Worker"
       }
     },
@@ -20782,6 +20809,13 @@
         "issue": 783,
         "claim": "7a6e2cf497194c409aeba29814d08572",
         "actor": "Worker-M1783A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-11T18:07:28+00:00",
+        "issue": 782,
+        "claim": "b4cb0892e93f4bb5b794fb8979891595",
+        "actor": "Worker-M1782A"
       }
     ],
     "policy": {
