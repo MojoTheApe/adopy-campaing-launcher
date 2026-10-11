@@ -96,6 +96,8 @@ def _text2(page, name):
 
 def _show(page, idx=0):
     page.locator(".cbd-camp-row").nth(idx).click()
+    # ACL-1769: поля объявления лежат в разделе Ad правой колонки.
+    page.locator(".cbd-seg [data-level='ad']").click()
 
 
 def test_the_ad_block_has_primary_text_2_and_no_cta_select(ui):
@@ -108,7 +110,10 @@ def test_the_ad_block_has_primary_text_2_and_no_cta_select(ui):
     expect(row.locator("input[type=hidden][name='camp_0_ad_0_copy2']")).to_have_count(1)
     assert "Primary text 2" in row.inner_text() and "(optional)" in row.inner_text()
     expect(p.locator(".cb-cta-select")).to_have_count(0)
-    assert "CTA" not in row.inner_text() and "preview only" not in row.inner_text()
+    # ACL-1769: CTA показан выключенным (список — ACL-1767), а не рабочим полем.
+    assert "preview only" not in row.inner_text()
+    expect(row.locator("[data-future='cta'] select")).to_be_disabled()
+    assert "ACL-1767" in row.locator("[data-future='cta']").get_attribute("title")
     # Превью живо и показывает постоянную кнопку (перерисовка — по событию
     # смены библиотеки текстов, как на живой странице).
     p.evaluate("t => document.dispatchEvent(new CustomEvent('acl:adtextschange', {detail: {texts: t}}))", TEXTS)
@@ -184,6 +189,8 @@ def test_publish_all_sends_primary_text_2_with_the_ad(ui):
     add(p)
     _show(p)
     p.evaluate("() => cbAddAd(document.querySelector('.cb-slot .cb-add-btn-sm'))")
+    # ACL-1769: редактор открывает только что добавленное объявление; нужное — первое.
+    p.locator(".cbd-ed-ad").select_option("0")
     _pick(p, ".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0']", "Text7", "Text7")
     p.evaluate("() => document.querySelector('form.open-account-form')"
                ".dispatchEvent(new Event('input', {bubbles: true}))")
