@@ -7256,9 +7256,10 @@
         "worktree": "C:\\acl-1781",
         "id": "be82d7b2a0af4271a345ff36a5c3f4d6",
         "issue": 781,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-11T18:08:35+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "report": "## Stop report: ACL-1781\n\nThe claim was recorded with branch `feature/acl-1781-meta-rules-registry`. That name breaks the repository rule `work/acl-NNNN-short-name` (docs/repository/WORKFLOW.md), and the coordinator brief caused the mistake. Implementation is on that branch (PR #791). Independent review returned CHANGES REQUIRED: seed the objective->goal and goal->billing mappings, add the missing destination types, cover the hook. The work continues on `work/acl-1781-meta-rules-registry` under a new claim. Nothing is lost or merged."
       },
       "782": {
         "actor": "Worker-M1782B",
