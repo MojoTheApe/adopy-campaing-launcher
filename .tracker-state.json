@@ -7256,9 +7256,11 @@
         "worktree": "C:\\acl-1782",
         "id": "373295f275e2448c91184a1d448cf0d6",
         "issue": 782,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-11T18:28:13+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 793,
+        "report": "PR #793 (work/acl-1782-meta-docs-watcher, commits 3f40da19 + 02b052f2). Added scripts/meta_docs_watch.py, config/meta_rules/sources.json (74 official URLs), tests/test_meta_docs_watch_1782.py (12 passed, affected tests only) and .claude/skills/meta-builder-sync/SKILL.md (force-added: .claude is gitignored and existing skills are not tracked). Added --obsidian (appends dated section to \u0434\u0435\u0448\u0431\u043e\u0440\u0434/ACL \u2014 Meta \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f.md; default on only if the vault exists; no-op on empty digest). 9 facebook.com/business/help sources marked weak:true and flagged in the digest (JS shells). Real run: ok 74, failed 0, 74 baselines; one 404 URL dropped. Scheduled task not registered (Coordinator; instructions in PR body)."
       },
       "781": {
         "actor": "Worker-M1781B",
