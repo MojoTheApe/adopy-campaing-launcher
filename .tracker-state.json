@@ -7248,20 +7248,6 @@
         "started_at": "2026-10-11T18:04:36+00:00",
         "from_status": "status:idea"
       },
-      "782": {
-        "actor": "Worker-M1782B",
-        "session": "a0247198fa5445808b9c6400851e6a62",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1782-meta-docs-watcher",
-        "worktree": "C:\\acl-1782",
-        "id": "373295f275e2448c91184a1d448cf0d6",
-        "issue": 782,
-        "state": "handoff",
-        "started_at": "2026-10-11T18:28:13+00:00",
-        "from_status": "status:todo",
-        "pr": 793,
-        "report": "PR #793 (work/acl-1782-meta-docs-watcher, commits 3f40da19 + 02b052f2). Added scripts/meta_docs_watch.py, config/meta_rules/sources.json (74 official URLs), tests/test_meta_docs_watch_1782.py (12 passed, affected tests only) and .claude/skills/meta-builder-sync/SKILL.md (force-added: .claude is gitignored and existing skills are not tracked). Added --obsidian (appends dated section to \u0434\u0435\u0448\u0431\u043e\u0440\u0434/ACL \u2014 Meta \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f.md; default on only if the vault exists; no-op on empty digest). 9 facebook.com/business/help sources marked weak:true and flagged in the digest (JS shells). Real run: ok 74, failed 0, 74 baselines; one 404 URL dropped. Scheduled task not registered (Coordinator; instructions in PR body)."
-      },
       "781": {
         "actor": "Worker-M1781B",
         "session": "a9f3467038d4400d80d0727275ae2ff4",
@@ -10659,22 +10645,25 @@
             "session": "a0247198fa5445808b9c6400851e6a62"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-M1782B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-M1782A",
-          "session": "87693cefa8a446598a4984cafafacb7d",
+          "actor": "Worker-M1782B",
+          "session": "a0247198fa5445808b9c6400851e6a62",
           "coordinator": "Coordinator-M1011A",
-          "branch": "feature/acl-1782-meta-docs-watcher",
+          "branch": "work/acl-1782-meta-docs-watcher",
           "worktree": "C:\\acl-1782",
-          "id": "b4cb0892e93f4bb5b794fb8979891595",
+          "id": "373295f275e2448c91184a1d448cf0d6",
           "issue": 782,
-          "state": "stopping",
-          "started_at": "2026-10-11T18:07:28+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-11T18:28:13+00:00",
           "from_status": "status:todo",
-          "report": "## Stop report: ACL-1782\n\nThe claim was recorded with branch `feature/acl-1782-meta-docs-watcher`. That name breaks the repository rule `work/acl-NNNN-short-name` (docs/repository/WORKFLOW.md), and the coordinator brief caused the mistake. The same commit is on `work/acl-1782-meta-docs-watcher` with PR #793. PR #792 on the old branch is obsolete. Stopping so the task can be re-claimed under the correct branch. Nothing is lost or merged."
-        }
+          "pr": 793,
+          "report": "PR #793 (work/acl-1782-meta-docs-watcher, commits 3f40da19 + 02b052f2). Added scripts/meta_docs_watch.py, config/meta_rules/sources.json (74 official URLs), tests/test_meta_docs_watch_1782.py (12 passed, affected tests only) and .claude/skills/meta-builder-sync/SKILL.md (force-added: .claude is gitignored and existing skills are not tracked). Added --obsidian (appends dated section to \u0434\u0435\u0448\u0431\u043e\u0440\u0434/ACL \u2014 Meta \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f.md; default on only if the vault exists; no-op on empty digest). 9 facebook.com/business/help sources marked weak:true and flagged in the digest (JS shells). Real run: ok 74, failed 0, 74 baselines; one 404 URL dropped. Scheduled task not registered (Coordinator; instructions in PR body)."
+        },
+        "pr": 793,
+        "queued_at": "2026-10-11T18:38:42+00:00"
       },
       "781": {
         "implementers": [
@@ -14007,7 +13996,8 @@
       739,
       761,
       783,
-      766
+      766,
+      782
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21014,6 +21004,13 @@
         "issue": 781,
         "claim": "77eb56ef9d5b4a3cb93b75e48d5370b0",
         "actor": "Worker-M1781B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-11T18:38:42+00:00",
+        "issue": 782,
+        "pr": 793,
+        "actor": "Worker-M1782B"
       }
     ],
     "policy": {
