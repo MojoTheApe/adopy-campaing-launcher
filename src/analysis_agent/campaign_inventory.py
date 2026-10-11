@@ -478,7 +478,7 @@ def join_bi(snap: Snapshot, bi: dict | None) -> tuple[dict[str, dict], dict]:
     # ad set
     for a in snap.adsets:
         n = norm_name(a["name"])
-        if n and adset_names[n] == 1 and n in book_c and whole:
+        if n and adset_names[n] == 1 and n in book_c:
             out[f"adset:{a['id']}"] = {"match": "name", **numbers(book_c[n])}
             used.add(n)
     # объявления под совпавшим ad set
