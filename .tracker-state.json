@@ -7235,22 +7235,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "769": {
-        "actor": "Worker-S1769A",
-        "session": "run_s1769a_1011",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1769-two-column-builder",
-        "worktree": "C:\\acl-1769-builder",
-        "id": "243acd22b5ba4425a72b1d193afb9d00",
-        "issue": 769,
-        "state": "handoff",
-        "started_at": "2026-10-11T18:04:36+00:00",
-        "from_status": "status:idea",
-        "pr": 796,
-        "report": "ACL-1769 handoff (PR #796, branch codex/acl-1769-two-column-builder, head 3bf6a52e, stacked on #765)\n\nChecks and results:\n- Only src/web/templates/report.html and tests changed. The server contract and the payload sent to Meta are unchanged. Publish all, Check plan, the plan panel and the RPA/API texts are preserved.\n- New tests/test_acl1769_two_column_layout.py: 11 tests, driven by tests/builder_layout_harness.cjs. Extended the tree, drawer and keep harnesses (names-only, fold, levels, ad picker, expand, restoring an old draft).\n- 231 non-browser tests passed. 42 affected Playwright tests passed (run with free RAM above 6 GB).\n- Creator parity: real plan_from_draft errors are routed to the right fields; the UI is tied to the creator's constants (no ACTIVE, ABO, extra CTA or placements outside the list).\n- Screenshots at 1280x800, light and dark: C:\\acl-notes\\acl-1769-shots\\.\n\nRemaining risks:\n- Controls without a backend are disabled and name their task: ACL-1767, 1768, 1772, 1773, 1774, 1775.\n- Deferred: the ad-text compliance warning, which needs an endpoint and a product decision.\n- Full CI is blocked by the GitHub Actions billing outage; re-run before merge.\n\nDurable reference: PR #796."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -10589,9 +10574,25 @@
             "session": "run_s1769a_1011"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1769A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1769A",
+          "session": "run_s1769a_1011",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1769-two-column-builder",
+          "worktree": "C:\\acl-1769-builder",
+          "id": "243acd22b5ba4425a72b1d193afb9d00",
+          "issue": 769,
+          "state": "handoff",
+          "started_at": "2026-10-11T18:04:36+00:00",
+          "from_status": "status:idea",
+          "pr": 796,
+          "report": "ACL-1769 handoff (PR #796, branch codex/acl-1769-two-column-builder, head 3bf6a52e, stacked on #765)\n\nChecks and results:\n- Only src/web/templates/report.html and tests changed. The server contract and the payload sent to Meta are unchanged. Publish all, Check plan, the plan panel and the RPA/API texts are preserved.\n- New tests/test_acl1769_two_column_layout.py: 11 tests, driven by tests/builder_layout_harness.cjs. Extended the tree, drawer and keep harnesses (names-only, fold, levels, ad picker, expand, restoring an old draft).\n- 231 non-browser tests passed. 42 affected Playwright tests passed (run with free RAM above 6 GB).\n- Creator parity: real plan_from_draft errors are routed to the right fields; the UI is tied to the creator's constants (no ACTIVE, ABO, extra CTA or placements outside the list).\n- Screenshots at 1280x800, light and dark: C:\\acl-notes\\acl-1769-shots\\.\n\nRemaining risks:\n- Controls without a backend are disabled and name their task: ACL-1767, 1768, 1772, 1773, 1774, 1775.\n- Deferred: the ad-text compliance warning, which needs an endpoint and a product decision.\n- Full CI is blocked by the GitHub Actions billing outage; re-run before merge.\n\nDurable reference: PR #796."
+        },
+        "pr": 796,
+        "queued_at": "2026-10-11T18:59:04+00:00"
       },
       "783": {
         "implementers": [
@@ -13991,7 +13992,8 @@
       783,
       766,
       782,
-      781
+      781,
+      769
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21012,6 +21014,13 @@
         "issue": 781,
         "pr": 795,
         "actor": "Worker-M1781B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-11T18:59:04+00:00",
+        "issue": 769,
+        "pr": 796,
+        "actor": "Worker-S1769A"
       }
     ],
     "policy": {
