@@ -7247,20 +7247,6 @@
         "state": "implementing",
         "started_at": "2026-10-11T18:04:36+00:00",
         "from_status": "status:idea"
-      },
-      "781": {
-        "actor": "Worker-M1781B",
-        "session": "a9f3467038d4400d80d0727275ae2ff4",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1781-meta-rules-registry",
-        "worktree": "C:\\acl-1781",
-        "id": "77eb56ef9d5b4a3cb93b75e48d5370b0",
-        "issue": 781,
-        "state": "handoff",
-        "started_at": "2026-10-11T18:30:15+00:00",
-        "from_status": "status:todo",
-        "pr": 795,
-        "report": "Scope: config/meta_rules/{meta.json,rules.json}, src/campaign_bridge/meta_rules.py (load_rules, check_job, objective_code), preflight hook in src/web/publish_preflight.py and src/web/publish_jobs.py::_run_rpa, tests/test_acl1781_meta_rules.py. PR 795, branch work/acl-1781-meta-rules-registry, base main. PR 791 (old feature/ branch) is obsolete.\nRules: ODAX objectives (legacy = deprecated), enums for optimization_goal/billing_event/bid_strategy/destination_type/CTA, optimization_goal_by_objective (Objective Mapping table), billing_event_by_goal (billing-events opt_bids), bid_amount required for bid cap, special_ad_categories required. Each rule has source_url and checked_date 2026-10-11. No text-length blocking: Meta only recommends lengths.\nLimitations: the RPA draft carries only the objective, so goal/billing/CTA are not checked on that path. OUTCOME_SALES has no mapping rows. Unknown labels fail open. Mappings were read through summarized fetches; a human spot-check against the live docs is advised.\nReviews: Opus review returned CHANGES REQUIRED, all items fixed; Sonnet re-review APPROVE. Tests: 121 passed (test_acl1781_meta_rules, test_acl1604_preflight, test_a_job_exception_reaches_sentry_tagged, test_publish_release, test_rpa_publisher_gates). Full suite in CI.\nFollow-up: ACL-1761 creator.py should call check_job after both merge; also wire into the new builder (ACL-1769)."
       }
     },
     "tasks": {
@@ -10678,22 +10664,25 @@
             "session": "a9f3467038d4400d80d0727275ae2ff4"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-M1781B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-M1781A",
-          "session": "0953a1165d92337c4e7dfc2c9a9801a9",
+          "actor": "Worker-M1781B",
+          "session": "a9f3467038d4400d80d0727275ae2ff4",
           "coordinator": "Coordinator-M1011A",
-          "branch": "feature/acl-1781-meta-rules-registry",
+          "branch": "work/acl-1781-meta-rules-registry",
           "worktree": "C:\\acl-1781",
-          "id": "be82d7b2a0af4271a345ff36a5c3f4d6",
+          "id": "77eb56ef9d5b4a3cb93b75e48d5370b0",
           "issue": 781,
-          "state": "stopping",
-          "started_at": "2026-10-11T18:08:35+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-11T18:30:15+00:00",
           "from_status": "status:todo",
-          "report": "## Stop report: ACL-1781\n\nThe claim was recorded with branch `feature/acl-1781-meta-rules-registry`. That name breaks the repository rule `work/acl-NNNN-short-name` (docs/repository/WORKFLOW.md), and the coordinator brief caused the mistake. Implementation is on that branch (PR #791). Independent review returned CHANGES REQUIRED: seed the objective->goal and goal->billing mappings, add the missing destination types, cover the hook. The work continues on `work/acl-1781-meta-rules-registry` under a new claim. Nothing is lost or merged."
-        }
+          "pr": 795,
+          "report": "Scope: config/meta_rules/{meta.json,rules.json}, src/campaign_bridge/meta_rules.py (load_rules, check_job, objective_code), preflight hook in src/web/publish_preflight.py and src/web/publish_jobs.py::_run_rpa, tests/test_acl1781_meta_rules.py. PR 795, branch work/acl-1781-meta-rules-registry, base main. PR 791 (old feature/ branch) is obsolete.\nRules: ODAX objectives (legacy = deprecated), enums for optimization_goal/billing_event/bid_strategy/destination_type/CTA, optimization_goal_by_objective (Objective Mapping table), billing_event_by_goal (billing-events opt_bids), bid_amount required for bid cap, special_ad_categories required. Each rule has source_url and checked_date 2026-10-11. No text-length blocking: Meta only recommends lengths.\nLimitations: the RPA draft carries only the objective, so goal/billing/CTA are not checked on that path. OUTCOME_SALES has no mapping rows. Unknown labels fail open. Mappings were read through summarized fetches; a human spot-check against the live docs is advised.\nReviews: Opus review returned CHANGES REQUIRED, all items fixed; Sonnet re-review APPROVE. Tests: 121 passed (test_acl1781_meta_rules, test_acl1604_preflight, test_a_job_exception_reaches_sentry_tagged, test_publish_release, test_rpa_publisher_gates). Full suite in CI.\nFollow-up: ACL-1761 creator.py should call check_job after both merge; also wire into the new builder (ACL-1769)."
+        },
+        "pr": 795,
+        "queued_at": "2026-10-11T18:46:57+00:00"
       },
       "766": {
         "implementers": [
@@ -13999,7 +13988,8 @@
       761,
       783,
       766,
-      782
+      782,
+      781
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21013,6 +21003,13 @@
         "issue": 782,
         "pr": 793,
         "actor": "Worker-M1782B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-11T18:46:57+00:00",
+        "issue": 781,
+        "pr": 795,
+        "actor": "Worker-M1781B"
       }
     ],
     "policy": {
