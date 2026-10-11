@@ -7261,6 +7261,18 @@
         "state": "implementing",
         "started_at": "2026-10-11T20:33:28+00:00",
         "from_status": "status:idea"
+      },
+      "806": {
+        "actor": "Worker-M1806A",
+        "session": "4b214c77a7e14ef0937301c56af0fb88",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1806-obsidian-path",
+        "worktree": "C:\\acl-1806",
+        "id": "1b7258b21ca64fe6aace6aa0f751d046",
+        "issue": 806,
+        "state": "implementing",
+        "started_at": "2026-10-11T20:38:41+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -10870,6 +10882,17 @@
         "state": "implementing",
         "worker": "Worker-S1775A",
         "coordinator": "Coordinator-C0930A"
+      },
+      "806": {
+        "implementers": [
+          {
+            "actor": "Worker-M1806A",
+            "session": "4b214c77a7e14ef0937301c56af0fb88"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-M1806A",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -11791,6 +11814,10 @@
       },
       "Worker-S1775A": {
         "session": "run_s1775a_1011",
+        "role": "Worker"
+      },
+      "Worker-M1806A": {
+        "session": "4b214c77a7e14ef0937301c56af0fb88",
         "role": "Worker"
       }
     },
@@ -21276,6 +21303,13 @@
         "issue": 786,
         "pr": 804,
         "actor": "Worker-M1786A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-11T20:38:41+00:00",
+        "issue": 806,
+        "claim": "1b7258b21ca64fe6aace6aa0f751d046",
+        "actor": "Worker-M1806A"
       }
     ],
     "policy": {
