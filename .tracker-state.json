@@ -7271,20 +7271,6 @@
         "state": "implementing",
         "started_at": "2026-10-11T18:08:35+00:00",
         "from_status": "status:todo"
-      },
-      "766": {
-        "actor": "Worker-S1766A",
-        "session": "run_s1766a_1011",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1766-map-pixel",
-        "worktree": "C:\\acl-1766-pixel",
-        "id": "7870855184e44f9388f67ea928445f6b",
-        "issue": 766,
-        "state": "handoff",
-        "started_at": "2026-10-11T18:14:37+00:00",
-        "from_status": "status:idea",
-        "pr": 794,
-        "report": "ACL-1766 handoff (PR #794, branch codex/acl-1766-map-pixel, head f851999f, stacked on #765)\n\nChecks and results:\n- New tests/test_acl1766_map_pixel.py: 9 passed. Covered: map pixel with 2 account pixels, map pixel not on the account (clear error, nothing created), 1 account pixel, 2 account pixels without a map value (previous error), plan_summary pixel/page source, readback \"Not read\" for CTA and locales.\n- Affected suites (fakes only): 174 passed together with test_acl1761_api_create and test_acl1761_plan_check; RPA suites test_second_primary_text_reaches_the_robot, test_september_review, test_account_link_sources and test_rpa_job_start_is_measured: 59 passed.\n- Mutations: removing the enrich pixel line fails test_enrich_carries_map_pixel_and_page; letting the map override the draft fails test_enrich_keeps_what_the_draft_already_has.\n\nRemaining risks:\n- src/fb_ads_rpa/enrich_draft.py is RPA-owned; the change is minimal (two fields set via getattr). No RPA code reads draft.pixel_id. A draft page_id now wins over the map, and the builder never supplies one.\n- The plan-line source text in report.html has no browser test.\n- Full CI is blocked by the GitHub Actions billing outage; re-run before merge.\n\nDurable reference: PR #794."
       }
     },
     "tasks": {
@@ -10689,9 +10675,25 @@
             "session": "run_s1766a_1011"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1766A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1766A",
+          "session": "run_s1766a_1011",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1766-map-pixel",
+          "worktree": "C:\\acl-1766-pixel",
+          "id": "7870855184e44f9388f67ea928445f6b",
+          "issue": 766,
+          "state": "handoff",
+          "started_at": "2026-10-11T18:14:37+00:00",
+          "from_status": "status:idea",
+          "pr": 794,
+          "report": "ACL-1766 handoff (PR #794, branch codex/acl-1766-map-pixel, head f851999f, stacked on #765)\n\nChecks and results:\n- New tests/test_acl1766_map_pixel.py: 9 passed. Covered: map pixel with 2 account pixels, map pixel not on the account (clear error, nothing created), 1 account pixel, 2 account pixels without a map value (previous error), plan_summary pixel/page source, readback \"Not read\" for CTA and locales.\n- Affected suites (fakes only): 174 passed together with test_acl1761_api_create and test_acl1761_plan_check; RPA suites test_second_primary_text_reaches_the_robot, test_september_review, test_account_link_sources and test_rpa_job_start_is_measured: 59 passed.\n- Mutations: removing the enrich pixel line fails test_enrich_carries_map_pixel_and_page; letting the map override the draft fails test_enrich_keeps_what_the_draft_already_has.\n\nRemaining risks:\n- src/fb_ads_rpa/enrich_draft.py is RPA-owned; the change is minimal (two fields set via getattr). No RPA code reads draft.pixel_id. A draft page_id now wins over the map, and the builder never supplies one.\n- The plan-line source text in report.html has no browser test.\n- Full CI is blocked by the GitHub Actions billing outage; re-run before merge.\n\nDurable reference: PR #794."
+        },
+        "pr": 794,
+        "queued_at": "2026-10-11T18:25:16+00:00"
       }
     },
     "actors": {
@@ -13960,7 +13962,8 @@
       710,
       739,
       761,
-      783
+      783,
+      766
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -20932,6 +20935,13 @@
         "issue": 783,
         "pr": 790,
         "actor": "Worker-M1783B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-11T18:25:16+00:00",
+        "issue": 766,
+        "pr": 794,
+        "actor": "Worker-S1766A"
       }
     ],
     "policy": {
