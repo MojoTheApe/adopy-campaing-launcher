@@ -95,6 +95,7 @@ const sent = [], replies = [];
 const root = { fetch: async (url, init) => {
   sent.push({ url: url, method: (init && init.method) || 'GET', body: init && init.body && JSON.parse(init.body) });
   const r = replies.shift();
+  if (r.throw) throw new TypeError('network down');
   return { ok: r.status < 400, status: r.status, json: async () => r.body };
 } };
 root.document = { createElement: () => ({}), body: {}, getElementById: () => null };
@@ -160,6 +161,40 @@ const st = (r, a, av) => H.controlState(r, a, av === undefined ? AV : av);
     out.flows[name] = { kind: res.kind, status: r.status, applied: res.applied.length, notes: res.notes, message: res.message,
       urls: sent.map((s) => s.method + ' ' + s.url), exec: sent[1] && sent[1].body, asked: asked, states: states, budget: r.budget, bid: r.bid_amount };
   }
+  // сбои после принятия записи — «исход неизвестен», до принятия — «не отправлено»
+  const base = { account: 'Acc', actor: 'Dana', command: 'set_status', value: 'ACTIVE', targets: [{ level: 'campaign', id: '1000001' }] };
+  const prev = { op_id: 'op_1', revision_id: 'rev_1', affected: [{ id: '1000001', level: 'campaign', name: 'C' }], skipped: [] };
+  const yes = { confirm: async () => true, intervalMs: 1, key: 'k_fixed_key_0001', timeoutMs: 5 };
+  const attempt = async (script) => {
+    replies.length = 0; sent.length = 0; script.forEach((x) => replies.push(x));
+    try { const r = await H.flow(base, yes); return { kind: r.kind, message: r.message, applied: r.applied.length, calls: sent.length }; }
+    catch (e) { return { thrown: e.message, status: e.status || null, calls: sent.length }; }
+  };
+  out.fail = {
+    poll_network: await attempt([{ status: 200, body: prev }, { status: 202, body: { op_id: 'op_1', state: 'Running' } }, { throw: true }]),
+    poll_timeout: await attempt([{ status: 200, body: prev }, { status: 202, body: { op_id: 'op_1', state: 'Running' } },
+                                 { status: 200, body: { state: 'Running' } }, { status: 200, body: { state: 'Running' } },
+                                 { status: 200, body: { state: 'Running' } }, { status: 200, body: { state: 'Running' } }]),
+    poll_http: await attempt([{ status: 200, body: prev }, { status: 202, body: { op_id: 'op_1', state: 'Running' } },
+                              { status: 500, body: { error: 'boom' } }]),
+    exec_network: await attempt([{ status: 200, body: prev }, { throw: true }]),
+    exec_refused: await attempt([{ status: 200, body: prev }, { status: 409, body: { error: 'This preview was already used.' } }]),
+    preview_refused: await attempt([{ status: 409, body: { error: 'Needs ACL_FB_BACKEND=api' } }]),
+  };
+  // занятые строки в пакет не входят
+  const busyRows = [row({ id: '1000001', level: 'campaign' }), row({ id: '1000002', level: 'campaign', busy: true })];
+  const bp = H.batchPlan(busyRows, AV);
+  out.busy = { ok: bp.ok, targets: bp.targets, skipped: bp.skippedBusy, all: H.batchPlan([busyRows[1]], AV) };
+  // строку меняет только подтверждённое: settle на отказе и неизвестном исходе её не трогает
+  const mk = () => [row({ id: '1000001', level: 'campaign', key: 'campaign:1000001', status: 'off', status_raw: 'PAUSED' })];
+  const settleCase = (res) => { const rs = mk(); const notes = H.settle(rs, res); return { status: rs[0].status, note: (notes['campaign:1000001'] || {}).text || null }; };
+  const none = { applied: [], notes: { '1000001': 'Meta refused' } };
+  out.settle = {
+    failed: settleCase(Object.assign({ kind: 'failed' }, none)),
+    unknown: settleCase(Object.assign({ kind: 'unknown' }, none)),
+    saved: settleCase({ kind: 'confirmed', notes: {}, applied: [{ id: '1000001', level: 'campaign', field: 'status', saved: 'ACTIVE', unit: 100 }] }),
+    cancelled: settleCase(Object.assign({ kind: 'cancelled' }, none)),
+  };
   process.stdout.write(JSON.stringify(out));
 })();
 """
@@ -274,3 +309,38 @@ def test_budget_and_bid_rows_are_updated_from_the_saved_value(page_out):
 def test_cancel_sends_neither_execute_nor_a_status_poll(page_out):
     f = page_out["flows"]["cancelled"]
     assert f["kind"] == "cancelled" and f["urls"] == ["POST /campaign-commands/preview"] and f["status"] == "off"
+
+
+def test_poll_failures_after_execute_say_outcome_unknown_not_not_sent(page_out):
+    unknown = "Outcome unknown — check the history and Read campaigns"
+    for name in ("poll_network", "poll_timeout", "poll_http", "exec_network"):
+        f = page_out["fail"][name]
+        assert f.get("kind") == "unknown" and f["message"] == unknown and f["applied"] == 0, (name, f)
+        assert "Not sent" not in json.dumps(f)
+    # сервер отказал до принятия: исключение наружу, страница напишет «Not sent»
+    assert page_out["fail"]["exec_refused"] == {"thrown": "This preview was already used.", "status": 409, "calls": 2}
+    assert page_out["fail"]["preview_refused"]["thrown"] == "Needs ACL_FB_BACKEND=api"
+    assert page_out["fail"]["preview_refused"]["calls"] == 1
+
+
+def test_batch_leaves_busy_rows_out(page_out):
+    b = page_out["busy"]
+    assert b["ok"] is True and b["targets"] == [{"level": "campaign", "id": "1000001"}] and b["skipped"] == 1
+    assert b["all"] == {"ok": False, "reason": "The selected rows are busy with another command"}
+
+
+def test_a_row_changes_only_from_a_confirmed_readback(page_out):
+    st = page_out["settle"]
+    assert st["failed"] == {"status": "off", "note": "Failed — previous state kept: Meta refused"}
+    assert st["unknown"] == {"status": "off", "note": "Outcome unknown — press Read campaigns to check"}
+    assert st["saved"] == {"status": "on", "note": "Confirmed"}
+    assert st["cancelled"] == {"status": "off", "note": None}
+
+
+def test_template_never_sets_row_state_itself():
+    """Мутация «оптимистичный переключатель» ловится и здесь, без браузера: строку меняет только помощник."""
+    code = TEMPLATE.split("<script>", 1)[1]
+    assert not re.search(r"\b(?:r|row)\.(?:status|status_raw|budget|bid_amount)\s*=(?!=)", code)
+    assert "aria-checked=\"' + (st === 'on')" in TEMPLATE            # переключатель рисуется из r.status
+    assert "ACM.home.settle(rows, res)" in TEMPLATE
+    assert "Outcome unknown" not in TEMPLATE.replace("Outcome unknown —", "")  # текст живёт в помощнике

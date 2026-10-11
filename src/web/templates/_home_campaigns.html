@@ -682,25 +682,18 @@
   function runCommand(rows, command, value) {
     var plan = ACM.home.batchPlan(rows, S.avail);
     if (!plan.ok) { say(rows, plan.reason, 'warn'); render(); return Promise.resolve(); }
+    rows = plan.rows;                       // строки с идущей командой в пакет не входят
+    el('hc-batch-note').textContent = plan.skippedBusy ? plan.skippedBusy + ' busy row(s) left out' : '';
     setBusy(rows, true); say(rows, 'Previewing…', 'busy'); render();
-    var byId = {};
-    rows.forEach(function (r) { byId[r.id] = r; });
     return ACM.home.flow({account: plan.account, actor: ACM.home.actor(), command: command, value: value, targets: plan.targets}, {
       onState: function (text) { say(rows, text, 'busy'); render(); }
     }).then(function (res) {
-      /* Только подтверждённое чтением Meta попадает в строку; остальное — пометка. */
-      res.applied.forEach(function (item) { if (byId[item.id]) ACM.home.applySaved(byId[item.id], item); });
-      rows.forEach(function (r) {
-        var saved = res.applied.some(function (a) { return a.id === r.id; });
-        if (res.kind === 'cancelled' || res.kind === 'nothing') { delete S.notes[r.key]; return; }
-        if (saved) S.notes[r.key] = {text: 'Confirmed', tone: 'ok'};
-        else if (res.kind === 'unknown') S.notes[r.key] = {text: 'Outcome unknown — checking', tone: 'warn'};
-        else S.notes[r.key] = {text: 'Failed — previous state kept' + (res.notes[r.id] ? ': ' + res.notes[r.id] : ''), tone: 'bad'};
-      });
-      if ((res.kind === 'failed' || res.kind === 'unknown') && res.message) el('hc-batch-note').textContent = res.message;
-      else if (res.kind === 'nothing') el('hc-batch-note').textContent = res.message;
-      else el('hc-batch-note').textContent = '';
+      /* Строку меняет только `settle`, и только подтверждённым чтением Meta; остальное — пометка. */
+      var notes = ACM.home.settle(rows, res);
+      rows.forEach(function (r) { if (notes[r.key]) S.notes[r.key] = notes[r.key]; else delete S.notes[r.key]; });
+      if ((res.kind === 'failed' || res.kind === 'unknown' || res.kind === 'nothing') && res.message) el('hc-batch-note').textContent = res.message;
     }, function (e) {
+      /* Сюда — только когда сервер НЕ принял запись (отказ превью/исполнения): ничего не отправлено. */
       say(rows, 'Not sent: ' + String(e && e.message || e), 'bad');
     }).then(function () { setBusy(rows, false); render(); });
   }

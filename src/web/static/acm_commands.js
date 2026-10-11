@@ -313,7 +313,10 @@
     if (!avail || !avail.available) {
       return { ok: false, reason: 'Commands unavailable' + (avail && avail.reason ? ': ' + avail.reason : '') };
     }
-    if (!rows.length) return { ok: false, reason: 'Select rows first' };
+    var total = rows.length;
+    rows = rows.filter(function (r) { return !r.busy; });   // строка с идущей командой в пакет не входит
+    if (!total) return { ok: false, reason: 'Select rows first' };
+    if (!rows.length) return { ok: false, reason: 'The selected rows are busy with another command' };
     var accounts = {};
     rows.forEach(function (r) { accounts[r.account] = true; });
     if (Object.keys(accounts).length > 1) return { ok: false, reason: 'Select rows from one account' };
@@ -321,7 +324,8 @@
     if (rows.length > cap) {
       return { ok: false, reason: 'At most ' + cap + ' objects per command with the current call limit' };
     }
-    return { ok: true, account: rows[0].account, targets: rows.map(function (r) { return { level: r.level, id: String(r.id) }; }) };
+    return { ok: true, account: rows[0].account, rows: rows, skippedBusy: total - rows.length,
+             targets: rows.map(function (r) { return { level: r.level, id: String(r.id) }; }) };
   }
 
   function skippedText(op) {
@@ -352,7 +356,30 @@
     return row;
   }
 
+  var UNKNOWN_TEXT = 'Outcome unknown — check the history and Read campaigns';
+  var CHECK_TEXT = 'Outcome unknown — press Read campaigns to check';
+
+  // Что показать в строках по итогу и что в них изменить. Строка меняется ТОЛЬКО объектами,
+  // которые операция подтвердила чтением Meta (`res.applied`); при отказе и неизвестном
+  // исходе переключатель, бюджет и ставка остаются прежними. Возвращает пометки по ключам строк.
+  function settle(rows, res) {
+    var byId = {};
+    rows.forEach(function (r) { byId[r.id] = r; });
+    res.applied.forEach(function (item) { if (byId[item.id]) applySaved(byId[item.id], item); });
+    var notes = {};
+    if (res.kind === 'cancelled' || res.kind === 'nothing') return notes;
+    rows.forEach(function (r) {
+      var saved = res.applied.some(function (a) { return a.id === r.id; });
+      if (saved) notes[r.key] = { text: 'Confirmed', tone: 'ok' };
+      else if (res.kind === 'unknown') notes[r.key] = { text: CHECK_TEXT, tone: 'warn' };
+      else notes[r.key] = { text: 'Failed — previous state kept' + (res.notes[r.id] ? ': ' + res.notes[r.id] : ''), tone: 'bad' };
+    });
+    return notes;
+  }
+
   // Превью → диалог → запись → опрос. Диалог показывается и когда менять нечего — чтобы были видны причины.
+  // Ошибка ДО принятия записи сервером («не отправлено») уходит наружу как есть; сбой сети или
+  // срок опроса ПОСЛЕ неё — «исход неизвестен», а не «не отправлено»: запись могла дойти до Meta.
   function flow(req, hooks) {
     hooks = hooks || {};
     var ask = hooks.confirm || confirm;
@@ -363,11 +390,17 @@
         if (!yes) return { kind: 'cancelled', op: op, applied: [], notes: {}, message: 'Cancelled' };
         if (!(op.affected || []).length) return { kind: 'nothing', op: op, applied: [], notes: {}, message: skippedText(op) };
         say('Running…');
+        var unknown = function () {
+          return { kind: 'unknown', op: op, applied: [], notes: {}, message: UNKNOWN_TEXT };
+        };
         return execute(op.revision_id, hooks.key).then(function (started) {
-          return poll(started.op_id, { intervalMs: hooks.intervalMs, onUpdate: function (o) {
+          return poll(started.op_id, { intervalMs: hooks.intervalMs, timeoutMs: hooks.timeoutMs, onUpdate: function (o) {
             say(o.state === 'Verifying' ? 'Verifying…' : 'Running…');
-          } });
-        }).then(classify);
+          } }).then(classify, unknown);
+        }, function (e) {
+          if (e && e.status) throw e;          // сервер отказал: запись не принята
+          return unknown();                    // ответа нет: запись могла дойти
+        });
       });
     });
   }
@@ -424,6 +457,7 @@
     newKey: newKey, FINAL_STATES: FINAL.slice(),
     home: { availability: availability, controlState: controlState, statusTarget: statusTarget,
             stepValue: stepValue, batchPlan: batchPlan, flow: flow, classify: classify,
-            applySaved: applySaved, editValue: editValue, actor: actor, AUTOMATIC: AUTOMATIC }
+            applySaved: applySaved, editValue: editValue, actor: actor, AUTOMATIC: AUTOMATIC,
+            settle: settle, UNKNOWN_TEXT: UNKNOWN_TEXT, CHECK_TEXT: CHECK_TEXT }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
