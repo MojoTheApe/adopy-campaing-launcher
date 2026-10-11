@@ -181,7 +181,8 @@ def test_commands_are_disabled_with_reason_and_send_nothing(page, site):
     assert len(info) > 20
     for b in info:
         assert b["disabled"] is True and b["name"] is None
-        assert b["title"] in ("Coming in ACL-1800", "ACL-1773")
+        # без помощника команд (этот стенд его не отдаёт) команды выключены с причиной (ACL-1800)
+        assert b["title"] in ("Coming in ACL-1800", "ACL-1773") or b["title"].startswith("Commands unavailable"), b["title"]
         assert b["id"] and b["level"] and b["account"] and b["action"]
     assert {b["title"] for b in info if b["action"] == "copy"} == {"ACL-1773"}
     posts_before = len([r for r in site.requests if r[0] != "GET"])

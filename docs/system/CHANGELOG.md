@@ -21,6 +21,13 @@ a clear refusal.
 - History of operations (actor label, time, object, before, requested, saved, result) is kept in
   `campaign_command_history.jsonl` in the local config dir. The page helper is `acm_commands.js`
   (`acmCommands.preview/execute/poll/confirm`).
+- Home campaign table (ACL-1798) is wired to the commands: the on/off switch, budget editor (only on
+  objects that own a budget), bid -/+ editor (only on bid cap and cost cap; automatic bidding shows
+  "Automatic · no manual bid") and a batch bar for the selected rows (one account, capped by the
+  call limit). Each goes preview, confirm dialog, execute, poll; the row changes only from the
+  confirmed readback, and a failed or unknown outcome keeps the previous state. Duplicate and Copy
+  stay disabled (ACL-1773). With the rpa backend or a non-loopback bind the controls stay disabled
+  with the reason (`GET /campaign-commands/availability`).
 - The first live check runs on the 9095 test dashboard with test accounts, after the owner agrees.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736

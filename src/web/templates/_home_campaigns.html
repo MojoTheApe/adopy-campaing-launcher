@@ -1,10 +1,11 @@
 {# Командная таблица кампаний на Home: Campaign > Ad set > Ad (ACL-1798).
 
-   Стадия «только чтение»: опись и Insights читает Graph API в профиле по
-   кнопке «Read campaigns» (POST /campaign-inventory/read, как Read spend), всё
-   остальное — локальные GET по сохранённому снимку. Команды (on/off, bid,
-   budget, duplicate, copy) нарисованы выключенными и ничего не отправляют:
-   у них нет ни `name`, ни обработчиков.
+   Опись и Insights читает Graph API в профиле по кнопке «Read campaigns»
+   (POST /campaign-inventory/read, как Read spend), всё остальное — локальные GET
+   по сохранённому снимку. Команды (on/off, budget, bid) — ACL-1800: каждая идёт
+   только по щелчку человека через превью и подтверждение (`acmCommands.home`),
+   состояние переключателя берётся из подтверждённого чтения Meta, а не
+   выставляется заранее. Duplicate и Copy остаются выключенными (ACL-1773).
 
    Токены Adopy объявлены на `.hc`, а не на `:root` (как у билдера, ACL-1769):
    остальной дешборд перекрашивает отдельная задача. Ожидает `amap` и `pd`. #}
@@ -159,6 +160,15 @@
   .hc-na { color: var(--adopy-text-muted); }
   .hc-cmd { min-width: 28px; padding: 0 0.375rem !important; min-height: 28px !important; }
   .hc-cmd-note { font-size: 0.6875rem; color: var(--adopy-text-muted); }
+  .hc-batchbar { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; padding: 0 0 0.5rem; }
+  .hc-batch { display: inline-flex; gap: 0.25rem; align-items: center; }
+  .hc-rnote { display: block; font-size: 0.6875rem; max-width: 120px; white-space: normal; }
+  .hc-rnote.ok { color: var(--adopy-success); }
+  .hc-rnote.bad { color: var(--adopy-danger); }
+  .hc-rnote.warn { color: var(--adopy-warning); }
+  .hc-rnote.busy { color: var(--adopy-text-muted); }
+  .hc-switch[aria-busy="true"] { opacity: 0.6; cursor: progress; }
+  .hc-switch:not(:disabled), .hc-cmd:not(:disabled) { cursor: pointer; }
   .hc-foot { padding: 0.5rem 0.25rem; color: var(--adopy-text-muted); font-size: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
   @media (max-width: 760px) { .hc { --hc-pin-w: 300px; } .hc-toolbar input[type="search"] { width: 100%; } }
 </style>
@@ -167,7 +177,7 @@
   <script type="application/json" id="hc-seed">[{% for mc in amap.countries if not mc.virtual and mc.rows %}{{ {'country': mc.country, 'accounts': mc.rows | map(attribute='account') | list} | tojson }}{% if not loop.last %},{% endif %}{% endfor %}]</script>
   <div class="hc-head">
     <h3 id="hc-title">Campaigns</h3>
-    <span class="hc-sub">Read-only · campaigns, ad sets and ads as the ad accounts report them; BI from the stats workbook</span>
+    <span class="hc-sub">Campaigns, ad sets and ads as the ad accounts report them; BI from the stats workbook · every change asks for your confirmation</span>
   </div>
   <div class="hc-needs" id="hc-needs" hidden>Campaign inventory needs the API backend
     <small>Switch this machine to <code>ACL_FB_BACKEND=api</code> to read campaigns. Nothing was read.</small></div>
@@ -178,10 +188,20 @@
       <input type="search" id="hc-search" placeholder="Search campaign, ad set or ad…" aria-label="Search names">
       <span class="hc-spacer"></span>
       <span class="hc-note" id="hc-selcount" aria-live="polite"></span>
+
       <label class="hc-note">Columns <select id="hc-preset" aria-label="Column preset">
         <option value="optimization">Optimization</option><option value="meta">Meta delivery</option>
         <option value="bi">BI funnel</option><option value="all">All metrics</option><option value="custom" hidden>Custom</option></select></label>
       <details class="hc-cols" id="hc-cols"><summary>Manage columns</summary><div class="hc-cols-pop" id="hc-cols-pop"></div></details>
+    </div>
+    <div class="hc-batchbar">
+      <span class="hc-batch" id="hc-batch" role="group" aria-label="Commands for the selected rows">
+        <button type="button" data-batch="on">Switch on</button>
+        <button type="button" data-batch="off">Switch off</button>
+        <button type="button" data-batch="budget">Set budget…</button>
+        <button type="button" data-batch="bid">Set bid…</button>
+      </span>
+      <span class="hc-note" id="hc-batch-note" aria-live="polite"></span>
     </div>
     <div class="hc-frame" id="hc-frame">
       <div class="hc-top" id="hc-top" aria-hidden="true"><div id="hc-top-in"></div></div>
@@ -194,6 +214,7 @@
   <noscript><div class="hc-needs">The campaign table needs JavaScript.</div></noscript>
 </section>
 
+<script src="/static/acm_commands.js"></script>
 <script>
 (function () {
   'use strict';
@@ -229,8 +250,11 @@
     kids: {},                        // 'level:id' -> {state, rows, note}
     expanded: {}, selected: {},
     running: {}, busy: false,
+    avail: null,                     // ответ /campaign-commands/availability (null — ещё не знаем)
+    notes: {},                       // key -> {text, tone}: итог последней команды по строке
     country: '', account: '', q: ''
   };
+  var ACM = window.acmCommands && window.acmCommands.home ? window.acmCommands : null;
   seed.forEach(function (c) {
     c.accounts.forEach(function (a) {
       (S.accountCountries[a] = S.accountCountries[a] || []).indexOf(c.country) < 0 && S.accountCountries[a].push(c.country);
@@ -301,6 +325,17 @@
         '" title="' + esc(why) + '">' + glyph + '</button></td>';
     };
   }
+  /* Команды ACL-1800: состояние кнопки решает `acmCommands.home.controlState`; нет помощника
+     или команды выключены (rpa, не loopback) — кнопка выключена с причиной. */
+  function ctl(r, action) {
+    if (!ACM) return {enabled: false, reason: 'Commands unavailable: the command helper did not load'};
+    return ACM.home.controlState(r, action, S.avail);
+  }
+  function cmdButton(r, action, glyph, label, st) {
+    var why = st.enabled ? label : st.reason;
+    return '<button type="button" class="hc-cmd"' + (st.enabled ? '' : ' disabled aria-disabled="true"') + objAttrs(r, action) +
+      ' aria-label="' + esc(label + (st.enabled ? '' : ' — ' + st.reason)) + '" title="' + esc(why) + '">' + glyph + '</button>';
+  }
   var COLS = [
     {k: 'delivery', g: 'delivery', h: 'Effective delivery', w: 170, cell: function (r) {
       var d = r.delivery || {};
@@ -312,16 +347,19 @@
       var a = age(sum, S.fetchedAt[r.account]);
       return '<td title="' + esc(r.synced_at) + '">' + (a ? esc(a) : na('Read time unknown')) + '</td>';
     }},
-    {k: 'dup', g: 'commands', h: 'Duplicate', w: 84, cell: cmd('⧉', 'Duplicate here', REASON, 'duplicate')},
+    {k: 'dup', g: 'commands', h: 'Duplicate', w: 84, cell: cmd('⧉', 'Duplicate here', REASON_COPY, 'duplicate')},
     {k: 'copy', g: 'commands', h: 'Copy to accounts', w: 136, cell: cmd('⇉', 'Copy to accounts', REASON_COPY, 'copy')},
     {k: 'bid', g: 'commands', h: 'Bid − / +', w: 104, cell: function (r) {
       if (r.level === 'ad') return '<td class="hc-gl"><span class="hc-cmd-note">Managed by ad set</span></td>';
-      return '<td class="hc-gl"><button type="button" class="hc-cmd" disabled aria-disabled="true"' + objAttrs(r, 'bid-down') + ' aria-label="Bid minus — ' + esc(REASON) + '" title="' + esc(REASON) + '">−</button> ' +
-        '<button type="button" class="hc-cmd" disabled aria-disabled="true"' + objAttrs(r, 'bid-up') + ' aria-label="Bid plus — ' + esc(REASON) + '" title="' + esc(REASON) + '">+</button></td>';
+      var st = ctl(r, 'bid-down');
+      var cur = r.bid_amount != null && r.level === 'adset' ? '<span class="hc-sub2">' + esc(money(r.bid_amount, r.currency)) + '</span>' : '';
+      return '<td class="hc-gl">' + cmdButton(r, 'bid-down', '−', 'Bid minus', st) + ' ' + cmdButton(r, 'bid-up', '+', 'Bid plus', st) + cur + '</td>';
     }},
     {k: 'budgetcmd', g: 'commands', h: 'Budget', w: 84, cell: function (r) {
       if (r.level === 'ad') return '<td class="hc-gl">' + na('Ads have no budget') + '</td>';
-      return cmd('✎', 'Edit budget', REASON, 'budget')(r);
+      var st = ctl(r, 'budget');
+      if (st.openKids) return '<td class="hc-gl">' + cmdButton(r, 'budget', '▾', st.label, st) + '</td>';
+      return '<td class="hc-gl">' + cmdButton(r, 'budget', '✎', 'Edit budget', st) + '</td>';
     }},
     {k: 'more', g: 'commands', h: 'More', w: 72, cell: cmd('⋯', 'More actions', REASON, 'more')},
     {k: 'm_spend', g: 'meta', h: 'Spend', w: 104, num: 1, cell: metaCell(money, 'spend')},
@@ -435,10 +473,18 @@
     var lv = r.level, key = r.key, canOpen = lv !== 'ad';
     var open = !!S.expanded[key], sel = !!S.selected[key];
     var st = r.status;
-    var sw = st === 'unknown'
-      ? '<span class="hc-status-txt" title="Meta status ' + esc(r.status_raw) + '">' + esc(r.status_raw || DASH) + '</span>'
-      : '<button type="button" class="hc-switch" role="switch" aria-checked="' + (st === 'on') + '" disabled aria-disabled="true"' + objAttrs(r, 'status') + ' aria-label="Configured status: ' +
-        (st === 'on' ? 'On' : 'Off') + '. ' + esc(REASON) + '" title="' + esc(REASON) + '"></button><span class="hc-status-txt">' + (st === 'on' ? 'On' : 'Off') + '</span>';
+    var note = S.notes[key] ? '<span class="hc-rnote ' + esc(S.notes[key].tone) + '" role="status">' + esc(S.notes[key].text) + '</span>' : '';
+    var sw;
+    if (st === 'unknown') {
+      sw = '<span class="hc-status-txt" title="Meta status ' + esc(r.status_raw) + '">' + esc(r.status_raw || DASH) + '</span>' + note;
+    } else {
+      var sc = ctl(r, 'status');
+      sw = '<button type="button" class="hc-switch" role="switch" aria-checked="' + (st === 'on') + '"' + (sc.enabled ? '' : ' disabled aria-disabled="true"') +
+        (r.busy ? ' aria-busy="true"' : '') + objAttrs(r, 'status') + ' aria-label="Configured status: ' + (st === 'on' ? 'On' : 'Off') +
+        (sc.enabled ? '. Click to switch ' + (st === 'on' ? 'off' : 'on') : '. ' + esc(sc.reason)) + '" title="' +
+        esc(sc.enabled ? 'Switch ' + (st === 'on' ? 'off' : 'on') + ' (asks for confirmation)' : sc.reason) + '"></button><span class="hc-status-txt">' +
+        (st === 'on' ? 'On' : 'Off') + '</span>' + note;
+    }
     var badge = lv === 'campaign' ? 'Campaign' : lv === 'adset' ? 'Ad set' : 'Ad';
     var count = '';
     if (r.child_count != null) count = r.child_state === 'not_read' ? ' · children not read' : ' · ' + r.child_count + (lv === 'campaign' ? ' ad sets' : ' ads') + (r.child_state === 'partial' ? ' (partial)' : '');
@@ -515,9 +561,10 @@
     el('hc-table').innerHTML = html;
     scroller.scrollLeft = left; scroller.scrollTop = topv;
     el('hc-foot').innerHTML = '<span>Showing ' + shown + (S.q ? ' of ' + total : '') + ' campaigns. Reach and frequency are read per level from Meta and never summed up the tree.</span>' +
-      '<span>Status shows the configured on/off from Meta; Effective delivery is separate. Commands arrive in ACL-1800.</span>';
+      '<span>Status shows the configured on/off from Meta; Effective delivery is separate. The switch changes only after Meta confirms it.</span>';
     var n = Object.keys(S.selected).length;
     el('hc-selcount').textContent = n ? n + ' selected' : '';
+    renderBatch();
     syncTop();
   }
 
@@ -628,8 +675,89 @@
   function showNeedsApi() { el('hc-needs').hidden = false; el('hc-body').hidden = true; }
 
   /* ── события ── */
+  /* ── команды (ACL-1800) ── */
+  function say(rows, text, tone) { rows.forEach(function (r) { S.notes[r.key] = {text: text, tone: tone}; }); }
+  function setBusy(rows, on) { rows.forEach(function (r) { r.busy = on; }); }
+
+  function runCommand(rows, command, value) {
+    var plan = ACM.home.batchPlan(rows, S.avail);
+    if (!plan.ok) { say(rows, plan.reason, 'warn'); render(); return Promise.resolve(); }
+    setBusy(rows, true); say(rows, 'Previewing…', 'busy'); render();
+    var byId = {};
+    rows.forEach(function (r) { byId[r.id] = r; });
+    return ACM.home.flow({account: plan.account, actor: ACM.home.actor(), command: command, value: value, targets: plan.targets}, {
+      onState: function (text) { say(rows, text, 'busy'); render(); }
+    }).then(function (res) {
+      /* Только подтверждённое чтением Meta попадает в строку; остальное — пометка. */
+      res.applied.forEach(function (item) { if (byId[item.id]) ACM.home.applySaved(byId[item.id], item); });
+      rows.forEach(function (r) {
+        var saved = res.applied.some(function (a) { return a.id === r.id; });
+        if (res.kind === 'cancelled' || res.kind === 'nothing') { delete S.notes[r.key]; return; }
+        if (saved) S.notes[r.key] = {text: 'Confirmed', tone: 'ok'};
+        else if (res.kind === 'unknown') S.notes[r.key] = {text: 'Outcome unknown — checking', tone: 'warn'};
+        else S.notes[r.key] = {text: 'Failed — previous state kept' + (res.notes[r.id] ? ': ' + res.notes[r.id] : ''), tone: 'bad'};
+      });
+      if ((res.kind === 'failed' || res.kind === 'unknown') && res.message) el('hc-batch-note').textContent = res.message;
+      else if (res.kind === 'nothing') el('hc-batch-note').textContent = res.message;
+      else el('hc-batch-note').textContent = '';
+    }, function (e) {
+      say(rows, 'Not sent: ' + String(e && e.message || e), 'bad');
+    }).then(function () { setBusy(rows, false); render(); });
+  }
+
+  function currencyOf(rows) { return (rows[0] && rows[0].currency) || ''; }
+
+  function editThenRun(rows, kind, dir) {
+    var one = rows.length === 1 ? rows[0] : null, cur = currencyOf(rows);
+    var budget = kind === 'budget';
+    var base = one ? (budget ? (one.budget && one.budget.kind === 'daily' ? one.budget.amount : null) : one.bid_amount) : null;
+    var prefill = base == null ? '' : (dir ? ACM.home.stepValue(base, dir, cur) : String(base));
+    return ACM.home.editValue({
+      title: budget ? 'Daily budget' : 'Bid', label: budget ? 'New daily budget' : 'New bid', currency: cur || '?',
+      value: prefill, hint: (one ? one.name + ' · ' : rows.length + ' objects · ') + (budget ? 'Daily budget, ' : (one ? one.bid_strategy + ', ' : '')) +
+        (base == null ? 'current value unknown' : 'now ' + base)
+    }).then(function (v) {
+      if (v == null) return;
+      return runCommand(rows, budget ? 'set_budget' : 'set_bid', v);
+    });
+  }
+
+  function onCommand(b) {
+    var row = findRow(b.dataset.level + ':' + b.dataset.objectId);
+    if (!row || !ACM) return;
+    var st = ctl(row, b.dataset.action);
+    if (!st.enabled) return;
+    var a = b.dataset.action;
+    if (a === 'status') { runCommand([row], 'set_status', ACM.home.statusTarget(row)); return; }
+    if (a === 'budget' && st.openKids) {
+      if (!S.expanded[row.key]) { S.expanded[row.key] = true; if (!S.kids[row.key] || S.kids[row.key].state === 'error') loadKids(row); else render(); }
+      return;
+    }
+    if (a === 'budget') { editThenRun([row], 'budget', 0); return; }
+    if (a === 'bid-down' || a === 'bid-up') { editThenRun([row], 'bid', a === 'bid-down' ? -1 : 1); }
+  }
+
+  function selectedRows() { return Object.keys(S.selected).map(findRow).filter(Boolean); }
+  function renderBatch() {
+    var rows = selectedRows(), plan = ACM ? ACM.home.batchPlan(rows, S.avail) : {ok: false, reason: 'Commands unavailable'};
+    var why = rows.length ? plan.reason : 'Select rows first';
+    Array.prototype.forEach.call(el('hc-batch').querySelectorAll('button'), function (b) {
+      b.disabled = !plan.ok; b.title = plan.ok ? 'Review the change for ' + rows.length + ' selected' : (why || '');
+    });
+  }
+  el('hc-batch').addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('[data-batch]') : null;
+    if (!b || b.disabled || !ACM) return;
+    var rows = selectedRows(), kind = b.dataset.batch;
+    if (kind === 'on') runCommand(rows, 'set_status', 'ACTIVE');
+    else if (kind === 'off') runCommand(rows, 'set_status', 'PAUSED');
+    else editThenRun(rows, kind, 0);
+  });
+
   el('hc-table').addEventListener('click', function (ev) {
     var t = ev.target;
+    var cb = t.closest ? t.closest('button[data-action]') : null;
+    if (cb) { if (!cb.disabled) onCommand(cb); return; }
     var b = t.closest ? t.closest('[data-read],[data-read-country],[data-exp],[data-retry]') : null;
     if (!b) return;
     if (b.dataset.read) { readQueue([b.dataset.read]); return; }
@@ -698,6 +826,8 @@
       accounts.forEach(function (a) { S.fetchedAt[a] = Date.now(); if (j.running.indexOf(a) >= 0) S.running[a] = true; });
       el('hc-body').hidden = false;
       fillCountries(); fillAccounts(); fillCols(); render();
+      (ACM ? ACM.home.availability() : Promise.resolve({available: false, reason: 'the command helper did not load'}))
+        .then(function (a) { S.avail = a; render(); });
       /* Страницу перезагрузили во время чтения: дальше ждём его конец у своего сервера. */
       accounts.filter(function (a) { return S.running[a]; }).forEach(function (a) {
         awaitDone(a).then(function () { return refreshAccount(a); }).catch(function () { /* статус виден в полосе аккаунта */ })

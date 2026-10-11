@@ -477,7 +477,8 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
                 affected.append({**entry, "result": "", "saved": None, "note": ""})
     now = store.clock()
     op = {"op_id": "op_" + secrets.token_hex(8), "state": PREVIEW, "account": account,
-          "act": sess.act, "currency": currency, "command": command, "value": value,
+          "act": sess.act, "currency": currency, "unit": 1 if currency in ZERO_DECIMAL else 100,
+          "command": command, "value": value,
           "value_minor": new if command != "set_status" else None,
           "actor": clean_actor(actor), "created_at": store.now_iso(now),
           "expires_at": store.now_iso(now + PREVIEW_TTL_S), "_expires_ts": now + PREVIEW_TTL_S,

@@ -705,13 +705,17 @@ def test_template_renders_and_embeds_the_account_seed():
 
 
 def test_command_controls_are_disabled_with_the_reason_and_carry_object_data():
-    # каждая кнопка команды рисуется выключенной; причина — в title и aria-label
+    # Duplicate, Copy и More по-прежнему нарисованы выключенными; причина — в title и aria-label
     assert "var REASON = 'Coming in ACL-1800';" in SRC and "var REASON_COPY = 'ACL-1773';" in SRC
-    cmd_buttons = re.findall(r"<button[^>]*class=\"hc-(?:cmd|switch)\"[^>]*>", SRC)
-    assert len(cmd_buttons) >= 4
-    for b in cmd_buttons:
+    static = re.findall(r"<button[^>]*class=\"hc-cmd\"[^>]*>", SRC)
+    assert len(static) >= 1
+    for b in static:
         assert " disabled " in b + " " and 'aria-disabled="true"' in b, b
-        assert " name=" not in b and "onclick" not in b.lower(), b
+    assert "cmd('⧉', 'Duplicate here', REASON_COPY, 'duplicate')" in SRC
+    assert "cmd('⇉', 'Copy to accounts', REASON_COPY, 'copy')" in SRC
+    # Команды ACL-1800 (on/off, budget, bid): состояние решает помощник, без него — выключено с причиной
+    assert "ACM.home.controlState" in SRC and "the command helper did not load" in SRC
+    assert " name=" not in SRC.split("<script", 1)[0] and "onclick" not in SRC.lower()
     # ACL-1800 цепляется по data-атрибутам объекта
     assert "data-object-id" in SRC and "data-level" in SRC and "data-account" in SRC and "data-action" in SRC
     assert "needs owner approval" not in SRC

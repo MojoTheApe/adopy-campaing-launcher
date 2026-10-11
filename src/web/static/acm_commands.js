@@ -139,6 +139,30 @@
              confirmLabel: rows.length ? 'Confirm' : 'Nothing to change' };
   }
 
+  // Стили диалогов — один раз, на токенах дешборда (с запасными значениями).
+  function ensureStyle() {
+    var doc = root.document;
+    if (!doc || !doc.head || (doc.getElementById && doc.getElementById('acm-style'))) return;
+    var st = doc.createElement('style');
+    st.id = 'acm-style';
+    st.textContent =
+      'dialog.acm-confirm h2,dialog.acm-edit h2{margin:0 0 .25rem;font-size:1.05rem}' +
+      'dialog.acm-confirm h3{margin:.75rem 0 .25rem;font-size:.85rem}' +
+      '.acm-sub{margin:0 0 .5rem;font-size:.8rem;color:var(--muted,#647084)}' +
+      '.acm-warn{margin:.35rem 0;font-size:.8rem;color:var(--warn,#d97706)}' +
+      '.acm-diff{width:100%;border-collapse:collapse;font-size:.85rem}' +
+      '.acm-diff td{padding:.3rem .4rem;border-bottom:1px solid var(--border,#dfe3ea)}' +
+      '.acm-actions{display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem}' +
+      '.acm-actions button{min-height:32px;padding:0 .9rem;border-radius:6px;border:1px solid var(--border-strong,#c8ced8);' +
+      'background:var(--bg-elev,#fff);color:var(--text,#1a1d23);cursor:pointer}' +
+      '.acm-actions button[data-acm="confirm"],.acm-actions button[data-acm="review"]{background:var(--accent,#2563eb);' +
+      'border-color:var(--accent,#2563eb);color:var(--on-accent,#fff)}' +
+      '.acm-actions button:disabled{opacity:.5;cursor:not-allowed}' +
+      'dialog.acm-edit label{display:flex;flex-direction:column;gap:.25rem;font-size:.85rem}' +
+      'dialog.acm-edit input{min-height:32px;padding:0 .5rem}';
+    doc.head.appendChild(st);
+  }
+
   function el(tag, text, cls) {
     var n = root.document.createElement(tag);
     if (text !== undefined) n.textContent = text;   // только textContent: имена объектов не разбираются как HTML
@@ -148,6 +172,7 @@
 
   function buildConfirmDialog(op) {
     var m = dialogModel(op);
+    ensureStyle();
     var dlg = el('dialog', undefined, 'acm-confirm');
     dlg.setAttribute('aria-label', m.title);
     dlg.style.cssText = 'max-width:640px;width:calc(100% - 32px);border:1px solid var(--border,#dfe3ea);'
@@ -214,9 +239,191 @@
     });
   }
 
+  // ── Таблица Home (ACL-1798 отдаёт строки и data-атрибуты, ACL-1800 — команды) ──
+  // Всё решение «можно ли» здесь, чтобы его проверять без браузера. Сервер всё равно
+  // перепроверяет в превью и перед записью; страница только не предлагает лишнего.
+  var CAP_STRATEGIES = ['LOWEST_COST_WITH_BID_CAP', 'COST_CAP'];
+  var AUTOMATIC = 'Automatic · no manual bid';
+  var ZERO_DECIMAL = ['CLP', 'COP', 'CRC', 'HUF', 'ISK', 'IDR', 'JPY', 'KRW', 'PYG', 'TWD', 'VND'];
+
+  function availability() {
+    return root.fetch('/campaign-commands/availability').then(readReply).catch(function (e) {
+      return { available: false, reason: String((e && e.message) || e), max_targets: 0 };
+    });
+  }
+
+  function budgetState(row) {
+    if (row.level === 'ad') return { enabled: false, reason: 'Ads have no budget' };
+    var b = row.budget || { kind: 'none' };
+    if (b.kind === 'daily') return { enabled: true, reason: '' };
+    if (b.kind === 'ad_sets') {   // у кампании бюджета нет: показываем бюджеты её ad set
+      return { enabled: true, reason: '', openKids: true, label: 'View ad set budgets' };
+    }
+    if (b.kind === 'inherited') return { enabled: false, reason: 'Budget is set on the campaign' };
+    if (b.kind === 'lifetime') return { enabled: false, reason: 'Lifetime budget is not supported here' };
+    if (b.kind === 'unit_unknown') return { enabled: false, reason: 'The budget unit of this currency is not confirmed' };
+    return { enabled: false, reason: 'No daily budget on this object' };
+  }
+
+  function bidState(row) {
+    if (row.level === 'ad') return { enabled: false, reason: 'Managed by ad set' };
+    if (row.level === 'campaign') return { enabled: false, reason: 'A manual bid is set on ad sets' };
+    var raw = row.bid_strategy_raw || '';
+    if (CAP_STRATEGIES.indexOf(raw) >= 0) return { enabled: true, reason: '' };
+    if (raw === 'LOWEST_COST_WITHOUT_CAP') return { enabled: false, reason: AUTOMATIC };
+    if (!raw) return { enabled: false, reason: 'The bid strategy is set on the campaign' };
+    return { enabled: false, reason: 'No manual bid for this strategy' };
+  }
+
+  // Состояние кнопки команды: включена ли и почему нет. `avail` — ответ /campaign-commands/availability.
+  function controlState(row, action, avail) {
+    if (!avail || !avail.available) {
+      return { enabled: false, reason: 'Commands unavailable' + (avail && avail.reason ? ': ' + avail.reason : '') };
+    }
+    if (row.busy) return { enabled: false, reason: 'A command for this object is running' };
+    if (action === 'status') {
+      if (row.status === 'on' || row.status === 'off') return { enabled: true, reason: '' };
+      return { enabled: false, reason: 'Status ' + (row.status_raw || 'unknown') + ' cannot be changed here' };
+    }
+    if (action === 'budget') return budgetState(row);
+    if (action === 'bid-down' || action === 'bid-up') return bidState(row);
+    return { enabled: false, reason: '' };
+  }
+
+  // Что просить у сервера при щелчке на переключателе: только по подтверждённому состоянию строки.
+  function statusTarget(row) { return row.status === 'on' ? 'PAUSED' : 'ACTIVE'; }
+
+  function isZeroDecimal(currency) { return ZERO_DECIMAL.indexOf(String(currency || '').toUpperCase()) >= 0; }
+
+  // Подсказка для − / +: 5% от текущей ставки, округлено до единицы валюты.
+  function stepValue(current, dir, currency) {
+    if (current == null || !(current > 0)) return '';
+    var next = current * (dir < 0 ? 0.95 : 1.05);
+    if (isZeroDecimal(currency)) return String(Math.max(1, Math.round(next)));
+    return String(Math.max(0.01, Math.round(next * 100) / 100).toFixed(2));
+  }
+
+  function actor() {
+    var sel = root.document && root.document.getElementById && root.document.getElementById('buyer-select');
+    return (sel && sel.value) || '';
+  }
+
+  // Выбранные строки → одна команда: один аккаунт и не больше потолка вызовов.
+  function batchPlan(rows, avail) {
+    if (!avail || !avail.available) {
+      return { ok: false, reason: 'Commands unavailable' + (avail && avail.reason ? ': ' + avail.reason : '') };
+    }
+    if (!rows.length) return { ok: false, reason: 'Select rows first' };
+    var accounts = {};
+    rows.forEach(function (r) { accounts[r.account] = true; });
+    if (Object.keys(accounts).length > 1) return { ok: false, reason: 'Select rows from one account' };
+    var cap = Math.min(MAX_TARGETS, avail.max_targets || MAX_TARGETS);
+    if (rows.length > cap) {
+      return { ok: false, reason: 'At most ' + cap + ' objects per command with the current call limit' };
+    }
+    return { ok: true, account: rows[0].account, targets: rows.map(function (r) { return { level: r.level, id: String(r.id) }; }) };
+  }
+
+  function skippedText(op) {
+    var s = (op.skipped || []).map(function (x) { return x.name + ': ' + x.reason; });
+    return s.length ? s.join('; ') : 'Nothing to change';
+  }
+
+  // Итог операции → то, что показывает строка. Применять к строке можно ТОЛЬКО `applied`
+  // (объекты, подтверждённые чтением Meta); переключатель не меняется заранее.
+  function classify(op) {
+    var applied = (op.affected || []).filter(function (a) { return a.result === 'saved'; })
+      .map(function (a) { return { id: a.id, level: a.level, field: a.field, saved: a.saved, unit: op.unit || 100 }; });
+    var notes = {};
+    (op.affected || []).forEach(function (a) { if (a.result !== 'saved') notes[a.id] = a.note || ''; });
+    var kind = op.state === 'Succeeded' ? 'confirmed' : op.state === 'Outcome unknown' ? 'unknown' : 'failed';
+    return { kind: kind, op: op, applied: applied, notes: notes, message: op.message || '' };
+  }
+
+  function applySaved(row, item) {
+    if (item.field === 'status') {
+      row.status = item.saved === 'ACTIVE' ? 'on' : item.saved === 'PAUSED' ? 'off' : 'unknown';
+      row.status_raw = item.saved;
+    } else if (item.field === 'daily_budget') {
+      row.budget = { kind: 'daily', amount: item.saved / item.unit };
+    } else if (item.field === 'bid_amount') {
+      row.bid_amount = item.saved / item.unit;
+    }
+    return row;
+  }
+
+  // Превью → диалог → запись → опрос. Диалог показывается и когда менять нечего — чтобы были видны причины.
+  function flow(req, hooks) {
+    hooks = hooks || {};
+    var ask = hooks.confirm || confirm;
+    var say = hooks.onState || function () {};
+    say('Previewing…');
+    return preview(req).then(function (op) {
+      return ask(op).then(function (yes) {
+        if (!yes) return { kind: 'cancelled', op: op, applied: [], notes: {}, message: 'Cancelled' };
+        if (!(op.affected || []).length) return { kind: 'nothing', op: op, applied: [], notes: {}, message: skippedText(op) };
+        say('Running…');
+        return execute(op.revision_id, hooks.key).then(function (started) {
+          return poll(started.op_id, { intervalMs: hooks.intervalMs, onUpdate: function (o) {
+            say(o.state === 'Verifying' ? 'Verifying…' : 'Running…');
+          } });
+        }).then(classify);
+      });
+    });
+  }
+
+  // Поле ввода суммы в диалоге: проверка на странице, сервер проверит ещё раз.
+  function editValue(opts) {
+    return new Promise(function (resolve) {
+      ensureStyle();
+      var dlg = el('dialog', undefined, 'acm-edit');
+      dlg.setAttribute('aria-label', opts.title);
+      dlg.style.cssText = 'max-width:420px;width:calc(100% - 32px);border:1px solid var(--border,#dfe3ea);'
+        + 'border-radius:var(--radius-lg,10px);padding:var(--space-lg,16px);background:var(--bg-elev,#fff);'
+        + 'color:var(--text,#1a1d23)';
+      dlg.appendChild(el('h2', opts.title));
+      var label = el('label', opts.label + ' (' + opts.currency + ')');
+      var input = el('input');
+      input.type = 'text';
+      input.setAttribute('inputmode', 'decimal');
+      input.setAttribute('data-acm', 'value');
+      input.value = opts.value || '';
+      label.appendChild(input);
+      dlg.appendChild(label);
+      if (opts.hint) dlg.appendChild(el('p', opts.hint, 'acm-sub'));
+      var err = el('p', '', 'acm-warn');
+      err.setAttribute('role', 'alert');
+      dlg.appendChild(err);
+      var bar = el('div', undefined, 'acm-actions');
+      var cancel = el('button', 'Cancel'); cancel.type = 'button'; cancel.setAttribute('data-acm', 'cancel');
+      var ok = el('button', 'Review'); ok.type = 'button'; ok.setAttribute('data-acm', 'review');
+      bar.appendChild(cancel); bar.appendChild(ok); dlg.appendChild(bar);
+      function done(v) {
+        try { dlg.close(); } catch (e) { /* уже закрыт */ }
+        if (dlg.parentNode) dlg.parentNode.removeChild(dlg);
+        resolve(v);
+      }
+      ok.addEventListener('click', function () {
+        var v = String(input.value).trim();
+        var zero = isZeroDecimal(opts.currency);
+        var good = zero ? /^[1-9][0-9]{0,11}$/.test(v) : /^[0-9]{1,12}(\.[0-9]{1,2})?$/.test(v) && Number(v) > 0;
+        if (!good) { err.textContent = zero ? 'Enter a whole positive amount.' : 'Enter a positive amount with at most two decimals.'; return; }
+        done(v);
+      });
+      cancel.addEventListener('click', function () { done(null); });
+      dlg.addEventListener('cancel', function () { done(null); });
+      root.document.body.appendChild(dlg);
+      dlg.showModal();
+      input.focus();
+    });
+  }
+
   root.acmCommands = {
     preview: preview, execute: execute, poll: poll, confirm: confirm, run: run,
     buildConfirmDialog: buildConfirmDialog, dialogModel: dialogModel, assertAllowed: assertAllowed,
-    newKey: newKey, FINAL_STATES: FINAL.slice()
+    newKey: newKey, FINAL_STATES: FINAL.slice(),
+    home: { availability: availability, controlState: controlState, statusTarget: statusTarget,
+            stepValue: stepValue, batchPlan: batchPlan, flow: flow, classify: classify,
+            applySaved: applySaved, editValue: editValue, actor: actor, AUTOMATIC: AUTOMATIC }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

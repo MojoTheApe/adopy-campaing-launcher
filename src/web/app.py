@@ -5143,6 +5143,13 @@ async def campaign_commands_execute(request: Request) -> JSONResponse:
     return JSONResponse(data, status_code=code)
 
 
+@app.get("/campaign-commands/availability")
+async def campaign_commands_availability() -> JSONResponse:
+    from src.web import campaign_commands
+
+    return JSONResponse(campaign_commands.availability())
+
+
 @app.get("/campaign-commands/{op_id}")
 async def campaign_commands_status(op_id: str) -> JSONResponse:
     from src.web import campaign_commands

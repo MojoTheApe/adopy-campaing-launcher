@@ -65,6 +65,19 @@ def _guard() -> tuple[dict, int] | None:
     return None
 
 
+def availability() -> dict:
+    """Что страница может предлагать: включены ли команды и почему нет. Ничего не читает у Meta."""
+    if not api_enabled():
+        return {"available": False, "code": "rpa_backend", "reason": "Needs ACL_FB_BACKEND=api",
+                "max_targets": 0}
+    if not bound_to_loopback():
+        return {"available": False, "code": "not_loopback",
+                "reason": "Only when the dashboard listens on this computer alone (127.0.0.1)",
+                "max_targets": 0}
+    return {"available": True, "code": "", "reason": "",
+            "max_targets": min(_cmd.MAX_TARGETS, _cmd.max_targets_for_ceiling())}
+
+
 def run_preview(body: dict[str, Any]) -> tuple[dict, int]:
     refused = _guard()
     if refused:
