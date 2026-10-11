@@ -131,3 +131,71 @@ def test_readback_covers_cta_and_locales_and_marks_not_read(tmp_path):
     out, _ = _run(meta, _draft(tmp_path))
     cta = [c for c in out.readback["checks"] if c["field"] == "call_to_action" and not c["ok"]]
     assert cta and all(c["not_read"] for c in cta)
+
+
+# ───────────────────────── ревью #794 ─────────────────────────
+
+class NoPagesMeta(FakeMeta):
+    def _get(self, path, params):
+        if path.strip("/") == f"{ACT}/promote_pages":
+            return {"data": []}
+        return super()._get(path, params)
+
+
+@pytest.mark.parametrize("pixels", [[], ["222", "333"]])
+def test_foreign_map_pixel_writes_nothing_end_to_end(tmp_path, pixels):
+    meta = TwoPixelMeta(pixels)
+    draft = _draft(tmp_path)
+    draft.pixel_id, draft.pixel_source = "999", "map"
+    out, _ = _run(meta, draft)
+    assert meta.posts == [] and "pixel from the map (999) is not on this ad account" in out.error
+
+
+def test_empty_pixel_list_with_a_set_pixel_is_an_error(tmp_path):
+    plan = _plan(tmp_path, "999", "map")
+    with pytest.raises(cr.PlanError, match="0 found"):
+        cr.resolve_page_pixel(plan, _facts(TwoPixelMeta([])))
+
+
+@pytest.mark.parametrize("meta_cls", [FakeMeta, NoPagesMeta])
+def test_foreign_or_unlisted_map_page_writes_nothing(tmp_path, meta_cls):
+    meta = meta_cls()
+    draft = _draft(tmp_path)
+    draft.page_id, draft.page_source = "555", "map"
+    out, _ = _run(meta, draft)
+    assert meta.posts == [] and "page from the map (555)" in out.error
+
+
+def test_error_text_does_not_repeat_nothing_was_created(tmp_path):
+    meta = TwoPixelMeta(["222", "333"])
+    draft = _draft(tmp_path)
+    draft.pixel_id, draft.pixel_source = "999", "map"
+    out, _ = _run(meta, draft)
+    assert "Nothing was created. Nothing more" not in out.error
+
+
+def test_a_campaign_without_language_reads_back_ok(tmp_path):
+    draft = _draft(tmp_path)
+    draft.language = ""
+    out, _ = _run(FakeMeta(), draft)
+    assert out.error == "" and out.readback["ok"] is True
+
+
+def test_dropped_locales_read_back_as_not_read(tmp_path):
+    meta = FakeMeta()
+    out, _ = _run(meta, _draft(tmp_path))
+    assert out.readback["ok"] is True
+    # Meta не вернула locales у группы, хотя их ждали
+    meta2 = FakeMeta()
+    orig = meta2._get
+
+    def drop(path, params):
+        body = orig(path, params)
+        if isinstance(body, dict) and isinstance(body.get("targeting"), dict):
+            body = {**body, "targeting": {k: v for k, v in body["targeting"].items() if k != "locales"}}
+        return body
+
+    meta2._get = drop
+    out2, _ = _run(meta2, _draft(tmp_path))
+    lang = [c for c in out2.readback["checks"] if c["field"] == "languages"]
+    assert lang and all(c["ok"] is False and c["not_read"] is True for c in lang)

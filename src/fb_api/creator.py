@@ -303,10 +303,11 @@ def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
     """Страница и пиксель плана. Возвращает предупреждения; ошибки — `PlanError`."""
     notes = []
     if plan.page_id:
-        if facts.pages and plan.page_id not in facts.pages:
+        # Принадлежность проверяется и при пустом списке: пустой список — не «можно всё».
+        if plan.page_id not in facts.pages:
             src = plan.page_source or "draft"
-            raise PlanError(f"The page from the {src} cannot advertise from this ad account. "
-                            "Nothing was created.")
+            raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
+                            f"this ad account can advertise from ({len(facts.pages)} found).")
     elif len(facts.pages) == 1:
         plan.page_id = facts.pages[0]
         plan.page_source = "account default"
@@ -315,10 +316,11 @@ def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
         raise PlanError(f"page_id is empty in the account map and the ad account has "
                         f"{len(facts.pages)} pages; set page_id")
     if plan.pixel_id:
-        if facts.pixels and plan.pixel_id not in facts.pixels:
+        # То же для пикселя. Читается первая страница (50): больше — безопасный отказ.
+        if plan.pixel_id not in facts.pixels:
             src = plan.pixel_source or "draft"
-            raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account. "
-                            "Nothing was created; fix the pixel instead of letting another one be picked.")
+            raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
+                            f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.")
     elif len(facts.pixels) == 1:
         plan.pixel_id = facts.pixels[0]
         plan.pixel_source = "account default"
@@ -809,8 +811,10 @@ class CampaignCreator:
         check("age_min", targeting["age_min"], t.get("age_min"))
         check("age_max", targeting["age_max"], t.get("age_max"))
         # Локали: если Meta поле не вернула, это «Not read», а не «пусто».
-        check("languages", targeting.get("locales") or [],
-              t.get("locales") if "locales" in t or not targeting.get("locales") else None)
+        # None («Not read») только если локали ждали, а Meta их не вернула; иначе как раньше.
+        want_locales = targeting.get("locales") or []
+        check("languages", want_locales,
+              None if want_locales and "locales" not in t else t.get("locales") or [])
         check("detailed_targeting", _flex_ids(targeting.get("flexible_spec")), _flex_ids(t.get("flexible_spec")))
         check("os", targeting.get("user_os") or [], t.get("user_os") or [])
         # Площадки вручную, как у робота (паритет RPA): платформы, места, устройства.
