@@ -7244,6 +7244,18 @@
         "state": "implementing",
         "started_at": "2026-10-09T22:32:02+00:00",
         "from_status": "status:todo"
+      },
+      "778": {
+        "actor": "Worker-H8D3",
+        "session": "Worker-H8D3",
+        "coordinator": "Coordinator-H8D3",
+        "branch": "codex/acl-1778-header-linear-toolbar",
+        "worktree": "C:\\acl-header-design",
+        "id": "fd905cbebf444b9fb4294dfeb46ab06f",
+        "issue": 778,
+        "state": "implementing",
+        "started_at": "2026-10-11T05:51:20+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -10533,9 +10545,13 @@
           {
             "actor": "Worker-H8D3",
             "session": "Worker-H8D3"
+          },
+          {
+            "actor": "Worker-H8D3",
+            "session": "Worker-H8D3"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-H8D3",
         "coordinator": "Coordinator-H8D3",
         "handoff": {
@@ -10554,7 +10570,6 @@
         },
         "pr": 780,
         "queued_at": "2026-10-11T05:35:39+00:00",
-        "reviewer": "Reviewer-R7Q2",
         "review_report": "# Review of PR #780 (ACL-1778): returned for fixes\n\nReviewed head: ae127e8647f8e199a82eeea53ecce3b95d8d40b0\nBase: e8e59f8376458f2f73089c3f2a8d454837ff033f (work/main)\n\n## Requested fixes\n\n1. (minor) src/web/templates/report.html, amapApply (~line 7001): it removes the popup with `cal.remove()` and bypasses the new close path. On a same-URL navigation that only differs by hash (Update pressed with an unchanged range while the URL has a #fragment), the page does not reload, and the period button keeps aria-expanded=\"true\" and the open styling until the next mousedown. Close through `cal._amapClose` (no refocus needed) so aria-expanded resets.\n2. (nit) report.html:3270: the button declares aria-haspopup=\"dialog\", but the `.amap-cal` popup has no role=\"dialog\". Give the popup role=\"dialog\" (with an accessible name, e.g. aria-label=\"Date range\") so it matches aria-haspopup.\n\n## Approved as-is\n\nEverything else is approved:\n- All header IDs, handlers and routes are kept.\n- The date label formatting is correct, including cross-year, single day, \"All dates\" and escaping of malformed values.\n- The picker's open/close, aria-expanded and focus return work.\n- The layout holds in both themes, with the builder open and closed, from 360 to 1600 px.\n- The targeted tests pass (48).\n\nOptional, not blocking:\n- The drawer still covers the header below 760 px. This is pre-existing; mention it in the PR.\n- Add tests for the only-from / only-to label output and for aria-label escaping."
       }
     },
@@ -20675,6 +20690,13 @@
           "report": "# Review of PR #780 (ACL-1778): returned for fixes\n\nReviewed head: ae127e8647f8e199a82eeea53ecce3b95d8d40b0\nBase: e8e59f8376458f2f73089c3f2a8d454837ff033f (work/main)\n\n## Requested fixes\n\n1. (minor) src/web/templates/report.html, amapApply (~line 7001): it removes the popup with `cal.remove()` and bypasses the new close path. On a same-URL navigation that only differs by hash (Update pressed with an unchanged range while the URL has a #fragment), the page does not reload, and the period button keeps aria-expanded=\"true\" and the open styling until the next mousedown. Close through `cal._amapClose` (no refocus needed) so aria-expanded resets.\n2. (nit) report.html:3270: the button declares aria-haspopup=\"dialog\", but the `.amap-cal` popup has no role=\"dialog\". Give the popup role=\"dialog\" (with an accessible name, e.g. aria-label=\"Date range\") so it matches aria-haspopup.\n\n## Approved as-is\n\nEverything else is approved:\n- All header IDs, handlers and routes are kept.\n- The date label formatting is correct, including cross-year, single day, \"All dates\" and escaping of malformed values.\n- The picker's open/close, aria-expanded and focus return work.\n- The layout holds in both themes, with the builder open and closed, from 360 to 1600 px.\n- The targeted tests pass (48).\n\nOptional, not blocking:\n- The drawer still covers the header below 760 px. This is pre-existing; mention it in the PR.\n- Add tests for the only-from / only-to label output and for aria-label escaping.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-11T05:51:20+00:00",
+        "issue": 778,
+        "claim": "fd905cbebf444b9fb4294dfeb46ab06f",
+        "actor": "Worker-H8D3"
       }
     ],
     "policy": {
