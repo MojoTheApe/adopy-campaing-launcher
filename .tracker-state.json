@@ -7249,20 +7249,6 @@
         "started_at": "2026-10-11T19:40:14+00:00",
         "from_status": "status:idea"
       },
-      "800": {
-        "actor": "Worker-S1800A",
-        "session": "run_s1800a_1011",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1800-campaign-commands",
-        "worktree": "C:\\acl-1800-cmd",
-        "id": "414c09a2e4bc4d208f31e3ebdfbe204d",
-        "issue": 800,
-        "state": "handoff",
-        "started_at": "2026-10-11T19:50:20+00:00",
-        "from_status": "status:idea",
-        "pr": 802,
-        "report": "# ACL-1800 handoff report\n\nPR 802, head ee2ce4af4c7961aeaf770bc09091972861f755b0, stacked on 796 -> 765 (base main). CI is blocked.\n\nEndpoints: POST /campaign-commands/preview, POST /campaign-commands/execute, GET /campaign-commands/{op_id}; acmCommands JS helper (src/web/static/acm_commands.js). Only with ACL_FB_BACKEND=api; rpa answers 409.\n\nWrite policy: write_policy.check_object_update, POST to an existing object id, exactly one of status (ACTIVE/PAUSED), daily_budget, bid_amount (positive minor units); no edges, no creation, no DELETE. Mirrored in the page helper (separate InPageGraph(allow_object_updates=True) mode).\n\nTests: tests/test_acl1800_campaign_commands.py 181 passed (fake Meta, node); existing 1756/1760/1761 suites 389 passed; full suite not run (CI only).\nMutation checks: 20 mutants (Python and JS policy, stale check, idempotency, blind retry, readback compare), 20 killed, 0 survived.\n\nLive check pending owner approval on 9095 test accounts. Nothing live was touched."
-      },
       "799": {
         "actor": "Worker-S1799A",
         "session": "run_s1799a_1011",
@@ -10811,9 +10797,25 @@
             "session": "run_s1800a_1011"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1800A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1800A",
+          "session": "run_s1800a_1011",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1800-campaign-commands",
+          "worktree": "C:\\acl-1800-cmd",
+          "id": "414c09a2e4bc4d208f31e3ebdfbe204d",
+          "issue": 800,
+          "state": "handoff",
+          "started_at": "2026-10-11T19:50:20+00:00",
+          "from_status": "status:idea",
+          "pr": 802,
+          "report": "# ACL-1800 handoff report\n\nPR 802, head ee2ce4af4c7961aeaf770bc09091972861f755b0, stacked on 796 -> 765 (base main). CI is blocked.\n\nEndpoints: POST /campaign-commands/preview, POST /campaign-commands/execute, GET /campaign-commands/{op_id}; acmCommands JS helper (src/web/static/acm_commands.js). Only with ACL_FB_BACKEND=api; rpa answers 409.\n\nWrite policy: write_policy.check_object_update, POST to an existing object id, exactly one of status (ACTIVE/PAUSED), daily_budget, bid_amount (positive minor units); no edges, no creation, no DELETE. Mirrored in the page helper (separate InPageGraph(allow_object_updates=True) mode).\n\nTests: tests/test_acl1800_campaign_commands.py 181 passed (fake Meta, node); existing 1756/1760/1761 suites 389 passed; full suite not run (CI only).\nMutation checks: 20 mutants (Python and JS policy, stale check, idempotency, blind retry, readback compare), 20 killed, 0 survived.\n\nLive check pending owner approval on 9095 test accounts. Nothing live was touched."
+        },
+        "pr": 802,
+        "queued_at": "2026-10-11T20:21:48+00:00"
       },
       "799": {
         "implementers": [
@@ -14137,7 +14139,8 @@
       782,
       781,
       769,
-      798
+      798,
+      800
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21207,6 +21210,13 @@
         "issue": 786,
         "claim": "82d78378a57c4ff1910bd29eebc96592",
         "actor": "Worker-M1786A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-11T20:21:48+00:00",
+        "issue": 800,
+        "pr": 802,
+        "actor": "Worker-S1800A"
       }
     ],
     "policy": {
