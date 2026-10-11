@@ -7249,20 +7249,6 @@
         "started_at": "2026-10-11T19:40:14+00:00",
         "from_status": "status:idea"
       },
-      "786": {
-        "actor": "Worker-M1786A",
-        "session": "922f523d07564d18961d4f57e3ea4337",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1786-meta-error-messages",
-        "worktree": "C:\\acl-1786",
-        "id": "82d78378a57c4ff1910bd29eebc96592",
-        "issue": 786,
-        "state": "handoff",
-        "started_at": "2026-10-11T20:18:52+00:00",
-        "from_status": "status:todo",
-        "pr": 804,
-        "report": "Scope: new standalone src/fb_api/error_catalog.py (~125 (code, subcode) entries -> message_en, action_en, retryable, category, source_url, documented flag), explain() (observed text > code 2238055 disambiguation > code+subcode > code > raw fallback), Explanation.line() and problem_line(GraphError). Tests in tests/test_acl1786_error_catalog.py. graph.py is imported read-only; no file touched by ACL-1761 is edited. PR 804, branch work/acl-1786-meta-error-messages, base main.\nSources: Marketing API error-reference, Graph API error handling and rate-limiting pages. Observed-only entries (Lead Gen form text from meta_dom.py; rate codes 32, 80001/2/5-13 from graph.py) are marked documented=False.\nReviews: Opus review checked 40+ codes against the raw error-reference HTML and returned CHANGES REQUIRED (2238055 has two meanings; code 104 advice). Both fixed in ce6cea6c; coordinator verified the fix diff. Safety confirmed: 368 says do not retry now; token/policy entries non-retryable; rate limits say wait.\nTests: test_acl1786_error_catalog + test_acl1756_fb_api: 113 passed. Full suite in CI.\nNot in scope (follow-up ACL-1805): wiring into the API publish path and the dashboard problem list after ACL-1761 merges. Issue acceptance \"shown in the dashboard\" is completed there."
-      },
       "775": {
         "actor": "Worker-S1775A",
         "session": "run_s1775a_1011",
@@ -10853,9 +10839,25 @@
             "session": "922f523d07564d18961d4f57e3ea4337"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-M1786A",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-M1786A",
+          "session": "922f523d07564d18961d4f57e3ea4337",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1786-meta-error-messages",
+          "worktree": "C:\\acl-1786",
+          "id": "82d78378a57c4ff1910bd29eebc96592",
+          "issue": 786,
+          "state": "handoff",
+          "started_at": "2026-10-11T20:18:52+00:00",
+          "from_status": "status:todo",
+          "pr": 804,
+          "report": "Scope: new standalone src/fb_api/error_catalog.py (~125 (code, subcode) entries -> message_en, action_en, retryable, category, source_url, documented flag), explain() (observed text > code 2238055 disambiguation > code+subcode > code > raw fallback), Explanation.line() and problem_line(GraphError). Tests in tests/test_acl1786_error_catalog.py. graph.py is imported read-only; no file touched by ACL-1761 is edited. PR 804, branch work/acl-1786-meta-error-messages, base main.\nSources: Marketing API error-reference, Graph API error handling and rate-limiting pages. Observed-only entries (Lead Gen form text from meta_dom.py; rate codes 32, 80001/2/5-13 from graph.py) are marked documented=False.\nReviews: Opus review checked 40+ codes against the raw error-reference HTML and returned CHANGES REQUIRED (2238055 has two meanings; code 104 advice). Both fixed in ce6cea6c; coordinator verified the fix diff. Safety confirmed: 368 says do not retry now; token/policy entries non-retryable; rate limits say wait.\nTests: test_acl1786_error_catalog + test_acl1756_fb_api: 113 passed. Full suite in CI.\nNot in scope (follow-up ACL-1805): wiring into the API publish path and the dashboard problem list after ACL-1761 merges. Issue acceptance \"shown in the dashboard\" is completed there."
+        },
+        "pr": 804,
+        "queued_at": "2026-10-11T20:36:07+00:00"
       },
       "775": {
         "implementers": [
@@ -14174,7 +14176,8 @@
       769,
       798,
       800,
-      799
+      799,
+      786
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21265,6 +21268,13 @@
         "issue": 775,
         "claim": "ce360b93d8e54a82866474221bd1ab9b",
         "actor": "Worker-S1775A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-11T20:36:07+00:00",
+        "issue": 786,
+        "pr": 804,
+        "actor": "Worker-M1786A"
       }
     ],
     "policy": {
