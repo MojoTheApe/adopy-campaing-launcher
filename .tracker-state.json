@@ -7256,9 +7256,10 @@
         "worktree": "C:\\acl-1782",
         "id": "b4cb0892e93f4bb5b794fb8979891595",
         "issue": 782,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-11T18:07:28+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "report": "## Stop report: ACL-1782\n\nThe claim was recorded with branch `feature/acl-1782-meta-docs-watcher`. That name breaks the repository rule `work/acl-NNNN-short-name` (docs/repository/WORKFLOW.md), and the coordinator brief caused the mistake. The same commit is on `work/acl-1782-meta-docs-watcher` with PR #793. PR #792 on the old branch is obsolete. Stopping so the task can be re-claimed under the correct branch. Nothing is lost or merged."
       },
       "781": {
         "actor": "Worker-M1781A",
