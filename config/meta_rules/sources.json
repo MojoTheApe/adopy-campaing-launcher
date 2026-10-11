@@ -10,7 +10,8 @@
   {
    "url": "https://www.facebook.com/business/help/181290242815171",
    "title": "Accounts in your business portfolio",
-   "category": "help"
+   "category": "help",
+   "weak": true
   },
   {
    "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/ads",
@@ -35,7 +36,8 @@
   {
    "url": "https://www.facebook.com/business/help/915885887059947",
    "title": "Add / Claim / Share an ad account",
-   "category": "help"
+   "category": "help",
+   "weak": true
   },
   {
    "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ads-in-whatsapp-status",
@@ -270,17 +272,20 @@
   {
    "url": "https://www.facebook.com/business/help/1253008271714847",
    "title": "где посмотреть лимит",
-   "category": "help"
+   "category": "help",
+   "weak": true
   },
   {
    "url": "https://www.facebook.com/business/help/190760004667059",
    "title": "закрытие",
-   "category": "help"
+   "category": "help",
+   "weak": true
   },
   {
    "url": "https://www.facebook.com/business/help/375950529870841",
    "title": "инструкция для партнёрского доступа",
-   "category": "help"
+   "category": "help",
+   "weak": true
   },
   {
    "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-mcp-server/ads-mcp-server-get-started",
@@ -300,7 +305,8 @@
   {
    "url": "https://www.facebook.com/business/help/1026272311098874",
    "title": "лимит кабинетов",
-   "category": "help"
+   "category": "help",
+   "weak": true
   },
   {
    "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ads-webhooks/setup/get-started",
@@ -335,7 +341,8 @@
   {
    "url": "https://www.facebook.com/business/help/675406303122941",
    "title": "повторная активация",
-   "category": "help"
+   "category": "help",
+   "weak": true
   },
   {
    "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/overview/versioning",
@@ -345,12 +352,14 @@
   {
    "url": "https://www.facebook.com/business/help/443041549525801",
    "title": "проблемы создания",
-   "category": "help"
+   "category": "help",
+   "weak": true
   },
   {
    "url": "https://www.facebook.com/business/help/350066115746201",
    "title": "работа от имени другого бизнеса",
-   "category": "help"
+   "category": "help",
+   "weak": true
   },
   {
    "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-cli/command-reference",

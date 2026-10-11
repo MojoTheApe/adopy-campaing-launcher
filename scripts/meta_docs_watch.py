@@ -181,6 +181,7 @@ def run_watch(sources: list[dict], fetch, snap_dir: Path, out_dir: Path | None,
     errors: list[dict] = []
     baselined: list[str] = []
     unchanged = 0
+    weak_sources = [x["url"] for x in sources if x.get("weak")]
     if not dry_run:
         snap_dir.mkdir(parents=True, exist_ok=True)
     for i, src in enumerate(sources):
@@ -211,6 +212,7 @@ def run_watch(sources: list[dict], fetch, snap_dir: Path, out_dir: Path | None,
                 "summary": _summary(added, removed),
                 "status_label": classify_status(added),
                 "affected_fields": fields,
+                "weak": bool(src.get("weak")),
             })
         if not dry_run:
             _snap_path(snap_dir, url).write_text(json.dumps(
@@ -224,6 +226,7 @@ def run_watch(sources: list[dict], fetch, snap_dir: Path, out_dir: Path | None,
         "failed": len(errors),
         "baselined": len(baselined),
         "unchanged": unchanged,
+        "weak_sources": weak_sources,
         "changes": changes,
         "errors": errors,
     }
@@ -239,8 +242,14 @@ def render_markdown(d: dict) -> str:
              f"changed: {len(d['changes'])}", ""]
     if not d["changes"] and not d["errors"]:
         lines.append("No changes.")
+    if d.get("weak_sources"):
+        lines += ["", f"WEAK sources ({len(d['weak_sources'])}): JS shells with almost no text, "
+                  "so 'no change' there is NOT meaningful:"]
+        lines += [f"- {u}" for u in d["weak_sources"]]
+        lines.append("")
     for c in d["changes"]:
-        lines += [f"## [{c['status_label']}] {c['title'] or c['source_url']}", "",
+        lines += [f"## [{c['status_label']}]{' [WEAK]' if c.get('weak') else ''} "
+                  f"{c['title'] or c['source_url']}", "",
                   f"- Source: {c['source_url']}", f"- Category: {c['category']}",
                   f"- Seen: {c['date_seen']}",
                   f"- Affected fields: {', '.join(c['affected_fields']) or '-'}", "",
@@ -249,6 +258,40 @@ def render_markdown(d: dict) -> str:
         lines += ["## Fetch errors", ""]
         lines += [f"- {e['source_url']}: {e['error']}" for e in d["errors"]]
     return "\n".join(lines) + "\n"
+
+
+OBSIDIAN_NOTE = "ACL — Meta изменения.md"
+
+
+def default_vault_dir() -> Path | None:
+    """Папка «дешборд» в Obsidian: ACL_OBSIDIAN_DIR, иначе стандартное место; None, если нет."""
+    env = os.environ.get("ACL_OBSIDIAN_DIR", "").strip()
+    p = Path(env) if env else Path.home() / "Desktop" / "Obsidian" / "Kuwait Forms" / "дешборд"
+    return p if p.is_dir() else None
+
+
+def append_obsidian(d: dict, vault: Path | None) -> bool:
+    """Дописывает датированную секцию в заметку дневника. Пустой дайджест и нет vault — no-op."""
+    if vault is None or not Path(vault).is_dir():
+        print("obsidian: vault not found, skipped")
+        return False
+    if not d["changes"] and not d["errors"]:
+        return False
+    lines = ["", f"## {d['generated']}", "",
+             f"- Источников: {d['sources_total']}, изменилось: {len(d['changes'])}, "
+             f"ошибок: {d['failed']}, новых снимков: {d['baselined']}"]
+    for c in d["changes"]:
+        lines.append(f"- [{c['status_label']}]{' [слабый источник]' if c.get('weak') else ''} "
+                     f"{c['title'] or c['source_url']} — {c['source_url']}")
+    for e in d["errors"]:
+        lines.append(f"- ошибка: {e['source_url']}: {e['error']}")
+    note = Path(vault) / OBSIDIAN_NOTE
+    fresh = not note.exists() or note.stat().st_size == 0
+    with note.open("a", encoding="utf-8", newline="\n") as f:
+        if fresh:
+            f.write("# ACL — Meta изменения\n")
+        f.write("\n".join(lines) + "\n")
+    return True
 
 
 def write_digest(d: dict, out_dir: Path) -> None:
@@ -267,6 +310,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--snapshots", type=Path, help="snapshot dir (default: <watch dir>/snapshots)")
     ap.add_argument("--category", action="append", help="only these categories (repeatable)")
     ap.add_argument("--dry-run", action="store_true", help="fetch and diff, write nothing")
+    ap.add_argument("--obsidian", action=argparse.BooleanOptionalAction, default=None,
+                    help="append summary to Obsidian note (default: on when the vault exists)")
+    ap.add_argument("--vault", type=Path, help="Obsidian 'дешборд' dir (default: ACL_OBSIDIAN_DIR or standard)")
     ap.add_argument("--delay", type=float, default=0.5, help="seconds between requests")
     a = ap.parse_args(argv)
     base = default_watch_dir() if not (a.out and a.snapshots) else None
@@ -275,6 +321,10 @@ def main(argv: list[str] | None = None) -> int:
     d = run_watch(load_sources(a.sources, a.category), http_fetch, snap, out,
                   dry_run=a.dry_run, delay=a.delay)
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if a.obsidian is not False and not a.dry_run:
+        vault = a.vault if a.vault else default_vault_dir()
+        if a.obsidian is None or vault is not None:
+            append_obsidian(d, vault)
     print(render_markdown(d) if a.dry_run else
           f"ok={d['ok']} failed={d['failed']} changed={len(d['changes'])} "
           f"baselined={d['baselined']} -> {out}")

@@ -93,3 +93,45 @@ def test_shipped_sources_json_is_official_only_and_categorised():
         assert s["category"] in allowed
         assert not any(b in s["url"] for b in banned)
         assert s["url"].startswith("https://")
+
+
+def test_weak_sources_flagged_in_digest(tmp_path):
+    weak = dict(SRC_A, weak=True)
+    watch.run_watch([weak], make_fetch({weak["url"]: PAGE_V1}), tmp_path / "s", None)
+    d = watch.run_watch([weak], make_fetch({weak["url"]: PAGE_V2}), tmp_path / "s", None)
+    assert d["weak_sources"] == [weak["url"]] and d["changes"][0]["weak"] is True
+    md = watch.render_markdown(d)
+    assert "WEAK" in md
+
+
+def test_shipped_help_sources_are_weak():
+    items = watch.load_sources(ROOT / "config" / "meta_rules" / "sources.json")
+    helps = [s for s in items if "facebook.com/business/help" in s["url"]]
+    assert helps and all(s.get("weak") for s in helps)
+
+
+def _changed_digest(tmp_path):
+    watch.run_watch([SRC_A], make_fetch({SRC_A["url"]: PAGE_V1}), tmp_path / "s", None)
+    return watch.run_watch([SRC_A], make_fetch({SRC_A["url"]: PAGE_V2}), tmp_path / "s", None)
+
+
+def test_obsidian_appends_dated_section(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    d = _changed_digest(tmp_path)
+    assert watch.append_obsidian(d, vault) is True
+    assert watch.append_obsidian(d, vault) is True
+    text = (vault / watch.OBSIDIAN_NOTE).read_text(encoding="utf-8")
+    assert text.count("# ACL — Meta изменения") == 1
+    assert text.count(f"## {d['generated']}") == 2 and SRC_A["url"] in text
+
+
+def test_obsidian_noop_when_empty_or_no_vault(tmp_path, capsys):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    watch.run_watch([SRC_A], make_fetch({SRC_A["url"]: PAGE_V1}), tmp_path / "s", None)
+    empty = watch.run_watch([SRC_A], make_fetch({SRC_A["url"]: PAGE_V1}), tmp_path / "s", None)
+    assert watch.append_obsidian(empty, vault) is False
+    assert not (vault / watch.OBSIDIAN_NOTE).exists()
+    assert watch.append_obsidian(_changed_digest(tmp_path), tmp_path / "missing") is False
+    assert "skipped" in capsys.readouterr().out
