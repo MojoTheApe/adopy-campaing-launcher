@@ -7283,6 +7283,18 @@
         "state": "implementing",
         "started_at": "2026-10-11T18:14:37+00:00",
         "from_status": "status:idea"
+      },
+      "783": {
+        "actor": "Worker-M1783B",
+        "session": "c18fd7986a28447daada00e6d2b99f57",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1783-graph-api-version",
+        "worktree": "C:\\acl-1783",
+        "id": "88d5aa3ad01e4971b02cfc1f61b28731",
+        "issue": 783,
+        "state": "implementing",
+        "started_at": "2026-10-11T18:22:37+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -10632,11 +10644,15 @@
           {
             "actor": "Worker-M1783A",
             "session": "ea74af46b9684322a8e4c6b643a049a2"
+          },
+          {
+            "actor": "Worker-M1783B",
+            "session": "c18fd7986a28447daada00e6d2b99f57"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-M1783A",
-        "coordinator": "Coordinator-M1783",
+        "state": "implementing",
+        "worker": "Worker-M1783B",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-M1783A",
           "session": "ea74af46b9684322a8e4c6b643a049a2",
@@ -11568,6 +11584,10 @@
       },
       "Worker-S1766A": {
         "session": "run_s1766a_1011",
+        "role": "Worker"
+      },
+      "Worker-M1783B": {
+        "session": "c18fd7986a28447daada00e6d2b99f57",
         "role": "Worker"
       }
     },
@@ -20904,6 +20924,13 @@
         "issue": 783,
         "actor": "Worker-M1783A",
         "report": "## Stop report: ACL-1783\n\nThe claim was recorded with branch `feature/acl-1783-graph-api-version`. That name breaks the repository rule `work/acl-NNNN-short-name` (docs/repository/WORKFLOW.md), and the coordinator brief caused the mistake. The same work, unchanged, is now on `work/acl-1783-graph-api-version` with PR #790 (PR #789 from the old branch is closed). Stopping this claim so the task can be re-claimed under the correct branch and the dispatching Coordinator-M1011A. No code is lost and nothing was merged."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-11T18:22:37+00:00",
+        "issue": 783,
+        "claim": "88d5aa3ad01e4971b02cfc1f61b28731",
+        "actor": "Worker-M1783B"
       }
     ],
     "policy": {
