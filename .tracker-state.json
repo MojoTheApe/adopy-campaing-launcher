@@ -7253,9 +7253,11 @@
         "worktree": "C:\\acl-header-design",
         "id": "f7b8dbab1b194389b0aae5076e8b73c6",
         "issue": 778,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-11T05:34:41+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 780,
+        "report": "## Implementation handoff \u00b7 ACL-1778\n\n- Branch `codex/acl-1778-header-linear-toolbar`, head ae127e86 on work/main e8e59f83. PR #780 (#779 closed: wrong branch name; claim re-taken on the renamed branch).\n- Changed: src/web/templates/report.html (header markup/CSS, picker aria-expanded + focus return, tab title), src/web/templates/loading.html (tab title), tests/test_header.py (+5), tests/test_stage_badge.py (title).\n- Checks: targeted tests 447 + 87 passed; preview instance 9097 (live 9090 untouched); Playwright 10 layouts (both themes, builder open/closed, 1600\u2013360 px, long values) with no overlap/overflow; every header control exercised.\n- Remaining: independent review; full suite in CI; builder draft preservation not exercised (no drafts on the preview)."
       }
     },
     "tasks": {
