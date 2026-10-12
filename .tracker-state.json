@@ -14689,7 +14689,19 @@
       771,
       768
     ],
-    "review": null,
+    "review": {
+      "id": "37b8b284b6bb41269e9e0b8fa15eaacb",
+      "batch_id": "2eaa69c20cbf4d399cee65a6fa070f9c",
+      "pr": 835,
+      "issues": [
+        760
+      ],
+      "actor": "Reviewer-RX1012A",
+      "session": "rev_rx1012a_20261012",
+      "coordinator": "Coordinator-CX1012A",
+      "state": "reviewing",
+      "started_at": "2026-10-12T17:45:01+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -22152,6 +22164,23 @@
           "report": "# PR 780 independent review return \u2014 2026-10-12\n\nReviewer: Reviewer-RX1012A (actual independent source_reviewer agent), session rev_rx1012a_20261012. Coordinator: Coordinator-CX1012A. Held source-review claim: 0dabb1148ba346e493b90c626603b938.\n\nTask: ACL-1778 / issue 778. PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/780. Exact inspected head: c671a6022618032777cd8151f2ae825d5870bd81. Current main/base supplied and independently resolved locally: e8e59f8376458f2f73089c3f2a8d454837ff033f. Diff: `git diff e8e59f8376458f2f73089c3f2a8d454837ff033f...c671a6022618032777cd8151f2ae825d5870bd81`. Four files: report/loading templates, header/stage-badge tests; two commits ae127e86 and c671a602. Source was not edited by this Reviewer.\n\n## Standards\n\nNo approval is recorded. Read AGENTS.md, delivery.json, WORKFLOW.md, BATCH_INTEGRATION.md, STAGING.md, engineering context, tracker/config.json and the exact pinned Tracker guide. Required source CI remains mandatory under WORKFLOW.md and the v2 batch contract. The Coordinator's fresh GitHub read found `statusCheckRollup: []` on this head. The prior run 38116203727 ended in startup_failure; GitHub refuses its rerun and its check suite is not rerequestable. This is unavailable verification, not a code test failure and not evidence of success. The parallel offline Standards inspection is still in progress and will be appended separately.\n\n## Spec\n\nRead the complete issue body from the Coordinator's fresh `issue-778.json`. The inspected diff implements the requested two-rail layout, framed date control, English ISO-derived labels, preserved control IDs/routes, Adopy tab title, theme tokens and responsive rows. The c671a602 fix routes Update through the common picker close function and sets dialog role, addressing the prior ARIA close concerns in code. Actual browser regression and screenshot evidence have not yet been independently verified in this resumed review. No completed full-scope acceptance or approval is claimed.\n\n## Required next action\n\nReturn source review using the supported `execution review-return` command, retaining the real Worker and original source branch. A fresh implementation claim is required before a Worker changes even the source head to restore workflow triggers. Restore required source CI legitimately, preserve the design acceptance and screenshots, then hand off and acquire fresh independent exact-head/base/scope review. Do not approve or directly merge this ordinary source PR, waive checks, modify the pinned client, or treat local tests as required CI.\n\nThis return releases a CI-blocked source lane while preserving all source work. The offline inspection may continue read-only, but any later approval must bind current head/base and completed required checks.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-12T17:45:01+00:00",
+        "review": {
+          "id": "37b8b284b6bb41269e9e0b8fa15eaacb",
+          "batch_id": "2eaa69c20cbf4d399cee65a6fa070f9c",
+          "pr": 835,
+          "issues": [
+            760
+          ],
+          "actor": "Reviewer-RX1012A",
+          "session": "rev_rx1012a_20261012",
+          "coordinator": "Coordinator-CX1012A",
+          "state": "reviewing",
+          "started_at": "2026-10-12T17:45:01+00:00"
+        }
       }
     ],
     "policy": {
@@ -22433,7 +22462,7 @@
       "id": "2eaa69c20cbf4d399cee65a6fa070f9c",
       "actor": "Coordinator-CX1012A",
       "session": "coord_cx1012a_20261012",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         760
       ],
@@ -22487,7 +22516,7 @@
       "branch": "codex/batch-2eaa69c20cbf4d399cee65a6fa070f9c",
       "intake": "f66f2045826d4ff3ac27ee2e26630baa",
       "started_at": "2026-10-12T17:13:36+00:00",
-      "pr": null,
+      "pr": 835,
       "entered_stage": false,
       "history": []
     },
