@@ -315,8 +315,8 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
                         pixels=[str(p.get("id")) for p in pixels if p.get("id")])
 
 
-def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
-    """Страница и пиксель плана. Возвращает предупреждения; ошибки — `PlanError`."""
+def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
+    """Страница плана: на кабинете и одна определённая. Заметки; ошибки — `PlanError`."""
     notes = []
     if plan.page_id:
         if facts.pages and plan.page_id not in facts.pages:
@@ -327,10 +327,15 @@ def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
     else:
         raise PlanError(f"page_id is empty in the account map and the ad account has "
                         f"{len(facts.pages)} pages; set page_id")
+    return notes
+
+
+def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
+    """Пиксель плана (только сайтовые наборы). Ошибки — `PlanError`."""
     if plan.ad_sets and all(s.instant for s in plan.ad_sets):
         # Instant Form: цель — форма Страницы, пиксель не нужен (ACL-1775).
-        pass
-    elif plan.pixel_id:
+        return
+    if plan.pixel_id:
         if facts.pixels and plan.pixel_id not in facts.pixels:
             raise PlanError("The pixel of the draft is not on this ad account.")
     elif len(facts.pixels) == 1:
@@ -338,6 +343,12 @@ def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
     else:
         raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets; "
                         "the API backend needs exactly one")
+
+
+def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
+    """Страница и пиксель плана. Возвращает предупреждения; ошибки — `PlanError`."""
+    notes = resolve_page(plan, facts)
+    resolve_pixel(plan, facts)
     return notes
 
 
@@ -523,6 +534,8 @@ class Outcome:
     ad_media: dict = field(default_factory=dict)
     #: Пробный запуск: что было бы создано (ни одной записи).
     plan: dict = field(default_factory=dict)
+    #: Pre-flight audit (ACL-1819): вердикты серверных правил; пусто, если аудит не шёл.
+    audit: list = field(default_factory=list)
 
     @property
     def mismatches(self) -> list[dict]:
@@ -993,6 +1006,8 @@ class CampaignCreator:
         """
         self._creatives = None
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
+        differences: list | None = None
+        files: dict | None = None
         try:
             targetings, files = self._prepare(plan, out)
             existing = self._find_campaign(plan)
@@ -1027,7 +1042,27 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Graph API stopped: {exc}", exc.kind
         except GraphError as exc:
             out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
+        self._audit(plan, out, existing=differences, checked=differences is not None, files=files)
         return out
+
+    def _audit(self, plan: CampaignPlan, out: Outcome, *, existing: list | None, checked: bool,
+               files: dict | None) -> None:
+        """Pre-flight audit (ACL-1819): независимые вердикты серверных правил, только чтения.
+
+        Не идёт после остановки Graph (лимит/блокировка): новых чтений там быть не должно.
+        Сбой самого аудита не ломает план: вердиктов просто нет.
+        """
+        if out.stop_kind not in ("", "plan", "graph_error"):
+            return
+        from src.fb_api import preflight_rules as _pf
+
+        try:
+            out.audit = _pf.server_verdicts(self, plan, existing=existing, existing_checked=checked, files=files)
+        except Exception:  # noqa: BLE001 — аудит вспомогательный, план от него не зависит
+            import logging
+
+            logging.getLogger(__name__).exception("pre-flight audit failed for %r", plan.name)
+            out.audit = []
 
     def plan_summary(self, plan: CampaignPlan, targetings: list[dict], files: dict[str, bytes], *,
                      existing: bool = False, existing_differences: list[dict] | None = None) -> dict:
