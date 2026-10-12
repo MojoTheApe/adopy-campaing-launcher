@@ -1023,6 +1023,12 @@ class CampaignCreator:
             existing, why = _fc.match_existing(read, tpl)
             if why:
                 raise PlanError(why + ".")
+            fname = _ft.form_name(tpl)
+            if existing:
+                _fc.clear_pending(plan.act, plan.page_id, fname)
+            elif _fc.is_pending(plan.act, plan.page_id, fname):
+                # Список только что перечитан и формы в нём нет: прошлая запись могла дойти.
+                raise PlanError(_fc.MSG_PENDING + ".")
             self._form_steps[tid] = _fc.FormStep(template_id=tid, template_name=tpl["name"],
                                                  form_name=_ft.form_name(tpl), existing_id=existing)
         if any(step.action == "create" for step in self._form_steps.values()):
@@ -1093,6 +1099,11 @@ class CampaignCreator:
                 except GraphError as exc:
                     raise CreationStopped(_fc.refused_message(exc), created=out.created,
                                           kind="form_refused") from exc
+                except CreationStopped as exc:
+                    if exc.kind == "unknown":
+                        _fc.record_pending(plan.act, plan.page_id, step.form_name)
+                    raise
+                _fc.clear_pending(plan.act, plan.page_id, step.form_name)
                 out.created.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: created")
             self._verify_form(out, plan, tpl, step.form_id)
@@ -1123,7 +1134,7 @@ class CampaignCreator:
                     done_forms.add(tpl["id"])
                     try:
                         _wp.check_form_create(plan.page_id, "POST", f"/{plan.page_id}/{_wp.FORM_EDGE}",
-                                              _ft.form_params(tpl))
+                                              _ft.form_params(tpl), None, plan.page_id)
                     except _wp.WriteRefused as exc:
                         raise PlanError(f"form {tpl['name']!r}: {exc}") from exc
         for ad_set, targeting in zip(plan.ad_sets, targetings):

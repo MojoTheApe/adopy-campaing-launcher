@@ -65,7 +65,7 @@ class FormsMeta(FormMeta):
 
     def write(self, path, params, files=None, filename="", on_ad=False, form_page=""):
         if form_page:
-            wp.check_form_create(form_page, "POST", path, params, files)      # линия политики Python
+            wp.check_form_create(form_page, "POST", path, params, files, PAGE)      # линия политики Python
             self.posts.append((path, dict(params)))
             self.form_posts.append((path, copy.deepcopy(params)))
             mode = self.fail_next.pop("leadgen_forms", None)
@@ -150,14 +150,15 @@ def test_a_valid_template_makes_a_narrow_graph_request():
     assert params["questions"][3]["options"] == [{"key": "q2_option_1", "value": "Low"},
                                                  {"key": "q2_option_2", "value": "High"}]
     assert params["privacy_policy"] == {"url": "https://example.com/privacy", "link_text": "Privacy Policy"}
-    assert params["thank_you_page"] == {"title": "Thank you", "body": "Thank you. We will contact you."}
+    assert params["thank_you_page"] == {"title": "Thank you", "body": "Thank you. We will contact you.",
+                                        "button_type": "NONE"}
     assert "context_card" not in params
-    assert wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", params) == "leadgen_forms"
+    assert wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", params, pinned_page=PAGE) == "leadgen_forms"
     full, _ = ft.validate({**TEMPLATE, "intro": "Hello", "website_url": "https://example.com/x"})
     p2 = ft.form_params(full)
     assert p2["context_card"]["content"] == ["Hello"]
     assert p2["thank_you_page"]["button_type"] == "VIEW_WEBSITE"
-    wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", p2)
+    wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", p2, pinned_page=PAGE)
 
 
 BAD_TEMPLATES = [
@@ -230,6 +231,27 @@ def _p(**over):
     return out
 
 
+def _custom_q(**extra):
+    return {"type": "CUSTOM", "key": "q_custom", "label": "Which product?", **extra}
+
+
+def _custom_with_option_key(key):
+    return _custom_q(options=[{"key": "o1", "value": "Low", key: True}])
+
+
+#: Условия Lead Ads/статус внутри `questions`: вопрос CUSTOM, вариант ответа, строка JSON.
+NESTED_TERMS = []
+for _key in ("tos_accepted", "terms", "status"):
+    NESTED_TERMS += [
+        (f"nested_{_key}_custom_question", _p(questions=[_custom_q(**{_key: True})])),
+        (f"nested_{_key}_option", _p(questions=[_custom_with_option_key(_key)])),
+        (f"nested_{_key}_questions_json_string",
+         {**BASE, "questions": json.dumps([_custom_q(**{_key: True})])}),
+        (f"nested_{_key}_option_json_string",
+         {**BASE, "questions": json.dumps([_custom_with_option_key(_key)])}),
+    ]
+
+
 def _deep(path, key, value):
     out = copy.deepcopy(BASE)
     target = out
@@ -272,6 +294,8 @@ FORM_MATRIX = [
     ("thank_you_site_http", PAGE, "leadgen_forms", _deep(["thank_you_page"], "website_url", "http://x.example.com"), False),
     ("locale_lower", PAGE, "leadgen_forms", _p(locale="en_us"), False),
     ("no_locale", PAGE, "leadgen_forms", _p(locale=None), False),
+    *[(n, PAGE, "leadgen_forms", prm, False) for n, prm in NESTED_TERMS],
+    ("ok_thank_you_no_link_none", PAGE, "leadgen_forms", BASE, True),
     # другие рёбра и чужие Страницы
     ("page_feed", PAGE, "feed", BASE, False),
     ("page_tos_edge", PAGE, "leadgen_tos", BASE, False),
@@ -287,19 +311,38 @@ FORM_IDS = [m[0] for m in FORM_MATRIX]
 def test_form_policy_python(name, page, edge, params, allowed):
     path = f"/{page}/{edge}"
     if allowed:
-        assert wp.check_form_create(PAGE, "POST", path, params) == "leadgen_forms"
+        assert wp.check_form_create(PAGE, "POST", path, params, pinned_page=PAGE) == "leadgen_forms"
     else:
         with pytest.raises(wp.WriteRefused):
-            wp.check_form_create(PAGE, "POST", path, params)
+            wp.check_form_create(PAGE, "POST", path, params, pinned_page=PAGE)
+
+
+@pytest.mark.parametrize("name,params", NESTED_TERMS, ids=[n for n, _ in NESTED_TERMS])
+def test_terms_nested_in_questions_are_refused_by_the_terms_guard_not_by_the_allowlist(name, params):
+    """Сообщение именно про условия: вложенный список ключей не должен маскировать результат."""
+    with pytest.raises(wp.WriteRefused, match="never accepts Lead Ads terms"):
+        wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", params, pinned_page=PAGE)
+
+
+def test_the_page_must_be_the_pinned_page_and_unpinned_means_no_form_writes():
+    path = f"/{PAGE}/leadgen_forms"
+    with pytest.raises(wp.WriteRefused, match="not the Page of the plan"):
+        wp.check_form_create(PAGE, "POST", path, BASE, pinned_page="999999")
+    with pytest.raises(wp.WriteRefused, match="no Page is pinned"):
+        wp.check_form_create(PAGE, "POST", path, BASE)
+    with pytest.raises(wp.WriteRefused, match="no Page is pinned"):
+        wp.check_form_create(PAGE, "POST", path, BASE, pinned_page="")
+    assert wp.policy_for_form_create(PAGE)["page"] == PAGE and wp.policy_for_form_create()["page"] == ""
+    assert wp.policy_for_page(ACT, PAGE)["form_create"]["page"] == PAGE
 
 
 def test_form_policy_never_deletes_never_sends_files_and_needs_the_page():
     with pytest.raises(wp.WriteRefused, match="DELETE"):
-        wp.check_form_create(PAGE, "DELETE", f"/{PAGE}/leadgen_forms", BASE)
+        wp.check_form_create(PAGE, "DELETE", f"/{PAGE}/leadgen_forms", BASE, pinned_page=PAGE)
     with pytest.raises(wp.WriteRefused, match="files"):
-        wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", BASE, {"source": b"x"})
+        wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", BASE, {"source": b"x"}, pinned_page=PAGE)
     with pytest.raises(wp.WriteRefused, match="Page"):
-        wp.check_form_create("", "POST", "//leadgen_forms", BASE)
+        wp.check_form_create("", "POST", "//leadgen_forms", BASE, pinned_page=PAGE)
 
 
 def test_the_two_policy_chains_do_not_overlap():
@@ -309,7 +352,7 @@ def test_the_two_policy_chains_do_not_overlap():
     with pytest.raises(wp.WriteRefused):
         wp.check(ACT, "POST", f"/{ACT}/leadgen_forms", BASE)
     with pytest.raises(wp.WriteRefused):
-        wp.check_form_create(PAGE, "POST", f"/{ACT}/campaigns", {"name": "x · ACL abcdef"})
+        wp.check_form_create(PAGE, "POST", f"/{ACT}/campaigns", {"name": "x · ACL abcdef"}, pinned_page=PAGE)
     assert "tos_accepted" in wp.FORBIDDEN_ANYWHERE and "tos_accepted" not in wp.FORM_KEYS
     assert wp.FORM_KEYS == frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
                                       "question_page_custom_headline", "locale", "follow_up_action_url"})
@@ -318,7 +361,7 @@ def test_the_two_policy_chains_do_not_overlap():
 def test_the_policy_does_not_mutate_the_callers_params():
     params = {**BASE, "questions": json.dumps(BASE["questions"])}
     before = copy.deepcopy(params)
-    wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", params)
+    wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", params, pinned_page=PAGE)
     assert params == before
 
 
@@ -360,7 +403,7 @@ def _node_form_matrix(policy=None) -> dict:
     matrix = [{"name": n, "page": p, "edge": e, "params": prm} for n, p, e, prm, _a in FORM_MATRIX]
     script = (_NODE.replace("TOKENV", json.dumps("EAAB" + "Zx9" * 20)).replace("NAME", json.dumps(name))
               .replace("PAGEV", json.dumps(PAGE)).replace("MATRIX", "(" + json.dumps(matrix) + ")")
-              .replace("HELPER", json.dumps(tc.helper_source(name, policy or wp.policy_for_page(ACT)))))
+              .replace("HELPER", json.dumps(tc.helper_source(name, policy or wp.policy_for_page(ACT, PAGE)))))
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
         fh.write(script)
         path = fh.name
@@ -384,6 +427,19 @@ def test_form_policy_page_helper_matches_python_on_the_whole_matrix():
     assert out["delete"] == {"error": "read_only"}
     assert out["no_form_page"].get("error") == "write_refused"
     assert out["files"].get("error") == "write_refused"
+
+
+def test_the_page_helper_names_the_nested_terms_refusal():
+    out = _node_form_matrix()
+    for name, _params in NESTED_TERMS:
+        assert out[name] == {"error": "write_refused", "why": "form_forbidden"}, name
+
+
+def test_the_page_helper_compares_with_the_pinned_page_not_with_the_callers_claim():
+    other = _node_form_matrix(wp.policy_for_page(ACT, "999999"))
+    assert other["ok"] == {"error": "write_refused", "why": "form_page"} and other["calls"] == 0
+    unpinned = _node_form_matrix(wp.policy_for_page(ACT))
+    assert unpinned["ok"] == {"error": "write_refused", "why": "form_no_page"} and unpinned["calls"] == 0
 
 
 def test_the_page_helper_names_the_terms_refusal_and_only_when_it_has_a_policy():
@@ -415,7 +471,7 @@ def test_the_write_path_runs_both_layers_for_a_form():
             return {"status": 200, "body": {"id": "1"}}
 
     tab = Tab()
-    t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
+    t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT, write_page=PAGE)
     with pytest.raises(wp.WriteRefused):                      # без Страницы плана путь формы - не act_X
         t.write(f"/{PAGE}/leadgen_forms", BASE)
     with pytest.raises(wp.WriteRefused):
@@ -424,6 +480,39 @@ def test_the_write_path_runs_both_layers_for_a_form():
     t.write(f"/{PAGE}/leadgen_forms", BASE, form_page=PAGE)
     sent = [e for e in tab.exprs if ".call(" in e]
     assert len(sent) == 1 and f'"form_page": "{PAGE}"' in sent[0]
+
+
+def test_the_session_pins_the_page_once_and_refuses_form_writes_without_it():
+    tab = type("T", (), {"create_isolated_world": lambda self, n: 7,
+                         "evaluate_in": lambda self, ctx, expr, timeout=60.0: None})()
+    t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
+    assert t.write_page is None
+    with pytest.raises(wp.WriteRefused, match="no Page is pinned"):
+        t.write(f"/{PAGE}/leadgen_forms", BASE, form_page=PAGE)
+    t.pin_page(PAGE)
+    t.pin_page(PAGE)                                          # то же значение - можно
+    with pytest.raises(ValueError, match="different Page"):
+        t.pin_page("999999")
+    with pytest.raises(wp.WriteRefused, match="not the Page of the plan"):
+        t.write("/999999/leadgen_forms", BASE, form_page="999999")
+    assert t._write_policy["form_create"]["page"] == PAGE
+    with pytest.raises(ValueError):
+        tc.InPageGraph(tab, allow_writes=True, write_act=ACT, write_page="abc")
+
+
+def test_a_no_link_thank_you_page_sends_button_type_none_and_the_readback_accepts_it():
+    clean, _ = ft.validate(TEMPLATE)
+    assert ft.form_params(clean)["thank_you_page"]["button_type"] == "NONE"
+    linked, _ = ft.validate({**TEMPLATE, "website_url": "https://example.com/x"})
+    assert ft.form_params(linked)["thank_you_page"]["button_type"] == "VIEW_WEBSITE"
+    row = {"id": "1", "name": ft.form_name(clean), "status": "ACTIVE", "page": {"id": PAGE},
+           "thank_you_page": {"button_type": "NONE"},
+           "questions": {"data": ft.expected_questions(clean)}}
+    assert fc.compare_form(clean, PAGE, row) == []
+    bad = copy.deepcopy(BASE)
+    bad["thank_you_page"]["button_type"] = "VIEW_ON_FACEBOOK"
+    with pytest.raises(wp.WriteRefused, match="button_type"):
+        wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", bad, pinned_page=PAGE)
 
 
 # ───────────────────────── создание: один раз, до креатива, со сверкой ─────────────────────────
@@ -500,6 +589,42 @@ def test_a_timeout_with_nothing_found_stops_and_blocks_any_blind_retry(tmp_path)
     with pytest.raises(g.WritesBlocked):                # клиент не пишет, пока не сверено
         client.post(f"/{PAGE}/leadgen_forms", BASE, form_page=PAGE)
     assert len(meta.form_posts) == 1
+
+
+def test_a_rerun_after_an_unknown_write_waits_instead_of_creating_a_second_form(tmp_path, monkeypatch):
+    tid = _saved()["id"]
+    meta = FormsMeta()
+    meta.fail_next["leadgen_forms"] = "unsent"
+    first, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
+    assert first.stop_kind == "unknown" and len(meta.form_posts) == 1
+    name = ft.form_name(ft.validate(TEMPLATE)[0])
+    assert fc.is_pending(ACT, PAGE, name)
+    # Список всё ещё без формы, прошло мало времени: повторный запуск стоит.
+    again, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
+    assert "may still be appearing at Meta" in again.error and "wait a few minutes" in again.error
+    assert len(meta.form_posts) == 1, "вторая форма не создана"
+    # Check plan говорит то же и ничего не пишет.
+    creator, _c = _creator(meta, writes=False)
+    plan_out = creator.plan_only(cr.plan_from_draft(_tpl_draft(tmp_path, [tid])))
+    assert "may still be appearing at Meta" in plan_out.error and len(meta.form_posts) == 1
+    # Через 15 минут метка устарела: форму можно создать.
+    real = fc.time.time()
+    monkeypatch.setattr(fc.time, "time", lambda: real + fc.PENDING_WINDOW_S + 5)
+    late, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
+    assert late.error == "" and len(meta.form_posts) == 2
+    assert not fc.is_pending(ACT, PAGE, name)
+
+
+def test_the_pending_marker_is_dropped_when_the_form_shows_up(tmp_path):
+    tid = _saved()["id"]
+    meta = FormsMeta()
+    meta.fail_next["leadgen_forms"] = "unsent"
+    _run(meta, _tpl_draft(tmp_path, [tid]))
+    name = ft.form_name(ft.validate(TEMPLATE)[0])
+    assert fc.is_pending(ACT, PAGE, name)
+    seeded = _seeded()
+    out, _ = _run(seeded, _tpl_draft(tmp_path, [tid]))
+    assert out.error == "" and not seeded.form_posts and not fc.is_pending(ACT, PAGE, name)
 
 
 def test_a_form_that_reads_back_wrong_stops_before_the_creative(tmp_path):

@@ -355,6 +355,14 @@ class ApiPublisher:
             return result_dict(Outcome(campaign_name=name),
                                error="The draft's ad account differs from the verified one. Nothing was created.")
         assert self._client is not None and self._facts is not None and self._resolver is not None
+        if not self.dry_run and any(ad.form_template for s_ in plan.ad_sets for ad in s_.ads):
+            # ACL-1776: Страница плана закрепляется на сессию до первой записи формы.
+            try:
+                self._client.transport.pin_page(plan.page_id)
+            except ValueError as exc:
+                return result_dict(Outcome(campaign_name=name),
+                                   error=f"The Page of this draft cannot be used in this run ({exc}). "
+                                         "Nothing was created.")
         self._client.reset_budget(int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, 20, 250)))
 
         def step(text: str) -> None:

@@ -242,6 +242,9 @@ _HELPER_JS = r"""
     if (!F) return 'form_policy';
     const m = new RegExp('^/([0-9]{1,25})/' + F.edge + '$').exec(String(spec.path || ''));
     if (!m) return 'form_path';
+    // Страница закреплена на сессию (WRITE.form_create.page), а не берётся у вызывающего.
+    if (!F.page || !/^[0-9]{1,25}$/.test(String(F.page))) return 'form_no_page';
+    if (m[1] !== String(F.page)) return 'form_page';
     if (String(spec.form_page || '') !== m[1]) return 'form_page';
     if (spec.files && Object.keys(spec.files).length) return 'form_file';
     const params = spec.params || {};
@@ -519,11 +522,13 @@ class InPageGraph:
     def __init__(self, tab: Any, *, name: str | None = None,
                  graph_host: str = "captured", credentials: str = "captured",
                  allow_writes: bool = False, write_act: str | None = None,
+                 write_page: str | None = None,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic):
         # ACL-1761: запись — только явно и только в один проверенный кабинет.
         self.allow_writes = bool(allow_writes)
         self.write_act = None
+        self.write_page: str | None = None
         self._write_policy: dict | None = None
         if self.allow_writes:
             from src.fb_api import write_policy as _wp
@@ -532,7 +537,10 @@ class InPageGraph:
             if not m:
                 raise ValueError("allow_writes needs the verified act_<id>")
             self.write_act = str(write_act)
-            self._write_policy = _wp.policy_for_page(self.write_act)
+            if write_page and not re.fullmatch(r"[0-9]{1,25}", str(write_page)):
+                raise ValueError("write_page must be the numeric Page id of the plan")
+            self.write_page = str(write_page) if write_page else None
+            self._write_policy = _wp.policy_for_page(self.write_act, self.write_page or "")
         if graph_host not in GRAPH_HOST_MODES:
             raise ValueError(f"graph_host must be one of {sorted(GRAPH_HOST_MODES)}")
         if credentials not in CREDENTIAL_MODES:
@@ -586,6 +594,27 @@ class InPageGraph:
             raise stop from exc
 
     # -- отдельный мир и помощник
+    def pin_page(self, page: str) -> None:
+        """Закрепить Страницу плана на сессию (ACL-1776), как `write_act` закреплён на кабинет.
+
+        Один раз: повторно - только то же значение. Помощник переустанавливается
+        в новом мире уже с этой Страницей в политике форм.
+        """
+        if not self.allow_writes:
+            raise ValueError("read-only: writes are not enabled for this page")
+        page = str(page or "")
+        if not re.fullmatch(r"[0-9]{1,25}", page):
+            raise ValueError("the Page to pin must be a numeric Page id")
+        if self.write_page:
+            if self.write_page != page:
+                raise ValueError("a different Page is already pinned for this session")
+            return
+        from src.fb_api import write_policy as _wp
+
+        self.write_page = page
+        self._write_policy = _wp.policy_for_page(self.write_act, page)
+        self._reset_world()
+
     def _reset_world(self) -> None:
         self._ctx = None
         self._injected = False
@@ -778,7 +807,7 @@ class InPageGraph:
 
         if form_page:
             # ACL-1776: цепочка форм - Страница плана; цепочка act_X для такого пути не годится.
-            _wp.check_form_create(form_page, "POST", path, params, files)
+            _wp.check_form_create(form_page, "POST", path, params, files, self.write_page or "")
         else:
             _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},

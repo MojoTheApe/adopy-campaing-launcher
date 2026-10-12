@@ -207,6 +207,9 @@ def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
     if tpl.get("website_url"):
         thanks.update({"button_type": "VIEW_WEBSITE", "button_text": tpl["button_text"],
                        "website_url": tpl["website_url"]})
+    else:
+        # button_type обязателен; без ссылки на сайт - «без кнопки» (Meta: NONE).
+        thanks["button_type"] = "NONE"
     params["thank_you_page"] = thanks
     return params
 

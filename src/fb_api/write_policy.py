@@ -77,7 +77,7 @@ class WriteRefused(ValueError):
     """Запись не прошла политику; к Meta ничего не ушло."""
 
 
-def policy_for_page(act: str) -> dict:
+def policy_for_page(act: str, page: str = "") -> dict:
     """Та же политика для помощника страницы (JSON-сериализуемая)."""
     return {
         "act": act,
@@ -90,7 +90,7 @@ def policy_for_page(act: str) -> dict:
         "dof_features": sorted(DOF_FEATURES),
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
-        "form_create": policy_for_form_create(),
+        "form_create": policy_for_form_create(page),
     }
 
 
@@ -244,7 +244,9 @@ FORM_NESTED: dict[str, list[str]] = {
     "option": ["key", "value"],
 }
 FORM_QUESTION_TYPES = ("CUSTOM", "EMAIL", "FULL_NAME", "PHONE")
-FORM_BUTTON_TYPES = ("VIEW_WEBSITE",)
+#: `NONE` - кнопки нет (нет ссылки на сайт): `button_type` у thank_you_page обязателен
+#: (справочник Meta page/leadgen_forms), для «без ссылки» там предусмотрен `NONE`.
+FORM_BUTTON_TYPES = ("VIEW_WEBSITE", "NONE")
 FORM_CARD_STYLES = ("PARAGRAPH_STYLE",)
 FORM_MAX_QUESTIONS = 15
 FORM_MAX_OPTIONS = 20
@@ -260,10 +262,10 @@ FORM_FORBIDDEN_ANYWHERE = frozenset({"tos_accepted", "leadgen_tos_accepted", "to
                                      "suppress_http_code", "status", "execution_options"})
 
 
-def policy_for_form_create() -> dict:
+def policy_for_form_create(page: str = "") -> dict:
     """Таблица цепочки форм для страницы-помощника (JSON-сериализуемая)."""
     return {
-        "edge": FORM_EDGE, "keys": sorted(FORM_KEYS), "json_keys": sorted(FORM_JSON_KEYS),
+        "edge": FORM_EDGE, "page": str(page or ""), "keys": sorted(FORM_KEYS), "json_keys": sorted(FORM_JSON_KEYS),
         "nested": {k: list(v) for k, v in FORM_NESTED.items()},
         "question_types": list(FORM_QUESTION_TYPES), "button_types": list(FORM_BUTTON_TYPES),
         "card_styles": list(FORM_CARD_STYLES), "max_questions": FORM_MAX_QUESTIONS,
@@ -331,7 +333,7 @@ def _check_form_question(q: Any, i: int) -> None:
 
 
 def check_form_create(page_id: str, method: str, path: str, params: dict | None,
-                      files: dict | None = None) -> str:
+                      files: dict | None = None, pinned_page: str = "") -> str:
     """Проверить создание формы лидов. Возвращает имя ребра; иначе `WriteRefused`.
 
     Только `POST /{page_id}/leadgen_forms` ТОЙ Страницы, что в плане; ключи из
@@ -341,6 +343,10 @@ def check_form_create(page_id: str, method: str, path: str, params: dict | None,
         raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
     if not re.match(FORM_PAGE_RE, str(page_id or "")):
         raise WriteRefused("write refused: the Page of the plan is not set")
+    if not re.match(FORM_PAGE_RE, str(pinned_page or "")):
+        raise WriteRefused("write refused: no Page is pinned for this session; form writes are off")
+    if str(page_id) != str(pinned_page):
+        raise WriteRefused("write refused: the Page is not the Page of the plan")
     if path != f"/{page_id}/{FORM_EDGE}":
         raise WriteRefused(f"write refused: path must be /{page_id}/{FORM_EDGE} (no other Page edges)")
     if files:

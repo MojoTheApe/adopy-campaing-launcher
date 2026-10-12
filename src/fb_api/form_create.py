@@ -10,7 +10,10 @@
 """
 from __future__ import annotations
 
+import json
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from src.fb_api import form_templates as ft
@@ -105,3 +108,58 @@ def refused_message(exc: Exception) -> str:
     if _forms.mentions_terms(text):
         return MSG_TERMS_STOP
     return MSG_REFUSED.format(why=text[:300])
+
+
+# ───────────────── «форма ещё появляется»: метка после неизвестного результата ─────────────────
+#
+# Запись формы оборвалась (`WriteUnknown`), список форм её ещё не показывает. Повторный
+# запуск за это время создал бы вторую форму: помним (кабинет, Страница, имя, время) локально.
+
+PENDING_WINDOW_S = 15 * 60
+MSG_PENDING = ("A form with this name may still be appearing at Meta - wait a few minutes and run again")
+
+
+def pending_path() -> Path:
+    from config.paths import get_local_config_dir
+
+    return Path(get_local_config_dir()) / "pending_forms.json"
+
+
+def _pending_key(act: str, page_id: str, form_name: str) -> str:
+    return "".join((str(act), str(page_id), str(form_name)))
+
+
+def _pending_load() -> dict[str, float]:
+    try:
+        data = json.loads(pending_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {str(k): float(v) for k, v in data.items()
+            if isinstance(data, dict) and isinstance(v, (int, float))} if isinstance(data, dict) else {}
+
+
+def _pending_save(data: dict[str, float]) -> None:
+    try:
+        path = pending_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass  # метка - подстраховка; без неё работа не ломается
+
+
+def record_pending(act: str, page_id: str, form_name: str) -> None:
+    now = time.time()
+    data = {k: v for k, v in _pending_load().items() if now - v < PENDING_WINDOW_S}
+    data[_pending_key(act, page_id, form_name)] = now
+    _pending_save(data)
+
+
+def is_pending(act: str, page_id: str, form_name: str) -> bool:
+    ts = _pending_load().get(_pending_key(act, page_id, form_name))
+    return ts is not None and 0 <= time.time() - ts < PENDING_WINDOW_S
+
+
+def clear_pending(act: str, page_id: str, form_name: str) -> None:
+    data = _pending_load()
+    if data.pop(_pending_key(act, page_id, form_name), None) is not None:
+        _pending_save(data)
