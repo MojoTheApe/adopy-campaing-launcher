@@ -7238,20 +7238,6 @@
   },
   "execution": {
     "claims": {
-      "771": {
-        "actor": "Worker-S1771A",
-        "session": "run_s1771a_1012",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1771-targeting-resolver",
-        "worktree": "C:\\acl-1771-resolver",
-        "id": "545e3a5ccfc44faeb92b63b377806ca2",
-        "issue": 771,
-        "state": "handoff",
-        "started_at": "2026-10-12T13:28:49+00:00",
-        "from_status": "status:idea",
-        "pr": 832,
-        "report": "PR #832 (head 81e2a23), stacked on #821. Resolver: confirmed cache, adinterestvalid exact, adinterest search paged, adTargetingCategory classes paged, split on or. No auto-pick of near matches; Confirm/Clear via /targeting-resolver endpoints and Check plan. Pre-flight rules interests_resolve and interests_confirmed. Tests: 24 new, 335 affected passed. Mutations: 4 of 4 caught."
-      },
       "768": {
         "actor": "Worker-S1768A",
         "session": "run_s1768a_1012",
@@ -11240,9 +11226,25 @@
             "session": "run_s1771a_1012"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1771A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1771A",
+          "session": "run_s1771a_1012",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1771-targeting-resolver",
+          "worktree": "C:\\acl-1771-resolver",
+          "id": "545e3a5ccfc44faeb92b63b377806ca2",
+          "issue": 771,
+          "state": "handoff",
+          "started_at": "2026-10-12T13:28:49+00:00",
+          "from_status": "status:idea",
+          "pr": 832,
+          "report": "PR #832 (head 81e2a23), stacked on #821. Resolver: confirmed cache, adinterestvalid exact, adinterest search paged, adTargetingCategory classes paged, split on or. No auto-pick of near matches; Confirm/Clear via /targeting-resolver endpoints and Check plan. Pre-flight rules interests_resolve and interests_confirmed. Tests: 24 new, 335 affected passed. Mutations: 4 of 4 caught."
+        },
+        "pr": 832,
+        "queued_at": "2026-10-12T13:51:30+00:00"
       },
       "768": {
         "implementers": [
@@ -14636,7 +14638,8 @@
       826,
       827,
       767,
-      776
+      776,
+      771
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21944,6 +21947,13 @@
         "issue": 768,
         "claim": "6fa1bf3f55094975807223f38f4aebd3",
         "actor": "Worker-S1768A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-12T13:51:30+00:00",
+        "issue": 771,
+        "pr": 832,
+        "actor": "Worker-S1771A"
       }
     ],
     "policy": {
