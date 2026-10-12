@@ -5414,6 +5414,84 @@ async def warm_close(request: Request) -> JSONResponse:
     body = await _campaign_commands_body(request)
     data, code = await asyncio.to_thread(warm_api.close_profiles, body.get("accounts"),
                                          body.get("confirm") is True)
+
+
+# ACL-1822: страница Rules. Локальные чтения и записи в файлы правил; в Meta пишут только
+# человеческие команды (`/campaign-commands/*`).
+@app.get("/rules/overview")
+async def rules_overview(request: Request) -> JSONResponse:
+    from src.web import rules_api, rules_runtime
+
+    def run():
+        return rules_api.overview(request.query_params.get("owner", ""),
+                                  engine_status=lambda: rules_runtime.get_engine().status())
+    data, code = await asyncio.to_thread(run)
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/rules/activity")
+async def rules_activity(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    q = request.query_params
+    data, code = await asyncio.to_thread(rules_api.activity, q.get("owner", ""), q.get("limit"))
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/rules/scope-options")
+async def rules_scope_options(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.scope_options, request.query_params.get("account", ""))
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/rules/cells")
+async def rules_cells(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    q = request.query_params
+    data, code = await asyncio.to_thread(rules_api.cells, q.get("account", ""), q.get("owner", ""))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/save")
+async def rules_save(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.save_rule, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/mode")
+async def rules_mode(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.set_rule_mode, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/duplicate")
+async def rules_duplicate(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.duplicate_rule, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/dismiss")
+async def rules_dismiss(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.dismiss_proposal, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/action-result")
+async def rules_action_result(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.record_action_result, await _campaign_commands_body(request))
     return JSONResponse(data, status_code=code)
 
 
