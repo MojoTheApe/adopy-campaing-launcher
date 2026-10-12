@@ -424,3 +424,89 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     assert "WinError 10061" in page.locator('tr[data-msg="acct:Fresh:read"] .hc-rm-raw').inner_text()
     page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
     assert page.errors == []
+
+
+# ───────────────────────── выравнивание шапки таблицы страны (ACL-1800) ─────────────────────────
+
+def test_the_header_area_lines_up_with_the_grid_and_the_page_does_not_overflow(page):
+    import os
+    from pathlib import Path
+
+    left = page.evaluate("""() => {
+      const L = sel => { const e = document.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().left * 10) / 10 : null; };
+      const textLeft = sel => { const e = document.querySelector(sel); const r = document.createRange(); r.selectNodeContents(e); return Math.round(r.getBoundingClientRect().left * 10) / 10; };
+      return {frame: L('[data-hc=frame]'), toolbar: L('.hc-toolbar'), tabs: textLeft('.hc-tabs .hc-tab'), title: textLeft('.hc-title'),
+              count: textLeft('[data-hc=count]'), batch: L('.hc-batchbar'), hint: textLeft('.hc-hint-line span'), foot: L('[data-hc=foot]'),
+              section: L('.amap-campaigns'), accounts: L('table.amap-grid'), doc: document.documentElement.scrollWidth, win: innerWidth,
+              checkbox: L('[data-hc=table] tbody input[type=checkbox]')};
+    }""")
+    for k in ("toolbar", "tabs", "title", "count", "batch", "hint", "foot"):
+        assert abs(left[k] - left["frame"]) <= 2, (k, left)          # весь блок начинается там же, где сетка
+    assert left["frame"] - left["section"] >= 8                       # и это — внутренний отступ, а не край рамки
+    assert left["doc"] <= left["win"]                                 # страница не ползёт вширь при 1280
+    assert page.evaluate("getComputedStyle(document.querySelector('[data-hc=table] thead th')).position") == "sticky"
+    page.select_option("[data-hc=preset]", "all")
+    assert page.evaluate("const s = document.querySelector('[data-hc=scroll]'); s.scrollWidth > s.clientWidth")   # общая горизонтальная прокрутка на месте
+    shots = os.environ.get("ACL_SHOTS_DIR", "")
+    if shots:
+        page.select_option("[data-hc=preset]", "optimization")
+        for theme in ("light", "dark"):
+            page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
+            page.locator(".amap").screenshot(path=str(Path(shots) / f"header-aligned-{theme}.png"))
+        page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
+
+
+# ───────────────────────── прокрутка вправо: никаких наложений посередине (ACL-1800) ─────────────────────────
+
+def _rgba(css):
+    import re
+    nums = [float(x) for x in re.findall(r"[\d.]+", css)]
+    return (nums + [1.0])[:4] if len(nums) == 3 else nums[:4]
+
+
+def test_scrolled_right_there_is_no_overlay_and_only_pinned_cells_are_sticky(page):
+    import os
+    from io import BytesIO
+    from pathlib import Path
+
+    from PIL import Image
+
+    shots = os.environ.get("ACL_SHOTS_DIR", "")
+    page.select_option("[data-hc=preset]", "all")
+    page.mouse.move(2, 2)
+    for theme in ("light", "dark"):
+        page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
+        page.evaluate("const s = document.querySelector('[data-hc=scroll]'); s.scrollLeft = s.scrollWidth")
+        page.wait_for_timeout(250)
+        info = page.evaluate("""() => {
+          const sc = document.querySelector('[data-hc=scroll]'), fr = document.querySelector('[data-hc=frame]');
+          const allowedPinned = e => e.matches('thead th, td.p0, td.p1, td.p2, td.p3');
+          const sticky = [...sc.querySelectorAll('*')].filter(e => ['sticky', 'absolute', 'fixed'].includes(getComputedStyle(e).position));
+          const other = sticky.filter(e => !allowedPinned(e) && !e.matches('.hc-band-in, .hc-rm-raw, .hc-resize, thead th > span'));
+          const partial = sticky.filter(e => e.matches('.hc-band-in, .hc-rm-raw')).filter(e => e.getBoundingClientRect().width < sc.clientWidth - 2);
+          const pinnedBg = [...sc.querySelectorAll('td.p0, td.p1, td.p2, td.p3, thead th.p0, thead th.p1, thead th.p2, thead th.p3, th.hc-pin-top')].map(e => getComputedStyle(e).backgroundColor);
+          const cs = (pe) => { const c = getComputedStyle(fr, pe); return {content: c.content, position: c.position, events: c.pointerEvents, right: c.right}; };
+          const pin = parseFloat(getComputedStyle(document.querySelector('.hc-scoped')).getPropertyValue('--hc-pin-w'));
+          const row = document.querySelector('tr[data-key="campaign:1"]').getBoundingClientRect(), frr = fr.getBoundingClientRect();
+          return {other: other.map(e => e.className || e.tagName), partial: partial.map(e => e.className), pinnedBg, before: cs('::before'), after: cs('::after'),
+                  moreLeft: fr.dataset.moreLeft, moreRight: fr.dataset.moreRight, x: frr.left + pin + 7, y: row.top + 3};
+        }""")
+        assert info["other"] == [], info["other"]                      # sticky/absolute — только закреплённые ячейки, ручка и полосы на всю ширину
+        assert info["partial"] == []                                   # никакой sticky-элемент не занимает часть области прокрутки
+        assert info["pinnedBg"] and all(_rgba(c)[3] == 1.0 for c in info["pinnedBg"]), info["pinnedBg"]   # закреплённый блок непрозрачный
+        assert info["before"]["content"] in ("none", "normal")         # левой тени-полосы больше нет
+        assert info["moreLeft"] == "1" and info["moreRight"] == "0"    # в конце: слева есть что прятать, справа — нет
+        if info["after"]["content"] not in ("none", "normal"):
+            assert info["after"]["events"] == "none" and info["after"]["right"] == "0px"
+        # пиксели под бывшей полосой — обычный фон ячейки
+        cell_bg = page.evaluate("([x, y]) => { const t = document.elementFromPoint(x, y); const td = t && t.closest('td'); return td ? getComputedStyle(td).backgroundColor : ''; }",
+                                [info["x"], info["y"]])
+        assert cell_bg
+        want = _rgba(cell_bg)[:3]
+        def pixel(dx):
+            png = page.screenshot(clip={"x": info["x"] + dx, "y": info["y"], "width": 1, "height": 1})
+            return Image.open(BytesIO(png)).convert("RGB").getpixel((0, 0))
+        assert any(all(abs(a - b) <= 2 for a, b in zip(pixel(dx), want)) for dx in (0, 3, 5)), (theme, want, pixel(0))
+        if shots:
+            page.locator(".amap-campaigns").screenshot(path=str(Path(shots) / f"scrolled-right-{theme}.png"))
+    page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
