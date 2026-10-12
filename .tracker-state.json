@@ -7239,15 +7239,15 @@
   "execution": {
     "claims": {
       "774": {
-        "actor": "Worker-S1774A",
-        "session": "S1774A",
-        "coordinator": "Coordinator-C0930A",
+        "actor": "Worker-WX1012A",
+        "session": "work_wx1012a_20261012",
+        "coordinator": "Coordinator-CX1012A",
         "branch": "codex/acl-1774-texts-vertical",
         "worktree": "C:\\wk-1774",
-        "id": "934f194fbc01450d9b688377a0746d8c",
+        "id": "8655e3ed36cb4151948eba056bb09db3",
         "issue": 774,
         "state": "implementing",
-        "started_at": "2026-10-12T14:53:58+00:00",
+        "started_at": "2026-10-12T16:49:09+00:00",
         "from_status": "status:idea"
       }
     },
@@ -11278,11 +11278,15 @@
           {
             "actor": "Worker-S1774A",
             "session": "S1774A"
+          },
+          {
+            "actor": "Worker-WX1012A",
+            "session": "work_wx1012a_20261012"
           }
         ],
         "state": "implementing",
-        "worker": "Worker-S1774A",
-        "coordinator": "Coordinator-C0930A"
+        "worker": "Worker-WX1012A",
+        "coordinator": "Coordinator-CX1012A"
       }
     },
     "actors": {
@@ -12268,6 +12272,10 @@
       },
       "Worker-S1774A": {
         "session": "S1774A",
+        "role": "Worker"
+      },
+      "Worker-WX1012A": {
+        "session": "work_wx1012a_20261012",
         "role": "Worker"
       }
     },
@@ -22000,6 +22008,25 @@
         "issue": 768,
         "pr": 833,
         "actor": "Worker-S1768A"
+      },
+      {
+        "event": "takeover",
+        "at": "2026-10-12T16:49:09+00:00",
+        "issue": 774,
+        "previous": {
+          "actor": "Worker-S1774A",
+          "session": "S1774A",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1774-texts-vertical",
+          "worktree": "C:\\wk-1774",
+          "id": "934f194fbc01450d9b688377a0746d8c",
+          "issue": 774,
+          "state": "implementing",
+          "started_at": "2026-10-12T14:53:58+00:00",
+          "from_status": "status:idea"
+        },
+        "claim": "8655e3ed36cb4151948eba056bb09db3",
+        "reason": "Owner requested continuation after previous Claude Worker exhausted tokens and stopped; existing work inspected and preserved in a binary patch and SHA256 manifest."
       }
     ],
     "policy": {
