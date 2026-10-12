@@ -136,10 +136,17 @@ def _atomic_write_json(path: Path, data: Any) -> None:
         if path.is_file():
             # последняя целая копия - на случай, если сам файл когда-нибудь окажется битым
             bak = path.with_name(path.name + ".bak")
+            bak_tmp = path.with_name(f".{path.name}.bak.{uuid.uuid4().hex}.tmp")
             try:
-                bak.write_bytes(path.read_bytes())
+                with open(bak_tmp, "wb") as bfh:
+                    bfh.write(path.read_bytes())
+                    bfh.flush()
+                    os.fsync(bfh.fileno())
+                os.replace(bak_tmp, bak)
             except OSError:
                 pass
+            finally:
+                bak_tmp.unlink(missing_ok=True)
         for attempt in range(10):
             try:
                 os.replace(temp, path)
@@ -152,8 +159,10 @@ def _atomic_write_json(path: Path, data: Any) -> None:
         temp.unlink(missing_ok=True)
 
 
-def _read_json(path: Path, default: Callable[[], dict]) -> dict:
-    """Читает JSON-объект; битый файл откладывается в сторону, берётся .bak, иначе пустой."""
+def _read_json_src(path: Path, default: Callable[[], dict]) -> tuple[dict, bool]:
+    """Читает JSON-объект. Второе значение True, если файл битый/нечитаемый и взята
+    копия .bak или пустой дефолт. Битый файл откладывается в сторону, а не удаляется."""
+    exists = path.is_file()
     for candidate in (path, path.with_name(path.name + ".bak")):
         if not candidate.is_file():
             continue
@@ -162,12 +171,15 @@ def _read_json(path: Path, default: Callable[[], dict]) -> dict:
         except (OSError, ValueError):
             data = None
         if isinstance(data, dict):
-            return data
+            return data, candidate != path
         if candidate == path:
-            # не затираем улику: битый файл переезжает, а не удаляется
             with contextlib.suppress(OSError):
                 os.replace(path, path.with_name(f"{path.name}.corrupt-{int(time.time())}"))
-    return default()
+    return default(), exists
+
+
+def _read_json(path: Path, default: Callable[[], dict]) -> dict:
+    return _read_json_src(path, default)[0]
 
 
 def _repair_tail(path: Path) -> bool:
@@ -255,10 +267,40 @@ class RulesStore:
 
     # -- правила --
 
-    def _load(self) -> dict:
-        data = _read_json(self._p(RULES_FILE), lambda: {})
+    def _read_rules(self) -> tuple[dict, bool]:
+        data, fallback = _read_json_src(self._p(RULES_FILE), lambda: {})
         rules = data.get("rules")
-        return {"rules": rules if isinstance(rules, dict) else {}}
+        return {"rules": rules if isinstance(rules, dict) else {}}, fallback
+
+    def _normalise(self, data: dict, restored: bool) -> list[dict]:
+        """Automatic без действующего гранта - это Suggest. После восстановления из
+        копии все гранты снимаются: старая копия не должна заново включать автоматику."""
+        notes: list[dict] = []
+        for rule in data["rules"].values():
+            if restored and (rule.get("grant") or rule.get("mode") == "automatic"):
+                reason = "restored_from_backup"
+            elif rule.get("mode") == "automatic" and self.active_grant(rule) is None:
+                reason = "automatic without a valid grant on load"
+            else:
+                continue
+            self._drop_grant(rule, reason)
+            notes.append({"kind": "grant_dropped", "state": "system", "rule_id": rule.get("id"),
+                          "reason": reason})
+        return notes
+
+    def _load(self) -> dict:
+        data, fallback = self._read_rules()
+        if not fallback and not any(r.get("mode") == "automatic" and self.active_grant(r) is None
+                                    for r in data["rules"].values()):
+            return data
+        with self.lock():
+            data, fallback = self._read_rules()
+            notes = self._normalise(data, fallback)
+            if notes or fallback:
+                self._save(data)
+                for note in notes:
+                    self._append(ACTIONS_FILE, note)
+        return data
 
     def _save(self, data: dict) -> None:
         _atomic_write_json(self._p(RULES_FILE), data)
@@ -435,7 +477,12 @@ class RulesStore:
     # -- настройки и kill switch --
 
     def load_settings(self) -> dict:
-        raw = _read_json(self._p(SETTINGS_FILE), lambda: {})
+        raw, fallback = _read_json_src(self._p(SETTINGS_FILE), lambda: {})
+        if fallback:
+            # копия .bak отстаёт на одну запись и могла бы включить автоматику заново
+            raw = dict(raw, automatic_enabled=False)
+            with self.lock():
+                _atomic_write_json(self._p(SETTINGS_FILE), {**raw, "changed_at": self._now()})
         out = copy.deepcopy(DEFAULT_SETTINGS)
         for k, v in raw.items():
             out[k] = _merge(out.get(k), v) if k in out else v

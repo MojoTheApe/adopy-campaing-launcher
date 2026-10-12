@@ -203,6 +203,9 @@ def test_grant_requires_blockers_cleared(st):
     {"conditions": [{"metric": "spend", "cmp": ">=", "value": 5, "unit": "t_multiple"}]},
     {"action": {"level": "campaign"}},
     {"caps": {"per_account_day": 1}},
+    {"target": {"override": {"value": 30, "currency": "USD"}}},
+    {"evidence": {"min_sample": 4}},
+    {"strategy": 2},
 ])
 def test_grant_revoked_on_guarded_edit(st, changes):
     r = _auto_rule(st)
@@ -216,8 +219,6 @@ def test_grant_revoked_on_guarded_edit(st, changes):
 
 @pytest.mark.parametrize("changes", [
     {"name": "Other name"}, {"priority": 3},
-    {"target": {"override": {"value": 30, "currency": "USD"}}},
-    {"evidence": {"min_sample": 4}},
 ])
 def test_grant_survives_unguarded_edit(st, changes):
     r = _auto_rule(st)
@@ -378,3 +379,78 @@ def test_concurrent_processes_append_under_lock(tmp_path):
     ids = [r["action_id"] for r in s.actions()]
     assert len(ids) == 45 and len(set(ids)) == 45
     assert len(s.list_rules()) == 9  # ни одна запись rules.json не потерялась
+
+
+# --- ревью #817: восстановление не включает автоматику заново --------------------
+
+def test_restore_from_bak_never_rearms_grant(st):
+    r = _auto_rule(st)
+    st.revoke_grant(r["id"], by="dan")           # .bak теперь хранит версию с грантом
+    (st.directory / "rules.json").write_text("{torn", "utf-8")
+    got = RulesStore(st.directory).get_rule(r["id"])
+    assert got["mode"] == "suggest" and got["grant"] is None
+    assert RulesStore.active_grant(got) is None
+
+
+def test_restore_from_bak_strips_grant_and_persists(st):
+    r = _auto_rule(st)
+    st.edit_rule(r["id"], {"priority": 2})        # грант цел, .bak тоже с грантом
+    (st.directory / "rules.json").write_text("{torn", "utf-8")
+    got = RulesStore(st.directory).get_rule(r["id"])
+    assert got["mode"] == "suggest" and got["grant"] is None
+    assert got["grant_revoked"]["reason"] == "restored_from_backup"
+    on_disk = json.loads((st.directory / "rules.json").read_text("utf-8"))
+    assert on_disk["rules"][r["id"]]["grant"] is None
+    assert on_disk["rules"][r["id"]]["mode"] == "suggest"
+
+
+def test_settings_fallback_forces_automatic_off_and_persists(tmp_path):
+    s = RulesStore(tmp_path)
+    s.set_automatic_enabled(True, by="dan")
+    s.set_automatic_enabled(False, by="dan")
+    s.set_automatic_enabled(True, by="dan")
+    s.set_automatic_enabled(True, by="dan")       # .bak хранит True
+    (tmp_path / "rules_settings.json").write_text("{torn", "utf-8")
+    assert RulesStore(tmp_path).load_settings()["automatic_enabled"] is False
+    saved = json.loads((tmp_path / "rules_settings.json").read_text("utf-8"))
+    assert saved["automatic_enabled"] is False
+    assert RulesStore(tmp_path).load_settings()["automatic_enabled"] is False
+
+
+def test_settings_bak_true_is_ignored_when_main_missing_content(tmp_path):
+    s = RulesStore(tmp_path)
+    s.set_automatic_enabled(True, by="dan")
+    s.set_automatic_enabled(True, by="dan")       # .bak = True
+    (tmp_path / "rules_settings.json").write_bytes(bytes([0, 0]))
+    assert RulesStore(tmp_path).load_settings()["automatic_enabled"] is False
+
+
+def test_load_normalises_automatic_without_grant(st):
+    r = _auto_rule(st)
+    path = st.directory / "rules.json"
+    data = json.loads(path.read_text("utf-8"))
+    data["rules"][r["id"]]["grant"] = None        # mode остался automatic
+    path.write_text(json.dumps(data), "utf-8")
+    got = st.get_rule(r["id"])
+    assert got["mode"] == "suggest"
+    assert json.loads(path.read_text("utf-8"))["rules"][r["id"]]["mode"] == "suggest"
+    assert any(a.get("kind") == "grant_dropped" and a["rule_id"] == r["id"] for a in st.actions())
+
+
+def test_load_normalises_automatic_with_hash_mismatch(st):
+    r = _auto_rule(st)
+    path = st.directory / "rules.json"
+    data = json.loads(path.read_text("utf-8"))
+    data["rules"][r["id"]]["versions"][0]["target"]["override"] = {"value": 9, "currency": "USD"}
+    path.write_text(json.dumps(data), "utf-8")
+    got = st.get_rule(r["id"])
+    assert got["mode"] == "suggest" and got["grant"] is None
+
+
+def test_bak_is_written_atomically(st, monkeypatch):
+    r = st.create_rule("Dan", {"name": "x"})
+    seen = []
+    real = store_mod.os.replace
+    monkeypatch.setattr(store_mod.os, "replace", lambda a, b: (seen.append(Path(b).name), real(a, b))[1])
+    st.edit_rule(r["id"], {"priority": 1})
+    assert "rules.json.bak" in seen and "rules.json" in seen

@@ -32,7 +32,9 @@ UNITS = ("t_multiple", "abs", "pct")
 CMPS = (">=", ">", "<=", "<", "==")
 TARGET_SOURCES = ("goal_asset", "goal", "override")
 #: Части, правка которых аннулирует грант Automatic (дизайн 5.8).
-GRANT_PARTS = ("scope", "conditions", "action", "caps")
+#: Консервативно: цель T, доказательства и стратегия тоже входят - диалог гранта
+#: показывает T, поэтому его смена должна спросить владельца заново.
+GRANT_PARTS = ("strategy", "scope", "target", "evidence", "conditions", "action", "caps")
 NO_TARGET = "No target"
 
 DEFAULT_CAPS = {
