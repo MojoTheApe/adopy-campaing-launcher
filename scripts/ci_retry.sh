@@ -6,6 +6,11 @@
 # Перед каждым повтором выполняется CI_RETRY_CLEANUP (если задана): снять замки apt,
 # убрать недокачанные списки. Если все попытки провалились, выходим с 1 и внятным текстом.
 set -u
+# нужен именно coreutils timeout (на Windows в PATH бывает системный timeout.exe)
+if ! command -v timeout >/dev/null 2>&1 || ! timeout --version 2>&1 | grep -qi coreutils; then
+  echo "::error::ci_retry: coreutils 'timeout' not found; refusing to run unbounded"
+  exit 2
+fi
 attempts=$1; per_try=$2; pause=$3; shift 3
 [ "${1:-}" = "--" ] && shift
 
@@ -29,7 +34,7 @@ for n in $(seq 1 "$attempts"); do
   if [ "$n" -lt "$attempts" ]; then
     if [ -n "${CI_RETRY_CLEANUP:-}" ]; then
       echo "ci_retry: cleanup before retry"
-      bash -c "$CI_RETRY_CLEANUP" || true
+      timeout 60 bash -c "$CI_RETRY_CLEANUP" || true
     fi
     sleep "$pause"
   fi
