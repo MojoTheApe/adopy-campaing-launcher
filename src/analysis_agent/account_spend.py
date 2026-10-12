@@ -598,9 +598,13 @@ def start_read(
             with browser_operation.reading(), _lock_for(account):
                 done = fn(account, date_from, date_to)
         except Exception as exc:  # noqa: BLE001 — падение чтения не должно ронять сервер
+            from src.fb_api import mlx_session as _mlx
+
+            # ACL-1826: вход в прокси (ERR_INVALID_AUTH_CREDENTIALS) читается одной фразой.
+            text, code = _mlx.humanize(exc, "", account)
             done = SpendReading(
                 account=account, date_from=date_from, date_to=date_to,
-                state="failed", error=f"{type(exc).__name__}: {exc}",
+                state="failed", error=text or f"{type(exc).__name__}: {exc}", error_code=code,
             )
         done.started_at = reading.started_at
         done.finished_at = _now()
@@ -879,6 +883,12 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
         _record("spend_profile_started", False, time.monotonic() - began,
                 {"account": account_label, "slot_wait_s": round(waited_s, 1),
                  "error": type(exc).__name__})
+        # ACL-1826: 403 «restricted permission» на слоте B / вход в прокси — понятный текст и код.
+        from src.fb_api import mlx_session as _mlx
+
+        text, code = _mlx.humanize(exc, getattr(entry, "multilogin_instance", "") or "A", account_label)
+        if code:
+            raise ProfileNotAttachable(text, code=code) from exc
         raise ProfileNotAttachable(
             f"{account_label}: the profile is closed and could not be started with automation: {exc}"
         ) from exc
@@ -1374,6 +1384,11 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
         conn = rpa_browser.get_browser_provider("multilogin_attach").open(
             entry, who, allow_missing_dir=True, allow_restart=False)
     except Exception as exc:  # noqa: BLE001
+        from src.fb_api import mlx_session as _mlx
+
+        text, code = _mlx.humanize(exc, instance, who)   # ACL-1826
+        if code:
+            return False, CodedMessage(text, code)
         return False, f"{type(exc).__name__}: {exc}"
     try:
         # Окно остаётся человеку: отключаемся, не закрывая браузер.
