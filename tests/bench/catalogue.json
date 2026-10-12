@@ -3,6 +3,13 @@
   "harvested": "Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).",
   "steps": [
     {
+      "step": "Graph reconciliation after CDP session detachment",
+      "robot": "PageTab / InPageGraph local helper recovery before the next Graph read (ACL-1836)",
+      "layouts": [
+        {"layout": "Transport trace: paused campaign/ad set, uncertain video upload, lost readback session", "seen": ["anonymized 2026-10-12 incident, ACL-1836"], "fixture": "fb_api_session_lost_2026_10_12.json", "fragment": null, "test": "tests/test_acl1836_session_recovery.py", "expected": "one reattach to the same verified owned target; no replay of sent calls; unavailable/changed target becomes a typed stop", "status": "pass"}
+      ]
+    },
+    {
       "step": "objective",
       "robot": "Create -> objective dialog -> Leads (`_create_took`, `_objective_missing_reason`, simple_create.ensure_leads_objective)",
       "layouts": [

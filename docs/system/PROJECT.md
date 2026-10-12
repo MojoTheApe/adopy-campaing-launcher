@@ -24,6 +24,15 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   detached update helper. `src/web/release_updates.py` offers verified release updates.
 - `config/paths.py`: machine-specific paths. User configuration, account maps and
   credentials belong outside Git, normally under `%LOCALAPPDATA%/ACL`.
+- `src/fb_api`: in-profile Graph transport keeps tokens inside an isolated page
+  world. ACL-1836 permits one recovery of a detached CDP session on the same owned
+  target and existing browser connection. Target and main-frame location must
+  match the navigated Ads Manager account; subsequent reads recheck that location.
+  Local helper setup can retry, but a sent Graph request is never replayed.
+  Missing/changed targets, repeat detachment and unavailable transport stop with
+  `GraphStop`, so creator reconciliation can retain already-created object details.
+  Recovery does not open a replacement tab, restart the profile or reload for a
+  missing token. Pending creator source integration and live delivery remain separate.
 
 Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../../PRODUCT.md),
 [design guidance](../../DESIGN.md) and existing specs for subsystem details.

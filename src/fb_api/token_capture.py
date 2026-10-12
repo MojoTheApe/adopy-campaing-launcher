@@ -39,7 +39,9 @@ import secrets
 import time
 from typing import Any, Callable
 
-from src.fb_api.cdp import CdpError, CdpTimeout, PageError, StaleContextError
+from src.fb_api.cdp import (CdpError, CdpTimeout, PageError, StaleContextError,
+                            SessionLostError, PageIdentityError)
+from src.fb_api.graph import Checkpoint, GraphStop, LoggedOut, PageFailed
 from src.fb_api.telemetry import strip_tokens
 
 ADS_MANAGER_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act}"
@@ -255,6 +257,9 @@ class InPageGraph:
         self._clock = clock
         self._ctx: int | None = None
         self._injected = False
+        self._expected_url = ""
+        self._session_recovered = False
+        self._connection_stop: GraphStop | None = None
 
     # -- отдельный мир и помощник
     def _reset_world(self) -> None:
@@ -274,21 +279,47 @@ class InPageGraph:
     def _eval_helper(self, tail: str, *, timeout: float = 60.0) -> Any:
         """Не-Meta вызов помощника (`state`/`probe`/`retire`): можно повторить.
 
-        Повтор ТОЛЬКО если отдельный мир исчез (`StaleContextError`): это не
-        запрос к Meta, пересоздать мир и попробовать ещё раз безопасно. Прочие
-        ошибки (`PageError`/`CdpError`/`CdpTimeout`) поднимаются как есть — к
-        Graph они не относятся, повторять нечего.
+        Retry local work once after a stale world or a detached session. A
+        detached session must reattach to the same verified owned target first.
+        Graph calls never pass through this retry boundary.
         """
         expr = f"globalThis[{json.dumps(self.name)}]{tail}"
+        if self._connection_stop is not None:
+            raise self._connection_stop
         for attempt in (0, 1):
-            ctx = self._ensure()
             try:
+                if self._session_recovered:
+                    self.tab.verify_url(self._expected_url)
+                ctx = self._ensure()
                 return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+            except SessionLostError as exc:
+                self._reset_world()
+                if attempt:
+                    raise self._stop_connection(exc) from exc
+                try:
+                    self.tab.recover_session(self._expected_url)
+                    self._session_recovered = True
+                except (CdpError, OSError) as recovery:
+                    raise self._stop_connection(recovery) from recovery
+            except PageIdentityError as exc:
+                raise self._stop_connection(exc) from exc
             except StaleContextError:
                 self._reset_world()
                 if attempt:
                     raise
         raise CdpError("isolated world evaluation failed")  # недостижимо
+
+    def _stop_connection(self, exc: BaseException) -> GraphStop:
+        kind = getattr(exc, "kind", "")
+        if kind == "checkpoint":
+            stop = Checkpoint("the profile is on a Facebook checkpoint")
+        elif kind == "login":
+            stop = LoggedOut("the profile is logged out of Facebook")
+        else:
+            stop = PageFailed("connection to the owned Ads Manager tab was lost or its account changed; "
+                              "recovery stopped without replaying the interrupted request")
+        self._connection_stop = stop
+        return stop
 
     def _ready_for_call(self, *, timeout: float = 10.0) -> None:
         """Приготовить отдельный мир к Graph-вызову: помощник на месте, мир живой.
@@ -296,7 +327,17 @@ class InPageGraph:
         Повторы допустимы — сюда ничего к Meta не уходит. `.state()` заодно
         подтверждает, что контекст отвечает (иначе `_eval_helper` его пересоздаст).
         """
-        self._eval_helper(".state()", timeout=timeout)
+        try:
+            state = self._eval_helper(".state()", timeout=timeout)
+            if self._session_recovered and isinstance(state, dict) and not state.get("has_token"):
+                state = self._eval_helper(".probe()", timeout=timeout)
+        except (CdpError, OSError) as exc:
+            raise self._stop_connection(exc) from exc
+        if isinstance(state, dict) and state.get("kind") in ("login", "checkpoint"):
+            raise self._stop_connection(PageIdentityError(state["kind"]))
+        if self._session_recovered and (not isinstance(state, dict) or
+                state.get("kind") != "ads_manager" or not state.get("has_token")):
+            raise self._stop_connection(PageIdentityError())
 
     # -- жизненный цикл
     def install(self) -> None:
@@ -306,6 +347,7 @@ class InPageGraph:
     def navigate(self, act_id: str, *, timeout: float = 60.0) -> None:
         """Открыть Ads Manager кабинета в своей вкладке. Одна загрузка, ни одного клика."""
         self.tab.navigate(ads_manager_url(act_id), timeout=timeout)
+        self._expected_url = ads_manager_url(act_id)
         self._reset_world()
 
     def start(self, act_id: str, *, timeout: float = 90.0) -> dict:

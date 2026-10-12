@@ -224,7 +224,10 @@ class GraphClient:
         self._pace()
         self.calls += 1
         self._last_call = self._clock()
-        reply = self.transport.request("GET", path, params or {})
+        try:
+            reply = self.transport.request("GET", path, params or {})
+        except GraphStop as exc:
+            raise self._stop(exc)
         self._last_call = self._clock()
 
         err = reply.get("error")
