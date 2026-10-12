@@ -283,9 +283,12 @@ class ApiPublisher:
 
         if self._open_warm(account_label, profile_id):
             return
+        from src.fb_api import mlx_session as _mlx
+
         try:
-            self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
-                                         (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")
+            with _mlx.scope(account=account_label):
+                self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
+                                             (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")
         except _fb_profile.ProfileError as exc:
             raise ApiPublishError(str(exc), code=getattr(exc, "code", "")) from exc
         except Exception as exc:  # noqa: BLE001
