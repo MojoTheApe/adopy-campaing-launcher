@@ -52,6 +52,7 @@ class Site:
 
     def __init__(self, web, monkeypatch):
         self.web, self.requests, self.fail_children, self.reads = web, [], 0, []
+        self.warm, self.warm_posts = None, []
         monkeypatch.setattr(web, "_inventory_bi", lambda a, c, f, t, s: ({"campaigns": {}, "ads": {}}, ""))
         # цель и бенчмарк — из настроек машины; в тесте их нет, и таблица должна сказать об этом тире с причиной
         monkeypatch.setattr(web, "_inventory_goal_context", lambda c: {
@@ -83,6 +84,16 @@ class Site:
         self.requests.append((req.method, u.path))
         if u.path == "/":
             return route.fulfill(status=200, content_type="text/html", body=self.html())
+        if u.path.startswith("/warm/") and getattr(self, "warm", None):
+            W = self.warm
+            if u.path == "/warm/state":
+                body = {"available": True, "actions": True, "accounts": W["accounts"]}
+            elif u.path == "/warm/open":
+                self.warm_posts.append(req.post_data)
+                return route.fulfill(status=202, content_type="application/json", body=json.dumps({"job_id": "j1", "state": "running"}))
+            else:
+                body = {"state": "done", "results": W["results"]}
+            return route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
         w = self.web
         fn = {"/campaign-inventory/status": w.campaign_inventory_status,
               "/campaign-inventory/tree": w.campaign_inventory_tree,
@@ -510,3 +521,31 @@ def test_scrolled_right_there_is_no_overlay_and_only_pinned_cells_are_sticky(pag
         if shots:
             page.locator(".amap-campaigns").screenshot(path=str(Path(shots) / f"scrolled-right-{theme}.png"))
     page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
+
+
+def test_profile_chip_and_open_profile_button_with_and_without_the_warm_api(site, monkeypatch):
+    """Чип состояния и «Open profile» — только когда есть API тёплых сессий (ACL-1812); открытие — только по нажатию."""
+    with sync_playwright() as pw:
+        browser = launch_chromium(pw)
+        for with_api in (False, True):
+            site.warm = ({"accounts": {"Acc": {"state": "closed", "text": "Closed", "title": "Not running"},
+                                       "Fresh": {"state": "by_hand", "text": "Opened by hand", "title": "by hand"}},
+                          "results": {"Acc": {"state": "ok", "ok": True}}} if with_api else None)
+            pg = browser.new_page(viewport={"width": 1280, "height": 900})
+            pg.route("http://acl.test/**", site.handle)
+            goto(pg, "http://acl.test/")
+            pg.wait_for_selector(TABLE + " tbody tr")
+            pg.wait_for_timeout(500)
+            if not with_api:
+                assert pg.locator(".hc-pstate").count() == 0 and pg.locator("[data-warm-open]").count() == 0
+                assert pg.locator('[data-read="Acc"]').count() == 1
+            else:
+                assert pg.locator('.hc-pstate[data-state="closed"]').inner_text() == "Closed"
+                assert pg.locator('.hc-pstate[data-state="by_hand"]').inner_text() == "Opened by hand"
+                assert pg.locator('[data-warm-open="Fresh"]').is_disabled() and not pg.locator('[data-warm-open="Acc"]').is_disabled()
+                assert site.warm_posts == []                                  # само по себе ничего не открывается
+                pg.click('[data-warm-open="Acc"]')
+                pg.wait_for_function("() => !document.querySelector('[data-warm-open=\"Acc\"]') || !document.querySelector('[data-warm-open=\"Acc\"]').textContent.includes('Opening')", timeout=15000)
+                assert site.warm_posts == ['{"accounts":["Acc"]}']
+            pg.close()
+        browser.close()

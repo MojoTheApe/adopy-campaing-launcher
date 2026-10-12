@@ -264,7 +264,7 @@ _HARNESS = r"""
 const fs = require('fs');
 const code = fs.readFileSync(process.argv[2], 'utf8');
 const IN = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
-const calls = [], posts = [];
+const calls = [], posts = [], warmCalls = [];
 function mkEl(name) {
   const e = {name, innerHTML: '', textContent: '', style: {setProperty() {}}, dataset: {}, hidden: false, value: '', listeners: {},
     scrollLeft: 0, scrollTop: 0, scrollWidth: 800, clientWidth: 400, disabled: false, title: '', open: false,
@@ -309,6 +309,13 @@ async function fakeFetch(url, init) {
     return reply(k ? Object.assign({ok: true}, k) : {ok: true, state: 'empty', rows: [], note: ''});
   }
   if (u.pathname === '/campaign-inventory/read') { posts.push(init.body.get('account')); return reply({ok: true}); }
+  if (u.pathname.startsWith('/warm/')) {
+    const W = IN.warm;
+    if (!W) return reply({error: 'not found'}, 404);                                  // ветки ACL-1812 нет: маршрутов тоже нет
+    if (u.pathname === '/warm/state') { warmCalls.push('GET /warm/state?' + u.search.slice(1)); return reply({available: W.available !== false, actions: W.actions !== false, accounts: W.accounts}); }
+    if (u.pathname === '/warm/open') { warmCalls.push('POST /warm/open ' + init.body); return reply({job_id: 'j1', state: 'running'}, 202); }
+    if (u.pathname.startsWith('/warm/job/')) { warmCalls.push('GET ' + u.pathname); return reply({state: 'done', results: W.results}); }
+  }
   if (u.pathname === '/campaign-commands/history') return reply({ok: true, entries: []});
   if (u.pathname === '/account-spend/turn-off-history') return reply({ok: true, entries: []});
   return reply({ok: false, error: 'unexpected ' + u.pathname}, 404);
@@ -381,7 +388,33 @@ async function msgScenario() {
   out.band = /data-msg="acct:Acc:read".*?<\/tr>/s.exec(els.table.innerHTML)[0];
   console.log(JSON.stringify(out));
 }
+async function warmScenario() {
+  const out = {};
+  const inst = win.hcMount(root, {scoped: true, seed: IN.seed}); await inst.init();
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  const band = acct => new RegExp('<tr class="hc-band[^"]*"><td[^>]*><div class="hc-band-in"><b>' + acct + '</b>.*?</tr>', 's').exec(els.table.innerHTML);
+  out.bands = {}; ['Acc', 'Other', 'Fresh'].forEach(a => { out.bands[a] = band(a) && band(a)[0]; });
+  out.calls0 = warmCalls.slice();
+  if (IN.press) {
+    const click = a => els.table.listeners.click[0]({target: {closest: sel => (/data-warm-open/.test(sel) ? {dataset: {warmOpen: a}} : null)}});
+    const pr = click(IN.press);
+    out.busyBand = band(IN.press) && band(IN.press)[0];
+    for (let i = 0; i < 50; i++) await new Promise(r => setImmediate(r));
+    out.calls1 = warmCalls.slice();
+    out.after = band(IN.press) && band(IN.press)[0];
+    out.msg = (new RegExp('data-msg="acct:' + IN.press + ':open".*?</tr>', 's').exec(els.table.innerHTML) || [null])[0];
+  }
+  if (IN.dedup) {
+    const ACM = win.acmCommands;
+    inst.state.notes['campaign:1'] = ACM.explain(IN.dedup.raw, 'bad', IN.dedup.code || '');
+    inst.state.summaries.Acc = Object.assign({}, inst.state.summaries.Acc, IN.dedup.attempt ? {attempt: IN.dedup.attempt} : {});
+    inst.render();
+    out.dedup = (/data-msg="row:campaign:1".*?<\/tr>/s.exec(els.table.innerHTML) || [null])[0];
+  }
+  console.log(JSON.stringify(out));
+}
 (async () => {
+  if (IN.scenario === 'warm') { await warmScenario(); return; }
   if (IN.scenario === 'resize') { await resizeScenario(); return; }
   if (IN.scenario === 'msg') { await msgScenario(); return; }
   const out = {};
@@ -427,7 +460,7 @@ async function msgScenario() {
 ACM_JS = ROOT / 'src' / 'web' / 'static' / 'acm_commands.js'
 
 
-def _run(period_ok=True, seed=None, statusAfterRead=False, scenario='', storage=None, frameW=1400) -> dict:
+def _run(period_ok=True, seed=None, statusAfterRead=False, scenario='', storage=None, frameW=1400, extra=None) -> dict:
     data = _fixtures()
     js = _component_js()
     seed = seed or [{"country": "Chile", "accounts": ["Acc", "Other", "Fresh"]}]
@@ -437,7 +470,7 @@ def _run(period_ok=True, seed=None, statusAfterRead=False, scenario='', storage=
         (Path(tmp) / "c.js").write_text(js, encoding="utf-8")
         (Path(tmp) / "in.json").write_text(json.dumps({"data": data, "seed": seed, "period": period, "statusAfterRead": statusAfterRead,
                                                     "scenario": scenario, "storage": storage or {}, "frameW": frameW,
-                                                    "acm": str(ACM_JS) if scenario == "msg" else ""}), encoding="utf-8")
+                                                    "acm": str(ACM_JS) if scenario in ("msg", "warm") else "", **(extra or {})}), encoding="utf-8")
         done = subprocess.run([shutil.which("node"), "h.js", "c.js", "in.json"], cwd=tmp, capture_output=True, text=True,
                               encoding="utf-8", timeout=60)
     assert done.returncode == 0, done.stderr
@@ -623,7 +656,11 @@ RPA = "Campaign commands need the Graph API backend (ACL_FB_BACKEND=api). This m
     (LAUNCHER, "", "Multilogin isn't running — start it and try again"),
     ("HTTPSConnectionPool(host='127.0.0.1', port=45001): refused", "", "Multilogin isn't running — start it and try again"),
     ("[WinError 10061] No connection could be made", "", "Multilogin isn't running — start it and try again"),
-    ("ProfileError: " + HAND, "open_by_hand", "ProfileError: " + HAND),                                   # уже человеческий текст сервера
+    ("ProfileError: " + HAND, "open_by_hand", "Profile is open in Multilogin by hand — close it there, wait about 3 minutes, then press Open profile"),
+    (HAND, "", "Profile is open in Multilogin by hand — close it there, wait about 3 minutes, then press Open profile"),                                                                           # и без кода — по тексту
+    ("Opened in Multilogin by hand — close it there", "no_port", "Profile is open in Multilogin by hand — close it there, wait about 3 minutes, then press Open profile"),
+    ("the profile is closing or starting; retry in a minute. Nothing was stopped.", "profile_closing", "Profile is closing — try again in a few seconds"),
+    ("ProfileError: closing", "profile_closing", "Profile is closing — try again in a few seconds"),
     ("Not sent: the profile restarted a minute ago; try again in 3 min.", "restart_cooldown", "the profile restarted a minute ago; try again in 3 min."),
     ("The Facebook_5 profile is logged out.", "logged_out", "Logged out in this profile — log in inside Multilogin, then retry"),
     ("session says: logged out of facebook", "", "Logged out in this profile — log in inside Multilogin, then retry"),
@@ -688,3 +725,69 @@ def test_an_account_read_failure_is_one_line_plus_details():
 def test_the_mapping_lives_in_one_place():
     assert TABLE.count("launcher.mlx.yt") == 0 and "Multilogin isn't running" not in TABLE
     assert "Multilogin isn't running" in ACM_JS.read_text(encoding="utf-8")
+
+
+# ───────────────────────── профиль в полосе аккаунта (ACL-1812) и без повторов ─────────────────────────
+
+WARM = {"Acc": {"state": "closed", "text": "Closed", "title": "Not running", "closable": False},
+        "Other": {"state": "by_hand", "text": "Opened by hand", "title": "Opened in Multilogin by hand", "closable": False},
+        "Fresh": {"state": "warm", "text": "Warm · since 09:15", "title": "Open with automation", "closable": True}}
+
+
+def test_without_the_warm_api_there_is_no_chip_and_no_button():
+    bands = _run(scenario="warm")["bands"]
+    for acct, html in bands.items():
+        assert html and "hc-pstate" not in html and "data-warm-open" not in html, acct       # маршрутов нет (404) — ничего не рисуется, ничего не ломается
+        assert f'data-read="{acct}"' in html                                                  # а «Read campaigns» на месте
+
+
+def test_chip_and_open_button_follow_the_profile_state():
+    out = _run(scenario="warm", extra={"warm": {"accounts": WARM, "results": {}}})
+    assert any(c.startswith("GET /warm/state?account=Acc&account=Other&account=Fresh") for c in out["calls0"])
+    acc, other, fresh = out["bands"]["Acc"], out["bands"]["Other"], out["bands"]["Fresh"]
+    assert 'class="hc-pstate" data-state="closed"' in acc and ">Closed<" in acc
+    assert re.search(r'<button type="button" data-warm-open="Acc" title="[^"]*">Open profile</button>', acc)       # закрыт — кнопка доступна
+    assert 'data-state="by_hand"' in other and ">Opened by hand<" in other
+    assert re.search(r'data-warm-open="Other" disabled title="Close it in Multilogin first"', other)                # открыт руками — выключена с причиной
+    assert 'data-state="warm"' in fresh and "Warm · since 09:15" in fresh and "data-warm-open" not in fresh        # тёплый — открывать нечего
+    assert acc.index("data-warm-open") < acc.index('data-read="Acc"')                                              # кнопка рядом с Read campaigns
+    assert not [c for c in out["calls0"] if c.startswith("POST")]
+
+
+def test_actions_off_disables_the_button_with_the_reason():
+    out = _run(scenario="warm", extra={"warm": {"accounts": WARM, "results": {}, "actions": False}})
+    assert 'data-warm-open="Acc" disabled title="Opening profiles needs the dashboard to listen on 127.0.0.1 only"' in out["bands"]["Acc"]
+
+
+def test_pressing_open_profile_calls_the_warm_open_endpoint_and_then_refreshes():
+    out = _run(scenario="warm", extra={"press": "Acc", "warm": {"accounts": WARM, "results": {"Acc": {"state": "ok", "ok": True}}}})
+    assert 'disabled title' in out["busyBand"] and "Opening…" in out["busyBand"]                                   # пока идёт — кнопка занята
+    posts = [c for c in out["calls1"] if c.startswith("POST")]
+    assert posts == ['POST /warm/open {"accounts":["Acc"]}']                                                       # ровно одно открытие, ровно этого аккаунта
+    assert "GET /warm/job/j1" in out["calls1"] and sum(c.startswith("GET /warm/state") for c in out["calls1"]) >= 2   # после — перечитали состояние
+    assert out["msg"] is None and "Open profile" in out["after"]
+
+
+def test_a_refused_open_shows_the_friendly_message_with_the_raw_text_in_details():
+    for code, text, want in (("restart_cooldown", "Stopped a minute ago; it can be started again in about 3 min.", "Stopped a minute ago; it can be started again in about 3 min."),
+                             ("open_by_hand", "Opened in Multilogin by hand — close it there", "Profile is open in Multilogin by hand — close it there, wait about 3 minutes, then press Open profile"),
+                             ("profile_closing", "The profile is closing; try again in a minute. Nothing was started.", "Profile is closing — try again in a few seconds")):
+        res = {"Acc": {"state": "failed", "ok": False, "code": code, "message": text}}
+        out = _run(scenario="warm", extra={"press": "Acc", "warm": {"accounts": WARM, "results": res}})
+        assert want.replace("'", "&#39;") in out["msg"], code
+
+
+def test_a_row_failure_with_the_cause_the_account_band_already_shows_is_one_short_line():
+    hand = "Not sent: ProfileError: " + HAND
+    # чип «Opened by hand» в полосе Other; аккаунт Acc — ошибка последнего чтения с той же причиной
+    seen = _run(scenario="warm", extra={"warm": {"accounts": {**WARM, "Acc": {"state": "by_hand", "text": "Opened by hand", "title": ""}}, "results": {}},
+                                       "dedup": {"raw": hand, "code": "open_by_hand"}})["dedup"]
+    assert "Profile problem — see account above" in seen and "Details" not in seen and "no automation port" not in seen
+    attempt = {"state": "failed", "at": "2026-10-12 11:00:00", "error": HAND, "code": "open_by_hand"}
+    seen = _run(scenario="warm", extra={"warm": {"accounts": WARM, "results": {}}, "dedup": {"raw": hand, "code": "open_by_hand", "attempt": attempt}})["dedup"]
+    assert "Profile problem — see account above" in seen and "Details" not in seen
+    # другая причина или полосе нечего показать — полный текст как прежде
+    other = _run(scenario="warm", extra={"warm": {"accounts": WARM, "results": {}}, "dedup": {"raw": LAUNCHER, "code": "", "attempt": attempt}})["dedup"]
+    assert "Multilogin isn&#39;t running" in other and "Details" in other
+    alone = _run(scenario="warm", extra={"dedup": {"raw": hand, "code": "open_by_hand"}})["dedup"]
+    assert "Profile is open in Multilogin by hand" in alone and "Details" in alone                          # без чипа и без ошибки чтения дубля нет — показываем полностью

@@ -223,6 +223,10 @@
   .hc-chip.note { background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); }
   .hc-hint-ok { color: var(--adopy-success); font-weight: 500; } .hc-hint-warn { color: var(--adopy-warning); font-weight: 500; } .hc-hint-neutral { color: var(--adopy-text); }
   .hc-table tr.hc-r-adset > td { background: var(--adopy-surface-subtle); }
+  .hc-pstate { flex: none; padding: 1px 8px; border: 1px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-pill); font-size: 0.6875rem; color: var(--adopy-text-muted); cursor: help; }
+  .hc-pstate[data-state="warm"] { color: var(--adopy-success); border-color: currentColor; }
+  .hc-pstate[data-state="by_hand"], .hc-pstate[data-state="logged_out"] { color: var(--adopy-danger); border-color: currentColor; }
+  .hc-pstate[data-state="closing"] { color: var(--adopy-warning); border-color: currentColor; }
   .hc-hist { margin-top: 0.5rem; font-size: 0.8125rem; }
   .hc-hist > summary { cursor: pointer; color: var(--adopy-primary); width: max-content; }
   .hc-hist-body { padding: 0.375rem 0; color: var(--adopy-text-muted); }
@@ -348,7 +352,9 @@
     avail: null,                     // ответ /campaign-commands/availability (null — ещё не знаем)
     notes: {},                       // key -> {text, tone}: итог последней команды по строке
     q: '', delivery: 'all',
-    ctx: {}                          // account -> {goal_cpa, benchmark_cpa, …} из My Goals и benchmarks
+    ctx: {},                         // account -> {goal_cpa, benchmark_cpa, …} из My Goals и benchmarks
+    warm: {available: false, actions: false, accounts: {}},   // ACL-1812: состояние профилей; нет API — чип и кнопка скрыты
+    warmBusy: {}, warmMsg: {}
   };
   var ACM = window.acmCommands && window.acmCommands.home ? window.acmCommands : null;
   seed.forEach(function (c) {
@@ -644,6 +650,18 @@
     var A = window.acmCommands;   // помощник мог догрузиться после создания таблицы
     return A && A.explain ? A.explain(text, tone, code) : {text: String(text), raw: null, tone: tone};
   }
+  /* Причина про профиль, уже показанная в полосе аккаунта (чип состояния или ошибка последнего чтения), строка объекта не повторяет. */
+  var WARM_CAUSE = {by_hand: 'hand', closing: 'closing', logged_out: 'logged_out'};
+  function bandCause(account) {
+    var att = (S.summaries[account] || {}).attempt, A = window.acmCommands;
+    if (att && att.state === 'failed' && A && A.profileCause) { var c = A.profileCause(att.error, att.code); if (c) return c; }
+    var w = S.warm.available && S.warm.accounts[account];
+    return (w && WARM_CAUSE[w.state]) || '';
+  }
+  function dedupNote(n, account) {
+    if (n.cause && n.cause === bandCause(account)) return {text: 'Profile problem — see account above', raw: null, tone: n.tone, cause: n.cause};
+    return n;
+  }
   function msg(cls, inner, span) {
     return '<tr class="hc-msg ' + cls + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div></td></tr>';
   }
@@ -676,7 +694,7 @@
       '<td class="p3"><div class="hc-id"><span class="hc-badge">' + badge + '</span><span class="hc-name"><b title="' + esc(r.name + ' (id ' + r.id + ')') + '">' + esc(r.name || '(no name)') + ctx + '</b>' +
       '<span>' + esc(countryOf(r.account)) + ' · ' + esc(r.account) + esc(count) + '</span></span></div></td>' +
       cols.map(function (c) { return c.cell(r); }).join('') + '</tr>';
-    if (S.notes[key]) html += rowMsg('row:' + key, S.notes[key], 4 + cols.length);
+    if (S.notes[key]) html += rowMsg('row:' + key, dedupNote(S.notes[key], r.account), 4 + cols.length);
     if (open && canOpen) html += kidsHtml(r, cols);
     return html;
   }
@@ -702,6 +720,18 @@
     else if (bi && bi.note) bits.push('<span class="hc-note" title="' + esc(bi.note) + '">BI unavailable</span>');
     if (sum.date_from && (sum.date_from !== period.from || (sum.date_to || sum.date_from) !== (period.to || period.from))) bits.push('<span class="hc-note">Insights read for ' + esc(sum.date_from + (sum.date_to && sum.date_to !== sum.date_from ? ' → ' + sum.date_to : '')) + ', not the dates on screen</span>');
     bits.push('<span class="hc-spacer"></span>');
+    var wi = S.warm.available ? S.warm.accounts[a.account] : null;
+    if (wi && wi.state && wi.state !== 'unknown') {
+      bits.push('<span class="hc-pstate" data-state="' + esc(wi.state) + '" title="' + esc(wi.title || '') + '">' + esc(wi.text || wi.state) + '</span>');
+      var can = wi.state === 'closed' || wi.state === 'open';
+      var shown = can || wi.state === 'by_hand' || wi.state === 'closing';
+      if (shown) {
+        var off = !can || !S.warm.actions || S.warmBusy[a.account] || S.busy;
+        var why = !S.warm.actions ? 'Opening profiles needs the dashboard to listen on 127.0.0.1 only'
+          : wi.state === 'by_hand' ? 'Close it in Multilogin first' : wi.state === 'closing' ? 'Wait until it has closed' : 'Open this profile with automation and keep it open (only when pressed)';
+        bits.push('<button type="button" data-warm-open="' + esc(a.account) + '"' + (off ? ' disabled' : '') + ' title="' + esc(why) + '">' + (S.warmBusy[a.account] ? 'Opening…' : 'Open profile') + '</button>');
+      }
+    }
     bits.push('<button type="button" data-read="' + esc(a.account) + '"' + (S.busy || !periodOk ? ' disabled' : '') + ' title="' + esc(periodOk ? 'Read campaigns, ad sets, ads and Insights for the dates on screen (GET only)' : 'Select dates to read campaigns; Maximum is not supported') + '">Read campaigns</button>');
     return band('', bits.join(' '), 4 + cols.length);
   }
@@ -717,6 +747,7 @@
     if (S.treeErr[a.account]) return one('acct:' + a.account + ':tree', 'bad', 'Could not load the saved inventory', S.treeErr[a.account], '');
     if (att && att.state === 'failed') out += one('acct:' + a.account + ':read', 'bad', 'The last read failed (' + (att.at || '') + ')', att.error || 'unknown reason', att.code,
       sum.state !== 'idle' ? ' — showing the earlier snapshot below' : '');
+    if (S.warmMsg[a.account]) out += rowMsg('acct:' + a.account + ':open', S.warmMsg[a.account], span);
     if (sum.state === 'idle') return out || msg('', 'Not read yet — press Read campaigns. Nothing is shown until the account has been read.', span);
     if (sum.state === 'empty') return out + msg('', 'The account was read and has no campaigns in the shown states.', span);
     if (sum.state === 'partial') {
@@ -787,6 +818,45 @@
       return r.json().then(function (j) { if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
     });
   }
+  /* ── профили (ACL-1812): состояние и «Open profile». Локальный GET при показе и после действий; открытие — только по кнопке ── */
+  function warmState() {
+    var accounts = Object.keys(S.accountCountries), W = window.acmWarm;
+    if (W && typeof W.state === 'function') return Promise.resolve(W.state(accounts)).catch(function () { return null; });
+    var q = accounts.map(function (a) { return 'account=' + encodeURIComponent(a); }).join('&');
+    return fetch('/warm/state?' + q, {credentials: 'same-origin'}).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  }
+  function loadWarm() {
+    return warmState().then(function (d) {
+      S.warm = d && d.available ? {available: true, actions: !!d.actions, accounts: d.accounts || {}} : {available: false, actions: false, accounts: {}};
+      render();
+    });
+  }
+  function warmPost(account) {
+    var W = window.acmWarm;
+    if (W && typeof W.open === 'function') return Promise.resolve(W.open([account]));
+    return fetch('/warm/open', {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({accounts: [account]})})
+      .then(function (r) { return r.json().then(function (j) { return {status: r.status, body: j}; }); });
+  }
+  function warmPoll(account, jobId) {
+    return fetch('/warm/job/' + encodeURIComponent(jobId), {credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (job) {
+      if (job.state === 'running') return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return warmPoll(account, jobId); });
+      return (job.results || {})[account] || {state: 'failed', message: 'No result'};
+    });
+  }
+  function warmOpen(account) {
+    if (S.warmBusy[account] || !S.warm.actions) return Promise.resolve();
+    S.warmBusy[account] = true; delete S.warmMsg[account]; render();
+    return warmPost(account).then(function (res) {
+      if (res && res.job_id) return warmPoll(account, res.job_id);     // acmWarm может вернуть итог сразу
+      if (res && res.body && res.body.job_id) return warmPoll(account, res.body.job_id);
+      var b = (res && res.body) || res || {};
+      return {state: 'failed', message: b.error || 'Could not start opening the profile', code: b.code || ''};
+    }).then(function (r) {
+      if (!(r.state === 'ok' || r.ok)) S.warmMsg[account] = noteFrom(r.message || 'Could not open the profile', 'bad', r.code);
+    }, function (e) {
+      S.warmMsg[account] = noteFrom(String(e && e.message || e), 'bad');
+    }).then(function () { delete S.warmBusy[account]; return loadWarm(); });
+  }
   function loadTree(account) {
     return getJson('/campaign-inventory/tree?' + qs(['account=' + encodeURIComponent(account)], account)).then(function (j) {
       S.rows[account] = j.rows || [];
@@ -823,6 +893,7 @@
       return refreshAccount(account).then(function () {
         /* Тот же аккаунт открыт в другой области (он стоит в двух странах) — её данные устарели. */
         instances.forEach(function (i) { if (i !== api && i.watches(account)) i.reload(account); });
+        loadWarm();
       });
     }).catch(function (e) {
       if (e && e.code === 'needs_api_backend') { showNeedsApi(); return; }
@@ -991,9 +1062,10 @@
     var t = ev.target;
     var cb = t.closest ? t.closest('button[data-action]') : null;
     if (cb) { if (!cb.disabled) onCommand(cb); return; }
-    var b = t.closest ? t.closest('[data-read],[data-exp],[data-retry],[data-details]') : null;
+    var b = t.closest ? t.closest('[data-read],[data-exp],[data-retry],[data-details],[data-warm-open]') : null;
     if (!b) return;
     if (b.dataset.details) { var did = b.dataset.details; if (S.details[did]) delete S.details[did]; else S.details[did] = true; render(); return; }
+    if (b.dataset.warmOpen) { warmOpen(b.dataset.warmOpen); return; }
     if (b.dataset.read) { readQueue([b.dataset.read]); return; }
     var key = b.dataset.exp || b.dataset.retry, row = findRow(key);
     if (!row) return;
@@ -1083,6 +1155,7 @@
       accounts.forEach(function (a) { S.fetchedAt[a] = Date.now(); if (j.running.indexOf(a) >= 0) S.running[a] = true; });
       el('body').hidden = false;
       fillCols(); render();
+      loadWarm();
       (ACM ? ACM.home.availability() : Promise.resolve({available: false, reason: 'the command helper did not load'}))
         .then(function (a) { S.avail = a; render(); });
       /* Страницу перезагрузили во время чтения: дальше ждём его конец у своего сервера. */
