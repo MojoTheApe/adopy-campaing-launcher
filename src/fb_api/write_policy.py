@@ -6,11 +6,19 @@
 вшивается в помощник страницы (`token_capture`) — две линии, одна политика.
 
 Никогда: DELETE, ACTIVE, `effective_status`/`configured_status`,
-`execution_options`, согласие с условиями, формы лидов, запись куда-то, кроме
-`/act_X/<ребро>`.
+`execution_options`, согласие с условиями, создание форм лидов, запись куда-то,
+кроме `/act_X/<ребро>`.
+
+Единственное исключение для форм (ACL-1775): `lead_gen_form_id` ссылается на
+УЖЕ СУЩЕСТВУЮЩУЮ форму Страницы и допустим ровно в одном месте — креатив
+(`adcreatives`) → `object_story_spec.{link_data|video_data}.call_to_action.value`
+— и только когда набор объявлений того же плана создан с `destination_type=ON_AD`
+(вызывающий передаёт `on_ad=True`). Везде в другом месте ключ по-прежнему
+запрещён.
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 from typing import Any
@@ -36,6 +44,12 @@ FORBIDDEN_ANYWHERE = frozenset({"effective_status", "configured_status", "execut
                                 "access_token", "method", "_method", "batch",
                                 "suppress_http_code", "lead_gen_form_id", "tos_accepted"})
 PAUSED = "PAUSED"
+#: Ключ существующей формы лидов: разрешён только в `_without_lead_form` (ACL-1775).
+LEAD_FORM_KEY = "lead_gen_form_id"
+#: Форматы креатива, в `call_to_action.value` которых форма может стоять.
+LEAD_FORM_FORMATS = ("link_data", "video_data")
+#: Id формы — только цифры; всё прочее не форма.
+LEAD_FORM_ID_RE = re.compile(r"^[0-9]{5,25}$")
 #: Ключи, которые Graph читает как JSON. Строку в них Graph разберёт сам —
 #: поэтому и мы разбираем её до проверок статуса (ревью, minor 1).
 JSON_KEYS = frozenset({"special_ad_categories", "adlabels", "promoted_object", "targeting",
@@ -69,6 +83,8 @@ def policy_for_page(act: str) -> dict:
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
         "dof_features": sorted(DOF_FEATURES),
+        "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
+                      "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
     }
 
 
@@ -121,9 +137,45 @@ def _check_dof(value: Any) -> None:
             raise WriteRefused(f"write refused: creative feature {feature!r} must be exactly OPT_OUT")
 
 
+def _without_lead_form(edge: str, checked: dict, on_ad: bool) -> dict:
+    """Копия параметров БЕЗ единственного разрешённого `lead_gen_form_id` (ACL-1775).
+
+    Разрешённое место: креатив → object_story_spec → link_data|video_data →
+    call_to_action → value, и значение там — ровно {lead_gen_form_id: "<цифры>"}.
+    Ключ в любом другом месте остаётся в копии, и `_walk` его отвергнет.
+    Без `on_ad` (набор объявлений плана не ON_AD) форма не допускается и там.
+    """
+    spec = checked.get("object_story_spec") if edge == "adcreatives" else None
+    if not isinstance(spec, dict):
+        return checked
+    for fmt in LEAD_FORM_FORMATS:
+        data = spec.get(fmt)
+        cta = data.get("call_to_action") if isinstance(data, dict) else None
+        value = cta.get("value") if isinstance(cta, dict) else None
+        if not (isinstance(value, dict) and LEAD_FORM_KEY in value):
+            continue
+        if not on_ad:
+            raise WriteRefused("write refused: lead_gen_form_id is allowed only when the ad set "
+                               "of the same plan is ON_AD")
+        form = value[LEAD_FORM_KEY]
+        if not (isinstance(form, str) and LEAD_FORM_ID_RE.fullmatch(form)):
+            raise WriteRefused("write refused: lead_gen_form_id must be the numeric id of a Page form")
+        if set(value) != {LEAD_FORM_KEY}:
+            raise WriteRefused("write refused: call_to_action.value may hold only lead_gen_form_id "
+                               "next to an Instant Form")
+        out = copy.deepcopy(checked)
+        del out["object_story_spec"][fmt]["call_to_action"]["value"][LEAD_FORM_KEY]
+        return out
+    return checked
+
+
 def check(act: str, method: str, path: str, params: dict | None,
-          files: dict | None = None) -> str:
-    """Проверить запись. Возвращает ребро; иначе `WriteRefused`."""
+          files: dict | None = None, *, on_ad: bool = False) -> str:
+    """Проверить запись. Возвращает ребро; иначе `WriteRefused`.
+
+    `on_ad` — набор объявлений того же плана создаётся с `destination_type=ON_AD`
+    (только тогда креатив может нести `lead_gen_form_id`).
+    """
     if method != "POST":
         raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
     m = _PATH_RE.fullmatch(path or "")
@@ -154,7 +206,7 @@ def check(act: str, method: str, path: str, params: dict | None,
         if not (isinstance(creative, dict) and set(creative) == {"creative_id"}
                 and isinstance(creative["creative_id"], (str, int))):
             raise WriteRefused("write refused: an ad may only reference a creative by creative_id")
-    _walk(checked, edge)
+    _walk(_without_lead_form(edge, checked, on_ad), edge)
     files = dict(files or {})
     want = FILE_FIELDS.get(edge)
     if files:

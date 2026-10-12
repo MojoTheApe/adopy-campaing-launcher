@@ -46,9 +46,11 @@ CREATE_MAX_CALLS_ENV = "ACL_FB_API_CREATE_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
 #: Потолок вызовов Graph на одну кампанию: предпроверка, поиск, медиа,
 #: ожидание видео, запись, проверка меток, сверка — с запасом на 4 объявления
-#: с видео (4 × (20 опросов + ~10) + ~20). Свой потолок кончает только эту
+#: с видео (4 × (20 опросов + ~10) + ~20). Instant Form (ACL-1775) добавляет
+#: до 4 чтений форм Страницы (до 2 в предпроверке и до 2 при сверке: список и
+#: условия), поэтому запас на них +10. Свой потолок кончает только эту
 #: кампанию, следующие идут со своим (ревью, minor 5).
-DEFAULT_CREATE_MAX_CALLS = 140
+DEFAULT_CREATE_MAX_CALLS = 150
 #: Потолок на предпроверку кабинета (один раз на задание).
 PREFLIGHT_MAX_CALLS = 12
 READY_TIMEOUT_S = 90.0
@@ -180,6 +182,8 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
         "adset_id": None, "creative_id": None, "ad_id": None, "ad_ids": [],
         "error": outcome.error or None, "steps_completed": list(outcome.steps), "screenshots": [],
         "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
+        # ACL-1819: вердикты серверных правил pre-flight audit (пусто, если аудит не шёл).
+        "audit": list(outcome.audit),
     }
 
 
@@ -462,7 +466,7 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
         try:
             pub._facts = preflight_account(client, sess.act)
         except PlanError as exc:
-            raise ApiPublishError(f"{account_label}: {exc}") from exc
+            raise ApiPublishError(f"{account_label}: {exc}", code="account") from exc
         pub._resolver = TargetingResolver(client)
         for draft in drafts:
             if draft.errors:
@@ -490,12 +494,17 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
     if not drafts:
         return {"account": account_label, "results": [], "dry_run": True, "error": "No campaigns to check."}
     run = _as.serialized_browser(key=_as._profile_key, reading=True)(_plan_in_read_session)
+    account_audit: dict[str, Any] | None = None
     try:
         results = run(account_label, drafts)
         error = ""
     except Exception as exc:  # noqa: BLE001 — отказ профиля/страницы: текстом
         results = []
         error = str(exc) if isinstance(exc, ApiPublishError) else _api._failure(account_label, exc)[0]
+        if isinstance(exc, ApiPublishError) and exc.code == "account":
+            # ACL-1819: кабинет недоступен/не активен — это вердикт правила account_active.
+            account_audit = {"rule": "account_active", "status": "error", "detail": error, "ads": []}
     _record("api_plan_check", not error, diag={"campaigns": len(drafts), "results": len(results)},
             duration_s=round(time.monotonic() - started, 1))
-    return {"account": account_label, "results": results, "dry_run": True, "error": error}
+    return {"account": account_label, "results": results, "dry_run": True, "error": error,
+            "account_audit": account_audit}

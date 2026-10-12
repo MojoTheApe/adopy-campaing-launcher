@@ -44,6 +44,8 @@ class AdDraft:
     # библиотеки текстов (как `copy_name`), из неё берётся только body.
     copy2_name: str = ""
     ad_body2: str = ""
+    # ACL-1775: id существующей формы Страницы (только Instant Form, только API-бэкенд).
+    lead_form_id: str = ""
 
     def ad_name(self) -> str:
         """Name for the ad in Ads Manager: "<creative> [<variant>] - <text>".
@@ -86,6 +88,8 @@ class AdDraft:
             # ACL-1344: второй текст — только у объявлений, где он выбран.
             out["copy2_name"] = self.copy2_name
             out["ad_body2"] = (self.ad_body2 or "")[:80]
+        if self.lead_form_id:
+            out["lead_form_id"] = self.lead_form_id
         return out
 
 
@@ -98,9 +102,11 @@ class AdSetDraft:
     age_max: int = 65
     daily_budget: float | None = None
     ads: list[AdDraft] = field(default_factory=list)
+    # ACL-1775: "website" (как всегда) или "instant_form" (только API-бэкенд).
+    destination: str = "website"
 
     def to_preview_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "name": self.name,
             "targeting": self.targeting_label or "—",
             "os": self.os,
@@ -108,6 +114,9 @@ class AdSetDraft:
             "daily_budget": self.daily_budget,
             "ads": [a.to_preview_dict() for a in self.ads],
         }
+        if self.destination != "website":
+            out["destination"] = self.destination
+        return out
 
 
 @dataclass

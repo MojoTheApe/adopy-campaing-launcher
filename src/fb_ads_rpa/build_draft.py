@@ -62,6 +62,9 @@ def slots_to_campaign_drafts(
             if (slot.get("budget") or "").strip() and _parse_budget(str(slot.get("budget"))) != budget:
                 warnings.append(f"Mixed budget in {campaign_name!r} — using first slot")
 
+        # ACL-1775: Instant Form - ключи есть только у слотов с формой; старые слоты прежние.
+        destination = (first.get("destination") or "website").strip()
+
         ads = [
             AdDraft(
                 creative_type=(s.get("creative_type") or "Image").strip(),
@@ -70,6 +73,7 @@ def slots_to_campaign_drafts(
                 creative_filename=(s.get("creative_file") or "").strip(),
                 copy_name=(s.get("copy") or "").strip(),
                 copy2_name=(s.get("copy2") or "").strip(),
+                lead_form_id=(s.get("lead_form_id") or "").strip() if destination == "instant_form" else "",
             )
             for s in group
         ]
@@ -82,6 +86,7 @@ def slots_to_campaign_drafts(
             age_max=age_max,
             daily_budget=budget,
             ads=ads,
+            destination=destination,
         )
 
         tracking_link = (first.get("tracking_link") or "").strip()

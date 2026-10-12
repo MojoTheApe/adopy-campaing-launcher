@@ -42,6 +42,62 @@ a clear refusal.
 - Backend switch: the country table and "Read campaigns in <Country>" render only with `ACL_FB_BACKEND=api`. Under `rpa` (the default) the previous per-account list from Read spend, with its Off/On chips, "Turn off?" flow, log and coverage note, is unchanged; the two are never shown for the same country.
 - The first live check runs on the 9095 test dashboard with test accounts, after the owner agrees.
 
+## Builder: pre-flight audit card that blocks Publish - ACL-1819
+
+- Every check is defined once in `src/fb_api/preflight_rules.py` (id, label, severity, field, hint,
+  client or server side). The same table is exported to `preflight_rules.json` and rendered into the
+  page (`window.CB_PREFLIGHT_RULES`); a test fails if the file drifts from the table.
+- The editor has a "Pre-flight audit" card for the selected campaign (red cross = error, orange "!" =
+  warning, green tick = ok, grey "?" = not checked) with an "errors: N" badge, the same badge in the
+  campaign tree, and a click on a line focuses its field.
+- Client checks run instantly on edit and never touch the network: country, link (https, well formed),
+  tracking parameters (warning), media chosen, primary text, headline, headline over 40 and primary text
+  over 125 characters (warnings), CTA allowed for the objective, daily budget, age 18-65 with min <= max,
+  unique ad names, Instant Form chosen.
+- Account checks come from the read-only `/publish-plan` (the creator's own functions, no POST): account
+  ACTIVE, Page on the account, pixel (website) or ACTIVE form (Instant Form), country / language /
+  interests resolved with exact matches, media readable, file type and size, video length (over 60 s is a
+  warning), vertical 9:16 file (warning), daily budget against Meta's minimum, existing campaign with
+  other settings. They are cached per campaign draft revision and refreshed only by the "Check" button
+  and right before Publish - never on a keystroke and never on a timer. After an edit they show
+  "Edited since the last check".
+- Minimum daily budget: Meta does not publish a per-currency table. Only USD 1.00 (impressions billing)
+  is listed; any other account currency is "unknown" (it does not block). Extend `MIN_DAILY_BUDGET`
+  from Ads Manager when a currency is confirmed.
+- Gate: Publish and Publish all stay disabled while any selected campaign has an error, and the reason
+  is shown under the button. Warnings never block and are listed in the confirm dialog. Under
+  `ACL_FB_BACKEND=rpa` only client checks run (the card says "Account checks need the API backend")
+  and the RPA publish itself is unchanged; the gate looks at client errors only.
+
+## Builder: Instant Forms - use an existing form of the Page (API backend) - ACL-1775
+
+- The ad set has a real "Conversion location": Website (the default, unchanged) or Instant Form.
+  With Instant Form every ad gets a form picker filled from the Page's forms (archived, deleted and
+  draft forms are hidden) and a "Refresh forms" button. The forms are read only when a person
+  presses that button (one read per press, no polling). With `ACL_FB_BACKEND=rpa` the control is
+  disabled with the reason "API backend only"; a stored Instant Form choice is never dropped
+  silently, the server refuses it out loud. Website values stay in the draft while Instant Form is
+  chosen (and the other way round), but only the chosen destination's values are sent.
+- Reading: `GET /{page_id}/leadgen_forms` (id, name, status, locale, created_time), read-only,
+  through the same client and session. A pure capability probe (`fb_api/forms.py`) turns the answer
+  into a clear text: "This Page's forms can't be read with the current session", or "This Page has
+  not accepted the Lead Ads terms" (the robot never accepts terms and never creates forms - that is
+  ACL-1776). Whether the token captured in the profile can read the forms is NOT confirmed yet: it
+  is checked on the 9095 test accounts.
+- Creating: ad set `destination_type=ON_AD`, `optimization_goal=LEAD_GENERATION`,
+  `promoted_object={page_id}` (no pixel); the creative's `call_to_action.value` carries
+  `lead_gen_form_id`. Everything stays PAUSED. Before any write the form of every ad must be a
+  usable form of the plan's Page; another Page's form, an archived form or unreadable forms stop
+  the campaign with 0 writes.
+- Write policy, narrow change in both layers (Python `write_policy` and the page helper in
+  `token_capture`): `lead_gen_form_id` is allowed ONLY in `adcreatives` ->
+  `object_story_spec.{link_data|video_data}.call_to_action.value`, as the only key of that value,
+  a numeric id, and only when the caller says the ad set of the same plan is ON_AD (`on_ad`). It
+  stays forbidden everywhere else; creating forms (`/{page}/leadgen_forms`) and terms remain
+  outside the allowlist.
+- Readback adds the creative's form id, "the form is listed under the Page", and for the ad set
+  the destination, goal and promoted Page. "Check plan" shows the form name and id.
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
