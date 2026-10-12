@@ -35,9 +35,10 @@ LOCALES = {"Spanish": 23, "Portuguese": 31, "English": 6}
 class AudienceMeta(FakeMeta):
     """FakeMeta + языки по имени («X (All)») и часовой пояс кабинета +02:00."""
 
-    def __init__(self, *, tz=2, **kw):
+    def __init__(self, *, tz="Europe/Madrid", now_offset=2, **kw):
         super().__init__(**kw)
         self.tz = tz
+        self.now_offset = now_offset
 
     def _get(self, path, params):
         if params.get("type") == "adlocale":
@@ -47,7 +48,9 @@ class AudienceMeta(FakeMeta):
             return {"data": []}
         body = super()._get(path, params)
         if path.strip("/") == ACT and self.tz is not None and "account_id" in body:
-            body["timezone_offset_hours_utc"] = self.tz
+            body["timezone_name"] = self.tz
+            # Смещение «сейчас» отдельно от имени пояса: на дату старта оно может быть другим.
+            body["timezone_offset_hours_utc"] = self.now_offset
         return body
 
 
@@ -149,7 +152,6 @@ def test_an_unknown_extra_language_stops_the_plan_and_the_audit_names_it(tmp_pat
 @pytest.mark.parametrize("over,platforms,user_os", [
     ({}, ["mobile", "desktop"], None),
     ({"device": "mobile"}, ["mobile"], None),
-    ({"device": "desktop"}, ["desktop"], None),
     ({"os": "iOS"}, ["mobile"], ["iOS"]),
     ({"os": "Android"}, ["mobile"], ["Android"]),
     ({"os": "iOS", "os_min": "14"}, ["mobile"], ["iOS_ver_14.0_and_above"]),
@@ -171,6 +173,7 @@ def test_devices_and_os_reach_the_payload_and_the_readback(tmp_path, over, platf
 
 @pytest.mark.parametrize("over,message", [
     ({"os": "iOS", "device": "desktop"}, "mobile system"),
+    ({"device": "desktop"}, "Desktop only isn't possible with automatic placements"),
     ({"os": "All", "os_min": "14"}, "needs the operating system"),
     ({"os": "iOS", "os_min": "14.x"}, "not a number"),
     ({"device": "tablet"}, "unknown devices"),
@@ -181,33 +184,81 @@ def test_contradictory_or_unknown_devices_are_refused_out_loud(tmp_path, over, m
         cr.plan_from_draft(_with_fields(tmp_path, **over))
 
 
+DESKTOP_MESSAGE = ("Desktop only isn't possible with automatic placements (Instagram, Stories and Reels "
+                   "need mobile). Pick All devices or Mobile, or wait for manual placements.")
+
+
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry_run", "real"])
+def test_desktop_only_is_refused_in_check_plan_with_no_write(tmp_path, dry_run):
+    from tests.test_acl1761_api_create import _publisher
+    meta = AudienceMeta()
+    pub = _publisher(meta, dry_run=dry_run)
+    res = pub.publish_draft(_with_fields(tmp_path, device="desktop"))
+    assert DESKTOP_MESSAGE in res["error"] and "Nothing was created" in res["error"]
+    assert not res.get("success") and meta.posts == [] and pub._client.writes == 0
+
+
 # ───────────────────────── старт ─────────────────────────
 
+@pytest.mark.parametrize("tz,start,iso", [
+    ("Europe/Madrid", "2026-10-20T10:00", "2026-10-20T10:00:00+0200"),
+    ("Europe/Madrid", "2026-10-30T10:00", "2026-10-30T10:00:00+0100"),     # летнее время кончилось 25.10
+    ("America/New_York", "2026-10-31T10:00", "2026-10-31T10:00:00-0400"),
+    ("America/New_York", "2026-11-02T10:00", "2026-11-02T10:00:00-0500"),   # 01.11 в США
+])
+def test_start_time_uses_the_offset_on_the_start_date_not_todays(tmp_path, tz, start, iso):
+    # «Сейчас» у кабинета летнее смещение; на дату старта оно другое - берём по имени пояса.
+    meta = AudienceMeta(tz=tz, now_offset=2 if tz == "Europe/Madrid" else -4)
+    out = _run(meta, _with_fields(tmp_path, start_time=start))
+    assert out.error == "" and out.readback["ok"], out.mismatches
+    assert _adset(meta)["start_time"] == iso
+    # Сверка идёт с правильным моментом: старый момент по смещению «сейчас» - расхождение.
+    other = AudienceMeta(tz=tz, now_offset=2 if tz == "Europe/Madrid" else -4)
+    wrong = {"2026-10-30T10:00": "2026-10-30T10:00:00+0200",
+             "2026-11-02T10:00": "2026-11-02T10:00:00-0400"}.get(start)
+    if wrong:
+        other.mutate_on_read[("adset", "start_time")] = wrong
+        out2 = _run(other, _with_fields(tmp_path, start_time=start))
+        assert [m["field"] for m in out2.mismatches] == ["start_time"]
+
+
+def test_an_unknown_time_zone_name_is_refused_before_any_write(tmp_path):
+    meta = AudienceMeta(tz="Mars/Olympus")
+    out = _run(meta, _with_fields(tmp_path, start_time="2026-10-20T10:00"))
+    assert out.stop_kind == "plan" and "time zone" in out.error and meta.posts == []
+
+
+def test_zoneinfo_has_its_data_on_this_machine_and_in_requirements():
+    from zoneinfo import ZoneInfo
+    ZoneInfo("Europe/Madrid")
+    reqs = (Path(__file__).resolve().parents[1] / "requirements.txt").read_text(encoding="utf-8")
+    assert "tzdata" in reqs
+
 def test_start_time_is_sent_with_the_account_offset_and_read_back(tmp_path):
-    meta = AudienceMeta(tz=2)
+    meta = AudienceMeta()
     out = _run(meta, _with_fields(tmp_path, start_time="2026-10-20T10:00"))
     assert out.error == "" and out.readback["ok"], out.mismatches
     assert _adset(meta)["start_time"] == "2026-10-20T10:00:00+0200"
     # Meta отдаёт тот же момент в другом смещении - это не расхождение.
-    meta2 = AudienceMeta(tz=2)
+    meta2 = AudienceMeta()
     meta2.mutate_on_read[("adset", "start_time")] = "2026-10-20T08:00:00+0000"
     out2 = _run(meta2, _with_fields(tmp_path, start_time="2026-10-20T10:00"))
     assert out2.readback["ok"], out2.mismatches
-    meta3 = AudienceMeta(tz=2)
+    meta3 = AudienceMeta()
     meta3.mutate_on_read[("adset", "start_time")] = "2026-10-21T10:00:00+0200"
     out3 = _run(meta3, _with_fields(tmp_path, start_time="2026-10-20T10:00"))
     assert [m["field"] for m in out3.mismatches] == ["start_time"]
 
 
 def test_start_time_shows_in_the_plan(tmp_path):
-    creator, _ = _creator(AudienceMeta(tz=5.5))
+    creator, _ = _creator(AudienceMeta(tz="Asia/Kolkata", now_offset=5.5))
     out = creator.plan_only(cr.plan_from_draft(_with_fields(tmp_path, start_time="2026-10-20T10:00")))
     assert out.plan["ad_sets"][0]["start_time"] == "2026-10-20T10:00:00+0530"
     assert out.plan["summary"]["ad_sets"][0]["start_time"] == "2026-10-20T10:00:00+0530"
 
 
 def test_a_start_in_the_past_or_an_unknown_time_zone_is_refused_before_any_write(tmp_path):
-    meta = AudienceMeta(tz=2)
+    meta = AudienceMeta()
     out = _run(meta, _with_fields(tmp_path, start_time="2026-10-12T13:00"))        # 11:00 UTC < 12:00 UTC
     assert out.stop_kind == "plan" and "not in the future" in out.error and meta.posts == []
     meta = AudienceMeta(tz=None)
@@ -220,6 +271,20 @@ def test_a_start_in_the_past_or_an_unknown_time_zone_is_refused_before_any_write
 
 
 # ───────────────────────── кнопка ─────────────────────────
+
+def test_a_null_cta_is_refused_like_in_the_page_layer():
+    with pytest.raises(wp.WriteRefused):
+        wp.check(ACT, "POST", f"/{ACT}/adcreatives",
+                 _cre(object_story_spec={"page_id": "1", "link_data": {"call_to_action": None}}))
+
+
+def test_the_policy_cta_list_is_per_destination_when_the_destination_is_known():
+    params = _cta("ORDER_NOW")
+    assert wp.check(ACT, "POST", f"/{ACT}/adcreatives", params) == "adcreatives"
+    with pytest.raises(wp.WriteRefused):
+        wp.check(ACT, "POST", f"/{ACT}/adcreatives", params, on_ad=True)
+    assert wp.check(ACT, "POST", f"/{ACT}/adcreatives", _cta("SIGN_UP"), on_ad=True) == "adcreatives"
+
 
 def test_the_cta_goes_to_the_creative_the_plan_and_the_readback(tmp_path):
     meta = AudienceMeta()
@@ -337,6 +402,7 @@ POLICY_CASES = [
     ("cta_shop_now", "adcreatives", _cta("SHOP_NOW"), False),
     ("cta_lowercase", "adcreatives", _cta("learn_more"), False),
     ("cta_missing_type", "adcreatives", _cre(object_story_spec={"page_id": "1", "link_data": {"call_to_action": {"value": {}}}}), False),
+    ("cta_null", "adcreatives", _cre(object_story_spec={"page_id": "1", "link_data": {"call_to_action": None}}), False),
     ("cta_not_object", "adcreatives", _cre(object_story_spec={"page_id": "1", "link_data": {"call_to_action": "LEARN_MORE"}}), False),
     ("t_genders_men", "adsets", _set({"genders": [1]}), True),
     ("t_genders_both", "adsets", _set({"genders": [1, 2]}), True),
@@ -370,6 +436,13 @@ POLICY_CASES = [
 ]
 
 
+#: Те же проверки, когда назначение известно (Instant Form, on_ad): список формы, без «Order now».
+ON_AD_CASES = [
+    ("form_cta_order_now", "adcreatives", _cta("ORDER_NOW"), False),
+    ("form_cta_sign_up", "adcreatives", _cta("SIGN_UP"), True),
+]
+
+
 @pytest.mark.parametrize("name,edge,params,allowed", POLICY_CASES, ids=[c[0] for c in POLICY_CASES])
 def test_python_policy_matrix(name, edge, params, allowed):
     if allowed:
@@ -393,7 +466,7 @@ const cases = CASES;
 (async () => {
   const out = {};
   for (const c of cases) {
-    const r = await h.call({ method: 'POST', path: '/' + ACTV + '/' + c.edge, params: c.params });
+    const r = await h.call({ method: 'POST', path: '/' + ACTV + '/' + c.edge, params: c.params, on_ad: c.on_ad === true });
     out[c.name] = r.error === 'write_refused' ? 'refused' : (r.body ? 'sent' : JSON.stringify(r));
   }
   process.stdout.write(JSON.stringify(out));
@@ -407,6 +480,7 @@ def _node_matrix():
         pytest.skip("node is not installed")
     name = "__acl_graph_1767"
     cases = [{"name": n, "edge": e, "params": p} for n, e, p, _ in POLICY_CASES]
+    cases += [{"name": n, "edge": e, "params": p, "on_ad": True} for n, e, p, _ in ON_AD_CASES]
     script = (_NODE_MATRIX.replace("ACTV", json.dumps(ACT)).replace("TOKENV", json.dumps(TOKEN))
               .replace("NAME", json.dumps(name)).replace("CASES", json.dumps(cases))
               .replace("HELPER", json.dumps(tc.helper_source(name, wp.policy_for_page(ACT)))))
@@ -423,7 +497,7 @@ def _node_matrix():
 
 def test_the_page_helper_gives_the_same_verdicts_as_the_python_policy():
     got = _node_matrix()
-    for name, _edge, _params, allowed in POLICY_CASES:
+    for name, _edge, _params, allowed in POLICY_CASES + ON_AD_CASES:
         assert got[name] == ("sent" if allowed else "refused"), (name, got[name])
 
 

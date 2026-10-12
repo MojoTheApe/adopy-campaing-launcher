@@ -240,13 +240,14 @@ _HELPER_JS = r"""
   function multiAdsOk(v) {
     return isObj(v) && Object.keys(v).length === 1 && v.enroll_status === 'OPT_OUT';
   }
-  function ctaOk(spec) {
+  function ctaOk(spec, onAd) {
     if (!isObj(spec)) return true;
+    const allowed = onAd ? WRITE.cta_form : WRITE.cta_website;
     for (const fmt of WRITE.lead_form.formats) {
       const data = spec[fmt];
       if (!isObj(data) || !('call_to_action' in data)) continue;
       const cta = data.call_to_action;
-      if (!isObj(cta) || WRITE.cta_types.indexOf(cta.type) < 0) return false;
+      if (!isObj(cta) || allowed.indexOf(cta.type) < 0) return false;
     }
     return true;
   }
@@ -302,7 +303,7 @@ _HELPER_JS = r"""
       }
     }
     if ('contextual_multi_ads' in checked && !multiAdsOk(checked.contextual_multi_ads)) return refused('multi_ads');
-    if (edge === 'adcreatives' && !ctaOk(checked.object_story_spec)) return refused('cta');
+    if (edge === 'adcreatives' && !ctaOk(checked.object_story_spec, spec.on_ad === true)) return refused('cta');
     if (edge === 'adsets' && 'targeting' in checked && !targetingOk(checked.targeting)) return refused('targeting');
     // Объявление — только ссылка на готовый креатив.
     if (edge === 'ads' && 'creative' in checked) {
