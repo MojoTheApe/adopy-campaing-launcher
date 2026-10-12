@@ -636,27 +636,32 @@ class WarmRegistry:
         if foreign:
             return _result(False, "This profile is kept warm by another dashboard window on this computer. "
                            "Use that window, or close it first. Nothing was changed.", "other_dashboard")
+        from src.fb_ads_rpa.operations import profile_lock
+
         queue = self._slot_queue()
-        prev = None
-        try:
-            prev = self._pending_close(pid)   # отложенное закрытие после чтения отменяется
-        except Exception:
-            log.exception("Could not cancel the pending close of %s", label)
-        slot = getattr(prev, "slot_id", "") if prev is not None else ""
-        try:
-            # Свой слот чтения исключаем: он держится до закрытия, и без этого окно льготы не усыновить.
-            if queue is not None and queue.others_on(pid, slot):
-                if prev is not None:
-                    self._pending_restore(pid, prev)
-                return _result(False, "A job is using this profile right now. Try again after it finishes. "
-                               "Nothing was changed.", "job_running")
-        except Exception:
-            log.exception("Could not ask the profile queue about %s", label)
-        if slot and queue is not None:
+        # Под замком профиля: таймер льготы чтения берёт тот же замок и не успеет закрыть профиль
+        # между «забрали отложенное закрытие» и «вернули его назад».
+        with profile_lock(pid):
+            prev = None
             try:
-                queue.release(slot)
+                prev = self._pending_close(pid)   # отложенное закрытие после чтения отменяется
             except Exception:
-                log.exception("Could not release the slot held for %s", label)
+                log.exception("Could not cancel the pending close of %s", label)
+            slot = getattr(prev, "slot_id", "") if prev is not None else ""
+            try:
+                # Свой слот чтения исключаем: он держится до закрытия, и без этого окно льготы не усыновить.
+                if queue is not None and queue.others_on(pid, slot):
+                    if prev is not None:
+                        self._pending_restore(pid, prev)
+                    return _result(False, "A job is using this profile right now. Try again after it finishes. "
+                                   "Nothing was changed.", "job_running")
+            except Exception:
+                log.exception("Could not ask the profile queue about %s", label)
+            if slot and queue is not None:
+                try:
+                    queue.release(slot)
+                except Exception:
+                    log.exception("Could not release the slot held for %s", label)
         # Профиль, поднятый чтением дешборда, — «поднят дешбордом»: человек сам попросил его оставить.
         self.register(pid, account=label, port=port, dashboard_started=prev is not None)
         return _result(True, "Already open with automation; kept warm.", "already_open", started=False)

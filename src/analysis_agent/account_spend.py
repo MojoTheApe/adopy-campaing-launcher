@@ -659,40 +659,31 @@ class ProfileNotAttachable(RuntimeError):
         self.code = code
 
 
-# ── окно, открытое руками (ACL-1518) ──────────────────────────────────────
+# ── окно, открытое руками ──────────────────────────────────────────────────
 #
-# Publish с ACL-1388/1427 сам закрывает и поднимает заново окно профиля,
-# открытое руками, когда это безопасно, и ждёт тишины ввода до 2 минут.
-# Чтение спенда и стран, Read all и «open profile» шли мимо: 03.10 07:45
-# Read у 1443/6540 сразу кончался «open by hand», а open-profile отвечал 409,
-# хотя Publish на 1443 через две минуты дождался тишины и переоткрыл окно.
-# Теперь эти пути просят у провайдера тот же путь (`reopen_hand_window`):
-# только мягкая остановка через MLX API, никакого kill.
-#
-# ACL-1562 (решение владельца 04.10): без условий и без ожидания — окно,
-# открытое руками, переоткрывается сразу. Строка аккаунта говорит, почему
-# окно закрылось, пока идёт мягкая остановка и подъём.
+# ACL-1812 / ACL-1811: дашборд окно, открытое руками, НИКОГДА не останавливает и не
+# поднимает заново (так 12.10 в 08:42-08:43 разлогинило 5414). Отказ с понятным текстом;
+# закрыть окно и подождать 3 минуты должен человек.
 
 #: Код отказа, когда окно так и осталось открытым руками.
 HAND_OPEN_CODE = "open_by_hand"
 
-#: Окно открыто руками (нет порта автоматизации): дашборд его не закрывает и не переоткрывает.
-HAND_WINDOW_MESSAGE = ("Opened in Multilogin by hand \u2014 close it there, wait about 3 minutes, "
-                       "then use Open profiles for today")
+#: Окно открыто руками (нет порта автоматизации). Текст зависит от бэкенда: на `api` есть
+#: кнопка «Open profiles for today», на `rpa` её нет — там кнопка «open profile» в строке.
+HAND_OPEN_MESSAGE_API = ("Opened in Multilogin by hand \u2014 close it there, wait about 3 minutes, "
+                         "then use Open profiles for today")
+HAND_OPEN_MESSAGE = ("Opened in Multilogin by hand \u2014 close it there, wait about 3 minutes, "
+                     "then use the open profile button on this row")
+HAND_WINDOW_MESSAGE = HAND_OPEN_MESSAGE
 
-#: Строка на карте, пока окно, открытое руками, переоткрывается
-#: (тот же текст, что в панели задания Publish — `browser.HAND_WINDOW_NOTICE`).
-HAND_NOTE = "The {account} window was opened by hand — reopening it with automation"
 
-#: Простой текст отказа — вместо «failed · retry» / «countries failed».
-#: ACL-1562: мягкая остановка через MLX API окно не закрыла — ничего не убивали.
-HAND_OPEN_MESSAGE = ("Opened in Multilogin by hand — close it there, wait about 3 minutes, "
-                     "then use Open profiles for today")
+def hand_message() -> str:
+    """Текст отказа «открыто руками» для текущего бэкенда."""
+    import os
 
-#: Ревью PR #563 (F3): переоткрытие выключено на этой машине
-#: (`FB_RPA_REOPEN_HAND_WINDOW=0`) — Multilogin тут ни при чём.
-HAND_OFF_MESSAGE = ("The profile is open by hand and reopening it with automation is switched "
-                    "off on this computer — close its window in Multilogin, then Read again")
+    return HAND_OPEN_MESSAGE_API if (os.environ.get("ACL_FB_BACKEND") or "").strip().lower() == "api" \
+        else HAND_OPEN_MESSAGE
+
 
 #: Аккаунт → строка переоткрытия. Живёт только в памяти и только пока окно
 #: переоткрывается: опрос `/account-spend/status` отдаёт её строке аккаунта.
@@ -700,61 +691,10 @@ _HAND_WAIT: dict[str, str] = {}
 _HAND_WAIT_LOCK = threading.Lock()
 
 
-def hand_note(account: str) -> str:
-    """Строка «окно открыто руками — переоткрываем» для этого аккаунта."""
-    return HAND_NOTE.format(account=str(account or "") or "profile")
-
-
 def hand_wait_note(account: str) -> str:
     """Переоткрывается ли сейчас окно этого аккаунта — строкой для экрана."""
     with _HAND_WAIT_LOCK:
         return _HAND_WAIT.get(str(account or ""), "")
-
-
-def _set_hand_wait(account: str, waiting: bool) -> None:
-    with _HAND_WAIT_LOCK:
-        if waiting:
-            _HAND_WAIT[str(account or "")] = hand_note(account)
-        else:
-            _HAND_WAIT.pop(str(account or ""), None)
-
-
-#: Чтение просит переоткрывать окно, открытое руками (`reopening_by_hand`).
-#: Флагом контекста, а не аргументом: `_attach_only(entry, label)` подменяют
-#: десятки тестов, и сигнатура у него прежняя.
-_REOPEN_BY_HAND: ContextVar[bool] = ContextVar("acl_reopen_by_hand", default=False)
-
-
-@contextmanager
-def reopening_by_hand():
-    """Внутри блока `_attach_only` переоткрывает окно, открытое руками (ACL-1518)."""
-    token = _REOPEN_BY_HAND.set(True)
-    try:
-        yield
-    finally:
-        _REOPEN_BY_HAND.reset(token)
-
-
-def _hand_open_message(exc: BaseException) -> str:
-    """Текст отказа «открыт руками» по причине (ревью PR #563, F3).
-
-    Мягкая остановка не закрыла окно — в `detail` остановки хвост
-    `browser.HAND_WINDOW_STOP_FAILED`; иначе переоткрытие выключено на машине.
-    """
-    from src.fb_ads_rpa import browser as rpa_browser
-
-    detail = str(getattr(exc, "detail", "") or "")
-    if rpa_browser.HAND_WINDOW_STOP_FAILED in detail:
-        return HAND_OPEN_MESSAGE
-    return HAND_OFF_MESSAGE
-
-
-def _is_open_by_hand(exc: BaseException) -> bool:
-    """Отказ провайдера — «окно открыто руками и закрыть его нельзя»."""
-    from src.fb_ads_rpa import profile_trouble
-
-    return (isinstance(exc, profile_trouble.ProfileStop)
-            and exc.code == profile_trouble.OPEN_BY_HAND)
 
 
 # ── закрытый профиль: чтение открывает его само (ACL-1580) ────────────────
@@ -1166,7 +1106,7 @@ def _attach_open(direct_cls, entry, profile_id: str):
     return None
 
 
-def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = None):
+def _attach_only(entry, account_label: str):
     """Подключиться к уже открытому профилю. Никогда его не перезапускать.
 
     Обычный путь RPA, не сумев прицепиться, останавливает профиль через API
@@ -1182,18 +1122,14 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
     Используем публичный attach_existing_only: проверка принадлежности
     профилю закреплена в провайдере, для чтения создаётся отдельная вкладка.
 
-    ACL-1518: `reopen_by_hand=True` (или блок `reopening_by_hand()` — так
-    читают спенд и страны) — окно, открытое руками, переоткрывается путём
-    Publish: сразу (ACL-1562), мягкая остановка, без kill. Не вышло — отказ
-    с кодом `HAND_OPEN_CODE` и простым текстом.
+    ACL-1812 / ACL-1811: окно, открытое руками, не останавливается и не переоткрывается
+    автоматически — отказ `HAND_OPEN_CODE` с понятным текстом.
 
     ACL-1580: внутри `opening_closed_profile(...)` (так читают спенд и
     страны) закрытый профиль не отказ — он запускается путём «open profile»
     с местом из очереди профилей Publish (`_start_closed`), и в переданной
     записи отмечается, что его запустило чтение. Без блока — прежний отказ.
     """
-    if reopen_by_hand is None:
-        reopen_by_hand = _REOPEN_BY_HAND.get()
     opening = _READ_OPEN.get()
     from src.fb_ads_rpa import browser as rpa_browser
 
@@ -1236,7 +1172,7 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
         # ACL-1812 (ревью #813, B1-bis; ACL-1811): окно, открытое руками, АВТОМАТИЧЕСКИ не
         # останавливаем и не поднимаем заново. «Закрыли — через 10 секунд открыли» разлогинило
         # 5414 (12.10, 08:42-08:43). Остановка и запуск — только руками человека.
-        raise ProfileNotAttachable(HAND_WINDOW_MESSAGE, code=HAND_OPEN_CODE)
+        raise ProfileNotAttachable(hand_message(), code=HAND_OPEN_CODE)
     if opening is not None:
         return _start_closed(entry, account_label, opening,
                              recheck=lambda: _attach_open(direct_cls, entry, profile_id))
@@ -1374,8 +1310,7 @@ class _Profile:
 
 @serialized_browser(reading=True)
 def open_profile_for_automation(profile_id: str, folder_id: str = "",
-                                instance: str = "A", label: str = "", *,
-                                reopen_by_hand: bool = False) -> tuple[bool, str]:
+                                instance: str = "A", label: str = "") -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
 
     Прицепиться можно только к профилю, поднятому автоматизацией, а поднимал
@@ -1393,11 +1328,9 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     запускали. Без папки пробуем API Multilogin; если профиль уже занят,
     возвращаем отказ и никогда не останавливаем его ради этой кнопки.
 
-    ACL-1518: `reopen_by_hand=True` (кнопка «open profile» на строке карты) —
-    окно, открытое руками, переоткрывается путём Publish (`_attach_only`):
-    сразу (ACL-1562), только мягкая остановка, без kill. Не вышло — `(False,
-    HAND_OPEN_MESSAGE)`. Подключение нового профиля (`/mlx-profile-open`)
-    по-прежнему такое окно не трогает.
+    ACL-1812 / ACL-1811: окно, открытое руками, не трогается ни этой кнопкой, ни Connect —
+    `(False, hand_message())` с кодом `HAND_OPEN_CODE`. Перед запуском закрытого профиля
+    проверяется общий журнал остановок (`fb_api.stop_log`).
     """
     profile_id = (profile_id or "").strip()
     who = label or profile_id[:8] or "profile"
@@ -1424,7 +1357,7 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
         try:
             if any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd)):
                 # ACL-1812 (B1-bis): и кнопка «open profile» руками открытое окно не трогает.
-                return False, CodedMessage(HAND_WINDOW_MESSAGE, HAND_OPEN_CODE)
+                return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
         except Exception as exc:
             return False, f"Could not check open profiles: {exc}. Nothing was launched."
 
@@ -1465,22 +1398,6 @@ class CodedMessage(str):
         return obj
 
 
-def _reopen_for_automation(entry, who: str) -> tuple[bool, str]:
-    """Окно открыто руками: переоткрыть путём Publish и оставить открытым (ACL-1518)."""
-    try:
-        with reopening_by_hand():
-            conn = _attach_only(entry, who)
-    except ProfileNotAttachable as exc:
-        return False, CodedMessage(str(exc), getattr(exc, "code", ""))
-    try:
-        # Как у обычного «open profile»: вкладку не закрываем — после
-        # переоткрытия она может оказаться единственной, и окно закрылось бы.
-        conn.close(keep_browser_open=True)
-    except Exception:
-        pass
-    return True, "The profile was reopened with automation. Log in if needed and leave the window open."
-
-
 @serialized_browser(key=_profile_key, reading=True)
 def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
@@ -1492,7 +1409,6 @@ def open_for_automation(account: str) -> tuple[bool, str]:
         (getattr(entry, "folder_id", "") or ""),
         (getattr(entry, "multilogin_instance", "") or "A"),
         account,
-        reopen_by_hand=True,
     )
 
 
@@ -1528,7 +1444,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
     held = _ReadOpen(account)
     try:
         try:
-            with reopening_by_hand(), opening_closed_profile(held):
+            with opening_closed_profile(held):
                 conn = _attach_only(entry, account)
         except ProfileNotAttachable as exc:
             out.error = str(exc)

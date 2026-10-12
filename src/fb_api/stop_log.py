@@ -158,5 +158,8 @@ def refusal(profile_id: str, log_: StopLog | None = None) -> str:
     if wait <= 0:
         return ""
     elapsed = max(0, int(restart_cooldown_s() - wait))
-    return (f"This profile was closed {elapsed} s ago. Wait about {int(wait // 60) + 1} min before "
-            "starting it again (a quick restart can log the account out). Nothing was started.")
+    left = int(wait) + (1 if wait % 1 else 0)
+    mins, secs = divmod(left, 60)
+    span = f"{mins} min {secs} s" if mins and secs else (f"{mins} min" if mins else f"{secs} s")
+    return (f"This profile was closed {elapsed} s ago \u2014 wait about {span} before opening it again "
+            "(protects the account from logouts). Nothing was started.")

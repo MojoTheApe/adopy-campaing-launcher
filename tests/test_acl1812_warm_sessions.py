@@ -1250,6 +1250,7 @@ def hand_world(monkeypatch, tmp_path):
         return SimpleNamespace(open=open_)
 
     monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("ACL_FB_BACKEND", "api")
     monkeypatch.setattr(rpa_browser, "MultiloginDirectCDPProvider", lambda: provider)
     monkeypatch.setattr(rpa_browser, "get_browser_provider", forbidden_provider)
     monkeypatch.setattr(rpa_browser, "stop_profile_on_request",
@@ -1266,17 +1267,14 @@ def test_hand_opened_window_is_never_stopped_or_restarted_by_any_open_profile_pa
     """12.10 08:42-08:43: «open profile» закрыл окно, открытое руками, и поднял его через 10 с."""
     results = [
         sp.open_for_automation("Acc"),                                           # кнопка в строке
-        sp.open_profile_for_automation(PID, "F", "A", "Acc", reopen_by_hand=True),
         sp.open_profile_for_automation(PID, "F", "A", "Acc"),                    # Connect
-        sp._reopen_for_automation(SimpleNamespace(profile_id=PID, folder_id="F", multilogin_instance="A"), "Acc"),
     ]
     for ok, message in results:
-        assert ok is False and message == sp.HAND_OPEN_MESSAGE
+        assert ok is False and message == sp.hand_message()
         assert getattr(message, "code", "") == sp.HAND_OPEN_CODE
-    for reopen in (None, True, False):
-        with pytest.raises(sp.ProfileNotAttachable) as ei:
-            sp._attach_only(hand_world.entry, "Acc", reopen_by_hand=reopen)
-        assert ei.value.code == sp.HAND_OPEN_CODE and str(ei.value) == warm.HAND_MESSAGE
+    with pytest.raises(sp.ProfileNotAttachable) as ei:
+        sp._attach_only(hand_world.entry, "Acc")
+    assert ei.value.code == sp.HAND_OPEN_CODE and str(ei.value) == warm.HAND_MESSAGE
     assert hand_world.opened == []
 
 
@@ -1423,3 +1421,118 @@ def test_a_memory_wait_shows_a_memory_note(monkeypatch):
         with api._session("Acc"):
             pass
     assert "Waiting for free memory" in notes and api.WARM_WAIT_NOTE in notes
+
+
+# ───────────────────────── ревью #813, раунд 3 ─────────────────────────
+
+def test_job_panel_close_profile_records_a_stop_even_when_it_fails(monkeypatch, tmp_path):
+    """B1-ter: «Close profile» на панели задания (ACL-1444), оба бэкенда."""
+    from src.fb_ads_rpa import rpa_publisher as rp
+    from src.web import publish_jobs as pj
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: PID)
+    monkeypatch.setattr(pj, "_jobs", {"job-x": {"account_label": "Acc", "status": "done"}})
+    monkeypatch.setattr(pj._slots, "release", lambda job_id: None)
+    monkeypatch.setattr(pj._slots, "wake", lambda: None)
+    try:
+        monkeypatch.setattr(rp, "close_account_profile", lambda label: None)
+        assert pj.close_profile("job-x")["ok"] is True
+        assert stop_log.default().restart_wait_s(PID) > 170
+        assert stop_log.refusal(PID) and "Nothing was started" in stop_log.refusal(PID)
+        other = "8" * 8 + "-0000-4000-8000-000000000000"
+        monkeypatch.setattr(pj, "profile_key_for", lambda label: other)
+
+        def boom(label):
+            raise RuntimeError("MLX timeout")
+
+        monkeypatch.setattr(rp, "close_account_profile", boom)
+        assert pj.close_profile("job-x")["code"] == "failed"
+        assert stop_log.default().restart_wait_s(other) > 170, "a failed attempt may still have closed it"
+    finally:
+        pass
+
+
+def test_close_on_the_job_panel_then_the_row_button_is_refused(monkeypatch, tmp_path, hand_world):
+    from src.fb_ads_rpa import rpa_publisher as rp
+    from src.web import publish_jobs as pj
+
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: PID)
+    monkeypatch.setattr(pj, "_jobs", {"job-y": {"account_label": "Acc", "status": "done"}})
+    monkeypatch.setattr(pj._slots, "release", lambda job_id: None)
+    monkeypatch.setattr(pj._slots, "wake", lambda: None)
+    monkeypatch.setattr(rp, "close_account_profile", lambda label: None)
+    monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a: None)
+    hand_world.provider.running = False
+    try:
+        assert pj.close_profile("job-y")["ok"]
+    finally:
+        pass
+    ok, message = sp.open_for_automation("Acc")
+    assert ok is False and getattr(message, "code", "") == "restart_cooldown"
+    assert hand_world.opened == []
+
+
+def test_cooldown_message_gives_the_remaining_time(tmp_path):
+    log = stop_log.StopLog(tmp_path / "s.json", wall=lambda: 1000.0 + 40)
+    log.record(PID, at=1000.0)
+    text = stop_log.refusal(PID, log)
+    assert text.startswith("This profile was closed 40 s ago")
+    assert "wait about 2 min 20 s before opening it again (protects the account from logouts)" in text
+
+
+def test_hand_message_names_the_right_button_per_backend(monkeypatch):
+    monkeypatch.setenv("ACL_FB_BACKEND", "api")
+    assert sp.hand_message() == warm.HAND_MESSAGE and "Open profiles for today" in sp.hand_message()
+    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    assert "open profile button on this row" in sp.hand_message()
+    assert "Open profiles for today" not in sp.hand_message()
+
+
+def test_adopt_holds_the_profile_lock_so_the_grace_timer_cannot_interleave(rig, monkeypatch):
+    from src.fb_ads_rpa.operations import profile_lock
+
+    rig.scan_result[PID] = ("port", 9444)
+    seen = []
+    real = rig.reg._pending_close
+
+    def pending(pid):
+        # Чужой поток (таймер льготы) за замок профиля не пройдёт, пока `_adopt` внутри.
+        got = []
+        t = threading.Thread(target=lambda: got.append(profile_lock(pid).acquire(blocking=False)))
+        t.start()
+        t.join(2)
+        seen.append(got[0])
+        return real(pid)
+
+    rig.reg._pending_close = pending
+    rig.reg.open_one("Acc", entry())
+    assert seen == [False]
+
+
+def test_row_open_profile_answers_200_with_open_by_hand_over_http(hand_world, monkeypatch):
+    import asyncio
+
+    import httpx
+
+    from src.web.app import app
+
+    async def go():
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as c:
+            return await c.post("/account-spend/open-profile", data={"account": "Acc"})
+
+    r = asyncio.run(go())
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is False and body["code"] == "open_by_hand" and body["message"] == warm.HAND_MESSAGE
+    assert hand_world.opened == []
+
+
+def test_a_hand_window_is_found_by_its_short_8_3_folder_name(hand_world, monkeypatch):
+    """Профиль открыт руками, а процесс называет папку по-короткому (`SHORT~1`)."""
+    hand_world.provider.profile_is_running = lambda path, profile="": path == "SHORT~1"
+    monkeypatch.setattr(sp, "_dir_spellings", lambda p: ["LONG", "SHORT~1"])
+    ok, message = sp.open_profile_for_automation(PID, "F", "A", "Acc")
+    assert ok is False and getattr(message, "code", "") == "open_by_hand"
+    assert hand_world.opened == [], "the hand-opened window was started again"

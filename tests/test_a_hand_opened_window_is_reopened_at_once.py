@@ -279,14 +279,7 @@ def test_the_wait_and_the_conditions_are_gone():
     assert not hasattr(br, "HAND_WINDOW_WAIT_NOTICE")
     page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
     assert "once the computer has been idle" not in page
-    assert "idle" not in sp.HAND_OPEN_MESSAGE and "idle" not in sp.hand_note(ACCOUNT)
-
-
-def test_the_notice_texts_are_english_and_name_the_account():
-    assert br.HAND_WINDOW_NOTICE.format(account=ACCOUNT) == NOTICE
-    assert sp.hand_note(ACCOUNT) == NOTICE
-    for text in (NOTICE, sp.HAND_OPEN_MESSAGE):
-        assert not any("\u0400" <= ch <= "\u04ff" for ch in text), text
+    assert "idle" not in sp.HAND_OPEN_MESSAGE
 
 
 # ── Stop задания — не сбой кампании (перенесено из ACL-1427) ──────────────

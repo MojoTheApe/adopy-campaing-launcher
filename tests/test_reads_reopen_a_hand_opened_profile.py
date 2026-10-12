@@ -86,19 +86,14 @@ def _attach(account=ACCOUNT):
 
 def test_the_spend_read_asks_for_the_publish_reopen(monkeypatch):
     """`read_via_rpa` просит переоткрывать окно, открытое руками, и отдаёт код отказа."""
-    seen = []
-
     def attach(entry, label):
-        seen.append(sp._REOPEN_BY_HAND.get())
         raise sp.ProfileNotAttachable(sp.HAND_OPEN_MESSAGE, code=sp.HAND_OPEN_CODE)
 
     monkeypatch.setattr(sp, "_entry_for", lambda account: SimpleNamespace(ad_account_id="act_1", profile_id="p"))
     monkeypatch.setattr(sp, "_attach_only", attach)
     out = sp.read_via_rpa(ACCOUNT, "2026-10-01", "2026-10-01")
-    assert seen == [True]
     assert out.state == "failed" and out.error_code == sp.HAND_OPEN_CODE
     assert out.to_dict()["error_code"] == sp.HAND_OPEN_CODE
-    assert sp._REOPEN_BY_HAND.get() is False, "флаг пережил чтение"
 
 
 def test_the_country_read_gives_the_same_plain_message(reads):
@@ -133,57 +128,6 @@ def _wait_for(predicate, seconds=5.0):
             return True
         threading.Event().wait(0.02)
     return predicate()
-
-
-def test_a_reopening_read_does_not_block_another_account(monkeypatch, tmp_path):
-    """Read all: пока один аккаунт переоткрывается, чтение другого не стоит.
-
-    Ревью PR #519 (F3): через настоящий `read_via_rpa` и его замок профиля
-    (`serialized_browser(key=_profile_key, reading=True)`), а не подменённое
-    чтение. Третий ярлык на ТОТ ЖЕ профиль, наоборот, ждёт — замок настоящий.
-    """
-    monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
-    monkeypatch.setattr(sp, "_UNSAVED", {})
-    same = "Facebook_1443_alias"
-    entries = {ACCOUNT: SimpleNamespace(profile_id="p-1443", ad_account_id="act_1"),
-               OTHER: SimpleNamespace(profile_id="p-6540", ad_account_id="act_2"),
-               same: SimpleNamespace(profile_id="p-1443", ad_account_id="act_1")}
-    monkeypatch.setattr(sp, "_entry_for", entries.get)
-    waiting, release = threading.Event(), threading.Event()
-    attached: list = []
-
-    def attach(entry, label):
-        attached.append(label)
-        assert sp._REOPEN_BY_HAND.get() is True
-        if label == ACCOUNT:
-            # Так выглядит переоткрытие изнутри: строка на карте и поток,
-            # который держит замок своего профиля.
-            sp._set_hand_wait(label, True)
-            waiting.set()
-            release.wait(10)
-            sp._set_hand_wait(label, False)
-            raise sp.ProfileNotAttachable(sp.HAND_OPEN_MESSAGE, code=sp.HAND_OPEN_CODE)
-        raise sp.ProfileNotAttachable(f"{label}: the profile is not open.")
-
-    monkeypatch.setattr(sp, "_attach_only", attach)
-    day = "2026-10-01"
-    sp.start_read(ACCOUNT, day, day)
-    assert waiting.wait(5)
-    sp.start_read(OTHER, day, day)
-    sp.start_read(same, day, day)
-    assert _wait_for(lambda: sp.get_reading(OTHER, day, day).state != "running")
-    assert sp.get_reading(OTHER, day, day).error.endswith("the profile is not open.")
-    # Тот же профиль стоит за переоткрывающимся чтением — до его конца.
-    assert sp.get_reading(ACCOUNT, day, day).state == "running"
-    assert sp.get_reading(same, day, day).state == "running"
-    assert same not in attached
-    assert sp.hand_wait_note(ACCOUNT) == sp.hand_note(ACCOUNT)
-    release.set()
-    assert _wait_for(lambda: sp.get_reading(same, day, day).state != "running")
-    first = sp.get_reading(ACCOUNT, day, day)
-    assert first.state == "failed" and first.error_code == sp.HAND_OPEN_CODE
-    assert attached.index(same) > attached.index(ACCOUNT)
-    assert sp.hand_wait_note(ACCOUNT) == ""
 
 
 # ── open profile: больше не 409 ───────────────────────────────────────────
@@ -222,30 +166,14 @@ def test_connecting_a_new_profile_still_leaves_a_hand_opened_window_alone(reads)
     assert reads.ev == []
 
 
-def test_the_status_poll_carries_the_reopen_note(monkeypatch, tmp_path):
-    monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
-    monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "country_splits.json")
-    sp._set_hand_wait(ACCOUNT, True)
-    try:
-        r = _get("/account-spend/status", {"account": ACCOUNT, "date_from": "2026-10-01",
-                                           "date_to": "2026-10-01"})
-        assert r.status_code == 200 and r.json()["waiting"] == sp.hand_note(ACCOUNT)
-    finally:
-        sp._set_hand_wait(ACCOUNT, False)
-    r = _get("/account-spend/status", {"account": ACCOUNT, "date_from": "2026-10-01",
-                                       "date_to": "2026-10-01"})
-    assert r.json()["waiting"] == ""
-
-
 # ── строка карты: по-английски и без «failed · retry» ─────────────────────
 
 def test_the_row_texts_are_english():
-    for text in (sp.hand_note(ACCOUNT), sp.HAND_OPEN_MESSAGE):
+    for text in (sp.HAND_OPEN_MESSAGE, sp.HAND_OPEN_MESSAGE_API):
         assert not any("Ѐ" <= ch <= "ӿ" for ch in text), text
-    assert sp.hand_note("Facebook_9943") == ("The Facebook_9943 window was opened by hand "
-                                             "— reopening it with automation")
-    assert sp.HAND_OPEN_MESSAGE == ("Opened in Multilogin by hand — close it there, wait about 3 minutes, "
-                                    "then use Open profiles for today")
+    assert sp.HAND_OPEN_MESSAGE_API == ("Opened in Multilogin by hand — close it there, wait about 3 minutes, "
+                                        "then use Open profiles for today")
+    assert "open profile button" in sp.HAND_OPEN_MESSAGE, "the RPA backend has no Open profiles for today button"
 
 
 def test_the_row_shows_the_wait_and_the_plain_message():
@@ -346,7 +274,7 @@ def test_the_row_paints_the_wait_and_the_plain_message_in_node(tmp_path):
         cut("function amapSplitMark(", "function amapSplitBusy("),
     ])
     # Сам скрипт подставляется последним: в нём могут встретиться метки.
-    source = (_ROW_HARNESS.replace("__WAIT__", json.dumps(sp.hand_note("Acc")))
+    source = (_ROW_HARNESS.replace("__WAIT__", json.dumps("The Acc window was opened by hand — reopening it with automation"))
               .replace("__MSG__", json.dumps(sp.HAND_OPEN_MESSAGE))
               .replace("__SCRIPT__", json.dumps(script)))
     path = tmp_path / "row.cjs"
