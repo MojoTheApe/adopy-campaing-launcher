@@ -7238,20 +7238,6 @@
   },
   "execution": {
     "claims": {
-      "768": {
-        "actor": "Worker-S1768A",
-        "session": "run_s1768a_1012",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1768-multiple-ad-sets",
-        "worktree": "C:\\acl-1768-adsets",
-        "id": "6fa1bf3f55094975807223f38f4aebd3",
-        "issue": 768,
-        "state": "handoff",
-        "started_at": "2026-10-12T13:49:31+00:00",
-        "from_status": "status:idea",
-        "pr": 833,
-        "report": "ACL-1768 handoff. PR #833 (stacked on #830 -> #821 -> #809 -> #796 -> #765; ACL-1767 head ecd525f2 merged).\nDone: adset_index and CampaignDraft.ad_sets[n]; form fields camp_N_adset_K_* (ad set 0 keeps old names); builder tree nodes, + Ad set, Copy ad set, Remove ad set; drafts v3 to v4; API path creates, reads back and re-runs N ad sets; per-ad-set pre-flight; RPA backend refuses several ad sets (409, \"Several ad sets need the API backend\").\nTests: 259 passed in affected suites (31 new in test_acl1768_ad_sets.py), keep harness ok. Mutation check on merge-by-name caught (6 and 8 failures).\nNot run: Playwright test test_acl1768_ad_sets_browser.py and tree screenshots (free RAM under 6 GB for 15 min); run before merge. No live calls."
-      },
       "774": {
         "actor": "Worker-S1774A",
         "session": "S1774A",
@@ -11267,9 +11253,25 @@
             "session": "run_s1768a_1012"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1768A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1768A",
+          "session": "run_s1768a_1012",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1768-multiple-ad-sets",
+          "worktree": "C:\\acl-1768-adsets",
+          "id": "6fa1bf3f55094975807223f38f4aebd3",
+          "issue": 768,
+          "state": "handoff",
+          "started_at": "2026-10-12T13:49:31+00:00",
+          "from_status": "status:idea",
+          "pr": 833,
+          "report": "ACL-1768 handoff. PR #833 (stacked on #830 -> #821 -> #809 -> #796 -> #765; ACL-1767 head ecd525f2 merged).\nDone: adset_index and CampaignDraft.ad_sets[n]; form fields camp_N_adset_K_* (ad set 0 keeps old names); builder tree nodes, + Ad set, Copy ad set, Remove ad set; drafts v3 to v4; API path creates, reads back and re-runs N ad sets; per-ad-set pre-flight; RPA backend refuses several ad sets (409, \"Several ad sets need the API backend\").\nTests: 259 passed in affected suites (31 new in test_acl1768_ad_sets.py), keep harness ok. Mutation check on merge-by-name caught (6 and 8 failures).\nNot run: Playwright test test_acl1768_ad_sets_browser.py and tree screenshots (free RAM under 6 GB for 15 min); run before merge. No live calls."
+        },
+        "pr": 833,
+        "queued_at": "2026-10-12T15:06:42+00:00"
       },
       "774": {
         "implementers": [
@@ -14668,7 +14670,8 @@
       827,
       767,
       776,
-      771
+      771,
+      768
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21990,6 +21993,13 @@
         "issue": 774,
         "claim": "934f194fbc01450d9b688377a0746d8c",
         "actor": "Worker-S1774A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-12T15:06:42+00:00",
+        "issue": 768,
+        "pr": 833,
+        "actor": "Worker-S1768A"
       }
     ],
     "policy": {
