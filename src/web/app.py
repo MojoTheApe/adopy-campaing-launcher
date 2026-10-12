@@ -702,7 +702,7 @@ def _build_account_map_view(
                 # account_name_rules.json), а не угадано по хвосту
                 "workbook_alias_exact": alias_exact,
                 # страны, под которыми числа этого аккаунта лежат на самом деле
-                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, label),
+                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, alias or label),
                 # состояние кабинета — без периода: спенд отвечает «сколько за
                 # эти дни», состояние — «что с ним сейчас»
                 "status": _account_status(label),

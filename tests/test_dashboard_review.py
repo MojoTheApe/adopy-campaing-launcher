@@ -185,6 +185,40 @@ def test_account_map_row_shows_numbers_for_suffixed_label(isolated_links):
     assert view["countries"][0]["leads"] == 6
 
 
+def test_suffixed_account_row_shows_elsewhere_for_its_resolved_alias(isolated_links):
+    label = "Acme_12345678"
+    older = _id_frame("Acme")
+    older["Date"] = "2026-10-10"
+    df = pd.concat([older, _id_frame("Acme", country="Colombia")], ignore_index=True)
+    for account in (label, "Acme"):
+        account_links.link(account, "country", "Peru")
+
+    country = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")["countries"][0]
+    rows = {row["account"]: row for row in country["rows"]}
+    assert rows[label]["workbook_alias"] == "Acme"
+    assert rows[label]["in_workbook"] and not rows[label]["has_data"]
+    assert rows["Acme"]["elsewhere"] == {"Colombia": 30.0}
+    assert rows[label]["elsewhere"] == {"Colombia": 30.0}
+
+
+@pytest.mark.parametrize("aliases", [
+    ("Unrelated",),
+    ("Acme", "ACME"),
+    ("Acme", "Legacy678", "Other678"),
+], ids=["absent_from_linked_country", "ambiguous_suffix", "ambiguous_tail"])
+def test_elsewhere_does_not_guess_an_unresolved_suffix_alias(isolated_links, aliases):
+    label = "Acme_12345678"
+    older = _id_frame(*aliases)
+    older["Date"] = "2026-10-10"
+    df = pd.concat([older, _id_frame("Acme", country="Colombia")], ignore_index=True)
+    account_links.link(label, "country", "Peru")
+
+    row = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")["countries"][0]["rows"][0]
+    assert row["countries"] == ["Peru"]
+    assert row["workbook_alias"] == "" and not row["has_data"]
+    assert row["elsewhere"] == {}, "the other country must not supply a guessed alias"
+
+
 def test_country_totals_do_not_double_count_a_linked_alias(isolated_links):
     df = _id_frame("Facebook_5265")
     account_links.link("Facebook_5265_61579362958966", "country", "Peru")

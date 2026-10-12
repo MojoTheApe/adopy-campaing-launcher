@@ -7,6 +7,9 @@
   ambiguous tail matches remain unmatched instead of selecting the suffix alias.
 - Explicit account links continue to select the country before workbook resolution,
   and account rows and country totals use the same resolved alias without duplicates.
+- When that country has no rows in the selected period, the elsewhere diagnostic
+  also uses the already-resolved alias. Unresolved or ambiguous labels keep their
+  original identity; another country cannot supply a guessed suffix match.
 - Required CI exposed an inherited logging-filter leak when the added regressions
   changed shard assignment. The pilot tests now restore each handler's pre-test
   filters, so later tests see their own logging behavior. Production redaction and
