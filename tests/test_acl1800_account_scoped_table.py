@@ -478,10 +478,10 @@ def test_header_count_line_toolbar_and_hint_follow_the_prototype(page):
 def test_column_groups_and_order_follow_the_prototype(page):
     heads = re.findall(r"<th[^>]*>(.*?)</th>", page["table"])
     names = [re.sub(r"<[^>]+>", "", h) for h in heads]
-    ctrl = ["Delivery", "Duplicate", "Bid control", "Budget", "Optimization hint", "Alerts", "Goal CPA", "Benchmark CPA"]
+    ctrl = ["Delivery", "Duplicate", "Bid control", "Budget", "Optimization hint", "Alerts", "Rules", "Goal CPA", "Benchmark CPA"]
     at = names.index("Delivery")
-    assert names[at: at + 8] == ctrl
-    assert names[at + 8: at + 11] == ["Spend", "Leads", "FTDs"]                  # BI идёт сразу за управлением
+    assert names[at: at + 9] == ctrl
+    assert names[at + 9: at + 12] == ["Spend", "Leads", "FTDs"]                  # BI идёт сразу за управлением
     assert "MANAGEMENT &amp; DECISIONS" in page["table"] or "MANAGEMENT & DECISIONS" in page["table"]
     assert "BI · business outcomes" in page["table"]
     assert "Account / campaign hierarchy" in page["table"] and "Campaign / Ad set / Ad" in page["table"]
