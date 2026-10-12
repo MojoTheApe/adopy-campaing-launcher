@@ -398,6 +398,7 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
 
 #: Что видит человек, пока действие ждёт, пока кончится чужое тяжёлое (ACL-1812).
 WARM_WAIT_NOTE = "Waiting for another account action to finish"
+WARM_MEMORY_NOTE = "Waiting for free memory"
 
 
 def _warm_registry():
@@ -425,7 +426,9 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
         lease = _warm_registry().checkout(
             profile_id, account=account, act=act, mode=mode, make_graph=make,
             ready_timeout=READY_TIMEOUT_S,
-            on_wait=lambda _why: _as._set_wait_note(account, WARM_WAIT_NOTE))
+            on_wait=lambda why: _as._set_wait_note(
+                account, WARM_MEMORY_NOTE if why in ("below_reserve", "memory_low", "memory_unknown")
+                else WARM_WAIT_NOTE))
     except _warm.WarmError as exc:
         raise ApiReadError(str(exc), code=exc.code) from exc
     except GraphStop as exc:

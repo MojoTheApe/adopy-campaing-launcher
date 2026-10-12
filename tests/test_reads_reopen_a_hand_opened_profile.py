@@ -84,21 +84,6 @@ def _attach(account=ACCOUNT):
 
 # ── hand-opened → переоткрыто сразу и прочитано ───────────────────────────
 
-def test_a_hand_opened_window_is_reopened_for_the_read(reads):
-    conn = _attach()
-    # Ревью PR #519 (M12): ни остановка, ни подъём не просят права убить.
-    assert reads.kill_flags == [("stop", False), ("start", False)], reads.kill_flags
-    assert conn.page == "reopened-page"
-    assert reads.ev == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)]
-    assert "kill" not in reads.ev, "чтение убило окно человека"
-    # Пока переоткрывали — строка на карте; после — её нет.
-    assert reads.row_notes == [sp.hand_note(ACCOUNT)]
-    assert sp.hand_wait_note(ACCOUNT) == ""
-    step, ok, kw = [r for r in reads.rows if r[0] == "profile_hand_window"][-1]
-    assert (ok, kw["note"]) == (True, "reopened")
-    assert "wait_outcome" not in kw["diag"]
-
-
 def test_the_spend_read_asks_for_the_publish_reopen(monkeypatch):
     """`read_via_rpa` просит переоткрывать окно, открытое руками, и отдаёт код отказа."""
     seen = []
@@ -116,70 +101,19 @@ def test_the_spend_read_asks_for_the_publish_reopen(monkeypatch):
     assert sp._REOPEN_BY_HAND.get() is False, "флаг пережил чтение"
 
 
-def test_the_spend_read_reaches_the_page_after_the_reopen(reads, monkeypatch):
-    """Полный путь `read_via_rpa`: после переоткрытия чтение идёт в Ads Manager."""
-    visited = []
-
-    class Page:
-        def goto(self, url, **kw):
-            visited.append(url)
-            raise RuntimeError("stop here")  # дальше — обычное чтение, его тут не проверяем
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(reads.prov, "_connect_started",
-                        lambda started, pid: reads.ev.append(("connect", pid)) or SimpleNamespace(
-                            page=Page(), close=lambda **kw: None))
-    with pytest.raises(RuntimeError, match="stop here"):
-        sp.read_via_rpa(ACCOUNT, "2026-10-01", "2026-10-01")
-    assert reads.ev == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)]
-    assert visited and "act=123" in visited[0]
-
-
-# ── мягкая остановка не прошла → простой текст ────────────────────────────
-
-def test_a_failed_graceful_stop_ends_with_the_plain_message(reads):
-    reads.stop_fails = True
-    out = sp.read_via_rpa(ACCOUNT, "2026-10-01", "2026-10-01")
-    assert out.state == "failed"
-    assert out.error == sp.HAND_OPEN_MESSAGE
-    assert out.error_code == sp.HAND_OPEN_CODE
-    assert reads.ev == [("stop", PROFILE)] and "kill" not in reads.ev
-    assert reads.row_notes == [sp.hand_note(ACCOUNT)]
-    assert sp.hand_wait_note(ACCOUNT) == ""
-    kw = [r for r in reads.rows if r[0] == "profile_hand_window"][-1][2]
-    assert kw["note"] == "mlx_stop_failed"
-
-
 def test_the_country_read_gives_the_same_plain_message(reads):
-    reads.stop_fails = True
     out = cs.read_country_split(ACCOUNT, "2026-10-01")
     assert out.state == "failed"
     assert out.error == sp.HAND_OPEN_MESSAGE and out.error_code == sp.HAND_OPEN_CODE
     assert cs.get_split(ACCOUNT, "2026-10-01", "2026-10-01")["error_code"] == sp.HAND_OPEN_CODE
-    assert reads.ev == [("stop", PROFILE)]
-
-
-def test_the_country_read_reopens_at_once(reads, monkeypatch):
-    seen = []
-    real = cs._attach_only
-
-    def attach(entry, label):
-        seen.append(sp._REOPEN_BY_HAND.get())
-        return real(entry, label)
-
-    monkeypatch.setattr(cs, "_attach_only", attach)
-    cs.read_country_split(ACCOUNT, "2026-10-01")  # дальше страница-заглушка, итог не важен
-    assert seen == [True]
-    assert reads.ev[:3] == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)]
+    assert reads.ev == [], "a hand-opened window is never stopped (ACL-1812, ACL-1811)"
 
 
 def test_without_the_read_flag_nothing_changes(reads):
     """Прочие пользователи `_attach_only` (выключение, проба кабинета) окно не трогают."""
     with pytest.raises(sp.ProfileNotAttachable) as exc:
         sp._attach_only(sp._entry_for(ACCOUNT), ACCOUNT)
-    assert exc.value.code == ""
+    assert exc.value.code == sp.HAND_OPEN_CODE
     assert reads.ev == []
 
 
@@ -280,32 +214,11 @@ def _get(path, params):
     return asyncio.run(go())
 
 
-def test_open_profile_on_a_hand_opened_profile_reopens_instead_of_409(reads):
-    r = _post("/account-spend/open-profile", {"account": ACCOUNT})
-    assert r.status_code == 200, r.text
-    assert r.json()["ok"] is True
-    assert reads.ev == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)]
-    assert reads.row_notes == [sp.hand_note(ACCOUNT)]
-
-
-def test_open_profile_that_cannot_reopen_gives_the_plain_message_not_409(reads):
-    reads.stop_fails = True
-    r = _post("/account-spend/open-profile", {"account": ACCOUNT})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["ok"] is False and body["message"] == sp.HAND_OPEN_MESSAGE
-    assert body["code"] == sp.HAND_OPEN_CODE
-    assert reads.ev == [("stop", PROFILE)] and "kill" not in reads.ev
-    # Ревью PR #519 (F6): маршрут решает по коду, а не по тексту.
-    ok, message = sp.open_for_automation(ACCOUNT)
-    assert not ok and message.code == sp.HAND_OPEN_CODE and message == sp.HAND_OPEN_MESSAGE
-
-
 def test_connecting_a_new_profile_still_leaves_a_hand_opened_window_alone(reads):
     """`/mlx-profile-open` (подключение нового профиля) в задачу не входит
     (ACL-1518; ACL-1562 оставил так: подключение — не действие над аккаунтом)."""
     ok, message = sp.open_profile_for_automation(PROFILE, "f-1", "A", "DQ438")
-    assert not ok and "opened manually" in message
+    assert not ok and message == sp.HAND_OPEN_MESSAGE
     assert reads.ev == []
 
 
@@ -331,8 +244,8 @@ def test_the_row_texts_are_english():
         assert not any("Ѐ" <= ch <= "ӿ" for ch in text), text
     assert sp.hand_note("Facebook_9943") == ("The Facebook_9943 window was opened by hand "
                                              "— reopening it with automation")
-    assert sp.HAND_OPEN_MESSAGE == ("Multilogin did not close the hand-opened profile window — "
-                                    "close it in Multilogin, then Read again")
+    assert sp.HAND_OPEN_MESSAGE == ("Opened in Multilogin by hand — close it there, wait about 3 minutes, "
+                                    "then use Open profiles for today")
 
 
 def test_the_row_shows_the_wait_and_the_plain_message():

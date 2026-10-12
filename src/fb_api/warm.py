@@ -387,6 +387,7 @@ class WarmRegistry:
                  stops: "_stop_log.StopLog | None" = None,
                  pid_alive: Callable[[int, float], bool] = _pid_alive,
                  pending_close: Callable[[str], Any] | None = None,
+                 pending_restore: Callable[[str, Any], None] | None = None,
                  memory: Callable[[], Any] | None = None,
                  settings: Callable[[], Any] | None = None,
                  usage: Any = None,
@@ -406,6 +407,7 @@ class WarmRegistry:
         self._pid_alive = pid_alive
         #: Забрать отложенное закрытие профиля после чтения (S1): `pid -> прежняя запись | None`.
         self._pending_close = pending_close or _default_pending_close
+        self._pending_restore = pending_restore or _default_pending_restore
         self._memory = memory
         self._settings = settings
         self._usage = usage
@@ -628,26 +630,33 @@ class WarmRegistry:
                        "started" if started else "already_open", started=started)
 
     def _adopt(self, label: str, pid: str, port: int) -> dict:
-        """Профиль уже открыт с портом: берём в реестр, но не из-под чужого задания (S1)."""
+        """Профиль уже открыт с портом: берём в реестр, но не из-под чужого задания (S1, S2)."""
+        with self._lock:
+            foreign = pid in self._foreign
+        if foreign:
+            return _result(False, "This profile is kept warm by another dashboard window on this computer. "
+                           "Use that window, or close it first. Nothing was changed.", "other_dashboard")
         queue = self._slot_queue()
-        try:
-            if queue is not None and queue.others_on(pid):
-                return _result(False, "A job is using this profile right now. Try again after it finishes. "
-                               "Nothing was changed.", "job_running")
-        except Exception:
-            log.exception("Could not ask the profile queue about %s", label)
         prev = None
         try:
             prev = self._pending_close(pid)   # отложенное закрытие после чтения отменяется
         except Exception:
             log.exception("Could not cancel the pending close of %s", label)
-        if prev is not None:
-            slot = getattr(prev, "slot_id", "")
-            if slot and queue is not None:
-                try:
-                    queue.release(slot)
-                except Exception:
-                    log.exception("Could not release the slot held for %s", label)
+        slot = getattr(prev, "slot_id", "") if prev is not None else ""
+        try:
+            # Свой слот чтения исключаем: он держится до закрытия, и без этого окно льготы не усыновить.
+            if queue is not None and queue.others_on(pid, slot):
+                if prev is not None:
+                    self._pending_restore(pid, prev)
+                return _result(False, "A job is using this profile right now. Try again after it finishes. "
+                               "Nothing was changed.", "job_running")
+        except Exception:
+            log.exception("Could not ask the profile queue about %s", label)
+        if slot and queue is not None:
+            try:
+                queue.release(slot)
+            except Exception:
+                log.exception("Could not release the slot held for %s", label)
         # Профиль, поднятый чтением дешборда, — «поднят дешбордом»: человек сам попросил его оставить.
         self.register(pid, account=label, port=port, dashboard_started=prev is not None)
         return _result(True, "Already open with automation; kept warm.", "already_open", started=False)
@@ -751,6 +760,8 @@ class WarmRegistry:
                     return _result(False, "Closing profiles is not available here.", "no_closer")
                 self._close_window(entry, label)   # мягкая остановка MLX, без kill
             except Exception as exc:  # noqa: BLE001
+                # Профиль мог закрыться, хотя вызов упал: пауза перед запуском всё равно нужна.
+                self._stops.record(pid)
                 return _result(False, f"Multilogin did not close the profile: {scrub(str(exc))}. "
                                       "The window stays open.", "stop_failed")
             self._forget(pid, stopped=True)
@@ -1016,6 +1027,13 @@ def _default_pending_close(profile_id: str) -> Any:
 
     with _as._PENDING_LOCK:
         return _as._PENDING_CLOSE.pop(profile_id, None)
+
+
+def _default_pending_restore(profile_id: str, prev: Any) -> None:
+    from src.analysis_agent import account_spend as _as
+
+    with _as._PENDING_LOCK:
+        _as._PENDING_CLOSE.setdefault(profile_id, prev)
 
 
 def _default_slot_queue() -> Any:

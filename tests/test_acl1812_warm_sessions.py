@@ -123,6 +123,7 @@ class Rig:
             gate=self.gate, sleep=self.sleeps.append, stagger=lambda: 7.0, stops=self.stops,
             pid_alive=lambda pid, created: pid in self.alive_pids,
             pending_close=lambda pid: self.pending.pop(pid, None),
+            pending_restore=lambda pid, prev: self.pending.setdefault(pid, prev),
             memory=reg_memory or (lambda: ps.MemoryReading(64000, 40000)),
             settings=lambda: ps.SlotSettings(),
             usage=reg_usage if reg_usage is not None else FakeUsage(),
@@ -605,7 +606,7 @@ def test_close_failure_leaves_the_window_and_the_record(rig):
     rig.reg._close_window = boom
     res = rig.reg.close_one("Acc", entry())
     assert res["ok"] is False and res["code"] == "stop_failed"
-    assert rig.reg.session(PID) is not None and rig.reg.restart_wait_s(PID) == 0
+    assert rig.reg.session(PID) is not None and rig.reg.restart_wait_s(PID) > 170, "an attempt starts the pause"
 
 
 def test_close_needs_a_confirmation_on_the_endpoint(monkeypatch):
@@ -1051,13 +1052,13 @@ def test_read_close_records_a_stop(monkeypatch, tmp_path):
     assert stop_log.default().restart_wait_s(PID) == 0
     sp._close_started(opened)
     assert stop_log.default().restart_wait_s(PID) > 170
-    # Не закрылось — остановки нет.
+    # Вызов упал — профиль мог закрыться: остановка всё равно записана.
     other = "z" * 8 + "-0000-4000-8000-000000000000"
     monkeypatch.setattr(rpa_browser, "stop_profile_on_request",
                         lambda e, label: (_ for _ in ()).throw(RuntimeError("MLX 500")))
     sp._close_started(sp._ReadOpen("Acc2", started=True, profile_id=other, entry=entry(other),
                                    started_mono=time.monotonic()))
-    assert stop_log.default().restart_wait_s(other) == 0
+    assert stop_log.default().restart_wait_s(other) > 170, "a failed attempt may still have stopped it"
 
 
 def test_publish_finish_records_a_stop(monkeypatch, tmp_path):
@@ -1212,3 +1213,213 @@ def test_liveness_check_reasserts_focus_emulation(rig):
     rig.checkout().release()
     rig.checkout().release()
     assert rig.tabs[0].kept_active == 1, "the 2nd action re-asserts anti-throttling on the reused tab"
+
+
+# ───────────────────────── ревью #813, раунд 2 ─────────────────────────
+
+class _Provider:
+    """Провайдер Multilogin: открытое руками окно (процесс есть, порта нет)."""
+
+    def __init__(self, running=True):
+        self.running = running
+        self.attach_calls = 0
+
+    def attach_existing_only(self, *a, **k):
+        self.attach_calls += 1
+        return None
+
+    def profile_is_running(self, path, profile=""):
+        return self.running
+
+
+@pytest.fixture
+def hand_world(monkeypatch, tmp_path):
+    """Всё, что умеет запускать и останавливать профиль, падает, если его позвали."""
+    from pathlib import Path
+
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    provider = _Provider()
+    opened = []
+
+    def forbidden_provider(name):
+        def open_(entry, label, **options):
+            opened.append(options)
+            raise AssertionError("the provider must not be asked to start or restart a profile")
+
+        return SimpleNamespace(open=open_)
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setattr(rpa_browser, "MultiloginDirectCDPProvider", lambda: provider)
+    monkeypatch.setattr(rpa_browser, "get_browser_provider", forbidden_provider)
+    monkeypatch.setattr(rpa_browser, "stop_profile_on_request",
+                        lambda *a, **k: pytest.fail("a hand-opened window must never be stopped"))
+    monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a: Path("LONG"))
+    monkeypatch.setattr(sp, "_dir_spellings", lambda p: ["LONG"])
+    ent = SimpleNamespace(profile_id=PID, folder_id="F", multilogin_instance="A", ad_account_id=ACT)
+    monkeypatch.setattr(sp, "_entry_for", lambda account: ent)
+    monkeypatch.setattr(sp, "_set_wait_note", lambda *a: None)
+    return SimpleNamespace(provider=provider, opened=opened, entry=ent)
+
+
+def test_hand_opened_window_is_never_stopped_or_restarted_by_any_open_profile_path(hand_world):
+    """12.10 08:42-08:43: «open profile» закрыл окно, открытое руками, и поднял его через 10 с."""
+    results = [
+        sp.open_for_automation("Acc"),                                           # кнопка в строке
+        sp.open_profile_for_automation(PID, "F", "A", "Acc", reopen_by_hand=True),
+        sp.open_profile_for_automation(PID, "F", "A", "Acc"),                    # Connect
+        sp._reopen_for_automation(SimpleNamespace(profile_id=PID, folder_id="F", multilogin_instance="A"), "Acc"),
+    ]
+    for ok, message in results:
+        assert ok is False and message == sp.HAND_OPEN_MESSAGE
+        assert getattr(message, "code", "") == sp.HAND_OPEN_CODE
+    for reopen in (None, True, False):
+        with pytest.raises(sp.ProfileNotAttachable) as ei:
+            sp._attach_only(hand_world.entry, "Acc", reopen_by_hand=reopen)
+        assert ei.value.code == sp.HAND_OPEN_CODE and str(ei.value) == warm.HAND_MESSAGE
+    assert hand_world.opened == []
+
+
+def test_row_open_profile_after_close_profiles_is_refused_inside_the_cooldown(hand_world, monkeypatch):
+    hand_world.provider.running = False                      # профиль закрыт
+    monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a: None)
+    stop_log.default().record(PID)                           # то, что делает Close profiles
+    for call in (lambda: sp.open_for_automation("Acc"),
+                 lambda: sp.open_profile_for_automation(PID, "F", "A", "Connect")):
+        ok, message = call()
+        assert ok is False and getattr(message, "code", "") == "restart_cooldown"
+        assert "Nothing was started" in message
+    assert hand_world.opened == [], "no start was attempted"
+
+
+def test_open_profile_starts_normally_without_a_recent_stop(hand_world, monkeypatch):
+    monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a: None)
+    hand_world.provider.running = False
+    started = []
+
+    class Conn:
+        def close(self, keep_browser_open=False):
+            pass
+
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    monkeypatch.setattr(rpa_browser, "get_browser_provider",
+                        lambda name: SimpleNamespace(open=lambda *a, **k: started.append(k) or Conn()))
+    ok, _ = sp.open_profile_for_automation(PID, "F", "A", "Acc")
+    assert ok is True and started and started[0]["allow_restart"] is False
+
+
+def test_start_closed_refuses_inside_the_cooldown(hand_world):
+    stop_log.default().record(PID)
+    with pytest.raises(sp.ProfileNotAttachable) as ei:
+        sp._start_closed(hand_world.entry, "Acc", sp._ReadOpen("Acc"))
+    assert ei.value.code == "restart_cooldown" and hand_world.opened == []
+
+
+def test_a_failed_stop_call_still_records_the_stop(monkeypatch, tmp_path):
+    from src.fb_ads_rpa import browser as rpa_browser
+    from src.web import publish_api
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+
+    def boom(*a, **k):
+        raise RuntimeError("MLX timeout")
+
+    monkeypatch.setattr(rpa_browser, "stop_profile_on_request", boom)
+    monkeypatch.setattr(sp, "_publish_touched", lambda opened: False)
+    monkeypatch.setattr(sp, "_record", lambda *a, **k: None)
+    sp._close_started(sp._ReadOpen("Acc", started=True, profile_id=PID, entry=entry(), started_mono=time.monotonic()))
+    assert stop_log.default().restart_wait_s(PID) > 170
+    other = "9" * 8 + "-0000-4000-8000-000000000000"
+    monkeypatch.setattr(publish_api, "_stop_profile", boom)
+    monkeypatch.setattr(publish_api, "_keep_profiles_open", lambda: False)
+    pub = publish_api.ApiPublisher()
+    pub._opened, pub._entry = SimpleNamespace(started_now=True), entry(other)
+    assert pub.finish_job("Acc", clean=True) == ""
+    assert stop_log.default().restart_wait_s(other) > 170
+
+
+def test_close_that_raises_still_starts_the_cooldown(rig):
+    rig.warm_up()
+
+    def boom(entry_, label):
+        raise RuntimeError("MLX timeout")
+
+    rig.reg._close_window = boom
+    assert rig.reg.close_one("Acc", entry())["code"] == "stop_failed"
+    assert rig.reg.restart_wait_s(PID) > 170
+
+
+def test_adopting_during_the_read_grace_works_with_the_real_queue(rig):
+    """Чтение держит свой слот все 30 с льготы: усыновление исключает его из «занято»."""
+    queue = ps.ProfileSlots(memory=lambda: ps.MemoryReading(64000, 40000), settings=lambda: ps.SlotSettings(),
+                            usage=ps.ProfileUsage(measure=lambda p: {}, background=False))
+    queue.acquire("read-api:Acc:1", PID)
+    assert queue.others_on(PID) is True and queue.others_on(PID, "read-api:Acc:1") is False
+    rig.reg._slot_queue = lambda: queue
+    rig.scan_result[PID] = ("port", 9444)
+    rig.pending[PID] = SimpleNamespace(slot_id="read-api:Acc:1")
+    res = rig.reg.open_one("Acc", entry())
+    assert res["ok"] and res["code"] == "already_open" and rig.pending == {}
+    assert queue.snapshot()["running"] == [], "the read's own slot is released on adopt"
+    assert rig.reg.session(PID).dashboard_started is True
+
+
+def test_adopting_is_refused_and_the_pending_close_restored_when_a_publish_holds_the_profile(rig):
+    queue = ps.ProfileSlots(memory=lambda: ps.MemoryReading(64000, 40000), settings=lambda: ps.SlotSettings(),
+                            usage=ps.ProfileUsage(measure=lambda p: {}, background=False))
+    queue.acquire("read-api:Acc:1", PID)
+    queue.acquire("job-1", PID, share_profile=True)       # Publish делит профиль
+    queue._running["job-1"] = {"profile": PID, "started": 0}
+    rig.reg._slot_queue = lambda: queue
+    rig.scan_result[PID] = ("port", 9444)
+    prev = SimpleNamespace(slot_id="read-api:Acc:1")
+    rig.pending[PID] = prev
+    res = rig.reg.open_one("Acc", entry())
+    assert res["code"] == "job_running" and rig.pending[PID] is prev
+    assert rig.reg.session(PID) is None
+
+
+def test_adopting_a_profile_kept_by_a_live_neighbour_is_refused(tmp_path):
+    import json
+
+    first = Rig(tmp_path)
+    first.warm_up()
+    path = first.store._file()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["profiles"][PID].update(owner_pid=424242, owner_started=1.0, target_id="T-theirs")
+    path.write_text(json.dumps(data), encoding="utf-8")
+    other = Rig(tmp_path)
+    other.alive_pids = {424242}
+    other.reg = warm.WarmRegistry(store=first.store, scan=other._scan, tab_factory=other._tab, gate=other.gate,
+                                  stops=other.stops, pid_alive=lambda pid, c: pid in other.alive_pids,
+                                  slot_queue=lambda: FakeQueue(other))
+    other.scan_result[PID] = ("port", 9333)
+    res = other.reg.open_one("Acc", entry())
+    assert res["ok"] is False and res["code"] == "other_dashboard"
+    kept = first.store.load()["profiles"][PID]
+    assert kept["owner_pid"] == 424242 and kept["target_id"] == "T-theirs"
+    assert other.reg.is_warm(PID) is False
+
+
+def test_a_memory_wait_shows_a_memory_note(monkeypatch):
+    notes = []
+    monkeypatch.setattr(sp, "_set_wait_note", lambda account, note: notes.append(note))
+    ent = SimpleNamespace(profile_id=PID, folder_id="", multilogin_instance="A", ad_account_id=ACT)
+    monkeypatch.setattr(sp, "_entry_for", lambda account: ent)
+
+    class Reg:
+        def is_warm(self, pid):
+            return True
+
+        def checkout(self, pid, **kw):
+            kw["on_wait"]("below_reserve")
+            kw["on_wait"]("limit")
+            raise warm.WarmError("no memory", "below_reserve")
+
+    monkeypatch.setattr(warm, "_REGISTRY", Reg())
+    api._COOLDOWN.clear()
+    with pytest.raises(api.ApiReadError):
+        with api._session("Acc"):
+            pass
+    assert "Waiting for free memory" in notes and api.WARM_WAIT_NOTE in notes

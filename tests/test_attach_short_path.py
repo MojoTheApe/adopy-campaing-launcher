@@ -174,13 +174,13 @@ def test_a_window_without_a_debug_port_is_reopened_only_after_both_spellings(wir
 
     class _Publish:
         def open(self, entry, label, **kwargs):
-            assert kwargs == {"allow_restart": True, "allow_kill": False}
+            raise AssertionError("a hand-opened window must not be restarted")
             raise RuntimeError("Multilogin could not stop it. Nothing was closed.")
 
     monkeypatch.setattr(rpa_browser, "get_browser_provider", lambda name: _Publish())
     with pytest.raises(sp.ProfileNotAttachable) as exc:
         sp._attach_only(_Entry(), "KLD_BFL_X84")
-    assert "open in MLX Desktop" in str(exc.value)
+    assert str(exc.value) == sp.HAND_OPEN_MESSAGE
     assert provider.tried == [LONG, SHORT]
 
 

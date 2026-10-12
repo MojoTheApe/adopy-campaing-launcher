@@ -676,14 +676,18 @@ class ProfileNotAttachable(RuntimeError):
 #: Код отказа, когда окно так и осталось открытым руками.
 HAND_OPEN_CODE = "open_by_hand"
 
+#: Окно открыто руками (нет порта автоматизации): дашборд его не закрывает и не переоткрывает.
+HAND_WINDOW_MESSAGE = ("Opened in Multilogin by hand \u2014 close it there, wait about 3 minutes, "
+                       "then use Open profiles for today")
+
 #: Строка на карте, пока окно, открытое руками, переоткрывается
 #: (тот же текст, что в панели задания Publish — `browser.HAND_WINDOW_NOTICE`).
 HAND_NOTE = "The {account} window was opened by hand — reopening it with automation"
 
 #: Простой текст отказа — вместо «failed · retry» / «countries failed».
 #: ACL-1562: мягкая остановка через MLX API окно не закрыла — ничего не убивали.
-HAND_OPEN_MESSAGE = ("Multilogin did not close the hand-opened profile window — "
-                     "close it in Multilogin, then Read again")
+HAND_OPEN_MESSAGE = ("Opened in Multilogin by hand — close it there, wait about 3 minutes, "
+                     "then use Open profiles for today")
 
 #: Ревью PR #563 (F3): переоткрытие выключено на этой машине
 #: (`FB_RPA_REOPEN_HAND_WINDOW=0`) — Multilogin тут ни при чём.
@@ -895,8 +899,13 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
       остаётся Publish: чтение его не закрывает (ни сразу, ни по таймеру).
     """
     from src.fb_ads_rpa import browser as rpa_browser
+    from src.fb_api import stop_log as _stop_log
 
     profile_id = (getattr(entry, "profile_id", "") or "").strip()
+    # ACL-1812 (ревью #813, B1-bis): закрыли недавно — не поднимаем (ACL-1811).
+    why = _stop_log.refusal(profile_id)
+    if why:
+        raise ProfileNotAttachable(why, code="restart_cooldown")
     queue = _slot_queue()
     slot_id = f"read:{account_label}:{uuid.uuid4().hex[:8]}"
     waited_from = time.monotonic()
@@ -980,16 +989,17 @@ def _close_started(opened: _ReadOpen) -> None:
         log.warning("%s: could not close the profile the read started (%s); its window stays open",
                     opened.account, exc)
     finally:
+        if opened.profile_id:
+            # Остановку записываем при любой ПОПЫТКЕ: профиль мог закрыться, хотя вызов упал
+            # (ревью #813, B2 minor); лишняя пауза безопасна, лишний запуск — нет.
+            from src.fb_api import stop_log as _stop_log
+
+            _stop_log.record_stop(opened.profile_id)
         if opened.slot_id:
             try:
                 _slot_queue().release(opened.slot_id)
             except Exception:
                 log.exception("Could not release the profile slot of %s", opened.account)
-    if ok and opened.profile_id:
-        # ACL-1812 (ревью #813, B2): остановка запомнена — следующий запуск ждёт паузу.
-        from src.fb_api import stop_log as _stop_log
-
-        _stop_log.record_stop(opened.profile_id)
     diag = {"account": opened.account, "held_s": round(time.monotonic() - opened.started_mono, 1)}
     if error:
         diag["error"] = error
@@ -1223,35 +1233,10 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
     except Exception:
         pass
     if running:
-        # Как у Publish: вручную открытое окно (без отладочного порта) мягко
-        # останавливаем через API Multilogin — куки и вход сохраняются, другие
-        # профили не трогаются — и поднимаем заново с автоматизацией. Убивать
-        # окно чтению нельзя: жёсткий перезапуск однажды разлогинил x01, поэтому
-        # allow_kill=False, и при отказе API окно остаётся как было (ACL-1234).
-        options: dict[str, Any] = {"allow_restart": True, "allow_kill": False}
-        if reopen_by_hand:
-            options["reopen_hand_window"] = True
-            options["on_hand_reopen"] = lambda: _set_hand_wait(account_label, True)
-        try:
-            conn = rpa_browser.get_browser_provider("multilogin_attach").open(
-                entry, account_label, **options)
-        except Exception as exc:  # noqa: BLE001
-            if reopen_by_hand and _is_open_by_hand(exc):
-                raise ProfileNotAttachable(_hand_open_message(exc), code=HAND_OPEN_CODE) from exc
-            raise ProfileNotAttachable(
-                f"{account_label}: the profile is open in MLX Desktop and could not be reopened "
-                f"with automation: {exc}"
-            ) from exc
-        finally:
-            if reopen_by_hand:
-                _set_hand_wait(account_label, False)
-        try:
-            from src.fb_ads_rpa import run_telemetry as _rt
-
-            _rt.record("spend_profile_restarted", True, diag={"account": account_label})
-        except Exception:
-            pass
-        return conn
+        # ACL-1812 (ревью #813, B1-bis; ACL-1811): окно, открытое руками, АВТОМАТИЧЕСКИ не
+        # останавливаем и не поднимаем заново. «Закрыли — через 10 секунд открыли» разлогинило
+        # 5414 (12.10, 08:42-08:43). Остановка и запуск — только руками человека.
+        raise ProfileNotAttachable(HAND_WINDOW_MESSAGE, code=HAND_OPEN_CODE)
     if opening is not None:
         return _start_closed(entry, account_label, opening,
                              recheck=lambda: _attach_open(direct_cls, entry, profile_id))
@@ -1438,16 +1423,18 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
                 return True, "The profile is already open through automation. You can read it."
         try:
             if any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd)):
-                if reopen_by_hand:
-                    return _reopen_for_automation(_Profile(profile_id, folder_id, instance), who)
-                return False, (
-                    f"{who}: the profile was opened manually in MLX Desktop. Opening it through "
-                    "automation would require stopping it, which logs the account out. "
-                    "Close the window in MLX Desktop and try again."
-                )
+                # ACL-1812 (B1-bis): и кнопка «open profile» руками открытое окно не трогает.
+                return False, CodedMessage(HAND_WINDOW_MESSAGE, HAND_OPEN_CODE)
         except Exception as exc:
             return False, f"Could not check open profiles: {exc}. Nothing was launched."
 
+
+    # ACL-1812 (B1-bis): обе кнопки («open profile» на строке и Connect) идут через общий журнал.
+    from src.fb_api import stop_log as _stop_log
+
+    why = _stop_log.refusal(profile_id)
+    if why:
+        return False, CodedMessage(why, "restart_cooldown")
 
     entry = _Profile(profile_id, folder_id, instance)
     try:
