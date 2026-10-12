@@ -188,6 +188,13 @@ def running_now() -> list[str]:
         return sorted({k.split("|")[0] for k in _RUNNING})
 
 
+def default_reader():
+    """Чем читать страны: `insights?breakdowns=country` (ACL-1760) или отчёт Ads Manager."""
+    from src.analysis_agent import account_spend_api
+
+    return account_spend_api.read_country_split_via_api if account_spend_api.api_enabled() else read_country_split
+
+
 def start_split(
     account: str,
     date_from: str,
@@ -222,7 +229,7 @@ def start_split(
             _RUNNING.discard(key)
             raise
 
-    fn = reader or read_country_split
+    fn = reader or default_reader()
 
     def run() -> None:
         try:

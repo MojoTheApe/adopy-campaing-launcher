@@ -582,7 +582,7 @@ def start_read(
             _RUNNING.discard(key)
             raise
 
-    fn = reader or read_via_rpa
+    fn = reader or default_reader()
 
     def run() -> None:
         started = time.time()
@@ -615,6 +615,13 @@ def start_read(
             _RUNNING.discard(key)
         raise
     return reading
+
+
+def default_reader() -> Callable[[str, str, str], SpendReading]:
+    """Чем читать спенд: Graph API в профиле (`ACL_FB_BACKEND=api`, ACL-1760) или RPA."""
+    from src.analysis_agent import account_spend_api
+
+    return account_spend_api.read_via_api if account_spend_api.api_enabled() else read_via_rpa
 
 
 def _now() -> str:
