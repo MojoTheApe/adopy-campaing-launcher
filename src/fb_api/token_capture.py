@@ -605,6 +605,20 @@ class InPageGraph:
             got = None
         return got if isinstance(got, dict) else {"kind": "other", "has_token": False}
 
+    def live_state(self, *, timeout: float = 10.0) -> dict:
+        """Дешёвая проверка прогретой вкладки перед действием (ACL-1812).
+
+        Один `.state()` помощника; токена в нём нет, а вкладка на Ads Manager —
+        один полный `.probe()` (Resource Timing мог переполниться за часы, токен
+        остаётся в HTML). К Meta ничего не уходит. Зависшая вкладка поднимает
+        `GraphStop` (вход, checkpoint, не отвечает), мёртвая — `CdpError`: решает
+        вызывающий (заменить вкладку один раз).
+        """
+        got = self._eval_helper(".state()", timeout=timeout)
+        if isinstance(got, dict) and got.get("kind") == "ads_manager" and not got.get("has_token"):
+            got = self._eval_helper(".probe()", timeout=timeout)
+        return got if isinstance(got, dict) else {"kind": "unknown", "has_token": False}
+
     def state(self) -> dict:
         try:
             got = self._eval_helper(".state()", timeout=10.0)
