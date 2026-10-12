@@ -437,3 +437,46 @@ def test_preflight_server_side_resolves_every_ad_sets_language_and_pixel(tmp_pat
     verdicts = {v["rule"]: v for v in out.audit}
     assert verdicts["language_resolves"]["status"] == "ok" and verdicts["pixel_ok"]["status"] == "ok"
     assert pf.blocks(out.audit) is False
+
+
+# ───────────────────────────── ACL-1767 (база): часовой пояс и «только десктоп» - по каждому набору ─────────────────────────────
+
+def test_every_ad_set_gets_its_start_time_by_the_zone_of_the_account(tmp_path):
+    from tests.test_acl1767_audience_fields import NOW, AudienceMeta
+    from tests.test_acl1767_audience_fields import _creator as creator_at
+
+    meta = AudienceMeta(tz="Europe/Madrid", now_offset=2)
+    d = _draft(tmp_path)
+    d.ad_sets[0].start_time = "2026-10-20T10:00"          # летнее время: +02:00
+    d.ad_sets[1].start_time = "2026-10-30T10:00"          # летнее время кончилось 25.10: +01:00
+    creator, _client = creator_at(meta, NOW)
+    out = creator.run(cr.plan_from_draft(d))
+    assert out.error == "" and out.readback["ok"], out.mismatches
+    starts = {o["name"]: o["start_time"] for o in meta.objects.values() if o["_kind"] == "adset"}
+    assert starts == {"MX Leads 1": "2026-10-20T10:00:00+0200", "MX Leads 1 - Ad set 2": "2026-10-30T10:00:00+0100"}
+    checks = [c for c in out.readback["checks"] if c["field"] == "start_time"]
+    assert len(checks) == 2 and all(c["ok"] for c in checks)
+
+
+def test_an_unknown_zone_refuses_the_start_time_of_the_ad_set_that_has_one(tmp_path):
+    from tests.test_acl1767_audience_fields import NOW, AudienceMeta
+    from tests.test_acl1767_audience_fields import _creator as creator_at
+
+    meta = AudienceMeta(tz="Mars/Olympus", now_offset=2)
+    d = _draft(tmp_path)
+    d.ad_sets[1].start_time = "2026-10-20T10:00"
+    creator, _client = creator_at(meta, NOW)
+    out = creator.run(cr.plan_from_draft(d))
+    assert "MX Leads 1 - Ad set 2" in out.error and "time zone" in out.error and meta.posts == []
+
+
+def test_desktop_only_is_refused_for_every_ad_set_not_only_the_first(tmp_path):
+    d = _draft(tmp_path)
+    d.ad_sets[1].device = "desktop"
+    with pytest.raises(cr.PlanError, match=r"Ad set 'MX Leads 1 - Ad set 2': Desktop only"):
+        cr.plan_from_draft(d)
+    d = _draft(tmp_path)
+    d.ad_sets[0].device = d.ad_sets[1].device = "desktop"
+    with pytest.raises(cr.PlanError) as err:
+        cr.plan_from_draft(d)
+    assert str(err.value).count("Desktop only isn't possible") == 2
