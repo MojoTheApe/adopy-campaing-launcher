@@ -5041,6 +5041,52 @@ async def publish_plan(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# ACL-1771: подтверждённые соответствия «термин библиотеки -> id Meta» (локальный кэш резолвера).
+# Только файл на этой машине: в Meta ничего не уходит.
+async def _targeting_body(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    return body if isinstance(body, dict) else {}
+
+
+@app.get("/targeting-resolver/cache")
+async def targeting_resolver_cache() -> JSONResponse:
+    from src.fb_api.targeting_resolver import ConfirmedStore
+
+    return JSONResponse({"entries": ConfirmedStore().entries()})
+
+
+@app.post("/targeting-resolver/confirm")
+async def targeting_resolver_confirm(request: Request) -> JSONResponse:
+    """Человек подтвердил кандидата: запомнить термин -> id + тип + имя."""
+    from src.fb_api.targeting_resolver import ConfirmedStore
+
+    body = await _targeting_body(request)
+    try:
+        row = ConfirmedStore().put(str(body.get("term") or ""), id=str(body.get("id") or ""),
+                                   type=str(body.get("type") or ""), name=str(body.get("name") or ""))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return JSONResponse({"ok": True, "entry": row})
+
+
+@app.post("/targeting-resolver/clear")
+async def targeting_resolver_clear(request: Request) -> JSONResponse:
+    """Забыть один подтверждённый термин (`term`) или все (`all: true`)."""
+    from src.fb_api.targeting_resolver import ConfirmedStore
+
+    body = await _targeting_body(request)
+    store = ConfirmedStore()
+    if body.get("all") is True:
+        return JSONResponse({"ok": True, "removed": store.clear()})
+    term = str(body.get("term") or "")
+    if not term.strip():
+        return JSONResponse({"error": "Give a term, or all=true."}, status_code=400)
+    return JSONResponse({"ok": True, "removed": 1 if store.remove(term) else 0})
+
+
 @app.get("/publish-jobs/slots")
 async def publish_jobs_slots() -> JSONResponse:
     """Сколько профилей публикуют разом и почему (ACL-1321).
