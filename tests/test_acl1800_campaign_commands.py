@@ -599,7 +599,7 @@ def test_client_that_cannot_write_cannot_execute(world):
 
 
 def test_object_of_another_account_is_refused(world):
-    world.meta.objs[CAMP_A]["account_id"] = "9999999999"
+    world.meta.objs[CAMP_A]["account_id"] = "1234567890123456"
     with pytest.raises(cmd.CommandRefused):
         world.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
     assert world.meta.posts == []
@@ -717,7 +717,7 @@ def test_session_for_another_account_is_refused_before_any_write(world):
 
     @contextmanager
     def other(account, commands):
-        yield SimpleNamespace(client=make_client(world.meta, commands=True), act="act_9999999999")
+        yield SimpleNamespace(client=make_client(world.meta, commands=True), act="act_1234567890123456")
 
     cmd.execute(world.store, other, revision_id=pv["revision_id"], idempotency_key="idem-key-0001",
                 spawn=lambda fn: fn())
