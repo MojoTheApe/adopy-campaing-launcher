@@ -52,9 +52,16 @@ def preview_campaign_drafts(drafts: list[CampaignDraft]) -> list[dict[str, Any]]
             row["Age Max"] = ad_set.age_max
             row["OS"] = ad_set.os
 
+        # ACL-1768: объявления всех наборов, номера сквозные (как «Ad N» в билдере).
+        many = len(draft.ad_sets) > 1
+        if many:
+            row["Ad sets"] = len(draft.ad_sets)
         ads_raw: list[dict[str, Any]] = []
-        for idx, ad in enumerate((ad_set.ads if ad_set else []), start=1):
+        flat = [(si, ad) for si, st in enumerate(draft.ad_sets, start=1) for ad in st.ads]
+        for idx, (set_no, ad) in enumerate(flat, start=1):
             prefix = f"Ad {idx}"
+            if many:
+                row[f"{prefix} — Ad set"] = draft.ad_sets[set_no - 1].name
             creative_file = ad.creative_filename or "—"
             path_name = Path(ad.creative_path).name if ad.creative_path else "❌ file not mapped"
             row[f"{prefix} — Creative"] = ad.creative_type
