@@ -31,7 +31,7 @@
     --adopy-row-campaign-min: 64px; --adopy-row-adset-min: 56px; --adopy-row-ad-min: 52px;
     --adopy-cell-x: 12px; --adopy-z-sticky-cell: 10; --adopy-z-table-header: 20;
     --adopy-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-    --hc-pin-w: 432px;
+    --hc-pin-w: 432px; --hc-inset: 0.75rem;
   }
   :root[data-theme="dark"] .hc {
     --adopy-bg: #111720; --adopy-surface: #19222e; --adopy-surface-subtle: #202b39;
@@ -97,12 +97,17 @@
   .hc-top { overflow-x: auto; overflow-y: hidden; height: 14px; border-bottom: 1px solid var(--adopy-border); }
   .hc-top > div { height: 1px; }
   .hc-scroll { position: relative; overflow: auto; max-height: min(70vh, 720px); min-width: 0; }
-  .hc-frame[data-more-right="1"]::after, .hc-frame[data-more-left="1"]::before {
-    content: ""; position: absolute; top: 0; bottom: 0; width: 14px; pointer-events: none; z-index: 30;
-  }
+  /* Тени «там есть ещё колонки» — только на двух краях: у правого края закреплённого блока (тень самих закреплённых ячеек,
+     она не может оказаться в другом месте) и у правого края видимой области (`::after` рамки). Никаких наложений
+     поверх прокручиваемых ячеек посередине; всё без событий мыши. */
   .hc-frame { position: relative; }
-  .hc-frame[data-more-right="1"]::after { right: 0; background: linear-gradient(to left, rgb(24 44 76 / 14%), transparent); }
-  .hc-frame[data-more-left="1"]::before { left: var(--hc-pin-w); background: linear-gradient(to right, rgb(24 44 76 / 14%), transparent); }
+  .hc-frame[data-more-right="1"]::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 14px; pointer-events: none; z-index: 30;
+    background: linear-gradient(to left, rgb(24 44 76 / 14%), transparent); }
+  .hc-frame[data-more-left="1"] .hc-table .p3 { box-shadow: 8px 0 8px -6px rgb(24 44 76 / 24%); }
+  :root[data-theme="dark"] .hc-frame[data-more-right="1"]::after { background: linear-gradient(to left, rgb(0 0 0 / 40%), transparent); }
+  :root[data-theme="dark"] .hc-frame[data-more-left="1"] .hc-table .p3 { box-shadow: 8px 0 8px -6px rgb(0 0 0 / 55%); }
+  /* Ни один предок не растёт вслед за широкой таблицей: прокручивается только `.hc-scroll`, страница — нет. */
+  .hc-scoped, .hc-scoped [data-hc="body"], .hc-mount, .hc-frame { min-width: 0; max-width: 100%; }
   table.hc-table { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: auto; margin: 0; font-size: 0.8125rem;
     font-variant-numeric: tabular-nums; background: var(--adopy-surface); }
   .hc-table th, .hc-table td {
@@ -191,13 +196,15 @@
     white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 0.6875rem/1.4 ui-monospace, Consolas, monospace; color: var(--adopy-text); border-top: 1px solid var(--adopy-border); background: var(--adopy-surface-subtle); }
   .hc-switch[aria-busy="true"] { opacity: 0.6; cursor: progress; }
   .hc-switch:not(:disabled), .hc-cmd:not(:disabled) { cursor: pointer; }
-  .hc-foot { padding: 0.5rem 0.25rem; color: var(--adopy-text-muted); font-size: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
+  .hc-foot { padding: 0.5rem 0; color: var(--adopy-text-muted); font-size: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
   @media (max-width: 760px) { .hc { --hc-pin-w: 330px; } .hc-toolbar input[type="search"] { width: 100%; } }
   /* Таблица страны под списком аккаунтов (карта аккаунтов на Home и вкладка страны, ACL-1800). */
-  .hc.hc-scoped { margin: 0.75rem 0 0; padding: 0; white-space: normal; text-align: left; border: 1px solid var(--adopy-border);
+  .hc.hc-scoped { margin: 0.75rem 0 0; padding: 0 var(--hc-inset) 0.5rem; white-space: normal; text-align: left; border: 1px solid var(--adopy-border);
     border-radius: var(--adopy-radius-lg); background: var(--adopy-surface); }
-  .hc-scoped > [data-hc="body"], .hc-scoped > [data-hc="needs"] { margin: 0.75rem 1rem 1rem; }
-  .hc-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.25rem; padding: 0 1rem; border-bottom: 1px solid var(--adopy-border); }
+  /* Один левый край у всего блока: вкладки, заголовок, панели, подсказка и сама сетка стоят на отступе --hc-inset
+     (≈ отступ ячейки списка аккаунтов выше), поэтому текст шапки начинается там же, где первая колонка сетки. */
+  .hc-scoped [data-hc="body"], .hc-scoped [data-hc="needs"] { margin: 0.75rem 0 0.25rem; }
+  .hc-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.25rem; padding: 0; border-bottom: 1px solid var(--adopy-border); }
   .hc-tab { padding: 0.625rem 0; font-size: 0.8125rem; color: var(--adopy-text-muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
   a.hc-tab:hover { color: var(--adopy-text); }
   .hc-tab[aria-current="page"] { color: var(--adopy-primary); border-bottom-color: var(--adopy-primary); font-weight: 600; }
@@ -206,7 +213,7 @@
   .hc-title { margin: 0; font-size: 1.0625rem; font-weight: 600; color: var(--adopy-text); }
   .hc-actions { display: inline-flex; gap: 0.5rem; }
   .hc-divider { align-self: stretch; width: 1px; background: var(--adopy-border); margin: 0 0.25rem; }
-  .hc-hint-line { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.6875rem; color: var(--adopy-text-muted); padding: 0.25rem 0.25rem 0.125rem; }
+  .hc-hint-line { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.6875rem; color: var(--adopy-text-muted); padding: 0.25rem 0 0.125rem; }
   .hc-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 0.375rem; background: var(--adopy-text-muted); vertical-align: middle; }
   .hc-dot.ok { background: var(--adopy-success); } .hc-dot.warn { background: var(--adopy-warning); } .hc-dot.bad { background: var(--adopy-danger); }
   .hc-lbl { display: inline-block; margin-right: 0.375rem; font-size: 0.75rem; }
