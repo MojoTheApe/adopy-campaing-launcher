@@ -48,6 +48,8 @@ class AdDraft:
     lead_form_id: str = ""
     # ACL-1767: тип кнопки (call_to_action.type); пусто = LEARN_MORE как всегда (только API-бэкенд).
     cta: str = ""
+    # ACL-1776: id шаблона формы из библиотеки (форму создаёт робот; только API-бэкенд).
+    lead_form_template: str = ""
 
     def ad_name(self) -> str:
         """Name for the ad in Ads Manager: "<creative> [<variant>] - <text>".
@@ -94,6 +96,8 @@ class AdDraft:
             out["lead_form_id"] = self.lead_form_id
         if self.cta:
             out["cta"] = self.cta
+        if self.lead_form_template:
+            out["lead_form_template"] = self.lead_form_template
         return out
 
 

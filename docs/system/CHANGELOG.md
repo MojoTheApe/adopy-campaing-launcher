@@ -47,6 +47,39 @@ a clear refusal.
 - Backend switch: the country table and "Read campaigns in <Country>" render only with `ACL_FB_BACKEND=api`. Under `rpa` (the default) the previous per-account list from Read spend, with its Off/On chips, "Turn off?" flow, log and coverage note, is unchanged; the two are never shown for the same country.
 - The first live check runs on the 9095 test dashboard with test accounts, after the owner agrees.
 
+## Builder: Instant Forms - the robot creates a form from a template (API backend) - ACL-1776
+
+- Owner decision 2026-10-12: the robot MAY create an Instant Form on a Page from a saved template. It
+  never accepts the Lead Ads terms (`tos_accepted` is not allowed anywhere, in either policy layer). A
+  Page that has not accepted the terms stops the campaign before any write with a text that tells the
+  human to accept them in Meta.
+- Forms library: templates live in `form_templates.json` in the machine config folder
+  (`get_local_config_dir()`), not in git. A template has a name, headline, optional intro, contact fields
+  (name / email / phone), up to 5 custom questions (short answer or multiple choice), an https privacy
+  policy URL, thank-you text with an optional https website link, and a locale. The same checks run on
+  the page and on the server.
+- Builder: with Instant Form every ad has "Use existing form" (ACL-1775) or "Create from template" with
+  a "Create and save form" panel (Save and select / Back to ad). Saving only stores the template on the
+  computer. With `ACL_FB_BACKEND=rpa` the template path is disabled with "API backend only"; a stored
+  choice is refused out loud.
+- Creation: `POST /{page_id}/leadgen_forms` runs in its own narrow write-policy chain
+  (`write_policy.check_form_create`, mirrored in the page helper): only that edge on the plan's Page; only
+  the keys name, questions, privacy_policy, thank_you_page, context_card, question_page_custom_headline,
+  locale, follow_up_action_url; nested keys and values are checked; no terms, no DELETE, no other Page
+  edge, no files.
+- Idempotent: the form name is `<template> · ACL <6-hex content hash>`. The Page's forms are searched by
+  the exact name first; an ACTIVE match is reused (also by another campaign), an archived one stops with
+  a clear text. The write happens once, right before the creative that needs the form. A timeout is
+  reconciled by reading the forms list; nothing found means a stop and no blind retry. The created form
+  is read back: ACTIVE, on this Page, questions match.
+- Check plan makes zero writes and says "form will be created: <name>" (or "form found on the Page,
+  reused"). Pre-flight audit: privacy URL present and https, at least one contact field, Lead Ads terms
+  accepted (when readable).
+- Open: whether the captured Ads Manager token may create forms on a Page is only known from a live
+  attempt (`pages_manage_ads`). `/me/permissions` is read as a hint (warning, not a block); a Meta refusal
+  becomes a clear English stop that points to "Use existing form". The robot never asks for or stores
+  another token.
+
 ## Builder: pre-flight audit card that blocks Publish - ACL-1819
 
 - Every check is defined once in `src/fb_api/preflight_rules.py` (id, label, severity, field, hint,
