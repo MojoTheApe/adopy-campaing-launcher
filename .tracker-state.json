@@ -7237,7 +7237,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "814": {
+        "actor": "Worker-S1814A",
+        "session": "run_s1814a_1012",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1814-rules-store",
+        "worktree": "C:\\acl-1814-rules",
+        "id": "b905c688e3a24c1293d3819e2ac0631a",
+        "issue": 814,
+        "state": "implementing",
+        "started_at": "2026-10-12T07:29:24+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -10931,6 +10944,17 @@
         },
         "pr": 813,
         "queued_at": "2026-10-12T07:05:42+00:00"
+      },
+      "814": {
+        "implementers": [
+          {
+            "actor": "Worker-S1814A",
+            "session": "run_s1814a_1012"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1814A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -11860,6 +11884,10 @@
       },
       "Worker-S1812A": {
         "session": "run_s1812a_1012",
+        "role": "Worker"
+      },
+      "Worker-S1814A": {
+        "session": "run_s1814a_1012",
         "role": "Worker"
       }
     },
@@ -21391,6 +21419,13 @@
         "issue": 812,
         "pr": 813,
         "actor": "Worker-S1812A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T07:29:24+00:00",
+        "issue": 814,
+        "claim": "b905c688e3a24c1293d3819e2ac0631a",
+        "actor": "Worker-S1814A"
       }
     ],
     "policy": {
