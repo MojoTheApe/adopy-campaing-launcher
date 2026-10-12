@@ -7237,7 +7237,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "826": {
+        "actor": "Worker-S1826A",
+        "session": "run_s1826a_1012",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1826-mlx-session-lost",
+        "worktree": "C:\\acl-1826-mlx",
+        "id": "2b5298d7f62846d5a75b6d3d5ae1902c",
+        "issue": 826,
+        "state": "implementing",
+        "started_at": "2026-10-12T12:54:45+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -11117,6 +11130,17 @@
           "from_status": "status:idea",
           "report": "Owner cancelled ACL-1776: the robot does not create forms. No code written, nothing pushed."
         }
+      },
+      "826": {
+        "implementers": [
+          {
+            "actor": "Worker-S1826A",
+            "session": "run_s1826a_1012"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1826A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -12074,6 +12098,10 @@
       },
       "Worker-S1776A": {
         "session": "run_s1776a_1012",
+        "role": "Worker"
+      },
+      "Worker-S1826A": {
+        "session": "run_s1826a_1012",
         "role": "Worker"
       }
     },
@@ -21709,6 +21737,13 @@
         "issue": 776,
         "actor": "Worker-S1776A",
         "report": "Owner cancelled ACL-1776: the robot does not create forms. No code written, nothing pushed."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T12:54:45+00:00",
+        "issue": 826,
+        "claim": "2b5298d7f62846d5a75b6d3d5ae1902c",
+        "actor": "Worker-S1826A"
       }
     ],
     "policy": {
