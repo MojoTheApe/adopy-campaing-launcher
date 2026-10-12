@@ -107,7 +107,6 @@ def test_the_read_labels_say_spend_everywhere():
     # Занятость — короткое «reading…» и на сервере, и на странице (кнопка при
     # нажатии, при опросе; третье — загрузка журнала): длинная подпись не
     # влезала в колонку кнопок на 1280–1366px.
-    # Два места: кнопка Read spend и её ячейка. Третье было в журнале старого списка «in the account» (убран в ACL-1800).
-    assert page.count("'reading…'") == 2 and "'reading spend…'" not in page
+    assert page.count("'reading…'") == 3 and "'reading spend…'" not in page
     for stale in (">Read</button>", ">Read all</button>", "' read';", "'Read';", "'Reading ' +", "by the Read button"):
         assert stale not in amap + country + page, stale

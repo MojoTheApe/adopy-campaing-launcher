@@ -74,7 +74,7 @@ class Site:
                 '<section class="hc hc-scoped amap-campaigns" data-country="Kuwait"><nav class="hc-tabs" data-hc-tabs></nav>'
                 '<div class="hc-mount" data-hc-mount></div></section>'
                 "</details></div>"
-                "<script>function amapPeriod() { return {from: '" + D + "', to: '" + D + "', span: ''}; }\n" + MOUNT_JS + "</script>"
+                "<script>window.AMAP_CAMPAIGN_TABLE = true; function amapPeriod() { return {from: '" + D + "', to: '" + D + "', span: ''}; }\n" + MOUNT_JS + "</script>"
                 "</body></html>")
 
     def handle(self, route):

@@ -39,6 +39,7 @@ a clear refusal.
   numbers on screen, and where an input is missing the cell shows a dash with the reason.
   `GET /campaign-commands/history?account=` backs "What was changed here". Opening a block reads
   nothing from Meta.
+- Backend switch: the country table and "Read campaigns in <Country>" render only with `ACL_FB_BACKEND=api`. Under `rpa` (the default) the previous per-account list from Read spend, with its Off/On chips, "Turn off?" flow, log and coverage note, is unchanged; the two are never shown for the same country.
 - The first live check runs on the 9095 test dashboard with test accounts, after the owner agrees.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736

@@ -1332,6 +1332,19 @@ from urllib.parse import quote as _url_quote
 
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
+
+
+def _campaign_table_api() -> bool:
+    """Какой список кампаний рисовать у аккаунта (ACL-1800): `api` — таблица страны, `rpa` — прежний список из Read spend.
+
+    Читается при каждом рендере, чтобы смена `ACL_FB_BACKEND` не требовала ничего, кроме перезапуска, и тест мог её переключать.
+    """
+    from src.analysis_agent import campaign_inventory as _ci
+
+    return _ci.backend_ready()
+
+
+templates.env.globals["campaign_table_api"] = _campaign_table_api
 templates.env.filters["fmt_usd"] = fmt_usd
 templates.env.filters["fmt_currency"] = fmt_currency
 templates.env.filters["fmt_summary_amount"] = fmt_summary_amount

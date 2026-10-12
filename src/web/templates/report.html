@@ -2064,6 +2064,7 @@
     .amap-live-old small { display: block; font-size: 0.66rem; font-style: normal; }
     /* Под неудачей — своей строкой, иначе «profile is closed$1,044.82». */
     .amap-live-bad + .amap-live-old { display: block; margin-top: 0.1rem; }
+    .amap-tree-head.old { color: var(--warn); }
     .amap-live-run { color: var(--muted); font-size: 0.78rem; }
     .amap-live-bad { color: var(--danger); border-color: var(--danger); }
     /* ACL-1282: разбивка по странам падает не так, как спенд, и после
@@ -2078,6 +2079,209 @@
     .amap-hand-wait { display: block; color: var(--muted); font-size: 0.66rem; font-style: italic; white-space: normal; max-width: 16rem; }
     .amap-split-bad.hand { color: var(--warn); white-space: normal; max-width: 16rem; }
 
+    /* ── Что в аккаунте на самом деле (acl-113) ───────────────────────────
+       Строки приходят из кабинета, не из книги: у книжных нет ни id, ни
+       состояния, и отстают они на сутки. Появляется этот блок только после
+       Read — до него показывать нечего, и притворяться, что есть, нельзя.
+
+       Состояние нарисовано СЛОВОМ, а не тумблером. Переключать пока нечем, а
+       контрол, похожий на переключатель, обещает то, чего не делает. */
+    .amap-tree > td { padding: 0 !important; background: var(--bg-subtle); }
+    /* ACL-1256: строки дерева стоят под колонками аккаунта. Ширины колонок
+       снимаются с самой строки аккаунта (--amap-cols), пока их нет — запасная
+       раскладка тех же одиннадцати колонок. Внутренний отступ слева убран,
+       иначе колонки уехали бы вправо на его ширину; текстовые блоки дерева
+       (заголовок, оговорки, журнал) держат прежний отступ сами. */
+    .amap-tree-inner { padding: 0.5rem 0 0.6rem; }
+    .amap-tree-inner > :not(.amap-tree-line):not(.amap-tree-kids) { margin-left: 2.2rem; margin-right: 0.75rem; }
+    .amap-tree-head {
+      font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 0.35rem;
+    }
+    .amap-tree-line {
+      display: grid; align-items: baseline;
+      grid-template-columns: var(--amap-cols, minmax(16rem, 1fr) repeat(7, 5.5rem) 8rem 9rem 2rem);
+      padding: 0.15rem 0; font-size: 0.8rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .amap-tree-line > * { padding: 0 var(--amap-cell-pad, 0.6rem); min-width: 0; }
+    .amap-tree-line:last-child { border-bottom: none; }
+    /* ACL-1277: на ноутбуке с открытым билдером таблице достаётся 582px на
+       1280 и 668px на 1366, а десяти колонкам кроме имени нужно по
+       содержимому 660px — имени не остаётся ничего. Перераспределением
+       ширины это не решается, и прятать числа владелец не захотел
+       (решение 23.09). Тогда имя занимает свою строку во всю ширину, а
+       числа встают строкой ниже под своими заголовками: столбцы те же, с
+       теми же ширинами, сдвинут только перенос.
+
+       Вторая строка начинается со второй колонки, потому что первая занята
+       именем сверху: без этого числа уехали бы на колонку влево и встали
+       под чужими заголовками — молча и правдоподобно. */
+    .amap-stacked .amap-tree-line {
+      display: flex; flex-wrap: wrap; align-items: baseline;
+      column-gap: 0.75rem; row-gap: 0.1rem; padding-bottom: 0.35rem;
+      padding-left: 0.6rem;
+    }
+    /* Уступ объявления держит вся строка, а не одна ячейка имени: иначе
+       числа объявления начинаются левее имени его же кампании, и по строке
+       чисел не видно, чья она (ревью 23.09). */
+    .amap-stacked .amap-tree-line.ad { padding-left: 1.6rem; }
+    .amap-stacked .amap-tree-who { flex: 1 0 100%; padding-left: 0 !important; }
+    /* У объявления уступ сильнее (0,3,0) и стоит ниже — без своего правила
+       он оставался на ячейке имени, и имя объявления уезжало на уровень
+       глубже собственной строки чисел (ревью 23.09). */
+    .amap-stacked .amap-tree-line.ad .amap-tree-who { padding-left: 0 !important; }
+    /* Колонки на этой ширине не помогают: и сами заголовки таблицы сжаты до
+       «S… A… L… F…». Поэтому числа идут подряд, каждое со своей подписью —
+       решение владельца 23.09, когда он увидел замер с настоящими отступами.
+       Подпись берётся из `data-label` и ставится CSS: в разметку она не
+       попадает, и в однострочной раскладке её нет вовсе. */
+    .amap-stacked .amap-tree-line > :not(.amap-tree-who) {
+      flex: 0 0 auto; padding: 0; text-align: left;
+    }
+    .amap-stacked .amap-tree-line > [data-label]:not(:empty)::before {
+      content: attr(data-label) " "; color: var(--muted);
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    /* Пустую ячейку не показываем вовсе: «CPL» без числа — это обещание
+       числа, которого нет. Прочерк книги — тот же случай: у объявления строк
+       в книге обычно нет вовсе, и строка читалась бы как «SPEND — LEADS —
+       FTD — CPL — CPA — CR —» (ревью 23.09). В широкой раскладке прочерк
+       остаётся: там он стоит в своей колонке и говорит «смотрели, не
+       нашли», ничего не занимая. */
+    .amap-stacked .amap-tree-line > :not(.amap-tree-who):empty,
+    .amap-stacked .amap-tree-line > .attr.nodata { display: none; }
+    .amap-stacked .amap-tree-line .amap-tree-src { display: none; }
+    .amap-stacked .amap-tree-namebox { flex-direction: row; align-items: baseline; gap: 0.35rem; }
+    /* Первая колонка узкая (это колонка имени аккаунта), а в ней стрелка,
+       уровень, тумблер и имя. Имя важнее всего остального: по нему решают,
+       что выключать, поэтому отступы и пометка уровня — самые скромные.
+       Само имя стоит одной строкой с многоточием (ACL-1275). */
+    .amap-tree-who {
+      display: flex; align-items: baseline; gap: 0.35rem;
+      padding-left: 0.6rem !important;
+    }
+    .amap-tree-line.ad .amap-tree-who { padding-left: 1.6rem !important; }
+    .amap-tree-who .amap-tree-sw { flex: 0 0 auto; }
+    .amap-tree-namebox { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+    .amap-tree-namebox .amap-tree-kind { flex: 0 0 auto; font-size: 0.6rem; line-height: 1.1; }
+    /* ACL-1275: имя — одной строкой с многоточием, как просил владелец:
+       перенос на две строки растягивал каждую строку дерева вдвое. Целиком
+       имя видно в подсказке, а колонка стала шире (ACL-1277). */
+    .amap-tree-namebox .amap-tree-name {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25;
+    }
+    .amap-tree-kind {
+      flex: 0 0 4.6rem; color: var(--muted); font-size: 0.7rem;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    /* ACL-1395: у объявлений с одним именем числа книги общие. Тихая пометка
+       в строке уровня, как «not in the workbook» у аккаунта; объяснение — в
+       подсказке. */
+    .amap-tree-shared {
+      margin-left: 0.35rem; color: var(--muted); text-transform: none;
+      letter-spacing: 0; cursor: help; border-bottom: 1px dotted var(--border);
+    }
+    /* Стрелка кампании. Пустое место вместо неё держит ту же ширину, иначе
+       строки без объявлений разъезжаются относительно остальных. */
+    .amap-tree-caret, .amap-tree-caret-off {
+      flex: 0 0 1rem; font-size: 0.7rem; line-height: 1; text-align: left;
+    }
+    .amap-tree-caret {
+      background: none; border: 0; padding: 0; cursor: pointer;
+      color: var(--muted); transition: transform 120ms var(--ease-out);
+    }
+    .amap-tree-caret:hover { color: var(--accent); }
+    .amap-tree-caret.open { transform: rotate(90deg); }
+    .amap-tree-sw {
+      flex: 0 0 2.6rem; text-align: center; border-radius: 3px;
+      padding: 0.05rem 0.3rem; font-size: 0.7rem; font-weight: 600;
+      border: 1px solid var(--border);
+    }
+    .amap-tree-sw.on { color: var(--good); border-color: var(--good); }
+    .amap-tree-sw.off { color: var(--muted); }
+    .amap-tree-sw.dim { color: var(--muted); border-style: dashed; }
+    .amap-tree-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Доставка отдельно от тумблера намеренно: «on» и «Campaign off» стоят
+       вместе на живом аккаунте — включено, а не крутится, потому что выключена
+       кампания сверху. Одним значком это не показать. */
+    .amap-tree-del { color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .amap-tree-del.stopped { color: var(--warn, var(--danger)); }
+    /* Числа держат свою ширину и выравниваются по разряду: столбик из пяти
+       строк читается взглядом, разъезжающийся — нет. */
+    .amap-tree-num {
+      text-align: right; font-size: 0.75rem;
+      font-variant-numeric: tabular-nums; color: var(--muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .amap-tree-num.spend { color: inherit; }
+    /* Числа книги — те же, что в строке аккаунта, и тем же цветом. */
+    .amap-tree-num.attr { color: inherit; }
+    /* Колонка Setup у строки аккаунта говорит «готов ли аккаунт», а у строк
+       дерева в ней стоит результат Meta. Под одним заголовком — две разные
+       вещи (ACL-1275), поэтому результат подписан источником. */
+    .amap-tree-num.res { text-align: left; }
+    .amap-tree-num.res .amap-tree-src {
+      color: var(--muted); font-size: 0.62rem; text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    /* С открытым билдером таблице остаётся мало места, и подпись съедала само
+       число (ревью 22.09). Тогда источник остаётся только в подсказке. */
+    body.cbd-open .amap-tree-num.res .amap-tree-src { display: none; }
+    .amap-tree-err { color: var(--danger); font-size: 0.75rem; padding-top: 0.3rem; }
+    /* ACL-1504: список кампаний не прочитан — причина, что делать, Read again. */
+    .amap-tree-notread { font-size: 0.78rem; margin-bottom: 0.5rem; }
+    .amap-tree-notread-why { color: var(--danger); font-weight: 600; }
+    .amap-tree-notread-do { color: var(--text); padding-top: 0.15rem; }
+    .amap-tree-notread-do .amap-tree-reread { margin-left: 0.4rem; }
+    .amap-tree-tech { padding-top: 0.3rem; color: var(--muted); font-size: 0.72rem; }
+    .amap-tree-tech summary { cursor: pointer; }
+    .amap-tree-tech-body { white-space: pre-wrap; word-break: break-word; padding-top: 0.2rem; }
+    /* Включённая строка — кнопка: её можно выключить. Выключенная и
+       «непонятно» остаются надписями, нажимать там нечего. */
+    button.amap-tree-sw { cursor: pointer; font-family: inherit; }
+    button.amap-tree-sw:hover { border-color: var(--danger); color: var(--danger); }
+    .amap-tree-sw.arming { flex-basis: 5rem; border-color: var(--danger); color: var(--danger); }
+    .amap-tree-sw.failed { border-style: dashed; }
+    button.amap-tree-sw:disabled { opacity: 0.6; cursor: default; }
+    /* Журнал изменений — под деревом и свёрнут. Он отвечает на вопрос,
+       который возникает реже, чем «что там сейчас», и не должен отбирать
+       место у строк, ради которых дерево открывают. */
+    .amap-tree-log { margin-top: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.35rem; }
+    .amap-tree-log-head {
+      background: none; border: 0; padding: 0.1rem 0; cursor: pointer;
+      font: inherit; font-size: 0.73rem; color: var(--muted);
+      display: flex; align-items: center; gap: 0.35rem;
+    }
+    .amap-tree-log-head:hover { color: var(--accent); }
+    .amap-tree-log-head::before {
+      content: '▸'; display: inline-block; transition: transform 0.12s;
+    }
+    .amap-tree-log-head.open::before { transform: rotate(90deg); }
+    .amap-tree-log-body { padding-top: 0.3rem; }
+    .amap-tree-log-line {
+      display: flex; gap: 0.5rem; align-items: baseline;
+      font-size: 0.73rem; padding: 0.15rem 0; line-height: 1.4;
+    }
+    .amap-tree-log-when {
+      flex: 0 0 3.4rem; color: var(--muted); font-variant-numeric: tabular-nums;
+    }
+    .amap-tree-log-what {
+      flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    /* Отказ не красится успехом — той же рукой, что и кнопка. */
+    .amap-tree-log-said { flex: 0 0 auto; color: var(--muted); }
+    .amap-tree-log-said.bad { color: var(--danger); }
+    /* Неподтверждённое — не отказ и не успех. Третий цвет, потому что третий
+       исход: объявление могло выключиться, а могло и нет. */
+    .amap-tree-log-said.warn { color: var(--warn, var(--danger)); }
+    .amap-tree-log-who { flex: 0 0 auto; color: var(--muted); opacity: 0.75; }
+    .amap-tree-log-none { font-size: 0.73rem; color: var(--muted); }
+    /* Оговорка, а не отказ: строки настоящие, просто их меньше, чем денег. */
+    .amap-tree-note {
+      color: var(--warn, var(--muted)); font-size: 0.73rem;
+      padding-top: 0.4rem; line-height: 1.4;
+    }
     /* Командная таблица кампаний страны (`_campaign_table.html`, ACL-1800) стоит под списком аккаунтов;
        старые стили списка «in the account» убраны вместе с ним. */
     .amap-campaigns { max-width: 100%; min-width: 0; }
@@ -3533,7 +3737,7 @@ async function dashRefresh(ev) {
 {#- ACL-1652: шесть метрик (заголовки и ячейки) — из одного места. -#}
 {% import "_metrics.html" as mx %}
 {#- ACL-1800: командная таблица кампаний — компонент для областей под строками аккаунтов (стили, шаблон, hcMount). Секции на Home у неё нет. -#}
-{% include "_campaign_table.html" %}
+{% if campaign_table_api is defined and campaign_table_api() %}{% include "_campaign_table.html" %}{% endif %}
 {% if account_map %}
 {% for day in account_map.dates or [] %}
 {% if (not account_map.date_from or day >= account_map.date_from)
@@ -7397,6 +7601,8 @@ function amapApply(from, to, span) {
    вырезают исходник кусками от неё, и Jinja-выражение в куске ломало бы им
    разбор. */
 window.AMAP_SHOW_COPY_FOR_GROUP = {{ SHOW_COPY_FOR_GROUP | tojson }};
+/* ACL-1800: какой список кампаний у строки аккаунта — таблица страны (api) или прежний список из чтения спенда (rpa). */
+window.AMAP_CAMPAIGN_TABLE = {{ (campaign_table_api() if campaign_table_api is defined else false) | tojson }};
 var AMAP_OPEN_KEY = 'acl.amap.open';
 
 function amapOpenList() {
@@ -7983,11 +8189,979 @@ function amapApplyReading(account, s, split, waiting) {
     cell.firstChild.textContent = amapMoney(s.spend, s.currency);
     cell.firstChild.title = amapReadTitle(s, split);
     btn.disabled = !!amapReadAllBusy; btn.className = 'amap-btn amap-read'; btn.textContent = 'Read spend'; btn.title = 'Read spend again';
+    amapPaintTree(row, s);
   });
   /* ACL-1518: строка ожидания тишины ввода — только пока чтение идёт. */
   if (typeof amapHandWait === 'function') amapHandWait(account, s.state === 'running' ? (waiting || '') : '');
+  /* ACL-1504: Read spend мог погаснуть или включиться (идёт чтение, отказ) —
+     Read again в дереве следует за ним, перерисовано дерево или нет. */
+  amapRereadSync();
   amapUpdateCountrySummaries();
 }
+
+/* ── Что в аккаунте на самом деле (acl-113) ─────────────────────────────
+   Read приносит не только число, но и кампании с объявлениями: их id,
+   положение тумблера и доставку словами Meta (ACL-1124). До этой правки всё
+   это приходило и пропадало — рисовать было нечем.
+
+   Строки из книги статистики этого заменить не могут: в книге нет ни id, ни
+   состояния, и отстаёт она на сутки. Поэтому блок появляется только после
+   чтения и только под тем аккаунтом, который читали.
+
+   Состояние показано двумя значениями, а не одним. На живом аккаунте
+   встретилось «тумблер on, доставка Campaign off» — включено, а не крутится,
+   потому что выключена кампания сверху. Сведи это в один значок, и человек
+   увидит работающим то, что не тратит ничего. */
+function amapTreeLine(o, adCount) {
+  var line = document.createElement('div');
+  line.className = 'amap-tree-line' + (o.level === 'ad' ? ' ad' : '');
+  /* Первая колонка — кто это: стрелка, уровень, тумблер, имя. Остальные
+     встают под колонками аккаунта (ACL-1256). */
+  var who = document.createElement('span');
+  who.className = 'amap-tree-who';
+  line._amapObject = o;
+
+  /* У кампании с объявлениями — своя стрелка. Кнопкой, а не значком: её
+     нажимают, и с клавиатуры тоже. Пустое место вместо неё держит ширину,
+     чтобы строки не разъезжались. */
+  if (o.level !== 'ad' && adCount) {
+    var caret = document.createElement('button');
+    caret.type = 'button';
+    caret.className = 'amap-tree-caret';
+    caret.textContent = '▸';
+    caret.setAttribute('aria-label', adCount + ' ads in ' + (amapTreeName(o.name) || 'this campaign'));
+    who.appendChild(caret);
+  } else {
+    var gap = document.createElement('span');
+    gap.className = 'amap-tree-caret-off';
+    who.appendChild(gap);
+  }
+
+  var kind = document.createElement('span');
+  kind.className = 'amap-tree-kind';
+  kind.textContent = o.level === 'ad' ? 'ad' : 'campaign';
+  if (o.level !== 'ad' && adCount) kind.textContent += ' · ' + adCount;
+
+  /* Включённое можно выключить, и только это. Включить отсюда нельзя
+     (решение владельца 12.09): выключение денег не тратит, включение тратит,
+     и обратный ход человек делает руками в Ads Manager, где видит
+     последствия. Поэтому кнопкой становится только `on`; `off` и «непонятно»
+     остаются надписями — нажимать там нечего. */
+  /* Кнопкой строка становится, только если по ней есть чем действовать.
+     Сохранённые чтения переживают смену формы ответа: после перехода с ad
+     set'ов на кампании (12.09) в хранилище остались деревья, где уровень
+     `adset`, а у объявлений в родителях — id ad set'а. Выключение такую
+     строку не примет, и кнопка на ней обещала бы работу, которой не будет.
+     Перечитать аккаунт — и всё встанет на место. */
+  /* Без id (новая таблица Ads Manager, Doc19 18.09) выключать нечем: turn_off
+     откажет. Кнопку не рисуем, а в подсказке говорим почему. */
+  /* ACL-1504: строки прежнего удачного чтения (`_stale`) — только для
+     показа: тумблер с тех пор мог смениться. */
+  var canAct = o.switch === 'on' && !!o.id && !o._stale
+    && (o.level === 'campaign' || (o.level === 'ad' && o.parent_id));
+  var live = canAct;
+  var sw = document.createElement(live ? 'button' : 'span');
+  var state = o.switch === 'on' ? 'on' : o.switch === 'off' ? 'off' : 'dim';
+  sw.className = 'amap-tree-sw ' + state;
+  sw.textContent = o.switch === 'on' ? 'On' : o.switch === 'off' ? 'Off' : '—';
+  /* «Тумблера не видно» — не «выключено». Спутать их значит показать
+     остановленным то, что тратит деньги. */
+  sw.title = o.switch === 'unknown'
+    ? 'No switch found in this row — not the same as switched off'
+    : !o.id && o.switch === 'on'
+      ? 'Read by name: this account’s Ads Manager table shows no ids, so it cannot be turned off from here yet.'
+    : live
+      ? 'Turn off. It cannot be turned back on from here — that is done in Ads Manager.'
+      : (o.switch_label || 'On/off');
+  if (live) {
+    sw.type = 'button';
+    sw.dataset.level = o.level;
+    sw.dataset.objectId = o.id || '';
+    sw.dataset.parentId = o.parent_id || '';
+    sw.dataset.name = amapTreeName(o.name);
+  }
+
+  var name = document.createElement('span');
+  name.className = 'amap-tree-name';
+  /* Имя — без надписей Meta, как его сопоставляет книга (ACL-1395). */
+  var shownName = amapTreeName(o.name);
+  name.textContent = shownName || '(no name)';
+  name.title = shownName + (o.id ? '  ·  ' + o.id : '');
+
+  var del = document.createElement('span');
+  var stopped = /off|review|reject|not deliver|error/i.test(o.delivery || '');
+  del.className = 'amap-tree-del' + (stopped ? ' stopped' : '');
+  del.dataset.label = 'Delivery';
+  /* Обрезаем: строка из пробелов пустой не считается, и в узкой раскладке
+     осталась бы подпись без числа. Сейчас читатель такого не отдаёт — но
+     это одно изменение в разборе страницы (ревью 23.09). */
+  del.textContent = (o.delivery || '').trim();
+
+  /* Числа — теми же словами, какими их написала Meta. Имя и состояние говорят,
+     ЧТО это; спенд и результаты — зачем это трогать. Пять одинаково включённых
+     кампаний без чисел выглядят одинаково, а остановить надо тот, что тратит
+     без лидов.
+
+     Пусто остаётся пустым: у черновика спенда ещё не бывает, и «$0» было бы
+     утверждением, которого страница не делала. */
+  var spend = document.createElement('span');
+  spend.className = 'amap-tree-num spend';
+  spend.dataset.label = 'Meta spend';
+  spend.textContent = (o.spend || '').trim();
+
+  var res = document.createElement('span');
+  res.className = 'amap-tree-num res';
+  res.dataset.label = 'Meta';
+  if (o.results) {
+    var src = document.createElement('small');
+    src.className = 'amap-tree-src';
+    src.textContent = 'Meta';
+    res.appendChild(src);
+    // Пробел настоящим узлом: без него копирование и экранный диктор дают
+    // «Meta18 Leads (Form)» (ревью 22.09).
+    res.appendChild(document.createTextNode(' ' + o.results));
+  }
+  /* Подсказка называет и источник, и цену результата: колонка узкая, текст
+     Meta в неё целиком не помещается. */
+  res.title = [o.results ? "Meta's own result for this row" : '', o.cost_per_result || '']
+    .filter(Boolean).join(' · ');
+
+  /* Уровень — мелкой строкой над именем, а не рядом: колонка узкая, и
+     рядом с ним имя сжималось до пары букв (ревью ACL-1256). */
+  var nameBox = document.createElement('span');
+  nameBox.className = 'amap-tree-namebox';
+  nameBox.appendChild(kind); nameBox.appendChild(name);
+  who.appendChild(sw); who.appendChild(nameBox);
+  line.appendChild(who);
+  /* Под колонками аккаунта: Spend (книга) · Account spend (Meta) · Leads ·
+     FTD · CPL · CPA · CR (книга) · Status (доставка Meta) · Setup (результат
+     Meta) · пустая колонка кнопок. */
+  line.appendChild(amapAttrCell('spend'));
+  line.appendChild(spend);
+  for (var i = 1; i < AMAP_ATTR_COLS.length; i++) line.appendChild(amapAttrCell(AMAP_ATTR_COLS[i]));
+  line.appendChild(del);
+  line.appendChild(res);
+  line.appendChild(document.createElement('span'));
+  return line;
+}
+
+/* Колонки книги в строке дерева — в том же порядке, что у таблицы аккаунта:
+   Spend, (Account spend — это спенд Meta), Leads, FTD, CPL, CPA, CR. */
+var AMAP_ATTR_COLS = ['spend', 'leads', 'deposits', 'cpl', 'cpa', 'cr'];
+
+/* Подписи для узкой раскладки — теми же словами, что в шапке таблицы
+   (ACL-1277). В обычной раскладке они не видны: там слово стоит в шапке. */
+var AMAP_ATTR_LABELS = {spend: 'Spend', leads: 'Leads', deposits: 'FTDs',
+                        cpl: 'CPL', cpa: 'CPA', cr: 'CR'};
+
+function amapAttrCell(field) {
+  var c = document.createElement('span');
+  c.className = 'amap-tree-num attr';
+  c.dataset.attr = field;
+  c.dataset.label = AMAP_ATTR_LABELS[field] || field;
+  c.textContent = '';
+  return c;
+}
+
+/* ── Числа книги по строкам дерева (ACL-1256) ──────────────────────────
+   Строка аккаунта показывает лиды, FTD, CPL, CPA и CR из книги статистики.
+   Здесь те же числа разложены по кампаниям и объявлениям: кампания — это
+   «Adset Name» книги, объявление — «Ad Title» под ним. Считает сервер той
+   же формулой и форматирует тем же `fmt_usd`, что и строку аккаунта.
+
+   Совпадение — по имени. Две кампании с одним именем по имени не различить:
+   такие строки получают прочерк с объяснением, а не угаданные числа.
+   Несколько объявлений с одним именем в одной кампании (ACL-1395, решение
+   владельца 30.09) получают каждое итог книги по этому имени — один раз, не
+   умноженный — и пометку «shared by N ads»: делить итог между ними нечем.
+   Нет строк в книге — прочерк, а не ноль: «не нашли» и «ноль» — разные ответы. */
+
+/* Надписи Meta из ячейки имени (ACL-1395): «1741 - Pro Bancolombia Unpublished
+   edits Unpublished edits». Чтение их теперь снимает само; здесь — для
+   чтений, сохранённых раньше. Копия `META_NAME_LABELS` из
+   `src/analysis_agent/account_spend.py`, тест держит их равными. Снимаются
+   только с конца имени и только если перед ними есть имя. */
+var AMAP_META_NAME_LABELS = ['Unpublished edits', 'In draft', 'In review', 'Draft'];
+
+function amapTreeName(s) {
+  var text = String(s || '').replace(/\s+/g, ' ').trim();
+  for (;;) {
+    var hit = null;
+    for (var i = 0; i < AMAP_META_NAME_LABELS.length; i++) {
+      var l = ' ' + AMAP_META_NAME_LABELS[i];
+      if (text.length > l.length && text.slice(-l.length) === l) { hit = l; break; }
+    }
+    if (!hit) return text;
+    text = text.slice(0, -hit.length).trim();
+  }
+}
+
+var AMAP_SHARED_TIP = 'The workbook cannot tell ads with the same name apart; '
+                    + 'these are the totals for all of them';
+
+function amapOwn(obj, key) {
+  return obj && Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null;
+}
+
+function amapTreeKeys(objects) {
+  var campName = {}, campCount = {}, adCount = {};
+  objects.forEach(function (o) {
+    if (o.level === 'ad') return;
+    var n = amapTreeName(o.name);
+    campCount[n] = (campCount[n] || 0) + 1;
+    var key = o.id || o.data_id || '';
+    if (key) campName[key] = n;
+  });
+  objects.forEach(function (o) {
+    if (o.level !== 'ad') return;
+    var k = (campName[o.parent_id] || '') + '\u0001' + amapTreeName(o.name);
+    adCount[k] = (adCount[k] || 0) + 1;
+  });
+  return {campName: campName, campCount: campCount, adCount: adCount};
+}
+
+function amapFillAttribution(box, objects, data) {
+  var keys = amapTreeKeys(objects);
+  var lines = box.querySelectorAll('.amap-tree-line');
+  lines.forEach(function (line, i) {
+    var o = line._amapObject;
+    if (!o) return;
+    var got = null, why = '', shared = 0;
+    /* Ответ может прийти второй раз (перечитали период) — прежняя пометка
+       снимается, новая ставится по новому ответу. */
+    var oldMark = line.querySelector('.amap-tree-shared');
+    if (oldMark) oldMark.remove();
+    if (!data || !data.ok) {
+      why = (data && data.error) || 'Workbook numbers are not available';
+    } else if (o.level === 'ad') {
+      var camp = keys.campName[o.parent_id] || '';
+      var n = amapTreeName(o.name);
+      if (!camp) why = 'The campaign of this ad is not known';
+      else if (keys.campCount[camp] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
+      else {
+        got = amapOwn(amapOwn(data.ads, camp), n);
+        shared = keys.adCount[camp + '\u0001' + n] || 0;
+      }
+      if (!got && !why) why = 'No rows for this ad in the stats workbook for these dates';
+    } else {
+      var cn = amapTreeName(o.name);
+      if (keys.campCount[cn] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
+      else got = amapOwn(data.campaigns, cn);
+      if (!got && !why) why = 'No rows for this campaign in the stats workbook for these dates';
+    }
+    line.querySelectorAll('.amap-tree-num.attr').forEach(function (cell) {
+      var v = got ? got[cell.dataset.attr] : null;
+      // Пробел значением не считается: в узкой раскладке он оставил бы
+      // подпись без числа (ревью 23.09).
+      var text = v === null || v === undefined ? '' : String(v).trim();
+      var has = text !== '';
+      cell.textContent = has ? text : '—';
+      cell.classList.toggle('nodata', !has);
+      cell.title = got ? (shared > 1 ? AMAP_SHARED_TIP : 'From the stats workbook') : why;
+    });
+    /* Пометка — только над числами: над прочерком «общие числа» ничего не
+       значат. Стоит в мелкой строке уровня над именем («ad»), чтобы не
+       отнимать ширину у самого имени. */
+    if (got && shared > 1) {
+      var kind = line.querySelector('.amap-tree-kind');
+      if (kind) {
+        var mark = document.createElement('span');
+        mark.className = 'amap-tree-shared';
+        mark.textContent = 'shared by ' + shared + ' ads';
+        mark.title = AMAP_SHARED_TIP;
+        kind.appendChild(mark);
+      }
+    }
+  });
+  /* Прочерки в узкой раскладке спрятаны, и «книга не прочиталась» выглядело
+     бы там ровно как «в книге нет строк» — то есть никак. Поломку говорим
+     словами, одной строкой на всё дерево, а не шестью клетками на строку. */
+  var broken = box.querySelector('.amap-tree-attr-err');
+  if (broken) broken.remove();
+  if (!data || !data.ok) {
+    var note = document.createElement('div');
+    note.className = 'amap-tree-note amap-tree-attr-err';
+    note.textContent = (data && data.error) || 'Workbook numbers could not be loaded';
+    note.title = 'The numbers from the stats workbook are missing because they could '
+               + 'not be read — not because this account has none.';
+    /* Рядом с числами, к которым относится, а не под свёрнутым журналом:
+       остальные оговорки дерева встают до него, а эта приходит позже, когда
+       блок уже собран. `insertBefore(node, null)` — это append, поэтому
+       отдельной ветки не нужно (ревью 23.09). */
+    box.insertBefore(note, box.querySelector('.amap-tree-log') || null);
+  }
+}
+
+function amapLoadAttribution(row, box, objects) {
+  if (typeof fetch !== 'function' || !row.closest) return;
+  var block = row.closest('[data-country-name]');
+  var cell = row.querySelector('.amap-live');
+  var country = block && block.dataset.countryName;
+  var account = cell && cell.dataset.account;
+  if (!country || !account) return;
+  var pick = window._amapPick || {};
+  var q = 'account=' + encodeURIComponent(account) + '&country=' + encodeURIComponent(country)
+    + '&date_from=' + encodeURIComponent(pick.from || '') + '&date_to=' + encodeURIComponent(pick.to || '')
+    + '&span=' + encodeURIComponent(pick.span || '');
+  fetch('/account-attribution?' + q)
+    .then(function (r) { return r.json(); })
+    .catch(function () { return {ok: false, error: 'Workbook numbers could not be loaded'}; })
+    .then(function (data) { if (box.isConnected) amapFillAttribution(box, objects, data); });
+}
+
+/* Ширины колонок дерева — с самой строки аккаунта: тогда числа стоят ровно
+   под заголовками. Пересчитываются при раскрытии и при смене размера окна;
+   пока ширин нет (строка скрыта), действует запасная раскладка из CSS. */
+function amapTreeColumns(row, tr) {
+  if (!row || !tr || !row.children) return;
+  /* Ширина колонки — от её левого края до левого края следующей: так в неё
+     входит и промежуток между ячейками таблицы, иначе колонки дерева
+     съезжали бы на его ширину с каждой колонкой. */
+  var boxes = Array.prototype.map.call(row.children, function (c) {
+    return c.getBoundingClientRect ? c.getBoundingClientRect() : null;
+  });
+  if (boxes.some(function (b) { return !b; })) return;
+  var widths = boxes.map(function (b, i) {
+    return i + 1 < boxes.length ? boxes[i + 1].left - b.left : b.width;
+  });
+  if (!widths.length || widths.some(function (w) { return !(w > 0); })) return;
+  tr.style.setProperty('--amap-cols', widths.map(function (w) { return w.toFixed(2) + 'px'; }).join(' '));
+  var pad = window.getComputedStyle ? getComputedStyle(row.children[1]).paddingRight : '';
+  if (pad) tr.style.setProperty('--amap-cell-pad', pad);
+  /* ACL-1277: мерим саму колонку, а не окно. Ширину съедает не только экран:
+     боковая колонка, открытый билдер и сама страна с её отступами — окно об
+     этом не знает, а левый край соседней ячейки знает. В колонке имени, кроме
+     имени, стоят стрелка, пометка уровня и тумблер — им нужно около 80px,
+     поэтому 210px здесь означают «имени осталось меньше 130px».
+
+     Класс ставится на всё дерево, а не на строки: объявления дорисовываются
+     позже, когда раскрывают кампанию, и им достанется та же раскладка. */
+  tr.classList.toggle('amap-stacked', widths[0] < 210);
+}
+
+/* Раз в кадр, а не на каждое событие: при протягивании окна их десятки, и
+   каждое заставляло бы пересчитать раскладку всех деревьев. */
+var amapTreeColumnsQueued = false;
+function amapTreeColumnsAll() {
+  if (amapTreeColumnsQueued) return;
+  amapTreeColumnsQueued = true;
+  (window.requestAnimationFrame || function (f) { return setTimeout(f, 16); })(function () {
+    amapTreeColumnsQueued = false;
+    document.querySelectorAll('tr.amap-tree:not([hidden])').forEach(function (tr) {
+      amapTreeColumns(tr.previousElementSibling, tr);
+    });
+  });
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', amapTreeColumnsAll);
+  /* Дерево, нарисованное в свёрнутом блоке страны, мерить было не по чему —
+     ширины снимаются, когда блок раскрывают. `toggle` не всплывает, поэтому
+     слушаем на погружении. */
+  document.addEventListener('toggle', amapTreeColumnsAll, true);
+  /* Билдер раздвигает страницу своим `padding-right`, и события `resize` при
+     этом нет: дерево оставалось с ширинами, снятыми до его открытия, и числа
+     уезжали за правый край таблицы — стоять под заголовками переставали
+     совсем. Ровно тот случай, ради которого написан ACL-1277 (ревью 23.09). */
+  document.addEventListener('acl:builder-drawer', amapTreeColumnsAll);
+}
+
+/* ── Покрывают ли строки спенд аккаунта ────────────────────────────────
+   На живом аккаунте 12.09 пять кампаний сложились в итог копейка в копейку
+   ($2 117.46), а шесть объявлений дали $661.57 из тех же денег. Прокрутка
+   новых строк не добавила — это весь список, который отдаёт страница.
+
+   Почему так, неизвестно: на странице объявлений есть переключатель вида
+   (All ads / Actions / Had delivery / Active ads), и какой из них выбран, в
+   разметке не выражено вовсе — ни `aria-selected`, ни `aria-current`. Либо
+   действует вид, скрывающий часть строк, либо спенд пришёлся на удалённые
+   объявления, которых нет ни в одном виде.
+
+   Пока это не выяснено, молчать нельзя: человек решает по этим строкам, что
+   остановить, и «шесть объявлений» выглядят как весь аккаунт. Поэтому суммы
+   разбираются — только чтобы сравнить, не для показа, — и когда строки
+   заметно не покрывают итог, это сказано словами.
+
+   Не разобралось — молчим. Неверная оговорка хуже отсутствующей. */
+function amapMoneyIn(text) {
+  if (!text) return null;
+  var m = String(text).match(/-?\d[\d,\s]*(?:\.\d+)?/);
+  if (!m) return null;
+  var n = parseFloat(m[0].replace(/[,\s]/g, ''));
+  return isFinite(n) ? n : null;
+}
+
+/* Порог в двадцатую долю: расхождение в копейки бывает от округления самой
+   Meta, и жаловаться на него значит приучить не читать оговорку. */
+var AMAP_COVER_GAP = 0.05;
+
+function amapCoverage(objects, level, total) {
+  if (typeof total !== 'number' || !(total > 0)) return null;
+  var rows = objects.filter(function (o) { return (o.level === 'ad') === (level === 'ad'); });
+  if (!rows.length) return null;
+  var sum = 0, seen = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var raw = rows[i].spend;
+    if (!raw) continue;                       // у черновика спенда нет — это не пробел
+    var v = amapMoneyIn(raw);
+    if (v === null) return null;              // не разобрали — ничего не утверждаем
+    sum += v; seen++;
+  }
+  if (!seen) return null;
+  if (total - sum < total * AMAP_COVER_GAP) return null;
+  return {sum: sum, total: total, count: rows.length};
+}
+
+/* Дерево живёт под той же стрелкой, что и остальное про аккаунт, и свёрнуто.
+   Раскрытым по умолчанию оно давало полтора экрана строк под каждым читанным
+   аккаунтом, и карта переставала читаться — владелец назвал это «странно
+   организовано», и был прав.
+
+   У аккаунта без книжных строк стрелки не было вовсе (шаблон рисует «·»):
+   раскрывать было нечего. Теперь есть, и она появляется. */
+function amapEnsureCaret(row, onToggle) {
+  var caret = row.querySelector('.amap-caret');
+  if (!caret) {
+    var off = row.querySelector('.amap-caret-off');
+    if (!off) return null;
+    caret = document.createElement('button');
+    caret.type = 'button';
+    caret.className = 'amap-caret';
+    caret.textContent = '▸';
+    caret.setAttribute('aria-label', 'What is in this account');
+    off.replaceWith(caret);
+  }
+  if (caret.dataset.treeBound === '1') return caret;
+  caret.dataset.treeBound = '1';
+  caret.addEventListener('click', onToggle);
+  return caret;
+}
+
+/* ACL-1504: список кампаний не прочитан. Причина и «что делать» приходят с
+   сервера готовыми (`tree_problem` в account_spend.py) — дешборд их только
+   рисует, как и проблемы кампании (ACL-1437). Read again — та же кнопка Read
+   spend этой строки, другого пути чтения нет. Сырой текст ошибки — свёрнут
+   и уже без act= и адресов (`scrub_tree_error`). */
+/* ACL-1504 (ревью M1): Read again повторяет состояние Read spend своей
+   строки. Скопировать его один раз при рисовании мало: Read all гасит
+   `.amap-read` и потом включает обратно (`amapReadAllControls`), а дерево
+   при этом не перерисовывается — Read again оставался серым до перезагрузки.
+   Поэтому сверяем заново всякий раз, когда меняется состояние Read spend. */
+function amapRereadSync() {
+  document.querySelectorAll('.amap-tree-reread').forEach(function (again) {
+    var tree = again.closest('tr.amap-tree');
+    var row = tree && tree.previousElementSibling;
+    var read = row && row.querySelector('.amap-read');
+    again.disabled = !read || read.disabled;
+  });
+}
+
+function amapTreeNotRead(row, s, problem) {
+  var box = document.createElement('div');
+  box.className = 'amap-tree-notread';
+  var why = document.createElement('div');
+  why.className = 'amap-tree-notread-why';
+  why.textContent = problem.reason || 'The campaign list was not reached.';
+  box.appendChild(why);
+
+  var todo = document.createElement('div');
+  todo.className = 'amap-tree-notread-do';
+  todo.textContent = '→ ' + (problem.action || 'Read again.') + ' ';
+  var again = document.createElement('button');
+  again.type = 'button';
+  again.className = 'amap-btn amap-tree-reread';
+  again.textContent = 'Read again';
+  again.title = 'Read spend and campaigns for this account again';
+  var read = row.querySelector('.amap-read');
+  again.disabled = !read || read.disabled;
+  again.addEventListener('click', function () {
+    var btn = row.querySelector('.amap-read');
+    if (!btn || btn.disabled) return;
+    again.disabled = true;
+    btn.click();
+  });
+  todo.appendChild(again);
+  box.appendChild(todo);
+
+  if (s.objects_error) {
+    var tech = document.createElement('details');
+    tech.className = 'amap-tree-tech';
+    var sum = document.createElement('summary');
+    sum.textContent = 'Technical details';
+    var body = document.createElement('div');
+    body.className = 'amap-tree-tech-body';
+    body.textContent = s.objects_error;
+    tech.appendChild(sum); tech.appendChild(body);
+    box.appendChild(tech);
+  }
+  return box;
+}
+
+function amapPaintTree(row, s) {
+  /* ACL-1800: под `ACL_FB_BACKEND=api` строка аккаунта не рисует прежний список «in the account» —
+     вместо него таблица кампаний страны (`_campaign_table.html`). Под rpa (по умолчанию) всё как было. */
+  if (window.AMAP_CAMPAIGN_TABLE) return;
+  /* Прежний блок снимается всегда: устаревшее состояние живого аккаунта —
+     худшее, что здесь можно оставить на экране. Раскрытость при этом
+     запоминается: перечитал человек аккаунт с открытым деревом — оно и
+     останется открытым, только уже с новыми числами. */
+  /* Строка вне таблицы — рисовать некуда. Причина та же, по которой неудача
+     дерева не отменяет спенд: `amapApplyReading` обходит все копии строки, и
+     исключение здесь оставило бы без числа те, до которых обход не дошёл. */
+  if (!row || !row.parentNode || !row.classList) return;
+
+  var wasOpen = row.classList.contains('amap-tree-open');
+  var next = row.nextElementSibling;
+  while (next && next.classList.contains('amap-tree')) {
+    var after = next.nextElementSibling;
+    next.remove();
+    next = after;
+  }
+
+  var objects = (s && s.objects) || [];
+  /* ACL-1504: чтение не дошло до списка кампаний (сервер сказал это в
+     `objects_problem`). Тогда «0 campaigns · 0 ads» — неправда: список не
+     пустой, его просто не видели. Пишем «campaigns not read», причину одной
+     фразой, что делать, Read again и свёрнутые технические подробности;
+     прежнее удачное дерево остаётся со своей датой. */
+  var problem = (s && s.objects_problem) || null;
+  var prev = (problem && s.objects_prev && s.objects_prev.objects) || [];
+  /* `objects_read === true` при пустом списке — список прочитан и пуст:
+     тогда «0 campaigns» — правда, и её показываем (ACL-1504). */
+  if (!objects.length && !(s && s.objects_error) && !problem && !(s && s.objects_read === true)) {
+    row.classList.remove('amap-tree-open');
+    return;
+  }
+
+  var tr = document.createElement('tr');
+  tr.className = 'amap-tree';
+  tr.hidden = !wasOpen;
+  var td = document.createElement('td');
+  td.colSpan = row.children.length;
+  var box = document.createElement('div');
+  box.className = 'amap-tree-inner';
+
+  var head = document.createElement('div');
+  head.className = 'amap-tree-head';
+  var sets = objects.filter(function (o) { return o.level !== 'ad'; }).length;
+  var ads = objects.length - sets;
+  head.textContent = 'in the account · ' + sets + ' campaigns · ' + ads + ' ads · read ' + (s.finished_at || '');
+  /* ACL-1271: дерево из чтения за другие даты говорит об этом сразу — его
+     числа Meta за те даты, не за период на экране. */
+  var onScreen = typeof amapPeriod === 'function' ? amapPeriod() : null;
+  if (problem) {
+    head.textContent = 'in the account · campaigns not read · tried ' + (s.finished_at || '');
+    head.classList.add('amap-tree-notread-head');
+    /* ACL-1504 (ревью L2): попытка за другие даты (запасное чтение ACL-1271)
+       говорит об этом и здесь — иначе её примут за попытку за даты на экране. */
+    if (onScreen && onScreen.from && s.date_from
+        && (s.date_from !== onScreen.from || (s.date_to || s.date_from) !== onScreen.to)) {
+      head.textContent += ' · for ' + s.date_from
+        + (s.date_to && s.date_to !== s.date_from ? '…' + s.date_to : '')
+        + ', not the dates on screen';
+      head.classList.add('old');
+    }
+    box.appendChild(head);
+    box.appendChild(amapTreeNotRead(row, s, problem));
+    if (prev.length) {
+      /* Прежние строки — только для чтения: их тумблер мог с тех пор
+         смениться, и выключать по ним нельзя (см. `_stale` в amapTreeLine). */
+      var p = s.objects_prev;
+      var pSets = prev.filter(function (o) { return o.level !== 'ad'; }).length;
+      head = document.createElement('div');
+      head.className = 'amap-tree-head old amap-tree-prev-head';
+      head.textContent = 'last good read · ' + pSets + ' campaigns · ' + (prev.length - pSets)
+        + ' ads · read ' + (p.at || '') + (p.date_from ? ' · Meta numbers for ' + p.date_from
+        + (p.date_to && p.date_to !== p.date_from ? '…' + p.date_to : '') : '');
+      objects = prev.map(function (o) { return Object.assign({}, o, {_stale: true}); });
+    } else {
+      head = null;
+      objects = [];
+    }
+  } else if (onScreen && onScreen.from && s.date_from
+      && (s.date_from !== onScreen.from || (s.date_to || s.date_from) !== onScreen.to)) {
+    /* Колонки Meta в дереве — за даты чтения, колонки книги (ACL-1256) — за
+       даты на экране; говорим это прямо, иначе рядом стоят числа за разное. */
+    head.textContent += ' · Meta numbers for ' + s.date_from
+      + (s.date_to && s.date_to !== s.date_from ? '…' + s.date_to : '')
+      + ', workbook numbers for the dates on screen';
+    head.classList.add('old');
+  }
+  if (head) box.appendChild(head);
+
+  /* Объявления встают под свою кампанию, а не общим списком следом. Порядок
+     задаёт `parent_id`, который чтение знает по построению: список
+     объявлений спрашивается по одной кампании за раз.
+
+     Осиротевшие — те, чья кампания в ответе не пришла, — идут в конец под своим
+     заголовком. Приписать их к последнему попавшемуся было бы хуже всего: по
+     этим строкам решают, что останавливать. */
+  var sets = objects.filter(function (o) { return o.level !== 'ad'; });  // кампании
+  var ads = objects.filter(function (o) { return o.level === 'ad'; });
+
+  /* Объявления свёрнуты под своей кампанией. У DQ438 их 99 на десять
+     кампаний: раскрытые разом, они уезжали на километр и прятали всё, что ниже
+     по карте. Раскрытое человеком запоминается и переживает перечитывание —
+     иначе после каждого Read пришлось бы открывать заново. */
+  var openSets = (row.dataset.openSets || '').split(',').filter(Boolean);
+
+  /* Ключ кампании — её id, а у таблицы без id (Doc19) — id из данных самой
+     страницы (`data_id`). Помечаем разложенные сами объекты, а не их id:
+     у объявлений такой таблицы id пустой, и по нему «разложенным» считалось
+     бы всё сразу. */
+  var placed = [];
+  sets.forEach(function (s) {
+    var sKey = s.id || s.data_id || '';
+    var mine = ads.filter(function (a) { return a.parent_id && a.parent_id === sKey; });
+    var line = amapTreeLine(s, mine.length);
+    box.appendChild(line);
+    if (!mine.length) return;
+
+    var kids = document.createElement('div');
+    kids.className = 'amap-tree-kids';
+    kids.hidden = openSets.indexOf(sKey) === -1;
+    mine.forEach(function (a) { placed.push(a); kids.appendChild(amapTreeLine(a)); });
+    box.appendChild(kids);
+
+    var caret = line.querySelector('.amap-tree-caret');
+    caret.classList.toggle('open', !kids.hidden);
+    caret.addEventListener('click', function () {
+      kids.hidden = !kids.hidden;
+      caret.classList.toggle('open', !kids.hidden);
+      var now = (row.dataset.openSets || '').split(',').filter(Boolean)
+        .filter(function (id) { return id !== sKey; });
+      if (!kids.hidden) now.push(sKey);
+      row.dataset.openSets = now.join(',');
+    });
+  });
+  var orphans = ads.filter(function (a) { return placed.indexOf(a) === -1; });
+  if (orphans.length) {
+    var lost = document.createElement('div');
+    lost.className = 'amap-tree-head';
+    lost.textContent = orphans.length + ' ads whose campaign is not in this answer';
+    box.appendChild(lost);
+    orphans.forEach(function (a) { box.appendChild(amapTreeLine(a)); });
+  }
+
+  /* Оговорка идёт по каждому уровню отдельно: кампании могут сойтись копейка
+     в копейку, а объявления нет — так и было на живом аккаунте. Общая фраза
+     про «строки» заставила бы усомниться и в тех, что сходятся. */
+  /* ACL-1504: у прежнего дерева другие даты, чем у спенда этого чтения, —
+     сравнивать их суммы нельзя. */
+  [['campaign', 'campaigns'], ['ad', 'ads']].forEach(function (pair) {
+    if (problem) return;
+    var gap = amapCoverage(objects, pair[0], s.spend);
+    if (!gap) return;
+    var note = document.createElement('div');
+    note.className = 'amap-tree-note';
+    note.textContent = gap.count + ' ' + pair[1] + ' here add up to '
+      + amapMoney(gap.sum, s.currency) + ' of the account’s '
+      + amapMoney(gap.total, s.currency)
+      + ' — the rest was spent by something this list does not show.';
+    note.title = 'Deleted items keep their spend in the account total, and the '
+      + 'list has a view switcher whose state Meta does not put in the markup. '
+      + 'Decide by the rows that add up.';
+    box.appendChild(note);
+  });
+
+  if (s.objects_error && !problem) {  // ACL-1504: при `problem` — в Technical details
+    var err = document.createElement('div');
+    err.className = 'amap-tree-err';
+    err.textContent = s.objects_error;
+    box.appendChild(err);
+  }
+
+  amapLogAttach(box, row);
+
+  td.appendChild(box); tr.appendChild(td);
+  row.parentNode.insertBefore(tr, row.nextSibling);
+  amapTreeColumns(row, tr);
+  amapLoadAttribution(row, box, objects);
+
+  amapEnsureCaret(row, function () {
+    /* Стрелка у аккаунта с книжными строками вдобавок дёргает htmx за
+       подробностями из книги — это его прежняя работа, и отнимать её не за
+       что: книга отвечает на «как шло», дерево на «что там сейчас». Здесь
+       только своё. */
+    var block = row.nextElementSibling;
+    while (block && !block.classList.contains('amap-tree')) block = block.nextElementSibling;
+    if (!block) return;
+    block.hidden = !block.hidden;
+    row.classList.toggle('amap-tree-open', !block.hidden);
+    row.classList.toggle('amap-open', !block.hidden);
+    if (!block.hidden) amapTreeColumns(row, block);
+  });
+}
+
+/* ── Журнал: что дешборд менял в этом кабинете ───────────────────────────
+   Выключение — единственное, чем ACL сам меняет живой кабинет, и оно писалось
+   в журнал с первого живого нажатия. Прочитать журнал было негде: файл рос, а
+   на экране от него не было ничего. Запись, которую никто не может открыть,
+   не отвечает на «почему это выключилось вчера» — она лишь позволяет сказать,
+   что ответ где-то есть.
+
+   Журнал стоит внизу дерева и свёрнут. Вопрос «что я только что сделал»
+   возникает много чаще, чем «что было неделю назад», и первый ответ — сами
+   строки дерева; журнал нужен, когда их уже недостаточно.
+
+   Отказы показываются наравне с удавшимся. Попытка, которая не сработала, —
+   это тоже то, что человек делал с живым аккаунтом, и журнал, в котором всё
+   всегда получалось, хуже отсутствующего. */
+function amapRowAccount(row) {
+  var live = row && row.querySelector('.amap-live');
+  return (live && live.dataset.account) || '';
+}
+
+function amapLogWhen(at) {
+  /* Сегодняшнее — часами: в журнале своей же работы дата сегодняшнего дня
+     занимает место и ничего не добавляет. Вчерашнее — с датой.
+
+     «Сегодня» берётся МЕСТНОЕ, и это не придирка. Запись ставит время
+     `datetime.now()` — местное; сравнивать его с датой по UTC значит с
+     полуночи до трёх часов ночи (у нас UTC+3) считать вчерашний вечер
+     сегодняшним и показывать его без даты. В журнале, вся задача которого
+     ответить «когда это случилось», такая строка прямо врёт.
+
+     Считает `amapIso` — та, что уже считает местную дату для календаря
+     карты. Написать рядом похожее было бы ровно тем расхождением, которое
+     потом ищут полдня. */
+  var s = String(at || '');
+  var today = amapIso(new Date());
+  if (s.slice(0, 10) === today) return s.slice(11, 16);
+  return s.slice(0, 16).replace('T', ' ');
+}
+
+function amapLogLine(e) {
+  var line = document.createElement('div');
+  line.className = 'amap-tree-log-line';
+
+  var when = document.createElement('span');
+  when.className = 'amap-tree-log-when';
+  when.textContent = amapLogWhen(e.at);
+  when.title = e.at || '';
+  line.appendChild(when);
+
+  var what = document.createElement('span');
+  what.className = 'amap-tree-log-what';
+  what.textContent = (e.level || 'item') + ' ' + (e.name || e.object_id || '');
+  line.appendChild(what);
+
+  /* Дословно, как и кнопка: «нажали, но тумблер не стал выключенным» —
+     это не успех, и красить его в успех нельзя. */
+  var said = document.createElement('span');
+  var ok = e.state === 'off' || e.state === 'already_off';
+  /* Три исхода, а не два. «did not turn off» — установленный факт: нажали, и
+     тумблер не стал выключенным. Оборванная попытка такого факта не даёт, и
+     называть её тем же словом значит толкать к выводу «значит, оно ещё
+     крутится» — тогда как объявление могло и выключиться. */
+  var unsure = e.state === 'unconfirmed';
+  said.className = 'amap-tree-log-said' + (ok ? '' : unsure ? ' warn' : ' bad');
+  said.textContent = e.state === 'off' ? 'turned off'
+    : e.state === 'already_off' ? 'was already off'
+    : unsure ? ('result not confirmed' + (e.error ? ' — ' + e.error : ''))
+    : ('did not turn off' + (e.error ? ' — ' + e.error : ''));
+  if (unsure) said.title = 'The attempt broke off before the switch could be read. '
+    + 'It may have gone off. Check it in Ads Manager.';
+  if (ok && e.how) said.title = e.how;
+  line.appendChild(said);
+
+  /* Кто и чем. Пустое не выдумываем: журнал без имени честнее журнала с
+     подставленным. */
+  var tail = [e.requester, e.route].filter(Boolean).join(' · ');
+  if (tail) {
+    var who = document.createElement('span');
+    who.className = 'amap-tree-log-who';
+    who.textContent = tail;
+    line.appendChild(who);
+  }
+  return line;
+}
+
+function amapLogLoad(block, account) {
+  var body = block.querySelector('.amap-tree-log-body');
+  body.textContent = 'reading…';
+  fetch('/account-spend/turn-off-history?account=' + encodeURIComponent(account),
+        { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('The record could not be read.');
+      return r.json();
+    })
+    .then(function (j) {
+      /* Ответ проверяется, а не принимается на веру. Без этой проверки отказ
+         чтения превращался в пустой список, а пустой список — в надпись
+         «здесь ничего не меняли»: самый успокаивающий вывод из возможных,
+         сделанный ровно тогда, когда журнал прочитать не удалось. */
+      if (!j || !j.ok || !Array.isArray(j.entries)) {
+        body.textContent = (j && j.error) || 'The record could not be read.';
+        return;
+      }
+      var rows = j.entries || [];
+      body.textContent = '';
+      if (!rows.length) {
+        var none = document.createElement('div');
+        none.className = 'amap-tree-log-none';
+        none.textContent = 'Nothing has been changed in this account from here.';
+        body.appendChild(none);
+        return;
+      }
+      rows.forEach(function (e) { body.appendChild(amapLogLine(e)); });
+    })
+    .catch(function () {
+      body.textContent = 'The record could not be read.';
+    });
+}
+
+function amapLogRefresh(row, account) {
+  /* Перечитать журнал, если он раскрыт. Смотреть в раскрытую запись, где нет
+     того, что только что сделано, хуже, чем не открывать её вовсе. Свёрнутый
+     не трогаем: он перечитается сам при раскрытии. */
+  var block = row && row.querySelector('.amap-tree-log');
+  if (!block) return;
+  var body = block.querySelector('.amap-tree-log-body');
+  if (body && !body.hidden) amapLogLoad(block, account);
+}
+
+function amapLogAttach(box, row) {
+  var account = amapRowAccount(row);
+  if (!account) return;
+
+  var block = document.createElement('div');
+  block.className = 'amap-tree-log';
+
+  var head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'amap-tree-log-head';
+  head.textContent = 'What was changed here';
+
+  var body = document.createElement('div');
+  body.className = 'amap-tree-log-body';
+  /* Раскрытое переживает перечитывание дерева — как и раскрытые кампании.
+     Иначе каждое нажатие Read закрывало бы журнал, который человек открыл
+     именно чтобы посмотреть на последствия нажатия. */
+  body.hidden = row.dataset.logOpen !== '1';
+  head.classList.toggle('open', !body.hidden);
+
+  head.addEventListener('click', function () {
+    body.hidden = !body.hidden;
+    head.classList.toggle('open', !body.hidden);
+    row.dataset.logOpen = body.hidden ? '' : '1';
+    if (!body.hidden) amapLogLoad(block, account);
+  });
+
+  block.appendChild(head);
+  block.appendChild(body);
+  box.appendChild(block);
+  if (!body.hidden) amapLogLoad(block, account);
+}
+
+/* ── Выключить строку ────────────────────────────────────────────────────
+   Первое, чем дешборд меняет живой аккаунт, а не читает его. Отсюда три
+   решения, каждое стоит объяснения.
+
+   **Только выключение.** Кнопкой становится лишь включённая строка. Включить
+   отсюда нельзя: выключение денег не тратит, включение тратит, и обратный ход
+   человек делает руками в Ads Manager, где видит последствия.
+
+   **Нажатие в два шага.** Отдельного диалога владелец не хотел, и его нет:
+   первое нажатие превращает «On» в «Turn off?», второе выключает, а через
+   несколько секунд или по нажатию мимо всё возвращается. Промах мышью не
+   должен останавливать кампанию, которая крутит деньги.
+
+   **Ответ дословный.** Что вышло, пишем её же словами и не подкрашиваем
+   успехом: «нажали, но тумблер не стал выключенным» — это не успех. */
+var AMAP_CONFIRM_MS = 4000;
+
+function amapTurnOffAsk(btn) {
+  if (btn.dataset.armed === '1') { amapTurnOffDo(btn); return; }
+  amapTurnOffDisarm();
+  btn.dataset.armed = '1';
+  btn.dataset.was = btn.textContent;
+  btn.textContent = 'Turn off?';
+  btn.classList.add('arming');
+  btn.dataset.timer = String(setTimeout(function () { amapTurnOffDisarm(); }, AMAP_CONFIRM_MS));
+}
+
+function amapTurnOffDisarm() {
+  document.querySelectorAll('.amap-tree-sw[data-armed="1"]').forEach(function (b) {
+    clearTimeout(Number(b.dataset.timer || 0));
+    b.textContent = b.dataset.was || 'On';
+    b.classList.remove('arming');
+    delete b.dataset.armed;
+  });
+}
+
+function amapTurnOffDo(btn) {
+  clearTimeout(Number(btn.dataset.timer || 0));
+  delete btn.dataset.armed;
+  btn.classList.remove('arming');
+
+  /* Аккаунт берём из строки над деревом — той самой, под которой оно стоит.
+     Держать его копию в кнопке значило бы завести второй источник правды. */
+  var row = btn.closest('.amap-tree');
+  var account = row && row.previousElementSibling
+    ? (row.previousElementSibling.querySelector('.amap-live') || {}).dataset : null;
+  account = account ? account.account : '';
+  var per = amapPeriod();
+  if (!account || !per.from || per.span === 'all') {
+    amapTurnOffSaid(btn, 'failed', 'Pick the dates first — we act on what is on screen.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '…';
+  var body = new URLSearchParams({
+    account: account, level: btn.dataset.level || '', object_id: btn.dataset.objectId || '',
+    parent_id: btn.dataset.parentId || '', name: btn.dataset.name || '',
+    date_from: per.from, date_to: per.to, span: per.span || '',
+  });
+  fetch('/account-spend/turn-off', {
+    method: 'POST', credentials: 'same-origin', body: body,
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j || !j.ok) throw new Error((j && j.error) || 'no answer');
+      var res = j.result || {};
+      if (res.state === 'off' || res.state === 'already_off') {
+        amapTurnOffSaid(btn, res.state, res.how || '');
+      } else {
+        amapTurnOffSaid(btn, 'failed', res.error || 'did not turn off');
+      }
+      amapLogRefresh(row, account);
+    })
+    .catch(function (e) {
+      amapTurnOffSaid(btn, 'failed', String((e && e.message) || e));
+      /* И здесь тоже. Это не симметрия ради симметрии: именно упавшая
+         попытка пишет в журнал запись «результат не подтверждён», и именно
+         она нужнее всего на глазах. Обновляя журнал только по успешному
+         ответу, мы прятали бы ровно ту строку, ради которой его открывают. */
+      amapLogRefresh(row, account);
+    });
+}
+
+function amapTurnOffSaid(btn, state, words) {
+  btn.disabled = false;
+  if (state === 'off' || state === 'already_off') {
+    /* Кнопка становится надписью: включить отсюда нельзя, и оставлять
+       нажимаемым то, что больше ничего не делает, — обман. */
+    var done = document.createElement('span');
+    done.className = 'amap-tree-sw off';
+    done.textContent = 'Off';
+    done.title = (state === 'already_off' ? 'It was already off. ' : 'Turned off. ')
+      + (words || '') + ' Turning it back on is done in Ads Manager.';
+    btn.replaceWith(done);
+    return;
+  }
+  btn.disabled = true;
+  btn.className = 'amap-tree-sw unknown failed';
+  btn.textContent = 'Check';
+  btn.title = 'State unconfirmed. Read the account again. ' + words;
+}
+
+document.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('.amap-tree-sw[data-object-id]') : null;
+  if (btn) { amapTurnOffAsk(btn); return; }
+  amapTurnOffDisarm();
+});
 
 /* ── Кампании страны: одна командная таблица под списком аккаунтов (ACL-1800) ─────
    Компонент `_campaign_table.html` (`hcMount`) стоит в блоке каждой страны — и в карте
@@ -8055,7 +9229,7 @@ function amapCampaignMountVisible() {
     else if (host._hc.syncTop) host._hc.syncTop();
   });
 }
-if (typeof document !== 'undefined') {
+if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapCampaignMountVisible);
   else amapCampaignMountVisible();
   /* `toggle` не всплывает — слушаем на погружении (так же, как раньше слушали ширины дерева). */
@@ -8119,6 +9293,22 @@ function amapPollSpend(account, cell, btn, tries, per, pressed) {
 
 
 
+function amapResumeTree(account, from, to) {
+  if (!from) return;
+  fetch('/account-spend/status?account=' + encodeURIComponent(account)
+        + '&date_from=' + encodeURIComponent(from)
+        + '&date_to=' + encodeURIComponent(to || from), { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      var s = (j && j.ok && j.reading) || null;
+      if (!s || s.state !== 'ok') return;
+      document.querySelectorAll('.amap-live').forEach(function (c) {
+        if (c.dataset.account === account) amapPaintTree(c.closest('tr'), s);
+      });
+    })
+    .catch(function () { /* дерево — не то, ради чего стоит рушить страницу */ });
+}
+
 function amapResumeReadings() {
   var seen = {};
   document.querySelectorAll('.amap-live[data-running="1"]').forEach(function (cell) {
@@ -8127,6 +9317,45 @@ function amapResumeReadings() {
     seen[account] = true;
     var btn = cell.closest('tr').querySelector('.amap-read');
     amapPollSpend(account, cell, btn, 0, amapPeriod());
+  });
+
+  /* Дерево рисует только JS — второй копии этой разметки в шаблоне нет
+     намеренно: две копии расходятся, и замечает это тот, кто поверил не той.
+     Значит после перезагрузки страницы его надо восстановить из сохранённого
+     чтения, иначе оно исчезало бы, пока человек не нажмёт Read ещё раз —
+     то есть ради уже известного ответа пришлось бы снова трогать живой
+     аккаунт.
+
+     Запрос уходит только за теми, кого уже читали: он местный и в браузер не
+     ходит. */
+  var done = {};
+  var per = amapPeriod();
+  if (!per.from || per.span === 'all') return;
+
+  /* ACL-1271: у кого за эти даты чтения нет, сервер положил последнее за
+     другие даты. Дерево рисуем из него же — его собственными датами. */
+  document.querySelectorAll('.amap-live[data-fb-from]').forEach(function (cell) {
+    var account = cell.dataset.account;
+    if (done[account] || seen[account]) return;
+    done[account] = true;
+    amapResumeTree(account, cell.dataset.fbFrom || '', cell.dataset.fbTo || '');
+  });
+  document.querySelectorAll('.amap-live[data-read-state="ok"]').forEach(function (cell) {
+    var account = cell.dataset.account;
+    if (done[account] || seen[account]) return;
+    done[account] = true;
+    fetch('/account-spend/status?account=' + encodeURIComponent(account)
+          + '&date_from=' + encodeURIComponent(per.from)
+          + '&date_to=' + encodeURIComponent(per.to), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var s = (j && j.ok && j.reading) || null;
+        if (!s || s.state !== 'ok') return;
+        document.querySelectorAll('.amap-live').forEach(function (c) {
+          if (c.dataset.account === account) amapPaintTree(c.closest('tr'), s);
+        });
+      })
+      .catch(function () { /* дерево — не то, ради чего стоит рушить страницу */ });
   });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapResumeReadings);
@@ -8146,6 +9375,7 @@ function amapReadAllControls(busy) {
     var cell = amapSpendCell(b);
     b.disabled = busy || !b.getAttribute('onclick') || !!(cell && cell.dataset.running === '1');
   });
+  amapRereadSync();  // ACL-1504: Read again — следом за Read spend
 }
 
 async function amapReadAll(btn) {

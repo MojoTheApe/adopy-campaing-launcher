@@ -50,12 +50,64 @@ def test_the_home_section_is_gone_and_the_component_is_included_once():
     assert html.count('<template id="hc-scoped-tpl">') == 1 and ' id="hc-table"' not in html
 
 
-def test_the_old_per_account_list_is_removed():
-    for gone in ("amapPaintTree", "amapTreeLine", "amapTreeNotRead", "amapLogAttach", "amapTurnOffAsk",
-                 "amap-tree-line", "amap-tree-head", "amap-tree-inner", "amap-tree-log", "amapTreeColumns"):
-        assert gone not in REPORT, gone
-    assert "in the account · " not in REPORT
-    assert "What was changed here" in TABLE and "What was changed here" not in REPORT
+def _country_html(monkeypatch, backend):
+    """Блок страны, отрисованный настоящим шаблоном приложения при заданном бэкенде."""
+    from types import SimpleNamespace as NS
+
+    from src.web.app import templates
+
+    monkeypatch.setenv("ACL_FB_BACKEND", backend)
+    mc = NS(country="Chile", key="chile", rows=[{"account": "Acc", "has_data": False, "ready": True, "in_workbook": True,
+                                                  "status": {}, "to_do": ""}], virtual=False)
+    return templates.env.get_template("_account_map_country.html").render(mc=mc, amap=NS(live={}, fallback={}, splits={}, countries=[mc]))
+
+
+def test_the_backend_decides_which_campaign_ui_renders(monkeypatch):
+    """rpa (по умолчанию): прежний список из Read spend; api: таблица страны. Обе — никогда для одной страны."""
+    rpa = _country_html(monkeypatch, "rpa")
+    assert "amap-campaigns" not in rpa and "Read campaigns in" not in rpa and "data-hc-mount" not in rpa
+    assert '<span class="amap-caret-off">·</span>' in rpa                       # стрелку, как раньше, рисует JS из чтения спенда
+    api = _country_html(monkeypatch, "api")
+    assert api.count('class="hc hc-scoped amap-campaigns"') == 1 and "Read campaigns in Chile" in api
+    assert '<span class="amap-caret-off">·</span>' in api                        # строка аккаунта одна и та же
+    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)                          # по умолчанию — rpa
+    assert "amap-campaigns" not in _country_html(monkeypatch, "")
+
+
+def test_the_page_flag_and_the_component_follow_the_backend(monkeypatch):
+    from src.web.app import templates
+
+    flag = next(l for l in REPORT.splitlines() if l.startswith("window.AMAP_CAMPAIGN_TABLE ="))
+    include = '{% if campaign_table_api is defined and campaign_table_api() %}{% include "_campaign_table.html" %}{% endif %}'
+    assert REPORT.count(include) == 1
+    for backend, want in (("rpa", False), ("api", True)):
+        monkeypatch.setenv("ACL_FB_BACKEND", backend)
+        assert templates.env.from_string(flag).render().strip() == "window.AMAP_CAMPAIGN_TABLE = %s;" % str(want).lower()
+        out = templates.env.from_string(include).render()
+        assert ('id="hc-scoped-tpl"' in out) is want, backend                       # компонент грузится только под api
+
+
+def test_the_old_list_is_kept_for_rpa_and_switched_off_under_api():
+    for kept in ("function amapPaintTree(", "function amapTreeLine(", "function amapTreeNotRead(", "function amapLogAttach(",
+                 "function amapTurnOffAsk(", "function amapCoverage(", "function amapResumeTree(", "in the account · "):
+        assert kept in REPORT, kept
+    paint = REPORT[REPORT.index("function amapPaintTree("):]
+    head = paint[: paint.index("var wasOpen")]
+    assert "if (window.AMAP_CAMPAIGN_TABLE) return;" in head                     # под api прежний список не рисуется
+    mount = REPORT[REPORT.index("if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE) {"):]
+    assert "amapCampaignMountVisible" in mount[:400]                              # а таблица страны монтируется только под api
+
+
+def test_the_old_paint_is_a_no_op_under_api_and_runs_under_rpa():
+    src = REPORT[REPORT.index("function amapPaintTree("): REPORT.index("function amapPaintTree(") + 2500]
+    head = src[: src.index("var wasOpen")] + "}"
+    js = ("global.window = {AMAP_CAMPAIGN_TABLE: FLAG}; let touched = false;\n" + head +
+          "\nconst row = {get parentNode() { touched = true; return null; }, classList: {}};\namapPaintTree(row, {});\nconsole.log(touched);")
+    for flag, touched in (("true", "false"), ("false", "true")):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "t.js").write_text(js.replace("FLAG", flag), encoding="utf-8")
+            done = subprocess.run([shutil.which("node"), "t.js"], cwd=tmp, capture_output=True, text=True, timeout=30)
+        assert done.returncode == 0 and done.stdout.strip() == touched, (flag, done.stdout, done.stderr)
 
 
 def test_country_block_carries_tabs_the_read_button_and_one_mount_point():
