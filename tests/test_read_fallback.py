@@ -185,7 +185,7 @@ def test_a_live_failure_keeps_the_old_amount_in_the_cell(page):
 
 def test_the_old_amount_stands_on_its_own_line_under_a_failure(page):
     src = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
-    css = src[src.index("    .amap-live-ok {"): src.index("    .amap-tree-head.old {")]
+    css = src[src.index("    .amap-live-ok {"): src.index("    .amap-live-run {")]
     page.set_content('<style>' + css + '</style><table><tr><td class="amap-live" style="width:200px">'
                      '<span class="amap-live-bad">profile is closed</span>'
                      '<span class="amap-live-old">$1,044.82<small>09-01…09-21</small></span></td></tr></table>')

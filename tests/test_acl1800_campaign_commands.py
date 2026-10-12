@@ -1011,7 +1011,7 @@ def _node_run(write_policy, script=_NODE, name="__acl_graph_cmd_test"):
         fh.write(text)
         path = fh.name
     try:
-        done = subprocess.run([node, path], capture_output=True, text=True, timeout=60)
+        done = subprocess.run([node, path], capture_output=True, text=True, encoding="utf-8", timeout=60)
     finally:
         Path(path).unlink(missing_ok=True)
     assert done.returncode == 0, done.stderr
@@ -1149,7 +1149,7 @@ def test_acm_commands_helper_in_node():
         fh.write(text)
         path = fh.name
     try:
-        done = subprocess.run([node, path], capture_output=True, text=True, timeout=60)
+        done = subprocess.run([node, path], capture_output=True, text=True, encoding="utf-8", timeout=60)
     finally:
         Path(path).unlink(missing_ok=True)
     assert done.returncode == 0, done.stderr

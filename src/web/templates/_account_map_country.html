@@ -10,6 +10,11 @@
       <div class="amap-toolbar">
         <button type="button" class="amap-btn amap-read-all" onclick="amapReadAll(this)"
                 title="Read every connected account in {{ mc.country }} for the period on screen — one at a time">Read all spend in {{ mc.country }}</button>
+        {#- Опись кампаний той же страны: аккаунты читаются по очереди, одним нажатием.
+            Раскрытие блока страны ничего не читает у Meta — только эта кнопка и
+            «Read campaigns» в строке аккаунта внутри таблицы (ACL-1800). -#}
+        <button type="button" class="amap-btn amap-read-campaigns" onclick="amapReadCampaigns(this)"
+                title="Read campaigns, ad sets and ads of every connected account in {{ mc.country }} for the period on screen — one at a time">Read campaigns in {{ mc.country }}</button>
       </div>
       <table class="amap-grid" data-country-name="{{ mc.country | e }}">
         {#- Колонок и долей поровну, в сумме ровно 100%. Когда-то доль было на
@@ -74,8 +79,9 @@
                   12.09). Вопрос «как шло по дням» остался в разделе
                   Optimization, где он и жил.
 
-                  Саму стрелку рисует JS и только когда есть что раскрыть:
-                  до чтения раскрывать нечего, и обещать обратное незачем. -#}
+                  Старый список «in the account» (JS из чтения спенда) убран в ACL-1800: кампании
+                  страны живут в одной таблице под списком аккаунтов, а не у каждой строки.
+                  Стрелки у строки больше нет — «·» держит выравнивание. -#}
               <span class="amap-caret-off">·</span>
               {{ r.account }}
               {# Числа подставлены по совпадению хвоста имён — говорим, по
@@ -238,6 +244,15 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
         {% endfor %}
         </tbody>
       </table>
+      {#- ACL-1800: одна командная таблица кампаний на страну — под списком аккаунтов. Вкладки
+          (Campaigns · Winning setups · Landings · Targets · Creatives · Buyers) и сама таблица
+          создаются JS при первом показе блока (`amapCampaignMount`): вкладки ведут в разделы
+          этой же страны, если они есть на странице; таблица читает только локальный снимок,
+          Meta не трогает. -#}
+      <section class="hc hc-scoped amap-campaigns" data-country="{{ mc.country | e }}" aria-label="Campaigns in {{ mc.country | e }}">
+        <nav class="hc-tabs" data-hc-tabs aria-label="{{ mc.country | e }} workspace sections"></nav>
+        <div class="hc-mount" data-hc-mount></div>
+      </section>
       {% set blank = mc.rows | rejectattr('has_data') | list | length %}
       {% if blank %}
       <div class="amap-empty">{{ blank }} of {{ mc.rows | length }} accounts have no rows in the workbook for this date.</div>

@@ -30,7 +30,7 @@ function amapSpendFailed(btn, cell, why) { window._failed = [btn, cell, why]; }
 
 def _script():
     start = SOURCE.index('function amapSplitMark(')
-    end = SOURCE.index('function amapPaintTree(')
+    end = SOURCE.index('function amapCampaignSlug(')
     return SOURCE[start:end]
 
 

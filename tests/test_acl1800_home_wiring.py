@@ -26,7 +26,7 @@ from tests.test_acl1800_campaign_commands import (  # noqa: E402
     CAMP_A, CAMP_CBO, SET_BID, World, t)
 
 JS = ROOT / "src" / "web" / "static" / "acm_commands.js"
-TEMPLATE = (ROOT / "src" / "web" / "templates" / "_home_campaigns.html").read_text(encoding="utf-8")
+TEMPLATE = (ROOT / "src" / "web" / "templates" / "_campaign_table.html").read_text(encoding="utf-8")
 
 
 # ───────────────────────── сервер: доступность и поля описи ─────────────────────────

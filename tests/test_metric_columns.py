@@ -327,14 +327,6 @@ def test_the_workbook_mix_up_is_gone_asset_drill_matches_the_server():
     assert 'colspan="8"' in body, "Assets: имя, шесть метрик, Player Value"
 
 
-def test_the_tree_rows_use_the_same_labels_in_the_same_order():
-    """Строки дерева под аккаунтом: поля и подписи идут в порядке шести метрик."""
-    cols = re.search(r"var AMAP_ATTR_COLS = \[(.*?)\];", REPORT).group(1)
-    fields = re.findall(r"'(\w+)'", cols)
-    labels = dict(re.findall(r"(\w+): '(\w+)'", re.search(r"var AMAP_ATTR_LABELS = \{(.*?)\};", REPORT, re.S).group(1)))
-    assert [labels[f] for f in fields] == TARGET
-
-
 def test_the_drills_have_no_date_and_no_cart_button():
     """Решение владельца 07.10: Date и «+ 🛒» из раскрытия объявлений убраны.
 

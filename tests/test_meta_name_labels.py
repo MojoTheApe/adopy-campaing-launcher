@@ -77,14 +77,7 @@ def test_the_label_must_match_exactly():
     assert sp.clean_object_name("Promo Drafts") == "Promo Drafts"
 
 
-def test_the_dashboard_uses_the_same_list():
-    """Список один; в шаблоне — его копия для уже сохранённых чтений, и она
-    не должна разойтись с оригиналом."""
-    src = REPORT.read_text(encoding="utf-8")
-    m = re.search(r"var AMAP_META_NAME_LABELS = \[([^\]]*)\];", src)
-    assert m, "в report.html нет списка надписей"
-    in_page = tuple(re.findall(r"'([^']*)'", m.group(1)))
-    assert in_page == sp.META_NAME_LABELS
+# Копия списка надписей в report.html (`AMAP_META_NAME_LABELS`) жила в старом списке «in the account»; он убран в ACL-1800.
 
 
 # ── чтение таблицы, на настоящем браузере ─────────────────────────────────

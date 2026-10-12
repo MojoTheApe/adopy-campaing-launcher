@@ -4098,6 +4098,46 @@ def _inventory_bi(account: str, countries: list[str], date_from: str, date_to: s
     return merge_attribution(parts), ""
 
 
+def _inventory_goal_context(countries: list[str]) -> dict:
+    """Цель CPA (My Goals) и бенчмарк CPA страны — вход для колонок Goal/Benchmark CPA и подсказок.
+
+    Только чтение локальных настроек, Meta и книгу не трогает. Нет значения — `None` и
+    причина словами: таблица пишет её рядом с тире, а не выдумывает число.
+    """
+    country = next((c.strip() for c in countries if c and c.strip()), "")
+    out: dict = {"country": country, "goal_cpa": None, "goal_ftd": None, "benchmark_cpa": None,
+                 "goal_note": "", "benchmark_note": ""}
+    if not country:
+        out["goal_note"] = out["benchmark_note"] = "This account is not placed in a country"
+        return out
+    try:
+        from src.web import goals as goals_store
+        from src.web.buyer import default_cm
+
+        who = (os.environ.get("MY_CM_NAME") or default_cm() or "").strip()
+        goal = next((g for g in goals_store.for_cm(who, []) if (g.get("country") or "").strip().casefold()
+                     == country.casefold()), None)
+        cpa = float(goal.get("cpa") or 0) if goal else 0.0
+        if cpa > 0:
+            out["goal_cpa"] = cpa
+            out["goal_ftd"] = int(goal.get("ftd") or 0) or None
+        else:
+            out["goal_note"] = f"No CPA goal is set for {country} in My Goals"
+    except Exception:  # noqa: BLE001 — цели не должны ронять опись
+        out["goal_note"] = "My Goals could not be read"
+    try:
+        from config.benchmarks import get_benchmark
+
+        cap = get_benchmark(country).get("max_cpa")
+        if cap is not None and float(cap) > 0:
+            out["benchmark_cpa"] = float(cap)
+        else:
+            out["benchmark_note"] = f"No benchmark CPA is set for {country}"
+    except Exception:  # noqa: BLE001
+        out["benchmark_note"] = "The benchmark could not be read"
+    return out
+
+
 def _inventory_context(request: Request, account: str):
     """Снимок аккаунта, BI и сводка соединения — для маршрутов описи (без Meta)."""
     from src.analysis_agent import campaign_inventory as ci
@@ -4178,6 +4218,7 @@ def campaign_inventory_tree(request: Request) -> JSONResponse:
         "has_snapshot": True,
         "summary": ci.summary(snap, ci.get_attempt(account)),
         "bi": bi_summary,
+        "context": _inventory_goal_context(request.query_params.getlist("country")),
         "rows": ci.campaign_rows(snap, joined),
     })
 
@@ -5148,6 +5189,20 @@ async def campaign_commands_availability() -> JSONResponse:
     from src.web import campaign_commands
 
     return JSONResponse(campaign_commands.availability())
+
+
+@app.get("/campaign-commands/history")
+async def campaign_commands_history(request: Request) -> JSONResponse:
+    """Журнал команд аккаунта; объявлен до `/campaign-commands/{op_id}`."""
+    from src.web import campaign_commands
+
+    try:
+        limit = int(request.query_params.get("limit") or 20)
+    except ValueError:
+        limit = 20
+    data, code = await asyncio.to_thread(
+        campaign_commands.account_history, request.query_params.get("account") or "", limit)
+    return JSONResponse(data, status_code=code)
 
 
 @app.get("/campaign-commands/{op_id}")
