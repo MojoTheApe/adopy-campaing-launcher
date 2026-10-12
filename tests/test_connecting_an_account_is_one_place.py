@@ -23,7 +23,8 @@ def browser():
 
 def _page(browser, *, alive=False, token_saved=True, workspaces=None):
     report = (TPL / 'report.html').read_text(encoding='utf-8')
-    styles = '\n'.join(re.findall(r'<style[^>]*>(.*?)</style>', report, re.S))
+    from _design_tokens import tokens_css  # ACL-1797: палитра — отдельный файл
+    styles = tokens_css() + '\n'.join(re.findall(r'<style[^>]*>(.*?)</style>', report, re.S))
     script = report[report.index('var _mlxCache ='):report.index('\nfunction amapHint')]
     shared = report[report.index('<template id="amap-ml-signin-template">'):report.index('</body>')]
     env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)

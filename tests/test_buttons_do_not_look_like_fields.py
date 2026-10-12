@@ -26,7 +26,9 @@ PAGE = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="
 def _styles() -> str:
     """Все блоки <style> страницы — без Jinja внутри них."""
     blocks = re.findall(r"<style>(.*?)</style>", PAGE, re.S)
-    return "\n".join(re.sub(r"\{[{%#].*?[}%#]\}", "", b, flags=re.S) for b in blocks)
+    # ACL-1797: палитра — отдельный файл токенов, подключённый в страницу через include.
+    tokens = (ROOT / "src" / "web" / "templates" / "adopy-tokens.css").read_text(encoding="utf-8")
+    return tokens + "\n".join(re.sub(r"\{[{%#].*?[}%#]\}", "", b, flags=re.S) for b in blocks)
 
 
 _HTML = """<!doctype html><html %(theme)s><head><style>%(css)s</style></head><body>

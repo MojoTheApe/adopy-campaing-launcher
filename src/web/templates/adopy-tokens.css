@@ -1,0 +1,157 @@
+/* Adopy visual foundation, 2026-10-11.
+   Token declarations only: importing this file does not restyle legacy components.
+   Mount on the existing application; adapt its theme switch to html[data-theme].
+   Behaviour belongs to dashboard-rebuild-for-claude.md and builder-spec.md. */
+:root {
+  color-scheme: light;
+  --adopy-brand: #2563eb;
+  --adopy-bg: #f4f5f7;
+  --adopy-surface: #ffffff;
+  --adopy-surface-subtle: #f7f8fa;
+  --adopy-surface-raised: #ffffff;
+  --adopy-surface-hover: #eef0f4;
+  --adopy-border: #dfe3ea;
+  --adopy-border-strong: #c6cfdc;
+  --adopy-control-border: #7c899d;
+  --adopy-text: #202a39;
+  --adopy-text-muted: #606c80;
+  --adopy-primary: #2563eb;
+  --adopy-primary-hover: #1d4ed8;
+  --adopy-on-primary: #ffffff;
+  --adopy-link: #245ace;
+  --adopy-selected-bg: #edf3ff;
+  --adopy-selected-text: #245ace;
+  --adopy-focus: #2563eb;
+  --adopy-success: #216e4e;
+  --adopy-success-bg: #edf7f1;
+  --adopy-warning: #855812;
+  --adopy-warning-bg: #fcf5e9;
+  --adopy-danger: #b42318;
+  --adopy-danger-bg: #fff0ed;
+  --adopy-neutral-bg: #eef0f4;
+  --adopy-switch-off: #606c80;
+  --adopy-switch-thumb: #ffffff;
+  --adopy-scrim: rgb(15 23 42 / 42%);
+  --adopy-shadow-sm: 0 1px 3px rgb(24 44 76 / 6%);
+  --adopy-shadow-popover: 0 8px 28px rgb(24 44 76 / 14%);
+  --adopy-shadow-drawer: -8px 0 28px rgb(24 44 76 / 12%);
+  --adopy-chart-you: #2563eb;
+  --adopy-chart-others: #606c80;
+  --adopy-chart-secondary: #0e7490;
+  --adopy-chart-tertiary: #7c3aed;
+
+  --adopy-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --adopy-font-mono: ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  --adopy-text-xs: 0.6875rem; /* 11 px at the default 16 px root */
+  --adopy-text-sm: 0.75rem;   /* 12 px */
+  --adopy-text-table: 0.8125rem; /* 13 px */
+  --adopy-text-body: 0.875rem; /* 14 px */
+  --adopy-text-control: 0.875rem;
+  --adopy-text-section: 1rem; /* 16 px */
+  --adopy-text-title: 1.25rem; /* 20 px */
+  --adopy-text-kpi: 1.75rem; /* 28 px */
+  --adopy-weight-regular: 400;
+  --adopy-weight-medium: 500;
+  --adopy-weight-semibold: 600;
+  --adopy-weight-bold: 700;
+  --adopy-leading-tight: 1.25;
+  --adopy-leading-ui: 1.45;
+  --adopy-leading-body: 1.55;
+
+  --adopy-space-1: 4px;
+  --adopy-space-2: 8px;
+  --adopy-space-3: 12px;
+  --adopy-space-4: 16px;
+  --adopy-space-5: 20px;
+  --adopy-space-6: 24px;
+  --adopy-space-8: 32px;
+  --adopy-space-10: 40px;
+  --adopy-space-12: 48px;
+  --adopy-radius-sm: 6px;
+  --adopy-radius-md: 8px;
+  --adopy-radius-lg: 10px;
+  --adopy-radius-date: 7px;
+  --adopy-radius-pill: 999px;
+  --adopy-border-width: 1px;
+  --adopy-focus-width: 2px;
+  --adopy-focus-offset: 2px;
+  --adopy-control-sm: 32px;
+  --adopy-control-md: 36px;
+  --adopy-control-lg: 40px;
+  --adopy-touch-target: 44px;
+  --adopy-icon-sm: 16px;
+  --adopy-icon-md: 20px;
+  --adopy-nav-width: 232px;
+  --adopy-nav-compact: 64px;
+  --adopy-builder-width: 420px;
+  --adopy-builder-min: 380px;
+  --adopy-builder-max: 560px;
+  --adopy-builder-expanded: 1100px;
+  --adopy-builder-handle: 48px;
+  --adopy-page-padding: 24px;
+  --adopy-cell-x: 12px;
+  --adopy-cell-y: 10px;
+  --adopy-row-min: 44px;
+  --adopy-row-campaign-min: 64px;
+  --adopy-row-adset-min: 56px;
+  --adopy-row-ad-min: 52px;
+  --adopy-table-checkbox-width: 40px;
+  --adopy-table-identity-width: 300px;
+  --adopy-motion-fast: 120ms;
+  --adopy-motion-ui: 160ms;
+  --adopy-motion-drawer: 200ms;
+  --adopy-ease: cubic-bezier(0.2, 0, 0, 1);
+  --adopy-z-sticky-cell: 10;
+  --adopy-z-table-header: 20;
+  --adopy-z-shell: 30;
+  --adopy-z-builder: 40;
+  --adopy-z-popover: 100;
+  --adopy-z-modal: 200;
+  --adopy-z-toast: 300;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --adopy-bg: #111720;
+  --adopy-surface: #19222e;
+  --adopy-surface-subtle: #202b39;
+  --adopy-surface-raised: #223041;
+  --adopy-surface-hover: #263446;
+  --adopy-border: #354459;
+  --adopy-border-strong: #4b5e76;
+  --adopy-control-border: #75869d;
+  --adopy-text: #edf2fa;
+  --adopy-text-muted: #a4b3c8;
+  --adopy-primary: #83aaff;
+  --adopy-primary-hover: #a1bfff;
+  --adopy-on-primary: #10233f;
+  --adopy-link: #a9c7ff;
+  --adopy-selected-bg: #223957;
+  --adopy-selected-text: #a9c7ff;
+  --adopy-focus: #83aaff;
+  --adopy-success: #8ad1ad;
+  --adopy-success-bg: #1e3c32;
+  --adopy-warning: #e5bd78;
+  --adopy-warning-bg: #3c3223;
+  --adopy-danger: #ffb4aa;
+  --adopy-danger-bg: #462a2e;
+  --adopy-neutral-bg: #263446;
+  --adopy-switch-off: #75869d;
+  --adopy-switch-thumb: #10233f;
+  --adopy-scrim: rgb(0 0 0 / 60%);
+  --adopy-shadow-sm: 0 1px 3px rgb(0 0 0 / 20%);
+  --adopy-shadow-popover: 0 8px 28px rgb(0 0 0 / 32%);
+  --adopy-shadow-drawer: -8px 0 28px rgb(0 0 0 / 28%);
+  --adopy-chart-you: #83aaff;
+  --adopy-chart-others: #a4b3c8;
+  --adopy-chart-secondary: #67d5e8;
+  --adopy-chart-tertiary: #c4b5fd;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --adopy-motion-fast: 0ms;
+    --adopy-motion-ui: 0ms;
+    --adopy-motion-drawer: 0ms;
+  }
+}
