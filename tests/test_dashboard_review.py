@@ -92,3 +92,87 @@ def test_theme_preference_behavior(scenario):
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+# ── ACL-1824: подпись «<имя>_<id кабинета>» и алиас книги ──────────────
+def _id_frame(*aliases, country="Peru"):
+    n = len(aliases)
+    return pd.DataFrame({
+        "Country Final": [country] * n,
+        "Account Alias": list(aliases),
+        "Date": ["2026-10-11"] * n,
+        "Adset Name": [f"adset {i}" for i in range(n)],
+        "Ad Title": [f"ad {i}" for i in range(n)],
+        "Ad Asset": ["demo"] * n,
+        "CM": ["Demo"] * n,
+        "# FTDs": [1] * n, "# Leads": [6] * n, "$ Spend": [30.0] * n,
+    })
+
+
+def test_label_with_ad_account_id_suffix_matches_the_workbook_alias():
+    df = _id_frame("Facebook_5265", "Facebook_5414")
+    assert web_app.workbook_alias_for(df, "Peru", "Facebook_5265_61579362958966") == "Facebook_5265"
+    assert web_app.workbook_alias_for(df, "Peru", "Facebook_5414_61579362958967") == "Facebook_5414"
+
+
+def test_exact_alias_still_wins_over_the_suffix_rule():
+    df = _id_frame("Facebook_5265", "Facebook_5265_61579362958966")
+    assert web_app.workbook_alias_for(df, "Peru", "Facebook_5265_61579362958966") == "Facebook_5265_61579362958966"
+
+
+def test_two_candidate_aliases_give_no_match():
+    # два разных алиаса под одним ключом — не выбираем первый
+    label = "Facebook_5265_61579362958966"
+    got = web_app._alias_without_id_suffix(label, ["Facebook_5265", "FACEBOOK_5265"])
+    assert got == ""
+    assert web_app.workbook_alias_for(_id_frame("Facebook_5265", "FACEBOOK_5265"), "Peru", label) == label
+
+
+def test_short_numeric_suffix_is_not_stripped():
+    df = _id_frame("Facebook_5265")
+    assert web_app.workbook_alias_for(df, "Peru", "Facebook_5265_1234567") == "Facebook_5265_1234567"
+    assert web_app.workbook_alias_for(df, "Peru", "Facebook_5265_12345678") == "Facebook_5265"
+
+
+def test_id_suffix_rule_is_scoped_to_the_country():
+    df = _id_frame("Facebook_5265", country="Peru")
+    label = "Facebook_5265_61579362958966"
+    assert web_app.workbook_alias_for(df, "Colombia", label) == label
+
+
+def test_account_map_row_shows_numbers_for_suffixed_label(isolated_links):
+    df = _id_frame("Facebook_5265")
+    account_links.link("Facebook_5265_61579362958966", "country", "Peru")
+    view = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")
+    row = view["countries"][0]["rows"][0]
+    assert row["workbook_alias"] == "Facebook_5265"
+    assert row["has_data"] and row["leads"] == 6 and row["deposits"] == 1 and row["spend"] == 30.0
+    assert view["countries"][0]["leads"] == 6
+
+
+def test_country_totals_do_not_double_count_a_linked_alias(isolated_links):
+    df = _id_frame("Facebook_5265")
+    account_links.link("Facebook_5265_61579362958966", "country", "Peru")
+    account_links.link("Facebook_5265", "country", "Peru")
+    view = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")
+    country = view["countries"][0]
+    assert len(country["rows"]) == 2 and all(r["has_data"] for r in country["rows"])
+    assert country["leads"] == 6 and country["deposits"] == 1 and country["spend"] == 30.0
+
+
+def test_country_totals_sum_two_different_aliases(isolated_links):
+    df = _id_frame("Facebook_5265", "Facebook_5414")
+    account_links.link("Facebook_5265_61579362958966", "country", "Peru")
+    account_links.link("Facebook_5414_61579362958967", "country", "Peru")
+    country = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")["countries"][0]
+    assert all(r["has_data"] for r in country["rows"]) and len(country["rows"]) == 2
+    assert country["leads"] == 12 and country["deposits"] == 2 and country["spend"] == 60.0
+
+
+def test_country_totals_count_duplicate_once_and_keep_distinct(isolated_links):
+    df = _id_frame("Facebook_5265", "Facebook_5414")
+    for label in ("Facebook_5265_61579362958966", "Facebook_5265", "Facebook_5414_61579362958967"):
+        account_links.link(label, "country", "Peru")
+    country = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")["countries"][0]
+    assert len(country["rows"]) == 3
+    assert country["leads"] == 12 and country["deposits"] == 2 and country["spend"] == 60.0
