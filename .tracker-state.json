@@ -7237,22 +7237,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "824": {
-        "actor": "Worker-S1824A",
-        "session": "run_s1824a_1012",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1824-alias-id-suffix",
-        "worktree": "C:\\acl-1824-alias",
-        "id": "5504cff55021496db86a05abf4423944",
-        "issue": 824,
-        "state": "handoff",
-        "started_at": "2026-10-12T12:10:20+00:00",
-        "from_status": "status:idea",
-        "pr": 825,
-        "report": "ACL-1824 PR #825, head cd9f9d9ab8b512a4446f505a7cbb0c02c85feb65, based on origin/main e8e59f8. Labels `<alias>_<8+ digits>` resolve to the single workbook alias of the same country (rule in `_alias_by_tail`, after exact/rule match and before the tail guess); country totals count each alias once. Tests: 59 passed across the affected files (test_dashboard_review, test_account_name_rules, test_account_map_alias_join, test_alias_matches_perf, test_account_drill); 7 new tests. Mutations: min digits 8->1 fails the short-suffix test; removing the totals dedupe fails the double-count test. No live calls."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -11089,9 +11074,25 @@
             "session": "run_s1824a_1012"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1824A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1824A",
+          "session": "run_s1824a_1012",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1824-alias-id-suffix",
+          "worktree": "C:\\acl-1824-alias",
+          "id": "5504cff55021496db86a05abf4423944",
+          "issue": 824,
+          "state": "handoff",
+          "started_at": "2026-10-12T12:10:20+00:00",
+          "from_status": "status:idea",
+          "pr": 825,
+          "report": "ACL-1824 PR #825, head cd9f9d9ab8b512a4446f505a7cbb0c02c85feb65, based on origin/main e8e59f8. Labels `<alias>_<8+ digits>` resolve to the single workbook alias of the same country (rule in `_alias_by_tail`, after exact/rule match and before the tail guess); country totals count each alias once. Tests: 59 passed across the affected files (test_dashboard_review, test_account_name_rules, test_account_map_alias_join, test_alias_matches_perf, test_account_drill); 7 new tests. Mutations: min digits 8->1 fails the short-suffix test; removing the totals dedupe fails the double-count test. No live calls."
+        },
+        "pr": 825,
+        "queued_at": "2026-10-12T12:16:35+00:00"
       }
     },
     "actors": {
@@ -14441,7 +14442,8 @@
       815,
       816,
       819,
-      822
+      822,
+      824
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21657,6 +21659,13 @@
         "at": "2026-10-12T12:10:20+00:00",
         "issue": 824,
         "claim": "5504cff55021496db86a05abf4423944",
+        "actor": "Worker-S1824A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-12T12:16:35+00:00",
+        "issue": 824,
+        "pr": 825,
         "actor": "Worker-S1824A"
       }
     ],
