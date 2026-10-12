@@ -88,9 +88,10 @@ def test_every_identity_case_has_its_own_verdict():
 def test_only_exact_kinds_allow_automatic():
     got = verdicts()
     allowed = {v["verdict"] for v in got.values() if v["automatic_ok"]}
-    assert allowed == {ev.EXACT, ev.EXACT_BY_CHILDREN, ev.COPY_SUFFIX}
+    assert allowed == {ev.EXACT, ev.EXACT_BY_CHILDREN}
+    assert got["adset:31"]["blocker"] == ev.AMBIGUOUS_MAPPING  # copy_suffix: только Observe/Suggest
     assert not verdicts(alias_quality="heuristic")["adset:11"]["automatic_ok"]
-    assert ev.AUTOMATIC_VERDICTS == {ev.EXACT, ev.EXACT_BY_CHILDREN, ev.COPY_SUFFIX}
+    assert ev.AUTOMATIC_VERDICTS == {ev.EXACT, ev.EXACT_BY_CHILDREN}
 
 
 def test_blockers_tell_missing_from_ambiguous():
@@ -131,7 +132,7 @@ def test_coverage_counts_each_group():
     assert cov["assigned"] == len(got)
     assert cov["exact"] == sum(v["automatic_ok"] for v in got.values())
     assert cov["missing"] == 4 and cov["partial"] == 1  # Ghost, P2 и кампании без единого совпавшего ad set
-    assert cov["ambiguous"] == 6  # 2 дубля, multi_country и renamed вместе с их кампаниями
+    assert cov["ambiguous"] == 9  # дубли, multi_country, renamed, копии и их кампании
     assert cov["evidence_only"] == ["Zzz"]
 
 
@@ -169,12 +170,21 @@ WINDOW_DF = book_df([
 ])
 
 
+def rsnap(**over):
+    """Снимок, который можно сверить: USD, период = зрелое окно, spend Meta = spend книги (200)."""
+    snap = make_snapshot(WINDOW_SNAP, date_from="2026-10-01", date_to="2026-10-09")
+    snap.insights = {"campaign": {"1": {"spend": 100.0}, "2": {"spend": 100.0}}}
+    for key, value in over.items():
+        setattr(snap, key, value)
+    return snap
+
+
 def evidence(strategy, snap=None, df=None, **kw):
     kw.setdefault("now", NOW)
     kw.setdefault("today", TODAY)
     kw.setdefault("bi_built_at", BUILT)
     kw.setdefault("account_label", "Acc")
-    return ev.build_evidence(snap or make_snapshot(WINDOW_SNAP), WINDOW_DF if df is None else df, ALIAS,
+    return ev.build_evidence(snap or rsnap(), WINDOW_DF if df is None else df, ALIAS,
                              strategy=strategy, start="2026-10-01", **kw)
 
 
@@ -281,7 +291,7 @@ def test_stale_bi_blocks_automatic():
 
 
 def test_stale_snapshot_blocks_automatic(monkeypatch):
-    old = make_snapshot(WINDOW_SNAP, finished_at_utc=(NOW - timedelta(hours=25)).isoformat())
+    old = rsnap(finished_at_utc=(NOW - timedelta(hours=25)).isoformat())
     out = evidence(ev.STOP_LOSS, snap=old)
     assert ev.STALE_SNAPSHOT in out["global_blockers"]
     assert not out["automatic"]["adset:11"]["allowed"]
@@ -325,11 +335,12 @@ def test_reconciliation_blocks_on_a_big_gap_only_for_usd():
     assert bad["status"] == "mismatch" and bad["blocker"] == ev.DATA_MISMATCH
     snap.currency = "BRL"
     skipped = ev.reconcile_spend(snap, window, 100.0)
-    assert skipped["status"] == "not_reconciled" and skipped["blocker"] == "" and "currency" in skipped["note"]
+    assert skipped["status"] == "not_reconciled" and skipped["blocker"] == "Not reconciled: currency BRL"
     snap.currency = "USD"
-    assert ev.reconcile_spend(snap, (date(2026, 10, 1), date(2026, 10, 8)), 100.0)["blocker"] == ""
+    assert ev.reconcile_spend(snap, (date(2026, 10, 1), date(2026, 10, 8)), 100.0)["blocker"]         == "Not reconciled: snapshot period differs"
+    assert ev.reconcile_spend(snap, window, None)["blocker"] == "Not reconciled: spend missing"
     snap.steps["insights_campaign"] = "truncated"
-    assert ev.reconcile_spend(snap, window, 100.0)["status"] == "not_reconciled"
+    assert ev.reconcile_spend(snap, window, 100.0)["blocker"] == "Not reconciled: spend missing"
 
 
 def test_mismatch_blocks_automatic_end_to_end():
@@ -338,6 +349,45 @@ def test_mismatch_blocks_automatic_end_to_end():
     out = evidence(ev.STOP_LOSS, snap=snap)
     assert ev.DATA_MISMATCH in out["global_blockers"]
     assert not out["automatic"]["adset:11"]["allowed"]
+
+
+@pytest.mark.parametrize("over,blocker", [
+    ({"currency": "EUR"}, "Not reconciled: currency EUR"),
+    ({"date_to": "2026-10-11"}, "Not reconciled: snapshot period differs"),
+    ({"insights": {}}, "Not reconciled: spend missing"),
+])
+def test_unreconciled_blocks_automatic_but_not_observe(over, blocker):
+    out = evidence(ev.STOP_LOSS, snap=rsnap(**over))
+    assert blocker in out["global_blockers"]
+    assert out["automatic"]["adset:11"] == {"allowed": False, "reasons": [blocker]}
+    assert out["identity"]["adset:11"]["verdict"] == ev.EXACT          # оценка идёт
+    assert out["numbers"]["adset:11"]["state"] == "ok"                 # числа есть
+
+
+# ───────────────────────── копия тянет за собой кампанию и объявления
+
+def test_copy_suffix_ad_set_taints_campaign_and_ads():
+    snap = make_snapshot([(3, "Camp3", [(31, "Orig"), (32, "Orig - Copy")])])
+    snap.ads, _ = ci.parse_inventory([_obj(311, "T", campaign_id="3", adset_id="31")], "ad")
+    book = {"campaigns": {"Orig": m(), "Orig - Copy": m()}, "ads": {"Orig": {"T": m()}}}
+    joined, _ = ev.exact_name_join(snap, book)
+    got = ev.identity_verdicts(snap, joined)
+    assert got["adset:31"]["verdict"] == ev.COPY_SUFFIX
+    assert got["campaign:3"]["verdict"] == ev.COPY_SUFFIX            # не exact_by_children
+    assert got["ad:311"]["verdict"] == ev.COPY_SUFFIX                # наследует от ad set
+    assert not any(v["automatic_ok"] for v in got.values())
+    assert ev.coverage(got)["exact"] == 0 and ev.coverage(got)["ambiguous"] == 4
+
+
+def test_snapshot_age_env_junk_falls_back_to_default(monkeypatch):
+    for junk in ("nan", "inf", "-inf", "abc", ""):
+        monkeypatch.setenv("ACL_RULES_MAX_SNAPSHOT_AGE_H", junk)
+        assert ev.max_snapshot_age_h() == 24.0
+
+
+def test_bi_built_at_is_required():
+    with pytest.raises(TypeError):
+        ev.build_evidence(rsnap(), WINDOW_DF, ALIAS, strategy=ev.STOP_LOSS, start="2026-10-01")
 
 
 # ───────────────────────── идентичность по книге ─────────────────────────

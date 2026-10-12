@@ -9,8 +9,8 @@
 
 * **Один джойн.** Таблица Home (`campaign_inventory.join_bi`) и правила считают
   через `exact_name_join`; ответ таблицы не менялся при выносе.
-* **Вердикт на каждый объект.** `exact`, `exact_by_children`, `copy_suffix` —
-  единственные, что допускают Automatic. Остальные — только Observe/Suggest.
+* **Вердикт на каждый объект.** `exact` и `exact_by_children` — единственные,
+  что допускают Automatic; `copy_suffix` (имя рядом с `X - Copy`) — только Observe/Suggest. Остальные — только Observe/Suggest.
 * **Нет строк — нет данных, а не ноль.** Объект не из книги никогда не получает
   `FTD = 0`: его числа — `None`, причина — `Missing mapping`.
 * **Асимметричная зрелость.** Stop-loss: spend за `[start, through − D]`, FTD за
@@ -19,6 +19,7 @@
 """
 from __future__ import annotations
 
+import math
 import os
 import re
 from collections import Counter, defaultdict
@@ -43,9 +44,9 @@ NOT_IN_WORKBOOK = "not_in_workbook"
 VERDICTS = (EXACT, EXACT_BY_CHILDREN, COPY_SUFFIX, ALIAS_HEURISTIC, PARTIAL, DUPLICATE_NAME,
             MULTI_COUNTRY, RENAMED, NOT_IN_WORKBOOK)
 
-#: Только эти вердикты могут пропустить Automatic (§3.2). `copy_suffix` — точное
-#: уникальное имя рядом с `X - Copy`; ошибиться тут нельзя, имя однозначно.
-AUTOMATIC_VERDICTS = frozenset({EXACT, EXACT_BY_CHILDREN, COPY_SUFFIX})
+#: Только эти вердикты могут пропустить Automatic (§3.2). `copy_suffix` решением
+#: координатора Automatic не пропускает: рядом живёт копия, и «то же ли это имя» решает человек.
+AUTOMATIC_VERDICTS = frozenset({EXACT, EXACT_BY_CHILDREN})
 
 #: Причина отказа в UI (§1.6): «нет строк» и «неоднозначно» — разные причины.
 MISSING_MAPPING = "Missing mapping"
@@ -59,7 +60,7 @@ INSUFFICIENT_EVIDENCE = "Insufficient evidence"
 _REASON_OF = {
     NOT_IN_WORKBOOK: MISSING_MAPPING,
     ALIAS_HEURISTIC: AMBIGUOUS_MAPPING, PARTIAL: AMBIGUOUS_MAPPING, DUPLICATE_NAME: AMBIGUOUS_MAPPING,
-    MULTI_COUNTRY: AMBIGUOUS_MAPPING, RENAMED: AMBIGUOUS_MAPPING,
+    MULTI_COUNTRY: AMBIGUOUS_MAPPING, RENAMED: AMBIGUOUS_MAPPING, COPY_SUFFIX: AMBIGUOUS_MAPPING,
 }
 
 #: `X - Copy`, `X - Copy 2`, `X-copy` (Duplicate в Ads Manager и ручные копии).
@@ -213,6 +214,8 @@ def identity_verdicts(snap: Snapshot, joined: dict[str, dict], *, bi_available: 
     `joined` — ответ `exact_name_join`. `assigned_names` / `current_names` —
     `{ключ: имя}` из назначения правила и из повторного чтения: расхождение с
     именем снимка — `renamed`, история под старым именем не подтянута.
+    ВНИМАНИЕ: вердикт `renamed` возникает только если вызывающий передал эти два
+    словаря (имя при назначении правила и имя из re-read); без них он не выдаётся.
     """
     tree = build_tree(snap)
     multi = {norm_name(x) for x in multi_country}
@@ -264,7 +267,7 @@ def identity_verdicts(snap: Snapshot, joined: dict[str, dict], *, bi_available: 
             up = out.get(f"adset:{parent['id']}") if parent else None
             if entry is None:
                 hit = _verdict(NOT_IN_WORKBOOK, "no workbook rows under this ad title")
-            elif up and up["verdict"] in (ALIAS_HEURISTIC, MULTI_COUNTRY, RENAMED):
+            elif up and up["verdict"] in (ALIAS_HEURISTIC, MULTI_COUNTRY, RENAMED, COPY_SUFFIX):
                 hit = _verdict(up["verdict"], "inherited from the ad set")
             elif title in _copy_related(siblings):
                 hit = _verdict(COPY_SUFFIX, "unique exact title next to a copy")
@@ -288,7 +291,7 @@ def identity_verdicts(snap: Snapshot, joined: dict[str, dict], *, bi_available: 
                 hit = _verdict(PARTIAL, "the ad set list is incomplete, so full coverage cannot be shown")
             elif entry["match"] == "ad_sets":
                 kinds = {out[f"adset:{k['id']}"]["verdict"] for k in kids}
-                worst = next((v for v in (RENAMED, MULTI_COUNTRY, ALIAS_HEURISTIC) if v in kinds), "")
+                worst = next((v for v in (RENAMED, MULTI_COUNTRY, ALIAS_HEURISTIC, COPY_SUFFIX) if v in kinds), "")
                 hit = (_verdict(worst, "inherited from its ad sets") if worst
                        else _verdict(EXACT_BY_CHILDREN, f"all {len(kids)} ad sets matched exactly"))
             elif heuristic:
@@ -308,11 +311,11 @@ def coverage(identities: dict[str, dict], keys: Iterable[str] | None = None, *,
     kinds = Counter(identities.get(k, _verdict(NOT_IN_WORKBOOK))["verdict"] for k in chosen)
     return {
         "assigned": len(chosen),
-        "exact": kinds[EXACT] + kinds[EXACT_BY_CHILDREN] + kinds[COPY_SUFFIX],
+        "exact": kinds[EXACT] + kinds[EXACT_BY_CHILDREN],
         "heuristic": kinds[ALIAS_HEURISTIC],
         "partial": kinds[PARTIAL],
         "missing": kinds[NOT_IN_WORKBOOK],
-        "ambiguous": kinds[DUPLICATE_NAME] + kinds[MULTI_COUNTRY] + kinds[RENAMED],
+        "ambiguous": kinds[DUPLICATE_NAME] + kinds[MULTI_COUNTRY] + kinds[RENAMED] + kinds[COPY_SUFFIX],
         "evidence_only": sorted(evidence_only),
     }
 
@@ -454,6 +457,8 @@ def max_snapshot_age_h() -> float:
         value = float(os.environ.get("ACL_RULES_MAX_SNAPSHOT_AGE_H", ""))
     except ValueError:
         return SNAPSHOT_MAX_AGE_H_DEFAULT
+    if not math.isfinite(value):  # nan / inf — мусор, а не «максимум диапазона»
+        return SNAPSHOT_MAX_AGE_H_DEFAULT
     return max(1.0, min(72.0, value))
 
 
@@ -555,20 +560,24 @@ def meta_spend_total(snap: Snapshot) -> float | None:
 def reconcile_spend(snap: Snapshot, window: tuple[date, date] | None, bi_spend: float | None) -> dict:
     """BI `$ Spend` против Meta `spend` снимка за ТОТ ЖЕ период (только USD).
 
-    Расхождение больше 20% от большего — `Data mismatch`, Automatic блокируется.
-    Не-USD, другой период снимка или нет числа — «не сверено» с причиной, без
-    блокировки и без выдуманного курса.
+    Расхождение больше 20% от большего — `Data mismatch`. Если сверку сделать
+    нельзя (не-USD, период снимка не равен окну, нет числа с одной из сторон),
+    статус `not_reconciled` и у него ТОЖЕ есть blocker `Not reconciled: …`:
+    Automatic без сверки не идёт (решение координатора), Observe/Suggest — идут.
+    Курс не придумываем.
     """
     def skipped(why: str) -> dict:
-        return {"status": "not_reconciled", "blocker": "", "note": why, "diff": None}
+        return {"status": "not_reconciled", "blocker": f"Not reconciled: {why}", "note": f"Not reconciled: {why}",
+                "diff": None}
 
-    if (snap.currency or "").upper() != "USD":
-        return skipped("not reconciled (currency)")
+    currency = (snap.currency or "").upper()
+    if currency != "USD":
+        return skipped(f"currency {currency or 'unknown'}")
     if window is None or (snap.date_from, snap.date_to) != (window[0].isoformat(), window[1].isoformat()):
-        return skipped("not reconciled (the inventory period differs from the evidence window)")
+        return skipped("snapshot period differs")
     meta = meta_spend_total(snap)
     if meta is None or bi_spend is None:
-        return skipped("not reconciled (no spend number on one side)")
+        return skipped("spend missing")
     top = max(abs(meta), abs(bi_spend))
     diff = 0.0 if top == 0 else abs(meta - bi_spend) / top
     bad = diff > RECONCILE_TOLERANCE
@@ -622,12 +631,16 @@ def object_numbers(strategy: str, key: str, ident: dict, spend_w: dict | None, f
 # ───────────────────────── сборка доказательств ─────────────────────────
 
 def build_evidence(snap: Snapshot | None, df: Any, aliases: dict[str, str], *, strategy: str, start: Any,
-                   account_label: str = "", through: Any = None, region: str | None = None,
+                   bi_built_at: Any, account_label: str = "", through: Any = None, region: str | None = None,
                    days: int | None = None, target_cpa: float | None = None, now: Any = None,
-                   today: date | None = None, bi_built_at: Any = None, alias_quality: str | None = None,
+                   today: date | None = None, alias_quality: str | None = None,
                    multi_country: Iterable[str] | None = None, assigned_names: dict[str, str] | None = None,
                    current_names: dict[str, str] | None = None, scope_keys: Iterable[str] | None = None) -> dict:
     """Доказательства аккаунта для оценки правила. Только чтение книги и описи.
+
+    `bi_built_at` обязателен: время сборки книги (`None` = неизвестно = `Stale BI`).
+    `assigned_names` / `current_names` нужны для вердикта `renamed` — их должен
+    передать вызывающий (имя при назначении правила и имя из re-read).
 
     Возвращает словарь (годится для `rule_evaluations.jsonl`): окна, вердикты,
     числа, покрытие, свежесть, сверку и итог по Automatic на каждый объект.
