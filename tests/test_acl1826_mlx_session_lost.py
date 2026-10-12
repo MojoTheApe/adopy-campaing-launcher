@@ -444,3 +444,39 @@ def test_page_scripts_send_batch_show_one_banner_and_retry_only_the_skipped():
     assert "runOpen(grid, s.stopped)" in warm_js
     cmds = (ROOT / "src/web/static/acm_commands.js").read_text(encoding="utf-8")
     assert LOST_TEXT in cmds and PROXY_TEXT in cmds
+
+
+# ── поведение страницы: Publish all -> баннер -> Retry (Node) ────────────────
+
+def _retry_run() -> dict:
+    """Настоящий cbPublishAll/cbNewRun/showQueue страницы в Node: три формы, две
+    останавливает mlx_session_lost, затем нажатие Retry в баннере."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("нет node — исполнить код страницы нечем")
+    r = subprocess.run([node, str(ROOT / "tests" / "acl1826_retry_harness.cjs"),
+                        str(ROOT / "src/web/templates/report.html")],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+def test_publish_all_shows_one_banner_for_the_two_stopped_forms():
+    out = _retry_run()
+    assert sorted(p["account"] for p in out["first"]) == ["UL1", "UL2", "UL3"]
+    assert out["banner"].count("data-cb-stop-retry") == 1               # одна строка на пачку
+    assert "2 accounts not sent" in out["banner"] and out["handler_present"]
+
+
+def test_retry_resends_exactly_the_stopped_forms_with_one_batch_id_per_run():
+    out = _retry_run()
+    first, retry = out["first"], out["retry"]
+    # Первый запуск: все три — под одним id пачки.
+    assert len({p["batch"] for p in first}) == 1 and first[0]["batch"]
+    # Retry: только остановленные (UL1 уже собран и не едет второй раз), id один на запуск.
+    assert sorted(p["account"] for p in retry) == ["UL2", "UL3"]
+    assert len({p["batch"] for p in retry}) == 1 and retry[0]["batch"]
+    assert retry[0]["batch"] != first[0]["batch"]                       # новый запуск — новая пачка
+    assert out["alerts"] == []
