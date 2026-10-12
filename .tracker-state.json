@@ -7249,6 +7249,18 @@
         "state": "implementing",
         "started_at": "2026-10-12T12:54:45+00:00",
         "from_status": "status:idea"
+      },
+      "767": {
+        "actor": "Worker-S1767A",
+        "session": "run_s1767a_1012",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1767-audience-cta-devices",
+        "worktree": "C:\\acl-1767-fields",
+        "id": "1268b50f233543bba2fab0c653ebce06",
+        "issue": 767,
+        "state": "implementing",
+        "started_at": "2026-10-12T12:56:46+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -11141,6 +11153,17 @@
         "state": "implementing",
         "worker": "Worker-S1826A",
         "coordinator": "Coordinator-C0930A"
+      },
+      "767": {
+        "implementers": [
+          {
+            "actor": "Worker-S1767A",
+            "session": "run_s1767a_1012"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1767A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -12102,6 +12125,10 @@
       },
       "Worker-S1826A": {
         "session": "run_s1826a_1012",
+        "role": "Worker"
+      },
+      "Worker-S1767A": {
+        "session": "run_s1767a_1012",
         "role": "Worker"
       }
     },
@@ -21744,6 +21771,13 @@
         "issue": 826,
         "claim": "2b5298d7f62846d5a75b6d3d5ae1902c",
         "actor": "Worker-S1826A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T12:56:46+00:00",
+        "issue": 767,
+        "claim": "1268b50f233543bba2fab0c653ebce06",
+        "actor": "Worker-S1767A"
       }
     ],
     "policy": {
