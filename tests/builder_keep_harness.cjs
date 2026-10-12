@@ -48,6 +48,13 @@ function slot(idx, values = {}) {
     input('camp_' + idx + '_ad_0_creative_type', 'Image', { type: 'radio', checked: true }),
     input('camp_' + idx + '_ad_0_creative_type', 'Video', { type: 'radio' }),
     input('camp_' + idx + '_ad_0_copy', values.copy || ''),
+    // ACL-1767: поля набора и кнопка объявления (необязательные, как name_override)
+    input('camp_' + idx + '_gender', values.gender || ''),
+    input('camp_' + idx + '_languages', values.languages || ''),
+    input('camp_' + idx + '_device', values.device || ''),
+    input('camp_' + idx + '_os_min', values.os_min || ''),
+    input('camp_' + idx + '_start_time', values.start_time || ''),
+    input('camp_' + idx + '_ad_0_cta', values.cta || 'LEARN_MORE'),
     input('camp_' + idx + '_ad_count', String(values.ads || 1)),
     el('div', { classes: ['cb-targeting-hint'], textContent: values.hint || '' }),
     el('button', { classes: ['cb-add-btn-sm'] }),
@@ -222,5 +229,44 @@ assert.equal(restored[0].querySelector('[name="camp_0_asset"]').value, 'Old');
 assert.equal(restored[0].querySelector('[name="camp_0_budget"]').value, '40');
 assert.equal(restored[0].querySelector('.cb-name-override').value, '', 'у старого черновика появилось чужое имя');
 assert.ok(restored[0]._named, 'имя старого черновика не пересобрано');
+
+// ── ACL-1767: хранилище v2 -> v3 ───────────────────────────────────────
+// Черновик v2 поднимается как был; новые поля пусты (умолчание = прежнее поведение);
+// после сохранения лежит v3, а старые значения целы.
+store = memoryStore({ 'acl.builder.v2': JSON.stringify(oldDraft) });
+back = boot({ store, slots: [] });
+back.api.save();
+const v3 = saved(store);
+assert.equal(v3.v, 3, 'после миграции хранилище не v3');
+const mig = v3.forms['saudi-arabia|DQ438'].campaigns[0].fields;
+assert.equal(mig.asset, 'Old'); assert.equal(mig.budget, '40'); assert.equal(mig.name, 'SA_Old_name');
+['gender', 'languages', 'device', 'os_min', 'start_time'].forEach((f) => assert.equal(mig[f], '', f + ': не пуст после миграции'));
+
+// migrate напрямую: v2 -> v3 не теряет полей; чужие версии не трогает.
+const direct = back.api.migrate(JSON.parse(JSON.stringify(oldDraft)));
+assert.equal(direct.v, 3);
+assert.equal(direct.forms['saudi-arabia|DQ438'].campaigns[0].fields.asset, 'Old');
+assert.equal(back.api.migrate({ v: 1, forms: {} }).v, 1, 'v1 не должен превращаться в v3');
+assert.equal(back.api.migrate(null), null);
+
+// Неизвестные версии не поднимаются (v1, v4): работа не подменяется чужой формой.
+['1', '4'].forEach((v) => {
+  const bad = Object.assign({}, oldDraft, { v: Number(v) });
+  const t2 = boot({ store: memoryStore({ 'acl.builder.v2': JSON.stringify(bad) }), slots: [] });
+  assert.equal(t2.form.querySelectorAll('.cb-slot').length, 0, 'версия ' + v + ' поднялась');
+});
+
+// v3: новые поля переживают перезагрузку.
+store = memoryStore();
+t = boot({ store, slots: [{ asset: 'New', name: 'SA_New', gender: 'women', languages: 'Portuguese, English', device: 'mobile', os_min: '14', start_time: '2026-10-20T10:00', cta: 'SIGN_UP' }] });
+t.api.save();
+back = boot({ store, slots: [] });
+const nf = back.form.querySelectorAll('.cb-slot')[0];
+assert.equal(nf.querySelector('[name="camp_0_gender"]').value, 'women');
+assert.equal(nf.querySelector('[name="camp_0_languages"]').value, 'Portuguese, English');
+assert.equal(nf.querySelector('[name="camp_0_device"]').value, 'mobile');
+assert.equal(nf.querySelector('[name="camp_0_os_min"]').value, '14');
+assert.equal(nf.querySelector('[name="camp_0_start_time"]').value, '2026-10-20T10:00');
+assert.equal(nf.querySelector('[name="camp_0_ad_0_cta"]').value, 'SIGN_UP', 'кнопка объявления не вернулась');
 
 console.log('ok');

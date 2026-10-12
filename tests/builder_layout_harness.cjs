@@ -89,10 +89,11 @@ assert.equal(L.futureTip('forms'), '', 'ACL-1775: формы больше не �
 assert.equal(L.futureTip('texts'), 'Up to 5 primary texts — coming in ACL-1774');
 assert.equal(L.futureTip('placements'), 'Placement editor — coming in ACL-1772');
 assert.equal(L.futureTip('copyTo'), 'Copy to accounts — coming in ACL-1773');
-assert.equal(L.futureTip('cta'), 'CTA list — coming in ACL-1767');
+assert.equal(L.futureTip('cta'), '', 'ACL-1767: кнопка больше не заглушка');
+['gender', 'languages'].forEach((k) => assert.equal(L.futureTip(k), '', k + ': ACL-1767 больше не заглушка'));
 assert.equal(L.futureHtml('нет-такого', 'button'), '', 'неизвестный ключ нарисовал элемент');
 // Показанное в выключенном списке экранируется.
-assert.ok(!/<script/.test(L.futureHtml('cta', 'select', '<script>x</script>')));
+assert.ok(!/<script/.test(L.futureHtml('texts', 'select', '<script>x</script>')));
 
 // ── сообщения сервера → поля ──────────────────────────────────────────
 const sels = (m) => L.routes(m).map((r) => r.sel);
