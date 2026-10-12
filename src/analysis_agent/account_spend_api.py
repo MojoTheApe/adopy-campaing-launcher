@@ -335,6 +335,12 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
     gated = False
     kind, _port = _probe_local(profile_id)
     if kind == "none":
+        # ACL-1812 (ревью #813, B1): закрыли недавно — не поднимаем, и в очередь за местом не встаём.
+        from src.fb_api import stop_log as _stop_log
+
+        why = _stop_log.refusal(profile_id)
+        if why:
+            raise ApiReadError(why, code="restart_cooldown")
         # Профиль не работает: его поднимет MLX — значит, нужно место по памяти
         # (ACL-1603), та же очередь, что у RPA-чтений и Publish.
         queue = _as._slot_queue()
@@ -390,6 +396,69 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
     return opened
 
 
+#: Что видит человек, пока действие ждёт, пока кончится чужое тяжёлое (ACL-1812).
+WARM_WAIT_NOTE = "Waiting for another account action to finish"
+WARM_MEMORY_NOTE = "Waiting for free memory"
+
+
+def _warm_registry():
+    from src.fb_api import warm
+
+    return warm.registry()
+
+
+@contextmanager
+def _warm_session(account: str, act: str, key: str, profile_id: str, commands: bool):
+    """Сессия поверх тёплой вкладки: замок профиля, ворота, проверка живости, клиент.
+
+    Вкладку после действия НЕ закрываем и профиль НЕ останавливаем. Охлаждения,
+    потолок вызовов и причины остановки — те же, что у обычного пути, и
+    считаются на каждое действие.
+    """
+    from src.fb_api import warm as _warm
+
+    mode = f"commands:{act}" if commands else "read"
+
+    def make(tab):
+        return _make_graph(tab, commands_act=act) if commands else _make_graph(tab)
+
+    try:
+        lease = _warm_registry().checkout(
+            profile_id, account=account, act=act, mode=mode, make_graph=make,
+            ready_timeout=READY_TIMEOUT_S,
+            on_wait=lambda why: _as._set_wait_note(
+                account, WARM_MEMORY_NOTE if why in ("below_reserve", "memory_low", "memory_unknown")
+                else WARM_WAIT_NOTE))
+    except _warm.WarmError as exc:
+        raise ApiReadError(str(exc), code=exc.code) from exc
+    except GraphStop as exc:
+        _start_cooldown(key, exc)
+        raise
+    finally:
+        _as._set_wait_note(account, "")
+    stop: BaseException | None = None
+    try:
+        client = GraphClient(
+            lease.graph,
+            allow_writes=bool(commands),
+            min_interval_s=_env_number(MIN_INTERVAL_ENV, DEFAULT_MIN_INTERVAL_S, 0.5, 10.0),
+            max_calls=int(_env_number(MAX_CALLS_ENV, DEFAULT_MAX_CALLS, 4, 60)),
+        )
+        sess = _Session(client=client, act=act, account=account)
+        try:
+            yield sess
+        except GraphStop as exc:
+            stop = exc
+            raise
+        finally:
+            if client.stopped is not None:
+                _start_cooldown(key, client.stopped)
+                stop = stop or client.stopped
+            sess.notes["calls"] = client.calls
+    finally:
+        lease.release(stop)
+
+
 @contextmanager
 def _session(account: str, *, commands: bool = False):
     """Профиль → вкладка → клиент. `commands=True` (ACL-1800) — клиент с правом
@@ -422,6 +491,14 @@ def _session(account: str, *, commands: bool = False):
         raise ApiReadError(
             f"Meta asked to slow down for {account}; waiting before the next read "
             f"(about {mins} min). Nothing was called.")
+
+    # ACL-1812: профиль, который человек держит «тёплым» (Open profiles for today),
+    # работает через реестр: одна вкладка робота на все действия, без перезагрузки.
+    profile_id = (getattr(entry, "profile_id", "") or "").strip()
+    if profile_id and _warm_registry().is_warm(profile_id):
+        with _warm_session(account, act, key, profile_id, commands) as warm_sess:
+            yield warm_sess
+        return
 
     held = _as._ReadOpen(account)
     tab = None

@@ -302,6 +302,14 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
             )
         return OpenedProfile(profile_id, folder_id, instance, port, None, False, launcher)
 
+    # ACL-1812 (ревью #813, B1): запуск ВСЕГДА проходит через общий журнал остановок.
+    # Закрыли и сразу подняли заново — вероятная причина двух разлогинов (ACL-1811).
+    from src.fb_api import stop_log as _stop_log
+
+    why = _stop_log.refusal(profile_id)
+    if why:
+        raise ProfileError(why, code="restart_cooldown")
+
     started = launcher.start_profile(folder_id or None, profile_id, headless=False)
     if not started.port:
         raise ProfileError("Multilogin did not return a debug port; nothing was stopped.")
