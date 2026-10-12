@@ -114,6 +114,8 @@ def policy_for_page(act: str) -> dict:
         "dof_features": sorted(DOF_FEATURES),
         "multi_ads_key": MULTI_ADS_KEY,
         "cta_types": sorted(CTA_TYPES),
+        "cta_website": list(CTA_WEBSITE),
+        "cta_form": list(CTA_FORM),
         "targeting": {"keys": sorted(TARGETING_KEYS), "genders": sorted(GENDER_VALUES),
                       "devices": sorted(DEVICE_PLATFORMS), "user_os_re": USER_OS_RE.pattern},
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
@@ -176,16 +178,19 @@ def _check_multi_ads(value: Any) -> None:
         raise WriteRefused("write refused: contextual_multi_ads may only be exactly OPT_OUT")
 
 
-def _check_cta(spec: Any) -> None:
+def _check_cta(spec: Any, on_ad: bool = False) -> None:
     """Тип кнопки — из списка; всё прочее Graph отвергнет, мы не даём и отправить (ACL-1767)."""
     if not isinstance(spec, dict):
         return
+    # Назначение известно, когда вызывающий сказал `on_ad` (Instant Form): тогда список формы,
+    # без «Order now». Иначе - список сайта (он шире и включает список формы).
+    allowed = CTA_FORM if on_ad else CTA_WEBSITE
     for fmt in LEAD_FORM_FORMATS:
         data = spec.get(fmt)
-        cta = data.get("call_to_action") if isinstance(data, dict) else None
-        if cta is None:
+        if not isinstance(data, dict) or "call_to_action" not in data:
             continue
-        if not (isinstance(cta, dict) and cta.get("type") in CTA_TYPES):
+        cta = data["call_to_action"]      # null тоже отказ, как в слое страницы
+        if not (isinstance(cta, dict) and cta.get("type") in allowed):
             raise WriteRefused("write refused: call_to_action.type is not on the allowed list")
 
 
@@ -279,7 +284,7 @@ def check(act: str, method: str, path: str, params: dict | None,
     if MULTI_ADS_KEY in checked:
         _check_multi_ads(checked[MULTI_ADS_KEY])
     if edge == "adcreatives":
-        _check_cta(checked.get("object_story_spec"))
+        _check_cta(checked.get("object_story_spec"), on_ad)
     if edge == "adsets" and "targeting" in checked:
         _check_targeting(checked["targeting"])
     if edge == "ads" and "creative" in checked:

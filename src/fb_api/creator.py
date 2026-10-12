@@ -26,10 +26,11 @@ import hashlib
 import json
 import re
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.fb_api import forms as _forms
 from src.fb_api import write_policy as _wpol
@@ -246,6 +247,13 @@ def _plan_audience(plan_set: AdSetPlan, src: Any, problems: list[str]) -> None:
     mobile_os = plan_set.os.casefold() in ("ios", "android")
     if mobile_os and device == "desktop":
         problems.append(f"Ad set {name!r}: {plan_set.os} is a mobile system and cannot be combined with desktop only")
+    elif device == "desktop":
+        # ACL-1767 review B2: создатель всегда шлёт Instagram, Stories и Reels (только мобильные),
+        # поэтому «только десктоп» Meta отвергнет уже после создания кампании. Настоящее решение -
+        # ручные плейсменты (ACL-1772); до тех пор отказ здесь, до любой записи.
+        problems.append(f"Ad set {name!r}: Desktop only isn't possible with automatic placements "
+                        "(Instagram, Stories and Reels need mobile). Pick All devices or Mobile, "
+                        "or wait for manual placements.")
     os_min = str(getattr(src, "os_min", "") or "").strip()
     if os_min:
         if not mobile_os:
@@ -365,8 +373,11 @@ class AccountFacts:
     currency: str
     pages: list[str]
     pixels: list[str]
-    #: Смещение часового пояса кабинета от UTC в часах (ACL-1767: время старта набора).
+    #: Смещение кабинета от UTC СЕЙЧАС (только для сведения: на дату старта оно может быть другим).
     utc_offset_hours: float | None = None
+    #: IANA-имя часового пояса кабинета (`timezone_name`, тот же ответ, что и смещение).
+    #: Время старта переводится по нему, а не по текущему смещению (ACL-1767: переход на летнее время).
+    timezone_name: str = ""
 
 
 def preflight_account(client: GraphClient, act: str) -> AccountFacts:
@@ -396,7 +407,7 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     return AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
                         pages=[str(p.get("id")) for p in pages if p.get("id")],
                         pixels=[str(p.get("id")) for p in pixels if p.get("id")],
-                        utc_offset_hours=offset)
+                        utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip())
 
 
 def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
@@ -898,12 +909,19 @@ class CampaignCreator:
 
     def _start_dt(self, ad_set: AdSetPlan) -> datetime:
         """Время старта набора как момент: введено по часовому поясу кабинета."""
-        off = self.facts.utc_offset_hours
-        if off is None:
-            raise PlanError(f"Ad set {ad_set.name!r}: Meta did not return the time zone of the ad account, "
-                            "so the start time cannot be set. Clear the start time or try again.")
-        return datetime.strptime(ad_set.start_time, "%Y-%m-%dT%H:%M").replace(
-            tzinfo=timezone(timedelta(hours=off)))
+        name = self.facts.timezone_name
+        zone = None
+        if name:
+            try:
+                zone = ZoneInfo(name)
+            except (ZoneInfoNotFoundError, ValueError, OSError):
+                zone = None
+        if zone is None:
+            # Не угадываем по текущему смещению: на дату старта оно может быть другим (летнее время).
+            raise PlanError(f"Ad set {ad_set.name!r}: the time zone of the ad account "
+                            f"({name or 'not returned by Meta'}) is not known here, so the start time "
+                            "cannot be set. Clear the start time or try again.")
+        return datetime.strptime(ad_set.start_time, "%Y-%m-%dT%H:%M").replace(tzinfo=zone)
 
     def start_iso(self, ad_set: AdSetPlan) -> str:
         """«2026-10-20T10:00:00+0200» - с явным смещением кабинета (Graph: ISO 8601)."""
