@@ -985,6 +985,11 @@ def _close_started(opened: _ReadOpen) -> None:
                 _slot_queue().release(opened.slot_id)
             except Exception:
                 log.exception("Could not release the profile slot of %s", opened.account)
+    if ok and opened.profile_id:
+        # ACL-1812 (ревью #813, B2): остановка запомнена — следующий запуск ждёт паузу.
+        from src.fb_api import stop_log as _stop_log
+
+        _stop_log.record_stop(opened.profile_id)
     diag = {"account": opened.account, "held_s": round(time.monotonic() - opened.started_mono, 1)}
     if error:
         diag["error"] = error

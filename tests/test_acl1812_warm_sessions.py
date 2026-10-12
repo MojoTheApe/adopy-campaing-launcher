@@ -26,6 +26,7 @@ from src.analysis_agent import account_spend_api as api  # noqa: E402
 from src.fb_api import graph as g  # noqa: E402
 from src.fb_api import profile as prof  # noqa: E402
 from src.fb_api import token_capture as tc  # noqa: E402
+from src.fb_api import stop_log  # noqa: E402
 from src.fb_api import warm  # noqa: E402
 from src.fb_api.cdp import CdpError, PageTab  # noqa: E402
 from src.web import profile_slots as ps  # noqa: E402
@@ -49,6 +50,11 @@ class FakeTab:
         self.reloads = 0
         self.live = "ok"        # ok | hung | error
         self.closed_targets: list[str] = []
+        self.kept_active = 0
+
+    def keep_active(self):
+        self.kept_active += 1
+        return {}
 
     def browser_url(self, timeout=5.0):
         return "" if self.closed else self.url
@@ -91,8 +97,12 @@ class FakeGraph:
 class Rig:
     """Реестр с подставными процессами, вкладками, MLX и часами."""
 
-    def __init__(self, tmp_path, *, limit=1, memory=None, usage=None):
+    def __init__(self, tmp_path, *, limit=1, memory=None, usage=None, reg_memory=None, reg_usage=None):
         self.tabs: list[FakeTab] = []
+        self.tab_urls: list[str] = []
+        self.alive_pids: set[int] = set()
+        self.pending: dict = {}
+        self.others = False
         self.scan_result: dict = {}
         self.started: list[tuple] = []
         self.stopped: list[str] = []
@@ -103,18 +113,26 @@ class Rig:
         self.slot_calls: list[tuple] = []
         self.grant_ok = True
         self.store = warm.WarmStore(tmp_path / "warm_sessions.json")
+        self.stops = stop_log.StopLog(tmp_path / "profile_stops.json", wall=lambda: self.now[0])
         self.gate = warm.HeavyGate(
             limit=lambda: limit, memory=memory or (lambda: ps.MemoryReading(64000, 40000)),
             settings=lambda: ps.SlotSettings(), usage=usage if usage is not None else FakeUsage(), tick_s=0.01)
         self.reg = warm.WarmRegistry(
             store=self.store, wall=lambda: self.now[0], scan=self._scan, tab_factory=self._tab,
             start_profile=self._start, close_window=self._stop, slot_queue=lambda: FakeQueue(self),
-            gate=self.gate, sleep=self.sleeps.append, stagger=lambda: 7.0)
+            gate=self.gate, sleep=self.sleeps.append, stagger=lambda: 7.0, stops=self.stops,
+            pid_alive=lambda pid, created: pid in self.alive_pids,
+            pending_close=lambda pid: self.pending.pop(pid, None),
+            memory=reg_memory or (lambda: ps.MemoryReading(64000, 40000)),
+            settings=lambda: ps.SlotSettings(),
+            usage=reg_usage if reg_usage is not None else FakeUsage(),
+            mono=lambda: self.now[0] - 1_800_000_000.0)
 
     def _scan(self, ids):
         return {pid: self.scan_result.get(pid, ("none", None)) for pid in ids}
 
     def _tab(self, url):
+        self.tab_urls.append(url)
         tab = FakeTab(len(self.tabs) + 1)
         self.tabs.append(tab)
         return tab
@@ -164,6 +182,9 @@ class FakeQueue:
 
     def release(self, job_id):
         self.rig.slot_calls.append(("release", job_id))
+
+    def others_on(self, profile, job_id=""):
+        return self.rig.others
 
 
 def entry(pid=PID, label="Acc"):
@@ -476,7 +497,7 @@ def test_cooldown_survives_a_dashboard_restart(rig, tmp_path):
     rig.reg.close_one("Acc", entry())
     again = warm.WarmRegistry(store=rig.store, wall=lambda: rig.now[0], scan=rig._scan,
                               start_profile=rig._start, slot_queue=lambda: FakeQueue(rig),
-                              gate=rig.gate, sleep=rig.sleeps.append)
+                              gate=rig.gate, sleep=rig.sleeps.append, stops=rig.stops)
     assert again.restart_wait_s(PID) > 170
 
 
@@ -643,7 +664,7 @@ def test_gate_busy_shows_working_on_the_chip(rig):
 def test_registry_survives_a_restart_and_checks_the_process_first(rig, tmp_path):
     rig.warm_up(port=9333)
     again = warm.WarmRegistry(store=rig.store, wall=lambda: rig.now[0], scan=rig._scan,
-                              tab_factory=rig._tab, gate=rig.gate)
+                              tab_factory=rig._tab, gate=rig.gate, stops=rig.stops)
     sess = again.session(PID)
     assert sess and sess.dashboard_started and sess.port == 9333 and sess.verified is False
     rig.scan_result[PID] = ("port", 9777)     # за время простоя профиль перезапустили не мы
@@ -655,7 +676,7 @@ def test_registry_survives_a_restart_and_checks_the_process_first(rig, tmp_path)
 
 def test_a_leftover_tab_of_the_previous_run_is_closed_when_the_new_one_opens(rig):
     rig.warm_up()
-    rig.reg.session(PID).target_id = "T-old"
+    rig.reg.session(PID).stale_target = "T-old"
     rig.reg.session(PID).verified = False
     rig.checkout().release()
     assert rig.tabs[0].closed_targets == ["T-old"], "the previous run's tab must not pile up"
@@ -892,7 +913,7 @@ def test_report_page_wiring_is_isolated_and_has_no_timers():
     js = (root / "static" / "warm_sessions.js").read_text(encoding="utf-8")
     assert page.count('<script src="/static/warm_sessions.js"></script>') == 1
     assert "setInterval" not in js, "no timers: the screen never polls on its own"
-    assert js.count("setTimeout") == 1, "the only wait is the local open-job status"
+    assert js.count("setTimeout") == 2, "the only waits: the local open-job status and the refresh debounce"
     assert "window.confirm(" in js and "confirm: true" in js
     for url in ("/warm/state", "/warm/open", "/warm/close", "/warm/job/"):
         assert url in js
@@ -907,3 +928,287 @@ def test_chip_texts_for_every_state_come_from_the_server(rig):
     src = Path(warm.__file__).read_text(encoding="utf-8")
     for t in texts:
         assert t in src, t
+
+
+# ───────────────────────── ревью #813: B1, B2 ─────────────────────────
+
+def test_bulk_open_refuses_inside_the_cooldown_and_starts_nothing(rig):
+    rig.stops.record(PID)
+    rig.now[0] += 60
+    results = rig.reg.open_many([("Acc", entry())], job_id="job1")
+    assert results["Acc"]["code"] == "restart_cooldown" and "Nothing was started" in results["Acc"]["message"]
+    assert rig.started == [] and rig.slot_calls == []
+
+
+def test_bulk_open_through_the_endpoint_job_honours_the_cooldown(monkeypatch, tmp_path):
+    from src.web import warm_api
+
+    rig = Rig(tmp_path)
+    rig.stops.record(PID)
+    monkeypatch.setattr(warm, "_REGISTRY", rig.reg)
+    monkeypatch.setattr(warm_api, "_guard", lambda: None)
+    monkeypatch.setattr(warm_api, "_entry", lambda label: entry())
+    data, code = warm_api.start_open(["Acc"])
+    assert code == 202
+    end = time.time() + 5
+    while time.time() < end and warm_api.job_status(data["job_id"])[0]["state"] != "done":
+        time.sleep(0.05)
+    assert warm_api.job_status(data["job_id"])[0]["results"]["Acc"]["code"] == "restart_cooldown"
+    assert rig.started == []
+
+
+def test_two_warm_profiles_use_two_distinct_tabs_each_on_its_own_port(rig):
+    a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
+    rig.warm_up(a, port=9001, account="A")
+    rig.warm_up(b, port=9002, account="B")
+    la = rig.checkout(a, account="A")
+    ta = la.tab
+    la.release()
+    lb = rig.checkout(b, account="B")
+    tb = lb.tab
+    lb.release()
+    assert ta is not tb and len(rig.tabs) == 2
+    assert rig.tab_urls == ["http://127.0.0.1:9001", "http://127.0.0.1:9002"]
+    again = rig.checkout(a, account="A")
+    assert again.tab is ta and len(rig.tabs) == 2
+    again.release()
+
+
+def test_open_profile_itself_refuses_a_start_inside_the_cooldown(monkeypatch, tmp_path):
+    """B1: любой путь API (чтение, опись, команды, Publish) поднимает профиль через `open_profile`."""
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    stop_log.default().record(PID)
+    started = []
+
+    class Launcher:
+        config = SimpleNamespace(launcher_base_v2="http://x", launcher_base_v1="http://x")
+
+        def _headers(self):
+            return {}
+
+        def start_profile(self, *a, **k):
+            started.append(a)
+            return SimpleNamespace(port=1, folder_id="", ws_endpoint=None)
+
+    monkeypatch.setattr(prof, "running_state", lambda launcher, pid: ("not_running", None))
+    with pytest.raises(prof.ProfileError) as ei:
+        prof.open_profile(PID, "F", "A", launcher_factory=lambda i: Launcher(),
+                          local_probe=lambda pid: ("none", None))
+    assert ei.value.code == "restart_cooldown" and started == []
+    # Профиль, который уже работает, пауза не касается: цепляемся, как и раньше.
+    got = prof.open_profile(PID, "F", "A", launcher_factory=lambda i: Launcher(),
+                            local_probe=lambda pid: ("port", 9222))
+    assert got.port == "9222"
+
+
+def test_read_on_a_just_closed_profile_is_refused_before_the_memory_queue(monkeypatch, tmp_path):
+    """B1: «Close profiles» → сразу «Read campaigns» не поднимает профиль заново."""
+    rig = Rig(tmp_path)
+    rig.warm_up()
+    monkeypatch.setattr(warm, "_REGISTRY", rig.reg)
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path / "cfg"))
+    ent = SimpleNamespace(profile_id=PID, folder_id="", multilogin_instance="A", ad_account_id=ACT)
+    monkeypatch.setattr(sp, "_entry_for", lambda account: ent)
+    monkeypatch.setattr(sp, "_set_wait_note", lambda *a: None)
+    queue_calls = []
+    monkeypatch.setattr(sp, "_slot_queue", lambda: queue_calls.append(1))
+    monkeypatch.setattr(api, "_probe_local", lambda pid: ("none", None))
+    monkeypatch.setattr(api, "_open_profile", lambda *a: pytest.fail("the profile must not be started"))
+    api._COOLDOWN.clear()
+    stop_log.default().record(PID)                 # то, что делает Close profiles
+    rig.reg._forget(PID, stopped=False)            # профиль больше не в реестре
+    with pytest.raises(api.ApiReadError) as ei:
+        with api._session("Acc"):
+            pass
+    assert ei.value.code == "restart_cooldown" and "Nothing was started" in str(ei.value)
+    assert queue_calls == []
+
+
+def test_close_then_open_in_the_same_minute_is_refused(rig):
+    rig.warm_up()
+    assert rig.reg.close_one("Acc", entry())["ok"]
+    res = rig.reg.open_one("Acc", entry())
+    assert res["code"] == "restart_cooldown" and rig.started == []
+
+
+def test_registered_profile_seen_gone_starts_the_cooldown_in_open_one(rig):
+    rig.warm_up()
+    rig.scan_result[PID] = ("none", None)          # человек или таймер чтения его закрыл
+    res = rig.reg.open_one("Acc", entry())
+    assert res["code"] == "restart_cooldown" and rig.started == []
+
+
+def test_read_close_records_a_stop(monkeypatch, tmp_path):
+    """B2: `_close_started` (и таймер 30 с — он зовёт её же) пишет остановку в общий журнал."""
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(rpa_browser, "stop_profile_on_request", lambda e, label: "closed")
+    monkeypatch.setattr(sp, "_publish_touched", lambda opened: False)
+    monkeypatch.setattr(sp, "_slot_queue", lambda: SimpleNamespace(release=lambda s: None))
+    monkeypatch.setattr(sp, "_record", lambda *a, **k: None)
+    opened = sp._ReadOpen("Acc", started=True, profile_id=PID, entry=entry(), started_mono=time.monotonic())
+    assert stop_log.default().restart_wait_s(PID) == 0
+    sp._close_started(opened)
+    assert stop_log.default().restart_wait_s(PID) > 170
+    # Не закрылось — остановки нет.
+    other = "z" * 8 + "-0000-4000-8000-000000000000"
+    monkeypatch.setattr(rpa_browser, "stop_profile_on_request",
+                        lambda e, label: (_ for _ in ()).throw(RuntimeError("MLX 500")))
+    sp._close_started(sp._ReadOpen("Acc2", started=True, profile_id=other, entry=entry(other),
+                                   started_mono=time.monotonic()))
+    assert stop_log.default().restart_wait_s(other) == 0
+
+
+def test_publish_finish_records_a_stop(monkeypatch, tmp_path):
+    from src.web import publish_api
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(publish_api, "_stop_profile", lambda e, label: None)
+    monkeypatch.setattr(publish_api, "_keep_profiles_open", lambda: False)
+    pub = publish_api.ApiPublisher()
+    pub._opened = SimpleNamespace(started_now=True)
+    pub._entry = entry()
+    assert pub.finish_job("Acc", clean=True) == "closed"
+    assert stop_log.default().restart_wait_s(PID) > 170
+
+
+def test_stop_log_is_shared_merged_and_survives_two_writers(tmp_path):
+    path = tmp_path / "stops.json"
+    a, b = stop_log.StopLog(path), stop_log.StopLog(path)
+    a.record("p1")
+    b.record("p2")
+    assert a.last_stop("p2") is not None and b.last_stop("p1") is not None, "a write must merge, not overwrite"
+    older = stop_log.StopLog(path, wall=lambda: 1.0)
+    older.record("p1", at=5.0)
+    assert a.last_stop("p1") > 100, "an older record must not replace a newer one"
+
+
+# ───────────────────────── ревью #813: S1, S2, S3 ─────────────────────────
+
+def test_adopting_cancels_the_pending_read_close_and_releases_its_slot(rig):
+    rig.scan_result[PID] = ("port", 9444)
+    rig.pending[PID] = SimpleNamespace(slot_id="read-api:Acc:1")
+    res = rig.reg.open_one("Acc", entry())
+    assert res["ok"] and rig.pending == {}
+    assert ("release", "read-api:Acc:1") in rig.slot_calls
+    assert rig.reg.session(PID).dashboard_started is True
+
+
+def test_adopting_a_profile_held_by_a_job_is_refused(rig):
+    rig.scan_result[PID] = ("port", 9444)
+    rig.others = True
+    rig.pending[PID] = SimpleNamespace(slot_id="")
+    res = rig.reg.open_one("Acc", entry())
+    assert res["ok"] is False and res["code"] == "job_running"
+    assert PID in rig.pending, "the pending close must stay: nothing was adopted"
+    assert rig.reg.session(PID) is None
+
+
+def test_two_processes_do_not_overwrite_each_others_profiles(tmp_path):
+    first = Rig(tmp_path)
+    first.warm_up("a" * 8 + "-0000-4000-8000-000000000000", account="A")
+    second = warm.WarmRegistry(store=first.store, scan=first._scan, tab_factory=first._tab, gate=first.gate,
+                               stops=first.stops, pid_alive=lambda pid, c: True)
+    second.register("b" * 8 + "-0000-4000-8000-000000000000", account="B", port=9002, dashboard_started=True)
+    on_disk = first.store.load()["profiles"]
+    assert set(on_disk) == {"a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"}
+
+
+def test_a_live_foreign_owner_keeps_its_tab_and_its_record(tmp_path):
+    import json
+
+    first = Rig(tmp_path)
+    first.warm_up()
+    path = first.store._file()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["profiles"][PID].update(owner_pid=424242, owner_started=1.0, target_id="T-theirs")
+    path.write_text(json.dumps(data), encoding="utf-8")
+    other = Rig(tmp_path)
+    other.alive_pids = {424242}
+    other.reg = warm.WarmRegistry(store=first.store, scan=other._scan, tab_factory=other._tab, gate=other.gate,
+                                  stops=other.stops, pid_alive=lambda pid, c: pid in other.alive_pids)
+    assert other.reg.is_warm(PID) is False, "a profile kept warm by a live neighbour is not ours to use"
+    other.reg.register("c" * 8 + "-0000-4000-8000-000000000000", account="C", port=9003, dashboard_started=True)
+    kept = first.store.load()["profiles"][PID]
+    assert kept["owner_pid"] == 424242 and kept["target_id"] == "T-theirs"
+    assert other.tabs == []
+
+
+def test_a_dead_owners_tab_is_closed_but_never_a_live_ones(tmp_path):
+    import json
+
+    first = Rig(tmp_path)
+    first.warm_up()
+    path = first.store._file()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["profiles"][PID].update(owner_pid=424242, owner_started=1.0, target_id="T-dead-owner")
+    path.write_text(json.dumps(data), encoding="utf-8")
+    heir = Rig(tmp_path)
+    heir.reg = warm.WarmRegistry(store=first.store, scan=heir._scan, tab_factory=heir._tab, gate=heir.gate,
+                                 stops=heir.stops, pid_alive=lambda pid, c: False)
+    heir.scan_result[PID] = ("port", 9333)
+    heir.reg.checkout(PID, account="Acc", act=ACT, mode="read", make_graph=heir.make).release()
+    assert heir.tabs[0].closed_targets == ["T-dead-owner"]
+
+
+def test_first_action_below_the_memory_reserve_waits_with_a_clear_message(tmp_path, monkeypatch):
+    monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
+    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
+    rig.warm_up()
+    with pytest.raises(warm.WarmError) as ei:
+        rig.checkout()
+    assert ei.value.code == "below_reserve" and "safety reserve" in str(ei.value)
+    assert rig.tabs == [] and rig.gate.active() == []
+
+
+def test_opening_waits_for_the_growth_of_profiles_still_warming_up(tmp_path, monkeypatch):
+    monkeypatch.setenv(warm.SETTLE_ENV, "1000")
+    free = [8000]
+    rig = Rig(tmp_path, reg_memory=lambda: ps.MemoryReading(64000, free[0]))
+    first = rig.reg.open_one("A1", entry("a" * 8 + "-0000-4000-8000-000000000000"))
+    assert first["started"] is True
+    # Новый профиль 3,5 ГБ + запас 3 ГБ = 6,5 ГБ, но первый ещё прогревается: плюс его рост 3,5 ГБ.
+    calls = []
+
+    def sleeping(secs):
+        calls.append(secs)
+        rig.now[0] += 30
+
+    rig.reg._sleep = sleeping
+    res = rig.reg.open_one("A2", entry("b" * 8 + "-0000-4000-8000-000000000000"))
+    assert res["code"] == "memory_low" and "warming up" in res["message"] and calls
+    # После прогрева (settle) тот же объём свободной памяти уже хватает.
+    monkeypatch.setenv(warm.SETTLE_ENV, "10")
+    rig.now[0] += 200
+    again = rig.reg.open_one("A2", entry("b" * 8 + "-0000-4000-8000-000000000000"))
+    assert again["ok"] is True
+
+
+def test_orphaned_session_is_not_used_after_close(rig):
+    rig.warm_up()
+    sess = rig.reg.session(PID)
+    sess.lock.acquire()                              # занято: другое действие в пути
+    got = []
+    t = threading.Thread(target=lambda: got.append(_try(rig)))
+    t.start()
+    time.sleep(0.1)
+    rig.reg._forget(PID, stopped=True)               # Close profiles успел
+    sess.lock.release()
+    t.join(3)
+    assert got and got[0] == "profile_closed" and rig.tabs == []
+
+
+def _try(rig):
+    try:
+        rig.checkout()
+    except warm.WarmError as exc:
+        return exc.code
+    return "ok"
+
+
+def test_liveness_check_reasserts_focus_emulation(rig):
+    rig.warm_up()
+    rig.checkout().release()
+    rig.checkout().release()
+    assert rig.tabs[0].kept_active == 1, "the 2nd action re-asserts anti-throttling on the reused tab"

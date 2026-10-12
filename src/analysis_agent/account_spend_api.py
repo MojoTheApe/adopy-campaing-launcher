@@ -335,6 +335,12 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
     gated = False
     kind, _port = _probe_local(profile_id)
     if kind == "none":
+        # ACL-1812 (ревью #813, B1): закрыли недавно — не поднимаем, и в очередь за местом не встаём.
+        from src.fb_api import stop_log as _stop_log
+
+        why = _stop_log.refusal(profile_id)
+        if why:
+            raise ApiReadError(why, code="restart_cooldown")
         # Профиль не работает: его поднимет MLX — значит, нужно место по памяти
         # (ACL-1603), та же очередь, что у RPA-чтений и Publish.
         queue = _as._slot_queue()

@@ -50,13 +50,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.fb_api import profile as _fb_profile
+from src.fb_api import stop_log as _stop_log
 from src.fb_api.graph import Checkpoint, GraphStop, LoggedOut, PageFailed, PageUnresponsive
 from src.fb_api.telemetry import scrub
 
 log = logging.getLogger(__name__)
 
-RESTART_COOLDOWN_ENV = "ACL_PROFILE_RESTART_COOLDOWN_S"
-DEFAULT_RESTART_COOLDOWN_S = 180.0
+RESTART_COOLDOWN_ENV = _stop_log.RESTART_COOLDOWN_ENV
+DEFAULT_RESTART_COOLDOWN_S = _stop_log.DEFAULT_RESTART_COOLDOWN_S
 MAX_HEAVY_ENV = "ACL_WARM_MAX_HEAVY"
 GATE_WAIT_ENV = "ACL_WARM_GATE_WAIT_S"
 DEFAULT_GATE_WAIT_S = 300.0
@@ -65,6 +66,10 @@ STAGGER_MIN_S = 5.0
 STAGGER_MAX_S = 10.0
 #: Сколько ждём места по памяти под запуск одного профиля.
 START_SLOT_WAIT_S = 120.0
+#: Сколько ждём памяти под запуск следующего профиля и сколько профиль «приживается».
+START_MEMORY_WAIT_S = 120.0
+SETTLE_ENV = "ACL_WARM_SETTLE_S"
+DEFAULT_SETTLE_S = 90.0
 
 #: Состояния для экрана.
 WARM = "warm"
@@ -99,7 +104,12 @@ def _env_number(name: str, default: float, lo: float, hi: float) -> float:
 
 
 def restart_cooldown_s() -> float:
-    return _env_number(RESTART_COOLDOWN_ENV, DEFAULT_RESTART_COOLDOWN_S, 0.0, 3600.0)
+    return _stop_log.restart_cooldown_s()
+
+
+def restart_refusal(profile_id: str) -> str:
+    """Общая проверка «не запускать сразу после остановки» (пусто — можно). См. `stop_log`."""
+    return _stop_log.refusal(profile_id)
 
 
 def max_heavy() -> int:
@@ -147,10 +157,11 @@ def _url_act(url: str) -> str:
 # ───────────────────────── хранилище: запись о профилях и журнал остановок ─────────────────────────
 
 class WarmStore:
-    """JSON-файл в каталоге настроек машины: профили реестра и последние остановки.
+    """JSON-файл в каталоге настроек машины: профили реестра.
 
-    Локальный, не в гите (`config.paths.get_local_config_dir`). Содержимое — id
-    профилей, порты и время: токенов и паролей здесь нет.
+    Локальный, не в гите. Содержимое — id профилей, порты, время, pid владельца
+    записи: токенов и паролей здесь нет. Запись — чтение-изменение-запись под
+    файловым замком (два процесса дешборда не затирают друг друга).
     """
 
     def __init__(self, path: Callable[[], Path] | Path | str | None = None):
@@ -165,28 +176,55 @@ class WarmStore:
 
         return Path(get_local_config_dir()) / "warm_sessions.json"
 
-    def load(self) -> dict:
-        with self._lock:
-            try:
-                data = json.loads(self._file().read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                data = {}
+    def _read(self) -> dict:
+        try:
+            data = json.loads(self._file().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
         if not isinstance(data, dict):
             data = {}
-        data.setdefault("profiles", {})
-        data.setdefault("stops", {})
+        if not isinstance(data.get("profiles"), dict):
+            data["profiles"] = {}
         return data
 
-    def save(self, data: dict) -> None:
+    def load(self) -> dict:
+        with self._lock:
+            return self._read()
+
+    def update(self, mutate: Callable[[dict], None]) -> None:
+        """Слияние: читаем файл как он есть сейчас, меняем свои записи, пишем обратно."""
         with self._lock:
             try:
                 target = self._file()
                 target.parent.mkdir(parents=True, exist_ok=True)
-                tmp = target.with_suffix(".tmp")
-                tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-                os.replace(tmp, target)
+                with _stop_log.file_lock(target):
+                    data = self._read()
+                    mutate(data)
+                    _stop_log.atomic_write(target, data)
             except OSError:
                 log.exception("Could not save the warm session registry")
+
+
+def _pid_alive(pid: int, created: float) -> bool:
+    """Жив ли процесс-владелец записи (pid + время создания: pid мог перейти другому)."""
+    if pid <= 0:
+        return False
+    try:
+        import psutil  # type: ignore
+
+        proc = psutil.Process(pid)
+        return abs(proc.create_time() - created) < 2.0 if created else proc.is_running()
+    except Exception:
+        return False
+
+
+def _my_start() -> float:
+    try:
+        import psutil  # type: ignore
+
+        return float(psutil.Process(os.getpid()).create_time())
+    except Exception:
+        return 0.0
 
 
 # ───────────────────────── ворота: сколько тяжёлых действий идут разом ─────────────────────────
@@ -226,11 +264,14 @@ class HeavyGate:
     def _allowed(self) -> tuple[bool, str]:
         n = len(self._active)
         limit = max(1, int(self._limit()))
+        memory = self._memory()
         if n == 0:
+            # S3: и первое действие не обходит запас: ниже него ждёт, а не лезет в память.
+            if memory is not None and memory.available_mb < self._settings().reserve_mb:
+                return False, "below_reserve"
             return True, "first"
         if n >= limit:
             return False, "limit"
-        memory = self._memory()
         if memory is None:
             return (n < min(self._ps.FALLBACK_LIMIT, limit)), "memory_unknown"
         settings = self._settings()
@@ -257,6 +298,10 @@ class HeavyGate:
                     self._active[profile_id] = 1
                     return
                 if self._clock() >= deadline:
+                    if why == "below_reserve":
+                        raise WarmError(
+                            "Free memory is below the safety reserve, so the action was not started. "
+                            "Close something and try again. Nothing was called.", code="below_reserve")
                     raise WarmError(
                         "Another account action is still running and there is no room for a second "
                         "one yet. Nothing was called; try again when it finishes.", code="gate_wait")
@@ -290,6 +335,10 @@ class WarmSession:
     dashboard_started: bool = False
     logged_out: bool = False
     target_id: str = ""
+    #: Вкладка прошлого запуска, чей владелец мёртв: её закроем при открытии новой.
+    stale_target: str = ""
+    owner_pid: int = 0
+    owner_started: float = 0.0
     tab: Any = None
     graphs: dict = field(default_factory=dict)
     #: Обычный замок, не реентерантный: аренду отпускает `Lease.release`, а он может
@@ -304,7 +353,8 @@ class WarmSession:
     def record(self) -> dict:
         return {"account": self.account, "port": self.port, "started_at": self.started_at,
                 "dashboard_started": self.dashboard_started, "logged_out": self.logged_out,
-                "target_id": self.target_id}
+                "target_id": self.target_id, "owner_pid": self.owner_pid,
+                "owner_started": self.owner_started}
 
 
 class Lease:
@@ -334,7 +384,14 @@ class WarmRegistry:
                  close_window: Callable[[Any, str], Any] | None = None,
                  slot_queue: Callable[[], Any] | None = None,
                  gate: HeavyGate | None = None,
+                 stops: "_stop_log.StopLog | None" = None,
+                 pid_alive: Callable[[int, float], bool] = _pid_alive,
+                 pending_close: Callable[[str], Any] | None = None,
+                 memory: Callable[[], Any] | None = None,
+                 settings: Callable[[], Any] | None = None,
+                 usage: Any = None,
                  sleep: Callable[[float], None] = time.sleep,
+                 mono: Callable[[], float] = time.monotonic,
                  stagger: Callable[[], float] = lambda: random.uniform(STAGGER_MIN_S, STAGGER_MAX_S)):
         self._store = store or WarmStore()
         self._wall = wall
@@ -345,11 +402,24 @@ class WarmRegistry:
         self._close_window = close_window
         self._slot_queue = slot_queue or _default_slot_queue
         self.gate = gate or HeavyGate()
+        self._stops = stops or _stop_log.default()
+        self._pid_alive = pid_alive
+        #: Забрать отложенное закрытие профиля после чтения (S1): `pid -> прежняя запись | None`.
+        self._pending_close = pending_close or _default_pending_close
+        self._memory = memory
+        self._settings = settings
+        self._usage = usage
         self._sleep = sleep
+        self._mono = mono
         self._stagger = stagger
         self._lock = threading.RLock()
         self._sessions: dict[str, WarmSession] = {}
-        self._stops: dict[str, float] = {}
+        #: Записи, которые держит ДРУГОЙ живой процесс дешборда: не трогаем ни их, ни их вкладки.
+        self._foreign: dict[str, dict] = {}
+        self._removed: set[str] = set()
+        #: Когда профиль, поднятый открытием, начал прогреваться (monotonic) — резерв под рост.
+        self._settling: dict[str, float] = {}
+        self._me = (os.getpid(), _my_start())
         self._load()
 
     # -- хранилище
@@ -358,19 +428,38 @@ class WarmRegistry:
         for pid, rec in (data.get("profiles") or {}).items():
             if not isinstance(rec, dict):
                 continue
-            self._sessions[pid] = WarmSession(
+            owner = int(rec.get("owner_pid") or 0)
+            started = float(rec.get("owner_started") or 0.0)
+            if owner and owner != self._me[0] and self._pid_alive(owner, started):
+                self._foreign[pid] = rec          # живёт у соседнего процесса
+                continue
+            sess = WarmSession(
                 profile_id=pid, account=str(rec.get("account") or ""), port=int(rec.get("port") or 0),
                 started_at=float(rec.get("started_at") or 0.0),
                 dashboard_started=bool(rec.get("dashboard_started")),
-                logged_out=bool(rec.get("logged_out")), target_id=str(rec.get("target_id") or ""))
-        self._stops = {k: float(v) for k, v in (data.get("stops") or {}).items()
-                       if isinstance(v, (int, float))}
+                logged_out=bool(rec.get("logged_out")),
+                # Вкладка принадлежала умершему процессу — закроем её, когда откроем свою.
+                stale_target=str(rec.get("target_id") or ""),
+                owner_pid=self._me[0], owner_started=self._me[1])
+            self._sessions[pid] = sess
 
     def _save(self) -> None:
         with self._lock:
-            data = {"profiles": {pid: s.record() for pid, s in self._sessions.items()},
-                    "stops": dict(self._stops)}
-        self._store.save(data)
+            mine = {pid: s.record() for pid, s in self._sessions.items()}
+            removed, self._removed = set(self._removed), set()
+
+        def mutate(data: dict) -> None:
+            profiles = data["profiles"]
+            for pid, rec in mine.items():
+                profiles[pid] = rec
+            for pid in removed:
+                rec = profiles.get(pid) or {}
+                owner = int(rec.get("owner_pid") or 0)
+                if pid not in mine and (not owner or owner == self._me[0]
+                                        or not self._pid_alive(owner, float(rec.get("owner_started") or 0.0))):
+                    profiles.pop(pid, None)
+
+        self._store.update(mutate)
 
     def has_closer(self) -> bool:
         return self._close_window is not None
@@ -397,6 +486,8 @@ class WarmRegistry:
             sess.port = int(port)
             sess.logged_out = False
             sess.verified = True
+            sess.owner_pid, sess.owner_started = self._me
+            self._foreign.pop(profile_id, None)
             # «Дешборд поднял» не пропадает от повторного открытия уже работающего профиля.
             sess.dashboard_started = bool(sess.dashboard_started or dashboard_started)
         self._save()
@@ -405,8 +496,10 @@ class WarmRegistry:
     def _forget(self, profile_id: str, *, stopped: bool) -> None:
         with self._lock:
             sess = self._sessions.pop(profile_id, None)
-            if stopped:
-                self._stops[profile_id] = self._wall()
+            self._removed.add(profile_id)
+            self._settling.pop(profile_id, None)
+        if stopped:
+            self._stops.record(profile_id)
         # Вкладку не закрываем: профиль уже ушёл (или это уже не наш экземпляр), и
         # закрытие по мёртвому сокету только ждало бы таймаута. Ссылку отпускаем.
         if sess is not None:
@@ -414,17 +507,11 @@ class WarmRegistry:
         self._save()
 
     def record_stop(self, profile_id: str) -> None:
-        with self._lock:
-            self._stops[profile_id] = self._wall()
-        self._save()
+        self._stops.record(profile_id)
 
     def restart_wait_s(self, profile_id: str) -> float:
-        """Сколько секунд ещё нельзя запускать профиль после его остановки."""
-        with self._lock:
-            last = self._stops.get(profile_id)
-        if last is None:
-            return 0.0
-        return max(0.0, last + restart_cooldown_s() - self._wall())
+        """Сколько секунд ещё нельзя запускать профиль после его остановки (общий журнал)."""
+        return self._stops.restart_wait_s(profile_id)
 
     # -- состояние для экрана (только локальные проверки)
     def states(self, accounts: list[tuple[str, str]]) -> dict[str, dict]:
@@ -489,19 +576,23 @@ class WarmRegistry:
             return _result(False, "No Multilogin profile is linked to this account.", "no_profile")
         kind, port = self._scan([pid]).get(pid, ("unknown", None))
         if kind == "port" and port:
-            self.register(pid, account=label, port=int(port), dashboard_started=False)
-            return _result(True, "Already open with automation; kept warm.", "already_open", started=False)
+            return self._adopt(label, pid, int(port))
         if kind == "no_port":
             return _result(False, HAND_MESSAGE, "open_by_hand")
         if kind == "closing":
             return _result(False, "The profile is closing; try again in a minute. Nothing was started.",
                            "profile_closing")
-        wait = self.restart_wait_s(pid)
-        if wait > 0:
-            return _result(False, (f"This profile was closed {int((restart_cooldown_s() - wait))} s ago. "
-                                   f"Wait about {int(wait // 60) + 1} min before starting it again "
-                                   "(a quick restart can log the account out). Nothing was started."),
-                           "restart_cooldown", wait_s=round(wait))
+        if kind == "none" and self.session(pid) is not None:
+            # B2: профиль в реестре, а процесса нет — его закрыли (человек, таймер чтения).
+            # Останавливаем отсчёт от момента, когда увидели, и только потом решаем про запуск.
+            self._forget(pid, stopped=True)
+        why = _stop_log.refusal(pid, self._stops)
+        if why:
+            return _result(False, why, "restart_cooldown", wait_s=round(self.restart_wait_s(pid)))
+        # S3: память под ещё один профиль с учётом роста уже запущенных и прогревающихся.
+        short = self._wait_for_memory(cancelled)
+        if short:
+            return _result(False, short, "memory_low")
         slot_id = f"warm-open:{label}:{job_id or int(self._wall())}"
         queue = self._slot_queue()
         began = time.monotonic()
@@ -524,14 +615,93 @@ class WarmRegistry:
                                       f"{scrub(str(exc))}", "start_failed")
         finally:
             if queue is not None and grant is not None:
-                queue.release(slot_id)   # профиль простаивает: место по памяти не держим
+                queue.release(slot_id)   # место очереди заданий не держим; рост резервирует `_settling`
         started = bool(getattr(opened, "started_now", False))
         self.register(pid, account=label, port=int(opened.port), dashboard_started=started)
+        if started:
+            with self._lock:
+                self._settling[pid] = self._mono()
         log.info("warm: profile of %s %s (dashboard_started=%s)", label,
                  "started" if started else "was already open", started)
         return _result(True, "Opened; ready for the next action." if started
                        else "Already open with automation; kept warm.",
                        "started" if started else "already_open", started=started)
+
+    def _adopt(self, label: str, pid: str, port: int) -> dict:
+        """Профиль уже открыт с портом: берём в реестр, но не из-под чужого задания (S1)."""
+        queue = self._slot_queue()
+        try:
+            if queue is not None and queue.others_on(pid):
+                return _result(False, "A job is using this profile right now. Try again after it finishes. "
+                               "Nothing was changed.", "job_running")
+        except Exception:
+            log.exception("Could not ask the profile queue about %s", label)
+        prev = None
+        try:
+            prev = self._pending_close(pid)   # отложенное закрытие после чтения отменяется
+        except Exception:
+            log.exception("Could not cancel the pending close of %s", label)
+        if prev is not None:
+            slot = getattr(prev, "slot_id", "")
+            if slot and queue is not None:
+                try:
+                    queue.release(slot)
+                except Exception:
+                    log.exception("Could not release the slot held for %s", label)
+        # Профиль, поднятый чтением дешборда, — «поднят дешбордом»: человек сам попросил его оставить.
+        self.register(pid, account=label, port=port, dashboard_started=prev is not None)
+        return _result(True, "Already open with automation; kept warm.", "already_open", started=False)
+
+    def _memory_state(self) -> tuple[Any, Any, Any]:
+        from src.web import profile_slots as _ps
+
+        memory = (self._memory or _ps.read_memory)()
+        settings = (self._settings or _ps.load_settings)()
+        return memory, settings, _ps
+
+    def _wait_for_memory(self, cancelled: Callable[[], bool]) -> str:
+        """Пусто — памяти хватает. Иначе текст отказа после ожидания `START_MEMORY_WAIT_S`.
+
+        Нужно: профиль (+ запас) + недостающий рост уже запущенных профилей, которые ещё
+        прогреваются (моложе `ACL_WARM_SETTLE_S`), с их ЗАМЕРЕННОЙ памятью, если замер есть.
+        """
+        deadline = self._mono() + START_MEMORY_WAIT_S
+        while True:
+            memory, settings, _ps = self._memory_state()
+            if memory is None:
+                return ""
+            need, growth = self._memory_need(settings, _ps)
+            if memory.available_mb >= need:
+                return ""
+            if cancelled() or self._mono() >= deadline:
+                return (f"Not started: {memory.available_mb / 1024:.1f} GB free, "
+                        f"{need / 1024:.1f} GB needed for another profile (new profile, safety reserve"
+                        f"{' and the growth of profiles still warming up' if growth else ''}). "
+                        "Close something and try again.")
+            self._sleep(2.0)
+
+    def _memory_need(self, settings: Any, _ps: Any) -> tuple[int, int]:
+        now = self._mono()
+        settle = _env_number(SETTLE_ENV, DEFAULT_SETTLE_S, 0.0, 3600.0)
+        with self._lock:
+            warm_ids = sorted(self._sessions)
+            settling = {p for p, t in self._settling.items() if now - t < settle and p in self._sessions}
+            self._settling = {p: t for p, t in self._settling.items() if p in settling}
+        measured: dict[str, int] = {}
+        usage = self._usage
+        if usage is None and warm_ids:
+            usage = self._usage = _ps.ProfileUsage()
+        if usage is not None and warm_ids:
+            probe = usage.read(warm_ids)
+            if probe.get("status") == "ok":
+                measured = {k: int(v) for k, v in (probe.get("per_profile") or {}).items()}
+        profile_mb = settings.profile_mb
+        if measured:
+            profile_mb = max(max(measured.values()), settings.profile_floor_mb)
+        growth = 0
+        for p in settling:
+            growth += max(0, profile_mb - measured.get(p, 0))
+        return profile_mb + settings.reserve_mb + growth, growth
 
     def open_many(self, items: list[tuple[str, Any]], *, job_id: str = "",
                   on_result: Callable[[str, dict], None] | None = None,
@@ -601,6 +771,12 @@ class WarmRegistry:
             raise WarmError("This profile's tab is already in use by this action.", "nested")
         sess.lock.acquire()
         sess.owner = threading.get_ident()
+        if self.session(profile_id) is not sess:
+            # Пока ждали замок, сессию закрыли/забыли (Close profiles): работать не на чем.
+            sess.owner = 0
+            sess.lock.release()
+            raise WarmError("This profile was closed or restarted while waiting. Use Open profiles "
+                            "for today first.", "profile_closed")
         try:
             self.gate.acquire(profile_id, wait_s=_env_number(GATE_WAIT_ENV, DEFAULT_GATE_WAIT_S, 1.0, 3600.0),
                               on_wait=on_wait)
@@ -672,7 +848,8 @@ class WarmRegistry:
             self._verify_process(sess)
             raise
         # Вкладка от прошлого запуска дешборда осталась в профиле — убираем, чтобы вкладка была одна.
-        stale = sess.target_id
+        # Только вкладку умершего процесса (владелец записи мёртв): чужую живую не трогаем (S2).
+        stale, sess.stale_target = sess.stale_target, ""
         if stale and stale != getattr(tab, "target_id", ""):
             closer = getattr(tab, "close_target", None)
             if callable(closer):
@@ -729,6 +906,12 @@ class WarmRegistry:
             raise stop
         if not _is_ads_manager(url):
             return None                       # about:blank / чужой сайт — не наша рабочая страница
+        keep = getattr(tab, "keep_active", None)
+        if callable(keep):
+            try:
+                keep()          # фокус-эмуляция живёт на сессии CDP: подтверждаем (только локальный CDP)
+            except Exception:
+                return None
         graph = sess.graphs.get(mode)
         if graph is None:
             graph = make_graph(tab)
@@ -825,6 +1008,14 @@ def _default_tab(cdp_url: str) -> Any:
 
 def _default_start(profile_id: str, folder_id: str, instance: str) -> Any:
     return _fb_profile.open_profile(profile_id, folder_id, instance)
+
+
+def _default_pending_close(profile_id: str) -> Any:
+    """Забрать у чтения отложенное закрытие профиля (`CLOSE_GRACE_S`) и вернуть его запись."""
+    from src.analysis_agent import account_spend as _as
+
+    with _as._PENDING_LOCK:
+        return _as._PENDING_CLOSE.pop(profile_id, None)
 
 
 def _default_slot_queue() -> Any:

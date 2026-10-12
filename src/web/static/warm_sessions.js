@@ -229,6 +229,7 @@
   function openProfiles(grid) {
     var p = picked(grid);
     var rows = p.ticked.length ? p.ticked : p.rows;
+    if (rows.length > 3 && !window.confirm('Start ' + rows.length + ' Multilogin profiles one after another and keep them open?')) return;
     runOpen(grid, rows.map(function (r) { return r.account; }));
   }
 
@@ -262,6 +263,11 @@
   addStyle();
   document.addEventListener('DOMContentLoaded', refresh);
   if (document.readyState !== 'loading') refresh();
-  document.addEventListener('htmx:afterSettle', function () { refresh(); });
+  var settleTimer = null;
+  document.addEventListener('htmx:afterSettle', function () {
+    // Одно обновление на пачку подмен: каждое — обход процессов на машине.
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = setTimeout(function () { settleTimer = null; refresh(); }, 800);
+  });
   window.aclWarmRefresh = refresh;
 })();

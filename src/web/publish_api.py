@@ -475,6 +475,10 @@ class ApiPublisher:
             log.warning("%s: could not close the profile the job started (%s)", account_label, exc)
             _record("profile_closed_after_job", False, diag={"error": type(exc).__name__})
             return ""
+        # ACL-1812 (ревью #813, B2): остановка запомнена для паузы перед следующим запуском.
+        from src.fb_api import stop_log as _stop_log
+
+        _stop_log.record_stop((getattr(self._entry, "profile_id", "") or "").strip())
         _record("profile_closed_after_job", True)
         return "closed"
 
