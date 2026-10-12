@@ -3360,7 +3360,10 @@
     .cbd-pf-foot { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-sm); flex-wrap: wrap; }
     .cbd-pf-when { color: var(--muted); font-size: var(--adopy-text-sm); }
     .cbd-pf-tree { color: var(--bad); font-weight: 700; white-space: nowrap; margin-left: var(--space-xs); }
-    .cbd-gate-reason + .cbd-publish-all { cursor: not-allowed; }
+    .cbd-gate-reason + .cbd-publish-all[disabled] {
+      cursor: not-allowed; opacity: 1; background: var(--bg-hover); color: var(--muted);
+      border: 1px solid var(--border);
+    }
     .cbd-pf-tree[hidden] { display: none; }
     .cbd-gate-reason {
       margin-bottom: var(--space-xs); padding: 0.3rem 0.5rem; border-radius: var(--radius-sm);
@@ -5566,6 +5569,30 @@ window.cbPreflight = (function () {
     return capSeverity(out);
   }
 
+  /* Имя объявления, как его строит сервер (AdDraft.ad_name): номер креатива из имени
+     файла без расширения (четыре цифры, не размер кадра), вариант-число в начале имени,
+     затем « - текст». Одно и то же имя у «2046 1.jpg» и «2046 1.mp4». */
+  function creativeNumber(file) {
+    var stem = String(file || '').split(/[\\/]/).pop();
+    if (stem.indexOf('.') !== -1) stem = stem.slice(0, stem.lastIndexOf('.'));
+    stem = stem.replace(/\d{3,4}\s*[xх×]\s*\d{3,4}/gi, ' ');
+    var m = /(?<!\d)(\d{4})(?!\d)/.exec(stem);
+    return m ? m[1] : '';
+  }
+  function fileVariant(file) {
+    var base = String(file || '').split(/[\\/]/).pop().trim();
+    var m = /^(\d{1,2})(?=[_\-\s])/.exec(base);
+    return m ? String(parseInt(m[1], 10)) : '';
+  }
+  function adName(file, copy) {
+    var creative = creativeNumber(file), text = s(copy);
+    if (creative && file && creative === creativeNumber(file)) {
+      var variant = fileVariant(file);
+      if (variant) creative = creative + ' ' + variant;
+    }
+    return creative && text ? creative + ' - ' + text : (text || creative);
+  }
+
   function count(ls) {
     var n = { error: 0, warning: 0, ok: 0, unknown: 0 };
     ls.forEach(function (x) { n[x.status] = (n[x.status] || 0) + 1; });
@@ -5586,7 +5613,7 @@ window.cbPreflight = (function () {
     return x.status === 'ok' ? x.label : x.label + (detail ? ' (' + detail + ')' : '');
   }
 
-  return { evaluate: evaluate, lines: lines, count: count, blocks: blocks, capSeverity: capSeverity,
+  return { adName: adName, evaluate: evaluate, lines: lines, count: count, blocks: blocks, capSeverity: capSeverity,
            lineText: lineText, table: table };
 })();
 </script>
@@ -6295,9 +6322,8 @@ window.cbTree = (function () {
       var copy = val(row, 'input[type="hidden"][name$="_copy"]').trim();
       var entry = copy && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(copy) : null;
       ads.push({
-        /* Имя объявления сервер строит из номера креатива и текста; страница берёт
-           пару «файл — текст»: одинаковая пара — одинаковое имя. */
-        name: file || copy ? file.split(/[\\/]/).pop() + ' - ' + copy : '',
+        /* Имя — как у сервера (AdDraft.ad_name): номер креатива из файла и текст. */
+        name: window.cbPreflight.adName(file, copy),
         file: file, body: entry ? String(entry.body || '') : '',
         headline: entry ? String(entry.headline || entry.ad_title || '') : '',
         form_id: val(row, 'input[type="hidden"][name$="_form_id"]').trim(), cta: 'LEARN_MORE'
@@ -13889,16 +13915,28 @@ function cbPfWarnings(slots) {
     : '';
 }
 
+var CB_PF_UNAVAILABLE = 'Pre-flight audit unavailable — reload the page';
+function cbPfUnavailable() {
+  window.CB_PF_GATE = { blocked: true, bad: [], reason: CB_PF_UNAVAILABLE };
+  window.alert(CB_PF_UNAVAILABLE);
+}
+
 /* Ворота Publish: клиентские ошибки блокируют сразу; при API — серверные проверки
  * обновляются перед отправкой (кроме свежих), и ошибка из них блокирует тоже.
  * items: [{form, slots}]. proceed() вызывается, только если ошибок нет. */
 window.cbPreflightGate = function (items, proceed) {
   var tree = window.cbTree;
-  if (!tree || !tree.auditLines || !window.cbPreflight) { proceed(); return; }
+  /* Ворота закрыты по умолчанию: нет дерева, правил или карточки — Publish не идёт. */
+  var rules = window.cbPreflight && window.cbPreflight.table ? window.cbPreflight.table() : [];
+  if (!tree || !tree.auditLines || !window.cbPreflight || !rules.length) { cbPfUnavailable(); return; }
   var slots = [];
   items.forEach(function (it) { slots = slots.concat(it.slots); });
   function blocked() {
-    return slots.filter(function (slot) { return window.cbPreflight.blocks(tree.auditLines(slot)); });
+    try {
+      return slots.filter(function (slot) { return window.cbPreflight.blocks(tree.auditLines(slot)); });
+    } catch (err) {
+      return null;                         // состояние аудита не читается — тоже запрет
+    }
   }
   function stop(bad) {
     tree.refreshAudit();
@@ -13906,9 +13944,11 @@ window.cbPreflightGate = function (items, proceed) {
     if (id) tree.open(id);
   }
   var bad = blocked();
+  if (!bad) { cbPfUnavailable(); return; }
   if (bad.length) { stop(bad); return; }
   function done() {
     var again = blocked();
+    if (!again) { cbPfUnavailable(); return; }
     if (again.length) { stop(again); return; }
     window.CB_PF_WARN = cbPfWarnings(slots);
     proceed();
@@ -14338,7 +14378,17 @@ function cbNewRun(notify) {
     e.state = 'retry';
     e.resend = function () {
       if (window.CB_QUEUE !== batch || e.state !== 'retry') return false;
-      post(e, fd, skipped, sentNames);
+      // ACL-1819: повтор отправки проходит те же ворота pre-flight audit, что и Publish;
+      // нет ворот — нет повтора.
+      if (typeof window.cbPreflightGate !== 'function' || !e.form) {
+        window.alert('Pre-flight audit unavailable — reload the page');
+        return false;
+      }
+      var all = Array.prototype.slice.call(e.form.querySelectorAll('.cb-slot'));
+      var slots = e.sent && e.sent.length ? e.sent : (Array.isArray(e.only) && e.only.length ? e.only : all);
+      window.cbPreflightGate([{ form: e.form, slots: slots }], function () {
+        if (window.CB_QUEUE === batch && e.state === 'retry') post(e, fd, skipped, sentNames);
+      });
       return true;
     };
     e.dismiss = function () {

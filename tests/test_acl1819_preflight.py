@@ -237,9 +237,11 @@ def _box(kind: bytes, payload: bytes) -> bytes:
     return struct.pack(">I4s", 8 + len(payload), kind) + payload
 
 
-def _mp4(seconds: int, w: int = 1080, h: int = 1920) -> bytes:
+def _mp4(seconds: int, w: int = 1080, h: int = 1920, rotate: bool = False) -> bytes:
     mvhd = _box(b"mvhd", b"\x00\x00\x00\x00" + b"\x00" * 8 + struct.pack(">II", 1000, seconds * 1000) + b"\x00" * 80)
-    tkhd = _box(b"tkhd", b"\x00" * 76 + struct.pack(">II", w << 16, h << 16))
+    # Матрица tkhd (36 байт с 40-го): поворот на 90 градусов — a = 0, b = 1.0, c = -1.0, d = 0.
+    matrix = struct.pack(">9i", 0, 0x10000, 0, -0x10000, 0, 0, 0, 0, 0x40000000) if rotate else b"\x00" * 36
+    tkhd = _box(b"tkhd", b"\x00" * 40 + matrix + struct.pack(">II", w << 16, h << 16))
     return _box(b"ftyp", b"isom\x00\x00\x02\x00") + _box(b"moov", mvhd + _box(b"trak", tkhd)) + b"\x00" * 64
 
 
@@ -540,6 +542,11 @@ def test_the_publish_gate_blocks_on_errors_and_lists_warnings():
      "function blocks(ls) { return false; }", "blocks() never fires"),
     ("    var stale = it.slots.filter(function (slot) { return !cbPfFresh(slot); });",
      "    var stale = [];", "server checks are never refreshed before Publish"),
+    ("  if (!tree || !tree.auditLines || !window.cbPreflight || !rules.length) { cbPfUnavailable(); return; }",
+     "  if (false) { cbPfUnavailable(); return; }", "a missing tree or rule table lets Publish through"),
+    ("      return null;                         // состояние аудита не читается — тоже запрет",
+     "      return [];                           // состояние аудита не читается — тоже запрет",
+     "an audit crash lets Publish through"),
     ("  if (!cbApiMode()) { done(); return; }",
      "  if (false) { done(); return; }", "RPA also runs the account checks"),
 ])
@@ -565,3 +572,57 @@ def test_the_publish_buttons_are_wrapped_by_the_gate_and_the_originals_are_untou
     block = re.sub(r"/\*.*?\*/", "", block, flags=re.S)       # в комментариях эти слова упомянуты
     assert "setInterval" not in block and "/publish-plan" not in block, "карточка сама в сеть не ходит"
     assert "setTimeout" not in block
+
+
+# ───────────────────────────── ревью #821: имена, поворот, ворота наглухо ─────────────────────────────
+
+NAME_CASES = [
+    ("2046 1.jpg", "Text A"), ("2046 1.mp4", "Text A"), ("1_es_2403_post.mp4", "Text B"),
+    ("1000_img.png", "Text0"), ("coffee.mp4", "Text C"), ("1080x1080-17.png", "Text D"),
+    (r"C:\files\2403_square.JPG", "Text E"), ("", "Only text"), ("2046.png", ""), ("", ""),
+    ("12_2403.png", "T"), ("2403x1080_3011.png", "T"),
+]
+
+
+def test_the_client_names_ads_exactly_like_the_server():
+    from src.fb_ads_rpa.draft import AdDraft
+
+    js = _harness("--names", [list(c) for c in NAME_CASES])["names"]
+    server = [AdDraft(creative_filename=f, copy_name=t).ad_name() for f, t in NAME_CASES]
+    assert js == server
+
+
+def test_a_jpg_and_an_mp4_of_the_same_creative_with_the_same_text_are_duplicates():
+    names = _harness("--names", [["2046 1.jpg", "Text A"], ["2046 1.mp4", "Text A"]])["names"]
+    assert names[0] == names[1] == "2046 - Text A"
+    ads = [{"name": n, "file": f, "form_id": "", "body": "b", "headline": "h", "cta": "LEARN_MORE"}
+           for n, f in zip(names, ["2046 1.jpg", "2046 1.mp4"])]
+    inp = _with(ads=ads)
+    got = {v["rule"]: v for v in pf.evaluate_client(inp)}["ad_names_unique"]
+    assert got["status"] == "error" and got["ads"] == [1, 2]
+    # Те же объявления создатель тоже отвергает.
+    from src.fb_ads_rpa.draft import AdDraft
+    assert AdDraft(creative_filename="2046 1.jpg", copy_name="Text A").ad_name() ==         AdDraft(creative_filename="2046 1.mp4", copy_name="Text A").ad_name()
+
+
+def test_the_vertical_check_follows_the_tkhd_rotation(tmp_path):
+    assert pf.video_info(_mp4(10, 1920, 1080, rotate=True))["width"] == 1080
+    assert pf.video_info(_mp4(10, 1920, 1080, rotate=True))["height"] == 1920
+    assert pf.video_info(_mp4(10, 1080, 1920))["height"] == 1920
+    d = _draft(tmp_path, video=True, ads=2)
+    _vertical(d)
+    video = Path(d.ad_sets[0].ads[1].creative_path)
+    video.write_bytes(_mp4(20, 1920, 1080, rotate=True))     # хранится лёжа, показывается стоя
+    assert _by(_audit(AuditMeta(), d))["media_vertical"]["status"] == "ok"
+    video.write_bytes(_mp4(20, 1080, 1920, rotate=True))     # хранится стоя, показывается лёжа
+    got = _by(_audit(AuditMeta(), d))["media_vertical"]
+    assert got["status"] == "warning" and got["ads"] == [2]
+
+
+def test_the_retry_of_an_unanswered_submission_goes_through_the_gate():
+    page = TPL.read_text(encoding="utf-8")
+    i = page.index("    e.resend = function () {")
+    body = page[i:page.index("    e.dismiss = function () {", i)]
+    assert "window.cbPreflightGate([{ form: e.form, slots: slots }]" in body
+    assert body.index("cbPreflightGate") < body.index("post(e, fd, skipped, sentNames)")
+    assert "typeof window.cbPreflightGate !== 'function'" in body and "Pre-flight audit unavailable" in body

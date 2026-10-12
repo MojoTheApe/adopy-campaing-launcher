@@ -312,7 +312,14 @@ def video_info(data: bytes) -> dict[str, float] | None:
                         if a3 + off + 8 <= b3:
                             w, h = struct.unpack(">II", data[a3 + off:a3 + off + 8])
                             if w and h:
-                                info["width"], info["height"] = w >> 16, h >> 16
+                                w, h = w >> 16, h >> 16
+                                # Матрица поворота: a, b — первые два числа 16.16. Поворот на
+                                # 90/270 градусов (a = 0, |b| = 1) меняет ширину и высоту местами.
+                                mo = a3 + (52 if data[a3] == 1 else 40)
+                                a, b = struct.unpack(">ii", data[mo:mo + 8])
+                                if a == 0 and abs(b) == 0x10000:
+                                    w, h = h, w
+                                info["width"], info["height"] = w, h
     return info or None
 
 

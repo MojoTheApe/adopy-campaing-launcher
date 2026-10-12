@@ -26,6 +26,10 @@
   is shown under the button. Warnings never block and are listed in the confirm dialog. Under
   `ACL_FB_BACKEND=rpa` only client checks run (the card says "Account checks need the API backend")
   and the RPA publish itself is unchanged; the gate looks at client errors only.
+- The gate fails closed: if the audit state or rule table is missing, Publish is blocked with
+  "Pre-flight audit unavailable — reload the page". Retry of an unanswered submission goes through the
+  same gate. Client ad names follow the server's naming (creative number from the file name plus the
+  text), and the vertical-crop check honours the video's `tkhd` rotation.
 
 ## Builder: Instant Forms - use an existing form of the Page (API backend) - ACL-1775
 

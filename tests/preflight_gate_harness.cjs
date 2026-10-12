@@ -24,8 +24,8 @@ const block = slice('/* ── ACL-1819: серверные проверки pre
 const rules = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'fb_api', 'preflight_rules.json'), 'utf8'));
 
 function world(backend, fetchReply) {
-  const log = { fetched: [], opened: [], proceeded: 0 };
-  const w = { CB_PREFLIGHT_RULES: rules, ACL_FB_BACKEND: backend };
+  const log = { fetched: [], opened: [], proceeded: 0, alerts: [] };
+  const w = { CB_PREFLIGHT_RULES: rules, ACL_FB_BACKEND: backend, alert: (m) => log.alerts.push(m) };
   const sandbox = {
     window: w, Object, Array, JSON, RegExp, Number, String, parseInt, isFinite, Promise, Date,
     aclEscHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
@@ -164,6 +164,38 @@ function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
       () => { log.proceeded += 1; });
     assert.equal(log.proceeded, 0);
     assert.deepEqual(log.opened, ['b']);
+  }
+  // 8. Ворота закрыты наглухо: нет дерева, нет таблицы правил или аудит падает — Publish не идёт.
+  {
+    const MSG = 'Pre-flight audit unavailable — reload the page';
+    for (const backend of ['api', 'rpa']) {
+      let x = world(backend, {});
+      const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
+      delete x.w.cbTree;
+      x.w.cbPreflightGate(itemsFor([s], form), () => { x.log.proceeded += 1; });
+      assert.equal(x.log.proceeded, 0, backend + ': без дерева Publish прошёл');
+      assert.deepEqual(x.log.alerts, [MSG]);
+      assert.equal(x.w.CB_PF_GATE.blocked, true);
+      assert.equal(x.w.CB_PF_GATE.reason, MSG);
+
+      x = world(backend, {});
+      x.w.cbPreflight = undefined;
+      x.w.cbPreflightGate(itemsFor([slotOf(form, 'C1', okInput(), 'cbs1')], form), () => { x.log.proceeded += 1; });
+      assert.equal(x.log.proceeded, 0, backend + ': без правил Publish прошёл');
+      assert.deepEqual(x.log.alerts, [MSG]);
+
+      x = world(backend, {});
+      x.w.CB_PREFLIGHT_RULES = { rules: [], consts: {} };
+      x.w.cbPreflightGate(itemsFor([slotOf(form, 'C1', okInput(), 'cbs1')], form), () => { x.log.proceeded += 1; });
+      assert.equal(x.log.proceeded, 0, backend + ': с пустой таблицей Publish прошёл');
+      assert.deepEqual(x.log.alerts, [MSG]);
+
+      x = world(backend, {});
+      x.w.cbTree.auditLines = () => { throw new Error('boom'); };
+      x.w.cbPreflightGate(itemsFor([slotOf(form, 'C1', okInput(), 'cbs1')], form), () => { x.log.proceeded += 1; });
+      assert.equal(x.log.proceeded, 0, backend + ': при сбое аудита Publish прошёл');
+      assert.deepEqual(x.log.alerts, [MSG]);
+    }
   }
   process.stdout.write('ok');
 })().catch((e) => { process.stderr.write(String(e && e.stack || e)); process.exit(1); });
