@@ -7237,7 +7237,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "812": {
+        "actor": "Worker-S1812A",
+        "session": "run_s1812a_1012",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1812-warm-sessions",
+        "worktree": "C:\\acl-1812-warm",
+        "id": "4072ecc6814f4bf88e3a62d515c1486c",
+        "issue": 812,
+        "state": "implementing",
+        "started_at": "2026-10-12T06:35:30+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -10904,6 +10917,17 @@
         },
         "pr": 808,
         "queued_at": "2026-10-11T20:45:46+00:00"
+      },
+      "812": {
+        "implementers": [
+          {
+            "actor": "Worker-S1812A",
+            "session": "run_s1812a_1012"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1812A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -11829,6 +11853,10 @@
       },
       "Worker-M1806A": {
         "session": "4b214c77a7e14ef0937301c56af0fb88",
+        "role": "Worker"
+      },
+      "Worker-S1812A": {
+        "session": "run_s1812a_1012",
         "role": "Worker"
       }
     },
@@ -21345,6 +21373,13 @@
         "issue": 797,
         "pr": 810,
         "actor": "Worker-S1797A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T06:35:30+00:00",
+        "issue": 812,
+        "claim": "4072ecc6814f4bf88e3a62d515c1486c",
+        "actor": "Worker-S1812A"
       }
     ],
     "policy": {
