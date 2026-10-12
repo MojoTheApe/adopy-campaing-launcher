@@ -7246,9 +7246,11 @@
         "worktree": "C:\\acl-1771-resolver",
         "id": "545e3a5ccfc44faeb92b63b377806ca2",
         "issue": 771,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-12T13:28:49+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 832,
+        "report": "PR #832 (head 81e2a23), stacked on #821. Resolver: confirmed cache, adinterestvalid exact, adinterest search paged, adTargetingCategory classes paged, split on or. No auto-pick of near matches; Confirm/Clear via /targeting-resolver endpoints and Check plan. Pre-flight rules interests_resolve and interests_confirmed. Tests: 24 new, 335 affected passed. Mutations: 4 of 4 caught."
       }
     },
     "tasks": {
