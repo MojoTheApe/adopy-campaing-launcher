@@ -7261,6 +7261,18 @@
         "state": "implementing",
         "started_at": "2026-10-12T12:56:46+00:00",
         "from_status": "status:idea"
+      },
+      "827": {
+        "actor": "Worker-S1827A",
+        "session": "run_s1827a_1012",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1827-design-parity-shell",
+        "worktree": "C:\\acl-1827-shell",
+        "id": "754e17f1b92c41b8affb4bf77f360c1c",
+        "issue": 827,
+        "state": "implementing",
+        "started_at": "2026-10-12T12:58:19+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -11164,6 +11176,17 @@
         "state": "implementing",
         "worker": "Worker-S1767A",
         "coordinator": "Coordinator-C0930A"
+      },
+      "827": {
+        "implementers": [
+          {
+            "actor": "Worker-S1827A",
+            "session": "run_s1827a_1012"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1827A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -12129,6 +12152,10 @@
       },
       "Worker-S1767A": {
         "session": "run_s1767a_1012",
+        "role": "Worker"
+      },
+      "Worker-S1827A": {
+        "session": "run_s1827a_1012",
         "role": "Worker"
       }
     },
@@ -21778,6 +21805,13 @@
         "issue": 767,
         "claim": "1268b50f233543bba2fab0c653ebce06",
         "actor": "Worker-S1767A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T12:58:19+00:00",
+        "issue": 827,
+        "claim": "754e17f1b92c41b8affb4bf77f360c1c",
+        "actor": "Worker-S1827A"
       }
     ],
     "policy": {
