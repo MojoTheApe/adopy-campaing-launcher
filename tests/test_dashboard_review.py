@@ -158,3 +158,21 @@ def test_country_totals_do_not_double_count_a_linked_alias(isolated_links):
     country = view["countries"][0]
     assert len(country["rows"]) == 2 and all(r["has_data"] for r in country["rows"])
     assert country["leads"] == 6 and country["deposits"] == 1 and country["spend"] == 30.0
+
+
+def test_country_totals_sum_two_different_aliases(isolated_links):
+    df = _id_frame("Facebook_5265", "Facebook_5414")
+    account_links.link("Facebook_5265_61579362958966", "country", "Peru")
+    account_links.link("Facebook_5414_61579362958967", "country", "Peru")
+    country = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")["countries"][0]
+    assert all(r["has_data"] for r in country["rows"]) and len(country["rows"]) == 2
+    assert country["leads"] == 12 and country["deposits"] == 2 and country["spend"] == 60.0
+
+
+def test_country_totals_count_duplicate_once_and_keep_distinct(isolated_links):
+    df = _id_frame("Facebook_5265", "Facebook_5414")
+    for label in ("Facebook_5265_61579362958966", "Facebook_5265", "Facebook_5414_61579362958967"):
+        account_links.link(label, "country", "Peru")
+    country = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")["countries"][0]
+    assert len(country["rows"]) == 3
+    assert country["leads"] == 12 and country["deposits"] == 2 and country["spend"] == 60.0
