@@ -7246,9 +7246,11 @@
         "worktree": "C:\\acl-1767-fields",
         "id": "1268b50f233543bba2fab0c653ebce06",
         "issue": 767,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-12T12:56:46+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 830,
+        "report": "ACL-1767 implemented on the API path. PR #830, head 2d28e0f (stacked on #821 -> #809 -> #796 -> #765).\n\nMeta fields: targeting.genders [1|2], targeting.locales (adlocale exact), targeting.device_platforms [mobile|desktop], targeting.user_os [\"iOS\"|\"Android\"|\"<OS>_ver_<N>.0_and_above\"], adset.start_time (ISO 8601 with account offset), creative call_to_action.type (closed list), creative contextual_multi_ads {enroll_status: OPT_OUT}.\nTests (fakes only): 81 new in test_acl1767_audience_fields.py; affected suites 595 passed (one Playwright-style test updated statically; Playwright not run, RAM under 6 GB).\nMutation checks: 11 mutants on the policy (both layers), creator OPT_OUT and readback, all killed.\nNot verified live: per-objective CTA list and user_os version string format; confirm on 9095."
       },
       "776": {
         "actor": "Worker-S1776B",
