@@ -7239,20 +7239,6 @@
   },
   "execution": {
     "claims": {
-      "836": {
-        "actor": "Worker-SR1012",
-        "session": "connection_sr1012_worker",
-        "coordinator": "Coordinator-CR1012",
-        "branch": "codex/acl-1836-session-recovery",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1836-2026-10-12",
-        "id": "96242fab0eed4858920e82e4d3741c3a",
-        "issue": 836,
-        "state": "handoff",
-        "started_at": "2026-10-12T20:21:10+00:00",
-        "from_status": "status:todo",
-        "pr": 837,
-        "report": "# ACL-1836 local implementation handoff evidence\n\nWorker Worker-SR1012, session connection_sr1012_worker; Coordinator Coordinator-CR1012.\nClaim: 96242fab0eed4858920e82e4d3741c3a (implementing; no durable execution handoff yet).\nWorktree: C:/Users/EvgeniSedin/Desktop/ACM-Worker-1836-2026-10-12.\nBranch: codex/acl-1836-session-recovery.\nBase: e8e59f8376458f2f73089c3f2a8d454837ff033f.\nHead: 6ce2886bd44c8b394016c81665cc25baa290dcb2.\nTree: 2f574f01b7bd7b3845a8872a07fd7edfaf32dd70.\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/836.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837 (main, approval-only).\n\nThe exact lost-session symptom was reproduced before the change by\n`C:/fb_agents/.venv/Scripts/python.exe -m pytest tests/test_acl1836_session_recovery.py -q --basetemp=.pytest-tmp-1836`:\n2 failed with `Runtime.evaluate: Session with given id not found.` at real PageTab/InPageGraph/GraphClient boundaries.\n\nRoot cause addressed: PageTab kept an invalid session; helper setup was outside\nthe retry boundary; readback could escape as raw CdpError rather than GraphStop.\nThe external reason for initial detachment remains unknown.\n\nImplementation: classify exact session loss without retry, allow one explicit\nreattach to the same target through the existing browser connection from local\nhelper setup only, verify target/frame account location, reset isolated world,\nretain token-in-page, and surface sticky GraphStop on unsafe/unavailable recovery.\nNo sent Graph request replay, profile restart, replacement tab, or recovery reload.\n\nFinal main tests: 259 passed in 61.58s, Windows/Python3.14, 5 files:\ntest_acl1836_session_recovery, test_acl1756_fb_api, test_acl1756_page_helper_node,\ntest_bench_catalogue, test_acl_test_platform. Initial sandbox-only loopback failure\npassed in the complete rerun with loopback permission. Scanner, import smoke and\ndiff check passed. No DEBUG instrumentation remains. Full required CI is pending.\n\nCoordinator's isolated compatibility snapshot from 5542e6ffb335:\nactual Creator->InPageGraph->PageTab incident harness 2 red before, 2 green after;\nsurviving target completes readback with one video POST; gone target retains\ncampaign/ad-set IDs with no further write. Existing integrated1756/1761/1760/1812:\n499 passed in 56.97s (125 existing deprecation warnings).\n\nNo live Meta/profile action, configuration change, package release, activation,\ndeployment or merge was performed. ACL-1335 was untouched. Creator code remains\noutside the main source PR; only patch hunks were compatibility-applied offline.\n\nPublication status: the initial automatic-review block was resolved by read-only\nverification of the exact existing private source origin and WRITE access, then\nretry of the same push through the same tool with that evidence. The branch was\npublished and PR837 created/attached; its head/base were verified. No alternate\npublication route was used. The trailing unquoted PowerShell Git tree display\nfailed after successful push; the separately quoted tree command verified the\ntree above. Independent final review, required CI and integration remain pending."
-      },
       "824": {
         "actor": "Worker-WX1012A",
         "session": "work_wx1012a_20261012",
@@ -11370,9 +11356,25 @@
             "session": "connection_sr1012_worker"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-SR1012",
-        "coordinator": "Coordinator-CR1012"
+        "coordinator": "Coordinator-CR1012",
+        "handoff": {
+          "actor": "Worker-SR1012",
+          "session": "connection_sr1012_worker",
+          "coordinator": "Coordinator-CR1012",
+          "branch": "codex/acl-1836-session-recovery",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1836-2026-10-12",
+          "id": "96242fab0eed4858920e82e4d3741c3a",
+          "issue": 836,
+          "state": "handoff",
+          "started_at": "2026-10-12T20:21:10+00:00",
+          "from_status": "status:todo",
+          "pr": 837,
+          "report": "# ACL-1836 local implementation handoff evidence\n\nWorker Worker-SR1012, session connection_sr1012_worker; Coordinator Coordinator-CR1012.\nClaim: 96242fab0eed4858920e82e4d3741c3a (implementing; no durable execution handoff yet).\nWorktree: C:/Users/EvgeniSedin/Desktop/ACM-Worker-1836-2026-10-12.\nBranch: codex/acl-1836-session-recovery.\nBase: e8e59f8376458f2f73089c3f2a8d454837ff033f.\nHead: 6ce2886bd44c8b394016c81665cc25baa290dcb2.\nTree: 2f574f01b7bd7b3845a8872a07fd7edfaf32dd70.\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/836.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837 (main, approval-only).\n\nThe exact lost-session symptom was reproduced before the change by\n`C:/fb_agents/.venv/Scripts/python.exe -m pytest tests/test_acl1836_session_recovery.py -q --basetemp=.pytest-tmp-1836`:\n2 failed with `Runtime.evaluate: Session with given id not found.` at real PageTab/InPageGraph/GraphClient boundaries.\n\nRoot cause addressed: PageTab kept an invalid session; helper setup was outside\nthe retry boundary; readback could escape as raw CdpError rather than GraphStop.\nThe external reason for initial detachment remains unknown.\n\nImplementation: classify exact session loss without retry, allow one explicit\nreattach to the same target through the existing browser connection from local\nhelper setup only, verify target/frame account location, reset isolated world,\nretain token-in-page, and surface sticky GraphStop on unsafe/unavailable recovery.\nNo sent Graph request replay, profile restart, replacement tab, or recovery reload.\n\nFinal main tests: 259 passed in 61.58s, Windows/Python3.14, 5 files:\ntest_acl1836_session_recovery, test_acl1756_fb_api, test_acl1756_page_helper_node,\ntest_bench_catalogue, test_acl_test_platform. Initial sandbox-only loopback failure\npassed in the complete rerun with loopback permission. Scanner, import smoke and\ndiff check passed. No DEBUG instrumentation remains. Full required CI is pending.\n\nCoordinator's isolated compatibility snapshot from 5542e6ffb335:\nactual Creator->InPageGraph->PageTab incident harness 2 red before, 2 green after;\nsurviving target completes readback with one video POST; gone target retains\ncampaign/ad-set IDs with no further write. Existing integrated1756/1761/1760/1812:\n499 passed in 56.97s (125 existing deprecation warnings).\n\nNo live Meta/profile action, configuration change, package release, activation,\ndeployment or merge was performed. ACL-1335 was untouched. Creator code remains\noutside the main source PR; only patch hunks were compatibility-applied offline.\n\nPublication status: the initial automatic-review block was resolved by read-only\nverification of the exact existing private source origin and WRITE access, then\nretry of the same push through the same tool with that evidence. The branch was\npublished and PR837 created/attached; its head/base were verified. No alternate\npublication route was used. The trailing unquoted PowerShell Git tree display\nfailed after successful push; the separately quoted tree command verified the\ntree above. Independent final review, required CI and integration remain pending."
+        },
+        "pr": 837,
+        "queued_at": "2026-10-12T20:37:22+00:00"
       }
     },
     "actors": {
@@ -14779,7 +14781,8 @@
       767,
       776,
       771,
-      768
+      768,
+      836
     ],
     "review": null,
     "history": [
@@ -22554,6 +22557,13 @@
         "issue": 824,
         "claim": "7d2bfef5df6049a69e7393332d01893b",
         "actor": "Worker-WX1012A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-12T20:37:22+00:00",
+        "issue": 836,
+        "pr": 837,
+        "actor": "Worker-SR1012"
       }
     ],
     "policy": {
