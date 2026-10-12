@@ -7246,9 +7246,11 @@
         "worktree": "C:\\acl-1822-rules-ui",
         "id": "a49cfbd74b8749f19c8d4ac374c47865",
         "issue": 822,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-12T10:19:35+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 823,
+        "report": "ACL-1822: PR #823, head ee95794, stacked on #820 + #802 (merged origin/codex/acl-1800-campaign-commands, clean).\nDone: Rules nav + page (Decision flow in Split), list, templates S1/S3, duplicate, enable/disable, editor, scope dialog from snapshot, 4 cards + counters + objects table, Evaluate now (queue only), Observe/Suggest only (Automatic disabled with T5 reason), Apply via acmCommands only, Dismiss in rules journal, Rules column + inspector in the country table, states (empty/loading/error/stale BI/ambiguous/no target/rpa), light+dark, no page scroll at 1280/1024/390.\nDeferred: Cohort/Lifetime, Activity tab, Undo, Release hold, Automatic (T5), builder hook.\nTests: api 16 + page/node 15 passed; browser 16 passed (run with a RAM override for screenshots, free RAM was about 5 GB; skipped by default under 6 GB); affected suites 493 passed.\nScreenshots: C:\\acl-design\\outbox\\2026-10-12_complete-dashboard-designs\\screens\\rules-flow__<state>__<theme>__built.png (built stand shows the page panel only, not the whole dashboard shell)."
       }
     },
     "tasks": {
