@@ -7238,20 +7238,6 @@
   },
   "execution": {
     "claims": {
-      "776": {
-        "actor": "Worker-S1776B",
-        "session": "run_s1776b_1012",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1776-create-forms",
-        "worktree": "C:\\acl-1776-forms",
-        "id": "00cdb633976d414f9e85902ebd11de2b",
-        "issue": 776,
-        "state": "handoff",
-        "started_at": "2026-10-12T12:59:06+00:00",
-        "from_status": "status:todo",
-        "pr": 831,
-        "report": "ACL-1776 implemented: PR #831, head 0f4e926 (stacked on #821).\nAffected tests: 591 passed (new file tests/test_acl1776_create_forms.py: 84). Mutation checks on both policy layers and on idempotency: all killed.\nBrowser tests were not run locally (machine load). Live check needs the owner's yes on a test Page; open question: whether the captured token can create forms (pages_manage_ads)."
-      },
       "771": {
         "actor": "Worker-S1771A",
         "session": "run_s1771a_1012",
@@ -11132,22 +11118,25 @@
             "session": "run_s1776b_1012"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1776B",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1776A",
-          "session": "run_s1776a_1012",
+          "actor": "Worker-S1776B",
+          "session": "run_s1776b_1012",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1776-create-forms",
           "worktree": "C:\\acl-1776-forms",
-          "id": "cc4936b406844a0988631708acb33fb6",
+          "id": "00cdb633976d414f9e85902ebd11de2b",
           "issue": 776,
-          "state": "stopping",
-          "started_at": "2026-10-12T12:51:35+00:00",
-          "from_status": "status:idea",
-          "report": "Owner cancelled ACL-1776: the robot does not create forms. No code written, nothing pushed."
-        }
+          "state": "handoff",
+          "started_at": "2026-10-12T12:59:06+00:00",
+          "from_status": "status:todo",
+          "pr": 831,
+          "report": "ACL-1776 implemented: PR #831, head 0f4e926 (stacked on #821).\nAffected tests: 591 passed (new file tests/test_acl1776_create_forms.py: 84). Mutation checks on both policy layers and on idempotency: all killed.\nBrowser tests were not run locally (machine load). Live check needs the owner's yes on a test Page; open question: whether the captured token can create forms (pages_manage_ads)."
+        },
+        "pr": 831,
+        "queued_at": "2026-10-12T13:46:44+00:00"
       },
       "826": {
         "implementers": [
@@ -14617,7 +14606,8 @@
       824,
       826,
       827,
-      767
+      767,
+      776
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21911,6 +21901,13 @@
         "issue": 767,
         "pr": 830,
         "actor": "Worker-S1767A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-12T13:46:44+00:00",
+        "issue": 776,
+        "pr": 831,
+        "actor": "Worker-S1776B"
       }
     ],
     "policy": {
