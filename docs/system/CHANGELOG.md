@@ -7,6 +7,10 @@
   ambiguous tail matches remain unmatched instead of selecting the suffix alias.
 - Explicit account links continue to select the country before workbook resolution,
   and account rows and country totals use the same resolved alias without duplicates.
+- Required CI exposed an inherited logging-filter leak when the added regressions
+  changed shard assignment. The pilot tests now restore each handler's pre-test
+  filters, so later tests see their own logging behavior. Production redaction and
+  the routing-log assertions remain unchanged.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
