@@ -594,11 +594,13 @@ class InPageGraph:
             raise stop from exc
 
     # -- отдельный мир и помощник
-    def pin_page(self, page: str) -> None:
+    def pin_page(self, page: str, *, timeout: float = 30.0) -> dict:
         """Закрепить Страницу плана на сессию (ACL-1776), как `write_act` закреплён на кабинет.
 
         Один раз: повторно - только то же значение. Помощник переустанавливается
-        в новом мире уже с этой Страницей в политике форм.
+        в новом мире уже с этой Страницей в политике форм. После сброса мира ждём токен
+        (`wait_ready`): свежий мир мог не найти его в буфере Resource Timing. Возвращает
+        состояние страницы; без токена вызывающий не пишет.
         """
         if not self.allow_writes:
             raise ValueError("read-only: writes are not enabled for this page")
@@ -608,12 +610,13 @@ class InPageGraph:
         if self.write_page:
             if self.write_page != page:
                 raise ValueError("a different Page is already pinned for this session")
-            return
+            return {"kind": "ads_manager", "has_token": True, "pinned": True}
         from src.fb_api import write_policy as _wp
 
         self.write_page = page
         self._write_policy = _wp.policy_for_page(self.write_act, page)
         self._reset_world()
+        return self.wait_ready(timeout=timeout)
 
     def _reset_world(self) -> None:
         self._ctx = None

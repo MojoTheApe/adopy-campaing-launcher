@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +20,8 @@ from typing import Any
 
 from src.fb_api import form_templates as ft
 from src.fb_api import forms as _forms
+
+log = logging.getLogger(__name__)
 
 #: Поля чтения созданной формы для сверки.
 READBACK_FIELDS = "id,name,status,locale,page{id},questions{key,label,type,options}"
@@ -116,6 +120,8 @@ def refused_message(exc: Exception) -> str:
 # запуск за это время создал бы вторую форму: помним (кабинет, Страница, имя, время) локально.
 
 PENDING_WINDOW_S = 15 * 60
+MSG_NO_STATE = ("Couldn't record the form state locally - not creating a form. "
+                "Check that the ACL data folder is writable, then run again")
 MSG_PENDING = ("A form with this name may still be appearing at Meta - wait a few minutes and run again")
 
 
@@ -126,7 +132,7 @@ def pending_path() -> Path:
 
 
 def _pending_key(act: str, page_id: str, form_name: str) -> str:
-    return "".join((str(act), str(page_id), str(form_name)))
+    return "|".join((str(act), str(page_id), str(form_name)))
 
 
 def _pending_load() -> dict[str, float]:
@@ -139,15 +145,24 @@ def _pending_load() -> dict[str, float]:
 
 
 def _pending_save(data: dict[str, float]) -> None:
+    """Атомарно: временный файл в той же папке, затем `os.replace`. Сбой - `OSError` наружу."""
+    path = pending_path()
+    tmp = path.with_name(path.name + ".tmp")
     try:
-        path = pending_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    except OSError:
-        pass  # метка - подстраховка; без неё работа не ломается
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError as exc:
+        log.error("pending form marker was not saved (%s): %s", path, exc)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def record_pending(act: str, page_id: str, form_name: str) -> None:
+    """Записать метку ДО отправки формы. `OSError` - метку сохранить не удалось: формы не создаём."""
     now = time.time()
     data = {k: v for k, v in _pending_load().items() if now - v < PENDING_WINDOW_S}
     data[_pending_key(act, page_id, form_name)] = now
@@ -162,4 +177,7 @@ def is_pending(act: str, page_id: str, form_name: str) -> bool:
 def clear_pending(act: str, page_id: str, form_name: str) -> None:
     data = _pending_load()
     if data.pop(_pending_key(act, page_id, form_name), None) is not None:
-        _pending_save(data)
+        try:
+            _pending_save(data)
+        except OSError:
+            pass  # устаревшая метка лишь подождёт до конца окна; форма найдётся и сотрёт её

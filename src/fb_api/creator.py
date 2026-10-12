@@ -1092,17 +1092,20 @@ class CampaignCreator:
                 self._step(out, f"form {step.form_name!r}: found on the Page, reused")
             else:
                 try:
+                    # Метка ДО записи: без неё повторный запуск может создать вторую форму.
+                    _fc.record_pending(plan.act, plan.page_id, step.form_name)
+                except OSError as exc:
+                    raise CreationStopped(_fc.MSG_NO_STATE, created=out.created,
+                                          kind="form_state") from exc
+                try:
                     step.form_id = self._write(
                         out, f"form {step.form_name!r}", f"/{plan.page_id}/{_wp_form_edge()}",
                         _ft.form_params(tpl), lambda: self._find_form_id(plan, tpl),
                         form_page=plan.page_id)
                 except GraphError as exc:
+                    _fc.clear_pending(plan.act, plan.page_id, step.form_name)   # Meta отказала: формы нет
                     raise CreationStopped(_fc.refused_message(exc), created=out.created,
                                           kind="form_refused") from exc
-                except CreationStopped as exc:
-                    if exc.kind == "unknown":
-                        _fc.record_pending(plan.act, plan.page_id, step.form_name)
-                    raise
                 _fc.clear_pending(plan.act, plan.page_id, step.form_name)
                 out.created.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: created")

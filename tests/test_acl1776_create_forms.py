@@ -484,7 +484,8 @@ def test_the_write_path_runs_both_layers_for_a_form():
 
 def test_the_session_pins_the_page_once_and_refuses_form_writes_without_it():
     tab = type("T", (), {"create_isolated_world": lambda self, n: 7,
-                         "evaluate_in": lambda self, ctx, expr, timeout=60.0: None})()
+                         "evaluate_in": lambda self, ctx, expr, timeout=60.0: (
+                             {"kind": "ads_manager", "has_token": True} if ".state()" in expr else None)})()
     t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
     assert t.write_page is None
     with pytest.raises(wp.WriteRefused, match="no Page is pinned"):
@@ -498,6 +499,80 @@ def test_the_session_pins_the_page_once_and_refuses_form_writes_without_it():
     assert t._write_policy["form_create"]["page"] == PAGE
     with pytest.raises(ValueError):
         tc.InPageGraph(tab, allow_writes=True, write_act=ACT, write_page="abc")
+
+
+def test_pinning_waits_for_the_token_in_the_fresh_world():
+    """После сброса мира токен мог выпасть из буфера Resource Timing: ждём state(), затем probe()."""
+    class Tab:
+        def __init__(self):
+            self.calls = []
+            self.worlds = 0
+
+        def create_isolated_world(self, name):
+            self.worlds += 1
+            return 7 + self.worlds
+
+        def evaluate_in(self, ctx, expr, timeout=60.0):
+            if expr.lstrip().startswith("(() =>"):
+                return None                                     # установка помощника
+            self.calls.append(expr)
+            if ".probe()" in expr:
+                return {"kind": "ads_manager", "has_token": True}
+            return {"kind": "ads_manager", "has_token": False}  # state(): токена в новом мире нет
+
+    tab = Tab()
+    ticks = iter(range(0, 10000, 20))
+    t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT, sleep=lambda s: None,
+                       clock=lambda: float(next(ticks)))
+    state = t.pin_page(PAGE, timeout=30.0)
+    assert state["has_token"] is True
+    assert any(".state()" in c for c in tab.calls) and any(".probe()" in c for c in tab.calls)
+    assert tab.worlds >= 1 and t.write_page == PAGE
+
+
+def test_pinning_reports_when_the_token_never_comes_back():
+    class Tab:
+        def create_isolated_world(self, name):
+            return 7
+
+        def evaluate_in(self, ctx, expr, timeout=60.0):
+            return None if expr.lstrip().startswith("(() =>") else {"kind": "other", "has_token": False}
+
+    ticks = iter(range(0, 10000, 20))
+    t = tc.InPageGraph(Tab(), allow_writes=True, write_act=ACT, sleep=lambda s: None,
+                       clock=lambda: float(next(ticks)))
+    assert t.pin_page(PAGE, timeout=30.0)["has_token"] is False
+
+
+def test_the_pending_marker_is_written_atomically_and_joined_with_a_pipe(tmp_path, monkeypatch):
+    path = fc.pending_path()
+    calls = []
+    real = fc.os.replace
+    monkeypatch.setattr(fc.os, "replace", lambda a, b: (calls.append((Path(a).name, Path(b).name)), real(a, b))[1])
+    fc.record_pending(ACT, PAGE, "Demo · ACL abcdef")
+    assert calls == [("pending_forms.json.tmp", "pending_forms.json")], "запись идёт через os.replace"
+    assert not list(path.parent.glob("*.tmp"))
+    assert list(json.loads(path.read_text(encoding="utf-8"))) == [f"{ACT}|{PAGE}|Demo · ACL abcdef"]
+    # Сбой замены: прежний файл цел, временного файла не осталось, ошибка видна.
+    before = path.read_text(encoding="utf-8")
+
+    def boom(a, b):
+        raise OSError("disk")
+    monkeypatch.setattr(fc.os, "replace", boom)
+    with pytest.raises(OSError):
+        fc.record_pending(ACT, PAGE, "Other · ACL abcdef")
+    assert path.read_text(encoding="utf-8") == before and not list(path.parent.glob("*.tmp"))
+
+
+def test_no_form_is_created_when_the_local_marker_cannot_be_saved(tmp_path, monkeypatch):
+    blocker = tmp_path / "blocker"
+    blocker.write_text("a file, not a folder", encoding="utf-8")
+    monkeypatch.setattr(fc, "pending_path", lambda: blocker / "pending_forms.json")
+    tid = _saved()["id"]
+    meta = FormsMeta()
+    out, _c = _run(meta, _tpl_draft(tmp_path, [tid]))
+    assert out.stop_kind == "form_state" and "Couldn't record the form state locally" in out.error
+    assert "not creating a form" in out.error and not meta.form_posts
 
 
 def test_a_no_link_thank_you_page_sends_button_type_none_and_the_readback_accepts_it():
