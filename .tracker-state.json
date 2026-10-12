@@ -7262,6 +7262,18 @@
         "state": "implementing",
         "started_at": "2026-10-12T20:20:44+00:00",
         "from_status": "status:todo"
+      },
+      "836": {
+        "actor": "Worker-SR1012",
+        "session": "connection_sr1012_worker",
+        "coordinator": "Coordinator-CR1012",
+        "branch": "codex/acl-1836-session-recovery",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1836-2026-10-12",
+        "id": "96242fab0eed4858920e82e4d3741c3a",
+        "issue": 836,
+        "state": "implementing",
+        "started_at": "2026-10-12T20:21:10+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11345,6 +11357,17 @@
         "state": "implementing",
         "worker": "Worker-GX1012A",
         "coordinator": "Coordinator-CX1012A"
+      },
+      "836": {
+        "implementers": [
+          {
+            "actor": "Worker-SR1012",
+            "session": "connection_sr1012_worker"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-SR1012",
+        "coordinator": "Coordinator-CR1012"
       }
     },
     "actors": {
@@ -12346,6 +12369,10 @@
       },
       "Worker-GX1012A": {
         "session": "work_gx1012a_20261012",
+        "role": "Worker"
+      },
+      "Worker-SR1012": {
+        "session": "connection_sr1012_worker",
         "role": "Worker"
       }
     },
@@ -22487,6 +22514,13 @@
         "issue": 710,
         "claim": "9da99219db3f424aab59c37cfc78bc53",
         "actor": "Worker-WX1012A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T20:21:10+00:00",
+        "issue": 836,
+        "claim": "96242fab0eed4858920e82e4d3741c3a",
+        "actor": "Worker-SR1012"
       }
     ],
     "policy": {
