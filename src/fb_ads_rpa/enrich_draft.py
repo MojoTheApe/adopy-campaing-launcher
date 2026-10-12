@@ -189,7 +189,12 @@ def enrich_campaign_drafts(
                 draft.warnings.append(f"{label}: team library unavailable; using the saved copy from {stamp}. "
                                       + state.get("error", ""))
         draft.ad_account_id = entry.ad_account_id if entry else None
-        draft.page_id = (entry.page_id if entry else None)
+        # ACL-1766: что уже в черновике, то и берём; карта — следующий источник.
+        # Источник запоминаем для «Check plan»; RPA эти поля не читает.
+        draft.page_source = "draft" if draft.page_id else ("map" if entry and entry.page_id else "")
+        draft.pixel_source = "draft" if draft.pixel_id else ("map" if entry and getattr(entry, "pixel_id", None) else "")
+        draft.page_id = draft.page_id or (entry.page_id if entry else None)
+        draft.pixel_id = draft.pixel_id or ((getattr(entry, "pixel_id", None) or "") if entry else "")
         # Что набрано в билдере, то и берём. Раньше строка ниже перетирала
         # ссылку значением из книги безусловно: человек вписывал её в форму,
         # видел «Link empty» и не мог понять, куда она делась.
