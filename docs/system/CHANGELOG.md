@@ -28,6 +28,18 @@ a clear refusal.
   confirmed readback, and a failed or unknown outcome keeps the previous state. Duplicate and Copy
   stay disabled (ACL-1773). With the rpa backend or a non-loopback bind the controls stay disabled
   with the reason (`GET /campaign-commands/availability`).
+- The campaign table lives only inside each country block, under the list of that country's accounts
+  (Home account map and the country page). The standalone Home "Campaigns" section and the old
+  per-account list ("IN THE ACCOUNT - N CAMPAIGNS - N ADS") are gone. One table per country, with the
+  accounts of the country as bands; "Read campaigns in <Country>" in the country header reads them one
+  at a time, and each account band keeps its own "Read campaigns". Same endpoints, same confirm and
+  readback flow. Columns follow the design prototype: Delivery, Duplicate, Bid control, Budget,
+  Optimization hint, Alerts, Goal CPA, Benchmark CPA, then BI, Meta and Tracking. Goal CPA comes from My
+  Goals and Benchmark CPA from `config/benchmarks`; hints and alerts are advisory text computed from the
+  numbers on screen, and where an input is missing the cell shows a dash with the reason.
+  `GET /campaign-commands/history?account=` backs "What was changed here". Opening a block reads
+  nothing from Meta.
+- Backend switch: the country table and "Read campaigns in <Country>" render only with `ACL_FB_BACKEND=api`. Under `rpa` (the default) the previous per-account list from Read spend, with its Off/On chips, "Turn off?" flow, log and coverage note, is unchanged; the two are never shown for the same country.
 - The first live check runs on the 9095 test dashboard with test accounts, after the owner agrees.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736

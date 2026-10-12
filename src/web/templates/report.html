@@ -2282,6 +2282,9 @@
       color: var(--warn, var(--muted)); font-size: 0.73rem;
       padding-top: 0.4rem; line-height: 1.4;
     }
+    /* Командная таблица кампаний страны (`_campaign_table.html`, ACL-1800) стоит под списком аккаунтов;
+       старые стили списка «in the account» убраны вместе с ним. */
+    .amap-campaigns { max-width: 100%; min-width: 0; }
     .amap-btn {
       background: none; border: 1px solid var(--field-border);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -2292,7 +2295,7 @@
     .amap-btn.danger:hover { border-color: var(--bad); color: var(--bad); }
     /* Read all (ACL-353): панелька над таблицей страны; сама кнопка — тот же
        amap-btn, ей ничего особенного не нужно. */
-    .amap-toolbar { display: flex; justify-content: flex-end; padding: 0.35rem 0.85rem 0; }
+    .amap-toolbar { display: flex; justify-content: flex-end; gap: 0.4rem; padding: 0.35rem 0.85rem 0; }
     .amap-x {
       background: none; border: 0; color: var(--border-strong);
       cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.2rem;
@@ -3733,6 +3736,8 @@ async function dashRefresh(ev) {
       (not account_map.date_from and not account_map.date_to)) %}
 {#- ACL-1652: шесть метрик (заголовки и ячейки) — из одного места. -#}
 {% import "_metrics.html" as mx %}
+{#- ACL-1800: командная таблица кампаний — компонент для областей под строками аккаунтов (стили, шаблон, hcMount). Секции на Home у неё нет. -#}
+{% if campaign_table_api is defined and campaign_table_api() %}{% include "_campaign_table.html" %}{% endif %}
 {% if account_map %}
 {% for day in account_map.dates or [] %}
 {% if (not account_map.date_from or day >= account_map.date_from)
@@ -4041,8 +4046,6 @@ async function dashRefresh(ev) {
      тоталы страны теперь стоят в свёрнутой строке карты, а страна с деньгами
      без размещённых аккаунтов приходит туда красной «виртуальной» строкой. #}
   <div id="amap-slot">{% include "_account_map.html" %}</div>
-  {#- ACL-1798: командная таблица кампаний (только чтение) — под целями и картой стран. -#}
-  {% include "_home_campaigns.html" %}
 </div>
 
 {% for c in report.countries %}
@@ -7598,6 +7601,8 @@ function amapApply(from, to, span) {
    вырезают исходник кусками от неё, и Jinja-выражение в куске ломало бы им
    разбор. */
 window.AMAP_SHOW_COPY_FOR_GROUP = {{ SHOW_COPY_FOR_GROUP | tojson }};
+/* ACL-1800: какой список кампаний у строки аккаунта — таблица страны (api) или прежний список из чтения спенда (rpa). */
+window.AMAP_CAMPAIGN_TABLE = {{ (campaign_table_api() if campaign_table_api is defined else false) | tojson }};
 var AMAP_OPEN_KEY = 'acl.amap.open';
 
 function amapOpenList() {
@@ -8693,6 +8698,9 @@ function amapTreeNotRead(row, s, problem) {
 }
 
 function amapPaintTree(row, s) {
+  /* ACL-1800: под `ACL_FB_BACKEND=api` строка аккаунта не рисует прежний список «in the account» —
+     вместо него таблица кампаний страны (`_campaign_table.html`). Под rpa (по умолчанию) всё как было. */
+  if (window.AMAP_CAMPAIGN_TABLE) return;
   /* Прежний блок снимается всегда: устаревшее состояние живого аккаунта —
      худшее, что здесь можно оставить на экране. Раскрытость при этом
      запоминается: перечитал человек аккаунт с открытым деревом — оно и
@@ -9154,6 +9162,101 @@ document.addEventListener('click', function (e) {
   if (btn) { amapTurnOffAsk(btn); return; }
   amapTurnOffDisarm();
 });
+
+/* ── Кампании страны: одна командная таблица под списком аккаунтов (ACL-1800) ─────
+   Компонент `_campaign_table.html` (`hcMount`) стоит в блоке каждой страны — и в карте
+   аккаунтов на Home, и на странице страны. Это та же таблица Campaign > Ad set > Ad с
+   командами и подтверждением; аккаунты страны стоят в ней полосами, у каждой своя
+   кнопка «Read campaigns». Прежний список «in the account», который рисовался из
+   чтения спенда, убран: отдельной секции кампаний на Home тоже нет.
+
+   Таблица создаётся при первом показе блока страны и читает только локальный снимок
+   (GET своего сервера). Мета читается только нажатием «Read campaigns» — в строке
+   аккаунта внутри таблицы или в заголовке страны («Read campaigns in <страна>»). */
+/* Вкладки над таблицей: Campaigns (эта) и разделы той же страны, которые есть на странице
+   (панель `view-country-<slug>-<раздел>`); нет раздела — вкладка выключена и говорит почему.
+   Слаг считается так же, как `anchor_slug` на сервере. */
+function amapCampaignSlug(country) {
+  return String(country || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
+}
+function amapCampaignTabs(host) {
+  var nav = host.querySelector('[data-hc-tabs]');
+  if (!nav) return;
+  var slug = amapCampaignSlug(host.dataset.country);
+  var tabs = [['Campaigns', 'manage'], ['Winning setups', 'assets'], ['Landings', 'landings'],
+              ['Targets', 'targeting'], ['Creatives', 'creatives'], ['Buyers', '']];
+  nav.innerHTML = '';
+  tabs.forEach(function (t) {
+    var has = t[1] && document.getElementById('view-country-' + slug + '-' + t[1]);
+    var el = document.createElement(has ? 'a' : 'span');
+    el.className = 'hc-tab' + (has ? '' : ' hc-tab-off');
+    el.textContent = t[0];
+    if (has) { el.href = '#country-' + slug + '-' + t[1]; if (t[1] === 'manage') el.setAttribute('aria-current', 'page'); }
+    else el.title = t[1] ? 'This section has no data for ' + host.dataset.country + ' on this page' : 'Buyer comparison is not part of this build';
+    nav.appendChild(el);
+  });
+}
+
+function amapCampaignMount(host) {
+  if (host._hc) return host._hc;
+  amapCampaignTabs(host);
+  var mount = host.querySelector('[data-hc-mount]');
+  var tpl = document.getElementById('hc-scoped-tpl');
+  if (!mount || !tpl || typeof window.hcMount !== 'function') {
+    if (mount) mount.textContent = 'The campaign table is not available on this page. Reload the dashboard.';
+    return null;
+  }
+  mount.appendChild(tpl.content.cloneNode(true));
+  var per = typeof amapPeriod === 'function' ? amapPeriod() : {};
+  host.dataset.periodFrom = per.from || '';
+  host.dataset.periodTo = per.to || '';
+  host.dataset.periodSpan = per.span || '';
+  var seen = {}, accounts = [];
+  (host.parentNode || document).querySelectorAll('table.amap-grid td.amap-live[data-account]').forEach(function (c) {
+    var a = c.dataset.account;
+    if (a && !seen[a]) { seen[a] = true; accounts.push(a); }
+  });
+  host._hc = window.hcMount(host, {scoped: true, seed: [{country: host.dataset.country || '', accounts: accounts}]});
+  host._hc.ready = host._hc.init();
+  return host._hc;
+}
+
+/* Таблицы страны, которые сейчас видны, а ещё не созданы, — создать; созданным — поправить ширины. */
+function amapCampaignMountVisible() {
+  document.querySelectorAll('.amap-campaigns').forEach(function (host) {
+    if (host.offsetParent === null) return;           // свёрнутый блок или скрытая вкладка: читать пока нечем
+    if (!host._hc) amapCampaignMount(host);
+    else if (host._hc.syncTop) host._hc.syncTop();
+  });
+}
+if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapCampaignMountVisible);
+  else amapCampaignMountVisible();
+  /* `toggle` не всплывает — слушаем на погружении (так же, как раньше слушали ширины дерева). */
+  document.addEventListener('toggle', function () { setTimeout(amapCampaignMountVisible, 0); }, true);
+  document.addEventListener('acl:viewchange', function () { setTimeout(amapCampaignMountVisible, 0); });
+}
+
+/* «Read campaigns in <Country>»: аккаунты страны по очереди, одним нажатием. */
+function amapReadCampaigns(btn) {
+  var per = typeof amapPeriod === 'function' ? amapPeriod() : {};
+  if (!per.from || per.span === 'all') {
+    btn.title = 'Select dates to read campaigns; Maximum is not supported';
+    return;
+  }
+  var scope = btn.closest('details.amap-country') || btn.closest('.amap');
+  var host = scope && scope.querySelector('.amap-campaigns');
+  var inst = host && amapCampaignMount(host);
+  if (!inst || (typeof window.hcReadBusy === 'function' && window.hcReadBusy())) return;
+  var label = btn.textContent;
+  btn.disabled = true;
+  Promise.resolve(inst.ready).then(function () {
+    return inst.readAll(function (n, of) { btn.textContent = 'Reading campaigns ' + n + ' of ' + of + '…'; });
+  }).then(function () {}, function () {}).then(function () {
+    btn.textContent = label;
+    btn.disabled = false;
+  });
+}
 
 function amapPollSpend(account, cell, btn, tries, per, pressed) {
   /* `pressed` — человек нажал кнопку в этот раз. Без него дочитанный спенд
