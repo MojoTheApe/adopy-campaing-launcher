@@ -161,7 +161,8 @@ def test_switch_flow_end_to_end_row_comes_from_the_readback(open_page, world):
     assert world.meta.posts == []
     page.click('dialog.acm-confirm [data-acm="confirm"]')
     page.wait_for_selector(f'.hc-switch[data-object-id="{CAMP_A}"][aria-checked="true"]', timeout=15000)
-    assert "Confirmed" in page.inner_text(f'tr[data-key="campaign:{CAMP_A}"]')
+    assert "Confirmed" in page.inner_text(f'tr[data-msg="row:campaign:{CAMP_A}"]')           # итог — строкой под строкой, не в ячейке Status
+    assert "Confirmed" not in page.inner_text(f'tr[data-key="campaign:{CAMP_A}"] td.p2')
     assert world.meta.posts == [(f"/{CAMP_A}", {"status": "ACTIVE"})]
     assert world.meta.objs[CAMP_A]["status"] == "ACTIVE"
     shot(page, "02-switch-confirmed")
