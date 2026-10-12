@@ -7250,20 +7250,6 @@
         "started_at": "2026-10-12T12:56:46+00:00",
         "from_status": "status:idea"
       },
-      "827": {
-        "actor": "Worker-S1827A",
-        "session": "run_s1827a_1012",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1827-design-parity-shell",
-        "worktree": "C:\\acl-1827-shell",
-        "id": "754e17f1b92c41b8affb4bf77f360c1c",
-        "issue": 827,
-        "state": "handoff",
-        "started_at": "2026-10-12T12:58:19+00:00",
-        "from_status": "status:idea",
-        "pr": 829,
-        "report": "## Execution report: ACL-1827\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/829 (head 03b9d10fde052b20d236c75d384ede3e7aa38ffb), stacked on 1799 + 1797 + 1778.\n\nBuilt: Home six-tile You vs Others row above the Account map (ACL-1799 computations, real data only, labelled insufficient cohorts); sidebar without emoji, \"Target library\" label (route/ids unchanged), you/all FTD counters, Find country, asset sub-rows, all old links kept; Robot health popover from the header (page kept for direct links, new read-only /robot-health/summary).\n\nTests: 24 parity + 8 browser new; 158 passed across affected suites. Screenshot pairs in outbox screens/ (home-kpi__, sidebar__, robot-health__popover__; light and dark).\n\nDeferred: Workbench's own tile row stays at four tiles; Home tab strip/campaign table placement is a separate decision."
-      },
       "776": {
         "actor": "Worker-S1776B",
         "session": "run_s1776b_1012",
@@ -11206,9 +11192,25 @@
             "session": "run_s1827a_1012"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1827A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1827A",
+          "session": "run_s1827a_1012",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1827-design-parity-shell",
+          "worktree": "C:\\acl-1827-shell",
+          "id": "754e17f1b92c41b8affb4bf77f360c1c",
+          "issue": 827,
+          "state": "handoff",
+          "started_at": "2026-10-12T12:58:19+00:00",
+          "from_status": "status:idea",
+          "pr": 829,
+          "report": "## Execution report: ACL-1827\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/829 (head 03b9d10fde052b20d236c75d384ede3e7aa38ffb), stacked on 1799 + 1797 + 1778.\n\nBuilt: Home six-tile You vs Others row above the Account map (ACL-1799 computations, real data only, labelled insufficient cohorts); sidebar without emoji, \"Target library\" label (route/ids unchanged), you/all FTD counters, Find country, asset sub-rows, all old links kept; Robot health popover from the header (page kept for direct links, new read-only /robot-health/summary).\n\nTests: 24 parity + 8 browser new; 158 passed across affected suites. Screenshot pairs in outbox screens/ (home-kpi__, sidebar__, robot-health__popover__; light and dark).\n\nDeferred: Workbench's own tile row stays at four tiles; Home tab strip/campaign table placement is a separate decision."
+        },
+        "pr": 829,
+        "queued_at": "2026-10-12T13:27:02+00:00"
       }
     },
     "actors": {
@@ -14580,7 +14582,8 @@
       819,
       822,
       824,
-      826
+      826,
+      827
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21853,6 +21856,13 @@
         "issue": 826,
         "pr": 828,
         "actor": "Worker-S1826A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-12T13:27:02+00:00",
+        "issue": 827,
+        "pr": 829,
+        "actor": "Worker-S1827A"
       }
     ],
     "policy": {
