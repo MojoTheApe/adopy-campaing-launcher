@@ -584,6 +584,41 @@ def page_context(output_dir: Path | str, window: int = DEFAULT_WINDOW,
     return ctx
 
 
+def popover_context(output_dir: Path | str, window: int = DEFAULT_WINDOW,
+                    current_build: tuple[str, str] | None = None,
+                    logs_dir: Path | str | None = None) -> dict:
+    """Короткая сводка для всплывающей панели в шапке (ACL-1827).
+
+    По одной строке на аккаунт: сколько из последних N прогонов прошли без
+    провалов и чем кончился самый свежий. Читает ту же телеметрию, что и
+    страница /robot-health, и ничего не запускает.
+    """
+    window = min(max(int(window or DEFAULT_WINDOW), 1), 50)
+    ctx: dict = {"window": window, "accounts": [], "error": "", "n_runs": 0}
+    runs = [r for r in _sources(output_dir, current_build, logs_dir) if r.outcomes]
+    if not runs:
+        ctx["error"] = "No robot runs on this machine yet."
+        return ctx
+    ctx["n_runs"] = len(runs)
+    by_account: dict[str, list[Run]] = defaultdict(list)
+    for run in runs:
+        by_account[run.label].append(run)
+    rows = []
+    for label, seq in by_account.items():
+        recent = seq[-window:]
+        last = recent[-1]
+        clean = sum(1 for r in recent if not r.failed)
+        rows.append({
+            "account": label, "runs": len(recent), "clean": clean,
+            "last_ok": not last.failed, "last_run": last.run_id, "last_when": last.ended or last.started,
+            "last_failed_steps": list(last.failed)[:3],
+            "last_abort": last.abort_label or "",
+        })
+    rows.sort(key=lambda r: (r["last_ok"], r["account"]))   # сначала те, у кого последний прогон упал
+    ctx["accounts"] = rows
+    return ctx
+
+
 def run_context(output_dir: Path | str, run_id: str, window: int = DEFAULT_WINDOW,
                 current_build: tuple[str, str] | None = None,
                 logs_dir: Path | str | None = None) -> dict:

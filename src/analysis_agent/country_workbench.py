@@ -68,6 +68,31 @@ def _sum(frame: pd.DataFrame) -> Dict[str, float]:
     }
 
 
+def compare_cohorts(you_k: Dict[str, Any], oth_k: Dict[str, Any], status: str) -> Dict[str, Any]:
+    """CPL / CPA / CR двух когорт: значения, достаточность данных, разница и вердикт.
+
+    Вынесено из `you_vs_others`, чтобы Home считал сравнение ровно так же, как
+    Workbench страны (ACL-1827): одна формула, а не её копия.
+    """
+    metrics: Dict[str, Any] = {}
+    for name in ("cpl", "cpa", "cr"):
+        ys, os_ = metric_state(name, you_k), metric_state(name, oth_k)
+        row: Dict[str, Any] = {
+            "you": you_k[name], "you_state": ys,
+            "others": oth_k[name], "others_state": os_,
+            "delta_pct": None, "verdict": None,
+        }
+        if status == "ok" and ys == "ok" and os_ == "ok" and oth_k[name]:
+            delta = (you_k[name] - oth_k[name]) / oth_k[name] * 100.0
+            row["delta_pct"] = delta
+            better = delta < 0 if _LOWER_IS_BETTER[name] else delta > 0
+            row["verdict"] = "better" if (better and abs(delta) >= 0.05) else (
+                "worse" if abs(delta) >= 0.05 else "same")
+        metrics[name] = row
+
+    return metrics
+
+
 def you_vs_others(cube: pd.DataFrame, my_cm: str) -> Dict[str, Any]:
     """Сравнение «Вы / Другие» на срезе `cube` (колонки CM, Spend, Leads, FTDs)."""
     me = (my_cm or "").strip().casefold()
@@ -90,21 +115,7 @@ def you_vs_others(cube: pd.DataFrame, my_cm: str) -> Dict[str, Any]:
     else:
         status = "ok"
 
-    metrics: Dict[str, Any] = {}
-    for name in ("cpl", "cpa", "cr"):
-        ys, os_ = metric_state(name, you_k), metric_state(name, oth_k)
-        row: Dict[str, Any] = {
-            "you": you_k[name], "you_state": ys,
-            "others": oth_k[name], "others_state": os_,
-            "delta_pct": None, "verdict": None,
-        }
-        if status == "ok" and ys == "ok" and os_ == "ok" and oth_k[name]:
-            delta = (you_k[name] - oth_k[name]) / oth_k[name] * 100.0
-            row["delta_pct"] = delta
-            better = delta < 0 if _LOWER_IS_BETTER[name] else delta > 0
-            row["verdict"] = "better" if (better and abs(delta) >= 0.05) else (
-                "worse" if abs(delta) >= 0.05 else "same")
-        metrics[name] = row
+    metrics = compare_cohorts(you_k, oth_k, status)
 
     return {
         "status": status,
@@ -299,3 +310,137 @@ def build_country_workbench(df: pd.DataFrame, country: str, my_cm: str) -> Dict[
         "assets_total": int(len(by_asset)),
         "slices": {a["name"]: build_slice(cube, country, a["name"], my_cm) for a in assets},
     }
+
+
+# ── ACL-1827: Home — «Вы / Другие» по всем странам сразу ───────────────────
+
+def country_ftd_counts(workbench: Optional[Dict[str, Any]]) -> Optional[Dict[str, int]]:
+    """FTD страны для бокового списка: {'you': ..., 'all': ...} или None, если Workbench нет.
+
+    «Все» — вся страна, включая строки без CM; «вы» — только выбранный байер.
+    Данных нет — None, а не 0/0: ноль выглядел бы как честный результат.
+    """
+    sl = ((workbench or {}).get("slices") or {}).get("")
+    if not sl:
+        return None
+    return {"you": int(sl["compare"]["you"]["ftds"]), "all": int(sl["totals"]["ftds"])}
+
+
+def home_you_vs_others(countries: List[Dict[str, Any]], my_cm: str) -> Dict[str, Any]:
+    """Сравнение «Вы / Другие» по всем странам отчёта (формат как у `you_vs_others`).
+
+    Суммы берутся из уже посчитанных срезов «все ассеты» каждой страны, поэтому
+    период один и тот же, пир-значения взвешенные (сумма расходов / сумма FTD),
+    а выбранный байер в «Других» не участвует. Страна без Workbench в сравнение
+    не попадает — об этом говорит `countries_used` из `countries_total`.
+    """
+    acc = {"you": [0.0, 0.0, 0.0], "others": [0.0, 0.0, 0.0], "unat": [0.0, 0.0, 0.0]}
+    used = 0
+    for c in countries or []:
+        sl = ((c.get("workbench") or {}).get("slices") or {}).get("")
+        if not sl:
+            continue
+        used += 1
+        cmp_ = sl["compare"]
+        for key, src in (("you", cmp_["you"]), ("others", cmp_["others"]), ("unat", cmp_["unattributed"])):
+            acc[key][0] += float(src.get("spend") or 0)
+            acc[key][1] += float(src.get("leads") or 0)
+            acc[key][2] += float(src.get("ftds") or 0)
+    you_k = weighted_kpis(*acc["you"])
+    oth_k = weighted_kpis(*acc["others"])
+    me = (my_cm or "").strip()
+    if not me:
+        status = "no_buyer"
+    elif oth_k["spend"] <= 0 and oth_k["leads"] == 0 and oth_k["ftds"] == 0:
+        status = "no_peers"
+    elif you_k["spend"] <= 0 and you_k["leads"] == 0 and you_k["ftds"] == 0:
+        status = "no_you"
+    else:
+        status = "ok"
+    # Число байеров по странам складывать нельзя (один байер в двух странах
+    # посчитался бы дважды) — пороги проверяют лиды и FTD, а не людей.
+    you_k["buyers"] = oth_k["buyers"] = None
+    return {
+        "status": status,
+        "you": you_k,
+        "others": oth_k,
+        "unattributed": weighted_kpis(*acc["unat"]),
+        "metrics": compare_cohorts(you_k, oth_k, status),
+        "thresholds": {"min_leads": MIN_LEADS, "min_ftds": MIN_FTDS},
+        "countries_used": used,
+        "countries_total": len(countries or []),
+    }
+
+
+def _money(v: Optional[float]) -> str:
+    return "—" if v is None else "$" + format(int(-(-v // 1)), ",")
+
+
+def _pct(v: Optional[float]) -> str:
+    return "—" if v is None else f"{v:.1f}%"
+
+
+def home_kpi_tiles(cmp_: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Шесть плиток Home: FTDs, CPA, Leads, CPL, Spend, Lead→FTD.
+
+    Каждая плитка — готовые строки для шаблона: «вы», «другие», пояснение и
+    класс разницы. Недостаточная когорта подписана, а не показана как нулевая;
+    разница считается только когда обе стороны достаточны (то же правило, что
+    у Workbench). Объёмные плитки (FTDs, Leads, Spend) не сравниваются: у
+    байеров разный размер, «лучше/хуже» по ним ничего не значит.
+    """
+    th = cmp_["thresholds"]
+    you, oth, st = cmp_["you"], cmp_["others"], cmp_["status"]
+    metrics = cmp_["metrics"]
+
+    def note(name: str, state: str) -> str:
+        if state == "insufficient":
+            return f"insufficient (<{th['min_ftds']} FTDs)" if name == "cpa" else f"insufficient (<{th['min_leads']} leads)"
+        return ""
+
+    def val(name: str, m: Dict[str, Any], side: str, k: Dict[str, Any]) -> str:
+        state = m[f"{side}_state"]
+        if state == "unavailable":
+            return "— · 0 FTDs" if (name == "cpa" and k["spend"] > 0 and not k["ftds"]) else "—"
+        return _pct(m[side]) if name == "cr" else _money(m[side])
+
+    def ratio(name: str, label: str, caption: str) -> Dict[str, Any]:
+        m = metrics[name]
+        yn, on = note(name, m["you_state"]), note(name, m["others_state"])
+        cls = ""
+        if st == "no_buyer":
+            text = "Pick a buyer in the header to compare"
+        elif st == "no_peers":
+            text = "No comparable peer data"
+        elif st == "no_you":
+            text = "No results of yours in this period"
+        elif m["delta_pct"] is not None:
+            sign = "+" if m["delta_pct"] > 0 else ""
+            text = f"{sign}{m['delta_pct']:.1f}% vs others"
+            if m["verdict"] in ("better", "worse"):
+                text += f" · {m['verdict']}"
+                cls = "hk-good" if m["verdict"] == "better" else "hk-bad"
+        else:
+            text = "Not compared: " + (yn or on or "no value on one side")
+        return {"key": name, "label": label, "you": val(name, m, "you", you), "you_note": yn,
+                "others": val(name, m, "others", oth), "others_note": on, "caption": text, "cls": cls}
+
+    def volume(key: str, label: str, fmt) -> Dict[str, Any]:
+        if st == "no_buyer":
+            text = "Pick a buyer in the header to compare"
+        elif st == "no_peers":
+            text = "No comparable peer data"
+        else:
+            text = "Others exclude your results"
+        return {"key": key, "label": label, "you": fmt(you[key]), "you_note": "",
+                "others": fmt(oth[key]), "others_note": "", "caption": text, "cls": ""}
+
+    n = lambda v: format(int(v), ",")  # noqa: E731
+    return [
+        volume("ftds", "FTDs", n),
+        ratio("cpa", "CPA", ""),
+        volume("leads", "Leads", n),
+        ratio("cpl", "CPL", ""),
+        volume("spend", "Spend", _money),
+        ratio("cr", "Lead → FTD", ""),
+    ]
