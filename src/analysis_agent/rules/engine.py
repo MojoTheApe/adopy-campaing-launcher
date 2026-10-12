@@ -148,12 +148,13 @@ class RulesEngine:
             "result": i["result"]} for i in items])
 
         known = {a.get("dedup_key") for a in actions if a.get("dedup_key")}
+        pending = [r for r in self.store.latest_actions().values() if r.get("state") == "proposed"]
         written: list[dict] = []
         records: list[dict] = []
         for i in items:
             rec = self._journal(job, i, arbitration)
             records.append(rec)
-            written += self._suggest(i, arbitration, rec, known)
+            written += self._suggest(i, arbitration, rec, known, pending)
         for f in failed:
             records.append(self.store.append_evaluation({
                 "trigger": job["trigger"], "rule_id": f["rule"]["id"], "version": f["version"]["version"],
@@ -183,7 +184,8 @@ class RulesEngine:
                   "source": (evidence.get("target") or {}).get("source")},
             "objects": objects})
 
-    def _suggest(self, item: dict, arbitration: dict, evaluation: dict, known: set) -> list[dict]:
+    def _suggest(self, item: dict, arbitration: dict, evaluation: dict, known: set,
+                 pending: list[dict]) -> list[dict]:
         """Предложения для правил Suggest/Automatic; Observe не предлагает ничего."""
         rule, version = item["rule"], item["version"]
         if rule.get("mode") not in ("suggest", "automatic"):
@@ -197,11 +199,21 @@ class RulesEngine:
                 continue
             known.add(key)
             action = p["action"]
+            obj = next((o for o in item["result"]["objects"] if o["key"] == p["key"]), {})
+            # Новые доказательства по тому же правилу, объекту и виду вытесняют старые
+            # ожидающие предложения: строки остаются в журнале, но уже `superseded`.
+            for old in list(pending):
+                if (old.get("rule_id") == rule["id"] and old.get("id") == action.get("id")
+                        and old.get("kind") == p["kind"] and old.get("dedup_key") != key):
+                    self.store.append_action({**old, "state": "superseded", "superseded_by": key})
+                    pending.remove(old)
             out.append(self.store.append_action({
                 "state": "proposed", "evaluation_id": evaluation.get("evaluation_id"),
                 "rule_id": rule["id"], "version": version["version"], "account": action.get("account"),
                 "level": action.get("level"), "id": action.get("id"), "kind": p["kind"],
                 "before": action.get("before"), "requested": action.get("requested"),
-                "reason": action.get("reason") or "", "dedup_key": key, "fingerprint": p["fingerprint"],
+                "reason": action.get("reason") or "", "dedup_key": key,
+                "automatic_eligible": bool(obj.get("automatic_eligible")),
+                "freshness": list(obj.get("freshness") or []), "fingerprint": p["fingerprint"],
                 "actor": "rules-engine"}))
         return out

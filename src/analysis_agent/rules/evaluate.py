@@ -195,7 +195,11 @@ def _needs_target(version: dict) -> bool:
 # ───────────────────────── вспомогательное ─────────────────────────
 
 def _now(value: Any) -> datetime:
-    return ev._utc(value) or datetime.now(timezone.utc)  # noqa: SLF001
+    """Момент оценки обязателен: скрытых часов у чистой функции нет."""
+    moment = ev._utc(value)  # noqa: SLF001
+    if moment is None:
+        raise ValueError("evaluate() needs an explicit `now`")
+    return moment
 
 
 def _fingerprint(strategy: int, key: str, observed: dict, windows: Any, blocks: Any, compare: Any,
@@ -257,8 +261,9 @@ def _evaluate_object(version: dict, evidence: dict, key: str, now: datetime, mod
     # 1. что не оценивается вовсе
     if unsupported:
         add(UNSUPPORTED_ACTION, "strategy 5 or an action the rules cannot propose in v1")
-    if (evidence.get("holds") or {}).get(key):
-        add(MANUAL_HOLD, "a person put a hold on this object")
+    # Ручное удержание не мешает считать условия: проигрывающий объект остаётся проигрывающим
+    # и гасит scale, даже если пауза ему сейчас не разрешена.
+    hold = bool((evidence.get("holds") or {}).get(key))
 
     # 2. идентичность: «нет строк» и «неоднозначно» - разные причины
     verdict_id = (ident or {}).get("verdict")
@@ -287,11 +292,15 @@ def _evaluate_object(version: dict, evidence: dict, key: str, now: datetime, mod
                     if _label(r) in (STALE_BI, NOT_RECONCILED, ev.STALE_SNAPSHOT, ev.DATA_MISMATCH)]
     out["freshness"] = fresh_labels
     out["automatic_eligible"] = bool(auto.get("allowed")) and not unsupported
-    if mode == "automatic":
-        for r in fresh_labels:
-            add(r)
+    # Automatic не пропускает то, что evidence не признал годным (слабая идентичность,
+    # свежесть, сверка): блокеры берутся из его причин.
+    auto_blockers: list[str] = []
+    if mode == "automatic" and not out["automatic_eligible"]:
+        auto_blockers = [_label(r) for r in (auto.get("reasons") or [])] or [AMBIGUOUS_MAPPING]
 
     if reasons:
+        if hold:
+            add(MANUAL_HOLD, "a person put a hold on this object")
         out["fingerprint"] = _fingerprint(strategy, key, out["observed"], windows, blocks, compare,
                                           verdict_id or "", target, None, build.get("bi_through", ""))
         return out
@@ -317,6 +326,8 @@ def _evaluate_object(version: dict, evidence: dict, key: str, now: datetime, mod
 
     # 6. совпало: теперь «разрешено ли» (пауза родителя, cooldown, бюджет)
     action = _build_action(version, proposed, key, info, now, add)
+    if hold:
+        add(MANUAL_HOLD, "a person put a hold on this object")
     if action is None and not reasons:
         # нечего делать: уже выключен или упёрлись в потолок
         out["verdict"] = NOT_MATCHED
@@ -325,6 +336,8 @@ def _evaluate_object(version: dict, evidence: dict, key: str, now: datetime, mod
         return out
     if action is not None and action["kind"] in ("pause", "budget_up"):
         _post_blockers(version, evidence, key, info, now, add)
+        for r in auto_blockers:
+            add(r, "Automatic is not allowed for this object")
     out["action"] = action
     out["fingerprint"] = _fingerprint(strategy, key, out["observed"], windows, blocks, compare,
                                       verdict_id or "", target, action, build.get("bi_through", ""))
@@ -459,7 +472,7 @@ def evaluate(rule_version: dict, evidence: dict, now: Any, *, mode: str = "sugge
     один объект; `blocked`, если все заблокированы (или правило не поддерживается);
     иначе `not_matched`.
     """
-    moment = _now(now)
+    moment = _now(now)  # ValueError без явного `now`
     strategy = rule_version.get("strategy")
     kind = (rule_version.get("action") or {}).get("kind")
     unsupported = strategy in model.UNSUPPORTED_STRATEGIES or kind not in _SUPPORTED_ACTIONS

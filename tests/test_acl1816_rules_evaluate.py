@@ -548,21 +548,142 @@ def test_no_goal_means_no_target_end_to_end(st):
     assert o["verdict"] == "blocked" and E.NO_TARGET in o["reasons"]
 
 
-def test_pause_beats_scale_in_one_run(st):
+# Кампания с датой в имени (возраст известен) и двумя ad set: burn (40/день, 0 FTD) и fine (20/день, 5 FTD)
+LCAMP = "BR_1121_01.10 camp"
+LBURN, LFINE = "BR_1121_01.10 burn", "BR_1121_01.10 fine"
+LDF = book(days(LBURN, 40.0, 0, first="2026-10-01") + days(LFINE, 20.0, 5, first="2026-10-01"))
+LSNAP = [(1, LCAMP, [(11, LBURN), (12, LFINE)])]
+
+
+def two_rules(st):
     pause_rule = make_rule(st)  # S1: пауза ad set 11
     scale_rule = make_rule(st, preset="scale_proven", objects=[{"account": "Acc", "level": "campaign", "id": "1"}])
-    # S3: два зрелых блока по 3 дня с достаточными FTD и дешёвым CPA у кампании
-    rows = days(SET_BURN, 100.0, 0, first="2026-10-01") + days(SET_OK, 20.0, 5, first="2026-10-01")
-    eng = make_engine(st, df=book(rows))
+    return pause_rule, scale_rule
+
+
+def run_lineage(st, **kw):
+    eng = engine_mod.RulesEngine(st, make_sources(df=LDF, snap=make_snapshot(LSNAP), **kw), now=lambda: NOW)
     out = eng.run_job({"trigger": "manual", "scope": ""})
-    by_rule = {e["rule_id"]: e for e in out["evaluations"]}
-    camp = {o["key"]: o for o in by_rule[scale_rule["id"]]["objects"]}["campaign:1"]
-    # кампания покрыта двумя ad set (burn без FTD и fine); S1 совпал на burn -> scale обязан быть погашен
-    assert by_rule[pause_rule["id"]]["objects"][0]["verdict"] == "matched"
+    return out, {e["rule_id"]: {o["key"]: o for o in e["objects"]} for e in out["evaluations"]}
+
+
+def test_pause_beats_scale_in_one_run(st):
+    pause_rule, scale_rule = two_rules(st)
+    out, objs = run_lineage(st)
+    assert objs[pause_rule["id"]]["adset:11"]["verdict"] == "matched"
+    camp = objs[scale_rule["id"]]["campaign:1"]
+    assert camp["verdict"] == "matched" and camp["action"]["kind"] == "budget_up"   # без паузы scale прошёл бы
+    assert camp["arbiter"]["status"] == arbiter.SUPPRESSED
     kinds = {(s["id"], s["kind"]) for s in out["suggestions"]}
-    assert ("1", "budget_up") not in kinds and ("11", "pause") in kinds
-    if camp["verdict"] == "matched":
-        assert camp["arbiter"]["status"] == arbiter.SUPPRESSED
+    assert kinds == {("11", "pause")}
+
+
+def test_blocked_pause_by_manual_hold_still_kills_the_scale(st):
+    pause_rule, scale_rule = two_rules(st)
+    st.add_hold("11", "buyer is testing it by hand")
+    out, objs = run_lineage(st)
+    burn = objs[pause_rule["id"]]["adset:11"]
+    assert burn["verdict"] == "blocked" and burn["reasons"] == [E.MANUAL_HOLD] and burn["conditions_matched"] is True
+    assert burn["action"] is None
+    camp = objs[scale_rule["id"]]["campaign:1"]
+    assert camp["arbiter"]["status"] == arbiter.SUPPRESSED
+    assert out["suggestions"] == [] and out["arbitration"]["accepted"] == []   # ни паузы, ни scale
+    assert out["arbitration"]["blocked_killers"][0]["key"] == "adset:11"
+
+
+def test_blocked_pause_by_cooldown_still_kills_the_scale(st):
+    pause_rule, scale_rule = two_rules(st)
+    st.append_action({"id": "11", "state": "verified", "kind": "pause", "at": (NOW - timedelta(hours=10)).isoformat()})
+    out, objs = run_lineage(st)
+    burn = objs[pause_rule["id"]]["adset:11"]
+    assert burn["verdict"] == "blocked" and E.COOLDOWN in burn["reasons"]
+    assert objs[scale_rule["id"]]["campaign:1"]["arbiter"]["status"] == arbiter.SUPPRESSED
+    assert out["suggestions"] == []
+
+
+def test_the_lineage_wiring_in_gather_is_what_suppresses(st):
+    """Если gather не заполняет предков/потомков, scale уцелеет - а тест должен это ловить."""
+    _pause, scale_rule = two_rules(st)
+    _out, objs = run_lineage(st)
+    info = gather._object_info(make_snapshot(LSNAP), "adset", "11", "", date(2026, 10, 12))  # noqa: SLF001
+    assert info["ancestors"] == ["campaign:1"]
+    info = gather._object_info(make_snapshot(LSNAP), "campaign", "1", "", date(2026, 10, 12))  # noqa: SLF001
+    assert info["descendants"] == ["adset:11", "adset:12"]
+
+
+def test_blocked_pause_kills_scale_unit_and_never_becomes_a_proposal():
+    pause = item("r_stop", 1, "adset:11", "pause", strategy=1, lineage=["adset:11", "campaign:1"])
+    obj = pause["result"]["objects"][0]
+    obj.update(verdict="blocked", action=None, conditions_matched=True, reasons=["Manual hold"],
+               blocked_action={"kind": "pause"})
+    scale_it = item("r_scale", 1, "campaign:1", "budget_up", strategy=3, lineage=["campaign:1", "adset:11"])
+    out = arbiter.arbitrate([pause, scale_it])
+    assert statuses(out) == {("r_scale", "campaign:1", "budget_up"): arbiter.SUPPRESSED}
+    assert out["accepted"] == []
+    # блок без совпавших условий гасить не должен
+    obj["conditions_matched"] = False
+    assert statuses(arbiter.arbitrate([pause, scale_it]))[("r_scale", "campaign:1", "budget_up")] == arbiter.PROPOSED
+
+
+def test_s1_alert_also_suppresses_scale_on_object_children_and_ancestors():
+    alert = item("r_stop", 1, "adset:11", "alert", strategy=1, lineage=["adset:11", "campaign:1"])
+    scale_it = item("r_scale", 1, "campaign:1", "budget_up", strategy=3, lineage=["campaign:1", "adset:11"])
+    assert statuses(arbiter.arbitrate([alert, scale_it]))[("r_scale", "campaign:1", "budget_up")] == arbiter.SUPPRESSED
+    # алерт другой стратегии (S4) scale не гасит
+    drift = item("r_d", 1, "adset:11", "alert", strategy=4, lineage=["adset:11", "campaign:1"])
+    assert statuses(arbiter.arbitrate([drift, scale_it]))[("r_scale", "campaign:1", "budget_up")] == arbiter.PROPOSED
+
+
+@pytest.mark.parametrize("verdict,reason", [(ev.COPY_SUFFIX, E.AMBIGUOUS_MAPPING), (ev.ALIAS_HEURISTIC, E.AMBIGUOUS_MAPPING)])
+def test_automatic_blocks_what_evidence_does_not_allow(verdict, reason):
+    e = evid(verdict=verdict, auto={"allowed": False, "reasons": [reason]})
+    soft = one(E.evaluate(stop_loss(), e, NOW, mode="suggest"))
+    assert soft["verdict"] == E.MATCHED and not soft["automatic_eligible"]
+    hard = one(E.evaluate(stop_loss(), e, NOW, mode="automatic"))
+    assert hard["verdict"] == E.BLOCKED and hard["reasons"] == [reason] and hard["action"] is None
+    assert hard["blocked_action"]["kind"] == "pause"
+    # без причин от evidence всё равно блок
+    bare = one(E.evaluate(stop_loss(), evid(auto={"allowed": False, "reasons": []}), NOW, mode="automatic"))
+    assert bare["verdict"] == E.BLOCKED and bare["reasons"] == [E.AMBIGUOUS_MAPPING]
+    ok = one(E.evaluate(stop_loss(), evid(), NOW, mode="automatic"))
+    assert ok["verdict"] == E.MATCHED and ok["automatic_eligible"]
+
+
+def test_proposed_rows_carry_automatic_eligibility_and_freshness(st):
+    rule = make_rule(st, mode="suggest")
+    out = make_engine(st).run_job({"trigger": "manual", "scope": ""})
+    row = out["suggestions"][0]
+    assert row["automatic_eligible"] is False and isinstance(row["freshness"], list)
+    assert E.NOT_RECONCILED in row["freshness"]  # снимок не сверяется с окном
+    assert rule["id"] == row["rule_id"]
+
+
+def test_new_evidence_supersedes_older_pending_proposals(st):
+    make_rule(st)
+    make_engine(st).run_job({"trigger": "manual", "scope": ""})
+    more = book(days(SET_BURN, 120.0, 0) + days(SET_OK, 100.0, 2))
+    out = make_engine(st, df=more).run_job({"trigger": "manual", "scope": ""})
+    new = out["suggestions"][0]
+    latest = st.latest_actions()
+    states = sorted(r["state"] for r in latest.values())
+    assert states == ["proposed", "superseded"]
+    old = next(r for r in latest.values() if r["state"] == "superseded")
+    assert old["superseded_by"] == new["dedup_key"] and old["action_id"] != new["action_id"]
+    assert len([a for a in st.actions()]) == 3   # старая строка осталась в журнале
+
+
+def test_evaluate_requires_an_explicit_now():
+    with pytest.raises(ValueError):
+        E.evaluate(stop_loss(), evid(), None)
+
+
+def test_swallowed_listener_errors_are_logged(monkeypatch, caplog):
+    from src.web import cache
+
+    monkeypatch.setattr(cache, "_BUILD_LISTENERS", [lambda k: 1 / 0])
+    with caplog.at_level("ERROR"):
+        cache._notify_new_workbook("k")  # noqa: SLF001
+    assert "Workbook listener failed" in caplog.text
 
 
 def test_gather_helpers():

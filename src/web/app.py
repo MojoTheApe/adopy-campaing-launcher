@@ -16,6 +16,7 @@ import contextvars
 import functools
 import ipaddress
 import json
+import logging
 import math
 import os
 import re as _re
@@ -1710,7 +1711,7 @@ async def _warm_on_startup() -> None:
         if campaign_commands.api_enabled():
             rules_runtime.install()
     except Exception:  # noqa: BLE001 - Rules не должны мешать старту дешборда
-        pass
+        logging.getLogger(__name__).exception("Rules could not subscribe to triggers")
 
 
 @app.get("/acl/update/check")

@@ -7,9 +7,12 @@
 
 * приоритет: stop-loss (S1) -> quality (S2) -> deterioration (S4) -> pacing (S5) -> scale (S3);
   внутри класса - меньший `priority` правила, затем `rule_id`, версия, ключ объекта;
-* пауза и `block_scale` гасят scale на том же объекте, на его детях и на предках
+* пауза, `block_scale` и тревога S1 (spend >= 2T без исходов) гасят scale на том же объекте, на его детях и на предках
   (родство берётся из `lineage` объекта, оно симметрично: пауза ad set гасит scale
   кампании-владельца бюджета, пауза кампании гасит scale её ad set);
+* проигравший объект гасит scale, даже если пауза ему сейчас запрещена (Manual hold, Cooldown,
+  Parent paused, свежесть в Automatic): такой «убийца» никогда не становится предложением и не
+  занимает мутацию объекта;
 * на объект - не больше одной записывающей мутации (`pause`, `budget_up`);
 * одинаковое предложение (объект + вид действия) от двух правил - дубль, остаётся первое.
 """
@@ -29,6 +32,26 @@ DUPLICATE = "duplicate"
 
 SUPPRESSED_BY_PAUSE = "Suppressed: a pause or scale block exists on this object, its parent or its children"
 SUPPRESSED_ONE_MUTATION = "Suppressed: one object takes at most one mutation"
+
+
+def _kills_scale(strategy: Any, kind: str | None) -> bool:
+    return kind in KILLS_SCALE or (strategy == 1 and kind == "alert")
+
+
+def _blocked_killers(items: list[dict]) -> list[dict]:
+    """Объекты, у которых условия совпали, а действие заблокировано: они только гасят scale."""
+    out: list[dict] = []
+    for item in items:
+        result = item.get("result") or {}
+        strategy = item.get("strategy", result.get("strategy"))
+        for obj in result.get("objects") or []:
+            blocked = obj.get("blocked_action")
+            if (obj.get("verdict") == "blocked" and obj.get("conditions_matched") and blocked
+                    and _kills_scale(strategy, blocked.get("kind"))):
+                out.append({"rule_id": item.get("rule_id") or "", "key": obj["key"], "kind": blocked["kind"],
+                            "strategy": strategy, "lineage": set(obj.get("lineage") or [obj["key"]]),
+                            "reasons": list(obj.get("reasons") or [])})
+    return sorted(out, key=lambda k: (k["rule_id"], k["key"], k["kind"]))
 
 
 def _flatten(items: list[dict]) -> list[dict]:
@@ -66,6 +89,7 @@ def arbitrate(items: list[dict]) -> dict:
     "suppressed": [...], "duplicates": [...]}`. Входные результаты не меняются.
     """
     ordered = sorted(_flatten(items), key=_sort_key)
+    blocked_killers = _blocked_killers(items)
     accepted: list[dict] = []
     decided: list[dict] = []
     seen: dict[tuple, dict] = {}
@@ -79,9 +103,16 @@ def arbitrate(items: list[dict]) -> dict:
             rec.update(status=DUPLICATE, duplicate_of=twin["order"],
                        reason=f"Duplicate of #{twin['order']} ({twin['rule_id']})")
         elif p["kind"] == "budget_up":
-            killer = next((a for a in accepted if a["kind"] in KILLS_SCALE and _related(a["_p"], p)), None)
+            killer = next((a for a in accepted if _kills_scale(a["strategy"], a["kind"])
+                           and _related(a["_p"], p)), None)
             if killer is not None:
                 rec.update(status=SUPPRESSED, suppressed_by=killer["order"], reason=SUPPRESSED_BY_PAUSE)
+            else:
+                dead = next((k for k in blocked_killers if _related(k, p)), None)
+                if dead is not None:
+                    rec.update(status=SUPPRESSED, suppressed_by=f"blocked:{dead['rule_id']}:{dead['key']}",
+                               reason=f"{SUPPRESSED_BY_PAUSE} (the {dead['kind']} is blocked: "
+                                      f"{', '.join(dead['reasons']) or 'not allowed now'})")
         if rec["status"] == PROPOSED and p["kind"] in WRITING:
             taken = next((a for a in accepted if a["key"] == p["key"] and a["kind"] in WRITING), None)
             if taken is not None:
@@ -98,6 +129,7 @@ def arbitrate(items: list[dict]) -> dict:
         "accepted": [r for r in decided if r["status"] == PROPOSED],
         "suppressed": [r for r in decided if r["status"] == SUPPRESSED],
         "duplicates": [r for r in decided if r["status"] == DUPLICATE],
+        "blocked_killers": [{k: v for k, v in b.items() if k != "lineage"} for b in blocked_killers],
     }
 
 
