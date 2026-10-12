@@ -184,6 +184,15 @@ def test_dismiss_marks_the_proposal_and_nothing_else(st):
     assert rules_api.dismiss_proposal({"owner": OWNER, "action_id": "act_nope"}, store=st)[1] == 404
 
 
+def good_op(op_state="Succeeded", **over):
+    """Снимок операции команд для предложения `propose(...)`: пауза ad set ADSET на счёте Acc."""
+    op = {"state": op_state, "account": "Acc", "command": "set_status", "value": "PAUSED",
+          "affected": [{"level": "adset", "id": ADSET, "field": "status", "after": "PAUSED",
+                        "result": "saved" if op_state == "Succeeded" else "not_sent", "saved": "PAUSED"}]}
+    op.update(over)
+    return op
+
+
 @pytest.mark.parametrize("op_state,expected", [("Succeeded", "verified"), ("Failed", "failed"),
                                                ("Outcome unknown", "unknown")])
 def test_action_result_takes_the_state_from_the_command_server(st, op_state, expected):
@@ -193,7 +202,7 @@ def test_action_result_takes_the_state_from_the_command_server(st, op_state, exp
 
     def status(op_id):
         seen.append(op_id)
-        return {"state": op_state}, 200
+        return good_op(op_state), 200
 
     data, code = rules_api.record_action_result({"owner": OWNER, "action_id": act["action_id"], "op_id": "op_1"},
                                                 store=st, status=status)
@@ -259,3 +268,70 @@ def test_cells_report_blocked_hold_and_observe_results_and_ignore_older_versions
     st.edit_rule(rid, {"caps": {"cooldown_hours": 3}}, by=OWNER)   # новая версия: старый итог не показываем
     results = {r["rule_id"]: r["result"] for r in rules_api.cells("Acc", OWNER, store=st)[0]["cells"][f"adset:{ADSET}"]["rules"]}
     assert results[rid] == "Not evaluated yet"
+
+
+@pytest.mark.parametrize("label,over", [
+    ("another account", {"account": "Other"}),
+    ("another command", {"command": "set_budget", "value": "100"}),
+    ("another status", {"value": "ACTIVE"}),
+    ("another object", {"affected": [{"level": "adset", "id": "999999999", "result": "saved"}]}),
+    ("another level", {"affected": [{"level": "campaign", "id": ADSET, "result": "saved"}]}),
+    ("extra object", {"affected": [{"level": "adset", "id": ADSET, "result": "saved"},
+                                   {"level": "adset", "id": "999999999", "result": "saved"}]}),
+    ("skipped object", {"affected": [{"level": "adset", "id": ADSET, "result": "not_sent"}]}),
+    ("no objects", {"affected": []}),
+])
+def test_action_result_refuses_an_op_that_is_not_this_suggestion(st, label, over):
+    rid = make_rule(st)
+    act = propose(st, rid)
+    data, code = rules_api.record_action_result({"owner": OWNER, "action_id": act["action_id"], "op_id": "op_x"},
+                                                store=st, status=lambda o: (good_op(**over), 200))
+    assert code == 409 and data["code"] == "op_mismatch", label
+    assert st.latest_actions()[act["action_id"]]["state"] == "proposed", "the journal must not record it"
+
+
+def test_action_result_binds_a_budget_suggestion_and_refuses_another_value(st):
+    rid = make_rule(st, preset="scale_proven", objects=[{"account": "Acc", "level": "campaign", "id": CAMP,
+                                                         "name_at_assign": "c"}])
+    act = st.append_action({"state": "proposed", "rule_id": rid, "version": st.get_rule(rid)["current_version"],
+                            "account": "Acc", "level": "campaign", "id": CAMP, "kind": "budget_up",
+                            "before": {"daily_budget": 100}, "requested": {"daily_budget": 110}})
+
+    def op(value):
+        return {"state": "Succeeded", "account": "Acc", "command": "set_budget", "value": value,
+                "affected": [{"level": "campaign", "id": CAMP, "result": "saved"}]}
+    body = {"owner": OWNER, "action_id": act["action_id"], "op_id": "op_b"}
+    assert rules_api.record_action_result(body, store=st, status=lambda o: (op("120"), 200))[1] == 409
+    assert rules_api.record_action_result(body, store=st, status=lambda o: (op("110.00"), 200))[1] == 200
+    assert st.latest_actions()[act["action_id"]]["state"] == "verified"
+
+
+def test_action_result_refuses_an_op_id_already_used_by_another_suggestion(st):
+    rid = make_rule(st)
+    first, second = propose(st, rid), propose(st, rid)
+    ok = lambda o: (good_op(), 200)
+    assert rules_api.record_action_result({"owner": OWNER, "action_id": first["action_id"], "op_id": "op_1"},
+                                          store=st, status=ok)[1] == 200
+    data, code = rules_api.record_action_result({"owner": OWNER, "action_id": second["action_id"], "op_id": "op_1"},
+                                                store=st, status=ok)
+    assert code == 409 and data["code"] == "op_reused"
+    assert st.latest_actions()[second["action_id"]]["state"] == "proposed"
+
+
+def test_owner_is_required_by_mode_duplicate_cells_dismiss_and_result(st):
+    rid = make_rule(st)
+    act = propose(st, rid)
+    assert rules_api.set_rule_mode({"rule_id": rid, "mode": "observe"}, store=st)[0]["code"] == "no_owner"
+    assert rules_api.duplicate_rule({"rule_id": rid}, store=st)[0]["code"] == "no_owner"
+    assert rules_api.cells("Acc", "", store=st)[0]["code"] == "no_owner"
+    assert rules_api.dismiss_proposal({"action_id": act["action_id"]}, store=st)[0]["code"] == "no_owner"
+    assert rules_api.record_action_result({"action_id": act["action_id"], "op_id": "o"}, store=st)[0]["code"] == "no_owner"
+    assert st.get_rule(rid)["mode"] == "suggest"
+
+
+def test_scope_object_ids_must_be_numeric(st):
+    rid = make_rule(st)
+    bad = {"accounts": ["Acc"], "country": "Mexico",
+           "objects": [{"account": "Acc", "level": "adset", "id": "12x45", "name_at_assign": "n"}]}
+    data, code = rules_api.save_rule({"owner": OWNER, "rule_id": rid, "changes": {"scope": bad}}, store=st)
+    assert code == 422 and data["code"] == "bad_object_id"

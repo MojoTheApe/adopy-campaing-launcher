@@ -5275,6 +5275,15 @@ async def rules_overview(request: Request) -> JSONResponse:
     return JSONResponse(data, status_code=code)
 
 
+@app.get("/rules/activity")
+async def rules_activity(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    q = request.query_params
+    data, code = await asyncio.to_thread(rules_api.activity, q.get("owner", ""), q.get("limit"))
+    return JSONResponse(data, status_code=code)
+
+
 @app.get("/rules/scope-options")
 async def rules_scope_options(request: Request) -> JSONResponse:
     from src.web import rules_api

@@ -130,6 +130,21 @@
   .rl-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .rl-table .rl-pick { background: none; border: 0; padding: 0; text-align: left; color: var(--adopy-selected-text); font-weight: 600; cursor: pointer; }
   .rl-table .rl-id { display: block; font-size: .75rem; color: var(--adopy-text-muted); }
+  .rl-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .625rem; margin-bottom: 1rem; }
+  .rl-kpi { padding: .75rem .875rem; background: var(--adopy-surface); border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); }
+  .rl-kpi span { display: block; font-size: .75rem; color: var(--adopy-text-muted); } .rl-kpi b { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+  .rl-kpi small { display: block; font-size: .75rem; color: var(--adopy-text-muted); }
+  .rl-tabs { display: flex; gap: 1.25rem; margin: 0 0 .75rem; border-bottom: 1px solid var(--adopy-border); }
+  .rl-tab { padding: .5rem 0; background: none; border: 0; border-bottom: 2px solid transparent; font-weight: 600; color: var(--adopy-text-muted); cursor: pointer; }
+  .rl-tab[aria-selected="true"] { color: var(--adopy-selected-text); border-bottom-color: var(--adopy-primary); }
+  .rl-filters { display: grid; gap: .375rem; margin-bottom: .625rem; }
+  .rl-filters select { padding: .3125rem .375rem; font-size: .8125rem; border: 1px solid var(--adopy-control-border); border-radius: var(--adopy-radius-sm); background: var(--adopy-surface); }
+  .rl-panel { padding: 1rem; background: var(--adopy-surface); border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-lg); }
+  .rl-panel[hidden], .rl-shell[hidden] { display: none; }
+  .rl-resrow { display: flex; flex-wrap: nowrap; align-items: center; gap: .375rem; min-width: 0; }
+  .rl-resrow .t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rl-resrow .rl-btn, .rl-resrow .rl-chip { flex: none; }
+  .rl-table td.rl-resc { min-width: 250px; max-width: 320px; }
   .rl-res { display: flex; flex-wrap: wrap; gap: .375rem; margin-top: .375rem; }
   .rl-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .875rem 1.25rem; border-top: 1px solid var(--adopy-border); }
   .rl-foot .rl-grow { flex: 1 1 240px; min-width: 0; font-size: .75rem; color: var(--adopy-text-muted); }
@@ -164,7 +179,7 @@
     .rl-body { grid-template-columns: minmax(0, 1fr); }
     .rl-settings { border-right: 0; border-bottom: 1px solid var(--adopy-border); }
   }
-  @media (max-width: 640px) { .rl-cards, .rl-count3, .rl-grid2 { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 640px) { .rl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rl-cards, .rl-count3, .rl-grid2 { grid-template-columns: minmax(0, 1fr); } }
 </style>
 
 <section class="rl" id="rl-root" data-live="{{ '1' if rl_live else '0' }}" aria-label="Rules">
@@ -183,9 +198,18 @@
   <script type="application/json" id="rl-seed">{{ (rl_seed | default([])) | tojson }}</script>
   <div class="rl-sources" id="rl-sources" aria-live="polite">Loading sources…</div>
   <div id="rl-banner"></div>
-  <div class="rl-shell">
+  <div class="rl-kpis" id="rl-kpis" aria-label="Rules at a glance"></div>
+  <div class="rl-tabs" role="tablist" aria-label="Rules sections">
+    <button type="button" class="rl-tab" role="tab" data-tab="rules" aria-selected="true">My rules <span class="rl-muted" id="rl-tab-n"></span></button>
+    <button type="button" class="rl-tab" role="tab" data-tab="templates" aria-selected="false">Templates</button>
+    <button type="button" class="rl-tab" role="tab" data-tab="activity" aria-selected="false">Activity</button>
+  </div>
+  <div class="rl-panel" id="rl-tab-templates" hidden></div>
+  <div class="rl-panel" id="rl-tab-activity" hidden></div>
+  <div class="rl-shell" id="rl-shell">
     <aside class="rl-list" aria-label="Your rules">
       <h3><span>Your rules</span><span id="rl-count">–</span></h3>
+      <div class="rl-filters" id="rl-filters" aria-label="Filter rules"></div>
       <div id="rl-items"><div class="rl-skel"></div><div class="rl-skel"></div><div class="rl-skel"></div></div>
       <div class="rl-list-actions">
         <button type="button" class="rl-btn small primary" id="rl-create">+ Create rule</button>
@@ -244,7 +268,7 @@
   var seed = [];
   try { seed = JSON.parse($('rl-seed').textContent) || []; } catch (e) { seed = []; }
 
-  var S = { status: 'loading', err: '', data: null, selId: '', selKey: '', draft: null, dirty: false, saved: '', busy: '',
+  var S = { tab: 'rules', fq: { country: '', asset: '', mode: '' }, status: 'loading', err: '', data: null, selId: '', selKey: '', draft: null, dirty: false, saved: '', busy: '',
             evalNote: '', scopeSel: {}, scopeCountry: '', scopeData: {}, tplPick: '' };
 
   function owner() { var s = document.getElementById('buyer-select'); return (s && s.value) || ''; }
@@ -302,12 +326,41 @@
     }
     $('rl-banner').innerHTML = banner;
   }
+  function distinct(l, f) { var o = []; l.forEach(function (r) { var v = f(r); if (v && o.indexOf(v) < 0) o.push(v); }); return o.sort(); }
+  function renderFilters(all) {
+    function sel(id, label, opts, cur) {
+      return '<select data-filter="' + id + '" aria-label="' + label + '"><option value="">All ' + label.toLowerCase() + '</option>' + opts.map(function (v) {
+        return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</select>';
+    }
+    $('rl-filters').innerHTML = sel('country', 'Countries', distinct(all, function (r) { return r.body.scope.country; }), S.fq.country) +
+      sel('asset', 'Assets', distinct(all, function (r) { return r.body.scope.asset; }), S.fq.asset) +
+      sel('mode', 'Modes', ['disabled', 'observe', 'suggest'].filter(function (m) { return all.some(function (r) { return r.mode === m; }); }), S.fq.mode);
+    Array.prototype.forEach.call($('rl-filters').querySelectorAll('select'), function (e) {
+      Array.prototype.forEach.call(e.options, function (o) { if (e.dataset.filter === 'mode' && o.value) o.textContent = modeLabel(o.value); });
+    });
+  }
+  function filtered() {
+    return ((S.data && S.data.rules) || []).filter(function (r) {
+      return (!S.fq.country || r.body.scope.country === S.fq.country) && (!S.fq.asset || r.body.scope.asset === S.fq.asset) &&
+        (!S.fq.mode || r.mode === S.fq.mode);
+    });
+  }
+  function renderKpis() {
+    var k = (S.data && S.data.kpis) || null;
+    $('rl-kpis').innerHTML = !k ? '' : [['Observing', k.observing, 'rules recording only'], ['Suggesting', k.suggesting, 'review before any change'],
+      ['Suggestions awaiting review', k.awaiting_review, 'Apply or dismiss'], ['Blocked evaluations', k.blocked, 'held, stale or failed']].map(function (x) {
+      return '<div class="rl-kpi"><span>' + esc(x[0]) + '</span><b>' + esc(x[1]) + '</b><small>' + esc(x[2]) + '</small></div>'; }).join('');
+    var b = document.getElementById('rl-nav-badge');
+    if (b) { var n = k ? k.awaiting_review : 0; b.hidden = !n; b.textContent = n ? String(n) : ''; b.title = n + ' suggestions awaiting review'; }
+    $('rl-tab-n').textContent = S.data ? String((S.data.rules || []).length) : '';
+  }
   function renderList() {
-    var l = (S.data && S.data.rules) || [];
+    var all = (S.data && S.data.rules) || [], l = filtered();
+    if (S.status === 'ready') renderFilters(all);
     $('rl-count').textContent = S.status === 'ready' ? String(l.length) : '–';
     if (S.status === 'loading') return;
     if (S.status !== 'ready') { $('rl-items').innerHTML = '<p class="rl-hint">Unavailable.</p>'; return; }
-    if (!l.length) { $('rl-items').innerHTML = '<p class="rl-hint">No rules yet.</p>'; return; }
+    if (!l.length) { $('rl-items').innerHTML = '<p class="rl-hint">' + (all.length ? 'No rules match the filters.' : 'No rules yet.') + '</p>'; return; }
     $('rl-items').innerHTML = l.map(function (r) {
       var c = r.counts, last = r.last_eval;
       var ev = last && !last.error ? 'Evaluated ' + ago(last.at) + (r.proposals.length ? ' · ' + plural(r.proposals.length, 'suggestion') : '') : r.health.text;
@@ -349,14 +402,14 @@
     if (!o) return '<span class="rl-chip warn">Not in the last evaluation</span>';
     if (row.props.length) {
       h = row.props.map(function (p) {
-        return '<span class="rl-chip ok">Suggested</span> <span>' + esc(R.proposalText(p)) + '</span>' +
-          '<div class="rl-res"><button type="button" class="rl-btn small primary" data-apply="' + esc(p.action_id) + '">Apply…</button>' +
+        return '<div class="rl-resrow"><span class="rl-chip ok">Suggested</span><span class="t" title="' + esc(R.proposalText(p)) + '">' + esc(R.proposalText(p)) + '</span>' +
+          '<button type="button" class="rl-btn small primary" data-apply="' + esc(p.action_id) + '">Apply…</button>' +
           '<button type="button" class="rl-btn small" data-dismiss="' + esc(p.action_id) + '">Dismiss</button></div>';
       }).join('');
       return h;
     }
-    if (o.verdict === 'matched') return '<span class="rl-chip">' + (r.mode === 'observe' ? 'Would act' : 'Matched') + '</span> <span class="rl-muted">' + esc(R.KIND[(o.action || {}).kind] || '') + '</span>';
-    if (o.verdict === 'blocked') return '<span class="rl-chip warn">Blocked</span><div class="rl-sub">' + esc((o.reasons || []).join(' · ')) + '</div>';
+    if (o.verdict === 'matched') return '<div class="rl-resrow"><span class="rl-chip">' + (r.mode === 'observe' ? 'Would act' : 'Matched') + '</span><span class="t rl-muted">' + esc(R.KIND[(o.action || {}).kind] || '') + '</span></div>';
+    if (o.verdict === 'blocked') { var why = (o.reasons || []).join(' · '); return '<div class="rl-resrow"><span class="rl-chip warn">Blocked</span><span class="t rl-sub" title="' + esc(why) + '">' + esc(why) + '</span></div>'; }
     return '<span class="rl-chip m-observe">No match</span>';
   }
   function renderEditor() {
@@ -435,7 +488,7 @@
         return '<tr data-key="' + esc(x.key) + '" aria-selected="' + (x.key === S.selKey) + '"><td><button type="button" class="rl-pick" data-pick="' + esc(x.key) + '">' + esc(x.o && x.o.name || x.a.name_at_assign || x.a.id) + '</button>' +
           '<span class="rl-id">' + esc(R.KIND && ({ campaign: 'Campaign', adset: 'Ad set', ad: 'Ad' }[x.a.level])) + ' · ' + esc(x.a.account) + ' · id ' + esc(x.a.id) + '</span></td>' +
           '<td class="num">' + esc(ob.spend != null ? R.usd(ob.spend) : '—') + '</td><td class="num">' + esc(ob.ftd != null ? R.num(ob.ftd) : '—') + '</td>' +
-          '<td class="num">' + esc(ob.target != null ? R.usd(ob.target) : '—') + '</td><td>' + esc(x.o ? R.identityText(x.o.identity) : '—') + '</td><td>' + resultCell(r, x) + '</td></tr>';
+          '<td class="num">' + esc(ob.target != null ? R.usd(ob.target) : '—') + '</td><td>' + esc(x.o ? R.identityText(x.o.identity) : '—') + '</td><td class="rl-resc">' + resultCell(r, x) + '</td></tr>';
       }).join('') : '<tr><td colspan="6" class="rl-muted">No objects assigned yet. Use Choose campaigns.</td></tr>') + '</tbody></table></div>' +
       '<p class="rl-hint">Showing ' + Math.min(100, rows.length) + ' of ' + rows.length + ' assigned objects. Results come from the latest evaluation' + (last ? ' (' + esc(ago(last.at)) + ')' : '') + '.</p></div></div>';
     html += '<div class="rl-foot"><span class="rl-grow" id="rl-evnote" role="status">' + esc(S.evalNote || 'Evaluate now only queues the check; it reads the workbook and the saved snapshot, not Meta.') + '</span>' +
@@ -445,7 +498,7 @@
   }
   function scopeCount(b, level) { return objects({ body: b }).filter(function (o) { return o.level === level; }).length; }
   function strategyName(s) { return { 1: 'Stop-loss', 2: 'Funnel quality', 3: 'Controlled scaling', 4: 'Deterioration', 5: 'Pacing' }[s] || 'Strategy ' + s; }
-  function render() { renderSources(); renderList(); renderEditor(); }
+  function render() { renderSources(); renderKpis(); renderList(); renderEditor(); renderTab(); }
 
   // ── черновик: ввод ──
   function condAt(path) {
@@ -527,7 +580,7 @@
   $('rl-editor').addEventListener('click', function (ev) {
     var t = ev.target.closest ? ev.target.closest('button') : null; if (!t) return;
     if (t.id === 'rl-retry') { load(); return; }
-    if (t.id === 'rl-empty-create') { openNew(); return; }
+    if (t.id === 'rl-empty-create') { openNew(''); return; }
     if (t.id === 'rl-save') { save(); return; }
     if (t.id === 'rl-eval') { evaluateNow(); return; }
     if (t.id === 'rl-dup') { duplicate(); return; }
@@ -553,18 +606,20 @@
   });
 
   // ── диалог «Create rule / Templates» ──
-  function openNew() {
+  function openNew(pick) {
     var tpls = (S.data && S.data.templates) || [];
-    S.tplPick = tpls.length ? tpls[0].id : '';
+    if (typeof pick !== 'string') pick = '';
+    S.tplPick = pick || (tpls.length ? tpls[0].id : '');
     $('rl-tpls').innerHTML = tpls.map(function (t) {
       return '<button type="button" class="rl-tpl" data-tpl="' + esc(t.id) + '" data-name="' + esc(t.name) + '" aria-pressed="' + (t.id === S.tplPick) + '"><b>' + esc(t.name) + '</b><span>' + esc(t.text) +
         ' Suggested start: ' + esc(modeLabel(t.start_mode)) + '.</span></button>';
     }).join('');
-    $('rl-new-name').value = tpls.length ? tpls[0].name : ''; $('rl-new-err').textContent = '';
+    var cur = tpls.filter(function (t) { return t.id === S.tplPick; })[0];
+    $('rl-new-name').value = cur ? cur.name : ''; $('rl-new-err').textContent = '';
     $('rl-dlg-new').showModal();
   }
-  $('rl-create').addEventListener('click', openNew);
-  $('rl-templates').addEventListener('click', openNew);
+  $('rl-create').addEventListener('click', function () { openNew(''); });
+  $('rl-templates').addEventListener('click', function () { S.tab = 'templates'; renderTab(); });
   $('rl-tpls').addEventListener('click', function (ev) {
     var b = ev.target.closest ? ev.target.closest('[data-tpl]') : null; if (!b) return;
     S.tplPick = b.dataset.tpl; $('rl-new-name').value = b.dataset.name;
@@ -637,13 +692,42 @@
     $('rl-dlg-scope').close(); touch(); renderEditor();
   });
 
+  // ── вкладки: My rules / Templates / Activity ──
+  function renderTab() {
+    Array.prototype.forEach.call(document.querySelectorAll('.rl-tab'), function (t) { t.setAttribute('aria-selected', String(t.dataset.tab === S.tab)); });
+    $('rl-shell').hidden = S.tab !== 'rules'; $('rl-tab-templates').hidden = S.tab !== 'templates'; $('rl-tab-activity').hidden = S.tab !== 'activity';
+    if (S.tab === 'templates') {
+      var tpls = (S.data && S.data.templates) || [];
+      $('rl-tab-templates').innerHTML = '<p class="rl-hint" style="margin-top:0">A template creates a Disabled rule. Pick campaigns, then choose Observe or Suggest and save.</p><div class="rl-tpls">' +
+        tpls.map(function (t) { return '<button type="button" class="rl-tpl" data-use="' + esc(t.id) + '"><b>' + esc(t.name) + '</b><span>' + esc(t.text) + ' Suggested start: ' + esc(modeLabel(t.start_mode)) + '.</span></button>'; }).join('') + '</div>';
+    }
+  }
+  function loadActivity() {
+    var box = $('rl-tab-activity'); box.innerHTML = '<div class="rl-skel"></div><div class="rl-skel"></div>';
+    getJson('/rules/activity?owner=' + encodeURIComponent(owner())).then(function (j) {
+      box.innerHTML = j.rows.length ? '<div class="rl-tablewrap"><table class="rl-table"><thead><tr><th>When</th><th>Rule</th><th>What</th><th>State</th><th>By</th></tr></thead><tbody>' +
+        j.rows.map(function (r) { return '<tr><td>' + esc(String(r.at || '').slice(0, 16).replace('T', ' ')) + '</td><td>' + esc(r.rule) + '</td><td>' + esc(r.text) + '</td><td>' + esc(r.state || '') +
+          '</td><td>' + esc(r.actor || '') + (r.op_id ? ' <span class="rl-sub">' + esc(r.op_id) + '</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div><p class="rl-hint">Read-only record of evaluations and suggestions.</p>'
+        : '<p class="rl-hint">Nothing has happened yet. Evaluations and suggestions appear here.</p>';
+    }, function (e) { box.innerHTML = '<div class="rl-state bad" style="margin:0">' + esc(e.message) + '</div>'; });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.rl-tab'), function (t) {
+    t.addEventListener('click', function () { S.tab = t.dataset.tab; renderTab(); if (S.tab === 'activity') loadActivity(); });
+  });
+  $('rl-tab-templates').addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('[data-use]') : null; if (!b) return;
+    S.tab = 'rules'; renderTab(); openNew(b.dataset.use);
+  });
+  $('rl-filters').addEventListener('change', function (ev) { var t = ev.target; if (t.dataset && t.dataset.filter) { S.fq[t.dataset.filter] = t.value; renderList(); } });
+
   // ── запуск: при первом показе страницы и при смене байера ──
   var started = false;
   function start() { if (started) return; started = true; load(); }
   document.addEventListener('acl:viewchange', function (e) { if (e.detail && e.detail.view === 'rules') start(); });
   var bs = document.getElementById('buyer-select');
   if (bs) bs.addEventListener('change', function () { if (started) { S.draft = null; load(); } });
-  if ((location.hash || '') === '#rules') document.addEventListener('DOMContentLoaded', start);
+  /* Значок в навигации и счётчики нужны до первого захода на страницу: один локальный GET при загрузке. */
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
   window.aclRulesPage = { start: start, state: S, reload: load };
 })();
 </script>

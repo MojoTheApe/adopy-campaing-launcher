@@ -59,6 +59,7 @@ def evaluate_now(body: dict, *, engine: Any = None) -> tuple[dict, int]:
 # человеческие команды (`/campaign-commands/*`) по кнопке «Apply» на странице.
 
 import copy
+import re
 from datetime import datetime, timezone
 
 from src.analysis_agent.rules import model as _model
@@ -190,7 +191,11 @@ def overview(owner: str = "", *, store: Any = None, engine_status: Any = None,
         templates.append({"id": pid, "name": version["name"], "strategy": version["strategy"],
                           "action": version["action"]["kind"], "start_mode": mode,
                           "text": TEMPLATE_TEXT.get(pid, "")})
-    return {"ok": True, "owner": owner, "rules": rules, "templates": templates,
+    kpis = {"observing": sum(1 for r in rules if r["mode"] == "observe"),
+            "suggesting": sum(1 for r in rules if r["mode"] == "suggest"),
+            "awaiting_review": sum(len(r["proposals"]) for r in rules),
+            "blocked": sum(1 for r in rules if r["health"]["state"] in ("blocked", "stale", "error"))}
+    return {"ok": True, "owner": owner, "rules": rules, "templates": templates, "kpis": kpis,
             "sources": _sources(latest, now),
             "engine": status, "automatic_reason": AUTOMATIC_REASON,
             "settings": {"automatic_enabled": bool(settings.get("automatic_enabled"))}}, 200
@@ -247,6 +252,9 @@ def save_rule(body: dict, *, store: Any = None) -> tuple[dict, int]:
             if wrong:
                 return wrong
         changes = {k: v for k, v in (body.get("changes") or {}).items() if k in EDITABLE_PARTS}
+        for o in ((changes.get("scope") or {}).get("objects") or []):
+            if not isinstance(o, dict) or not re.fullmatch(r"[0-9]+", str(o.get("id") or "")):
+                return _bad("Object ids must be numeric Meta ids.", "bad_object_id", 422)
         expected = body.get("expected_version")
         rule = store.edit_rule(rule_id, changes, by=owner,
                                expected_version=int(expected) if expected not in (None, "") else None)
@@ -273,6 +281,8 @@ def set_rule_mode(body: dict, *, store: Any = None) -> tuple[dict, int]:
     if wrong:
         return wrong
     owner = str(body.get("owner") or "").strip()
+    if not owner:
+        return _bad("Pick the buyer in the header first.", "no_owner")
     _rule, refusal = _owned(store, str(body.get("rule_id") or ""), owner)
     if refusal:
         return refusal
@@ -287,6 +297,8 @@ def duplicate_rule(body: dict, *, store: Any = None) -> tuple[dict, int]:
     store = _store(store)
     body = body or {}
     owner = str(body.get("owner") or "").strip()
+    if not owner:
+        return _bad("Pick the buyer in the header first.", "no_owner")
     _rule, refusal = _owned(store, str(body.get("rule_id") or ""), owner)
     if refusal:
         return refusal
@@ -295,6 +307,8 @@ def duplicate_rule(body: dict, *, store: Any = None) -> tuple[dict, int]:
 
 
 def _proposal(store: Any, action_id: str, owner: str) -> tuple[dict | None, tuple[dict, int] | None]:
+    if not owner:
+        return None, _bad("Pick the buyer in the header first.", "no_owner")
     rec = store.latest_actions().get(action_id)
     if rec is None or not rec.get("rule_id"):
         return None, _bad("This suggestion no longer exists.", "not_found", 404)
@@ -321,6 +335,38 @@ def dismiss_proposal(body: dict, *, store: Any = None) -> tuple[dict, int]:
     return {"ok": True, "action_id": rec["action_id"], "state": "dismissed"}, 200
 
 
+def _op_mismatch(rec: dict, op: dict, state: str) -> str:
+    """Пусто, если операция - именно та, что предложена: счёт, вид команды, значение и объект совпадают,
+    а при успехе запись по объекту `saved`, а не пропуск. Иначе - что не сошлось."""
+    req = (rec.get("requested") or {})
+    if rec.get("kind") == "pause" and req.get("status") == "PAUSED":
+        command, want = "set_status", "PAUSED"
+    elif rec.get("kind") == "budget_up" and req.get("daily_budget"):
+        command, want = "set_budget", req["daily_budget"]
+    else:
+        return "the suggestion has nothing to apply"
+    if op.get("account") != rec.get("account"):
+        return "another account"
+    if op.get("command") != command:
+        return "another kind of command"
+    if command == "set_status":
+        if str(op.get("value")) != want:
+            return "another status"
+    else:
+        try:
+            if float(op.get("value")) != float(want):
+                return "another budget value"
+        except (TypeError, ValueError):
+            return "another budget value"
+    ours = [a for a in op.get("affected") or []
+            if str(a.get("id")) == str(rec.get("id")) and a.get("level") == rec.get("level")]
+    if len(ours) != 1 or len(op.get("affected") or []) != 1:
+        return "another object"
+    if state == "verified" and ours[0].get("result") != "saved":
+        return "the object was not saved"
+    return ""
+
+
 def record_action_result(body: dict, *, store: Any = None, status: Any = None) -> tuple[dict, int]:
     """После человеческой команды: переход предложения берётся из ОТВЕТА сервера команд (`get_status`),
     а не из слов страницы. Сама запись в Meta уже сделана командой с подтверждением."""
@@ -345,6 +391,12 @@ def record_action_result(body: dict, *, store: Any = None, status: Any = None) -
     state = {"Succeeded": "verified", "Failed": "failed", "Outcome unknown": "unknown"}.get(op.get("state"))
     if state is None:
         return _bad("The command is still running.", "running", 409)
+    mismatch = _op_mismatch(rec, op, state)
+    if mismatch:
+        return _bad("This command is not the one that was suggested: " + mismatch, "op_mismatch", 409)
+    for other in store.actions():
+        if other.get("op_id") == op_id and other.get("action_id") != rec["action_id"]:
+            return _bad("This command was already used for another suggestion.", "op_reused", 409)
     store.append_action({**rec, "state": state, "op_id": op_id, "actor": "human:" + owner,
                          "reason": "applied by " + owner + " through the confirm flow"})
     return {"ok": True, "action_id": rec["action_id"], "state": state}, 200
@@ -401,6 +453,8 @@ def cells(account: str, owner: str = "", *, store: Any = None) -> tuple[dict, in
         return refused
     store = _store(store)
     account = (account or "").strip()
+    if not (owner or "").strip():
+        return _bad("Pick the buyer in the header first.", "no_owner")
     latest = _latest_evaluations(store)
     proposals = _open_proposals(store)
     holds = store.active_holds()
@@ -435,3 +489,35 @@ def cells(account: str, owner: str = "", *, store: Any = None) -> tuple[dict, in
         entry["result"] = order[0]["result"]
         entry["tone"] = "act" if order[0]["proposal"] else "warn" if order[0]["verdict"] in ("matched", "blocked") else ""
     return {"ok": True, "account": account, "cells": out}, 200
+
+
+def activity(owner: str, limit: Any = None, *, store: Any = None) -> tuple[dict, int]:
+    """Вкладка Activity: оценки и действия правил этого менеджера, только чтение журналов."""
+    refused = _guard()
+    if refused:
+        return refused
+    store = _store(store)
+    owner = (owner or "").strip()
+    if not owner:
+        return _bad("Pick the buyer in the header first.", "no_owner")
+    try:
+        n = max(1, min(MAX_LIMIT, int(limit))) if limit not in (None, "") else 100
+    except (TypeError, ValueError):
+        n = 100
+    names = {}
+    for rule in store.list_rules(owner):
+        names[rule["id"]] = store.current_version(rule).get("name")
+    rows: list[dict] = []
+    for rec in store.evaluations():
+        if rec.get("rule_id") in names:
+            rows.append({"at": rec.get("at"), "kind": "evaluation", "rule_id": rec["rule_id"], "rule": names[rec["rule_id"]],
+                         "text": f"Evaluation ({rec.get('trigger')}): {rec.get('verdict')}"
+                                 + (f" · {', '.join(rec.get('reasons') or [])}" if rec.get("reasons") else ""),
+                         "state": rec.get("verdict")})
+    for rec in store.latest_actions().values():
+        if rec.get("rule_id") in names and rec.get("kind"):
+            rows.append({"at": rec.get("at"), "kind": "action", "rule_id": rec["rule_id"], "rule": names[rec["rule_id"]],
+                         "text": f"{_KIND_WORD.get(rec.get('kind'), rec.get('kind'))} · {rec.get('level')} {rec.get('id')}",
+                         "state": rec.get("state"), "actor": rec.get("actor"), "op_id": rec.get("op_id")})
+    rows.sort(key=lambda r: str(r.get("at") or ""), reverse=True)
+    return {"ok": True, "rows": rows[:n]}, 200

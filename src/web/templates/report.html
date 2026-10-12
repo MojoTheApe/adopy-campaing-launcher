@@ -232,6 +232,8 @@
     .sidebar-country-btn:active {
       transform: scale(0.99);
     }
+    .sidebar-badge { display: inline-block; min-width: 1.25rem; margin-left: .25rem; padding: 0 .375rem; border-radius: 999px; background: var(--accent, #2563eb); color: #fff; font-size: .6875rem; font-weight: 700; text-align: center; }
+    .sidebar-badge[hidden] { display: none; }
     .sidebar-link {
       display: block;
       width: 100%;
@@ -3771,7 +3773,7 @@ async function dashRefresh(ev) {
   <button type="button" class="sidebar-link" data-view="targets">🎯 Targeting</button>
   <button type="button" class="sidebar-link" data-view="ad-texts">✍️ Ad titles</button>
   <button type="button" class="sidebar-link" data-view="accounts">🔌 Accounts</button>
-  <button type="button" class="sidebar-link" data-view="rules">⚖️ Rules</button>
+  <button type="button" class="sidebar-link" data-view="rules">⚖️ Rules <span class="sidebar-badge" id="rl-nav-badge" hidden></span></button>
 
   <div class="sidebar-label">Countries</div>
   {#- Порядок по расходу, а не по алфавиту: алфавит ничего не говорит, а

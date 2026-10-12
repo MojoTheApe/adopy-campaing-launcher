@@ -149,6 +149,7 @@ class Stand:
         return (f"<!doctype html><html data-theme='{self.theme}'><head><meta charset='utf-8'>"
                 f"<style>body{{margin:0;padding:24px 32px;background:{dark};font-family:system-ui}}"
                 "#buyer-select{position:absolute;left:-9999px}</style></head><body>"
+                "<span id='rl-nav-badge' hidden></span>"
                 f"<select id='buyer-select'><option value='{OWNER}'>{OWNER}</option></select>{body}</body></html>")
 
     def handle(self, route):
@@ -165,6 +166,7 @@ class Stand:
         st = self.st
         table = {
             ("GET", "/rules/overview"): lambda: rules_api.overview(q.get("owner", ""), store=st, engine_status=lambda: {}),
+            ("GET", "/rules/activity"): lambda: rules_api.activity(q.get("owner", ""), store=st),
             ("GET", "/rules/scope-options"): lambda: rules_api.scope_options(q.get("account", "")),
             ("POST", "/rules/save"): lambda: rules_api.save_rule(body, store=st),
             ("POST", "/rules/mode"): lambda: rules_api.set_rule_mode(body, store=st),
@@ -283,7 +285,9 @@ def test_mode_change_saves_only_observe_or_suggest(env, open_page):
 def test_create_from_template_duplicate_and_toggle(env, open_page, theme):
     filled(env)
     page = open_page(Stand(env, theme=theme))
-    page.click("#rl-templates")
+    page.click("#rl-templates")      # кнопка открывает вкладку Templates; карточка - диалог создания
+    page.wait_for_selector("#rl-tab-templates [data-use]")
+    page.click('#rl-tab-templates [data-use="stop_loss_new_tests"]')
     page.wait_for_selector("dialog.rl-dialog[open]")
     assert "Stop-loss · new tests" in page.inner_text("#rl-tpls") and "Scale proven" in page.inner_text("#rl-tpls")
     assert "Disabled" in page.inner_text("#rl-dlg-new")
@@ -463,6 +467,10 @@ def open_cell_page(env, monkeypatch, tmp_path):
     ci.put_result(inventory_snapshot())
 
     class RulesSite(CmdSite):
+        def html(self, theme="light"):   # в настоящем дешборде селектор байера есть; ячейки Rules требуют owner
+            return super().html(theme).replace("<body style='margin:24px'>",
+                                               f"<body style='margin:24px'><select id='buyer-select'><option value='{OWNER}'>{OWNER}</option></select>")
+
         def handle(self, route):
             u = urlparse(route.request.url)
             if u.path == "/static/rules_ui.js":
@@ -510,3 +518,40 @@ def open_cell_page(env, monkeypatch, tmp_path):
     yield pg, w, env, rule["id"]
     browser.close()
     pw.stop()
+
+
+def test_kpis_nav_badge_tabs_filters_and_one_line_result_cells(env, open_page):
+    rid, scale = filled(env)
+    st = env
+    st.edit_rule(scale, {"scope": {"country": "Chile", "accounts": ["MX Account 1"], "objects": []}}, by=OWNER)
+    page = open_page(Stand(env), rule=rid)
+    kpis = page.locator(".rl-kpi").all_inner_texts()
+    flat = [" ".join(k.split()) for k in kpis]
+    assert len(flat) == 4 and flat[0].startswith("Observing 1") and flat[1].startswith("Suggesting 1")
+    assert flat[2].startswith("Suggestions awaiting review 3")
+    assert page.inner_text("#rl-nav-badge") == "3" and not page.locator("#rl-nav-badge").get_attribute("hidden")
+    # фильтры: страна и режим
+    assert page.locator(".rl-item").count() == 2
+    page.select_option('[data-filter="country"]', "Chile")
+    assert page.locator(".rl-item").count() == 1 and "Scale proven" in page.inner_text("#rl-items")
+    page.select_option('[data-filter="country"]', "")
+    page.select_option('[data-filter="mode"]', "suggest")
+    assert page.locator(".rl-item").count() == 1 and "Protect LATAM tests" in page.inner_text("#rl-items")
+    page.select_option('[data-filter="mode"]', "")
+    # вкладки
+    page.click('.rl-tab[data-tab="templates"]')
+    assert page.locator("#rl-shell").is_hidden() and "Stop-loss" in page.inner_text("#rl-tab-templates")
+    page.click('.rl-tab[data-tab="activity"]')
+    page.wait_for_selector("#rl-tab-activity table")
+    text = page.inner_text("#rl-tab-activity")
+    assert "Evaluation (manual)" in text and "Pause" in text and "proposed" in text
+    page.click('.rl-tab[data-tab="rules"]')
+    assert page.locator("#rl-shell").is_visible()
+    # результат в одну строку при 1280
+    heights = page.evaluate("[...document.querySelectorAll('.rl-resrow')].map(e => e.getBoundingClientRect().height)")
+    assert heights and max(heights) <= 36, heights    # чип, текст и кнопки - в одной строке
+    assert page.evaluate("[...document.querySelectorAll('.rl-resrow .t')].every(e => e.title)")
+    assert no_page_scroll(page)
+    shot(page, "kpis-tabs-filters", "light")
+    page.click('.rl-tab[data-tab="activity"]')
+    shot(page, "activity", "light")
