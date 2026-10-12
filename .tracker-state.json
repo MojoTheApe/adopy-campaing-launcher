@@ -7238,20 +7238,6 @@
   },
   "execution": {
     "claims": {
-      "814": {
-        "actor": "Worker-S1814A",
-        "session": "run_s1814a_1012",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1814-rules-store",
-        "worktree": "C:\\acl-1814-rules",
-        "id": "b905c688e3a24c1293d3819e2ac0631a",
-        "issue": 814,
-        "state": "handoff",
-        "started_at": "2026-10-12T07:29:24+00:00",
-        "from_status": "status:idea",
-        "pr": 817,
-        "report": "PR #817 (head 903b697), branch codex/acl-1814-rules-store, stacked on #802.\nAdded src/analysis_agent/rules/model.py and store.py plus tests/test_rules_store.py (55 tests passed locally).\nMutation check: removing the grant revocation on edit fails 4 tests; dropping caps from the grant hash fails 2.\nNo UI, no Meta calls."
-      },
       "815": {
         "actor": "Worker-S1815A",
         "session": "run_s1815a_1012",
@@ -10966,9 +10952,25 @@
             "session": "run_s1814a_1012"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1814A",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1814A",
+          "session": "run_s1814a_1012",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1814-rules-store",
+          "worktree": "C:\\acl-1814-rules",
+          "id": "b905c688e3a24c1293d3819e2ac0631a",
+          "issue": 814,
+          "state": "handoff",
+          "started_at": "2026-10-12T07:29:24+00:00",
+          "from_status": "status:idea",
+          "pr": 817,
+          "report": "PR #817 (head 903b697), branch codex/acl-1814-rules-store, stacked on #802.\nAdded src/analysis_agent/rules/model.py and store.py plus tests/test_rules_store.py (55 tests passed locally).\nMutation check: removing the grant revocation on edit fails 4 tests; dropping caps from the grant hash fails 2.\nNo UI, no Meta calls."
+        },
+        "pr": 817,
+        "queued_at": "2026-10-12T07:37:59+00:00"
       },
       "815": {
         "implementers": [
@@ -14308,7 +14310,8 @@
       806,
       775,
       797,
-      812
+      812,
+      814
     ],
     "review": {
       "id": "0670f34f31fa4237be5c0d6e3a146b04",
@@ -21462,6 +21465,13 @@
         "issue": 815,
         "claim": "f1e875f880a74ded8f885c99f28c4de5",
         "actor": "Worker-S1815A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-12T07:37:59+00:00",
+        "issue": 814,
+        "pr": 817,
+        "actor": "Worker-S1814A"
       }
     ],
     "policy": {
