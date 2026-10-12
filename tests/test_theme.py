@@ -9,6 +9,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _design_tokens import tokens  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 TPL = ROOT / "src" / "web" / "templates" / "report.html"
 
@@ -20,7 +25,8 @@ def _block(selector: str) -> str:
 
 
 def _tokens(selector: str) -> dict[str, str]:
-    return dict(re.findall(r"(--[\w-]+):\s*([^;]+);", _block(selector)))
+    # ACL-1797: палитра в adopy-tokens.css, имена шаблона — ссылки на неё.
+    return tokens("dark" if "dark" in selector else "light")
 
 
 def _lum(hexs: str) -> float:

@@ -5,14 +5,28 @@
   <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   <title>Adopy Campaign Manager — {{ title }}</title>
+  <script>
+    // Та же тема, что у дешборда: выбор человека в localStorage, иначе ОС.
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('acl.theme'); } catch (e) {}
+      if (t !== 'light' && t !== 'dark') {
+        t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style id="adopy-tokens">{% autoescape false %}{% include "adopy-tokens.css" %}{% endautoescape %}</style>
   <style>
-    body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-           background: #0e1116; color: #d8dde3; padding: 2rem; max-width: 720px; }
-    h1 { color: #f78166; font-size: 1.4rem; margin-bottom: 1rem; }
-    pre { background: #161b22; padding: 1rem; border-radius: 6px;
-          white-space: pre-wrap; word-break: break-word; color: #c9d1d9; }
-    p.hint { color: #8b949e; margin-top: 1.5rem; font-size: 0.9rem; }
-    code { background: #161b22; padding: 0.1rem 0.3rem; border-radius: 3px; }
+    /* ACL-1797: токены Adopy; страница следует теме дешборда. */
+    body { font-family: var(--adopy-font-sans); background: var(--adopy-bg); color: var(--adopy-text);
+           padding: 2rem; max-width: 720px; font-size: var(--adopy-text-body); line-height: var(--adopy-leading-body); }
+    h1 { color: var(--adopy-danger); font-size: var(--adopy-text-title); margin-bottom: 1rem; }
+    pre { background: var(--adopy-surface); border: 1px solid var(--adopy-border); padding: 1rem; border-radius: var(--adopy-radius-md);
+          white-space: pre-wrap; word-break: break-word; color: var(--adopy-text); font-family: var(--adopy-font-mono);
+          font-size: var(--adopy-text-table); }
+    p.hint { color: var(--adopy-text-muted); margin-top: 1.5rem; font-size: var(--adopy-text-body); }
+    code { background: var(--adopy-neutral-bg); padding: 0.1rem 0.3rem; border-radius: 3px; font-family: var(--adopy-font-mono); }
   </style>
 </head>
 <body>

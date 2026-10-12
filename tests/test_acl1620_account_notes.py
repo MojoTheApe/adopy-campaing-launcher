@@ -209,7 +209,8 @@ def _js_block() -> str:
 def _css() -> str:
     src = (TPL / "report.html").read_text(encoding="utf-8")
     m = re.search(r"(\.amap table\.amap-grid td\.amap-acct-note \{.*?\.amap-note-toast \{[^}]*\})", src, re.S)
-    return m.group(1) if m else ""
+    from _design_tokens import tokens_css  # ACL-1797: палитра — отдельный файл
+    return tokens_css() + (m.group(1) if m else "")
 
 
 def _page_html() -> str:

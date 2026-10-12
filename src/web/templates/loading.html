@@ -17,11 +17,12 @@
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     })();
   </script>
+  <style id="adopy-tokens">{% autoescape false %}{% include "adopy-tokens.css" %}{% endautoescape %}</style>
   <style>
-    :root { --bg: #f6f7f9; --fg: #1f2328; --muted: #656d76; --accent: #2f6feb; --line: #d0d7de; }
-    :root[data-theme="dark"] { --bg: #0e1116; --fg: #d8dde3; --muted: #8b949e; --accent: #58a6ff; --line: #30363d; }
+    /* ACL-1797: цвета из токенов Adopy (adopy-tokens.css). */
+    :root { --bg: var(--adopy-bg); --fg: var(--adopy-text); --muted: var(--adopy-text-muted); --accent: var(--adopy-primary); --line: var(--adopy-border-strong); }
     html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
-                 font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+                 font-family: var(--adopy-font-sans); }
     main { max-width: 34rem; margin: 18vh auto 0; padding: 0 1rem; }
     h1 { font-size: 1.15rem; font-weight: 600; margin: 0 0 0.6rem; display: flex; align-items: center; gap: 0.6rem; }
     p { color: var(--muted); font-size: 0.9rem; line-height: 1.5; margin: 0.4rem 0; }
@@ -29,7 +30,7 @@
             border-radius: 50%; animation: spin 0.9s linear infinite; flex: none; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
-    #report-loading-error { color: #cf222e; display: none; }
+    #report-loading-error { color: var(--adopy-danger); display: none; }
   </style>
 </head>
 <body>
