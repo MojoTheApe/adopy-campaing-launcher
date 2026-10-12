@@ -7246,9 +7246,11 @@
         "worktree": "C:\\acl-1776-forms",
         "id": "00cdb633976d414f9e85902ebd11de2b",
         "issue": 776,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-12T12:59:06+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 831,
+        "report": "ACL-1776 implemented: PR #831, head 0f4e926 (stacked on #821).\nAffected tests: 591 passed (new file tests/test_acl1776_create_forms.py: 84). Mutation checks on both policy layers and on idempotency: all killed.\nBrowser tests were not run locally (machine load). Live check needs the owner's yes on a test Page; open question: whether the captured token can create forms (pages_manage_ads)."
       },
       "771": {
         "actor": "Worker-S1771A",
