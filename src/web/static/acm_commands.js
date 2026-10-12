@@ -451,10 +451,54 @@
     });
   }
 
+  // ── Короткие сообщения для человека (одно место на страницу) ──
+  // Ключ — код отказа сервера (`code` в ответе: open_by_hand, stale, not_loopback, rpa_backend, logged_out,
+  // page_unresponsive, restart_cooldown …), а где кода нет — узнаваемый кусок текста. Сырой текст
+  // не теряется: его показывает «Details». Текст, который сервер уже написал по-человечески
+  // (open_by_hand, restart_cooldown, not_loopback, rpa), отдаётся как есть.
+  var FRIENDLY = {
+    mlx: "Multilogin isn't running — start it and try again",
+    loggedOut: 'Logged out in this profile — log in inside Multilogin, then retry',
+    checkpoint: 'Facebook checkpoint — resolve it inside the profile',
+    unresponsive: 'Ads Manager stopped answering — try again in a few minutes',
+    permission: 'Multilogin refused to start this profile (permission) — another user may be signed in to the same Multilogin account',
+    stale: 'Changed since the preview — review again',
+    unknown: 'Something went wrong — see Details'
+  };
+  var OWN_TEXT_CODES = ['open_by_hand', 'restart_cooldown', 'profile_closing', 'not_loopback', 'rpa_backend', 'rpa'];
+
+  function friendly(text, code) {
+    text = String(text == null ? '' : text); code = String(code || '');
+    if (OWN_TEXT_CODES.indexOf(code) >= 0 && text) return text.replace(/^Not sent:\s*/, '');
+    if (/\b403\b/.test(text) && /permission|restricted|forbidden/i.test(text)) return FRIENDLY.permission;
+    if (/launcher\.mlx\.yt|port\W{0,3}45001|winerror\W{0,3}10061/i.test(text)) return FRIENDLY.mlx;
+    if (code === 'logged_out' || /logged[ _-]?out/i.test(text)) return FRIENDLY.loggedOut;
+    if (/checkpoint/i.test(text)) return FRIENDLY.checkpoint;
+    if (code === 'page_unresponsive' || /stopped answering|page[ _]unresponsive/i.test(text)) return FRIENDLY.unresponsive;
+    if (code === 'stale' || /changed since|since the preview/i.test(text)) return FRIENDLY.stale;
+    if (/listens on this computer alone|\(127\.0\.0\.1\)/.test(text) || /ACL_FB_BACKEND=api/.test(text)) return text.replace(/^Not sent:\s*/, '');
+    return null;
+  }
+
+  // Итог для строки: {text: короткая строка, raw: полный текст для Details | null, tone}.
+  // Хорошее и «идёт» (ok, busy) остаётся как есть; плохое и предупреждение — коротко, с деталями.
+  var LONG = 80;
+  function explain(text, tone, code) {
+    var raw = String(text == null ? '' : text);
+    if (tone !== 'bad' && tone !== 'warn') return { text: raw, raw: null, tone: tone };
+    var f = friendly(raw, code);
+    var i = raw.indexOf(': '), pre = i > 0 ? raw.slice(0, i) : '', cause = i > 0 ? raw.slice(i + 2) : '';
+    if (f === null && cause) f = friendly(cause, code);
+    if (f !== null) return { text: f, raw: f === raw ? null : raw, tone: tone };
+    if (pre === 'Not sent' || (!pre && raw.length > LONG)) return { text: FRIENDLY.unknown, raw: raw, tone: tone };
+    if (raw.length > LONG && pre) return { text: pre, raw: raw, tone: tone };
+    return { text: raw, raw: null, tone: tone };
+  }
+
   root.acmCommands = {
     preview: preview, execute: execute, poll: poll, confirm: confirm, run: run,
     buildConfirmDialog: buildConfirmDialog, dialogModel: dialogModel, assertAllowed: assertAllowed,
-    newKey: newKey, FINAL_STATES: FINAL.slice(),
+    newKey: newKey, FINAL_STATES: FINAL.slice(), friendly: friendly, explain: explain, FRIENDLY: FRIENDLY,
     home: { availability: availability, controlState: controlState, statusTarget: statusTarget,
             stepValue: stepValue, batchPlan: batchPlan, flow: flow, classify: classify,
             applySaved: applySaved, editValue: editValue, actor: actor, AUTOMATIC: AUTOMATIC,

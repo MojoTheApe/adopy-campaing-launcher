@@ -320,6 +320,8 @@ const sandbox = {
   fetch: fakeFetch, setTimeout: (f) => { Promise.resolve().then(f); return 0; }, clearTimeout() {}, Date, JSON, Promise, Object, Array, String, Number, Math, URL,
   console
 };
+win.fetch = fakeFetch;
+if (IN.acm) new Function(...Object.keys(sandbox), fs.readFileSync(IN.acm, 'utf8'))(...Object.values(sandbox));
 new Function(...Object.keys(sandbox), code)(...Object.values(sandbox));
 const handle = {closest: sel => (sel === '.hc-resize' ? handle : null)};
 const key = (k, extra) => Object.assign({key: k, target: handle, preventDefault() { this.stopped = true; }}, extra || {});
@@ -355,8 +357,33 @@ async function resizeScenario() {
   els.frame.clientWidth = 0; a.setPin(2000, false); out.hidden = a.pinWidth();
   console.log(JSON.stringify(out));
 }
+async function msgScenario() {
+  const out = {};
+  const inst = win.hcMount(root, {scoped: true, seed: IN.seed}); await inst.init();
+  const ACM = win.acmCommands;
+  const raw = "Not sent: Facebook_5414_x the profile could not be opened with automation: HTTPSConnectionPool(host='launcher.mlx.yt', port=45001): Max retries exceeded (Caused by NewConnectionError: [WinError 10061] No connection could be made because the target machine actively refused it) <b>x</b>";
+  inst.state.notes['campaign:1'] = ACM.explain(raw, 'bad', '');
+  inst.state.notes['campaign:3'] = ACM.explain('Confirmed', 'ok');
+  inst.render();
+  const row = key => (new RegExp('<tr class="hc-r-campaign[^"]*" data-key="' + key + '".*?</tr>', 's')).exec(els.table.innerHTML);
+  out.statusCell = (/<td class="p2">.*?<\/td>/s.exec(row('campaign:1')[0]) || [''])[0];
+  const sub = html => /<tr class="hc-rowmsg[^"]*" data-msg="row:campaign:1".*?<\/tr>/s.exec(html);
+  out.sub = sub(els.table.innerHTML) && sub(els.table.innerHTML)[0];
+  out.order = els.table.innerHTML.indexOf('data-key="campaign:1"') < els.table.innerHTML.indexOf('data-msg="row:campaign:1"');
+  out.okSub = /data-msg="row:campaign:3"[^>]*>.*?<\/tr>/s.exec(els.table.innerHTML)[0];
+  // Details: раскрыть и свернуть
+  const click = id => els.table.listeners.click[0]({target: {closest: sel => (/data-details/.test(sel) ? {dataset: {details: id}} : null)}});
+  click('row:campaign:1'); out.opened = sub(els.table.innerHTML)[0];
+  click('row:campaign:1'); out.closed = sub(els.table.innerHTML)[0];
+  // сбой чтения аккаунта: одна строка и Details
+  inst.state.summaries.Acc = Object.assign({}, inst.state.summaries.Acc, {attempt: {state: 'failed', at: '2026-10-12 08:54:22', error: raw.replace('Not sent: ', ''), code: ''}});
+  inst.render();
+  out.band = /data-msg="acct:Acc:read".*?<\/tr>/s.exec(els.table.innerHTML)[0];
+  console.log(JSON.stringify(out));
+}
 (async () => {
   if (IN.scenario === 'resize') { await resizeScenario(); return; }
+  if (IN.scenario === 'msg') { await msgScenario(); return; }
   const out = {};
   const inst = win.hcMount(root, {scoped: true, seed: IN.seed});
   await inst.init();
@@ -397,6 +424,9 @@ async function resizeScenario() {
 """
 
 
+ACM_JS = ROOT / 'src' / 'web' / 'static' / 'acm_commands.js'
+
+
 def _run(period_ok=True, seed=None, statusAfterRead=False, scenario='', storage=None, frameW=1400) -> dict:
     data = _fixtures()
     js = _component_js()
@@ -406,7 +436,8 @@ def _run(period_ok=True, seed=None, statusAfterRead=False, scenario='', storage=
         (Path(tmp) / "h.js").write_text(_HARNESS, encoding="utf-8")
         (Path(tmp) / "c.js").write_text(js, encoding="utf-8")
         (Path(tmp) / "in.json").write_text(json.dumps({"data": data, "seed": seed, "period": period, "statusAfterRead": statusAfterRead,
-                                                    "scenario": scenario, "storage": storage or {}, "frameW": frameW}), encoding="utf-8")
+                                                    "scenario": scenario, "storage": storage or {}, "frameW": frameW,
+                                                    "acm": str(ACM_JS) if scenario == "msg" else ""}), encoding="utf-8")
         done = subprocess.run([shutil.which("node"), "h.js", "c.js", "in.json"], cwd=tmp, capture_output=True, text=True,
                               encoding="utf-8", timeout=60)
     assert done.returncode == 0, done.stderr
@@ -564,3 +595,96 @@ def test_names_wrap_to_two_lines_and_keep_the_full_name_in_the_tooltip(page):
     assert ".hc-table td.p3 { white-space: normal; }" in css
     assert 'class="p3"><div class="hc-id"><span class="hc-badge">Campaign</span><span class="hc-name"><b title="CL - Mercado Libre - Evergreen (id ' in page["table"]
     assert 'class="hc-resize" role="separator"' in page["table"] and 'aria-label="Resize the name column' in page["table"]
+
+
+# ───────────────────────── сообщения: короткая строка под строкой, не в ячейке Status ─────────────────────────
+
+def _map(cases):
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "m.js").write_text(
+            "const fs = require('fs'); const win = {}; new Function('window', fs.readFileSync(process.argv[2], 'utf8'))(win);\n"
+            "const IN = JSON.parse(process.argv[3]);\n"
+            "console.log(JSON.stringify(IN.map(([t, c, tone]) => [win.acmCommands.friendly(t, c), win.acmCommands.explain(t, tone || 'bad', c)])));",
+            encoding="utf-8")
+        done = subprocess.run([shutil.which("node"), "m.js", str(ACM_JS), json.dumps(cases)], cwd=tmp, capture_output=True,
+                              text=True, encoding="utf-8", timeout=30)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
+LAUNCHER = ("Not sent: Facebook_5414_x the profile could not be opened with automation: HTTPSConnectionPool(host='launcher.mlx.yt', "
+            "port=45001): Max retries exceeded (Caused by NewConnectionError: [WinError 10061] No connection could be made)")
+HAND = "the profile is open but has no automation port (opened by hand in MLX Desktop?). Close it in MLX Desktop or open it from the dashboard, then retry."
+LOOP = "Campaign commands are only available when the dashboard listens on this computer alone (127.0.0.1). It is bound to a network address."
+RPA = "Campaign commands need the Graph API backend (ACL_FB_BACKEND=api). This machine uses the RPA backend, so nothing was changed."
+
+
+@pytest.mark.parametrize("text,code,want", [
+    (LAUNCHER, "", "Multilogin isn't running — start it and try again"),
+    ("HTTPSConnectionPool(host='127.0.0.1', port=45001): refused", "", "Multilogin isn't running — start it and try again"),
+    ("[WinError 10061] No connection could be made", "", "Multilogin isn't running — start it and try again"),
+    ("ProfileError: " + HAND, "open_by_hand", "ProfileError: " + HAND),                                   # уже человеческий текст сервера
+    ("Not sent: the profile restarted a minute ago; try again in 3 min.", "restart_cooldown", "the profile restarted a minute ago; try again in 3 min."),
+    ("The Facebook_5 profile is logged out.", "logged_out", "Logged out in this profile — log in inside Multilogin, then retry"),
+    ("session says: logged out of facebook", "", "Logged out in this profile — log in inside Multilogin, then retry"),
+    ("The profile is on a Facebook checkpoint; solve it", "", "Facebook checkpoint — resolve it inside the profile"),
+    ("The Ads Manager tab stopped answering on the last read", "", "Ads Manager stopped answering — try again in a few minutes"),
+    ("tab is dead", "page_unresponsive", "Ads Manager stopped answering — try again in a few minutes"),
+    ("Multilogin answered 403: restricted permission for this profile", "",
+     "Multilogin refused to start this profile (permission) — another user may be signed in to the same Multilogin account"),
+    ("The account currency changed since the preview.", "stale", "Changed since the preview — review again"),
+    ("Failed — previous state kept: value changed since the preview. Nothing was written.", "", "Changed since the preview — review again"),
+    (LOOP, "not_loopback", LOOP), (RPA, "rpa_backend", RPA),
+])
+def test_friendly_messages_map_the_common_causes(text, code, want):
+    (f, ex), = _map([[text, code]])
+    assert f == want and ex["text"] == want and ex["tone"] == "bad"
+    if want != text:
+        assert ex["raw"] == text                                                                      # сырой текст — в Details
+
+
+def test_unknown_errors_say_something_went_wrong_and_keep_the_raw_text():
+    (f, ex), (f2, ex2), (f3, ex3) = _map([["Not sent: kaboom", "", "bad"], ["Failed — previous state kept: Meta refused", "", "bad"],
+                                          ["Confirmed", "", "ok"]])
+    assert f is None and ex["text"] == "Something went wrong — see Details" and ex["raw"] == "Not sent: kaboom"
+    assert ex2["text"] == "Failed — previous state kept: Meta refused" and ex2["raw"] is None          # известный исход короткий — Details не нужен
+    assert ex3 == {"text": "Confirmed", "raw": None, "tone": "ok"}
+    long = "Failed — previous state kept: " + "x" * 200
+    (_, ex4), = _map([[long, "", "bad"]])
+    assert ex4["text"] == "Failed — previous state kept" and ex4["raw"] == long
+
+
+def test_the_message_is_a_full_width_sub_row_not_a_status_cell_note():
+    out = _run(scenario="msg")
+    assert "hc-mk bad" in out["statusCell"]                                                              # в ячейке — только маркер с подсказкой
+    assert "WinError" not in out["statusCell"] and "HTTPSConnectionPool" not in out["statusCell"]       # сырой текст в узкую ячейку не попадает
+    assert out["order"] is True                                                                          # строка сообщения — сразу под своей строкой
+    sub = out["sub"]
+    assert re.search(r'<td colspan="\d+">', sub) and int(re.search(r'colspan="(\d+)"', sub).group(1)) > 4        # на всю ширину таблицы
+    assert "Multilogin isn&#39;t running — start it and try again" in sub and "WinError" not in sub
+    assert 'class="hc-rm-btn" data-details="row:campaign:1" aria-expanded="false">Details' in sub
+    assert "hc-rm-raw" not in sub                                                                         # свёрнуто
+    assert 'class="hc-rm-btn"' not in out["okSub"] and "Confirmed" in out["okSub"]                      # у «Confirmed» деталей нет
+
+
+def test_details_expands_with_the_escaped_raw_text_and_collapses_again():
+    out = _run(scenario="msg")
+    assert 'aria-expanded="true"' in out["opened"] and 'class="hc-rm-raw"' in out["opened"]
+    assert "WinError 10061" in out["opened"] and "launcher.mlx.yt" in out["opened"]
+    assert "&lt;b&gt;x&lt;/b&gt;" in out["opened"] and "<b>x</b>" not in out["opened"]                   # экранировано
+    assert "hc-rm-raw" not in out["closed"] and 'aria-expanded="false"' in out["closed"]
+
+
+def test_an_account_read_failure_is_one_line_plus_details():
+    band = _run(scenario="msg")["band"]
+    assert "The last read failed (2026-10-12 08:54:22) — Multilogin isn&#39;t running — start it and try again" in band
+    assert 'data-details="acct:Acc:read"' in band and "WinError" not in band
+    assert "hc-rm-raw" not in band
+    css = TABLE[: TABLE.index("</style>")]
+    assert ".hc-rm-text { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" in css
+    assert "user-select: text" in css and "hc-rnote" not in TABLE
+
+
+def test_the_mapping_lives_in_one_place():
+    assert TABLE.count("launcher.mlx.yt") == 0 and "Multilogin isn't running" not in TABLE
+    assert "Multilogin isn't running" in ACM_JS.read_text(encoding="utf-8")

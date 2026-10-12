@@ -356,3 +356,71 @@ def test_names_stay_within_two_lines_and_carry_the_full_name_in_the_tooltip(page
       return {clamp: cs.webkitLineClamp || cs.lineClamp, title: b.title, text: b.textContent, h: Math.round(b.getBoundingClientRect().height), lh: parseFloat(cs.lineHeight)};
     }""")
     assert info["clamp"] == "2" and info["text"] in info["title"] and info["h"] <= info["lh"] * 2 + 2
+
+
+# ───────────────────────── сообщения под строкой (ACL-1800) ─────────────────────────
+
+RAW_ERROR = ("Not sent: Facebook_5414_61579429945735 the profile could not be opened with automation: HTTPSConnectionPool(host='launcher.mlx.yt', "
+             "port=45001): Max retries exceeded with url: /api/v2/profile/f/automation_type (Caused by NewConnectionError('<urllib3.connection."
+             "HTTPSConnection object at 0x000001>: Failed to establish a new connection: [WinError 10061] No connection could be made because "
+             "the target machine actively refused it'))")
+
+
+def _inject_error(page):
+    page.evaluate("""(raw) => {
+      const inst = document.querySelector('.amap-campaigns')._hc;
+      inst.state.notes['campaign:1'] = window.acmCommands
+        ? window.acmCommands.explain(raw, 'bad', '') : {text: raw, raw: null, tone: 'bad'};
+      inst.state.summaries.Fresh = Object.assign({}, inst.state.summaries.Fresh, {attempt: {state: 'failed', at: '2026-10-12 08:54:22', error: raw.replace('Not sent: ', ''), code: ''}});
+      inst.render();
+    }""", RAW_ERROR)
+
+
+def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page):
+    import os
+    from pathlib import Path
+
+    shots = os.environ.get("ACL_SHOTS_DIR", "")
+    page.evaluate("document.querySelector('[data-hc=preset]').value = 'all'")
+    page.add_script_tag(url="http://acl.test/static/acm_commands.js")
+    page.wait_for_function("!!window.acmCommands")
+    _inject_error(page)
+    row = page.locator('tr[data-key="campaign:1"]')
+    sub = page.locator('tr[data-msg="row:campaign:1"]')
+    assert row.bounding_box()["height"] <= 90                                              # строка осталась обычной высоты
+    assert sub.bounding_box()["height"] <= 40                                              # сообщение — одна строка
+    status = row.locator("td.p2")
+    assert "WinError" not in status.inner_text() and "Multilogin" not in status.inner_text()
+    assert status.locator(".hc-mk.bad").count() == 1 and "Multilogin" in status.locator(".hc-mk").get_attribute("title")
+    table_w = page.evaluate("document.querySelector('[data-hc=table]').getBoundingClientRect().width")
+    assert page.evaluate("document.querySelector('tr[data-msg=\"row:campaign:1\"] td').getBoundingClientRect().width") >= table_w - 2   # на всю ширину
+    assert page.evaluate("document.querySelector('tr[data-msg=\"row:campaign:1\"]').previousElementSibling.dataset.key") == "campaign:1"
+    text = sub.locator(".hc-rm-text")
+    assert text.inner_text() == "Multilogin isn't running — start it and try again"
+    assert page.evaluate("getComputedStyle(document.querySelector('.hc-rm-text')).whiteSpace") == "nowrap"
+    assert page.locator(".hc-rm-raw").count() == 0
+    if shots:
+        for theme in ("light", "dark"):
+            page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
+            page.locator(".amap-campaigns").screenshot(path=str(Path(shots) / f"row-error-collapsed-{theme}.png"))
+    sub.locator(".hc-rm-btn").click()
+    raw = page.locator(".hc-rm-raw")
+    assert raw.count() == 1 and "WinError 10061" in raw.inner_text() and "launcher.mlx.yt" in raw.inner_text()
+    assert page.evaluate("getComputedStyle(document.querySelector('.hc-rm-raw')).userSelect") == "text"
+    assert row.bounding_box()["height"] <= 90                                              # раскрытые детали строку не растягивают
+    assert page.evaluate("document.querySelector('.hc-rm-raw').getBoundingClientRect().height") <= 160
+    assert page.locator('.hc-rm-btn[aria-expanded="true"]').count() == 1
+    if shots:
+        for theme in ("light", "dark"):
+            page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
+            page.locator(".amap-campaigns").screenshot(path=str(Path(shots) / f"row-error-details-{theme}.png"))
+    sub.locator(".hc-rm-btn").click()
+    assert page.locator(".hc-rm-raw").count() == 0
+    # сбой чтения аккаунта: одна строка в полосе и Details
+    band = page.locator('tr[data-msg="acct:Fresh:read"]')
+    assert "The last read failed (2026-10-12 08:54:22)" in band.inner_text() and band.bounding_box()["height"] <= 40
+    assert "WinError" not in band.inner_text()
+    band.locator(".hc-rm-btn").click()
+    assert "WinError 10061" in page.locator('tr[data-msg="acct:Fresh:read"] .hc-rm-raw').inner_text()
+    page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
+    assert page.errors == []

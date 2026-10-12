@@ -127,7 +127,7 @@
   .hc-table tr.hc-r-ad > td { height: var(--adopy-row-ad-min); }
   .hc-table tr.hc-sel > td { background: var(--adopy-selected-bg); }
   .hc-table td.hc-gl { border-left: 1px solid var(--adopy-border); }
-  .hc-band td, .hc-msg td { overflow: visible; }
+  .hc-band td, .hc-msg td, .hc-rowmsg td { overflow: visible; }
   .hc-table thead th.hc-pin-top { left: 0; z-index: calc(var(--adopy-z-table-header) + 6); border-right: 1px solid var(--adopy-border-strong); color: var(--adopy-text); }
   .hc-band td { height: 36px; background: var(--adopy-surface-subtle); border-bottom: 1px solid var(--adopy-border-strong); padding: 0; }
   .hc-band-in { position: sticky; left: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0 var(--adopy-cell-x);
@@ -176,11 +176,19 @@
   .hc-cmd-note { font-size: 0.6875rem; color: var(--adopy-text-muted); }
   .hc-batchbar { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; padding: 0 0 0.5rem; }
   .hc-batch { display: inline-flex; gap: 0.25rem; align-items: center; }
-  .hc-rnote { display: block; font-size: 0.6875rem; max-width: 120px; white-space: normal; }
-  .hc-rnote.ok { color: var(--adopy-success); }
-  .hc-rnote.bad { color: var(--adopy-danger); }
-  .hc-rnote.warn { color: var(--adopy-warning); }
-  .hc-rnote.busy { color: var(--adopy-text-muted); }
+  /* Маркер результата в ячейке Status — точка с подсказкой; сам текст — в строке `.hc-rowmsg` под строкой. */
+  .hc-mk { display: inline-block; width: 8px; height: 8px; margin-left: 0.375rem; border-radius: 50%; background: var(--adopy-text-muted); vertical-align: middle; cursor: help; }
+  .hc-mk.ok { background: var(--adopy-success); } .hc-mk.bad { background: var(--adopy-danger); } .hc-mk.warn { background: var(--adopy-warning); }
+  .hc-table tr.hc-rowmsg > td { height: 32px; padding: 0; background: var(--adopy-surface-subtle); }
+  .hc-rowmsg .hc-band-in { height: 32px; }
+  .hc-rowmsg .hc-ic { flex: none; width: 1.25em; text-align: center; color: var(--adopy-text-muted); }
+  .hc-rowmsg.ok .hc-ic, .hc-rowmsg.ok .hc-rm-text { color: var(--adopy-success); }
+  .hc-rowmsg.bad .hc-ic, .hc-rowmsg.bad .hc-rm-text { color: var(--adopy-danger); }
+  .hc-rowmsg.warn .hc-ic, .hc-rowmsg.warn .hc-rm-text { color: var(--adopy-warning); }
+  .hc-rm-text { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem; }
+  .hc-rm-btn { flex: none; min-height: 22px !important; padding: 0 0.5rem !important; font-size: 0.6875rem !important; }
+  .hc-rm-raw { position: sticky; left: 0; width: min(var(--hc-view-w, 900px), 100vw); max-height: 9rem; overflow: auto; margin: 0; padding: 0.375rem var(--adopy-cell-x) 0.5rem;
+    white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 0.6875rem/1.4 ui-monospace, Consolas, monospace; color: var(--adopy-text); border-top: 1px solid var(--adopy-border); background: var(--adopy-surface-subtle); }
   .hc-switch[aria-busy="true"] { opacity: 0.6; cursor: progress; }
   .hc-switch:not(:disabled), .hc-cmd:not(:disabled) { cursor: pointer; }
   .hc-foot { padding: 0.5rem 0.25rem; color: var(--adopy-text-muted); font-size: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
@@ -328,7 +336,7 @@
     treeErr: {},                     // account -> текст ошибки локального GET
     bi: {},                          // account -> сводка BI
     kids: {},                        // 'level:id' -> {state, rows, note}
-    expanded: {}, selected: {},
+    expanded: {}, selected: {}, details: {},
     running: {}, busy: queueBusy,
     avail: null,                     // ответ /campaign-commands/availability (null — ещё не знаем)
     notes: {},                       // key -> {text, tone}: итог последней команды по строке
@@ -614,6 +622,21 @@
   function band(cls, inner, span) {
     return '<tr class="hc-band ' + cls + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div></td></tr>';
   }
+  /* Одна компактная строка на всю ширину таблицы под строкой: значок, короткое сообщение (одна строка,
+     многоточие) и «Details» с полным техническим текстом (экранируется, выделяется для копирования). */
+  var ICONS = {ok: '✓', bad: '⚠', warn: '⚠', busy: '…'};
+  function rowMsg(id, n, span) {
+    var open = !!S.details[id], tone = n.tone || 'busy';
+    var inner = '<span class="hc-ic" aria-hidden="true">' + (ICONS[tone] || '•') + '</span><span class="hc-rm-text" title="' + esc(n.text) + '" role="status">' + esc(n.text) + '</span>' +
+      (n.raw ? '<button type="button" class="hc-rm-btn" data-details="' + esc(id) + '" aria-expanded="' + open + '">Details</button>' : '');
+    return '<tr class="hc-rowmsg ' + esc(tone) + '" data-msg="' + esc(id) + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div>' +
+      (n.raw && open ? '<div class="hc-rm-raw" tabindex="0">' + esc(n.raw) + '</div>' : '') + '</td></tr>';
+  }
+  /* Короткий текст и сырой — через общий словарь `acmCommands.explain`; без помощника — как есть. */
+  function noteFrom(text, tone, code) {
+    var A = window.acmCommands;   // помощник мог догрузиться после создания таблицы
+    return A && A.explain ? A.explain(text, tone, code) : {text: String(text), raw: null, tone: tone};
+  }
   function msg(cls, inner, span) {
     return '<tr class="hc-msg ' + cls + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div></td></tr>';
   }
@@ -622,7 +645,8 @@
     var lv = r.level, key = r.key, canOpen = lv !== 'ad';
     var open = !!S.expanded[key], sel = !!S.selected[key];
     var st = r.status;
-    var note = S.notes[key] ? '<span class="hc-rnote ' + esc(S.notes[key].tone) + '" role="status">' + esc(S.notes[key].text) + '</span>' : '';
+    /* Итог команды — не в узкой ячейке Status, а одной строкой под строкой объекта (`rowMsg`); здесь только маркер. */
+    var note = S.notes[key] ? '<span class="hc-mk ' + esc(S.notes[key].tone) + '" role="img" aria-label="' + esc(S.notes[key].text) + '" title="' + esc(S.notes[key].text) + '"></span>' : '';
     var sw;
     if (st === 'unknown') {
       sw = '<span class="hc-status-txt" title="Meta status ' + esc(r.status_raw) + '">' + esc(r.status_raw || DASH) + '</span>' + note;
@@ -645,6 +669,7 @@
       '<td class="p3"><div class="hc-id"><span class="hc-badge">' + badge + '</span><span class="hc-name"><b title="' + esc(r.name + ' (id ' + r.id + ')') + '">' + esc(r.name || '(no name)') + ctx + '</b>' +
       '<span>' + esc(countryOf(r.account)) + ' · ' + esc(r.account) + esc(count) + '</span></span></div></td>' +
       cols.map(function (c) { return c.cell(r); }).join('') + '</tr>';
+    if (S.notes[key]) html += rowMsg('row:' + key, S.notes[key], 4 + cols.length);
     if (open && canOpen) html += kidsHtml(r, cols);
     return html;
   }
@@ -676,12 +701,21 @@
   function accountMessage(a, cols) {
     var sum = S.summaries[a.account] || {state: 'idle'}, span = 4 + cols.length, att = sum.attempt;
     var out = '';
+    function one(id, tone, head, cause, code, tail) {
+      var ex = cause ? noteFrom(cause, 'bad', code) : {text: '', raw: null};
+      var line = head + (ex.text ? ' — ' + ex.text : '') + (tail || '');
+      return rowMsg(id, {text: line, raw: ex.raw || (cause && ex.text !== cause ? cause : null), tone: tone}, span);
+    }
     if (S.running[a.account]) return msg('', 'Reading campaigns for ' + esc(a.account) + '… (one profile at a time)', span);
-    if (S.treeErr[a.account]) return msg('hc-bad', 'Could not load the saved inventory: ' + esc(S.treeErr[a.account]), span);
-    if (att && att.state === 'failed') out += msg('hc-bad', 'The last read failed (' + esc(att.at || '') + '): ' + esc(att.error || 'unknown reason') + (sum.state !== 'idle' ? ' — showing the earlier snapshot below.' : ''), span);
+    if (S.treeErr[a.account]) return one('acct:' + a.account + ':tree', 'bad', 'Could not load the saved inventory', S.treeErr[a.account], '');
+    if (att && att.state === 'failed') out += one('acct:' + a.account + ':read', 'bad', 'The last read failed (' + (att.at || '') + ')', att.error || 'unknown reason', att.code,
+      sum.state !== 'idle' ? ' — showing the earlier snapshot below' : '');
     if (sum.state === 'idle') return out || msg('', 'Not read yet — press Read campaigns. Nothing is shown until the account has been read.', span);
     if (sum.state === 'empty') return out + msg('', 'The account was read and has no campaigns in the shown states.', span);
-    if (sum.state === 'partial') out += msg('hc-warn', 'Partial read: ' + esc((sum.problems || []).join('; ') || 'some levels were not read'), span);
+    if (sum.state === 'partial') {
+      var why = (sum.problems || []).join('; ') || 'some levels were not read';
+      out += rowMsg('acct:' + a.account + ':partial', {text: 'Partial read', raw: why, tone: 'warn'}, span);
+    }
     return out;
   }
 
@@ -785,7 +819,7 @@
       });
     }).catch(function (e) {
       if (e && e.code === 'needs_api_backend') { showNeedsApi(); return; }
-      S.summaries[account] = Object.assign({}, S.summaries[account] || {state: 'idle'}, {attempt: {state: 'failed', at: '', error: String(e && e.message || e)}});
+      S.summaries[account] = Object.assign({}, S.summaries[account] || {state: 'idle'}, {attempt: {state: 'failed', at: '', error: String(e && e.message || e), code: e && e.code || ''}});
     }).then(function () { delete S.running[account]; render(); });
   }
   /* Ждём конец чтения у СВОЕГО сервера (локальный статус задания); Meta это не трогает. */
@@ -840,11 +874,12 @@
     }).then(function (res) {
       /* Строку меняет только `settle`, и только подтверждённым чтением Meta; остальное — пометка. */
       var notes = ACM.home.settle(rows, res);
-      rows.forEach(function (r) { if (notes[r.key]) S.notes[r.key] = notes[r.key]; else delete S.notes[r.key]; });
-      if ((res.kind === 'failed' || res.kind === 'unknown' || res.kind === 'nothing') && res.message) el('batch-note').textContent = res.message;
+      rows.forEach(function (r) { if (notes[r.key]) S.notes[r.key] = noteFrom(notes[r.key].text, notes[r.key].tone); else delete S.notes[r.key]; });
+      if ((res.kind === 'failed' || res.kind === 'unknown' || res.kind === 'nothing') && res.message) el('batch-note').textContent = noteFrom(res.message, 'warn').text;
     }, function (e) {
       /* Сюда — только когда сервер НЕ принял запись (отказ превью/исполнения): ничего не отправлено. */
-      say(rows, 'Not sent: ' + String(e && e.message || e), 'bad');
+      var nf = noteFrom('Not sent: ' + String(e && e.message || e), 'bad', e && e.code);
+      rows.forEach(function (r) { S.notes[r.key] = nf; });
     }).then(function () { setBusy(rows, false); render(); });
   }
 
@@ -949,8 +984,9 @@
     var t = ev.target;
     var cb = t.closest ? t.closest('button[data-action]') : null;
     if (cb) { if (!cb.disabled) onCommand(cb); return; }
-    var b = t.closest ? t.closest('[data-read],[data-exp],[data-retry]') : null;
+    var b = t.closest ? t.closest('[data-read],[data-exp],[data-retry],[data-details]') : null;
     if (!b) return;
+    if (b.dataset.details) { var did = b.dataset.details; if (S.details[did]) delete S.details[did]; else S.details[did] = true; render(); return; }
     if (b.dataset.read) { readQueue([b.dataset.read]); return; }
     var key = b.dataset.exp || b.dataset.retry, row = findRow(key);
     if (!row) return;
