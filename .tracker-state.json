@@ -7249,6 +7249,18 @@
         "state": "implementing",
         "started_at": "2026-10-12T20:08:51+00:00",
         "from_status": "status:todo"
+      },
+      "335": {
+        "actor": "Worker-GX1012A",
+        "session": "work_gx1012a_20261012",
+        "coordinator": "Coordinator-CX1012A",
+        "branch": "codex/acl-1335-signin-token",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1335-2026-10-12",
+        "id": "2fb57dd4e9834ff9addc8538cce8b33e",
+        "issue": 335,
+        "state": "implementing",
+        "started_at": "2026-10-12T20:16:31+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11317,6 +11329,17 @@
           "from_status": "status:idea",
           "report": "### Recovery handoff \u2014 2026-10-12\n\nThe owner requested preservation and continuation after the previous Claude Worker stopped when its token allocation was exhausted. The stopped claim was transferred through the supported Tracker takeover to a real replacement Worker; the original branch and existing work were retained. The recovery verified that all 11 source files matched their preserved SHA256 manifest and committed their existing contents unchanged.\n\nDraft source PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/834\n\nRecovery commit: `d6c479f33aefec19b0dfd03ad25b89150091aa28` on `codex/acl-1774-texts-vertical`, based on `ecd525f20432a18b7d8f164e9d449f36ae2c9f88`.\n\nImplemented WIP: draft/form fields for additional texts and vertical media, asset-feed plan/upload/readback, media labels and ratio checks, both Python and in-page write-policy allowlists, and preliminary preflight/template wiring. No completion, independent approval, stage entry, merge, package release or live verification is claimed.\n\nRemaining work before ready review:\n\n- Complete controls for texts 3\u20135 and vertical files, persistence/restoration/copy behavior, and RPA disabled-with-reason behavior. The recovered template only adds preliminary rule/error-routing support for these controls.\n- Verify and finish reuse of `creative_pairing` for square + vertical pairs.\n- Add feature-specific regression coverage for text limits and deduplication, both policy layers, retry/idempotency, multiset readback and placement binding, UI persistence, and old-draft/RPA compatibility.\n- Run the required Meta capability spike with text optimizations OFF and manual placements after explicit owner authorization of the test-dashboard operation.\n- Complete the original 9095 PAUSED-ad acceptance with multiple texts and Feed/Story media, verify Ads Manager presentation and readback. Asset feeds with Instant Forms currently refuse explicitly and are unverified.\n- Resolve inherited ACL-1760/1761/1769/1775/1819/1767 source history relative to main before approval; the preservation draft does not approve those dependencies.\n\nVerification: 414 existing affected offline tests passed (93 warnings, 66.64 seconds): `test_acl1761_api_create.py`, `test_acl1756_fb_api.py`, `test_acl1767_audience_fields.py`, `test_acl1775_instant_forms.py`, and `test_creative_pairing.py`. The test configuration was isolated and external library settings empty. Secret scanner and `git diff --check` passed. No full suite, browser/live-profile test or advertising write was performed. New feature-specific regression tests remain to be written.\n\nPreservation is complete; feature implementation remains unfinished. The Worker records a supported stop rather than moving this draft into Review or declaring it complete."
         }
+      },
+      "335": {
+        "implementers": [
+          {
+            "actor": "Worker-GX1012A",
+            "session": "work_gx1012a_20261012"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-GX1012A",
+        "coordinator": "Coordinator-CX1012A"
       }
     },
     "actors": {
@@ -12315,6 +12338,10 @@
       "Coordinator-CX1012A": {
         "session": "coord_cx1012a_20261012",
         "role": "Coordinator"
+      },
+      "Worker-GX1012A": {
+        "session": "work_gx1012a_20261012",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -22416,6 +22443,13 @@
           "report": "# ACL-1710 / PR #711 \u2014 factual recovery return\n\nFinal report, 2026-10-12. Verdict: **return to Worker; no approval**.\n\n- Actual Reviewer: Reviewer-RX1012A; session rev_rx1012a_20261012.\n- Held source review claim: d5d9cf35ba1c4d5a9f0697b486885352.\n- Issue: ACL-1710 / GitHub #710.\n- Original source PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/711\n- Original branch: codex/acl-1710-ci-chromium.\n- Cached current remote head: bf5a3e254e44d98dfeef60d1f8366783aaf96f27.\n- Cached PR target: stage, a legacy source route. This report does not certify its base or tree against current main e8e59f8376458f2f73089c3f2a8d454837ff033f.\n\n## Inspection performed\n\nI read the full saved Issue #710 body and PR #711 body/check metadata, the recovery triage, the saved HEAD/index patches for C:\\acl-1710-ci-chromium, and that original worktree's ci_retry.sh. I did not perform a complete branch review, run tests, alter source, or fetch/mutate remote state.\n\nThe saved HEAD patch contains four uncommitted files, +23/-10, beyond the same bf5a3e25 source head recorded in the PR evidence:\n\n- .github/workflows/ci.yml\n- docs/repository/WORKFLOW.md\n- scripts/ci_retry.sh\n- tests/test_ci_layout.py\n\nThe patch switches the Ubuntu mirror, changes Linux attempts to 150 seconds and the step/job ceilings to 10/32 minutes, requires GNU coreutils timeout, places retry cleanup under timeout 60, and updates documentation/test assertions. The saved index patch is empty. The original ci_retry.sh read contains the new coreutils guard and cleanup timeout. This is genuine preserved WIP awaiting a recovery commit, not proof of tested or accepted behavior. The authoritative preserved bytes remain in dirty-source-backups/C_acl-1710-ci-chromium/head.patch.\n\n## Standards / delivery status\n\nThis is a recovery intake decision, not a completed Standards approval. Saved current-head checks include cancelled linux tests (3.11, 1), job 112989475420 in run 37678814660, and failed ACL verification, job 113000325460. The presence of other green checks does not establish required-CI completion. The current source/base route also needs reconciliation under the project's current source-review/batch workflow before any approval.\n\nReturn the review slot through the supported command, then use a fresh actual Worker claim on the original task/source branch to preserve exactly these four WIP files in a clearly described recovery commit. Verify the live files against the saved patch before committing so subsequent edits are not accidentally included. Preserve the original task history, branch and backup. This return permits that preservation step; it grants no ready, approved, batch, stage or merge status.\n\n## Spec / acceptance status\n\nIssue #710 requires bounded browser installation and retries, apt cleanup, browser caching keyed by Playwright version, measured normal-run performance, job ceilings, Windows coverage, unchanged check names/tree reuse/release gates, and hang/time acceptance evidence. These original criteria remain in force.\n\nThe WIP changes explicit numerical choices from the issue/committed PR. The saved documentation is internally inconsistent: it says attempts are 300 seconds while also naming Linux 150 seconds, and a workflow comment still says the hard ceiling is 16 minutes while the value is 10. These require reconciliation and evidence before readiness. The PR describes historical local tests and a shorter local hang simulation; I did not rerun or independently establish those results. The requested before/after three-run comparison, real-limit hang behavior, and follow-up job-duration acceptance are not established by the evidence inspected for this return.\n\nPreserve the WIP unchanged first, then perform necessary issue-scoped corrections and verification under legitimate Worker ownership. Do not silently rewrite the original acceptance requirements or present preservation as completion. Refresh current-main/base compatibility, relevant checks and handoff, followed by complete independent source review on the final exact head. No review approval evidence is produced by this report.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T20:16:31+00:00",
+        "issue": 335,
+        "claim": "2fb57dd4e9834ff9addc8538cce8b33e",
+        "actor": "Worker-GX1012A"
       }
     ],
     "policy": {
