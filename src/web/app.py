@@ -5414,6 +5414,7 @@ async def warm_close(request: Request) -> JSONResponse:
     body = await _campaign_commands_body(request)
     data, code = await asyncio.to_thread(warm_api.close_profiles, body.get("accounts"),
                                          body.get("confirm") is True)
+    return JSONResponse(data, status_code=code)
 
 
 # ACL-1822: страница Rules. Локальные чтения и записи в файлы правил; в Meta пишут только
