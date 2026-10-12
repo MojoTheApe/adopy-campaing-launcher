@@ -5354,9 +5354,7 @@ window.cbLayout = (function () {
   var FUTURE = {
     adsets:     { task: 'ACL-1768', what: 'Multiple ad sets' },
     copyAdset:  { task: 'ACL-1768', what: 'Copy ad set' },
-    texts:      { task: 'ACL-1774', what: 'Up to 5 primary texts' },
     placements: { task: 'ACL-1772', what: 'Placement editor' },
-    media:      { task: 'ACL-1772', what: 'Separate Stories / Reels file' },
     copyTo:     { task: 'ACL-1773', what: 'Copy to accounts' }
   };
 
@@ -5415,7 +5413,9 @@ window.cbLayout = (function () {
      creator.plan_from_draft), а здесь только куда её показать. */
   var ROUTES = [
     [/primary text 2/i, '.cb-text2-search', 'ad'],
-    [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text 2'],
+    [/primary text [3-5]/i, '.cb-textx-search', 'ad'],
+    [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text [2-5]'],
+    [/stories \/ reels/i, '.cb-vertical-search', 'ad'],
     [/creative|file|image|video/i, '.cb-creative-search', 'ad'],
     [/would all be named|names must differ/i, '.cb-creative-search, .cb-adtitle-search', 'ad'],
     [/budget/i, '[name$="_budget"]', 'campaign'],
@@ -5508,6 +5508,16 @@ window.cbPreflight = (function () {
 
   function applies(rule, dest) { return rule.applies === 'always' || rule.applies === dest; }
 
+  /* Непустые тексты без повторов (пробелы не в счёт) — как creator._unique / _distinct на сервере. */
+  function distinct(items) {
+    var seen = {}, out = [];
+    (Array.isArray(items) ? items : []).forEach(function (x) {
+      var key = s(x).replace(/\s+/g, '');
+      if (key && !seen[key]) { seen[key] = 1; out.push(key); }
+    });
+    return out;
+  }
+
   function perAd(rule, inp, bad, status) {
     var ads = [];
     (inp.ads || []).forEach(function (ad, i) { if (bad(ad)) ads.push(i + 1); });
@@ -5531,6 +5541,10 @@ window.cbPreflight = (function () {
       else if (id === 'link_https') out.push(!link ? v(id, 'error', 'empty') : !linkOk ? v(id, 'error', 'not_https') : v(id, 'ok'));
       else if (id === 'link_tracking') out.push(!linkOk ? v(id, 'unknown', 'no_valid_link') : v(id, trackRe.test(link) ? 'ok' : 'warning'));
       else if (id === 'media_chosen') out.push(perAd(id, inp, function (a) { return !s(a.file); }));
+      else if (id === 'vertical_needs_main') out.push(perAd(id, inp, function (a) { return !!s(a.vertical_file) && !s(a.file); }));
+      else if (id === 'texts_limit') out.push(perAd(id, inp, function (a) {
+        return ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > (C.max_texts || 5); });
+      }));
       else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }));
       else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }));
       else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return s(a.headline).length > C.max_headline; }, 'warning'));
