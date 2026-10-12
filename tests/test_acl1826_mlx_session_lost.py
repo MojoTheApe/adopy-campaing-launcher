@@ -436,8 +436,10 @@ def test_page_scripts_send_batch_show_one_banner_and_retry_only_the_skipped():
     assert "body.append('batch', batch)" in report and "amapBatchBanner(btn, scope, stopped, per" in report
     assert "amapRunJobs(btn, scope, stopped, per)" in report            # Retry = только пропущенные
     assert "fd.set('batch', batch.id)" in report                         # Publish all
-    camp = (ROOT / "src/web/templates/_home_campaigns.html").read_text(encoding="utf-8")
-    assert "body.append('batch', batch)" in camp and "readQueue(stops.map(" in camp
+    camp = (ROOT / "src/web/templates/_campaign_table.html").read_text(encoding="utf-8")
+    assert "body.append('batch', batch)" in camp and "stopped.map(function (x) { return x.job; })" in camp
+    assert "data-cb-stop-retry" in report and "onlyKeys.indexOf" in report
+    assert "amapRunSplit(job.account, job.btn, per, batch)" in report
     warm_js = (ROOT / "src/web/static/warm_sessions.js").read_text(encoding="utf-8")
     assert "runOpen(grid, s.stopped)" in warm_js
     cmds = (ROOT / "src/web/static/acm_commands.js").read_text(encoding="utf-8")
