@@ -7246,9 +7246,10 @@
         "worktree": "C:\\acl-1776-forms",
         "id": "cc4936b406844a0988631708acb33fb6",
         "issue": 776,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-12T12:51:35+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "report": "Owner cancelled ACL-1776: the robot does not create forms. No code written, nothing pushed."
       }
     },
     "tasks": {
