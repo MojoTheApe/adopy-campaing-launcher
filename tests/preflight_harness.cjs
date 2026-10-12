@@ -28,7 +28,9 @@ if (mode === '--evaluate') {
     const lines = P.lines(c.input, c.opts || {});
     out[k] = { lines, count: P.count(lines), blocks: P.blocks(lines) };
   });
+} else if (mode === '--names') {
+  out.names = data.map((x) => P.adName(x[0], x[1]));
 } else {
-  throw new Error('режим: --evaluate | --lines');
+  throw new Error('режим: --evaluate | --lines | --names');
 }
 process.stdout.write(JSON.stringify(out));

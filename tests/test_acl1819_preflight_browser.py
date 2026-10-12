@@ -31,6 +31,9 @@ LIBRARY = [{"ad_title": "Text A", "headline": "Short headline", "body": "A body 
 
 def _page_html(backend: str) -> str:
     html = _render({"Demo": [], "Other": []})
+    # Общая отрисовка пропускает ворота ради чужих тестов; здесь нужны настоящие.
+    html = html.replace("<script>/*ACL1819_TEST_GATE*/window.cbPreflightGate = function (items, go) { go(); };</script>", "")
+    assert "ACL1819_TEST_GATE" not in html
     html = html.replace("window.CB_PREFLIGHT_RULES = {};", "window.CB_PREFLIGHT_RULES = "
                         + json.dumps(pf.export_rules()) + ";", 1)
     assert "CB_PREFLIGHT_RULES = {\"version\"" in html, "таблица правил не попала на страницу"

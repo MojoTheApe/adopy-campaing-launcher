@@ -25,7 +25,7 @@ def _render_html(report: dict) -> str:
     """
     report = {**report, "countries": [dict(c) for c in report.get("countries", [])]}
     _enrich_country_overview(report)
-    return templates.env.get_template("report.html").render(
+    html = templates.env.get_template("report.html").render(
         mlx_labels=mlx_instance_labels(),
         request=MagicMock(),
         report=report,
@@ -39,6 +39,11 @@ def _render_html(report: dict) -> str:
         account_alias_map_json={},
         draft_status={},
     )
+    # ACL-1819: страница теперь закрывает Publish, пока нет pre-flight audit (ворота наглухо).
+    # Эти тесты проверяют очередь и ящик, а не аудит: ворота здесь пропускают. Сам гейт —
+    # tests/test_acl1819_preflight*.py (они вырезают эту вставку по метке ACL1819_TEST_GATE).
+    head, _, tail = html.rpartition("</body>")
+    return head + "<script>/*ACL1819_TEST_GATE*/window.cbPreflightGate = function (items, go) { go(); };</script></body>" + tail
 
 
 _MOCK_REPORT = {
