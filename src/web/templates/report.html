@@ -9197,26 +9197,79 @@ function amapCampaignTabs(host) {
   });
 }
 
+/* Дерево аккаунтов страны: строка аккаунта — родитель, под ней раскрывается таблица её кампаний.
+   Страница создаёт узлы (стрелка, строка снимка, кнопки, рамка прокрутки, таблица) и отдаёт компоненту;
+   под rpa ничего этого нет. Раскрытие строки ничего не читает у Meta. */
+function amapCampaignTree(grid, accounts) {
+  var handles = {};
+  var warmOwn = !window.__aclWarmSessions;      // чип и «Open/Close» от ACL-1812 уже в строке — второй не рисуем
+  function btn(cls, text) { var b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = text; return b; }
+  grid.querySelectorAll('td.amap-live[data-account]').forEach(function (cell) {
+    var a = cell.dataset.account, row = cell.closest('tr');
+    if (!row || accounts.indexOf(a) < 0 || handles[a]) return;
+    var acc = row.querySelector('td.amap-acc');
+    if (!acc) return;
+    var caret = btn('amap-caret', '▸');
+    caret.tabIndex = -1;
+    caret.setAttribute('aria-label', 'Show campaigns of ' + a);
+    var off = acc.querySelector('.amap-caret-off');
+    if (off) off.replaceWith(caret); else acc.insertBefore(caret, acc.firstChild);
+    var chip = null, openBtn = null;
+    if (warmOwn) {
+      chip = document.createElement('span'); chip.className = 'amap-pstate'; chip.hidden = true;
+      acc.appendChild(chip);
+    }
+    var snap = document.createElement('small'); snap.className = 'hc-snap';
+    acc.appendChild(snap);
+    var act = row.querySelector('td.amap-actions') || row.lastElementChild;
+    var readBtn = btn('amap-btn hc-rc', 'Read campaigns');
+    act.appendChild(readBtn);
+    if (warmOwn) { openBtn = btn('amap-btn hc-ro', 'Open profile'); openBtn.hidden = true; act.appendChild(openBtn); }
+    var child = document.createElement('tr');
+    child.className = 'hc-acct-child'; child.hidden = true;
+    var td = document.createElement('td');
+    td.colSpan = row.children.length;
+    td.innerHTML = '<div class="hc hc-embed"><div class="hc-frame"><div class="hc-top" aria-hidden="true"><div></div></div>' +
+      '<div class="hc-scroll" tabindex="0" role="region"><table class="hc-table"></table></div></div></div>';
+    child.appendChild(td);
+    row.parentNode.insertBefore(child, row.nextSibling);
+    row.classList.add('hc-acct-row');
+    row.tabIndex = 0;
+    row.setAttribute('aria-expanded', 'false');
+    var scroll = td.querySelector('.hc-scroll');
+    scroll.setAttribute('aria-label', 'Campaigns of ' + a + ', scrolls horizontally');
+    handles[a] = {row: row, caret: caret, snap: snap, readBtn: readBtn, chip: chip, openBtn: openBtn, child: child,
+                  embed: td.querySelector('.hc-embed'), frame: td.querySelector('.hc-frame'), scroll: scroll,
+                  top: td.querySelector('.hc-top'), topIn: td.querySelector('.hc-top > div'), table: td.querySelector('table')};
+  });
+  return handles;
+}
+
 function amapCampaignMount(host) {
   if (host._hc) return host._hc;
   amapCampaignTabs(host);
   var mount = host.querySelector('[data-hc-mount]');
-  var tpl = document.getElementById('hc-scoped-tpl');
+  var tpl = document.getElementById('hc-scoped-tpl'), tplAfter = document.getElementById('hc-after-tpl');
   if (!mount || !tpl || typeof window.hcMount !== 'function') {
     if (mount) mount.textContent = 'The campaign table is not available on this page. Reload the dashboard.';
     return null;
   }
   mount.appendChild(tpl.content.cloneNode(true));
+  var scope = host.parentNode || document;
+  var after = scope.querySelector('[data-hc-after]');
+  if (after && tplAfter && !after.firstChild) after.appendChild(tplAfter.content.cloneNode(true));
   var per = typeof amapPeriod === 'function' ? amapPeriod() : {};
   host.dataset.periodFrom = per.from || '';
   host.dataset.periodTo = per.to || '';
   host.dataset.periodSpan = per.span || '';
   var seen = {}, accounts = [];
-  (host.parentNode || document).querySelectorAll('table.amap-grid td.amap-live[data-account]').forEach(function (c) {
+  scope.querySelectorAll('table.amap-grid td.amap-live[data-account]').forEach(function (c) {
     var a = c.dataset.account;
     if (a && !seen[a]) { seen[a] = true; accounts.push(a); }
   });
-  host._hc = window.hcMount(host, {scoped: true, seed: [{country: host.dataset.country || '', accounts: accounts}]});
+  var grid = scope.querySelector('table.amap-grid');
+  host._hc = window.hcMount(host, {seed: [{country: host.dataset.country || '', accounts: accounts}],
+                                   rows: grid ? amapCampaignTree(grid, accounts) : {}, after: after});
   host._hc.ready = host._hc.init();
   return host._hc;
 }

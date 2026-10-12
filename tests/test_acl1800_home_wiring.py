@@ -81,7 +81,7 @@ def test_inventory_rows_carry_the_bid_fields_the_editor_needs():
 
 def test_template_loads_the_helper_first_and_keeps_one_post_path():
     assert TEMPLATE.index('<script src="/static/acm_commands.js"></script>') < TEMPLATE.index("(function () {")
-    assert re.findall(r"fetch\('([^']+)'", TEMPLATE) == ["/campaign-inventory/read"]   # команды ходят через помощник
+    assert re.findall(r"fetch\('([^']+)'", TEMPLATE) == ["/warm/state?", "/warm/open", "/warm/job/", "/campaign-inventory/read"]   # команды ходят через помощник; Meta читает только первый
     assert "data-batch" in TEMPLATE and "Duplicate here" in TEMPLATE and "REASON_COPY" in TEMPLATE
     assert "setInterval" not in TEMPLATE
 

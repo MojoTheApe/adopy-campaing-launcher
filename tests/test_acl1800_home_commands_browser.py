@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 pytest.importorskip("playwright.sync_api")
-from tests.test_acl1798_home_campaigns_browser import Site, sync_playwright  # noqa: E402,F401
+from tests.test_acl1798_home_campaigns_browser import Site, open_acc, sync_playwright  # noqa: E402,F401
 from tests._retry_once import goto, launch_chromium  # noqa: E402
 from tests.test_acl1798_campaign_inventory import adset, camp, ad, snapshot  # noqa: E402
 from tests.test_acl1800_campaign_commands import (  # noqa: E402
@@ -129,7 +129,8 @@ def open_page(world, monkeypatch, tmp_path):
         pg.on("pageerror", lambda e: errors.append(str(e)))
         pg.errors = errors
         goto(pg, "http://acl.test/")
-        pg.wait_for_selector("[data-hc=table] tbody tr", timeout=10000)
+        open_acc(pg, "Acc")
+        pg.wait_for_selector(".hc-table tbody tr", timeout=10000)
         pg.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.avail !== null")
         state.update(pw=pw, browser=browser)
         return pg, site
@@ -345,23 +346,24 @@ def test_country_table_screenshots_light_and_dark(open_page, monkeypatch, world)
         "country": "Kuwait", "goal_cpa": 500.0, "goal_ftd": 12, "benchmark_cpa": 650.0, "goal_note": "", "benchmark_note": ""})
     page.set_viewport_size({"width": 1500, "height": 1000})
     page.reload()
-    page.wait_for_selector("[data-hc=table] tbody tr")
+    open_acc(page, "Acc")
+    page.wait_for_selector(".hc-table tbody tr")
     page.click("[data-hc=expand-all]")
     page.wait_for_selector(f'tr[data-key="ad:{AD_1}"]', timeout=15000)
-    block = page.locator(".amap-campaigns")
+    block = page.locator(".amap")
     for theme in ("light", "dark"):
         page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
-        page.evaluate("document.querySelector('[data-hc=scroll]').scrollLeft = 0")
+        page.evaluate("document.querySelector('.hc-scroll').scrollLeft = 0")
         page.wait_for_timeout(150)
-        block.screenshot(path=str(Path(SHOTS) / f"country-table-controls-{theme}.png"))
+        block.screenshot(path=str(Path(SHOTS) / f"account-tree-controls-{theme}.png"))
         page.click("[data-jump=bi]")
         page.wait_for_timeout(150)
-        block.screenshot(path=str(Path(SHOTS) / f"country-table-bi-{theme}.png"))
+        block.screenshot(path=str(Path(SHOTS) / f"account-tree-bi-{theme}.png"))
         page.click("[data-jump=meta]")
         page.wait_for_timeout(150)
-        block.screenshot(path=str(Path(SHOTS) / f"country-table-meta-{theme}.png"))
+        block.screenshot(path=str(Path(SHOTS) / f"account-tree-meta-{theme}.png"))
     page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
-    page.evaluate("document.querySelector('[data-hc=scroll]').scrollLeft = 0")
+    page.evaluate("document.querySelector('.hc-scroll').scrollLeft = 0")
     box = page.locator(".hc-resize").bounding_box()
     x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
     page.mouse.move(x, y)
@@ -369,6 +371,6 @@ def test_country_table_screenshots_light_and_dark(open_page, monkeypatch, world)
     page.mouse.move(x + 180, y, steps=6)
     page.mouse.up()
     page.wait_for_timeout(150)
-    block.screenshot(path=str(Path(SHOTS) / "country-table-pinned-widened-light.png"))
+    block.screenshot(path=str(Path(SHOTS) / "account-tree-pinned-widened-light.png"))
     page.evaluate("localStorage.removeItem('acl.hc.pinw.v1')")
     assert page.errors == []
