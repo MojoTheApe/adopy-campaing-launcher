@@ -105,6 +105,18 @@ def _write(data: dict) -> None:
         temp.unlink(missing_ok=True)
 
 
+def _num_of(raw, key: str):
+    if raw in (None, ""):
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"assets {key} must be a number, got {raw!r}")
+    if value < 0:
+        raise ValueError(f"assets {key} cannot be negative")
+    return value
+
+
 def _clean(goal: dict) -> dict:
     country = (str(goal.get("country") or "")).strip()
     if not country:
@@ -122,7 +134,7 @@ def _clean(goal: dict) -> dict:
             raise ValueError(f"{key} cannot be negative")
         return value
 
-    return {
+    out = {
         "country": country,
         "code": (str(goal.get("code") or "")).strip().upper()[:4],
         "market": (str(goal.get("market") or "")).strip() or "Other",
@@ -131,6 +143,20 @@ def _clean(goal: dict) -> dict:
         "cr": _num("cr", float),
         "leads_per_day": _num("leads_per_day", int),
     }
+    # Необязательные цели по Ad Asset (Rules): {"<asset>": {"cpa": .., "cr": ..}}
+    assets = goal.get("assets")
+    if isinstance(assets, dict) and assets:
+        clean: dict = {}
+        for name, val in assets.items():
+            name = str(name or "").strip()
+            if not name or not isinstance(val, dict):
+                continue
+            entry = {k: _num_of(val.get(k), k) for k in ("cpa", "cr")}
+            if any(v is not None for v in entry.values()):
+                clean[name] = entry
+        if clean:
+            out["assets"] = clean
+    return out
 
 
 def for_cm(cm: str, countries=None) -> list[dict]:
@@ -176,7 +202,15 @@ def upsert(cm: str, goal: dict, countries=None) -> list[dict]:
     стартовые цели вместе с ней, а не одну правленую страну.
     """
     cleaned = _clean(goal)
-    goals = [g for g in for_cm(cm, countries) if (g.get("country") or "").casefold() != cleaned["country"].casefold()]
+    current = for_cm(cm, countries)
+    # Правка страны из формы My Goals не знает про цели по Ad Asset: без ключа `assets`
+    # (или с `None`) сохраняем прежние, иначе первая же правка CPA стирала бы цели Rules.
+    # Пустой словарь `{}` - явная просьба очистить.
+    if goal.get("assets") is None and "assets" not in cleaned:
+        old = next((g for g in current if (g.get("country") or "").casefold() == cleaned["country"].casefold()), None)
+        if old and isinstance(old.get("assets"), dict) and old["assets"]:
+            cleaned["assets"] = old["assets"]
+    goals = [g for g in current if (g.get("country") or "").casefold() != cleaned["country"].casefold()]
     goals.append(cleaned)
     goals.sort(key=lambda g: (g.get("market") or "", g.get("country") or ""))
     return save(cm, goals)
