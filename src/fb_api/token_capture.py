@@ -235,11 +235,91 @@ _HELPER_JS = r"""
     return checked;
   }
 
+  // ACL-1776: отдельная цепочка создания формы лидов (зеркало
+  // write_policy.check_form_create). Возвращает null (можно) или короткую причину.
+  function checkForm(spec) {
+    const F = WRITE && WRITE.form_create;
+    if (!F) return 'form_policy';
+    const m = new RegExp('^/([0-9]{1,25})/' + F.edge + '$').exec(String(spec.path || ''));
+    if (!m) return 'form_path';
+    if (String(spec.form_page || '') !== m[1]) return 'form_page';
+    if (spec.files && Object.keys(spec.files).length) return 'form_file';
+    const params = spec.params || {};
+    const txt = (x) => typeof x === 'string' && x.trim().length > 0 && x.length <= F.max_text;
+    const url = (x) => typeof x === 'string' && new RegExp(F.url_re, 'i').test(x.trim());
+    const bad = (value) => {
+      if (Array.isArray(value)) return value.some(bad);
+      if (value && typeof value === 'object') {
+        return Object.keys(value).some((k) => {
+          const low = String(k).toLowerCase();
+          const parts = low.split(/[^a-z0-9]+/);
+          return F.forbidden.indexOf(low) >= 0 || parts.indexOf('tos') >= 0
+            || parts.indexOf('terms') >= 0 || low.indexOf('tos_accepted') >= 0 || bad(value[k]);
+        });
+      }
+      return false;
+    };
+    if (bad(params)) return 'form_forbidden';
+    const keys = Object.keys(params);
+    for (const k of keys) if (!KEY_RE.test(k) || F.keys.indexOf(k) < 0) return 'form_key';
+    for (const k of ['name', 'questions', 'locale']) if (!(k in params)) return 'form_key';
+    const c = Object.assign({}, params);
+    for (const k of F.json_keys) {
+      if (!(k in params)) continue;
+      let v = params[k];
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { return 'form_json'; } }
+      c[k] = v;
+    }
+    if (bad(c)) return 'form_forbidden';
+    const only = (obj, kind) => obj && typeof obj === 'object' && !Array.isArray(obj)
+      && Object.keys(obj).every((k) => F.nested[kind].indexOf(k) >= 0);
+    if (!txt(c.name) || c.name.length > 200 || !new RegExp(F.name_re).test(c.name)) return 'form_name';
+    if (!new RegExp(F.locale_re).test(String(c.locale))) return 'form_locale';
+    const qs = c.questions;
+    if (!Array.isArray(qs) || qs.length < 1 || qs.length > F.max_questions) return 'form_questions';
+    for (const q of qs) {
+      if (!only(q, 'question') || F.question_types.indexOf(q.type) < 0) return 'form_questions';
+      if (q.type === 'CUSTOM') { if (!txt(q.key) || !txt(q.label)) return 'form_questions'; }
+      else if (Object.keys(q).length !== 1) return 'form_questions';
+      if ('options' in q) {
+        if (q.type !== 'CUSTOM' || !Array.isArray(q.options) || q.options.length < 1
+            || q.options.length > F.max_options) return 'form_questions';
+        for (const o of q.options) if (!only(o, 'option') || !txt(o.key) || !txt(o.value)) return 'form_questions';
+      }
+    }
+    if ('question_page_custom_headline' in c && !txt(c.question_page_custom_headline)) return 'form_headline';
+    if ('follow_up_action_url' in c && !url(c.follow_up_action_url)) return 'form_url';
+    if ('privacy_policy' in c) {
+      const p = c.privacy_policy;
+      if (!only(p, 'privacy_policy') || !url(p.url) || !txt(p.link_text)) return 'form_privacy';
+    }
+    if ('thank_you_page' in c) {
+      const t = c.thank_you_page;
+      if (!only(t, 'thank_you_page') || !txt(t.title)) return 'form_thanks';
+      if ('body' in t && !txt(t.body)) return 'form_thanks';
+      if ('button_text' in t && !txt(t.button_text)) return 'form_thanks';
+      if ('button_type' in t && F.button_types.indexOf(t.button_type) < 0) return 'form_thanks';
+      if ('website_url' in t && !url(t.website_url)) return 'form_thanks';
+    }
+    if ('context_card' in c) {
+      const x = c.context_card;
+      if (!only(x, 'context_card') || !txt(x.title) || F.card_styles.indexOf(x.style) < 0) return 'form_card';
+      if (!Array.isArray(x.content) || !x.content.length || !x.content.every(txt)) return 'form_card';
+    }
+    return null;
+  }
+
   async function write(spec) {
     const refused = (why) => ({ error: 'write_refused', why: why });
     if (!WRITE) return { error: 'read_only' };
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
+    // ACL-1776: путь Страницы идёт ТОЛЬКО по цепочке форм; путь act_X - только по своей.
+    if (/\/leadgen_forms$/.test(path)) {
+      const why = checkForm(spec);
+      if (why) return refused(why);
+      return post(path, spec.params || {}, undefined, null, spec, {});
+    }
     const m = /^\/(act_[0-9]{5,})\/([a-z]+)$/.exec(path);
     if (!m || m[1] !== WRITE.act) return refused('path');
     const edge = m[2];
@@ -304,6 +384,11 @@ _HELPER_JS = r"""
         if (hex !== String(expect.sha256 || '')) return refused('file_hash');
       } catch (e) { return refused('file_hash'); }
     }
+    return post(path, params, want, blob, spec, files);
+  }
+
+  // Общая отправка записи: политика уже проверена (цепочка act_X или цепочка форм).
+  async function post(path, params, want, blob, spec, files) {
     scanFast(); scanHtml();
     if (!token) return { error: 'no_token', state: state() };
     if (typeof fetch !== 'function') return { error: 'no_fetch' };
@@ -676,7 +761,8 @@ class InPageGraph:
         raise CdpError("staging failed")  # недостижимо
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
-              filename: str = "", timeout: float = 120.0, on_ad: bool = False) -> dict:
+              filename: str = "", timeout: float = 120.0, on_ad: bool = False,
+              form_page: str = "") -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
         `files` — {поле: bytes}. Файл складывается в помощник прямо перед
@@ -690,10 +776,16 @@ class InPageGraph:
 
         from src.fb_api import write_policy as _wp
 
-        _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
+        if form_page:
+            # ACL-1776: цепочка форм - Страница плана; цепочка act_X для такого пути не годится.
+            _wp.check_form_create(form_page, "POST", path, params, files)
+        else:
+            _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
                                 "filename": filename, "host": self.graph_host,
                                 "credentials": self.credentials}
+        if form_page:
+            spec["form_page"] = str(form_page)
         if on_ad:
             # ACL-1775: набор плана ON_AD — вторая линия политики пропустит форму в креативе.
             spec["on_ad"] = True

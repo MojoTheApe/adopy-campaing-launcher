@@ -162,6 +162,23 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "form_partly_missing": (_with(destination="instant_form", ads=_ad(0, form_id="7")), "form_chosen", "error", [2]),
     "form_all_ok": (_with(destination="instant_form",
                           ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]), "form_chosen", "ok", []),
+    "tpl_counts_as_a_chosen_form": (_with(destination="instant_form", ads=[
+        {**a, "form_id": "", "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["email"]}}
+        for a in _ok_input()["ads"]]), "form_chosen", "ok", []),
+    "tpl_privacy_ok": (_with(destination="instant_form", ads=[
+        {**a, "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["email"]}}
+        for a in _ok_input()["ads"]]), "form_template_privacy", "ok", []),
+    "tpl_privacy_http": (_with(destination="instant_form", ads=_ad(
+        0, template={"privacy_url": "http://x.example.com/p", "contact_fields": ["email"]})),
+        "form_template_privacy", "error", [1]),
+    "tpl_privacy_missing": (_with(destination="instant_form", ads=_ad(
+        1, template={"privacy_url": "", "contact_fields": ["email"]})), "form_template_privacy", "error", [2]),
+    "tpl_contacts_ok": (_with(destination="instant_form", ads=[
+        {**a, "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["phone"]}}
+        for a in _ok_input()["ads"]]), "form_template_contacts", "ok", []),
+    "tpl_contacts_none": (_with(destination="instant_form", ads=_ad(
+        0, template={"privacy_url": "https://x.example.com/p", "contact_fields": []})),
+        "form_template_contacts", "error", [1]),
     "instant_has_no_link_rules": (_with(destination="instant_form", link="",
                                         ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]),
                                   "link_https", None, []),
