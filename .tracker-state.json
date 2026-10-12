@@ -7237,7 +7237,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "819": {
+        "actor": "Worker-S1819A",
+        "session": "run_s1819a_1012",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1819-preflight-audit",
+        "worktree": "C:\\acl-1819-preflight",
+        "id": "594d40897bcc455399bc506fbd5b8bec",
+        "issue": 819,
+        "state": "implementing",
+        "started_at": "2026-10-12T07:45:24+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -10985,6 +10998,17 @@
         },
         "pr": 818,
         "queued_at": "2026-10-12T07:41:09+00:00"
+      },
+      "819": {
+        "implementers": [
+          {
+            "actor": "Worker-S1819A",
+            "session": "run_s1819a_1012"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1819A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -11922,6 +11946,10 @@
       },
       "Worker-S1815A": {
         "session": "run_s1815a_1012",
+        "role": "Worker"
+      },
+      "Worker-S1819A": {
+        "session": "run_s1819a_1012",
         "role": "Worker"
       }
     },
@@ -21483,6 +21511,13 @@
         "issue": 815,
         "pr": 818,
         "actor": "Worker-S1815A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T07:45:24+00:00",
+        "issue": 819,
+        "claim": "594d40897bcc455399bc506fbd5b8bec",
+        "actor": "Worker-S1819A"
       }
     ],
     "policy": {
