@@ -7246,9 +7246,11 @@
         "worktree": "C:\\acl-1824-alias",
         "id": "5504cff55021496db86a05abf4423944",
         "issue": 824,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-12T12:10:20+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 825,
+        "report": "ACL-1824 PR #825, head cd9f9d9ab8b512a4446f505a7cbb0c02c85feb65, based on origin/main e8e59f8. Labels `<alias>_<8+ digits>` resolve to the single workbook alias of the same country (rule in `_alias_by_tail`, after exact/rule match and before the tail guess); country totals count each alias once. Tests: 59 passed across the affected files (test_dashboard_review, test_account_name_rules, test_account_map_alias_join, test_alias_matches_perf, test_account_drill); 7 new tests. Mutations: min digits 8->1 fails the short-suffix test; removing the totals dedupe fails the double-count test. No live calls."
       }
     },
     "tasks": {
