@@ -7237,7 +7237,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "776": {
+        "actor": "Worker-S1776A",
+        "session": "run_s1776a_1012",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1776-create-forms",
+        "worktree": "C:\\acl-1776-forms",
+        "id": "cc4936b406844a0988631708acb33fb6",
+        "issue": 776,
+        "state": "implementing",
+        "started_at": "2026-10-12T12:51:35+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -11093,6 +11106,17 @@
         },
         "pr": 825,
         "queued_at": "2026-10-12T12:16:35+00:00"
+      },
+      "776": {
+        "implementers": [
+          {
+            "actor": "Worker-S1776A",
+            "session": "run_s1776a_1012"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1776A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -12046,6 +12070,10 @@
       },
       "Worker-S1824A": {
         "session": "run_s1824a_1012",
+        "role": "Worker"
+      },
+      "Worker-S1776A": {
+        "session": "run_s1776a_1012",
         "role": "Worker"
       }
     },
@@ -21667,6 +21695,13 @@
         "issue": 824,
         "pr": 825,
         "actor": "Worker-S1824A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T12:51:35+00:00",
+        "issue": 776,
+        "claim": "cc4936b406844a0988631708acb33fb6",
+        "actor": "Worker-S1776A"
       }
     ],
     "policy": {
