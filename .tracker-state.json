@@ -7237,7 +7237,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "824": {
+        "actor": "Worker-S1824A",
+        "session": "run_s1824a_1012",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1824-alias-id-suffix",
+        "worktree": "C:\\acl-1824-alias",
+        "id": "5504cff55021496db86a05abf4423944",
+        "issue": 824,
+        "state": "implementing",
+        "started_at": "2026-10-12T12:10:20+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -11066,6 +11079,17 @@
         },
         "pr": 823,
         "queued_at": "2026-10-12T11:43:04+00:00"
+      },
+      "824": {
+        "implementers": [
+          {
+            "actor": "Worker-S1824A",
+            "session": "run_s1824a_1012"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1824A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -12015,6 +12039,10 @@
       },
       "Worker-S1822A": {
         "session": "run_s1822a_1012",
+        "role": "Worker"
+      },
+      "Worker-S1824A": {
+        "session": "run_s1824a_1012",
         "role": "Worker"
       }
     },
@@ -21621,6 +21649,13 @@
         "issue": 822,
         "pr": 823,
         "actor": "Worker-S1822A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T12:10:20+00:00",
+        "issue": 824,
+        "claim": "5504cff55021496db86a05abf4423944",
+        "actor": "Worker-S1824A"
       }
     ],
     "policy": {
