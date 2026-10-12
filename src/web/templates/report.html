@@ -14021,16 +14021,16 @@ function cbTargetingHtml(items) {
       + '</div>';
   }
   (items || []).forEach(function (i) {
-    if (i.state === 'pending' || i.state === 'unresolved') {
+    if (i.state === 'unknown') {
+      rows += '<div class="cbd-plan-warn" style="color:#b45309;margin:0.15rem 0">&#9888; ' + aclEscHtml(i.term)
+        + ': ' + aclEscHtml(i.reason || "Couldn't check all interests — press Check plan again") + '</div>';
+    } else if (i.state === 'pending' || i.state === 'unresolved') {
       (i.bad_parts && i.bad_parts.length ? i.bad_parts : [i]).forEach(function (p) { rows += ask(p); });
     } else if (i.state === 'confirmed' && (i.picks || [])[0]) {
-      rows += '<div style="font-size:0.72rem">' + aclEscHtml(i.term) + ' &rarr; ' + aclEscHtml(i.picks[0].name)
-        + ' [' + aclEscHtml(i.picks[0].type) + '] (confirmed earlier) <button type="button" class="cbd-add" '
-        + 'data-act="clear-target" data-term="' + aclEscHtml(i.term) + '">Clear</button></div>';
-    } else if (i.state === 'split') {
       rows += '<div style="font-size:0.72rem">' + aclEscHtml(i.term) + ' &rarr; '
-        + (i.picks || []).map(function (p) { return aclEscHtml(p.name) + ' [' + aclEscHtml(p.type) + ']'; }).join(' + ')
-        + ' (split into exact parts)</div>';
+        + i.picks.map(function (p) { return aclEscHtml(p.name) + ' [' + aclEscHtml(p.type) + ']'; }).join(' + ')
+        + ' (confirmed earlier) <button type="button" class="cbd-add" '
+        + 'data-act="clear-target" data-term="' + aclEscHtml(i.term) + '">Clear</button></div>';
     }
   });
   return rows ? '<div class="cbd-plan-targeting" style="margin:0.2rem 0">' + rows + '</div>' : '';

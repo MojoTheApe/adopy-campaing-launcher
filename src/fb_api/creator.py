@@ -370,7 +370,8 @@ class TargetingUnresolved(PlanError):
 
     def __init__(self, items: list[dict]):
         self.items = items
-        lost = [i for i in items if i.get("state") != "pending"]
+        unknown = [i for i in items if i.get("state") == "unknown"]
+        lost = [i for i in items if i.get("state") not in ("pending", "unknown")]
         asks = [i for i in items if i.get("state") == "pending"]
 
         def cands(i: dict) -> str:
@@ -387,6 +388,8 @@ class TargetingUnresolved(PlanError):
             msg.append("Detailed targeting needs your confirmation: "
                        + " | ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
                                     for i in asks) + " Confirm a candidate in Check plan.")
+        if unknown:
+            msg.append(_tr.UNKNOWN_MESSAGE)
         super().__init__(". ".join(msg))
 
 
@@ -1080,7 +1083,9 @@ class CampaignCreator:
     def _targeting_report(self) -> list:
         fn = getattr(self.resolver, "targeting_report", None)
         try:
-            return list(fn()) if fn else []
+            items = list(fn()) if fn else []
+            _tr.register_candidates(items)      # подтвердить можно только показанных кандидатов
+            return items
         except Exception:  # noqa: BLE001 — отчёт вспомогательный
             return []
 

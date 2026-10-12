@@ -451,8 +451,8 @@ class ApiPublisher:
 # записи (помощник с WRITE=null, `GraphClient(allow_writes=False)`).
 
 #: Потолок вызовов на предпроверку кабинета внутри «Check plan».
-# ACL-1771: поиск детального таргетинга ходит за списками Meta (свой потолок 60 в резолвере).
-PLAN_PREFLIGHT_MAX_CALLS = 80
+# ACL-1771: поиск детального таргетинга ходит за списками Meta (в резолвере свои потолки в чтениях: 8 на термин, 16 на задание).
+PLAN_PREFLIGHT_MAX_CALLS = 30
 
 
 def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[str, Any]]:

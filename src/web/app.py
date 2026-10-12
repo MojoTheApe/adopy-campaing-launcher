@@ -5042,7 +5042,9 @@ async def publish_plan(request: Request) -> JSONResponse:
 
 
 # ACL-1771: подтверждённые соответствия «термин библиотеки -> id Meta» (локальный кэш резолвера).
-# Только файл на этой машине: в Meta ничего не уходит.
+# Только файл на этой машине: в Meta ничего не уходит. Тот же вход, что у /publish-plan:
+# локальный адрес (общий middleware) и бэкенд API; подтвердить можно только кандидата,
+# показанного в последнем Check plan для этого термина.
 async def _targeting_body(request: Request) -> dict:
     try:
         body = await request.json()
@@ -5051,22 +5053,44 @@ async def _targeting_body(request: Request) -> dict:
     return body if isinstance(body, dict) else {}
 
 
+def _targeting_gate() -> JSONResponse | None:
+    from src.web import publish_api
+
+    if not publish_api.api_enabled():
+        return JSONResponse({"error": "Targeting confirmation needs the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return None
+
+
 @app.get("/targeting-resolver/cache")
 async def targeting_resolver_cache() -> JSONResponse:
     from src.fb_api.targeting_resolver import ConfirmedStore
 
+    blocked = _targeting_gate()
+    if blocked:
+        return blocked
     return JSONResponse({"entries": ConfirmedStore().entries()})
 
 
 @app.post("/targeting-resolver/confirm")
 async def targeting_resolver_confirm(request: Request) -> JSONResponse:
-    """Человек подтвердил кандидата: запомнить термин -> id + тип + имя."""
-    from src.fb_api.targeting_resolver import ConfirmedStore
+    """Человек подтвердил кандидата Check plan: запомнить (тип, термин) -> id + имя."""
+    from src.fb_api import targeting_resolver as tr
 
+    blocked = _targeting_gate()
+    if blocked:
+        return blocked
     body = await _targeting_body(request)
+    term, cid, ctype = str(body.get("term") or ""), str(body.get("id") or ""), str(body.get("type") or "")
+    cand = tr.candidate_for(term, cid, ctype)
+    if cand is None:
+        return JSONResponse({"error": "That pick was not among the candidates of the last Check plan "
+                                      "for this term. Run Check plan and choose from its list."},
+                            status_code=400)
     try:
-        row = ConfirmedStore().put(str(body.get("term") or ""), id=str(body.get("id") or ""),
-                                   type=str(body.get("type") or ""), name=str(body.get("name") or ""))
+        # Имя и состав берутся у кандидата, который показал сервер, а не из запроса.
+        row = tr.ConfirmedStore().put(term, id=cand["id"], type=cand["type"], name=cand["name"],
+                                      picks=cand.get("picks"))
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True, "entry": row})
@@ -5077,6 +5101,9 @@ async def targeting_resolver_clear(request: Request) -> JSONResponse:
     """Забыть один подтверждённый термин (`term`) или все (`all: true`)."""
     from src.fb_api.targeting_resolver import ConfirmedStore
 
+    blocked = _targeting_gate()
+    if blocked:
+        return blocked
     body = await _targeting_body(request)
     store = ConfirmedStore()
     if body.get("all") is True:
