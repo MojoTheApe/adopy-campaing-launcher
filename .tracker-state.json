@@ -7251,6 +7251,18 @@
         "from_status": "status:idea",
         "pr": 832,
         "report": "PR #832 (head 81e2a23), stacked on #821. Resolver: confirmed cache, adinterestvalid exact, adinterest search paged, adTargetingCategory classes paged, split on or. No auto-pick of near matches; Confirm/Clear via /targeting-resolver endpoints and Check plan. Pre-flight rules interests_resolve and interests_confirmed. Tests: 24 new, 335 affected passed. Mutations: 4 of 4 caught."
+      },
+      "768": {
+        "actor": "Worker-S1768A",
+        "session": "run_s1768a_1012",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1768-multiple-ad-sets",
+        "worktree": "C:\\acl-1768-adsets",
+        "id": "6fa1bf3f55094975807223f38f4aebd3",
+        "issue": 768,
+        "state": "implementing",
+        "started_at": "2026-10-12T13:49:31+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -11231,6 +11243,17 @@
         "state": "implementing",
         "worker": "Worker-S1771A",
         "coordinator": "Coordinator-C0930A"
+      },
+      "768": {
+        "implementers": [
+          {
+            "actor": "Worker-S1768A",
+            "session": "run_s1768a_1012"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1768A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -12208,6 +12231,10 @@
       },
       "Worker-S1771A": {
         "session": "run_s1771a_1012",
+        "role": "Worker"
+      },
+      "Worker-S1768A": {
+        "session": "run_s1768a_1012",
         "role": "Worker"
       }
     },
@@ -21910,6 +21937,13 @@
         "issue": 776,
         "pr": 831,
         "actor": "Worker-S1776B"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-12T13:49:31+00:00",
+        "issue": 768,
+        "claim": "6fa1bf3f55094975807223f38f4aebd3",
+        "actor": "Worker-S1768A"
       }
     ],
     "policy": {
