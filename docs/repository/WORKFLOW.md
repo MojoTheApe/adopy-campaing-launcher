@@ -47,15 +47,32 @@ create their PRs and explicitly hand off their claims, freeing implementation sl
 Review labels alone do not release claims. Record Worker, Coordinator and Reviewer
 separately with neutral opaque identities; GitHub Assignees remain real accounts.
 
-For ordinary/application work, execution schema 2 separates source approval from
+For ordinary/application work, execution schemas 2/3 separate source approval from
 integration. A separate real,
-non-implementing Reviewer acquires the single source-review lane and reviews the
+non-implementing Reviewer acquires a source-review lane and reviews the
 complete current scope/head/base. Record the report, keep required source checks,
 then use `batch approve` to move Review -> Approved and release that lane. Each
 source keeps its genuine Worker and independent Reviewer. Labels cannot approve
 work. Ordinary batch source PRs target main and remain open; their direct merge is refused.
 The proven instruction-only route is the explicit exception described above.
 Existing queued stage-targeted PRs become approval-only after the supported migration.
+
+The prepared schema-3 policy permits five source Reviewer runs independently of
+five Workers, one integration Coordinator and one combined-batch Reviewer. Use the
+PR/claim to identify each source lane; returning, resuming or approving one source
+preserves all other owners. Source review/approval may continue during batch review.
+Instruction-only reviews consume source capacity and still block new intake/batch
+creation; their main admission waits for existing intake/integration/stage ownership.
+See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md) for the current v2 source handoff and
+separate idle migration. A prepared descriptor does not activate the pool.
+During ACL-1875's old-v2 source cutover, the genuine old config remains authoritative
+through source approval, batch/stage and unchanged main promotion. If GitHub then
+auto-marks the included source PR merged and the old engine rejects completion,
+use only the bounded explicit clean fixed-engine recovery in
+[SOURCE_REVIEWS.md](SOURCE_REVIEWS.md), preserving that same v2 config and all
+held ownership/evidence. The reviewed engine verifies the frozen source's exact
+post-main inclusion before normal Merged/cleanup; it does not activate schema 3
+or relax open-source admission before main.
 
 For changes before approval, the Reviewer returns review and the author takes a
 fresh implementation claim before editing the original branch. After approval,
@@ -169,7 +186,7 @@ A reuse proof or a release needs every Linux shard, the Windows job and
 Windows, before ACL-1582) are refused, not translated: a release of a tree that
 only has such a run needs a fresh `ci.yml` run on main.
 
-Python versions: under execution schema 2, ordinary one-task approval sources
+Python versions: under execution schemas 2/3, ordinary one-task approval sources
 into main (and retained v1 stage sources) keep the affected-check selection: 3.13,
 with both Linux versions and installer when dependency/packaging inputs change.
 A combined batch into stage, stage/main pushes, promotion, manual run and any
