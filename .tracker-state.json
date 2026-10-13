@@ -265,6 +265,10 @@
       "title": "Replace country activity dots with a vertical line",
       "state": "created",
       "issue": 838
+    },
+    "32a2ecabe43538e752424dae7236a9aebe3dbebd7df0b15544109fb3be2ff09f": {
+      "title": "Builder: align publication button design with the updated dashboard",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
