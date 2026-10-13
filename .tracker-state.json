@@ -12132,7 +12132,7 @@
             "session": "architecture_audit_n7q4_20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-N7Q4",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12157,7 +12157,8 @@
           "actor": "Coordinator-FLOW513",
           "session": "flow_five_reviews_coordinator_01a134f0_20261013",
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
-        }
+        },
+        "reviewer": "Reviewer-RS1012"
       },
       "851": {
         "implementers": [
@@ -16138,8 +16139,7 @@
       839,
       845,
       840,
-      841,
-      844
+      841
     ],
     "review": null,
     "history": [
@@ -26536,6 +26536,13 @@
             "approved_at": "2026-10-13T18:12:59+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T18:15:35+00:00",
+        "pr": 849,
+        "lane": "1d20bf89e7f6485eb20c46efe3218f89",
+        "actor": "Reviewer-RS1012"
       }
     ],
     "policy": {
@@ -27343,6 +27350,18 @@
         "session": "codex-source530-20261013",
         "coordinator": "Coordinator-DLV13",
         "started_at": "2026-10-13T18:12:17+00:00",
+        "state": "reviewing"
+      },
+      "849": {
+        "id": "1d20bf89e7f6485eb20c46efe3218f89",
+        "pr": 849,
+        "issues": [
+          844
+        ],
+        "actor": "Reviewer-RS1012",
+        "session": "connection_review_rs1012",
+        "coordinator": "Coordinator-CR1012",
+        "started_at": "2026-10-13T18:15:35+00:00",
         "state": "reviewing"
       }
     }
