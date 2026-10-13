@@ -7438,6 +7438,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T09:03:23+00:00",
         "from_status": "status:todo"
+      },
+      "868": {
+        "actor": "Worker-RP7K13",
+        "session": "root_parallel_review_20261013",
+        "coordinator": "Coordinator-RP7K13",
+        "branch": "codex/acl-1868-parallel-reviews",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Parallel-Reviews-2026-10-13",
+        "id": "3ba62c9c016e4024a3ee89d7091c32f4",
+        "issue": 868,
+        "state": "implementing",
+        "started_at": "2026-10-13T09:19:56+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11906,9 +11918,13 @@
           {
             "actor": "Worker-RP7K13",
             "session": "root_parallel_review_20261013"
+          },
+          {
+            "actor": "Worker-RP7K13",
+            "session": "root_parallel_review_20261013"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-RP7K13",
         "coordinator": "Coordinator-RP7K13",
         "handoff": {
@@ -24378,6 +24394,13 @@
         "issue": 868,
         "actor": "Worker-RP7K13",
         "report": "ACL-1868 was created and claimed by this actual Worker before its numeric ID was known. No code edits, commits or PR exist yet. The initial intake branch codex/acl-parallel-review-adoption lacks the now-known ticket ID. This owning Worker stops its own preparation claim and will immediately resume the same task in codex/acl-1868-parallel-reviews through the supported start lifecycle. No foreign claim or queue entry is changed; no implementation is complete."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T09:19:56+00:00",
+        "issue": 868,
+        "claim": "3ba62c9c016e4024a3ee89d7091c32f4",
+        "actor": "Worker-RP7K13"
       }
     ],
     "policy": {
