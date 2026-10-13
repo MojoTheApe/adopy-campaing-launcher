@@ -7358,20 +7358,6 @@
   },
   "execution": {
     "claims": {
-      "838": {
-        "actor": "Worker-CN6B92",
-        "session": "worker_countryline_cn6b92_20261013",
-        "coordinator": "Coordinator-CV1013",
-        "branch": "codex/acl-1838-country-active-line",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line",
-        "id": "ed344663bc00405187778f3381959f61",
-        "issue": 838,
-        "state": "handoff",
-        "started_at": "2026-10-13T08:06:39+00:00",
-        "from_status": "status:todo",
-        "pr": 842,
-        "report": "ACL-1838 current-main source handoff \u2014 2026-10-13\nActual Worker: Worker-CN6B92\nSession: worker_countryline_cn6b92_20261013\nClaim: ed344663bc00405187778f3381959f61\nCoordinator: Coordinator-CV1013\nBranch: codex/acl-1838-country-active-line\nWorktree: C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/842\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/838\nExact head: ecfdfa51a214c787cb2f0b7251c5f66501da09fe\nExact tree: a64cc1a357ed0b78b902add9535a689039dae4a5\nOfficial main/base: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80\nMerge parents: 520b988cbaefcb856759bdc00a45d3908d9b9e1b and 3327465fcbd46ccff9b64eb7c574ff5b84b99b80\n\nTracker issues: ACL-1838\n\nReplace the Countries sidebar's blue activity dots with static 2 px vertical accent lines, following the owner's selected option 3. Activity uses the existing live predicate; inactive countries have no marker, and the expanded-country background continues to indicate selection. Absolute positioning keeps country labels aligned; pointer-events: none preserves the owning row's interactions. System behavior/history are updated.\n\nThe original source normally merged current official main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80, preserving both system-history entries. Current HEAD: ecfdfa51a214c787cb2f0b7251c5f66501da09fe; tree: a64cc1a357ed0b78b902add9535a689039dae4a5. Relative to current main, only report.html, docs/system/PROJECT.md and docs/system/CHANGELOG.md change. Original Worker-CL7F31 history is preserved; the refresh was performed by actual Worker-CN6B92 after independent review-return and a fresh claim.\n\nValidation on this exact refreshed source (Windows, Python 3.14.3 project venv; isolated synthetic config/temp, empty external-library environment):\n- 28 affected sidebar/builder/manage regressions passed (24.59 s).\n- 46 packaging unit tests passed (86.64 s).\n- Secret/identifier scanner, dashboard/RPA import smoke and git diff checks passed.\n- All six fresh Chromium scenario assertions passed: light/dark at 1440 px, 390 px and 150% zoom at 980 px; geometry, label alignment, marker-coordinate row click, keyboard selection and hover. Both fresh theme screenshots visually verified. Browser cleanup stalled after the harness printed ALL SIX SCENARIOS PASS; only the owned invocation was interrupted. Scenario success and cleanup limitation are recorded separately.\n\nFull applicable source checks remain in CI; tracker-link must be rerun after the durable Review handoff because its first refreshed run saw In Progress. Independent exact-head/current-main review and Approved/batch/stage/main integration remain required. No release or installation is claimed.\n\nFresh private Chromium harness: C:\\Users\\EvgeniSedin\\Desktop\\countryline-cn6b92-browser-check.py.\nActual tool stdout before cleanup: SCENARIO PASS light 1440 1; SCENARIO PASS light 390 1; SCENARIO PASS light 980 1.5; SCENARIO PASS dark 1440 1; SCENARIO PASS dark 390 1; SCENARIO PASS dark 980 1.5; ALL SIX SCENARIOS PASS.\nFresh screenshots: countryline-cn6b92-light.png / countryline-cn6b92-dark.png, visually verified. Original full run also stalled in cleanup; the progress-instrumented retry changed only private logging/isolated paths, no product files. Both owned invocations interrupted after scenario evidence; no other browser touched.\nCI run38367683466 is in progress, descriptor38367683470 passed, installer aggregate38367683490 passed with classified build/install skips. Tracker-link38367683457 failed before durable handoff; rerun pending after supported handoff. Local clean worktree verified. Original WorkerCL7F31 preserved in implementer history; this new Worker does not review or integrate source."
-      },
       "840": {
         "actor": "Worker-F8Q620",
         "session": "footer_fix-01a133d7-20261013",
@@ -11543,25 +11529,25 @@
             "session": "worker_countryline_cn6b92_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-CN6B92",
         "coordinator": "Coordinator-CV1013",
         "handoff": {
-          "actor": "Worker-CL7F31",
-          "session": "worker_countryline_cl7f31_20261013",
+          "actor": "Worker-CN6B92",
+          "session": "worker_countryline_cn6b92_20261013",
           "coordinator": "Coordinator-CV1013",
           "branch": "codex/acl-1838-country-active-line",
           "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line",
-          "id": "157561418833493d884707db6a807d28",
+          "id": "ed344663bc00405187778f3381959f61",
           "issue": 838,
           "state": "handoff",
-          "started_at": "2026-10-13T06:04:47+00:00",
+          "started_at": "2026-10-13T08:06:39+00:00",
           "from_status": "status:todo",
           "pr": 842,
-          "report": "ACL-1838 Worker source handoff \u2014 2026-10-13\n\nWorker: Worker-CL7F31\nSession: worker_countryline_cl7f31_20261013\nClaim: 157561418833493d884707db6a807d28\nCoordinator: Coordinator-CV1013\nBranch: codex/acl-1838-country-active-line\nWorktree: C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/838\nReady source PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/842\nBase main: e8e59f8376458f2f73089c3f2a8d454837ff033f\nHead: 520b988cbaefcb856759bdc00a45d3908d9b9e1b\nTree: d03502aebb8cca171228abd10f76f1d49bec18bc\n\nScope complete for source review: static 2px vertical accent activity line on existing live country rows; inactive rows have no marker. Absolute positioning preserves aligned country labels. pointer-events:none gives no independent hit target. Existing activity predicate, JavaScript, FTD counts, expanded-country selection, focus and hover remain unchanged. Three files: report.html plus system PROJECT/history. Compatible with pending ACL-1827 PR829 font-weight override.\n\nValidation: Windows, Python3.14.3 existing C:\\fb_agents\\.venv interpreter, own Desktop temp/config, library environment emptied. 28 affected tests passed (test_sidebar_without_workbook, test_the_builder_tree, test_manage_behavior); 46 Windows packaging unittests passed; tracked secret/identifier scanner passed; import smoke passed; git diff --check passed. Six isolated Chromium scenarios passed: light/dark at 1440px,390px and980px with150%zoom. Asserted active/inactive/selected state, owning row marker-coordinate click, keyboard Enter, hover, 2px geometry and aligned label insets. Both theme screenshots visually reviewed. Ad hoc browser script/log/screenshots remain local outside Git.\n\nInfrastructure history: default Python3.13 lacked pytest/app packages; initial packaging attempt also hit sandbox temp permissions. Proper project venv and own Desktop temp resolved checks. Sandbox browser driver stalled; unsandboxed local Chromium successfully verified synthetic dashboard without network/live accounts. One harness attempt retained prior scenario URL fragment; reset fixed its isolation, then all six scenarios passed without product changes. Initial push review rejected unverified destination; read-only repository identity/permission evidence plus required workflow resolved the approval, and the same branch push/PR creation succeeded.\n\nRemaining gates: actual independent source review (shared lane already occupied by PR837), full applicable source CI, Approved transition, authorized frozen batch integration with additional combined review/checks, actual stage verification, unchanged main promotion. No source merge, installer release, employee installation or production activity is claimed. Release membership not added.\n\nAdministrative history: provisional intake branch was necessary before assigned ACL ID. No code edits used its claim. Supported stop and removal of the resolved administrative blocker preceded a fresh claim on the correct branch, retaining actual same Worker/session."
+          "report": "ACL-1838 current-main source handoff \u2014 2026-10-13\nActual Worker: Worker-CN6B92\nSession: worker_countryline_cn6b92_20261013\nClaim: ed344663bc00405187778f3381959f61\nCoordinator: Coordinator-CV1013\nBranch: codex/acl-1838-country-active-line\nWorktree: C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/842\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/838\nExact head: ecfdfa51a214c787cb2f0b7251c5f66501da09fe\nExact tree: a64cc1a357ed0b78b902add9535a689039dae4a5\nOfficial main/base: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80\nMerge parents: 520b988cbaefcb856759bdc00a45d3908d9b9e1b and 3327465fcbd46ccff9b64eb7c574ff5b84b99b80\n\nTracker issues: ACL-1838\n\nReplace the Countries sidebar's blue activity dots with static 2 px vertical accent lines, following the owner's selected option 3. Activity uses the existing live predicate; inactive countries have no marker, and the expanded-country background continues to indicate selection. Absolute positioning keeps country labels aligned; pointer-events: none preserves the owning row's interactions. System behavior/history are updated.\n\nThe original source normally merged current official main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80, preserving both system-history entries. Current HEAD: ecfdfa51a214c787cb2f0b7251c5f66501da09fe; tree: a64cc1a357ed0b78b902add9535a689039dae4a5. Relative to current main, only report.html, docs/system/PROJECT.md and docs/system/CHANGELOG.md change. Original Worker-CL7F31 history is preserved; the refresh was performed by actual Worker-CN6B92 after independent review-return and a fresh claim.\n\nValidation on this exact refreshed source (Windows, Python 3.14.3 project venv; isolated synthetic config/temp, empty external-library environment):\n- 28 affected sidebar/builder/manage regressions passed (24.59 s).\n- 46 packaging unit tests passed (86.64 s).\n- Secret/identifier scanner, dashboard/RPA import smoke and git diff checks passed.\n- All six fresh Chromium scenario assertions passed: light/dark at 1440 px, 390 px and 150% zoom at 980 px; geometry, label alignment, marker-coordinate row click, keyboard selection and hover. Both fresh theme screenshots visually verified. Browser cleanup stalled after the harness printed ALL SIX SCENARIOS PASS; only the owned invocation was interrupted. Scenario success and cleanup limitation are recorded separately.\n\nFull applicable source checks remain in CI; tracker-link must be rerun after the durable Review handoff because its first refreshed run saw In Progress. Independent exact-head/current-main review and Approved/batch/stage/main integration remain required. No release or installation is claimed.\n\nFresh private Chromium harness: C:\\Users\\EvgeniSedin\\Desktop\\countryline-cn6b92-browser-check.py.\nActual tool stdout before cleanup: SCENARIO PASS light 1440 1; SCENARIO PASS light 390 1; SCENARIO PASS light 980 1.5; SCENARIO PASS dark 1440 1; SCENARIO PASS dark 390 1; SCENARIO PASS dark 980 1.5; ALL SIX SCENARIOS PASS.\nFresh screenshots: countryline-cn6b92-light.png / countryline-cn6b92-dark.png, visually verified. Original full run also stalled in cleanup; the progress-instrumented retry changed only private logging/isolated paths, no product files. Both owned invocations interrupted after scenario evidence; no other browser touched.\nCI run38367683466 is in progress, descriptor38367683470 passed, installer aggregate38367683490 passed with classified build/install skips. Tracker-link38367683457 failed before durable handoff; rerun pending after supported handoff. Local clean worktree verified. Original WorkerCL7F31 preserved in implementer history; this new Worker does not review or integrate source."
         },
         "pr": 842,
-        "queued_at": "2026-10-13T06:15:09+00:00",
+        "queued_at": "2026-10-13T08:18:58+00:00",
         "review_report": "ACL-1838 / PR842 independent reviewer return for current-main refresh\nReviewer-RL8C42, actual session rev_countryline_rl8c42_20261013.\nSource head: 520b988cbaefcb856759bdc00a45d3908d9b9e1b.\nPR-reported base: e8e59f8376458f2f73089c3f2a8d454837ff033f.\nOfficial main verified through GitHub heads/main: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nSource handoff remains on the old main baseline. The pinned execution-schema-2 BATCH_INTEGRATION.md Individual review and approval requires current main in the source and fresh scope/head/baseline evidence.\nReturn this unapproved source to its author for a real fresh implementation claim on the retained original branch, current-main reconciliation preserving all work, applicable new source CI, and durable exact-head handoff. A fresh independent standards/spec review and approval remain required afterward. This is a bounded prerequisite return, not a full acceptance review or approval; no source files were edited. The reviewer releases the source lane through the supported review-return operation; no merge, force push or batch admission is authorized by this report."
       },
       "839": {
@@ -15282,7 +15268,8 @@
       844,
       853,
       839,
-      845
+      845,
+      838
     ],
     "review": null,
     "history": [
@@ -23721,6 +23708,13 @@
         "issue": 864,
         "actor": "Worker-SR1012",
         "report": "# ACL-1864 deferred without implementation \u2014 2026-10-13\n\nWorker-SR1012 / connection_sr1012_worker, Coordinator-CR1012.\nClaim02065bdd371f4967b5311d303481b860.\n\nThe owner repaired the workbook and reported that it now works, then asked to\ncontinue the primary connection/API work. The Coordinator directed this new\npreventive Stats-loader task to remain queued rather than begin source changes.\n\nIssue864 remains valid recurrence protection: accept only leading empty/formatted\nrows before the first valid unambiguous Stats header, retaining strict validation.\nIts synthetic regression/design context is preserved in the Issue. No source\nedits, commit, push or PR were made. The isolated worktree is clean at main\n3327465fcbd46ccff9b64eb7c574ff5b84b99b80, under\nACM-Audit-2026-10-12/worktrees/acl-1864. Preserve it and the issue for later work.\n\nThe pending normal claim did succeed after a shared-state race, so release this\nexact owned claim through supported execution stop. This is a priority deferral,\nnot an implemented fix or a live verification. No workbook, machine path or\nrunning9095 dashboard was modified by this Worker. Resume only after a new\nauthorized normal claim."
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T08:18:58+00:00",
+        "issue": 838,
+        "pr": 842,
+        "actor": "Worker-CN6B92"
       }
     ],
     "policy": {
