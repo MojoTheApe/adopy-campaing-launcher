@@ -2930,6 +2930,27 @@
         "issue_scopes": {
           "651": "002f03eed5e1c93a57fe614b9e26c1141056f74542d3fd9ffc7ed5baf4478ab8"
         }
+      },
+      "530": {
+        "kind": "independent-review",
+        "reviewer": "Reviewer-C530",
+        "implementer": "Worker-W530R",
+        "verdict": "approved",
+        "head_sha": "8a72acf36fbac87b16eeff173f989349f477a37f",
+        "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+        "tree_sha": "33ba08e7c26ea1fa974e1bdb1be25c972d87acec",
+        "execution_lane": "24bc47aab55a4fa79bed18b20866b0c1",
+        "review_session": "codex-source530-20261013",
+        "report": "Independent source review ACL-1529 PR530 by actual distinct agent /root/source_review_530. Reviewed complete issue529, original owner-approved no-clip/no-scale deviation, actual old and fresh handoffs, all eight current changed files, source history and current-main reconciliation. Exact head8a72acf36fbac87b16eeff173f989349f477a37f, tree33ba08e7c26ea1fa974e1bdb1be25c972d87acec, base/main777663bf539308c0898cc177f872a8e0f63b597e. Original sourceccf288 and currentmain are ancestors. Merge preserves both changelog histories, default-off screenshots, SHOW_COPY_FOR_GROUP and AMAP_SHOW_COPY_FOR_GROUP guards and safe disabled tooltip. Capture uses plain Page.captureScreenshot format png/captureBeyondViewport false, no clip/scale or screen override changes; DOM-frame crop and bounded Pillow trim are local. Timeout/hidden/error handling and session detach retained. Revised fixture enforces exact plain-CDP arguments and opt-in calls, without weakening default-off assertions. Independent isolated Windows Python3.13 fixture run tests/test_copy_for_group.py + tests/test_status_screenshot.py:113 passed,4 deprecation warnings,37.88s. Diff whitespace check clean; no source edits by reviewer. Source code verdict approved, no blocking findings. Required hosted full Linux/Windows/installer checks are still pending at evidence preparation; batch approval must wait for every required check passing. Live Multilogin and owner pasted-image readability acceptance remain pending and unclaimed. No profile, advertising, clipboard user action, dashboard deployment, package receipt or task completion claimed.",
+        "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          529
+        ],
+        "recorded_at": "2026-10-13T18:14:41+00:00",
+        "issue_scopes": {
+          "529": "9a74f39a51e6a0ed9ebb0f4f5a648614efa4a85e721efd516bbb34e0868824e6"
+        }
       }
     },
     "stage": {
