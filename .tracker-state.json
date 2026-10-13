@@ -11747,7 +11747,7 @@
             "session": "worker_countryline_cn6b92_20261013"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-CN6B92",
         "coordinator": "Coordinator-CV1013",
         "handoff": {
@@ -11767,7 +11767,19 @@
         "pr": 842,
         "queued_at": "2026-10-13T08:18:58+00:00",
         "review_report": "ACL-1838 / PR842 independent reviewer return for current-main refresh\nReviewer-RL8C42, actual session rev_countryline_rl8c42_20261013.\nSource head: 520b988cbaefcb856759bdc00a45d3908d9b9e1b.\nPR-reported base: e8e59f8376458f2f73089c3f2a8d454837ff033f.\nOfficial main verified through GitHub heads/main: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nSource handoff remains on the old main baseline. The pinned execution-schema-2 BATCH_INTEGRATION.md Individual review and approval requires current main in the source and fresh scope/head/baseline evidence.\nReturn this unapproved source to its author for a real fresh implementation claim on the retained original branch, current-main reconciliation preserving all work, applicable new source CI, and durable exact-head handoff. A fresh independent standards/spec review and approval remain required afterward. This is a bounded prerequisite return, not a full acceptance review or approval; no source files were edited. The reviewer releases the source lane through the supported review-return operation; no merge, force push or batch admission is authorized by this report.",
-        "reviewer": "Reviewer-RL8C42"
+        "reviewer": "Reviewer-RL8C42",
+        "return_operation": {
+          "id": "91201340047f423fa6a6747b1c5dc404",
+          "actor": "Coordinator-FLOW513",
+          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+        },
+        "return": {
+          "id": "91201340047f423fa6a6747b1c5dc404",
+          "actor": "Coordinator-FLOW513",
+          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+        }
       },
       "839": {
         "implementers": [
