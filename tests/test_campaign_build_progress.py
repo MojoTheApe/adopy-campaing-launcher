@@ -13,6 +13,7 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -22,6 +23,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.web import publish_jobs as pj  # noqa: E402
 from src.web import publish_progress as pp  # noqa: E402
+from tests.profile_lease_fakes import fake_profile
 
 NOW = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
 
@@ -248,6 +250,8 @@ def test_telemetry_rows_carry_the_job_of_their_thread(tmp_path, monkeypatch):
 def test_the_job_thread_names_its_job_before_the_robot_runs(monkeypatch):
     from src.fb_ads_rpa import run_telemetry as rt
 
+    monkeypatch.setattr("src.fb_ads_rpa.rpa_publisher.load_ad_account_map", lambda _: {
+        "Demo": SimpleNamespace(profile_id=fake_profile("Demo"))})
     seen = {}
     monkeypatch.setattr(pj, "use_rpa_publish", lambda: True)
     monkeypatch.setattr(pj, "_run_rpa", lambda job_id, *a, **k: seen.update(job=rt.current_job_id()))

@@ -12,6 +12,7 @@ import pytest
 from scripts import run_rpa_publish
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+from tests.profile_lease_fakes import fake_profile
 from src.web.app import mlx_instance_labels, app
 from src.web.app import _enrich_country_overview, templates
 from src.web.publish_jobs import (
@@ -19,6 +20,12 @@ from src.web.publish_jobs import (
     _write_draft_status,
     create_job,
 )
+
+
+@pytest.fixture
+def mapped_account(monkeypatch):
+    monkeypatch.setattr("src.fb_ads_rpa.rpa_publisher.load_ad_account_map", lambda _: {
+        "Account": SimpleNamespace(profile_id=fake_profile("Account"))})
 
 
 def _result(*, success: bool = True, publishable: bool = True) -> dict:
@@ -138,7 +145,7 @@ def test_persistent_badge_is_green_only_for_ready_state() -> None:
     assert "✓ Draft ready" not in blocked_html
 
 
-def test_handoff_does_not_replace_do_not_publish_message() -> None:
+def test_handoff_does_not_replace_do_not_publish_message(mapped_account) -> None:
     publisher = RpaPublisher.__new__(RpaPublisher)
     publisher.hand_off = True
     publisher.dry_run = False
@@ -164,7 +171,7 @@ def test_handoff_does_not_replace_do_not_publish_message() -> None:
     assert "NOT publishable" in (result.error or "")
 
 
-def test_rpa_publisher_rejects_active_before_opening_browser() -> None:
+def test_rpa_publisher_rejects_active_before_opening_browser(mapped_account) -> None:
     publisher = RpaPublisher.__new__(RpaPublisher)
     draft = CampaignDraft(
         name="Campaign A",
@@ -177,7 +184,7 @@ def test_rpa_publisher_rejects_active_before_opening_browser() -> None:
         publisher.publish_draft(draft)
 
 
-def test_rpa_publish_slots_rejects_activate() -> None:
+def test_rpa_publish_slots_rejects_activate(mapped_account) -> None:
     publisher = RpaPublisher.__new__(RpaPublisher)
 
     with pytest.raises(ValueError, match="draft-only"):

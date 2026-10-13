@@ -12,6 +12,7 @@ from src.web import app as web, account_links
 from src.fb_ads_rpa import browser, enrich_draft as en
 from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map
+from tests.profile_lease_fakes import fake_profile
 
 
 @pytest.fixture
@@ -116,17 +117,17 @@ def real_provider(tmp_path, monkeypatch):
 
 def test_open_new_profile_reaches_the_real_provider_without_a_local_folder(real_provider):
     sp, _, events = real_provider
-    ok, message = sp.open_profile_for_automation("new-profile", "new-folder", "B", "New Demo")
+    ok, message = sp.open_profile_for_automation(fake_profile("New Demo"), "new-folder", "B", "New Demo")
     assert ok, message
-    assert events == [("start", "B", "new-folder", "new-profile"), ("detach",)]
+    assert events == [("start", "B", "new-folder", fake_profile("New Demo")), ("detach",)]
 
 
 def test_api_lock_conflict_never_stops_or_restarts_a_profile(real_provider, tmp_path):
     sp, state, events = real_provider
     state.update(folder=tmp_path, locked=True)
-    ok, message = sp.open_profile_for_automation("new-profile", "new-folder", "B", "New Demo")
+    ok, message = sp.open_profile_for_automation(fake_profile("New Demo"), "new-folder", "B", "New Demo")
     assert not ok and "profile" in message.lower()
-    assert events == [("start", "B", "new-folder", "new-profile")]
+    assert events == [("start", "B", "new-folder", fake_profile("New Demo"))]
 
 
 def test_linked_country_without_statistics_gets_a_renderable_builder(machine):

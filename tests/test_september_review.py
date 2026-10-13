@@ -8,6 +8,7 @@ import pytest
 from scripts import acl_board as board
 from src.analysis_agent import ad_text_registry as ar, account_spend as spend
 from src.web import app as web, ad_copy as copy_source
+from tests.profile_lease_fakes import fake_profile
 
 
 @pytest.fixture
@@ -107,7 +108,7 @@ def test_short_named_manual_profile_is_not_started_again(monkeypatch):
         raise profile_trouble.ProfileStop(profile_trouble.OPEN_BY_HAND,
                                           f"no_automation_port; {browser.HAND_WINDOW_STOP_FAILED}: 500")
 
-    monkeypatch.setattr(spend, "_entry_for", lambda a: NS(profile_id="demo", folder_id="folder"))
+    monkeypatch.setattr(spend, "_entry_for", lambda a: NS(profile_id=fake_profile("Demo"), folder_id="folder"))
     monkeypatch.setattr(spend, "_mlx_profile_dir", lambda *a: Path("LONG"))
     monkeypatch.setattr(spend, "_dir_spellings", lambda p: ["LONG", "SHORT"])
     monkeypatch.setattr(browser, "MultiloginDirectCDPProvider", lambda: provider)
@@ -165,7 +166,7 @@ def test_process_detection_failure_does_not_start_a_profile(monkeypatch):
     def fail(*args):
         raise RuntimeError("process inventory unavailable")
     provider = NS(attach_existing_only=lambda *a, **kw: None, profile_is_running=fail)
-    monkeypatch.setattr(spend, "_entry_for", lambda a: NS(profile_id="demo", folder_id="folder"))
+    monkeypatch.setattr(spend, "_entry_for", lambda a: NS(profile_id=fake_profile("Demo"), folder_id="folder"))
     monkeypatch.setattr(spend, "_mlx_profile_dir", lambda *a: Path("LONG"))
     monkeypatch.setattr(browser, "MultiloginDirectCDPProvider", lambda: provider)
     monkeypatch.setattr(browser, "get_browser_provider", lambda name: pytest.fail("Unexpected browser startup"))
