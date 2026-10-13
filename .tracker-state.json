@@ -2964,35 +2964,19 @@
       }
     },
     "stage": {
-      "pr": 877,
+      "pr": 884,
       "issues": [
-        875
+        651,
+        865,
+        879
       ],
-      "tree_sha": "07b36d28348a356324df59951442177253074ac8",
-      "source_sha": "5c8901074ae189fb71d5a45a3ccd5135b03dea95",
-      "main_tree": "5366a8906888cba5c25487adea3da9a9cfe28d03",
+      "tree_sha": "06e60120c55379d776152c76d6f337b252c18d7b",
+      "source_sha": "87f604758d15367cb396b12cfb5437f9d453126a",
+      "main_tree": "84d322133c9b5d29c84221d2445b0ea88639ac42",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-13T14:03:16+00:00",
-      "batch_id": "67923a8e08d34c538623be512c739a1a",
-      "verification": {
-        "kind": "stage-verification",
-        "tree_sha": "07b36d28348a356324df59951442177253074ac8",
-        "source_sha": "5c8901074ae189fb71d5a45a3ccd5135b03dea95",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "checks": [
-          "The actual admitted permanent stage merge has exact Git tree 07b36d28348a356324df59951442177253074ac8.",
-          "Full combined Linux 3.11/3.13 shards and Windows 3.13 checks, descriptor and tracker-link passed for the unchanged reviewed content.",
-          "Combined Windows installer run 38406421780 passed build, install, repair and uninstall.",
-          "ACL-update-recovery-1128 passed real isolated frozen-helper installation, update, pointer/shortcut advancement, application restart and byte-preserved synthetic employee/workspace/creative data.",
-          "The deliberately mismatched expected version triggered healthy rollback, restored pointers/shortcuts and preserved synthetic data.",
-          "The package artifact names synthetic PR merge eedd0bf07feba217d4be98403375d5f764efde38 with the same exact Git tree; this receipt separately identifies actual stage merge 5c8901074ae189fb71d5a45a3ccd5135b03dea95.",
-          "No stable release, employee rollout, published update-channel or live advertising/profile pilot is claimed."
-        ],
-        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38406421780"
-      },
-      "verified_at": "2026-10-13T14:04:14+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-13T20:01:02+00:00",
+      "batch_id": "24551548a5084a13a4d81bb957a084f1"
     },
     "tasks": {
       "248": {
@@ -10211,7 +10195,7 @@
             "session": "run-workerfix665-20261013"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-Fix665",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -12286,7 +12270,7 @@
             "session": "root-worker_refresh_867"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-867R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -12537,7 +12521,7 @@
             "session": "isolated_app_sol_20261013"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-IS1013",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -28215,7 +28199,7 @@
       "id": "24551548a5084a13a4d81bb957a084f1",
       "actor": "Coordinator-DLV13",
       "session": "Root-DLV13-01a13445",
-      "state": "reviewing",
+      "state": "stage",
       "issues": [
         651,
         865,
@@ -28360,7 +28344,7 @@
       "intake": "8c7fbeecd39d476a8dd54650526d1af8",
       "started_at": "2026-10-13T18:59:06+00:00",
       "pr": 884,
-      "entered_stage": false,
+      "entered_stage": true,
       "history": []
     },
     "intake": {
