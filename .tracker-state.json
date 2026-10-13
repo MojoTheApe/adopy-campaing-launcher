@@ -15232,7 +15232,9 @@
       "session": "rev_countryline_rl8c42_20261013",
       "coordinator": "Coordinator-CV1013",
       "started_at": "2026-10-13T08:03:06+00:00",
-      "state": "reviewing"
+      "state": "returning",
+      "report": "ACL-1838 / PR842 independent reviewer return for current-main refresh\nReviewer-RL8C42, actual session rev_countryline_rl8c42_20261013.\nSource head: 520b988cbaefcb856759bdc00a45d3908d9b9e1b.\nPR-reported base: e8e59f8376458f2f73089c3f2a8d454837ff033f.\nOfficial main verified through GitHub heads/main: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nSource handoff remains on the old main baseline. The pinned execution-schema-2 BATCH_INTEGRATION.md Individual review and approval requires current main in the source and fresh scope/head/baseline evidence.\nReturn this unapproved source to its author for a real fresh implementation claim on the retained original branch, current-main reconciliation preserving all work, applicable new source CI, and durable exact-head handoff. A fresh independent standards/spec review and approval remain required afterward. This is a bounded prerequisite return, not a full acceptance review or approval; no source files were edited. The reviewer releases the source lane through the supported review-return operation; no merge, force push or batch admission is authorized by this report.",
+      "keep_lane": false
     },
     "history": [
       {
