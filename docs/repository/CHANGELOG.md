@@ -1,5 +1,32 @@
 # Repository process history
 
+## ACL-1879 — Preserve Linux browser-file balance when diagnostic tests join CI
+
+Adding the official-token diagnostic test file deterministically changed the
+cost-only split's browser counts from `[35,36,36]` to `[33,37,37]`, failing the
+existing maximum-spread assertion. Linux now assigns browser files first by
+browser count, current estimated cost and stable index, then fills remaining files
+by the existing minimum-cost rule. Cost weights, platform selection and other
+sharding modes remain unchanged. Synthetic public-shards coverage reproduces the
+costly non-browser trigger and checks browser/cost balance, determinism and
+exact-once selection; existing real-tree assertions remain in force. This bounded
+CI compatibility repair does not relax source review/check or deployment gates.
+
+## ACL-1874 — Activate five independent source reviews — 2026-10-13
+
+After ACL-1875's independently reviewed and fully verified old-v2 source/stage/main
+completion at main `72a2d2c21aa42f1a388d32ea27ba2c8253ee7854`, the maintained
+Tracker fallback publication at `57b1674d34049b88490908fc69c25747059a27d4` and
+supported owner-paused handoffs allowed idle schema-3 adoption at 14:52:32 UTC.
+Independent complete-state comparison and fresh protected projections at 14:52:52 UTC
+confirmed five implementations, five source reviews, one integration review and
+batches of five. The 37-item queue/order and full author/handoff/history/delivery
+records remain preserved; closed unmerged historical sources stay unfinished.
+The original cutover/recovery procedure and paused source checkouts remain intact.
+See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md) for exact integrated source, publication,
+migration and digest-covered board evidence. This entry claims no stable ACL release,
+employee rollout or live advertising/pilot verification.
+
 ## ACL-1875 — Prepare five independent source reviews
 
 Select matching execution schema 3 limits implementation5/review5/batch5, keeping
