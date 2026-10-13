@@ -188,10 +188,11 @@ def test_publish_through_the_publisher_reopens_at_once(world, monkeypatch):
     pub.selectors_path = None
     pub._conn = None
     pub._entry = None
+    pub.browser_provider_name = "multilogin_attach"
     pub._cancelled = False
     pub._provider = world.prov
     monkeypatch.setattr(pub, "_resolve_entry", lambda label: _entry())
-    with observe_preparation(world.notices.append):
+    with sp.profile_lock(PROFILE), observe_preparation(world.notices.append):
         pub._ensure_browser(ACCOUNT)
     _reopened_only(world)
     _no_wait(world)
@@ -285,11 +286,11 @@ def test_read_spend_reopens_at_once_and_shows_the_row_notice(reads, monkeypatch)
 
 
 def test_read_all_reopens_each_hand_opened_profile_and_touches_only_it(reads):
-    with sp.reopening_by_hand():
+    with sp.profile_lock(PROFILE), sp.reopening_by_hand():
         assert sp._attach_only(sp._entry_for(ACCOUNT), ACCOUNT).page == "reopened-page"
     assert reads.ev == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)]
     assert reads.running[OTHER_PROFILE], "первое чтение тронуло второй профиль"
-    with sp.reopening_by_hand():
+    with sp.profile_lock(OTHER_PROFILE), sp.reopening_by_hand():
         assert sp._attach_only(sp._entry_for(OTHER), OTHER).page == "reopened-page"
     assert reads.ev[3:] == [("stop", OTHER_PROFILE), ("start", OTHER_PROFILE), ("connect", OTHER_PROFILE)]
     assert "kill" not in reads.ev
@@ -406,6 +407,7 @@ def test_stop_pressed_during_the_reopen_does_not_start_the_campaign(world, monke
     pub.selectors_path = None
     pub._conn = None
     pub._entry = None
+    pub.browser_provider_name = "multilogin_attach"
     pub._built_at = None
     pub._cancelled = False
     pub._provider = world.prov
@@ -453,3 +455,10 @@ def test_the_publish_failure_texts_name_both_causes():
     assert "Multilogin did not close it when the robot asked" not in src
     assert "Multilogin did not close the hand-opened window, so" not in src
     assert "switched off on this computer" in src
+
+
+@pytest.fixture(autouse=True)
+def publisher_profile_mapping(monkeypatch):
+    from src.fb_ads_rpa import rpa_publisher as rp
+    monkeypatch.setattr(rp, "load_ad_account_map", lambda *_: {})
+    monkeypatch.setattr(rp, "resolve_account_entry", lambda *_: _entry())

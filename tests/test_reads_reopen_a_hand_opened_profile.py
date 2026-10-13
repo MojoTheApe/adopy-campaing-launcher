@@ -78,7 +78,7 @@ def reads(world, monkeypatch, tmp_path):
 
 
 def _attach(account=ACCOUNT):
-    with sp.reopening_by_hand():
+    with sp.profile_lock(sp._entry_for(account).profile_id), sp.reopening_by_hand():
         return sp._attach_only(sp._entry_for(account), account)
 
 
@@ -107,7 +107,7 @@ def test_the_spend_read_asks_for_the_publish_reopen(monkeypatch):
         seen.append(sp._REOPEN_BY_HAND.get())
         raise sp.ProfileNotAttachable(sp.HAND_OPEN_MESSAGE, code=sp.HAND_OPEN_CODE)
 
-    monkeypatch.setattr(sp, "_entry_for", lambda account: SimpleNamespace(ad_account_id="act_1", profile_id="p"))
+    monkeypatch.setattr(sp, "_entry_for", lambda account: SimpleNamespace(ad_account_id="act_1", profile_id=PROFILE))
     monkeypatch.setattr(sp, "_attach_only", attach)
     out = sp.read_via_rpa(ACCOUNT, "2026-10-01", "2026-10-01")
     assert seen == [True]
@@ -178,7 +178,7 @@ def test_the_country_read_reopens_at_once(reads, monkeypatch):
 def test_without_the_read_flag_nothing_changes(reads):
     """Прочие пользователи `_attach_only` (выключение, проба кабинета) окно не трогают."""
     with pytest.raises(sp.ProfileNotAttachable) as exc:
-        sp._attach_only(sp._entry_for(ACCOUNT), ACCOUNT)
+        _attach_without_reopen()
     assert exc.value.code == ""
     assert reads.ev == []
 
@@ -211,9 +211,9 @@ def test_a_reopening_read_does_not_block_another_account(monkeypatch, tmp_path):
     monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
     monkeypatch.setattr(sp, "_UNSAVED", {})
     same = "Facebook_1443_alias"
-    entries = {ACCOUNT: SimpleNamespace(profile_id="p-1443", ad_account_id="act_1"),
-               OTHER: SimpleNamespace(profile_id="p-6540", ad_account_id="act_2"),
-               same: SimpleNamespace(profile_id="p-1443", ad_account_id="act_1")}
+    entries = {ACCOUNT: SimpleNamespace(profile_id=PROFILE, ad_account_id="act_1"),
+               OTHER: SimpleNamespace(profile_id=OTHER_PROFILE, ad_account_id="act_2"),
+               same: SimpleNamespace(profile_id=PROFILE, ad_account_id="act_1")}
     monkeypatch.setattr(sp, "_entry_for", entries.get)
     waiting, release = threading.Event(), threading.Event()
     attached: list = []
@@ -497,3 +497,8 @@ def test_the_server_row_keeps_failed_retry_for_other_failures(rendered):
     assert "amap-live-hand" not in cell and 'class="amap-live-bad"' in cell
     assert "countries failed" in cell
     assert "failed · retry" in _cell(html, '<td class="amap-actions">')
+
+
+def _attach_without_reopen():
+    with sp.profile_lock(PROFILE):
+        return sp._attach_only(sp._entry_for(ACCOUNT), ACCOUNT)

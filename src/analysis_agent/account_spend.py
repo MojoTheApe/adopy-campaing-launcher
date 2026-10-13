@@ -513,16 +513,19 @@ def _profile_key(account: str, *_a, **_k) -> str:
 
     Ярлыков может оказаться несколько на один профиль: карта этого не
     запрещает, а две очереди к одному браузеру — ровно то, от чего замок и
-    защищает. Если ярлык в профиль не разрешается (нет в карте, файл не
-    читается), ключом остаётся сам ярлык: занять лишнее безопаснее, чем не
-    занять нужное.
+    защищает. Без физического UUID отказываем до открытия браузера: ярлык
+    не защищает тот же профиль в другом процессе.
     """
     try:
         entry = _entry_for(account)
     except Exception:
         entry = None
     profile = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
-    return profile or str(account or "")
+    from src.fb_ads_rpa.profile_lease import physical_profile_key, ProfileLeaseError
+
+    if entry is None:
+        raise ProfileLeaseError(f"{account} is not in the account map; check the account connection.")
+    return physical_profile_key(profile)
 
 
 def _lock_for(account: str):
@@ -1171,6 +1174,10 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
     if not profile_id:
         raise ProfileNotAttachable(f"{account_label} has no profile_id in the account map")
 
+    from src.fb_ads_rpa.profile_lease import require_profile_lease
+
+    require_profile_lease(profile_id)
+
     direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
     if direct_cls is None:
         raise ProfileNotAttachable(
@@ -1241,7 +1248,20 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
     )
 
 
-@serialized_browser(reading=True)
+def _probe_lease_error(exc, *_args, **_kwargs):
+    return {"ok": False, "act": "", "account_name": "", "error": str(exc)}
+
+
+def _open_lease_error(exc, *_args, **_kwargs):
+    return False, str(exc)
+
+
+def _spend_lease_error(exc, account, date_from, date_to=""):
+    return SpendReading(account=account, date_from=date_from, date_to=date_to or date_from,
+                        source="rpa", state="failed", error=str(exc))
+
+
+@serialized_browser(reading=True, on_lease_error=_probe_lease_error)
 def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
     """Спросить у самого аккаунта, какой у него номер.
 
@@ -1367,7 +1387,7 @@ class _Profile:
         self.multilogin_instance = (instance or "A").strip() or "A"
 
 
-@serialized_browser(reading=True)
+@serialized_browser(reading=True, on_lease_error=_open_lease_error)
 def open_profile_for_automation(profile_id: str, folder_id: str = "",
                                 instance: str = "A", label: str = "", *,
                                 reopen_by_hand: bool = False) -> tuple[bool, str]:
@@ -1474,7 +1494,7 @@ def _reopen_for_automation(entry, who: str) -> tuple[bool, str]:
     return True, "The profile was reopened with automation. Log in if needed and leave the window open."
 
 
-@serialized_browser(key=_profile_key, reading=True)
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_open_lease_error)
 def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
     entry = _entry_for(account)
@@ -1489,7 +1509,7 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     )
 
 
-@serialized_browser(key=_profile_key, reading=True)
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_spend_lease_error)
 def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReading:
     """Прочитать спенд аккаунта за период, выбранный на дешборде.
 
@@ -3446,7 +3466,16 @@ _SWITCH_ACTION_JS = """args => {
 }"""
 
 
-@serialized_browser(key=_profile_key)
+def _turn_off_lease_error(exc, account, level, object_id, *, expected_name="", requester="", **_kwargs):
+    # No browser action started: this is a refusal, not an unconfirmed click.
+    out = TurnOffResult(account=account, level=level, object_id=str(object_id),
+                        name=expected_name, state="failed", error=str(exc), at=_now(),
+                        requester=(requester or "").strip(), route="rpa")
+    _record_turn_off(out)
+    return out
+
+
+@serialized_browser(key=_profile_key, on_lease_error=_turn_off_lease_error)
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
              expected_name: str = "", date_from: str = "", date_to: str = "",
              requester: str = "") -> "TurnOffResult":

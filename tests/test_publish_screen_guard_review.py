@@ -17,6 +17,7 @@ pytestmark = pytest.mark.windows_only(reason="real Windows session and screen AP
 @pytest.fixture
 def job(monkeypatch):
     monkeypatch.setattr(pj, 'use_rpa_publish', lambda: True)
+    monkeypatch.setattr(pj, 'profile_key_for', lambda label: '550e8400-e29b-41d4-a716-446655440000')
     monkeypatch.setattr(pj, '_clear_inherited_asyncio_loop', lambda: None)
     monkeypatch.setattr(pj, '_write_draft_status', lambda *a, **kw: None)
     monkeypatch.setattr(rt, 'screen_locked', lambda: None)
@@ -82,7 +83,7 @@ def test_real_runner_holds_guard_inside_queue_and_releases(job, monkeypatch, out
     gate.acquire()
     # С acl-1210 очередь берётся по ключу профиля; подставной замок — один
     # на любой ключ, чтобы проверка порядка осталась той же.
-    monkeypatch.setattr(pj, '_publish_serial', lambda key: gate)
+    monkeypatch.setattr(pj, '_publish_serial', lambda key, **kwargs: gate)
     def set_state(flags):
         calls.append((flags, threading.get_ident()))
         if flags == ka._BUSY: acquired.set()

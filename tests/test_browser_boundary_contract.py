@@ -200,7 +200,7 @@ def test_everyone_goes_through_the_same_gate():
     assert publish_jobs._publish_serial is publish_lease, (
         "очередь публикации перестала делить замок профиля с чтением"
     )
-    assert publish_lease("profile-x") is profile_lock("profile-x"), (
+    assert publish_lease("550e8400-e29b-41d4-a716-446655440000") is profile_lock("550e8400-e29b-41d4-a716-446655440000"), (
         "публикация и чтение одного профиля стоят в разных очередях"
     )
 
@@ -224,15 +224,15 @@ def test_two_profiles_are_read_at_the_same_time():
 
     @serialized_browser(reading=True)
     def read(profile):
-        (inside_a if profile == "profile-a" else inside_b).set()
-        if profile == "profile-a":
+        (inside_a if profile == "550e8400-e29b-41d4-a716-446655440000" else inside_b).set()
+        if profile == "550e8400-e29b-41d4-a716-446655440000":
             may_finish.wait(timeout=5)
 
-    a = threading.Thread(target=read, args=("profile-a",))
+    a = threading.Thread(target=read, args=("550e8400-e29b-41d4-a716-446655440000",))
     a.start()
     assert inside_a.wait(timeout=5)
 
-    b = threading.Thread(target=read, args=("profile-b",))
+    b = threading.Thread(target=read, args=("6ba7b810-9dad-11d1-80b4-00c04fd430c8",))
     b.start()
     assert inside_b.wait(timeout=2), "второй профиль ждёт первого без причины"
 
@@ -255,11 +255,11 @@ def test_the_same_profile_is_still_read_one_at_a_time():
         else:
             second.set()
 
-    first = threading.Thread(target=read, args=("profile-a",))
+    first = threading.Thread(target=read, args=("550e8400-e29b-41d4-a716-446655440000",))
     first.start()
     assert inside.wait(timeout=5)
 
-    other = threading.Thread(target=read, args=("profile-a",))
+    other = threading.Thread(target=read, args=("550e8400-e29b-41d4-a716-446655440000",))
     other.start()
     assert not second.wait(timeout=0.5), "два чтения вошли в один профиль разом"
 
@@ -283,8 +283,8 @@ def test_a_read_waits_while_a_publish_holds_the_browser():
     def read(profile):
         entered.set()
 
-    with publish_lease("profile-a"):
-        thread = threading.Thread(target=read, args=("profile-a",))
+    with publish_lease("550e8400-e29b-41d4-a716-446655440000"):
+        thread = threading.Thread(target=read, args=("550e8400-e29b-41d4-a716-446655440000",))
         thread.start()
         assert not entered.wait(timeout=0.5), "чтение полезло в браузер во время публикации"
 
@@ -302,8 +302,8 @@ def test_a_read_of_another_profile_does_not_wait_for_a_publish():
     def read(profile):
         entered.set()
 
-    with publish_lease("profile-a"):
-        thread = threading.Thread(target=read, args=("profile-b",))
+    with publish_lease("550e8400-e29b-41d4-a716-446655440000"):
+        thread = threading.Thread(target=read, args=("6ba7b810-9dad-11d1-80b4-00c04fd430c8",))
         thread.start()
         assert entered.wait(timeout=2), "чтение другого профиля ждёт чужую публикацию"
     thread.join(timeout=5)
@@ -319,14 +319,14 @@ def test_two_profiles_publish_at_the_same_time():
 
     def publish(profile):
         with publish_lease(profile):
-            (inside_a if profile == "profile-a" else inside_b).set()
-            if profile == "profile-a":
+            (inside_a if profile == "550e8400-e29b-41d4-a716-446655440000" else inside_b).set()
+            if profile == "550e8400-e29b-41d4-a716-446655440000":
                 may_finish.wait(timeout=5)
 
-    a = threading.Thread(target=publish, args=("profile-a",))
+    a = threading.Thread(target=publish, args=("550e8400-e29b-41d4-a716-446655440000",))
     a.start()
     assert inside_a.wait(timeout=5)
-    b = threading.Thread(target=publish, args=("profile-b",))
+    b = threading.Thread(target=publish, args=("6ba7b810-9dad-11d1-80b4-00c04fd430c8",))
     b.start()
     assert inside_b.wait(timeout=2), "вторая публикация ждёт первую без причины"
     may_finish.set()
@@ -343,7 +343,7 @@ def test_the_same_profile_still_publishes_one_at_a_time():
     second = threading.Event()
 
     def publish():
-        with publish_lease("profile-a"):
+        with publish_lease("550e8400-e29b-41d4-a716-446655440000"):
             if not inside.is_set():
                 inside.set()
                 may_finish.wait(timeout=5)
@@ -376,10 +376,10 @@ def test_a_publish_waits_for_a_read_to_finish():
         may_finish.wait(timeout=5)
 
     def publish():
-        with publish_lease("profile-a"):
+        with publish_lease("550e8400-e29b-41d4-a716-446655440000"):
             published.set()
 
-    reader = threading.Thread(target=read, args=("profile-a",))
+    reader = threading.Thread(target=read, args=("550e8400-e29b-41d4-a716-446655440000",))
     reader.start()
     assert inside.wait(timeout=5)
 

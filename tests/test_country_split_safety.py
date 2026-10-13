@@ -63,7 +63,7 @@ def test_zero_is_a_real_row_but_no_data_requires_an_explicit_marker():
 @pytest.fixture
 def harness(monkeypatch, tmp_path):
     monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "country_splits.json")
-    entry = SimpleNamespace(ad_account_id="act_123")
+    entry = SimpleNamespace(ad_account_id="act_123", profile_id="550e8400-e29b-41d4-a716-446655440000")
     page = Mock()
     # Страница отвечает по существу вопроса, а не одинаково на любой: вход в
     # Reporting спрашивает её, отрисовалась ли она, не открыт ли запрос о
@@ -94,6 +94,8 @@ def harness(monkeypatch, tmp_path):
     conn = Mock(page=page)
     attach = Mock(return_value=conn)
     monkeypatch.setattr(cs, "_entry_for", lambda _: entry)
+    from src.analysis_agent import account_spend
+    monkeypatch.setattr(account_spend, "_entry_for", lambda _: entry)
     monkeypatch.setattr(cs, "_attach_only", attach)
     monkeypatch.setattr(cs, "_sleep", lambda _: None)
     monkeypatch.setattr(cs, "_act_from_url", lambda *a, **k: "act_123")

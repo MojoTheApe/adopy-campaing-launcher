@@ -20,6 +20,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from src.fb_ads_rpa.operations import profile_lock
 
 import pytest
 
@@ -42,7 +44,8 @@ class _Draft:
 def _publisher() -> RpaPublisher:
     p = RpaPublisher.__new__(RpaPublisher)   # без __init__: он тянет провайдера
     p._conn = None
-    p._entry = None
+    p._entry = SimpleNamespace(profile_id="550e8400-e29b-41d4-a716-446655440000")
+    p.browser_provider_name = "multilogin_attach"
     p._provider = MagicMock()
     p.hand_off = False
     p.dry_run = False
@@ -180,7 +183,7 @@ def test_an_open_profile_goes_straight_to_direct_cdp(monkeypatch):
     """
     monkeypatch.setenv("FB_MLX_ATTACH_ONLY", "0")
     p = _publisher()
-    with patch.object(p, "_resolve_entry", return_value=object()), \
+    with patch.object(p, "_resolve_entry", return_value=SimpleNamespace(profile_id="550e8400-e29b-41d4-a716-446655440000")), \
          patch.object(p, "_profile_already_running", return_value=True), \
          patch.object(p, "_open_multilogin_direct", return_value="прямое") as direct:
         assert p._ensure_browser("TEST_ACCOUNT") == "прямое"
@@ -192,7 +195,7 @@ def test_under_attach_only_an_open_profile_is_handed_to_the_provider():
     """Умолчание: открытый профиль — дело настроенного провайдера, не ярлыка."""
     p = _publisher()
     p._provider.open.return_value = "через API"
-    with patch.object(p, "_resolve_entry", return_value=object()), \
+    with patch.object(p, "_resolve_entry", return_value=SimpleNamespace(profile_id="550e8400-e29b-41d4-a716-446655440000")), \
          patch.object(p, "_profile_already_running", return_value=True), \
          patch.object(p, "_open_multilogin_direct") as direct:
         assert p._ensure_browser("TEST_ACCOUNT") == "через API"
@@ -209,7 +212,7 @@ def test_attach_only_refuses_to_fall_back(monkeypatch):
     monkeypatch.setenv("FB_MLX_ATTACH_ONLY", "1")
     p = _publisher()
     p._provider.open.side_effect = RuntimeError("HTTP 401: Profile Authorization error")
-    with patch.object(p, "_resolve_entry", return_value=object()), \
+    with patch.object(p, "_resolve_entry", return_value=SimpleNamespace(profile_id="550e8400-e29b-41d4-a716-446655440000")), \
          patch.object(p, "_profile_already_running", return_value=False), \
          patch.object(p, "_reset_browser"), \
          patch.object(p, "_open_multilogin_direct") as direct, \
@@ -225,7 +228,7 @@ def test_an_expired_token_falls_through_to_direct_cdp(monkeypatch):
     monkeypatch.setenv("FB_MLX_ATTACH_ONLY", "0")
     p = _publisher()
     p._provider.open.side_effect = RuntimeError("HTTP 401: Authorization error")
-    with patch.object(p, "_resolve_entry", return_value=object()), \
+    with patch.object(p, "_resolve_entry", return_value=SimpleNamespace(profile_id="550e8400-e29b-41d4-a716-446655440000")), \
          patch.object(p, "_profile_already_running", return_value=False), \
          patch.object(p, "_reset_browser"), \
          patch.object(p, "_open_multilogin_direct", return_value="прямое") as direct:
@@ -242,7 +245,7 @@ def test_an_unrelated_failure_is_not_dressed_up_as_a_fallback(monkeypatch):
     monkeypatch.setenv("FB_MLX_ATTACH_ONLY", "0")
     p = _publisher()
     p._provider.open.side_effect = ValueError("что-то своё")
-    with patch.object(p, "_resolve_entry", return_value=object()), \
+    with patch.object(p, "_resolve_entry", return_value=SimpleNamespace(profile_id="550e8400-e29b-41d4-a716-446655440000")), \
          patch.object(p, "_profile_already_running", return_value=False), \
          patch.object(p, "_reset_browser"), \
          patch.object(p, "_open_multilogin_direct") as direct:
@@ -258,3 +261,12 @@ def test_an_open_connection_is_reused():
     with patch.object(p, "_resolve_entry") as resolve:
         assert p._ensure_browser("TEST_ACCOUNT") == "уже открыто"
     resolve.assert_not_called()
+
+
+@pytest.fixture(autouse=True)
+def mapped_profile_lease(monkeypatch):
+    from src.fb_ads_rpa import rpa_publisher as rp
+    monkeypatch.setattr(rp, "load_ad_account_map", lambda *_: {})
+    monkeypatch.setattr(rp, "resolve_account_entry", lambda *_: SimpleNamespace(profile_id="550e8400-e29b-41d4-a716-446655440000"))
+    with profile_lock("550e8400-e29b-41d4-a716-446655440000"):
+        yield

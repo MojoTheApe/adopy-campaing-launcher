@@ -20,6 +20,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from tests.profile_lease_fakes import fake_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -36,7 +37,7 @@ def quiet_runner(monkeypatch):
     monkeypatch.setattr(pj, "use_rpa_publish", lambda: True)
     monkeypatch.setattr(pj, "keep_display_awake", lambda label: _Noop())
     monkeypatch.setattr(pj, "_watch_screen_lock", lambda job_id: _Noop())
-    monkeypatch.setattr(pj, "profile_key_for", lambda label: label)  # ярлык = профиль
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: fake_profile(label))  # ярлык = профиль
     # ACL-1321: сколько профилей разом, решает память машины. Здесь проверяется
     # параллельность, а не память ноутбука, на котором идут тесты.
     from src.web.profile_slots import ProfileSlots, SlotSettings
@@ -94,7 +95,7 @@ def test_two_accounts_on_two_profiles_run_at_the_same_time(quiet_runner):
 
 def test_two_jobs_on_one_profile_still_queue(quiet_runner, monkeypatch):
     q = quiet_runner
-    monkeypatch.setattr(pj, "profile_key_for", lambda label: "one-profile")
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: fake_profile("one-profile"))
     q["job"]("DQ501")
     assert q["entered"]["DQ501"].wait(timeout=5)
     q["job"]("DQ501-again")

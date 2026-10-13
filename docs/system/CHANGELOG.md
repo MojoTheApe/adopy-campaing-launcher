@@ -1,5 +1,16 @@
 # System history
 
+## Physical profile ownership across ACM processes — ACL-1853
+
+- The main Read Spend/country/RPA boundaries now share an OS-backed lease per
+  physical Multilogin UUID across processes of the same OS user, independent of
+  dashboard port and instance configuration. Dolphin IDs retain a separate namespace.
+- Waiting is bounded and cancellable, nested same-profile calls reenter, and process
+  termination releases ownership. Missing identities, lock failures and changed map
+  targets refuse browser entry; publishing reports a finished error.
+- See [scope and downstream warm/API integration](PROFILE_OWNERSHIP.md). This source
+  change does not claim live verification or coverage of the unmerged ACL-1812 lifecycle.
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then

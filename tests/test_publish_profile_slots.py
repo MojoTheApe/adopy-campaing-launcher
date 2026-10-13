@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 
 import pytest
+from tests.profile_lease_fakes import fake_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -367,7 +368,7 @@ def runner(monkeypatch):
     monkeypatch.setattr(pj, "keep_display_awake", lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(pj, "_watch_screen_lock", lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(pj, "_write_draft_status", lambda *a, **k: None)
-    monkeypatch.setattr(pj, "profile_key_for", lambda label: label)
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: fake_profile(label))
 
     entered: dict[str, threading.Event] = {}
     release: dict[str, threading.Event] = {}
