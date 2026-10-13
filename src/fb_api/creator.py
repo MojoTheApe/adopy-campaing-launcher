@@ -424,6 +424,7 @@ class AccountFacts:
     #: IANA-имя часового пояса кабинета (`timezone_name`, тот же ответ, что и смещение).
     #: Время старта переводится по нему, а не по текущему смещению (ACL-1767: переход на летнее время).
     timezone_name: str = ""
+    page_names: dict[str, str] = field(default_factory=dict)
 
 
 def preflight_account(client: GraphClient, act: str) -> AccountFacts:
@@ -443,7 +444,9 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     got = str(acc.get("account_id") or "").strip()
     if got and got != digits:
         raise PlanError("Graph API answered for a different ad account. Nothing was created.")
-    pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=2)
+    pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=5)
+    if f"/{act}/promote_pages" in getattr(client, "truncated", []):
+        raise PlanError("Facebook Pages could not be fully loaded. Refresh pages before running the campaign.")
     pixels = client.get_all(f"/{act}/adspixels", {"fields": "id,name", "limit": 50}, max_pages=1)
     try:
         raw_off = acc.get("timezone_offset_hours_utc")
@@ -451,6 +454,7 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     except (TypeError, ValueError):
         offset = None
     return AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
+                        page_names={str(p["id"]): str(p.get("name") or p["id"]) for p in pages if p.get("id")},
                         pages=[str(p.get("id")) for p in pages if p.get("id")],
                         pixels=[str(p.get("id")) for p in pixels if p.get("id")],
                         utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip())
@@ -464,14 +468,15 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
         if plan.page_id not in facts.pages:
             src = plan.page_source or "draft"
             raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
-                            f"this ad account can advertise from ({len(facts.pages)} found).")
-    elif len(facts.pages) == 1:
+                            f"this ad account can advertise from ({len(facts.pages)} found). "
+                            "This account cannot advertise using that Page. Refresh pages and choose again.")
+    elif facts.pages:
         plan.page_id = facts.pages[0]
         plan.page_source = "account default"
-        notes.append("page_id was empty in the account map; the only page of the ad account is used")
+        notes.append("Automatic Facebook Page: the first available page of this ad account is used")
     else:
-        raise PlanError(f"page_id is empty in the account map and the ad account has "
-                        f"{len(facts.pages)} pages; set page_id")
+        raise PlanError("No Facebook Pages are available for this ad account. "
+                        "Refresh pages in the builder or grant this account access to a Page.")
     return notes
 
 
@@ -1517,6 +1522,8 @@ class CampaignCreator:
         if self._form_steps:
             # Только у планов с шаблонами форм: сайтовый план не меняется ни байтом (ACL-1775).
             summary["forms"] = [st.as_dict() for st in self._form_steps.values()]
+        if self.facts.page_names.get(plan.page_id, plan.page_id) != plan.page_id:
+            summary["page_name"] = self.facts.page_names[plan.page_id]
         return summary
 
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:

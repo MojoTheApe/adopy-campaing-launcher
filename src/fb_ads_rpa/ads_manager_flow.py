@@ -2386,6 +2386,11 @@ class AdsManagerFlow:
         # priority over both the LLM agent and the recipe player when enabled.
         from src.fb_ads_rpa.config import get_use_llm_agent, get_use_recipe_player, get_use_recorded_flow
 
+        if draft.page_provided and not get_use_recorded_flow():
+            result.error = "Facebook Page Identity verification requires the recorded RPA flow. No campaign was created."
+            result.blocking_failures.append("page_identity")
+            return result
+
         if get_use_recorded_flow():
             # ACL-1447: общая длительность кампании — для её итога в Sentry.
             flow_started = time.monotonic()
@@ -2447,6 +2452,8 @@ class AdsManagerFlow:
                         soft_fails_out=ad_soft_fails,
                         on_new_page=self._adopt_page,
                         expected_act=draft.ad_account_id or "",
+                        **({"page_id": draft.page_id or "", "page_name": draft.page_name,
+                            "page_name_unique": draft.page_name_unique} if draft.page_provided else {}),
                         **({"ad_body2": ad.ad_body2} if ad.ad_body2 else {}),
                     )
                     if fail_step == profile_trouble.WRONG_AD_ACCOUNT and _md.last_wrong_ad_account():
@@ -2560,7 +2567,7 @@ class AdsManagerFlow:
                 # человек должен понять из самой ошибки, без разбора телеметрии.
                 if (fail_step.split(":", 1)[0] in ("account_blocked", "browser_closed", "tab_hung",
                                                    "conversion_website_name_changed",
-                                                   "next_to_ad_stuck_on_adset",
+                                                   "next_to_ad_stuck_on_adset", "page_identity",
                                                    "profile_unresponsive", "simple_create_layout",
                                                    *retry_policy.FLOW_BUDGET_STOPS)
                         or fail_step.split(":", 1)[0] in profile_trouble.ACCOUNT_STOPS):
