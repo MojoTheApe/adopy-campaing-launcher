@@ -15654,7 +15654,19 @@
       841,
       865
     ],
-    "review": null,
+    "review": {
+      "id": "26ae7e39de4244518d2b2e69684adb88",
+      "batch_id": "67923a8e08d34c538623be512c739a1a",
+      "pr": 877,
+      "issues": [
+        875
+      ],
+      "actor": "Reviewer-R875X",
+      "session": "root_tracker_review_acl1875",
+      "coordinator": "Coordinator-FLOW513",
+      "state": "reviewing",
+      "started_at": "2026-10-13T13:41:43+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -25279,6 +25291,23 @@
           "entered_stage": false,
           "history": []
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-13T13:41:43+00:00",
+        "review": {
+          "id": "26ae7e39de4244518d2b2e69684adb88",
+          "batch_id": "67923a8e08d34c538623be512c739a1a",
+          "pr": 877,
+          "issues": [
+            875
+          ],
+          "actor": "Reviewer-R875X",
+          "session": "root_tracker_review_acl1875",
+          "coordinator": "Coordinator-FLOW513",
+          "state": "reviewing",
+          "started_at": "2026-10-13T13:41:43+00:00"
+        }
       }
     ],
     "policy": {
@@ -26100,7 +26129,7 @@
       "id": "67923a8e08d34c538623be512c739a1a",
       "actor": "Coordinator-FLOW513",
       "session": "flow_five_reviews_coordinator_01a134f0_20261013",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         875
       ],
@@ -26154,7 +26183,7 @@
       "branch": "codex/batch-67923a8e08d34c538623be512c739a1a",
       "intake": "91201340047f423fa6a6747b1c5dc404",
       "started_at": "2026-10-13T13:33:06+00:00",
-      "pr": null,
+      "pr": 877,
       "entered_stage": false,
       "history": []
     },
