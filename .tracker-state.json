@@ -25765,12 +25765,72 @@
         "issue": 880,
         "actor": "Worker-FIVE874",
         "report": "# ACL-1880 bounded administrative stop\n\nHuman confirmation received via Coordinator: \"all acl tasks stopped please finish implementation asap\" and \"\u0412\u0441\u044f \u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430 ACL \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0430\". This is a stopped-owner administrative transfer followed by immediate owned stop only. No feature implementation, source recovery, push, review, approval, merge, delivery or completion is authorized or asserted here.\n\nThe full original Issue880 body and metadata are preserved in acl1880-original-issue.json. Actual fresh exact462 engine state is acl1880-exact462-before-admin-stop.json, genuine unchanged schema2 5/1/5 config is acl-old-config.json.\n\nOriginal ownership/private locator (do not publish):\n{\n  \"actor\": \"Worker-PG86\",\n  \"session\": \"01a135aa-a82d-77d2-8057-5116cc969c86\",\n  \"coordinator\": \"Coordinator-PG86\",\n  \"branch\": \"codex/facebook-page-selection\",\n  \"worktree\": \"C:\\\\Users\\\\EvgeniSedin\\\\fb_agents\\\\output\\\\facebook-page-selection\",\n  \"id\": \"69a7d5c37ae34427a55bed3bd25b7230\",\n  \"issue\": 880,\n  \"state\": \"implementing\",\n  \"started_at\": \"2026-10-13T14:33:53+00:00\",\n  \"from_status\": \"status:backlog\"\n}\n\nThe recorded original working branch remains unchanged. Official remote branch returned404. The original Windows worktree is inaccessible on this host. Its unpublished commits/uncommitted files have not been recovered, read, copied, backed up, reset, stashed or modified. This report preserves only the locator, actual claim, recorded source refs/history and complete task scope; it does not claim backup of inaccessible Windows contents. Original Worker-PG86 authorship remains in implementers and the supported takeover audit retains the full previous claim.\n\nThe actual Worker-FIVE874 run performs takeover with --previous-claim and --stopped, preserving the original branch, in a distinct empty administrative directory acl1880-stop-only. Immediate own execution stop leaves ToDo+Blocked and releases only that actual transferred claim. Follow-up public blocker records actual pause and source limitation without exposing private identity/session/path strings. Original task acceptance stays unfinished.\n\nChecks: exact reviewed462 runtime clean; unchanged genuine old policy; original claim freshly verified; only880 implementing before action; queue37. Fresh private after-state must verify stopped/no claim, original author+takeover history retained, queue/reviews/integration/intake/other tasks unchanged and all ownership idle."
+      },
+      {
+        "event": "policy-adopted",
+        "at": "2026-10-13T14:52:32+00:00",
+        "policy": {
+          "schema_version": 3,
+          "implementation_limit": 5,
+          "review_limit": 5,
+          "batch_limit": 5
+        },
+        "preserved_review_queue": [
+          406,
+          433,
+          526,
+          529,
+          642,
+          651,
+          739,
+          761,
+          766,
+          767,
+          768,
+          769,
+          771,
+          775,
+          776,
+          781,
+          782,
+          783,
+          786,
+          797,
+          798,
+          799,
+          800,
+          806,
+          812,
+          814,
+          815,
+          816,
+          819,
+          822,
+          826,
+          827,
+          839,
+          840,
+          841,
+          845,
+          865
+        ],
+        "preserved_closed_review_handoffs": [
+          {
+            "issue": 406,
+            "pr": 407
+          },
+          {
+            "issue": 433,
+            "pr": 439
+          }
+        ],
+        "preserved_approved": []
       }
     ],
     "policy": {
-      "schema_version": 2,
+      "schema_version": 3,
       "implementation_limit": 5,
-      "review_limit": 1,
+      "review_limit": 5,
       "batch_limit": 5
     },
     "approvals": {
@@ -26428,6 +26488,7 @@
       "started_at": "2026-10-13T13:32:25+00:00",
       "ineligible": {},
       "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
-    }
+    },
+    "source_reviews": {}
   }
 }
