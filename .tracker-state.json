@@ -7378,22 +7378,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "836": {
-        "actor": "Worker-SR1012",
-        "session": "connection_sr1012_worker",
-        "coordinator": "Coordinator-CR1012",
-        "branch": "codex/acl-1836-session-recovery",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1836-2026-10-12",
-        "id": "af95644917644f399702a713e7bb4750",
-        "issue": 836,
-        "state": "handoff",
-        "started_at": "2026-10-13T08:29:43+00:00",
-        "from_status": "status:todo",
-        "pr": 837,
-        "report": "# ACL-1836 current-main reconciliation handoff \u2014 2026-10-13\n\nWorker-SR1012 / connection_sr1012_worker; Coordinator-CR1012.\nFresh claim: af95644917644f399702a713e7bb4750.\nIndependent return: acl1836-current-main-review-return.md, Reviewer-RS1012.\nPR837: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837\n\nSource head02bb4f77bf1fa70cb29c3761f8ad450a84a24cc0,\ntreefc1a9a081119fcb3304f6fb72a148514961fade6.\nCurrent main3327465fcbd46ccff9b64eb7c574ff5b84b99b80 is a verified ancestor.\nThe original source branch codex/acl-1836-session-recovery is retained.\n\n## Scope and preservation\n\nNormal merge of current main into the original8a45 author source. The only\nconflict was docs/system/CHANGELOG.md; both ACL1836 and ACL1824 records are intact.\nNo new product behavior was added. Git diff confirms src/fb_api and the1836\nregression module unchanged from8a45, and current-main src/web/app.py,\ntest_acl1756_fb_api.py and test_dashboard_review.py unchanged from3327465f.\nThe source delta against current main remains the same10 connection-fix files,\n497 additions/13 deletions, preserving earlier source authorship/history.\n\n## Current candidate checks\n\nWindows / Python3.14, isolated configuration/temp files under the existing audit\ndirectory, empty external-library variables and Sentry disabled. The six files\ntest_acl1836_session_recovery, test_acl1756_fb_api,\ntest_acl1756_page_helper_node, test_bench_catalogue, test_acl_test_platform,\ntest_the_api_stop_is_asked_first passed276 tests in36.12s in one process.\n\nInitial invocation produced276 fixture-setup errors because the new basetemp's\nparent verification directory did not exist (WinError3). No test body ran. After\ncreating that parent, the exact same file set passed; this was harness setup,\nnot a source repair. Scanner and dashboard/RPA import smoke passed, diff checks\npassed, and the committed source worktree is clean.\n\nThe earlier source CI failure is proven baseline test isolation, now supplied by\nthe original ACL1824 repair in main. The original failed run remains failed.\nFresh exact-head hosted CI must pass; no blind rerun or waiver is claimed.\n\n## Retained compatibility evidence and limits\n\nSee acl1836-compatibility-report.md for the prior isolated integrated snapshot:\n4 incident regressions passed1.28s; full escalated suite502 passed/1 failed35.86s;\nthe remaining synthetic stop-log os.replace WinError5 reran1 passed0.99s.\nThe stopped restricted run has no complete verdict. Stop-log/account-spend files\nwere baseline-identical and not repaired. The transport remains byte-identical\nafter this merge, but those prior runs are not relabelled as a fresh whole-tree\nintegrated or live-runtime run. Prior Chromium mechanism probe is likewise local.\n\nRequired next steps: durable author handoff, fresh independent exact-head/current\nbase review, complete required source CI, then the separately owned integration\nroute. No merge/deploy/package publication, live Meta/Multilogin calls, account\nactivation or runtime configuration/workbook edits were performed. ACL1335 and\nother Workers' source/claims are untouched. ACL1864 is deferred without source\nedits after the owner restored Excel; its own claim was stopped separately."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -11508,7 +11493,7 @@
             "session": "connection_sr1012_worker"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-SR1012",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -11517,16 +11502,16 @@
           "coordinator": "Coordinator-CR1012",
           "branch": "codex/acl-1836-session-recovery",
           "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1836-2026-10-12",
-          "id": "964c1c2cec924b999f51878839a8772d",
+          "id": "af95644917644f399702a713e7bb4750",
           "issue": 836,
           "state": "handoff",
-          "started_at": "2026-10-13T06:30:41+00:00",
+          "started_at": "2026-10-13T08:29:43+00:00",
           "from_status": "status:todo",
           "pr": 837,
-          "report": "# ACL-1836 warm-helper review repair\n\nWorker: Worker-SR1012 / connection_sr1012_worker.\nCoordinator: Coordinator-CR1012.\nFresh implementation claim: 964c1c2cec924b999f51878839a8772d.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837 (approval-only main source).\nWorktree: C:/Users/EvgeniSedin/Desktop/ACM-Worker-1836-2026-10-12.\nBranch: codex/acl-1836-session-recovery.\nBase: e8e59f8376458f2f73089c3f2a8d454837ff033f (fresh origin/main verification).\nHead: 8a45c683c538d13cc670c779da3de100ce65942d.\nTree: 8cdac4c2ded1e609a4b36fcaa96bf5ef6222bb65.\n\nDo not approve or integrate while the final integrated compatibility run remains\nunresolved. The Coordinator expressly authorized this honest pending-result handoff.\n\nThe previous independent review was returned by supported Reviewer-RX1013B takeover\nand request-changes for the warm helper P1; this same Worker took a fresh claim\nbefore editing. No prior green review is reused as approval of this candidate.\n\nWarmRegistry can create a new InPageGraph for another mode on the same PageTab\nwithout navigation. Its empty expected URL caused safe recovery refusal even when\nthe intended target survived. A helper replacement after earlier recovery also\ndropped the strict identity-check flag.\n\nPageTab now exposes read-only navigation_url (successful explicit ACL navigation\nintent only) and recovery_attempted state. New InPageGraph instances inherit both.\nRecovery still verifies target and attached frame; no current page URL becomes\ntrusted identity. Failed navigation cannot rebind a later helper. The tab-lifetime\none-attempt bound remains; uncertain Graph operations are not replayed. No warm.py\nor creator source was imported into main.\n\nRegression evidence on main: five added tests, before fix 3 failed / 2 passed;\nafter fix all 32 session tests passed in 8.84s. Existing focused suite passed\n232 tests in 84.39s (1756_fb_api, 1756_page_helper_node, bench_catalogue,\nacl_test_platform), including the existing loopback test with appropriate permission.\nTotal affected main checks: 264 passed on Windows / Python3.14. Secret scanner,\nimport smoke and diff check passed. Source worktree clean; branch push and remote\nPR head/base verified. Full source CI is running and has no final verdict yet.\n\nCoordinator's isolated integrated snapshot: all four incident cases passed after\nthe exact incremental source patch, including fresh warm helper mode. The full\n503-case integrated run remains in progress with three broader-suite failures\nawaiting their tracebacks/classification. Earlier 499-pass evidence belongs to the\nprevious candidate and is not reused as final-candidate proof. Likewise, the earlier\none-pass isolated real Chromium probe remains prior mechanism evidence only.\n\nThe Coordinator retains compatibility investigation. If any failure is a source\ndefect, use review-return and a fresh Worker claim before source edits, then fresh\nself-checks, handoff and independent review. No approval until the current candidate\nhas valid review and required CI/compatibility evidence.\n\nNo Meta/profile action, runtime configuration change, deployment, merge, package\nrelease or activation was performed. ACL-1335 remains untouched. Original external\nsession-loss cause and the live upload's outcome remain unknown."
+          "report": "# ACL-1836 current-main reconciliation handoff \u2014 2026-10-13\n\nWorker-SR1012 / connection_sr1012_worker; Coordinator-CR1012.\nFresh claim: af95644917644f399702a713e7bb4750.\nIndependent return: acl1836-current-main-review-return.md, Reviewer-RS1012.\nPR837: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837\n\nSource head02bb4f77bf1fa70cb29c3761f8ad450a84a24cc0,\ntreefc1a9a081119fcb3304f6fb72a148514961fade6.\nCurrent main3327465fcbd46ccff9b64eb7c574ff5b84b99b80 is a verified ancestor.\nThe original source branch codex/acl-1836-session-recovery is retained.\n\n## Scope and preservation\n\nNormal merge of current main into the original8a45 author source. The only\nconflict was docs/system/CHANGELOG.md; both ACL1836 and ACL1824 records are intact.\nNo new product behavior was added. Git diff confirms src/fb_api and the1836\nregression module unchanged from8a45, and current-main src/web/app.py,\ntest_acl1756_fb_api.py and test_dashboard_review.py unchanged from3327465f.\nThe source delta against current main remains the same10 connection-fix files,\n497 additions/13 deletions, preserving earlier source authorship/history.\n\n## Current candidate checks\n\nWindows / Python3.14, isolated configuration/temp files under the existing audit\ndirectory, empty external-library variables and Sentry disabled. The six files\ntest_acl1836_session_recovery, test_acl1756_fb_api,\ntest_acl1756_page_helper_node, test_bench_catalogue, test_acl_test_platform,\ntest_the_api_stop_is_asked_first passed276 tests in36.12s in one process.\n\nInitial invocation produced276 fixture-setup errors because the new basetemp's\nparent verification directory did not exist (WinError3). No test body ran. After\ncreating that parent, the exact same file set passed; this was harness setup,\nnot a source repair. Scanner and dashboard/RPA import smoke passed, diff checks\npassed, and the committed source worktree is clean.\n\nThe earlier source CI failure is proven baseline test isolation, now supplied by\nthe original ACL1824 repair in main. The original failed run remains failed.\nFresh exact-head hosted CI must pass; no blind rerun or waiver is claimed.\n\n## Retained compatibility evidence and limits\n\nSee acl1836-compatibility-report.md for the prior isolated integrated snapshot:\n4 incident regressions passed1.28s; full escalated suite502 passed/1 failed35.86s;\nthe remaining synthetic stop-log os.replace WinError5 reran1 passed0.99s.\nThe stopped restricted run has no complete verdict. Stop-log/account-spend files\nwere baseline-identical and not repaired. The transport remains byte-identical\nafter this merge, but those prior runs are not relabelled as a fresh whole-tree\nintegrated or live-runtime run. Prior Chromium mechanism probe is likewise local.\n\nRequired next steps: durable author handoff, fresh independent exact-head/current\nbase review, complete required source CI, then the separately owned integration\nroute. No merge/deploy/package publication, live Meta/Multilogin calls, account\nactivation or runtime configuration/workbook edits were performed. ACL1335 and\nother Workers' source/claims are untouched. ACL1864 is deferred without source\nedits after the owner restored Excel; its own claim was stopped separately."
         },
         "pr": 837,
-        "queued_at": "2026-10-13T06:45:31+00:00",
+        "queued_at": "2026-10-13T08:38:19+00:00",
         "review_report": "# ACL-1836 / PR837 current-main reconciliation return\n\nReviewer: Reviewer-RS1012 / connection_review_rs1012.\nActual author: Worker-SR1012. Coordinator: Coordinator-CR1012.\nDate: 2026-10-13.\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/836\nCurrent source head: `8a45c683c538d13cc670c779da3de100ce65942d`.\nSource tree: `8cdac4c2ded1e609a4b36fcaa96bf5ef6222bb65`.\nOriginal source base: `e8e59f8376458f2f73089c3f2a8d454837ff033f`.\nCurrent main: `3327465fcbd46ccff9b64eb7c574ff5b84b99b80`.\n\nReturn to the original author through a fresh ordinary implementation claim.\nReconcile this same source with current main, resolve its reported merge conflict,\npreserve the session-recovery implementation and the existing main fixes, rerun\naffected checks and obtain complete required CI on the refreshed exact head.\nA fresh independent review is required before approval.\n\nIndependent remote inspection confirmed the head above, open/nondraft PR, and\n`mergeable: CONFLICTING`. Current checks are not successful overall: Linux 3.13\nshard 3 and ACL verification failed. The earlier clean-base reproduction identified\nthe logging-filter isolation failure also seen in PR849. Main now includes the\nreviewed ACL-1824 fix through PR852; this is reason to reconcile and retest, not\na waiver of required source checks. Earlier tracker-link failures/successes also\nremain visible in the check rollup and should be resolved by fresh current checks.\n\nThis return introduces no new product-code finding. The existing r2 source and\ncompatibility evidence remain preserved in acl1836-r2-preliminary-review.md and\nacl1836-compatibility-report.md. They cover bounded same-owned-target session\nrecovery, navigation intent across fresh warm helpers, no replay of uncertain Graph\nwrites, and partial creator outcome preservation. The compatibility report records\nits failures and targeted retries honestly; it is not relabelled a clean full-suite\npass. These prior results do not prove the forthcoming refreshed source head.\n\nNo source/test edit, live Meta/Multilogin operation, token access, file move or\ndeletion was performed by this reviewer. This is an author return, not approval."
       },
       "838": {
@@ -15290,7 +15275,8 @@
       845,
       840,
       841,
-      853
+      853,
+      836
     ],
     "review": {
       "id": "7defc24d92d84b54912c947917921bc3",
@@ -23993,6 +23979,13 @@
         "pr": 849,
         "lane": "7defc24d92d84b54912c947917921bc3",
         "actor": "Reviewer-RS1012"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T08:38:19+00:00",
+        "issue": 836,
+        "pr": 837,
+        "actor": "Worker-SR1012"
       }
     ],
     "policy": {
