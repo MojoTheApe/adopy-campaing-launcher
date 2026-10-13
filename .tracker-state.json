@@ -7447,21 +7447,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "868": {
-        "actor": "Worker-RP7K13",
-        "session": "root_parallel_review_20261013",
-        "coordinator": "Coordinator-RP7K13",
-        "branch": "codex/acl-1868-parallel-reviews",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Parallel-Reviews-2026-10-13",
-        "id": "3ba62c9c016e4024a3ee89d7091c32f4",
-        "issue": 868,
-        "state": "stopping",
-        "started_at": "2026-10-13T09:19:56+00:00",
-        "from_status": "status:todo",
-        "report": "ACL-1868 source preparation is preserved in draft PR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/870 at 4bdb12ec309fbaa80286bef703541a13f6996133, branch codex/acl-1868-parallel-reviews, isolated checkout C:\\Users\\EvgeniSedin\\Desktop\\ACL-Parallel-Reviews-2026-10-13. Current actual Worker is Worker-RP7K13 / root_parallel_review_20261013. No unrelated executor or runtime was modified.\n\nImplemented schema-3 recognition in ACL batch assembly and CI classification, preserving full combined/stage/promotion checks, exact ownership and frozen source composition. Added runbook describing reviewed shared-engine adoption, safe queue migration, ownership preservation and the inspected source test-dashboard identity.\n\nVerification: five new CI capacity/classification regressions pass; one actual schema-3 Git batch assembly with concurrent source review passes; secret scan and git diff --check pass. Earlier broad local run reported 33 passes and five failures in the original new test preparation/expectation; those five failures were fixed before commit and rerun successfully. Current hosted tooling, descriptor, task linkage, process instructions and Windows tests passed; Linux matrix/installer remain pending at this handoff. Read exact hosted PR870 statuses rather than treating this dated statement as final evidence. Bounded independent non-implementing preparation review found no actionable code regressions at this exact head; report C:\\Users\\EvgeniSedin\\Desktop\\acl1868-independent-preparation-review.md. This is not final merge admission or full task acceptance.\n\nExternal prerequisite: authenticated evgenis-ctrl has push=false for MojoTheApe/master-repo; push of MR-22 returned 403. Master local reviewed candidate4bd7c63c4626443bed4726d3066e806fdf0f8e79 and MR22-pr-body.md are preserved; requires actual Write access, final independently reviewed merged Tracker pin, real exporter verification and Linux checks. Shared engine TT-93 draft PR94 is separately implementing/testing schema3 source_reviews ownership and safe queue-preserving transition.\n\nRemaining task scope: reviewed merged immutable Tracker/Master revisions; actual matching ACL pins/helpers/config and registry/service alignment; current-base independent review/admission/old-policy source integration; supported owner-free schema2->3 preview/apply with preservation comparisons and fresh board evidence; three actual source-review claims with fourth/duplicate/foreign refusal; test-dashboard update only via its verified safe source procedure. Live ACL remains five implementations, one source-review lane, batch ceiling5. No three-lane activation, shared deployment, stage/main integration, dashboard update, package publication or advertising action is claimed.\n\nThis owning Worker stops only its own preparation claim while awaiting the actual shared prerequisite, so an implementation slot is not held idle. Resume this same task through supported claim/start after inspecting all dependencies and current source/base/CI. Preserve original task criteria, foreign claims and queue. Do not clear shared state or force-reassign another owner to bypass adoption gates."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -11950,21 +11936,21 @@
             "session": "root_parallel_review_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-RP7K13",
         "coordinator": "Coordinator-RP7K13",
         "handoff": {
           "actor": "Worker-RP7K13",
           "session": "root_parallel_review_20261013",
           "coordinator": "Coordinator-RP7K13",
-          "branch": "codex/acl-parallel-review-adoption",
+          "branch": "codex/acl-1868-parallel-reviews",
           "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Parallel-Reviews-2026-10-13",
-          "id": "00a30ccb5ccc439cbea1e965ddc929c0",
+          "id": "3ba62c9c016e4024a3ee89d7091c32f4",
           "issue": 868,
           "state": "stopping",
-          "started_at": "2026-10-13T09:17:34+00:00",
-          "from_status": "status:backlog",
-          "report": "ACL-1868 was created and claimed by this actual Worker before its numeric ID was known. No code edits, commits or PR exist yet. The initial intake branch codex/acl-parallel-review-adoption lacks the now-known ticket ID. This owning Worker stops its own preparation claim and will immediately resume the same task in codex/acl-1868-parallel-reviews through the supported start lifecycle. No foreign claim or queue entry is changed; no implementation is complete."
+          "started_at": "2026-10-13T09:19:56+00:00",
+          "from_status": "status:todo",
+          "report": "ACL-1868 source preparation is preserved in draft PR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/870 at 4bdb12ec309fbaa80286bef703541a13f6996133, branch codex/acl-1868-parallel-reviews, isolated checkout C:\\Users\\EvgeniSedin\\Desktop\\ACL-Parallel-Reviews-2026-10-13. Current actual Worker is Worker-RP7K13 / root_parallel_review_20261013. No unrelated executor or runtime was modified.\n\nImplemented schema-3 recognition in ACL batch assembly and CI classification, preserving full combined/stage/promotion checks, exact ownership and frozen source composition. Added runbook describing reviewed shared-engine adoption, safe queue migration, ownership preservation and the inspected source test-dashboard identity.\n\nVerification: five new CI capacity/classification regressions pass; one actual schema-3 Git batch assembly with concurrent source review passes; secret scan and git diff --check pass. Earlier broad local run reported 33 passes and five failures in the original new test preparation/expectation; those five failures were fixed before commit and rerun successfully. Current hosted tooling, descriptor, task linkage, process instructions and Windows tests passed; Linux matrix/installer remain pending at this handoff. Read exact hosted PR870 statuses rather than treating this dated statement as final evidence. Bounded independent non-implementing preparation review found no actionable code regressions at this exact head; report C:\\Users\\EvgeniSedin\\Desktop\\acl1868-independent-preparation-review.md. This is not final merge admission or full task acceptance.\n\nExternal prerequisite: authenticated evgenis-ctrl has push=false for MojoTheApe/master-repo; push of MR-22 returned 403. Master local reviewed candidate4bd7c63c4626443bed4726d3066e806fdf0f8e79 and MR22-pr-body.md are preserved; requires actual Write access, final independently reviewed merged Tracker pin, real exporter verification and Linux checks. Shared engine TT-93 draft PR94 is separately implementing/testing schema3 source_reviews ownership and safe queue-preserving transition.\n\nRemaining task scope: reviewed merged immutable Tracker/Master revisions; actual matching ACL pins/helpers/config and registry/service alignment; current-base independent review/admission/old-policy source integration; supported owner-free schema2->3 preview/apply with preservation comparisons and fresh board evidence; three actual source-review claims with fourth/duplicate/foreign refusal; test-dashboard update only via its verified safe source procedure. Live ACL remains five implementations, one source-review lane, batch ceiling5. No three-lane activation, shared deployment, stage/main integration, dashboard update, package publication or advertising action is claimed.\n\nThis owning Worker stops only its own preparation claim while awaiting the actual shared prerequisite, so an implementation slot is not held idle. Resume this same task through supported claim/start after inspecting all dependencies and current source/base/CI. Preserve original task criteria, foreign claims and queue. Do not clear shared state or force-reassign another owner to bypass adoption gates."
         }
       }
     },
@@ -24486,6 +24472,13 @@
         "issue": 854,
         "pr": 869,
         "actor": "Worker-SR1012"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-13T09:39:31+00:00",
+        "issue": 868,
+        "actor": "Worker-RP7K13",
+        "report": "ACL-1868 source preparation is preserved in draft PR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/870 at 4bdb12ec309fbaa80286bef703541a13f6996133, branch codex/acl-1868-parallel-reviews, isolated checkout C:\\Users\\EvgeniSedin\\Desktop\\ACL-Parallel-Reviews-2026-10-13. Current actual Worker is Worker-RP7K13 / root_parallel_review_20261013. No unrelated executor or runtime was modified.\n\nImplemented schema-3 recognition in ACL batch assembly and CI classification, preserving full combined/stage/promotion checks, exact ownership and frozen source composition. Added runbook describing reviewed shared-engine adoption, safe queue migration, ownership preservation and the inspected source test-dashboard identity.\n\nVerification: five new CI capacity/classification regressions pass; one actual schema-3 Git batch assembly with concurrent source review passes; secret scan and git diff --check pass. Earlier broad local run reported 33 passes and five failures in the original new test preparation/expectation; those five failures were fixed before commit and rerun successfully. Current hosted tooling, descriptor, task linkage, process instructions and Windows tests passed; Linux matrix/installer remain pending at this handoff. Read exact hosted PR870 statuses rather than treating this dated statement as final evidence. Bounded independent non-implementing preparation review found no actionable code regressions at this exact head; report C:\\Users\\EvgeniSedin\\Desktop\\acl1868-independent-preparation-review.md. This is not final merge admission or full task acceptance.\n\nExternal prerequisite: authenticated evgenis-ctrl has push=false for MojoTheApe/master-repo; push of MR-22 returned 403. Master local reviewed candidate4bd7c63c4626443bed4726d3066e806fdf0f8e79 and MR22-pr-body.md are preserved; requires actual Write access, final independently reviewed merged Tracker pin, real exporter verification and Linux checks. Shared engine TT-93 draft PR94 is separately implementing/testing schema3 source_reviews ownership and safe queue-preserving transition.\n\nRemaining task scope: reviewed merged immutable Tracker/Master revisions; actual matching ACL pins/helpers/config and registry/service alignment; current-base independent review/admission/old-policy source integration; supported owner-free schema2->3 preview/apply with preservation comparisons and fresh board evidence; three actual source-review claims with fourth/duplicate/foreign refusal; test-dashboard update only via its verified safe source procedure. Live ACL remains five implementations, one source-review lane, batch ceiling5. No three-lane activation, shared deployment, stage/main integration, dashboard update, package publication or advertising action is claimed.\n\nThis owning Worker stops only its own preparation claim while awaiting the actual shared prerequisite, so an implementation slot is not held idle. Resume this same task through supported claim/start after inspecting all dependencies and current source/base/CI. Preserve original task criteria, foreign claims and queue. Do not clear shared state or force-reassign another owner to bypass adoption gates."
       }
     ],
     "policy": {
