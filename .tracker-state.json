@@ -2815,7 +2815,7 @@
       "source_sha": "5c8901074ae189fb71d5a45a3ccd5135b03dea95",
       "main_tree": "5366a8906888cba5c25487adea3da9a9cfe28d03",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-13T14:03:16+00:00",
       "batch_id": "67923a8e08d34c538623be512c739a1a",
       "verification": {
@@ -4409,6 +4409,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-13T07:37:50+00:00"
+      },
+      "875": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 878,
+            "merge_sha": "72a2d2c21aa42f1a388d32ea27ba2c8253ee7854",
+            "tree_sha": "07b36d28348a356324df59951442177253074ac8"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-13T14:09:00+00:00"
       }
     },
     "promotions": {
@@ -7536,6 +7548,37 @@
           "report": "# Actual stage verification \u2014 ACL-1824 / batch6b33b0c808d045a89e4d5f771f95483b\n\nPR847 really merged into permanent stage on13 October2026. Actual stage merge22df14b3a7f01729a2e85607da30f9dca7585958 has parents a227497ab04225ab5e7ae52e06c8fb74fcaf57ac and independently reviewed batch headfe7ee11980c4b2719f23c5daf2bb06e4649d8c10. Current stage ref and Git API commit/tree were checked after merge. Exact stage tree5366a8906888cba5c25487adea3da9a9cfe28d03 matches the approved source, combined review and tested package. Main remains the frozen e8e59f8376458f2f73089c3f2a8d454837ff033f with tree295c4bf5b7911fc3b5f417d429d84d0d927629a3.\n\nConfigured verification target: ACL isolated Windows stage installation. The actual target was an isolated GitHub-hosted Windows runner using separate configuration/workspace/creatives, synthetic data and disabled telemetry. Package acceptance used real installers/helper/launcher, not unit-only fixtures or a second source checkout.\n\nFull candidate CI [38358208652](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38358208652) passed all six Linux3.11/3.13 shards, Windows3.13, tooling and Process instructions, with successful ACL verification. Complete Windows workflow [38358208656](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38358208656) passed input isolation/scan/tests, build, packaged executable, install/launch/repair/uninstall and real update/restart/recovery, followed by Installer verification. Descriptor and tracker-link passed before actual stage admission. Fresh check-pr/check-merge admitted exactly this batch/tree before GitHub merge.\n\nThe installer acceptance report identifies the tested GitHub candidate merge73b09d623c13244eb2653073c70400388b111374, rather than pretending it is actual stage commit22df14b. Git API verified identical tree5366a8906888cba5c25487adea3da9a9cfe28d03 and the same two parents. Artifact ACL-update-recovery-1103/ID11794198798/run38358208656 was downloaded locally; report.json resultpassed and all five actual checks passed. SHA256FD81D21388225031548A6D616066A407DDBDE082EF0D8AD4C66A02C2190BCE49. Installer hashes and full receipts/logs are retained in batch1824-windows-update-recovery-1103 and summarized in batch1824-windows-package-proof.md.\n\nFive actual scenarios: previous package install/start; frozen-helper update with all pointers/shortcuts advanced; new-version restart with data preserved; deliberately mismatched version recovery with previous_running=true and pointers/shortcuts restored; recovered-version restart with synthetic data byte-identical.\n\nActual stage workflows completed successfully: CI [38360622489](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38360622489), installer [38360622463](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38360622463), descriptor [38360622417](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38360622417). Saved logs explicitly report reused-green-full-run-of-same-tree/tree5366a890..., reusing candidate CI38358208652 and complete installer38358208656. Stage runtime jobs were skipped because of verified same-tree reuse; those skips are not counted as new test executions. They reuse the full actual checks above, not source825's classified skipped installer.\n\nIndependent source and combined reports cover the full unchanged ACL-1824 scope, Standards0/Spec0. No extra implementation/member or conflict resolution was added. This verifies the reviewed exact stage content and isolated package mechanism for unchanged promotion. It does not claim a published stable release/download channel, employee installation, live Multilogin/Meta pilot or activation of advertising.\n"
         },
         "verified_at": "2026-10-13T07:26:01+00:00"
+      },
+      "878": {
+        "pr": 877,
+        "issues": [
+          875
+        ],
+        "tree_sha": "07b36d28348a356324df59951442177253074ac8",
+        "source_sha": "5c8901074ae189fb71d5a45a3ccd5135b03dea95",
+        "main_tree": "5366a8906888cba5c25487adea3da9a9cfe28d03",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-13T14:03:16+00:00",
+        "batch_id": "67923a8e08d34c538623be512c739a1a",
+        "verification": {
+          "kind": "stage-verification",
+          "tree_sha": "07b36d28348a356324df59951442177253074ac8",
+          "source_sha": "5c8901074ae189fb71d5a45a3ccd5135b03dea95",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "checks": [
+            "The actual admitted permanent stage merge has exact Git tree 07b36d28348a356324df59951442177253074ac8.",
+            "Full combined Linux 3.11/3.13 shards and Windows 3.13 checks, descriptor and tracker-link passed for the unchanged reviewed content.",
+            "Combined Windows installer run 38406421780 passed build, install, repair and uninstall.",
+            "ACL-update-recovery-1128 passed real isolated frozen-helper installation, update, pointer/shortcut advancement, application restart and byte-preserved synthetic employee/workspace/creative data.",
+            "The deliberately mismatched expected version triggered healthy rollback, restored pointers/shortcuts and preserved synthetic data.",
+            "The package artifact names synthetic PR merge eedd0bf07feba217d4be98403375d5f764efde38 with the same exact Git tree; this receipt separately identifies actual stage merge 5c8901074ae189fb71d5a45a3ccd5135b03dea95.",
+            "No stable release, employee rollout, published update-channel or live advertising/profile pilot is claimed."
+          ],
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38406421780"
+        },
+        "verified_at": "2026-10-13T14:04:14+00:00"
       }
     }
   },
