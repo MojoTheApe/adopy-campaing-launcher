@@ -27653,7 +27653,51 @@
         "session": "source_review_867_20261013",
         "coordinator": "Coordinator-DLV13",
         "started_at": "2026-10-13T18:39:49+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 865,
+          "pr": 867,
+          "branch": "codex/acl-1865-loading-stages",
+          "head_sha": "3cf21cdfb549bdc21b837dae88949ec68475e892",
+          "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+          "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3",
+          "review": {
+            "implementer": "Worker-867R",
+            "report": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Review-867-20261013\\output\\source-review-867\\compatibility-review.md",
+            "tree_sha": "48b9d71b0950d28135ee144096e4e3d249221d30",
+            "kind": "independent-review",
+            "reviewer": "Reviewer-867S",
+            "execution_lane": "5329d662d852466cb27e325c39192db7",
+            "review_session": "source_review_867_20261013",
+            "verdict": "approved",
+            "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+            "head_sha": "3cf21cdfb549bdc21b837dae88949ec68475e892",
+            "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              865
+            ],
+            "recorded_at": "2026-10-13T18:42:00+00:00",
+            "issue_scopes": {
+              "865": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3"
+            }
+          },
+          "lane": {
+            "id": "5329d662d852466cb27e325c39192db7",
+            "pr": 867,
+            "issues": [
+              865
+            ],
+            "actor": "Reviewer-867S",
+            "session": "source_review_867_20261013",
+            "coordinator": "Coordinator-DLV13",
+            "started_at": "2026-10-13T18:39:49+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-13T18:52:47+00:00"
+        }
       },
       "873": {
         "id": "1f3d3ae29cfa49ef8a89c4ae1e8f1f37",
