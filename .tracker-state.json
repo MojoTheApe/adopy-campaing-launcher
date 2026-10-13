@@ -25623,6 +25623,39 @@
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
         },
         "batch_id": null
+      },
+      {
+        "event": "intake-cancelled",
+        "at": "2026-10-13T14:15:13+00:00",
+        "intake": {
+          "id": "91201340047f423fa6a6747b1c5dc404",
+          "actor": "Coordinator-FLOW513",
+          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+          "state": "cancelled",
+          "issues": [
+            875,
+            836,
+            838,
+            844,
+            853,
+            854,
+            872
+          ],
+          "remaining": [
+            836,
+            838,
+            844,
+            853,
+            854,
+            872
+          ],
+          "batches": [
+            "67923a8e08d34c538623be512c739a1a"
+          ],
+          "started_at": "2026-10-13T13:32:25+00:00",
+          "ineligible": {},
+          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+        }
       }
     ],
     "policy": {
@@ -26262,7 +26295,7 @@
       "id": "91201340047f423fa6a6747b1c5dc404",
       "actor": "Coordinator-FLOW513",
       "session": "flow_five_reviews_coordinator_01a134f0_20261013",
-      "state": "running",
+      "state": "cancelled",
       "issues": [
         875,
         836,
@@ -26284,7 +26317,8 @@
         "67923a8e08d34c538623be512c739a1a"
       ],
       "started_at": "2026-10-13T13:32:25+00:00",
-      "ineligible": {}
+      "ineligible": {},
+      "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
     }
   }
 }
