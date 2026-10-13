@@ -7486,6 +7486,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T10:04:06+00:00",
         "from_status": "status:todo"
+      },
+      "872": {
+        "actor": "Worker-IS1013",
+        "session": "isolated_app_sol_20261013",
+        "coordinator": "Coordinator-CR1012",
+        "branch": "work/acl-1872-isolated-meta-setup",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\Adopy Campaign Manager\\ACM-Audit-2026-10-12\\worktrees\\acl-1872",
+        "id": "ef091f19c7d943d2b40c4a5a38e1ba27",
+        "issue": 872,
+        "state": "implementing",
+        "started_at": "2026-10-13T10:41:15+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12026,6 +12038,17 @@
           "from_status": "status:backlog",
           "report": "ACL-1871 was assigned after intake on the provisional codex/builder-handle-controls branch. Temporarily release only this run's claim to rename that same branch to codex/acl-1871-builder-handle and immediately reclaim under the same Worker-BH7K26/session and worktree. Existing implementation and tests remain intact. No handoff or PR exists yet. This is branch bookkeeping only, with no new actor or product blocker."
         }
+      },
+      "872": {
+        "implementers": [
+          {
+            "actor": "Worker-IS1013",
+            "session": "isolated_app_sol_20261013"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-IS1013",
+        "coordinator": "Coordinator-CR1012"
       }
     },
     "actors": {
@@ -13091,6 +13114,10 @@
       },
       "Worker-BH7K26": {
         "session": "builder_handle_01a13470_20261013",
+        "role": "Worker"
+      },
+      "Worker-IS1013": {
+        "session": "isolated_app_sol_20261013",
         "role": "Worker"
       }
     },
@@ -24685,6 +24712,13 @@
             "approved_at": "2026-10-13T10:13:45+00:00"
           }
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T10:41:15+00:00",
+        "issue": 872,
+        "claim": "ef091f19c7d943d2b40c4a5a38e1ba27",
+        "actor": "Worker-IS1013"
       }
     ],
     "policy": {
