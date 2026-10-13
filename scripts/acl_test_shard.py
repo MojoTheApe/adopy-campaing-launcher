@@ -82,6 +82,29 @@ def shards(count: int, platform: str | None = None) -> list[list[Path]]:
         i = min(range(count), key=lambda k: (load[k], k))
         buckets[i].append(path)
         load[i] += cost(path)
+    if platform == "linux":
+        # A larger screenshot regression can skew the cost-first split's
+        # browser counts. Repair only that skew; keep all selected files and
+        # choose the move with the smallest resulting cost imbalance.
+        browser = {p for p in files if _BROWSER.search(p.read_text(encoding="utf-8", errors="replace"))}
+        browser_counts = [sum(p in browser for p in bucket) for bucket in buckets]
+        while max(browser_counts) - min(browser_counts) > 1:
+            donor = max(range(count), key=lambda k: (browser_counts[k], load[k], -k))
+            receiver = min(range(count), key=lambda k: (browser_counts[k], load[k], k))
+
+            def move_cost(path):
+                moved = load.copy()
+                moved[donor] -= cost(path)
+                moved[receiver] += cost(path)
+                return max(moved) - min(moved), path.name
+
+            path = min((p for p in buckets[donor] if p in browser), key=move_cost)
+            buckets[donor].remove(path)
+            buckets[receiver].append(path)
+            load[donor] -= cost(path)
+            load[receiver] += cost(path)
+            browser_counts[donor] -= 1
+            browser_counts[receiver] += 1
     return [sorted(b) for b in buckets]
 
 
