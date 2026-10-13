@@ -7307,6 +7307,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T06:35:09+00:00",
         "from_status": "status:backlog"
+      },
+      "845": {
+        "actor": "Worker-Q8V274",
+        "session": "publish-buttons-20261013-Q8V274",
+        "coordinator": "Coordinator-D7K413",
+        "branch": "codex/publish-button-design-intake",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-Publish-Design-2026-10-13",
+        "id": "c2f4620b2f3f424290ea6d063d0f0a24",
+        "issue": 845,
+        "state": "implementing",
+        "started_at": "2026-10-13T06:37:39+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -11518,6 +11530,17 @@
         "state": "implementing",
         "worker": "Worker-T8L621",
         "coordinator": "Coordinator-D7K413"
+      },
+      "845": {
+        "implementers": [
+          {
+            "actor": "Worker-Q8V274",
+            "session": "publish-buttons-20261013-Q8V274"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-Q8V274",
+        "coordinator": "Coordinator-D7K413"
       }
     },
     "actors": {
@@ -12547,6 +12570,10 @@
       },
       "Worker-T8L621": {
         "session": "table-fix-01a133d7-1841",
+        "role": "Worker"
+      },
+      "Worker-Q8V274": {
+        "session": "publish-buttons-20261013-Q8V274",
         "role": "Worker"
       }
     },
@@ -22933,6 +22960,13 @@
         "issue": 841,
         "claim": "9eb9fd8a43dd43ecac2f531fc7855ec2",
         "actor": "Worker-T8L621"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T06:37:39+00:00",
+        "issue": 845,
+        "claim": "c2f4620b2f3f424290ea6d063d0f0a24",
+        "actor": "Worker-Q8V274"
       }
     ],
     "policy": {
