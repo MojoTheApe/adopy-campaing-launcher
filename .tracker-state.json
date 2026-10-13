@@ -2974,9 +2974,28 @@
       "source_sha": "87f604758d15367cb396b12cfb5437f9d453126a",
       "main_tree": "84d322133c9b5d29c84221d2445b0ea88639ac42",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
+      "state": "passed",
       "recorded_at": "2026-10-13T20:01:02+00:00",
-      "batch_id": "24551548a5084a13a4d81bb957a084f1"
+      "batch_id": "24551548a5084a13a4d81bb957a084f1",
+      "verification": {
+        "kind": "stage-verification",
+        "target": "ACL isolated Windows stage installation",
+        "source_sha": "87f604758d15367cb396b12cfb5437f9d453126a",
+        "tree_sha": "06e60120c55379d776152c76d6f337b252c18d7b",
+        "result": "passed",
+        "checks": [
+          "Six Linux Python3.11/3.13 shards and Windows3.13 passed on the exact combined Git tree",
+          "Descriptor, tracker linkage, process, ACL verification and Installer verification passed",
+          "Actual isolated Windows package build, install, repair and uninstall passed",
+          "Previous actual package installs and starts with isolated data",
+          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+          "Updated installed application restarts with preserved machine/workspace/creative data",
+          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+          "Recovered application restarts and synthetic data remains byte-identical"
+        ],
+        "report": "Actual PR884 stage merge 87f604758d15367cb396b12cfb5437f9d453126a has tree 06e60120c55379d776152c76d6f337b252c18d7b, verified from official stage ref and commit. Same-tree evidence: CI https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38451520805 and actual isolated Windows installer https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38451520796. Authentic artifact ACL-update-recovery-1147, artifact11841677332, synthetic PR merge 3f6ba626db3e47361572f4453dd3da699b79dea4 has identical tree. Independent Reviewer-PTDLV13 downloaded and compared authentic report and recovery-log SHA; exact report retained output/batch884-update-recovery/report.json. Two actual package SHA256s: {\"0.0.0-ci.1147\": {\"sha256\": \"8e19ee683186261e9b4a189d38a6a91e97cf706f2634bc4e93c975cd847aef1b\", \"size\": 93489300}, \"0.1.0-alpha.1147\": {\"sha256\": \"8a0936b57335d9c04256f7bd6fb42acfba92651245ede6f4f5929e9011613474\", \"size\": 93488369}}. Real installed update/restart and deliberate mismatch recovery verified current.json, shortcuts, health and byte-identical synthetic machine/workspace/creative data. Reused successful unchanged exact-tree jobs per STAGING.md. TEST9095 and live Multilogin pilot are separate and are not stage proof; no stable release or employee installation is asserted."
+      },
+      "verified_at": "2026-10-13T20:03:25+00:00"
     },
     "tasks": {
       "248": {
