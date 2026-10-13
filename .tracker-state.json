@@ -7316,9 +7316,10 @@
         "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-Publish-Design-2026-10-13",
         "id": "c2f4620b2f3f424290ea6d063d0f0a24",
         "issue": 845,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-13T06:37:39+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "report": "Publication design task intake reserved a temporary branch before the real task ID was returned. No source edits have been made. This worker stops the intake claim explicitly, then will take a fresh claim on codex/acl-1845-publish-button-design in the same isolated worktree and genuine session."
       },
       "844": {
         "actor": "Worker-N7Q4",
