@@ -7264,21 +7264,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "838": {
-        "actor": "Worker-CL7F31",
-        "session": "worker_countryline_cl7f31_20261013",
-        "coordinator": "Coordinator-CV1013",
-        "branch": "codex/acl-country-active-line",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line",
-        "id": "391673e0f04d4ea8a4786616a760cc9b",
-        "issue": 838,
-        "state": "stopping",
-        "started_at": "2026-10-13T06:01:52+00:00",
-        "from_status": "status:backlog",
-        "report": "ACL-1838 intake reserved codex/acl-country-active-line before GitHub assigned the new task ID. No code was edited. Stop the provisional claim solely to re-claim the same authorized task on the repository-conformant codex/acl-1838-country-active-line branch in the same isolated clean worktree. Worker identity/session remain unchanged. No missing product dependency or external blocker exists."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -11411,9 +11397,22 @@
             "session": "worker_countryline_cl7f31_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-CL7F31",
-        "coordinator": "Coordinator-CV1013"
+        "coordinator": "Coordinator-CV1013",
+        "handoff": {
+          "actor": "Worker-CL7F31",
+          "session": "worker_countryline_cl7f31_20261013",
+          "coordinator": "Coordinator-CV1013",
+          "branch": "codex/acl-country-active-line",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line",
+          "id": "391673e0f04d4ea8a4786616a760cc9b",
+          "issue": 838,
+          "state": "stopping",
+          "started_at": "2026-10-13T06:01:52+00:00",
+          "from_status": "status:backlog",
+          "report": "ACL-1838 intake reserved codex/acl-country-active-line before GitHub assigned the new task ID. No code was edited. Stop the provisional claim solely to re-claim the same authorized task on the repository-conformant codex/acl-1838-country-active-line branch in the same isolated clean worktree. Worker identity/session remain unchanged. No missing product dependency or external blocker exists."
+        }
       }
     },
     "actors": {
@@ -22643,6 +22642,13 @@
         "issue": 838,
         "claim": "391673e0f04d4ea8a4786616a760cc9b",
         "actor": "Worker-CL7F31"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-13T06:03:30+00:00",
+        "issue": 838,
+        "actor": "Worker-CL7F31",
+        "report": "ACL-1838 intake reserved codex/acl-country-active-line before GitHub assigned the new task ID. No code was edited. Stop the provisional claim solely to re-claim the same authorized task on the repository-conformant codex/acl-1838-country-active-line branch in the same isolated clean worktree. Worker identity/session remain unchanged. No missing product dependency or external blocker exists."
       }
     ],
     "policy": {
