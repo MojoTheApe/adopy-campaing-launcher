@@ -12263,7 +12263,7 @@
             "session": "root-worker_refresh_867"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-867R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -12283,7 +12283,19 @@
         "pr": 867,
         "queued_at": "2026-10-13T17:50:36+00:00",
         "review_report": "# Independent source review: ACL-1865 / PR867\n\nVerdict: changes requested; approval is blocked by the current-main baseline guard.\n\nReviewed source head: fa830871e37fa8adeb1a75bf970d5e77337ad898.\nGitHub source base: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nObserved authoritative main: 777663bf539308c0898cc177f872a8e0f63b597e.\nGitHub compare main...source: diverged, ahead 1, behind 7; merge base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Local ancestry independently returns false.\n\nBlocking finding: the exact pinned shared engine's record-review source approval contract requires source inclusion of current main and source base tree equal to current main. The original source predates the reviewed policy/activation and other main changes. A green old-source CI run and user acceptance of the separate 9095 combined preview cannot approve this source against today's main.\n\nRequired author correction: acquire a fresh genuine implementation claim on the original source branch, reconcile current main into that branch without dropping the loading-stage acceptance criteria, resolve any conflicts under author ownership, rerun affected loading/cache/concurrency/browser regressions and exact-source required hosted CI, and perform a fresh supported handoff for independent source review. Preserve this task, original branch, PR and history. Do not directly merge the source PR into main and do not alter another owner's claim.\n\nRead scope: complete issue865/PR867 bodies, all six changed-file names, pipeline changes in morning_service.py, cache.py and app.py; project AGENTS, SOURCE_REVIEWS, WORKFLOW, TRACKER, BATCH_INTEGRATION and exact pinned guide/contracts. Source CI aggregates descriptor, tracker-link, ACL verification and Installer verification are SUCCESS for the existing head. No additional local tests were run because the mandatory baseline guard already fails; this report is not a full code approval. No code edits, live profile/ad operations, deployment or server restart occurred.",
-        "reviewer": "Reviewer-867S"
+        "reviewer": "Reviewer-867S",
+        "return_operation": {
+          "id": "4e725b2553394d0191723f6b4423929e",
+          "actor": "Coordinator-DLV13",
+          "session": "Root-DLV13-01a13445",
+          "report": "Integration compatibility return for ACL-1865 / PR867.\n\nThe exact approved head 55f69649e6213117b923237b4d435b2ee3590dea has passed its source checks and independent review. Read-only git merge-tree against approved PR665 head 54f1c1fe and approved PR882 head 5d0e7259 reports a content conflict only in docs/system/CHANGELOG.md: each inserts a new entry immediately after the title. Product code is not the blocker.\n\nUnder a fresh owned Worker claim on the preserved source branch, move only the complete ACL-1865 entry, with its text unchanged, to immediately before the existing unique heading \"One metric set in every attribution table, Totals and Campaign managers on Home \u2014 ACL-1652, ACL-1654, ACL-1656\". Preserve every old entry and all runtime/tests. This stable insertion point is distinct from the creative entry near ACL-1615 and the token diagnostic entry after the title. Do not include another task's source commits.\n\nThen fast-forward push, truthful checks/handoff and fresh independent review/approval. The old source approval remains historical; no stage/main merge or live action is claimed. The failed composition was found before freezing or publishing a batch."
+        },
+        "return": {
+          "id": "4e725b2553394d0191723f6b4423929e",
+          "actor": "Coordinator-DLV13",
+          "session": "Root-DLV13-01a13445",
+          "report": "Integration compatibility return for ACL-1865 / PR867.\n\nThe exact approved head 55f69649e6213117b923237b4d435b2ee3590dea has passed its source checks and independent review. Read-only git merge-tree against approved PR665 head 54f1c1fe and approved PR882 head 5d0e7259 reports a content conflict only in docs/system/CHANGELOG.md: each inserts a new entry immediately after the title. Product code is not the blocker.\n\nUnder a fresh owned Worker claim on the preserved source branch, move only the complete ACL-1865 entry, with its text unchanged, to immediately before the existing unique heading \"One metric set in every attribution table, Totals and Campaign managers on Home \u2014 ACL-1652, ACL-1654, ACL-1656\". Preserve every old entry and all runtime/tests. This stable insertion point is distinct from the creative entry near ACL-1615 and the token diagnostic entry after the title. Do not include another task's source commits.\n\nThen fast-forward push, truthful checks/handoff and fresh independent review/approval. The old source approval remains historical; no stage/main merge or live action is claimed. The failed composition was found before freezing or publishing a batch."
+        }
       },
       "854": {
         "implementers": [
