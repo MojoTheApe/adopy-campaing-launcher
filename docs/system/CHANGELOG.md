@@ -1,5 +1,20 @@
 # System history
 
+## Publication controls match dashboard primary actions — ACL-1845
+
+- Individual and all/selected campaign publishing controls use the existing accent
+  theme, 14 px labels, a 38 px minimum height, wrapping text and visible keyboard focus.
+  Unavailable controls retain readable text instead of reduced opacity; confirmation
+  actions share the same sizing and wrap separately from Cancel.
+- Queue progress exposes `aria-busy` on individual and bulk publishing controls.
+  Existing duplicate explanations and the ability to queue other accounts remain;
+  this visual state adds no lock. Unknown status still uses the existing disable gate.
+- Synthetic browser checks cover both themes, the production 360 px drawer and
+  480/720 px width-token compatibility previews, preview invalidation, confirmation,
+  running, queued and lost-status states. Existing selection, retry, Stop and draft-only
+  request tests pass. No live profile, advertising operation or installed-package
+  delivery is asserted by these source checks.
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
