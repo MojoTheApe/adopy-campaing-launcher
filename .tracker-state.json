@@ -7308,19 +7308,6 @@
         "started_at": "2026-10-13T06:35:09+00:00",
         "from_status": "status:backlog"
       },
-      "845": {
-        "actor": "Worker-Q8V274",
-        "session": "publish-buttons-20261013-Q8V274",
-        "coordinator": "Coordinator-D7K413",
-        "branch": "codex/publish-button-design-intake",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-Publish-Design-2026-10-13",
-        "id": "c2f4620b2f3f424290ea6d063d0f0a24",
-        "issue": 845,
-        "state": "stopping",
-        "started_at": "2026-10-13T06:37:39+00:00",
-        "from_status": "status:backlog",
-        "report": "Publication design task intake reserved a temporary branch before the real task ID was returned. No source edits have been made. This worker stops the intake claim explicitly, then will take a fresh claim on codex/acl-1845-publish-button-design in the same isolated worktree and genuine session."
-      },
       "844": {
         "actor": "Worker-N7Q4",
         "session": "architecture_audit_n7q4_20261013",
@@ -11551,9 +11538,22 @@
             "session": "publish-buttons-20261013-Q8V274"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-Q8V274",
-        "coordinator": "Coordinator-D7K413"
+        "coordinator": "Coordinator-D7K413",
+        "handoff": {
+          "actor": "Worker-Q8V274",
+          "session": "publish-buttons-20261013-Q8V274",
+          "coordinator": "Coordinator-D7K413",
+          "branch": "codex/publish-button-design-intake",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-Publish-Design-2026-10-13",
+          "id": "c2f4620b2f3f424290ea6d063d0f0a24",
+          "issue": 845,
+          "state": "stopping",
+          "started_at": "2026-10-13T06:37:39+00:00",
+          "from_status": "status:backlog",
+          "report": "Publication design task intake reserved a temporary branch before the real task ID was returned. No source edits have been made. This worker stops the intake claim explicitly, then will take a fresh claim on codex/acl-1845-publish-button-design in the same isolated worktree and genuine session."
+        }
       },
       "844": {
         "implementers": [
@@ -23068,6 +23068,13 @@
         "issue": 844,
         "claim": "777167e928b14c338c270c7a015b95fe",
         "actor": "Worker-N7Q4"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-13T06:40:20+00:00",
+        "issue": 845,
+        "actor": "Worker-Q8V274",
+        "report": "Publication design task intake reserved a temporary branch before the real task ID was returned. No source edits have been made. This worker stops the intake claim explicitly, then will take a fresh claim on codex/acl-1845-publish-button-design in the same isolated worktree and genuine session."
       }
     ],
     "policy": {
