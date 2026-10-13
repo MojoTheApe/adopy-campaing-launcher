@@ -18,10 +18,13 @@ main promotion and normal `merged` handoff have actually completed.
 Preserve employee data, existing installers and draft-only advertising controls.
 Implementation requires a real Issue and a durable Worker claim. After the
 [parallel cutover](docs/repository/PARALLEL_EXECUTION.md), ACL permits five
-implementation tasks and one review lane across all agent platforms. The explicit
-[batch cutover](docs/repository/BATCH_INTEGRATION.md) releases review at Approved
+implementation tasks across all agent platforms. The prepared
+[source-review pool](docs/repository/SOURCE_REVIEWS.md) selects five independent
+source reviews; the live v2 single source lane remains until its guarded v3 migration.
+The explicit [batch cutover](docs/repository/BATCH_INTEGRATION.md) releases review at Approved
 and gives one separate Coordinator ownership of at most five tasks through stage/main.
-Finish its old-policy source handoff before the supported live state migration.
+Source child ACL-1875 finishes its current v2 source/batch/stage/main handoff before
+the supported live v3 state migration. The v1 cutover evidence remains historical.
 Use only available real sessions in isolated worktrees; capacity is not a promise
 that a particular host can spawn five Workers. Use a separate non-implementing
 agent for final review. The full shared skill is installed
