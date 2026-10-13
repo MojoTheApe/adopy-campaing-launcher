@@ -42,6 +42,11 @@ WARNING = "warning"
 # Names are the base part, before any ":detail" suffix. Add a new step here in
 # the same commit that starts producing it, otherwise it blocks by default.
 POLICY: dict[str, tuple[str, str]] = {
+    "page_identity": (
+        BLOCKING,
+        "the requested Facebook Page could not be selected and verified in Identity; "
+        "the draft must not be published. Check Identity in Ads Manager before continuing",
+    ),
     "account_blocked": (
         BLOCKING,
         "Meta has restricted this ad account (\"Verification required to advertise\", "
