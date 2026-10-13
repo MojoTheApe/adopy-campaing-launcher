@@ -7265,7 +7265,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "836": {
+        "actor": "Worker-SR1012",
+        "session": "connection_sr1012_worker",
+        "coordinator": "Coordinator-CR1012",
+        "branch": "codex/acl-1836-session-recovery",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1836-2026-10-12",
+        "id": "964c1c2cec924b999f51878839a8772d",
+        "issue": 836,
+        "state": "implementing",
+        "started_at": "2026-10-13T06:30:41+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -11369,9 +11382,13 @@
           {
             "actor": "Worker-SR1012",
             "session": "connection_sr1012_worker"
+          },
+          {
+            "actor": "Worker-SR1012",
+            "session": "connection_sr1012_worker"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-SR1012",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -11390,7 +11407,6 @@
         },
         "pr": 837,
         "queued_at": "2026-10-12T20:37:22+00:00",
-        "reviewer": "Reviewer-RX1013B",
         "review_report": "# PR837 independent source review \u2014 request changes\n\nReviewer: Reviewer-RX1013B; actual session rev_rx1013b_20261013. Supported stopped-session takeover claim: b3ce4fdd1e32449c9db663a8d6107e6e. Coordinator: Coordinator-CX1012A/session coord_cx1012a_20261012. Original Worker: Worker-SR1012. This report is a new review, not an adoption of the stopped reviewer's evidence.\n\nRepository: MojoTheApe/adopy-campaing-launcher. Task ACL-1836 / Issue836; source PR837. Reviewed clean checkout C:/Users/EvgeniSedin/Desktop/ACM-Review-1836-Recovery-2026-10-13. Head 6ce2886bd44c8b394016c81665cc25baa290dcb2; tree 2f574f01b7bd7b3845a8872a07fd7edfaf32dd70. Current main/base and merge-base e8e59f8376458f2f73089c3f2a8d454837ff033f, base tree 295c4bf5b7911fc3b5f417d429d84d0d927629a3. Diff command: git diff e8e59f8376458f2f73089c3f2a8d454837ff033f...HEAD. Commit: 6ce2886b [ACL-1836] Recover owned CDP sessions without replaying Graph calls. Complete diff: 10 files, 419 additions/13 deletions.\n\nRead full Issue Description, Specifications, acceptance checklist and handoff from issue-836-resume-current.json; current PR metadata/checks from pr837-resume-current.json; AGENTS, installed code-review and project-workflow, delivery.json, repository workflow/Tracker/batch/layout guidance, pinned standard and engineering context. Read complete source/test/documentation diff and relevant existing lifecycle/callers. No source or Tracker edits by this Reviewer.\n\n## Standards\n\nSeparate parallel Standards helper /root/recovery_reviewer_1013/standards837 read the complete diff and documented rules with the full smell baseline. No documented-standard violations or actionable baseline smells found. Existing exact-target/browser ownership, non-replay boundary, in-page tokens, read-only policy and typed client stops are preserved. The anonymized transport fixture, bench registration and system documentation satisfy the incident/history obligations; the HTML converter exception is documented. Helper performed read-only review, with no tests/network/Tracker/live actions.\n\n## Spec\n\nP1 \u2014 retain trusted identity across warm helper replacement (src/fb_api/token_capture.py:260; recovery call at line300). Issue scope requires: \"Start from current main and preserve compatibility with the separately pending API creator (ACL-1761).\" Its acceptance requires: \"A detached session with a surviving owned target can recover within a bounded attempt count\" and existing checks to remain valid \"on main and the current integrated API candidate where applicable.\"\n\nEach new InPageGraph initializes _expected_url to an empty string; only that helper's navigate() assigns the trusted account URL. In the real integrated WarmRegistry._reuse caller (src/fb_api/warm.py:924-963 in the isolated compatibility candidate), changing read/write mode creates another helper on the existing same-account PageTab and calls live_state() without navigation/start(). After an uncertain video write detaches the CDP session, this new helper's readback calls recover_session(''); PageTab rejects the empty expected identity before target reattachment. The correct owned target survives, yet reconciliation fails. The creator retains its already-created campaign/ad-set IDs and sends no additional writes, but successful surviving-target recovery remains unimplemented for this supported caller. All new source regressions construct one helper and start it, so they miss helper replacement.\n\nRoot executed the focused four-case offline repro at this Reviewer's request, using isolated configuration, empty library/Sentry settings and disabled telemetry: C:/fb_agents/.venv/Scripts/python.exe -m pytest tests/test_connection_recovery_compat.py -q in C:/Users/EvgeniSedin/Desktop/ACM-Connection-Compatibility-1836. Actual result: 1 failed, 3 passed in 3.87s. Failure: test_upload_detachment_preserves_or_completes_the_created_campaign[True-True], line102. pr837-rx1013b-compat-repro.log was read by this Reviewer and confirms the unknown-write/readback PageFailed outcome with preserved synthetic IDs. This is a focused integration compatibility regression, not evidence of live Meta behavior. Earlier 499-pass suite and initial two-case/Chromium evidence do not cover this later failing path.\n\nRepair through the actual author's supported claim lifecycle: retain trusted navigation/account intent at the owned-tab lifecycle (or equivalent authenticated handoff) so a replacement helper inherits it; never derive trust merely from an arbitrary current URL. Add observable same-account helper-switch recovery plus wrong-account/login/checkpoint regressions, retaining one recovery per tab and non-replay controls. Require fresh source and affected integrated checks, current-head/main review and applicable CI before approval.\n\n## Checks and disposition\n\nSource git diff --check passed; HEAD/tree/base verified locally and checkout clean. Current cached required source checks are green: descriptor, latest tracker-link, ACL verification and Installer verification. Linux3.13 three shards and Windows3.13 passed. Earlier tracker-link was cancelled, superseded by success. Installer build/install jobs were classified skipped while Installer verification passed; this source selection is not combined/stage installer proof. No redundant full suite run locally.\n\nVerdict: REQUEST CHANGES / not approved. Standards: 0 findings. Spec: 1 finding, worst P1. Return source review under the actual claim; do not batch-approve, merge or deploy this head. Runtime/package delivery and original browser-detachment cause remain unverified. No live Meta requests, profile actions, advertising activation, source fixes or production configuration changes were performed by the review."
       },
       "838": {
@@ -22817,6 +22833,13 @@
             "approved_at": "2026-10-13T06:25:54+00:00"
           }
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T06:30:41+00:00",
+        "issue": 836,
+        "claim": "964c1c2cec924b999f51878839a8772d",
+        "actor": "Worker-SR1012"
       }
     ],
     "policy": {
