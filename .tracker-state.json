@@ -7762,6 +7762,81 @@
         },
         "verified_at": "2026-10-13T14:04:14+00:00"
       }
+    },
+    "acceptances": {
+      "24551548a5084a13a4d81bb957a084f1": {
+        "evidence": {
+          "execution_lane": "e0aa3853d00c4e3c84403d9512b671ad",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "merge_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+          "issues": [
+            651,
+            865,
+            879
+          ],
+          "coordinator_session": "Root-DLV13-01a13445",
+          "reviewer": "Reviewer-PTDLV13",
+          "batch_id": "24551548a5084a13a4d81bb957a084f1",
+          "issue_scopes": {
+            "865": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3",
+            "879": "bfea5187d29d4a3a75e346ac8632d054d4dd3d24b9cc2465a8d7a20013584e63",
+            "651": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05"
+          },
+          "criteria": {
+            "879": [
+              {
+                "result": "passed",
+                "evidence": "Public typed verifier validates exact App ID and token type, bool validity, typed expiry and scope evidence. Malformed fields return sanitized failure; unknown, zero and expired evidence stay distinct. Concrete tests: test_actual_handlers_fixed_get_and_typed_evidence, test_known_types_and_unknown_expiry, test_reported_required_scopes_and_exact_app_identity, test_strict_public_metadata, test_missing_data_and_validity, test_cli_safe_exception_and_exit_outcomes. Exact combined CI run38451520805 passed; original source approval, own exact combined review, authentic installer38451520796, applied stage verification and unchanged actual main PR885 inclusion retained.",
+                "line": 28,
+                "criterion": "- [ ] Public verifier and real CLI tests cover valid expected App ID, wrong app, malformed data, false/missing validity, unsupported token type, absent/zero/past expiry, malformed/missing scopes and required-scope comparisons."
+              },
+              {
+                "result": "passed",
+                "evidence": "Production opener explicitly disables ambient proxies and redirects, uses certificate-verified fixed HTTPS endpoint and no retry path. Tests exercise real urllib handler chain with fake HTTPS connections, checking method/host and request counts. Concrete tests: test_actual_handlers_fixed_get_and_typed_evidence, test_invalid_local_inputs_zero_requests, test_no_redirect_or_cookie_replay, test_network_failure_no_retry_or_unsafe_exception. Exact combined CI run38451520805 passed; original source approval, own exact combined review, authentic installer38451520796, applied stage verification and unchanged actual main PR885 inclusion retained.",
+                "line": 29,
+                "criterion": "- [ ] Exactly zero requests for invalid local input and at most one fixed-host GET otherwise; actual urllib handler-chain tests prove no redirect/proxy/cookie replay or retry."
+              },
+              {
+                "result": "passed",
+                "evidence": "Only typed allowlisted result metadata leaves transport. Raw/encoded synthetic-secret assertions cover result repr and output. Network/HTTP failures remain local enums. Runtime docs preserve the stdlib DNS/header timing limitation rather than claiming an absolute externally enforced DNS wall-time bound. Concrete tests: test_inspector_errors_do_not_revoke_subject, test_malformed_inspector_error_cannot_succeed, test_malformed_bodies, test_oversized_body_with_and_without_length, test_unexpected_headers, test_network_failure_no_retry_or_unsafe_exception, test_total_body_deadline_and_close, test_secret_reprs_and_untrusted_echo. Exact combined CI run38451520805 passed; original source approval, own exact combined review, authentic installer38451520796, applied stage verification and unchanged actual main PR885 inclusion retained.",
+                "line": 30,
+                "criterion": "- [ ] Timeouts, HTTP authentication/permission/rate errors, malformed/oversized bodies and exceptions containing raw or encoded synthetic secrets return only sanitized outcomes."
+              },
+              {
+                "result": "passed",
+                "evidence": "Per-call subject token and App ID|App Secret inspector values are local. Parallel invocation test proves separate request credentials. Result as_dict always emits account_access/read_readiness/publishing as not_checked. Concrete tests: test_independent_parallel_invocations, test_actual_handlers_fixed_get_and_typed_evidence. Exact combined CI run38451520805 passed; original source approval, own exact combined review, authentic installer38451520796, applied stage verification and unchanged actual main PR885 inclusion retained.",
+                "line": 31,
+                "criterion": "- [ ] Two independent invocations cannot mix subject/inspector credentials; successful introspection never declares an account read-ready or publish-ready."
+              },
+              {
+                "result": "passed",
+                "evidence": "Real CLI reads hidden prompt or explicitly named process variables only. Parser errors suppress supplied arguments, getpass warning becomes refusal, fake transport/no-config tests exercise real entry point. No live token/profile/action was used by this Reviewer. Concrete tests: test_cli_hidden_prompt_actual_fake_http, test_cli_explicit_env_only_and_scope_exit, test_cli_rejected_arguments_never_echo_or_request, test_cli_refuses_hidden_input_fallback_and_missing_env, test_real_cli_entry_with_fake_https_and_no_config_import, test_real_cli_help_and_parser_errors_zero_network. Exact combined CI run38451520805 passed; original source approval, own exact combined review, authentic installer38451520796, applied stage verification and unchanged actual main PR885 inclusion retained.",
+                "line": 32,
+                "criterion": "- [ ] Hidden-input CLI succeeds against injected fake HTTP, refuses secret flags/echo fallback, and never loads real machine configuration. Tests make no live request."
+              },
+              {
+                "result": "passed",
+                "evidence": "Frozen source PR882/head5d0e7259 has genuine independent source approval in frozen manifest. Own complete combined review plus actual combined CI38451520805: all Linux3.11/3.13 shards, Windows3.13 scanner/smoke/tests and aggregates passed. Installer38451520796 and authentic exact-tree recovery artifact independently verified. This Reviewer's local focused attempt lacked pytest before collection; it is not a test pass. Runtime doc describes explicit supported-version choice, protected input, result semantics, stdlib timing limits and future connection integration. The final sentence is a historical hold, superseded by the later human shipping authorization: source882 is genuinely included/auto-merged in main PR885; do not represent it as currently unmerged or alter original history. Concrete tests: tests/test_acl1879_official_token_verifier.py, tests/test_acl_test_shard.py, tests/test_acl_test_platform.py, docs/runtime/OFFICIAL_TOKEN_DIAGNOSTIC.md. Exact combined CI run38451520805 passed; original source approval, own exact combined review, authentic installer38451520796, applied stage verification and unchanged actual main PR885 inclusion retained.",
+                "line": 33,
+                "criterion": "- [ ] Focused tests, scanner, smoke, required hosted checks and separate independent source review are recorded. Runtime docs explain safe use, API version selection, limitations and future integration. Source PR remains unmerged under the owner's hold."
+              }
+            ]
+          },
+          "tree_sha": "06e60120c55379d776152c76d6f337b252c18d7b",
+          "coordinator": "Coordinator-DLV13",
+          "review_session": "Agent-preview_table_review-DLV13-01a13445",
+          "pr": 885,
+          "kind": "post-main-acceptance",
+          "head_sha": "87f604758d15367cb396b12cfb5437f9d453126a",
+          "source_heads": [
+            "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
+            "3cf21cdfb549bdc21b837dae88949ec68475e892",
+            "5d0e725944d9694cd292e8cd165ac7775ae61c9c"
+          ],
+          "report": "Actual retained independent Reviewer-PTDLV13 attests all six exact original ACL-1879 unchecked criteria against genuine source review and my full combined review, actual complete combined CI and authenticated exact-tree Windows installer/update/recovery evidence, applied exact-stage verification and unchanged admitted main PR885. Original criterion text/order/line numbers and strict source scopes are preserved. Source historical hold was superseded by later human shipping authorization; source882 is actually merged, and its old unmerged state is not asserted. This is bounded private post-main acceptance, not a task body edit, parent/sibling completion, live Meta pilot, stable release or employee rollout. Own prior local pytest attempt failed before collection due missing pytest and is not a pass. Approved merged TT105 engine6e4e47c/d7aa9c is used explicitly with unchanged original consumer config/pins; no unreviewed engine invoked."
+        },
+        "recorded_at": "2026-10-13T21:32:32+00:00"
+      }
     }
   },
   "execution": {
@@ -27499,6 +27574,12 @@
             "approved_at": "2026-10-13T21:25:03+00:00"
           }
         }
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-13T21:32:32+00:00",
+        "batch_id": "24551548a5084a13a4d81bb957a084f1",
+        "pr": 885
       }
     ],
     "policy": {
