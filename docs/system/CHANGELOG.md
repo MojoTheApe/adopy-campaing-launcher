@@ -1,5 +1,19 @@
 # System history
 
+## Account table scroll containment — ACL-1841 (partial source)
+
+- Expanded Home account cards and country Manage share a keyboard-focusable horizontal
+  scroll region. Their account grid retains a readable minimum width; account names
+  and metric headers wrap instead of shrinking to a few clipped characters.
+- The region contains only the table. Read-all controls, empty-row explanations and
+  country connection forms remain outside it. Table order and existing read/profile,
+  note, unlink and account-tree handlers are unchanged.
+- Synthetic Chromium geometry checks cover 1280/1024/768/390 px, both themes and
+  populated/empty shared sections. This does not verify the complete integrated
+  campaign dashboard: ACL-1797/1798's campaign toolbar is absent from this main base.
+  Its coherent search/filter, expansion, column and batch groups remain an outstanding
+  ACL-1841 criterion and require verification against that integrated source.
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
