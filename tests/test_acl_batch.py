@@ -10,7 +10,7 @@ from scripts import acl_batch
 
 
 @pytest.fixture
-def fixture(tmp_path, monkeypatch):
+def fixture(tmp_path, monkeypatch, request):
     root = tmp_path / "checkout"
     root.mkdir()
     def git(*args):
@@ -18,7 +18,9 @@ def fixture(tmp_path, monkeypatch):
     git("init", "-q", "-b", "main")
     git("config", "user.name", "Independent source fixture")
     git("config", "user.email", "batch@example.invalid")
-    policy = {"schema_version": 2, "implementation_limit": 5, "review_limit": 1, "batch_limit": 5}
+    schema = getattr(request, "param", 2)
+    policy = {"schema_version": schema, "implementation_limit": 5,
+              "review_limit": 3 if schema == 3 else 1, "batch_limit": 5}
     (root / "tracker").mkdir()
     (root / "tracker/config.json").write_text(json.dumps({"execution_policy": policy,
         "project": {"repository": acl_batch.REPOSITORY, "id_prefix": "ACL", "id_offset": 1000}}))
@@ -75,6 +77,16 @@ def test_real_two_author_assembly_preserves_exact_source_commits(fixture):
         subprocess.run(["git", "-C", str(worktree), "merge-base", "--is-ancestor", member["head_sha"], "HEAD"], check=True)
         assert acl_batch.git(root, "rev-parse", member["branch"]) == member["head_sha"]
     assert len(acl_batch.git(worktree, "rev-list", "--merges", original + "..HEAD").splitlines()) == 2
+
+
+@pytest.mark.parametrize("fixture", [3], indirect=True)
+def test_source_reviews_do_not_block_schema3_batch_assembly(fixture):
+    root, _, section, _, assemble = fixture
+    section["source_reviews"] = {"99": {"pr": 99, "issues": [99], "state": "reviewing"}}
+    result = assemble(apply=True)
+    assert result["applied"]
+    assert (Path(result["worktree"]) / "worker1.txt").is_file()
+    assert section["source_reviews"]["99"]["state"] == "reviewing"
 
 
 def test_foreign_or_changed_claim_stops_before_any_worktree(fixture):
