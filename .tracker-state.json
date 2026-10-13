@@ -12093,7 +12093,7 @@
             "session": "connection_sr1012_worker"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-SR1012",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12112,7 +12112,7 @@
         },
         "pr": 869,
         "queued_at": "2026-10-13T09:52:42+00:00",
-        "review_report": "# ACL-1854 / PR869 independent finding and requested repair\n\nReviewer-RS1012 / connection_review_rs1012; separate non-implementing session.\nAuthor: Worker-SR1012 / connection_sr1012_worker; Coordinator-CR1012.\nHead: 6b264f39d2a62cb59cb98af58af8dab13a5a4a31.\nTree: cdf30fffd6de8a4639f699c8f85603bd4f31becc.\nMain/base: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/869\n\n## P2 \u2014 Fence failed admissions by the observed predecessor revision\n\nsrc/web/draft_status.py:102 stores only observed_job_id for a failed begin=True admission. The load predicate at lines131-133 treats any stored record with that predecessor identity as eligible for the error overlay whenever the failed attempted job has a different ID. It therefore ignores a later successfully stored revision of that predecessor. This contradicts the adjacent promise to mask only the exact previous record observed by the failed admission.\n\nIndependent deterministic replay on the exact source, using actual save/load and temporary synthetic JSON:\n\n1. Persist old job revision2, state running.\n2. A new job begin=True reads that record, then its atomic write raises synthetic PermissionError.\n3. Delay this failed admission's error bookkeeping after the transaction lock has been released, before its failure-lock entry.\n4. The old job successfully persists revision3, state ready, count1.\n5. Release the delayed error bookkeeping and call load.\n\nActual disk: old job, revision3, ready, count1.\nActual displayed record: new job, revision1, unverified, with the old failed-admission error.\nThe new attempt was not accepted and launched no worker. Its late error masks the later committed successful predecessor until another write clears it or the process restarts. The public lifecycle can reach this ordering because _finish marks the predecessor done under _jobs_lock before persisting its final snapshot outside that lock; create_job can attempt a new admission while that final write is pending.\n\nThe replay replaced only the atomic writer's failure for the new admission thread and delayed entry to its failure bookkeeping lock. Actual store transaction, version logic, atomic successful write and load were exercised. No browser, live data, machine configuration, or source/test edit was used. Temporary-directory cleanup was confined to its verified child of the existing Audit directory.\n\nThis is a conservative false error, not a false-ready result. It is still a current-verdict correctness defect: an unaccepted new attempt must not indefinitely obscure a later saved result of the accepted job. Coordinator explicitly confirmed this expected behavior after the replay.\n\n## Requested author repair\n\nAfter supported return and a fresh normal Worker claim, retain the predecessor revision/identity needed to recognize the exact observed record for failed admission overlays. Suppress a delayed overlay once that predecessor or a later accepted job has successfully advanced. Preserve honest unverified display for a real current write failure, missing/corrupt storage handling, ordinary stale-update fences, history and cancellation/slot boundaries. Add this deterministic ordering to the regression coverage and obtain fresh exact-head CI and independent review after handoff.\n\nThe complete nine-file change and current issue were inspected. The other lifecycle/persistence boundaries and the two legacy fixture additions showed no additional preliminary source finding. Author evidence remains 496 affected checks, two later admission cases and46 packaging checks; these were not blindly repeated. Required CI38377103539 is still in progress and is not approved. No source-review approval, merge, deployment or runtime action is claimed by this report.",
+        "review_report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle.",
         "reviewer": "Reviewer-RS1012",
         "return_operation": {
           "id": "91201340047f423fa6a6747b1c5dc404",
@@ -25586,6 +25586,18 @@
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-13T14:14:26+00:00",
+        "issue": 854,
+        "operation": {
+          "id": "91201340047f423fa6a6747b1c5dc404",
+          "actor": "Coordinator-FLOW513",
+          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -25729,50 +25741,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-13T06:25:54+00:00"
-      },
-      "854": {
-        "issue": 854,
-        "pr": 869,
-        "branch": "codex/acl-1854-current-draft-status",
-        "head_sha": "edcdb67024bbe24043d7751eab96da3dec9c1920",
-        "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-        "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "ce94e71be07e15d51abd2d40213824a5c58353e198e03aa5267b0a812d22b4c9",
-        "review": {
-          "kind": "independent-review",
-          "implementer": "Worker-SR1012",
-          "reviewer": "Reviewer-RS1012",
-          "review_session": "connection_review_rs1012",
-          "execution_lane": "09e0a58c997f4e69b9b9e810ba72d2ab",
-          "head_sha": "edcdb67024bbe24043d7751eab96da3dec9c1920",
-          "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-          "tree_sha": "22becf6d3b80b5c6ed6fd74f033d3c915a81754e",
-          "verdict": "approved",
-          "report": "# ACL-1854 / PR869 revision 2 independent source review\n\nReviewer-RS1012 / connection_review_rs1012, separate non-implementing session.\nAuthor: Worker-SR1012 / connection_sr1012_worker; Coordinator-CR1012.\nHead: edcdb67024bbe24043d7751eab96da3dec9c1920.\nTree: 22becf6d3b80b5c6ed6fd74f033d3c915a81754e.\nCurrent main/base: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nFresh review lane: 09e0a58c997f4e69b9b9e810ba72d2ab, acquired normally on 2026-10-13 at 10:10:22 UTC after completed current-head CI and a read-only free-lane check.\nCurrent worktree: C:/Users/EvgeniSedin/Desktop/Adopy Campaign Manager/ACM-Audit-2026-10-12/worktrees/acl-1854.\n\n## Source assessment\n\nThe confirmed stale admission-error finding is fixed. No remaining blocking finding in the complete current source scope. Independent source verdict: approved for the supported source-admission command. The durable task-state transition is recorded separately only after that command succeeds.\n\nRead complete issue 854, all nine original source/test/documentation files, then all three repair-file deltas. Re-read the current issue Specifications and acceptance criteria immediately before this fresh review acquisition. The repair adds the observed predecessor revision to failure bookkeeping and checks it together with identity before applying a failed-admission overlay. A predecessor that successfully advances cannot be obscured by the later bookkeeping of a rejected attempt. The paired regression preserves visible unverified errors when the predecessor has not advanced. Ordinary write-error and job/revision fences remain intact. No on-disk schema or lifecycle hook changed in this narrow repair.\n\nIndependent exact-head verification: the same saved reviewer replay, acl1854-late-admission-replay.py, which failed its final assertion on 6b264f39, exits 0 on edcdb670. Disk contains the old accepted job at revision 3, ready; the displayed record correctly contains that same job/revision/ready state. Only synthetic temporary JSON and delayed failure bookkeeping were used. This directly closes the original finding without relying on the author's result.\n\nThe complete change durably invalidates prior readiness before worker admission, while a rejected duplicate does not alter the active job. It associates snapshots with job identity, intended submitted-plan hash and monotonic revision. Old successful results are labelled history. Progress, fatal error, normal cancellation and deadline abandonment persist current outcomes; absent active jobs load as interrupted. Missing/unreadable/malformed storage is explicitly unverified, and corrupt files are preserved. The complete read/modify/write transaction uses existing OS locking plus atomic replacement; unrelated accounts survive. Snapshot numbering occurs under the job lock while storage I/O occurs outside it, and abandonment releases memory slots before storage. The report consumes the actual Snapshot and renders the current state/history. No external action retry, operation journal, profile ownership or draft-only control change is introduced.\n\nThe two modified older test fixtures only add the job_id always provided by real create_job. No existing safety assertions were weakened. New regressions exercise the public job lifecycle, actual persistence/reader and rendered report, including deterministic concurrent transactions and actual spawned-process locking.\n\n## Evidence and admission\n\n- Author failed-before evidence for the original lifecycle change: 7 failures; earlier source had 496 affected + 2 later admission checks and 46 packaging checks. These prior-head results are not labelled fresh r2 runs.\n- Author repair evidence: paired ordering regression 1 failed / 1 passed before the fix, then 91 affected status/safety/cancel/config checks passed in 26.18s on edcdb670, including all 31 status regressions. Secret scanner/import smoke/staged diff passed.\n- Reviewer replay on exact edcdb670 passed, full diff check is clean, checkout is clean, and the current full change is nine files,736 additions/60 deletions.\n- Independently verified CI 38379285935 completed SUCCESS on exact head edcdb670: Linux Python 3.13 shards 1/2/3, Windows Python 3.13, tooling, process instructions and ACL verification all passed. The earlier 6b264f39 green CI proves only that earlier tree and is not used as current-head admission evidence.\n- Current descriptor and Installer verification aggregate passed. Installer build-input and build/install/repair/uninstall jobs were classifier-skipped for this source scope; this is not evidence of executing those jobs. Latest tracker-link 38379286654 passed after durable handoff; the canceled older duplicate remains identifiable in PR check history.\n- Immediately before acquiring review, remote main and PR base were both 3327465, the open PR head/tree matched the source above, merge status was CLEAN, checkout had zero changed files, issue 854 was queued with no Worker claim, and the shared review lane was free. No older claim was reused.\n\nThe author completed durable refreshed handoff and released the implementation slot. The reviewer left the shared review lane available throughout CI, including for the unrelated integration batch, then acquired a fresh ordinary claim after all current checks passed. The worktree and reports were externally relocated during review; the new worktree was independently verified clean at the same head/tree, and no files were restored, moved or edited by the reviewer. No takeover, source/test edit, live Meta/Multilogin call, runtime change, merge or deployment was performed. Combined integration and installed-runtime behavior remain separate and require their own exact-tree evidence.\n",
-          "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            854
-          ],
-          "recorded_at": "2026-10-13T10:13:02+00:00",
-          "issue_scopes": {
-            "854": "ce94e71be07e15d51abd2d40213824a5c58353e198e03aa5267b0a812d22b4c9"
-          }
-        },
-        "lane": {
-          "id": "09e0a58c997f4e69b9b9e810ba72d2ab",
-          "pr": 869,
-          "issues": [
-            854
-          ],
-          "actor": "Reviewer-RS1012",
-          "session": "connection_review_rs1012",
-          "coordinator": "Coordinator-CR1012",
-          "started_at": "2026-10-13T10:10:22+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-13T10:13:45+00:00"
       },
       "872": {
         "issue": 872,
