@@ -7766,6 +7766,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T18:31:50+00:00",
         "from_status": "status:todo"
+      },
+      "865": {
+        "actor": "Worker-867R",
+        "session": "root-worker_refresh_867",
+        "coordinator": "Coordinator-DLV13",
+        "branch": "codex/acl-1865-loading-stages",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-867",
+        "id": "014059808ad4438e9359c1a0dcbed781",
+        "issue": 865,
+        "state": "implementing",
+        "started_at": "2026-10-13T18:32:08+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12270,9 +12282,13 @@
           {
             "actor": "Worker-867R",
             "session": "root-worker_refresh_867"
+          },
+          {
+            "actor": "Worker-867R",
+            "session": "root-worker_refresh_867"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-867R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -12292,14 +12308,7 @@
         "pr": 867,
         "queued_at": "2026-10-13T17:50:36+00:00",
         "review_report": "Integration compatibility return for ACL-1865 / PR867.\n\nThe exact approved head 55f69649e6213117b923237b4d435b2ee3590dea has passed its source checks and independent review. Read-only git merge-tree against approved PR665 head 54f1c1fe and approved PR882 head 5d0e7259 reports a content conflict only in docs/system/CHANGELOG.md: each inserts a new entry immediately after the title. Product code is not the blocker.\n\nUnder a fresh owned Worker claim on the preserved source branch, move only the complete ACL-1865 entry, with its text unchanged, to immediately before the existing unique heading \"One metric set in every attribution table, Totals and Campaign managers on Home \u2014 ACL-1652, ACL-1654, ACL-1656\". Preserve every old entry and all runtime/tests. This stable insertion point is distinct from the creative entry near ACL-1615 and the token diagnostic entry after the title. Do not include another task's source commits.\n\nThen fast-forward push, truthful checks/handoff and fresh independent review/approval. The old source approval remains historical; no stage/main merge or live action is claimed. The failed composition was found before freezing or publishing a batch.",
-        "reviewer": "Reviewer-867S",
         "return_operation": {
-          "id": "4e725b2553394d0191723f6b4423929e",
-          "actor": "Coordinator-DLV13",
-          "session": "Root-DLV13-01a13445",
-          "report": "Integration compatibility return for ACL-1865 / PR867.\n\nThe exact approved head 55f69649e6213117b923237b4d435b2ee3590dea has passed its source checks and independent review. Read-only git merge-tree against approved PR665 head 54f1c1fe and approved PR882 head 5d0e7259 reports a content conflict only in docs/system/CHANGELOG.md: each inserts a new entry immediately after the title. Product code is not the blocker.\n\nUnder a fresh owned Worker claim on the preserved source branch, move only the complete ACL-1865 entry, with its text unchanged, to immediately before the existing unique heading \"One metric set in every attribution table, Totals and Campaign managers on Home \u2014 ACL-1652, ACL-1654, ACL-1656\". Preserve every old entry and all runtime/tests. This stable insertion point is distinct from the creative entry near ACL-1615 and the token diagnostic entry after the title. Do not include another task's source commits.\n\nThen fast-forward push, truthful checks/handoff and fresh independent review/approval. The old source approval remains historical; no stage/main merge or live action is claimed. The failed composition was found before freezing or publishing a batch."
-        },
-        "return": {
           "id": "4e725b2553394d0191723f6b4423929e",
           "actor": "Coordinator-DLV13",
           "session": "Root-DLV13-01a13445",
@@ -26633,6 +26642,13 @@
         "issue": 651,
         "claim": "a9cd72a878d044e5b3250905613bd19f",
         "actor": "Worker-Fix665"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T18:32:08+00:00",
+        "issue": 865,
+        "claim": "014059808ad4438e9359c1a0dcbed781",
+        "actor": "Worker-867R"
       }
     ],
     "policy": {
