@@ -1,6 +1,8 @@
 name: Delivery setup (draft adoption)
 on:
+  # ACL-1649: a branch push with an open PR ran this twice (push + pull_request); the PR run covers it.
   push:
+    branches: [master, main, stage]
   pull_request:
 permissions:
   contents: read
@@ -11,6 +13,6 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: MojoTheApe/master-repo@6ba8b2c5aed4aa58520d4d2f271d3e713a80a6bd
+      - uses: MojoTheApe/master-repo@8ce271dc289b6a7ef24498ed3d9d92cb78694a3d
         with:
           allow-draft: 'true'

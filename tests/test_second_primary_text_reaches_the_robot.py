@@ -222,7 +222,7 @@ def recorded(monkeypatch, tmp_path):
     monkeypatch.setattr(dom, "upload_ad_creative_with_retry", lambda p, ctype, path, **kw: True)
     monkeypatch.setattr(dom, "create_additional_ad", lambda p, name: True)
     monkeypatch.setattr(dom, "_open_tree_ad", lambda p, name: False)
-    monkeypatch.setattr(dom, "_tree_new_ad_shells", lambda p: 0)
+    monkeypatch.setattr(dom, "_tree_shell_ids", lambda p: frozenset())
     monkeypatch.setattr(dom, "set_ad_destination_website", lambda p, url: True)
     monkeypatch.setattr(dom, "verify_and_fix_ad_destinations", lambda p, names, url: [])
     monkeypatch.setattr(dom, "recover_stuck_page", lambda *a, **k: False)

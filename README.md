@@ -1,4 +1,4 @@
-# ACL repository adoption
+# ACL repository adoption (Adopy Campaign Manager)
 
 ACL uses the Master Repo layout and main/stage process. Read the verified
 [cutover and activation gate](docs/repository/ADOPTION.md): main is the integration
@@ -10,7 +10,7 @@ Start with [AGENTS.md](AGENTS.md) and the [current system](docs/system/PROJECT.m
 
 Анализ статистики Facebook-кампаний: отчёты по странам, кампайн-менеджерам (CM) и офферам.
 
-## Установка (ACL — Adopy Campaigns Launcher)
+## Установка (ACL — Adopy Campaign Manager)
 
 Требуется **Python 3.11+**. Двойной клик по `install_acl.bat` (или из консоли):
 

@@ -1,5 +1,217 @@
 # System history
 
+## Account-label ID suffix keeps existing alias precedence — ACL-1824
+
+- A long numeric account-ID suffix is removed only after the existing tail lookup
+  finds no candidate. Exact names and configured name rules retain their priority;
+  ambiguous tail matches remain unmatched instead of selecting the suffix alias.
+- Explicit account links continue to select the country before workbook resolution,
+  and account rows and country totals use the same resolved alias without duplicates.
+- When that country has no rows in the selected period, the elsewhere diagnostic
+  also uses the already-resolved alias. Unresolved or ambiguous labels keep their
+  original identity; another country cannot supply a guessed suffix match.
+- Required CI exposed an inherited logging-filter leak when the added regressions
+  changed shard assignment. The pilot tests now restore each handler's pre-test
+  filters, so later tests see their own logging behavior. Production redaction and
+  the routing-log assertions remain unchanged.
+
+## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
+
+Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
+Creative setup -> Media -> Creative setup -> Crop. The captures show the library pick was NOT lost
+(the tile is still "selected", "1 selected" on Media), and the second Crop was a fresh arrival where
+Next had not been pressed. The ACL-1551 guard ("Next on Crop was already pressed") took it for the
+Crop where Next hung and closed the wizard with Close, leaving the ad without media.
+
+- When the wizard leaves Crop and later comes back to it through another step, the Crop step is
+  re-checked (Original, no expansion) and Next is pressed once more, for a single-file plan.
+- A second return to Crop, a post/story pair (Replace) or a Crop where Next already hung still
+  ends in the honest `crop_wizard_stuck`, with the exit reason `looped_back`.
+- The wizard telemetry row gets `looped_back_to` (first earlier step the wizard went back to, e.g.
+  `Media`), also inside `exit`. No new clicks: only the existing Next on a Crop that is on screen.
+## Window recovery enlarges a window restored below the editor minimum — ACL-1727
+
+- Run 4db2039f760d (Facebook_9403A): a minimised window was restored to its normal size
+  (inner 1117 px, minimum 1168) and the run stopped at `window_too_small`.
+- Now, when the window is un-minimised but still below the minimum, recovery enlarges it through
+  CDP `Browser.setWindowBounds` and measures again; `window_too_small` is recorded only if it is
+  still too small. The branch is chosen from the real window bounds: a window on screen is
+  maximised in place; a window parked off-screen grows proportionally and is re-parked so its right
+  edge stays at or left of 0; an already maximised or fullscreen window is not touched. A Mimic
+  scale drop (dpr below 0.85 of before) is undone and not retried.
+- The `window_bounds` diag records `enlarged: true` and `enlarged_to` (the new size). No new
+  windows are opened and the window is never moved to another monitor.
+## Campaign open: the AI-guided / Manual chooser counts as Create taken - ACL-1726
+
+- Run 4db2039f760d (Facebook_9403A, 08.10): Create now opens Meta's "Create new campaign" chooser
+  ("Meta AI-guided setup" / "Manual campaign setup"). It was not recognised, so Create was pressed
+  again and the open budget ran out (`objective_leads` after 103 s, about 2 minutes lost per campaign).
+- The chooser is now `create_took` with note `ai_manual_chooser` (ok), and `_wait_objective_dialog`
+  returns at once while it is on screen. The existing `manual` step then picks Manual setup. The
+  AI-guided option is never chosen.
+
+## Account map: notes only per account, Enter saves — ACL-1721
+
+- Country rows on the account map no longer show or edit a note. Stored country notes are kept in
+  `account_notes.json` untouched (the backend and the `countries` map are unchanged).
+- Account notes work as before, except in the editor: Enter saves and closes, Shift+Enter inserts a
+  newline. Esc, outside click and Ctrl+Enter behave as before.
+
+## Notes: a country note, and nothing on screen when a note is empty — ACL-1633
+
+Owner review of ACL-1620 (06.10).
+
+- Country notes: each country header row on the account map takes a note in the same style. They
+  are stored in the same local `account_notes.json` under a separate `countries` map. An old file
+  (account notes only) is read as it is and gains the `countries` key on the first save; nothing is
+  lost and no migration step is needed.
+- No noise: an empty note shows nothing. A faint pencil appears only while the row (or the note)
+  is hovered or focused. A filled note shows its first line with an ellipsis; the full text is in
+  the tooltip.
+- Simpler editor: only the textarea, a small "Delete" and a one-word state ("Saving", "Saved",
+  "Save failed"). The cursor opens at the end. It saves on outside click, Esc or Ctrl+Enter; there
+  is no Save or Close button. Delete asks nothing and shows "Deleted - Undo" for 5 seconds.
+- Click or Enter opens the editor, including from a country header (the country does not fold).
+- Kept from ACL-1620: escaping, the strict read on save with the `.corrupt` backup, the in-flight
+  guard, columns Account 28% / Note 9%. Notes are never sent anywhere: the only call is the local
+  `POST /api/account-notes` ({account, text} or {country, text}).
+- The note is drawn as an input box (field border, radius, light background, one line with an
+  ellipsis). An empty note shows the same quiet box with no text, so it is always clear that it can
+  be clicked. The country box stays compact beside the name.
+
+## One metric set in every attribution table, Totals and Campaign managers on Home — ACL-1652, ACL-1654, ACL-1656
+
+Every attribution table now shows **Spend, Leads, FTDs, CPL, CPA, CR** in this order, with the same
+names, formulas and number format. Decisions: owner, 2026-10-06 (issue #652).
+
+- **One source.** `src/analysis_agent/metric_columns.py` holds the header lists, the three formulas and the
+  number format; templates take headers and cells from `_metrics.html`; the JS twin `acl6Metrics` in
+  `report.html` is pinned to the Python helper by `tests/test_metric_columns.py`.
+- **Formulas.** CPL = Spend / Leads, CPA = Spend / FTDs, CR = FTDs / Leads, "—" when the divisor is 0.
+  Money is whole dollars rounded up everywhere (the asset-landing drill used to round to nearest).
+- **Fixed.** A zero CPA showed "$0" in Targeting, Creatives and CM Comparison; CR 0.0% showed "—" in the
+  account row and tree rows (it is a real number when there are leads).
+- **Tables.** Home country rows (+CPL), Home and Manage account table ("FTD" is now "FTDs", Account spend stays),
+  tree rows, CM Comparison, Assets, the asset-landing drill, Landings, Trends, Combos, Targeting, Creatives,
+  Optimization ad sets and the three drills. Net, ROI and Player Value stay after the six metrics.
+- **Trends**: two-line cells (last days bold, whole period grey), and "Trending down" is shown.
+  **Combos**: one identity cell (offer, device, age, category chip; interest and creative below).
+- **Drills** scroll horizontally inside the table when the builder is open.
+- **Home headers** are in normal case (they were upper case, which turned "FTDs" into "FTDS").
+- **Totals row** (ACL-1654) under the country rows, before Available accounts: Spend, Leads and FTDs are summed,
+  CPL/CPA/CR are computed from the sums. "Account read" is summed once per account and only when every
+  read account is in one currency; otherwise "—".
+- **Campaign managers** (ACL-1656) at the bottom of Home, collapsed by default (state in localStorage):
+  country rows are the sum of all managers, the current manager is highlighted. Same rows as CM Comparison.
+- **Ad drills**: the Date column and the dead "+ 🛒" button are gone.
+- **Copy for group** (button and hint under a red account status) is hidden for now; `SHOW_COPY_FOR_GROUP = True` in `app.py` brings it back. Screenshot and status code are unchanged.
+- Python edits (`morning_report.py` trend builder, `app.py`) need a `serve.py` restart.
+## next_to_ad confirms the ad level and names the reason on that step — ACL-1693
+
+Manager laptop LAPTOP-UA006, run 81c1bfbb5456 (07.10, window 1536x730 at dpr 1.25): `next_to_ad`
+was recorded ok, but the editor stayed on "Ad sets - Edit" (`levels: ["ad_set"]`). Five `ad_name`
+tries ended in `not_on_ad_level`, then every creative upload ended in `wizard_not_opened` - about
+four minutes lost, and the failure was named on the wrong step.
+
+- After the Next press the robot reads the editor level. Still on the ad set: it closes the
+  notices that may cover Next (the "WhatsApp Status included" notice was open over the page) and
+  presses Next again, up to three presses in all.
+- Still on the ad set after all presses: the campaign stops at `next_to_ad_stuck_on_adset` with a page
+  capture and a reason (`next_covered`, `next_outside_viewport`, `dialog_open`, `next_not_found` or
+  `next_clicked_no_change`). The stop is blocking and never replayed: a rebuild would leave another
+  partial draft in a live account. Plain `next_to_ad` (retryable) stays for a page that cannot be read.
+- The level is re-read after every press and before failing, so a slow transition is not a failure.
+  Page markers (`/editor:<level>`) decide; the wizard sidebar guess is used only without markers.
+- A page whose level cannot be read is not pressed blindly (the old behaviour is kept).
+- The browser zoom is not touched. Evidence is not enough to pin the cause (see the PR for the
+  captures to request from the laptop).
+
+## Classic editor: ads 2-4 are created again, the ad set row's Action menu is opened by hover — ACL-1691
+
+On 07.10 (Facebook_5265 run f2c513f0a22d, KW_TRL on 9403A) `create_additional_ad` failed with
+`create_menu_item_not_found` (`menuSurfaces: []`, click point on an ad's text) and ads 2-4 were not created.
+Two causes on the captures:
+
+- The classic tree draws the row buttons only under the cursor (as the single-screen editor did, ACL-1630):
+  there is no "Action menu" in the DOM until the pointer is over the row. The step waited 30 s for it
+  to appear and then fell back to a blind coordinate click.
+- That fallback took the first text equal to the ad set name, sorted by height. The breadcrumb header above the
+  tree carries the same name (y = 22), so the click landed on the breadcrumb's ad name, not on the row.
+
+Fix: the tree counts as ready once the ad set row is there; the robot hovers that row (mouse move only, no
+press, no focus, at most 3 tries, stopping as soon as the button appears), then the existing Action menu ->
+"Create ad" path runs. If the row still shows no button the step blocks with `adset_action_menu_not_shown`
+("The ad set row in the left tree shows no Action menu button, even with the cursor over it; nothing was
+clicked.") instead of clicking blindly. The legacy coordinate fallback now ignores the breadcrumb.
+
+After that block the caller does not adopt an existing "New Leads Ad" row (ACL-1641's `_adopt_shell_or_recreate` is
+not called): nothing was clicked, so there is no new shell, and adopting another ad would report a false "created" and
+overwrite it. It makes one clean re-create instead (only when the tree shows no new shell), and if that blocks too the
+ad fails as `adN_create:adset_action_menu_not_shown`. The reason is kept per thread (`last_create_block()`), because two
+accounts publish at once in threads of one process; the caller reads it once per attempt.
+
+Where the blind coordinate fallback is still reachable: when the tree readiness check times out (30 s, no ad set
+row) or when the hover finds no ad set row (`hidden`, or no point after a timeout). With the breadcrumb and
+left-third filters the only thing it can click there is the ad set row itself; it cannot reach a breadcrumb or an ad row.
+
+## Placements: a complete Stories list that flickers is still read as "not offered" — ACL-1684
+
+On FacebookDoc120 (run 4e4969867d28) "Messenger Stories" was judged missing and a good run became a
+false do-not-publish: the list was complete (end proven, nothing hidden) but never read as stable.
+
+- Meta folded the Stories list twice while it was read; each re-opening spent the wait counted from
+  the first read, so the 1.5 s quiet window never fitted. The wait is now counted from the last
+  re-opening, with a hard limit of 15 s from the first read.
+- The row count no longer takes part in "stable" (it flickers while Meta remounts the list; the
+  end proof already covers hidden rows).
+- Unchanged: an incomplete list, or an offered but hidden placement, is never "not offered".
+
+## B97: when Meta shows no media counter the robot refuses honestly; it waits for the Crop cards — ACL-1669
+
+Two live B97 runs of the same build (07.10) failed in the media step. In both the robot read a step body once, immediately. Only the Crop case is established as a late draw.
+
+- Library pick (run 3edaf71b0613): the "N selected" counter was read 0.1 s after the Media step opened, found nothing and refused (`selection_state_unavailable`), so no ad got media and `url_field_missing` followed on each. The robot now waits up to 4 s for the counter. If it is still missing, the robot refuses honestly instead of guessing: it neither clicks a tile nor uploads, and the ad ends with the named blocking reason `library_selection_unreadable` (the media must be attached by hand). A safe automatic fallback needs a live capture of the missing-counter state; that is follow-up work. Two review rounds found that an upload "when no tile is marked" cannot be proven safe from the markup we have (hidden or unrendered selections), so it was removed.
+- What is NOT established: that the counter was merely "late" in run 3edaf71b0613. The real 07.10 picker capture of the other run (bc4302862ee7, wizard open on Media at 0.1 s) shows the counter readable ("1 selected" / "0 selected") and the selected tile wrapped in `data-test-decoration="selected"`. Why the counter was not found in 3edaf71b0613 is unknown: no picker markup of that run exists. The 4 s wait is a bounded response, not a proven fix.
+- When the counter is missing the robot does not search the library for a known copy. A reuse-only ad that reaches that point is named `library_not_searched_counter_unreadable`, not `library_has_no_copy`, and it does NOT trigger the ACL-1637 re-upload (that stays for a searched library that answered "no copy"). The `counter_missing` flag is per call, so per ad: it is reset at the start of every `upload_ad_creative`.
+- Crop (run bc4302862ee7): the pick worked, but Crop was read while Meta still showed loading placeholders (no Square/Vertical cards) and ended `crop_replace_button_missing`. The step now waits up to 20 s for the cards; if they never appear it names the missing card. The 20 s figure is a cap, not a measured load time.
+- `url_field_missing` is reported as `<ad>_destination:url_field_missing_no_media` (still blocking, with a sentence for the dashboard) only when the creative step failed AND the empty Media state is positively seen on the page (Meta's "Please specify the media" text, or the single-screen editor's `empty` state on a mounted block). A Media block that cannot be read or is unmounted keeps the plain `url_field_missing`.
+- ACL-1637 did not cause this: the counter check dates from 17.09 and ad 1 never goes through the ACL-1637 path.
+- Bench: `wizard_media_picker_selected_2026_10_07.html` is cut from the real 07.10 capture (counters emptied; expected result is a REFUSAL). `scripts/capture_to_fixture.py` now keeps `data-test-decoration`, only when its value is `selected` (the scrubber used to drop Meta's selected mark, which is why the old 04.10 picker fixture looked unmarked). The Crop-loading fixture is hand-reduced from the real captures and keeps their three `role=progressbar` placeholders.
+
+## Conversion location: the menu is opened by click or script, and a failure names its reason — ACL-1572
+
+`conversion_website_pick: not_selected` failed campaigns on Doc21, Elf403, KLD_BFL_B91 and
+Facebook_5265 (01-06.10). Telemetry showed `menu_closed: 8, reopened: 0`: the menu never opened,
+so none of the eight pick methods ever ran against an open menu.
+
+- Opening the menu now escalates: the existing click, then a single script press; the next opener runs only when the previous one left the menu closed.
+- "Menu is open" also reads the trigger's `aria-expanded`, not only the Single/Multiple headings
+  (a menu without those headings was taken for closed and then clicked shut).
+- Focus is released from the ad set name field before the trigger is pressed (its suggestion list
+  swallowed the first press on the failing captures; no Escape, it closes the wizard).
+- After three failed openings the step stops instead of spending 60-190 s on the remaining methods.
+- A failed pick says why, in English, in the `conversion_website_pick` note: the menu would not
+  stay open; Website is not offered in the open menu; Conversion location is not on this screen
+  (the ad editor was showing, as on Facebook_5265).
+- Review fixes: the script press is one click (two would close a toggle trigger). The keyboard (focus + Enter) opener was dropped entirely: Enter could accept a suggestion in the ad set name field and rename the ad set, so the only openers are the click and the script press, and the name field is blurred first (in the frame that holds it). As a single safety check, the ad set name is read once at the start of the Conversion location step and compared at its end, across all retries; a change stops the step (the recorded flow returns the blocking, never replayed `conversion_website_name_changed`) and says only that the name changed, never the names. "Not on this screen" is returned only when the field is truly absent (a page script failing in every frame is its own read-error reason); "would not stay open" only after both openers pressed and failed; the reason is added to the step's error text, not only telemetry; the step state is per thread.
+## Advantage+ audience on WhatsApp campaigns: a collapsed Age row with a note is opened again — ACL-1638
+
+The classic ad set editor failed the `advantage_plus_audience` step (`still_on`, campaign not published)
+on 06.10 on FacebookDoc120 and Facebook_9403A. These were two different failures.
+
+- Doc120 (and 4285247f763a on 05.10): on WhatsApp campaigns Meta writes the collapsed Age row as
+  "35 - 65+ · Unknown age on WhatsApp: Excluded" with a "Your suggestion" label. The robot only
+  recognised a summary that ended right after the bounds, so it never opened the row
+  (`age_row_opened: false`, `age: []`) and never unchecked "Use as a suggestion". The summary now
+  accepts a note after the bounds, so the row is opened, the suggestion is unchecked and the badge is
+  re-read as before.
+- 9403A (d4f9d5f016c1, 327c0b934cb3): the age was already a hard 35 - 65+ and the checkbox was off, but
+  the badge read "Advantage+ on" again after reading "off" before the age step. Nothing is left for the
+  robot to click, and the cause of the flip is not known from the captures, so the step still blocks the
+  draft. A failure now carries `age_suggestion_checked` and `mode` in its telemetry, and a read-only
+  `audience_badge_probe` row after the age, location, languages and targeting steps shows which step
+  flips the badge on the next occurrence.
+
 ## AI rescue core module: ask Claude for one safe action when the robot is stuck (not wired in yet) — ACL-1613
 
 The last rung of the fallback ladder: when a step fails on a screen the robot does not know (a

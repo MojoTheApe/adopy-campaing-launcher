@@ -60,15 +60,27 @@ def test_the_routine_csv_line_is_not_a_warning():
     assert "warnings.append" not in body, "обычная работа снова объявлена предупреждением"
 
 
-def test_the_logo_is_left_alone():
-    """Знак оставлен прежним — решение пользователя.
+def test_the_logo_is_the_blue_adopy_mark():
+    """ACL-1705: знак — плоская синяя метка Adopy «A» (#2563eb), без плитки и текста.
 
-    Я заменил его геометрией, потому что «ACL» нарисовано как `<text>` шрифтом
-    Segoe UI: на машине без него буква подставляется другой, и знак едет.
-    Пользователь вернул прежний, и это его выбор — но риск не исчез, поэтому
-    записан на доску как `acl-701a`, а не забыт.
-
-    Проверка держит только одно: файл не меняется молча.
+    Прежний знак с `<text>`-буквами «ACL» зависел от шрифта Segoe UI; новый —
+    чистая геометрия, поэтому проверяем, что текста в нём нет.
     """
     svg = (ROOT / "src" / "web" / "static" / "logo.svg").read_text(encoding="utf-8")
-    assert "<text" in svg and "ACL" in svg, "знак подменили — он должен остаться прежним"
+    assert "#2563eb" in svg and "<text" not in svg and "<rect" not in svg
+    assert 'aria-label="Adopy Campaign Manager"' in svg
+
+
+def test_the_header_shows_the_logo_only():
+    """ACL-1723: под знаком нет видимой подписи; имя продукта — в alt у логотипа.
+
+    Слова Launcher в шапке по-прежнему нет, шрифт подписи больше не грузится.
+    """
+    head = _header()
+    assert 'brand-name' not in head, "под знаком вернулась подпись"
+    assert "<h1" not in head, "в шапке появился заголовок-подпись"
+    assert re.search(r'<img[^>]*class="brand-logo"[^>]*alt="Adopy Campaign Manager"|'
+                     r'<img[^>]*alt="Adopy Campaign Manager"[^>]*class="brand-logo"', head)
+    assert "Launcher" not in head
+    tpl = TPL.read_text(encoding="utf-8")
+    assert "ACM Inter" not in tpl, "неиспользуемый @font-face вернулся"

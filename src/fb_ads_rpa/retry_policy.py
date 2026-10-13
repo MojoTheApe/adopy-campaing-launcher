@@ -92,7 +92,13 @@ CAMPAIGN_RETRY_STEPS = frozenset(
 NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "browser_closed",
                                       "profile_logged_out", "profile_network",
                                       "simple_create_layout", "lead_terms_not_accepted",
-                                      "objective_inline"})
+                                      "objective_inline",
+                                      # ACL-1697: не тот кабинет — повтор откроет тот же.
+                                      "wrong_ad_account",
+                                      # ACL-1572: имя ad set'а изменилось, пока выбирали Website.
+                                      "conversion_website_name_changed",
+                                      # ACL-1693: Next нажат, редактор остался на ad set.
+                                      "next_to_ad_stuck_on_adset"})
 
 # tab_frozen_budget_exceeded / campaign_budget_exceeded / step_budget_exceeded
 # (ACL-1354, runs 37e397574548 and a71e4fc14aa1 of 2026-09-28): the campaign
@@ -112,6 +118,11 @@ BLOCKING_REVIEW_STEPS = frozenset(
         "window_too_small",
         "account_blocked",
         "browser_closed",
+        # ACL-1572: имя ad set'а изменилось за шаг Conversion location.
+        "conversion_website_name_changed",
+        # ACL-1693: ad set настроен, на уровень объявления не перешли; повтор
+        # кампании оставил бы ещё один черновик в живом кабинете.
+        "next_to_ad_stuck_on_adset",
         # ACL-1320: profile-level stops. profile_restart_failed is decided by
         # the flow's caller (the MLX restart), not returned by the flow.
         "profile_logged_out",
@@ -122,8 +133,13 @@ BLOCKING_REVIEW_STEPS = frozenset(
         "profile_open_by_hand",
         "simple_create_layout",
         "lead_terms_not_accepted",
+        "wrong_ad_account",
         "objective_inline",
         "simple_create_more_ads",
+        # ACL-1702: the tab watchdog unblocked a tab stuck in one call; the
+        # draft is partial and a replay would duplicate it. Decided by the
+        # flow's caller (tab_watchdog.take_hung), not returned by the flow.
+        "tab_hung",
         # ACL-1354: time budgets of the recorded flow.
         "tab_frozen_budget_exceeded",
         "campaign_budget_exceeded",

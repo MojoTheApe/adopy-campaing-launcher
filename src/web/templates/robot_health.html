@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="/favicon.ico?v=acl" sizes="32x32">
+  <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
   <title>Robot health{% if run %} — run {{ run.run_id }}{% endif %}</title>
   <script>
     // Та же тема, что у дешборда: выбор человека в localStorage, иначе ОС.
@@ -104,7 +104,8 @@
   {#- Один прогон: исходы шагов по порядку и его снимки. -#}
   <h2>Run {{ run.run_id }} · {{ run.account }} · build {{ run.build }}</h2>
   <p class="help">Started {{ run.started[:19] | replace('T', ' ') }} UTC · {{ run.n_ok }}/{{ run.n_steps }} steps ok
-    {%- if run.abort %} · stopped at <code>{{ run.abort }}</code>{% endif %}</p>
+    {%- if run.abort %} · stopped at <code>{{ run.abort }}</code>{% endif %}
+    {%- if run.abort_label %} · <strong>{{ run.abort_label }}</strong>{% endif %}</p>
   {% if run.failures %}
   <ul class="hl">
     {% for f in run.failures %}
@@ -188,6 +189,7 @@
       <td class="left">
         {% for f in r.failures %}<code>{{ f.step }}</code><span class="tag {{ 'new' if f.status == 'new' else 'known' }}">{{ f.status }}</span>{% if not loop.last %} {% endif %}{% endfor %}
         {% if not r.failures and r.abort %}<span class="muted">stopped at <code>{{ r.abort }}</code></span>{% endif %}
+        {% if r.abort_label %}<span class="tag new">{{ r.abort_label }}</span>{% endif %}
       </td></tr>
     {% endfor %}
   </table></div>

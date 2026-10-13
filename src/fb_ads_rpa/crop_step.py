@@ -651,6 +651,10 @@ def _replace_vertical(page, filename: str, log: dict) -> str:
     return "crop_replace_not_confirmed"
 
 
+#: Сколько ждать карточки Crop, пока Meta показывает заглушки (ACL-1669).
+CARDS_RENDER_WAIT_S = 20.0
+
+
 def apply(page, plan) -> str:
     """Bring the Crop step to the plan and read it back. "" = as planned.
 
@@ -662,6 +666,12 @@ def apply(page, plan) -> str:
     why = ""
     try:
         state = read(page)
+        if state.get("found") and not any(_card(state, n) for n in CARDS):
+            # ACL-1669 (B97, bc4302862ee7): шаг Crop открыт, а карточки ещё не
+            # дорисованы — Meta показывает заглушки загрузки (~13 с). Читали
+            # сразу, видели пустые карточки и отвечали crop_replace_button_missing.
+            state = _wait(page, lambda s: any(_card(s, n) for n in CARDS), CARDS_RENDER_WAIT_S)
+            log["cards_waited_s"] = round(time.time() - started, 1)
         if not state.get("found"):
             why = "crop_step_not_read"
         else:
@@ -782,6 +792,11 @@ def reset_attempt() -> None:
     _tls.done = False
     _tls.unseen_said = False
     _tls.warning = ""
+
+
+def reopen() -> None:
+    """ACL-1736: мастер вернулся на Crop через другой шаг - рамки проверить снова."""
+    _tls.done = False
 
 
 def failure_pending() -> bool:
