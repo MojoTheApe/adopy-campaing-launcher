@@ -25,7 +25,9 @@ def page_for(entry_page_id: str, client: Any, act: str) -> str:
         return page_id
     pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=1)
     ids = [str(p.get("id")) for p in pages if p.get("id")]
-    return ids[0] if ids else ""
+    # Среди нескольких страниц первую не берём: порядок promote_pages ничего не значит (ACL-1880).
+    from src.fb_api.page_choice import automatic_page
+    return automatic_page(ids)[0]
 
 
 def _read_in_session(account_label: str, selected_page: str | None = None) -> dict[str, Any]:
@@ -43,7 +45,11 @@ def _read_in_session(account_label: str, selected_page: str | None = None) -> di
             page_id = page_for(entry_page, client, sess.act)
         else:
             from src.web.account_pages import pages_from_client, resolve_selection
-            page_id = resolve_selection(pages_from_client(client, sess.act), selected_page)["id"]
+            try:
+                page_id = resolve_selection(pages_from_client(client, sess.act), selected_page, entry_page)["id"]
+            except ValueError as exc:
+                # Несколько страниц и выбора нет: просим выбрать, а не гадаем (ACL-1880).
+                return {"state": "failed", "ok": False, "page_id": "", "forms": [], "message": str(exc)}
         if not page_id:
             read = _forms.forms_capability("", [])
         else:
