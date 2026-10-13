@@ -10173,7 +10173,7 @@
             "session": "run-workerfix665-20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-Fix665",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -10192,7 +10192,8 @@
         },
         "pr": 665,
         "queued_at": "2026-10-13T17:57:08+00:00",
-        "review_report": "# Independent source review: ACL-1651 / PR665\n\nVerdict: return to the original author; not Approved.\nSource head: 921cd3318492248da55b1312fb68b454e940597f.\nSource tree: 42416225fcb6cdd7d03311eab49c74224bf070ff.\nObserved current main: 777663bf539308c0898cc177f872a8e0f63b597e, tree84d322133c9b5d29c84221d2445b0ea88639ac42.\nPR base at inspection: 9f592b540519edf94cff5e6ce94625c25deca00b.\n\n## Blocking findings\n\n1. A creative search miss within two seconds after a successful focus refresh can remain stuck on No files found. cbCreativeSearch sets _cbMissLatched before cbRefreshCreatives(2000), but that helper returns false without fetching inside the throttle window. The latch remains true after the window expires, so subsequent typing in the same missed query streak makes no refresh request. This leaves a newly added replacement photo unavailable without focus/type workarounds, contrary to acceptance criteria 1 and the owner's current report.\n\nExact-source offline Chromium reproduction: use the existing creatives_env synthetic fixture, settle a focus refresh, add zz_replacement.jpg to the temporary folder, immediately type its name, wait 2.5 seconds, then continue/edit the query without changing focus/type. Result: No files found; zero additional /api/creatives requests. One targeted test failed on the expected behavior assertion (1 failed, 34.42s, Windows/Python3.14). The existing source miss test explicitly ages the request to three seconds and therefore does not cover this edge. This demonstrates a concrete timing bug, but does not establish that it is the only cause of the owner's real-folder report.\n\n2. Source does not contain current main (merge-base --is-ancestor current-main source exits1;169 missing commits). The fresh source/base scope must be updated by its actual author, then have applicable CI and a new independent exact-content review. Existing October7 green CI and structural check-pr success do not approve current-main compatibility.\n\n## Author follow-up\n\nPreserve this source branch, genuine author, complete issue criteria and all existing history. Take a fresh supported implementation claim, fix the throttled-miss latch/retry behavior while preserving at-most-one background refresh per miss streak and focus throttle, add the immediate-post-refresh regression, and investigate the actual remove-photo / choose-replacement flow. Update the source against current main; run applicable affected regressions and CI; hand off for fresh independent review. Do not change live advertising/profiles or activate publication to test this search bug.\n\nNo source edits, GitHub merge, dashboard installation, scheduler or live Meta actions were performed by this Reviewer. The reproduction helper is local ignored output, not a source change. Existing successful checks remain historical evidence; no passing replacement-flow claim is made."
+        "review_report": "# Independent source review: ACL-1651 / PR665\n\nVerdict: return to the original author; not Approved.\nSource head: 921cd3318492248da55b1312fb68b454e940597f.\nSource tree: 42416225fcb6cdd7d03311eab49c74224bf070ff.\nObserved current main: 777663bf539308c0898cc177f872a8e0f63b597e, tree84d322133c9b5d29c84221d2445b0ea88639ac42.\nPR base at inspection: 9f592b540519edf94cff5e6ce94625c25deca00b.\n\n## Blocking findings\n\n1. A creative search miss within two seconds after a successful focus refresh can remain stuck on No files found. cbCreativeSearch sets _cbMissLatched before cbRefreshCreatives(2000), but that helper returns false without fetching inside the throttle window. The latch remains true after the window expires, so subsequent typing in the same missed query streak makes no refresh request. This leaves a newly added replacement photo unavailable without focus/type workarounds, contrary to acceptance criteria 1 and the owner's current report.\n\nExact-source offline Chromium reproduction: use the existing creatives_env synthetic fixture, settle a focus refresh, add zz_replacement.jpg to the temporary folder, immediately type its name, wait 2.5 seconds, then continue/edit the query without changing focus/type. Result: No files found; zero additional /api/creatives requests. One targeted test failed on the expected behavior assertion (1 failed, 34.42s, Windows/Python3.14). The existing source miss test explicitly ages the request to three seconds and therefore does not cover this edge. This demonstrates a concrete timing bug, but does not establish that it is the only cause of the owner's real-folder report.\n\n2. Source does not contain current main (merge-base --is-ancestor current-main source exits1;169 missing commits). The fresh source/base scope must be updated by its actual author, then have applicable CI and a new independent exact-content review. Existing October7 green CI and structural check-pr success do not approve current-main compatibility.\n\n## Author follow-up\n\nPreserve this source branch, genuine author, complete issue criteria and all existing history. Take a fresh supported implementation claim, fix the throttled-miss latch/retry behavior while preserving at-most-one background refresh per miss streak and focus throttle, add the immediate-post-refresh regression, and investigate the actual remove-photo / choose-replacement flow. Update the source against current main; run applicable affected regressions and CI; hand off for fresh independent review. Do not change live advertising/profiles or activate publication to test this search bug.\n\nNo source edits, GitHub merge, dashboard installation, scheduler or live Meta actions were performed by this Reviewer. The reproduction helper is local ignored output, not a source change. Existing successful checks remain historical evidence; no passing replacement-flow claim is made.",
+        "reviewer": "Reviewer-Creative665"
       },
       "669": {
         "implementers": [
@@ -16108,8 +16109,7 @@
       839,
       845,
       840,
-      841,
-      651
+      841
     ],
     "review": null,
     "history": [
@@ -26347,6 +26347,13 @@
         "issue": 872,
         "claim": "cebcbdbb515a49e59bd74170c4ca3f1f",
         "actor": "Worker-IS1013"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T18:02:05+00:00",
+        "pr": 665,
+        "lane": "8e38d4617feb4a32b262501a73fe5588",
+        "actor": "Reviewer-Creative665"
       }
     ],
     "policy": {
@@ -27066,6 +27073,18 @@
         "session": "source_review_867_20261013",
         "coordinator": "Coordinator-DLV13",
         "started_at": "2026-10-13T17:53:21+00:00",
+        "state": "reviewing"
+      },
+      "665": {
+        "id": "8e38d4617feb4a32b262501a73fe5588",
+        "pr": 665,
+        "issues": [
+          651
+        ],
+        "actor": "Reviewer-Creative665",
+        "session": "review665-20261013-f83a61d2",
+        "coordinator": "Coordinator-DLV13",
+        "started_at": "2026-10-13T18:02:05+00:00",
         "state": "reviewing"
       }
     }
