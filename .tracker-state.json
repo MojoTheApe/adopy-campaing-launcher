@@ -7497,15 +7497,15 @@
   "execution": {
     "claims": {
       "871": {
-        "actor": "Worker-BH7K26",
-        "session": "builder_handle_01a13470_20261013",
-        "coordinator": "Coordinator-BH7K26",
+        "actor": "Worker-FIVE874",
+        "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
+        "coordinator": "Coordinator-FLOW513",
         "branch": "codex/acl-1871-builder-handle",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Builder-Handle-2026-10-13",
-        "id": "8dbb2ff671e64527b60b8a642db4fa95",
+        "worktree": "/private/tmp/flow-five-reviews-20261013/acl1871-stop-only",
+        "id": "d2c1a2f105b3484fa6582b182bf9aab7",
         "issue": 871,
         "state": "implementing",
-        "started_at": "2026-10-13T10:04:06+00:00",
+        "started_at": "2026-10-13T13:01:56+00:00",
         "from_status": "status:todo"
       }
     },
@@ -12029,11 +12029,15 @@
           {
             "actor": "Worker-BH7K26",
             "session": "builder_handle_01a13470_20261013"
+          },
+          {
+            "actor": "Worker-FIVE874",
+            "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
           }
         ],
         "state": "implementing",
-        "worker": "Worker-BH7K26",
-        "coordinator": "Coordinator-BH7K26",
+        "worker": "Worker-FIVE874",
+        "coordinator": "Coordinator-FLOW513",
         "handoff": {
           "actor": "Worker-BH7K26",
           "session": "builder_handle_01a13470_20261013",
@@ -25093,6 +25097,25 @@
         "pr": 876,
         "lane": "a06f028a1f704bd5b4298372660afd12",
         "actor": "Reviewer-R875X"
+      },
+      {
+        "event": "takeover",
+        "at": "2026-10-13T13:01:56+00:00",
+        "issue": 871,
+        "previous": {
+          "actor": "Worker-BH7K26",
+          "session": "builder_handle_01a13470_20261013",
+          "coordinator": "Coordinator-BH7K26",
+          "branch": "codex/acl-1871-builder-handle",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Builder-Handle-2026-10-13",
+          "id": "8dbb2ff671e64527b60b8a642db4fa95",
+          "issue": 871,
+          "state": "implementing",
+          "started_at": "2026-10-13T10:04:06+00:00",
+          "from_status": "status:todo"
+        },
+        "claim": "d2c1a2f105b3484fa6582b182bf9aab7",
+        "reason": "Human explicitly confirmed ACL-1871 development stopped. Bounded administrative takeover for immediate supported stop only; preserve original Windows locator and branch/history, whose local content is inaccessible and not recovered; no Builder code edits, source push, approval or completion."
       }
     ],
     "policy": {
