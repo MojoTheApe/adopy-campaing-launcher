@@ -7357,7 +7357,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "853": {
+        "actor": "Worker-N7Q4",
+        "session": "architecture_audit_n7q4_20261013",
+        "coordinator": "Coordinator-CR1012",
+        "branch": "codex/acl-1853-profile-process-lease",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1853-2026-10-13",
+        "id": "477eb807bdae44329e5bd2be4df24e83",
+        "issue": 853,
+        "state": "implementing",
+        "started_at": "2026-10-13T08:27:38+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -11715,9 +11728,13 @@
           {
             "actor": "Worker-N7Q4",
             "session": "architecture_audit_n7q4_20261013"
+          },
+          {
+            "actor": "Worker-N7Q4",
+            "session": "architecture_audit_n7q4_20261013"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-N7Q4",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -11736,7 +11753,6 @@
         },
         "pr": 863,
         "queued_at": "2026-10-13T08:05:38+00:00",
-        "reviewer": "Reviewer-RS1012",
         "review_report": "# ACL-1853 / PR863 exact-head independent inspection and return\n\nReviewer: Reviewer-RS1012 / connection_review_rs1012.\nAuthor: Worker-N7Q4 / architecture_audit_n7q4_20261013.\nCoordinator: Coordinator-CR1012. Date: 2026-10-13.\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/863\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/853\nInspected head: `70073be3892128b3528a4dbb2d47319a2a617ba3`.\nInspected tree: `b21924b193ea1f3ec53634ffa0e2faf2e0185039`.\nSource merge base: `e8e59f8376458f2f73089c3f2a8d454837ff033f`.\nCurrent remote main: `3327465fcbd46ccff9b64eb7c574ff5b84b99b80`.\n\n## Decision\n\nReturn to the author for current-main reconciliation and fresh required CI.\nThis is not a newly established product-source defect or an approval. The source\ndoes not contain current main: `git merge-base --is-ancestor 3327465... HEAD`\nreturned exit 1, and its merge base remains e8e59f8. Main now contains PR852's\npromotion of ACL-1824, including the existing test logging-filter isolation fix.\nThe four-file main delta concerns CHANGELOG, web/app.py, test_acl1756_fb_api.py,\nand test_dashboard_review.py. Reconcile through the author's normal fresh claim,\npreserving source history and the current-main changes.\n\nThe remote PR check read confirmed the exact head above, open/nondraft/main,\nand `statusCheckRollup: []`; no required CI success was present. The author later\nreported manual CI run 38367237557 in progress on this old head. That is neither\na successful result nor evidence for the forthcoming refreshed head. Run and\nverify the required checks on the final refreshed source and obtain a new\nindependent review before approval.\n\nA later independent remote read also confirmed PR863 is `CONFLICTING` / `DIRTY`\nagainst current main. The author must resolve that composition under the fresh\nimplementation claim; this reviewer did not perform the merge or edit source.\n\n## Exact-head source evidence\n\nThe final source retains the inspected profile lease architecture: existing\nmachine_file_lock primitive, canonical physical identities outside per-instance\nconfig, outer file descriptor lifetime, reentrant same-thread calls, bounded and\ncancellable wait, explicit provider aliases/Dolphin namespace, map/lease guards\nbefore browser entry, and publish slot cleanup on failure or cancellation.\nPrior provider-alias and turn-off-history findings are fixed in this head.\n\nThe final country reader change was additionally inspected. Its lease-refusal\nhandler creates a failed CountrySplit, persists it via the existing save_split,\nand reports a persistence failure explicitly. A prior successful cached report\nis replaced by the new refusal; the new regression checks failed state, empty\nrows, and the reason for refusal. The oversized Dolphin numeric-input validation\nalso returns the typed ownership refusal before integer parsing can fail.\n\nIndependent Windows / Python 3.14 run on this clean, exact committed head:\n\n`C:/fb_agents/.venv/Scripts/python.exe -m pytest tests/test_profile_process_lease.py -q --basetemp C:/Users/EvgeniSedin/Desktop/ACM-Audit-2026-10-12/profile-lease-review-exacthead`\n\nResult: **38 passed in 48.98 seconds**, exit 0. This includes the new country\ncached-success-to-refusal regression, real independent spawned-process ownership,\ntermination release, cancellation/timeout, canonical aliases, public refusal\nshapes, turn-off audit preservation, and publish slot cleanup.\n\nThe earlier working-tree review separately exercised the real decorated\nRpaPublisher.publish_draft under an outer profile-A lease with the resolver changed\nto profile B: the nested operation refused before its body and never held B.\nSix public refusal shapes and exactly one failed turn-off history record were\nalso checked independently. These are useful prior evidence, not a substitute\nfor checking a later refreshed source head.\n\nNo additional blocking product-code finding was established in this inspection.\nRequired full source CI remains a separate unmet approval condition. The author\nhandoff honestly records initial failing fixture sets and targeted passing retries;\nthis review does not relabel those as clean first-pass full-suite results.\n\n## Scope and exclusions\n\nInspected product boundary is the main Read Spend/country/RPA/publish-queue/close\nscope described in issue853. The guarantee is independently started Windows\nprocesses of the same OS user with the same home and lease protocol. Inherited\nPOSIX fork state, old builds, manual browser use and external automation are outside\nthat documented contract. The unmerged Graph/warm session lifetime integration\nis a separate ACL-1862 follow-up and is not established by this source review.\n\nAll checks used synthetic data, fake browser/provider seams and isolated paths.\nNo live Meta/Multilogin operation, token access, production configuration change,\nsource edit, test edit, move, or deletion was performed by this reviewer."
       },
       "864": {
@@ -23775,6 +23791,13 @@
         "pr": 842,
         "lane": "ec025c9a465d422280fe769b549516f6",
         "actor": "Reviewer-RL8C42"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T08:27:38+00:00",
+        "issue": 853,
+        "claim": "477eb807bdae44329e5bd2be4df24e83",
+        "actor": "Worker-N7Q4"
       }
     ],
     "policy": {
