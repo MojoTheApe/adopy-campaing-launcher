@@ -101,6 +101,11 @@ class AdDraft:
         return out
 
 
+#: ACL-1768: потолок наборов в одной кампании (форма, билдер, план).
+MAX_AD_SETS = 10
+MAX_AD_SETS_ERROR = f"A campaign can have at most {MAX_AD_SETS} ad sets."
+
+
 @dataclass
 class AdSetDraft:
     name: str
@@ -118,6 +123,10 @@ class AdSetDraft:
     device: str = ""            # "mobile" | "desktop" (пусто = все устройства)
     os_min: str = ""            # минимальная версия ОС, например "14"
     start_time: str = ""        # "YYYY-MM-DDTHH:MM", время часового пояса кабинета
+    # ACL-1768: номер набора в кампании (явный, не по порядку слотов) и поля уровня набора.
+    adset_index: int = 0
+    language: str = ""          # язык набора; пусто = язык кампании (CampaignDraft.language)
+    pixel_id: str = ""          # пиксель набора; пусто = пиксель кампании/кабинета
 
     def to_preview_dict(self) -> dict[str, Any]:
         out = {
@@ -130,7 +139,7 @@ class AdSetDraft:
         }
         if self.destination != "website":
             out["destination"] = self.destination
-        for key in ("gender", "languages", "device", "os_min", "start_time"):
+        for key in ("gender", "languages", "device", "os_min", "start_time", "language", "pixel_id"):
             if getattr(self, key):
                 out[key] = getattr(self, key)
         return out
