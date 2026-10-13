@@ -11536,7 +11536,7 @@
             "session": "worker_countryline_cl7f31_20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-CL7F31",
         "coordinator": "Coordinator-CV1013",
         "handoff": {
@@ -11554,7 +11554,8 @@
           "report": "ACL-1838 Worker source handoff \u2014 2026-10-13\n\nWorker: Worker-CL7F31\nSession: worker_countryline_cl7f31_20261013\nClaim: 157561418833493d884707db6a807d28\nCoordinator: Coordinator-CV1013\nBranch: codex/acl-1838-country-active-line\nWorktree: C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/838\nReady source PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/842\nBase main: e8e59f8376458f2f73089c3f2a8d454837ff033f\nHead: 520b988cbaefcb856759bdc00a45d3908d9b9e1b\nTree: d03502aebb8cca171228abd10f76f1d49bec18bc\n\nScope complete for source review: static 2px vertical accent activity line on existing live country rows; inactive rows have no marker. Absolute positioning preserves aligned country labels. pointer-events:none gives no independent hit target. Existing activity predicate, JavaScript, FTD counts, expanded-country selection, focus and hover remain unchanged. Three files: report.html plus system PROJECT/history. Compatible with pending ACL-1827 PR829 font-weight override.\n\nValidation: Windows, Python3.14.3 existing C:\\fb_agents\\.venv interpreter, own Desktop temp/config, library environment emptied. 28 affected tests passed (test_sidebar_without_workbook, test_the_builder_tree, test_manage_behavior); 46 Windows packaging unittests passed; tracked secret/identifier scanner passed; import smoke passed; git diff --check passed. Six isolated Chromium scenarios passed: light/dark at 1440px,390px and980px with150%zoom. Asserted active/inactive/selected state, owning row marker-coordinate click, keyboard Enter, hover, 2px geometry and aligned label insets. Both theme screenshots visually reviewed. Ad hoc browser script/log/screenshots remain local outside Git.\n\nInfrastructure history: default Python3.13 lacked pytest/app packages; initial packaging attempt also hit sandbox temp permissions. Proper project venv and own Desktop temp resolved checks. Sandbox browser driver stalled; unsandboxed local Chromium successfully verified synthetic dashboard without network/live accounts. One harness attempt retained prior scenario URL fragment; reset fixed its isolation, then all six scenarios passed without product changes. Initial push review rejected unverified destination; read-only repository identity/permission evidence plus required workflow resolved the approval, and the same branch push/PR creation succeeded.\n\nRemaining gates: actual independent source review (shared lane already occupied by PR837), full applicable source CI, Approved transition, authorized frozen batch integration with additional combined review/checks, actual stage verification, unchanged main promotion. No source merge, installer release, employee installation or production activity is claimed. Release membership not added.\n\nAdministrative history: provisional intake branch was necessary before assigned ACL ID. No code edits used its claim. Supported stop and removal of the resolved administrative blocker preceded a fresh claim on the correct branch, retaining actual same Worker/session."
         },
         "pr": 842,
-        "queued_at": "2026-10-13T06:15:09+00:00"
+        "queued_at": "2026-10-13T06:15:09+00:00",
+        "reviewer": "Reviewer-RL8C42"
       },
       "839": {
         "implementers": [
@@ -12784,6 +12785,10 @@
       },
       "Reviewer-LR1839": {
         "session": "layout_review_20261013",
+        "role": "Reviewer"
+      },
+      "Reviewer-RL8C42": {
+        "session": "rev_countryline_rl8c42_20261013",
         "role": "Reviewer"
       }
     },
@@ -15212,13 +15217,23 @@
       776,
       771,
       768,
-      838,
       840,
       836,
       841,
       844
     ],
-    "review": null,
+    "review": {
+      "id": "dec83412ec604af4bb75d8adfc9a93cb",
+      "pr": 842,
+      "issues": [
+        838
+      ],
+      "actor": "Reviewer-RL8C42",
+      "session": "rev_countryline_rl8c42_20261013",
+      "coordinator": "Coordinator-CV1013",
+      "started_at": "2026-10-13T08:03:06+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -23524,6 +23539,13 @@
         "issue": 839,
         "claim": "7bba5eba3ec747b4aa55cb8877f43079",
         "actor": "Worker-D7K413"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T08:03:06+00:00",
+        "pr": 842,
+        "lane": "dec83412ec604af4bb75d8adfc9a93cb",
+        "actor": "Reviewer-RL8C42"
       }
     ],
     "policy": {
