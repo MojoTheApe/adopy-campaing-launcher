@@ -50,6 +50,13 @@ class AdDraft:
     cta: str = ""
     # ACL-1776: id шаблона формы из библиотеки (форму создаёт робот; только API-бэкенд).
     lead_form_template: str = ""
+    # ACL-1774 (только API-бэкенд): тексты 3-5 — названия записей библиотеки (как `copy2_name`)
+    # и разобранные записи для слотов 2-5: [{"name", "body", "headline", "description"}].
+    more_copy_names: list[str] = field(default_factory=list)
+    text_variants: list[dict[str, str]] = field(default_factory=list)
+    # ACL-1774: необязательный вертикальный (9:16) файл Stories/Reels рядом с основным.
+    vertical_filename: str = ""
+    vertical_path: str | None = None
 
     def ad_name(self) -> str:
         """Name for the ad in Ads Manager: "<creative> [<variant>] - <text>".
@@ -98,6 +105,10 @@ class AdDraft:
             out["cta"] = self.cta
         if self.lead_form_template:
             out["lead_form_template"] = self.lead_form_template
+        if self.more_copy_names:
+            out["more_copy_names"] = list(self.more_copy_names)
+        if self.vertical_filename:
+            out["vertical_file"] = self.vertical_filename
         return out
 
 

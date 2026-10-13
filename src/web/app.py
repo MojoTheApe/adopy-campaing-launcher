@@ -2361,6 +2361,10 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     # ACL-1344: необязательный второй вариант основного текста —
                     # название записи библиотеки текстов, как у `copy`.
                     copy2         = (form.get(f"camp_{idx}_ad_{a_idx}_copy2") or "").strip()
+                    # ACL-1774 (только API-бэкенд): тексты 3-5 и вертикальный файл Stories/Reels.
+                    copy_more     = [c for c in ((form.get(f"camp_{idx}_ad_{a_idx}_copy{n}") or "").strip()
+                                                 for n in (3, 4, 5)) if c]
+                    file_vertical = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file_vertical") or "").strip()
                     # Legacy single-ad fallback (forms submitted before multi-ad upgrade)
                     if not creative_file and a_idx == 0:
                         creative_file = (form.get(f"camp_{idx}_creative_file") or "").strip()
@@ -2376,6 +2380,10 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     # (и записанные из них задания) остаются прежними.
                     if copy2:
                         slot["copy2"] = copy2
+                    if copy_more:
+                        slot["copy_more"] = copy_more
+                    if file_vertical:
+                        slot["creative_file_vertical"] = file_vertical
                     cta_val = (form.get(f"camp_{idx}_ad_{a_idx}_cta") or "").strip().upper()
                     if cta_val and cta_val != "LEARN_MORE":
                         slot["cta"] = cta_val
@@ -5370,7 +5378,9 @@ def _multi_adset_refusal(slots: list[dict]) -> JSONResponse | None:
 #: Поля билдера, которые умеет только API-бэкенд (ACL-1767).
 API_ONLY_SLOT_KEYS = {"adset_name": "Ad set name", "pixel_id": "Pixel of the ad set",
                       "gender": "Gender", "languages": "Several languages", "device": "Devices",
-                      "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more"}
+                      "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more",
+                      "copy_more": "Primary text 3-5 (with their headlines and descriptions)",
+                      "creative_file_vertical": "Stories / Reels file"}
 
 
 def _api_only_fields_refusal(slots: list[dict]) -> JSONResponse | None:

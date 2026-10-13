@@ -510,7 +510,7 @@ class FakeMeta:
                     row = self._out(o)
                     cre = self._out(self.objects[o["creative"]["creative_id"]])
                     row["creative"] = {k: cre[k] for k in ("id", "object_story_spec", "adlabels",
-                                                          "degrees_of_freedom_spec", "contextual_multi_ads") if k in cre}
+                                                          "degrees_of_freedom_spec", "contextual_multi_ads", "asset_feed_spec") if k in cre}
                     row = json.loads(json.dumps(row))
                     for key, value in self.mutate_ads.items():
                         target = row
@@ -692,8 +692,12 @@ def test_no_delete_and_only_allowlisted_writes(tmp_path):
 
 
 def test_plan_errors_are_raised_before_any_call(tmp_path):
+    # ACL-1774: второй текст теперь поддержан; ошибка плана - шестой вариант.
+    assert cr.plan_from_draft(_draft(tmp_path, body2="second text")).ad_sets[0].ads[0].bodies[-1] == "second text"
+    six = _draft(tmp_path)
+    six.ad_sets[0].ads[0].text_variants = [{"body": f"v{i}", "headline": "", "description": ""} for i in range(5)]
     with pytest.raises(cr.PlanError):
-        cr.plan_from_draft(_draft(tmp_path, body2="second text"))
+        cr.plan_from_draft(six)
     d = _draft(tmp_path)
     d.link = ""
     with pytest.raises(cr.PlanError):
