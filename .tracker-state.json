@@ -7754,6 +7754,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T18:01:02+00:00",
         "from_status": "status:todo"
+      },
+      "844": {
+        "actor": "Worker-N7Q4",
+        "session": "architecture_audit_n7q4_20261013",
+        "coordinator": "Coordinator-CR1012",
+        "branch": "codex/acl-1844-official-access-probe",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\Adopy Campaign Manager\\ACM-Worker-1844-2026-10-13",
+        "id": "702b288feb1d470abca4e94dfa393ac8",
+        "issue": 844,
+        "state": "implementing",
+        "started_at": "2026-10-13T18:18:15+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12109,9 +12121,13 @@
           {
             "actor": "Worker-N7Q4",
             "session": "architecture_audit_n7q4_20261013"
+          },
+          {
+            "actor": "Worker-N7Q4",
+            "session": "architecture_audit_n7q4_20261013"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-N7Q4",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12136,8 +12152,7 @@
           "actor": "Coordinator-FLOW513",
           "session": "flow_five_reviews_coordinator_01a134f0_20261013",
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
-        },
-        "reviewer": "Reviewer-RS1012"
+        }
       },
       "851": {
         "implementers": [
@@ -26540,6 +26555,13 @@
           "report": "# ACL-1844 / PR849 narrow review return: deterministic documentation conflict\n\nActual independent Reviewer-RS1012 / connection_review_rs1012; genuine author Worker-N7Q4 / architecture_audit_n7q4_20261013; Coordinator-CR1012.\n\nCurrent source is clean at head5a149f5dcd146d4b02331e4aa8944b0856454b1a, tree13d28a8630e5509d8be3d53ab918eef06454c4a5, base777663bf539308c0898cc177f872a8e0f63b597e. PR849 is OPEN and ready. Durable author handoff is queued, with no implementation claim for issue844. The active policy is schema3 implementation5/source-review5/batch5.\n\n## Concrete blocking composition finding\n\nRead-only source preflight executed `git merge-tree --write-tree 5a149f5dcd146d4b02331e4aa8944b0856454b1a 5d0e725944d9694cd292e8cd165ac7775ae61c9c`. The merge base is exactly current main777663bf539308c0898cc177f872a8e0f63b597e. Exit status is1; the sole unmerged path is docs/system/CHANGELOG.md. The generated conflict tree is03dc6513db4bf00aa8af440bda33669cc64546a0. docs/system/PROJECT.md merges automatically. No checkout/index/source file was changed; this preflight only creates Git object evidence.\n\nBoth sources insert their distinct history entry at docs/system/CHANGELOG.md:3, immediately after '# System history' and before the existing ACL-1824 entry. ACL-1844 adds 'Official Meta access: isolated read-only diagnostic'; independently Approved dependency ACL-1879 adds 'Explicit official-token application inspection'. Git cannot select an ordering automatically. This is a documentation composition conflict, not a demonstrated defect in the pilot implementation. It prevents the required frozen dependency assembly without an unreviewed conflict resolution in the generated integration branch.\n\n## Required bounded author correction\n\nReturn the source normally to its original Worker for a fresh supported implementation claim. Move only ACL-1844's existing CHANGELOG entry to a separate stable location, preserving its entire meaning and all existing history. The end of the existing history is one suitable location. Avoid the ACL-1824-to-ACL-1736 boundary, which the actual ACL-1872 author is using for its independent entry. Do not import sibling implementation code, alter Approved ACL-1879, or resolve this in the integration branch.\n\nAfter correction, commit/handoff the exact new source, prove the pair is conflict-free through merge-tree, and obtain the normal complete current-scope Standards/Spec independent review and applicable required CI. This narrow return is not a content approval and does not claim that pending hosted checks are green. Previously successful unchanged product checks need not be rerun merely for relocating documentation; applicable admission must decide current-head evidence honestly.\n\nThe owner has resumed authorized normal delivery; the Coordinator owns subsequent integration and installation. This reviewer performed no Meta/MLX calls, credentials operations, source/test edits, merge, runtime or installation action. Other review/Worker ownership is preserved.\n\nActual source review claim: 1d20bf89e7f6485eb20c46efe3218f89 (acquired 2026-10-13T18:15:35+00:00).",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T18:18:15+00:00",
+        "issue": 844,
+        "claim": "702b288feb1d470abca4e94dfa393ac8",
+        "actor": "Worker-N7Q4"
       }
     ],
     "policy": {
