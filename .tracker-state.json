@@ -7495,21 +7495,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "871": {
-        "actor": "Worker-FIVE874",
-        "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
-        "coordinator": "Coordinator-FLOW513",
-        "branch": "codex/acl-1871-builder-handle",
-        "worktree": "/private/tmp/flow-five-reviews-20261013/acl1871-stop-only",
-        "id": "d2c1a2f105b3484fa6582b182bf9aab7",
-        "issue": 871,
-        "state": "stopping",
-        "started_at": "2026-10-13T13:01:56+00:00",
-        "from_status": "status:todo",
-        "report": "# ACL-1871 administrative stopped-development handoff\n\nThe human explicitly confirmed: \u201c\u0414\u0430, \u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430 ACL-1871 \u0442\u043e\u0436\u0435 \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0430\u201d. This bounded administrative operation honors that stop; it does not implement, edit, push, approve, integrate or complete Builder work. The source implementation remains unfinished under original Issue871 scope.\n\nActual administrative Worker is the same genuine Worker-FIVE874 run flow_five_reviews_acl_worker_01a134f0_20261013 after its source875 implementation claim was genuinely handed off and released. Original Worker-BH7K26 is not impersonated. The supported stopped-Worker takeover preserves the recorded branch codex/acl-1871-builder-handle and retains the entire previous claim/actual original actor/session/Windows worktree in the durable takeover history and the private before-state record. Immediate supported stop releases only the temporary administrative claim, leaving the task To Do/Blocked for explicit author reconciliation/resumption.\n\nThe official source branch was absent at inspection. The original Windows worktree is not accessible from this host; its local commits and uncommitted files were not read, recovered, copied or backed up, and no filesystem write was attempted there. This limitation is explicit; the original locator/history remain preserved for recovery by the real Windows author. The separate private stop-only administrative working directory contains no application source and is not presented as recovered Builder content. No source ref is created, deleted or pushed.\n\nOriginal complete claim metadata, labels/body and ref absence are retained in acl1871-before-pause-claim.json, acl1871-original-issue.json, acl1871-original-remote-ref.json and the fresh pre-takeover state in this access-controlled evidence directory. The original Issue description/specifications/acceptance checklist and all historical authors remain intact. This private handoff supplements the source task history; it supplies no Builder implementation/review/install/delivery success.\n\nReason for pause: development is stopped at the owner\u2019s request while the Flow upgrade proceeds; resume only after explicit authorization and reconciliation with the original Windows source. Other source approvals, queued work, active source Reviewer, delivery receipts, main/stage and employee data remain untouched by this operation.\n\nOriginal recorded claim, retained verbatim privately:\n{\n  \"actor\": \"Worker-BH7K26\",\n  \"session\": \"builder_handle_01a13470_20261013\",\n  \"coordinator\": \"Coordinator-BH7K26\",\n  \"branch\": \"codex/acl-1871-builder-handle\",\n  \"worktree\": \"C:\\\\Users\\\\EvgeniSedin\\\\Desktop\\\\ACM-Builder-Handle-2026-10-13\",\n  \"id\": \"8dbb2ff671e64527b60b8a642db4fa95\",\n  \"issue\": 871,\n  \"state\": \"implementing\",\n  \"started_at\": \"2026-10-13T10:04:06+00:00\",\n  \"from_status\": \"status:todo\"\n}"
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -12036,21 +12022,21 @@
             "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-FIVE874",
         "coordinator": "Coordinator-FLOW513",
         "handoff": {
-          "actor": "Worker-BH7K26",
-          "session": "builder_handle_01a13470_20261013",
-          "coordinator": "Coordinator-BH7K26",
-          "branch": "codex/builder-handle-controls",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Builder-Handle-2026-10-13",
-          "id": "61f661424bb444cdb057fdb2e526248a",
+          "actor": "Worker-FIVE874",
+          "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
+          "coordinator": "Coordinator-FLOW513",
+          "branch": "codex/acl-1871-builder-handle",
+          "worktree": "/private/tmp/flow-five-reviews-20261013/acl1871-stop-only",
+          "id": "d2c1a2f105b3484fa6582b182bf9aab7",
           "issue": 871,
           "state": "stopping",
-          "started_at": "2026-10-13T09:54:32+00:00",
-          "from_status": "status:backlog",
-          "report": "ACL-1871 was assigned after intake on the provisional codex/builder-handle-controls branch. Temporarily release only this run's claim to rename that same branch to codex/acl-1871-builder-handle and immediately reclaim under the same Worker-BH7K26/session and worktree. Existing implementation and tests remain intact. No handoff or PR exists yet. This is branch bookkeeping only, with no new actor or product blocker."
+          "started_at": "2026-10-13T13:01:56+00:00",
+          "from_status": "status:todo",
+          "report": "# ACL-1871 administrative stopped-development handoff\n\nThe human explicitly confirmed: \u201c\u0414\u0430, \u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430 ACL-1871 \u0442\u043e\u0436\u0435 \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0430\u201d. This bounded administrative operation honors that stop; it does not implement, edit, push, approve, integrate or complete Builder work. The source implementation remains unfinished under original Issue871 scope.\n\nActual administrative Worker is the same genuine Worker-FIVE874 run flow_five_reviews_acl_worker_01a134f0_20261013 after its source875 implementation claim was genuinely handed off and released. Original Worker-BH7K26 is not impersonated. The supported stopped-Worker takeover preserves the recorded branch codex/acl-1871-builder-handle and retains the entire previous claim/actual original actor/session/Windows worktree in the durable takeover history and the private before-state record. Immediate supported stop releases only the temporary administrative claim, leaving the task To Do/Blocked for explicit author reconciliation/resumption.\n\nThe official source branch was absent at inspection. The original Windows worktree is not accessible from this host; its local commits and uncommitted files were not read, recovered, copied or backed up, and no filesystem write was attempted there. This limitation is explicit; the original locator/history remain preserved for recovery by the real Windows author. The separate private stop-only administrative working directory contains no application source and is not presented as recovered Builder content. No source ref is created, deleted or pushed.\n\nOriginal complete claim metadata, labels/body and ref absence are retained in acl1871-before-pause-claim.json, acl1871-original-issue.json, acl1871-original-remote-ref.json and the fresh pre-takeover state in this access-controlled evidence directory. The original Issue description/specifications/acceptance checklist and all historical authors remain intact. This private handoff supplements the source task history; it supplies no Builder implementation/review/install/delivery success.\n\nReason for pause: development is stopped at the owner\u2019s request while the Flow upgrade proceeds; resume only after explicit authorization and reconciliation with the original Windows source. Other source approvals, queued work, active source Reviewer, delivery receipts, main/stage and employee data remain untouched by this operation.\n\nOriginal recorded claim, retained verbatim privately:\n{\n  \"actor\": \"Worker-BH7K26\",\n  \"session\": \"builder_handle_01a13470_20261013\",\n  \"coordinator\": \"Coordinator-BH7K26\",\n  \"branch\": \"codex/acl-1871-builder-handle\",\n  \"worktree\": \"C:\\\\Users\\\\EvgeniSedin\\\\Desktop\\\\ACM-Builder-Handle-2026-10-13\",\n  \"id\": \"8dbb2ff671e64527b60b8a642db4fa95\",\n  \"issue\": 871,\n  \"state\": \"implementing\",\n  \"started_at\": \"2026-10-13T10:04:06+00:00\",\n  \"from_status\": \"status:todo\"\n}"
         }
       },
       "872": {
@@ -25117,6 +25103,13 @@
         },
         "claim": "d2c1a2f105b3484fa6582b182bf9aab7",
         "reason": "Human explicitly confirmed ACL-1871 development stopped. Bounded administrative takeover for immediate supported stop only; preserve original Windows locator and branch/history, whose local content is inaccessible and not recovered; no Builder code edits, source push, approval or completion."
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-13T13:04:39+00:00",
+        "issue": 871,
+        "actor": "Worker-FIVE874",
+        "report": "# ACL-1871 administrative stopped-development handoff\n\nThe human explicitly confirmed: \u201c\u0414\u0430, \u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430 ACL-1871 \u0442\u043e\u0436\u0435 \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0430\u201d. This bounded administrative operation honors that stop; it does not implement, edit, push, approve, integrate or complete Builder work. The source implementation remains unfinished under original Issue871 scope.\n\nActual administrative Worker is the same genuine Worker-FIVE874 run flow_five_reviews_acl_worker_01a134f0_20261013 after its source875 implementation claim was genuinely handed off and released. Original Worker-BH7K26 is not impersonated. The supported stopped-Worker takeover preserves the recorded branch codex/acl-1871-builder-handle and retains the entire previous claim/actual original actor/session/Windows worktree in the durable takeover history and the private before-state record. Immediate supported stop releases only the temporary administrative claim, leaving the task To Do/Blocked for explicit author reconciliation/resumption.\n\nThe official source branch was absent at inspection. The original Windows worktree is not accessible from this host; its local commits and uncommitted files were not read, recovered, copied or backed up, and no filesystem write was attempted there. This limitation is explicit; the original locator/history remain preserved for recovery by the real Windows author. The separate private stop-only administrative working directory contains no application source and is not presented as recovered Builder content. No source ref is created, deleted or pushed.\n\nOriginal complete claim metadata, labels/body and ref absence are retained in acl1871-before-pause-claim.json, acl1871-original-issue.json, acl1871-original-remote-ref.json and the fresh pre-takeover state in this access-controlled evidence directory. The original Issue description/specifications/acceptance checklist and all historical authors remain intact. This private handoff supplements the source task history; it supplies no Builder implementation/review/install/delivery success.\n\nReason for pause: development is stopped at the owner\u2019s request while the Flow upgrade proceeds; resume only after explicit authorization and reconciliation with the original Windows source. Other source approvals, queued work, active source Reviewer, delivery receipts, main/stage and employee data remain untouched by this operation.\n\nOriginal recorded claim, retained verbatim privately:\n{\n  \"actor\": \"Worker-BH7K26\",\n  \"session\": \"builder_handle_01a13470_20261013\",\n  \"coordinator\": \"Coordinator-BH7K26\",\n  \"branch\": \"codex/acl-1871-builder-handle\",\n  \"worktree\": \"C:\\\\Users\\\\EvgeniSedin\\\\Desktop\\\\ACM-Builder-Handle-2026-10-13\",\n  \"id\": \"8dbb2ff671e64527b60b8a642db4fa95\",\n  \"issue\": 871,\n  \"state\": \"implementing\",\n  \"started_at\": \"2026-10-13T10:04:06+00:00\",\n  \"from_status\": \"status:todo\"\n}"
       }
     ],
     "policy": {
