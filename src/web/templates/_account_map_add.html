@@ -35,7 +35,7 @@
     профиля работает одинаково в обоих местах — он к стране не привязан. -#}
 <div class="amap-add" data-amap-country="{{ amap_value | e }}">
   {% if amap_value %}
-  <select class="amap-known">
+  <select class="amap-known" aria-label="Connected account">
     <option value="">already connected…</option>
     {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
   </select>
@@ -57,7 +57,7 @@
       инстанс и фильтруется на месте: так отклик мгновенный, а Multilogin
       не дёргается на каждую букву. Кнопка осталась для перезагрузки
       списка, когда профиль только что завели. -#}
-  <input type="text" class="amap-find" placeholder="last letters: X84" size="10"
+  <input type="text" class="amap-find" aria-label="Find Multilogin profile" placeholder="last letters: X84" size="10"
          oninput="amapFilter(this)" onfocus="amapFilter(this)" autocomplete="off">
   <button type="button" class="amap-btn" onclick="amapFind(this)" title="Reload the profile list from Multilogin">Reload</button>
   <span class="amap-msg"></span>
