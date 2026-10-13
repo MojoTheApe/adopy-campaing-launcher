@@ -9146,7 +9146,7 @@
             "session": "worker530refresh20261013"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-W530R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -9165,7 +9165,7 @@
         },
         "pr": 530,
         "queued_at": "2026-10-13T18:09:52+00:00",
-        "review_report": "# Independent source review \u2014 ACL-1529 / PR530\n\nReviewer: Reviewer-C530, actual distinct Codex agent /root/source_review_530.\nVerdict: changes requested; source cannot be approved against current main.\n\nPinned source head: ccf288034fd302a8044686881db0ea4f1840bfd5\nHead tree: 8b270a7ed5d9263a94313324144b017650a42c4a\nCurrent PR stage base: ccd42230ab7debc0a54b549bd62ea1ace8c77fbb\nAuthoritative main observed: 777663bf539308c0898cc177f872a8e0f63b597e\nGitHub comparison main...head: diverged, ahead 3, behind 150.\n\nBlocking finding B1 \u2014 stale source baseline. The adopted source-review and batch contract requires current main ancestry and a base tree equal to current main before recording source approval. This source still targets old stage and does not include current main. Green CI on the October 3 tree cannot prove current-main compatibility. The original author must acquire a fresh implementation claim, preserve source branch/history, reconcile current main and any conflicts, update the source base to main as required, run current applicable source checks, then perform a fresh durable handoff. No Coordinator-side code resolution or manufactured approval is acceptable.\n\nScope inspected: complete issue529 including owner acceptance; full PR metadata and seven changed paths; current exact capture and clipboard implementation; genuine prior author handoff/review. Current capture deliberately uses plain CDP screenshot with no clip or scale, then Pillow DOM-frame crop and white-margin trim. It preserves the owner's recorded screen-fingerprint decision from the author handoff; do not restore the outdated 2x capture described in the current PR body. Update the stale PR body/issue description to describe the actual head and owner-approved deviation. The actual source has timeout/hidden-page safeguards, bounded width, and no Chromium screenshot fallback that would reset profile metrics.\n\nHosted source checks for ccf28803 are all completed SUCCESS (descriptor, tracker-link, ACL verification and Installer verification, plus listed tests/build jobs). No additional local suite was run because the baseline guard definitively blocks admission and fresh author checks are required after reconciliation. No source code was changed; no live profiles or advertising actions were performed. Owner pasted-image readability acceptance remains pending and is not claimed by this source review.\n\nReturn only this owned review lane via supported execution review-return, retaining original Worker-S1529C, Coordinator-C0930A, branch, PR and historical handoff. No other source lane, implementation claim, intake or completion record is modified.",
+        "review_report": "# ACL-1529 PR530 independent CI review \u2014 changes requested\n\nExact source head: 8a72acf36fbac87b16eeff173f989349f477a37f; tree33ba08e7c26ea1fa974e1bdb1be25c972d87acec; main/base777663bf539308c0898cc177f872a8e0f63b597e.\nActual independent reviewer Reviewer-C530 (/root/source_review_530), held owned lane24bc47aab55a4fa79bed18b20866b0c1. Current required hosted verification run38444055009 failed. Earlier source-code review and113 passing targeted fixtures did not claim hosted CI passed; formal Approved was never applied.\n\nBlocking B1: tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage failed on Linux Python3.11 and3.13: cb-build-model stage rules do not map newly emitted telemetry step status_shot. Preserve telemetry and model assertions; author must implement the narrowly correct model/telemetry contract and run relevant model tests plus current full required source CI.\n\nBlocking B2: tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards failed on both Linux versions with browser file counts[32,38,37]; maximum difference6 exceeds allowed3. Author must make an authentic narrow standalone correction justified by source530 requirements or use the supported separate-source dependency/reconciliation route. Approved PR882 exists as a separate sharder repair and must not be silently imported into530 or counted as already integrated. Preserve coverage and invariant; do not loosen assertion, remove tests, relabel failure as infrastructure or fabricate CI approval.\n\nRaw durable evidence: output/source530-ci-failed.txt in delivery checkout; hosted https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38444055009 . No new source edits or live profile/advertising/dashboard/deployment actions by reviewer. Original branch/history and real Worker-W530R handoff retained. Supported review-return releases only this owned source lane and invalidates prior review approval, returning issue529 normally to ToDo/changes_requested so the genuine Worker can claim a new narrow correction. Fresh exact-head independent review and green required checks needed after new handoff. All unrelated lanes/claims/approvals/intake/history preserved.",
         "reviewer": "Reviewer-C530"
       },
       "532": {
@@ -26634,6 +26634,24 @@
         "pr": 867,
         "lane": "5329d662d852466cb27e325c39192db7",
         "actor": "Reviewer-867S"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-13T18:40:12+00:00",
+        "review": {
+          "id": "24bc47aab55a4fa79bed18b20866b0c1",
+          "pr": 530,
+          "issues": [
+            529
+          ],
+          "actor": "Reviewer-C530",
+          "session": "codex-source530-20261013",
+          "coordinator": "Coordinator-DLV13",
+          "started_at": "2026-10-13T18:12:17+00:00",
+          "state": "returning",
+          "report": "# ACL-1529 PR530 independent CI review \u2014 changes requested\n\nExact source head: 8a72acf36fbac87b16eeff173f989349f477a37f; tree33ba08e7c26ea1fa974e1bdb1be25c972d87acec; main/base777663bf539308c0898cc177f872a8e0f63b597e.\nActual independent reviewer Reviewer-C530 (/root/source_review_530), held owned lane24bc47aab55a4fa79bed18b20866b0c1. Current required hosted verification run38444055009 failed. Earlier source-code review and113 passing targeted fixtures did not claim hosted CI passed; formal Approved was never applied.\n\nBlocking B1: tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage failed on Linux Python3.11 and3.13: cb-build-model stage rules do not map newly emitted telemetry step status_shot. Preserve telemetry and model assertions; author must implement the narrowly correct model/telemetry contract and run relevant model tests plus current full required source CI.\n\nBlocking B2: tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards failed on both Linux versions with browser file counts[32,38,37]; maximum difference6 exceeds allowed3. Author must make an authentic narrow standalone correction justified by source530 requirements or use the supported separate-source dependency/reconciliation route. Approved PR882 exists as a separate sharder repair and must not be silently imported into530 or counted as already integrated. Preserve coverage and invariant; do not loosen assertion, remove tests, relabel failure as infrastructure or fabricate CI approval.\n\nRaw durable evidence: output/source530-ci-failed.txt in delivery checkout; hosted https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38444055009 . No new source edits or live profile/advertising/dashboard/deployment actions by reviewer. Original branch/history and real Worker-W530R handoff retained. Supported review-return releases only this owned source lane and invalidates prior review approval, returning issue529 normally to ToDo/changes_requested so the genuine Worker can claim a new narrow correction. Fresh exact-head independent review and green required checks needed after new handoff. All unrelated lanes/claims/approvals/intake/history preserved.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -27343,20 +27361,6 @@
       "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
     },
     "source_reviews": {
-      "530": {
-        "id": "24bc47aab55a4fa79bed18b20866b0c1",
-        "pr": 530,
-        "issues": [
-          529
-        ],
-        "actor": "Reviewer-C530",
-        "session": "codex-source530-20261013",
-        "coordinator": "Coordinator-DLV13",
-        "started_at": "2026-10-13T18:12:17+00:00",
-        "state": "returning",
-        "report": "# ACL-1529 PR530 independent CI review \u2014 changes requested\n\nExact source head: 8a72acf36fbac87b16eeff173f989349f477a37f; tree33ba08e7c26ea1fa974e1bdb1be25c972d87acec; main/base777663bf539308c0898cc177f872a8e0f63b597e.\nActual independent reviewer Reviewer-C530 (/root/source_review_530), held owned lane24bc47aab55a4fa79bed18b20866b0c1. Current required hosted verification run38444055009 failed. Earlier source-code review and113 passing targeted fixtures did not claim hosted CI passed; formal Approved was never applied.\n\nBlocking B1: tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage failed on Linux Python3.11 and3.13: cb-build-model stage rules do not map newly emitted telemetry step status_shot. Preserve telemetry and model assertions; author must implement the narrowly correct model/telemetry contract and run relevant model tests plus current full required source CI.\n\nBlocking B2: tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards failed on both Linux versions with browser file counts[32,38,37]; maximum difference6 exceeds allowed3. Author must make an authentic narrow standalone correction justified by source530 requirements or use the supported separate-source dependency/reconciliation route. Approved PR882 exists as a separate sharder repair and must not be silently imported into530 or counted as already integrated. Preserve coverage and invariant; do not loosen assertion, remove tests, relabel failure as infrastructure or fabricate CI approval.\n\nRaw durable evidence: output/source530-ci-failed.txt in delivery checkout; hosted https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38444055009 . No new source edits or live profile/advertising/dashboard/deployment actions by reviewer. Original branch/history and real Worker-W530R handoff retained. Supported review-return releases only this owned source lane and invalidates prior review approval, returning issue529 normally to ToDo/changes_requested so the genuine Worker can claim a new narrow correction. Fresh exact-head independent review and green required checks needed after new handoff. All unrelated lanes/claims/approvals/intake/history preserved.",
-        "keep_lane": false
-      },
       "849": {
         "id": "ffe4e2d14d6745d2a361f2285fcea161",
         "pr": 849,
