@@ -188,6 +188,32 @@ with responsive light/dark styling, reduced motion and connection retry messages
   Its coherent search/filter, expansion, column and batch groups remain an outstanding
   ACL-1841 criterion and require verification against that integrated source.
 
+## Publication controls match dashboard primary actions — ACL-1845
+
+- The footer owns one primary all/selected campaign action; the open campaign's
+  action is secondary. Labels stay at 14 px with a 38 px minimum height and visible
+  keyboard focus. A live scope describes the checkbox selection; the action count
+  excludes accounts already building, matching the existing dispatch guard.
+- Unavailable bulk publication has a soft blue fill, distinguishable border and
+  an explanation. Zero unlocked campaigns disables that action while other accounts
+  remain enqueueable. No selection still means all campaigns and all selected keeps
+  the established all label. Confirmation retains its existing payload semantics.
+- Queue progress exposes `aria-busy` on individual and bulk publishing controls.
+  Existing duplicate explanations and the ability to queue other accounts remain;
+  this visual state adds no lock. Unknown status still uses the existing disable gate.
+  A focused footer select survives checkbox updates without node replacement.
+- Synthetic browser checks cover both themes, the production 360 px drawer and
+  480/720 px width-token compatibility previews, preview invalidation, confirmation,
+  running, queued and lost-status states. Existing selection, retry, Stop and draft-only
+  request tests pass. No live profile, advertising operation or installed-package
+  delivery is asserted by these source checks. Supplemental checks use the newer
+  production Adopy tokens, docked/expanded two-column CSS and sanitized markup;
+  they prove CSS compatibility, not adoption of the newer expanded/API runtime.
+  That runtime's preflight gate must retain the zero-count exclusion when integrated;
+  its existing applyGate currently overwrites disabled state. Source main uses RPA
+  drafts; the label adapter preserves PAUSED wording when an API runtime supplies its
+  existing mode flag, without adding an API publishing backend to main.
+
 ## Account-label ID suffix keeps existing alias precedence — ACL-1824
 
 - A long numeric account-ID suffix is removed only after the existing tail lookup

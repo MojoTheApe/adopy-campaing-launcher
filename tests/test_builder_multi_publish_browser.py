@@ -236,8 +236,11 @@ def test_the_same_account_twice_is_refused_with_a_message(ui):
     assert len(state['posts']) == 1
     assert len(state['dialogs']) == 2
     assert all('Demo is already being built' in m for m in state['dialogs']), state['dialogs']
-    # «Publish all», когда кроме идущего аккаунта собирать нечего, — то же.
-    p.locator('.cbd-publish-all').click()
+    # No unlocked campaigns: the action explains the wait before a click.
+    expect(p.locator('.cbd-publish-all')).to_be_disabled()
+    expect(p.locator('.cbd-publication-reason')).to_contain_text('already being built')
+    # The existing programmatic guard still refuses a duplicate request.
+    p.evaluate('cbPublishAll()')
     p.wait_for_timeout(200)
     expect(p.locator('#sfc-ok')).to_have_count(0)
     assert len(state['posts']) == 1
