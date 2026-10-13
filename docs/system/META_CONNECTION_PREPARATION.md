@@ -76,8 +76,12 @@ if that replacement fails, the old binding deliberately remains disabled.
 This conservative outcome needs fresh preparation even if the map still shows
 the old pair.
 
-Unreadable metadata is preserved and reported; it is never silently replaced with
-an empty registry. Support bundles exclude the registry/vault, and existing
+Unreadable metadata is preserved and reported before reconciliation, cleanup or
+writing. A pending retirement must name `disconnected` or `binding_changed`, have
+pending cleanup, no active credential and a compatible binding state. Missing or
+contradictory retirement metadata preserves the registry and encrypted files;
+valid pending cleanup still resumes normally. Metadata is never silently replaced
+with an empty registry. Support bundles exclude the registry/vault, and existing
 telemetry/support scrubbing covers App Secret and credential reference fields.
 There is no browser-local secret persistence. User-bound encryption is not a
 credential transfer mechanism between machines/users. These data files are

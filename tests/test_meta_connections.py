@@ -215,6 +215,87 @@ def test_disconnect_cleanup_failure_is_durable_and_does_not_delete_another_owner
     assert begin()["connection_id"] == a["connection_id"]
 
 
+@pytest.mark.parametrize("damage", ["invalid", "missing", "null", "number", "list", "object", "active", "saved", "pending",
+                                  "empty_cleanup", "active_credential", "invalid_binding", "changed_valid_binding"])
+def test_corrupt_retirement_is_refused_before_cleanup_or_writes(setup, monkeypatch, damage):
+    a = save(begin()).json()["connection"]
+    save(begin("Beta"), TOKEN_B, "300000002")
+    with monkeypatch.context() as unavailable:
+        unavailable.setattr(vault, "delete", lambda *args, **kwargs: (_ for _ in ()).throw(vault.SecretUnavailable()))
+        response = call("POST", f"/meta-connections/{a['connection_id']}/disconnect", body={
+            "expected_revision": a["revision"], "request_id": "retirement-preserve-01"})
+        assert response.status_code == 200
+        assert response.json()["connection"]["phase"] == "cleanup_pending"
+    source = setup.parent / "meta-connections.json"
+    data = registry(setup)
+    item = data["connections"][a["connection_id"]]
+    assert item["retired_phase"] == "disconnected" and len(item["cleanup"]) == 1
+    if damage == "missing":
+        item.pop("retired_phase")
+    elif damage == "empty_cleanup":
+        item["cleanup"] = []
+    elif damage == "active_credential":
+        item["credential_ref"] = next(record["credential_ref"] for cid, record in data["connections"].items()
+                                      if cid != a["connection_id"])
+    elif damage == "invalid_binding":
+        item["binding_valid"] = False
+    elif damage == "changed_valid_binding":
+        item["retired_phase"] = "binding_changed"
+    else:
+        item["retired_phase"] = {"invalid": "corrupt-invalid-phase", "null": None, "number": 1,
+                                 "list": [], "object": {}, "active": "awaiting_app",
+                                 "saved": "saved_unverified", "pending": "cleanup_pending"}[damage]
+    source.write_text(json.dumps(data), encoding="utf-8")
+    original_registry = source.read_bytes()
+    original_map = setup.read_bytes()
+    folder = setup.parent / "protected-secrets"
+    original_blobs = {path.name: path.read_bytes() for path in folder.glob("*.bin")}
+    deletions = []
+    real_delete = vault.delete
+    def observe_delete(*args, **kwargs):
+        deletions.append(True)
+        return real_delete(*args, **kwargs)
+    monkeypatch.setattr(vault, "delete", observe_delete)
+    response = call("GET", "/meta-connections/" + a["connection_id"])
+    assert response.status_code == 503
+    assert source.read_bytes() == original_registry
+    assert setup.read_bytes() == original_map
+    assert {path.name: path.read_bytes() for path in folder.glob("*.bin")} == original_blobs
+    assert not deletions
+    assert TOKEN_A not in response.text and TOKEN_B not in response.text and SECRET not in response.text
+
+
+@pytest.mark.parametrize("retirement", ["disconnect", "binding_changed"])
+def test_valid_pending_retirement_recovers_and_preserves_other_saved_connection(setup, monkeypatch, retirement):
+    a = save(begin()).json()["connection"]
+    b = save(begin("Beta"), TOKEN_B, "300000002").json()["connection"]
+    with monkeypatch.context() as unavailable:
+        unavailable.setattr(vault, "delete", lambda *args, **kwargs: (_ for _ in ()).throw(vault.SecretUnavailable()))
+        if retirement == "disconnect":
+            response = call("POST", f"/meta-connections/{a['connection_id']}/disconnect", body={
+                "expected_revision": a["revision"], "request_id": "valid-retirement-01"})
+        else:
+            response = call("POST", "/account-map-patch", body={"account_name": "Alpha", "profile_id": PROFILE_B})
+        assert response.status_code == 200
+        assert status(a)["phase"] == "cleanup_pending"
+    data = registry(setup)
+    item = data["connections"][a["connection_id"]]
+    pending_blob = setup.parent / "protected-secrets" / (item["cleanup"][0]["ref"] + ".bin")
+    assert pending_blob.exists()
+    recovered = status(a)
+    assert recovered["phase"] == ("disconnected" if retirement == "disconnect" else "binding_changed")
+    assert not recovered["has_credential"] and not pending_blob.exists()
+    assert status(b) == b
+    resumed = begin()
+    assert (resumed["connection_id"] == a["connection_id"]) == (retirement == "disconnect")
+    # Disconnected records retain valid retirement history when active again;
+    # freshly created records do not require a historical retired_phase field.
+    restored = save(resumed, TOKEN_A, "300000001" if retirement == "disconnect" else "300000003",
+                    request="restored-after-retire").json()["connection"]
+    assert restored["phase"] == "saved_unverified" and restored["has_credential"]
+    assert status(restored) == restored and status(b) == b
+
+
 def test_corrupt_registry_and_swapped_envelopes_fail_closed(setup):
     a = save(begin()).json()["connection"]
     b = save(begin("Beta"), TOKEN_B, "300000002").json()["connection"]

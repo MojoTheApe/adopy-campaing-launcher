@@ -20,7 +20,8 @@ from config import paths, protected_secrets as vault
 
 _lock = threading.RLock()
 _ACTIVE = {"awaiting_app", "awaiting_credential", "saved_unverified"}
-_PHASES = _ACTIVE | {"binding_changed", "disconnected", "cleanup_pending"}
+_RETIRED = {"binding_changed", "disconnected"}
+_PHASES = _ACTIVE | _RETIRED | {"cleanup_pending"}
 _MAX_REGISTRY = 4 * 1024 * 1024
 _directory = contextvars.ContextVar("meta_setup_directory", default=None)
 
@@ -118,6 +119,15 @@ def _load() -> dict:
                     or not isinstance(item["app_id"], str)
                     or not isinstance(item["credential_ref"], str)
                     or not isinstance(item["requests"], dict) or not isinstance(item["cleanup"], list)):
+                raise ValueError
+            if "retired_phase" in item and (not isinstance(item["retired_phase"], str)
+                                           or item["retired_phase"] not in _RETIRED):
+                raise ValueError
+            # Validate the persisted retirement before reconciliation can write
+            # or cleanup can delete evidence. Active records may retain history.
+            if item["phase"] == "cleanup_pending" and (
+                    "retired_phase" not in item or not item["cleanup"] or item["credential_ref"]
+                    or item["binding_valid"] != (item["retired_phase"] == "disconnected")):
                 raise ValueError
             if item["binding_valid"]:
                 pair = (item["profile_uuid"], item["ad_account_id"])

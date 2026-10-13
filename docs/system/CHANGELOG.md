@@ -28,6 +28,9 @@
 - Contended map transactions run outside the ASGI event loop, preserving control
   request dispatch. Historical save receipts must retain their permanent App
   owner; a contradictory registry is preserved and refused before mutation.
+- Malformed retirement phases and contradictory pending states are rejected at
+  registry load, before reconciliation writes or protected-file cleanup. Public
+  regressions preserve registry/blob/map bytes while valid retirement recovers.
 - [Behavior, crash outcomes and recovery](META_CONNECTION_PREPARATION.md) preserve
   the full remaining ACL-1858 onboarding/HTTP scope and ACL-1358 legacy scope.
 

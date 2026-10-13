@@ -9,6 +9,11 @@ Moving ciphertext to another machine/user is not a supported credential
 transfer. Preserve an unreadable registry for recovery; do not replace it with
 an empty registry to bypass permanent application ownership.
 
+Malformed retirement metadata is refused before cleanup or reconciliation writes.
+An invalid/missing retirement phase or contradictory pending state leaves the
+registry and encrypted files intact for restoring the matching backup. Do not
+edit the phase to force deletion or restore a retired binding.
+
 If user-bound decryption is unavailable, reopen setup and save a new official
 credential on the current Windows user account. A disconnected setup with
 pending cleanup remains disabled; reopening/status retries deletion. These
