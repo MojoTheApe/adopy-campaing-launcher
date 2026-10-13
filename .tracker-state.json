@@ -11507,7 +11507,7 @@
             "session": "connection_sr1012_worker"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-SR1012",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -11526,7 +11526,8 @@
         },
         "pr": 837,
         "queued_at": "2026-10-13T08:38:19+00:00",
-        "review_report": "# ACL-1836 / PR837 current-main reconciliation return\n\nReviewer: Reviewer-RS1012 / connection_review_rs1012.\nActual author: Worker-SR1012. Coordinator: Coordinator-CR1012.\nDate: 2026-10-13.\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/836\nCurrent source head: `8a45c683c538d13cc670c779da3de100ce65942d`.\nSource tree: `8cdac4c2ded1e609a4b36fcaa96bf5ef6222bb65`.\nOriginal source base: `e8e59f8376458f2f73089c3f2a8d454837ff033f`.\nCurrent main: `3327465fcbd46ccff9b64eb7c574ff5b84b99b80`.\n\nReturn to the original author through a fresh ordinary implementation claim.\nReconcile this same source with current main, resolve its reported merge conflict,\npreserve the session-recovery implementation and the existing main fixes, rerun\naffected checks and obtain complete required CI on the refreshed exact head.\nA fresh independent review is required before approval.\n\nIndependent remote inspection confirmed the head above, open/nondraft PR, and\n`mergeable: CONFLICTING`. Current checks are not successful overall: Linux 3.13\nshard 3 and ACL verification failed. The earlier clean-base reproduction identified\nthe logging-filter isolation failure also seen in PR849. Main now includes the\nreviewed ACL-1824 fix through PR852; this is reason to reconcile and retest, not\na waiver of required source checks. Earlier tracker-link failures/successes also\nremain visible in the check rollup and should be resolved by fresh current checks.\n\nThis return introduces no new product-code finding. The existing r2 source and\ncompatibility evidence remain preserved in acl1836-r2-preliminary-review.md and\nacl1836-compatibility-report.md. They cover bounded same-owned-target session\nrecovery, navigation intent across fresh warm helpers, no replay of uncertain Graph\nwrites, and partial creator outcome preservation. The compatibility report records\nits failures and targeted retries honestly; it is not relabelled a clean full-suite\npass. These prior results do not prove the forthcoming refreshed source head.\n\nNo source/test edit, live Meta/Multilogin operation, token access, file move or\ndeletion was performed by this reviewer. This is an author return, not approval."
+        "review_report": "# ACL-1836 / PR837 current-main reconciliation return\n\nReviewer: Reviewer-RS1012 / connection_review_rs1012.\nActual author: Worker-SR1012. Coordinator: Coordinator-CR1012.\nDate: 2026-10-13.\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/836\nCurrent source head: `8a45c683c538d13cc670c779da3de100ce65942d`.\nSource tree: `8cdac4c2ded1e609a4b36fcaa96bf5ef6222bb65`.\nOriginal source base: `e8e59f8376458f2f73089c3f2a8d454837ff033f`.\nCurrent main: `3327465fcbd46ccff9b64eb7c574ff5b84b99b80`.\n\nReturn to the original author through a fresh ordinary implementation claim.\nReconcile this same source with current main, resolve its reported merge conflict,\npreserve the session-recovery implementation and the existing main fixes, rerun\naffected checks and obtain complete required CI on the refreshed exact head.\nA fresh independent review is required before approval.\n\nIndependent remote inspection confirmed the head above, open/nondraft PR, and\n`mergeable: CONFLICTING`. Current checks are not successful overall: Linux 3.13\nshard 3 and ACL verification failed. The earlier clean-base reproduction identified\nthe logging-filter isolation failure also seen in PR849. Main now includes the\nreviewed ACL-1824 fix through PR852; this is reason to reconcile and retest, not\na waiver of required source checks. Earlier tracker-link failures/successes also\nremain visible in the check rollup and should be resolved by fresh current checks.\n\nThis return introduces no new product-code finding. The existing r2 source and\ncompatibility evidence remain preserved in acl1836-r2-preliminary-review.md and\nacl1836-compatibility-report.md. They cover bounded same-owned-target session\nrecovery, navigation intent across fresh warm helpers, no replay of uncertain Graph\nwrites, and partial creator outcome preservation. The compatibility report records\nits failures and targeted retries honestly; it is not relabelled a clean full-suite\npass. These prior results do not prove the forthcoming refreshed source head.\n\nNo source/test edit, live Meta/Multilogin operation, token access, file move or\ndeletion was performed by this reviewer. This is an author return, not approval.",
+        "reviewer": "Reviewer-RS1012"
       },
       "838": {
         "implementers": [
@@ -15328,11 +15329,21 @@
       845,
       840,
       841,
-      836,
       844,
       865
     ],
-    "review": null,
+    "review": {
+      "id": "05439b07482b4300ac7a71c4cc146b55",
+      "pr": 837,
+      "issues": [
+        836
+      ],
+      "actor": "Reviewer-RS1012",
+      "session": "connection_review_rs1012",
+      "coordinator": "Coordinator-CR1012",
+      "started_at": "2026-10-13T08:58:45+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -24107,6 +24118,13 @@
         "issue": 865,
         "pr": 867,
         "actor": "Worker-LS13455"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T08:58:45+00:00",
+        "pr": 837,
+        "lane": "05439b07482b4300ac7a71c4cc146b55",
+        "actor": "Reviewer-RS1012"
       }
     ],
     "policy": {
