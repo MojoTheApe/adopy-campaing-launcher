@@ -7244,22 +7244,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "839": {
-        "actor": "Worker-D7K413",
-        "session": "design_audit_d7k413_20261013",
-        "coordinator": "Coordinator-D7K413",
-        "branch": "codex/acl-1839-connection-panel-layout",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Design-Audit-2026-10-13",
-        "id": "b24c33f5ee60435883252c7b80f57e45",
-        "issue": 839,
-        "state": "handoff",
-        "started_at": "2026-10-13T06:13:24+00:00",
-        "from_status": "status:todo",
-        "pr": 843,
-        "report": "ACL-1839 source implementation complete; independent formal review and CI pending.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/843\nBranch: codex/acl-1839-connection-panel-layout\nCommit: 145a30ba\nBase: e8e59f83\n\nRoot causes: visible-results flex rule overrode hidden, and long unbroken status\nmetadata retained an intrinsic width exceeding the panel. Shared CSS now preserves\nhidden and contains fields/status. Accessible names were added without handler or\nAdd sibling changes.\n\nVerified on Windows Python 3.13: 54 focused regressions; after strengthening the\nbuilder/cache fixture, 118 layout/platform tests; 46 packaging unittests; tracked\nsecrets scanner; import smoke; git diff --check. Original real-Chromium regression\nfailed at 975 px in 280 px host. Final tests use synthetic values, no real profiles.\nIndependent non-implementing precheck: no actionable findings after correcting its\nbuilder fixture note. Official review lane remained occupied by PR837, so this is\nnot a durable approval. Initial tracker-link CI ran before Review and needs rerun\nafter the verified handoff. Full CI/installer verification, source approval, batch\nstage/main integration and package delivery remain unverified. No merge/rollout."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -11425,9 +11410,25 @@
             "session": "design_audit_d7k413_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-D7K413",
-        "coordinator": "Coordinator-D7K413"
+        "coordinator": "Coordinator-D7K413",
+        "handoff": {
+          "actor": "Worker-D7K413",
+          "session": "design_audit_d7k413_20261013",
+          "coordinator": "Coordinator-D7K413",
+          "branch": "codex/acl-1839-connection-panel-layout",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Design-Audit-2026-10-13",
+          "id": "b24c33f5ee60435883252c7b80f57e45",
+          "issue": 839,
+          "state": "handoff",
+          "started_at": "2026-10-13T06:13:24+00:00",
+          "from_status": "status:todo",
+          "pr": 843,
+          "report": "ACL-1839 source implementation complete; independent formal review and CI pending.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/843\nBranch: codex/acl-1839-connection-panel-layout\nCommit: 145a30ba\nBase: e8e59f83\n\nRoot causes: visible-results flex rule overrode hidden, and long unbroken status\nmetadata retained an intrinsic width exceeding the panel. Shared CSS now preserves\nhidden and contains fields/status. Accessible names were added without handler or\nAdd sibling changes.\n\nVerified on Windows Python 3.13: 54 focused regressions; after strengthening the\nbuilder/cache fixture, 118 layout/platform tests; 46 packaging unittests; tracked\nsecrets scanner; import smoke; git diff --check. Original real-Chromium regression\nfailed at 975 px in 280 px host. Final tests use synthetic values, no real profiles.\nIndependent non-implementing precheck: no actionable findings after correcting its\nbuilder fixture note. Official review lane remained occupied by PR837, so this is\nnot a durable approval. Initial tracker-link CI ran before Review and needs rerun\nafter the verified handoff. Full CI/installer verification, source approval, batch\nstage/main integration and package delivery remain unverified. No merge/rollout."
+        },
+        "pr": 843,
+        "queued_at": "2026-10-13T06:23:19+00:00"
       }
     },
     "actors": {
@@ -14851,7 +14852,8 @@
       776,
       771,
       768,
-      838
+      838,
+      839
     ],
     "review": {
       "id": "d8f3189fe8034e7e908beca5b629b0d6",
@@ -22736,6 +22738,13 @@
         "pr": 825,
         "lane": "d8f3189fe8034e7e908beca5b629b0d6",
         "actor": "Reviewer-RX1013B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T06:23:19+00:00",
+        "issue": 839,
+        "pr": 843,
+        "actor": "Worker-D7K413"
       }
     ],
     "policy": {
