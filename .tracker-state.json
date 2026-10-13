@@ -11600,7 +11600,7 @@
             "session": "footer_fix-01a133d7-20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-F8Q620",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -11618,7 +11618,8 @@
           "report": "ACL-1840 source handoff, 2026-10-13.\n\nWorker-F8Q620, session footer_fix-01a133d7-20261013, Coordinator-D7K413.\nPR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/846\nBranch codex/acl-1840-country-footer-inset\nHead 23abf729de601fc3c8f2221d0cc8cb1471ecc466\nBase e8e59f8376458f2f73089c3f2a8d454837ff033f\n\nScoped country-footer CSS aligns explanation, disclosure and expanded history to the existing 0.85rem connection/workbook inset. Adds explicit footer spacing, wraps long words and summary text. Native disclosure behavior remains unchanged. Source component remains outside main; CSS is intentionally additive and dormant until its mount exists.\n\nActual checks: Windows/Python 3.13; focused Chromium regression 19 passed in75.92s (18 theme/width/inventory cases plus original missing-inset reproduction); scanner passed; dashboard/RPA import smoke passed; git diff --check passed. Sanitized before/after PNGs at local ACL-1840-visual-evidence directory for widths1280/1024/320, both themes; narrow dark and desktop light after images visually inspected. Fixture provenance: preview5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d hc_after macro, mounting section and relevant CSS. Synthetic text only.\n\nIndependent read-only final source precheck by genuine Coordinator-D7K413 root agent bound to this head/base: no actionable findings. No official source review lane acquired or approval recorded, because that lane is occupied.\n\nRemaining: CI required platform suites; official independent approval; integration with pending ACL-1798 component, whole-page filtered/populated/empty inventory validation and installed staging verification; batch/main admission and package delivery. Original acceptance checkboxes stay unfinished pending integration. No unrelated preview commits imported; no changes to preview owner path or live ad actions."
         },
         "pr": 846,
-        "queued_at": "2026-10-13T06:42:53+00:00"
+        "queued_at": "2026-10-13T06:42:53+00:00",
+        "reviewer": "Reviewer-LR1839"
       },
       "841": {
         "implementers": [
@@ -15241,13 +15242,23 @@
       776,
       771,
       768,
-      840,
       836,
       841,
       844,
       853
     ],
-    "review": null,
+    "review": {
+      "id": "e1fd314831634a6dbb60a61e369bee8b",
+      "pr": 846,
+      "issues": [
+        840
+      ],
+      "actor": "Reviewer-LR1839",
+      "session": "layout_review_20261013",
+      "coordinator": "Coordinator-D7K413",
+      "started_at": "2026-10-13T08:08:00+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -23592,6 +23603,13 @@
         "issue": 838,
         "claim": "ed344663bc00405187778f3381959f61",
         "actor": "Worker-CN6B92"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T08:08:00+00:00",
+        "pr": 846,
+        "lane": "e1fd314831634a6dbb60a61e369bee8b",
+        "actor": "Reviewer-LR1839"
       }
     ],
     "policy": {
