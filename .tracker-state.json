@@ -11997,7 +11997,7 @@
             "session": "architecture_audit_n7q4_20261013"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-N7Q4",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12016,7 +12016,7 @@
         },
         "pr": 863,
         "queued_at": "2026-10-13T09:13:33+00:00",
-        "review_report": "# ACL-1853 / PR863 current-CI review return\n\nActual reviewer: Reviewer-RS1012 / connection_review_rs1012.\nAuthor: Worker-N7Q4 / architecture_audit_n7q4_20261013.\nCoordinator: Coordinator-CR1012. Date: 2026-10-13.\nCurrent source-review claim: `8fdb2e47657b4890a983a328ae35a6cc`.\n\nHead: `3710f7576452d3a983bced22010356a356072e14`.\nTree: `39f0162fd3dab10455b6adaefc602df692a8133e`.\nCurrent main/base: `3327465fcbd46ccff9b64eb7c574ff5b84b99b80`.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/863\n\n## Blocking evidence\n\nRequired current-head source CI run 38369810907 has concrete failures. This is\nnot the old baseline logging-filter problem and cannot be waived based on the\nfocused 179-test pass or successful Windows job.\n\n- Linux3.13 shard2, job115203991535: **30 failed, 2244 passed, 19 warnings in\n  581.20s**. Failures include status_screenshot reader cases, sentry_page_snapshot\n  attach-time stop, workbook_review open-profile cases, the status-route country\n  refresh case in one_button_reads_what_is_needed, and the job telemetry case in\n  campaign_build_progress.\n- Linux3.13 shard1, job115203991584: **15 failed, 2144 passed, 9 warnings in\n  728.19s**. Failures include ads_manager_url navigation/account-mismatch cases,\n  two september_review profile cases, copy_for_group's status-shot ordering,\n  and rpa_job_start_is_measured's queue/attach timing.\n- Linux3.11 shards1/2 also completed with failure. Their exact counts are not\n  asserted here. Both shard3 versions remain in progress at report creation;\n  their results must still be inspected. Windows3.13 and metadata recheck passed.\n\nANSI-stripped failed-job logs are preserved under the existing Audit directory:\n`acl1853-ci-job-115203991535.log` and `acl1853-ci-job-115203991584.log`.\n\nBefore any source edit, the author independently reproduced the same nine-file\nfailure set on Windows at unchanged head3710: **45 failed, 283 passed in 56.59s**.\nAuthor log: worktree1853/output/profile-lease-ci-red-tests.txt. This is reported\nauthor evidence; it confirms that the observed failures are not exclusively a\nLinux runner condition.\n\n## Confirmed cause and required repair\n\nThe newly strict physical ownership boundary stops several legacy synthetic\ncallers before they reach their intended assertions. Inspection confirmed, for\nexample, test_status_screenshot.py:60/121/159 and test_copy_for_group.py:321 supply\nonly ad_account_id and no physical profile_id. test_september_review.py:110/168\nuses profile_id=\"demo\". test_workbook_review.py:119/127 opens \"new-profile\".\nThe CI traces show the typed UUID/unknown-map refusal instead of the intended\nread/status/navigation/provider behavior. Publisher-related tests also reach\nprofile_key_for without a valid synthetic account map.\n\nAfter a fresh ordinary Worker claim, complete the fixture migration for the\nremaining affected callers. Supply valid synthetic physical UUIDs and explicit\naccount mappings/held leases where the test's real entry boundary requires them.\nKeep ad_account_id validation separate from profile UUID validation so the tests\nstill reach the guard they intend to exercise. Preserve existing assertions,\nwrong-account safeguards, call ordering, cancellation and timing behavior. Do not\nrelax the production ownership guard or mark these regressions skipped merely\nto obtain a green run.\n\nInvestigate any failures not explained by that concrete fixture setup, including\nthe status-route refresh and job telemetry cases, and incorporate any remaining\nshard3 results. Run the affected regressions, then require complete applicable\nCI on the new exact head and a fresh independent source review.\n\n## Review state\n\nCurrent main reconciliation itself was independently verified: lease/source/tests\nare unchanged from the previously inspected 70073be implementation, and only the\nfour current-main files were imported with both CHANGELOG records retained. The\nnew current-CI evidence makes the source incomplete for approval despite the\nearlier focused checks. No approved record or batch approval was issued.\n\nThis report requests the original author's repair via the supported workflow.\nThe reviewer made no source/test change and no live Meta/Multilogin operation.",
+        "review_report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle.",
         "reviewer": "Reviewer-RS1012",
         "return_operation": {
           "id": "91201340047f423fa6a6747b1c5dc404",
@@ -25562,6 +25562,18 @@
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-13T14:13:55+00:00",
+        "issue": 853,
+        "operation": {
+          "id": "91201340047f423fa6a6747b1c5dc404",
+          "actor": "Coordinator-FLOW513",
+          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -25705,50 +25717,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-13T06:25:54+00:00"
-      },
-      "853": {
-        "issue": 853,
-        "pr": 863,
-        "branch": "codex/acl-1853-profile-process-lease",
-        "head_sha": "9aaabdd60e49da5ebbbde31d106ec9e902240893",
-        "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-        "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "105d6722a09d9dd6f99b38e307b1bc582588a62125f29c8722a0696aa317c1bb",
-        "review": {
-          "kind": "independent-review",
-          "implementer": "Worker-N7Q4",
-          "reviewer": "Reviewer-RS1012",
-          "review_session": "connection_review_rs1012",
-          "execution_lane": "dd5d44db4d7a4b2d9004e1655c49a024",
-          "head_sha": "9aaabdd60e49da5ebbbde31d106ec9e902240893",
-          "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-          "tree_sha": "739e1b0e8936b5b6c6a4422d5bd51330aae99b6c",
-          "verdict": "approved",
-          "report": "# ACL-1853 / PR863 repaired-source independent review\n\nReviewer-RS1012 / connection_review_rs1012, separate non-implementing session.\nFresh normal review claim: dd5d44db4d7a4b2d9004e1655c49a024, acquired after confirmed author handoff.\nHead: 9aaabdd60e49da5ebbbde31d106ec9e902240893.\nTree: 739e1b0e8936b5b6c6a4422d5bd51330aae99b6c.\nCurrent main/base: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\n\n## Source result\n\nNo blocking source finding after the repair review. All required current-head CI completed successfully. The independent source verdict is approved; the supported batch approval receipt remains a separate durable state transition.\n\nRead the complete current issue 853 scope and handoff, current PR metadata, every repair hunk, and the unchanged product boundary again. Current main is an ancestor; checkout and diff checks are clean. The full PR remains the previously reviewed physical-profile lease plus its main caller integration, documentation, meaningful process tests and synthetic fixture migrations.\n\nThe delta from returned head 3710 is exactly 13 test files, 54 insertions/17 deletions. No production module, configuration, script, documentation or test_profile_process_lease.py changed. Independently parsed old/current Python ASTs: all test function names and all 633 assertion counts remain; 631 assertion ASTs are identical. The only two changed assertions are workbook expected profile IDs, changed consistently from the invalid label-shaped fixture to its deterministic synthetic UUID. The repaired fixtures supply explicit maps/UUIDs and one constructor provider name. No lease/unknown-ID guard is bypassed, no test is skipped or removed, and wrong-account, draft-only, stop/reopen, telemetry, call-order and cancellation assertions remain.\n\nThe product uses canonical physical UUIDs/provider aliases and separate Dolphin numeric identities, one same-user coordination directory independent of instance config, the existing OS lock helper and a thread-reentrant descriptor lifetime. Cancellation/timeouts and process death release are preserved. The underlying helper closes its descriptor even if unlock raises, before ProfileLease releases the thread lock. Nested entry checks reject a different profile before acquiring it; actual resolved entries are checked before browser side effects. Read/probe/open/country and turn-off refusal shapes/history remain intact. Country refusal replaces old cached success; queue failure releases its memory slot. The scope explicitly excludes inherited POSIX fork, other OS users, manual/external control and old builds; unmerged Graph/warm full-session integration remains ACL-1862/ACL-1812 follow-up.\n\n## Evidence\n\n- Reused earlier independent 38/38 Windows process/public-boundary result on unchanged production/test core (70073); no unnecessary rerun.\n- Author reproduced all 53 prior CI failures before repair: 45+8. The new 37-file caller selection produced 1045 passed/1 incomplete constructor fixture, then that corrected complete 14-test file passed. This is not called one atomic 1046-pass run.\n- Author platform classification 100 passed, final staged scanner/diff passed; product imports unchanged from earlier successful smoke.\n- Required fresh run 38373909206 completed SUCCESS on exact 9aaabdd6: all six Linux 3.11/3.13 shards, Windows 3.13, tooling/process and ACL verification passed. Descriptor, latest linkage 38374222452 and Installer verification also passed. Installer build-input and build/install/repair/uninstall jobs were classifier-skipped for this source; packaged/runtime verification is not claimed. The older InProgress linkage failure is historical. Old head 3710 failure run remains failed and is not reused as green evidence.\n\nThe reviewer made no source/test changes, live Meta/Multilogin calls, configuration edits, source merges, deployment, file moves or deletions. Immediately before this final report, current main/base, head/tree, clean checkout and all required CI were reread and unchanged. Supported record-review/admission/batch approval follows this evidence; no source merge is authorized by this report. Source approval does not establish packaged/runtime or combined integration behavior. Revalidate if main/base, scope, head or policy changes.\n\r\n",
-          "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            853
-          ],
-          "recorded_at": "2026-10-13T09:32:00+00:00",
-          "issue_scopes": {
-            "853": "105d6722a09d9dd6f99b38e307b1bc582588a62125f29c8722a0696aa317c1bb"
-          }
-        },
-        "lane": {
-          "id": "dd5d44db4d7a4b2d9004e1655c49a024",
-          "pr": 863,
-          "issues": [
-            853
-          ],
-          "actor": "Reviewer-RS1012",
-          "session": "connection_review_rs1012",
-          "coordinator": "Coordinator-CR1012",
-          "started_at": "2026-10-13T09:14:40+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-13T09:33:38+00:00"
       },
       "854": {
         "issue": 854,
