@@ -288,6 +288,10 @@
       "title": "Enable three source reviews and coordinated batch delivery",
       "state": "created",
       "issue": 868
+    },
+    "3e8696924e0a35610d3f9aa2d00bad421094da0e4213e4f989c8901b8f259d4a": {
+      "title": "Builder: resize from the side tab with three presets and dragging",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
