@@ -286,7 +286,8 @@
     },
     "866ca4500e8bcbbc1c73adb92be1088cb7c8746c6d6af868d7e87ba0c2154228": {
       "title": "Enable three source reviews and coordinated batch delivery",
-      "state": "creating"
+      "state": "created",
+      "issue": 868
     }
   },
   "delivery_workflow": {
