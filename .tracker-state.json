@@ -12400,7 +12400,7 @@
             "session": "isolated_app_sol_20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-IS1013",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12419,7 +12419,8 @@
         },
         "pr": 882,
         "queued_at": "2026-10-13T17:03:59+00:00",
-        "review_report": "# ACL-1879 / PR882 review return: deterministic required CI regression\n\nActual Reviewer-RS1012 / connection_review_rs1012; non-implementing. Source review claim d8dd671fa8b84eb5ad2c6524c92720d4. Author Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\n\nHead89d63125ca1f9d12c9445259e584c687d24c2aae, tree6afe969357e9a7aaa97dd9485c632024503c7cf0, base777663bf539308c0898cc177f872a8e0f63b597e. Source remains clean and unchanged. No formal record-review approval or batch approve has occurred.\n\n## Blocking finding\n\nRequired CI38431410006, Linux3.13 shard3 job115414595042, failed tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards at line100. Actual browser-file counts are [33,37,37], exceeding the existing permitted maximum difference3. The job completed with 1 failed and 2112 passed in615.58s. Sanitized hosted evidence is acl1879-linux3-failure-89d63125.log, lines1124 onward.\n\nThe reviewer reproduced the exact failure using the unchanged production selection/balancing code and actual test assertion on Windows/Python3.14. No browser or test suite was executed: the assertion only reads the selected test source files. The current selection produces counts[33,37,37], estimated loads[3726,3726,3725], file counts[131,131,131], and the assertion fails.\n\nGit diff from the exact base proves tests/test_acl1879_official_token_verifier.py is the only changed sharding input: every existing test file and scripts/acl_test_shard.py plus scripts/acl_test_platform.py are unchanged. Excluding only that added file from platforms.select in memory reconstructs the base input selection without editing any file. The same algorithm and actual assertion then produce counts[35,36,36], estimated loads[3702,3702,3701], file counts[131,131,130], and PASS. The added file is non-browser with estimated cost72. Private receipt: acl1879-shard-regression-repro.json.\n\nThis is a deterministic regression triggered by the added legitimate test file, exposing an existing limitation of the greedy cost balancer in scripts/acl_test_shard.py:55-62. Selecting the minimum estimated load does not guarantee the separate browser-count constraint. It is not established as flaky, nor is the unchanged base failing. No defect in token-verification behavior is inferred from this CI failure.\n\n## Required correction and scope\n\nReturn to the genuine author for a fresh supported implementation claim and a Coordinator scope decision on the balancer correction. Preserve test coverage, exact-once platform selection, deterministic assignment and the existing balance assertion. Renaming a test solely to shift tie ordering, weakening the assertion, dropping coverage or mixing unrelated changes is not an acceptable substitute for a justified fix. If tooling repair belongs in a separate task, record that explicit dependency and resolve current-source required CI through the supported workflow.\n\nAfter any correction, require focused reproducing balance/selection checks, relevant author checks, a fresh committed head/handoff, independent review of the actual delta in full scope and complete current-head required CI. Do not reuse the previous zero-finding source review as approval for a new head.\n\nThe earlier Standards0/Spec0 content findings and four successful independent token/transport boundary cases remain accurate historical evidence for89d63125. They do not override failed required CI. Other running hosted jobs are monitored by the Coordinator and are not asserted complete here.\n\nNo source/test changes, live Meta/MLX calls, credential use, takeover, integration, merge, stage/main action or installation occurred. The owner's integration/install hold remains in force. This report requests only the supported source review return and release of this review claim, preserving all other ownership."
+        "review_report": "# ACL-1879 / PR882 review return: deterministic required CI regression\n\nActual Reviewer-RS1012 / connection_review_rs1012; non-implementing. Source review claim d8dd671fa8b84eb5ad2c6524c92720d4. Author Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\n\nHead89d63125ca1f9d12c9445259e584c687d24c2aae, tree6afe969357e9a7aaa97dd9485c632024503c7cf0, base777663bf539308c0898cc177f872a8e0f63b597e. Source remains clean and unchanged. No formal record-review approval or batch approve has occurred.\n\n## Blocking finding\n\nRequired CI38431410006, Linux3.13 shard3 job115414595042, failed tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards at line100. Actual browser-file counts are [33,37,37], exceeding the existing permitted maximum difference3. The job completed with 1 failed and 2112 passed in615.58s. Sanitized hosted evidence is acl1879-linux3-failure-89d63125.log, lines1124 onward.\n\nThe reviewer reproduced the exact failure using the unchanged production selection/balancing code and actual test assertion on Windows/Python3.14. No browser or test suite was executed: the assertion only reads the selected test source files. The current selection produces counts[33,37,37], estimated loads[3726,3726,3725], file counts[131,131,131], and the assertion fails.\n\nGit diff from the exact base proves tests/test_acl1879_official_token_verifier.py is the only changed sharding input: every existing test file and scripts/acl_test_shard.py plus scripts/acl_test_platform.py are unchanged. Excluding only that added file from platforms.select in memory reconstructs the base input selection without editing any file. The same algorithm and actual assertion then produce counts[35,36,36], estimated loads[3702,3702,3701], file counts[131,131,130], and PASS. The added file is non-browser with estimated cost72. Private receipt: acl1879-shard-regression-repro.json.\n\nThis is a deterministic regression triggered by the added legitimate test file, exposing an existing limitation of the greedy cost balancer in scripts/acl_test_shard.py:55-62. Selecting the minimum estimated load does not guarantee the separate browser-count constraint. It is not established as flaky, nor is the unchanged base failing. No defect in token-verification behavior is inferred from this CI failure.\n\n## Required correction and scope\n\nReturn to the genuine author for a fresh supported implementation claim and a Coordinator scope decision on the balancer correction. Preserve test coverage, exact-once platform selection, deterministic assignment and the existing balance assertion. Renaming a test solely to shift tie ordering, weakening the assertion, dropping coverage or mixing unrelated changes is not an acceptable substitute for a justified fix. If tooling repair belongs in a separate task, record that explicit dependency and resolve current-source required CI through the supported workflow.\n\nAfter any correction, require focused reproducing balance/selection checks, relevant author checks, a fresh committed head/handoff, independent review of the actual delta in full scope and complete current-head required CI. Do not reuse the previous zero-finding source review as approval for a new head.\n\nThe earlier Standards0/Spec0 content findings and four successful independent token/transport boundary cases remain accurate historical evidence for89d63125. They do not override failed required CI. Other running hosted jobs are monitored by the Coordinator and are not asserted complete here.\n\nNo source/test changes, live Meta/MLX calls, credential use, takeover, integration, merge, stage/main action or installation occurred. The owner's integration/install hold remains in force. This report requests only the supported source review return and release of this review claim, preserving all other ownership.",
+        "reviewer": "Reviewer-RS1012"
       },
       "880": {
         "implementers": [
@@ -16008,8 +16009,7 @@
       845,
       840,
       841,
-      865,
-      879
+      865
     ],
     "review": null,
     "history": [
@@ -26054,6 +26054,13 @@
         "issue": 879,
         "pr": 882,
         "actor": "Worker-IS1013"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T17:05:55+00:00",
+        "pr": 882,
+        "lane": "ce348a54eed44280b92ba04123615441",
+        "actor": "Reviewer-RS1012"
       }
     ],
     "policy": {
@@ -26718,6 +26725,19 @@
       "ineligible": {},
       "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "882": {
+        "id": "ce348a54eed44280b92ba04123615441",
+        "pr": 882,
+        "issues": [
+          879
+        ],
+        "actor": "Reviewer-RS1012",
+        "session": "connection_review_rs1012",
+        "coordinator": "Coordinator-CR1012",
+        "started_at": "2026-10-13T17:05:55+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
