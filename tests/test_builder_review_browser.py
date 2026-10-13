@@ -251,6 +251,61 @@ def test_creatives_focus_refresh_is_throttled(creatives_env):
     assert len(hits) == n + 2
 
 
+def test_replacement_photo_is_found_after_immediate_post_refresh_miss(creatives_env):
+    pg, folder, hits = creatives_env
+    box = pg.locator('.cb-creative-search').first
+    _focus_and_settle(pg, box, hits)
+    box.fill('1111')
+    pg.locator('.cb-sel-dropdown:not([hidden]) .cb-sel-opt').first.dispatch_event('mousedown')
+    assert pg.locator('[name="camp_0_ad_0_creative_file"]').input_value() == '1111_old.jpg'
+    pg.locator('[name="camp_0_budget"]').fill('42')
+    # Replace the selected photo immediately after a successful refresh. Unlike
+    # the older miss test, do not age the clock past the throttle window.
+    (folder / 'zz_replacement.jpg').write_bytes(b'x')
+    n = len(hits)
+    box.fill('zz')
+    box.press_sequentially('_replacement', delay=30)
+    pg.wait_for_function('document.querySelector(".cb-sel-dropdown:not([hidden])")'
+                         ' && document.querySelector(".cb-sel-dropdown:not([hidden])").textContent.includes("zz_replacement.jpg")',
+                         timeout=5000)
+    assert len(hits) == n + 1
+    pg.locator('.cb-sel-dropdown:not([hidden]) .cb-sel-opt').first.dispatch_event('mousedown')
+    assert pg.locator('[name="camp_0_ad_0_creative_file"]').input_value() == 'zz_replacement.jpg'
+    assert pg.locator('[name="camp_0_budget"]').input_value() == '42'
+    assert pg.locator('[name="camp_0_ad_0_creative_type"][value="Image"]').is_checked()
+    assert pg.locator('.cb-sel-dropdown:not([hidden])').count() == 0
+
+
+def test_pending_miss_refresh_does_not_reopen_closed_dropdown(creatives_env):
+    pg, folder, hits = creatives_env
+    box = pg.locator('.cb-creative-search').first
+    _focus_and_settle(pg, box, hits)
+    (folder / 'zz_replacement.jpg').write_bytes(b'x')
+    n = len(hits)
+    box.fill('zz_replacement')
+    pg.locator('[name="camp_0_budget"]').click()
+    pg.locator('[name="camp_0_budget"]').fill('42')
+    assert pg.locator('.cb-sel-dropdown:not([hidden])').count() == 0
+    pg.wait_for_function('window.CB_CREATIVES_REFRESH_COUNT >= %d' % (n + 1), timeout=5000)
+    pg.wait_for_timeout(300)
+    assert len(hits) == n + 1
+    assert pg.locator('.cb-sel-dropdown:not([hidden])').count() == 0
+    assert pg.locator('[name="camp_0_budget"]').input_value() == '42'
+
+
+def test_immediate_miss_refreshes_without_further_typing(creatives_env):
+    pg, folder, hits = creatives_env
+    box = pg.locator('.cb-creative-search').first
+    _focus_and_settle(pg, box, hits)
+    (folder / 'zz_immediate.jpg').write_bytes(b'x')
+    n = len(hits)
+    box.fill('zz_immediate')
+    pg.wait_for_function('document.querySelector(".cb-sel-dropdown:not([hidden])")'
+                         ' && document.querySelector(".cb-sel-dropdown:not([hidden])").textContent.includes("zz_immediate.jpg")',
+                         timeout=5000)
+    assert len(hits) == n + 1
+
+
 def test_creatives_list_change_keeps_closed_dropdown_and_unchanged_previews(creatives_env):
     pg, folder, hits = creatives_env
     box = pg.locator('.cb-creative-search').first

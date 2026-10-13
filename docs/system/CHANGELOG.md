@@ -641,6 +641,20 @@ write their own note about an account.
   the same note in every country; notes survive a report refresh and a dashboard restart.
 - Text is escaped on render and written to the page only as text.
 - The `ready` / `to_do` fields stay in the row data; only their display is removed.
+## Builder creative replacement after a recent refresh — ACL-1651 / PR665
+
+The owner's 2026-10-13 replacement-photo report exposed a missed-search refresh
+consumed by the two-second throttle: the search latch stayed set although no
+request ran. Misses now share a pending background refresh that waits out that
+gap, then searches the current visible query. The ten-second focus limit and one
+refresh per miss streak remain; late results do not reopen a closed picker or
+change the selected creative or campaign fields. Both Image and Video searches
+use the same refreshed list; switching type merely cleared the field/picker and
+therefore caused a new focus/search path, rather than performing a separate scan.
+Offline browser regressions cover immediate replacement, typing during the wait,
+closed pickers and retained campaign settings. No live advertising action or
+installed-package delivery is established by these synthetic checks.
+
 ## Campaign Builder creative previews no longer freeze the dashboard — ACL-1615
 
 05.10 py-spy: while the Builder loaded video previews, every other request (job status, slots,

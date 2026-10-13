@@ -12664,6 +12664,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   var CB_CREATIVES_MISS_THROTTLE_MS = 2000;  // промах: свой, короткий порог
   var _cbMissLatched = false;  // защёлка: один запрос на серию промахов
   var _cbCreativesInflight = null;
+  var _cbCreativesMissPending = null;
   var _cbCreativesLastAt = 0;
   var _cbCreativesSig = '';
   window.CB_CREATIVES_REFRESH_COUNT = 0;  // счётчик запросов (для тестов)
@@ -12698,6 +12699,25 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // Хук для тестов: «состарить» последний запрос, не ожидая 10 секунд.
   window.cbCreativesAge = function(ms) { _cbCreativesLastAt = Date.now() - ms; };
   window.cbRefreshCreatives(0);
+
+  // A miss consumes its one refresh only when a request can actually start.
+  // Wait out the short gap in the background, coalescing repeated misses.
+  function cbRefreshCreativesOnMiss() {
+    if (_cbCreativesMissPending) return _cbCreativesMissPending;
+    function refreshWhenReady() {
+      if (_cbCreativesInflight) return _cbCreativesInflight.then(refreshWhenReady);
+      var wait = CB_CREATIVES_MISS_THROTTLE_MS - (Date.now() - _cbCreativesLastAt);
+      if (wait > 0) {
+        return new Promise(function(resolve) { setTimeout(resolve, wait); }).then(refreshWhenReady);
+      }
+      return window.cbRefreshCreatives(CB_CREATIVES_MISS_THROTTLE_MS);
+    }
+    _cbCreativesMissPending = Promise.resolve().then(refreshWhenReady).then(function(changed) {
+      _cbCreativesMissPending = null;
+      return changed;
+    });
+    return _cbCreativesMissPending;
+  }
 
   function cbCreativeSig(f) {
     return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file] : null;
@@ -12789,10 +12809,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     // пока запрос не станет попаданием или поле не потеряет фокус.
     if (!matches.length && query && !noRefresh && !_cbMissLatched) {
       _cbMissLatched = true;
-      window.cbRefreshCreatives(CB_CREATIVES_MISS_THROTTLE_MS).then(function(changed) {
+      cbRefreshCreativesOnMiss().then(function(changed) {
         // Список мог закрыться или фокус уйти, пока шёл запрос.
-        if (changed && document.activeElement === input && !dropdown.hidden
-            && input.value.trim().toLowerCase() === query) cbCreativeSearch(input, true);
+        if (changed && document.activeElement === input && !dropdown.hidden) cbCreativeSearch(input, true);
       });
     }
 
