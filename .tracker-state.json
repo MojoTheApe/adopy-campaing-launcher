@@ -7591,15 +7591,15 @@
   "execution": {
     "claims": {
       "880": {
-        "actor": "Worker-PG86",
-        "session": "01a135aa-a82d-77d2-8057-5116cc969c86",
-        "coordinator": "Coordinator-PG86",
+        "actor": "Worker-FIVE874",
+        "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
+        "coordinator": "Coordinator-FLOW513",
         "branch": "codex/facebook-page-selection",
-        "worktree": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\facebook-page-selection",
-        "id": "69a7d5c37ae34427a55bed3bd25b7230",
+        "worktree": "/private/tmp/flow-five-reviews-20261013/acl1880-stop-only",
+        "id": "9574523969754e78a26b8700b43128d2",
         "issue": 880,
         "state": "implementing",
-        "started_at": "2026-10-13T14:33:53+00:00",
+        "started_at": "2026-10-13T14:43:06+00:00",
         "from_status": "status:backlog"
       }
     },
@@ -12329,11 +12329,15 @@
           {
             "actor": "Worker-PG86",
             "session": "01a135aa-a82d-77d2-8057-5116cc969c86"
+          },
+          {
+            "actor": "Worker-FIVE874",
+            "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
           }
         ],
         "state": "implementing",
-        "worker": "Worker-PG86",
-        "coordinator": "Coordinator-PG86"
+        "worker": "Worker-FIVE874",
+        "coordinator": "Coordinator-FLOW513"
       }
     },
     "actors": {
@@ -25735,6 +25739,25 @@
         "issue": 879,
         "actor": "Worker-IS1013",
         "report": "# ACL-1879 owner-requested full pause\n\nReason: owner requested full pause. Development, tests, research and delivery are\nstopped until the owner explicitly resumes them.\n\nActual Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\nOwned claim: c577660d190c42299973d4b649fb1ee4.\nBranch: work/acl-1879-official-token-verifier.\nWorktree: ACM-Audit-2026-10-12/worktrees/acl-1879.\nHEAD/base: 72a2d2c21aa42f1a388d32ea27ba2c8253ee7854.\n\nThe ordinary genuine matching-v2 claim was verified In Progress. Scope,\ninstructions and primary-source request semantics were inspected before the\npause. No implementation files were created or edited, no tests/services were\nstarted for this task, and no source commit, push or PR was created.\n\nStop audit confirms the worktree is clean at the preserved base and finds no\nrunning Python/pytest/uvicorn process belonging to this task worktree. Existing\nsource/worktrees and earlier PRs remain preserved. This report exists solely for\nthe supported owned-claim stop. No merge, integration, stage, main, installation,\ndeployment, policy migration or foreign claim action was performed.\n\nRemaining work: the entire verifier/CLI implementation, offline verification,\nsource PR and compatible formal review/handoff. Resume requires the owner's\nexplicit instruction and a supported fresh author claim; elapsed time supplies\nno authorization to restart."
+      },
+      {
+        "event": "takeover",
+        "at": "2026-10-13T14:43:06+00:00",
+        "issue": 880,
+        "previous": {
+          "actor": "Worker-PG86",
+          "session": "01a135aa-a82d-77d2-8057-5116cc969c86",
+          "coordinator": "Coordinator-PG86",
+          "branch": "codex/facebook-page-selection",
+          "worktree": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\facebook-page-selection",
+          "id": "69a7d5c37ae34427a55bed3bd25b7230",
+          "issue": 880,
+          "state": "implementing",
+          "started_at": "2026-10-13T14:33:53+00:00",
+          "from_status": "status:backlog"
+        },
+        "claim": "9574523969754e78a26b8700b43128d2",
+        "reason": "Human explicitly confirmed all ACL development is stopped. Administrative takeover then immediate owned stop only; preserve original Worker-PG86, claim/session, branch, inaccessible Windows locator and task/source history. Remote branch is absent; no unpublished Windows content recovered or backed up. No Builder/campaign source edit, push, review, approval, delivery or completion."
       }
     ],
     "policy": {
