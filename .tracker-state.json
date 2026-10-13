@@ -7380,6 +7380,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T07:51:51+00:00",
         "from_status": "status:todo"
+      },
+      "839": {
+        "actor": "Worker-D7K413",
+        "session": "design_audit_d7k413_20261013",
+        "coordinator": "Coordinator-D7K413",
+        "branch": "codex/acl-1839-connection-panel-layout",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Design-Audit-2026-10-13",
+        "id": "7bba5eba3ec747b4aa55cb8877f43079",
+        "issue": 839,
+        "state": "implementing",
+        "started_at": "2026-10-13T08:01:43+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11549,9 +11561,13 @@
           {
             "actor": "Worker-D7K413",
             "session": "design_audit_d7k413_20261013"
+          },
+          {
+            "actor": "Worker-D7K413",
+            "session": "design_audit_d7k413_20261013"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-D7K413",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -11570,7 +11586,6 @@
         },
         "pr": 843,
         "queued_at": "2026-10-13T06:23:19+00:00",
-        "reviewer": "Reviewer-LR1839",
         "review_report": "# ACL-1839 / PR843 source review return\n\nChanges required: refresh the source against current main before approval.\n\nIndependent review verified PR843 head 145a30ba116b599a010c61160e5be2ac519ed00c retains base e8e59f8376458f2f73089c3f2a8d454837ff033f, while official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Earlier source review and CI establish the old baseline only.\n\nThe actual author must take a fresh implementation claim for ACL-1839, include current main on the retained source branch, resolve any conflicts under that author ownership, run actual affected checks and obtain fresh source CI plus independent exact-head/base/scope review. Preserve the existing bounded layout and accessibility scope, original Worker and source PR. No production regression was found in the previously reviewed patch; this return concerns stale admission evidence.\n\nThis Reviewer made no source edits. No source approval, merge, stage entry, package publication or installation is claimed."
       },
       "840": {
@@ -23502,6 +23517,13 @@
           "report": "# ACL-1839 / PR843 source review return\n\nChanges required: refresh the source against current main before approval.\n\nIndependent review verified PR843 head 145a30ba116b599a010c61160e5be2ac519ed00c retains base e8e59f8376458f2f73089c3f2a8d454837ff033f, while official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Earlier source review and CI establish the old baseline only.\n\nThe actual author must take a fresh implementation claim for ACL-1839, include current main on the retained source branch, resolve any conflicts under that author ownership, run actual affected checks and obtain fresh source CI plus independent exact-head/base/scope review. Preserve the existing bounded layout and accessibility scope, original Worker and source PR. No production regression was found in the previously reviewed patch; this return concerns stale admission evidence.\n\nThis Reviewer made no source edits. No source approval, merge, stage entry, package publication or installation is claimed.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T08:01:43+00:00",
+        "issue": 839,
+        "claim": "7bba5eba3ec747b4aa55cb8877f43079",
+        "actor": "Worker-D7K413"
       }
     ],
     "policy": {
