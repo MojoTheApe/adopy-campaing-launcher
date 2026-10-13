@@ -2869,22 +2869,22 @@
         }
       },
       "867": {
-        "kind": "independent-review",
-        "verdict": "approved",
-        "report": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Review-867-20261013\\output\\source-review-867\\approved-source.md",
-        "tree_sha": "c46a101cc4bd7e7573ed5d4b2417c1304ec8ecd8",
-        "review_session": "source_review_867_20261013",
-        "reviewer": "Reviewer-867S",
         "implementer": "Worker-867R",
-        "execution_lane": "4b2229883db847769686047342b00776",
+        "report": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Review-867-20261013\\output\\source-review-867\\compatibility-review.md",
+        "tree_sha": "48b9d71b0950d28135ee144096e4e3d249221d30",
+        "kind": "independent-review",
+        "reviewer": "Reviewer-867S",
+        "execution_lane": "5329d662d852466cb27e325c39192db7",
+        "review_session": "source_review_867_20261013",
+        "verdict": "approved",
         "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-        "head_sha": "55f69649e6213117b923237b4d435b2ee3590dea",
+        "head_sha": "3cf21cdfb549bdc21b837dae88949ec68475e892",
         "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
           865
         ],
-        "recorded_at": "2026-10-13T17:58:14+00:00",
+        "recorded_at": "2026-10-13T18:42:00+00:00",
         "issue_scopes": {
           "865": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3"
         }
