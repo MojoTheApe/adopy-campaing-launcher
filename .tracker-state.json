@@ -13961,6 +13961,10 @@
       "Coordinator-CL1014": {
         "session": "claude-788bdf25-coord-20261014",
         "role": "Coordinator"
+      },
+      "Reviewer-CLR1014": {
+        "session": "claude-reviewer-cl1014-890",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -16460,7 +16464,19 @@
       840,
       841
     ],
-    "review": null,
+    "review": {
+      "id": "02e618a2240b4925ab570b9f04b89550",
+      "batch_id": "2bbd7b7e22c44323bab273af8002ee47",
+      "pr": 890,
+      "issues": [
+        529
+      ],
+      "actor": "Reviewer-CLR1014",
+      "session": "claude-reviewer-cl1014-890",
+      "coordinator": "Coordinator-CL1014",
+      "state": "reviewing",
+      "started_at": "2026-10-13T22:20:15+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -28031,6 +28047,23 @@
           "entered_stage": false,
           "history": []
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-13T22:20:15+00:00",
+        "review": {
+          "id": "02e618a2240b4925ab570b9f04b89550",
+          "batch_id": "2bbd7b7e22c44323bab273af8002ee47",
+          "pr": 890,
+          "issues": [
+            529
+          ],
+          "actor": "Reviewer-CLR1014",
+          "session": "claude-reviewer-cl1014-890",
+          "coordinator": "Coordinator-CL1014",
+          "state": "reviewing",
+          "started_at": "2026-10-13T22:20:15+00:00"
+        }
       }
     ],
     "policy": {
@@ -29018,7 +29051,7 @@
       "id": "2bbd7b7e22c44323bab273af8002ee47",
       "actor": "Coordinator-CL1014",
       "session": "claude-788bdf25-coord-20261014",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         529
       ],
@@ -29072,7 +29105,7 @@
       "branch": "codex/batch-2bbd7b7e22c44323bab273af8002ee47",
       "intake": "995b275595744f35ba94cc61dbc96df1",
       "started_at": "2026-10-13T22:17:27+00:00",
-      "pr": null,
+      "pr": 890,
       "entered_stage": false,
       "history": []
     },
