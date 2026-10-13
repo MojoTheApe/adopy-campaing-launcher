@@ -7584,7 +7584,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "879": {
+        "actor": "Worker-IS1013",
+        "session": "isolated_app_sol_20261013",
+        "coordinator": "Coordinator-CR1012",
+        "branch": "work/acl-1879-official-token-verifier",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\Adopy Campaign Manager\\ACM-Audit-2026-10-12\\worktrees\\acl-1879",
+        "id": "c577660d190c42299973d4b649fb1ee4",
+        "issue": 879,
+        "state": "implementing",
+        "started_at": "2026-10-13T14:28:29+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -12281,6 +12294,17 @@
         "queued_at": "2026-10-13T12:47:25+00:00",
         "reviewer": "Reviewer-R875X",
         "batch_id": "67923a8e08d34c538623be512c739a1a"
+      },
+      "879": {
+        "implementers": [
+          {
+            "actor": "Worker-IS1013",
+            "session": "isolated_app_sol_20261013"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-IS1013",
+        "coordinator": "Coordinator-CR1012"
       }
     },
     "actors": {
@@ -25657,6 +25681,13 @@
           "ineligible": {},
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T14:28:29+00:00",
+        "issue": 879,
+        "claim": "c577660d190c42299973d4b649fb1ee4",
+        "actor": "Worker-IS1013"
       }
     ],
     "policy": {
