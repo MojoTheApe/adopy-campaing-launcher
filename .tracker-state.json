@@ -12031,7 +12031,7 @@
             "session": "connection_sr1012_worker"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-SR1012",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12050,7 +12050,7 @@
         },
         "pr": 837,
         "queued_at": "2026-10-13T19:30:53+00:00",
-        "review_report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle.",
+        "review_report": "Coordinator approval return for ACL-1836 / Issue836 / source PR837.\n\nActual Coordinator: Coordinator-CR1012.\nActual root session: acm_connection_coordinator_20261013.\nThe user resumed development, integration and installation with \"\u0432\u0441\u0435 \u0432\u043c\u0435\u0441\u0442\u0435\" and selected ACM TEST9095. Cross-chat coordination is explicitly authorized.\n\nFresh official readback confirms main7cee2857d4b374bc564c5ca84b9f6ede69f96430, while the existing Approved review for exact source d0d4b87305a4e1d25c045c67103da1637fe8c3d7 was bound to main777663bf539308c0898cc177f872a8e0f63b597e. PR837 is still OPEN, ready, targeting main, with that unchanged head. The latest private state confirms Approved, no implementation claim, no pending return, and recorded approval Coordinator-CR1012. The task is not a member of the foreign frozen integration or intake.\n\nReturn reason is only advancement of the authoritative baseline; no new product defect is asserted. Preserve full Issue scope/history, original Worker-SR1012 / connection_sr1012_worker, original source branch and review evidence. After this supported return, the actual original author must claim normally, reconcile current main, perform applicable checks, push the same source PR and hand off for fresh independent current-source review. The author currently owns ACL-1886 and must finish its normal handoff first; do not steal or fabricate a second Worker run.\n\nThis return does not edit source/runtime, change the foreign batch24551548a5084a13a4d81bb957a084f1 or its Coordinator-DLV13 ownership, start a competing intake, claim a new approval, publish a package or execute advertising.",
         "return_operation": {
           "id": "2ab69234dbc645ffab72d57e22133086",
           "actor": "Coordinator-CR1012",
@@ -27636,6 +27636,18 @@
         "issue": 888,
         "claim": "5a020102694e4e3c92d2cd071a6e29c8",
         "actor": "Worker-S1880B"
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-13T21:35:50+00:00",
+        "issue": 836,
+        "operation": {
+          "id": "2ab69234dbc645ffab72d57e22133086",
+          "actor": "Coordinator-CR1012",
+          "session": "acm_connection_coordinator_20261013",
+          "report": "Coordinator approval return for ACL-1836 / Issue836 / source PR837.\n\nActual Coordinator: Coordinator-CR1012.\nActual root session: acm_connection_coordinator_20261013.\nThe user resumed development, integration and installation with \"\u0432\u0441\u0435 \u0432\u043c\u0435\u0441\u0442\u0435\" and selected ACM TEST9095. Cross-chat coordination is explicitly authorized.\n\nFresh official readback confirms main7cee2857d4b374bc564c5ca84b9f6ede69f96430, while the existing Approved review for exact source d0d4b87305a4e1d25c045c67103da1637fe8c3d7 was bound to main777663bf539308c0898cc177f872a8e0f63b597e. PR837 is still OPEN, ready, targeting main, with that unchanged head. The latest private state confirms Approved, no implementation claim, no pending return, and recorded approval Coordinator-CR1012. The task is not a member of the foreign frozen integration or intake.\n\nReturn reason is only advancement of the authoritative baseline; no new product defect is asserted. Preserve full Issue scope/history, original Worker-SR1012 / connection_sr1012_worker, original source branch and review evidence. After this supported return, the actual original author must claim normally, reconcile current main, perform applicable checks, push the same source PR and hand off for fresh independent current-source review. The author currently owns ACL-1886 and must finish its normal handoff first; do not steal or fabricate a second Worker run.\n\nThis return does not edit source/runtime, change the foreign batch24551548a5084a13a4d81bb957a084f1 or its Coordinator-DLV13 ownership, start a competing intake, claim a new approval, publish a package or execute advertising."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -27999,50 +28011,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-13T18:52:47+00:00"
-      },
-      "836": {
-        "issue": 836,
-        "pr": 837,
-        "branch": "codex/acl-1836-session-recovery",
-        "head_sha": "d0d4b87305a4e1d25c045c67103da1637fe8c3d7",
-        "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-        "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151",
-        "review": {
-          "kind": "independent-review",
-          "implementer": "Worker-SR1012",
-          "reviewer": "Reviewer-RS1012",
-          "review_session": "connection_review_rs1012",
-          "execution_lane": "541af8fb58a24492bf902960c55b5de7",
-          "head_sha": "d0d4b87305a4e1d25c045c67103da1637fe8c3d7",
-          "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "tree_sha": "5424d9b512651693f1aac5b536b0857408f66f05",
-          "verdict": "approved",
-          "report": "# ACL-1836 / PR837 fresh independent source review \u2014 d0d4b873\n\nActual separate non-implementing Reviewer-RS1012 / connection_review_rs1012; original author Worker-SR1012 / connection_sr1012_worker; Coordinator-CR1012. Genuine normally acquired source-review claim541af8fb58a24492bf902960c55b5de7. Author task836 was durably queued and implementation claim absent before acquisition. Schema3 implementation5/source-review5/batch5 is active; other ownership is preserved.\n\nExact head d0d4b87305a4e1d25c045c67103da1637fe8c3d7; tree5424d9b512651693f1aac5b536b0857408f66f05; fixed/current main and base777663bf539308c0898cc177f872a8e0f63b597e. Clean checkout and OPEN/ready PR837 verified. Full comparison: git diff 777663bf539308c0898cc177f872a8e0f63b597e...HEAD. Reviewed all ten changed files and four commits d0d4b873,02bb4f77,8a45c683,6ce2886b. Entire current Issue836 description/specifications/acceptance and resumed handoff (updated19:32:43Z) was read and saved as acl1836-current-full-scope-d0d4b873.md/json. Earlier owner/Flow pause is explicitly historical; current owner delivery authorization does not replace normal source/batch/package gates.\n\nApplied the code-review skill through two genuine parallel GPT-6.1 Sol high helpers, acl1836_refresh_standards and acl1836_refresh_spec. Both reviewed the complete current diff against current instructions, not merely the latest relocation or historical approval. Actual Reviewer independently read all recovery hunks, public call boundaries, all32 regression cases, fixture/bench provenance and prior compatibility evidence. No source/test edits or live resources were used.\n\n## Standards\n\n0 documented violations; 0 actionable heuristic smells.\n\nThe helper verified exact clean head/tree/merge-base and applied AGENTS.md, engineering context, repository workflow/layout/source-review/batch rules and the full code-review smell baseline. Transport changes preserve existing navigation/error mechanisms, isolate recovery from sent Graph calls, retain trusted navigation across warm helper replacement, and use existing typed Graph stops. No sibling creator source is imported. Regressions exercise the real PageTab/InPageGraph/GraphClient boundary through a synthetic wire and inspect observable calls, ownership, identity, bounded recovery, cancellation and non-replay. The anonymized transport fixture, README and both catalogue files satisfy the offline-bench requirement. System behavior/history is in its prescribed location.\n\n## Spec\n\n0 findings: no missing implementation requirement, unasked behavior or incorrect implementation identified in the complete ten-file diff.\n\nSame-target recovery uses the existing browser socket and exact owned target, allows one attempt, and validates both target and attached main-frame Ads Manager/account identity. Only local helper work is retried; sent Graph calls stay outside this boundary. Subsequent reconciliation may use the restored session, but the uncertain request is not replayed. Missing targets, identity changes, unavailable transport and repeat detachment become sticky typed GraphStop outcomes; GraphClient retains the stop. Login/checkpoint and cancellation remain distinct. Trusted successful navigation and prior recovery guard survive a fresh warm helper; arbitrary observed URLs are never adopted as intent. No silent new tab, profile restart, account switch, reload for missing token, token extraction or advertising activation is added.\n\nThe separately pending Creator is absent from main. Four isolated integrated Creator\u2192GraphClient\u2192InPageGraph\u2192PageTab cases establish partial-outcome compatibility for normal and warm helper paths, including one uncertain video POST and retained campaign/ad-set IDs when recovery cannot proceed. This is separately inspected compatibility evidence, not a main source import or new runtime acceptance claim.\n\n## Independent current proof and preserved evidence\n\nGit proof acl1836-independent-current-proofs-d0d4b873.json establishes byte identity of all eight recovery/source/test/fixture/catalogue files with previously reviewed02bb4f77. The complete CHANGELOG content is preserved as relocated lines, and the complete PROJECT recovery text is retained in its own section. Current-main process/configuration/CI/launcher are inherited unchanged. Pairwise merge-tree preflight is clean against1844/efebcc75 (treeb7aab067c636f2e7757a3f4d2bc0d6cfdc1c41a2),1879/5d0e7259 (tree200eef24b29bc665ee27360e6265b8a5e01acc6f), and current repaired1872/1b5459a02ef24408f2d497b0af0487ffb5e4b7bf (treeb7463062b0f64203f1384f79f66ddb33c3a473ee). Only Git object evidence was created; this is not a frozen combined candidate or admission.\n\nHistorical independent32-case session run passed on unchanged recovery implementation. The current author additionally ran276 affected tests in52.35s and46 packaging units in38.692s on this exact d0d4b873 source, Windows/Python3.14.3, with scanner/import smoke/diff passing. No successful unchanged broad check was rerun merely for bookkeeping.\n\nThe compatibility report remains honest: four integrated incident cases passed after the warm-helper defect was repaired; a real isolated Chromium detach/reattach probe passed while leaving another fixture tab untouched. The larger pending-creator snapshot run was502 passed and one intermittent synthetic stop-log os.replace WinError5 failure, followed by an exact isolated pass. It is not clean503 first-pass evidence, a stop-log repair or fresh testing of the entire current combined runtime. Earlier sandbox-blocked/stalled attempts had no completed-suite verdict. Original external detachment cause and actual upload outcome remain unknown.\n\n## Current required checks and source verdict\n\nFinal independent readback confirms unchanged complete Issue836 scope (updated2026-10-13T19:32:43Z), actual remote main777663bf539308c0898cc177f872a8e0f63b597e, exact OPEN/ready head d0d4b873 and its base/tree, genuine schema3 policy5/5/5 and our same reviewing claim541af8fb58a24492bf902960c55b5de7. Scope readback: acl1836-final-scope-readback-d0d4b873.json.\n\nCurrent exact-head product CI38455155317 completed SUCCESS: all three Linux3.13 shards, Windows3.13, tooling, process and ACL aggregate. Descriptor38455155171 and latest ready tracker-link38455682565 succeeded. Older prehandoff38455155162 failure and cancelled38455154901 are historical entries, not substitutes for current successful linkage. Full current readbacks: acl1836-final-checks-d0d4b873.json and acl1836-final-ci-d0d4b873.json.\n\nInstaller38455155193 completed SUCCESS for classifier and aggregate; Verify build inputs and actual build/install/repair/uninstall were SKIPPED by source classification. No actual installer lifecycle or Linux3.11 source run is claimed. Exact installer receipt: acl1836-current-installer-d0d4b873.json.\n\nIndependent source review verdict: approved, with no remaining demonstrated blocker. The supported formal record-review/check-pr/batch approve transition is performed separately and its durable receipt will be appended. A foreign batch may advance main; supported admission must still validate current evidence and cannot override a changed base. The owner resumed development, integration and installation; the Coordinator owns those later actions. This source review does not integrate, install TEST9095, modify runtime, publish a package or verify live Meta/Multilogin behavior. No foreign source/batch/approval was changed.\n\nAxis totals: Standards0; Spec0. Worst finding within either axis: none.\n",
-          "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            836
-          ],
-          "recorded_at": "2026-10-13T19:51:20+00:00",
-          "issue_scopes": {
-            "836": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151"
-          }
-        },
-        "lane": {
-          "id": "541af8fb58a24492bf902960c55b5de7",
-          "pr": 837,
-          "issues": [
-            836
-          ],
-          "actor": "Reviewer-RS1012",
-          "session": "connection_review_rs1012",
-          "coordinator": "Coordinator-CR1012",
-          "started_at": "2026-10-13T19:35:35+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-13T19:52:32+00:00"
       },
       "529": {
         "issue": 529,
