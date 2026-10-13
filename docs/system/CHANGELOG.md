@@ -1,20 +1,5 @@
 # System history
 
-## Official Meta access: isolated read-only diagnostic — ACL-1844
-
-- Added an explicit one-account HTTP pilot with no browser or machine-config
-  discovery. A supplied official token reads only account metadata and a bounded
-  account-level spend report; identity, currency and date mismatches stop the read.
-- Typed failures preserve already verified account metadata when spend fails.
-  Empty reports remain `no_data`; permission scopes never imply publishing access.
-- Fixed Meta GET endpoints, TLS verification, no redirects/cookies/ambient proxy,
-  no retries or writes, bounded response size/timeouts and local-only sanitized
-  output. A hidden prompt or explicitly selected process secret replaces token
-  arguments; raw upstream errors and credential-bearing tracebacks are excluded.
-- Offline fake-HTTP tests cover these boundaries. No live account, app setup,
-  dashboard default, advertising action or production configuration was changed.
-  Runtime procedure: [official access pilot](../runtime/META_OFFICIAL_ACCESS_PILOT.md).
-
 ## Account-label ID suffix keeps existing alias precedence — ACL-1824
 
 - A long numeric account-ID suffix is removed only after the existing tail lookup
@@ -2854,3 +2839,18 @@ in PROJECT.md and the original Issues. Code integration is not a released instal
 Existing detailed release history remains in [RELEASES.md](../RELEASES.md); original
 specifications remain at their established locations. Preserve their dates and scope.
 Add future implemented changes and reasons here, linking the actual ticket and PR.
+
+## Official Meta access: isolated read-only diagnostic — ACL-1844
+
+- Added an explicit one-account HTTP pilot with no browser or machine-config
+  discovery. A supplied official token reads only account metadata and a bounded
+  account-level spend report; identity, currency and date mismatches stop the read.
+- Typed failures preserve already verified account metadata when spend fails.
+  Empty reports remain `no_data`; permission scopes never imply publishing access.
+- Fixed Meta GET endpoints, TLS verification, no redirects/cookies/ambient proxy,
+  no retries or writes, bounded response size/timeouts and local-only sanitized
+  output. A hidden prompt or explicitly selected process secret replaces token
+  arguments; raw upstream errors and credential-bearing tracebacks are excluded.
+- Offline fake-HTTP tests cover these boundaries. No live account, app setup,
+  dashboard default, advertising action or production configuration was changed.
+  Runtime procedure: [official access pilot](../runtime/META_OFFICIAL_ACCESS_PILOT.md).
