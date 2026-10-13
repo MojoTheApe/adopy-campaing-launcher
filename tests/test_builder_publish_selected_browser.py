@@ -101,7 +101,8 @@ def test_ticked_campaigns_only_are_sent_one_job_per_account(ui):
         expect(box(p, a, s)).to_be_disabled()
     title = box(p, 0, 0).evaluate('b => b.closest("label").title')
     assert 'being built' in title, title
-    expect(publish_button(p)).to_have_text('Publish all → drafts (4)')
+    expect(publish_button(p)).to_have_text('Publish all → drafts (0)')
+    expect(publish_button(p)).to_be_disabled()
     assert p.evaluate("JSON.stringify(cbKeep.all())").count('"picked":true') == 0
 
     finish(p, state, 'Demo')

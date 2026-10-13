@@ -3113,7 +3113,43 @@
     /* Кнопки формы — в столбик во всю ширину: в ряд они не помещаются. */
     .cbd-host .cb-actions { display: flex; flex-direction: column; gap: var(--space-xs); }
     .cbd-host .cb-actions button { width: 100%; }
-    .cbd-host .cb-actions .cb-publish-btn { margin-top: var(--space-xs); }
+    /* The footer owns the primary action; the open campaign stays secondary. */
+    .cbd-host .cb-actions { flex-direction: row; flex-wrap: wrap; gap: var(--space-sm); }
+    .cbd-host .cb-actions .cb-publish-btn {
+      width: auto; margin: 0; padding: 8px 0; background: transparent;
+      border-color: transparent; color: var(--accent); box-shadow: none;
+    }
+    .cbd-host .cb-actions .cb-publish-btn:not(:disabled):hover {
+      background: transparent; border-color: transparent; text-decoration: underline;
+      box-shadow: none;
+    }
+    .cbd-host .cb-actions .cb-publish-btn:disabled { color: var(--muted); }
+    .cbd-publication {
+      display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-sm);
+      padding-bottom: var(--space-md); margin-bottom: var(--space-sm);
+      border-bottom: 1px solid var(--border);
+    }
+    .cbd-publication-scope { min-width: 0; line-height: 1.4; order: 1; }
+    .cbd-publication-scope strong { display: block; font-size: 14px; }
+    .cbd-publication-scope span { display: block; color: var(--muted); font-size: 12px; }
+    .cbd-publication .cbd-publish-all { margin: 0; order: 2; }
+    .cbd-publication-reason, .cbd-publication .cbd-gate-reason {
+      grid-column: 1 / -1; order: 3; margin: 0;
+      font-size: 12px; line-height: 1.5;
+    }
+    .cbd-publication-reason { color: var(--muted); }
+    .cbd-root .cbd-foot .cbd-publish-all:disabled {
+      background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+      color: var(--text); opacity: 1; cursor: not-allowed;
+    }
+    .cbd-root[data-expanded="1"] .cbd-publication {
+      grid-template-columns: minmax(0, 1fr) minmax(240px, auto); align-items: center;
+    }
+    .cbd-root[data-expanded="1"] .cbd-host .cb-actions button { width: auto; }
+    @media (max-width: 640px) {
+      .cbd-root[data-expanded="1"] .cbd-publication { grid-template-columns: minmax(0, 1fr); }
+    }
 
     /* На странице страны, пока форма в ящике. */
     .cb-parked-note {
@@ -5156,8 +5192,33 @@ window.cbTree = (function () {
   function publishLabel(t) {
     // K — сколько кампаний уйдёт сейчас: отмеченные у идущей формы не едут
     // (их пропустит и подтверждение), и считать их было бы неправдой.
-    return t.some ? 'Publish selected → drafts (' + t.send.length + ')'
-                  : 'Publish all → drafts (' + t.total + ')';
+    var what = window.ACL_FB_BACKEND === 'api' ? 'PAUSED campaigns' : 'drafts';
+    return t.some ? 'Publish selected → ' + what + ' (' + t.send.length + ')'
+                  : 'Publish all → ' + what + ' (' + t.open.length + ')';
+  }
+
+  function refreshPublication(t) {
+    var btn = foot.querySelector('.cbd-publish-all');
+    if (!btn) return;
+    btn.textContent = publishLabel(t);
+    var count = t.some ? t.send.length : t.open.length;
+    var excluded = t.on.length ? t.on.length - t.send.length : t.total - t.open.length;
+    var scope = foot.querySelector('.cbd-publication-scope');
+    if (scope) {
+      scope.querySelector('strong').textContent = t.on.length
+        ? t.on.length + (t.on.length === 1 ? ' campaign selected' : ' campaigns selected')
+        : 'All ' + t.total + (t.total === 1 ? ' campaign' : ' campaigns');
+      scope.querySelector('span').textContent = (t.on.length ? 'Checkbox selection' : 'No selection — all campaigns')
+        + (excluded ? ' · ' + excluded + ' already building' : '');
+    }
+    var uncertain = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
+    var reason = foot.querySelector('.cbd-publication-reason');
+    if (reason) {
+      reason.textContent = uncertain ? 'The previous run status is unknown. Reload the dashboard before publishing again.'
+        : !count ? 'These campaigns are already being built. Change the selection or wait for a run to finish.' : '';
+      reason.hidden = !reason.textContent;
+    }
+    btn.disabled = uncertain || !count;
   }
 
   /* Отметки, кнопка и «Select all» — на месте, без перерисовки дерева:
@@ -5185,8 +5246,7 @@ window.cbTree = (function () {
       bar.querySelector('.cbd-tick-none').hidden = !t.some;
       bar.querySelector('.cbd-tick-count').textContent = t.on.length ? t.on.length + ' of ' + t.total + ' selected' : '';
     }
-    var btn = foot.querySelector('.cbd-publish-all');
-    if (btn) btn.textContent = publishLabel(t);
+    refreshPublication(t);
   }
 
   function keepTicks() {
@@ -5349,8 +5409,10 @@ window.cbTree = (function () {
     var keepTyped = typedOld ? typedOld.value : '';
     var t = ticks();
     var html = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
-        ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
+        ? '<div class="cbd-publication"><div class="cbd-publication-scope" id="cbd-publication-scope" aria-live="polite"><strong></strong><span></span></div>'
+          + '<button type="button" class="cbd-publish-all" data-act="publish-all" aria-describedby="cbd-publication-scope cbd-publication-reason">'
           + aclEscHtml(publishLabel(t)) + '</button>'
+          + '<div class="cbd-publication-reason" id="cbd-publication-reason" role="status" hidden></div></div>'
           + '<div class="cbd-queue" hidden></div>'
         : '')
       + '<div class="cbd-pick">'
