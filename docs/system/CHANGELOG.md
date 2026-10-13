@@ -14,6 +14,10 @@
 - Lost targets, identity changes, unavailable transport and repeat detachment
   produce a sticky typed stop. Login/checkpoint remain distinct stops; missing
   tokens after recovery do not trigger a reload. Read clients retain the stop.
+- Review found that warm mode changes create a new helper without navigating.
+  The tab now retains successful explicit navigation intent and its recovery
+  guard for replacement helpers. Failed navigation cannot rebind the expected
+  account, and the current page URL is never adopted as trusted identity.
 - An anonymized transport fixture and offline regressions cover setup, later
   reconciliation, non-replay, identity, liveness and interruption. No live Meta
   calls, runtime configuration changes, package delivery or rollout are claimed.

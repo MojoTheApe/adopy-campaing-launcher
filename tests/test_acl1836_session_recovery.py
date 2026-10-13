@@ -112,6 +112,59 @@ def test_missing_owned_target_is_a_typed_stop_for_creator_readback():
     assert len(browser.calls) == sent
 
 
+def test_fresh_helper_on_a_warm_owned_tab_recovers_without_another_navigation():
+    browser, tab, first_graph = transport()
+    # Warm reuse changes read/write helper mode on the same tab without start().
+    graph = InPageGraph(tab, sleep=lambda _: None)
+    assert GraphClient(graph, min_interval_s=0).get("/reconcile") == {
+        "data": [{"id": "reconciled"}]}
+    assert tab.session_id == INCIDENT["recovered_session_id"]
+    assert sum(m == "Page.navigate" for m, _, _ in browser.calls) == 1
+    assert len(browser.graph_calls) == 1
+
+
+def test_fresh_helper_never_adopts_an_unbound_current_account_url():
+    browser = Browser()  # Its current URL looks valid but ACL has not navigated it.
+    tab = PageTab.open("http://127.0.0.1:1", connect=lambda *a, **k: browser)
+    graph = InPageGraph(tab, sleep=lambda _: None)
+    browser.detached = True
+    with pytest.raises(PageFailed):
+        graph.request("GET", "/reconcile")
+    assert sum(m == "Target.attachToTarget" for m, _, _ in browser.calls) == 1
+    assert browser.graph_calls == []
+
+
+def test_fresh_helper_keeps_the_original_account_when_the_current_page_changes():
+    browser, tab, first_graph = transport()
+    browser.url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1234567890123456"
+    graph = InPageGraph(tab, sleep=lambda _: None)
+    with pytest.raises(PageFailed):
+        graph.request("GET", "/reconcile")
+    assert sum(m == "Target.attachToTarget" for m, _, _ in browser.calls) == 1
+    assert browser.graph_calls == []
+
+
+def test_fresh_helper_keeps_identity_checks_after_an_earlier_recovery():
+    browser, tab, graph = transport()
+    assert graph.request("GET", "/first")["status"] == 200
+    browser.url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1234567890123456"
+    replacement = InPageGraph(tab, sleep=lambda _: None)
+    with pytest.raises(PageFailed):
+        replacement.request("GET", "/must-not-run")
+    assert len(browser.graph_calls) == 1
+
+
+def test_failed_navigation_does_not_rebind_a_replacement_helper():
+    browser, tab, graph = transport()
+    browser.detached = False
+    browser.fail_on = "Page.navigate"
+    with pytest.raises(SessionLostError):
+        graph.navigate("act_1234567890123456")
+    replacement = InPageGraph(tab, sleep=lambda _: None)
+    assert replacement.request("GET", "/original-account")["status"] == 200
+    assert len(browser.graph_calls) == 1
+
+
 @pytest.mark.parametrize("seam", ["Page.getFrameTree", "Page.createIsolatedWorld", "(() =>", ".state()"])
 def test_detachment_during_local_setup_recovers_at_the_same_boundary(seam):
     browser, tab, graph = transport()

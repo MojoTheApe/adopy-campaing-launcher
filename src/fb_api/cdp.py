@@ -98,6 +98,7 @@ class PageTab:
         self.session_id = session_id
         self.closed = False
         self._recovery_attempted = False
+        self._navigation_url = ""
         #: Удалось ли снять троттлинг фона: {"focus": bool, "lifecycle": bool}.
         self.throttle: dict = {}
 
@@ -160,6 +161,20 @@ class PageTab:
             raise
 
     # -- вызовы во вкладку
+    @property
+    def navigation_url(self) -> str:
+        """Last successful explicit navigation intent, never a discovered URL.
+
+        A replacement Graph helper may inherit this account binding on our tab.
+        Recovery still verifies the actual target and frame against it.
+        """
+        return self._navigation_url
+
+    @property
+    def recovery_attempted(self) -> bool:
+        """Keep strict identity checks across helper replacements after recovery."""
+        return self._recovery_attempted
+
     def call(self, method: str, params: dict | None = None, *, timeout: float = CALL_S) -> dict:
         if self.closed:
             raise CdpError("the tab is closed")
@@ -282,6 +297,7 @@ class PageTab:
         got = self.call("Page.navigate", {"url": url}, timeout=timeout)
         if got.get("errorText"):
             raise PageError(f"navigation failed: {got['errorText']}")
+        self._navigation_url = url
 
     def reload(self, *, timeout: float = 30.0) -> None:
         self.call("Page.reload", {"ignoreCache": False}, timeout=timeout)

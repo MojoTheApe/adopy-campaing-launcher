@@ -28,6 +28,9 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   world. ACL-1836 permits one recovery of a detached CDP session on the same owned
   target and existing browser connection. Target and main-frame location must
   match the navigated Ads Manager account; subsequent reads recheck that location.
+  The owned tab retains the successful explicit navigation intent and recovery
+  guard across replacement helpers, including warm read/write mode changes.
+  A helper never learns its expected account from the current page URL.
   Local helper setup can retry, but a sent Graph request is never replayed.
   Missing/changed targets, repeat detachment and unavailable transport stop with
   `GraphStop`, so creator reconciliation can retain already-created object details.

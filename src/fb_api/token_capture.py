@@ -257,8 +257,10 @@ class InPageGraph:
         self._clock = clock
         self._ctx: int | None = None
         self._injected = False
-        self._expected_url = ""
-        self._session_recovered = False
+        # Warm reuse can replace the helper mode without navigating the tab.
+        # Inherit only ACL's prior navigation intent, never the current page URL.
+        self._expected_url = getattr(tab, "navigation_url", "")
+        self._session_recovered = bool(getattr(tab, "recovery_attempted", False))
         self._connection_stop: GraphStop | None = None
 
     # -- отдельный мир и помощник
