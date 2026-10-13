@@ -7297,7 +7297,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "851": {
+        "actor": "Worker-SR1012",
+        "session": "connection_sr1012_worker",
+        "coordinator": "Coordinator-CR1012",
+        "branch": "codex/acl-1851-caplog-isolation",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1851-2026-10-13",
+        "id": "2dfb80a2c826488f97154fbce08cff6e",
+        "issue": 851,
+        "state": "implementing",
+        "started_at": "2026-10-13T07:14:58+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -11597,6 +11610,17 @@
         },
         "pr": 849,
         "queued_at": "2026-10-13T06:56:12+00:00"
+      },
+      "851": {
+        "implementers": [
+          {
+            "actor": "Worker-SR1012",
+            "session": "connection_sr1012_worker"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-SR1012",
+        "coordinator": "Coordinator-CR1012"
       }
     },
     "actors": {
@@ -23183,6 +23207,13 @@
         "issue": 845,
         "pr": 850,
         "actor": "Worker-Q8V274"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T07:14:58+00:00",
+        "issue": 851,
+        "claim": "2dfb80a2c826488f97154fbce08cff6e",
+        "actor": "Worker-SR1012"
       }
     ],
     "policy": {
