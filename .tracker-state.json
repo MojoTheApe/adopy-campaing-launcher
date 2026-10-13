@@ -23415,6 +23415,11 @@
           ],
           "finished_at": "2026-10-13T07:38:02+00:00"
         }
+      },
+      {
+        "event": "included-sources-closed",
+        "at": "2026-10-13T07:39:25+00:00",
+        "batch_id": "6b33b0c808d045a89e4d5f771f95483b"
       }
     ],
     "policy": {
@@ -23850,7 +23855,8 @@
           852
         ],
         "finished_at": "2026-10-13T07:38:02+00:00",
-        "closing_sources": true
+        "closing_sources": false,
+        "sources_closed": true
       }
     },
     "integration": null,
