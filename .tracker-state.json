@@ -11763,7 +11763,7 @@
             "session": "architecture_audit_n7q4_20261013"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-N7Q4",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -15397,62 +15397,7 @@
       841,
       865
     ],
-    "review": {
-      "id": "d4f11610fae04abebbeecb14976cc192",
-      "pr": 849,
-      "issues": [
-        844
-      ],
-      "actor": "Reviewer-RS1012",
-      "session": "connection_review_rs1012",
-      "coordinator": "Coordinator-CR1012",
-      "started_at": "2026-10-13T09:08:17+00:00",
-      "state": "approving",
-      "approval": {
-        "issue": 844,
-        "pr": 849,
-        "branch": "codex/acl-1844-official-access-probe",
-        "head_sha": "71b9e100558b9d35b7173e32f0e5850c2eb0b386",
-        "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-        "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "60d765df82de915229c08cca2210ca662dfe9c2ecfefb35ef6c2b294baca0798",
-        "review": {
-          "kind": "independent-review",
-          "implementer": "Worker-N7Q4",
-          "reviewer": "Reviewer-RS1012",
-          "review_session": "connection_review_rs1012",
-          "execution_lane": "d4f11610fae04abebbeecb14976cc192",
-          "head_sha": "71b9e100558b9d35b7173e32f0e5850c2eb0b386",
-          "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-          "tree_sha": "f4d85a34294d073416eeeca2c9368ed1a9e5c1f2",
-          "verdict": "approved",
-          "report": "Independent source review of ACL-1844 / PR849 by the actual separate non-implementing Reviewer-RS1012 / connection_review_rs1012, fresh normal lane d4f11610fae04abebbeecb14976cc192. Reviewed current full issue 844 Description/Specifications and handoff, applicable repository workflow/engineering rules, and every file in the complete six-file diff. Candidate head 71b9e100558b9d35b7173e32f0e5850c2eb0b386, tree f4d85a34294d073416eeeca2c9368ed1a9e5c1f2, current main/base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Main is an ancestor, checkout and diff check are clean. No blocking source correctness, secrecy or scope findings.\n\nThe narrowly scoped operation validates the explicit numeric account and inclusive 1-to-31-day date range before network access. Only the fixed versioned HTTPS account and account-level Insights GET endpoints are constructed. Both account identity fields must match before Insights, and spend identity, currency and dates must match before success. Empty data is explicitly no_data; spend failure preserves only already verified account metadata as partial. Publishing access is always not_checked, with no ownership/asset-grant inference. No generic URL/method, paging, retries, write, browser fallback or dashboard default change is introduced.\n\nThe default urllib handler chain verifies TLS, disables ambient proxies and response-cookie retention, and rejects redirects without forwarding credentials. Token stays in the Authorization header, not URL or result. Output allowlists bounded metadata/numeric codes and local messages; raw HTTP errors, upstream messages, trace IDs and payloads are not emitted. Credential-echoing string metadata is rejected and AccessToken repr hides the value. CLI invalid-argument diagnostics do not echo pasted secrets. Credential input is a hidden prompt or explicitly selected process variable; echoed fallback is refused, unexpected execution errors are sanitized, and .env/machine/browser credentials are not discovered. Two requests maximum, socket/body/size limits and the OS DNS limitation are documented honestly. Runtime documentation clearly separates the prepared tool from live account permissions, dashboard integration and publishing.\n\nEarlier independent focused run on 59c55c1e639fe33543f55c4ef011b3dff92c8ff4: all 70 offline HTTP/CLI tests passed in 2.47s on Windows/Python 3.14. Verified current pilot implementation, CLI, full 70-case test file and runtime procedure are unchanged from that reviewed head; the main refresh adds only four upstream files with both CHANGELOG entries preserved. Successful unchanged tests were not repeated. Worker reports current-tree 211 passed in 15.50s including pilot/logging/dashboard checks; scanner, import smoke, diff and token-free/no-network CLI help passed. Prior unchanged platform/distribution set 106 passed. Re-read the actual tests, including real urllib handler-chain redirect/cookie behavior, not just a fake opener method assertion.\n\nCurrent exact-head CI 38371374340 completed SUCCESS: Linux Python 3.13 shards 1/2/3, Windows Python 3.13, tooling/process and ACL aggregate. Descriptor, latest tracker-link 38371595770 and Installer verification passed. Older tracker-link 38371374500 failed before durable handoff; the later check is current green evidence. Installer build-input and build/install/repair/uninstall were classifier-skipped for this source route; no Linux 3.11 or packaged/live pilot verification is claimed. The old baseline logging-filter failure is resolved by current main and the current full applicable CI is green.\n\nSource approval covers only the prepared official-access diagnostic in issue 844. No real Meta request, credential extraction, account connection, app provisioning, rights change, advertising mutation, production configuration or runtime installation was performed by Reviewer. The independent review does not complete ACL-1788 ownership/access research or authorize a real-account pilot. Source PR remains unmerged; integration and delivery remain separate. Revalidate if current main/base, source head, issue scope or policy changes.",
-          "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            844
-          ],
-          "recorded_at": "2026-10-13T09:10:40+00:00",
-          "issue_scopes": {
-            "844": "60d765df82de915229c08cca2210ca662dfe9c2ecfefb35ef6c2b294baca0798"
-          }
-        },
-        "lane": {
-          "id": "d4f11610fae04abebbeecb14976cc192",
-          "pr": 849,
-          "issues": [
-            844
-          ],
-          "actor": "Reviewer-RS1012",
-          "session": "connection_review_rs1012",
-          "coordinator": "Coordinator-CR1012",
-          "started_at": "2026-10-13T09:08:17+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-13T09:11:50+00:00"
-      }
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -24310,6 +24255,68 @@
         "pr": 849,
         "lane": "d4f11610fae04abebbeecb14976cc192",
         "actor": "Reviewer-RS1012"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-13T09:12:21+00:00",
+        "issue": 844,
+        "pr": 849,
+        "review": {
+          "id": "d4f11610fae04abebbeecb14976cc192",
+          "pr": 849,
+          "issues": [
+            844
+          ],
+          "actor": "Reviewer-RS1012",
+          "session": "connection_review_rs1012",
+          "coordinator": "Coordinator-CR1012",
+          "started_at": "2026-10-13T09:08:17+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 844,
+            "pr": 849,
+            "branch": "codex/acl-1844-official-access-probe",
+            "head_sha": "71b9e100558b9d35b7173e32f0e5850c2eb0b386",
+            "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+            "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "60d765df82de915229c08cca2210ca662dfe9c2ecfefb35ef6c2b294baca0798",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-N7Q4",
+              "reviewer": "Reviewer-RS1012",
+              "review_session": "connection_review_rs1012",
+              "execution_lane": "d4f11610fae04abebbeecb14976cc192",
+              "head_sha": "71b9e100558b9d35b7173e32f0e5850c2eb0b386",
+              "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+              "tree_sha": "f4d85a34294d073416eeeca2c9368ed1a9e5c1f2",
+              "verdict": "approved",
+              "report": "Independent source review of ACL-1844 / PR849 by the actual separate non-implementing Reviewer-RS1012 / connection_review_rs1012, fresh normal lane d4f11610fae04abebbeecb14976cc192. Reviewed current full issue 844 Description/Specifications and handoff, applicable repository workflow/engineering rules, and every file in the complete six-file diff. Candidate head 71b9e100558b9d35b7173e32f0e5850c2eb0b386, tree f4d85a34294d073416eeeca2c9368ed1a9e5c1f2, current main/base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Main is an ancestor, checkout and diff check are clean. No blocking source correctness, secrecy or scope findings.\n\nThe narrowly scoped operation validates the explicit numeric account and inclusive 1-to-31-day date range before network access. Only the fixed versioned HTTPS account and account-level Insights GET endpoints are constructed. Both account identity fields must match before Insights, and spend identity, currency and dates must match before success. Empty data is explicitly no_data; spend failure preserves only already verified account metadata as partial. Publishing access is always not_checked, with no ownership/asset-grant inference. No generic URL/method, paging, retries, write, browser fallback or dashboard default change is introduced.\n\nThe default urllib handler chain verifies TLS, disables ambient proxies and response-cookie retention, and rejects redirects without forwarding credentials. Token stays in the Authorization header, not URL or result. Output allowlists bounded metadata/numeric codes and local messages; raw HTTP errors, upstream messages, trace IDs and payloads are not emitted. Credential-echoing string metadata is rejected and AccessToken repr hides the value. CLI invalid-argument diagnostics do not echo pasted secrets. Credential input is a hidden prompt or explicitly selected process variable; echoed fallback is refused, unexpected execution errors are sanitized, and .env/machine/browser credentials are not discovered. Two requests maximum, socket/body/size limits and the OS DNS limitation are documented honestly. Runtime documentation clearly separates the prepared tool from live account permissions, dashboard integration and publishing.\n\nEarlier independent focused run on 59c55c1e639fe33543f55c4ef011b3dff92c8ff4: all 70 offline HTTP/CLI tests passed in 2.47s on Windows/Python 3.14. Verified current pilot implementation, CLI, full 70-case test file and runtime procedure are unchanged from that reviewed head; the main refresh adds only four upstream files with both CHANGELOG entries preserved. Successful unchanged tests were not repeated. Worker reports current-tree 211 passed in 15.50s including pilot/logging/dashboard checks; scanner, import smoke, diff and token-free/no-network CLI help passed. Prior unchanged platform/distribution set 106 passed. Re-read the actual tests, including real urllib handler-chain redirect/cookie behavior, not just a fake opener method assertion.\n\nCurrent exact-head CI 38371374340 completed SUCCESS: Linux Python 3.13 shards 1/2/3, Windows Python 3.13, tooling/process and ACL aggregate. Descriptor, latest tracker-link 38371595770 and Installer verification passed. Older tracker-link 38371374500 failed before durable handoff; the later check is current green evidence. Installer build-input and build/install/repair/uninstall were classifier-skipped for this source route; no Linux 3.11 or packaged/live pilot verification is claimed. The old baseline logging-filter failure is resolved by current main and the current full applicable CI is green.\n\nSource approval covers only the prepared official-access diagnostic in issue 844. No real Meta request, credential extraction, account connection, app provisioning, rights change, advertising mutation, production configuration or runtime installation was performed by Reviewer. The independent review does not complete ACL-1788 ownership/access research or authorize a real-account pilot. Source PR remains unmerged; integration and delivery remain separate. Revalidate if current main/base, source head, issue scope or policy changes.",
+              "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                844
+              ],
+              "recorded_at": "2026-10-13T09:10:40+00:00",
+              "issue_scopes": {
+                "844": "60d765df82de915229c08cca2210ca662dfe9c2ecfefb35ef6c2b294baca0798"
+              }
+            },
+            "lane": {
+              "id": "d4f11610fae04abebbeecb14976cc192",
+              "pr": 849,
+              "issues": [
+                844
+              ],
+              "actor": "Reviewer-RS1012",
+              "session": "connection_review_rs1012",
+              "coordinator": "Coordinator-CR1012",
+              "started_at": "2026-10-13T09:08:17+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-13T09:11:50+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -24541,6 +24548,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-13T09:06:44+00:00"
+      },
+      "844": {
+        "issue": 844,
+        "pr": 849,
+        "branch": "codex/acl-1844-official-access-probe",
+        "head_sha": "71b9e100558b9d35b7173e32f0e5850c2eb0b386",
+        "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+        "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "60d765df82de915229c08cca2210ca662dfe9c2ecfefb35ef6c2b294baca0798",
+        "review": {
+          "kind": "independent-review",
+          "implementer": "Worker-N7Q4",
+          "reviewer": "Reviewer-RS1012",
+          "review_session": "connection_review_rs1012",
+          "execution_lane": "d4f11610fae04abebbeecb14976cc192",
+          "head_sha": "71b9e100558b9d35b7173e32f0e5850c2eb0b386",
+          "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+          "tree_sha": "f4d85a34294d073416eeeca2c9368ed1a9e5c1f2",
+          "verdict": "approved",
+          "report": "Independent source review of ACL-1844 / PR849 by the actual separate non-implementing Reviewer-RS1012 / connection_review_rs1012, fresh normal lane d4f11610fae04abebbeecb14976cc192. Reviewed current full issue 844 Description/Specifications and handoff, applicable repository workflow/engineering rules, and every file in the complete six-file diff. Candidate head 71b9e100558b9d35b7173e32f0e5850c2eb0b386, tree f4d85a34294d073416eeeca2c9368ed1a9e5c1f2, current main/base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Main is an ancestor, checkout and diff check are clean. No blocking source correctness, secrecy or scope findings.\n\nThe narrowly scoped operation validates the explicit numeric account and inclusive 1-to-31-day date range before network access. Only the fixed versioned HTTPS account and account-level Insights GET endpoints are constructed. Both account identity fields must match before Insights, and spend identity, currency and dates must match before success. Empty data is explicitly no_data; spend failure preserves only already verified account metadata as partial. Publishing access is always not_checked, with no ownership/asset-grant inference. No generic URL/method, paging, retries, write, browser fallback or dashboard default change is introduced.\n\nThe default urllib handler chain verifies TLS, disables ambient proxies and response-cookie retention, and rejects redirects without forwarding credentials. Token stays in the Authorization header, not URL or result. Output allowlists bounded metadata/numeric codes and local messages; raw HTTP errors, upstream messages, trace IDs and payloads are not emitted. Credential-echoing string metadata is rejected and AccessToken repr hides the value. CLI invalid-argument diagnostics do not echo pasted secrets. Credential input is a hidden prompt or explicitly selected process variable; echoed fallback is refused, unexpected execution errors are sanitized, and .env/machine/browser credentials are not discovered. Two requests maximum, socket/body/size limits and the OS DNS limitation are documented honestly. Runtime documentation clearly separates the prepared tool from live account permissions, dashboard integration and publishing.\n\nEarlier independent focused run on 59c55c1e639fe33543f55c4ef011b3dff92c8ff4: all 70 offline HTTP/CLI tests passed in 2.47s on Windows/Python 3.14. Verified current pilot implementation, CLI, full 70-case test file and runtime procedure are unchanged from that reviewed head; the main refresh adds only four upstream files with both CHANGELOG entries preserved. Successful unchanged tests were not repeated. Worker reports current-tree 211 passed in 15.50s including pilot/logging/dashboard checks; scanner, import smoke, diff and token-free/no-network CLI help passed. Prior unchanged platform/distribution set 106 passed. Re-read the actual tests, including real urllib handler-chain redirect/cookie behavior, not just a fake opener method assertion.\n\nCurrent exact-head CI 38371374340 completed SUCCESS: Linux Python 3.13 shards 1/2/3, Windows Python 3.13, tooling/process and ACL aggregate. Descriptor, latest tracker-link 38371595770 and Installer verification passed. Older tracker-link 38371374500 failed before durable handoff; the later check is current green evidence. Installer build-input and build/install/repair/uninstall were classifier-skipped for this source route; no Linux 3.11 or packaged/live pilot verification is claimed. The old baseline logging-filter failure is resolved by current main and the current full applicable CI is green.\n\nSource approval covers only the prepared official-access diagnostic in issue 844. No real Meta request, credential extraction, account connection, app provisioning, rights change, advertising mutation, production configuration or runtime installation was performed by Reviewer. The independent review does not complete ACL-1788 ownership/access research or authorize a real-account pilot. Source PR remains unmerged; integration and delivery remain separate. Revalidate if current main/base, source head, issue scope or policy changes.",
+          "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            844
+          ],
+          "recorded_at": "2026-10-13T09:10:40+00:00",
+          "issue_scopes": {
+            "844": "60d765df82de915229c08cca2210ca662dfe9c2ecfefb35ef6c2b294baca0798"
+          }
+        },
+        "lane": {
+          "id": "d4f11610fae04abebbeecb14976cc192",
+          "pr": 849,
+          "issues": [
+            844
+          ],
+          "actor": "Reviewer-RS1012",
+          "session": "connection_review_rs1012",
+          "coordinator": "Coordinator-CR1012",
+          "started_at": "2026-10-13T09:08:17+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-13T09:11:50+00:00"
       }
     },
     "batches": {
