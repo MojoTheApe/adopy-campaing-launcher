@@ -7507,19 +7507,6 @@
         "state": "implementing",
         "started_at": "2026-10-13T10:04:06+00:00",
         "from_status": "status:todo"
-      },
-      "874": {
-        "actor": "Worker-FIVE874",
-        "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
-        "coordinator": "Coordinator-FLOW513",
-        "branch": "codex/acl-1874-five-source-reviews",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-five-reviews",
-        "id": "e3f7986c4cfe4b9b984a0b06887d274e",
-        "issue": 874,
-        "state": "stopping",
-        "started_at": "2026-10-13T11:27:19+00:00",
-        "from_status": "status:backlog",
-        "report": "# Genuine source decomposition handoff\n\nACL-1874 / Issue874 remains unfinished for actual compatible service publication, idle v2-to-v3 migration and fresh protected-board proof. Source-only work is carried into linked ACL-1875 / Issue875: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/875. This is an authorized scope decomposition preserving every original requirement, not completion of the parent.\n\nActual Worker: Worker-FIVE874; same real session flow_five_reviews_acl_worker_01a134f0_20261013. Parent claim e3f7986c4cfe4b9b984a0b06887d274e. Dedicated worktree /Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-five-reviews; original branch codex/acl-1874-five-source-reviews at baseline3327465fcbd46ccff9b64eb7c574ff5b84b99b80 remains preserved. Uncommitted source and original branch are retained without stash/reset/clear; private binary diff preserves tracked preparation and SOURCE_REVIEWS.md remains in the checkout. New child work will take a genuine fresh claim under this same Worker/session before changing branch or source.\n\nPrepared code/config: explicit mirrored execution schema3 5/5/5; reviewed merged Tracker46283b8a6fe444065838e136c89ef4ed64bd1528 descriptor/lock pin and four genuine clean immutable exported helpers (three actual diffs), preserving ACL guarded client and relocated checker root. ACL-owned CI dispatch recognizes valid v2/v3 with full checks on policy uncertainty; batch assembly supports v3 independent source owners without weakening frozen content/integration ownership. Repository/current-system/staging documentation and v2/v3 policy/CI/adoption/Git assembly regressions are prepared. All71 aliases, +1000IDs, six modules,74 historical completions, delivery fingerprint302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21 and pristine baseline bytes remain preserved.\n\nChecks:625 affected CI tooling tests passed in398.20s in existing ACL Python3.12 environment with library env empty. Scanner, import smoke, syntax,14 maintained instruction files/51 links and exact export-byte provenance passed. Full application/Windows/installer/exact-stage checks are hosted requirements, not claimed locally. Actual pinned client guide loads schema3; exact old client inspection verifies old live2 5/1/5. Other real Workers, queued Reviews, approvals/history and held assembling integration are untouched.\n\nRemaining source gates: fresh child claim/branch, actual merged Master8ce271dc289b6a7ef24498ed3d9d92cb78694a3d descriptor/Action pin after clean checkout confirmation, final child scope/self-check/two-way Issue/PR links, hosted feedback, ready handoff and genuine independent source/integration reviews, normal old v2 Approved/batch/stage/exact-tree/main/child-Merged. Parent retains compatible maintained service publication and actual idle migration/fresh-board acceptance. No PR, review approval, merge, release, employee update, deployment, advertising/pilot or migration has occurred under this source Worker."
       }
     },
     "tasks": {
@@ -12096,9 +12083,22 @@
             "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-FIVE874",
-        "coordinator": "Coordinator-FLOW513"
+        "coordinator": "Coordinator-FLOW513",
+        "handoff": {
+          "actor": "Worker-FIVE874",
+          "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
+          "coordinator": "Coordinator-FLOW513",
+          "branch": "codex/acl-1874-five-source-reviews",
+          "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-five-reviews",
+          "id": "e3f7986c4cfe4b9b984a0b06887d274e",
+          "issue": 874,
+          "state": "stopping",
+          "started_at": "2026-10-13T11:27:19+00:00",
+          "from_status": "status:backlog",
+          "report": "# Genuine source decomposition handoff\n\nACL-1874 / Issue874 remains unfinished for actual compatible service publication, idle v2-to-v3 migration and fresh protected-board proof. Source-only work is carried into linked ACL-1875 / Issue875: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/875. This is an authorized scope decomposition preserving every original requirement, not completion of the parent.\n\nActual Worker: Worker-FIVE874; same real session flow_five_reviews_acl_worker_01a134f0_20261013. Parent claim e3f7986c4cfe4b9b984a0b06887d274e. Dedicated worktree /Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-five-reviews; original branch codex/acl-1874-five-source-reviews at baseline3327465fcbd46ccff9b64eb7c574ff5b84b99b80 remains preserved. Uncommitted source and original branch are retained without stash/reset/clear; private binary diff preserves tracked preparation and SOURCE_REVIEWS.md remains in the checkout. New child work will take a genuine fresh claim under this same Worker/session before changing branch or source.\n\nPrepared code/config: explicit mirrored execution schema3 5/5/5; reviewed merged Tracker46283b8a6fe444065838e136c89ef4ed64bd1528 descriptor/lock pin and four genuine clean immutable exported helpers (three actual diffs), preserving ACL guarded client and relocated checker root. ACL-owned CI dispatch recognizes valid v2/v3 with full checks on policy uncertainty; batch assembly supports v3 independent source owners without weakening frozen content/integration ownership. Repository/current-system/staging documentation and v2/v3 policy/CI/adoption/Git assembly regressions are prepared. All71 aliases, +1000IDs, six modules,74 historical completions, delivery fingerprint302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21 and pristine baseline bytes remain preserved.\n\nChecks:625 affected CI tooling tests passed in398.20s in existing ACL Python3.12 environment with library env empty. Scanner, import smoke, syntax,14 maintained instruction files/51 links and exact export-byte provenance passed. Full application/Windows/installer/exact-stage checks are hosted requirements, not claimed locally. Actual pinned client guide loads schema3; exact old client inspection verifies old live2 5/1/5. Other real Workers, queued Reviews, approvals/history and held assembling integration are untouched.\n\nRemaining source gates: fresh child claim/branch, actual merged Master8ce271dc289b6a7ef24498ed3d9d92cb78694a3d descriptor/Action pin after clean checkout confirmation, final child scope/self-check/two-way Issue/PR links, hosted feedback, ready handoff and genuine independent source/integration reviews, normal old v2 Approved/batch/stage/exact-tree/main/child-Merged. Parent retains compatible maintained service publication and actual idle migration/fresh-board acceptance. No PR, review approval, merge, release, employee update, deployment, advertising/pilot or migration has occurred under this source Worker."
+        }
       }
     },
     "actors": {
@@ -24856,6 +24856,13 @@
             "approved_at": "2026-10-13T12:06:03+00:00"
           }
         }
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-13T12:09:33+00:00",
+        "issue": 874,
+        "actor": "Worker-FIVE874",
+        "report": "# Genuine source decomposition handoff\n\nACL-1874 / Issue874 remains unfinished for actual compatible service publication, idle v2-to-v3 migration and fresh protected-board proof. Source-only work is carried into linked ACL-1875 / Issue875: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/875. This is an authorized scope decomposition preserving every original requirement, not completion of the parent.\n\nActual Worker: Worker-FIVE874; same real session flow_five_reviews_acl_worker_01a134f0_20261013. Parent claim e3f7986c4cfe4b9b984a0b06887d274e. Dedicated worktree /Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-five-reviews; original branch codex/acl-1874-five-source-reviews at baseline3327465fcbd46ccff9b64eb7c574ff5b84b99b80 remains preserved. Uncommitted source and original branch are retained without stash/reset/clear; private binary diff preserves tracked preparation and SOURCE_REVIEWS.md remains in the checkout. New child work will take a genuine fresh claim under this same Worker/session before changing branch or source.\n\nPrepared code/config: explicit mirrored execution schema3 5/5/5; reviewed merged Tracker46283b8a6fe444065838e136c89ef4ed64bd1528 descriptor/lock pin and four genuine clean immutable exported helpers (three actual diffs), preserving ACL guarded client and relocated checker root. ACL-owned CI dispatch recognizes valid v2/v3 with full checks on policy uncertainty; batch assembly supports v3 independent source owners without weakening frozen content/integration ownership. Repository/current-system/staging documentation and v2/v3 policy/CI/adoption/Git assembly regressions are prepared. All71 aliases, +1000IDs, six modules,74 historical completions, delivery fingerprint302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21 and pristine baseline bytes remain preserved.\n\nChecks:625 affected CI tooling tests passed in398.20s in existing ACL Python3.12 environment with library env empty. Scanner, import smoke, syntax,14 maintained instruction files/51 links and exact export-byte provenance passed. Full application/Windows/installer/exact-stage checks are hosted requirements, not claimed locally. Actual pinned client guide loads schema3; exact old client inspection verifies old live2 5/1/5. Other real Workers, queued Reviews, approvals/history and held assembling integration are untouched.\n\nRemaining source gates: fresh child claim/branch, actual merged Master8ce271dc289b6a7ef24498ed3d9d92cb78694a3d descriptor/Action pin after clean checkout confirmation, final child scope/self-check/two-way Issue/PR links, hosted feedback, ready handoff and genuine independent source/integration reviews, normal old v2 Approved/batch/stage/exact-tree/main/child-Merged. Parent retains compatible maintained service publication and actual idle migration/fresh-board acceptance. No PR, review approval, merge, release, employee update, deployment, advertising/pilot or migration has occurred under this source Worker."
       }
     ],
     "policy": {
