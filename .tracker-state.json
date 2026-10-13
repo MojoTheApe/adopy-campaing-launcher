@@ -2894,20 +2894,20 @@
         "verdict": "approved",
         "reviewer": "Reviewer-Creative665",
         "implementer": "Worker-Fix665",
-        "head_sha": "54f1c1fe6697b65b115e639435d3a5b225a9de62",
+        "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
         "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-        "tree_sha": "ac882b9227bff2ea2047b181ccf0937b79d429be",
-        "execution_lane": "8e38d4617feb4a32b262501a73fe5588",
+        "tree_sha": "7c1656d82ad6f2a6cf85ca0ea98d5f331c0973fc",
+        "execution_lane": "91da4586c8c246dd93038e9a9ed5b740",
         "review_session": "review665-20261013-f83a61d2",
-        "report": "Independent complete source review of PR665 / ACL-1651 against exact current main 777663bf539308c0898cc177f872a8e0f63b597e. Inspected the complete four-path source diff (report.html, test_builder_review_browser.py, system PROJECT and CHANGELOG), full issue criteria, original author history and fresh Worker-Fix665 handoff. No blocking Standards or Spec findings remain. The shared creative catalog refresh preserves old results while fetching and updates focus/window/missed search with appropriate throttles; the new coalesced pending miss waits for the two-second gap and redraws the current visible query, preserving the ten-second focus throttle, selected creative, campaign budget and closed picker. Both Image and Video use this same catalog; type switching only clears picker/search. My exact original-source offline Chromium reproduction previously failed (zero requests and No files found), establishing the defect. On this fresh exact source I independently ran three tracked offline Chromium regressions for immediate replacement after focus refresh, no further typing, and a picker closed while refresh is pending: 3 passed,8 deselected in78.33s, Windows Python3.13.15, synthetic isolated configuration and temporary creative files. Worker evidence additionally records all11 affected Builder tests, the original reviewer reproduction and102 story/platform tests passing plus scanner/import smoke; that evidence is distinguished from my own three checks. The source contains current main and preserves original source ancestry. This review approves source correctness only: required hosted Linux jobs and aggregate are still pending and batch approval must wait for current exact-head CI. No live profile, Meta action, dashboard installation, stage verification or package delivery is asserted. No implementation edits were made by this Reviewer. Original failed review remains historical, superseded only for this new exact source.",
+        "report": "Fresh independent full-scope re-review after supported author return and rehandoff. Exact new source5f9455a tree7c1656d currentmain777663b. Compared previous independently approved54f1c1 against this new source: only docs/system/CHANGELOG.md changed, moving the full unchanged14-line ACL1651 entry from the top to immediately before uniqueACL1615 heading; no requirements, history or wording lost. report.html, tests/test_builder_review_browser.py and PROJECT.md byte-identical to54f1c1. The complete four-path current-main source scope and issue acceptance criteria remain covered by my previous complete review. No blocking Standards or Spec findings. Runtime/tests unchanged: my independent three offline Chromium replacement/immediate/closed-picker regressions passed on byte-identical code, so no redundant rerun is asserted. Original exact-source failure and historical source returns remain preserved. New full-source hosted Linux jobs and mandatory aggregate must succeed before formal batch approval; current latest tracker-link rerun succeeds after the Review handoff. No live profile, advertising action, dashboard installation, stage verification or package delivery is established. No implementation edits made by this Reviewer.",
         "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
           651
         ],
-        "recorded_at": "2026-10-13T18:05:27+00:00",
+        "recorded_at": "2026-10-13T18:43:16+00:00",
         "issue_scopes": {
-          "651": "002f03eed5e1c93a57fe614b9e26c1141056f74542d3fd9ffc7ed5baf4478ab8"
+          "651": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05"
         }
       },
       "849": {
