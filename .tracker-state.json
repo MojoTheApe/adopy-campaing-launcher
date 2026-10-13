@@ -12194,7 +12194,7 @@
             "session": "isolated_app_sol_20261013"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-IS1013",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12225,7 +12225,8 @@
           "actor": "Coordinator-FLOW513",
           "session": "flow_five_reviews_coordinator_01a134f0_20261013",
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
-        }
+        },
+        "review_report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
       },
       "874": {
         "implementers": [
@@ -25610,6 +25611,18 @@
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-13T14:14:54+00:00",
+        "issue": 872,
+        "operation": {
+          "id": "91201340047f423fa6a6747b1c5dc404",
+          "actor": "Coordinator-FLOW513",
+          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -25753,50 +25766,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-13T06:25:54+00:00"
-      },
-      "872": {
-        "issue": 872,
-        "pr": 873,
-        "branch": "work/acl-1872-isolated-meta-setup",
-        "head_sha": "67d921a12429f036216e5dd5ea7faec0682e343a",
-        "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-        "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "e819cc27b07349b71c636566e358ff14547ef2580b63b5e5ed729a6a5c3e596a",
-        "review": {
-          "kind": "independent-review",
-          "implementer": "Worker-IS1013",
-          "reviewer": "Reviewer-RS1012",
-          "review_session": "connection_review_rs1012",
-          "execution_lane": "89bd411fc54d45399dcaea198e3f9be9",
-          "head_sha": "67d921a12429f036216e5dd5ea7faec0682e343a",
-          "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-          "tree_sha": "065848e035dac397842d3542a8b65abc057db2a5",
-          "verdict": "approved",
-          "report": "# ACL-1872 / PR873 final independent source review\n\nActual Reviewer-RS1012 / connection_review_rs1012, a separate non-implementing agent throughout. Actual author Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\n\n- Head: 67d921a12429f036216e5dd5ea7faec0682e343a.\n- Current main/base: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\n- Tree: 065848e035dac397842d3542a8b65abc057db2a5.\n- Full comparison: git diff 3327465fcbd46ccff9b64eb7c574ff5b84b99b80...67d921a12429f036216e5dd5ea7faec0682e343a.\n- Genuine fresh ordinary review lane: 89bd411fc54d45399dcaea198e3f9be9, acquired at 2026-10-13T12:01:59Z after current CI, ready linkage and durable author handoff.\n\nSource-content verdict: approved. No remaining blocking source finding. The supported batch approve transition and lane release are separate facts recorded only by their resulting receipts.\n\nThe reviewer read the complete issue872 Description, Specifications, acceptance criteria and updated implementation evidence, the repository AGENTS/workflow/delivery/layout/engineering instructions, and the entire original change plus the complete repair delta. Fresh remote main, open ready PR head/base, local tree, clean checkout and matching schema2 delivery/execution policy were verified immediately before lane acquisition. The task was durably queued with the author's implementation claim released. The shared source review lane was free; the unrelated Coordinator-CX1012A integration claim was left untouched.\n\n## Standards\n\nBoth genuine independent read-only helpers reviewed the original scope and then the repaired fixed head in parallel: acl1872_standards and acl1872_spec, GPT-6.1 Sol high. Their findings are retained separately. The actual reviewer independently inspected and reproduced the product defects and their corrections; helper findings are not substitutes for that review.\n\nStandards: no remaining documented-standard findings. Recovery instructions now reside under docs/runtime and are linked from docs/system, matching the repository ownership rule. Complete patch/remove map transactions and both locking link-writer calls execute off the ASGI event loop. Existing lock coverage and durable invalidation before mapping replacement remain intact. Public-caller regressions use explicit synchronization to prove dashboard control dispatch before lock release, rather than asserting a timing threshold. No materially useful heuristic code-smell finding was reported.\n\n## Spec\n\nSpec: no remaining concrete defect or unrequested scope expansion. The bounded child extends the existing shared Connect panel with a separate declared Meta App ID, Windows CurrentUser DPAPI-protected access token and optional App Secret, resume, replace and local disconnect. Saving is explicitly API-unverified and enables no official read/publish transport or browser fallback. The reviewed public Host/cross-site security boundary and redacted DTO/error path remain applicable.\n\nStable connection identity uses canonical physical profile UUID and exact numeric ad-account identity. Permanent local App ownership, CAS revisions and replay receipts prevent normal cross-connection reassignment or stale restoration. Complete map/link, bootstrap/migration and installer map-write transactions durably retire old bindings. Cleanup failure remains durable and resumes the same identity. Registry/vault writes use existing local locking and atomic replacement; secrets are protected before a metadata reference is committed. No plaintext fallback or legacy token migration was introduced. An interrupted pre-commit save can leave an unused encrypted orphan, which grants no readiness.\n\nThe confirmed corrupt-storage finding is closed: every successful save receipt must name a valid App ID whose permanent owner is that same connection. Missing or conflicting historical ownership is refused before mutation. The old reproducer required contradictory metadata; it was not a normal-flow ownership bypass. Secrets are not returned to forms, stored in browser localStorage, exported to ordinary diagnostics/library data or echoed by the reviewed error paths. Operational recovery accurately distinguishes local removal from remote revocation and reconnect requirements after loss of user-bound decryption.\n\nThe complete implemented local-preparation acceptance scope is met. ACL-1858 still owns verified token/App/account permissions and official HTTP routing; ACL-1358 retains wider legacy credential migration. Automated app creation, actual Meta access, deployment and employee installation are not outcomes of this child or this review.\n\n## Verification\n\nEarlier reviewer failed-before evidence is retained in acl1872-exact-source-content-review-7f0fd3df.md: actual public ASGI control dispatch was delayed by a held registry lock, and actual public save accepted reassignment after removal of a contradictory historical owner. Only isolated synthetic data and an explicit OS-encryption boundary fake were used for those cross-platform reproductions.\n\nOn exact repaired head67d921a1, the reviewer ran only the six new public regressions needed to close those findings. All four contended map/link variants passed: actual nonexistent-job cancel returned404 while the production lock remained held, then the map operation completed200 after release. Both corrupt-owner variants passed and preserved registry and ciphertext bytes while returning redacted503. The first two corruption-case attempts stopped during initial synthetic credential setup because the reviewer-created temporary path produced a272-character atomic filename. The underlying FileNotFoundError was identified; only those two unexecuted cases were rerun with a shorter isolated path, passing in1.46s. The four successful control cases and unchanged broad selections were not repeated. This is not described as a clean first run.\n\nAuthor evidence remains separately attributed: Windows/Python3.14,177 affected tests, six final public repros,46 packaging unit tests, staged secret scanner/import smoke/diff check passed. That evidence includes actual Chromium executing the production Connect partial/JavaScript against public ASGI routes with an explicit OS-encryption fake, separate actual Windows DPAPI and fresh-process recovery, and process concurrency. No live Meta/MLX call was used as test evidence.\n\nFresh hosted checks were independently read back on the exact repaired source:\n\n- CI38391268614 completed SUCCESS: Linux Python3.11 shards1/2/3, Python3.13 shards1/2/3, Windows3.13, tooling, process checks and ACL verification all passed.\n- Installer38391268757 completed SUCCESS: input verification and actual isolated build/install/repair/uninstall plus Installer verification. These jobs executed; this is not a classifier-skip claim or an employee deployment claim.\n- Descriptor38391268623 passed.\n- Ready-PR tracker-link38393931025 attempt2 passed at12:00:20Z after durable handoff. Its initial attempt preceded the Review transition; earlier draft structural successes are not substituted for ready admission.\n\nOld-head hosted results are not used as evidence for this repaired tree. No successful unchanged tests were repeated for formal bookkeeping. No source/test edit, takeover, live profile/campaign action, runtime configuration change, merge, batch integration or deployment was performed by this reviewer. Source admission preserves the separately required combined integration, stage/main and package-delivery gates.\n\nAxis totals: Standards0 remaining findings; Spec0 remaining findings. The previous two product defects and documentation placement finding are closed.\n",
-          "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            872
-          ],
-          "recorded_at": "2026-10-13T12:04:49+00:00",
-          "issue_scopes": {
-            "872": "e819cc27b07349b71c636566e358ff14547ef2580b63b5e5ed729a6a5c3e596a"
-          }
-        },
-        "lane": {
-          "id": "89bd411fc54d45399dcaea198e3f9be9",
-          "pr": 873,
-          "issues": [
-            872
-          ],
-          "actor": "Reviewer-RS1012",
-          "session": "connection_review_rs1012",
-          "coordinator": "Coordinator-CR1012",
-          "started_at": "2026-10-13T12:01:59+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-13T12:06:03+00:00"
       },
       "875": {
         "issue": 875,
