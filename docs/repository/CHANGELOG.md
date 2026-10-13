@@ -1,5 +1,20 @@
 # Repository process history
 
+## ACL-1874 — Activate five independent source reviews — 2026-10-13
+
+After ACL-1875's independently reviewed and fully verified old-v2 source/stage/main
+completion at main `72a2d2c21aa42f1a388d32ea27ba2c8253ee7854`, the maintained
+Tracker fallback publication at `57b1674d34049b88490908fc69c25747059a27d4` and
+supported owner-paused handoffs allowed idle schema-3 adoption at 14:52:32 UTC.
+Independent complete-state comparison and fresh protected projections at 14:52:52 UTC
+confirmed five implementations, five source reviews, one integration review and
+batches of five. The 37-item queue/order and full author/handoff/history/delivery
+records remain preserved; closed unmerged historical sources stay unfinished.
+The original cutover/recovery procedure and paused source checkouts remain intact.
+See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md) for exact integrated source, publication,
+migration and digest-covered board evidence. This entry claims no stable ACL release,
+employee rollout or live advertising/pilot verification.
+
 ## ACL-1875 — Prepare five independent source reviews
 
 Select matching execution schema 3 limits implementation5/review5/batch5, keeping
