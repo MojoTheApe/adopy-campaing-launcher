@@ -1,16 +1,5 @@
 # System history
 
-## Honest dashboard loading stages and ACM identity — ACL-1865
-
-The report-loading screen uses the existing centered ACM logo above the product
-name, followed by workbook reading, statistics processing and dashboard preparation.
-`/report/status` adds a `stage` and `waiting` flag. Progress comes from real pipeline
-boundaries and is bound to its background job, requested period and captured manager;
-another request's progress is never shown as this page's completed work. A cached
-workbook skips reading/processing, and period-only loading shows preparation.
-The existing ready/error polling and automatic dashboard transition remain in place,
-with responsive light/dark styling, reduced motion and connection retry messages.
-
 ## Account-label ID suffix keeps existing alias precedence — ACL-1824
 
 - A long numeric account-ID suffix is removed only after the existing tail lookup
@@ -89,6 +78,17 @@ Owner review of ACL-1620 (06.10).
 - The note is drawn as an input box (field border, radius, light background, one line with an
   ellipsis). An empty note shows the same quiet box with no text, so it is always clear that it can
   be clicked. The country box stays compact beside the name.
+
+## Honest dashboard loading stages and ACM identity — ACL-1865
+
+The report-loading screen uses the existing centered ACM logo above the product
+name, followed by workbook reading, statistics processing and dashboard preparation.
+`/report/status` adds a `stage` and `waiting` flag. Progress comes from real pipeline
+boundaries and is bound to its background job, requested period and captured manager;
+another request's progress is never shown as this page's completed work. A cached
+workbook skips reading/processing, and period-only loading shows preparation.
+The existing ready/error polling and automatic dashboard transition remain in place,
+with responsive light/dark styling, reduced motion and connection retry messages.
 
 ## One metric set in every attribution table, Totals and Campaign managers on Home — ACL-1652, ACL-1654, ACL-1656
 
