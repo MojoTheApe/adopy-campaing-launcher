@@ -115,7 +115,8 @@ VIDEO_MAX_POLLS = 20
 CALLS_BASE = 20
 CALLS_PER_AD_SET = 7
 CALLS_PER_AD = 5
-CALLS_PER_VIDEO_POLLS = 4       # опросов обработки на одно видео (предел - VIDEO_MAX_POLLS, обычно 1-3)
+CALLS_PER_VIDEO_POLLS = 8       # опросов обработки на одно видео: медленная обработка (6-8 опросов) не должна упираться в бюджет;
+                                # больше 250 вызовов на план - отказ заранее («разбейте»), а не остановка на полпути
 CALLS_INSTANT_FORM = 10
 
 

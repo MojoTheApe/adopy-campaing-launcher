@@ -655,3 +655,54 @@ def test_upload_fb_export_refuses_a_custom_ad_set_name_or_pixel():
         slots = web._parse_build_upload_form(_fields(**{key: val}))[2]
         assert any(s.get("adset_name") or s.get("pixel_id") for s in slots)
     assert "Upload FB cannot hold a custom ad set name or pixel" in (ROOT / "src/web/app.py").read_text(encoding="utf-8")
+
+
+# ───────────────────── ревью 833, раунд 2: бюджет вызовов и медленное видео ─────────────────────
+
+def _video_draft(tmp_path, *, sets, ads=3):
+    draft = _draft(tmp_path, sets=2, ads=ads)
+    draft.ad_sets = (draft.ad_sets[:1] if sets == 1 else
+                     draft.ad_sets + [_ad_set(tmp_path, f"MX Leads 1 - Ad set {i + 1}", i * ads, ads, adset_index=i)
+                                      for i in range(2, sets)])
+    for s in draft.ad_sets:
+        for ad in s.ads:
+            ad.creative_type = "Video"
+            ad.creative_path = str(Path(ad.creative_path).with_suffix(".mp4"))
+            Path(ad.creative_path).write_bytes(b"video-" + ad.creative_id.encode())
+    return draft
+
+
+@pytest.mark.parametrize("sets", [1, 3, 5])
+def test_slow_video_processing_never_exhausts_the_call_budget(tmp_path, sets):
+    from src.web import publish_api
+
+    draft = _video_draft(tmp_path, sets=sets)
+    budget, refusal = publish_api.create_call_budget(cr.plan_from_draft(draft))
+    assert refusal == ""
+    meta = FakeMeta(video_states=("processing",) * 7 + ("ready",))      # 8 опросов на каждое видео
+    pub = _publisher_for(meta)
+    res = pub.publish_draft(draft)
+    assert res["success"] is True, res["error"]
+    assert pub._client.calls < budget
+
+
+def test_the_call_budget_is_never_below_the_old_fixed_150_for_small_plans(tmp_path):
+    from src.web import publish_api
+
+    for sets, ads in ((2, 1), (2, 3), (3, 3)):
+        budget, refusal = publish_api.create_call_budget(cr.plan_from_draft(_draft(tmp_path, sets=sets, ads=ads)))
+        assert refusal == "" and budget == 150
+    one = _draft(tmp_path, sets=2, ads=1)
+    one.ad_sets = one.ad_sets[:1]
+    assert publish_api.create_call_budget(cr.plan_from_draft(one)) == (150, "")
+
+
+def test_an_upper_limit_video_plan_is_refused_up_front_not_stopped_midway(tmp_path):
+    from src.web import publish_api
+
+    assert publish_api.create_call_budget(cr.plan_from_draft(_video_draft(tmp_path, sets=5)))[1] == ""
+    draft = _video_draft(tmp_path, sets=6)                    # 6 x 3 видео: больше 250 при 8 опросах на видео
+    assert "split it" in publish_api.create_call_budget(cr.plan_from_draft(draft))[1]
+    meta = FakeMeta()
+    res = _publisher_for(meta).publish_draft(draft)
+    assert res["success"] is False and "split it" in res["error"] and meta.posts == []

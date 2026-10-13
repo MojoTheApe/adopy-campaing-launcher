@@ -51,6 +51,8 @@ MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
 #: ("split it"), а не останавливается на полпути. Свой потолок кончает только эту
 #: кампанию, следующие идут со своим (ревью, minor 5).
 DEFAULT_CREATE_MAX_CALLS = 250
+#: Бюджет вызовов на кампанию не опускается ниже прежнего фиксированного (ревью 833, раунд 2).
+CREATE_BUDGET_FLOOR = 150
 CREATE_CALLS_FLOOR = 20
 #: Потолок на предпроверку кабинета (один раз на задание).
 PREFLIGHT_MAX_CALLS = 12
@@ -89,8 +91,9 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     if need > DEFAULT_CREATE_MAX_CALLS:
         return ceiling, (f"This campaign needs about {need} Meta calls, more than one run allows "
                          "— split it. Nothing was created.")
-    # Нижний потолок в окружении - решение оператора: бюджет зажимается им (остановка на полпути, как всегда).
-    return min(need, ceiling), ""
+    # Не ниже прежних 150: малые планы не теряют запас на медленное видео. Нижний потолок в окружении -
+    # решение оператора: бюджет зажимается им (остановка на полпути, как всегда).
+    return min(max(need, CREATE_BUDGET_FLOOR), ceiling), ""
 
 
 def _now_iso() -> str:
