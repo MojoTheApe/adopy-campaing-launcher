@@ -15034,6 +15034,8 @@ function cbPlanHtml(data) {
       h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
     });
     if (s) {
+      if ((s.manual_required || []).length) h += '<div class="cbd-plan-manual" style="color:var(--warn)"><strong>Manual completion required</strong>: '
+        + s.manual_required.map(aclEscHtml).join(' ') + '</div>';
       var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
         + (s.page_name ? aclEscHtml(s.page_name) + ' · ' : '') + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
@@ -15059,6 +15061,8 @@ function cbPlanHtml(data) {
             + ' · CTA ' + aclEscHtml(ad.cta) + '</li>';
         });
         h += '</ol>';
+        if (a.ads_not_created) h += '<div class="cbd-plan-manual">Ads will not be created ('
+          + aclEscHtml(String(a.pending_ad_count || 0)) + ' kept in the builder). Add a Page and ads manually, or retry after Page access is restored.</div>';
       });
     }
     h += '</div>';
@@ -16399,7 +16403,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
                     || (r.publishable !== true && r.success);
       var warningOnly = r.publishable === true
                         && !!(r.warnings && r.warnings.length);
-      var icon = !r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅'));
+      var manual = r.success && r.manual_required && r.manual_required.length && !(r.blocking_failures || []).length;
+      var icon = manual ? '⚠️' : (!r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅')));
       html += '<div class="cb-status-row">';
       html += '<span class="cb-status-icon">' + icon + '</span>';
       html += '<span class="cb-status-name">' + aclEscHtml(r.campaign_name || '?')
@@ -16409,6 +16414,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       }
       html += '</div>';
       if (r.backend === 'api') html += cbApiReadbackHtml(r);
+      if (manual) html += '<div class="cb-status-err" style="color:var(--warn);border-color:var(--warn)">Manual completion required: '
+        + r.manual_required.map(aclEscHtml).join(' ') + '</div>';
       if (r.error) {
         // Green is reserved for a finished, publishable draft — an
         // informational note such as the dry-run message. Anything blocking

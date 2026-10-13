@@ -331,11 +331,11 @@ def test_page_not_on_the_account(tmp_path):
     assert _by(out)["pixel_ok"]["status"] == "ok", "остальные проверки независимы"
 
 
-def test_page_automatic_uses_first_available_and_blocks_empty(tmp_path):
+def test_page_automatic_uses_first_available_and_warns_for_manual_shell(tmp_path):
     d = _draft(tmp_path, ads=1)
     d.page_id = ""
     assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
-    assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "error"
+    assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"
     assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"   # единственная страница
 
 

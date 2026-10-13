@@ -173,3 +173,16 @@ Loading failures and confirmed empty lists are distinct and support Refresh page
 RPA resolves the selection before campaign creation and passes the ID and unique display name to the recorded flow. Every ad verifies Identity; failure is non-retryable and not publishable. The existing sanitized `tests/fixtures/ads_manager/simple_create_2026_09_27.html` supplies regression coverage for the captured collapsed Identity summary. Picker interaction has offline native/custom-control tests; a live alternate-Page picker pilot has not been performed. Unrecognized or ambiguous controls fail closed. Other RPA engines are refused for builder Page selections until they implement Identity verification.
 
 Verification uses synthetic accounts and mocked browser/API transports only. The isolated local dashboard preview is not a production deployment or a stage/main merge.
+# ACL-1880: manual completion when the automatic Page list is empty
+
+Owner revised the acceptance on 2026-10-13: use the first available Page; if none
+is available, allow preparation for manual completion. In the API website path,
+a confirmed empty list and no explicit Page now produces a warning. The worker
+creates only a PAUSED campaign and its PAUSED ad sets, with readback of those
+objects. It does not upload media or create creatives/ads without a Page. Results
+carry `manual_required` and remain non-publishable. The operator adds Page/ads in
+Ads Manager or retries after Page access is restored; normal identity labels
+reuse the same campaign/ad sets. The original builder retains the ad inputs.
+Instant Forms and an explicitly unavailable Page still block, as do failed Page
+reads. The RPA path retains its existing Identity requirements. This supersedes
+the earlier requirement that every empty Page list blocks all preparation.

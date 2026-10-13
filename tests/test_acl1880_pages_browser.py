@@ -10,6 +10,15 @@ SCRIPT = Path(__file__).resolve().parents[1] / 'src/web/static/account_pages.js'
 PAGES = [{'id': '123', 'name': 'First Page'}, {'id': '456', 'name': 'Second Page'}]
 
 
+def test_manual_plan_does_not_promise_ads(full_page):
+    html = full_page.evaluate("""() => cbPlanHtml({results:[{campaign_name:'Manual', warnings:[],
+      plan:{summary:{daily_budget:50,currency:'USD',manual_required:['Add Page and ads manually'],
+      ad_sets:[{name:'Set',ads:[],ads_not_created:true,pending_ad_count:2}]}}}]})""")
+    assert 'Manual completion required' in html
+    assert 'Ads will not be created (2 kept in the builder)' in html
+    assert '<li><strong>' not in html
+
+
 def install(page, payload):
     page.route('**/api/account-pages', lambda r: r.fulfill(json=payload))
     page.add_script_tag(path=str(SCRIPT))
@@ -37,6 +46,7 @@ def test_error_retry_and_confirmed_empty(page):
     page.route('**/api/account-pages', lambda r: r.fulfill(json={'ok': True, 'state': 'empty', 'pages': [], 'message': 'No Facebook Pages available'}))
     page.evaluate("cbRefreshPages(document.querySelector('.cb-slot'), true)")
     page.wait_for_function("document.querySelector('[data-page-note]').textContent.includes('No Facebook Pages')")
+    assert page.locator('.cb-page-select').first.is_enabled()
     page.route('**/api/account-pages', lambda r: r.fulfill(json={'ok': True, 'state': 'ready', 'pages': PAGES}))
     page.evaluate("cbRefreshPages(document.querySelector('.cb-slot'), true)")
     page.wait_for_function("document.querySelector('[data-page-note]').textContent.includes('First Page')")

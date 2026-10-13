@@ -25,7 +25,7 @@
     var chosen = pages.find(function (p) { return p.id === hidden.value; });
     if (hidden.value && !chosen) select.add(new Option('Unavailable Page (' + hidden.value + ')', hidden.value));
     select.value = hidden.value;
-    select.disabled = !state || state.state !== 'ready';
+    select.disabled = !state || (state.state !== 'ready' && state.state !== 'empty');
     if (!key) note.textContent = 'Connect an account to load its Facebook Pages.';
     else if (!state || state.state === 'loading') note.textContent = 'Loading Facebook Pages…';
     else if (state.state !== 'ready') note.textContent = state.message;

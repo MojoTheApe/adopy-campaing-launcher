@@ -9,10 +9,11 @@ def test_automatic_uses_first_of_multiple_pages():
     assert plan.page_id == '123'
 
 
-def test_empty_pages_has_actionable_error():
-    with pytest.raises(PlanError, match='No Facebook Pages.*Refresh'):
-        resolve_page(SimpleNamespace(page_id='', page_source=''),
-                     AccountFacts('act_1234567890', 'USD', [], []))
+def test_empty_pages_offer_manual_website_completion():
+    plan = SimpleNamespace(page_id='', page_source='', ad_sets=[])
+    warnings = resolve_page(plan, AccountFacts('act_1234567890', 'USD', [], []))
+    assert plan.page_id == '' and plan.page_source == 'manual completion'
+    assert 'ads will not be created' in warnings[0]
 
 @pytest.mark.parametrize('chosen', ['123', '456'])
 def test_explicit_page_preserved(chosen):
