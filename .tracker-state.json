@@ -7461,9 +7461,10 @@
         "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Builder-Handle-2026-10-13",
         "id": "61f661424bb444cdb057fdb2e526248a",
         "issue": 871,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-13T09:54:32+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "report": "ACL-1871 was assigned after intake on the provisional codex/builder-handle-controls branch. Temporarily release only this run's claim to rename that same branch to codex/acl-1871-builder-handle and immediately reclaim under the same Worker-BH7K26/session and worktree. Existing implementation and tests remain intact. No handoff or PR exists yet. This is branch bookkeeping only, with no new actor or product blocker."
       }
     },
     "tasks": {
