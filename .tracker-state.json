@@ -7357,22 +7357,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "841": {
-        "actor": "Worker-T8L621",
-        "session": "table-fix-01a133d7-1841",
-        "coordinator": "Coordinator-D7K413",
-        "branch": "codex/acl-1841-account-table-responsive",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1841-2026-10-13",
-        "id": "4b1b4a13060d408793ec620b03eb80f7",
-        "issue": 841,
-        "state": "handoff",
-        "started_at": "2026-10-13T08:14:11+00:00",
-        "from_status": "status:todo",
-        "pr": 848,
-        "report": "Partial source implementation: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/848\n\nCurrent-main refresh: genuine author merged official main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80 into the retained source branch. New source head b5f85d02fa3cfc69ea8d8966d1bedce8b679e0b0, tree 000992a0edbe5a73199535d8ac7e893ea550fd42. The sole changelog insertion conflict preserves both ACL-1841 and ACL-1824 sections. No design behavior changed during reconciliation.\n\nThe shared Home / country Manage account table keeps a readable minimum width in a keyboard-focusable horizontal scroll region. Names and headers wrap, and read/profile/unlink actions remain reachable. Existing data, table order and handlers are preserved.\n\nValidation on the refreshed tree: 186 affected tests passed, including the strengthened 16-case responsive regression (214.62 seconds). Production CSS, synthetic populated/empty sections, light/dark themes, and 1280/1024/768/390 px were checked. Future Read campaigns and Open profile actions were also checked without live advertising operations. Secret scan, import smoke and diff check passed. Previous source checks apply only to the prior baseline; new complete source CI remains required.\n\nAll original acceptance criteria remain in force. This source does not complete ACL-1841: coherent campaign-toolbar grouping and complete integrated dashboard geometry / builder clearance remain outstanding until the ACL-1797/1798 campaign implementation is integrated. Two table-boundary integration conflicts require reconciliation; keep toolbar and footer outside the account-table scroller. No installer or live delivery is claimed."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -11615,7 +11600,7 @@
             "session": "table-fix-01a133d7-1841"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-T8L621",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -11624,16 +11609,16 @@
           "coordinator": "Coordinator-D7K413",
           "branch": "codex/acl-1841-account-table-responsive",
           "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1841-2026-10-13",
-          "id": "9eb9fd8a43dd43ecac2f531fc7855ec2",
+          "id": "4b1b4a13060d408793ec620b03eb80f7",
           "issue": 841,
           "state": "handoff",
-          "started_at": "2026-10-13T06:35:09+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-13T08:14:11+00:00",
+          "from_status": "status:todo",
           "pr": 848,
-          "report": "Partial source implementation: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/848\n\nThe shared Home / country Manage account table keeps a readable minimum width in a keyboard-focusable horizontal scroll region. Names and headers wrap, and read/profile/unlink actions remain reachable. Existing data, table order and handlers are preserved.\n\nValidation: 186 affected tests passed; the strengthened 16-case responsive regression also passed. Production CSS, synthetic populated/empty sections, light/dark themes, and 1280/1024/768/390 px were checked. Future Read campaigns and Open profile actions were also checked without live advertising operations. Secret scan, import smoke and diff check passed. Complete source CI remains required.\n\nAll original acceptance criteria remain in force. This source does not complete ACL-1841: coherent campaign-toolbar grouping and complete integrated dashboard geometry / builder clearance remain outstanding until the ACL-1797/1798 campaign implementation is integrated. Two table-boundary integration conflicts require reconciliation; keep toolbar and footer outside the account-table scroller. No installer or live delivery is claimed."
+          "report": "Partial source implementation: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/848\n\nCurrent-main refresh: genuine author merged official main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80 into the retained source branch. New source head b5f85d02fa3cfc69ea8d8966d1bedce8b679e0b0, tree 000992a0edbe5a73199535d8ac7e893ea550fd42. The sole changelog insertion conflict preserves both ACL-1841 and ACL-1824 sections. No design behavior changed during reconciliation.\n\nThe shared Home / country Manage account table keeps a readable minimum width in a keyboard-focusable horizontal scroll region. Names and headers wrap, and read/profile/unlink actions remain reachable. Existing data, table order and handlers are preserved.\n\nValidation on the refreshed tree: 186 affected tests passed, including the strengthened 16-case responsive regression (214.62 seconds). Production CSS, synthetic populated/empty sections, light/dark themes, and 1280/1024/768/390 px were checked. Future Read campaigns and Open profile actions were also checked without live advertising operations. Secret scan, import smoke and diff check passed. Previous source checks apply only to the prior baseline; new complete source CI remains required.\n\nAll original acceptance criteria remain in force. This source does not complete ACL-1841: coherent campaign-toolbar grouping and complete integrated dashboard geometry / builder clearance remain outstanding until the ACL-1797/1798 campaign implementation is integrated. Two table-boundary integration conflicts require reconciliation; keep toolbar and footer outside the account-table scroller. No installer or live delivery is claimed."
         },
         "pr": 848,
-        "queued_at": "2026-10-13T06:51:32+00:00",
+        "queued_at": "2026-10-13T08:20:59+00:00",
         "review_report": "# ACL-1841 / PR848 source review return\n\nChanges required: refresh the source baseline before approval.\n\nPR848 head 17cb5634fb7f33fc33b21a7e3ca8be7a11441acc retains base e8e59f8376458f2f73089c3f2a8d454837ff033f. Official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80; previous source checks establish the old baseline only.\n\nThe genuine author must take a fresh implementation claim on the retained source branch, include current main, reconcile conflicts under author ownership, run affected Home/Manage geometry and keyboard checks plus actual source CI, and obtain fresh independent exact-head/base/scope review after durable handoff.\n\nPreserve the explicit PARTIAL scope. PR848 does not complete ACL-1841: the campaign-toolbar search/filter, expansion, column and batch grouping criterion remains outstanding until ACL-1797/ACL-1798 upstream content is integrated and verified. Full integrated dashboard geometry and builder clearance also remain outstanding. Keep the footer and toolbar outside the horizontal table scroller and preserve the documented author-reconciliation boundaries; do not import unrelated preview commits or erase unresolved acceptance criteria.\n\nThis is a baseline prerequisite return, not a complete acceptance approval. No source edits, approval, merge, stage entry, package publication or installation performed."
       },
       "845": {
@@ -15260,7 +15245,8 @@
       839,
       845,
       838,
-      840
+      840,
+      841
     ],
     "review": null,
     "history": [
@@ -23713,6 +23699,13 @@
         "issue": 840,
         "pr": 846,
         "actor": "Worker-F8Q620"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T08:20:59+00:00",
+        "issue": 841,
+        "pr": 848,
+        "actor": "Worker-T8L621"
       }
     ],
     "policy": {
