@@ -2612,31 +2612,17 @@
       }
     },
     "stage": {
-      "pr": 763,
+      "pr": 847,
       "issues": [
-        728,
-        756
+        824
       ],
-      "tree_sha": "295c4bf5b7911fc3b5f417d429d84d0d927629a3",
-      "source_sha": "a227497ab04225ab5e7ae52e06c8fb74fcaf57ac",
-      "main_tree": "f0a9183dbf0b4babc358c0127ba4efb49b7fde03",
+      "tree_sha": "5366a8906888cba5c25487adea3da9a9cfe28d03",
+      "source_sha": "22df14b3a7f01729a2e85607da30f9dca7585958",
+      "main_tree": "295c4bf5b7911fc3b5f417d429d84d0d927629a3",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-09T22:13:24+00:00",
-      "batch_id": "3b8ca0b6359c400c90e4bb3e78a40247",
-      "verification": {
-        "kind": "stage-verification",
-        "result": "passed",
-        "target": "ACL isolated Windows stage installation",
-        "source_sha": "a227497ab04225ab5e7ae52e06c8fb74fcaf57ac",
-        "tree_sha": "295c4bf5b7911fc3b5f417d429d84d0d927629a3",
-        "checks": [
-          "Git checks on actual stage a227497: CI run 37997956202 success",
-          "Windows installer run 37997956336 success"
-        ],
-        "report": "Batch ACL-1728, ACL-1756 stage verification: Git and installer checks green on the actual stage a227497. Integration review: scratchpad/review_763.md."
-      },
-      "verified_at": "2026-10-09T22:14:45+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-13T07:22:33+00:00",
+      "batch_id": "6b33b0c808d045a89e4d5f771f95483b"
     },
     "tasks": {
       "248": {
@@ -11169,7 +11155,7 @@
             "session": "work_wx1012a_20261012"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-WX1012A",
         "coordinator": "Coordinator-CX1012A",
         "handoff": {
@@ -23576,7 +23562,7 @@
       "id": "6b33b0c808d045a89e4d5f771f95483b",
       "actor": "Coordinator-CX1012A",
       "session": "coord_cx1012a_20261012",
-      "state": "reviewing",
+      "state": "stage",
       "issues": [
         824
       ],
@@ -23631,7 +23617,7 @@
       "intake": "b9787ef2958b4fd2874f09b9a01e6107",
       "started_at": "2026-10-13T06:38:56+00:00",
       "pr": 847,
-      "entered_stage": false,
+      "entered_stage": true,
       "history": []
     },
     "intake": {
