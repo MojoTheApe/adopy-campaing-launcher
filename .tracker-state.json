@@ -7393,19 +7393,6 @@
         "state": "implementing",
         "started_at": "2026-10-13T08:14:11+00:00",
         "from_status": "status:todo"
-      },
-      "864": {
-        "actor": "Worker-SR1012",
-        "session": "connection_sr1012_worker",
-        "coordinator": "Coordinator-CR1012",
-        "branch": "codex/acl-1864-stats-leading-rows",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Audit-2026-10-12\\worktrees\\acl-1864",
-        "id": "02065bdd371f4967b5311d303481b860",
-        "issue": 864,
-        "state": "stopping",
-        "started_at": "2026-10-13T08:16:28+00:00",
-        "from_status": "status:todo",
-        "report": "# ACL-1864 deferred without implementation \u2014 2026-10-13\n\nWorker-SR1012 / connection_sr1012_worker, Coordinator-CR1012.\nClaim02065bdd371f4967b5311d303481b860.\n\nThe owner repaired the workbook and reported that it now works, then asked to\ncontinue the primary connection/API work. The Coordinator directed this new\npreventive Stats-loader task to remain queued rather than begin source changes.\n\nIssue864 remains valid recurrence protection: accept only leading empty/formatted\nrows before the first valid unambiguous Stats header, retaining strict validation.\nIts synthetic regression/design context is preserved in the Issue. No source\nedits, commit, push or PR were made. The isolated worktree is clean at main\n3327465fcbd46ccff9b64eb7c574ff5b84b99b80, under\nACM-Audit-2026-10-12/worktrees/acl-1864. Preserve it and the issue for later work.\n\nThe pending normal claim did succeed after a shared-state race, so release this\nexact owned claim through supported execution stop. This is a priority deferral,\nnot an implemented fix or a live verification. No workbook, machine path or\nrunning9095 dashboard was modified by this Worker. Resume only after a new\nauthorized normal claim."
       }
     },
     "tasks": {
@@ -11792,9 +11779,22 @@
             "session": "connection_sr1012_worker"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-SR1012",
-        "coordinator": "Coordinator-CR1012"
+        "coordinator": "Coordinator-CR1012",
+        "handoff": {
+          "actor": "Worker-SR1012",
+          "session": "connection_sr1012_worker",
+          "coordinator": "Coordinator-CR1012",
+          "branch": "codex/acl-1864-stats-leading-rows",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Audit-2026-10-12\\worktrees\\acl-1864",
+          "id": "02065bdd371f4967b5311d303481b860",
+          "issue": 864,
+          "state": "stopping",
+          "started_at": "2026-10-13T08:16:28+00:00",
+          "from_status": "status:todo",
+          "report": "# ACL-1864 deferred without implementation \u2014 2026-10-13\n\nWorker-SR1012 / connection_sr1012_worker, Coordinator-CR1012.\nClaim02065bdd371f4967b5311d303481b860.\n\nThe owner repaired the workbook and reported that it now works, then asked to\ncontinue the primary connection/API work. The Coordinator directed this new\npreventive Stats-loader task to remain queued rather than begin source changes.\n\nIssue864 remains valid recurrence protection: accept only leading empty/formatted\nrows before the first valid unambiguous Stats header, retaining strict validation.\nIts synthetic regression/design context is preserved in the Issue. No source\nedits, commit, push or PR were made. The isolated worktree is clean at main\n3327465fcbd46ccff9b64eb7c574ff5b84b99b80, under\nACM-Audit-2026-10-12/worktrees/acl-1864. Preserve it and the issue for later work.\n\nThe pending normal claim did succeed after a shared-state race, so release this\nexact owned claim through supported execution stop. This is a priority deferral,\nnot an implemented fix or a live verification. No workbook, machine path or\nrunning9095 dashboard was modified by this Worker. Resume only after a new\nauthorized normal claim."
+        }
       }
     },
     "actors": {
@@ -23712,6 +23712,13 @@
         "issue": 864,
         "claim": "02065bdd371f4967b5311d303481b860",
         "actor": "Worker-SR1012"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-13T08:17:55+00:00",
+        "issue": 864,
+        "actor": "Worker-SR1012",
+        "report": "# ACL-1864 deferred without implementation \u2014 2026-10-13\n\nWorker-SR1012 / connection_sr1012_worker, Coordinator-CR1012.\nClaim02065bdd371f4967b5311d303481b860.\n\nThe owner repaired the workbook and reported that it now works, then asked to\ncontinue the primary connection/API work. The Coordinator directed this new\npreventive Stats-loader task to remain queued rather than begin source changes.\n\nIssue864 remains valid recurrence protection: accept only leading empty/formatted\nrows before the first valid unambiguous Stats header, retaining strict validation.\nIts synthetic regression/design context is preserved in the Issue. No source\nedits, commit, push or PR were made. The isolated worktree is clean at main\n3327465fcbd46ccff9b64eb7c574ff5b84b99b80, under\nACM-Audit-2026-10-12/worktrees/acl-1864. Preserve it and the issue for later work.\n\nThe pending normal claim did succeed after a shared-state race, so release this\nexact owned claim through supported execution stop. This is a priority deferral,\nnot an implemented fix or a live verification. No workbook, machine path or\nrunning9095 dashboard was modified by this Worker. Resume only after a new\nauthorized normal claim."
       }
     ],
     "policy": {
