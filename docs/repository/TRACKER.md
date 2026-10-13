@@ -4,20 +4,29 @@ Issues remain in MojoTheApe/adopy-campaing-launcher; the existing board identity
 at https://tracker.team7.cloud/projects/acl/. Keep the six established modules,
 71 historical aliases and +1000 numbering. Never renumber Issues or start a second board.
 
-ACL-1750 pins reviewed, merged Task Tracker
+Source child ACL-1875 selects reviewed, merged Task Tracker
+`46283b8a6fe444065838e136c89ef4ed64bd1528` (TT-97 / PR98), including five independent
+source reviews, with reviewed merged Master
+`8ce271dc289b6a7ef24498ed3d9d92cb78694a3d` (MR-22 / PR23). Actual state migration
+remains parent ACL-1874 and is a separate gate in [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md).
+
+The historical ACL-1750 source selected reviewed, merged Task Tracker
 `d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76` (TT-79 / PR80) with Master
-`d24db185ebdff2cadcecf89f5b28061d6cd19564` (MR-16 / PR17). Run
-`python scripts/task_tracker.py guide` for that guide; helpers live in .workflow/tools
-and existing scripts paths remain wrappers. The active client uses that exact
-clean shared engine. `.workflow/legacy` retains the original configs for audit and
+`d24db185ebdff2cadcecf89f5b28061d6cd19564` (MR-16 / PR17).
+Run `python scripts/task_tracker.py guide` for the exact currently configured
+engine; helpers live in .workflow/tools and existing scripts paths remain wrappers.
+The client loads the clean engine from `tracker/engine.json`. During ACL-1875's
+old-policy source handoff, use the genuine preserved v2 config and old pin as
+described in [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md). `.workflow/legacy` retains the original configs for audit and
 bootstrap PR history; it is not another live tracker or a second Issue store.
 Do not return to the retired master client. ACL-1248's original adoption is recorded
 in ADOPTION.md. The bounded ACL-1383 old-policy source handoff and ACL-1382 live
 execution migration are described in PARALLEL_EXECUTION.md.
 
-Follow [WORKFLOW.md](WORKFLOW.md), [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) and
-the exact pinned command guide. Once the guarded v2 migration succeeds, ordinary
-application/batch work follows: claimed one-task source -> handoff -> independent review -> Approved -> frozen Coordinator
+Follow [WORKFLOW.md](WORKFLOW.md), [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md),
+[SOURCE_REVIEWS.md](SOURCE_REVIEWS.md) and
+the exact pinned command guide. Ordinary application/batch work follows:
+claimed one-task source -> handoff -> independent review -> Approved -> frozen Coordinator
 batch -> additional combined review/checks -> Stage -> exact target verification
 -> unchanged main promotion -> per-task Merged -> verified package delivery.
 The explicit [instruction-only route](PROCESS_INSTRUCTIONS.md) uses its current
@@ -25,14 +34,20 @@ independent source review and direct main receipt instead of Approved/batch/stag
 It cannot displace an active batch or staged candidate. Policy/automation adoption
 itself remains on the old source route until activated.
 
-Keep implementation_limit 5, review_limit 1 and batch_limit 5. The Approved backlog
-has no size cap. Ordinary batch-source approval frees the review lane; only one
+The prepared schema-3 policy keeps implementation_limit 5, review_limit 5 and
+batch_limit 5. The live v2 policy keeps review_limit 1 until the separate guarded
+state migration. The Approved backlog has no size cap. Ordinary batch-source
+approval frees only its source review lane; only one
 batch owns stage. Ordinary source PRs target main and remain open until verified
 batch inclusion. Retained
 queued stage PRs are approval-only, preserving actual authors/history.
+Five source-review claims are independent of the single integration Coordinator
+and combined review. Every simultaneous Reviewer has a distinct actual run;
+capacity does not prove that a host can launch five agents. Resuming/returning a
+source uses that PR/claim and preserves the other source and integration owners.
 
-The source children ACL-1747 and ACL-1750 complete their distinct old-policy
-stage/main handoffs before the coordinated migration.
+The source children ACL-1747 and ACL-1750 completed their distinct old-policy
+stage/main handoffs before the historical coordinated v2 migration.
 The new pin contains TT-73's large-state read fix; the bounded old-v1 operator use
 is documented in the adoption runbook. New pin/config/skill alone is not activation.
 Preserve explicit Release membership and Archive semantics. Description explains
