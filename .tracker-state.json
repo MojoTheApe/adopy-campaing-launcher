@@ -4483,6 +4483,27 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-13T14:09:00+00:00"
+      },
+      "874": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 881,
+            "merge_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+            "tree_sha": "84d322133c9b5d29c84221d2445b0ea88639ac42"
+          }
+        ],
+        "state": "verified",
+        "recorded_at": "2026-10-13T15:13:58+00:00",
+        "process": true,
+        "verification": {
+          "route": "process",
+          "tree_sha": "84d322133c9b5d29c84221d2445b0ea88639ac42",
+          "main_sha": "72a2d2c21aa42f1a388d32ea27ba2c8253ee7854",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "process_policy": "9276adda3c40d4e03e471c96c3a1a4d055b82bd73f282d3b523f329781e3bca5"
+        },
+        "verified_at": "2026-10-13T15:13:58+00:00"
       }
     },
     "promotions": {
