@@ -13687,6 +13687,10 @@
       "Coordinator-DLV13": {
         "session": "Root-DLV13-01a13445",
         "role": "Coordinator"
+      },
+      "Reviewer-PTDLV13": {
+        "session": "Agent-preview_table_review-DLV13-01a13445",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -16156,7 +16160,21 @@
       840,
       841
     ],
-    "review": null,
+    "review": {
+      "id": "e0aa3853d00c4e3c84403d9512b671ad",
+      "batch_id": "24551548a5084a13a4d81bb957a084f1",
+      "pr": 884,
+      "issues": [
+        651,
+        865,
+        879
+      ],
+      "actor": "Reviewer-PTDLV13",
+      "session": "Agent-preview_table_review-DLV13-01a13445",
+      "coordinator": "Coordinator-DLV13",
+      "state": "reviewing",
+      "started_at": "2026-10-13T19:03:29+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -27106,6 +27124,25 @@
           "entered_stage": false,
           "history": []
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-13T19:03:29+00:00",
+        "review": {
+          "id": "e0aa3853d00c4e3c84403d9512b671ad",
+          "batch_id": "24551548a5084a13a4d81bb957a084f1",
+          "pr": 884,
+          "issues": [
+            651,
+            865,
+            879
+          ],
+          "actor": "Reviewer-PTDLV13",
+          "session": "Agent-preview_table_review-DLV13-01a13445",
+          "coordinator": "Coordinator-DLV13",
+          "state": "reviewing",
+          "started_at": "2026-10-13T19:03:29+00:00"
+        }
       }
     ],
     "policy": {
@@ -27920,7 +27957,7 @@
       "id": "24551548a5084a13a4d81bb957a084f1",
       "actor": "Coordinator-DLV13",
       "session": "Root-DLV13-01a13445",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         651,
         865,
@@ -28064,7 +28101,7 @@
       "branch": "codex/batch-24551548a5084a13a4d81bb957a084f1",
       "intake": "8c7fbeecd39d476a8dd54650526d1af8",
       "started_at": "2026-10-13T18:59:06+00:00",
-      "pr": null,
+      "pr": 884,
       "entered_stage": false,
       "history": []
     },
