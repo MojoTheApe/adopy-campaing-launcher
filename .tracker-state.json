@@ -2555,27 +2555,6 @@
         "issue_scopes": {
           "760": "c8553eaca5772bba5b0bbed87c2b7ab8cab6668956ecb4606703dc0106e20bc3"
         }
-      },
-      "837": {
-        "kind": "independent-review",
-        "implementer": "Worker-SR1012",
-        "reviewer": "Reviewer-RS1012",
-        "review_session": "connection_review_rs1012",
-        "execution_lane": "cdf8eb56587749a2babcf0fb3d56f254",
-        "head_sha": "6ce2886bd44c8b394016c81665cc25baa290dcb2",
-        "base_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
-        "tree_sha": "2f574f01b7bd7b3845a8872a07fd7edfaf32dd70",
-        "verdict": "approved",
-        "report": "Independent source review for ACL-1836 / PR837 (https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837), by the separate non-implementing Reviewer-RS1012. Read full issue Description/Specifications, current AGENTS/workflow/engineering rules, and complete ten-file diff against current main e8e59f8376458f2f73089c3f2a8d454837ff033f. No blocking correctness or scope findings. Exact-session loss is classified without retrying a sent CDP command; only the local helper boundary can reattach once to the exact owned target through the existing browser socket. Target and newly attached main-frame Ads Manager/account identity are checked, subsequent helper calls recheck URL, token stays in-page, and missing/changed targets, repeat loss, logout/checkpoint or unavailable recovery yield sticky typed stops. Cancellation propagates. No profile restart, replacement target, account switch or uncertain Graph request replay is added. New anonymized fixture and 27 regressions cover setup failure, subsequent reconciliation, non-replay, identity races, repeat loss, missing token and interruption. Independently ran the three source recovery/Graph/helper test files on this head: 151 passed plus one synthetic loopback failure under sandbox networking; that exact test passed separately with localhost access (1 passed in 2.92s). Worker reports all 259 affected source tests, secret scan and import smoke passed; local diff check clean. Inspected coordinator's actual Creator/InPageGraph/PageTab compatibility harness and assertions; coordinator reports exact incident baseline 2 failed before fix, 2 passed after, plus 499 existing integrated tests passed. Inspected coordinator's isolated real-Chromium fixture: actual detach/reattach to same target, other local tab untouched, second recovery refused, all navigation fulfilled in memory; coordinator reports 1 passed. These coordinator runs were not rerun by Reviewer. Pending creator source is not bundled into this main-based patch; only compatibility hunks were applied offline. Original external detachment cause and fate of the live upload remain unknown. No live Meta/Multilogin action, campaign retry, activation, production configuration mutation, package installation or deployment was performed. Required source CI is still running at report creation; batch approval must wait for all applicable exact-head checks. This source verdict is not integration, runtime delivery, or package acceptance. Revalidate if head, main/base, scope or policy changes.",
-        "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "issues": [
-          836
-        ],
-        "recorded_at": "2026-10-12T20:41:03+00:00",
-        "issue_scopes": {
-          "836": "46ea2560e056c5d2d19c3e7e5ee9e139e50adb330e98c1ad6a40e96ec23304e1"
-        }
       }
     },
     "stage": {
@@ -11401,7 +11380,7 @@
         },
         "pr": 837,
         "queued_at": "2026-10-12T20:37:22+00:00",
-        "reviewer": "Reviewer-RS1012"
+        "reviewer": "Reviewer-RX1013B"
       },
       "838": {
         "implementers": [
@@ -12444,6 +12423,10 @@
       "Worker-CL7F31": {
         "session": "worker_countryline_cl7f31_20261013",
         "role": "Worker"
+      },
+      "Reviewer-RX1013B": {
+        "session": "rev_rx1013b_20261013",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -14848,14 +14831,14 @@
       824
     ],
     "review": {
-      "id": "cdf8eb56587749a2babcf0fb3d56f254",
+      "id": "b3ce4fdd1e32449c9db663a8d6107e6e",
       "pr": 837,
       "issues": [
         836
       ],
-      "actor": "Reviewer-RS1012",
-      "session": "connection_review_rs1012",
-      "coordinator": "Coordinator-CR1012",
+      "actor": "Reviewer-RX1013B",
+      "session": "rev_rx1013b_20261013",
+      "coordinator": "Coordinator-CX1012A",
       "started_at": "2026-10-12T20:38:38+00:00",
       "state": "reviewing"
     },
@@ -22673,6 +22656,24 @@
         "issue": 838,
         "claim": "157561418833493d884707db6a807d28",
         "actor": "Worker-CL7F31"
+      },
+      {
+        "event": "review-takeover",
+        "at": "2026-10-13T06:06:19+00:00",
+        "previous": {
+          "id": "cdf8eb56587749a2babcf0fb3d56f254",
+          "pr": 837,
+          "issues": [
+            836
+          ],
+          "actor": "Reviewer-RS1012",
+          "session": "connection_review_rs1012",
+          "coordinator": "Coordinator-CR1012",
+          "started_at": "2026-10-12T20:38:38+00:00",
+          "state": "reviewing"
+        },
+        "claim": "b3ce4fdd1e32449c9db663a8d6107e6e",
+        "reason": "The actual previous Reviewer thread01a131cd-f8af-7d92-8292-b8ce9f007eb8 was inspected through read_thread: systemError, latest turn failed due account usage limit. Its review process is stopped. Preserve PR837 source, Worker and all prior evidence; transfer only the stranded review to actual independent recovery_reviewer_1013 for fresh complete-scope review."
       }
     ],
     "policy": {
