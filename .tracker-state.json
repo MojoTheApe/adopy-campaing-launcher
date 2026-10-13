@@ -7391,6 +7391,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T08:53:40+00:00",
         "from_status": "status:todo"
+      },
+      "854": {
+        "actor": "Worker-SR1012",
+        "session": "connection_sr1012_worker",
+        "coordinator": "Coordinator-CR1012",
+        "branch": "codex/acl-1854-current-draft-status",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Audit-2026-10-12\\worktrees\\acl-1854",
+        "id": "c9647db484424506b36add4f58fe8a00",
+        "issue": 854,
+        "state": "implementing",
+        "started_at": "2026-10-13T09:03:23+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11840,6 +11852,17 @@
         },
         "pr": 867,
         "queued_at": "2026-10-13T08:58:09+00:00"
+      },
+      "854": {
+        "implementers": [
+          {
+            "actor": "Worker-SR1012",
+            "session": "connection_sr1012_worker"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-SR1012",
+        "coordinator": "Coordinator-CR1012"
       }
     },
     "actors": {
@@ -24125,6 +24148,13 @@
         "pr": 837,
         "lane": "05439b07482b4300ac7a71c4cc146b55",
         "actor": "Reviewer-RS1012"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T09:03:23+00:00",
+        "issue": 854,
+        "claim": "c9647db484424506b36add4f58fe8a00",
+        "actor": "Worker-SR1012"
       }
     ],
     "policy": {
