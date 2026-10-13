@@ -452,3 +452,54 @@ def record(summary_: dict[str, Any], *, step: str = "publish_preflight",
         rt.record(step, not summary_.get("not_ready"), note="preflight", diag=diag)
     except Exception:
         log.debug("preflight telemetry failed", exc_info=True)
+
+
+def meta_rules_errors(
+    slots: list[dict[str, Any]],
+    *,
+    account_label: str,
+    country: str,
+    drafts: list[Any] | None = None,
+) -> dict[str, list[str]]:
+    """Нарушения правил Meta по кампаниям формы до загрузки (ACL-1781).
+
+    Возвращает {имя кампании: [сообщения на English]}; пусто — всё проходит.
+    Сети нет. Когда переданы `drafts` (путь RPA), проверяется то, что
+    черновик реально публикует: его objective ("Leads" -> OUTCOME_LEADS).
+    Цель оптимизации, billing event и CTA в RPA выбирает рецепт Ads Manager,
+    черновик их не несёт — они не проверяются (это делает `check_job` для
+    Graph API-задания). Без `drafts` слоты превращаются в задания (как в
+    превью) и сверяются целиком. Сбой самой проверки (нет реестра, нет
+    книги) кампанию не блокирует — пишется в лог.
+    """
+    try:
+        from src.campaign_bridge import meta_rules
+
+        ruleset = meta_rules.load_rules()
+        out: dict[str, list[str]] = {}
+
+        def _add(name: str, violations: list[Any]) -> None:
+            texts = meta_rules.format_violations(violations)
+            if texts:
+                bucket = out.setdefault(name, [])
+                bucket.extend(t for t in texts if t not in bucket)
+
+        if drafts is not None:
+            for draft in drafts:
+                _add(
+                    str(getattr(draft, "name", "") or ""),
+                    meta_rules.check_job(
+                        meta_rules.DraftView(draft), ruleset, skip_kinds=("required_field", "text_limit")
+                    ),
+                )
+            return out
+
+        from src.campaign_bridge.dashboard_publisher import slots_to_publish_jobs
+
+        jobs = slots_to_publish_jobs(slots, account_label=account_label, country=country, preview_mode=True)
+        for job in jobs:
+            _add(job.campaign_name, meta_rules.check_job(job, ruleset))
+        return out
+    except Exception:
+        log.exception("Meta rules check failed; campaigns are not blocked by it")
+        return {}
