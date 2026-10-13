@@ -25182,6 +25182,37 @@
             "approved_at": "2026-10-13T13:28:00+00:00"
           }
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-13T13:32:25+00:00",
+        "intake": {
+          "id": "91201340047f423fa6a6747b1c5dc404",
+          "actor": "Coordinator-FLOW513",
+          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+          "state": "running",
+          "issues": [
+            875,
+            836,
+            838,
+            844,
+            853,
+            854,
+            872
+          ],
+          "remaining": [
+            875,
+            836,
+            838,
+            844,
+            853,
+            854,
+            872
+          ],
+          "batches": [],
+          "started_at": "2026-10-13T13:32:25+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -26001,20 +26032,31 @@
     },
     "integration": null,
     "intake": {
-      "id": "8bb2add6e87b47a79549507b4d17603a",
+      "id": "91201340047f423fa6a6747b1c5dc404",
       "actor": "Coordinator-FLOW513",
       "session": "flow_five_reviews_coordinator_01a134f0_20261013",
-      "state": "cancelled",
+      "state": "running",
       "issues": [
-        838
+        875,
+        836,
+        838,
+        844,
+        853,
+        854,
+        872
       ],
       "remaining": [
-        838
+        875,
+        836,
+        838,
+        844,
+        853,
+        854,
+        872
       ],
       "batches": [],
-      "started_at": "2026-10-13T08:35:16+00:00",
-      "ineligible": {},
-      "report": "Owner confirmed in the Flow chat on 2026-10-13 that all ACL integration runs have been paused and authorized this Flow change to continue. Preserve ACL-1838 source, approval, branches and frozen handoff; cancel only its pre-stage batch and remaining intake.\n\nThe genuine old execution-v2 policy is used. No stage entry or integration PR exists. This is a supported stopped-Coordinator transfer followed by pre-stage cancellation, not task completion. ACL-1838 retains its original Worker/source review/Approved history; all implementation claims and queued sources remain intact."
+      "started_at": "2026-10-13T13:32:25+00:00",
+      "ineligible": {}
     }
   }
 }
