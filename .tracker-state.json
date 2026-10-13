@@ -15386,7 +15386,51 @@
       "session": "connection_review_rs1012",
       "coordinator": "Coordinator-CR1012",
       "started_at": "2026-10-13T08:58:45+00:00",
-      "state": "reviewing"
+      "state": "approving",
+      "approval": {
+        "issue": 836,
+        "pr": 837,
+        "branch": "codex/acl-1836-session-recovery",
+        "head_sha": "02bb4f77bf1fa70cb29c3761f8ad450a84a24cc0",
+        "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+        "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "46ea2560e056c5d2d19c3e7e5ee9e139e50adb330e98c1ad6a40e96ec23304e1",
+        "review": {
+          "kind": "independent-review",
+          "implementer": "Worker-SR1012",
+          "reviewer": "Reviewer-RS1012",
+          "review_session": "connection_review_rs1012",
+          "execution_lane": "05439b07482b4300ac7a71c4cc146b55",
+          "head_sha": "02bb4f77bf1fa70cb29c3761f8ad450a84a24cc0",
+          "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+          "tree_sha": "fc1a9a081119fcb3304f6fb72a148514961fade6",
+          "verdict": "approved",
+          "report": "Independent source review for ACL-1836 / PR837 by Reviewer-RS1012, a separate non-implementing actual session connection_review_rs1012. Fresh normal lane 05439b07482b4300ac7a71c4cc146b55. Reviewed full current issue Description/Specifications, repository workflow/engineering rules, and complete ten-file source diff against current main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Candidate head 02bb4f77bf1fa70cb29c3761f8ad450a84a24cc0, tree fc1a9a081119fcb3304f6fb72a148514961fade6; clean checkout and diff check. No blocking correctness or scope findings.\n\nExact CDP session loss is classified without replaying the sent command. Recovery is bounded to one attempt on the existing socket and exact owned target; it verifies target and attached main-frame Ads Manager/account identity and verifies URL on subsequent helper calls. Only local helper setup/state is retried, never an uncertain Graph GET/POST. GraphClient keeps typed recovery stops for creator reconciliation. Missing/changed targets, repeated loss, logout/checkpoint and unavailable recovery fail closed; cancellation propagates; tokens stay in-page. The warm read-to-write helper defect found in the initial review is fixed: PageTab records only successful explicit navigation intent, and replacement InPageGraph inherits that intent and prior recovery guard. No observed arbitrary page URL becomes trusted intent. No replacement tab/profile restart/account switch or advertising activation is introduced.\n\nReviewed all 32 recovery regressions and anonymized incident fixture. Earlier independent exact-r2 focused run: 32 passed in 3.41s on Windows/Python 3.14. Verified product recovery source and session tests are byte-unchanged from r2 8a45c683c538d13cc670c779da3de100ce65942d; current-main refresh contains only the four upstream main files, with both CHANGELOG entries retained. Successful unchanged tests were not repeated. Worker current-head affected run: 276 passed in 36.12s, scanner/import smoke/diff passed; initial setup-only basetemp-parent errors were corrected before that run, not described as a clean first pass.\n\nCoordinator compatibility evidence was inspected, not independently rerun: four actual Creator/InPageGraph/PageTab incident paths passed (including fresh warm helper, uncertain video POST exactly once, surviving-target readback, deleted-target typed outcome preserving partial IDs). An isolated real-Chromium detach/reattach proof passed with another fixture tab untouched. Broader pending-creator snapshot run was 502 passed/1 intermittent synthetic stop-log os.replace WinError5 failure, whose exact rerun passed. Stop-log/account-spend files were baseline-identical and recovery was not on the failing path; this is a separate persistence concern, not established session-patch regression. Earlier sandbox failures and stalled run have no completed-suite success verdict. These prior compatibility proofs cover unchanged transport behavior, not a new full integrated runtime build.\n\nVerified current exact-head CI38370341512 SUCCESS: all three Linux Python3.13 shards, Windows Python3.13, tooling/process and ACL aggregate passed. Current descriptor, latest tracker-link38370342185, installer classification and Installer verification passed. Build-input and build/install/repair/uninstall jobs were classifier-skipped for this source; Linux3.11 and a packaged runtime were not run for this source route. Older canceled linkage attempts do not replace the latest successful check. Main/base/head were reread immediately before this report.\n\nThis is approval of source within issue836 scope only. Original external detachment cause and fate of the real upload remain unknown. No live Meta/Multilogin call, campaign retry, activation, production configuration mutation, package deployment or integration merge was performed. Pending creator/warm code is not bundled into this main-based patch. Integration and runtime verification remain separate; any changed scope/head/base/policy requires fresh relevant evidence.",
+          "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            836
+          ],
+          "recorded_at": "2026-10-13T09:05:54+00:00",
+          "issue_scopes": {
+            "836": "46ea2560e056c5d2d19c3e7e5ee9e139e50adb330e98c1ad6a40e96ec23304e1"
+          }
+        },
+        "lane": {
+          "id": "05439b07482b4300ac7a71c4cc146b55",
+          "pr": 837,
+          "issues": [
+            836
+          ],
+          "actor": "Reviewer-RS1012",
+          "session": "connection_review_rs1012",
+          "coordinator": "Coordinator-CR1012",
+          "started_at": "2026-10-13T08:58:45+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-13T09:06:44+00:00"
+      }
     },
     "history": [
       {
