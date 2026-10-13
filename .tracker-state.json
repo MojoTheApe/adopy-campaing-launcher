@@ -12031,7 +12031,7 @@
             "session": "connection_sr1012_worker"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-SR1012",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12052,12 +12052,18 @@
         "queued_at": "2026-10-13T19:30:53+00:00",
         "review_report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle.",
         "return_operation": {
-          "id": "91201340047f423fa6a6747b1c5dc404",
-          "actor": "Coordinator-FLOW513",
-          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
-          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+          "id": "2ab69234dbc645ffab72d57e22133086",
+          "actor": "Coordinator-CR1012",
+          "session": "acm_connection_coordinator_20261013",
+          "report": "Coordinator approval return for ACL-1836 / Issue836 / source PR837.\n\nActual Coordinator: Coordinator-CR1012.\nActual root session: acm_connection_coordinator_20261013.\nThe user resumed development, integration and installation with \"\u0432\u0441\u0435 \u0432\u043c\u0435\u0441\u0442\u0435\" and selected ACM TEST9095. Cross-chat coordination is explicitly authorized.\n\nFresh official readback confirms main7cee2857d4b374bc564c5ca84b9f6ede69f96430, while the existing Approved review for exact source d0d4b87305a4e1d25c045c67103da1637fe8c3d7 was bound to main777663bf539308c0898cc177f872a8e0f63b597e. PR837 is still OPEN, ready, targeting main, with that unchanged head. The latest private state confirms Approved, no implementation claim, no pending return, and recorded approval Coordinator-CR1012. The task is not a member of the foreign frozen integration or intake.\n\nReturn reason is only advancement of the authoritative baseline; no new product defect is asserted. Preserve full Issue scope/history, original Worker-SR1012 / connection_sr1012_worker, original source branch and review evidence. After this supported return, the actual original author must claim normally, reconcile current main, perform applicable checks, push the same source PR and hand off for fresh independent current-source review. The author currently owns ACL-1886 and must finish its normal handoff first; do not steal or fabricate a second Worker run.\n\nThis return does not edit source/runtime, change the foreign batch24551548a5084a13a4d81bb957a084f1 or its Coordinator-DLV13 ownership, start a competing intake, claim a new approval, publish a package or execute advertising."
         },
-        "reviewer": "Reviewer-RS1012"
+        "reviewer": "Reviewer-RS1012",
+        "return": {
+          "id": "2ab69234dbc645ffab72d57e22133086",
+          "actor": "Coordinator-CR1012",
+          "session": "acm_connection_coordinator_20261013",
+          "report": "Coordinator approval return for ACL-1836 / Issue836 / source PR837.\n\nActual Coordinator: Coordinator-CR1012.\nActual root session: acm_connection_coordinator_20261013.\nThe user resumed development, integration and installation with \"\u0432\u0441\u0435 \u0432\u043c\u0435\u0441\u0442\u0435\" and selected ACM TEST9095. Cross-chat coordination is explicitly authorized.\n\nFresh official readback confirms main7cee2857d4b374bc564c5ca84b9f6ede69f96430, while the existing Approved review for exact source d0d4b87305a4e1d25c045c67103da1637fe8c3d7 was bound to main777663bf539308c0898cc177f872a8e0f63b597e. PR837 is still OPEN, ready, targeting main, with that unchanged head. The latest private state confirms Approved, no implementation claim, no pending return, and recorded approval Coordinator-CR1012. The task is not a member of the foreign frozen integration or intake.\n\nReturn reason is only advancement of the authoritative baseline; no new product defect is asserted. Preserve full Issue scope/history, original Worker-SR1012 / connection_sr1012_worker, original source branch and review evidence. After this supported return, the actual original author must claim normally, reconcile current main, perform applicable checks, push the same source PR and hand off for fresh independent current-source review. The author currently owns ACL-1886 and must finish its normal handoff first; do not steal or fabricate a second Worker run.\n\nThis return does not edit source/runtime, change the foreign batch24551548a5084a13a4d81bb957a084f1 or its Coordinator-DLV13 ownership, start a competing intake, claim a new approval, publish a package or execute advertising."
+        }
       },
       "838": {
         "implementers": [
@@ -13867,6 +13873,10 @@
       "Worker-S1880B": {
         "session": "S1880B-run",
         "role": "Worker"
+      },
+      "Coordinator-CR1012": {
+        "session": "acm_connection_coordinator_20261013",
+        "role": "Coordinator"
       }
     },
     "completed": {
