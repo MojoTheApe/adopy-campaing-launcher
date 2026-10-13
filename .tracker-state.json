@@ -11551,7 +11551,7 @@
             "session": "design_audit_d7k413_20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-D7K413",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -11569,7 +11569,8 @@
           "report": "ACL-1839 source implementation complete; independent formal review and CI pending.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/843\nBranch: codex/acl-1839-connection-panel-layout\nCommit: 145a30ba\nBase: e8e59f83\n\nRoot causes: visible-results flex rule overrode hidden, and long unbroken status\nmetadata retained an intrinsic width exceeding the panel. Shared CSS now preserves\nhidden and contains fields/status. Accessible names were added without handler or\nAdd sibling changes.\n\nVerified on Windows Python 3.13: 54 focused regressions; after strengthening the\nbuilder/cache fixture, 118 layout/platform tests; 46 packaging unittests; tracked\nsecrets scanner; import smoke; git diff --check. Original real-Chromium regression\nfailed at 975 px in 280 px host. Final tests use synthetic values, no real profiles.\nIndependent non-implementing precheck: no actionable findings after correcting its\nbuilder fixture note. Official review lane remained occupied by PR837, so this is\nnot a durable approval. Initial tracker-link CI ran before Review and needs rerun\nafter the verified handoff. Full CI/installer verification, source approval, batch\nstage/main integration and package delivery remain unverified. No merge/rollout."
         },
         "pr": 843,
-        "queued_at": "2026-10-13T06:23:19+00:00"
+        "queued_at": "2026-10-13T06:23:19+00:00",
+        "reviewer": "Reviewer-LR1839"
       },
       "840": {
         "implementers": [
@@ -12763,6 +12764,10 @@
       },
       "Reviewer-D1845": {
         "session": "design_review_1845_20261013",
+        "role": "Reviewer"
+      },
+      "Reviewer-LR1839": {
+        "session": "layout_review_20261013",
         "role": "Reviewer"
       }
     },
@@ -15192,13 +15197,23 @@
       771,
       768,
       838,
-      839,
       840,
       836,
       841,
       844
     ],
-    "review": null,
+    "review": {
+      "id": "917cbd8d99be4be9ab82a7c196c0bc90",
+      "pr": 843,
+      "issues": [
+        839
+      ],
+      "actor": "Reviewer-LR1839",
+      "session": "layout_review_20261013",
+      "coordinator": "Coordinator-D7K413",
+      "started_at": "2026-10-13T07:59:48+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -23472,6 +23487,13 @@
         "issue": 845,
         "claim": "d9f5699c919e41c5957876ba9e63e27d",
         "actor": "Worker-Q8V274"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T07:59:48+00:00",
+        "pr": 843,
+        "lane": "917cbd8d99be4be9ab82a7c196c0bc90",
+        "actor": "Reviewer-LR1839"
       }
     ],
     "policy": {
