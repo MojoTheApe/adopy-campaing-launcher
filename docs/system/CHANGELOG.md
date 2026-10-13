@@ -1,6 +1,5 @@
 # System history
 
-<<<<<<< HEAD
 ## Campaign commands: human-confirmed on/off, budget and bid with readback - ACL-1800
 
 Campaigns are created published and PAUSED through the API; a person switches them on or off and
@@ -174,7 +173,7 @@ with responsive light/dark styling, reduced motion and connection retry messages
   `5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d`, real Chromium geometry and keyboard
   disclosure at 1280, 1024 and 320 px in both themes. It does not import the
   preview's unrelated changes or assert full integrated/installed verification.
-=======
+
 ## Account table scroll containment — ACL-1841 (partial source)
 
 - Expanded Home account cards and country Manage share a keyboard-focusable horizontal
@@ -188,7 +187,6 @@ with responsive light/dark styling, reduced motion and connection retry messages
   campaign dashboard: ACL-1797/1798's campaign toolbar is absent from this main base.
   Its coherent search/filter, expansion, column and batch groups remain an outstanding
   ACL-1841 criterion and require verification against that integrated source.
->>>>>>> b5f85d02fa3cfc69ea8d8966d1bedce8b679e0b0
 
 ## Account-label ID suffix keeps existing alias precedence — ACL-1824
 
