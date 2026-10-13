@@ -25,6 +25,9 @@ def render_section(route, populated=True):
     env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)
     env.filters.update(fmt_usd=fmt_usd, fmt_currency=fmt_currency)
     env.globals["metric_values"] = metric_values
+    # Integrated preview includes the API campaign mount/footer. They must
+    # remain siblings of the table scroller, not move inside its viewport.
+    env.globals["campaign_table_api"] = lambda: True
     row = dict(account="Synthetic account with a long descriptive identity " * 3,
                has_data=True, spend=1044.82, leads=42, deposits=3,
                status={"status": "clear"})
@@ -43,6 +46,9 @@ def render_section(route, populated=True):
 def test_account_identity_and_actions_remain_reachable(browser, width, theme, route):
     report = (TPL / "report.html").read_text(encoding="utf-8")
     styles = "\n".join(re.findall(r"<style[^>]*>(.*?)</style>", report, re.S))
+    # Resolve the production theme include. Raw Jinja leaves Adopy font and
+    # spacing variables undefined and measures a different page from the UI.
+    styles = Environment(loader=FileSystemLoader(str(TPL))).from_string(styles).render()
     page = browser.new_page(viewport={"width": width, "height": 900})
     try:
         # Full production CSS and shared partial; no live handlers or network requests.
@@ -50,6 +56,8 @@ def test_account_identity_and_actions_remain_reachable(browser, width, theme, ro
         scroll = page.locator(".amap-table-scroll")
         assert scroll.count() == 1, "The account table needs its own scroll region"
         assert scroll.get_attribute("tabindex") == "0"
+        assert page.locator(".hc-scoped").evaluate("el => !el.closest('.amap-table-scroll')")
+        assert page.locator(".hc-after").evaluate("el => !el.closest('.amap-table-scroll')")
         assert page.locator(".amap-acc").bounding_box()["width"] >= 250
         scroll.focus()
         scroll.press("End")
