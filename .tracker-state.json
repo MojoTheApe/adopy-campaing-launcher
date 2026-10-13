@@ -7778,20 +7778,6 @@
         "started_at": "2026-10-13T16:13:25+00:00",
         "from_status": "status:todo"
       },
-      "529": {
-        "actor": "Worker-W530R",
-        "session": "worker530refresh20261013",
-        "coordinator": "Coordinator-DLV13",
-        "branch": "codex/acl-1529-sharp-shot",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-530-Refresh",
-        "id": "250c3eeee7bf4cb5ae0f28c7daccabf9",
-        "issue": 529,
-        "state": "handoff",
-        "started_at": "2026-10-13T20:55:12+00:00",
-        "from_status": "status:todo",
-        "pr": 530,
-        "report": "# ACL-1529 current-main refresh handoff \u2014 2026-10-14\n\nActual Worker-W530R / sessionworker530refresh20261013 / actualagent/root/worker_refresh_530. Coordinator-DLV13. Fresh claim250c3eeee7bf4cb5ae0f28c7daccabf9 acquired after genuine Coordinator return; original Worker-S1529C history and codex/acl-1529-sharp-shot branch preserved.\n\nPR530 mainbase7cee2857d4b374bc564c5ca84b9f6ede69f96430; finalheadbcbe152e5b1bcbb595f23760f5334d7b89058e36; treed93e985f3f1cd4695c2d138589bba604d7bb4138. Current main merged cleanly into prior sourcec459673; no additional compatibility code edits required. Original scope and all owner-hidden/default-off/fingerprint-safe guards retained. Main browser-first sharder plus source post-pass compose; status_shot remains hold. No held batch, Tracker pin, dashboard or live environment touched.\n\nWindows/Python3.13.15 isolated checks:181 model/shard/platform/script/screenshot assertions passed;23 opt-in/default-off/last-shot tests passed,61 deselected. The181 run stalled final Playwright fixture teardown after assertions; its native taskkill helper exited but owned synthetic Chrome6912 remained. Verified it was a descendant of owned pytest29332 on the final teardown marker and terminated only that synthetic browser; cleanup then completed and pytest reported181passed. Local intervention is explicit, not an unassisted-cleanup claim or forced assertion success. No unrelated Chrome/Multilogin/dashboard processes affected. Scanner/import smoke/whitespace pass.\n\nFresh fullsourceCI38466991847 and installer38466991917 pending; Windows3.13 already passed as observed, no historical-tree reuse. Tracker-link38466991840 pre-handoff InProgress race will be retried after durable Review. Independent exact-head/current-main review still required. Owner screenshot readability acceptance, live verification and package delivery remain unclaimed."
-      },
       "872": {
         "actor": "Worker-IS1013",
         "session": "isolated_app_sol_20261013",
@@ -9236,7 +9222,7 @@
             "session": "worker530refresh20261013"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W530R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -9245,16 +9231,16 @@
           "coordinator": "Coordinator-DLV13",
           "branch": "codex/acl-1529-sharp-shot",
           "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-530-Refresh",
-          "id": "ef8b689a24b44dc5a7aa878d06962645",
+          "id": "250c3eeee7bf4cb5ae0f28c7daccabf9",
           "issue": 529,
           "state": "handoff",
-          "started_at": "2026-10-13T18:41:27+00:00",
+          "started_at": "2026-10-13T20:55:12+00:00",
           "from_status": "status:todo",
           "pr": 530,
-          "report": "# ACL-1529 source CI repair handoff \u2014 2026-10-13\n\nActual Worker-W530R / stable session worker530refresh20261013 / actual agent /root/worker_refresh_530. Coordinator-DLV13. Original author commits, acceptance requirements and source branch preserved.\n\nFinal head c459673e5d898fe4b8775c843af8f54b18af8d39; tree f71e67a6a751ba7cd26564c511737b272e4b90f8; baseline main777663bf539308c0898cc177f872a8e0f63b597e. PR530 original branch codex/acl-1529-sharp-shot targets main.\n\nIndependent return at 8a72acf identified actual hosted CI blockers: run38444055009 status_shot missing stage mapping, and Linux browser file counts[32,38,37] exceeding invariant. No failure is reclassified or waived.\n\nNarrow authentic correction: status_shot is an explicit hold-stage diagnostic, never campaign progress. Linux sharding retains existing cost-first allocation and performs a deterministic post-pass only to repair browser-count skew, moving a browser file to the least-populated bucket with the smallest resulting cost imbalance. Coverage, platform selection and assertion thresholds stay unchanged. A synthetic uneven-cost regression proves balanced browser counts and exact deterministic coverage. No other source tip/commit was imported. PR882 separately uses first-pass browser partitioning; read-only merge-tree confirmed clean composition with exact8825d0e725,8673cf21cdf,6655f9455a after relocating only the unchanged Oct3 screenshot history beside its related safety entry.\n\nWindows Python3.13.15 isolated config:146 model/shard/platform tests passed;3 report script parse tests passed; scanner/import smoke/whitespace passed. Screenshot product behavior unchanged since prior verified181cases and corrected23-test fixture subset; no redundant screenshot suite repeated. Initial3.14 native crash remains historical infrastructure failure. Fresh hosted full required CI pending; prior failedrun not claimed green.\n\nNo dashboard deployment, live Meta/profile operation, screenshot activation, ad write or package delivery performed. Readability owner acceptance remains outstanding. Fresh independent exact-source review and actual required CI are still mandatory."
+          "report": "# ACL-1529 current-main refresh handoff \u2014 2026-10-14\n\nActual Worker-W530R / sessionworker530refresh20261013 / actualagent/root/worker_refresh_530. Coordinator-DLV13. Fresh claim250c3eeee7bf4cb5ae0f28c7daccabf9 acquired after genuine Coordinator return; original Worker-S1529C history and codex/acl-1529-sharp-shot branch preserved.\n\nPR530 mainbase7cee2857d4b374bc564c5ca84b9f6ede69f96430; finalheadbcbe152e5b1bcbb595f23760f5334d7b89058e36; treed93e985f3f1cd4695c2d138589bba604d7bb4138. Current main merged cleanly into prior sourcec459673; no additional compatibility code edits required. Original scope and all owner-hidden/default-off/fingerprint-safe guards retained. Main browser-first sharder plus source post-pass compose; status_shot remains hold. No held batch, Tracker pin, dashboard or live environment touched.\n\nWindows/Python3.13.15 isolated checks:181 model/shard/platform/script/screenshot assertions passed;23 opt-in/default-off/last-shot tests passed,61 deselected. The181 run stalled final Playwright fixture teardown after assertions; its native taskkill helper exited but owned synthetic Chrome6912 remained. Verified it was a descendant of owned pytest29332 on the final teardown marker and terminated only that synthetic browser; cleanup then completed and pytest reported181passed. Local intervention is explicit, not an unassisted-cleanup claim or forced assertion success. No unrelated Chrome/Multilogin/dashboard processes affected. Scanner/import smoke/whitespace pass.\n\nFresh fullsourceCI38466991847 and installer38466991917 pending; Windows3.13 already passed as observed, no historical-tree reuse. Tracker-link38466991840 pre-handoff InProgress race will be retried after durable Review. Independent exact-head/current-main review still required. Owner screenshot readability acceptance, live verification and package delivery remain unclaimed."
         },
         "pr": 530,
-        "queued_at": "2026-10-13T18:48:26+00:00",
+        "queued_at": "2026-10-13T21:13:59+00:00",
         "review_report": "PR530 approved source c459673e names former main777663bf. Actualmain now7cee2857 after admitted verified batchPR884/885. Original taskscope, Worker, sourcebranch and originalsourcePR remain unchanged; return for originalauthor current-main reconciliation, required relevant checks and fresh independent exact-head/base/tree approval. No new product outcome or completion is asserted; retained3member integration is untouched.",
         "return_operation": {
           "id": "dca98cd670f646d6a3a26839c4c91cff",
@@ -16241,7 +16227,8 @@
       839,
       845,
       840,
-      841
+      841,
+      529
     ],
     "review": {
       "id": "e0aa3853d00c4e3c84403d9512b671ad",
@@ -27436,6 +27423,13 @@
         "issue": 886,
         "claim": "e060660e6b7a40ccb296b72f6aa8e9cc",
         "actor": "Worker-SR1012"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T21:13:59+00:00",
+        "issue": 529,
+        "pr": 530,
+        "actor": "Worker-W530R"
       }
     ],
     "policy": {
