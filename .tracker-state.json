@@ -12186,7 +12186,7 @@
             "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-FIVE874",
         "coordinator": "Coordinator-FLOW513",
         "handoff": {
@@ -12205,7 +12205,8 @@
         },
         "pr": 876,
         "queued_at": "2026-10-13T12:47:25+00:00",
-        "reviewer": "Reviewer-R875X"
+        "reviewer": "Reviewer-R875X",
+        "batch_id": "67923a8e08d34c538623be512c739a1a"
       }
     },
     "actors": {
@@ -15680,6 +15681,32 @@
         "coordinator": "Coordinator-CX1012A",
         "state": "reviewing",
         "started_at": "2026-10-13T06:43:29+00:00"
+      },
+      "877": {
+        "id": "26ae7e39de4244518d2b2e69684adb88",
+        "batch_id": "67923a8e08d34c538623be512c739a1a",
+        "pr": 877,
+        "issues": [
+          875
+        ],
+        "actor": "Reviewer-R875X",
+        "session": "root_tracker_review_acl1875",
+        "coordinator": "Coordinator-FLOW513",
+        "state": "reviewing",
+        "started_at": "2026-10-13T13:41:43+00:00"
+      },
+      "878": {
+        "id": "26ae7e39de4244518d2b2e69684adb88",
+        "batch_id": "67923a8e08d34c538623be512c739a1a",
+        "pr": 877,
+        "issues": [
+          875
+        ],
+        "actor": "Reviewer-R875X",
+        "session": "root_tracker_review_acl1875",
+        "coordinator": "Coordinator-FLOW513",
+        "state": "reviewing",
+        "started_at": "2026-10-13T13:41:43+00:00"
       }
     },
     "review_queue": [
@@ -15721,19 +15748,7 @@
       841,
       865
     ],
-    "review": {
-      "id": "26ae7e39de4244518d2b2e69684adb88",
-      "batch_id": "67923a8e08d34c538623be512c739a1a",
-      "pr": 877,
-      "issues": [
-        875
-      ],
-      "actor": "Reviewer-R875X",
-      "session": "root_tracker_review_acl1875",
-      "coordinator": "Coordinator-FLOW513",
-      "state": "reviewing",
-      "started_at": "2026-10-13T13:41:43+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -25375,6 +25390,89 @@
           "state": "reviewing",
           "started_at": "2026-10-13T13:41:43+00:00"
         }
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-13T14:09:11+00:00",
+        "batch": {
+          "id": "67923a8e08d34c538623be512c739a1a",
+          "actor": "Coordinator-FLOW513",
+          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+          "state": "merged",
+          "issues": [
+            875
+          ],
+          "members": [
+            {
+              "issue": 875,
+              "pr": 876,
+              "branch": "codex/acl-1875-five-source-reviews",
+              "head_sha": "7452c522d4bdf4fc3763389a40cf484b70cec50a",
+              "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+              "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "a3257154e45bba7235258692afb630675cf011f57e23d1d99c819639c31510d2",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R875X",
+                "review_session": "root_tracker_review_acl1875",
+                "execution_lane": "a06f028a1f704bd5b4298372660afd12",
+                "implementer": "Worker-FIVE874",
+                "head_sha": "7452c522d4bdf4fc3763389a40cf484b70cec50a",
+                "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+                "tree_sha": "07b36d28348a356324df59951442177253074ac8",
+                "report": "/private/tmp/flow-five-reviews-20261013/acl1875-independent-source-review.md",
+                "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  875
+                ],
+                "recorded_at": "2026-10-13T13:27:46+00:00",
+                "issue_scopes": {
+                  "875": "a3257154e45bba7235258692afb630675cf011f57e23d1d99c819639c31510d2"
+                }
+              },
+              "lane": {
+                "id": "a06f028a1f704bd5b4298372660afd12",
+                "pr": 876,
+                "issues": [
+                  875
+                ],
+                "actor": "Reviewer-R875X",
+                "session": "root_tracker_review_acl1875",
+                "coordinator": "Coordinator-FLOW513",
+                "started_at": "2026-10-13T12:57:35+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-13T13:28:00+00:00"
+            }
+          ],
+          "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+          "branch": "codex/batch-67923a8e08d34c538623be512c739a1a",
+          "intake": "91201340047f423fa6a6747b1c5dc404",
+          "started_at": "2026-10-13T13:33:06+00:00",
+          "pr": 877,
+          "entered_stage": true,
+          "history": [],
+          "review": {
+            "id": "26ae7e39de4244518d2b2e69684adb88",
+            "batch_id": "67923a8e08d34c538623be512c739a1a",
+            "pr": 877,
+            "issues": [
+              875
+            ],
+            "actor": "Reviewer-R875X",
+            "session": "root_tracker_review_acl1875",
+            "coordinator": "Coordinator-FLOW513",
+            "state": "reviewing",
+            "started_at": "2026-10-13T13:41:43+00:00"
+          },
+          "main_prs": [
+            878
+          ],
+          "finished_at": "2026-10-13T14:09:11+00:00"
+        }
       }
     ],
     "policy": {
@@ -26190,70 +26288,88 @@
           }
         ],
         "report": "Owner confirmed in the Flow chat on 2026-10-13 that all ACL integration runs have been paused and authorized this Flow change to continue. Preserve ACL-1838 source, approval, branches and frozen handoff; cancel only its pre-stage batch and remaining intake.\n\nThe genuine old execution-v2 policy is used. No stage entry or integration PR exists. This is a supported stopped-Coordinator transfer followed by pre-stage cancellation, not task completion. ACL-1838 retains its original Worker/source review/Approved history; all implementation claims and queued sources remain intact."
-      }
-    },
-    "integration": {
-      "id": "67923a8e08d34c538623be512c739a1a",
-      "actor": "Coordinator-FLOW513",
-      "session": "flow_five_reviews_coordinator_01a134f0_20261013",
-      "state": "stage",
-      "issues": [
-        875
-      ],
-      "members": [
-        {
-          "issue": 875,
-          "pr": 876,
-          "branch": "codex/acl-1875-five-source-reviews",
-          "head_sha": "7452c522d4bdf4fc3763389a40cf484b70cec50a",
-          "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-          "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "a3257154e45bba7235258692afb630675cf011f57e23d1d99c819639c31510d2",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R875X",
-            "review_session": "root_tracker_review_acl1875",
-            "execution_lane": "a06f028a1f704bd5b4298372660afd12",
-            "implementer": "Worker-FIVE874",
+      },
+      "67923a8e08d34c538623be512c739a1a": {
+        "id": "67923a8e08d34c538623be512c739a1a",
+        "actor": "Coordinator-FLOW513",
+        "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+        "state": "merged",
+        "issues": [
+          875
+        ],
+        "members": [
+          {
+            "issue": 875,
+            "pr": 876,
+            "branch": "codex/acl-1875-five-source-reviews",
             "head_sha": "7452c522d4bdf4fc3763389a40cf484b70cec50a",
             "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-            "tree_sha": "07b36d28348a356324df59951442177253074ac8",
-            "report": "/private/tmp/flow-five-reviews-20261013/acl1875-independent-source-review.md",
             "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              875
-            ],
-            "recorded_at": "2026-10-13T13:27:46+00:00",
-            "issue_scopes": {
-              "875": "a3257154e45bba7235258692afb630675cf011f57e23d1d99c819639c31510d2"
-            }
-          },
-          "lane": {
-            "id": "a06f028a1f704bd5b4298372660afd12",
-            "pr": 876,
-            "issues": [
-              875
-            ],
-            "actor": "Reviewer-R875X",
-            "session": "root_tracker_review_acl1875",
-            "coordinator": "Coordinator-FLOW513",
-            "started_at": "2026-10-13T12:57:35+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-13T13:28:00+00:00"
-        }
-      ],
-      "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-      "branch": "codex/batch-67923a8e08d34c538623be512c739a1a",
-      "intake": "91201340047f423fa6a6747b1c5dc404",
-      "started_at": "2026-10-13T13:33:06+00:00",
-      "pr": 877,
-      "entered_stage": true,
-      "history": []
+            "scope": "a3257154e45bba7235258692afb630675cf011f57e23d1d99c819639c31510d2",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R875X",
+              "review_session": "root_tracker_review_acl1875",
+              "execution_lane": "a06f028a1f704bd5b4298372660afd12",
+              "implementer": "Worker-FIVE874",
+              "head_sha": "7452c522d4bdf4fc3763389a40cf484b70cec50a",
+              "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+              "tree_sha": "07b36d28348a356324df59951442177253074ac8",
+              "report": "/private/tmp/flow-five-reviews-20261013/acl1875-independent-source-review.md",
+              "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                875
+              ],
+              "recorded_at": "2026-10-13T13:27:46+00:00",
+              "issue_scopes": {
+                "875": "a3257154e45bba7235258692afb630675cf011f57e23d1d99c819639c31510d2"
+              }
+            },
+            "lane": {
+              "id": "a06f028a1f704bd5b4298372660afd12",
+              "pr": 876,
+              "issues": [
+                875
+              ],
+              "actor": "Reviewer-R875X",
+              "session": "root_tracker_review_acl1875",
+              "coordinator": "Coordinator-FLOW513",
+              "started_at": "2026-10-13T12:57:35+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-13T13:28:00+00:00"
+          }
+        ],
+        "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
+        "branch": "codex/batch-67923a8e08d34c538623be512c739a1a",
+        "intake": "91201340047f423fa6a6747b1c5dc404",
+        "started_at": "2026-10-13T13:33:06+00:00",
+        "pr": 877,
+        "entered_stage": true,
+        "history": [],
+        "review": {
+          "id": "26ae7e39de4244518d2b2e69684adb88",
+          "batch_id": "67923a8e08d34c538623be512c739a1a",
+          "pr": 877,
+          "issues": [
+            875
+          ],
+          "actor": "Reviewer-R875X",
+          "session": "root_tracker_review_acl1875",
+          "coordinator": "Coordinator-FLOW513",
+          "state": "reviewing",
+          "started_at": "2026-10-13T13:41:43+00:00"
+        },
+        "main_prs": [
+          878
+        ],
+        "finished_at": "2026-10-13T14:09:11+00:00"
+      }
     },
+    "integration": null,
     "intake": {
       "id": "91201340047f423fa6a6747b1c5dc404",
       "actor": "Coordinator-FLOW513",
@@ -26269,7 +26385,6 @@
         872
       ],
       "remaining": [
-        875,
         836,
         838,
         844,
@@ -26277,7 +26392,9 @@
         854,
         872
       ],
-      "batches": [],
+      "batches": [
+        "67923a8e08d34c538623be512c739a1a"
+      ],
       "started_at": "2026-10-13T13:32:25+00:00",
       "ineligible": {}
     }
