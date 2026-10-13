@@ -7303,7 +7303,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "853": {
+        "actor": "Worker-N7Q4",
+        "session": "architecture_audit_n7q4_20261013",
+        "coordinator": "Coordinator-CR1012",
+        "branch": "codex/acl-1853-profile-process-lease",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1853-2026-10-13",
+        "id": "8206cb103afc4597948ad14dc9d2b392",
+        "issue": 853,
+        "state": "implementing",
+        "started_at": "2026-10-13T07:27:23+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -11627,6 +11640,17 @@
           "from_status": "status:todo",
           "report": "# ACL-1851 duplicate implementation stop \u2014 2026-10-13\n\nWorker-SR1012, session connection_sr1012_worker, Coordinator-CR1012.\nClaim 2dfb80a2c826488f97154fbce08cff6e.\n\nThe CI failure is real and pre-existing. The ordered direct-filter/routing pair\nfailed on PR837 head and a clean main e8e59f83 archive; route alone passed. PR849\nhas the same CI symptom. Broader local validation also exposed pilot.main's\nintentional root-handler scrub installation retained by its CLI tests.\n\nThe same complete test-isolation repair already belongs to ACL-1824 / issue824,\nsource PR825: original repair commit 4633be0d85721cf822de143cebbdd20ea941bb88,\nretained in approved source ea63bbd1b88132361fdea678733b742a676c048d. The issue's\nfull Specifications document both paths, guaranteed cleanup and 196/200-test\nverification. This was missed by the initial title/result-only duplicate search;\nthe product audit found it before any duplicate commit or publication.\n\nIndependent read-only check of the original source ea63bbd1: ordered direct\nScrubFilter test, pilot-stop CLI test and routing test all passed, 3 tests in\n1.83s. PR847 contains source825 as its sole frozen ACL1824 member and now reports\nMERGED into stage at fe7ee11980c4b2719f23c5daf2bb06e4649d8c10. Main promotion,\nsource reconciliation and exact-candidate CI remain separate evidence.\n\nNo ACL1851 commit, push or PR exists. Its isolated local candidate remains\nuncommitted and preserved in ACM-Worker-1851-2026-10-13: only the pilot test module\nand system changelog. It passed 117 affected tests including temporary exception\ncleanup probes, scanner, import smoke and diff check. This evidence is not a\nsecond admission and does not replace the existing author's repair.\n\nStop this implementation and release its actual claim through the supported\nTracker command. Archive ACL1851 as duplicate/superseded by ACL1824's existing\nrepair; do not mark it Merged or claim a runtime deployment. The existing repair\nmust arrive through its already owned integration route. PR837/849 failures\nremain failures until their supported reconciled candidates obtain fresh CI."
         }
+      },
+      "853": {
+        "implementers": [
+          {
+            "actor": "Worker-N7Q4",
+            "session": "architecture_audit_n7q4_20261013"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-N7Q4",
+        "coordinator": "Coordinator-CR1012"
       }
     },
     "actors": {
@@ -23233,6 +23257,13 @@
         "at": "2026-10-13T07:25:30+00:00",
         "issue": 851,
         "reason": "Duplicate of the already approved ACL-1824 isolation repair, commit 4633be0d retained in source PR825 and integrated by PR847. Both leak paths independently verified green on ea63bbd1. Own claim stopped normally; no ACL1851 commit/PR/publication. Preserve failed source CI until supported reconciliation and fresh checks."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T07:27:23+00:00",
+        "issue": 853,
+        "claim": "8206cb103afc4597948ad14dc9d2b392",
+        "actor": "Worker-N7Q4"
       }
     ],
     "policy": {
