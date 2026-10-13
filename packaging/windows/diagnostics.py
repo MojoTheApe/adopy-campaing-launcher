@@ -28,7 +28,7 @@ GENERIC_REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r"(?i)\b(token|secret|password|api[_-]?key)\b\s*[:=]\s*[^\s,;]+"),
         r"\1=<redacted>",
     ),
-    (re.compile(r"(?i)([\"']?(?:access_token|refresh_token|client_secret|password|proxy_pass|api[_-]?key|token|secret)[\"']?\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;}]+)"), r"\1<redacted>"),
+    (re.compile(r"(?i)([\"']?(?:access_token|refresh_token|client_secret|app_secret|credential_ref|secret_ref|password|proxy_pass|api[_-]?key|token|secret)[\"']?\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;}]+)"), r"\1<redacted>"),
     (re.compile(r"\bact_\d{8,}\b", re.I), "act_<redacted>"),
     (
         re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I),

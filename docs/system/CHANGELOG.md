@@ -1,5 +1,18 @@
 # System history
 
+## Separate Meta app preparation in the existing Connect panel — ACL-1872
+
+- A mapped account can save its declared App ID and protected official credential,
+  resume, replace and disconnect locally. The UI explicitly keeps API access
+  unverified; this source introduces no HTTP/browser call or transport change.
+- Windows CurrentUser DPAPI envelopes enforce owner/revision checks. Atomic
+  metadata, shared map/registry locks, request replay and permanent App ownership
+  prevent concurrent changes from exchanging credentials between connections.
+- Mapping replacement retires the old binding before CSV commit. Cleanup failures
+  remain disabled and retryable; pending cleanup resumes the same connection.
+- [Behavior, crash outcomes and recovery](META_CONNECTION_PREPARATION.md) preserve
+  the full remaining ACL-1858 onboarding/HTTP scope and ACL-1358 legacy scope.
+
 ## Account-label ID suffix keeps existing alias precedence — ACL-1824
 
 - A long numeric account-ID suffix is removed only after the existing tail lookup

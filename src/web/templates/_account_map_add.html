@@ -70,4 +70,31 @@
     <button type="button" class="amap-btn amap-ml-open" hidden onclick="amapMlOpen(this)">Connect Multilogin</button>
     <button type="button" class="amap-btn" onclick="document.getElementById('amap-rpa-help').showModal()">RPA help</button>
   </div>
+  <details class="amap-meta" ontoggle="amapMetaToggle(this)">
+    <summary>Prepare a separate Meta application</summary>
+    <p>Save this account's application details locally. API access is not verified;
+       Read spend and publishing keep their current behavior.</p>
+    <label>Mapped account
+      <select class="amap-meta-account" onchange="amapMetaBegin(this.closest('.amap-meta'))">
+        <option value="">select account…</option>
+        {% for a in amap.all_accounts %}<option value="{{ a | e }}">{{ a }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="amap-meta-fields" hidden>
+      <template class="amap-meta-fields-template">
+      <p class="amap-meta-binding"></p>
+      <label>Separate App ID <input type="text" inputmode="numeric" class="amap-meta-app"
+             autocomplete="off" maxlength="40"></label>
+      <label>Official access token <input type="password" class="amap-meta-token"
+             autocomplete="new-password" maxlength="16384"></label>
+      <label>App Secret (optional) <input type="password" class="amap-meta-secret"
+             autocomplete="new-password" maxlength="4096"></label>
+      <button type="button" class="amap-btn amap-meta-save" onclick="amapMetaSave(this)">Save application details</button>
+      <button type="button" class="amap-btn" onclick="amapMetaBegin(this.closest('.amap-meta'))">Reopen saved setup</button>
+      <button type="button" class="amap-btn danger amap-meta-disconnect" onclick="amapMetaDisconnect(this)">Disconnect locally</button>
+      <small>Saved credentials are never filled back into these fields. Local disconnect does not revoke Meta access or delete the application.</small>
+      </template>
+    </div>
+    <p class="amap-msg amap-meta-message" role="status"></p>
+  </details>
 </div>
