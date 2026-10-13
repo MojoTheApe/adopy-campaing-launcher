@@ -15028,7 +15028,19 @@
       839,
       840
     ],
-    "review": null,
+    "review": {
+      "id": "d03327d470a448a88c6b1812d325c427",
+      "batch_id": "6b33b0c808d045a89e4d5f771f95483b",
+      "pr": 847,
+      "issues": [
+        824
+      ],
+      "actor": "Reviewer-RX1013B",
+      "session": "rev_rx1013b_20261013",
+      "coordinator": "Coordinator-CX1012A",
+      "state": "reviewing",
+      "started_at": "2026-10-13T06:43:29+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -23110,6 +23122,23 @@
         "issue": 840,
         "pr": 846,
         "actor": "Worker-F8Q620"
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-13T06:43:29+00:00",
+        "review": {
+          "id": "d03327d470a448a88c6b1812d325c427",
+          "batch_id": "6b33b0c808d045a89e4d5f771f95483b",
+          "pr": 847,
+          "issues": [
+            824
+          ],
+          "actor": "Reviewer-RX1013B",
+          "session": "rev_rx1013b_20261013",
+          "coordinator": "Coordinator-CX1012A",
+          "state": "reviewing",
+          "started_at": "2026-10-13T06:43:29+00:00"
+        }
       }
     ],
     "policy": {
@@ -23472,7 +23501,7 @@
       "id": "6b33b0c808d045a89e4d5f771f95483b",
       "actor": "Coordinator-CX1012A",
       "session": "coord_cx1012a_20261012",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         824
       ],
@@ -23526,7 +23555,7 @@
       "branch": "codex/batch-6b33b0c808d045a89e4d5f771f95483b",
       "intake": "b9787ef2958b4fd2874f09b9a01e6107",
       "started_at": "2026-10-13T06:38:56+00:00",
-      "pr": null,
+      "pr": 847,
       "entered_stage": false,
       "history": []
     },
