@@ -140,6 +140,29 @@ a clear refusal.
 - Readback adds the creative's form id, "the form is listed under the Page", and for the ad set
   the destination, goal and promoted Page. "Check plan" shows the form name and id.
 
+## Account-label ID suffix keeps existing alias precedence — ACL-1824
+
+- A long numeric account-ID suffix is removed only after the existing tail lookup
+  finds no candidate. Exact names and configured name rules retain their priority;
+  ambiguous tail matches remain unmatched instead of selecting the suffix alias.
+- Explicit account links continue to select the country before workbook resolution,
+  and account rows and country totals use the same resolved alias without duplicates.
+- When that country has no rows in the selected period, the elsewhere diagnostic
+  also uses the already-resolved alias. Unresolved or ambiguous labels keep their
+  original identity; another country cannot supply a guessed suffix match.
+- Required CI exposed an inherited logging-filter leak when the added regressions
+  changed shard assignment. The pilot tests now restore each handler's pre-test
+  filters, so later tests see their own logging behavior. Production redaction and
+  the routing-log assertions remain unchanged.
+
+## Countries: a vertical activity line replaces the dot — ACL-1838
+
+- Active country rows show a static 2 px line in the existing accent color at the
+  left, following the owner's selected design option 3. Inactive rows have no marker.
+- The marker occupies no label space and has no separate pointer target. The existing
+  activity predicate, expanded-country highlight, country actions and FTD counts
+  retain their behavior.
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then

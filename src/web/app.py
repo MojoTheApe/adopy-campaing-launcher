@@ -713,7 +713,7 @@ def _build_account_map_view(
                 # account_name_rules.json), а не угадано по хвосту
                 "workbook_alias_exact": alias_exact,
                 # страны, под которыми числа этого аккаунта лежат на самом деле
-                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, label),
+                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, alias or label),
                 # состояние кабинета — без периода: спенд отвечает «сколько за
                 # эти дни», состояние — «что с ним сейчас»
                 "status": _account_status(label),
@@ -2089,11 +2089,6 @@ def _alias_by_tail(label: str, known: dict) -> str:
     exact = exact_alias(label, known)
     if exact:
         return exact
-    # ACL-1824: подпись «<имя>_<id кабинета>» знает книга под голым именем.
-    # Правило строже хвостовой догадки, поэтому стоит перед ней.
-    stripped = _alias_without_id_suffix(label, known)
-    if stripped:
-        return stripped
     if has_own_name(label, known):
         return ""  # своё имя в книге есть — альтернатива не нужна
     tail = _account_tail(label)
@@ -2106,7 +2101,11 @@ def _alias_by_tail(label: str, known: dict) -> str:
         a for a in known
         if _account_tail(a) == tail and a.casefold() != (label or "").casefold()
     ]
-    return hits[0] if len(hits) == 1 else ""
+    if hits:
+        return hits[0] if len(hits) == 1 else ""
+    # ACL-1824: суффикс id — только последняя попытка; прежнее совпадение
+    # по хвосту и отказ при его неоднозначности сохраняют приоритет.
+    return _alias_without_id_suffix(label, known)
 
 
 #: ACL-1729: индекс алиасов книги по странам — один слот на одну книгу.

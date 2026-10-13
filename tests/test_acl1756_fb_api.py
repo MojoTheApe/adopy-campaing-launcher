@@ -40,17 +40,17 @@ LONG_ID_RE = re.compile(r"[0-9]{8,}")
 
 
 @pytest.fixture(autouse=True)
-def _no_leaked_log_filters():
-    """`fb_api_pilot.main()` вешает `ScrubFilter` на обработчики корневого логгера,
-    а среди них — общий обработчик pytest (caplog). Оставшийся фильтр прятал бы
-    id профиля в чужих тестах файлов, идущих после этого (ACL-1760)."""
-    handlers = list(logging.getLogger().handlers)
-    before = {h: list(h.filters) for h in handlers}
-    yield
-    for h in list(logging.getLogger().handlers):
-        for f in list(h.filters):
-            if h not in before or f not in before[h]:
-                h.removeFilter(f)
+def _restore_log_handler_filters(caplog):
+    """Pilot CLI tests must not leave redaction on pytest's shared handlers."""
+    handlers = set(logging.getLogger().handlers) | {caplog.handler}
+    before = {handler: list(handler.filters) for handler in handlers}
+    try:
+        yield
+    finally:
+        # Restore the existing filters and their order, including on handlers
+        # detached during a test. Production pilot redaction stays unchanged.
+        for handler, filters in before.items():
+            handler.filters[:] = filters
 
 
 # ───────────────────────── поддельный браузер ─────────────────────────
