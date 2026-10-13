@@ -14,7 +14,7 @@ from config.paths import _atomic_write, machine_file_lock
 
 _lock = threading.RLock()
 _failure_lock = threading.Lock()
-_failed_writes: dict[tuple[str, str], tuple[dict, str | None]] = {}
+_failed_writes: dict[tuple[str, str], tuple[dict, str | None, int]] = {}
 _UNFINISHED = {"running"}
 
 
@@ -67,6 +67,7 @@ def save(path: str, label: str, verdict: dict, *, begin: bool = False) -> str | 
     target = Path(path)
     key = (str(target), label)
     observed_job_id = None
+    observed_revision = 0
     try:
         with _lock, machine_file_lock(target.with_suffix(".lock"), timeout=2):
             try:
@@ -75,6 +76,7 @@ def save(path: str, label: str, verdict: dict, *, begin: bool = False) -> str | 
                 data = {}
             previous = data.get(label, {})
             observed_job_id = previous.get("job_id")
+            observed_revision = previous.get("status_revision", 0)
             job_id = verdict.get("job_id")
             if job_id and not begin and previous.get("job_id") != job_id:
                 # A late worker cannot replace the status of a newer run.
@@ -99,7 +101,11 @@ def save(path: str, label: str, verdict: dict, *, begin: bool = False) -> str | 
         # Do not include filesystem paths or the corrupt document in the UI.
         message = f"Build status could not be saved ({type(exc).__name__}); result is unverified."
         with _failure_lock:
-            _failed_writes[key] = (_unverified(message, verdict), observed_job_id if begin else verdict.get("job_id"))
+            _failed_writes[key] = (
+                _unverified(message, verdict),
+                observed_job_id if begin else verdict.get("job_id"),
+                observed_revision if begin else verdict.get("status_revision", 0),
+            )
         return message
 
 
@@ -121,15 +127,15 @@ def load(path: str, *, active_jobs: set[str]) -> Snapshot:
             current["state"] = "interrupted"
             current["errors"] = ["This build did not record a final result; verify its partial drafts."]
     with _failure_lock:
-        for (failed_path, label), (current, observed_job_id) in _failed_writes.items():
+        for (failed_path, label), (current, observed_job_id, observed_revision) in _failed_writes.items():
             if failed_path == str(target):
                 stored = data.get(label, {})
                 # A delayed failure from an older job/update cannot obscure a
                 # successful newer verdict. Failed admission may mask only the
-                # exact previous record it observed, not a subsequent run.
+                # previous job/revision it observed, not a later result from
+                # that same job or a subsequently accepted run.
                 if (not stored.get("job_id") or
                         stored.get("job_id") == observed_job_id and
-                        (stored.get("job_id") != current.get("job_id") or
-                         stored.get("status_revision", 0) <= current.get("status_revision", 0))):
+                        stored.get("status_revision", 0) <= observed_revision):
                     data[label] = copy.deepcopy(current)
     return Snapshot(data, error)

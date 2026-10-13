@@ -15,6 +15,9 @@
   monotonic status revisions reject late writes. Storage I/O does not hold the
   job lock or delay abandonment's slot release. Existing profile/slot ownership,
   cancellation deadlines and draft-only controls remain in force.
+- Failed admission errors also retain the predecessor's observed revision: their
+  delayed bookkeeping cannot mask that accepted job's later saved success. The
+  same error stays visible when the predecessor has not advanced.
 - Offline regressions use the public job caller, real persistence and rendered
   report, with gated synthetic publishers and isolated files. The initial seven
   cases failed on main `3327465f`. No live profile or deployed runtime is verified.

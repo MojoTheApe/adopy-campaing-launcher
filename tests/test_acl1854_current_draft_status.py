@@ -351,6 +351,67 @@ def test_late_progress_snapshot_cannot_overwrite_terminal_verdict(run):
     assert all(saved()[key] == value for key, value in new.items())
 
 
+@pytest.mark.parametrize("advance_predecessor", [False, True])
+def test_failed_admission_overlay_respects_predecessor_revision(monkeypatch, tmp_path, advance_predecessor):
+    from src.web import draft_status
+
+    path = tmp_path / "draft_status.json"
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    old = {"job_id": "accepted-job", "status_revision": 2, "state": "running", "ts": "2026-10-13T00:00:00"}
+    assert draft_status.save(str(path), "Account", old, begin=True) is None
+    entered, resume = threading.Event(), threading.Event()
+    mutex = threading.Lock()
+    real_write = draft_status._atomic_write
+
+    def fail_new_admission(*args):
+        if threading.current_thread().name == "rejected-admission":
+            raise PermissionError("synthetic admission write failure")
+        real_write(*args)
+
+    class FailureLock:
+        def __enter__(self):
+            if threading.current_thread().name == "rejected-admission":
+                entered.set()
+                assert resume.wait(5)
+            mutex.acquire()
+
+        def __exit__(self, *args):
+            mutex.release()
+
+    monkeypatch.setattr(draft_status, "_failure_lock", FailureLock())
+    monkeypatch.setattr(draft_status, "_atomic_write", fail_new_admission)
+    errors = []
+    worker = threading.Thread(name="rejected-admission", target=lambda: errors.append(
+        draft_status.save(str(path), "Account", {
+            "job_id": "not-accepted", "status_revision": 1, "state": "running",
+        }, begin=True)))
+    worker.start()
+    try:
+        assert entered.wait(5)
+        if advance_predecessor:
+            # The earlier job finished before admission, but its final snapshot
+            # can commit after admission fails: disk I/O is outside _jobs_lock.
+            assert draft_status.save(str(path), "Account", {
+                **old, "status_revision": 3, "state": "ready", "count": 1,
+                "campaign_names": ["Synthetic campaign"],
+            }) is None
+    finally:
+        resume.set()
+        worker.join(5)
+    assert not worker.is_alive()
+    assert errors and errors[0]
+    current = jobs.load_draft_status()["Account"]
+    if advance_predecessor:
+        assert json.loads(path.read_text(encoding="utf-8"))["Account"]["state"] == "ready"
+        assert current["state"] == "ready"
+        assert current["job_id"] == "accepted-job"
+        assert current["status_revision"] == 3
+        assert "✓ Draft ready" in _render_badge(current)
+    else:
+        assert current["state"] == "unverified"
+        assert "could not be saved" in _render_badge(current)
+
+
 def test_slow_storage_does_not_hold_the_cancellation_lock(run, monkeypatch):
     from src.web import draft_status
 
