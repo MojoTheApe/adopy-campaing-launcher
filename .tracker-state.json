@@ -7589,7 +7589,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "874": {
+        "actor": "Worker-FIVE874",
+        "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
+        "coordinator": "Coordinator-FLOW513",
+        "branch": "codex/acl-1874-five-source-reviews",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-flow-activation-report",
+        "id": "2d176805ba8848d1acc8eb1f9269253a",
+        "issue": 874,
+        "state": "implementing",
+        "started_at": "2026-10-13T14:58:25+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -12239,9 +12252,13 @@
           {
             "actor": "Worker-FIVE874",
             "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
+          },
+          {
+            "actor": "Worker-FIVE874",
+            "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-FIVE874",
         "coordinator": "Coordinator-FLOW513",
         "handoff": {
@@ -25825,6 +25842,13 @@
           }
         ],
         "preserved_approved": []
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T14:58:25+00:00",
+        "issue": 874,
+        "claim": "2d176805ba8848d1acc8eb1f9269253a",
+        "actor": "Worker-FIVE874"
       }
     ],
     "policy": {
