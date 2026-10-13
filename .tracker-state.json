@@ -7391,6 +7391,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T08:42:18+00:00",
         "from_status": "status:todo"
+      },
+      "865": {
+        "actor": "Worker-LS13455",
+        "session": "codex_01a13455_8219_7cd3_91f7_e1220ad22a1e",
+        "coordinator": "Coordinator-LSC1865",
+        "branch": "codex/acl-1865-loading-stages",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Loading-2026-10-13",
+        "id": "486d9e18f4454e0db7a59fea1bcc3fd4",
+        "issue": 865,
+        "state": "implementing",
+        "started_at": "2026-10-13T08:42:58+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11809,6 +11821,17 @@
           "from_status": "status:todo",
           "report": "# ACL-1864 deferred without implementation \u2014 2026-10-13\n\nWorker-SR1012 / connection_sr1012_worker, Coordinator-CR1012.\nClaim02065bdd371f4967b5311d303481b860.\n\nThe owner repaired the workbook and reported that it now works, then asked to\ncontinue the primary connection/API work. The Coordinator directed this new\npreventive Stats-loader task to remain queued rather than begin source changes.\n\nIssue864 remains valid recurrence protection: accept only leading empty/formatted\nrows before the first valid unambiguous Stats header, retaining strict validation.\nIts synthetic regression/design context is preserved in the Issue. No source\nedits, commit, push or PR were made. The isolated worktree is clean at main\n3327465fcbd46ccff9b64eb7c574ff5b84b99b80, under\nACM-Audit-2026-10-12/worktrees/acl-1864. Preserve it and the issue for later work.\n\nThe pending normal claim did succeed after a shared-state race, so release this\nexact owned claim through supported execution stop. This is a priority deferral,\nnot an implemented fix or a live verification. No workbook, machine path or\nrunning9095 dashboard was modified by this Worker. Resume only after a new\nauthorized normal claim."
         }
+      },
+      "865": {
+        "implementers": [
+          {
+            "actor": "Worker-LS13455",
+            "session": "codex_01a13455_8219_7cd3_91f7_e1220ad22a1e"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-LS13455",
+        "coordinator": "Coordinator-LSC1865"
       }
     },
     "actors": {
@@ -12862,6 +12885,10 @@
       },
       "Worker-CN6B92": {
         "session": "worker_countryline_cn6b92_20261013",
+        "role": "Worker"
+      },
+      "Worker-LS13455": {
+        "session": "codex_01a13455_8219_7cd3_91f7_e1220ad22a1e",
         "role": "Worker"
       }
     },
@@ -24036,6 +24063,13 @@
         "issue": 844,
         "claim": "c3652302044f4867927e49bc0377a8f4",
         "actor": "Worker-N7Q4"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T08:42:58+00:00",
+        "issue": 865,
+        "claim": "486d9e18f4454e0db7a59fea1bcc3fd4",
+        "actor": "Worker-LS13455"
       }
     ],
     "policy": {
