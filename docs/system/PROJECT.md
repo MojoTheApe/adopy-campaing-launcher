@@ -9,6 +9,10 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 - `src/web`, `serve.py`: local dashboard, account/report views, campaign builder,
   machine configuration and update endpoints.
+  Countries with the existing live activity state show a static 2 px blue vertical
+  line at the left of their sidebar row (ACL-1838), including countries opened in
+  the account map before their first spend. Inactive countries have no marker;
+  the expanded-country background remains a separate selection indication.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
