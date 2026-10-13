@@ -7366,9 +7366,11 @@
         "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-Publish-Design-2026-10-13",
         "id": "d9f5699c919e41c5957876ba9e63e27d",
         "issue": 845,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-13T07:51:51+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 850,
+        "report": "Tracker issues: ACL-1845\n\nThe builder previously stacked two filled Publish controls, and the all-campaign count included accounts already building. The footer now owns one primary action with live checkbox scope and a count that excludes already-building accounts; the open campaign's action is a secondary link. Zero eligible campaigns shows a disabled action and a wait reason, while a free account can still be enqueued. Disabled bulk publication keeps a distinct pale blue fill and border in both themes. No-checkbox/all-checkbox behavior, confirmations, retry keys, duplicate guards and draft-only payloads remain unchanged.\n\nValidation on current main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80: 55 affected offline browser/per-account tests passed, including actual selected request bodies, two busy campaigns plus one free, count/scope updates while a footer select retains focus, zero count/unknown status, queued work, readable contrast, focus and reduced motion. Packaging unittest suite46, scanner, import smoke and diff check passed on Windows/Python3.14. Hosted CI and installer checks must run on the new head.\n\nActual-main synthetic populated light/dark screenshots were visually checked. A separate fixture applies only scoped publication CSS to the newer production Adopy tokens/report styles and sanitized two-column markup, using actual docked/expanded selectors. Its 480px docked and1100px expanded cases pass geometry/focus and contrast (active5.17/6.86; disabled12.24/11.43). It includes blocked Page/preflight presentation and PAUSED target labels; it executes no newer runtime JavaScript. Main still has the older one-column RPA runtime. The label adapter preserves PAUSED wording if the API runtime supplies its existing mode flag; this PR adds no API backend or expanded runtime. During integration with that newer source, its applyGate must preserve the zero-count disabled condition rather than overwrite it. CSS compatibility is not runtime adoption or installed-package delivery; no production account or advertising write was used."
       },
       "838": {
         "actor": "Worker-CN6B92",
