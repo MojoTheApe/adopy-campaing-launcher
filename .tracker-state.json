@@ -7380,6 +7380,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T08:01:43+00:00",
         "from_status": "status:todo"
+      },
+      "838": {
+        "actor": "Worker-CN6B92",
+        "session": "worker_countryline_cn6b92_20261013",
+        "coordinator": "Coordinator-CV1013",
+        "branch": "codex/acl-1838-country-active-line",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line",
+        "id": "ed344663bc00405187778f3381959f61",
+        "issue": 838,
+        "state": "implementing",
+        "started_at": "2026-10-13T08:06:39+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11522,10 +11534,14 @@
           {
             "actor": "Worker-CL7F31",
             "session": "worker_countryline_cl7f31_20261013"
+          },
+          {
+            "actor": "Worker-CN6B92",
+            "session": "worker_countryline_cn6b92_20261013"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-CL7F31",
+        "state": "implementing",
+        "worker": "Worker-CN6B92",
         "coordinator": "Coordinator-CV1013",
         "handoff": {
           "actor": "Worker-CL7F31",
@@ -11543,7 +11559,6 @@
         },
         "pr": 842,
         "queued_at": "2026-10-13T06:15:09+00:00",
-        "reviewer": "Reviewer-RL8C42",
         "review_report": "ACL-1838 / PR842 independent reviewer return for current-main refresh\nReviewer-RL8C42, actual session rev_countryline_rl8c42_20261013.\nSource head: 520b988cbaefcb856759bdc00a45d3908d9b9e1b.\nPR-reported base: e8e59f8376458f2f73089c3f2a8d454837ff033f.\nOfficial main verified through GitHub heads/main: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nSource handoff remains on the old main baseline. The pinned execution-schema-2 BATCH_INTEGRATION.md Individual review and approval requires current main in the source and fresh scope/head/baseline evidence.\nReturn this unapproved source to its author for a real fresh implementation claim on the retained original branch, current-main reconciliation preserving all work, applicable new source CI, and durable exact-head handoff. A fresh independent standards/spec review and approval remain required afterward. This is a bounded prerequisite return, not a full acceptance review or approval; no source files were edited. The reviewer releases the source lane through the supported review-return operation; no merge, force push or batch admission is authorized by this report."
       },
       "839": {
@@ -12795,6 +12810,10 @@
       "Reviewer-RL8C42": {
         "session": "rev_countryline_rl8c42_20261013",
         "role": "Reviewer"
+      },
+      "Worker-CN6B92": {
+        "session": "worker_countryline_cn6b92_20261013",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -23566,6 +23585,13 @@
         "issue": 853,
         "pr": 863,
         "actor": "Worker-N7Q4"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T08:06:39+00:00",
+        "issue": 838,
+        "claim": "ed344663bc00405187778f3381959f61",
+        "actor": "Worker-CN6B92"
       }
     ],
     "policy": {
