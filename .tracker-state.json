@@ -11600,7 +11600,7 @@
             "session": "footer_fix-01a133d7-20261013"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-F8Q620",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -11619,7 +11619,8 @@
         },
         "pr": 846,
         "queued_at": "2026-10-13T06:42:53+00:00",
-        "reviewer": "Reviewer-LR1839"
+        "reviewer": "Reviewer-LR1839",
+        "review_report": "# ACL-1840 / PR846 source review return\n\nChanges required: refresh the source baseline before approval.\n\nPR846 head 23abf729de601fc3c8f2221d0cc8cb1471ecc466 retains base e8e59f8376458f2f73089c3f2a8d454837ff033f. Official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80; older checks do not prove this baseline.\n\nThe genuine author must obtain a fresh implementation claim on the retained source branch, include current main, resolve author-owned conflicts, run affected geometry/behavior checks and actual source CI, then hand off for fresh independent exact-head/base/scope review.\n\nPreserve ACL-1840's upstream dependency: its campaign-table component remains absent from main, and its additive scoped footer rule is dormant until ACL-1798 is admitted. Do not import unrelated preview commits or claim complete integrated application verification. Recheck the actual integrated footer mount and cascade when the owning upstream source is admitted. This return does not approve the dormant source or erase those constraints.\n\nThis is a baseline prerequisite return, not a full acceptance approval. No source edits, merge, stage entry, publication or installation performed."
       },
       "841": {
         "implementers": [
@@ -15247,20 +15248,7 @@
       844,
       853
     ],
-    "review": {
-      "id": "e1fd314831634a6dbb60a61e369bee8b",
-      "pr": 846,
-      "issues": [
-        840
-      ],
-      "actor": "Reviewer-LR1839",
-      "session": "layout_review_20261013",
-      "coordinator": "Coordinator-D7K413",
-      "started_at": "2026-10-13T08:08:00+00:00",
-      "state": "returning",
-      "report": "# ACL-1840 / PR846 source review return\n\nChanges required: refresh the source baseline before approval.\n\nPR846 head 23abf729de601fc3c8f2221d0cc8cb1471ecc466 retains base e8e59f8376458f2f73089c3f2a8d454837ff033f. Official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80; older checks do not prove this baseline.\n\nThe genuine author must obtain a fresh implementation claim on the retained source branch, include current main, resolve author-owned conflicts, run affected geometry/behavior checks and actual source CI, then hand off for fresh independent exact-head/base/scope review.\n\nPreserve ACL-1840's upstream dependency: its campaign-table component remains absent from main, and its additive scoped footer rule is dormant until ACL-1798 is admitted. Do not import unrelated preview commits or claim complete integrated application verification. Recheck the actual integrated footer mount and cascade when the owning upstream source is admitted. This return does not approve the dormant source or erase those constraints.\n\nThis is a baseline prerequisite return, not a full acceptance approval. No source edits, merge, stage entry, publication or installation performed.",
-      "keep_lane": false
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -23612,6 +23600,24 @@
         "pr": 846,
         "lane": "e1fd314831634a6dbb60a61e369bee8b",
         "actor": "Reviewer-LR1839"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-13T08:08:48+00:00",
+        "review": {
+          "id": "e1fd314831634a6dbb60a61e369bee8b",
+          "pr": 846,
+          "issues": [
+            840
+          ],
+          "actor": "Reviewer-LR1839",
+          "session": "layout_review_20261013",
+          "coordinator": "Coordinator-D7K413",
+          "started_at": "2026-10-13T08:08:00+00:00",
+          "state": "returning",
+          "report": "# ACL-1840 / PR846 source review return\n\nChanges required: refresh the source baseline before approval.\n\nPR846 head 23abf729de601fc3c8f2221d0cc8cb1471ecc466 retains base e8e59f8376458f2f73089c3f2a8d454837ff033f. Official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80; older checks do not prove this baseline.\n\nThe genuine author must obtain a fresh implementation claim on the retained source branch, include current main, resolve author-owned conflicts, run affected geometry/behavior checks and actual source CI, then hand off for fresh independent exact-head/base/scope review.\n\nPreserve ACL-1840's upstream dependency: its campaign-table component remains absent from main, and its additive scoped footer rule is dormant until ACL-1798 is admitted. Do not import unrelated preview commits or claim complete integrated application verification. Recheck the actual integrated footer mount and cascade when the owning upstream source is admitted. This return does not approve the dormant source or erase those constraints.\n\nThis is a baseline prerequisite return, not a full acceptance approval. No source edits, merge, stage entry, publication or installation performed.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
