@@ -12265,7 +12265,7 @@
             "session": "root-worker_refresh_867"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-867R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -12290,7 +12290,8 @@
           "actor": "Coordinator-DLV13",
           "session": "Root-DLV13-01a13445",
           "report": "Integration compatibility return for ACL-1865 / PR867.\n\nThe exact approved head 55f69649e6213117b923237b4d435b2ee3590dea has passed its source checks and independent review. Read-only git merge-tree against approved PR665 head 54f1c1fe and approved PR882 head 5d0e7259 reports a content conflict only in docs/system/CHANGELOG.md: each inserts a new entry immediately after the title. Product code is not the blocker.\n\nUnder a fresh owned Worker claim on the preserved source branch, move only the complete ACL-1865 entry, with its text unchanged, to immediately before the existing unique heading \"One metric set in every attribution table, Totals and Campaign managers on Home \u2014 ACL-1652, ACL-1654, ACL-1656\". Preserve every old entry and all runtime/tests. This stable insertion point is distinct from the creative entry near ACL-1615 and the token diagnostic entry after the title. Do not include another task's source commits.\n\nThen fast-forward push, truthful checks/handoff and fresh independent review/approval. The old source approval remains historical; no stage/main merge or live action is claimed. The failed composition was found before freezing or publishing a batch."
-        }
+        },
+        "reviewer": "Reviewer-867S"
       },
       "854": {
         "implementers": [
@@ -16145,8 +16146,7 @@
       839,
       845,
       840,
-      841,
-      865
+      841
     ],
     "review": null,
     "history": [
@@ -26648,6 +26648,13 @@
         "pr": 665,
         "lane": "91da4586c8c246dd93038e9a9ed5b740",
         "actor": "Reviewer-Creative665"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T18:39:49+00:00",
+        "pr": 867,
+        "lane": "5329d662d852466cb27e325c39192db7",
+        "actor": "Reviewer-867S"
       }
     ],
     "policy": {
@@ -27391,6 +27398,18 @@
         "session": "review665-20261013-f83a61d2",
         "coordinator": "Coordinator-DLV13",
         "started_at": "2026-10-13T18:38:53+00:00",
+        "state": "reviewing"
+      },
+      "867": {
+        "id": "5329d662d852466cb27e325c39192db7",
+        "pr": 867,
+        "issues": [
+          865
+        ],
+        "actor": "Reviewer-867S",
+        "session": "source_review_867_20261013",
+        "coordinator": "Coordinator-DLV13",
+        "started_at": "2026-10-13T18:39:49+00:00",
         "state": "reviewing"
       }
     }
