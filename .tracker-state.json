@@ -12322,7 +12322,7 @@
             "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-FIVE874",
         "coordinator": "Coordinator-FLOW513",
         "handoff": {
@@ -15927,6 +15927,19 @@
         "coordinator": "Coordinator-FLOW513",
         "state": "reviewing",
         "started_at": "2026-10-13T13:41:43+00:00"
+      },
+      "881": {
+        "id": "bb4d9946fe5b40a5a58d820fde19b5be",
+        "pr": 881,
+        "issues": [
+          874
+        ],
+        "actor": "Reviewer-R875X",
+        "session": "root_tracker_review_acl1875",
+        "coordinator": "Coordinator-FLOW513",
+        "started_at": "2026-10-13T15:08:01+00:00",
+        "state": "reviewing",
+        "route": "process"
       }
     },
     "review_queue": [
@@ -25931,6 +25944,26 @@
         "pr": 881,
         "lane": "bb4d9946fe5b40a5a58d820fde19b5be",
         "actor": "Reviewer-R875X"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-13T15:14:17+00:00",
+        "review": {
+          "id": "bb4d9946fe5b40a5a58d820fde19b5be",
+          "pr": 881,
+          "issues": [
+            874
+          ],
+          "actor": "Reviewer-R875X",
+          "session": "root_tracker_review_acl1875",
+          "coordinator": "Coordinator-FLOW513",
+          "started_at": "2026-10-13T15:08:01+00:00",
+          "state": "reviewing",
+          "route": "process"
+        },
+        "prs": [
+          881
+        ]
       }
     ],
     "policy": {
@@ -26595,20 +26628,6 @@
       "ineligible": {},
       "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
     },
-    "source_reviews": {
-      "881": {
-        "id": "bb4d9946fe5b40a5a58d820fde19b5be",
-        "pr": 881,
-        "issues": [
-          874
-        ],
-        "actor": "Reviewer-R875X",
-        "session": "root_tracker_review_acl1875",
-        "coordinator": "Coordinator-FLOW513",
-        "started_at": "2026-10-13T15:08:01+00:00",
-        "state": "reviewing",
-        "route": "process"
-      }
-    }
+    "source_reviews": {}
   }
 }
