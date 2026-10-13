@@ -3398,6 +3398,7 @@
     .cbd-camp-sets::before { content: "·"; margin-right: var(--space-xs); }
     .cbd-ed-actions { gap: var(--space-xs); }
     .cbd-ed-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .cbd-ed-note { font-size: 0.75rem; color: var(--text-muted, #8a8f98); margin-top: var(--space-xs); }
     .cbd-ed-adlist { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
     .cbd-ed-adlist .cbd-ed-adlist-label { color: var(--muted); font-size: var(--adopy-text-sm); }
     /* Настройка аккаунта (ссылка, поля карты) — контекст кампании, не набора и не объявления. */
@@ -5235,7 +5236,7 @@ window.cbKeep = (function () {
        Нет сохранённого числа (старый черновик) - один набор. */
     var wantSets = parseInt(data.fields && data.fields.adset_count, 10) || 1;
     var haveSets = slot.querySelectorAll('.cb-adset-sec').length;
-    for (var ks = haveSets; ks < wantSets && ks < 50 && window.cbAddAdset; ks += 1) window.cbAddAdset(slot, { noAd: true });
+    for (var ks = haveSets; ks < wantSets && ks < 10 && window.cbAddAdset; ks += 1) window.cbAddAdset(slot, { noAd: true });
     var have = slot.querySelectorAll('.cb-ad-row').length;
     var addAd = slot.querySelector('.cb-add-btn-sm');
     for (var i = have; i < (data.ads || 1) && addAd; i += 1) window.cbAddAd(addAd);
@@ -6435,6 +6436,7 @@ window.cbTree = (function () {
       pick = '<div class="cbd-ed-pick"><label for="cbd-ed-ad">Ad</label>'
         + '<select id="cbd-ed-ad" class="cbd-ed-ad">' + body + '</select></div>';
     } else if (level === 'adset') {
+      var atMax = sets.length >= 10;
       pick = '<div class="cbd-ed-pick"><label for="cbd-ed-set">Ad set</label>'
         + '<select id="cbd-ed-set" class="cbd-ed-set">'
         + sets.map(function (st) {
@@ -6443,11 +6445,12 @@ window.cbTree = (function () {
           }).join('')
         + '</select></div>'
         + '<div class="cbd-ed-pick cbd-ed-actions">'
-        + '<button type="button" class="cbd-add" data-act="add-adset" title="Add an ad set to this campaign">+ Ad set</button>'
-        + '<button type="button" class="cbd-add" data-act="copy-adset" title="Copy this ad set with its ads">Copy ad set</button>'
+        + '<button type="button" class="cbd-add" data-act="add-adset"' + (atMax ? ' disabled title="A campaign can have at most 10 ad sets."' : ' title="Add an ad set to this campaign"') + '>+ Ad set</button>'
+        + '<button type="button" class="cbd-add" data-act="copy-adset"' + (atMax ? ' disabled title="A campaign can have at most 10 ad sets."' : ' title="Copy this ad set with its ads"') + '>Copy ad set</button>'
         + '<button type="button" class="cbd-add" data-act="remove-adset"'
         + (setIdx === 0 ? ' disabled title="The first ad set stays; remove the campaign instead"' : ' title="Remove this ad set and its ads"')
-        + '>Remove ad set</button></div>';
+        + '>Remove ad set</button></div>'
+        + (atMax ? '<div class="cbd-ed-note" role="note">A campaign can have at most 10 ad sets.</div>' : '');
       /* Объявления выбранного набора: открыть любое одним нажатием. */
       var mine = [], all = slot.querySelectorAll('.cb-ad-row');
       Array.prototype.forEach.call(all, function (row, i) {
@@ -7055,7 +7058,7 @@ window.cbTree = (function () {
     } else if (act === 'add-adset' || act === 'copy-adset' || act === 'remove-adset') {
       var cur = openId ? findCampaign(openId) : null;
       if (!cur) return;
-      if (act === 'add-adset') window.cbAddAdset(cur.camp.slot);
+      if (act === 'add-adset') window.cbAddAdset(cur.camp.slot);          /* на 10 наборах вернёт null */
       else if (act === 'copy-adset') window.cbCopyAdset(cur.camp.slot, setIdx);
       else {
         if (setIdx < 1) return;
@@ -13221,6 +13224,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (c) c.value = slot.querySelectorAll('.cb-adset-sec').length || 1;
   }
 
+  /* ACL-1768: не больше 10 наборов в кампании (как MAX_AD_SETS на сервере). */
+  var CB_MAX_ADSETS = 10;
+
   /* Новый набор в конец кампании. `noAd`: без объявления (его положит вызывающий). */
   window.cbAddAdset = function (slot, opts) {
     opts = opts || {};
@@ -13228,6 +13234,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (!wrap) return null;
     var idx = slot.dataset.idx;
     var k = wrap.querySelectorAll('.cb-adset-sec').length;
+    if (k >= CB_MAX_ADSETS) return null;     /* потолок: и кнопки, и восстановление черновика */
     wrap.insertAdjacentHTML('beforeend', buildAdsetSectionHTML(idx, k));
     var sec = wrap.lastElementChild;
     initAllSelects(sec);
@@ -13246,6 +13253,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (!src) return -1;
     var idx = slot.dataset.idx;
     var dst = window.cbAddAdset(slot, { noAd: true });
+    if (!dst) return -1;                     /* уже 10 наборов */
     var nk = secs.length;
     var from = adsetPrefix(idx, k), to = adsetPrefix(idx, nk);
     src.querySelectorAll('[name]').forEach(function (el) {

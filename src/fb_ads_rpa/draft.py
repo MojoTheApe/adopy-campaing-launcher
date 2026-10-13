@@ -97,6 +97,11 @@ class AdDraft:
         return out
 
 
+#: ACL-1768: потолок наборов в одной кампании (форма, билдер, план).
+MAX_AD_SETS = 10
+MAX_AD_SETS_ERROR = f"A campaign can have at most {MAX_AD_SETS} ad sets."
+
+
 @dataclass
 class AdSetDraft:
     name: str

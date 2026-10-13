@@ -44,13 +44,14 @@ log = logging.getLogger(__name__)
 BACKEND_ENV = "ACL_FB_BACKEND"
 CREATE_MAX_CALLS_ENV = "ACL_FB_API_CREATE_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
-#: Потолок вызовов Graph на одну кампанию: предпроверка, поиск, медиа,
-#: ожидание видео, запись, проверка меток, сверка — с запасом на 4 объявления
-#: с видео (4 × (20 опросов + ~10) + ~20). Instant Form (ACL-1775) добавляет
-#: до 4 чтений форм Страницы (до 2 в предпроверке и до 2 при сверке: список и
-#: условия), поэтому запас на них +10. Свой потолок кончает только эту
+#: Потолок вызовов Graph на одну кампанию (ACL-1768): сам бюджет считается по плану
+#: (`creator.estimate_create_calls`: основа + за набор + за объявление + опросы видео +
+#: чтения форм Instant Form) и зажимается этим потолком. Он же верхняя граница для
+#: `ACL_FB_API_CREATE_MAX_CALLS`. Кампания, которой нужно больше, отклоняется заранее
+#: ("split it"), а не останавливается на полпути. Свой потолок кончает только эту
 #: кампанию, следующие идут со своим (ревью, minor 5).
-DEFAULT_CREATE_MAX_CALLS = 150
+DEFAULT_CREATE_MAX_CALLS = 250
+CREATE_CALLS_FLOOR = 20
 #: Потолок на предпроверку кабинета (один раз на задание).
 PREFLIGHT_MAX_CALLS = 12
 READY_TIMEOUT_S = 90.0
@@ -72,6 +73,24 @@ def _env_number(name: str, default: float, lo: float, hi: float) -> float:
     except ValueError:
         value = default
     return max(lo, min(hi, value))
+
+
+def create_call_budget(plan: Any) -> tuple[int, str]:
+    """(бюджет вызовов на кампанию, отказ). Бюджет - по плану, не больше потолка из окружения.
+
+    Если плану нужно больше потолка, отказ вслух сразу (и в Check plan, и в запуске), а не
+    остановка на полпути.
+    """
+    from src.fb_api.creator import estimate_create_calls
+
+    ceiling = int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, CREATE_CALLS_FLOOR,
+                              DEFAULT_CREATE_MAX_CALLS))
+    need = estimate_create_calls(plan)
+    if need > DEFAULT_CREATE_MAX_CALLS:
+        return ceiling, (f"This campaign needs about {need} Meta calls, more than one run allows "
+                         "— split it. Nothing was created.")
+    # Нижний потолок в окружении - решение оператора: бюджет зажимается им (остановка на полпути, как всегда).
+    return min(need, ceiling), ""
 
 
 def _now_iso() -> str:
@@ -357,7 +376,10 @@ class ApiPublisher:
             return result_dict(Outcome(campaign_name=name),
                                error="The draft's ad account differs from the verified one. Nothing was created.")
         assert self._client is not None and self._facts is not None and self._resolver is not None
-        self._client.reset_budget(int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, 20, 250)))
+        budget, too_big = create_call_budget(plan)
+        if too_big:
+            return result_dict(Outcome(campaign_name=name), error=too_big)
+        self._client.reset_budget(budget)
 
         def step(text: str) -> None:
             self.progress(f"{name}: {text}")

@@ -28,12 +28,32 @@ def _parse_budget(raw: str) -> float | None:
         return None
 
 
-def _adset_index(slot: dict[str, Any]) -> int:
-    """Номер набора слота: явный `adset_index`; у старых слотов ключа нет - это набор 0."""
-    try:
-        return max(0, int(slot.get("adset_index") or 0))
-    except (TypeError, ValueError):
-        return 0
+def parse_adset_index(raw: Any, count: int | None = None) -> int | None:
+    """Номер набора строго: целое в [0, count) (без `count` - в [0, MAX_AD_SETS)).
+
+    Всё остальное ("abc", "-1", "1.5", "", None, 7 при двух наборах) - None: такой номер
+    не угадывается и не прячется в набор 0 (ACL-1768, ревью).
+    """
+    from src.fb_ads_rpa.draft import MAX_AD_SETS
+
+    if isinstance(raw, bool) or raw is None:
+        return None
+    if isinstance(raw, int):
+        k = raw
+    elif isinstance(raw, str) and raw.strip().isascii() and raw.strip().isdigit():
+        k = int(raw.strip())
+    else:
+        return None
+    limit = MAX_AD_SETS if count is None else min(count, MAX_AD_SETS)
+    return k if 0 <= k < limit else None
+
+
+def bad_adset_message(ad_no: int, raw: Any) -> str:
+    """Отказ вслух: объявление указывает на набор, которого нет. Номер набора - как в билдере (с 1)."""
+    shown = raw
+    if isinstance(raw, (int, str)) and not isinstance(raw, bool) and str(raw).strip().lstrip("-").isdigit():
+        shown = int(str(raw).strip()) + 1
+    return f"Ad {ad_no} points to ad set {shown}, which does not exist. Nothing was created."
 
 
 def slots_to_campaign_drafts(
@@ -64,10 +84,26 @@ def slots_to_campaign_drafts(
     for campaign_name, group in grouped.items():
         warnings: list[str] = []
         by_set: dict[int, list[dict[str, Any]]] = {}
-        for slot in group:
-            by_set.setdefault(_adset_index(slot), []).append(slot)
+        slot_errors: list[str] = []
+        for pos, slot in enumerate(group, start=1):
+            for msg in slot.get("form_errors") or []:
+                if msg not in slot_errors:
+                    slot_errors.append(msg)
+            # Нет ключа - набор 0 (старые формы и черновики); есть, но не целое в [0, число наборов) - отказ.
+            if "adset_index" not in slot:
+                k = 0
+            else:
+                count = slot.get("adset_count")
+                k = parse_adset_index(slot.get("adset_index"),
+                                      count if isinstance(count, int) and not isinstance(count, bool) else None)
+            if k is None:
+                msg = bad_adset_message(pos, slot.get("adset_index"))
+                if msg not in slot_errors:
+                    slot_errors.append(msg)
+                continue
+            by_set.setdefault(k, []).append(slot)
         order = sorted(by_set)
-        first_campaign = by_set[order[0]][0]
+        first_campaign = (by_set[order[0]] if order else group)[0]
         # Бюджет - на кампании (CBO): берётся у первого слота и общий для всех наборов.
         budget = _parse_budget(str(first_campaign.get("budget") or ""))
 
@@ -138,6 +174,9 @@ def slots_to_campaign_drafts(
             ad_sets=ad_sets,
             warnings=warnings,
         )
+        draft.errors.extend(slot_errors)
+        if not ad_sets:
+            draft.errors.append("No ads in campaign")
         for ad_set in ad_sets:
             if not ad_set.ads:
                 draft.errors.append("No ads in campaign" if len(ad_sets) == 1

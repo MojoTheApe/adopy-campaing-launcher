@@ -480,3 +480,178 @@ def test_desktop_only_is_refused_for_every_ad_set_not_only_the_first(tmp_path):
     with pytest.raises(cr.PlanError) as err:
         cr.plan_from_draft(d)
     assert str(err.value).count("Desktop only isn't possible") == 2
+
+
+# ───────────────────── ревью 833: номер набора не угадывается ─────────────────────
+
+BAD_INDEXES = ["abc", "-1", "1.5", "", "7", "99", " ", "1e1"]
+
+
+@pytest.mark.parametrize("bad", BAD_INDEXES)
+def test_a_bad_ad_to_set_value_in_the_form_is_refused_by_name_not_guessed(bad):
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+    from src.web import app as web
+
+    country, label, slots = web._parse_build_upload_form(_multi_fields(camp_0_ad_2_adset=bad))
+    [draft] = slots_to_campaign_drafts(slots, account_label=label, country=country)
+    shown = int(bad) + 1 if bad.lstrip("-").isdigit() else bad
+    assert f"Ad 3 points to ad set {shown}, which does not exist. Nothing was created." in draft.errors
+    # ни в набор 0, ни в придуманный набор: у набора 0 только его два объявления
+    assert draft.ad_sets[0].ads and len(draft.ad_sets[0].ads) == 2
+    assert len(draft.ad_sets) <= 2
+    with pytest.raises(cr.PlanError, match="points to ad set"):
+        cr.plan_from_draft(draft)
+
+
+@pytest.mark.parametrize("bad", ["abc", -2, 1.5, "", None, 2, 99, True])
+def test_a_bad_slot_adset_index_is_a_draft_error(bad):
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+
+    slots = [_slot("A", 0, adset_count=2), _slot("A", 1, adset_count=2), _slot("A", copy="T2")]
+    slots[2]["adset_index"], slots[2]["adset_count"] = bad, 2
+    [a] = slots_to_campaign_drafts(slots, account_label="Acc", country="MX")
+    assert any("points to ad set" in e and "does not exist" in e for e in a.errors), a.errors
+    assert sum(len(s.ads) for s in a.ad_sets) == 2          # плохое объявление нигде не оказалось
+
+
+def test_a_missing_key_still_means_ad_set_zero_and_valid_values_pass():
+    from src.web import app as web
+
+    country, label, slots = web._parse_build_upload_form(_multi_fields())
+    assert [s["adset_index"] for s in slots] == [0, 0, 1] and all("form_errors" not in s for s in slots)
+    f = _multi_fields()
+    del f["camp_0_ad_1_adset"]                               # ключа нет -> набор 0, как у старых форм
+    assert [s["adset_index"] for s in web._parse_build_upload_form(f)[2]] == [0, 0, 1]
+
+
+# ───────────────────── ревью 833: потолок наборов и бюджет вызовов ─────────────────────
+
+def test_the_form_refuses_more_than_ten_ad_sets():
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+    from src.web import app as web
+
+    country, label, slots = web._parse_build_upload_form(_multi_fields(camp_0_adset_count="60"))
+    [draft] = slots_to_campaign_drafts(slots, account_label=label, country=country)
+    assert "A campaign can have at most 10 ad sets." in draft.errors
+    assert len(draft.ad_sets) <= 10
+    ok = web._parse_build_upload_form(_multi_fields(camp_0_adset_count="10"))[2]
+    [fine] = slots_to_campaign_drafts(ok, account_label=label, country=country)
+    assert "A campaign can have at most 10 ad sets." not in fine.errors
+
+
+def test_the_plan_refuses_eleven_ad_sets_and_takes_ten(tmp_path):
+    assert len(cr.plan_from_draft(_draft(tmp_path, sets=10, ads=1)).ad_sets) == 10
+    with pytest.raises(cr.PlanError, match="at most 10 ad sets"):
+        cr.plan_from_draft(_draft(tmp_path, sets=11, ads=1))
+
+
+def test_the_page_disables_add_and_copy_at_ten_ad_sets():
+    html = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
+    assert "var atMax = sets.length >= 10;" in html and "var CB_MAX_ADSETS = 10;" in html
+    assert "if (k >= CB_MAX_ADSETS) return null;" in html
+    assert html.count("A campaign can have at most 10 ad sets.") >= 3
+
+
+def _publisher_for(meta, **kw):
+    from tests.test_acl1761_api_create import _publisher
+    return _publisher(meta, **kw)
+
+
+def test_ten_ad_sets_of_three_image_ads_fit_in_one_run_and_the_budget_scales(tmp_path):
+    from src.web import publish_api
+
+    draft = _draft(tmp_path, sets=10, ads=3)
+    plan = cr.plan_from_draft(draft)
+    budget, refusal = publish_api.create_call_budget(plan)
+    assert refusal == "" and 184 < budget <= publish_api.DEFAULT_CREATE_MAX_CALLS
+    small, _ = publish_api.create_call_budget(cr.plan_from_draft(_draft(tmp_path, sets=2, ads=3)))
+    assert small < budget                                    # растёт с планом, а не одно число
+    meta = FakeMeta()
+    pub = _publisher_for(meta)
+    res = pub.publish_draft(draft)
+    assert res["success"] is True, res["error"]
+    assert pub._client.calls <= budget
+    assert len([o for o in meta.objects.values() if o["_kind"] == "adset"]) == 10
+    assert len([o for o in meta.objects.values() if o["_kind"] == "ad"]) == 30
+
+
+def test_a_campaign_too_big_for_one_run_is_refused_up_front_in_check_plan_and_in_a_run(tmp_path):
+    draft = _draft(tmp_path, sets=10, ads=3)
+    for s in draft.ad_sets:                                  # те же 30 объявлений, но видео
+        for ad in s.ads:
+            ad.creative_path = str(Path(ad.creative_path).with_suffix(".mp4"))
+    for dry in (True, False):
+        meta = FakeMeta()
+        pub = _publisher_for(meta, dry_run=dry)
+        res = pub.publish_draft(draft)
+        assert res["success"] is False
+        assert "This campaign needs about" in res["error"] and "more than one run allows — split it" in res["error"]
+        assert meta.posts == []
+
+
+def test_the_env_ceiling_still_clamps_the_budget(tmp_path, monkeypatch):
+    from src.web import publish_api
+
+    monkeypatch.setenv("ACL_FB_API_CREATE_MAX_CALLS", "60")
+    budget, refusal = publish_api.create_call_budget(cr.plan_from_draft(_draft(tmp_path, sets=10, ads=3)))
+    assert (budget, refusal) == (60, "")
+
+
+# ───────────────────── ревью 833: две карточки с одним именем ─────────────────────
+
+def _twin_fields(**over):
+    base = dict(camp_count="2", camp_1_name="MX_test", camp_1_ad_count="1", camp_1_budget="20",
+                camp_1_ad_0_creative_file="z.png", camp_1_ad_0_copy="Z", camp_1_targeting="ZZ", camp_1_age="50")
+    base.update(over)
+    return _multi_fields(**base)
+
+
+def test_two_cards_with_the_same_name_are_refused_not_merged():
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+    from src.web import app as web
+
+    country, label, slots = web._parse_build_upload_form(_twin_fields())
+    [draft] = slots_to_campaign_drafts(slots, account_label=label, country=country)
+    assert draft.errors.count("Two campaigns are named MX_test. Give each campaign a distinct name.") == 1
+    with pytest.raises(cr.PlanError, match="Two campaigns are named MX_test"):
+        cr.plan_from_draft(draft)
+
+
+def test_two_single_set_cards_with_the_same_name_are_refused_too():
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+    from src.web import app as web
+
+    f = _fields(camp_count="2", camp_1_name="MX_test", camp_1_ad_count="1", camp_1_budget="20",
+                camp_1_ad_0_creative_file="z.png", camp_1_ad_0_copy="Z")
+    country, label, slots = web._parse_build_upload_form(f)
+    [draft] = slots_to_campaign_drafts(slots, account_label=label, country=country)
+    assert "Two campaigns are named MX_test. Give each campaign a distinct name." in draft.errors
+
+
+def test_distinct_names_are_not_twins():
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+    from src.web import app as web
+
+    country, label, slots = web._parse_build_upload_form(_twin_fields(camp_1_name="Other"))
+    drafts = slots_to_campaign_drafts(slots, account_label=label, country=country)
+    assert [d.name for d in drafts] == ["MX_test", "Other"]
+    assert not any("Two campaigns" in e for d in drafts for e in d.errors)
+
+
+def test_the_twin_error_travels_in_form_errors_apart_from_the_1880_page_check():
+    # 1880 (ветка facebook-page-selection) добавляет в конце группы свою проверку одинаковых имён с
+    # разными Страницами; наша живёт в разборе формы (`form_errors`) и ложится в `draft.errors` отдельной строкой.
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+
+    slots = [_slot("A", form_errors=["Two campaigns are named A. Give each campaign a distinct name."]), _slot("A")]
+    [a] = slots_to_campaign_drafts(slots, account_label="Acc", country="MX")
+    assert a.errors == ["Two campaigns are named A. Give each campaign a distinct name."]
+
+
+def test_upload_fb_export_refuses_a_custom_ad_set_name_or_pixel():
+    from src.web import app as web
+
+    for key, val in (("camp_0_adset_0_name", "My set"), ("camp_0_adset_0_pixel", "123")):
+        slots = web._parse_build_upload_form(_fields(**{key: val}))[2]
+        assert any(s.get("adset_name") or s.get("pixel_id") for s in slots)
+    assert "Upload FB cannot hold a custom ad set name or pixel" in (ROOT / "src/web/app.py").read_text(encoding="utf-8")

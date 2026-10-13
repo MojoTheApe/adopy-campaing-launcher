@@ -108,6 +108,28 @@ VIDEO_MAX_BYTES = 200 * 1024 * 1024
 VIDEO_WAIT_S = 300.0
 VIDEO_POLL_S = 15.0
 VIDEO_MAX_POLLS = 20
+
+#: ACL-1768: потолок вызовов Graph на одну кампанию растёт с планом. Замерено на FakeMeta
+#: (картинки, с предпроверкой): 14 + 5 за набор + 4 за объявление (10 наборов x 3 = 184).
+#: Берём с запасом; видео добавляет опросы обработки, Instant Form - чтения форм Страницы.
+CALLS_BASE = 20
+CALLS_PER_AD_SET = 7
+CALLS_PER_AD = 5
+CALLS_PER_VIDEO_POLLS = 4       # опросов обработки на одно видео (предел - VIDEO_MAX_POLLS, обычно 1-3)
+CALLS_INSTANT_FORM = 10
+
+
+def estimate_create_calls(plan: "CampaignPlan") -> int:
+    """Сколько вызовов Graph нужно на кампанию целиком (первый запуск, с запасом)."""
+    total = CALLS_BASE + CALLS_PER_AD_SET * len(plan.ad_sets)
+    for ad_set in plan.ad_sets:
+        total += CALLS_PER_AD * len(ad_set.ads)
+        total += CALLS_PER_VIDEO_POLLS * sum(1 for a in ad_set.ads if a.kind == "video")
+    if any(x.instant for x in plan.ad_sets):
+        total += CALLS_INSTANT_FORM
+    return total
+
+
 #: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
 RECONCILE_WAIT_S = 5.0
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
@@ -119,6 +141,9 @@ SUPPORTED_OBJECTIVES = frozenset({"leads"})
 LIVE_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED",
                "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS",
                "WITH_ISSUES"]
+
+
+from src.fb_ads_rpa.draft import MAX_AD_SETS, MAX_AD_SETS_ERROR  # noqa: E402
 
 
 class PlanError(ValueError):
@@ -304,6 +329,8 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
         problems.append("Tracking link is empty; the API backend needs it for the ads")
     if not ad_sets_src:
         problems.append("No ad sets in the campaign")
+    if len(ad_sets_src) > MAX_AD_SETS:
+        problems.append(MAX_AD_SETS_ERROR)      # ACL-1768: потолок наборов
     budget = getattr(ad_sets_src[0], "daily_budget", None) if ad_sets_src else None
     if not budget or float(budget) <= 0:
         problems.append("Daily budget missing")

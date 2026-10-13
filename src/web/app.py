@@ -2171,6 +2171,7 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             "pixel": (form.get(f"camp_{idx}_adset_{k}_pixel") or "").strip(),
         }
 
+    camp_spans: list[tuple[str, int, int, list[str]]] = []
     for idx in range(camp_count):
         asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
         budget    = (form.get(f"camp_{idx}_budget") or "").strip()
@@ -2187,6 +2188,13 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             adset_count = max(1, int(form.get(f"camp_{idx}_adset_count") or 1))
         except (TypeError, ValueError):
             adset_count = 1
+        # Ошибки формы этой кампании: уходят в слот и становятся ошибками черновика (отказ вслух).
+        form_errors: list[str] = []
+        from src.fb_ads_rpa.draft import MAX_AD_SETS, MAX_AD_SETS_ERROR
+        if adset_count > MAX_AD_SETS:
+            form_errors.append(MAX_AD_SETS_ERROR)
+            adset_count = MAX_AD_SETS
+        first_slot = len(slots)
 
         # Build auto-name from campaign-level fields if not set
         if not name:
@@ -2199,10 +2207,18 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         # Объявление -> набор: `camp_N_ad_M_adset`; нет поля - набор 0.
         ads_by_set: dict[int, list[int]] = {k: [] for k in range(adset_count)}
         for a_idx in range(ad_count):
-            try:
-                k = max(0, int(form.get(f"camp_{idx}_ad_{a_idx}_adset") or 0))
-            except (TypeError, ValueError):
+            # Нет ключа - набор 0 (старые формы); есть, но не целое в [0, число наборов) - отказ,
+            # объявление не угадывается в набор 0 и новый набор не придумывается.
+            key = f"camp_{idx}_ad_{a_idx}_adset"
+            if key not in form:
                 k = 0
+            else:
+                from src.fb_ads_rpa.build_draft import bad_adset_message, parse_adset_index
+                raw_k = form.get(key)
+                k = parse_adset_index(raw_k, adset_count)
+                if k is None:
+                    form_errors.append(bad_adset_message(a_idx + 1, raw_k))
+                    continue
             ads_by_set.setdefault(k, []).append(a_idx)
 
         for k in sorted(ads_by_set):
@@ -2257,6 +2273,7 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 # одного набора остаются прежними ни байтом.
                 if adset_count > 1 or len(ads_by_set) > 1:
                     slot["adset_index"] = k
+                    slot["adset_count"] = adset_count
                 if sf["adset_name"]:
                     slot["adset_name"] = sf["adset_name"]
                 if sf["pixel"]:
@@ -2271,6 +2288,14 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     if sf[key]:
                         slot[key] = sf[key]
                 slots.append(slot)
+        camp_spans.append((name, first_slot, len(slots), form_errors))
+    # ACL-1768: две карточки с одним именем склеили бы наборы друг друга - отказ вслух.
+    for name, start, end, errs in camp_spans:
+        if sum(1 for n, *_ in camp_spans if n == name) > 1 and start < end:
+            errs.append(f"Two campaigns are named {name}. Give each campaign a distinct name.")
+    for name, start, end, errs in camp_spans:
+        if errs and start < end:
+            slots[start]["form_errors"] = list(dict.fromkeys(errs))
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
     # the GCC/LatAm language rule and the Excel Countries lookup expect
@@ -4977,7 +5002,8 @@ def _several_adsets(slots: list[dict]) -> list[str]:
     """Имена кампаний, у которых больше одного набора (ACL-1768)."""
     seen: dict[str, set] = {}
     for slot in slots:
-        seen.setdefault(str(slot.get("name") or ""), set()).add(int(slot.get("adset_index") or 0))
+        k = slot.get("adset_index") or 0
+        seen.setdefault(str(slot.get("name") or ""), set()).add(k if isinstance(k, int) else str(k))
     return [n for n, idx in seen.items() if len(idx) > 1]
 
 
@@ -5292,6 +5318,15 @@ async def build_upload(request: Request) -> Response:
             _render_report, request,
             upload_errors={(form.get("country") or "").strip() or country:
                            {account_label: [MULTI_ADSET_RPA_ERROR.split(" (")[0] + ": Upload FB cannot hold them."]}},
+        )
+    custom = [s for s in slots if s.get("adset_name") or s.get("pixel_id")]
+    if custom:
+        # ACL-1768: имя набора и пиксель набора таблица Upload FB не несёт - не отбрасывать молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: ["Upload FB cannot hold a custom ad set name or pixel; "
+                                            "use Publish with the API backend."]}},
         )
     if any(s.get("destination") == "instant_form" for s in slots):
         # ACL-1775: таблица Upload FB формы не умеет - не собирать сайтовую молча.
