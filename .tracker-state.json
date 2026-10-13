@@ -9193,7 +9193,7 @@
             "session": "worker530refresh20261013"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-W530R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -9213,7 +9213,19 @@
         "pr": 530,
         "queued_at": "2026-10-13T18:48:26+00:00",
         "review_report": "# ACL-1529 PR530 independent CI review \u2014 changes requested\n\nExact source head: 8a72acf36fbac87b16eeff173f989349f477a37f; tree33ba08e7c26ea1fa974e1bdb1be25c972d87acec; main/base777663bf539308c0898cc177f872a8e0f63b597e.\nActual independent reviewer Reviewer-C530 (/root/source_review_530), held owned lane24bc47aab55a4fa79bed18b20866b0c1. Current required hosted verification run38444055009 failed. Earlier source-code review and113 passing targeted fixtures did not claim hosted CI passed; formal Approved was never applied.\n\nBlocking B1: tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage failed on Linux Python3.11 and3.13: cb-build-model stage rules do not map newly emitted telemetry step status_shot. Preserve telemetry and model assertions; author must implement the narrowly correct model/telemetry contract and run relevant model tests plus current full required source CI.\n\nBlocking B2: tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards failed on both Linux versions with browser file counts[32,38,37]; maximum difference6 exceeds allowed3. Author must make an authentic narrow standalone correction justified by source530 requirements or use the supported separate-source dependency/reconciliation route. Approved PR882 exists as a separate sharder repair and must not be silently imported into530 or counted as already integrated. Preserve coverage and invariant; do not loosen assertion, remove tests, relabel failure as infrastructure or fabricate CI approval.\n\nRaw durable evidence: output/source530-ci-failed.txt in delivery checkout; hosted https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38444055009 . No new source edits or live profile/advertising/dashboard/deployment actions by reviewer. Original branch/history and real Worker-W530R handoff retained. Supported review-return releases only this owned source lane and invalidates prior review approval, returning issue529 normally to ToDo/changes_requested so the genuine Worker can claim a new narrow correction. Fresh exact-head independent review and green required checks needed after new handoff. All unrelated lanes/claims/approvals/intake/history preserved.",
-        "reviewer": "Reviewer-C530"
+        "reviewer": "Reviewer-C530",
+        "return_operation": {
+          "id": "dca98cd670f646d6a3a26839c4c91cff",
+          "actor": "Coordinator-DLV13",
+          "session": "Root-DLV13-01a13445",
+          "report": "PR530 approved source c459673e names former main777663bf. Actualmain now7cee2857 after admitted verified batchPR884/885. Original taskscope, Worker, sourcebranch and originalsourcePR remain unchanged; return for originalauthor current-main reconciliation, required relevant checks and fresh independent exact-head/base/tree approval. No new product outcome or completion is asserted; retained3member integration is untouched."
+        },
+        "return": {
+          "id": "dca98cd670f646d6a3a26839c4c91cff",
+          "actor": "Coordinator-DLV13",
+          "session": "Root-DLV13-01a13445",
+          "report": "PR530 approved source c459673e names former main777663bf. Actualmain now7cee2857 after admitted verified batchPR884/885. Original taskscope, Worker, sourcebranch and originalsourcePR remain unchanged; return for originalauthor current-main reconciliation, required relevant checks and fresh independent exact-head/base/tree approval. No new product outcome or completion is asserted; retained3member integration is untouched."
+        }
       },
       "532": {
         "implementers": [
