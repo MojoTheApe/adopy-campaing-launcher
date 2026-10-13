@@ -23888,6 +23888,25 @@
         "issue": 853,
         "pr": 863,
         "actor": "Worker-N7Q4"
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-13T08:35:16+00:00",
+        "intake": {
+          "id": "8bb2add6e87b47a79549507b4d17603a",
+          "actor": "Coordinator-CX1012A",
+          "session": "coord_cx1012a_20261012",
+          "state": "running",
+          "issues": [
+            838
+          ],
+          "remaining": [
+            838
+          ],
+          "batches": [],
+          "started_at": "2026-10-13T08:35:16+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -24373,18 +24392,18 @@
     },
     "integration": null,
     "intake": {
-      "id": "b9787ef2958b4fd2874f09b9a01e6107",
+      "id": "8bb2add6e87b47a79549507b4d17603a",
       "actor": "Coordinator-CX1012A",
       "session": "coord_cx1012a_20261012",
-      "state": "finished",
+      "state": "running",
       "issues": [
-        824
+        838
       ],
-      "remaining": [],
-      "batches": [
-        "6b33b0c808d045a89e4d5f771f95483b"
+      "remaining": [
+        838
       ],
-      "started_at": "2026-10-13T06:32:49+00:00",
+      "batches": [],
+      "started_at": "2026-10-13T08:35:16+00:00",
       "ineligible": {}
     }
   }
