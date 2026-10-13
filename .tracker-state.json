@@ -10188,7 +10188,7 @@
             "session": "run-workerfix665-20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-Fix665",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -10213,7 +10213,8 @@
           "actor": "Coordinator-DLV13",
           "session": "Root-DLV13-01a13445",
           "report": "Integration compatibility return for ACL-1651 / PR665.\n\nThe exact approved head 54f1c1fe6697b65b115e639435d3a5b225a9de62 has passed its source checks and independent review. Read-only git merge-tree against approved PR867 head 55f69649 and approved PR882 head 5d0e7259 reports a content conflict only in docs/system/CHANGELOG.md: each inserts a new entry immediately after the title. Product code is not the blocker.\n\nUnder a fresh owned Worker claim on the preserved source branch, move only the complete ACL-1651 entry, with its text unchanged, to immediately before the existing unique heading \"Campaign Builder creative previews no longer freeze the dashboard \u2014 ACL-1615\". Preserve every old entry and all runtime/tests. This separate stable insertion point must merge cleanly with the loading entry and token diagnostic entry. Do not include another task's source commits.\n\nThen fast-forward push, truthful checks/handoff and fresh independent review/approval. The old source approval remains historical; no stage/main merge or live action is claimed. The failed composition was found before freezing or publishing a batch."
-        }
+        },
+        "reviewer": "Reviewer-Creative665"
       },
       "669": {
         "implementers": [
@@ -16145,7 +16146,6 @@
       845,
       840,
       841,
-      651,
       865
     ],
     "review": null,
@@ -26641,6 +26641,13 @@
         "issue": 865,
         "pr": 867,
         "actor": "Worker-867R"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T18:38:53+00:00",
+        "pr": 665,
+        "lane": "91da4586c8c246dd93038e9a9ed5b740",
+        "actor": "Reviewer-Creative665"
       }
     ],
     "policy": {
@@ -27372,6 +27379,18 @@
         "session": "connection_review_rs1012",
         "coordinator": "Coordinator-CR1012",
         "started_at": "2026-10-13T18:28:11+00:00",
+        "state": "reviewing"
+      },
+      "665": {
+        "id": "91da4586c8c246dd93038e9a9ed5b740",
+        "pr": 665,
+        "issues": [
+          651
+        ],
+        "actor": "Reviewer-Creative665",
+        "session": "review665-20261013-f83a61d2",
+        "coordinator": "Coordinator-DLV13",
+        "started_at": "2026-10-13T18:38:53+00:00",
         "state": "reviewing"
       }
     }
