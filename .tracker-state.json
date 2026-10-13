@@ -10099,7 +10099,7 @@
             "session": "run_s1651a_1006"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1651A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -10117,7 +10117,8 @@
           "report": "# ACL-1651 handoff\nBranch codex/acl-1651-creatives-fresh, worktree C:\\acl-1651-creatives-fresh, local commit 96934d2d (not pushed).\nRoot cause: report.html fetched /api/creatives once at load into CREATIVES; cbCreativeSearch filtered the stale list. Server scans fresh each call (no cache).\nType switch (cbAdTypeChange) does NOT refetch: it only sets wrap.dataset.ctype and clears the field. So it \"helped\" only by clearing the stale query / re-filtering by type (a file of the other type is hidden by the ctype filter) - no code path sees a new file. Both paths now share one list.\nFix: cbRefreshCreatives(minGap): in-flight dedupe, no-store fetch, error response keeps old list, redraw only if list changed. Triggers: focusin on search (10 s), miss (2 s separate throttle, one fetch, then re-search), window focus (10 s). Test hook window.cbCreativesAge.\nTests: tests/test_builder_creatives_fresh_browser.py 4 passed; test_builder_story_label 2; test_builder_review_browser 4; test_acl_test_platform 100.\nNote: tracker claim failed (\"All implementation slots are occupied\") twice; claim not registered.\nMachine very loaded (many other chromiums); runs took 2-9 min, pytest teardown can hang."
         },
         "pr": 665,
-        "queued_at": "2026-10-07T05:53:55+00:00"
+        "queued_at": "2026-10-07T05:53:55+00:00",
+        "reviewer": "Reviewer-Creative665"
       },
       "669": {
         "implementers": [
@@ -13539,6 +13540,10 @@
       "Worker-PG86": {
         "session": "01a135aa-a82d-77d2-8057-5116cc969c86",
         "role": "Worker"
+      },
+      "Reviewer-Creative665": {
+        "session": "review665-20261013-f83a61d2",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -15978,7 +15983,6 @@
       526,
       529,
       642,
-      651,
       739,
       761,
       783,
@@ -26061,6 +26065,13 @@
         "pr": 882,
         "lane": "ce348a54eed44280b92ba04123615441",
         "actor": "Reviewer-RS1012"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T17:22:33+00:00",
+        "pr": 665,
+        "lane": "f1f1fa4424e54538b7990604070a6067",
+        "actor": "Reviewer-Creative665"
       }
     ],
     "policy": {
@@ -26736,6 +26747,18 @@
         "session": "connection_review_rs1012",
         "coordinator": "Coordinator-CR1012",
         "started_at": "2026-10-13T17:05:55+00:00",
+        "state": "reviewing"
+      },
+      "665": {
+        "id": "f1f1fa4424e54538b7990604070a6067",
+        "pr": 665,
+        "issues": [
+          651
+        ],
+        "actor": "Reviewer-Creative665",
+        "session": "review665-20261013-f83a61d2",
+        "coordinator": "Coordinator-Delivery20261013",
+        "started_at": "2026-10-13T17:22:33+00:00",
         "state": "reviewing"
       }
     }
