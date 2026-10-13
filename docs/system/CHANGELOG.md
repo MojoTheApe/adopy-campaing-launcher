@@ -140,6 +140,17 @@ a clear refusal.
 - Readback adds the creative's form id, "the form is listed under the Page", and for the ad set
   the destination, goal and promoted Page. "Check plan" shows the form name and id.
 
+## Honest dashboard loading stages and ACM identity — ACL-1865
+
+The report-loading screen uses the existing centered ACM logo above the product
+name, followed by workbook reading, statistics processing and dashboard preparation.
+`/report/status` adds a `stage` and `waiting` flag. Progress comes from real pipeline
+boundaries and is bound to its background job, requested period and captured manager;
+another request's progress is never shown as this page's completed work. A cached
+workbook skips reading/processing, and period-only loading shows preparation.
+The existing ready/error polling and automatic dashboard transition remain in place,
+with responsive light/dark styling, reduced motion and connection retry messages.
+
 ## Account-label ID suffix keeps existing alias precedence — ACL-1824
 
 - A long numeric account-ID suffix is removed only after the existing tail lookup
