@@ -12194,7 +12194,7 @@
             "session": "isolated_app_sol_20261013"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-IS1013",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12213,7 +12213,19 @@
         },
         "pr": 873,
         "queued_at": "2026-10-13T11:58:59+00:00",
-        "reviewer": "Reviewer-RS1012"
+        "reviewer": "Reviewer-RS1012",
+        "return_operation": {
+          "id": "91201340047f423fa6a6747b1c5dc404",
+          "actor": "Coordinator-FLOW513",
+          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+        },
+        "return": {
+          "id": "91201340047f423fa6a6747b1c5dc404",
+          "actor": "Coordinator-FLOW513",
+          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
+          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+        }
       },
       "874": {
         "implementers": [
