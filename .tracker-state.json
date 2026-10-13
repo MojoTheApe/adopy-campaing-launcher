@@ -11591,7 +11591,7 @@
             "session": "connection_sr1012_worker"
           }
         ],
-        "state": "stopped",
+        "state": "archiving",
         "worker": "Worker-SR1012",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
