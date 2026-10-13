@@ -51,6 +51,7 @@ from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.web.publish_jobs import DuplicateJobError, get_job, start_job, cancel_job
 from src.web.cache import (
     background_build_state,
+    background_progress_callback,
     cache_built_at,
     cache_clear,
     forget_background_error,
@@ -2314,17 +2315,22 @@ def _page_ready(date_from: str, date_to: str, span: str) -> bool:
         return False
 
 
-def _warm_page(date_from: str, date_to: str, span: str) -> None:
+def _warm_page(date_from: str, date_to: str, span: str, my_cm: str) -> None:
     """Фоновая сборка ровно того, что нужно странице: отчёт и её период."""
-    report, df, _warnings = get_cached_report()
+    progress = background_progress_callback()
+    report, df, _warnings = get_cached_report(my_cm=my_cm, progress=progress)
+    progress("preparing")
     date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
     report_for_period(report, df, date_from, date_to)
 
 
 def _start_warm(date_from: str, date_to: str, span: str) -> None:
+    from src.web.buyer import get_selected_cm
+
+    my_cm = get_selected_cm()
     start_background_build(
-        functools.partial(_warm_page, date_from, date_to, span),
-        token=(date_from, date_to, span),
+        functools.partial(_warm_page, date_from, date_to, span, my_cm),
+        token=(date_from, date_to, span, my_cm),
     )
 
 
@@ -2352,16 +2358,25 @@ async def report_status(date_from: str = "", date_to: str = "", span: str = "") 
     Отвечает сразу — ничего не собирает и не ждёт. Если ни готово, ни идёт
     (например, сборку начал другой период), запускает фоновую сборку сам.
     """
+    from src.web.buyer import get_selected_cm
+
+    token = (date_from, date_to, span, get_selected_cm())
     ready = _page_ready(date_from, date_to, span)
     state = background_build_state()
-    if not ready and not state["building"] and not state["error"]:
+    own_build = state["token"] == token
+    error = state["error"] if own_build else None
+    if not ready and not state["building"] and not error:
         _start_warm(date_from, date_to, span)
         state = background_build_state()
+        own_build = state["token"] == token
+        error = state["error"] if own_build else None
     return JSONResponse({
         "ready": ready,
         "building": state["building"],
-        "error": state["error"],
+        "error": error,
         "built_at": cache_built_at(),
+        "stage": "ready" if ready else state["stage"] if own_build else None,
+        "waiting": not ready and state["building"] and not own_build,
     })
 
 
