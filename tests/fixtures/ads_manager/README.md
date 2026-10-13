@@ -9,6 +9,16 @@ These are sanitized fragments captured by the original author on **2026-09-09**,
 | ad_destination_2026_09_09.html | Destination section visible | Website URL lookup |
 | conversion_event_2026_09_09.html | Dataset selected, event still empty | Dataset alone must not mean event selection succeeded |
 
+## ACL-1886 permission error evidence (2026-10-13)
+
+`fb_api_permission_denied_2026_10_13.json` reconstructs only the shared visible
+fields from two owner-reported Plan check errors: Graph10, OAuthException,
+Permission Denied, HTTP400 and the fixed Ads Manager Graph host/cookie mode.
+The screenshot does not establish which operation failed or why access was
+denied. No account labels, identifiers, token, cookie, request URL or raw capture
+are included. Tests inject this response at the real GraphClient boundary for
+synthetic request paths; they verify diagnostics, not actual Meta permissions.
+
 ## ACL-1313 fragments (live run 2026-09-24)
 
 Cut from `output/rpa_pages/<run>/<step>/page.html` (and one telemetry record) of the 24.09 evening run. Class attributes and inline SVG paths were stripped, campaign/ad names, object ids, creative copy, media URLs and the account id in `cachekey` were replaced with synthetic values; structure, `data-surface`/`data-block`/`id` attributes and visible labels are kept. UI language: English. Meta build identifier: not recorded. Browser: Multilogin Chrome, version not recorded.

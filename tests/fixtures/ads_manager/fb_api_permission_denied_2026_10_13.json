@@ -1,0 +1,14 @@
+{
+  "status": 400,
+  "endpoint": {
+    "host": "adsmanager-graph.facebook.com",
+    "credentials": "include"
+  },
+  "body": {
+    "error": {
+      "code": 10,
+      "type": "OAuthException",
+      "message": "(#10) Permission Denied"
+    }
+  }
+}
