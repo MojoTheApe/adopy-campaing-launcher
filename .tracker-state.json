@@ -7776,6 +7776,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T16:13:25+00:00",
         "from_status": "status:todo"
+      },
+      "529": {
+        "actor": "Worker-W530R",
+        "session": "worker530refresh20261013",
+        "coordinator": "Coordinator-DLV13",
+        "branch": "codex/acl-1529-sharp-shot",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-530-Refresh",
+        "id": "250c3eeee7bf4cb5ae0f28c7daccabf9",
+        "issue": 529,
+        "state": "implementing",
+        "started_at": "2026-10-13T20:55:12+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -9191,9 +9203,13 @@
           {
             "actor": "Worker-W530R",
             "session": "worker530refresh20261013"
+          },
+          {
+            "actor": "Worker-W530R",
+            "session": "worker530refresh20261013"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W530R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -9213,14 +9229,7 @@
         "pr": 530,
         "queued_at": "2026-10-13T18:48:26+00:00",
         "review_report": "PR530 approved source c459673e names former main777663bf. Actualmain now7cee2857 after admitted verified batchPR884/885. Original taskscope, Worker, sourcebranch and originalsourcePR remain unchanged; return for originalauthor current-main reconciliation, required relevant checks and fresh independent exact-head/base/tree approval. No new product outcome or completion is asserted; retained3member integration is untouched.",
-        "reviewer": "Reviewer-C530",
         "return_operation": {
-          "id": "dca98cd670f646d6a3a26839c4c91cff",
-          "actor": "Coordinator-DLV13",
-          "session": "Root-DLV13-01a13445",
-          "report": "PR530 approved source c459673e names former main777663bf. Actualmain now7cee2857 after admitted verified batchPR884/885. Original taskscope, Worker, sourcebranch and originalsourcePR remain unchanged; return for originalauthor current-main reconciliation, required relevant checks and fresh independent exact-head/base/tree approval. No new product outcome or completion is asserted; retained3member integration is untouched."
-        },
-        "return": {
           "id": "dca98cd670f646d6a3a26839c4c91cff",
           "actor": "Coordinator-DLV13",
           "session": "Root-DLV13-01a13445",
@@ -27365,6 +27374,13 @@
           "report": "PR530 approved source c459673e names former main777663bf. Actualmain now7cee2857 after admitted verified batchPR884/885. Original taskscope, Worker, sourcebranch and originalsourcePR remain unchanged; return for originalauthor current-main reconciliation, required relevant checks and fresh independent exact-head/base/tree approval. No new product outcome or completion is asserted; retained3member integration is untouched."
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T20:55:12+00:00",
+        "issue": 529,
+        "claim": "250c3eeee7bf4cb5ae0f28c7daccabf9",
+        "actor": "Worker-W530R"
       }
     ],
     "policy": {
