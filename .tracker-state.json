@@ -7305,9 +7305,11 @@
         "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1841-2026-10-13",
         "id": "9eb9fd8a43dd43ecac2f531fc7855ec2",
         "issue": 841,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-13T06:35:09+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 848,
+        "report": "Partial source implementation: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/848\n\nThe shared Home / country Manage account table keeps a readable minimum width in a keyboard-focusable horizontal scroll region. Names and headers wrap, and read/profile/unlink actions remain reachable. Existing data, table order and handlers are preserved.\n\nValidation: 186 affected tests passed; the strengthened 16-case responsive regression also passed. Production CSS, synthetic populated/empty sections, light/dark themes, and 1280/1024/768/390 px were checked. Future Read campaigns and Open profile actions were also checked without live advertising operations. Secret scan, import smoke and diff check passed. Complete source CI remains required.\n\nAll original acceptance criteria remain in force. This source does not complete ACL-1841: coherent campaign-toolbar grouping and complete integrated dashboard geometry / builder clearance remain outstanding until the ACL-1797/1798 campaign implementation is integrated. Two table-boundary integration conflicts require reconciliation; keep toolbar and footer outside the account-table scroller. No installer or live delivery is claimed."
       },
       "844": {
         "actor": "Worker-N7Q4",
