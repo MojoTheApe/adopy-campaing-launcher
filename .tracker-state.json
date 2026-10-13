@@ -7750,9 +7750,11 @@
         "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-530-Refresh",
         "id": "70719b320aee4eb8b5a4bf97327d6858",
         "issue": 529,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-13T17:35:00+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 530,
+        "report": "# ACL-1529 fresh Worker handoff \u2014 2026-10-13\n\nActual Worker-W530R run: /root/worker_refresh_530, stable opaque session worker530refresh20261013. Coordinator-DLV13 requested refresh after independent current-main rejection. Original Worker-S1529C commits/author/history and branch codex/acl-1529-sharp-shot remain preserved.\n\nPR530 source base main: 777663bf539308c0898cc177f872a8e0f63b597e.\nFinal head: 8a72acf36fbac87b16eeff173f989349f477a37f\nTree: 33ba08e7c26ea1fa974e1bdb1be25c972d87acec\n\nCurrent main merged into the original source with three conflicts resolved preserving both histories, screenshot-only title, owner-hidden Copy for group flags and default-off status screenshots. Plain CDP capture has no clip or scale; source policy unchanged. One legacy fixture changed to test that exact capture contract instead of old Playwright screenshot calls. No Meta profile opened, no live advertising writes or screenshot activation, no dashboard deployment, package delivery or main completion claimed.\n\nWindows/Python3.13.15: initial affected nine-file suite 181 passed /1 legacy fixture failed; after correction, 23 affected fixture tests passed,61 deselected. Other159 successful cases unchanged. Secret scanner/import smoke/source whitespace checks pass. Initial Python3.14 collection native access violation recorded as infrastructure failure, not pass. Fresh hosted checks pending for final head.\n\nOutstanding owner acceptance: fresh pasted screenshot readability in provider group, controlled live Multilogin verification and package delivery remain unclaimed. Original issue requirements/checklists retained; owner-approved no-clip/no-scale deviation recorded in original ccf2880 commit and current PR description. Fresh independent source review/approval is required."
       },
       "872": {
         "actor": "Worker-IS1013",
