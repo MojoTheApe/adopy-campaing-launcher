@@ -1,5 +1,17 @@
 # System history
 
+## Country campaign footer shares the connection-form inset — ACL-1840
+
+- The pending campaign table's per-country explanation and change journal receive
+  scoped padding from the country-card stylesheet, aligned with the workbook
+  notice and connection form. The footer has explicit space above and below;
+  long history text and disclosure labels wrap inside narrow cards.
+- This additive rule is dormant on main until ACL-1798's campaign footer mounts.
+  Verification uses sanitized markup/CSS from preview
+  `5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d`, real Chromium geometry and keyboard
+  disclosure at 1280, 1024 and 320 px in both themes. It does not import the
+  preview's unrelated changes or assert full integrated/installed verification.
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
