@@ -11715,7 +11715,7 @@
             "session": "architecture_audit_n7q4_20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-N7Q4",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -11733,7 +11733,8 @@
           "report": "# ACL-1853 source handoff\n\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/853\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/863\nWorker-N7Q4 / architecture_audit_n7q4_20261013; Coordinator-CR1012.\nClaim: 8206cb103afc4597948ad14dc9d2b392.\nWorktree: C:/Users/EvgeniSedin/Desktop/ACM-Worker-1853-2026-10-13.\nBranch: codex/acl-1853-profile-process-lease.\nBase main: e8e59f8376458f2f73089c3f2a8d454837ff033f.\nSource head: 70073be3892128b3528a4dbb2d47319a2a617ba3.\nTree: b21924b193ea1f3ec53634ffa0e2faf2e0185039.\n\n## Delivered source\n\nA small profile_lease module wraps the existing machine_file_lock OS primitive\nwith a thread-reentrant lease. Canonical physical Multilogin UUIDs share one lock\nacross configuration roots, ports and labels. Existing provider aliases normalize\nto the same UUID; Dolphin numeric IDs have a separate namespace. The coordination\nroot is the OS-user home, outside per-instance config. No lock files are deleted.\nIndependent Windows processes cannot enter the same profile together; process death\nreleases the OS lock. Waiting is bounded to 120 seconds with cancellation checks\nbetween 50ms attempts. Failure refuses entry, never falls back to a label lock.\n\nMain operations/RPA/read/country/publish-queue boundaries use it. Actual entries are\nchecked before open/attach/close; nested operations cannot switch to another profile\nafter a map change. Publish waiting cancellation/failure finishes with an honest\njob outcome and releases acquired memory slots. Public probe/open/SpendReading/\nCountrySplit refusal shapes are retained, country failed attempts replace cached\nsuccess, and turn-off refuses with a failed result plus its audit history record.\n\nOnly source/main scope: no user-profile, Meta or production configuration actions.\nNo changes to graph/CDP/token code or unmerged TEST sources. Same OS user on the\nsame Windows machine, independent processes/spawn and the same lease protocol.\nNo claim for older builds, different users, remote machines, external/manual control\nor inherited POSIX fork locks. Warm/API lifecycle ACL-1812 still needs explicit\nfull-session ownership integration; ACL-1187 live verification remains deferred.\nSystem documentation and changelog record these boundaries.\n\n## Offline verification\n\nWindows / Python3.14.3, C:/fb_agents/.venv/Scripts/python.exe. Every test uses fake\nproviders, synthetic IDs, isolated configs and isolated coordination directories.\nThe Windows sandbox blocked asyncio socketpair in ASGI tests; faulthandler identified\nstdlib socket.accept. Those test processes were stopped and offline checks rerun\nwith approved local loopback access, not live endpoints.\n\n- Initial dedicated process suite: 15 passed in14.91s, then expanded with boundary,\n  provider aliases, publish cancellation/slot outcomes and public error/history cases.\n- Independent reviewer WIP run of the expanded suite: 37 passed in39.38s; reviewer\n  separately verified six public refusal shapes, exactly one failed turn-off record,\n  and actual decorated RpaPublisher A-to-B map refusal before its body.\n- Affected older boundary/RPA/reading/queue/cancel suite: 464 passed,18 failed in101.38s;\n  remaining fake IDs/mappings and public refusal contracts repaired; targeted retry\n  of all18 failures: 18 passed in5.03s.\n- Expanded country/history/platform/provider suite including new process suite:\n  362 passed,18 failed in113.81s; all18 residual mapping setup failures repaired;\n  targeted retry: 18 passed in8.42s. No concurrency/cancellation assertions weakened.\n- Final oversized Dolphin-ID validation and old public refusal cases: 5 passed in1.71s.\n- Last country cached-success refusal regression plus three public error-shape cases:\n  4 passed in2.09s. These include the final source change after the independent WIP run.\n- scripts/acl_scan_secrets.py PASS after staging every new file; smoke PASS with\n  isolated ACL_CONFIG_DIR, library/Sentry disabled; git diff --cached --check PASS.\n- No local full-suite rerun, no package build and no live-profile verification.\n  Required full Linux/Windows source CI is pending; successful unchanged local sets\n  were not repeatedly rerun. Raw local logs remain under this worktree/output.\n\n## Remaining handoff\n\nFinal independent review on the exact committed head and current CI; then normal\nbatch combined review, stage verification, unchanged main promotion and delivery.\nThis Worker did not acquire the review lane or bypass admission. Source PR remains\nopen and is not merged. Integrating warm/API callers must carry this lease across\nsession lifetime, not release it when an open_profile descriptor is returned."
         },
         "pr": 863,
-        "queued_at": "2026-10-13T08:05:38+00:00"
+        "queued_at": "2026-10-13T08:05:38+00:00",
+        "reviewer": "Reviewer-RS1012"
       },
       "864": {
         "implementers": [
@@ -15241,14 +15242,24 @@
       768,
       836,
       844,
-      853,
       839,
       845,
       838,
       840,
       841
     ],
-    "review": null,
+    "review": {
+      "id": "cd6c646675d7444e869e9fb97ada45cd",
+      "pr": 863,
+      "issues": [
+        853
+      ],
+      "actor": "Reviewer-RS1012",
+      "session": "connection_review_rs1012",
+      "coordinator": "Coordinator-CR1012",
+      "started_at": "2026-10-13T08:22:11+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -23706,6 +23717,13 @@
         "issue": 841,
         "pr": 848,
         "actor": "Worker-T8L621"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T08:22:11+00:00",
+        "pr": 863,
+        "lane": "cd6c646675d7444e869e9fb97ada45cd",
+        "actor": "Reviewer-RS1012"
       }
     ],
     "policy": {
