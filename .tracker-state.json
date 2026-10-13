@@ -2962,6 +2962,31 @@
           "865": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3",
           "879": "bfea5187d29d4a3a75e346ac8632d054d4dd3d24b9cc2465a8d7a20013584e63"
         }
+      },
+      "890": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-CLR1014",
+        "review_session": "claude-reviewer-cl1014-890",
+        "execution_lane": "02e618a2240b4925ab570b9f04b89550",
+        "implementer": "Coordinator-CL1014",
+        "head_sha": "33b0a2b2e2849616b6aa25bee61c864251723841",
+        "base_sha": "87f604758d15367cb396b12cfb5437f9d453126a",
+        "tree_sha": "d93e985f3f1cd4695c2d138589bba604d7bb4138",
+        "batch_id": "2bbd7b7e22c44323bab273af8002ee47",
+        "source_heads": [
+          "bcbe152e5b1bcbb595f23760f5334d7b89058e36"
+        ],
+        "report": "Integration review of batch candidate PR #890 (ACL-1529). Composition: head 33b0a2b2 is a single merge commit with parents main 7cee2857 and frozen source tip bcbe152e only; no extra commits. Candidate tree d93e985f equals the frozen source tree; stage 87f60475 tree 06e60120 equals main 7cee2857 tree. PR title [ACL-1529], body has exactly one 'Tracker issues: ACL-1529' and one 'Tracker batch: 2bbd7b7e22c44323bab273af8002ee47' line, base stage. Scope vs Issue 529: header band removed (amapTrimShot replaces amapComposeGroup; Copy for group copies the stored shot, old shots trimmed of white right/bottom margins); status shot captured via bare CDP Page.captureScreenshot with only format=png and captureBeyondViewport=false (no clip, no scale, no device-metrics override), framed and white-trimmed in Python with Pillow, capped at 2600 px; hidden pages are not captured; all CDP calls bounded by a 10 s deadline; CDP session detached in finally; no page.screenshot fallback for Chromium. The 'scale 2 or equivalent clip' wording in the acceptance criteria is superseded by the documented owner fingerprint-safety decision (B2) and recorded in the Issue handoff. Default-off guards intact: _shoot_status only captures when ACL_STATUS_SHOT=1; SHOW_COPY_FOR_GROUP stays False; disabled button and new-tab fallback preserved. status_shot telemetry maps to hold stage in both test and report.html rules; Linux shard browser-count skew repair keeps all files and is deterministic. Pillow 12.2.0 moved to requirements.txt (optional at runtime: missing Pillow keeps the shot uncropped). Tests (Windows, Python 3.13, -n 2, owned basetemp): tests/test_copy_for_group.py, tests/test_status_screenshot.py, tests/test_acl_test_shard.py, tests/test_build_progress_model.py -> first run 157 passed, 5 failed solely with ModuleNotFoundError PIL because the local venv predates the new requirement; rerun with pinned Pillow 12.2.0 on PYTHONPATH -> 162 passed, 0 failed. Outstanding and not claimed: owner readability acceptance of a pasted 9943/Doc20/6540 picture and live Multilogin capture verification; complete combined CI is for the Coordinator.",
+        "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          529
+        ],
+        "recorded_at": "2026-10-13T22:26:05+00:00",
+        "issue_scopes": {
+          "529": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac"
+        }
       }
     },
     "stage": {
