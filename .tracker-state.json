@@ -12412,7 +12412,7 @@
             "session": "isolated_app_sol_20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-IS1013",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12437,7 +12437,8 @@
           "session": "flow_five_reviews_coordinator_01a134f0_20261013",
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
         },
-        "review_report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+        "review_report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle.",
+        "reviewer": "Reviewer-RS1012"
       },
       "874": {
         "implementers": [
@@ -16149,8 +16150,7 @@
       839,
       845,
       840,
-      841,
-      872
+      841
     ],
     "review": null,
     "history": [
@@ -26753,6 +26753,13 @@
             "approved_at": "2026-10-13T18:44:30+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T18:46:29+00:00",
+        "pr": 873,
+        "lane": "1f3d3ae29cfa49ef8a89c4ae1e8f1f37",
+        "actor": "Reviewer-RS1012"
       }
     ],
     "policy": {
@@ -27528,6 +27535,18 @@
         "session": "source_review_867_20261013",
         "coordinator": "Coordinator-DLV13",
         "started_at": "2026-10-13T18:39:49+00:00",
+        "state": "reviewing"
+      },
+      "873": {
+        "id": "1f3d3ae29cfa49ef8a89c4ae1e8f1f37",
+        "pr": 873,
+        "issues": [
+          872
+        ],
+        "actor": "Reviewer-RS1012",
+        "session": "connection_review_rs1012",
+        "coordinator": "Coordinator-CR1012",
+        "started_at": "2026-10-13T18:46:29+00:00",
         "state": "reviewing"
       }
     }
