@@ -1,5 +1,20 @@
 # System history
 
+## Account-label ID suffix keeps existing alias precedence — ACL-1824
+
+- A long numeric account-ID suffix is removed only after the existing tail lookup
+  finds no candidate. Exact names and configured name rules retain their priority;
+  ambiguous tail matches remain unmatched instead of selecting the suffix alias.
+- Explicit account links continue to select the country before workbook resolution,
+  and account rows and country totals use the same resolved alias without duplicates.
+- When that country has no rows in the selected period, the elsewhere diagnostic
+  also uses the already-resolved alias. Unresolved or ambiguous labels keep their
+  original identity; another country cannot supply a guessed suffix match.
+- Required CI exposed an inherited logging-filter leak when the added regressions
+  changed shard assignment. The pilot tests now restore each handler's pre-test
+  filters, so later tests see their own logging behavior. Production redaction and
+  the routing-log assertions remain unchanged.
+
 ## Countries: a vertical activity line replaces the dot — ACL-1838
 
 - Active country rows show a static 2 px line in the existing accent color at the
