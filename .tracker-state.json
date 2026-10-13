@@ -295,6 +295,10 @@
       "title": "Builder: resize from the side tab with three presets and dragging",
       "state": "created",
       "issue": 871
+    },
+    "c3a9872e3663bfe61261b2bb88c0adfe9cb9164ccb98ff742a9af55db29a4556": {
+      "title": "Campaign Facebook Page selection with automatic destination defaults",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
