@@ -7452,7 +7452,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "871": {
+        "actor": "Worker-BH7K26",
+        "session": "builder_handle_01a13470_20261013",
+        "coordinator": "Coordinator-BH7K26",
+        "branch": "codex/acl-1871-builder-handle",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Builder-Handle-2026-10-13",
+        "id": "8dbb2ff671e64527b60b8a642db4fa95",
+        "issue": 871,
+        "state": "implementing",
+        "started_at": "2026-10-13T10:04:06+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -11968,9 +11981,13 @@
           {
             "actor": "Worker-BH7K26",
             "session": "builder_handle_01a13470_20261013"
+          },
+          {
+            "actor": "Worker-BH7K26",
+            "session": "builder_handle_01a13470_20261013"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-BH7K26",
         "coordinator": "Coordinator-BH7K26",
         "handoff": {
@@ -24570,6 +24587,13 @@
         "issue": 871,
         "actor": "Worker-BH7K26",
         "report": "ACL-1871 was assigned after intake on the provisional codex/builder-handle-controls branch. Temporarily release only this run's claim to rename that same branch to codex/acl-1871-builder-handle and immediately reclaim under the same Worker-BH7K26/session and worktree. Existing implementation and tests remain intact. No handoff or PR exists yet. This is branch bookkeeping only, with no new actor or product blocker."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T10:04:06+00:00",
+        "issue": 871,
+        "claim": "8dbb2ff671e64527b60b8a642db4fa95",
+        "actor": "Worker-BH7K26"
       }
     ],
     "policy": {
