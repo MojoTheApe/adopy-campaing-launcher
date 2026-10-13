@@ -343,7 +343,8 @@ def test_page_not_on_the_account(tmp_path):
     d = _draft(tmp_path, ads=1)
     d.page_id = "999"
     out = _audit(AuditMeta(), d)
-    assert _by(out)["page_ok"]["status"] == "error" and "cannot advertise" in _by(out)["page_ok"]["detail"]
+    assert _by(out)["page_ok"]["status"] == "error"
+    assert "(999) is not among the pages this ad account can advertise from" in _by(out)["page_ok"]["detail"]
     assert _by(out)["pixel_ok"]["status"] == "ok", "остальные проверки независимы"
 
 
