@@ -36,7 +36,7 @@ def execution(root):
 def owned_batch(section, config, actor, session, claim):
     policy = config["execution_policy"]
     batch = section.get("integration")
-    if (policy.get("schema_version") != 2 or section.get("policy") != policy
+    if (policy.get("schema_version") not in (2, 3) or section.get("policy") != policy
             or not batch or (batch.get("actor"), batch.get("session"), batch.get("id")) != (actor, session, claim)
             or not re.fullmatch(r"[0-9a-f]{32}", claim)
             or batch.get("branch") != "codex/batch-" + claim

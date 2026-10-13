@@ -174,7 +174,7 @@ def event_paths(root, event_name, event):
 
 
 def batch_context(root, event_name, event):
-    """Dispatch only explicit matching v2 policy; uncertain routes run in full."""
+    """Dispatch matching batch policy; parallel source reviews do not weaken CI."""
     descriptor = Path(root) / "delivery.json"
     if not descriptor.exists():
         return "legacy"
@@ -186,15 +186,17 @@ def batch_context(root, event_name, event):
         config_path = Path(root) / "tracker/config.json"
         if config_path.exists():
             policy = json.loads(config_path.read_text(encoding="utf-8")).get("execution_policy")
-            if isinstance(policy, dict) and policy.get("schema_version") == 2:
+            if isinstance(policy, dict) and policy.get("schema_version") in (2, 3):
                 raise ValueError("Descriptor and Tracker batch policies differ")
         return "legacy"
     expected = {"schema_version", "implementation_limit", "review_limit", "batch_limit"}
     if (set(execution) != expected or type(execution["schema_version"]) is not int
-            or execution["schema_version"] != 2 or execution["review_limit"] != 1
+            or execution["schema_version"] not in (2, 3)
             or type(execution["review_limit"]) is not int
+            or not 1 <= execution["review_limit"] <= (3 if execution["schema_version"] == 3 else 1)
             or any(type(execution[key]) is not int or not 1 <= execution[key] <= 16
                    for key in ("implementation_limit", "batch_limit"))
+            or execution["schema_version"] == 3 and execution["batch_limit"] > 5
             or data["workflow"]["staging"] is not True):
         raise ValueError("Invalid explicit batch policy")
     config = json.loads((Path(root) / "tracker/config.json").read_text(encoding="utf-8"))

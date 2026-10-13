@@ -52,6 +52,37 @@ def test_source_dependency_change_still_runs_full_matrix_and_installer(candidate
     assert select(root, "pull_request", payload, workflow="windows-installer.yml")["windows"]
 
 
+def test_parallel_reviews_keep_source_and_combined_checks(candidate):
+    root, _, change, event = candidate
+    policy = {"schema_version": 3, "implementation_limit": 5, "review_limit": 3, "batch_limit": 5}
+    descriptor = json.loads((root / "delivery.json").read_text())
+    config = json.loads((root / "tracker/config.json").read_text())
+    descriptor["workflow"]["execution"] = config["execution_policy"] = policy
+    (root / "delivery.json").write_text(json.dumps(descriptor))
+    (root / "tracker/config.json").write_text(json.dumps(config))
+    head = change("docs/note.md")
+    combined = event(head, "codex/batch-" + "a" * 32, "stage")
+    result = select(root, "pull_request", combined)
+    assert result["windows"] and result["linux"] and result["python"] == ["3.11", "3.13"]
+    assert select(root, "pull_request", combined, workflow="windows-installer.yml")["windows"]
+
+
+@pytest.mark.parametrize("field,value", [("review_limit", 4), ("review_limit", True),
+                                        ("review_limit", "3"), ("batch_limit", 6)])
+def test_parallel_review_policy_refuses_unsupported_capacity(candidate, field, value):
+    root, _, change, event = candidate
+    policy = {"schema_version": 3, "implementation_limit": 5, "review_limit": 3, "batch_limit": 5}
+    policy[field] = value
+    descriptor = json.loads((root / "delivery.json").read_text())
+    config = json.loads((root / "tracker/config.json").read_text())
+    descriptor["workflow"]["execution"] = config["execution_policy"] = policy
+    (root / "delivery.json").write_text(json.dumps(descriptor))
+    (root / "tracker/config.json").write_text(json.dumps(config))
+    result = select(root, "pull_request", event(change()))
+    assert result["reason"] == "classification-unavailable-run-full"
+    assert result["windows"] and result["linux"] and result["python"] == ["3.11", "3.13"]
+
+
 @pytest.mark.parametrize("branch,target", [
     ("codex/batch-" + "a" * 32, "stage"), ("stage", "main"),
     ("codex/batch-invalid", "stage"), ("unknown", "main"),

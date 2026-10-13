@@ -1,5 +1,17 @@
 # Repository process history
 
+## ACL-1868 — Parallel source review adoption
+
+Prepare explicit schema-3 source-review capacity with three independent per-PR
+owners and one separate integration Coordinator. Batch assembly and CI dispatch
+recognize schema 3 without relaxing the full combined/stage/main checks. The
+[activation procedure](PARALLEL_SOURCE_REVIEWS.md) preserves queued work and
+foreign ownership and separates source preparation from live policy migration.
+Shared Tracker TT-93 and Master MR-22 provide the compatible engine and standard.
+The owner test dashboard is identified before any update; local configuration and
+uncommitted instructions are retained. Source integration alone is not activation
+or a dashboard update.
+
 ## ACL-1753 — Compatible pins for the preserved review queue
 
 Adopt reviewed merged Master `fe9241152cb466dfbafa3bcd3070f877c1b1b9c4` and
