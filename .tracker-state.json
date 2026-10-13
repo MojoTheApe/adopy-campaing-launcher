@@ -7763,9 +7763,11 @@
         "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-867",
         "id": "014059808ad4438e9359c1a0dcbed781",
         "issue": 865,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-13T18:32:08+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 867,
+        "report": "# ACL-1865 compatibility correction handoff\n\nWorker-867R / root-worker_refresh_867 owns fresh claim 014059808ad4438e9359c1a0dcbed781, coordinated by Coordinator-DLV13. Original PR867 and codex/acl-1865-loading-stages preserved.\n\nHead 3cf21cdfb549bdc21b837dae88949ec68475e892 fast-forwards prior independently reviewed source 55f69649e6213117b923237b4d435b2ee3590dea. Current main remains 777663bf539308c0898cc177f872a8e0f63b597e. The only correction is moving the complete unchanged ACL-1865 changelog entry immediately before the unique ACL-1652/1654/1656 heading, avoiding the shared top-of-file integration anchor. Every entry byte is preserved; removing that exact entry from before and after gives identical remaining file bytes, and line multisets match.\n\nChanged paths relative to the prior source: only docs/system/CHANGELOG.md. All runtime, config, dependencies and tests are unchanged; git diff --exit-code on these paths passed. git diff --check and secret scan passed. No artificial documentation tests or repeated unchanged 40-test run were added; prior 40 Python 3.13 affected passes remain historical exact-code evidence. Fresh source hosted checks and independent review/approval are mandatory and pending, with no CI waiver or reuse assertion.\n\nNo other source tips included. No stage/main merge, live dashboard restart, profile/ad action, deployment or release. Previous source approval is historical; this head requires fresh independent full-source review and current required checks."
       }
     },
     "tasks": {
