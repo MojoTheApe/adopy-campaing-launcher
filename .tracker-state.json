@@ -7590,19 +7590,6 @@
   },
   "execution": {
     "claims": {
-      "879": {
-        "actor": "Worker-IS1013",
-        "session": "isolated_app_sol_20261013",
-        "coordinator": "Coordinator-CR1012",
-        "branch": "work/acl-1879-official-token-verifier",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\Adopy Campaign Manager\\ACM-Audit-2026-10-12\\worktrees\\acl-1879",
-        "id": "c577660d190c42299973d4b649fb1ee4",
-        "issue": 879,
-        "state": "stopping",
-        "started_at": "2026-10-13T14:28:29+00:00",
-        "from_status": "status:todo",
-        "report": "# ACL-1879 owner-requested full pause\n\nReason: owner requested full pause. Development, tests, research and delivery are\nstopped until the owner explicitly resumes them.\n\nActual Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\nOwned claim: c577660d190c42299973d4b649fb1ee4.\nBranch: work/acl-1879-official-token-verifier.\nWorktree: ACM-Audit-2026-10-12/worktrees/acl-1879.\nHEAD/base: 72a2d2c21aa42f1a388d32ea27ba2c8253ee7854.\n\nThe ordinary genuine matching-v2 claim was verified In Progress. Scope,\ninstructions and primary-source request semantics were inspected before the\npause. No implementation files were created or edited, no tests/services were\nstarted for this task, and no source commit, push or PR was created.\n\nStop audit confirms the worktree is clean at the preserved base and finds no\nrunning Python/pytest/uvicorn process belonging to this task worktree. Existing\nsource/worktrees and earlier PRs remain preserved. This report exists solely for\nthe supported owned-claim stop. No merge, integration, stage, main, installation,\ndeployment, policy migration or foreign claim action was performed.\n\nRemaining work: the entire verifier/CLI implementation, offline verification,\nsource PR and compatible formal review/handoff. Resume requires the owner's\nexplicit instruction and a supported fresh author claim; elapsed time supplies\nno authorization to restart."
-      },
       "880": {
         "actor": "Worker-PG86",
         "session": "01a135aa-a82d-77d2-8057-5116cc969c86",
@@ -12320,9 +12307,22 @@
             "session": "isolated_app_sol_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-IS1013",
-        "coordinator": "Coordinator-CR1012"
+        "coordinator": "Coordinator-CR1012",
+        "handoff": {
+          "actor": "Worker-IS1013",
+          "session": "isolated_app_sol_20261013",
+          "coordinator": "Coordinator-CR1012",
+          "branch": "work/acl-1879-official-token-verifier",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\Adopy Campaign Manager\\ACM-Audit-2026-10-12\\worktrees\\acl-1879",
+          "id": "c577660d190c42299973d4b649fb1ee4",
+          "issue": 879,
+          "state": "stopping",
+          "started_at": "2026-10-13T14:28:29+00:00",
+          "from_status": "status:todo",
+          "report": "# ACL-1879 owner-requested full pause\n\nReason: owner requested full pause. Development, tests, research and delivery are\nstopped until the owner explicitly resumes them.\n\nActual Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\nOwned claim: c577660d190c42299973d4b649fb1ee4.\nBranch: work/acl-1879-official-token-verifier.\nWorktree: ACM-Audit-2026-10-12/worktrees/acl-1879.\nHEAD/base: 72a2d2c21aa42f1a388d32ea27ba2c8253ee7854.\n\nThe ordinary genuine matching-v2 claim was verified In Progress. Scope,\ninstructions and primary-source request semantics were inspected before the\npause. No implementation files were created or edited, no tests/services were\nstarted for this task, and no source commit, push or PR was created.\n\nStop audit confirms the worktree is clean at the preserved base and finds no\nrunning Python/pytest/uvicorn process belonging to this task worktree. Existing\nsource/worktrees and earlier PRs remain preserved. This report exists solely for\nthe supported owned-claim stop. No merge, integration, stage, main, installation,\ndeployment, policy migration or foreign claim action was performed.\n\nRemaining work: the entire verifier/CLI implementation, offline verification,\nsource PR and compatible formal review/handoff. Resume requires the owner's\nexplicit instruction and a supported fresh author claim; elapsed time supplies\nno authorization to restart."
+        }
       },
       "880": {
         "implementers": [
@@ -25728,6 +25728,13 @@
         "issue": 880,
         "claim": "69a7d5c37ae34427a55bed3bd25b7230",
         "actor": "Worker-PG86"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-13T14:35:38+00:00",
+        "issue": 879,
+        "actor": "Worker-IS1013",
+        "report": "# ACL-1879 owner-requested full pause\n\nReason: owner requested full pause. Development, tests, research and delivery are\nstopped until the owner explicitly resumes them.\n\nActual Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\nOwned claim: c577660d190c42299973d4b649fb1ee4.\nBranch: work/acl-1879-official-token-verifier.\nWorktree: ACM-Audit-2026-10-12/worktrees/acl-1879.\nHEAD/base: 72a2d2c21aa42f1a388d32ea27ba2c8253ee7854.\n\nThe ordinary genuine matching-v2 claim was verified In Progress. Scope,\ninstructions and primary-source request semantics were inspected before the\npause. No implementation files were created or edited, no tests/services were\nstarted for this task, and no source commit, push or PR was created.\n\nStop audit confirms the worktree is clean at the preserved base and finds no\nrunning Python/pytest/uvicorn process belonging to this task worktree. Existing\nsource/worktrees and earlier PRs remain preserved. This report exists solely for\nthe supported owned-claim stop. No merge, integration, stage, main, installation,\ndeployment, policy migration or foreign claim action was performed.\n\nRemaining work: the entire verifier/CLI implementation, offline verification,\nsource PR and compatible formal review/handoff. Resume requires the owner's\nexplicit instruction and a supported fresh author claim; elapsed time supplies\nno authorization to restart."
       }
     ],
     "policy": {
