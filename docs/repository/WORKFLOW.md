@@ -65,6 +65,14 @@ Instruction-only reviews consume source capacity and still block new intake/batc
 creation; their main admission waits for existing intake/integration/stage ownership.
 See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md) for the current v2 source handoff and
 separate idle migration. A prepared descriptor does not activate the pool.
+During ACL-1875's old-v2 source cutover, the genuine old config remains authoritative
+through source approval, batch/stage and unchanged main promotion. If GitHub then
+auto-marks the included source PR merged and the old engine rejects completion,
+use only the bounded explicit clean fixed-engine recovery in
+[SOURCE_REVIEWS.md](SOURCE_REVIEWS.md), preserving that same v2 config and all
+held ownership/evidence. The reviewed engine verifies the frozen source's exact
+post-main inclusion before normal Merged/cleanup; it does not activate schema 3
+or relax open-source admission before main.
 
 For changes before approval, the Reviewer returns review and the author takes a
 fresh implementation claim before editing the original branch. After approval,

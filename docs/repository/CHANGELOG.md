@@ -21,6 +21,10 @@ parent ACL-1874 retains actual activation and stays unfinished. This policy sour
 finishes its genuine current v2 handoff/approval/batch/stage/main/Merged route before
 an idle queue-preserving v2-to-v3 migration. Compatible service publication is an
 independent parent prerequisite; source preparation does not publish it.
+Document the reviewed TT-89 fixed-engine recovery for GitHub-auto-merged source
+completion after a real main promotion, retaining genuine v2 policy/ownership and
+exact inclusion proof. Old-runtime patching or state editing remains forbidden;
+this bounded recovery is separate from schema-3 migration.
 See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md). Preparation grants no activation,
 package publication, employee update or live advertising/pilot receipt. Preserve
 pristine template ancestry, ACL identity/history, active owners and delivery controls.

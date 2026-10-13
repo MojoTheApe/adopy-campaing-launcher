@@ -19,6 +19,10 @@ matching reviewed merged Master/Action pin is
 `8ce271dc289b6a7ef24498ed3d9d92cb78694a3d` ([MR-22 / PR23](https://github.com/MojoTheApe/master-repo/pull/23)).
 Both descriptor/lock and Action pins match their actual clean official sources.
 Updating source pins cannot mutate old live state or prove compatible service publication.
+The activation parent separately reports independently reviewed shared runtime
+`919b5f6d`, a published descendant preserving the selected Tracker engine bytes.
+Retain and verify that publication receipt before migration; it is not ACL activation
+evidence and is not a replacement consumer engine pin.
 
 ## Selected policy and independent ownership
 
@@ -77,6 +81,23 @@ can perform idle migration. Source merge leaves parent migration/verification op
    installer checks -> actual stage -> exact-tree isolated package verification
    -> unchanged main promotion -> normal per-task Merged handoff. New head policy
    cannot operate on old live state; never fabricate a transitional config.
+   For post-main completion only, GitHub may automatically mark the main-targeted
+   source PR merged when the real promotion contains its frozen tip. The old
+   `086aaa98f2e807d640105be2929714d0b7331f21` engine predates the reviewed
+   [TT-89 containment fix](https://github.com/MojoTheApe/task-tracker/issues/89)
+   and can then refuse normal `merged`. Keep the existing genuine v2 config,
+   source approvals, Coordinator/review ownership and exact stage/main evidence.
+   Invoke the clean reviewed fixed engine
+   `46283b8a6fe444065838e136c89ef4ed64bd1528` explicitly from its checkout with
+   `python -m tracker --config /absolute/genuine-old-v2-config.json`, followed by
+   the same `merged` preview/apply and `batch close-sources` arguments from its
+   pinned guide. This bounded recovery verifies unchanged source scope/review/tips
+   and actual containment in that exact admitted main promotion before normal
+   durable completion/cleanup releases ownership. Approval, intake and pre-main
+   admission still require open unmerged sources. It neither migrates state nor
+   selects the prepared schema-3 configuration. Do not patch the old runtime,
+   change its lock or use a mismatched `TASK_TRACKER_HOME`; the project launcher
+   enforces its exact pin. Never hand-edit claims or completion records.
 2. Before actual migration, verify publication of the reviewed compatible Tracker
    service through its maintained route
    and align the maintained ACL fallback via the reviewed shared companion. Verify
