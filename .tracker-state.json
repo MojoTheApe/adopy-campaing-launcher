@@ -7256,6 +7256,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T06:04:47+00:00",
         "from_status": "status:todo"
+      },
+      "839": {
+        "actor": "Worker-D7K413",
+        "session": "design_audit_d7k413_20261013",
+        "coordinator": "Coordinator-D7K413",
+        "branch": "codex/acl-1839-connection-panel-layout",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Design-Audit-2026-10-13",
+        "id": "b24c33f5ee60435883252c7b80f57e45",
+        "issue": 839,
+        "state": "implementing",
+        "started_at": "2026-10-13T06:13:24+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11410,6 +11422,17 @@
           "from_status": "status:backlog",
           "report": "ACL-1838 intake reserved codex/acl-country-active-line before GitHub assigned the new task ID. No code was edited. Stop the provisional claim solely to re-claim the same authorized task on the repository-conformant codex/acl-1838-country-active-line branch in the same isolated clean worktree. Worker identity/session remain unchanged. No missing product dependency or external blocker exists."
         }
+      },
+      "839": {
+        "implementers": [
+          {
+            "actor": "Worker-D7K413",
+            "session": "design_audit_d7k413_20261013"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-D7K413",
+        "coordinator": "Coordinator-D7K413"
       }
     },
     "actors": {
@@ -12428,6 +12451,10 @@
       "Reviewer-RX1013B": {
         "session": "rev_rx1013b_20261013",
         "role": "Reviewer"
+      },
+      "Worker-D7K413": {
+        "session": "design_audit_d7k413_20261013",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -22675,6 +22702,13 @@
         },
         "claim": "b3ce4fdd1e32449c9db663a8d6107e6e",
         "reason": "The actual previous Reviewer thread01a131cd-f8af-7d92-8292-b8ce9f007eb8 was inspected through read_thread: systemError, latest turn failed due account usage limit. Its review process is stopped. Preserve PR837 source, Worker and all prior evidence; transfer only the stranded review to actual independent recovery_reviewer_1013 for fresh complete-scope review."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T06:13:24+00:00",
+        "issue": 839,
+        "claim": "b24c33f5ee60435883252c7b80f57e45",
+        "actor": "Worker-D7K413"
       }
     ],
     "policy": {
