@@ -7589,22 +7589,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "874": {
-        "actor": "Worker-FIVE874",
-        "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
-        "coordinator": "Coordinator-FLOW513",
-        "branch": "codex/acl-1874-five-source-reviews",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-flow-activation-report",
-        "id": "2d176805ba8848d1acc8eb1f9269253a",
-        "issue": 874,
-        "state": "handoff",
-        "started_at": "2026-10-13T14:58:25+00:00",
-        "from_status": "status:todo",
-        "pr": 881,
-        "report": "# ACL-1874 final activation report handoff\n\nSame actual Worker-FIVE874 run retained from original parent and child preparation. Fresh normal work under the genuine adopted schema3 configuration returned In Progress/current claim before report branch/source edits; no --resume or fabricated claim. Original stopped parent preparation, child source and paused foreign sources remain untouched.\n\nActual claim/private locator (do not publish):\n{\n  \"actor\": \"Worker-FIVE874\",\n  \"session\": \"flow_five_reviews_acl_worker_01a134f0_20261013\",\n  \"coordinator\": \"Coordinator-FLOW513\",\n  \"branch\": \"codex/acl-1874-five-source-reviews\",\n  \"worktree\": \"/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-flow-activation-report\",\n  \"id\": \"2d176805ba8848d1acc8eb1f9269253a\",\n  \"issue\": 874,\n  \"state\": \"implementing\",\n  \"started_at\": \"2026-10-13T14:58:25+00:00\",\n  \"from_status\": \"status:todo\"\n}\n\nFrozen report checkout: /Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-flow-activation-report\nBranch: codex/acl-1874-five-source-reviews\nPR881: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/881\nHead539c6c5f46a181aae0f2a616f4b73d5cc1c18181 / base72a2d2c21aa42f1a388d32ea27ba2c8253ee7854 / tree84d322133c9b5d29c84221d2445b0ea88639ac42.\nOnly two normal repository Markdown files change: SOURCE_REVIEWS.md and CHANGELOG.md. +65/-15. Complete original Issue874 scope retained; actual outcome and final source PR linked in both directions before review.\n\nAll original acceptance is covered by actual prior proofs: shared reviewed engine46283b8 and Master8ce271dc; source875 independently approved, combined877 independently approved and all applicable hosted Linux/Windows/installer checks green, actual exact-tree isolated stage verification and unchanged main878 promotion72a2d2c, normal old-v2 Merged/source closure releases ownership. Maintained shared fallback TT102/PR103 publication57b1674 and normal TT104 verified completion preserve interface/authentication/data/event writer. Supported idle migration at14:52:32UTC was independently accepted after complete new private before/after comparison and one fresh protected canonical/root projection at14:52:52UTC observed14:54:01UTC. Actual5/5/1/5 capacities, queue37/order and full records preserved, including stopped879/880/intake-dedup and unfinished closed source pairs406/407,433/439. Only supported policy/pool/one audit changed.\n\nEvidence: acl-independent-final-activation-verification.md, acl-independent-migration-comparison-private.json, acl-independent-activation-live-private.json; original source/own-stop receipts remain private beside them. Reporter did not rerun prior application/Windows/runtime proofs or claim five manufactured reviews. No stable ACL package, employee rollout, browser or live advertising/pilot receipt.\n\nReport-only selfchecks: git diff --check passed; maintained script acl_process_instructions.py passed14 instruction files/53 local links; exact pinned classify_local complete immutable base/head/tree proof passed, stored acl1874-report-local-process-proof.json. Official destination reverified PRIVATE and canonicalHTTPS; bounded two-file push succeeded. PR881 attached, two-way scope link present, ready exact head verified.\n\nRemaining: required report-specific hosted checks and actual independent Reviewer-R875X/root_tracker_review_acl1875 source review; check-pr/check-merge, genuine direct-main process merge and normal reviewed merged receipt. No selfapproval/merge or non-code completion. Pending hosted checks do not justify holding implementation ownership. Implementation now stops at genuine own handoff; new edits require supported return and fresh claim."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -12260,7 +12245,7 @@
             "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-FIVE874",
         "coordinator": "Coordinator-FLOW513",
         "handoff": {
@@ -12268,14 +12253,17 @@
           "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
           "coordinator": "Coordinator-FLOW513",
           "branch": "codex/acl-1874-five-source-reviews",
-          "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-five-reviews",
-          "id": "e3f7986c4cfe4b9b984a0b06887d274e",
+          "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-flow-activation-report",
+          "id": "2d176805ba8848d1acc8eb1f9269253a",
           "issue": 874,
-          "state": "stopping",
-          "started_at": "2026-10-13T11:27:19+00:00",
-          "from_status": "status:backlog",
-          "report": "# Genuine source decomposition handoff\n\nACL-1874 / Issue874 remains unfinished for actual compatible service publication, idle v2-to-v3 migration and fresh protected-board proof. Source-only work is carried into linked ACL-1875 / Issue875: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/875. This is an authorized scope decomposition preserving every original requirement, not completion of the parent.\n\nActual Worker: Worker-FIVE874; same real session flow_five_reviews_acl_worker_01a134f0_20261013. Parent claim e3f7986c4cfe4b9b984a0b06887d274e. Dedicated worktree /Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-five-reviews; original branch codex/acl-1874-five-source-reviews at baseline3327465fcbd46ccff9b64eb7c574ff5b84b99b80 remains preserved. Uncommitted source and original branch are retained without stash/reset/clear; private binary diff preserves tracked preparation and SOURCE_REVIEWS.md remains in the checkout. New child work will take a genuine fresh claim under this same Worker/session before changing branch or source.\n\nPrepared code/config: explicit mirrored execution schema3 5/5/5; reviewed merged Tracker46283b8a6fe444065838e136c89ef4ed64bd1528 descriptor/lock pin and four genuine clean immutable exported helpers (three actual diffs), preserving ACL guarded client and relocated checker root. ACL-owned CI dispatch recognizes valid v2/v3 with full checks on policy uncertainty; batch assembly supports v3 independent source owners without weakening frozen content/integration ownership. Repository/current-system/staging documentation and v2/v3 policy/CI/adoption/Git assembly regressions are prepared. All71 aliases, +1000IDs, six modules,74 historical completions, delivery fingerprint302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21 and pristine baseline bytes remain preserved.\n\nChecks:625 affected CI tooling tests passed in398.20s in existing ACL Python3.12 environment with library env empty. Scanner, import smoke, syntax,14 maintained instruction files/51 links and exact export-byte provenance passed. Full application/Windows/installer/exact-stage checks are hosted requirements, not claimed locally. Actual pinned client guide loads schema3; exact old client inspection verifies old live2 5/1/5. Other real Workers, queued Reviews, approvals/history and held assembling integration are untouched.\n\nRemaining source gates: fresh child claim/branch, actual merged Master8ce271dc289b6a7ef24498ed3d9d92cb78694a3d descriptor/Action pin after clean checkout confirmation, final child scope/self-check/two-way Issue/PR links, hosted feedback, ready handoff and genuine independent source/integration reviews, normal old v2 Approved/batch/stage/exact-tree/main/child-Merged. Parent retains compatible maintained service publication and actual idle migration/fresh-board acceptance. No PR, review approval, merge, release, employee update, deployment, advertising/pilot or migration has occurred under this source Worker."
-        }
+          "state": "handoff",
+          "started_at": "2026-10-13T14:58:25+00:00",
+          "from_status": "status:todo",
+          "pr": 881,
+          "report": "# ACL-1874 final activation report handoff\n\nSame actual Worker-FIVE874 run retained from original parent and child preparation. Fresh normal work under the genuine adopted schema3 configuration returned In Progress/current claim before report branch/source edits; no --resume or fabricated claim. Original stopped parent preparation, child source and paused foreign sources remain untouched.\n\nActual claim/private locator (do not publish):\n{\n  \"actor\": \"Worker-FIVE874\",\n  \"session\": \"flow_five_reviews_acl_worker_01a134f0_20261013\",\n  \"coordinator\": \"Coordinator-FLOW513\",\n  \"branch\": \"codex/acl-1874-five-source-reviews\",\n  \"worktree\": \"/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-flow-activation-report\",\n  \"id\": \"2d176805ba8848d1acc8eb1f9269253a\",\n  \"issue\": 874,\n  \"state\": \"implementing\",\n  \"started_at\": \"2026-10-13T14:58:25+00:00\",\n  \"from_status\": \"status:todo\"\n}\n\nFrozen report checkout: /Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-flow-activation-report\nBranch: codex/acl-1874-five-source-reviews\nPR881: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/881\nHead539c6c5f46a181aae0f2a616f4b73d5cc1c18181 / base72a2d2c21aa42f1a388d32ea27ba2c8253ee7854 / tree84d322133c9b5d29c84221d2445b0ea88639ac42.\nOnly two normal repository Markdown files change: SOURCE_REVIEWS.md and CHANGELOG.md. +65/-15. Complete original Issue874 scope retained; actual outcome and final source PR linked in both directions before review.\n\nAll original acceptance is covered by actual prior proofs: shared reviewed engine46283b8 and Master8ce271dc; source875 independently approved, combined877 independently approved and all applicable hosted Linux/Windows/installer checks green, actual exact-tree isolated stage verification and unchanged main878 promotion72a2d2c, normal old-v2 Merged/source closure releases ownership. Maintained shared fallback TT102/PR103 publication57b1674 and normal TT104 verified completion preserve interface/authentication/data/event writer. Supported idle migration at14:52:32UTC was independently accepted after complete new private before/after comparison and one fresh protected canonical/root projection at14:52:52UTC observed14:54:01UTC. Actual5/5/1/5 capacities, queue37/order and full records preserved, including stopped879/880/intake-dedup and unfinished closed source pairs406/407,433/439. Only supported policy/pool/one audit changed.\n\nEvidence: acl-independent-final-activation-verification.md, acl-independent-migration-comparison-private.json, acl-independent-activation-live-private.json; original source/own-stop receipts remain private beside them. Reporter did not rerun prior application/Windows/runtime proofs or claim five manufactured reviews. No stable ACL package, employee rollout, browser or live advertising/pilot receipt.\n\nReport-only selfchecks: git diff --check passed; maintained script acl_process_instructions.py passed14 instruction files/53 local links; exact pinned classify_local complete immutable base/head/tree proof passed, stored acl1874-report-local-process-proof.json. Official destination reverified PRIVATE and canonicalHTTPS; bounded two-file push succeeded. PR881 attached, two-way scope link present, ready exact head verified.\n\nRemaining: required report-specific hosted checks and actual independent Reviewer-R875X/root_tracker_review_acl1875 source review; check-pr/check-merge, genuine direct-main process merge and normal reviewed merged receipt. No selfapproval/merge or non-code completion. Pending hosted checks do not justify holding implementation ownership. Implementation now stops at genuine own handoff; new edits require supported return and fresh claim."
+        },
+        "pr": 881,
+        "queued_at": "2026-10-13T15:03:41+00:00"
       },
       "875": {
         "implementers": [
@@ -15900,7 +15888,8 @@
       845,
       840,
       841,
-      865
+      865,
+      874
     ],
     "review": null,
     "history": [
@@ -25850,6 +25839,13 @@
         "at": "2026-10-13T14:58:25+00:00",
         "issue": 874,
         "claim": "2d176805ba8848d1acc8eb1f9269253a",
+        "actor": "Worker-FIVE874"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T15:03:41+00:00",
+        "issue": 874,
+        "pr": 881,
         "actor": "Worker-FIVE874"
       }
     ],
