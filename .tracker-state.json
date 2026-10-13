@@ -10180,7 +10180,7 @@
             "session": "run-workerfix665-20261013"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-Fix665",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -26763,6 +26763,68 @@
         "pr": 530,
         "lane": "bfdb191febe442dc842cf280a45a7c95",
         "actor": "Reviewer-C530"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-13T18:51:52+00:00",
+        "issue": 651,
+        "pr": 665,
+        "review": {
+          "id": "91da4586c8c246dd93038e9a9ed5b740",
+          "pr": 665,
+          "issues": [
+            651
+          ],
+          "actor": "Reviewer-Creative665",
+          "session": "review665-20261013-f83a61d2",
+          "coordinator": "Coordinator-DLV13",
+          "started_at": "2026-10-13T18:38:53+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 651,
+            "pr": 665,
+            "branch": "codex/acl-1651-creatives-fresh",
+            "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
+            "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+            "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-Creative665",
+              "implementer": "Worker-Fix665",
+              "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
+              "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "tree_sha": "7c1656d82ad6f2a6cf85ca0ea98d5f331c0973fc",
+              "execution_lane": "91da4586c8c246dd93038e9a9ed5b740",
+              "review_session": "review665-20261013-f83a61d2",
+              "report": "Fresh independent full-scope re-review after supported author return and rehandoff. Exact new source5f9455a tree7c1656d currentmain777663b. Compared previous independently approved54f1c1 against this new source: only docs/system/CHANGELOG.md changed, moving the full unchanged14-line ACL1651 entry from the top to immediately before uniqueACL1615 heading; no requirements, history or wording lost. report.html, tests/test_builder_review_browser.py and PROJECT.md byte-identical to54f1c1. The complete four-path current-main source scope and issue acceptance criteria remain covered by my previous complete review. No blocking Standards or Spec findings. Runtime/tests unchanged: my independent three offline Chromium replacement/immediate/closed-picker regressions passed on byte-identical code, so no redundant rerun is asserted. Original exact-source failure and historical source returns remain preserved. New full-source hosted Linux jobs and mandatory aggregate must succeed before formal batch approval; current latest tracker-link rerun succeeds after the Review handoff. No live profile, advertising action, dashboard installation, stage verification or package delivery is established. No implementation edits made by this Reviewer.",
+              "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                651
+              ],
+              "recorded_at": "2026-10-13T18:43:16+00:00",
+              "issue_scopes": {
+                "651": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05"
+              }
+            },
+            "lane": {
+              "id": "91da4586c8c246dd93038e9a9ed5b740",
+              "pr": 665,
+              "issues": [
+                651
+              ],
+              "actor": "Reviewer-Creative665",
+              "session": "review665-20261013-f83a61d2",
+              "coordinator": "Coordinator-DLV13",
+              "started_at": "2026-10-13T18:38:53+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-13T18:51:19+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -27038,6 +27100,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-13T18:44:30+00:00"
+      },
+      "651": {
+        "issue": 651,
+        "pr": 665,
+        "branch": "codex/acl-1651-creatives-fresh",
+        "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
+        "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+        "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-Creative665",
+          "implementer": "Worker-Fix665",
+          "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
+          "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+          "tree_sha": "7c1656d82ad6f2a6cf85ca0ea98d5f331c0973fc",
+          "execution_lane": "91da4586c8c246dd93038e9a9ed5b740",
+          "review_session": "review665-20261013-f83a61d2",
+          "report": "Fresh independent full-scope re-review after supported author return and rehandoff. Exact new source5f9455a tree7c1656d currentmain777663b. Compared previous independently approved54f1c1 against this new source: only docs/system/CHANGELOG.md changed, moving the full unchanged14-line ACL1651 entry from the top to immediately before uniqueACL1615 heading; no requirements, history or wording lost. report.html, tests/test_builder_review_browser.py and PROJECT.md byte-identical to54f1c1. The complete four-path current-main source scope and issue acceptance criteria remain covered by my previous complete review. No blocking Standards or Spec findings. Runtime/tests unchanged: my independent three offline Chromium replacement/immediate/closed-picker regressions passed on byte-identical code, so no redundant rerun is asserted. Original exact-source failure and historical source returns remain preserved. New full-source hosted Linux jobs and mandatory aggregate must succeed before formal batch approval; current latest tracker-link rerun succeeds after the Review handoff. No live profile, advertising action, dashboard installation, stage verification or package delivery is established. No implementation edits made by this Reviewer.",
+          "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            651
+          ],
+          "recorded_at": "2026-10-13T18:43:16+00:00",
+          "issue_scopes": {
+            "651": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05"
+          }
+        },
+        "lane": {
+          "id": "91da4586c8c246dd93038e9a9ed5b740",
+          "pr": 665,
+          "issues": [
+            651
+          ],
+          "actor": "Reviewer-Creative665",
+          "session": "review665-20261013-f83a61d2",
+          "coordinator": "Coordinator-DLV13",
+          "started_at": "2026-10-13T18:38:53+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-13T18:51:19+00:00"
       }
     },
     "batches": {
@@ -27516,62 +27622,6 @@
       "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
     },
     "source_reviews": {
-      "665": {
-        "id": "91da4586c8c246dd93038e9a9ed5b740",
-        "pr": 665,
-        "issues": [
-          651
-        ],
-        "actor": "Reviewer-Creative665",
-        "session": "review665-20261013-f83a61d2",
-        "coordinator": "Coordinator-DLV13",
-        "started_at": "2026-10-13T18:38:53+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 651,
-          "pr": 665,
-          "branch": "codex/acl-1651-creatives-fresh",
-          "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
-          "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-Creative665",
-            "implementer": "Worker-Fix665",
-            "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
-            "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-            "tree_sha": "7c1656d82ad6f2a6cf85ca0ea98d5f331c0973fc",
-            "execution_lane": "91da4586c8c246dd93038e9a9ed5b740",
-            "review_session": "review665-20261013-f83a61d2",
-            "report": "Fresh independent full-scope re-review after supported author return and rehandoff. Exact new source5f9455a tree7c1656d currentmain777663b. Compared previous independently approved54f1c1 against this new source: only docs/system/CHANGELOG.md changed, moving the full unchanged14-line ACL1651 entry from the top to immediately before uniqueACL1615 heading; no requirements, history or wording lost. report.html, tests/test_builder_review_browser.py and PROJECT.md byte-identical to54f1c1. The complete four-path current-main source scope and issue acceptance criteria remain covered by my previous complete review. No blocking Standards or Spec findings. Runtime/tests unchanged: my independent three offline Chromium replacement/immediate/closed-picker regressions passed on byte-identical code, so no redundant rerun is asserted. Original exact-source failure and historical source returns remain preserved. New full-source hosted Linux jobs and mandatory aggregate must succeed before formal batch approval; current latest tracker-link rerun succeeds after the Review handoff. No live profile, advertising action, dashboard installation, stage verification or package delivery is established. No implementation edits made by this Reviewer.",
-            "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              651
-            ],
-            "recorded_at": "2026-10-13T18:43:16+00:00",
-            "issue_scopes": {
-              "651": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05"
-            }
-          },
-          "lane": {
-            "id": "91da4586c8c246dd93038e9a9ed5b740",
-            "pr": 665,
-            "issues": [
-              651
-            ],
-            "actor": "Reviewer-Creative665",
-            "session": "review665-20261013-f83a61d2",
-            "coordinator": "Coordinator-DLV13",
-            "started_at": "2026-10-13T18:38:53+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-13T18:51:19+00:00"
-        }
-      },
       "867": {
         "id": "5329d662d852466cb27e325c39192db7",
         "pr": 867,
