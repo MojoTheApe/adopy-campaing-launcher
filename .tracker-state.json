@@ -10184,7 +10184,7 @@
             "session": "run-workerfix665-20261013"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-Fix665",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -26453,6 +26453,68 @@
         "pr": 530,
         "lane": "24bc47aab55a4fa79bed18b20866b0c1",
         "actor": "Reviewer-C530"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-13T18:13:38+00:00",
+        "issue": 651,
+        "pr": 665,
+        "review": {
+          "id": "8e38d4617feb4a32b262501a73fe5588",
+          "pr": 665,
+          "issues": [
+            651
+          ],
+          "actor": "Reviewer-Creative665",
+          "session": "review665-20261013-f83a61d2",
+          "coordinator": "Coordinator-DLV13",
+          "started_at": "2026-10-13T18:02:05+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 651,
+            "pr": 665,
+            "branch": "codex/acl-1651-creatives-fresh",
+            "head_sha": "54f1c1fe6697b65b115e639435d3a5b225a9de62",
+            "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+            "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "002f03eed5e1c93a57fe614b9e26c1141056f74542d3fd9ffc7ed5baf4478ab8",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-Creative665",
+              "implementer": "Worker-Fix665",
+              "head_sha": "54f1c1fe6697b65b115e639435d3a5b225a9de62",
+              "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "tree_sha": "ac882b9227bff2ea2047b181ccf0937b79d429be",
+              "execution_lane": "8e38d4617feb4a32b262501a73fe5588",
+              "review_session": "review665-20261013-f83a61d2",
+              "report": "Independent complete source review of PR665 / ACL-1651 against exact current main 777663bf539308c0898cc177f872a8e0f63b597e. Inspected the complete four-path source diff (report.html, test_builder_review_browser.py, system PROJECT and CHANGELOG), full issue criteria, original author history and fresh Worker-Fix665 handoff. No blocking Standards or Spec findings remain. The shared creative catalog refresh preserves old results while fetching and updates focus/window/missed search with appropriate throttles; the new coalesced pending miss waits for the two-second gap and redraws the current visible query, preserving the ten-second focus throttle, selected creative, campaign budget and closed picker. Both Image and Video use this same catalog; type switching only clears picker/search. My exact original-source offline Chromium reproduction previously failed (zero requests and No files found), establishing the defect. On this fresh exact source I independently ran three tracked offline Chromium regressions for immediate replacement after focus refresh, no further typing, and a picker closed while refresh is pending: 3 passed,8 deselected in78.33s, Windows Python3.13.15, synthetic isolated configuration and temporary creative files. Worker evidence additionally records all11 affected Builder tests, the original reviewer reproduction and102 story/platform tests passing plus scanner/import smoke; that evidence is distinguished from my own three checks. The source contains current main and preserves original source ancestry. This review approves source correctness only: required hosted Linux jobs and aggregate are still pending and batch approval must wait for current exact-head CI. No live profile, Meta action, dashboard installation, stage verification or package delivery is asserted. No implementation edits were made by this Reviewer. Original failed review remains historical, superseded only for this new exact source.",
+              "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                651
+              ],
+              "recorded_at": "2026-10-13T18:05:27+00:00",
+              "issue_scopes": {
+                "651": "002f03eed5e1c93a57fe614b9e26c1141056f74542d3fd9ffc7ed5baf4478ab8"
+              }
+            },
+            "lane": {
+              "id": "8e38d4617feb4a32b262501a73fe5588",
+              "pr": 665,
+              "issues": [
+                651
+              ],
+              "actor": "Reviewer-Creative665",
+              "session": "review665-20261013-f83a61d2",
+              "coordinator": "Coordinator-DLV13",
+              "started_at": "2026-10-13T18:02:05+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-13T18:12:59+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -26728,6 +26790,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-13T18:06:45+00:00"
+      },
+      "651": {
+        "issue": 651,
+        "pr": 665,
+        "branch": "codex/acl-1651-creatives-fresh",
+        "head_sha": "54f1c1fe6697b65b115e639435d3a5b225a9de62",
+        "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+        "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "002f03eed5e1c93a57fe614b9e26c1141056f74542d3fd9ffc7ed5baf4478ab8",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-Creative665",
+          "implementer": "Worker-Fix665",
+          "head_sha": "54f1c1fe6697b65b115e639435d3a5b225a9de62",
+          "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+          "tree_sha": "ac882b9227bff2ea2047b181ccf0937b79d429be",
+          "execution_lane": "8e38d4617feb4a32b262501a73fe5588",
+          "review_session": "review665-20261013-f83a61d2",
+          "report": "Independent complete source review of PR665 / ACL-1651 against exact current main 777663bf539308c0898cc177f872a8e0f63b597e. Inspected the complete four-path source diff (report.html, test_builder_review_browser.py, system PROJECT and CHANGELOG), full issue criteria, original author history and fresh Worker-Fix665 handoff. No blocking Standards or Spec findings remain. The shared creative catalog refresh preserves old results while fetching and updates focus/window/missed search with appropriate throttles; the new coalesced pending miss waits for the two-second gap and redraws the current visible query, preserving the ten-second focus throttle, selected creative, campaign budget and closed picker. Both Image and Video use this same catalog; type switching only clears picker/search. My exact original-source offline Chromium reproduction previously failed (zero requests and No files found), establishing the defect. On this fresh exact source I independently ran three tracked offline Chromium regressions for immediate replacement after focus refresh, no further typing, and a picker closed while refresh is pending: 3 passed,8 deselected in78.33s, Windows Python3.13.15, synthetic isolated configuration and temporary creative files. Worker evidence additionally records all11 affected Builder tests, the original reviewer reproduction and102 story/platform tests passing plus scanner/import smoke; that evidence is distinguished from my own three checks. The source contains current main and preserves original source ancestry. This review approves source correctness only: required hosted Linux jobs and aggregate are still pending and batch approval must wait for current exact-head CI. No live profile, Meta action, dashboard installation, stage verification or package delivery is asserted. No implementation edits were made by this Reviewer. Original failed review remains historical, superseded only for this new exact source.",
+          "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            651
+          ],
+          "recorded_at": "2026-10-13T18:05:27+00:00",
+          "issue_scopes": {
+            "651": "002f03eed5e1c93a57fe614b9e26c1141056f74542d3fd9ffc7ed5baf4478ab8"
+          }
+        },
+        "lane": {
+          "id": "8e38d4617feb4a32b262501a73fe5588",
+          "pr": 665,
+          "issues": [
+            651
+          ],
+          "actor": "Reviewer-Creative665",
+          "session": "review665-20261013-f83a61d2",
+          "coordinator": "Coordinator-DLV13",
+          "started_at": "2026-10-13T18:02:05+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-13T18:12:59+00:00"
       }
     },
     "batches": {
@@ -27206,62 +27312,6 @@
       "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
     },
     "source_reviews": {
-      "665": {
-        "id": "8e38d4617feb4a32b262501a73fe5588",
-        "pr": 665,
-        "issues": [
-          651
-        ],
-        "actor": "Reviewer-Creative665",
-        "session": "review665-20261013-f83a61d2",
-        "coordinator": "Coordinator-DLV13",
-        "started_at": "2026-10-13T18:02:05+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 651,
-          "pr": 665,
-          "branch": "codex/acl-1651-creatives-fresh",
-          "head_sha": "54f1c1fe6697b65b115e639435d3a5b225a9de62",
-          "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "002f03eed5e1c93a57fe614b9e26c1141056f74542d3fd9ffc7ed5baf4478ab8",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-Creative665",
-            "implementer": "Worker-Fix665",
-            "head_sha": "54f1c1fe6697b65b115e639435d3a5b225a9de62",
-            "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-            "tree_sha": "ac882b9227bff2ea2047b181ccf0937b79d429be",
-            "execution_lane": "8e38d4617feb4a32b262501a73fe5588",
-            "review_session": "review665-20261013-f83a61d2",
-            "report": "Independent complete source review of PR665 / ACL-1651 against exact current main 777663bf539308c0898cc177f872a8e0f63b597e. Inspected the complete four-path source diff (report.html, test_builder_review_browser.py, system PROJECT and CHANGELOG), full issue criteria, original author history and fresh Worker-Fix665 handoff. No blocking Standards or Spec findings remain. The shared creative catalog refresh preserves old results while fetching and updates focus/window/missed search with appropriate throttles; the new coalesced pending miss waits for the two-second gap and redraws the current visible query, preserving the ten-second focus throttle, selected creative, campaign budget and closed picker. Both Image and Video use this same catalog; type switching only clears picker/search. My exact original-source offline Chromium reproduction previously failed (zero requests and No files found), establishing the defect. On this fresh exact source I independently ran three tracked offline Chromium regressions for immediate replacement after focus refresh, no further typing, and a picker closed while refresh is pending: 3 passed,8 deselected in78.33s, Windows Python3.13.15, synthetic isolated configuration and temporary creative files. Worker evidence additionally records all11 affected Builder tests, the original reviewer reproduction and102 story/platform tests passing plus scanner/import smoke; that evidence is distinguished from my own three checks. The source contains current main and preserves original source ancestry. This review approves source correctness only: required hosted Linux jobs and aggregate are still pending and batch approval must wait for current exact-head CI. No live profile, Meta action, dashboard installation, stage verification or package delivery is asserted. No implementation edits were made by this Reviewer. Original failed review remains historical, superseded only for this new exact source.",
-            "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              651
-            ],
-            "recorded_at": "2026-10-13T18:05:27+00:00",
-            "issue_scopes": {
-              "651": "002f03eed5e1c93a57fe614b9e26c1141056f74542d3fd9ffc7ed5baf4478ab8"
-            }
-          },
-          "lane": {
-            "id": "8e38d4617feb4a32b262501a73fe5588",
-            "pr": 665,
-            "issues": [
-              651
-            ],
-            "actor": "Reviewer-Creative665",
-            "session": "review665-20261013-f83a61d2",
-            "coordinator": "Coordinator-DLV13",
-            "started_at": "2026-10-13T18:02:05+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-13T18:12:59+00:00"
-        }
-      },
       "530": {
         "id": "24bc47aab55a4fa79bed18b20866b0c1",
         "pr": 530,
