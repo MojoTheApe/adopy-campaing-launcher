@@ -10394,7 +10394,7 @@
             "session": "run-workerfix665-20261013"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-Fix665",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -10420,7 +10420,8 @@
           "session": "Root-DLV13-01a13445",
           "report": "Integration compatibility return for ACL-1651 / PR665.\n\nThe exact approved head 54f1c1fe6697b65b115e639435d3a5b225a9de62 has passed its source checks and independent review. Read-only git merge-tree against approved PR867 head 55f69649 and approved PR882 head 5d0e7259 reports a content conflict only in docs/system/CHANGELOG.md: each inserts a new entry immediately after the title. Product code is not the blocker.\n\nUnder a fresh owned Worker claim on the preserved source branch, move only the complete ACL-1651 entry, with its text unchanged, to immediately before the existing unique heading \"Campaign Builder creative previews no longer freeze the dashboard \u2014 ACL-1615\". Preserve every old entry and all runtime/tests. This separate stable insertion point must merge cleanly with the loading entry and token diagnostic entry. Do not include another task's source commits.\n\nThen fast-forward push, truthful checks/handoff and fresh independent review/approval. The old source approval remains historical; no stage/main merge or live action is claimed. The failed composition was found before freezing or publishing a batch."
         },
-        "reviewer": "Reviewer-Creative665"
+        "reviewer": "Reviewer-Creative665",
+        "batch_id": "24551548a5084a13a4d81bb957a084f1"
       },
       "669": {
         "implementers": [
@@ -12481,7 +12482,7 @@
             "session": "root-worker_refresh_867"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-867R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -12507,7 +12508,8 @@
           "session": "Root-DLV13-01a13445",
           "report": "Integration compatibility return for ACL-1865 / PR867.\n\nThe exact approved head 55f69649e6213117b923237b4d435b2ee3590dea has passed its source checks and independent review. Read-only git merge-tree against approved PR665 head 54f1c1fe and approved PR882 head 5d0e7259 reports a content conflict only in docs/system/CHANGELOG.md: each inserts a new entry immediately after the title. Product code is not the blocker.\n\nUnder a fresh owned Worker claim on the preserved source branch, move only the complete ACL-1865 entry, with its text unchanged, to immediately before the existing unique heading \"One metric set in every attribution table, Totals and Campaign managers on Home \u2014 ACL-1652, ACL-1654, ACL-1656\". Preserve every old entry and all runtime/tests. This stable insertion point is distinct from the creative entry near ACL-1615 and the token diagnostic entry after the title. Do not include another task's source commits.\n\nThen fast-forward push, truthful checks/handoff and fresh independent review/approval. The old source approval remains historical; no stage/main merge or live action is claimed. The failed composition was found before freezing or publishing a batch."
         },
-        "reviewer": "Reviewer-867S"
+        "reviewer": "Reviewer-867S",
+        "batch_id": "24551548a5084a13a4d81bb957a084f1"
       },
       "854": {
         "implementers": [
@@ -12736,7 +12738,7 @@
             "session": "isolated_app_sol_20261013"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-IS1013",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12756,7 +12758,8 @@
         "pr": 882,
         "queued_at": "2026-10-13T17:03:59+00:00",
         "review_report": "# ACL-1879 / PR882 review return: deterministic required CI regression\n\nActual Reviewer-RS1012 / connection_review_rs1012; non-implementing. Source review claim d8dd671fa8b84eb5ad2c6524c92720d4. Author Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\n\nHead89d63125ca1f9d12c9445259e584c687d24c2aae, tree6afe969357e9a7aaa97dd9485c632024503c7cf0, base777663bf539308c0898cc177f872a8e0f63b597e. Source remains clean and unchanged. No formal record-review approval or batch approve has occurred.\n\n## Blocking finding\n\nRequired CI38431410006, Linux3.13 shard3 job115414595042, failed tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards at line100. Actual browser-file counts are [33,37,37], exceeding the existing permitted maximum difference3. The job completed with 1 failed and 2112 passed in615.58s. Sanitized hosted evidence is acl1879-linux3-failure-89d63125.log, lines1124 onward.\n\nThe reviewer reproduced the exact failure using the unchanged production selection/balancing code and actual test assertion on Windows/Python3.14. No browser or test suite was executed: the assertion only reads the selected test source files. The current selection produces counts[33,37,37], estimated loads[3726,3726,3725], file counts[131,131,131], and the assertion fails.\n\nGit diff from the exact base proves tests/test_acl1879_official_token_verifier.py is the only changed sharding input: every existing test file and scripts/acl_test_shard.py plus scripts/acl_test_platform.py are unchanged. Excluding only that added file from platforms.select in memory reconstructs the base input selection without editing any file. The same algorithm and actual assertion then produce counts[35,36,36], estimated loads[3702,3702,3701], file counts[131,131,130], and PASS. The added file is non-browser with estimated cost72. Private receipt: acl1879-shard-regression-repro.json.\n\nThis is a deterministic regression triggered by the added legitimate test file, exposing an existing limitation of the greedy cost balancer in scripts/acl_test_shard.py:55-62. Selecting the minimum estimated load does not guarantee the separate browser-count constraint. It is not established as flaky, nor is the unchanged base failing. No defect in token-verification behavior is inferred from this CI failure.\n\n## Required correction and scope\n\nReturn to the genuine author for a fresh supported implementation claim and a Coordinator scope decision on the balancer correction. Preserve test coverage, exact-once platform selection, deterministic assignment and the existing balance assertion. Renaming a test solely to shift tie ordering, weakening the assertion, dropping coverage or mixing unrelated changes is not an acceptable substitute for a justified fix. If tooling repair belongs in a separate task, record that explicit dependency and resolve current-source required CI through the supported workflow.\n\nAfter any correction, require focused reproducing balance/selection checks, relevant author checks, a fresh committed head/handoff, independent review of the actual delta in full scope and complete current-head required CI. Do not reuse the previous zero-finding source review as approval for a new head.\n\nThe earlier Standards0/Spec0 content findings and four successful independent token/transport boundary cases remain accurate historical evidence for89d63125. They do not override failed required CI. Other running hosted jobs are monitored by the Coordinator and are not asserted complete here.\n\nNo source/test changes, live Meta/MLX calls, credential use, takeover, integration, merge, stage/main action or installation occurred. The owner's integration/install hold remains in force. This report requests only the supported source review return and release of this review claim, preserving all other ownership.",
-        "reviewer": "Reviewer-RS1012"
+        "reviewer": "Reviewer-RS1012",
+        "batch_id": "24551548a5084a13a4d81bb957a084f1"
       },
       "880": {
         "implementers": [
@@ -16385,6 +16388,36 @@
         "started_at": "2026-10-13T15:08:01+00:00",
         "state": "reviewing",
         "route": "process"
+      },
+      "884": {
+        "id": "e0aa3853d00c4e3c84403d9512b671ad",
+        "batch_id": "24551548a5084a13a4d81bb957a084f1",
+        "pr": 884,
+        "issues": [
+          651,
+          865,
+          879
+        ],
+        "actor": "Reviewer-PTDLV13",
+        "session": "Agent-preview_table_review-DLV13-01a13445",
+        "coordinator": "Coordinator-DLV13",
+        "state": "reviewing",
+        "started_at": "2026-10-13T19:03:29+00:00"
+      },
+      "885": {
+        "id": "e0aa3853d00c4e3c84403d9512b671ad",
+        "batch_id": "24551548a5084a13a4d81bb957a084f1",
+        "pr": 884,
+        "issues": [
+          651,
+          865,
+          879
+        ],
+        "actor": "Reviewer-PTDLV13",
+        "session": "Agent-preview_table_review-DLV13-01a13445",
+        "coordinator": "Coordinator-DLV13",
+        "state": "reviewing",
+        "started_at": "2026-10-13T19:03:29+00:00"
       }
     },
     "review_queue": [
@@ -16423,21 +16456,7 @@
       840,
       841
     ],
-    "review": {
-      "id": "e0aa3853d00c4e3c84403d9512b671ad",
-      "batch_id": "24551548a5084a13a4d81bb957a084f1",
-      "pr": 884,
-      "issues": [
-        651,
-        865,
-        879
-      ],
-      "actor": "Reviewer-PTDLV13",
-      "session": "Agent-preview_table_review-DLV13-01a13445",
-      "coordinator": "Coordinator-DLV13",
-      "state": "reviewing",
-      "started_at": "2026-10-13T19:03:29+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -27743,6 +27762,181 @@
         "pr": 887,
         "lane": "c86db5aaf19247be8c986c051c79d601",
         "actor": "Reviewer-RS1012"
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-13T21:58:39+00:00",
+        "batch": {
+          "id": "24551548a5084a13a4d81bb957a084f1",
+          "actor": "Coordinator-DLV13",
+          "session": "Root-DLV13-01a13445",
+          "state": "merged",
+          "issues": [
+            651,
+            865,
+            879
+          ],
+          "members": [
+            {
+              "issue": 651,
+              "pr": 665,
+              "branch": "codex/acl-1651-creatives-fresh",
+              "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
+              "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-Creative665",
+                "implementer": "Worker-Fix665",
+                "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
+                "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+                "tree_sha": "7c1656d82ad6f2a6cf85ca0ea98d5f331c0973fc",
+                "execution_lane": "91da4586c8c246dd93038e9a9ed5b740",
+                "review_session": "review665-20261013-f83a61d2",
+                "report": "Fresh independent full-scope re-review after supported author return and rehandoff. Exact new source5f9455a tree7c1656d currentmain777663b. Compared previous independently approved54f1c1 against this new source: only docs/system/CHANGELOG.md changed, moving the full unchanged14-line ACL1651 entry from the top to immediately before uniqueACL1615 heading; no requirements, history or wording lost. report.html, tests/test_builder_review_browser.py and PROJECT.md byte-identical to54f1c1. The complete four-path current-main source scope and issue acceptance criteria remain covered by my previous complete review. No blocking Standards or Spec findings. Runtime/tests unchanged: my independent three offline Chromium replacement/immediate/closed-picker regressions passed on byte-identical code, so no redundant rerun is asserted. Original exact-source failure and historical source returns remain preserved. New full-source hosted Linux jobs and mandatory aggregate must succeed before formal batch approval; current latest tracker-link rerun succeeds after the Review handoff. No live profile, advertising action, dashboard installation, stage verification or package delivery is established. No implementation edits made by this Reviewer.",
+                "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  651
+                ],
+                "recorded_at": "2026-10-13T18:43:16+00:00",
+                "issue_scopes": {
+                  "651": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05"
+                }
+              },
+              "lane": {
+                "id": "91da4586c8c246dd93038e9a9ed5b740",
+                "pr": 665,
+                "issues": [
+                  651
+                ],
+                "actor": "Reviewer-Creative665",
+                "session": "review665-20261013-f83a61d2",
+                "coordinator": "Coordinator-DLV13",
+                "started_at": "2026-10-13T18:38:53+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-13T18:51:19+00:00"
+            },
+            {
+              "issue": 865,
+              "pr": 867,
+              "branch": "codex/acl-1865-loading-stages",
+              "head_sha": "3cf21cdfb549bdc21b837dae88949ec68475e892",
+              "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3",
+              "review": {
+                "implementer": "Worker-867R",
+                "report": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Review-867-20261013\\output\\source-review-867\\compatibility-review.md",
+                "tree_sha": "48b9d71b0950d28135ee144096e4e3d249221d30",
+                "kind": "independent-review",
+                "reviewer": "Reviewer-867S",
+                "execution_lane": "5329d662d852466cb27e325c39192db7",
+                "review_session": "source_review_867_20261013",
+                "verdict": "approved",
+                "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+                "head_sha": "3cf21cdfb549bdc21b837dae88949ec68475e892",
+                "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  865
+                ],
+                "recorded_at": "2026-10-13T18:42:00+00:00",
+                "issue_scopes": {
+                  "865": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3"
+                }
+              },
+              "lane": {
+                "id": "5329d662d852466cb27e325c39192db7",
+                "pr": 867,
+                "issues": [
+                  865
+                ],
+                "actor": "Reviewer-867S",
+                "session": "source_review_867_20261013",
+                "coordinator": "Coordinator-DLV13",
+                "started_at": "2026-10-13T18:39:49+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-13T18:52:47+00:00"
+            },
+            {
+              "issue": 879,
+              "pr": 882,
+              "branch": "work/acl-1879-official-token-verifier",
+              "head_sha": "5d0e725944d9694cd292e8cd165ac7775ae61c9c",
+              "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "bfea5187d29d4a3a75e346ac8632d054d4dd3d24b9cc2465a8d7a20013584e63",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-IS1013",
+                "reviewer": "Reviewer-RS1012",
+                "review_session": "connection_review_rs1012",
+                "execution_lane": "ce348a54eed44280b92ba04123615441",
+                "head_sha": "5d0e725944d9694cd292e8cd165ac7775ae61c9c",
+                "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+                "tree_sha": "d7fea33d856582485fb297d0e26794677ade9ea0",
+                "verdict": "approved",
+                "report": "# ACL-1879 / PR882 repaired source review\n\nActual Reviewer-RS1012 / connection_review_rs1012, independent and non-implementing throughout. Actual author Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\n\n- Head: 5d0e725944d9694cd292e8cd165ac7775ae61c9c.\n- Tree: d7fea33d856582485fb297d0e26794677ade9ea0.\n- Current main/base at review: 777663bf539308c0898cc177f872a8e0f63b597e.\n- Full comparison: git diff 777663bf539308c0898cc177f872a8e0f63b597e...5d0e725944d9694cd292e8cd165ac7775ae61c9c.\n- Repair comparison: git diff 89d63125ca1f9d12c9445259e584c687d24c2aae..5d0e725944d9694cd292e8cd165ac7775ae61c9c.\n- Fresh ordinary schema3 source review claim: ce348a54eed44280b92ba04123615441, acquired at 2026-10-13T17:05:55Z after the repaired source's supported author handoff. The standard launcher uses clean exact pinned Tracker46283b8a6fe444065838e136c89ef4ed64bd1528. The prior returned claim was not reused.\n\nThe reviewer read the entire updated Issue879, including all preserved token-verifier/CLI requirements and the explicit Required CI compatibility repair section. Current remote main/head/base, local head/tree and clean checkout were verified. The repair adds 79 lines in three files: the existing sharder, its tests and repository history. The complete source now comprises nine files. Original verifier/CLI/diagnostic tests and their documented behavior remain byte-identical to89d63125; this fact preserves earlier content evidence without treating the failed earlier CI as a successful admission.\n\n## Standards\n\nThe same actual independent Standards helper, acl1872_standards (GPT-6.1 Sol high), reviewed the repair in complete current scope. No actionable documented-standard violation or materially useful Fowler heuristic finding was found.\n\nThe Linux-only repair follows the explicitly accepted scope. Original platform selection, weights, final sorted output and the None/Windows algorithm remain intact. Existing assertions were neither weakened nor removed, meeting AGENT_CONTEXT's rule against hiding failures. Tests were not renamed, dropped or given false browser markers. The process change is documented in repository history, while credential procedures remain in runtime documentation. New behavioral tests verify public sharding results, exact-once coverage, determinism, cost spread and retained mode behavior.\n\n## Spec\n\nThe same actual independent Spec helper, acl1872_spec (GPT-6.1 Sol high), fetched the fresh full issue and reviewed the complete repair. No concrete missing requirement, incorrect implementation or unrequested scope expansion was found. Both axes ran in parallel after the actual Worker completed its turn; they performed no edits or redundant test runs.\n\nFor Linux, browser files are sorted by descending existing cost, then assigned by browser count, current estimated load and stable index. Other files subsequently use the previous minimum-cost assignment. This prevents a new costly non-browser file from changing browser-count balance. The original failing assertion and all selection/cost guarantees remain in place; unflagged and Windows calls retain their prior behavior.\n\nThe original bounded outcome remains unchanged: one explicit fixed versioned HTTPS debug_token GET using distinct subject and inspector credentials; strict App ID/type/validity/expiry/scope evidence; sanitized allowlisted results and errors; a real hidden-input or explicitly named-environment CLI. No account/spend access, persisted connection state, dashboard integration, browser fallback or unadmitted sibling dependency was introduced. All account/read/publication readiness remains not_checked. DNS/header receipt remains explicitly documented as lacking a hard overall wall-clock deadline, rather than overstating the socket/body limit.\n\n## Independent evidence closing the return\n\nThe previous reviewer proved current89d browser counts[33,37,37] failed while excluding its only newly added sharding input restored the base counts[35,36,36] and passed. This deterministic prior failure remains preserved in acl1879-shard-regression-repro.json and the supported review-return report; it is not relabelled flaky or a failing baseline.\n\nFor the repaired exact head, the reviewer ran a narrow independent replay using actual public shard functions and the actual existing assertion. Source fixtures were read only; no browser or broad test suite was executed.\n\n- Loaded the previous sharder directly from its committed Git blob into memory and ran the new synthetic regression: it failed with browser counts[5,7,3], as required for meaningful failed-before evidence.\n- Ran the identical synthetic regression on the repaired sharder: passed, including before/after costly non-browser addition, browser spread, exact-once selection, determinism and estimated-cost bound.\n- Ran both retained-mode guards: None and Windows passed their unchanged cost-only assignments.\n- Ran the original actual-tree browser-balance assertion: passed. Measured browser counts[35,36,36], estimated loads[3727,3727,3727], and verified the flattened selection contains every selected Linux file exactly once.\n\nThe single replay process exited0. Synthetic fixture directories were isolated under Audit/verification and removed by their own temporary-directory lifecycle. No worktree source, current machine configuration, browser/profile or external API was changed. Receipt: acl1879-r2-independent-shard-replay.json.\n\nEarlier reviewer-owned token boundary evidence remains clearly attributed to unchanged89d content: four public offline cases passed for secret-bearing TLS failure, truncated body, real chunked HTTPResponse and oversized local input. These were not rerun because the verifier, CLI and original diagnostic tests did not change. The author separately reports 207 affected public diagnostic/sharder/platform tests, scanner, isolated import smoke and diff checks passed on the repair. Prior46 packaging unit successes are old-head evidence with unchanged packaging inputs, not a newly executed installer lifecycle.\n\n## Admission boundary\n\nThe confirmed CI defect is closed by source inspection and independent failed-before/passed-after evidence. Source-content verdict: approved, with zero remaining findings. The supported task-state transition and release of the source lane are separate facts established only by the resulting batch approve receipt.\n\nFinal admission readback independently confirmed CI38435423933 completed SUCCESS at exact head5d0e7259: all six Linux3.11/3.13 shards, Windows3.13, tooling, process checks and ACL verification passed. Descriptor38435423755 and ready tracker-link38435425207 passed. The older canceled duplicate linkage38435423662 remains identifiable and is not used as current required-check evidence. Installer38435423947 aggregate passed; Verify build inputs and actual build/install/repair/uninstall were classifier-skipped, not executed. Private exact-head readbacks are acl1879-r2-reviewer-ci-readback.json and acl1879-r2-reviewer-checks-readback.json.\n\nImmediately before recording this review, the complete current Issue879 was reread with its preserved original scope and accepted repair. Remote main and PR base remained777663bf539308c0898cc177f872a8e0f63b597e; the ready open PR remained at5d0e7259 with CLEAN merge status, and the local tree matched with a clean checkout. Delivery checks and activated schema3 policy remained unchanged. The actual held source claimce348a54eed44280b92ba04123615441 was independently read back for this Reviewer/session and PR882, with task879 reviewing under its genuine author. No successful unchanged tests were repeated for final bookkeeping.\n\nThe author's fresh claim was normally handed off and the reviewer holds only the new source claim above. No takeover, source/test edit, integration, stage/main merge, runtime action or installation occurred. The owner's integration/install hold remains in force; any later source approval leaves PR882 open and does not complete ACL-1858, ACL-1844, ACL-1872 or live account proof.\n\nAxis totals: Standards0 remaining findings; Spec0 remaining findings.\n",
+                "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  879
+                ],
+                "recorded_at": "2026-10-13T17:31:53+00:00",
+                "issue_scopes": {
+                  "879": "bfea5187d29d4a3a75e346ac8632d054d4dd3d24b9cc2465a8d7a20013584e63"
+                }
+              },
+              "lane": {
+                "id": "ce348a54eed44280b92ba04123615441",
+                "pr": 882,
+                "issues": [
+                  879
+                ],
+                "actor": "Reviewer-RS1012",
+                "session": "connection_review_rs1012",
+                "coordinator": "Coordinator-CR1012",
+                "started_at": "2026-10-13T17:05:55+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-13T17:40:09+00:00"
+            }
+          ],
+          "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+          "branch": "codex/batch-24551548a5084a13a4d81bb957a084f1",
+          "intake": "8c7fbeecd39d476a8dd54650526d1af8",
+          "started_at": "2026-10-13T18:59:06+00:00",
+          "pr": 884,
+          "entered_stage": true,
+          "history": [],
+          "review": {
+            "id": "e0aa3853d00c4e3c84403d9512b671ad",
+            "batch_id": "24551548a5084a13a4d81bb957a084f1",
+            "pr": 884,
+            "issues": [
+              651,
+              865,
+              879
+            ],
+            "actor": "Reviewer-PTDLV13",
+            "session": "Agent-preview_table_review-DLV13-01a13445",
+            "coordinator": "Coordinator-DLV13",
+            "state": "reviewing",
+            "started_at": "2026-10-13T19:03:29+00:00"
+          },
+          "main_prs": [
+            885
+          ],
+          "finished_at": "2026-10-13T21:58:39+00:00"
+        }
       }
     ],
     "policy": {
@@ -28551,176 +28745,194 @@
         "finished_at": "2026-10-13T14:09:11+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "24551548a5084a13a4d81bb957a084f1",
-      "actor": "Coordinator-DLV13",
-      "session": "Root-DLV13-01a13445",
-      "state": "stage",
-      "issues": [
-        651,
-        865,
-        879
-      ],
-      "members": [
-        {
-          "issue": 651,
-          "pr": 665,
-          "branch": "codex/acl-1651-creatives-fresh",
-          "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
-          "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-Creative665",
-            "implementer": "Worker-Fix665",
+      },
+      "24551548a5084a13a4d81bb957a084f1": {
+        "id": "24551548a5084a13a4d81bb957a084f1",
+        "actor": "Coordinator-DLV13",
+        "session": "Root-DLV13-01a13445",
+        "state": "merged",
+        "issues": [
+          651,
+          865,
+          879
+        ],
+        "members": [
+          {
+            "issue": 651,
+            "pr": 665,
+            "branch": "codex/acl-1651-creatives-fresh",
             "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
             "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-            "tree_sha": "7c1656d82ad6f2a6cf85ca0ea98d5f331c0973fc",
-            "execution_lane": "91da4586c8c246dd93038e9a9ed5b740",
-            "review_session": "review665-20261013-f83a61d2",
-            "report": "Fresh independent full-scope re-review after supported author return and rehandoff. Exact new source5f9455a tree7c1656d currentmain777663b. Compared previous independently approved54f1c1 against this new source: only docs/system/CHANGELOG.md changed, moving the full unchanged14-line ACL1651 entry from the top to immediately before uniqueACL1615 heading; no requirements, history or wording lost. report.html, tests/test_builder_review_browser.py and PROJECT.md byte-identical to54f1c1. The complete four-path current-main source scope and issue acceptance criteria remain covered by my previous complete review. No blocking Standards or Spec findings. Runtime/tests unchanged: my independent three offline Chromium replacement/immediate/closed-picker regressions passed on byte-identical code, so no redundant rerun is asserted. Original exact-source failure and historical source returns remain preserved. New full-source hosted Linux jobs and mandatory aggregate must succeed before formal batch approval; current latest tracker-link rerun succeeds after the Review handoff. No live profile, advertising action, dashboard installation, stage verification or package delivery is established. No implementation edits made by this Reviewer.",
             "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              651
-            ],
-            "recorded_at": "2026-10-13T18:43:16+00:00",
-            "issue_scopes": {
-              "651": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05"
-            }
+            "scope": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-Creative665",
+              "implementer": "Worker-Fix665",
+              "head_sha": "5f9455a0ccfd930acf0dc5bfd2894b4de035b2f7",
+              "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "tree_sha": "7c1656d82ad6f2a6cf85ca0ea98d5f331c0973fc",
+              "execution_lane": "91da4586c8c246dd93038e9a9ed5b740",
+              "review_session": "review665-20261013-f83a61d2",
+              "report": "Fresh independent full-scope re-review after supported author return and rehandoff. Exact new source5f9455a tree7c1656d currentmain777663b. Compared previous independently approved54f1c1 against this new source: only docs/system/CHANGELOG.md changed, moving the full unchanged14-line ACL1651 entry from the top to immediately before uniqueACL1615 heading; no requirements, history or wording lost. report.html, tests/test_builder_review_browser.py and PROJECT.md byte-identical to54f1c1. The complete four-path current-main source scope and issue acceptance criteria remain covered by my previous complete review. No blocking Standards or Spec findings. Runtime/tests unchanged: my independent three offline Chromium replacement/immediate/closed-picker regressions passed on byte-identical code, so no redundant rerun is asserted. Original exact-source failure and historical source returns remain preserved. New full-source hosted Linux jobs and mandatory aggregate must succeed before formal batch approval; current latest tracker-link rerun succeeds after the Review handoff. No live profile, advertising action, dashboard installation, stage verification or package delivery is established. No implementation edits made by this Reviewer.",
+              "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                651
+              ],
+              "recorded_at": "2026-10-13T18:43:16+00:00",
+              "issue_scopes": {
+                "651": "26e44bf91b5b1a2c8249af6243f209233dce62e505a023383d009c3a261aed05"
+              }
+            },
+            "lane": {
+              "id": "91da4586c8c246dd93038e9a9ed5b740",
+              "pr": 665,
+              "issues": [
+                651
+              ],
+              "actor": "Reviewer-Creative665",
+              "session": "review665-20261013-f83a61d2",
+              "coordinator": "Coordinator-DLV13",
+              "started_at": "2026-10-13T18:38:53+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-13T18:51:19+00:00"
           },
-          "lane": {
-            "id": "91da4586c8c246dd93038e9a9ed5b740",
-            "pr": 665,
-            "issues": [
-              651
-            ],
-            "actor": "Reviewer-Creative665",
-            "session": "review665-20261013-f83a61d2",
-            "coordinator": "Coordinator-DLV13",
-            "started_at": "2026-10-13T18:38:53+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-13T18:51:19+00:00"
-        },
-        {
-          "issue": 865,
-          "pr": 867,
-          "branch": "codex/acl-1865-loading-stages",
-          "head_sha": "3cf21cdfb549bdc21b837dae88949ec68475e892",
-          "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3",
-          "review": {
-            "implementer": "Worker-867R",
-            "report": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Review-867-20261013\\output\\source-review-867\\compatibility-review.md",
-            "tree_sha": "48b9d71b0950d28135ee144096e4e3d249221d30",
-            "kind": "independent-review",
-            "reviewer": "Reviewer-867S",
-            "execution_lane": "5329d662d852466cb27e325c39192db7",
-            "review_session": "source_review_867_20261013",
-            "verdict": "approved",
-            "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-            "head_sha": "3cf21cdfb549bdc21b837dae88949ec68475e892",
-            "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              865
-            ],
-            "recorded_at": "2026-10-13T18:42:00+00:00",
-            "issue_scopes": {
-              "865": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3"
-            }
-          },
-          "lane": {
-            "id": "5329d662d852466cb27e325c39192db7",
+          {
+            "issue": 865,
             "pr": 867,
-            "issues": [
-              865
-            ],
-            "actor": "Reviewer-867S",
-            "session": "source_review_867_20261013",
-            "coordinator": "Coordinator-DLV13",
-            "started_at": "2026-10-13T18:39:49+00:00",
-            "state": "reviewing"
+            "branch": "codex/acl-1865-loading-stages",
+            "head_sha": "3cf21cdfb549bdc21b837dae88949ec68475e892",
+            "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+            "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3",
+            "review": {
+              "implementer": "Worker-867R",
+              "report": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Review-867-20261013\\output\\source-review-867\\compatibility-review.md",
+              "tree_sha": "48b9d71b0950d28135ee144096e4e3d249221d30",
+              "kind": "independent-review",
+              "reviewer": "Reviewer-867S",
+              "execution_lane": "5329d662d852466cb27e325c39192db7",
+              "review_session": "source_review_867_20261013",
+              "verdict": "approved",
+              "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "head_sha": "3cf21cdfb549bdc21b837dae88949ec68475e892",
+              "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                865
+              ],
+              "recorded_at": "2026-10-13T18:42:00+00:00",
+              "issue_scopes": {
+                "865": "ce8a672cba0c521703125842b0d31befdd55bb2dd70e4ea7ce3de46b86b80fe3"
+              }
+            },
+            "lane": {
+              "id": "5329d662d852466cb27e325c39192db7",
+              "pr": 867,
+              "issues": [
+                865
+              ],
+              "actor": "Reviewer-867S",
+              "session": "source_review_867_20261013",
+              "coordinator": "Coordinator-DLV13",
+              "started_at": "2026-10-13T18:39:49+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-13T18:52:47+00:00"
           },
-          "approved_at": "2026-10-13T18:52:47+00:00"
-        },
-        {
-          "issue": 879,
-          "pr": 882,
-          "branch": "work/acl-1879-official-token-verifier",
-          "head_sha": "5d0e725944d9694cd292e8cd165ac7775ae61c9c",
-          "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "bfea5187d29d4a3a75e346ac8632d054d4dd3d24b9cc2465a8d7a20013584e63",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-IS1013",
-            "reviewer": "Reviewer-RS1012",
-            "review_session": "connection_review_rs1012",
-            "execution_lane": "ce348a54eed44280b92ba04123615441",
+          {
+            "issue": 879,
+            "pr": 882,
+            "branch": "work/acl-1879-official-token-verifier",
             "head_sha": "5d0e725944d9694cd292e8cd165ac7775ae61c9c",
             "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-            "tree_sha": "d7fea33d856582485fb297d0e26794677ade9ea0",
-            "verdict": "approved",
-            "report": "# ACL-1879 / PR882 repaired source review\n\nActual Reviewer-RS1012 / connection_review_rs1012, independent and non-implementing throughout. Actual author Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\n\n- Head: 5d0e725944d9694cd292e8cd165ac7775ae61c9c.\n- Tree: d7fea33d856582485fb297d0e26794677ade9ea0.\n- Current main/base at review: 777663bf539308c0898cc177f872a8e0f63b597e.\n- Full comparison: git diff 777663bf539308c0898cc177f872a8e0f63b597e...5d0e725944d9694cd292e8cd165ac7775ae61c9c.\n- Repair comparison: git diff 89d63125ca1f9d12c9445259e584c687d24c2aae..5d0e725944d9694cd292e8cd165ac7775ae61c9c.\n- Fresh ordinary schema3 source review claim: ce348a54eed44280b92ba04123615441, acquired at 2026-10-13T17:05:55Z after the repaired source's supported author handoff. The standard launcher uses clean exact pinned Tracker46283b8a6fe444065838e136c89ef4ed64bd1528. The prior returned claim was not reused.\n\nThe reviewer read the entire updated Issue879, including all preserved token-verifier/CLI requirements and the explicit Required CI compatibility repair section. Current remote main/head/base, local head/tree and clean checkout were verified. The repair adds 79 lines in three files: the existing sharder, its tests and repository history. The complete source now comprises nine files. Original verifier/CLI/diagnostic tests and their documented behavior remain byte-identical to89d63125; this fact preserves earlier content evidence without treating the failed earlier CI as a successful admission.\n\n## Standards\n\nThe same actual independent Standards helper, acl1872_standards (GPT-6.1 Sol high), reviewed the repair in complete current scope. No actionable documented-standard violation or materially useful Fowler heuristic finding was found.\n\nThe Linux-only repair follows the explicitly accepted scope. Original platform selection, weights, final sorted output and the None/Windows algorithm remain intact. Existing assertions were neither weakened nor removed, meeting AGENT_CONTEXT's rule against hiding failures. Tests were not renamed, dropped or given false browser markers. The process change is documented in repository history, while credential procedures remain in runtime documentation. New behavioral tests verify public sharding results, exact-once coverage, determinism, cost spread and retained mode behavior.\n\n## Spec\n\nThe same actual independent Spec helper, acl1872_spec (GPT-6.1 Sol high), fetched the fresh full issue and reviewed the complete repair. No concrete missing requirement, incorrect implementation or unrequested scope expansion was found. Both axes ran in parallel after the actual Worker completed its turn; they performed no edits or redundant test runs.\n\nFor Linux, browser files are sorted by descending existing cost, then assigned by browser count, current estimated load and stable index. Other files subsequently use the previous minimum-cost assignment. This prevents a new costly non-browser file from changing browser-count balance. The original failing assertion and all selection/cost guarantees remain in place; unflagged and Windows calls retain their prior behavior.\n\nThe original bounded outcome remains unchanged: one explicit fixed versioned HTTPS debug_token GET using distinct subject and inspector credentials; strict App ID/type/validity/expiry/scope evidence; sanitized allowlisted results and errors; a real hidden-input or explicitly named-environment CLI. No account/spend access, persisted connection state, dashboard integration, browser fallback or unadmitted sibling dependency was introduced. All account/read/publication readiness remains not_checked. DNS/header receipt remains explicitly documented as lacking a hard overall wall-clock deadline, rather than overstating the socket/body limit.\n\n## Independent evidence closing the return\n\nThe previous reviewer proved current89d browser counts[33,37,37] failed while excluding its only newly added sharding input restored the base counts[35,36,36] and passed. This deterministic prior failure remains preserved in acl1879-shard-regression-repro.json and the supported review-return report; it is not relabelled flaky or a failing baseline.\n\nFor the repaired exact head, the reviewer ran a narrow independent replay using actual public shard functions and the actual existing assertion. Source fixtures were read only; no browser or broad test suite was executed.\n\n- Loaded the previous sharder directly from its committed Git blob into memory and ran the new synthetic regression: it failed with browser counts[5,7,3], as required for meaningful failed-before evidence.\n- Ran the identical synthetic regression on the repaired sharder: passed, including before/after costly non-browser addition, browser spread, exact-once selection, determinism and estimated-cost bound.\n- Ran both retained-mode guards: None and Windows passed their unchanged cost-only assignments.\n- Ran the original actual-tree browser-balance assertion: passed. Measured browser counts[35,36,36], estimated loads[3727,3727,3727], and verified the flattened selection contains every selected Linux file exactly once.\n\nThe single replay process exited0. Synthetic fixture directories were isolated under Audit/verification and removed by their own temporary-directory lifecycle. No worktree source, current machine configuration, browser/profile or external API was changed. Receipt: acl1879-r2-independent-shard-replay.json.\n\nEarlier reviewer-owned token boundary evidence remains clearly attributed to unchanged89d content: four public offline cases passed for secret-bearing TLS failure, truncated body, real chunked HTTPResponse and oversized local input. These were not rerun because the verifier, CLI and original diagnostic tests did not change. The author separately reports 207 affected public diagnostic/sharder/platform tests, scanner, isolated import smoke and diff checks passed on the repair. Prior46 packaging unit successes are old-head evidence with unchanged packaging inputs, not a newly executed installer lifecycle.\n\n## Admission boundary\n\nThe confirmed CI defect is closed by source inspection and independent failed-before/passed-after evidence. Source-content verdict: approved, with zero remaining findings. The supported task-state transition and release of the source lane are separate facts established only by the resulting batch approve receipt.\n\nFinal admission readback independently confirmed CI38435423933 completed SUCCESS at exact head5d0e7259: all six Linux3.11/3.13 shards, Windows3.13, tooling, process checks and ACL verification passed. Descriptor38435423755 and ready tracker-link38435425207 passed. The older canceled duplicate linkage38435423662 remains identifiable and is not used as current required-check evidence. Installer38435423947 aggregate passed; Verify build inputs and actual build/install/repair/uninstall were classifier-skipped, not executed. Private exact-head readbacks are acl1879-r2-reviewer-ci-readback.json and acl1879-r2-reviewer-checks-readback.json.\n\nImmediately before recording this review, the complete current Issue879 was reread with its preserved original scope and accepted repair. Remote main and PR base remained777663bf539308c0898cc177f872a8e0f63b597e; the ready open PR remained at5d0e7259 with CLEAN merge status, and the local tree matched with a clean checkout. Delivery checks and activated schema3 policy remained unchanged. The actual held source claimce348a54eed44280b92ba04123615441 was independently read back for this Reviewer/session and PR882, with task879 reviewing under its genuine author. No successful unchanged tests were repeated for final bookkeeping.\n\nThe author's fresh claim was normally handed off and the reviewer holds only the new source claim above. No takeover, source/test edit, integration, stage/main merge, runtime action or installation occurred. The owner's integration/install hold remains in force; any later source approval leaves PR882 open and does not complete ACL-1858, ACL-1844, ACL-1872 or live account proof.\n\nAxis totals: Standards0 remaining findings; Spec0 remaining findings.\n",
             "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              879
-            ],
-            "recorded_at": "2026-10-13T17:31:53+00:00",
-            "issue_scopes": {
-              "879": "bfea5187d29d4a3a75e346ac8632d054d4dd3d24b9cc2465a8d7a20013584e63"
-            }
-          },
-          "lane": {
-            "id": "ce348a54eed44280b92ba04123615441",
-            "pr": 882,
-            "issues": [
-              879
-            ],
-            "actor": "Reviewer-RS1012",
-            "session": "connection_review_rs1012",
-            "coordinator": "Coordinator-CR1012",
-            "started_at": "2026-10-13T17:05:55+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-13T17:40:09+00:00"
-        }
-      ],
-      "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
-      "branch": "codex/batch-24551548a5084a13a4d81bb957a084f1",
-      "intake": "8c7fbeecd39d476a8dd54650526d1af8",
-      "started_at": "2026-10-13T18:59:06+00:00",
-      "pr": 884,
-      "entered_stage": true,
-      "history": []
+            "scope": "bfea5187d29d4a3a75e346ac8632d054d4dd3d24b9cc2465a8d7a20013584e63",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-IS1013",
+              "reviewer": "Reviewer-RS1012",
+              "review_session": "connection_review_rs1012",
+              "execution_lane": "ce348a54eed44280b92ba04123615441",
+              "head_sha": "5d0e725944d9694cd292e8cd165ac7775ae61c9c",
+              "base_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "tree_sha": "d7fea33d856582485fb297d0e26794677ade9ea0",
+              "verdict": "approved",
+              "report": "# ACL-1879 / PR882 repaired source review\n\nActual Reviewer-RS1012 / connection_review_rs1012, independent and non-implementing throughout. Actual author Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\n\n- Head: 5d0e725944d9694cd292e8cd165ac7775ae61c9c.\n- Tree: d7fea33d856582485fb297d0e26794677ade9ea0.\n- Current main/base at review: 777663bf539308c0898cc177f872a8e0f63b597e.\n- Full comparison: git diff 777663bf539308c0898cc177f872a8e0f63b597e...5d0e725944d9694cd292e8cd165ac7775ae61c9c.\n- Repair comparison: git diff 89d63125ca1f9d12c9445259e584c687d24c2aae..5d0e725944d9694cd292e8cd165ac7775ae61c9c.\n- Fresh ordinary schema3 source review claim: ce348a54eed44280b92ba04123615441, acquired at 2026-10-13T17:05:55Z after the repaired source's supported author handoff. The standard launcher uses clean exact pinned Tracker46283b8a6fe444065838e136c89ef4ed64bd1528. The prior returned claim was not reused.\n\nThe reviewer read the entire updated Issue879, including all preserved token-verifier/CLI requirements and the explicit Required CI compatibility repair section. Current remote main/head/base, local head/tree and clean checkout were verified. The repair adds 79 lines in three files: the existing sharder, its tests and repository history. The complete source now comprises nine files. Original verifier/CLI/diagnostic tests and their documented behavior remain byte-identical to89d63125; this fact preserves earlier content evidence without treating the failed earlier CI as a successful admission.\n\n## Standards\n\nThe same actual independent Standards helper, acl1872_standards (GPT-6.1 Sol high), reviewed the repair in complete current scope. No actionable documented-standard violation or materially useful Fowler heuristic finding was found.\n\nThe Linux-only repair follows the explicitly accepted scope. Original platform selection, weights, final sorted output and the None/Windows algorithm remain intact. Existing assertions were neither weakened nor removed, meeting AGENT_CONTEXT's rule against hiding failures. Tests were not renamed, dropped or given false browser markers. The process change is documented in repository history, while credential procedures remain in runtime documentation. New behavioral tests verify public sharding results, exact-once coverage, determinism, cost spread and retained mode behavior.\n\n## Spec\n\nThe same actual independent Spec helper, acl1872_spec (GPT-6.1 Sol high), fetched the fresh full issue and reviewed the complete repair. No concrete missing requirement, incorrect implementation or unrequested scope expansion was found. Both axes ran in parallel after the actual Worker completed its turn; they performed no edits or redundant test runs.\n\nFor Linux, browser files are sorted by descending existing cost, then assigned by browser count, current estimated load and stable index. Other files subsequently use the previous minimum-cost assignment. This prevents a new costly non-browser file from changing browser-count balance. The original failing assertion and all selection/cost guarantees remain in place; unflagged and Windows calls retain their prior behavior.\n\nThe original bounded outcome remains unchanged: one explicit fixed versioned HTTPS debug_token GET using distinct subject and inspector credentials; strict App ID/type/validity/expiry/scope evidence; sanitized allowlisted results and errors; a real hidden-input or explicitly named-environment CLI. No account/spend access, persisted connection state, dashboard integration, browser fallback or unadmitted sibling dependency was introduced. All account/read/publication readiness remains not_checked. DNS/header receipt remains explicitly documented as lacking a hard overall wall-clock deadline, rather than overstating the socket/body limit.\n\n## Independent evidence closing the return\n\nThe previous reviewer proved current89d browser counts[33,37,37] failed while excluding its only newly added sharding input restored the base counts[35,36,36] and passed. This deterministic prior failure remains preserved in acl1879-shard-regression-repro.json and the supported review-return report; it is not relabelled flaky or a failing baseline.\n\nFor the repaired exact head, the reviewer ran a narrow independent replay using actual public shard functions and the actual existing assertion. Source fixtures were read only; no browser or broad test suite was executed.\n\n- Loaded the previous sharder directly from its committed Git blob into memory and ran the new synthetic regression: it failed with browser counts[5,7,3], as required for meaningful failed-before evidence.\n- Ran the identical synthetic regression on the repaired sharder: passed, including before/after costly non-browser addition, browser spread, exact-once selection, determinism and estimated-cost bound.\n- Ran both retained-mode guards: None and Windows passed their unchanged cost-only assignments.\n- Ran the original actual-tree browser-balance assertion: passed. Measured browser counts[35,36,36], estimated loads[3727,3727,3727], and verified the flattened selection contains every selected Linux file exactly once.\n\nThe single replay process exited0. Synthetic fixture directories were isolated under Audit/verification and removed by their own temporary-directory lifecycle. No worktree source, current machine configuration, browser/profile or external API was changed. Receipt: acl1879-r2-independent-shard-replay.json.\n\nEarlier reviewer-owned token boundary evidence remains clearly attributed to unchanged89d content: four public offline cases passed for secret-bearing TLS failure, truncated body, real chunked HTTPResponse and oversized local input. These were not rerun because the verifier, CLI and original diagnostic tests did not change. The author separately reports 207 affected public diagnostic/sharder/platform tests, scanner, isolated import smoke and diff checks passed on the repair. Prior46 packaging unit successes are old-head evidence with unchanged packaging inputs, not a newly executed installer lifecycle.\n\n## Admission boundary\n\nThe confirmed CI defect is closed by source inspection and independent failed-before/passed-after evidence. Source-content verdict: approved, with zero remaining findings. The supported task-state transition and release of the source lane are separate facts established only by the resulting batch approve receipt.\n\nFinal admission readback independently confirmed CI38435423933 completed SUCCESS at exact head5d0e7259: all six Linux3.11/3.13 shards, Windows3.13, tooling, process checks and ACL verification passed. Descriptor38435423755 and ready tracker-link38435425207 passed. The older canceled duplicate linkage38435423662 remains identifiable and is not used as current required-check evidence. Installer38435423947 aggregate passed; Verify build inputs and actual build/install/repair/uninstall were classifier-skipped, not executed. Private exact-head readbacks are acl1879-r2-reviewer-ci-readback.json and acl1879-r2-reviewer-checks-readback.json.\n\nImmediately before recording this review, the complete current Issue879 was reread with its preserved original scope and accepted repair. Remote main and PR base remained777663bf539308c0898cc177f872a8e0f63b597e; the ready open PR remained at5d0e7259 with CLEAN merge status, and the local tree matched with a clean checkout. Delivery checks and activated schema3 policy remained unchanged. The actual held source claimce348a54eed44280b92ba04123615441 was independently read back for this Reviewer/session and PR882, with task879 reviewing under its genuine author. No successful unchanged tests were repeated for final bookkeeping.\n\nThe author's fresh claim was normally handed off and the reviewer holds only the new source claim above. No takeover, source/test edit, integration, stage/main merge, runtime action or installation occurred. The owner's integration/install hold remains in force; any later source approval leaves PR882 open and does not complete ACL-1858, ACL-1844, ACL-1872 or live account proof.\n\nAxis totals: Standards0 remaining findings; Spec0 remaining findings.\n",
+              "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                879
+              ],
+              "recorded_at": "2026-10-13T17:31:53+00:00",
+              "issue_scopes": {
+                "879": "bfea5187d29d4a3a75e346ac8632d054d4dd3d24b9cc2465a8d7a20013584e63"
+              }
+            },
+            "lane": {
+              "id": "ce348a54eed44280b92ba04123615441",
+              "pr": 882,
+              "issues": [
+                879
+              ],
+              "actor": "Reviewer-RS1012",
+              "session": "connection_review_rs1012",
+              "coordinator": "Coordinator-CR1012",
+              "started_at": "2026-10-13T17:05:55+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-13T17:40:09+00:00"
+          }
+        ],
+        "main_sha": "777663bf539308c0898cc177f872a8e0f63b597e",
+        "branch": "codex/batch-24551548a5084a13a4d81bb957a084f1",
+        "intake": "8c7fbeecd39d476a8dd54650526d1af8",
+        "started_at": "2026-10-13T18:59:06+00:00",
+        "pr": 884,
+        "entered_stage": true,
+        "history": [],
+        "review": {
+          "id": "e0aa3853d00c4e3c84403d9512b671ad",
+          "batch_id": "24551548a5084a13a4d81bb957a084f1",
+          "pr": 884,
+          "issues": [
+            651,
+            865,
+            879
+          ],
+          "actor": "Reviewer-PTDLV13",
+          "session": "Agent-preview_table_review-DLV13-01a13445",
+          "coordinator": "Coordinator-DLV13",
+          "state": "reviewing",
+          "started_at": "2026-10-13T19:03:29+00:00"
+        },
+        "main_prs": [
+          885
+        ],
+        "finished_at": "2026-10-13T21:58:39+00:00"
+      }
     },
+    "integration": null,
     "intake": {
       "id": "8c7fbeecd39d476a8dd54650526d1af8",
       "actor": "Coordinator-DLV13",
       "session": "Root-DLV13-01a13445",
-      "state": "running",
+      "state": "finished",
       "issues": [
         651,
         865,
         879
       ],
-      "remaining": [
-        651,
-        865,
-        879
+      "remaining": [],
+      "batches": [
+        "24551548a5084a13a4d81bb957a084f1"
       ],
-      "batches": [],
       "started_at": "2026-10-13T18:55:58+00:00",
       "ineligible": {}
     },
