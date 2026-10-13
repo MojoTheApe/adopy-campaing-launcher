@@ -1,5 +1,16 @@
 # System history
 
+## Account connection panel contains long metadata — ACL-1839
+
+- The shared country/Accounts/builder connection form wraps long Multilogin status
+  text and bounds input/select widths to their host. A synthetic 280 px host
+  previously grew to 975 px; the same rendered production partial now fits.
+- Hidden profile results stay out of layout even though the visible results use
+  flex. Account selection and profile search have accessible names; the existing
+  Add sibling lookup and workspace/filter handlers remain unchanged.
+- Real-Chromium layout regressions cover three hosts, both themes and 280/720/1040 px
+  with synthetic long values. This source change does not claim stable delivery.
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
