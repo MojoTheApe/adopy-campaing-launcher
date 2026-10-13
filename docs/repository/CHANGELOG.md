@@ -1,5 +1,17 @@
 # Repository process history
 
+## ACL-1879 — Preserve Linux browser-file balance when diagnostic tests join CI
+
+Adding the official-token diagnostic test file deterministically changed the
+cost-only split's browser counts from `[35,36,36]` to `[33,37,37]`, failing the
+existing maximum-spread assertion. Linux now assigns browser files first by
+browser count, current estimated cost and stable index, then fills remaining files
+by the existing minimum-cost rule. Cost weights, platform selection and other
+sharding modes remain unchanged. Synthetic public-shards coverage reproduces the
+costly non-browser trigger and checks browser/cost balance, determinism and
+exact-once selection; existing real-tree assertions remain in force. This bounded
+CI compatibility repair does not relax source review/check or deployment gates.
+
 ## ACL-1874 — Activate five independent source reviews — 2026-10-13
 
 After ACL-1875's independently reviewed and fully verified old-v2 source/stage/main

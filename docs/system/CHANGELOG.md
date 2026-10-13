@@ -213,6 +213,20 @@ with responsive light/dark styling, reduced motion and connection retry messages
   its existing applyGate currently overwrites disabled state. Source main uses RPA
   drafts; the label adapter preserves PAUSED wording when an API runtime supplies its
   existing mode flag, without adding an API publishing backend to main.
+## Explicit official-token application inspection — ACL-1879
+
+- A narrow verifier and standalone CLI inspect an explicitly supplied subject token
+  against an expected App ID, using a separate App ID|App Secret inspector credential
+  and an explicit Graph version. Inputs use hidden prompts or explicitly named
+  environment sources; rejected arguments and fallback input do not expose values.
+- One fixed HTTPS GET disables ambient proxies, cookies, redirects and retries.
+  Bounded body reads and socket timeouts return sanitized typed outcomes, never raw
+  upstream bodies, URLs, free-text errors or credentials. DNS/header timing retains
+  the standard-library limitation documented in the runtime procedure.
+- Validity, exact application identity, known token type, expiry and scope evidence
+  remain separate from account/read/publication readiness, which is always unchecked.
+  Offline tests execute the public verifier, real urllib handler chain and real CLI
+  entry point with fake HTTPS; no live account or deployment is verified.
 
 ## Account-label ID suffix keeps existing alias precedence — ACL-1824
 

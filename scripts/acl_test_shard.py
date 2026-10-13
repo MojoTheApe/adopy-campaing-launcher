@@ -15,6 +15,10 @@ the number of tests in the file, and a flat extra for a file that starts a
 real browser (more), Node or another process, because starting Chromium costs
 more than most whole test files. Deterministic: the same tree gives the same split.
 
+Linux first spreads browser files by browser count, cost and stable shard index;
+the remaining files then fill the lightest shard. A costly non-browser addition
+therefore cannot change the browser-count balance (ACL-1879).
+
 ACL-1582: ``--platform linux`` shards only the files without the
 ``windows_only`` marker, ``--platform windows`` the marked files plus the
 Windows smoke set (scripts/acl_test_platform.py). Without the flag every file
@@ -62,6 +66,18 @@ def shards(count: int, platform: str | None = None) -> list[list[Path]]:
     files = test_files() if platform is None else platforms.select(platform)
     buckets: list[list[Path]] = [[] for _ in range(count)]
     load = [0] * count
+    if platform == "linux":
+        browser_files, other_files = [], []
+        for path in files:
+            target = browser_files if _BROWSER.search(path.read_text(encoding="utf-8", errors="replace")) else other_files
+            target.append(path)
+        browser_count = [0] * count
+        for path in sorted(browser_files, key=lambda p: (-cost(p), p.name)):
+            i = min(range(count), key=lambda k: (browser_count[k], load[k], k))
+            buckets[i].append(path)
+            load[i] += cost(path)
+            browser_count[i] += 1
+        files = other_files
     for path in sorted(files, key=lambda p: (-cost(p), p.name)):
         i = min(range(count), key=lambda k: (load[k], k))
         buckets[i].append(path)

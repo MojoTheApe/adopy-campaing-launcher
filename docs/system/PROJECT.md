@@ -7,6 +7,13 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 ## Components and current behavior
 
+- `src/meta_campaign_agent/official_token_verifier.py` and
+  `scripts/acl_meta_token_probe.py`: explicit standalone official-token application
+  inspection. One fixed versioned Graph GET returns typed, sanitized evidence;
+  it reads no machine configuration and makes no account/spend/publication calls.
+  See [safe diagnostic use](../runtime/OFFICIAL_TOKEN_DIAGNOSTIC.md). This is a
+  future connection-flow boundary, not a dashboard connection or readiness check.
+
 - `src/web`, `serve.py`: local dashboard, account/report views, campaign builder,
   machine configuration and update endpoints.
   Countries with the existing live activity state show a static 2 px blue vertical
