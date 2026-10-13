@@ -7297,20 +7297,6 @@
   },
   "execution": {
     "claims": {
-      "844": {
-        "actor": "Worker-N7Q4",
-        "session": "architecture_audit_n7q4_20261013",
-        "coordinator": "Coordinator-CR1012",
-        "branch": "codex/acl-1844-official-access-probe",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1844-2026-10-13",
-        "id": "777167e928b14c338c270c7a015b95fe",
-        "issue": 844,
-        "state": "handoff",
-        "started_at": "2026-10-13T06:39:54+00:00",
-        "from_status": "status:todo",
-        "pr": 849,
-        "report": "# ACL-1844 source handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/849\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/844\n\nWorker-N7Q4, actual agent session architecture_audit_n7q4_20261013;\nCoordinator-CR1012. Branch codex/acl-1844-official-access-probe.\nWorktree C:/Users/EvgeniSedin/Desktop/ACM-Worker-1844-2026-10-13.\nBase/current main e8e59f8376458f2f73089c3f2a8d454837ff033f.\nSource head 59c55c1e639fe33543f55c4ef011b3dff92c8ff4;\ntree 1a9a33fa99d7e82e6a2bfa401829f8328489cfbe.\n\nImplemented six files: new read-only official access module, CLI and offline tests,\nruntime procedure plus system behavior/history updates. The existing write-capable\nMeta client, browser Graph/token/CDP code, account aliases, sign-in and dashboard\ndefaults are unchanged. No live Meta call, app provisioning, advertising mutation,\ncredential discovery, real account connection or production configuration occurred.\n\nThe public operation accepts an explicit official token, account ID and date range;\nat most two fixed v26.0 GET requests verify account identity and a short account-level\nspend report. Default urllib transport blocks redirects and response-cookie replay,\ndoes not use ambient proxies, verifies TLS and has bounded socket/body size/timeouts.\nNo writes, automatic retries, paging or RPA fallback. Raw exception/upstream strings\nare excluded from results; only local failure messages and numeric codes are exposed.\nSuccessful metadata that echoes the credential is rejected. A missing report is\nno_data, not an inferred zero. Failed spend reads preserve verified account metadata.\nPublishing access remains not_checked; no ownership or real-access claim is made.\n\nCLI reads a hidden prompt or the explicitly selected ACL_META_OFFICIAL_ACCESS_TOKEN\nprocess variable. It never loads .env or machine credentials. Invalid argv never\nechoes a mistakenly supplied token, and getpass refuses echoed-input fallback.\n\nValidation (Windows 11 build26200, Python3.14.3, C:/fb_agents/.venv/Scripts/python.exe):\n- tests/test_official_meta_access_probe.py: 70 passed, final run2.72s.\n- tests/test_acl_test_platform.py and tests/test_distribution_boundary.py: 106 passed.\n- scripts/acl_scan_secrets.py: passed after staging all intended new files.\n- scripts/acl_smoke.py: passed with isolated ACL_CONFIG_DIR and library/Sentry disabled.\n- git diff --check: passed. Worktree clean after commit.\n- scripts/acl_meta_access_probe.py --help: passed without token or network.\n- Full suite/hosted supported-Python CI: delegated to required CI, not run locally.\n- Packaging/live-account parity: not performed and not established by mocks.\n\nRemaining: required current source CI and independent review of the complete scope,\nthen normal batch/stage/main route and delivery as applicable. A real one-account\npilot still needs explicit account/credential authorization and valid app/asset\nrights; do not wait for those rights to describe this as a prepared pilot tool.\nRelated ACL-1788 ownership inventory remains unfinished. Socket timeouts do not\nguarantee operating-system DNS latency; no fixed end-to-end performance promise.\nThe formal review lane was not acquired or bypassed by this Worker."
-      },
       "845": {
         "actor": "Worker-Q8V274",
         "session": "publish-buttons-20261013-Q8V274",
@@ -11601,9 +11587,25 @@
             "session": "architecture_audit_n7q4_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-N7Q4",
-        "coordinator": "Coordinator-CR1012"
+        "coordinator": "Coordinator-CR1012",
+        "handoff": {
+          "actor": "Worker-N7Q4",
+          "session": "architecture_audit_n7q4_20261013",
+          "coordinator": "Coordinator-CR1012",
+          "branch": "codex/acl-1844-official-access-probe",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1844-2026-10-13",
+          "id": "777167e928b14c338c270c7a015b95fe",
+          "issue": 844,
+          "state": "handoff",
+          "started_at": "2026-10-13T06:39:54+00:00",
+          "from_status": "status:todo",
+          "pr": 849,
+          "report": "# ACL-1844 source handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/849\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/844\n\nWorker-N7Q4, actual agent session architecture_audit_n7q4_20261013;\nCoordinator-CR1012. Branch codex/acl-1844-official-access-probe.\nWorktree C:/Users/EvgeniSedin/Desktop/ACM-Worker-1844-2026-10-13.\nBase/current main e8e59f8376458f2f73089c3f2a8d454837ff033f.\nSource head 59c55c1e639fe33543f55c4ef011b3dff92c8ff4;\ntree 1a9a33fa99d7e82e6a2bfa401829f8328489cfbe.\n\nImplemented six files: new read-only official access module, CLI and offline tests,\nruntime procedure plus system behavior/history updates. The existing write-capable\nMeta client, browser Graph/token/CDP code, account aliases, sign-in and dashboard\ndefaults are unchanged. No live Meta call, app provisioning, advertising mutation,\ncredential discovery, real account connection or production configuration occurred.\n\nThe public operation accepts an explicit official token, account ID and date range;\nat most two fixed v26.0 GET requests verify account identity and a short account-level\nspend report. Default urllib transport blocks redirects and response-cookie replay,\ndoes not use ambient proxies, verifies TLS and has bounded socket/body size/timeouts.\nNo writes, automatic retries, paging or RPA fallback. Raw exception/upstream strings\nare excluded from results; only local failure messages and numeric codes are exposed.\nSuccessful metadata that echoes the credential is rejected. A missing report is\nno_data, not an inferred zero. Failed spend reads preserve verified account metadata.\nPublishing access remains not_checked; no ownership or real-access claim is made.\n\nCLI reads a hidden prompt or the explicitly selected ACL_META_OFFICIAL_ACCESS_TOKEN\nprocess variable. It never loads .env or machine credentials. Invalid argv never\nechoes a mistakenly supplied token, and getpass refuses echoed-input fallback.\n\nValidation (Windows 11 build26200, Python3.14.3, C:/fb_agents/.venv/Scripts/python.exe):\n- tests/test_official_meta_access_probe.py: 70 passed, final run2.72s.\n- tests/test_acl_test_platform.py and tests/test_distribution_boundary.py: 106 passed.\n- scripts/acl_scan_secrets.py: passed after staging all intended new files.\n- scripts/acl_smoke.py: passed with isolated ACL_CONFIG_DIR and library/Sentry disabled.\n- git diff --check: passed. Worktree clean after commit.\n- scripts/acl_meta_access_probe.py --help: passed without token or network.\n- Full suite/hosted supported-Python CI: delegated to required CI, not run locally.\n- Packaging/live-account parity: not performed and not established by mocks.\n\nRemaining: required current source CI and independent review of the complete scope,\nthen normal batch/stage/main route and delivery as applicable. A real one-account\npilot still needs explicit account/credential authorization and valid app/asset\nrights; do not wait for those rights to describe this as a prepared pilot tool.\nRelated ACL-1788 ownership inventory remains unfinished. Socket timeouts do not\nguarantee operating-system DNS latency; no fixed end-to-end performance promise.\nThe formal review lane was not acquired or bypassed by this Worker."
+        },
+        "pr": 849,
+        "queued_at": "2026-10-13T06:56:12+00:00"
       }
     },
     "actors": {
@@ -15047,7 +15049,8 @@
       839,
       840,
       836,
-      841
+      841,
+      844
     ],
     "review": {
       "id": "d03327d470a448a88c6b1812d325c427",
@@ -23174,6 +23177,13 @@
         "issue": 841,
         "pr": 848,
         "actor": "Worker-T8L621"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T06:56:12+00:00",
+        "issue": 844,
+        "pr": 849,
+        "actor": "Worker-N7Q4"
       }
     ],
     "policy": {
