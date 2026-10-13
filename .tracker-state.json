@@ -7700,20 +7700,6 @@
         "started_at": "2026-10-13T16:13:25+00:00",
         "from_status": "status:todo"
       },
-      "865": {
-        "actor": "Worker-867R",
-        "session": "root-worker_refresh_867",
-        "coordinator": "Coordinator-DLV13",
-        "branch": "codex/acl-1865-loading-stages",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-867",
-        "id": "babf511893a74c3092112955435ead87",
-        "issue": 865,
-        "state": "handoff",
-        "started_at": "2026-10-13T17:33:41+00:00",
-        "from_status": "status:todo",
-        "pr": 867,
-        "report": "# ACL-1865 source refresh handoff\n\nActual Worker: Worker-867R; session root-worker_refresh_867 (actual agent /root/worker_refresh_867).\nCoordinator: Coordinator-DLV13. Claim: babf511893a74c3092112955435ead87.\n\nSource PR867 remains on original codex/acl-1865-loading-stages branch and targets main. Fresh head 55f69649e6213117b923237b4d435b2ee3590dea preserves original fa830871e37fa8adeb1a75bf970d5e77337ad898 and merges current main 777663bf539308c0898cc177f872a8e0f63b597e without conflicts. Current-main diff remains exactly the original six loading-stage files, with no additional product scope. Official source push was fast-forward only.\n\nVerification on Windows / Python 3.13: 40 affected tests passed in 161.75 seconds: test_report_loading_stages, test_dashboard_stays_responsive_while_report_builds, test_route_placeholder_is_loading, test_review_period_regressions and test_account_map_period. Includes real Chromium status polling, synthetic loading/cache/concurrency/period behavior. Secret scanner, import smoke and git diff --check passed. Earlier Python 3.14 focused run was interrupted after slow local browser execution and is not counted as passed; only its scanner/import-smoke results passed. Tracked source checkout is clean.\n\nHosted descriptor passed. Other required hosted checks are still running; tracker-link failed while the task was legitimately In Progress before this fresh handoff and requires inspection/rerun after the supported transition. No claim of hosted completion, independent approval, stage/main integration, formal stage verification, installer release, employee deployment or live-profile/ad operations. No local dashboard restart or data changes.\n\nIndependent Reviewer must review the complete exact refreshed scope/head/base and actual task acceptance, then wait for required hosted checks before approval. Loading-stage owner acceptance and previous 9095 preview feedback do not substitute for this source review. Preserve all original requirements and author history."
-      },
       "529": {
         "actor": "Worker-W530R",
         "session": "worker530refresh20261013",
@@ -12230,25 +12216,25 @@
             "session": "root-worker_refresh_867"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-867R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
-          "actor": "Worker-LS13455",
-          "session": "codex_01a13455_8219_7cd3_91f7_e1220ad22a1e",
-          "coordinator": "Coordinator-LSC1865",
+          "actor": "Worker-867R",
+          "session": "root-worker_refresh_867",
+          "coordinator": "Coordinator-DLV13",
           "branch": "codex/acl-1865-loading-stages",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Loading-2026-10-13",
-          "id": "486d9e18f4454e0db7a59fea1bcc3fd4",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-867",
+          "id": "babf511893a74c3092112955435ead87",
           "issue": 865,
           "state": "handoff",
-          "started_at": "2026-10-13T08:42:58+00:00",
+          "started_at": "2026-10-13T17:33:41+00:00",
           "from_status": "status:todo",
           "pr": 867,
-          "report": "ACL-1865 implementation handoff: PR867 targets main, source branch codex/acl-1865-loading-stages, head fa830871e37fa8adeb1a75bf970d5e77337ad898, implementation base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. The owner selected the staged loading-screen concept with centered existing ACM logo and explicitly authorized implementation and subsequent GitHub push/PR creation.\n\nComplete source scope: actual reading/processing/preparing progress from the report pipeline; thread-owned callbacks and captured manager/period token isolation; additive status stage/waiting fields; themed responsive loading page, completed checks/current spinner, retry/error/automatic navigation; regression tests and system history.\n\nWindows Python3.14.3: 66 affected regressions passed, final focused 7 passed after label fix, 46 packaging unittest passed, 100 platform guard tests passed, secret scan/import smoke/diff check passed. Final Chromium screenshots at 320/1024px light/dark with reduced motion passed and were visually inspected. Independent non-implementing Reviewer-LSR1865 (/root/loading_review) locally reviewed the complete exact six-file diff and ran 14 loading/responsiveness tests successfully, with no actionable findings. This local review is not a formal lane-bound approval; report C:/Users/EvgeniSedin/Desktop/ACM-Loading-local-review.md.\n\nRequired hosted CI, fresh independent Tracker source approval, eligible frozen Coordinator integration/stage/main and verified package delivery remain pending. No stage/main merge, stable release or employee installation is claimed. Preserve other owners' existing intake/batch/review claims. Source PR remains open pending the normal batch lifecycle."
+          "report": "# ACL-1865 source refresh handoff\n\nActual Worker: Worker-867R; session root-worker_refresh_867 (actual agent /root/worker_refresh_867).\nCoordinator: Coordinator-DLV13. Claim: babf511893a74c3092112955435ead87.\n\nSource PR867 remains on original codex/acl-1865-loading-stages branch and targets main. Fresh head 55f69649e6213117b923237b4d435b2ee3590dea preserves original fa830871e37fa8adeb1a75bf970d5e77337ad898 and merges current main 777663bf539308c0898cc177f872a8e0f63b597e without conflicts. Current-main diff remains exactly the original six loading-stage files, with no additional product scope. Official source push was fast-forward only.\n\nVerification on Windows / Python 3.13: 40 affected tests passed in 161.75 seconds: test_report_loading_stages, test_dashboard_stays_responsive_while_report_builds, test_route_placeholder_is_loading, test_review_period_regressions and test_account_map_period. Includes real Chromium status polling, synthetic loading/cache/concurrency/period behavior. Secret scanner, import smoke and git diff --check passed. Earlier Python 3.14 focused run was interrupted after slow local browser execution and is not counted as passed; only its scanner/import-smoke results passed. Tracked source checkout is clean.\n\nHosted descriptor passed. Other required hosted checks are still running; tracker-link failed while the task was legitimately In Progress before this fresh handoff and requires inspection/rerun after the supported transition. No claim of hosted completion, independent approval, stage/main integration, formal stage verification, installer release, employee deployment or live-profile/ad operations. No local dashboard restart or data changes.\n\nIndependent Reviewer must review the complete exact refreshed scope/head/base and actual task acceptance, then wait for required hosted checks before approval. Loading-stage owner acceptance and previous 9095 preview feedback do not substitute for this source review. Preserve all original requirements and author history."
         },
         "pr": 867,
-        "queued_at": "2026-10-13T08:58:09+00:00",
+        "queued_at": "2026-10-13T17:50:36+00:00",
         "review_report": "# Independent source review: ACL-1865 / PR867\n\nVerdict: changes requested; approval is blocked by the current-main baseline guard.\n\nReviewed source head: fa830871e37fa8adeb1a75bf970d5e77337ad898.\nGitHub source base: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nObserved authoritative main: 777663bf539308c0898cc177f872a8e0f63b597e.\nGitHub compare main...source: diverged, ahead 1, behind 7; merge base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Local ancestry independently returns false.\n\nBlocking finding: the exact pinned shared engine's record-review source approval contract requires source inclusion of current main and source base tree equal to current main. The original source predates the reviewed policy/activation and other main changes. A green old-source CI run and user acceptance of the separate 9095 combined preview cannot approve this source against today's main.\n\nRequired author correction: acquire a fresh genuine implementation claim on the original source branch, reconcile current main into that branch without dropping the loading-stage acceptance criteria, resolve any conflicts under author ownership, rerun affected loading/cache/concurrency/browser regressions and exact-source required hosted CI, and perform a fresh supported handoff for independent source review. Preserve this task, original branch, PR and history. Do not directly merge the source PR into main and do not alter another owner's claim.\n\nRead scope: complete issue865/PR867 bodies, all six changed-file names, pipeline changes in morning_service.py, cache.py and app.py; project AGENTS, SOURCE_REVIEWS, WORKFLOW, TRACKER, BATCH_INTEGRATION and exact pinned guide/contracts. Source CI aggregates descriptor, tracker-link, ACL verification and Installer verification are SUCCESS for the existing head. No additional local tests were run because the mandatory baseline guard already fails; this report is not a full code approval. No code edits, live profile/ad operations, deployment or server restart occurred."
       },
       "854": {
@@ -16103,7 +16089,8 @@
       839,
       845,
       840,
-      841
+      841,
+      865
     ],
     "review": null,
     "history": [
@@ -26313,6 +26300,13 @@
             "approved_at": "2026-10-13T17:40:09+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T17:50:36+00:00",
+        "issue": 865,
+        "pr": 867,
+        "actor": "Worker-867R"
       }
     ],
     "policy": {
