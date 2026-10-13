@@ -7699,6 +7699,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T16:13:25+00:00",
         "from_status": "status:todo"
+      },
+      "865": {
+        "actor": "Worker-867R",
+        "session": "root-worker_refresh_867",
+        "coordinator": "Coordinator-DLV13",
+        "branch": "codex/acl-1865-loading-stages",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-867",
+        "id": "babf511893a74c3092112955435ead87",
+        "issue": 865,
+        "state": "implementing",
+        "started_at": "2026-10-13T17:33:41+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12180,11 +12192,15 @@
           {
             "actor": "Worker-LS13455",
             "session": "codex_01a13455_8219_7cd3_91f7_e1220ad22a1e"
+          },
+          {
+            "actor": "Worker-867R",
+            "session": "root-worker_refresh_867"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-LS13455",
-        "coordinator": "Coordinator-LSC1865",
+        "state": "implementing",
+        "worker": "Worker-867R",
+        "coordinator": "Coordinator-DLV13",
         "handoff": {
           "actor": "Worker-LS13455",
           "session": "codex_01a13455_8219_7cd3_91f7_e1220ad22a1e",
@@ -12201,7 +12217,6 @@
         },
         "pr": 867,
         "queued_at": "2026-10-13T08:58:09+00:00",
-        "reviewer": "Reviewer-867S",
         "review_report": "# Independent source review: ACL-1865 / PR867\n\nVerdict: changes requested; approval is blocked by the current-main baseline guard.\n\nReviewed source head: fa830871e37fa8adeb1a75bf970d5e77337ad898.\nGitHub source base: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nObserved authoritative main: 777663bf539308c0898cc177f872a8e0f63b597e.\nGitHub compare main...source: diverged, ahead 1, behind 7; merge base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Local ancestry independently returns false.\n\nBlocking finding: the exact pinned shared engine's record-review source approval contract requires source inclusion of current main and source base tree equal to current main. The original source predates the reviewed policy/activation and other main changes. A green old-source CI run and user acceptance of the separate 9095 combined preview cannot approve this source against today's main.\n\nRequired author correction: acquire a fresh genuine implementation claim on the original source branch, reconcile current main into that branch without dropping the loading-stage acceptance criteria, resolve any conflicts under author ownership, rerun affected loading/cache/concurrency/browser regressions and exact-source required hosted CI, and perform a fresh supported handoff for independent source review. Preserve this task, original branch, PR and history. Do not directly merge the source PR into main and do not alter another owner's claim.\n\nRead scope: complete issue865/PR867 bodies, all six changed-file names, pipeline changes in morning_service.py, cache.py and app.py; project AGENTS, SOURCE_REVIEWS, WORKFLOW, TRACKER, BATCH_INTEGRATION and exact pinned guide/contracts. Source CI aggregates descriptor, tracker-link, ACL verification and Installer verification are SUCCESS for the existing head. No additional local tests were run because the mandatory baseline guard already fails; this report is not a full code approval. No code edits, live profile/ad operations, deployment or server restart occurred."
       },
       "854": {
@@ -13577,6 +13592,10 @@
       "Reviewer-C530": {
         "session": "codex-source530-20261013",
         "role": "Reviewer"
+      },
+      "Worker-867R": {
+        "session": "root-worker_refresh_867",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -26171,6 +26190,13 @@
           "report": "# Independent source review: ACL-1651 / PR665\n\nVerdict: return to the original author; not Approved.\nSource head: 921cd3318492248da55b1312fb68b454e940597f.\nSource tree: 42416225fcb6cdd7d03311eab49c74224bf070ff.\nObserved current main: 777663bf539308c0898cc177f872a8e0f63b597e, tree84d322133c9b5d29c84221d2445b0ea88639ac42.\nPR base at inspection: 9f592b540519edf94cff5e6ce94625c25deca00b.\n\n## Blocking findings\n\n1. A creative search miss within two seconds after a successful focus refresh can remain stuck on No files found. cbCreativeSearch sets _cbMissLatched before cbRefreshCreatives(2000), but that helper returns false without fetching inside the throttle window. The latch remains true after the window expires, so subsequent typing in the same missed query streak makes no refresh request. This leaves a newly added replacement photo unavailable without focus/type workarounds, contrary to acceptance criteria 1 and the owner's current report.\n\nExact-source offline Chromium reproduction: use the existing creatives_env synthetic fixture, settle a focus refresh, add zz_replacement.jpg to the temporary folder, immediately type its name, wait 2.5 seconds, then continue/edit the query without changing focus/type. Result: No files found; zero additional /api/creatives requests. One targeted test failed on the expected behavior assertion (1 failed, 34.42s, Windows/Python3.14). The existing source miss test explicitly ages the request to three seconds and therefore does not cover this edge. This demonstrates a concrete timing bug, but does not establish that it is the only cause of the owner's real-folder report.\n\n2. Source does not contain current main (merge-base --is-ancestor current-main source exits1;169 missing commits). The fresh source/base scope must be updated by its actual author, then have applicable CI and a new independent exact-content review. Existing October7 green CI and structural check-pr success do not approve current-main compatibility.\n\n## Author follow-up\n\nPreserve this source branch, genuine author, complete issue criteria and all existing history. Take a fresh supported implementation claim, fix the throttled-miss latch/retry behavior while preserving at-most-one background refresh per miss streak and focus throttle, add the immediate-post-refresh regression, and investigate the actual remove-photo / choose-replacement flow. Update the source against current main; run applicable affected regressions and CI; hand off for fresh independent review. Do not change live advertising/profiles or activate publication to test this search bug.\n\nNo source edits, GitHub merge, dashboard installation, scheduler or live Meta actions were performed by this Reviewer. The reproduction helper is local ignored output, not a source change. Existing successful checks remain historical evidence; no passing replacement-flow claim is made.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T17:33:41+00:00",
+        "issue": 865,
+        "claim": "babf511893a74c3092112955435ead87",
+        "actor": "Worker-867R"
       }
     ],
     "policy": {
