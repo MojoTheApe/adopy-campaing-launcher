@@ -9,6 +9,12 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 - `src/web`, `serve.py`: local dashboard, account/report views, campaign builder,
   machine configuration and update endpoints.
+- `src/web/draft_status.py`: current build verdicts in machine-local JSON. Accepted
+  jobs invalidate earlier readiness before starting, retain the previous success
+  as history and persist their job/plan identity, partial results and stopped or
+  failed outcome. Reloads mark unfinished jobs absent from this process interrupted;
+  missing/unreadable status is explicitly unverified. Thread and process locks cover
+  the complete read/modify/write transaction, with job/revision fencing for late writers.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified

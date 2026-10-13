@@ -78,7 +78,7 @@ def _job(monkeypatch, publisher_cls):
     monkeypatch.setattr(pj, "RpaPublisher", publisher_cls)
     monkeypatch.setattr(pj, "_write_draft_status", lambda *a, **k: None)
     job_id = "job-1"
-    monkeypatch.setitem(pj._jobs, job_id, {"errors": [], "results": [], "status": "running",
+    monkeypatch.setitem(pj._jobs, job_id, {"job_id": job_id, "errors": [], "results": [], "status": "running",
                                            "account_label": "KLD_BFL_S15 Person", "total": 0})
     return pj, job_id
 
