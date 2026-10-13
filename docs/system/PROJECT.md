@@ -24,6 +24,12 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   detached update helper. `src/web/release_updates.py` offers verified release updates.
 - `config/paths.py`: machine-specific paths. User configuration, account maps and
   credentials belong outside Git, normally under `%LOCALAPPDATA%/ACL`.
+- `scripts/acl_meta_access_probe.py`: explicit one-account official HTTP read
+  diagnostic (ACL-1844), with a hidden token prompt or explicitly selected process
+  secret, identity-checked metadata/spend and typed failures. It is a prepared
+  source-level pilot, not dashboard integration or verified real-account access;
+  publishing is never checked or attempted. See the
+  [pilot procedure](../runtime/META_OFFICIAL_ACCESS_PILOT.md).
 
 Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../../PRODUCT.md),
 [design guidance](../../DESIGN.md) and existing specs for subsystem details.

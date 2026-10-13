@@ -1,5 +1,20 @@
 # System history
 
+## Official Meta access: isolated read-only diagnostic — ACL-1844
+
+- Added an explicit one-account HTTP pilot with no browser or machine-config
+  discovery. A supplied official token reads only account metadata and a bounded
+  account-level spend report; identity, currency and date mismatches stop the read.
+- Typed failures preserve already verified account metadata when spend fails.
+  Empty reports remain `no_data`; permission scopes never imply publishing access.
+- Fixed Meta GET endpoints, TLS verification, no redirects/cookies/ambient proxy,
+  no retries or writes, bounded response size/timeouts and local-only sanitized
+  output. A hidden prompt or explicitly selected process secret replaces token
+  arguments; raw upstream errors and credential-bearing tracebacks are excluded.
+- Offline fake-HTTP tests cover these boundaries. No live account, app setup,
+  dashboard default, advertising action or production configuration was changed.
+  Runtime procedure: [official access pilot](../runtime/META_OFFICIAL_ACCESS_PILOT.md).
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
