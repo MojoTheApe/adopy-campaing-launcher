@@ -7438,19 +7438,6 @@
         "state": "implementing",
         "started_at": "2026-10-13T09:03:23+00:00",
         "from_status": "status:todo"
-      },
-      "868": {
-        "actor": "Worker-RP7K13",
-        "session": "root_parallel_review_20261013",
-        "coordinator": "Coordinator-RP7K13",
-        "branch": "codex/acl-parallel-review-adoption",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Parallel-Reviews-2026-10-13",
-        "id": "00a30ccb5ccc439cbea1e965ddc929c0",
-        "issue": 868,
-        "state": "stopping",
-        "started_at": "2026-10-13T09:17:34+00:00",
-        "from_status": "status:backlog",
-        "report": "ACL-1868 was created and claimed by this actual Worker before its numeric ID was known. No code edits, commits or PR exist yet. The initial intake branch codex/acl-parallel-review-adoption lacks the now-known ticket ID. This owning Worker stops its own preparation claim and will immediately resume the same task in codex/acl-1868-parallel-reviews through the supported start lifecycle. No foreign claim or queue entry is changed; no implementation is complete."
       }
     },
     "tasks": {
@@ -11921,9 +11908,22 @@
             "session": "root_parallel_review_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-RP7K13",
-        "coordinator": "Coordinator-RP7K13"
+        "coordinator": "Coordinator-RP7K13",
+        "handoff": {
+          "actor": "Worker-RP7K13",
+          "session": "root_parallel_review_20261013",
+          "coordinator": "Coordinator-RP7K13",
+          "branch": "codex/acl-parallel-review-adoption",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Parallel-Reviews-2026-10-13",
+          "id": "00a30ccb5ccc439cbea1e965ddc929c0",
+          "issue": 868,
+          "state": "stopping",
+          "started_at": "2026-10-13T09:17:34+00:00",
+          "from_status": "status:backlog",
+          "report": "ACL-1868 was created and claimed by this actual Worker before its numeric ID was known. No code edits, commits or PR exist yet. The initial intake branch codex/acl-parallel-review-adoption lacks the now-known ticket ID. This owning Worker stops its own preparation claim and will immediately resume the same task in codex/acl-1868-parallel-reviews through the supported start lifecycle. No foreign claim or queue entry is changed; no implementation is complete."
+        }
       }
     },
     "actors": {
@@ -24371,6 +24371,13 @@
         "issue": 868,
         "claim": "00a30ccb5ccc439cbea1e965ddc929c0",
         "actor": "Worker-RP7K13"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-13T09:19:25+00:00",
+        "issue": 868,
+        "actor": "Worker-RP7K13",
+        "report": "ACL-1868 was created and claimed by this actual Worker before its numeric ID was known. No code edits, commits or PR exist yet. The initial intake branch codex/acl-parallel-review-adoption lacks the now-known ticket ID. This owning Worker stops its own preparation claim and will immediately resume the same task in codex/acl-1868-parallel-reviews through the supported start lifecycle. No foreign claim or queue entry is changed; no implementation is complete."
       }
     ],
     "policy": {
