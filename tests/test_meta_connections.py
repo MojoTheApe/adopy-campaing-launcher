@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import uuid
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -411,3 +412,87 @@ def test_installer_keeps_existing_binding_and_refuses_corrupt_metadata(setup, mo
         machine.apply_machine_configuration(configuration, setup.parent,
                                             stats_workbook="changed.xlsx", creatives_directory="synthetic-creatives")
     assert setup.read_bytes() == old_map and (setup.parent / ".env").read_bytes() == old_env
+
+
+@pytest.mark.parametrize("owner_damage", ["missing", "other_connection"])
+def test_historical_save_receipt_requires_its_permanent_app_owner(setup, owner_damage):
+    a, b = begin(), begin("Beta")
+    first = save(a, app="300000001").json()["connection"]
+    assert save(first, app="300000002", request="replace-app-request").status_code == 200
+    data = registry(setup)
+    receipt = data["connections"][a["connection_id"]]["requests"]["save-request-0001"]
+    assert receipt["app_id"] == "300000001"
+    # Deliberately inconsistent metadata: a retained successful save disagrees
+    # with permanent ownership. This is a corruption test, not a normal-flow bypass.
+    if owner_damage == "missing":
+        del data["app_owners"]["300000001"]
+    else:
+        data["app_owners"]["300000001"] = b["connection_id"]
+    store = setup.parent / "meta-connections.json"
+    store.write_text(json.dumps(data), encoding="utf-8")
+    old_store = store.read_bytes()
+    old_blobs = {p.name: p.read_bytes() for p in (setup.parent / "protected-secrets").iterdir()}
+    response = save(b, TOKEN_B, "300000001", request="reassign-corrupt-app")
+    assert response.status_code == 503
+    assert "unreadable" in response.json()["error"]
+    assert store.read_bytes() == old_store
+    assert {p.name: p.read_bytes() for p in (setup.parent / "protected-secrets").iterdir()} == old_blobs
+    assert TOKEN_A not in response.text and TOKEN_B not in response.text
+
+
+@pytest.mark.parametrize("route,body,fallback", [
+    ("/account-map-patch", {"account_name": "Alpha", "country": "MX"}, False),
+    ("/account-map-remove", {"account_name": "Alpha"}, False),
+    ("/account-link-patch", {"account_name": "Alpha", "link": "https://synthetic.example/link"}, False),
+    ("/account-link-patch", {"account_name": "Alpha", "link": "https://synthetic.example/link"}, True),
+])
+def test_contended_map_writes_allow_real_dashboard_control_dispatch(setup, monkeypatch, route, body, fallback):
+    acquired, release, attempted, holder_done = (threading.Event() for _ in range(4))
+    real_transaction = connections.transaction
+    @contextmanager
+    def observed_transaction(*args, **kwargs):
+        attempted.set()
+        with real_transaction(*args, **kwargs):
+            yield
+    monkeypatch.setattr(connections, "transaction", observed_transaction)
+    if fallback:
+        real_link = web._save_link_to_machine_map
+        first_lookup = True
+        def miss_then_find(*args):
+            nonlocal first_lookup
+            if first_lookup:
+                first_lookup = False
+                return False
+            return real_link(*args)
+        monkeypatch.setattr(web, "_save_link_to_machine_map", miss_then_find)
+        monkeypatch.setattr(web, "_write_link_to_excel", lambda *args: None)
+        workbook = setup.parent / "synthetic-upload.xlsx"
+        workbook.touch()
+        monkeypatch.setattr(web, "get_upload_fb_excel_path", lambda: str(workbook))
+    def holder():
+        with connections._lock:
+            acquired.set()
+            release.wait(5)  # Bounded escape also makes the old blocking route fail.
+            holder_done.set()
+    thread = threading.Thread(target=holder)
+    thread.start()
+    assert acquired.wait(5)
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web.app, raise_app_exceptions=False),
+                                     base_url="http://127.0.0.1") as client:
+            mutation = asyncio.create_task(client.post(route, json=body))
+            try:
+                assert await asyncio.to_thread(attempted.wait, 5)
+                control = await client.post("/publish-jobs/synthetic-nonexistent/cancel")
+                assert control.status_code == 404  # No real job or browser action.
+                assert not holder_done.is_set(), "Map lock wait blocked the dashboard control caller"
+            finally:
+                release.set()
+                response = await mutation
+            assert response.status_code == 200, response.text
+    try:
+        asyncio.run(run())
+    finally:
+        release.set()
+        thread.join(timeout=5)
+        assert not thread.is_alive()

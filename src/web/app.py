@@ -3518,12 +3518,16 @@ async def account_map_patch(request: Request) -> JSONResponse:
     Body JSON: {account_name, ad_account_id, folder_id, profile_id, page_id?, multilogin_instance?}
     Creates the CSV if it doesn't exist yet.
     """
-    import csv as _csv
-
     try:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    return await asyncio.to_thread(_patch_account_map, data)
+
+
+def _patch_account_map(data: dict) -> JSONResponse:
+    import csv as _csv
 
     account_name = (data.get("account_name") or "").strip()
     if not account_name:
@@ -4580,12 +4584,16 @@ async def account_map_remove(request: Request) -> JSONResponse:
     this machine simply stops knowing how to reach it. Nothing here can or
     should delete a shared record.
     """
-    import csv as _csv
-
     try:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    return await asyncio.to_thread(_remove_account_map, data)
+
+
+def _remove_account_map(data: dict) -> JSONResponse:
+    import csv as _csv
 
     # One name or many. Removing several in a single request rewrites the file
     # once instead of N times: fewer chances of leaving the map half-edited.
@@ -4657,7 +4665,7 @@ async def account_link_patch(request: Request) -> JSONResponse:
 
     # Local settings win on reads, so Save must write that same source first.
     try:
-        saved = _save_link_to_machine_map(account_name, link)
+        saved = await asyncio.to_thread(_save_link_to_machine_map, account_name, link)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"Could not save the link on this machine: {exc}"}, status_code=409)
     if saved:
@@ -4689,7 +4697,7 @@ async def account_link_patch(request: Request) -> JSONResponse:
         # truth wherever it HAS a row, and an account connected on the
         # dashboard stops depending on someone editing a spreadsheet by hand.
         try:
-            saved = _save_link_to_machine_map(account_name, link)
+            saved = await asyncio.to_thread(_save_link_to_machine_map, account_name, link)
         except Exception as exc:
             return JSONResponse(
                 {"ok": False, "error": f"Could not save the link on this machine: {exc}"},

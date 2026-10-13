@@ -10,6 +10,9 @@
   prevent concurrent changes from exchanging credentials between connections.
 - Mapping replacement retires the old binding before CSV commit. Cleanup failures
   remain disabled and retryable; pending cleanup resumes the same connection.
+- Contended map transactions run outside the ASGI event loop, preserving control
+  request dispatch. Historical save receipts must retain their permanent App
+  owner; a contradictory registry is preserved and refused before mutation.
 - [Behavior, crash outcomes and recovery](META_CONNECTION_PREPARATION.md) preserve
   the full remaining ACL-1858 onboarding/HTTP scope and ACL-1358 legacy scope.
 

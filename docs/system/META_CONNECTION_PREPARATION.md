@@ -53,6 +53,11 @@ also checks the actual map. Unknown direct external edits are observed on the ne
 request; ACL cannot audit an external edit that changes away and back between
 all its observations.
 
+Async dashboard callers run complete synchronous map transactions in the thread
+pool. Waiting for a file/thread lock therefore leaves unrelated control requests
+dispatchable. Permanent App ownership is cross-checked against every accepted
+save receipt as well as the current App ID; contradictory metadata fails closed.
+
 A save writes ciphertext first, then atomically commits metadata and its request
 receipt, then removes the prior encrypted envelope. A crash before metadata commit
 retains the old credential and may leave an unreferenced encrypted file. Such a
@@ -74,11 +79,10 @@ the old pair.
 Unreadable metadata is preserved and reported; it is never silently replaced with
 an empty registry. Support bundles exclude the registry/vault, and existing
 telemetry/support scrubbing covers App Secret and credential reference fields.
-There is no browser-local secret persistence. Restore matching metadata and
-encrypted files together under the same Windows user; moving them to another
-machine/user is not a supported credential transfer. Reconnect when user-bound
-decryption is unavailable. These data files are outside the installation and
-survive source/package updates.
+There is no browser-local secret persistence. User-bound encryption is not a
+credential transfer mechanism between machines/users. These data files are
+outside the installation and survive source/package updates. See the
+[operational recovery procedure](../runtime/META_CONNECTION_RECOVERY.md).
 
 Verification uses isolated synthetic configuration: real public ASGI callers,
 Chromium executing the shared Connect partial and its production JavaScript,

@@ -131,8 +131,12 @@ def _load() -> dict:
                         or type(marker["expected_revision"]) is not int or marker["expected_revision"] < 1
                         or not isinstance(marker["app_id"], str)):
                     raise ValueError
-                if marker["app_id"]:
+                if marker["operation"] == "save":
                     _digits(marker["app_id"], "App ID")
+                    if data["app_owners"].get(marker["app_id"]) != cid:
+                        raise ValueError
+                elif marker["app_id"]:
+                    raise ValueError
             if item.get("app_id") and data["app_owners"].get(item["app_id"]) != cid:
                 raise ValueError
             if item.get("credential_ref"):
