@@ -94,6 +94,24 @@ def test_a_file_that_launches_chromium_weighs_more_than_one_that_starts_a_proces
     assert shard.cost(plain) < shard.cost(proc) < shard.cost(browser)
 
 
+def test_a_large_regression_does_not_skew_linux_browser_counts(tmp_path, monkeypatch):
+    files = []
+    for index, tests in enumerate((220, 45, 30, 20, 12, 8, 5, 3, 2)):
+        path = tmp_path / f"test_browser_{index}.py"
+        path.write_text("from playwright.sync_api import sync_playwright\n" +
+                        "\n".join(f"def test_{n}(): pass" for n in range(tests)), encoding="utf-8")
+        files.append(path)
+    plain = tmp_path / "test_large_plain.py"
+    plain.write_text("\n".join(f"def test_{n}(): pass" for n in range(300)), encoding="utf-8")
+    files.append(plain)
+    monkeypatch.setattr(platforms, "select", lambda platform: files)
+    parts = shard.shards(3, "linux")
+    counts = [sum(p != plain for p in part) for part in parts]
+    assert max(counts) - min(counts) <= 1
+    assert sorted(p for part in parts for p in part) == sorted(files)
+    assert parts == shard.shards(3, "linux")
+
+
 def test_the_browser_files_are_spread_evenly_over_the_linux_shards():
     counts = [sum(1 for p in part if shard._BROWSER.search(p.read_text(encoding="utf-8", errors="replace")))
               for part in shard.shards(3, "linux")]
