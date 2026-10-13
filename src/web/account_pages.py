@@ -39,7 +39,9 @@ def _read_in_session(account: str) -> dict:
         pages = pages_from_client(sess.client, sess.act)
         return {"ok": True, "state": "ready" if pages else "empty", "pages": pages,
                 "act": sess.act, "account": account, "message": "" if pages else
-                "No Facebook Pages are available. Grant this account access to a Page, then Refresh pages."}
+                "No Page is available. Automatic can create only the website campaign and ad sets PAUSED; "
+                "add a Page and ads manually in Ads Manager, or Refresh pages after restoring access. "
+                "Instant Forms require a Page."}
 
 
 def read_pages(account: str) -> dict:
