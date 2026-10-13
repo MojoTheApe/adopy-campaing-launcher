@@ -7,14 +7,6 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 ## Components and current behavior
 
-- The existing Connect panel can prepare a separate Meta application for an
-  exactly mapped profile/ad account, protect its credential with Windows
-  CurrentUser DPAPI, resume, replace or disconnect it locally (ACL-1872).
-  Its result remains **saved; API access not verified**. See
-  [local preparation and recovery](META_CONNECTION_PREPARATION.md); official
-  HTTP routing and automated Developers onboarding remain unfinished ACL-1858
-  work, and wider legacy credential migration remains ACL-1358.
-
 - `src/web`, `serve.py`: local dashboard, account/report views, campaign builder,
   machine configuration and update endpoints.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
@@ -32,6 +24,14 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   detached update helper. `src/web/release_updates.py` offers verified release updates.
 - `config/paths.py`: machine-specific paths. User configuration, account maps and
   credentials belong outside Git, normally under `%LOCALAPPDATA%/ACL`.
+
+- The existing Connect panel can prepare a separate Meta application for an
+  exactly mapped profile/ad account, protect its credential with Windows
+  CurrentUser DPAPI, resume, replace or disconnect it locally (ACL-1872).
+  Its result remains **saved; API access not verified**. See
+  [local preparation and recovery](META_CONNECTION_PREPARATION.md); official
+  HTTP routing and automated Developers onboarding remain unfinished ACL-1858
+  work, and wider legacy credential migration remains ACL-1358.
 
 Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../../PRODUCT.md),
 [design guidance](../../DESIGN.md) and existing specs for subsystem details.
