@@ -193,9 +193,13 @@ def enrich_campaign_drafts(
         # Источник запоминаем для «Check plan»; RPA эти поля не читает.
         draft.page_source = "draft" if draft.page_id else ("map" if entry and entry.page_id else "")
         draft.pixel_source = "draft" if draft.pixel_id else ("map" if entry and getattr(entry, "pixel_id", None) else "")
+        draft.map_page_id = str((entry.page_id if entry else "") or "").strip()
         if not draft.page_provided:
             draft.page_id = draft.page_id or (entry.page_id if entry else None)
         elif not draft.page_id:
+            # Пустой выбор в билдере: страницу из карты не подставляем как выбор человека.
+            # Её судьба решается позже, по списку страниц кабинета (`page_choice.automatic_page`):
+            # карта → единственная страница → отказ, если страниц несколько.
             draft.page_source = "automatic"
         draft.pixel_id = draft.pixel_id or ((getattr(entry, "pixel_id", None) or "") if entry else "")
         # Что набрано в билдере, то и берём. Раньше строка ниже перетирала

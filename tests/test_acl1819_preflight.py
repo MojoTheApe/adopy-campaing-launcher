@@ -124,6 +124,13 @@ def _ad(i: int, **over) -> list:
 
 #: имя фикстуры -> (вход, правило, ожидаемый статус, ожидаемые объявления)
 CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
+    # ACL-1880: Automatic при нескольких Страницах без страницы карты - отказ.
+    "page_choice_unknown_ok": (_with(), "page_choice", "ok", []),
+    "page_choice_chosen_ok": (_with(page_id="111", page_count=2, page_map_ok=False), "page_choice", "ok", []),
+    "page_choice_single_ok": (_with(page_id="", page_count=1, page_map_ok=False), "page_choice", "ok", []),
+    "page_choice_map_ok": (_with(page_id="", page_count=3, page_map_ok=True), "page_choice", "ok", []),
+    "page_choice_zero_ok": (_with(page_id="", page_count=0, page_map_ok=False), "page_choice", "ok", []),
+    "page_choice_several_refused": (_with(page_id="", page_count=2, page_map_ok=False), "page_choice", "error", []),
     "country_ok": (_with(), "country_set", "ok", []),
     "country_empty": (_with(country=" "), "country_set", "error", []),
     "link_ok": (_with(), "link_https", "ok", []),
@@ -348,10 +355,14 @@ def test_page_not_on_the_account(tmp_path):
     assert _by(out)["pixel_ok"]["status"] == "ok", "остальные проверки независимы"
 
 
-def test_page_automatic_uses_first_available_and_warns_for_manual_shell(tmp_path):
+def test_page_automatic_refuses_several_and_warns_for_manual_shell(tmp_path):
     d = _draft(tmp_path, ads=1)
     d.page_id = ""
+    several = _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]
+    assert several["status"] == "error" and "has 2 Facebook Pages" in several["detail"]
+    d.map_page_id = "222"
     assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
+    d.map_page_id = ""
     assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"
     assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"   # единственная страница
 

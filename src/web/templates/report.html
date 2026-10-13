@@ -6137,6 +6137,14 @@ window.cbPreflight = (function () {
       else if (id === 'form_template_contacts') out.push(perAd(id, inp, function (a) {
         return !!a.template && !(a.template.contact_fields || []).length;
       }));
+      else if (id === 'page_choice') {
+        /* Зеркало evaluate_client: Automatic при нескольких страницах без страницы карты - отказ. */
+        var pn = inp.page_count;
+        var several = typeof pn === 'number' && isFinite(pn) && pn > 1;
+        out.push(!s(inp.page_id) && several && !inp.page_map_ok
+          ? v(id, 'error', 'This ad account has ' + Math.floor(pn) + ' Facebook Pages. Choose the Page for this campaign in the builder.')
+          : v(id, 'ok'));
+      }
       else if (id === 'country_set') out.push(v(id, s(inp.country) ? 'ok' : 'error'));
       else if (id === 'link_https') out.push(!link ? v(id, 'error', 'empty') : !linkOk ? v(id, 'error', 'not_https') : v(id, 'ok'));
       else if (id === 'link_tracking') out.push(!linkOk ? v(id, 'unknown', 'no_valid_link') : v(id, trackRe.test(link) ? 'ok' : 'warning'));
@@ -7018,7 +7026,11 @@ window.cbTree = (function () {
         template: templateAudit(row), cta: val(row, 'select[name$="_cta"]').trim() || 'LEARN_MORE'
       });
     });
-    return {
+    function pageAudit(sl) {
+      /* ACL-1880: что страница знает о Страницах кабинета (число и страница карты). */
+      return window.cbPageAudit ? window.cbPageAudit(sl) : {};
+    }
+    return Object.assign({
       destination: L.destination(destEl ? destEl.value : 'website'), objective: 'leads',
       link: val(form, 'input[name="tracking_link"]'), country: val(form, '[name="country"]'),
       budget: budget === '' ? null : budget, age_min: age, age_max: age, ads: ads,
@@ -7026,7 +7038,7 @@ window.cbTree = (function () {
       os: val(slot, 'input[name$="_os"]').trim() || 'All', device: val(slot, '[name$="_device"]').trim(),
       os_min: val(slot, '[name$="_os_min"]').trim(), start_time: val(slot, '[name$="_start_time"]').trim(),
       now: cbNowLocal()
-    };
+    }, pageAudit(slot));
   }
 
   /* Строки карточки кампании: клиентские + серверные, что лежит на форме. */
@@ -7623,6 +7635,8 @@ window.cbTree = (function () {
   }
   host.addEventListener('input', auditSoon);
   host.addEventListener('change', auditSoon);
+  /* ACL-1880: список Страниц кабинета загрузился - правило page_choice должно пересчитаться. */
+  document.addEventListener('cb-pages-changed', auditSoon);
 
   /* Строка кампании обновляется на месте — без перерисовки дерева.
      Перерисовка вынимает форму из документа и возвращает обратно, а это
@@ -13624,7 +13638,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (!account || btn.disabled) return;
     var pageInput = row.closest('.cb-slot').querySelector('input[name$="_page_id"]');
     var selectedPage = window.cbResolvedPage ? window.cbResolvedPage(row.closest('.cb-slot')) : (pageInput ? pageInput.value : '');
-    if (!selectedPage) { if (note) note.textContent = 'Refresh Facebook Pages before loading forms.'; return; }
+    if (!selectedPage) {
+      /* Несколько Страниц и выбора нет: сначала выбрать Страницу, потом формы (ACL-1880). */
+      var needs = window.cbPageNeedsChoice ? window.cbPageNeedsChoice(row.closest('.cb-slot')) : '';
+      if (note) note.textContent = needs ? 'Choose a Page first, then load its forms. ' + needs : 'Refresh Facebook Pages before loading forms.';
+      return;
+    }
     btn.disabled = true;
     if (note) note.textContent = 'Reading the forms of the Page from Meta…';
     var body = new FormData();
@@ -14260,7 +14279,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign">' +
       '<span class="cb-label">Facebook Page</span>' +
       '<div class="cb-page-choice"><input type="hidden" name="camp_' + idx + '_page_id" value="">' +
-      '<select class="cb-input cb-page-select" aria-label="Facebook Page" onchange="cbPageChanged(this)"><option value="">Automatic — first available Page of this account</option></select>' +
+      '<select class="cb-input cb-page-select" aria-label="Facebook Page" onchange="cbPageChanged(this)"><option value="">Automatic</option></select>' +
       '<div style="font-size:var(--adopy-text-xs);color:var(--muted);overflow-wrap:anywhere" data-page-note role="status"></div>' +
       '<button type="button" class="cb-page-refresh cb-input" onclick="cbRefreshPages(this.closest(\'.cb-slot\'), true)">Refresh pages</button></div>' +
       '<input type="hidden" name="camp_' + idx + '_name" class="cb-name-hidden" value="">' +

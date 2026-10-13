@@ -39,6 +39,7 @@ AGE_MIN, AGE_MAX = 18, 65
 #: `write_policy` (CTA_WEBSITE / CTA_FORM): тот же набор разрешает и политика записи.
 #: Ключ `<цель>_instant_form` - список для лид-формы.
 from src.fb_api import write_policy as _wp  # noqa: E402
+from src.fb_api import page_choice as _pc  # noqa: E402
 
 ALLOWED_CTA = {
     "leads": _wp.CTA_WEBSITE,
@@ -80,8 +81,11 @@ def _r(rid: str, label: str, severity: str, side: str, hint: str, *, sel: str = 
 RULES: list[dict[str, Any]] = [
     _r("account_active", "Ad account is active", ERROR, "server",
        "the profile has no access to the ad account, or the account is not active: check the Accounts page"),
+    _r("page_choice", "Facebook Page chosen", ERROR, "client",
+       "this ad account has several Facebook Pages: choose the Page for this campaign in the builder",
+       sel=".cb-page-select"),
     _r("page_ok", "Facebook Page", ERROR, "server",
-       "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading"),
+       "choose a Facebook Page in this campaign (Automatic needs one Page on the account or the account map's Page); Refresh pages to retry loading"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
        "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
        applies="website"),
@@ -191,6 +195,8 @@ def load_json() -> dict[str, Any]:
 #    "budget": number|None, "age_min": int, "age_max": int,
 #    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str}],
 #    ACL-1767 (необязательные): "os": "All"|"iOS"|"Android", "device": ""|"mobile"|"desktop",
+#    ACL-1880 (необязательные): "page_id": выбранная страница или "", "page_count": число страниц кабинета
+#    (None - не загружены), "page_map_ok": страница карты есть среди них,
 #    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
 
 def _s(v: Any) -> str:
@@ -230,6 +236,15 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "form_template_contacts":
             out.append(_per_ad(rid, inp, lambda a: bool(a.get("template"))
                                and not (a.get("template") or {}).get("contact_fields")))
+        elif rid == "page_choice":
+            # Automatic при нескольких страницах без страницы карты — отказ (ACL-1880). Число
+            # страниц неизвестно (список не загружен) — молчим: решает сервер на Check plan.
+            n = inp.get("page_count")
+            several = isinstance(n, (int, float)) and not isinstance(n, bool) and n > 1
+            if not _s(inp.get("page_id")) and several and not inp.get("page_map_ok"):
+                out.append(_v(rid, ERROR, _pc.several_pages_message(int(n))))
+            else:
+                out.append(_v(rid, OK))
         elif rid == "country_set":
             out.append(_v(rid, OK if _s(inp.get("country")) else ERROR))
         elif rid == "link_https":

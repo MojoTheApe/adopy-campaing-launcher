@@ -3,10 +3,11 @@ import pytest
 from src.fb_api.creator import AccountFacts, resolve_page, PlanError
 
 
-def test_automatic_uses_first_of_multiple_pages():
+def test_automatic_never_picks_the_first_of_multiple_pages():
     plan = SimpleNamespace(page_id='', page_source='')
-    resolve_page(plan, AccountFacts('act_1234567890', 'USD', ['123', '456'], []))
-    assert plan.page_id == '123'
+    with pytest.raises(PlanError, match='has 2 Facebook Pages'):
+        resolve_page(plan, AccountFacts('act_1234567890', 'USD', ['123', '456'], []))
+    assert plan.page_id == ''
 
 
 def test_empty_pages_offer_manual_website_completion():
@@ -76,7 +77,8 @@ def test_form_parser_carries_campaign_specific_selection():
 
 
 @pytest.mark.parametrize('available,selected,expected,error', [
-    ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'First'}, {'id': '456', 'name': 'Second'}]}, '', '123', False),
+    ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'First'}, {'id': '456', 'name': 'Second'}]}, '', None, True),
+    ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'Only'}]}, '', '123', False),
     ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'First'}, {'id': '456', 'name': 'Second'}]}, '456', '456', False),
     ({'ok': True, 'act': 'act_1234567890', 'pages': []}, '', None, True),
     ({'ok': False, 'message': 'Could not load pages'}, '', None, True),

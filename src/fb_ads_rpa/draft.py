@@ -165,6 +165,8 @@ class CampaignDraft:
     page_provided: bool = False
     page_name: str = ""
     page_name_unique: bool = False
+    # Страница из карты аккаунтов: кандидат для «Automatic», но не выбор человека (ACL-1880).
+    map_page_id: str = ""
 
     @property
     def ad_count(self) -> int:

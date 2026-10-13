@@ -34,6 +34,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.fb_api import form_create as _fc
 from src.fb_api import form_templates as _ft
+from src.fb_api import page_choice as _pc
 from src.fb_api import forms as _forms
 from src.fb_api import write_policy as _wpol
 from src.fb_api import targeting_resolver as _tr
@@ -209,6 +210,8 @@ class CampaignPlan:
     #: Откуда страница и пиксель: draft / map / account default (ACL-1766).
     page_source: str = ""
     pixel_source: str = ""
+    #: Страница из карты аккаунтов: кандидат для «Automatic», не выбор человека (ACL-1880).
+    map_page_id: str = ""
     #: Предупреждения черновика (смешанный таргетинг/бюджет) — в итог (ревью, minor 7).
     warnings: list[str] = field(default_factory=list)
 
@@ -401,6 +404,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
         pixel_id=str(getattr(draft, "pixel_id", "") or "").strip(),
         daily_budget=float(budget), ad_sets=ad_sets,
         page_source=_source(draft, "page"), pixel_source=_source(draft, "pixel"),
+        map_page_id=str(getattr(draft, "map_page_id", "") or "").strip(),
         warnings=[str(w) for w in (getattr(draft, "warnings", None) or [])])
 
 
@@ -479,11 +483,17 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
             raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
                             f"this ad account can advertise from ({len(facts.pages)} found). "
                             "This account cannot advertise using that Page. Refresh pages and choose again.")
-    elif facts.pages:
-        plan.page_id = facts.pages[0]
-        plan.page_source = "account default"
-        notes.append("Automatic Facebook Page: the first available page of this ad account is used")
     else:
+        # Пустой выбор: страница карты → единственная страница кабинета → отказ (ACL-1880).
+        # `facts.pages[0]` здесь больше нет: порядок promote_pages ничего не значит.
+        try:
+            picked, source = _pc.automatic_page(facts.pages, getattr(plan, 'map_page_id', ''))
+        except _pc.PageChoiceError as exc:
+            raise PlanError(str(exc)) from None
+        if picked:
+            plan.page_id, plan.page_source = picked, source
+            notes.append(f"Automatic Facebook Page: {source} ({picked})")
+            return notes
         if any(s.instant for s in getattr(plan, 'ad_sets', [])):
             raise PlanError("Instant Forms require a Facebook Page. Refresh pages or choose a website destination.")
         plan.page_source = "manual completion"

@@ -163,8 +163,13 @@ class RpaPublisher:
                         raise ValueError(available.get("message") or "Could not load Facebook Pages. Refresh pages to retry.")
                     if available.get("act") != normalize_act(draft.ad_account_id or ""):
                         raise ValueError("The account changed while reading Facebook Pages. Refresh pages and retry.")
-                    chosen = resolve_selection(available["pages"], draft.page_id or "")
+                    # Пустой выбор: карта → единственная страница → отказ с тем же текстом, что у API.
+                    # RPA, как и API, не угадывает Страницу среди нескольких (ACL-1880).
+                    chosen = resolve_selection(available["pages"], draft.page_id or "",
+                                               draft.map_page_id or available.get("map_page_id") or "")
                     draft.page_id, draft.page_name = chosen["id"], chosen["name"]
+                    if chosen.get("source"):
+                        draft.page_source = chosen["source"]
                     draft.page_name_unique = sum(p["name"] == chosen["name"] for p in available["pages"]) == 1
                 except ValueError as exc:
                     draft.errors.append(str(exc))
