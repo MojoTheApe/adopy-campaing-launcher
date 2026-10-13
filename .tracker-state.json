@@ -11228,7 +11228,7 @@
             "session": "work_wx1012a_20261012"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-WX1012A",
         "coordinator": "Coordinator-CX1012A",
         "handoff": {
@@ -11248,7 +11248,8 @@
         "pr": 825,
         "queued_at": "2026-10-12T20:40:07+00:00",
         "review_report": "# ACL-1824 / PR #825 \u2014 complete-scope review return\n\nFinal report, 2026-10-12. Verdict: **changes requested; no approval**.\n\n- Actual Reviewer: Reviewer-RX1012A / rev_rx1012a_20261012.\n- Held source review claim: f8065ac3990e4e13be9956d9140187a4.\n- Separate actual Worker: Worker-WX1012A / work_wx1012a_20261012.\n- Source PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/825\n- Issue: ACL-1824 / GitHub #824.\n- Head: 4633be0d85721cf822de143cebbdd20ea941bb88.\n- Tree: fb698a8cf293c2976644433080d9236f8e973e1b.\n- Current main/base and verified merge-base: e8e59f8376458f2f73089c3f2a8d454837ff033f.\n\nI inspected the complete four-file final diff (src/web/app.py, tests/test_dashboard_review.py, tests/test_acl1756_fb_api.py, docs/system/CHANGELOG.md), the full updated Issue, Worker handoff and PR body, and affected resolver/account-map/drilldown consumers. The detached review checkout is clean; diff whitespace check passes. No source implementation or live operation was performed by this Reviewer.\n\n## Standards\n\nIndependent parallel helper standards780 inspected the complete scope and documented repository standards. **0 findings.**\n\nThe logging fixture snapshots the original root/capture handler filter lists and restores their exact order in guaranteed teardown, including handlers detached during a test. The direct-filter test removes only its own filter in finally. Redaction assertions and production filtering remain intact. The bounded repair addresses the demonstrated lifetime defect without importing rejected ACL-1760 product changes. Alias precedence, country-scoped identity normalization, row preservation and one-time workbook aggregation follow the existing implementation conventions.\n\n## Spec\n\n**[P2] Pass the resolved alias to the explicitly required elsewhere diagnostic.** Location: src/web/app.py:705, in _build_account_map_view.\n\nThe original Specifications explicitly include `elsewhere` among consumers of the shared resolver. The row correctly resolves Acme_12345678 to the existing Peru workbook alias Acme, but _elsewhere is still called with the original suffixed label. alias_matches does not remove an account-ID suffix. If Peru contains older Acme rows while the selected date contains Acme spend under Colombia, the exact Acme row shows the other-country diagnostic but the equivalent suffixed row silently hides it. The user loses the existing cue distinguishing missing data from data filed under another country.\n\nThis is an unmet original task criterion, not a claim that the test-isolation correction introduced a regression or a new request for cross-country identity inference. Identity was already resolved within the explicitly linked country. Preserve that guard and pass the already-resolved alias (falling back to the original label when unresolved) into the existing diagnostic lookup. Add an observable regression for that row behavior. This missed consumer was not identified in my earlier content-review pass; that earlier prepared evidence must not be used to approve this head.\n\n## Actual reproduction\n\nThe Coordinator executed the private offline script pr825-elsewhere-check.py against this exact review checkout with the verified interpreter. It calls the actual workbook resolver and account-map view; only account-link/external-read context is mocked. No production data or network is used.\n\nWorkbook: Acme under Peru on 2026-10-10 and Acme under Colombia on 2026-10-11, each with spend 30. The account link selects Peru and the selected date is 2026-10-11.\n\n| Input label | Resolved row alias | has_data | in_workbook | elsewhere |\n| --- | --- | --- | --- | --- |\n| Acme (control) | empty, because already exact | false | true | Colombia: 30.0 |\n| Acme_12345678 | Acme | false | true | empty |\n\nThe script exited 0 after deliberately asserting the bad behavior and the successful control. The desired result is the same Colombia: 30.0 diagnostic for the resolved suffix row. Independent helper inspection confirmed this is a Spec gap; its Standards result remains unchanged.\n\n## Original criteria and consumer audit\n\n| Original criterion/consumer | Current implementation and evidence | Disposition |\n| --- | --- | --- |\n| Alias plus at least eight trailing digits resolves within its country | _alias_without_id_suffix, invoked as the final fallback; both reported Facebook examples and 7/8-digit boundary are behavioral tests | Implemented and locally tested |\n| Exact alias and configured-name priority | workbook_alias_for/exact_alias and own-name guards; exact and configured-name behavioral regressions | Implemented and locally tested |\n| Explicit account links keep precedence | Links select country before workbook resolution; a two-country conflict test verifies Peru selection and resulting 42 spend / 5 leads / 2 FTDs | Implemented and locally tested |\n| Existing tail before suffix; ambiguity refuses | Unique tail wins; ambiguous tail returns unresolved before suffix; distinct aliases matching the normalized suffix refuse | Implemented and locally tested |\n| Account-map Spend/Leads/FTDs | _numbers receives the resolved alias at app.py:695; suffixed row test asserts 30 / 6 / 1 and has_data | Implemented and locally tested |\n| elsewhere | app.py:705 still passes original label despite a resolved alias | Confirmed P2 above; repair required |\n| No-rows counter | _account_map_country.html:241 counts rows with false has_data. That value comes from the resolved _numbers result at app.py:733; existing suffix tests assert it true when data exists | Correct data path inspected; direct rendered suffix-counter assertion is not present in the new tests |\n| Workbook membership indicator | _workbook_has_account resolves via workbook_alias_for at app.py:2117; the actual probe confirms in_workbook true for the suffixed label even when the selected period is empty | Correct inspected and exercised path |\n| Country totals counted once, rows retained | _rows_counted_once uses the resolved workbook identity; tests cover duplicate pair, two distinct aliases, and duplicate plus distinct alias across all three metrics | Implemented and locally tested |\n| Other shared resolver consumers | HTML account details app.py:2349 and workbook tree-number endpoint app.py:4124 resolve against the complete country-scoped workbook before date-filtered data consumption | Both paths inspected; existing drilldown tests pass, but new suffix-specific endpoint/render assertions are not present |\n\nNo other concrete unmet original criterion was found in this consumer audit. Coverage limits are explicitly recorded above rather than presented as tested facts. For the narrow return, add the confirmed elsewhere behavioral regression and cover its unresolved/ambiguous guard so the fix does not guess across countries. A direct no-rows counter or suffix drilldown assertion can use the same existing fixture if useful; those paths show no identified source defect and require no unrelated feature work.\n\n## Other actual verification and limits\n\nOn this head, the Coordinator's direct-filter-to-victim pair passed 2 tests in 2.18 seconds; the pilot-dry-run-to-victim pair passed 2 tests in 2.91 seconds. The two complete logging/API modules and five alias/dashboard modules passed **196 tests**, 95 warnings, 22.63 seconds, in a single process. Secret scan and diff check passed. These results establish the isolation repair and covered behaviors, but do not cover the newly reproduced elsewhere case.\n\nRequired GitHub CI run 38303124612 was still underway when the review was assigned. This report makes no claim that all required CI passed; even subsequent green checks cannot waive the reproduced Spec gap. No final approval JSON is prepared for this head.\n\n## Required next step\n\nUse supported execution review-return with this report and held claim. The actual Worker takes a fresh implementation claim on the original PR branch, repairs the bounded consumer gap while preserving existing country/ambiguity guards, updates the task handoff, and runs affected behavioral checks. Obtain fresh complete-scope/head/base independent review and required CI on the resulting exact head before record-review and batch approval. Prior claims and old prepared evidence are invalid for that new head.\n\nTotals: Standards 0; Spec 1 (P2). This report grants no source approval, batch admission, stage/main merge or package delivery.",
-        "reviewer": "Reviewer-RX1013B"
+        "reviewer": "Reviewer-RX1013B",
+        "batch_id": "6b33b0c808d045a89e4d5f771f95483b"
       },
       "776": {
         "implementers": [
@@ -15108,6 +15109,32 @@
         "coordinator": "Coordinator-C0930A",
         "state": "reviewing",
         "started_at": "2026-10-09T21:50:40+00:00"
+      },
+      "852": {
+        "id": "d03327d470a448a88c6b1812d325c427",
+        "batch_id": "6b33b0c808d045a89e4d5f771f95483b",
+        "pr": 847,
+        "issues": [
+          824
+        ],
+        "actor": "Reviewer-RX1013B",
+        "session": "rev_rx1013b_20261013",
+        "coordinator": "Coordinator-CX1012A",
+        "state": "reviewing",
+        "started_at": "2026-10-13T06:43:29+00:00"
+      },
+      "847": {
+        "id": "d03327d470a448a88c6b1812d325c427",
+        "batch_id": "6b33b0c808d045a89e4d5f771f95483b",
+        "pr": 847,
+        "issues": [
+          824
+        ],
+        "actor": "Reviewer-RX1013B",
+        "session": "rev_rx1013b_20261013",
+        "coordinator": "Coordinator-CX1012A",
+        "state": "reviewing",
+        "started_at": "2026-10-13T06:43:29+00:00"
       }
     },
     "review_queue": [
@@ -15151,19 +15178,7 @@
       844,
       845
     ],
-    "review": {
-      "id": "d03327d470a448a88c6b1812d325c427",
-      "batch_id": "6b33b0c808d045a89e4d5f771f95483b",
-      "pr": 847,
-      "issues": [
-        824
-      ],
-      "actor": "Reviewer-RX1013B",
-      "session": "rev_rx1013b_20261013",
-      "coordinator": "Coordinator-CX1012A",
-      "state": "reviewing",
-      "started_at": "2026-10-13T06:43:29+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -23317,6 +23332,89 @@
         "issue": 853,
         "claim": "8206cb103afc4597948ad14dc9d2b392",
         "actor": "Worker-N7Q4"
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-13T07:38:02+00:00",
+        "batch": {
+          "id": "6b33b0c808d045a89e4d5f771f95483b",
+          "actor": "Coordinator-CX1012A",
+          "session": "coord_cx1012a_20261012",
+          "state": "merged",
+          "issues": [
+            824
+          ],
+          "members": [
+            {
+              "issue": 824,
+              "pr": 825,
+              "branch": "codex/acl-1824-alias-id-suffix",
+              "head_sha": "ea63bbd1b88132361fdea678733b742a676c048d",
+              "base_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+              "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "030d723c8cffe0437a50130bd11713bfcd6f15953d2b98531e4652d77ef75ca8",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-RX1013B",
+                "implementer": "Worker-WX1012A",
+                "head_sha": "ea63bbd1b88132361fdea678733b742a676c048d",
+                "base_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+                "tree_sha": "5366a8906888cba5c25487adea3da9a9cfe28d03",
+                "report": "# Independent source review \u2014 ACL-1824 / PR825\n\nVerdict: approved. Actual Reviewer-RX1013B/session rev_rx1013b_20261013, legitimate source review claim d8f3189fe8034e7e908beca5b629b0d6. Coordinator-CX1012A/session coord_cx1012a_20261012. Actual implementing Worker-WX1012A/session work_wx1012a_20261012; final author claim 7d2bfef5df6049a69e7393332d01893b was handed off. This Reviewer implemented none of this task, made no source edits or Tracker mutations, and does not adopt any older review as its own.\n\nOfficial repository MojoTheApe/adopy-campaing-launcher, Issue824/ACL-1824, PR825. Clean review checkout C:/Users/EvgeniSedin/Desktop/ACM-Review-825-2026-10-12. Head ea63bbd1b88132361fdea678733b742a676c048d, tree 5366a8906888cba5c25487adea3da9a9cfe28d03; current main/base and merge-base e8e59f8376458f2f73089c3f2a8d454837ff033f. Diff git diff e8e59f8376458f2f73089c3f2a8d454837ff033f...HEAD. Complete four-file change: 239 additions/8 deletions; commits cd9f9d9a, 19d8d7c3, 965947c2, 4633be0d, ea63bbd1.\n\nRead entire current Issue Description, Specifications, Acceptance and all recovery handoffs from issue-824-current-20261013.json. Read current PR/check snapshot pr825-fresh-green-20261013.json, final actual Worker handoff acl1824-worker-handoff-elsewhere.md, installed code-review/project-workflow, repository AGENTS, engineering context, delivery/workflow/Tracker/batch/layout guidance and pinned shared standard. Reviewed the complete diff including test-lifetime repair, existing account normalization/name rules, country alias index, account map, attribution and details endpoints, available-account consumer and rendered map's has_data/in_workbook pathways.\n\n## Standards\n\nSeparate parallel Standards helper /root/recovery_reviewer_1013/standards837 reviewed this exact PR825 diff against current documented guidance and the supplied complete smell baseline. No documented-standard violations or actionable baseline smells found. The resolver extends the existing shared identity mechanism; consumers continue using it; diagnostic identity and totals remain centralized. Observable regressions use isolated link storage. Logging cleanup restores handler filters in guaranteed teardown and preserves production redaction/assertions. The system changelog records final behavior and why the validation repair was necessary. Helper ran no tests, network, Tracker or live actions.\n\n## Spec\n\nNo remaining findings after complete current-scope review. Long numeric suffix stripping is the final fallback only when existing tail candidates are absent. Exact/configured-name and own-name rules retain priority; a unique existing tail wins; ambiguous tails and multiple suffix aliases refuse. Fewer than eight trailing digits are not stripped. Workbook identity is resolved within the selected linked country against the entire workbook, so date filtering cannot hide older identity or collisions.\n\nThe real account-map numbers path uses the resolved alias for Spend, Leads and FTDs; workbook membership uses the shared resolver, and the no-rows path depends on resulting has_data. Details and attribution use the same whole-workbook resolver before period-specific summaries. The elsewhere diagnostic now receives the already-resolved alias, with original label fallback for unresolved identity; its guards prohibit borrowing a suffix identity from another country. Country totals keep all visible account rows while counting each canonical workbook identity once, including duplicate-plus-distinct cases. No alias override format or unrelated production behavior was introduced.\n\nTest-only logging lifetime repair is bounded validation work triggered by required CI: original shared root/capture filters are restored in their original order after every pilot test, including detached handlers, and the directly installed test filter is explicitly removed in finally. Production pilot filtering and the routing-log expectations are unchanged.\n\n## Verification\n\nReviewer locally verified clean checkout, exact head/tree and git diff --check BASE...HEAD. Actual Coordinator-executed checks, documented in the genuine Worker's final handoff: focused elsewhere guards 4 passed/22 deselected/91 warnings in3.89s; both logging/API modules plus five resolver/dashboard files in one process 200 passed/95 warnings in26.76s. Secret scan and dashboard/RPA import smoke passed. Isolated configuration and empty external-library settings were used. These are attributed execution results; this Reviewer did not execute those tests, and no standalone200-test output log was persisted. The earlier red proofs/history are contextual, not this head's approval evidence.\n\nFresh cached GitHub source checks at exact current head/base show descriptor, latest tracker-link, ACL verification and Installer verification successful. All three Linux3.13 shards and Windows3.13 passed. The earlier tracker-link failure was superseded by a later successful run after the actual handoff. Installer build/input jobs were classified skipped while its aggregate passed; this is source selection, not evidence of a built combined or stage installer. No redundant full suite was run locally after current green CI.\n\n## Disposition\n\nApprove this complete source at the exact head/base/scope/policy under the genuine source review claim. Root should reread current checks and refs before record-review and batch approve. Any relevant head/base/scope/policy change requires fresh review. This prepared report is not itself a Tracker transition.\n\nOrdinary source PR remains open after Approved for frozen batch integration; no direct source merge. Independent combined review, complete applicable combined CI, exact isolated stage verification, unchanged main promotion and package delivery remain separate. No live profile/Meta actions, installer acceptance, advertising activation, package publication or deployment were performed or claimed by this review.\n\nTotals: Standards0 findings; Spec0 findings.\n",
+                "execution_lane": "d8f3189fe8034e7e908beca5b629b0d6",
+                "review_session": "rev_rx1013b_20261013",
+                "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  824
+                ],
+                "recorded_at": "2026-10-13T06:25:37+00:00",
+                "issue_scopes": {
+                  "824": "030d723c8cffe0437a50130bd11713bfcd6f15953d2b98531e4652d77ef75ca8"
+                }
+              },
+              "lane": {
+                "id": "d8f3189fe8034e7e908beca5b629b0d6",
+                "pr": 825,
+                "issues": [
+                  824
+                ],
+                "actor": "Reviewer-RX1013B",
+                "session": "rev_rx1013b_20261013",
+                "coordinator": "Coordinator-CX1012A",
+                "started_at": "2026-10-13T06:17:20+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-13T06:25:54+00:00"
+            }
+          ],
+          "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+          "branch": "codex/batch-6b33b0c808d045a89e4d5f771f95483b",
+          "intake": "b9787ef2958b4fd2874f09b9a01e6107",
+          "started_at": "2026-10-13T06:38:56+00:00",
+          "pr": 847,
+          "entered_stage": true,
+          "history": [],
+          "review": {
+            "id": "d03327d470a448a88c6b1812d325c427",
+            "batch_id": "6b33b0c808d045a89e4d5f771f95483b",
+            "pr": 847,
+            "issues": [
+              824
+            ],
+            "actor": "Reviewer-RX1013B",
+            "session": "rev_rx1013b_20261013",
+            "coordinator": "Coordinator-CX1012A",
+            "state": "reviewing",
+            "started_at": "2026-10-13T06:43:29+00:00"
+          },
+          "main_prs": [
+            852
+          ],
+          "finished_at": "2026-10-13T07:38:02+00:00"
+        }
       }
     ],
     "policy": {
@@ -23673,82 +23771,100 @@
           }
         ],
         "report": "# Independent combined review \u2014 ACL-1760 / PR 835\n\nReviewer: actual `source_reviewer` agent, Reviewer-RX1012A / rev_rx1012a_20261012. Coordinator: Coordinator-CX1012A. Review date: 2026-10-12. No source edits, advertising actions, live browser profiles or production configuration were used in this review.\n\nSupported combined review claim: 37b8b284b6bb41269e9e0b8fa15eaacb, acquired for PR 835 and this actual Reviewer/session.\n\n## Candidate and composition\n\nFrozen batch: 2eaa69c20cbf4d399cee65a6fa070f9c. Only member: issue 760 / ACL-1760, source PR 762, Worker-S1760A. Preserved source Reviewer: Reviewer-R1760S / rev_r1760s_1010, with genuine rounds 1\u20135 approval from the private execution snapshot.\n\nIntegration head: 1adea353c6894de08e3284095d25edca50e68b4f. First parent/main baseline: e8e59f8376458f2f73089c3f2a8d454837ff033f. Second parent/source head: 41d61e4b500e3787bf6ccf4ae2878694f6a12fee. Integration tree: 946c76993515972d9086ef00405cdfb99dc98681, identical to the frozen source tree. The clean batch checkout contains one generated merge and no extra implementation or conflict-resolution commit. `git diff --check BASE...HEAD` passes. The full eight-file diff was inspected, including its Graph/profile callers and unchanged cleanup/launcher helpers.\n\nThe previous source approval legitimately exists, but the independent combined review found issues below. The new review does not rewrite earlier identities or claim that a green source or identical tree guarantees complete task acceptance.\n\n## Standards\n\nThe parallel actual helper `standards780` independently inspected this candidate. The source Reviewer verified both findings against the full call chains.\n\n- **P1 \u2014 Retain explicit launch-versus-attach ownership before stopping profiles.** `src/fb_api/profile.py:265` sets `started_now=True` after every successful `launcher.start_profile()`. The unchanged launcher (`src/meta_campaign_agent/multilogin_launcher.py:89\u2013122`) also succeeds by returning the port of an **already-running** profile after HTTP 409 / PROFILE_ALREADY_RUNNING. When running-profile discovery misses that profile or a session opens it after the final probe, `account_spend_api.py:371\u2013378` treats this result as ownership. `_finish_started()` then reaches `stop_profile_on_request` and can close the other session's profile. Propagate a trustworthy newly-started result and leave reused/unknown outcomes unowned. This violates engineering context's one-owner/profile-preservation rules and its distinction between confirmed and unknown external outcomes.\n\n- **P2 \u2014 Report usage-limit pagination stops as incomplete.** `src/fb_api/graph.py:322\u2013327` exits on `self.stopped` before marking truncation. A successful page with `paging.next` and usage at/above STOP_PCT sets `stopped` in `get()` but returns its rows. `_country_rows()` at `account_spend_api.py:612\u2013624` sees no truncation marker and accepts them; `_split_in_session()` can save an incomplete breakdown as `state=\"ok\"`, associated with the full spend. Mark incomplete pagination whenever a next page exists but cannot be fetched and add a response-header stop regression. This violates engineering context's explicit partial-success rule.\n\nNo additional smell-only finding is reported.\n\n## Spec\n\n- **P2 \u2014 The requested ad-set read scope is absent.** The issue's Reads specification says \u201c`/act_X/campaigns`, adsets and ads: ids, names, statuses, effective_status.\u201d The implemented `_tree()` calls campaigns and ads, plus their spend insights, and `build_objects()` produces only campaign/ad rows. The source PR explicitly says \u201cAd sets are not read yet.\u201d There is no recorded owner-approved scope reduction in the issue or the latest handoff inspected by the Coordinator. Complete the requested scope or obtain and preserve an explicit scope decision; do not declare the whole task complete from the current two-level implementation.\n\n- **P2 \u2014 Three-account acceptance is not evidenced.** The issue requires Read spend to match Ads Manager for **3 accounts**, with the tree visible and reads taking seconds. The only issue comment verifies Facebook_5414 on 2026-10-10; the Coordinator's latest Obsidian search found no three-account parity evidence. Later creation evidence belongs to ACL-1761 and does not prove this read acceptance. Preserve this outstanding criterion and perform it only through its authorized isolated test-dashboard process. Do not substitute unit tests or an unrelated live pilot.\n\nThe default RPA switch, in-profile GET transport, reading data shape, cap/cooldown handling and source isolation are otherwise implemented in the inspected scope. No unrelated source was added by batch assembly.\n\n## Verification and disposition\n\nThe source's earlier review records 115 focused tests and its required CI passing at the exact source head. This review did not redundantly rerun the full suite. Current combined CI, full Windows installer/update/recovery and stage evidence are not claimed by this report.\n\nPrivate offline reproducer: `batch1760-reproduce-findings.py`. The Coordinator executed it against this exact candidate and it exited 0, confirming both current defective behaviors. It mocks the actual launcher's HTTP response and all profile-stop operations, and supplies a fake Graph page with a next cursor plus 85% usage. It does not touch live profiles or make actual network calls.\n\n- P1 observed: HTTP 409 / PROFILE_ALREADY_RUNNING; `started_by_us=false`, `started_now=true`, read claimed ownership, **one soft-stop call**. This proves a reused profile can be stopped by the read when initial discovery did not establish it was running.\n- P2 observed: one Graph call; `stop=rate_limited`, `truncated=[]`; country breakdown saved `state=ok` with one country spend **20** against the explained account total **100**, while `paging.next` exists. This proves a successful partial page can be stored as complete when exposed usage headers stop pagination.\n\nThe reproducer intentionally asserts the present bad behavior to provide deterministic review evidence; its zero exit status is not a product acceptance pass.\n\n**Verdict: changes required; no approval.** Do not record an approved review, merge PR 835 into stage, promote main, or mark ACL-1760 Merged. Use the supported held-batch review-return and Coordinator author-return/cancel workflow before source edits. Retain the frozen member set/Coordinator claim as required by current batch state, and obtain fresh author handoff, approval, rebuilt combined review and applicable CI after corrections. Any full-task completion must also account for the unresolved spec criteria.\n\nTotals: Standards 2 (worst P1); Spec 2 (worst P2). Composition checks pass; task admission does not."
-      }
-    },
-    "integration": {
-      "id": "6b33b0c808d045a89e4d5f771f95483b",
-      "actor": "Coordinator-CX1012A",
-      "session": "coord_cx1012a_20261012",
-      "state": "stage",
-      "issues": [
-        824
-      ],
-      "members": [
-        {
-          "issue": 824,
-          "pr": 825,
-          "branch": "codex/acl-1824-alias-id-suffix",
-          "head_sha": "ea63bbd1b88132361fdea678733b742a676c048d",
-          "base_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
-          "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "030d723c8cffe0437a50130bd11713bfcd6f15953d2b98531e4652d77ef75ca8",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-RX1013B",
-            "implementer": "Worker-WX1012A",
+      },
+      "6b33b0c808d045a89e4d5f771f95483b": {
+        "id": "6b33b0c808d045a89e4d5f771f95483b",
+        "actor": "Coordinator-CX1012A",
+        "session": "coord_cx1012a_20261012",
+        "state": "merged",
+        "issues": [
+          824
+        ],
+        "members": [
+          {
+            "issue": 824,
+            "pr": 825,
+            "branch": "codex/acl-1824-alias-id-suffix",
             "head_sha": "ea63bbd1b88132361fdea678733b742a676c048d",
             "base_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
-            "tree_sha": "5366a8906888cba5c25487adea3da9a9cfe28d03",
-            "report": "# Independent source review \u2014 ACL-1824 / PR825\n\nVerdict: approved. Actual Reviewer-RX1013B/session rev_rx1013b_20261013, legitimate source review claim d8f3189fe8034e7e908beca5b629b0d6. Coordinator-CX1012A/session coord_cx1012a_20261012. Actual implementing Worker-WX1012A/session work_wx1012a_20261012; final author claim 7d2bfef5df6049a69e7393332d01893b was handed off. This Reviewer implemented none of this task, made no source edits or Tracker mutations, and does not adopt any older review as its own.\n\nOfficial repository MojoTheApe/adopy-campaing-launcher, Issue824/ACL-1824, PR825. Clean review checkout C:/Users/EvgeniSedin/Desktop/ACM-Review-825-2026-10-12. Head ea63bbd1b88132361fdea678733b742a676c048d, tree 5366a8906888cba5c25487adea3da9a9cfe28d03; current main/base and merge-base e8e59f8376458f2f73089c3f2a8d454837ff033f. Diff git diff e8e59f8376458f2f73089c3f2a8d454837ff033f...HEAD. Complete four-file change: 239 additions/8 deletions; commits cd9f9d9a, 19d8d7c3, 965947c2, 4633be0d, ea63bbd1.\n\nRead entire current Issue Description, Specifications, Acceptance and all recovery handoffs from issue-824-current-20261013.json. Read current PR/check snapshot pr825-fresh-green-20261013.json, final actual Worker handoff acl1824-worker-handoff-elsewhere.md, installed code-review/project-workflow, repository AGENTS, engineering context, delivery/workflow/Tracker/batch/layout guidance and pinned shared standard. Reviewed the complete diff including test-lifetime repair, existing account normalization/name rules, country alias index, account map, attribution and details endpoints, available-account consumer and rendered map's has_data/in_workbook pathways.\n\n## Standards\n\nSeparate parallel Standards helper /root/recovery_reviewer_1013/standards837 reviewed this exact PR825 diff against current documented guidance and the supplied complete smell baseline. No documented-standard violations or actionable baseline smells found. The resolver extends the existing shared identity mechanism; consumers continue using it; diagnostic identity and totals remain centralized. Observable regressions use isolated link storage. Logging cleanup restores handler filters in guaranteed teardown and preserves production redaction/assertions. The system changelog records final behavior and why the validation repair was necessary. Helper ran no tests, network, Tracker or live actions.\n\n## Spec\n\nNo remaining findings after complete current-scope review. Long numeric suffix stripping is the final fallback only when existing tail candidates are absent. Exact/configured-name and own-name rules retain priority; a unique existing tail wins; ambiguous tails and multiple suffix aliases refuse. Fewer than eight trailing digits are not stripped. Workbook identity is resolved within the selected linked country against the entire workbook, so date filtering cannot hide older identity or collisions.\n\nThe real account-map numbers path uses the resolved alias for Spend, Leads and FTDs; workbook membership uses the shared resolver, and the no-rows path depends on resulting has_data. Details and attribution use the same whole-workbook resolver before period-specific summaries. The elsewhere diagnostic now receives the already-resolved alias, with original label fallback for unresolved identity; its guards prohibit borrowing a suffix identity from another country. Country totals keep all visible account rows while counting each canonical workbook identity once, including duplicate-plus-distinct cases. No alias override format or unrelated production behavior was introduced.\n\nTest-only logging lifetime repair is bounded validation work triggered by required CI: original shared root/capture filters are restored in their original order after every pilot test, including detached handlers, and the directly installed test filter is explicitly removed in finally. Production pilot filtering and the routing-log expectations are unchanged.\n\n## Verification\n\nReviewer locally verified clean checkout, exact head/tree and git diff --check BASE...HEAD. Actual Coordinator-executed checks, documented in the genuine Worker's final handoff: focused elsewhere guards 4 passed/22 deselected/91 warnings in3.89s; both logging/API modules plus five resolver/dashboard files in one process 200 passed/95 warnings in26.76s. Secret scan and dashboard/RPA import smoke passed. Isolated configuration and empty external-library settings were used. These are attributed execution results; this Reviewer did not execute those tests, and no standalone200-test output log was persisted. The earlier red proofs/history are contextual, not this head's approval evidence.\n\nFresh cached GitHub source checks at exact current head/base show descriptor, latest tracker-link, ACL verification and Installer verification successful. All three Linux3.13 shards and Windows3.13 passed. The earlier tracker-link failure was superseded by a later successful run after the actual handoff. Installer build/input jobs were classified skipped while its aggregate passed; this is source selection, not evidence of a built combined or stage installer. No redundant full suite was run locally after current green CI.\n\n## Disposition\n\nApprove this complete source at the exact head/base/scope/policy under the genuine source review claim. Root should reread current checks and refs before record-review and batch approve. Any relevant head/base/scope/policy change requires fresh review. This prepared report is not itself a Tracker transition.\n\nOrdinary source PR remains open after Approved for frozen batch integration; no direct source merge. Independent combined review, complete applicable combined CI, exact isolated stage verification, unchanged main promotion and package delivery remain separate. No live profile/Meta actions, installer acceptance, advertising activation, package publication or deployment were performed or claimed by this review.\n\nTotals: Standards0 findings; Spec0 findings.\n",
-            "execution_lane": "d8f3189fe8034e7e908beca5b629b0d6",
-            "review_session": "rev_rx1013b_20261013",
             "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              824
-            ],
-            "recorded_at": "2026-10-13T06:25:37+00:00",
-            "issue_scopes": {
-              "824": "030d723c8cffe0437a50130bd11713bfcd6f15953d2b98531e4652d77ef75ca8"
-            }
-          },
-          "lane": {
-            "id": "d8f3189fe8034e7e908beca5b629b0d6",
-            "pr": 825,
-            "issues": [
-              824
-            ],
-            "actor": "Reviewer-RX1013B",
-            "session": "rev_rx1013b_20261013",
-            "coordinator": "Coordinator-CX1012A",
-            "started_at": "2026-10-13T06:17:20+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-13T06:25:54+00:00"
-        }
-      ],
-      "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
-      "branch": "codex/batch-6b33b0c808d045a89e4d5f771f95483b",
-      "intake": "b9787ef2958b4fd2874f09b9a01e6107",
-      "started_at": "2026-10-13T06:38:56+00:00",
-      "pr": 847,
-      "entered_stage": true,
-      "history": []
+            "scope": "030d723c8cffe0437a50130bd11713bfcd6f15953d2b98531e4652d77ef75ca8",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-RX1013B",
+              "implementer": "Worker-WX1012A",
+              "head_sha": "ea63bbd1b88132361fdea678733b742a676c048d",
+              "base_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+              "tree_sha": "5366a8906888cba5c25487adea3da9a9cfe28d03",
+              "report": "# Independent source review \u2014 ACL-1824 / PR825\n\nVerdict: approved. Actual Reviewer-RX1013B/session rev_rx1013b_20261013, legitimate source review claim d8f3189fe8034e7e908beca5b629b0d6. Coordinator-CX1012A/session coord_cx1012a_20261012. Actual implementing Worker-WX1012A/session work_wx1012a_20261012; final author claim 7d2bfef5df6049a69e7393332d01893b was handed off. This Reviewer implemented none of this task, made no source edits or Tracker mutations, and does not adopt any older review as its own.\n\nOfficial repository MojoTheApe/adopy-campaing-launcher, Issue824/ACL-1824, PR825. Clean review checkout C:/Users/EvgeniSedin/Desktop/ACM-Review-825-2026-10-12. Head ea63bbd1b88132361fdea678733b742a676c048d, tree 5366a8906888cba5c25487adea3da9a9cfe28d03; current main/base and merge-base e8e59f8376458f2f73089c3f2a8d454837ff033f. Diff git diff e8e59f8376458f2f73089c3f2a8d454837ff033f...HEAD. Complete four-file change: 239 additions/8 deletions; commits cd9f9d9a, 19d8d7c3, 965947c2, 4633be0d, ea63bbd1.\n\nRead entire current Issue Description, Specifications, Acceptance and all recovery handoffs from issue-824-current-20261013.json. Read current PR/check snapshot pr825-fresh-green-20261013.json, final actual Worker handoff acl1824-worker-handoff-elsewhere.md, installed code-review/project-workflow, repository AGENTS, engineering context, delivery/workflow/Tracker/batch/layout guidance and pinned shared standard. Reviewed the complete diff including test-lifetime repair, existing account normalization/name rules, country alias index, account map, attribution and details endpoints, available-account consumer and rendered map's has_data/in_workbook pathways.\n\n## Standards\n\nSeparate parallel Standards helper /root/recovery_reviewer_1013/standards837 reviewed this exact PR825 diff against current documented guidance and the supplied complete smell baseline. No documented-standard violations or actionable baseline smells found. The resolver extends the existing shared identity mechanism; consumers continue using it; diagnostic identity and totals remain centralized. Observable regressions use isolated link storage. Logging cleanup restores handler filters in guaranteed teardown and preserves production redaction/assertions. The system changelog records final behavior and why the validation repair was necessary. Helper ran no tests, network, Tracker or live actions.\n\n## Spec\n\nNo remaining findings after complete current-scope review. Long numeric suffix stripping is the final fallback only when existing tail candidates are absent. Exact/configured-name and own-name rules retain priority; a unique existing tail wins; ambiguous tails and multiple suffix aliases refuse. Fewer than eight trailing digits are not stripped. Workbook identity is resolved within the selected linked country against the entire workbook, so date filtering cannot hide older identity or collisions.\n\nThe real account-map numbers path uses the resolved alias for Spend, Leads and FTDs; workbook membership uses the shared resolver, and the no-rows path depends on resulting has_data. Details and attribution use the same whole-workbook resolver before period-specific summaries. The elsewhere diagnostic now receives the already-resolved alias, with original label fallback for unresolved identity; its guards prohibit borrowing a suffix identity from another country. Country totals keep all visible account rows while counting each canonical workbook identity once, including duplicate-plus-distinct cases. No alias override format or unrelated production behavior was introduced.\n\nTest-only logging lifetime repair is bounded validation work triggered by required CI: original shared root/capture filters are restored in their original order after every pilot test, including detached handlers, and the directly installed test filter is explicitly removed in finally. Production pilot filtering and the routing-log expectations are unchanged.\n\n## Verification\n\nReviewer locally verified clean checkout, exact head/tree and git diff --check BASE...HEAD. Actual Coordinator-executed checks, documented in the genuine Worker's final handoff: focused elsewhere guards 4 passed/22 deselected/91 warnings in3.89s; both logging/API modules plus five resolver/dashboard files in one process 200 passed/95 warnings in26.76s. Secret scan and dashboard/RPA import smoke passed. Isolated configuration and empty external-library settings were used. These are attributed execution results; this Reviewer did not execute those tests, and no standalone200-test output log was persisted. The earlier red proofs/history are contextual, not this head's approval evidence.\n\nFresh cached GitHub source checks at exact current head/base show descriptor, latest tracker-link, ACL verification and Installer verification successful. All three Linux3.13 shards and Windows3.13 passed. The earlier tracker-link failure was superseded by a later successful run after the actual handoff. Installer build/input jobs were classified skipped while its aggregate passed; this is source selection, not evidence of a built combined or stage installer. No redundant full suite was run locally after current green CI.\n\n## Disposition\n\nApprove this complete source at the exact head/base/scope/policy under the genuine source review claim. Root should reread current checks and refs before record-review and batch approve. Any relevant head/base/scope/policy change requires fresh review. This prepared report is not itself a Tracker transition.\n\nOrdinary source PR remains open after Approved for frozen batch integration; no direct source merge. Independent combined review, complete applicable combined CI, exact isolated stage verification, unchanged main promotion and package delivery remain separate. No live profile/Meta actions, installer acceptance, advertising activation, package publication or deployment were performed or claimed by this review.\n\nTotals: Standards0 findings; Spec0 findings.\n",
+              "execution_lane": "d8f3189fe8034e7e908beca5b629b0d6",
+              "review_session": "rev_rx1013b_20261013",
+              "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                824
+              ],
+              "recorded_at": "2026-10-13T06:25:37+00:00",
+              "issue_scopes": {
+                "824": "030d723c8cffe0437a50130bd11713bfcd6f15953d2b98531e4652d77ef75ca8"
+              }
+            },
+            "lane": {
+              "id": "d8f3189fe8034e7e908beca5b629b0d6",
+              "pr": 825,
+              "issues": [
+                824
+              ],
+              "actor": "Reviewer-RX1013B",
+              "session": "rev_rx1013b_20261013",
+              "coordinator": "Coordinator-CX1012A",
+              "started_at": "2026-10-13T06:17:20+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-13T06:25:54+00:00"
+          }
+        ],
+        "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+        "branch": "codex/batch-6b33b0c808d045a89e4d5f771f95483b",
+        "intake": "b9787ef2958b4fd2874f09b9a01e6107",
+        "started_at": "2026-10-13T06:38:56+00:00",
+        "pr": 847,
+        "entered_stage": true,
+        "history": [],
+        "review": {
+          "id": "d03327d470a448a88c6b1812d325c427",
+          "batch_id": "6b33b0c808d045a89e4d5f771f95483b",
+          "pr": 847,
+          "issues": [
+            824
+          ],
+          "actor": "Reviewer-RX1013B",
+          "session": "rev_rx1013b_20261013",
+          "coordinator": "Coordinator-CX1012A",
+          "state": "reviewing",
+          "started_at": "2026-10-13T06:43:29+00:00"
+        },
+        "main_prs": [
+          852
+        ],
+        "finished_at": "2026-10-13T07:38:02+00:00"
+      }
     },
+    "integration": null,
     "intake": {
       "id": "b9787ef2958b4fd2874f09b9a01e6107",
       "actor": "Coordinator-CX1012A",
       "session": "coord_cx1012a_20261012",
-      "state": "running",
+      "state": "finished",
       "issues": [
         824
       ],
-      "remaining": [
-        824
+      "remaining": [],
+      "batches": [
+        "6b33b0c808d045a89e4d5f771f95483b"
       ],
-      "batches": [],
       "started_at": "2026-10-13T06:32:49+00:00",
       "ineligible": {}
     }
