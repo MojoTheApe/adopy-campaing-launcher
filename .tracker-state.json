@@ -7370,20 +7370,6 @@
         "started_at": "2026-10-13T07:51:51+00:00",
         "from_status": "status:todo"
       },
-      "839": {
-        "actor": "Worker-D7K413",
-        "session": "design_audit_d7k413_20261013",
-        "coordinator": "Coordinator-D7K413",
-        "branch": "codex/acl-1839-connection-panel-layout",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Design-Audit-2026-10-13",
-        "id": "7bba5eba3ec747b4aa55cb8877f43079",
-        "issue": 839,
-        "state": "handoff",
-        "started_at": "2026-10-13T08:01:43+00:00",
-        "from_status": "status:todo",
-        "pr": 843,
-        "report": "### Current-main refresh \u2014 2026-10-13\n\nActual author Worker-D7K413 / session design_audit_d7k413_20261013, Coordinator-D7K413. Independent Reviewer-LR1839 returned the stale source using the supported review-return command; fresh author claim 7bba5eba3ec747b4aa55cb8877f43079 was acquired before changes.\n\nCurrent official main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80 is included by merge commit 02eaf7d92a50c8d440449799a55b09dfb7071178 on codex/acl-1839-connection-panel-layout. The only conflict was the top of docs/system/CHANGELOG.md; both ACL-1839 and upstream ACL-1824 entries were preserved. The source diff against current main remains exactly the four original layout/partial/test/history files, with no new product behavior.\n\nFresh Windows/Python3.14 validation: connection layout, account-map view/patch, Accounts shared connection and platform/CI layout regressions 149 passed, 1 skipped in 68.27s; packaging unittest suite 46 passed; tracked-file secret scan, dashboard/RPA import smoke and git diff --check passed. An initial test command referenced two absent filenames and ran no tests; corrected actual-file suite results above supersede it. The first scanner command similarly referenced an absent script; the actual acl_scan_secrets.py passed. No product check was weakened. All fixtures used synthetic data and an isolated ACL_CONFIG_DIR.\n\nPR843 remains the same source pull request. Fresh hosted CI and exact-current-main independent review are required. This report does not establish approval, source integration, an installed dashboard or package delivery. No production profiles or advertising writes were used."
-      },
       "838": {
         "actor": "Worker-CN6B92",
         "session": "worker_countryline_cn6b92_20261013",
@@ -11599,7 +11585,7 @@
             "session": "design_audit_d7k413_20261013"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-D7K413",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -11608,16 +11594,16 @@
           "coordinator": "Coordinator-D7K413",
           "branch": "codex/acl-1839-connection-panel-layout",
           "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Design-Audit-2026-10-13",
-          "id": "b24c33f5ee60435883252c7b80f57e45",
+          "id": "7bba5eba3ec747b4aa55cb8877f43079",
           "issue": 839,
           "state": "handoff",
-          "started_at": "2026-10-13T06:13:24+00:00",
+          "started_at": "2026-10-13T08:01:43+00:00",
           "from_status": "status:todo",
           "pr": 843,
-          "report": "ACL-1839 source implementation complete; independent formal review and CI pending.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/843\nBranch: codex/acl-1839-connection-panel-layout\nCommit: 145a30ba\nBase: e8e59f83\n\nRoot causes: visible-results flex rule overrode hidden, and long unbroken status\nmetadata retained an intrinsic width exceeding the panel. Shared CSS now preserves\nhidden and contains fields/status. Accessible names were added without handler or\nAdd sibling changes.\n\nVerified on Windows Python 3.13: 54 focused regressions; after strengthening the\nbuilder/cache fixture, 118 layout/platform tests; 46 packaging unittests; tracked\nsecrets scanner; import smoke; git diff --check. Original real-Chromium regression\nfailed at 975 px in 280 px host. Final tests use synthetic values, no real profiles.\nIndependent non-implementing precheck: no actionable findings after correcting its\nbuilder fixture note. Official review lane remained occupied by PR837, so this is\nnot a durable approval. Initial tracker-link CI ran before Review and needs rerun\nafter the verified handoff. Full CI/installer verification, source approval, batch\nstage/main integration and package delivery remain unverified. No merge/rollout."
+          "report": "### Current-main refresh \u2014 2026-10-13\n\nActual author Worker-D7K413 / session design_audit_d7k413_20261013, Coordinator-D7K413. Independent Reviewer-LR1839 returned the stale source using the supported review-return command; fresh author claim 7bba5eba3ec747b4aa55cb8877f43079 was acquired before changes.\n\nCurrent official main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80 is included by merge commit 02eaf7d92a50c8d440449799a55b09dfb7071178 on codex/acl-1839-connection-panel-layout. The only conflict was the top of docs/system/CHANGELOG.md; both ACL-1839 and upstream ACL-1824 entries were preserved. The source diff against current main remains exactly the four original layout/partial/test/history files, with no new product behavior.\n\nFresh Windows/Python3.14 validation: connection layout, account-map view/patch, Accounts shared connection and platform/CI layout regressions 149 passed, 1 skipped in 68.27s; packaging unittest suite 46 passed; tracked-file secret scan, dashboard/RPA import smoke and git diff --check passed. An initial test command referenced two absent filenames and ran no tests; corrected actual-file suite results above supersede it. The first scanner command similarly referenced an absent script; the actual acl_scan_secrets.py passed. No product check was weakened. All fixtures used synthetic data and an isolated ACL_CONFIG_DIR.\n\nPR843 remains the same source pull request. Fresh hosted CI and exact-current-main independent review are required. This report does not establish approval, source integration, an installed dashboard or package delivery. No production profiles or advertising writes were used."
         },
         "pr": 843,
-        "queued_at": "2026-10-13T06:23:19+00:00",
+        "queued_at": "2026-10-13T08:14:27+00:00",
         "review_report": "# ACL-1839 / PR843 source review return\n\nChanges required: refresh the source against current main before approval.\n\nIndependent review verified PR843 head 145a30ba116b599a010c61160e5be2ac519ed00c retains base e8e59f8376458f2f73089c3f2a8d454837ff033f, while official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Earlier source review and CI establish the old baseline only.\n\nThe actual author must take a fresh implementation claim for ACL-1839, include current main on the retained source branch, resolve any conflicts under that author ownership, run actual affected checks and obtain fresh source CI plus independent exact-head/base/scope review. Preserve the existing bounded layout and accessibility scope, original Worker and source PR. No production regression was found in the previously reviewed patch; this return concerns stale admission evidence.\n\nThis Reviewer made no source edits. No source approval, merge, stage entry, package publication or installation is claimed."
       },
       "840": {
@@ -15280,7 +15266,8 @@
       768,
       836,
       844,
-      853
+      853,
+      839
     ],
     "review": null,
     "history": [
@@ -23691,6 +23678,13 @@
         "issue": 841,
         "claim": "4b1b4a13060d408793ec620b03eb80f7",
         "actor": "Worker-T8L621"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T08:14:27+00:00",
+        "issue": 839,
+        "pr": 843,
+        "actor": "Worker-D7K413"
       }
     ],
     "policy": {
