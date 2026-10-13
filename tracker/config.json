@@ -482,9 +482,9 @@
     }
   },
   "execution_policy": {
-    "schema_version": 2,
+    "schema_version": 3,
     "implementation_limit": 5,
-    "review_limit": 1,
+    "review_limit": 5,
     "batch_limit": 5
   },
   "process_instructions": {
