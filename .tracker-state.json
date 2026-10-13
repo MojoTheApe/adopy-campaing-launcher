@@ -14886,7 +14886,51 @@
       "session": "rev_rx1013b_20261013",
       "coordinator": "Coordinator-CX1012A",
       "started_at": "2026-10-13T06:17:20+00:00",
-      "state": "reviewing"
+      "state": "approving",
+      "approval": {
+        "issue": 824,
+        "pr": 825,
+        "branch": "codex/acl-1824-alias-id-suffix",
+        "head_sha": "ea63bbd1b88132361fdea678733b742a676c048d",
+        "base_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+        "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "030d723c8cffe0437a50130bd11713bfcd6f15953d2b98531e4652d77ef75ca8",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-RX1013B",
+          "implementer": "Worker-WX1012A",
+          "head_sha": "ea63bbd1b88132361fdea678733b742a676c048d",
+          "base_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+          "tree_sha": "5366a8906888cba5c25487adea3da9a9cfe28d03",
+          "report": "# Independent source review \u2014 ACL-1824 / PR825\n\nVerdict: approved. Actual Reviewer-RX1013B/session rev_rx1013b_20261013, legitimate source review claim d8f3189fe8034e7e908beca5b629b0d6. Coordinator-CX1012A/session coord_cx1012a_20261012. Actual implementing Worker-WX1012A/session work_wx1012a_20261012; final author claim 7d2bfef5df6049a69e7393332d01893b was handed off. This Reviewer implemented none of this task, made no source edits or Tracker mutations, and does not adopt any older review as its own.\n\nOfficial repository MojoTheApe/adopy-campaing-launcher, Issue824/ACL-1824, PR825. Clean review checkout C:/Users/EvgeniSedin/Desktop/ACM-Review-825-2026-10-12. Head ea63bbd1b88132361fdea678733b742a676c048d, tree 5366a8906888cba5c25487adea3da9a9cfe28d03; current main/base and merge-base e8e59f8376458f2f73089c3f2a8d454837ff033f. Diff git diff e8e59f8376458f2f73089c3f2a8d454837ff033f...HEAD. Complete four-file change: 239 additions/8 deletions; commits cd9f9d9a, 19d8d7c3, 965947c2, 4633be0d, ea63bbd1.\n\nRead entire current Issue Description, Specifications, Acceptance and all recovery handoffs from issue-824-current-20261013.json. Read current PR/check snapshot pr825-fresh-green-20261013.json, final actual Worker handoff acl1824-worker-handoff-elsewhere.md, installed code-review/project-workflow, repository AGENTS, engineering context, delivery/workflow/Tracker/batch/layout guidance and pinned shared standard. Reviewed the complete diff including test-lifetime repair, existing account normalization/name rules, country alias index, account map, attribution and details endpoints, available-account consumer and rendered map's has_data/in_workbook pathways.\n\n## Standards\n\nSeparate parallel Standards helper /root/recovery_reviewer_1013/standards837 reviewed this exact PR825 diff against current documented guidance and the supplied complete smell baseline. No documented-standard violations or actionable baseline smells found. The resolver extends the existing shared identity mechanism; consumers continue using it; diagnostic identity and totals remain centralized. Observable regressions use isolated link storage. Logging cleanup restores handler filters in guaranteed teardown and preserves production redaction/assertions. The system changelog records final behavior and why the validation repair was necessary. Helper ran no tests, network, Tracker or live actions.\n\n## Spec\n\nNo remaining findings after complete current-scope review. Long numeric suffix stripping is the final fallback only when existing tail candidates are absent. Exact/configured-name and own-name rules retain priority; a unique existing tail wins; ambiguous tails and multiple suffix aliases refuse. Fewer than eight trailing digits are not stripped. Workbook identity is resolved within the selected linked country against the entire workbook, so date filtering cannot hide older identity or collisions.\n\nThe real account-map numbers path uses the resolved alias for Spend, Leads and FTDs; workbook membership uses the shared resolver, and the no-rows path depends on resulting has_data. Details and attribution use the same whole-workbook resolver before period-specific summaries. The elsewhere diagnostic now receives the already-resolved alias, with original label fallback for unresolved identity; its guards prohibit borrowing a suffix identity from another country. Country totals keep all visible account rows while counting each canonical workbook identity once, including duplicate-plus-distinct cases. No alias override format or unrelated production behavior was introduced.\n\nTest-only logging lifetime repair is bounded validation work triggered by required CI: original shared root/capture filters are restored in their original order after every pilot test, including detached handlers, and the directly installed test filter is explicitly removed in finally. Production pilot filtering and the routing-log expectations are unchanged.\n\n## Verification\n\nReviewer locally verified clean checkout, exact head/tree and git diff --check BASE...HEAD. Actual Coordinator-executed checks, documented in the genuine Worker's final handoff: focused elsewhere guards 4 passed/22 deselected/91 warnings in3.89s; both logging/API modules plus five resolver/dashboard files in one process 200 passed/95 warnings in26.76s. Secret scan and dashboard/RPA import smoke passed. Isolated configuration and empty external-library settings were used. These are attributed execution results; this Reviewer did not execute those tests, and no standalone200-test output log was persisted. The earlier red proofs/history are contextual, not this head's approval evidence.\n\nFresh cached GitHub source checks at exact current head/base show descriptor, latest tracker-link, ACL verification and Installer verification successful. All three Linux3.13 shards and Windows3.13 passed. The earlier tracker-link failure was superseded by a later successful run after the actual handoff. Installer build/input jobs were classified skipped while its aggregate passed; this is source selection, not evidence of a built combined or stage installer. No redundant full suite was run locally after current green CI.\n\n## Disposition\n\nApprove this complete source at the exact head/base/scope/policy under the genuine source review claim. Root should reread current checks and refs before record-review and batch approve. Any relevant head/base/scope/policy change requires fresh review. This prepared report is not itself a Tracker transition.\n\nOrdinary source PR remains open after Approved for frozen batch integration; no direct source merge. Independent combined review, complete applicable combined CI, exact isolated stage verification, unchanged main promotion and package delivery remain separate. No live profile/Meta actions, installer acceptance, advertising activation, package publication or deployment were performed or claimed by this review.\n\nTotals: Standards0 findings; Spec0 findings.\n",
+          "execution_lane": "d8f3189fe8034e7e908beca5b629b0d6",
+          "review_session": "rev_rx1013b_20261013",
+          "main_sha": "e8e59f8376458f2f73089c3f2a8d454837ff033f",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            824
+          ],
+          "recorded_at": "2026-10-13T06:25:37+00:00",
+          "issue_scopes": {
+            "824": "030d723c8cffe0437a50130bd11713bfcd6f15953d2b98531e4652d77ef75ca8"
+          }
+        },
+        "lane": {
+          "id": "d8f3189fe8034e7e908beca5b629b0d6",
+          "pr": 825,
+          "issues": [
+            824
+          ],
+          "actor": "Reviewer-RX1013B",
+          "session": "rev_rx1013b_20261013",
+          "coordinator": "Coordinator-CX1012A",
+          "started_at": "2026-10-13T06:17:20+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-13T06:25:54+00:00"
+      }
     },
     "history": [
       {
