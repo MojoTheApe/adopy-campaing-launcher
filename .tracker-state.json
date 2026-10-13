@@ -7742,20 +7742,6 @@
         "state": "implementing",
         "started_at": "2026-10-13T16:13:25+00:00",
         "from_status": "status:todo"
-      },
-      "529": {
-        "actor": "Worker-W530R",
-        "session": "worker530refresh20261013",
-        "coordinator": "Coordinator-DLV13",
-        "branch": "codex/acl-1529-sharp-shot",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-530-Refresh",
-        "id": "ef8b689a24b44dc5a7aa878d06962645",
-        "issue": 529,
-        "state": "handoff",
-        "started_at": "2026-10-13T18:41:27+00:00",
-        "from_status": "status:todo",
-        "pr": 530,
-        "report": "# ACL-1529 source CI repair handoff \u2014 2026-10-13\n\nActual Worker-W530R / stable session worker530refresh20261013 / actual agent /root/worker_refresh_530. Coordinator-DLV13. Original author commits, acceptance requirements and source branch preserved.\n\nFinal head c459673e5d898fe4b8775c843af8f54b18af8d39; tree f71e67a6a751ba7cd26564c511737b272e4b90f8; baseline main777663bf539308c0898cc177f872a8e0f63b597e. PR530 original branch codex/acl-1529-sharp-shot targets main.\n\nIndependent return at 8a72acf identified actual hosted CI blockers: run38444055009 status_shot missing stage mapping, and Linux browser file counts[32,38,37] exceeding invariant. No failure is reclassified or waived.\n\nNarrow authentic correction: status_shot is an explicit hold-stage diagnostic, never campaign progress. Linux sharding retains existing cost-first allocation and performs a deterministic post-pass only to repair browser-count skew, moving a browser file to the least-populated bucket with the smallest resulting cost imbalance. Coverage, platform selection and assertion thresholds stay unchanged. A synthetic uneven-cost regression proves balanced browser counts and exact deterministic coverage. No other source tip/commit was imported. PR882 separately uses first-pass browser partitioning; read-only merge-tree confirmed clean composition with exact8825d0e725,8673cf21cdf,6655f9455a after relocating only the unchanged Oct3 screenshot history beside its related safety entry.\n\nWindows Python3.13.15 isolated config:146 model/shard/platform tests passed;3 report script parse tests passed; scanner/import smoke/whitespace passed. Screenshot product behavior unchanged since prior verified181cases and corrected23-test fixture subset; no redundant screenshot suite repeated. Initial3.14 native crash remains historical infrastructure failure. Fresh hosted full required CI pending; prior failedrun not claimed green.\n\nNo dashboard deployment, live Meta/profile operation, screenshot activation, ad write or package delivery performed. Readability owner acceptance remains outstanding. Fresh independent exact-source review and actual required CI are still mandatory."
       }
     },
     "tasks": {
@@ -9173,7 +9159,7 @@
             "session": "worker530refresh20261013"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W530R",
         "coordinator": "Coordinator-DLV13",
         "handoff": {
@@ -9182,16 +9168,16 @@
           "coordinator": "Coordinator-DLV13",
           "branch": "codex/acl-1529-sharp-shot",
           "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-530-Refresh",
-          "id": "70719b320aee4eb8b5a4bf97327d6858",
+          "id": "ef8b689a24b44dc5a7aa878d06962645",
           "issue": 529,
           "state": "handoff",
-          "started_at": "2026-10-13T17:35:00+00:00",
+          "started_at": "2026-10-13T18:41:27+00:00",
           "from_status": "status:todo",
           "pr": 530,
-          "report": "# ACL-1529 fresh Worker handoff \u2014 2026-10-13\n\nActual Worker-W530R run: /root/worker_refresh_530, stable opaque session worker530refresh20261013. Coordinator-DLV13 requested refresh after independent current-main rejection. Original Worker-S1529C commits/author/history and branch codex/acl-1529-sharp-shot remain preserved.\n\nPR530 source base main: 777663bf539308c0898cc177f872a8e0f63b597e.\nFinal head: 8a72acf36fbac87b16eeff173f989349f477a37f\nTree: 33ba08e7c26ea1fa974e1bdb1be25c972d87acec\n\nCurrent main merged into the original source with three conflicts resolved preserving both histories, screenshot-only title, owner-hidden Copy for group flags and default-off status screenshots. Plain CDP capture has no clip or scale; source policy unchanged. One legacy fixture changed to test that exact capture contract instead of old Playwright screenshot calls. No Meta profile opened, no live advertising writes or screenshot activation, no dashboard deployment, package delivery or main completion claimed.\n\nWindows/Python3.13.15: initial affected nine-file suite 181 passed /1 legacy fixture failed; after correction, 23 affected fixture tests passed,61 deselected. Other159 successful cases unchanged. Secret scanner/import smoke/source whitespace checks pass. Initial Python3.14 collection native access violation recorded as infrastructure failure, not pass. Fresh hosted checks pending for final head.\n\nOutstanding owner acceptance: fresh pasted screenshot readability in provider group, controlled live Multilogin verification and package delivery remain unclaimed. Original issue requirements/checklists retained; owner-approved no-clip/no-scale deviation recorded in original ccf2880 commit and current PR description. Fresh independent source review/approval is required."
+          "report": "# ACL-1529 source CI repair handoff \u2014 2026-10-13\n\nActual Worker-W530R / stable session worker530refresh20261013 / actual agent /root/worker_refresh_530. Coordinator-DLV13. Original author commits, acceptance requirements and source branch preserved.\n\nFinal head c459673e5d898fe4b8775c843af8f54b18af8d39; tree f71e67a6a751ba7cd26564c511737b272e4b90f8; baseline main777663bf539308c0898cc177f872a8e0f63b597e. PR530 original branch codex/acl-1529-sharp-shot targets main.\n\nIndependent return at 8a72acf identified actual hosted CI blockers: run38444055009 status_shot missing stage mapping, and Linux browser file counts[32,38,37] exceeding invariant. No failure is reclassified or waived.\n\nNarrow authentic correction: status_shot is an explicit hold-stage diagnostic, never campaign progress. Linux sharding retains existing cost-first allocation and performs a deterministic post-pass only to repair browser-count skew, moving a browser file to the least-populated bucket with the smallest resulting cost imbalance. Coverage, platform selection and assertion thresholds stay unchanged. A synthetic uneven-cost regression proves balanced browser counts and exact deterministic coverage. No other source tip/commit was imported. PR882 separately uses first-pass browser partitioning; read-only merge-tree confirmed clean composition with exact8825d0e725,8673cf21cdf,6655f9455a after relocating only the unchanged Oct3 screenshot history beside its related safety entry.\n\nWindows Python3.13.15 isolated config:146 model/shard/platform tests passed;3 report script parse tests passed; scanner/import smoke/whitespace passed. Screenshot product behavior unchanged since prior verified181cases and corrected23-test fixture subset; no redundant screenshot suite repeated. Initial3.14 native crash remains historical infrastructure failure. Fresh hosted full required CI pending; prior failedrun not claimed green.\n\nNo dashboard deployment, live Meta/profile operation, screenshot activation, ad write or package delivery performed. Readability owner acceptance remains outstanding. Fresh independent exact-source review and actual required CI are still mandatory."
         },
         "pr": 530,
-        "queued_at": "2026-10-13T18:09:52+00:00",
+        "queued_at": "2026-10-13T18:48:26+00:00",
         "review_report": "# ACL-1529 PR530 independent CI review \u2014 changes requested\n\nExact source head: 8a72acf36fbac87b16eeff173f989349f477a37f; tree33ba08e7c26ea1fa974e1bdb1be25c972d87acec; main/base777663bf539308c0898cc177f872a8e0f63b597e.\nActual independent reviewer Reviewer-C530 (/root/source_review_530), held owned lane24bc47aab55a4fa79bed18b20866b0c1. Current required hosted verification run38444055009 failed. Earlier source-code review and113 passing targeted fixtures did not claim hosted CI passed; formal Approved was never applied.\n\nBlocking B1: tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage failed on Linux Python3.11 and3.13: cb-build-model stage rules do not map newly emitted telemetry step status_shot. Preserve telemetry and model assertions; author must implement the narrowly correct model/telemetry contract and run relevant model tests plus current full required source CI.\n\nBlocking B2: tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards failed on both Linux versions with browser file counts[32,38,37]; maximum difference6 exceeds allowed3. Author must make an authentic narrow standalone correction justified by source530 requirements or use the supported separate-source dependency/reconciliation route. Approved PR882 exists as a separate sharder repair and must not be silently imported into530 or counted as already integrated. Preserve coverage and invariant; do not loosen assertion, remove tests, relabel failure as infrastructure or fabricate CI approval.\n\nRaw durable evidence: output/source530-ci-failed.txt in delivery checkout; hosted https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38444055009 . No new source edits or live profile/advertising/dashboard/deployment actions by reviewer. Original branch/history and real Worker-W530R handoff retained. Supported review-return releases only this owned source lane and invalidates prior review approval, returning issue529 normally to ToDo/changes_requested so the genuine Worker can claim a new narrow correction. Fresh exact-head independent review and green required checks needed after new handoff. All unrelated lanes/claims/approvals/intake/history preserved."
       },
       "532": {
@@ -16152,7 +16138,8 @@
       839,
       845,
       840,
-      841
+      841,
+      529
     ],
     "review": null,
     "history": [
@@ -26762,6 +26749,13 @@
         "pr": 873,
         "lane": "1f3d3ae29cfa49ef8a89c4ae1e8f1f37",
         "actor": "Reviewer-RS1012"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T18:48:26+00:00",
+        "issue": 529,
+        "pr": 530,
+        "actor": "Worker-W530R"
       }
     ],
     "policy": {
