@@ -258,6 +258,10 @@
       "title": "Header: Linear toolbar with a framed Date range control",
       "state": "created",
       "issue": 778
+    },
+    "c2c343905a15adf4b96e810892590f2038749f3236b60f9f9ff6d20000997d78": {
+      "title": "Replace country activity dots with a vertical line",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
