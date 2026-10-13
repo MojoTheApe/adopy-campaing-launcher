@@ -7751,9 +7751,11 @@
         "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-530-Refresh",
         "id": "ef8b689a24b44dc5a7aa878d06962645",
         "issue": 529,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-13T18:41:27+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 530,
+        "report": "# ACL-1529 source CI repair handoff \u2014 2026-10-13\n\nActual Worker-W530R / stable session worker530refresh20261013 / actual agent /root/worker_refresh_530. Coordinator-DLV13. Original author commits, acceptance requirements and source branch preserved.\n\nFinal head c459673e5d898fe4b8775c843af8f54b18af8d39; tree f71e67a6a751ba7cd26564c511737b272e4b90f8; baseline main777663bf539308c0898cc177f872a8e0f63b597e. PR530 original branch codex/acl-1529-sharp-shot targets main.\n\nIndependent return at 8a72acf identified actual hosted CI blockers: run38444055009 status_shot missing stage mapping, and Linux browser file counts[32,38,37] exceeding invariant. No failure is reclassified or waived.\n\nNarrow authentic correction: status_shot is an explicit hold-stage diagnostic, never campaign progress. Linux sharding retains existing cost-first allocation and performs a deterministic post-pass only to repair browser-count skew, moving a browser file to the least-populated bucket with the smallest resulting cost imbalance. Coverage, platform selection and assertion thresholds stay unchanged. A synthetic uneven-cost regression proves balanced browser counts and exact deterministic coverage. No other source tip/commit was imported. PR882 separately uses first-pass browser partitioning; read-only merge-tree confirmed clean composition with exact8825d0e725,8673cf21cdf,6655f9455a after relocating only the unchanged Oct3 screenshot history beside its related safety entry.\n\nWindows Python3.13.15 isolated config:146 model/shard/platform tests passed;3 report script parse tests passed; scanner/import smoke/whitespace passed. Screenshot product behavior unchanged since prior verified181cases and corrected23-test fixture subset; no redundant screenshot suite repeated. Initial3.14 native crash remains historical infrastructure failure. Fresh hosted full required CI pending; prior failedrun not claimed green.\n\nNo dashboard deployment, live Meta/profile operation, screenshot activation, ad write or package delivery performed. Readability owner acceptance remains outstanding. Fresh independent exact-source review and actual required CI are still mandatory."
       }
     },
     "tasks": {
