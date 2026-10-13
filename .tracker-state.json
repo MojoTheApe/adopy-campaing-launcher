@@ -7754,6 +7754,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T18:56:37+00:00",
         "from_status": "status:todo"
+      },
+      "836": {
+        "actor": "Worker-SR1012",
+        "session": "connection_sr1012_worker",
+        "coordinator": "Coordinator-CR1012",
+        "branch": "codex/acl-1836-session-recovery",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\Adopy Campaign Manager\\ACM-Worker-1836-2026-10-12",
+        "id": "94f701d1fd4e4237ab9f8f00c04afa51",
+        "issue": 836,
+        "state": "implementing",
+        "started_at": "2026-10-13T19:04:02+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11893,9 +11905,13 @@
           {
             "actor": "Worker-SR1012",
             "session": "connection_sr1012_worker"
+          },
+          {
+            "actor": "Worker-SR1012",
+            "session": "connection_sr1012_worker"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-SR1012",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -11915,14 +11931,7 @@
         "pr": 837,
         "queued_at": "2026-10-13T08:38:19+00:00",
         "review_report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle.",
-        "reviewer": "Reviewer-RS1012",
         "return_operation": {
-          "id": "91201340047f423fa6a6747b1c5dc404",
-          "actor": "Coordinator-FLOW513",
-          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
-          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
-        },
-        "return": {
           "id": "91201340047f423fa6a6747b1c5dc404",
           "actor": "Coordinator-FLOW513",
           "session": "flow_five_reviews_coordinator_01a134f0_20261013",
@@ -27143,6 +27152,13 @@
           "state": "reviewing",
           "started_at": "2026-10-13T19:03:29+00:00"
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T19:04:02+00:00",
+        "issue": 836,
+        "claim": "94f701d1fd4e4237ab9f8f00c04afa51",
+        "actor": "Worker-SR1012"
       }
     ],
     "policy": {
