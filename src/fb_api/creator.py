@@ -460,6 +460,15 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
                         utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip())
 
 
+MANUAL_PAGE_NOTICE = ("No Facebook Page is available. Only the campaign and ad sets will be created PAUSED; "
+                      "ads will not be created. Add a Page and ads in Ads Manager, or refresh Pages and retry "
+                      "to complete the same campaign.")
+
+
+def needs_manual_page(plan: CampaignPlan) -> bool:
+    return not plan.page_id and plan.page_source == "manual completion"
+
+
 def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
     """Страница плана: на кабинете и одна определённая. Заметки; ошибки — `PlanError`."""
     notes = []
@@ -475,8 +484,10 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
         plan.page_source = "account default"
         notes.append("Automatic Facebook Page: the first available page of this ad account is used")
     else:
-        raise PlanError("No Facebook Pages are available for this ad account. "
-                        "Refresh pages in the builder or grant this account access to a Page.")
+        if any(s.instant for s in getattr(plan, 'ad_sets', [])):
+            raise PlanError("Instant Forms require a Facebook Page. Refresh pages or choose a website destination.")
+        plan.page_source = "manual completion"
+        notes.append(MANUAL_PAGE_NOTICE)
     return notes
 
 
@@ -743,6 +754,7 @@ class Outcome:
     audit: list = field(default_factory=list)
     #: ACL-1771: как найдены термины таргетинга и что ждёт подтверждения (для Check plan).
     targeting: list = field(default_factory=list)
+    manual_required: list[str] = field(default_factory=list)
 
     @property
     def mismatches(self) -> list[dict]:
@@ -1362,6 +1374,8 @@ class CampaignCreator:
                 raise PlanError(f"Ad set {ad_set.name!r}: the start time {ad_set.start_time} "
                                 "(ad account time zone) is not in the future")
             ok("adsets", self.adset_params(plan, ad_set, "0", targeting), f"ad set {ad_set.name!r}")
+            if needs_manual_page(plan):
+                continue  # No creative/ad write is planned until a Page is available.
             for ad in ad_set.ads:
                 ad = self._planned(ad, FORM_ID_PLACEHOLDER)
                 media = ({"video_id": "0", "thumb": "https://example.invalid/t.jpg"} if ad.kind == "video"
@@ -1391,7 +1405,7 @@ class CampaignCreator:
             sets = []
             for ad_set, targeting in zip(plan.ad_sets, targetings):
                 ads = []
-                for ad in ad_set.ads:
+                for ad in ([] if needs_manual_page(plan) else ad_set.ads):
                     data = files[ad.path]
                     media = ({"video_id": "<uploaded video>", "thumb": "<video thumbnail>"} if ad.kind == "video"
                              else {"image_hash": "<uploaded image>"})
@@ -1522,6 +1536,12 @@ class CampaignCreator:
         if self._form_steps:
             # Только у планов с шаблонами форм: сайтовый план не меняется ни байтом (ACL-1775).
             summary["forms"] = [st.as_dict() for st in self._form_steps.values()]
+        if needs_manual_page(plan):
+            summary["manual_required"] = [MANUAL_PAGE_NOTICE]
+            for row in summary["ad_sets"]:
+                row["ads_not_created"] = True
+                row["pending_ad_count"] = len(row["ads"])
+                row["ads"] = []
         if self.facts.page_names.get(plan.page_id, plan.page_id) != plan.page_id:
             summary["page_name"] = self.facts.page_names[plan.page_id]
         return summary
@@ -1567,6 +1587,9 @@ class CampaignCreator:
                 self._verify_label(out, f"The ad set {ad_set.name!r}", adset_id, plan.label)
                 self._step(out, f"ad set {ad_set.name!r}: created PAUSED, tag kept")
             out.adset_ids.append(adset_id)
+
+            if needs_manual_page(plan):
+                continue
 
             have = {str(r.get("name") or "").strip(): str(r["id"])
                     for r in self._children(adset_id, "ads", "id,name")}
@@ -1620,6 +1643,9 @@ class CampaignCreator:
 
         # 4. Сверка.
         out.readback = self.readback(plan, out, targetings, files)
+        if needs_manual_page(plan):
+            out.manual_required = [MANUAL_PAGE_NOTICE]
+            self._step(out, "Manual completion required: add a Facebook Page and ads in Ads Manager")
         n = len(out.mismatches)
         self._step(out, "readback: all fields match" if not n else f"readback: {n} mismatch(es)")
 
@@ -1655,6 +1681,9 @@ class CampaignCreator:
             obj = f"ad set {ad_set.name}"
             row = self.client.get(f"/{adset_id}", {"fields": ADSET_FIELDS})
             checks += self._adset_checks(plan, ad_set, targeting, row, out.campaign_id)
+
+            if needs_manual_page(plan):
+                continue  # Readback covers only the objects this run promised to create.
 
             ads = self.client.get_all(f"/{adset_id}/ads", {
                 "fields": "id,name,status,adset_id,adlabels{name},"
