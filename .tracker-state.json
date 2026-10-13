@@ -7358,20 +7358,6 @@
   },
   "execution": {
     "claims": {
-      "845": {
-        "actor": "Worker-Q8V274",
-        "session": "publish-buttons-20261013-Q8V274",
-        "coordinator": "Coordinator-D7K413",
-        "branch": "codex/acl-1845-publish-button-design",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-Publish-Design-2026-10-13",
-        "id": "d9f5699c919e41c5957876ba9e63e27d",
-        "issue": 845,
-        "state": "handoff",
-        "started_at": "2026-10-13T07:51:51+00:00",
-        "from_status": "status:todo",
-        "pr": 850,
-        "report": "Tracker issues: ACL-1845\n\nThe builder previously stacked two filled Publish controls, and the all-campaign count included accounts already building. The footer now owns one primary action with live checkbox scope and a count that excludes already-building accounts; the open campaign's action is a secondary link. Zero eligible campaigns shows a disabled action and a wait reason, while a free account can still be enqueued. Disabled bulk publication keeps a distinct pale blue fill and border in both themes. No-checkbox/all-checkbox behavior, confirmations, retry keys, duplicate guards and draft-only payloads remain unchanged.\n\nValidation on current main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80: 55 affected offline browser/per-account tests passed, including actual selected request bodies, two busy campaigns plus one free, count/scope updates while a footer select retains focus, zero count/unknown status, queued work, readable contrast, focus and reduced motion. Packaging unittest suite46, scanner, import smoke and diff check passed on Windows/Python3.14. Hosted CI and installer checks must run on the new head.\n\nActual-main synthetic populated light/dark screenshots were visually checked. A separate fixture applies only scoped publication CSS to the newer production Adopy tokens/report styles and sanitized two-column markup, using actual docked/expanded selectors. Its 480px docked and1100px expanded cases pass geometry/focus and contrast (active5.17/6.86; disabled12.24/11.43). It includes blocked Page/preflight presentation and PAUSED target labels; it executes no newer runtime JavaScript. Main still has the older one-column RPA runtime. The label adapter preserves PAUSED wording if the API runtime supplies its existing mode flag; this PR adds no API backend or expanded runtime. During integration with that newer source, its applyGate must preserve the zero-count disabled condition rather than overwrite it. CSS compatibility is not runtime adoption or installed-package delivery; no production account or advertising write was used."
-      },
       "838": {
         "actor": "Worker-CN6B92",
         "session": "worker_countryline_cn6b92_20261013",
@@ -11687,7 +11673,7 @@
             "session": "publish-buttons-20261013-Q8V274"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-Q8V274",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -11696,16 +11682,16 @@
           "coordinator": "Coordinator-D7K413",
           "branch": "codex/acl-1845-publish-button-design",
           "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-Publish-Design-2026-10-13",
-          "id": "feabff1b8e5f4931b940a28800234197",
+          "id": "d9f5699c919e41c5957876ba9e63e27d",
           "issue": 845,
           "state": "handoff",
-          "started_at": "2026-10-13T06:42:10+00:00",
+          "started_at": "2026-10-13T07:51:51+00:00",
           "from_status": "status:todo",
           "pr": 850,
-          "report": "Tracker issues: ACL-1845\n\nPublication controls were small and inconsistent with dashboard primary actions. Individual and all/selected actions now share accent theme colors, 14 px labels, 38 px minimum height, wrapping text, readable disabled states and keyboard focus. Confirmation buttons use the same sizing; queue progress exposes aria-busy without changing enqueue, duplicate, retry or draft-only guards.\n\nValidation: affected offline browser/per-account regressions 51 passed; final refined design suite 9 passed; packaging unittest suite 46 passed; scanner, import smoke and diff check passed on Windows/Python 3.14. Hosted required CI and installer gates remain pending. Synthetic populated screenshots were visually checked. A separate read-only CSS fixture using the newer dashboard report styles and Adopy tokens passed normal/expanded light/dark geometry, focus and contrast checks (active 5.17/6.86, disabled 12.68/11.24); it imports no newer runtime JS and establishes CSS compatibility only. No live publishing or installed-package delivery was tested."
+          "report": "Tracker issues: ACL-1845\n\nThe builder previously stacked two filled Publish controls, and the all-campaign count included accounts already building. The footer now owns one primary action with live checkbox scope and a count that excludes already-building accounts; the open campaign's action is a secondary link. Zero eligible campaigns shows a disabled action and a wait reason, while a free account can still be enqueued. Disabled bulk publication keeps a distinct pale blue fill and border in both themes. No-checkbox/all-checkbox behavior, confirmations, retry keys, duplicate guards and draft-only payloads remain unchanged.\n\nValidation on current main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80: 55 affected offline browser/per-account tests passed, including actual selected request bodies, two busy campaigns plus one free, count/scope updates while a footer select retains focus, zero count/unknown status, queued work, readable contrast, focus and reduced motion. Packaging unittest suite46, scanner, import smoke and diff check passed on Windows/Python3.14. Hosted CI and installer checks must run on the new head.\n\nActual-main synthetic populated light/dark screenshots were visually checked. A separate fixture applies only scoped publication CSS to the newer production Adopy tokens/report styles and sanitized two-column markup, using actual docked/expanded selectors. Its 480px docked and1100px expanded cases pass geometry/focus and contrast (active5.17/6.86; disabled12.24/11.43). It includes blocked Page/preflight presentation and PAUSED target labels; it executes no newer runtime JavaScript. Main still has the older one-column RPA runtime. The label adapter preserves PAUSED wording if the API runtime supplies its existing mode flag; this PR adds no API backend or expanded runtime. During integration with that newer source, its applyGate must preserve the zero-count disabled condition rather than overwrite it. CSS compatibility is not runtime adoption or installed-package delivery; no production account or advertising write was used."
         },
         "pr": 850,
-        "queued_at": "2026-10-13T07:00:48+00:00",
+        "queued_at": "2026-10-13T08:15:52+00:00",
         "review_report": "ACL-1845 / PR850 review return for user-approved design update\n\nActual non-implementing reviewer: Reviewer-D1845, session design_review_1845_20261013.\nThe user selected the single-primary-action design and requested implementation after inspecting the expanded-builder mockup. PR850 head 7b597f43538d1a3a7f26c846e21cc6edb020508c implements the earlier publication styling, but not this selected composition.\n\nRequired changes: one primary bulk-publication action tied to campaign checkboxes; explicit count of campaigns actually submitted, excluding already locked/building campaigns; readable selection scope; secondary individual-publication action; subtle blue fill and distinguishable border for disabled bulk publication. Preserve no-checkbox/all-checkbox publication semantics, error gates, confirmation, queues and API PAUSED-versus-RPA-draft target labels. Validate docked and genuine expanded-builder CSS compatibility without claiming an upstream runtime installation.\n\nReturn this source to its actual author for a fresh implementation claim, required checks, handoff and new independent review. This is not approval, integration or delivery evidence."
       },
       "844": {
@@ -15269,7 +15255,8 @@
       836,
       844,
       853,
-      839
+      839,
+      845
     ],
     "review": null,
     "history": [
@@ -23687,6 +23674,13 @@
         "issue": 839,
         "pr": 843,
         "actor": "Worker-D7K413"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T08:15:52+00:00",
+        "issue": 845,
+        "pr": 850,
+        "actor": "Worker-Q8V274"
       }
     ],
     "policy": {
