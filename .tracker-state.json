@@ -11624,7 +11624,7 @@
             "session": "publish-buttons-20261013-Q8V274"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-Q8V274",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -11642,7 +11642,8 @@
           "report": "Tracker issues: ACL-1845\n\nPublication controls were small and inconsistent with dashboard primary actions. Individual and all/selected actions now share accent theme colors, 14 px labels, 38 px minimum height, wrapping text, readable disabled states and keyboard focus. Confirmation buttons use the same sizing; queue progress exposes aria-busy without changing enqueue, duplicate, retry or draft-only guards.\n\nValidation: affected offline browser/per-account regressions 51 passed; final refined design suite 9 passed; packaging unittest suite 46 passed; scanner, import smoke and diff check passed on Windows/Python 3.14. Hosted required CI and installer gates remain pending. Synthetic populated screenshots were visually checked. A separate read-only CSS fixture using the newer dashboard report styles and Adopy tokens passed normal/expanded light/dark geometry, focus and contrast checks (active 5.17/6.86, disabled 12.68/11.24); it imports no newer runtime JS and establishes CSS compatibility only. No live publishing or installed-package delivery was tested."
         },
         "pr": 850,
-        "queued_at": "2026-10-13T07:00:48+00:00"
+        "queued_at": "2026-10-13T07:00:48+00:00",
+        "reviewer": "Reviewer-D1845"
       },
       "844": {
         "implementers": [
@@ -12743,6 +12744,10 @@
       "Worker-N7Q4": {
         "session": "architecture_audit_n7q4_20261013",
         "role": "Worker"
+      },
+      "Reviewer-D1845": {
+        "session": "design_review_1845_20261013",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -15175,10 +15180,20 @@
       840,
       836,
       841,
-      844,
-      845
+      844
     ],
-    "review": null,
+    "review": {
+      "id": "e9ff2a05f3274fc78c8a4731db8d5c80",
+      "pr": 850,
+      "issues": [
+        845
+      ],
+      "actor": "Reviewer-D1845",
+      "session": "design_review_1845_20261013",
+      "coordinator": "Coordinator-DesignAudit",
+      "started_at": "2026-10-13T07:50:01+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -23420,6 +23435,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-13T07:39:25+00:00",
         "batch_id": "6b33b0c808d045a89e4d5f771f95483b"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T07:50:01+00:00",
+        "pr": 850,
+        "lane": "e9ff2a05f3274fc78c8a4731db8d5c80",
+        "actor": "Reviewer-D1845"
       }
     ],
     "policy": {
