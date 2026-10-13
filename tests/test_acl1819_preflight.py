@@ -136,6 +136,12 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "tracking_unknown_when_link_broken": (_with(link="nope"), "link_tracking", "unknown", []),
     "media_ok": (_with(), "media_chosen", "ok", []),
     "media_missing": (_with(ads=_ad(1, file="")), "media_chosen", "error", [2]),
+    # ACL-1774: до 5 текстов и вертикальный файл только рядом с основным.
+    "texts_ok": (_with(), "texts_limit", "ok", []),
+    "texts_six_bodies": (_with(ads=_ad(0, bodies=[f"b{i}" for i in range(6)])), "texts_limit", "error", [1]),
+    "vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "vertical_needs_main", "ok", []),
+    "vertical_without_main": (_with(ads=_ad(1, file="", vertical_file="1001_story.png")),
+                              "vertical_needs_main", "error", [2]),
     "primary_ok": (_with(), "primary_text", "ok", []),
     "primary_missing": (_with(ads=_ad(0, body="  ")), "primary_text", "error", [1]),
     "headline_ok": (_with(), "headline", "ok", []),
@@ -319,7 +325,7 @@ def test_a_clean_campaign_has_no_server_error(tmp_path):
     assert {v["rule"]: v["status"] for v in out.audit} == {
         "account_active": "ok", "page_ok": "ok", "pixel_ok": "ok", "country_resolves": "ok",
         "language_resolves": "ok", "interests_resolve": "ok", "media_readable": "ok", "media_limits": "ok",
-        "media_vertical": "ok", "budget_min": "ok", "existing_diffs": "ok"}
+        "media_vertical": "ok", "vertical_ratio": "ok", "budget_min": "ok", "existing_diffs": "ok"}
 
 
 def test_page_not_on_the_account(tmp_path):

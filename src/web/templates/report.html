@@ -3413,6 +3413,11 @@
     .cb-headline-line { color: var(--muted); font-size: var(--adopy-text-sm); margin-top: 0.2rem; overflow-wrap: anywhere; }
     .cb-headline-line[hidden] { display: none; }
     .cb-api-note { color: var(--warn); font-size: var(--adopy-text-sm); margin-top: 0.15rem; }
+    .cb-textx-label[hidden], .cb-textx-sel-wrap[hidden] { display: none; }
+    .cb-textx-add-wrap { display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start; }
+    .cb-textx-add { font: inherit; padding: 0.25rem 0.7rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+    .cb-textx-add:disabled { opacity: 0.55; cursor: not-allowed; }
+    .cb-textx-note { color: var(--muted); font-size: var(--adopy-text-sm); }
     /* ACL-1775: выбор формы Страницы в объявлении */
     .cb-form-wrap { min-width: 0; }
     .cb-form-wrap[hidden], .cb-form-only[hidden] { display: none; }
@@ -5416,7 +5421,7 @@ window.cbLayout = (function () {
     [/primary text [3-5]/i, '.cb-textx-search', 'ad'],
     [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text [2-5]'],
     [/stories \/ reels/i, '.cb-vertical-search', 'ad'],
-    [/creative|file|image|video/i, '.cb-creative-search', 'ad'],
+    [/creative|file|image|video/i, '.cb-creative-search', 'ad', 'stories \/ reels'],
     [/would all be named|names must differ/i, '.cb-creative-search, .cb-adtitle-search', 'ad'],
     [/budget/i, '[name$="_budget"]', 'campaign'],
     [/detailed targeting|interest|target/i, '.cb-targeting-search', 'adset'],
@@ -6298,16 +6303,9 @@ window.cbTree = (function () {
     if (window.cbSyncDestination) window.cbSyncDestination(found.camp.slot);
     for (var i = 0; i < rows.length; i += 1) {
       rows[i].classList.toggle('cbd-ad-off', i !== adIdx);
-      /* Создатель по API второй основной текст не принимает: пустое поле
-         выключено с причиной, непустое остаётся рабочим (иначе набранное
-         молча пропало бы из отправки) и проверка покажет ошибку на нём. */
-      var t2 = rows[i].querySelector('.cb-text2-search');
-      var note = rows[i].querySelector('[data-api-only]');
-      if (t2) {
-        t2.disabled = api && !t2.value;
-        if (t2.disabled) t2.title = 'API backend: a second primary text is not supported yet (ACL-1774)';
-      }
-      if (note) note.hidden = !api;
+      /* ACL-1774: тексты 3-5 и вертикальный файл — только API; ряды 3-5 открываются
+         кнопкой или когда в них уже есть значение (восстановленный черновик). */
+      if (window.cbSyncTextRows) window.cbSyncTextRows(rows[i], api);
       /* Заголовок выбранной записи — под Primary text 1, только для чтения. */
       var line = rows[i].querySelector('[data-headline]');
       var pick = rows[i].querySelector('.cb-adtitle-sel-wrap input[type="hidden"]');
@@ -6374,7 +6372,18 @@ window.cbTree = (function () {
       var file = val(row, 'input[type="hidden"][name$="_creative_file"]').trim();
       var copy = val(row, 'input[type="hidden"][name$="_copy"]').trim();
       var entry = copy && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(copy) : null;
+      /* ACL-1774: все тексты объявления — записи библиотеки 1-5 по порядку. */
+      var entries = [];
+      ['_copy', '_copy2', '_copy3', '_copy4', '_copy5'].forEach(function (suf) {
+        var nm = val(row, 'input[type="hidden"][name$="' + suf + '"]').trim();
+        var en = nm && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(nm) : null;
+        if (en) entries.push(en);
+      });
       ads.push({
+        bodies: entries.map(function (e) { return String(e.body || ''); }),
+        headlines: entries.map(function (e) { return String(e.headline || e.ad_title || ''); }),
+        descriptions: entries.map(function (e) { return String(e.description || ''); }),
+        vertical_file: val(row, 'input[type="hidden"][name$="_creative_file_vertical"]').trim(),
         /* Имя — как у сервера (AdDraft.ad_name): номер креатива из файла и текст. */
         name: window.cbPreflight.adName(file, copy),
         file: file, body: entry ? String(entry.body || '') : '',
@@ -11857,7 +11866,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // otherwise only ever fires on oninput. focusin bubbles (plain focus
   // doesn't), so this works via delegation for dynamically-added ad rows too.
   document.addEventListener('focusin', function(e) {
-    if (e.target.classList && e.target.classList.contains('cb-creative-search') && e.target.value) {
+    if (e.target.classList && (e.target.classList.contains('cb-creative-search') || e.target.classList.contains('cb-vertical-search')) && e.target.value) {
       cbCreativeSearch(e.target);
     }
   });
@@ -12669,13 +12678,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="text" class="cb-sel-text cb-text2-search" placeholder="— optional: search ad text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Optional second primary text: the body of the chosen ad text is added as a second text option">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy2" value="">' +
-      /* ACL-1769: создатель по Graph API второй текст не принимает (ошибка
-         «Primary text 2 is not supported by the API backend yet»), поэтому при
-         бэкенде API поле гасится, пока пусто, и подпись говорит почему.
-         Набранное не теряется: непустое поле остаётся рабочим, а проверка
-         покажет ошибку на нём. Гасит cbTree.syncHost. */
-      '<div class="cb-api-note" data-api-only hidden>Primary text 2 is not supported by the API backend yet (ACL-1774). Leave it empty.</div>' +
       '</div>' +
+      /* ACL-1774: тексты 3-5 — те же записи библиотеки (основной текст, заголовок и описание),
+         ряды скрыты, пока их не откроют кнопкой; максимум 5 текстов у объявления.
+         Подписи — «Primary text N», как просил владелец. Только API-бэкенд (cb-api-field). */
+      textxRowHtml(pfx, 3) + textxRowHtml(pfx, 4) + textxRowHtml(pfx, 5) +
+      '<span class="cb-label cb-textx-add-label">More primary texts</span>' +
+      '<div class="cb-textx-add-wrap"><button type="button" class="cb-textx-add" onclick="cbAddTextRow(this)">+ Primary text 3</button>' +
+      '<span class="cb-textx-note">Up to 5 primary texts per ad. Each brings its own headline and description; all belong to the same ad.</span></div>' +
       /* ACL-1775: форма Страницы - только при Instant Form (cbSyncDestination). Скрытое
          поле `form_id` хранит выбор и уходит на сервер лишь у такого набора; у сайтового
          оно выключено, но значение живёт дальше. */
@@ -12688,13 +12698,20 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="hidden" name="' + pfx + 'form_id" value="" disabled>' +
       '<div class="cb-form-note" data-form-note></div>' +
       '</div>' +
-      '<span class="cb-label">More primary texts</span>' + future('texts', 'button', '+ Primary text 3–5') +
       /* ACL-1767: кнопка из списка Meta для цели Leads (сайт или Instant Form). Умолчание -
          Learn more. При бэкенде RPA пустой выбор выключен с причиной (cbSyncApiOnly). */
       '<span class="cb-label">CTA</span>' +
       '<select name="' + pfx + 'cta" class="cb-input cb-select cb-cta cb-api-field" data-default="LEARN_MORE" data-tip="Button of the ad" aria-label="Call to action">' +
       cbCtaOptionsHtml('website', 'LEARN_MORE') + '</select>' +
-      '<span class="cb-label">Stories / Reels file</span>' + future('media', 'button', 'Choose a vertical file') +
+      /* ACL-1774: необязательный вертикальный (9:16) файл Stories / Reels рядом с основным
+         (1:1 или 4:5). Соотношение и размер проверяет сервер до любой загрузки. Только API. */
+      '<span class="cb-label">Stories / Reels file <span style="opacity:0.6">(9:16, optional)</span></span>' +
+      '<div class="cb-sel-wrap cb-creative-sel-wrap cb-vertical-sel-wrap" data-ctype="Image">' +
+      '<input type="text" class="cb-sel-text cb-vertical-search cb-api-field" data-default="" data-tip="A separate 9:16 file for Stories and Reels" placeholder="— optional: vertical 9:16 file —" autocomplete="off" value="" oninput="cbCreativeSearch(this)">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'creative_file_vertical" value="">' +
+      '<div class="cb-api-note" data-vertical-note hidden>Same kind as the main file (two images or two videos). Stories and Reels use this file; Feed uses the main one.</div>' +
+      '</div>' +
       '</div></div>';
   }
 
@@ -12781,6 +12798,25 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var t2hSrc = srcText2.querySelector('input[type=hidden]');
       var t2hNew = newText2.querySelector('input[type=hidden]');
       if (t2hSrc && t2hNew) t2hNew.value = t2hSrc.value;
+    }
+    // ACL-1774: тексты 3-5 и вертикальный файл едут в копию (открытые ряды остаются открытыми).
+    srcRow.querySelectorAll('.cb-textx-sel-wrap').forEach(function (sw) {
+      var nw = newRow.querySelector('.cb-textx-sel-wrap[data-textx="' + sw.dataset.textx + '"]');
+      if (!nw) return;
+      var a = sw.querySelector('.cb-textx-search'), b = nw.querySelector('.cb-textx-search');
+      if (a && b) b.value = a.value;
+      var ah = sw.querySelector('input[type=hidden]'), bh = nw.querySelector('input[type=hidden]');
+      if (ah && bh) bh.value = ah.value;
+    });
+    if (srcRow.dataset.textsShown) newRow.dataset.textsShown = srcRow.dataset.textsShown;
+    var srcVert = srcRow.querySelector('.cb-vertical-sel-wrap');
+    var newVert = newRow.querySelector('.cb-vertical-sel-wrap');
+    if (srcVert && newVert) {
+      newVert.dataset.ctype = srcVert.dataset.ctype;
+      var vsA = srcVert.querySelector('.cb-vertical-search'), vsB = newVert.querySelector('.cb-vertical-search');
+      if (vsA && vsB) vsB.value = vsA.value;
+      var vhA = srcVert.querySelector('input[type=hidden]'), vhB = newVert.querySelector('input[type=hidden]');
+      if (vhA && vhB) vhB.value = vhA.value;
     }
     initAllSelects(newRow);
   }
@@ -12932,12 +12968,61 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   // ── Ad type toggle (per-ad-row) ───────────────────────────────────────
+  /* ACL-1774: ряд текста N (3-5): запись библиотеки, скрыт до открытия. */
+  function textxRowHtml(pfx, n) {
+    return '<span class="cb-label cb-textx-label" data-textx="' + n + '" hidden>Primary text ' + n + '</span>' +
+      '<div class="cb-sel-wrap cb-text2-sel-wrap cb-textx-sel-wrap" data-textx="' + n + '" hidden>' +
+      '<input type="text" class="cb-sel-text cb-text2-search cb-textx-search cb-api-field" data-default="" data-tip="Primary text ' + n + ' with its headline and description" placeholder="— optional: search ad text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Optional primary text ' + n + ': the library entry gives the text, its headline and its description">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'copy' + n + '" value="">' +
+      '</div>';
+  }
+
+  /* Показать ряды 3-5: открытые кнопкой или с непустым значением. Запись в DOM только при изменении. */
+  window.cbSyncTextRows = function (row, api) {
+    var shown = parseInt(row.dataset.textsShown || '2', 10) || 2;
+    var last = 2;
+    [3, 4, 5].forEach(function (n) {
+      var wrap = row.querySelector('.cb-textx-sel-wrap[data-textx="' + n + '"]');
+      var lab = row.querySelector('.cb-textx-label[data-textx="' + n + '"]');
+      if (!wrap) return;
+      var hid = wrap.querySelector('input[type="hidden"]');
+      var txt = wrap.querySelector('.cb-textx-search');
+      var has = !!((hid && hid.value) || (txt && txt.value.trim()));
+      var on = has || n <= shown;
+      if (on) last = n;
+      if (wrap.hidden === on) wrap.hidden = !on;
+      if (lab && lab.hidden === on) lab.hidden = !on;
+    });
+    var btn = row.querySelector('.cb-textx-add');
+    if (btn) {
+      var full = last >= 5;
+      var want = full ? 'All 5 primary texts in use' : '+ Primary text ' + (last + 1);
+      if (btn.textContent !== want) btn.textContent = want;
+      var off = full || !api;
+      if (btn.disabled !== off) btn.disabled = off;
+      var tip = full ? 'An ad takes up to 5 primary texts'
+        : (!api ? 'API backend only: several primary texts are set through the Graph API' : '');
+      if (btn.title !== tip) btn.title = tip;
+    }
+    var vnote = row.querySelector('[data-vertical-note]');
+    if (vnote && vnote.hidden === api) vnote.hidden = !api;
+  };
+
+  window.cbAddTextRow = function (btn) {
+    var row = btn.closest('.cb-ad-row');
+    if (!row || btn.disabled) return;
+    var n = Math.min(5, (parseInt(row.dataset.textsShown || '2', 10) || 2) + 1);
+    row.dataset.textsShown = String(n);
+    window.cbSyncTextRows(row, window.ACL_FB_BACKEND === 'api');
+  };
+
   window.cbAdTypeChange = function(radio) {
     var row = radio.closest('.cb-ad-row');
     if (!row) return;
     var ctype = radio.value;
-    var wrap = row.querySelector('.cb-creative-sel-wrap');
-    if (wrap) {
+    /* ACL-1774: тип относится к обоим файлам (основному и Stories / Reels). */
+    row.querySelectorAll('.cb-creative-sel-wrap').forEach(function (wrap) {
       wrap.dataset.ctype = ctype;
       var h = wrap.querySelector('input[type="hidden"]');
       var t = wrap.querySelector('.cb-sel-text');
@@ -12945,7 +13030,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (h) h.value = '';
       if (t) t.value = '';
       if (dd) dd.hidden = true;
-    }
+    });
   };
 
   // ── Remove campaign / Renumber ────────────────────────────────────────
