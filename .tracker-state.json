@@ -12046,7 +12046,7 @@
             "session": "isolated_app_sol_20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-IS1013",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -12064,7 +12064,8 @@
           "report": "# ACL-1872 author source handoff\n\nActual author Worker-IS1013 / `isolated_app_sol_20261013`; Coordinator-CR1012.\nExisting implementation claim `ef091f19c7d943d2b40c4a5a38e1ba27` is submitted\nthrough the supported handoff command for PR #873. No identity transfer occurred.\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/873.\nBranch: `work/acl-1872-isolated-meta-setup` in\n`ACM-Audit-2026-10-12/worktrees/acl-1872`.\nHead: `67d921a12429f036216e5dd5ea7faec0682e343a`.\nBase/current main: `3327465fcbd46ccff9b64eb7c574ff5b84b99b80`.\nTree: `065848e035dac397842d3542a8b65abc057db2a5`.\nClean source checked again before handoff. No source edits in this receipt turn.\n\nThe bounded child implements separate declared Meta App ID, Windows CurrentUser\nDPAPI-protected official token/optional App Secret, resume, replace and local\ndisconnect in the existing Connect experience. The UI explicitly leaves API\naccess unverified. Canonical physical profile/ad account binding, revisions,\nreplay receipts, permanent App ownership and durable retirement isolate local\ncredentials. All map writers, bootstrap, legacy copy and installer setup share\nthe transaction; async map/link callers run whole transactions off the ASGI loop.\nCorrupt historical ownership inconsistent with save receipts is preserved and\nrefused. Pending cleanup resumes the same connection identity. Recovery lives\nunder docs/runtime and is linked from the system description.\n\nIndependent read-only review findings on the previous head were fixed in the\nsame genuine author claim and covered by public regressions. Final local Windows\nPython 3.14 evidence: 177 affected tests, six final public review repros and all\n46 packaging unittests passed. Full staged secret scanner, import smoke and diff\ncheck passed. Tests include actual Chromium production Connect controls/public\nASGI routes, actual Windows DPAPI and fresh-process recovery, real process App\nownership races, mapping retirement, preserved corrupt storage and dashboard\ncontrol dispatch while map locks remain held. Cross-platform tests explicitly\nfake only the OS encryption boundary.\n\nComplete fresh hosted current-head evidence, verified before ready/handoff:\n\n- CI https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38391268614\n  completed SUCCESS: all three Linux 3.11 shards, all three Linux 3.13 shards,\n  Windows 3.13, tooling/process checks and ACL verification.\n- Installer https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38391268757\n  completed SUCCESS: input verification, actual isolated build/install/repair/\n  uninstall and Installer verification.\n- Descriptor run 38391268623 passed.\n- Draft structural tracker-link run 38391268857 passed; a fresh ready-PR linkage\n  receipt is required after this handoff and is recorded separately.\n\nRemaining: independent formal source review under a real free lane and Approved\ntransition, then the normal separate Coordinator batch/stage/main/package route.\nNo author approval, direct source merge, employee installation, live Meta/MLX\ncall or deployment is claimed. ACL-1858 retains official HTTP routing, actual\ntoken/App/account permissions and automated onboarding; ACL-1358 retains wider\nlegacy credential migration. User-bound decryption requires reconnect if\nunavailable; unreadable registry needs operational recovery. An interrupted\npre-commit save may leave an unused encrypted orphan; it cannot grant readiness."
         },
         "pr": 873,
-        "queued_at": "2026-10-13T11:58:59+00:00"
+        "queued_at": "2026-10-13T11:58:59+00:00",
+        "reviewer": "Reviewer-RS1012"
       },
       "874": {
         "implementers": [
@@ -15581,10 +15582,20 @@
       845,
       840,
       841,
-      865,
-      872
+      865
     ],
-    "review": null,
+    "review": {
+      "id": "89bd411fc54d45399dcaea198e3f9be9",
+      "pr": 873,
+      "issues": [
+        872
+      ],
+      "actor": "Reviewer-RS1012",
+      "session": "connection_review_rs1012",
+      "coordinator": "Coordinator-CR1012",
+      "started_at": "2026-10-13T12:01:59+00:00",
+      "state": "reviewing"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -24765,6 +24776,13 @@
         "issue": 872,
         "pr": 873,
         "actor": "Worker-IS1013"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-13T12:01:59+00:00",
+        "pr": 873,
+        "lane": "89bd411fc54d45399dcaea198e3f9be9",
+        "actor": "Reviewer-RS1012"
       }
     ],
     "policy": {
