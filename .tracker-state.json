@@ -7358,20 +7358,6 @@
   },
   "execution": {
     "claims": {
-      "840": {
-        "actor": "Worker-F8Q620",
-        "session": "footer_fix-01a133d7-20261013",
-        "coordinator": "Coordinator-D7K413",
-        "branch": "codex/acl-1840-country-footer-inset",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1840-2026-10-13",
-        "id": "7115a3978b764986b51c80f9b41119ca",
-        "issue": 840,
-        "state": "handoff",
-        "started_at": "2026-10-13T08:12:12+00:00",
-        "from_status": "status:todo",
-        "pr": 846,
-        "report": "ACL-1840 / PR846 refreshed source handoff, 2026-10-13.\n\nGenuine Worker-F8Q620, session footer_fix-01a133d7-20261013, Coordinator-D7K413.\nFresh author claim 7115a3978b764986b51c80f9b41119ca.\nPR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/846\nRetained branch codex/acl-1840-country-footer-inset\nHead fe58cef0c357488c3ca2696b4e4b89b03f0f8d9d\nCurrent base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80\n\nResponded to genuine independent baseline return by merging verified current main into the original branch without force-push. Resolved only system-changelog conflict, preserving both ACL-1840 and ACL-1824 entries. Production CSS, sanitized fixture and regression tests are unchanged; diff to current main remains four intended task files, 136 added lines.\n\nWindows/Python 3.13 checks rerun on refreshed source: 19 real Chromium geometry/disclosure regressions passed (1280/1024/320, both themes, empty/populated/filtered synthetic descriptions, long history and original-bug reproduction); secret scanner passed; dashboard/RPA import smoke passed; diff check passed; worktree clean. Complete applicable platform tests remain required CI on this head. No official source review lane acquired or approval recorded by the author.\n\nScope/dependency retained: additive country-footer rule remains dormant until ACL-1798's pending campaign component is admitted. Fixture provenance remains preview 5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d; no unrelated shared-preview commits imported or edited. Full integrated footer mount/cascade, whole-page inventory/filter behavior, isolated staging/package delivery and original acceptance completion remain pending. Previous screenshot evidence is unchanged CSS/fixture evidence, not refreshed integrated-runtime proof. No live ad actions, stage/main admission, publication or installation performed.\n\nNext: independent exact-head/current-base/scope source review and required CI, then the repository's eligible batch integration route subject to preserved upstream dependency."
-      },
       "841": {
         "actor": "Worker-T8L621",
         "session": "table-fix-01a133d7-1841",
@@ -11595,7 +11581,7 @@
             "session": "footer_fix-01a133d7-20261013"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-F8Q620",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -11604,16 +11590,16 @@
           "coordinator": "Coordinator-D7K413",
           "branch": "codex/acl-1840-country-footer-inset",
           "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1840-2026-10-13",
-          "id": "3ff9e1a6e43c471d9821f566c75be998",
+          "id": "7115a3978b764986b51c80f9b41119ca",
           "issue": 840,
           "state": "handoff",
-          "started_at": "2026-10-13T06:34:20+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-13T08:12:12+00:00",
+          "from_status": "status:todo",
           "pr": 846,
-          "report": "ACL-1840 source handoff, 2026-10-13.\n\nWorker-F8Q620, session footer_fix-01a133d7-20261013, Coordinator-D7K413.\nPR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/846\nBranch codex/acl-1840-country-footer-inset\nHead 23abf729de601fc3c8f2221d0cc8cb1471ecc466\nBase e8e59f8376458f2f73089c3f2a8d454837ff033f\n\nScoped country-footer CSS aligns explanation, disclosure and expanded history to the existing 0.85rem connection/workbook inset. Adds explicit footer spacing, wraps long words and summary text. Native disclosure behavior remains unchanged. Source component remains outside main; CSS is intentionally additive and dormant until its mount exists.\n\nActual checks: Windows/Python 3.13; focused Chromium regression 19 passed in75.92s (18 theme/width/inventory cases plus original missing-inset reproduction); scanner passed; dashboard/RPA import smoke passed; git diff --check passed. Sanitized before/after PNGs at local ACL-1840-visual-evidence directory for widths1280/1024/320, both themes; narrow dark and desktop light after images visually inspected. Fixture provenance: preview5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d hc_after macro, mounting section and relevant CSS. Synthetic text only.\n\nIndependent read-only final source precheck by genuine Coordinator-D7K413 root agent bound to this head/base: no actionable findings. No official source review lane acquired or approval recorded, because that lane is occupied.\n\nRemaining: CI required platform suites; official independent approval; integration with pending ACL-1798 component, whole-page filtered/populated/empty inventory validation and installed staging verification; batch/main admission and package delivery. Original acceptance checkboxes stay unfinished pending integration. No unrelated preview commits imported; no changes to preview owner path or live ad actions."
+          "report": "ACL-1840 / PR846 refreshed source handoff, 2026-10-13.\n\nGenuine Worker-F8Q620, session footer_fix-01a133d7-20261013, Coordinator-D7K413.\nFresh author claim 7115a3978b764986b51c80f9b41119ca.\nPR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/846\nRetained branch codex/acl-1840-country-footer-inset\nHead fe58cef0c357488c3ca2696b4e4b89b03f0f8d9d\nCurrent base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80\n\nResponded to genuine independent baseline return by merging verified current main into the original branch without force-push. Resolved only system-changelog conflict, preserving both ACL-1840 and ACL-1824 entries. Production CSS, sanitized fixture and regression tests are unchanged; diff to current main remains four intended task files, 136 added lines.\n\nWindows/Python 3.13 checks rerun on refreshed source: 19 real Chromium geometry/disclosure regressions passed (1280/1024/320, both themes, empty/populated/filtered synthetic descriptions, long history and original-bug reproduction); secret scanner passed; dashboard/RPA import smoke passed; diff check passed; worktree clean. Complete applicable platform tests remain required CI on this head. No official source review lane acquired or approval recorded by the author.\n\nScope/dependency retained: additive country-footer rule remains dormant until ACL-1798's pending campaign component is admitted. Fixture provenance remains preview 5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d; no unrelated shared-preview commits imported or edited. Full integrated footer mount/cascade, whole-page inventory/filter behavior, isolated staging/package delivery and original acceptance completion remain pending. Previous screenshot evidence is unchanged CSS/fixture evidence, not refreshed integrated-runtime proof. No live ad actions, stage/main admission, publication or installation performed.\n\nNext: independent exact-head/current-base/scope source review and required CI, then the repository's eligible batch integration route subject to preserved upstream dependency."
         },
         "pr": 846,
-        "queued_at": "2026-10-13T06:42:53+00:00",
+        "queued_at": "2026-10-13T08:20:10+00:00",
         "review_report": "# ACL-1840 / PR846 source review return\n\nChanges required: refresh the source baseline before approval.\n\nPR846 head 23abf729de601fc3c8f2221d0cc8cb1471ecc466 retains base e8e59f8376458f2f73089c3f2a8d454837ff033f. Official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80; older checks do not prove this baseline.\n\nThe genuine author must obtain a fresh implementation claim on the retained source branch, include current main, resolve author-owned conflicts, run affected geometry/behavior checks and actual source CI, then hand off for fresh independent exact-head/base/scope review.\n\nPreserve ACL-1840's upstream dependency: its campaign-table component remains absent from main, and its additive scoped footer rule is dormant until ACL-1798 is admitted. Do not import unrelated preview commits or claim complete integrated application verification. Recheck the actual integrated footer mount and cascade when the owning upstream source is admitted. This return does not approve the dormant source or erase those constraints.\n\nThis is a baseline prerequisite return, not a full acceptance approval. No source edits, merge, stage entry, publication or installation performed."
       },
       "841": {
@@ -15271,7 +15257,8 @@
       853,
       839,
       845,
-      838
+      838,
+      840
     ],
     "review": null,
     "history": [
@@ -23717,6 +23704,13 @@
         "issue": 838,
         "pr": 842,
         "actor": "Worker-CN6B92"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-13T08:20:10+00:00",
+        "issue": 840,
+        "pr": 846,
+        "actor": "Worker-F8Q620"
       }
     ],
     "policy": {
