@@ -2285,6 +2285,8 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     "language_provided": f"camp_{idx}_language" in form,
                 }
             # Ключ — только у объявлений со вторым текстом: остальные слоты
+            if f"camp_{idx}_page_id" in form:
+                slot["page_id"] = str(form.get(f"camp_{idx}_page_id") or "").strip()
             # (и записанные из них задания) остаются прежними.
             if copy2:
                 slot["copy2"] = copy2
@@ -5231,6 +5233,18 @@ def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
     return None
 
 
+@app.post("/api/account-pages")
+async def api_account_pages(request: Request) -> JSONResponse:
+    """Read available Pages under the existing profile read lock; no Meta writes."""
+    from src.web.account_pages import read_pages
+
+    form = await request.form()
+    account = str(form.get("account_label") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
+    return JSONResponse(await asyncio.to_thread(read_pages, account))
+
+
 @app.post("/api/page-forms")
 async def api_page_forms(request: Request) -> JSONResponse:
     """ACL-1775: формы Страницы аккаунта для выбора в билдере. Только по нажатию человека.
@@ -5246,6 +5260,8 @@ async def api_page_forms(request: Request) -> JSONResponse:
     if not publish_api.api_enabled():
         return JSONResponse({"ok": False, "error": "Instant Forms need the Graph API backend (ACL_FB_BACKEND=api)."},
                             status_code=409)
+    if "page_id" in form:
+        return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account, str(form.get("page_id") or "").strip()))
     return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
 
 

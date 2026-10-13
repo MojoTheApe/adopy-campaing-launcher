@@ -150,6 +150,24 @@ class RpaPublisher:
                 preview_mode=preview_mode,
             )
         self._built_at = time.monotonic()
+        if not preview_mode and any(d.page_provided and not d.errors for d in drafts):
+            from src.web.account_pages import read_pages, resolve_selection
+            from src.fb_api.graph import normalize_act
+
+            available = read_pages(account_label)
+            for draft in drafts:
+                if not draft.page_provided or draft.errors:
+                    continue
+                try:
+                    if not available.get("ok"):
+                        raise ValueError(available.get("message") or "Could not load Facebook Pages. Refresh pages to retry.")
+                    if available.get("act") != normalize_act(draft.ad_account_id or ""):
+                        raise ValueError("The account changed while reading Facebook Pages. Refresh pages and retry.")
+                    chosen = resolve_selection(available["pages"], draft.page_id or "")
+                    draft.page_id, draft.page_name = chosen["id"], chosen["name"]
+                    draft.page_name_unique = sum(p["name"] == chosen["name"] for p in available["pages"]) == 1
+                except ValueError as exc:
+                    draft.errors.append(str(exc))
         return drafts
 
     def _resolve_entry(self, account_label: str):

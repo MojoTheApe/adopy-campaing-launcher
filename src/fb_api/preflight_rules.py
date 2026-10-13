@@ -75,7 +75,7 @@ RULES: list[dict[str, Any]] = [
     _r("account_active", "Ad account is active", ERROR, "server",
        "the profile has no access to the ad account, or the account is not active: check the Accounts page"),
     _r("page_ok", "Facebook Page", ERROR, "server",
-       "choose a Page that belongs to this ad account on the Accounts page (page_id)"),
+       "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
        "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
        applies="website"),
