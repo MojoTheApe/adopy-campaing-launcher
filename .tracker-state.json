@@ -7452,7 +7452,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "871": {
+        "actor": "Worker-BH7K26",
+        "session": "builder_handle_01a13470_20261013",
+        "coordinator": "Coordinator-BH7K26",
+        "branch": "codex/builder-handle-controls",
+        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Builder-Handle-2026-10-13",
+        "id": "61f661424bb444cdb057fdb2e526248a",
+        "issue": 871,
+        "state": "implementing",
+        "started_at": "2026-10-13T09:54:32+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -11962,6 +11975,17 @@
           "from_status": "status:todo",
           "report": "ACL-1868 source preparation is preserved in draft PR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/870 at 4bdb12ec309fbaa80286bef703541a13f6996133, branch codex/acl-1868-parallel-reviews, isolated checkout C:\\Users\\EvgeniSedin\\Desktop\\ACL-Parallel-Reviews-2026-10-13. Current actual Worker is Worker-RP7K13 / root_parallel_review_20261013. No unrelated executor or runtime was modified.\n\nImplemented schema-3 recognition in ACL batch assembly and CI classification, preserving full combined/stage/promotion checks, exact ownership and frozen source composition. Added runbook describing reviewed shared-engine adoption, safe queue migration, ownership preservation and the inspected source test-dashboard identity.\n\nVerification: five new CI capacity/classification regressions pass; one actual schema-3 Git batch assembly with concurrent source review passes; secret scan and git diff --check pass. Earlier broad local run reported 33 passes and five failures in the original new test preparation/expectation; those five failures were fixed before commit and rerun successfully. Current hosted tooling, descriptor, task linkage, process instructions and Windows tests passed; Linux matrix/installer remain pending at this handoff. Read exact hosted PR870 statuses rather than treating this dated statement as final evidence. Bounded independent non-implementing preparation review found no actionable code regressions at this exact head; report C:\\Users\\EvgeniSedin\\Desktop\\acl1868-independent-preparation-review.md. This is not final merge admission or full task acceptance.\n\nExternal prerequisite: authenticated evgenis-ctrl has push=false for MojoTheApe/master-repo; push of MR-22 returned 403. Master local reviewed candidate4bd7c63c4626443bed4726d3066e806fdf0f8e79 and MR22-pr-body.md are preserved; requires actual Write access, final independently reviewed merged Tracker pin, real exporter verification and Linux checks. Shared engine TT-93 draft PR94 is separately implementing/testing schema3 source_reviews ownership and safe queue-preserving transition.\n\nRemaining task scope: reviewed merged immutable Tracker/Master revisions; actual matching ACL pins/helpers/config and registry/service alignment; current-base independent review/admission/old-policy source integration; supported owner-free schema2->3 preview/apply with preservation comparisons and fresh board evidence; three actual source-review claims with fourth/duplicate/foreign refusal; test-dashboard update only via its verified safe source procedure. Live ACL remains five implementations, one source-review lane, batch ceiling5. No three-lane activation, shared deployment, stage/main integration, dashboard update, package publication or advertising action is claimed.\n\nThis owning Worker stops only its own preparation claim while awaiting the actual shared prerequisite, so an implementation slot is not held idle. Resume this same task through supported claim/start after inspecting all dependencies and current source/base/CI. Preserve original task criteria, foreign claims and queue. Do not clear shared state or force-reassign another owner to bypass adoption gates."
         }
+      },
+      "871": {
+        "implementers": [
+          {
+            "actor": "Worker-BH7K26",
+            "session": "builder_handle_01a13470_20261013"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-BH7K26",
+        "coordinator": "Coordinator-BH7K26"
       }
     },
     "actors": {
@@ -13023,6 +13047,10 @@
       },
       "Worker-RP7K13": {
         "session": "root_parallel_review_20261013",
+        "role": "Worker"
+      },
+      "Worker-BH7K26": {
+        "session": "builder_handle_01a13470_20261013",
         "role": "Worker"
       }
     },
@@ -24528,6 +24556,13 @@
         "issue": 854,
         "pr": 869,
         "actor": "Worker-SR1012"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-13T09:54:32+00:00",
+        "issue": 871,
+        "claim": "61f661424bb444cdb057fdb2e526248a",
+        "actor": "Worker-BH7K26"
       }
     ],
     "policy": {
