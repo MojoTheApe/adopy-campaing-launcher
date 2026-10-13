@@ -9,6 +9,11 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 - `src/web`, `serve.py`: local dashboard, account/report views, campaign builder,
   machine configuration and update endpoints.
+  ACL-1651 refreshes the Builder creative list on search/window focus (ten-second
+  throttle) and once per missed search streak. A miss during the two-second request
+  gap waits in the background for its refresh; typing remains available and the
+  visible latest query is searched again without switching Image/Video. Selected
+  creatives and campaign fields remain unchanged until the user chooses a file.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
