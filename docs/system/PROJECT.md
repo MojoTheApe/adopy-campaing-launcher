@@ -24,6 +24,14 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   detached update helper. `src/web/release_updates.py` offers verified release updates.
 - `config/paths.py`: machine-specific paths. User configuration, account maps and
   credentials belong outside Git, normally under `%LOCALAPPDATA%/ACL`.
+
+Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../../PRODUCT.md),
+[design guidance](../../DESIGN.md) and existing specs for subsystem details.
+`content_machine`, `jira_agent` and legacy `fb_publish_agent` are not automatically
+part of the ACL runtime; preserve the tested distribution boundary.
+
+## In-profile Graph session recovery
+
 - `src/fb_api`: in-profile Graph transport keeps tokens inside an isolated page
   world. ACL-1836 permits one recovery of a detached CDP session on the same owned
   target and existing browser connection. Target and main-frame location must
@@ -36,11 +44,6 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   `GraphStop`, so creator reconciliation can retain already-created object details.
   Recovery does not open a replacement tab, restart the profile or reload for a
   missing token. Pending creator source integration and live delivery remain separate.
-
-Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../../PRODUCT.md),
-[design guidance](../../DESIGN.md) and existing specs for subsystem details.
-`content_machine`, `jira_agent` and legacy `fb_publish_agent` are not automatically
-part of the ACL runtime; preserve the tested distribution boundary.
 
 ## Delivery state at adoption
 
@@ -68,6 +71,16 @@ Engineering delivery now has an explicitly prepared Approved/batch policy;
 actual state activation is separately verified under
 [ACL-1566](../repository/BATCH_INTEGRATION.md). Campaign runtime, employee
 installations and stable-package publication retain their existing boundaries.
+
+[Source child ACL-1875](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/875)
+prepares five implementation slots, five independent source-review slots and
+batches of at most five through explicit execution schema 3. ACL-owned CI scope
+and assembly recognize both v2/v3; combined verification and a single integration
+Coordinator/Reviewer remain mandatory. Actual source completion, compatible shared
+service publication and idle queue-preserving migration are separate gates in
+[SOURCE_REVIEWS.md](../repository/SOURCE_REVIEWS.md), retained in parent
+[ACL-1874](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/874). Preparation changes no
+campaign runtime or installed employee version.
 
 ## Maintaining this document
 

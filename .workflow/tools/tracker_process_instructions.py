@@ -207,7 +207,7 @@ def admit(request, config, pr, numbers, shared):
     root = 'repos/' + config['project']['repository']
     section = rules.execution_state(shared, config)
     completed = section and section['completed'].get(str(pr['number'])) if pr.get('merged') else None
-    lane = completed or section and section.get('review')
+    lane = completed or rules.review_lane(section, pr=pr['number'])
     if completed and (completed.get('route') != 'process' or any(
             section['tasks'].get(str(n), {}).get('state') != 'merged'
             or section['tasks'][str(n)].get('pr') != completed.get('pr') for n in numbers)):

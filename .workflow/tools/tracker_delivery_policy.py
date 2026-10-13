@@ -57,21 +57,38 @@ def execution_policy(config):
         return None
     fields = {'schema_version', 'implementation_limit', 'review_limit'}
     version = value.get('schema_version') if isinstance(value, dict) else None
-    if (not isinstance(value, dict) or set(value) != fields | ({'batch_limit'} if version == 2 else set())
-            or type(version) is not int or version not in (1, 2)
+    if (not isinstance(value, dict) or set(value) != fields | ({'batch_limit'} if version in (2, 3) else set())
+            or type(version) is not int or version not in (1, 2, 3)
             or type(value['implementation_limit']) is not int or not 1 <= value['implementation_limit'] <= 16
-            or type(value['review_limit']) is not int or value['review_limit'] != 1):
-        raise ValueError('Execution policy needs schema_version 1 or 2, implementation_limit 1..16 and review_limit 1')
+            or type(value['review_limit']) is not int or not 1 <= value['review_limit'] <= (5 if version == 3 else 1)):
+        raise ValueError('Execution policy needs schema_version 1..3, implementation_limit 1..16; review_limit is 1 (v1/v2) or 1..5 (v3)')
     if not policy(config):
         raise ValueError('Parallel execution requires the independent-review delivery policy')
-    if version == 2 and (type(value['batch_limit']) is not int or not 1 <= value['batch_limit'] <= 16
+    if version in (2, 3) and (type(value['batch_limit']) is not int or not 1 <= value['batch_limit'] <= (5 if version == 3 else 16)
                          or not policy(config)['staging']['enabled']):
-        raise ValueError('Approved batches require staging and batch_limit 1..16')
+        raise ValueError('Approved batches require staging and batch_limit 1..16 (v2) or 1..5 (v3)')
     return value
 
 
 def batch_mode(config):
-    return bool(execution_policy(config) and execution_policy(config)['schema_version'] == 2)
+    return bool(execution_policy(config) and execution_policy(config)['schema_version'] in (2, 3))
+
+
+def review_lanes(section):
+    """Current source lanes and the separately bounded integration lane."""
+    if not section:
+        return []
+    return list(section.get('source_reviews', {}).values()) + ([section['review']] if section.get('review') else [])
+
+
+def review_lane(section, *, pr=None, claim=None, issue=None):
+    matches = [lane for lane in review_lanes(section)
+               if (pr is None or lane.get('pr') == pr)
+               and (claim is None or lane.get('id') == claim)
+               and (issue is None or issue in lane.get('issues', []))]
+    if len(matches) > 1:
+        raise ValueError('Conflicting review owners; inspect shared state')
+    return matches[0] if matches else None
 
 
 def dependencies(body, repo):
@@ -109,12 +126,31 @@ def execution_state(state, config):
         raise ValueError('Invalid review lane')
     if state.get('active') or len(section['claims']) > value['implementation_limit']:
         raise ValueError('Conflicting execution owners; inspect shared state')
-    if value['schema_version'] == 2:
+    if value['schema_version'] in (2, 3):
         if not isinstance(section.get('approvals'), dict) or not isinstance(section.get('batches'), dict):
             raise ValueError('Invalid approval/batch state')
         for key in ('integration', 'intake'):
             if section.get(key) is not None and not isinstance(section[key], dict):
                 raise ValueError('Invalid batch ownership: ' + key)
+    if value['schema_version'] == 3:
+        lanes = section.get('source_reviews')
+        if not isinstance(lanes, dict) or len(lanes) > value['review_limit']:
+            raise ValueError('Invalid source review capacity')
+        seen = {key: set() for key in ('id', 'actor', 'session', 'pr', 'issue')}
+        for key, lane in lanes.items():
+            if (not isinstance(lane, dict) or key != str(lane.get('pr')) or lane.get('batch_id')
+                    or len(lane.get('issues', [])) != 1):
+                raise ValueError('Invalid source review lane')
+        if section.get('review') and not section['review'].get('batch_id'):
+            raise ValueError('Schema 3 reserves review for the single integration lane')
+        for lane in review_lanes(section):
+            for key in seen:
+                values = lane.get('issues', []) if key == 'issue' else [lane.get(key)]
+                if any(v is None or v in seen[key] for v in values):
+                    raise ValueError('Conflicting review owners; each lane needs a distinct run and task')
+                seen[key].update(values)
+    elif section.get('source_reviews'):
+        raise ValueError('Source review pools require explicit execution schema 3')
     return section
 
 

@@ -9,7 +9,7 @@ is the matching Tracker configuration. The standard and engine use exact commit
 pins; neither automatically follows main. Populate actual procedures and verify
 registration before changing adoption from draft to ready.
 
-For ordinary/application work, execution schema 2 selects Review -> Approved -> Stage -> Merged.
+For ordinary/application work, execution schemas 2/3 select Review -> Approved -> Stage -> Merged.
 Independent source approval releases the review lane; one separate Coordinator
 integration claim covers a frozen batch of 1..batch_limit tasks. The recommended
 limit is five, independent of Worker capacity. Preserve each member's author,
@@ -17,7 +17,10 @@ source PR/current approval and scope; verify the combined stage candidate before
 unchanged promotion. Ship-all snapshots intake and processes sequential batches,
 rechecking remaining approvals after each main change. A single task may ship
 without filling the batch. Execution-v1 commands remain in force only through the guarded source cutover;
-follow the old pinned guide for that route. Completion and runtime authorization remain project-specific.
+follow the old pinned guide for that route. Source child ACL-1875 completes the current
+v2 source/batch/stage/main route before [v3 migration](SOURCE_REVIEWS.md).
+Five source-review slots leave one combined review and one stage owner; completion
+and runtime authorization remain project-specific.
 
 The explicitly opted-in [instruction-only route](PROCESS_INSTRUCTIONS.md) admits
 normal repository-process Markdown directly from Review into main after independent
@@ -37,7 +40,7 @@ record the normal reviewed `merged` transition. Hold its review lane through tha
 merge. Its verified process receipt completes the instruction task; do not create
 Stage, installer or package-delivery evidence for it.
 
-For ordinary/application work, execution schema 2 keeps one task per source PR,
+For ordinary/application work, execution schemas 2/3 keep one task per source PR,
 independently reviewed into Approved. Approval releases source review ownership; it does not merge or deliver.
 A separate Coordinator freezes intake and one batch of up to five. Assemble exact
 approved source tips in the reserved integration branch, acquire independent
@@ -47,7 +50,7 @@ verification. Promote the same members/content into main, then record per-task
 Merged. Preserve each source Worker/Reviewer and source branch. See
 [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) for current commands and guarded adoption.
 
-The source-adoption child completes its existing execution-v1 stage/main route
+The original v2 source-adoption child completed its execution-v1 stage/main route
 before live state changes. Existing legacy/v1 consumers keep their pinned lifecycle.
 No direct ordinary batch-source merge, added promotion fix, stage reset or silent member removal
 is allowed. After stage entry retain the claim and same-member rebuild through

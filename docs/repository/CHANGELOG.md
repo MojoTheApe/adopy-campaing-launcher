@@ -1,5 +1,49 @@
 # Repository process history
 
+## ACL-1874 — Activate five independent source reviews — 2026-10-13
+
+After ACL-1875's independently reviewed and fully verified old-v2 source/stage/main
+completion at main `72a2d2c21aa42f1a388d32ea27ba2c8253ee7854`, the maintained
+Tracker fallback publication at `57b1674d34049b88490908fc69c25747059a27d4` and
+supported owner-paused handoffs allowed idle schema-3 adoption at 14:52:32 UTC.
+Independent complete-state comparison and fresh protected projections at 14:52:52 UTC
+confirmed five implementations, five source reviews, one integration review and
+batches of five. The 37-item queue/order and full author/handoff/history/delivery
+records remain preserved; closed unmerged historical sources stay unfinished.
+The original cutover/recovery procedure and paused source checkouts remain intact.
+See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md) for exact integrated source, publication,
+migration and digest-covered board evidence. This entry claims no stable ACL release,
+employee rollout or live advertising/pilot verification.
+
+## ACL-1875 — Prepare five independent source reviews
+
+Select matching execution schema 3 limits implementation5/review5/batch5, keeping
+one separate integration Coordinator and one independent combined review. ACL-owned
+CI scope recognizes valid v2/v3 one-task sources while combined/stage/promotion,
+manual, unknown or drifted policies retain complete applicable checks. Batch assembly
+keeps frozen ownership/content proof and permits unrelated v3 source-review owners;
+an active integration review still blocks reassembly. Affected regressions exercise
+both the retained v2 route and the five-review v3 route.
+
+Shared source contracts belong to [MR-22](https://github.com/MojoTheApe/master-repo/issues/22)
+and [TT-97](https://github.com/MojoTheApe/task-tracker/issues/97). Select actual reviewed,
+merged Tracker `46283b8a6fe444065838e136c89ef4ed64bd1528` and its clean portable
+exports, preserving the ACL guarded client and relocated checker root. Reviewed
+merged Master/Action pin `8ce271dc289b6a7ef24498ed3d9d92cb78694a3d` supplies the
+matching schema-3 contract. This source-only child preserves the original ACL-1874
+author preparation through a supported stopped handoff and fresh genuine child claim;
+parent ACL-1874 retains actual activation and stays unfinished. This policy source
+finishes its genuine current v2 handoff/approval/batch/stage/main/Merged route before
+an idle queue-preserving v2-to-v3 migration. Compatible service publication is an
+independent parent prerequisite; source preparation does not publish it.
+Document the reviewed TT-89 fixed-engine recovery for GitHub-auto-merged source
+completion after a real main promotion, retaining genuine v2 policy/ownership and
+exact inclusion proof. Old-runtime patching or state editing remains forbidden;
+this bounded recovery is separate from schema-3 migration.
+See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md). Preparation grants no activation,
+package publication, employee update or live advertising/pilot receipt. Preserve
+pristine template ancestry, ACL identity/history, active owners and delivery controls.
+
 ## ACL-1753 — Compatible pins for the preserved review queue
 
 Adopt reviewed merged Master `fe9241152cb466dfbafa3bcd3070f877c1b1b9c4` and
