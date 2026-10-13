@@ -41,7 +41,13 @@ def local(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _read(monkeypatch, status, *, grid=True):
+def _read(monkeypatch, status, *, grid=True, shots_on=True):
+    # ACL-1535: снимок состояния выключен по умолчанию; эти тесты проверяют
+    # включённый (`ACL_STATUS_SHOT=1`) путь — прежнее поведение.
+    if shots_on:
+        monkeypatch.setenv("ACL_STATUS_SHOT", "1")
+    else:
+        monkeypatch.delenv("ACL_STATUS_SHOT", raising=False)
     shots = []
 
     def screenshot(path, full_page=False):
@@ -106,6 +112,8 @@ def test_a_problem_seen_on_a_stuck_page_is_shot_too(local, monkeypatch):
 
 
 def test_a_failed_screenshot_does_not_break_the_read(local, monkeypatch):
+    monkeypatch.setenv("ACL_STATUS_SHOT", "1")
+
     def boom(**_k):
         raise RuntimeError("page closed")
     page = NS(url="https://adsmanager.facebook.com/?act=111", goto=lambda *a, **k: None,
@@ -122,6 +130,113 @@ def test_a_failed_screenshot_does_not_break_the_read(local, monkeypatch):
     assert out.status_shot == ""
 
 
+# ── ACL-1535: по умолчанию снимка нет ────────────────────────────────────
+#
+# ACL-1532: `page.screenshot` сбрасывал override вьюпорта профиля Multilogin
+# (1919×1079 → 3837×2157), а размер окна — часть отпечатка. Без
+# `ACL_STATUS_SHOT=1` чтение страницу не снимает ни Playwright, ни CDP.
+
+def _spy_read(monkeypatch, status, *, env=None, **fakes):
+    if env is None:
+        monkeypatch.delenv("ACL_STATUS_SHOT", raising=False)
+    else:
+        monkeypatch.setenv("ACL_STATUS_SHOT", env)
+    calls = []
+
+    def screenshot(path=None, **_k):
+        calls.append("screenshot")
+        if path:
+            Path(path).write_bytes(PNG)
+
+    def new_cdp_session(*_a, **_k):
+        calls.append("new_cdp_session")
+        raise AssertionError("CDP-сессия во время чтения состояния")
+
+    ctx = NS(new_cdp_session=new_cdp_session)
+    page = NS(url="https://adsmanager.facebook.com/?act=111", goto=lambda *a, **k: None,
+              close=lambda: None, screenshot=screenshot, context=ctx,
+              new_cdp_session=new_cdp_session)
+    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111"))
+    monkeypatch.setattr(sp, "_attach_only", lambda *a: NS(page=page, close=lambda **k: None))
+    monkeypatch.setattr(sp, "_wait_for_grid", lambda _: True)
+    monkeypatch.setattr(sp, "_read_status", lambda _: status)
+    monkeypatch.setattr(sp, "_shown_period", lambda _: DAY)
+    monkeypatch.setattr(sp, "_read_total", lambda _: (7.0, "test"))
+    monkeypatch.setattr(sp, "_read_tree", lambda *a, **k: ([], "", ""))
+    for name, value in fakes.items():
+        monkeypatch.setattr(sp, name, value)
+    return sp.read_via_rpa(ACC, DAY, DAY), calls
+
+
+@pytest.mark.parametrize("status", [("disabled", "Account disabled"), ("restricted", "Verification"),
+                                    ("unknown", ""), ("clear", "")])
+@pytest.mark.parametrize("env", [None, "", "0", "true"])
+def test_by_default_a_status_read_takes_no_screenshot(local, monkeypatch, status, env):
+    out, calls = _spy_read(monkeypatch, status, env=env)
+    assert out.state == "ok" and out.status == status[0]
+    assert calls == [], "снимок или CDP во время чтения состояния"
+    assert out.status_shot == "" and out.status_shot_at == ""
+    assert not (local / "spend_shots").exists() or not list((local / "spend_shots").glob("*.png"))
+
+
+def test_with_the_switch_on_the_old_behaviour_returns(local, monkeypatch):
+    out, calls = _spy_read(monkeypatch, ("disabled", "Account disabled"), env="1")
+    assert calls == ["screenshot"]
+    assert out.status_shot and sp.status_shot_path(out.status_shot) is not None
+
+
+def test_a_read_without_a_shot_keeps_the_last_stored_shot(local, monkeypatch):
+    old, _ = _spy_read(monkeypatch, ("disabled", "Account disabled"), env="1")
+    sp._put(old)
+    new, calls = _spy_read(monkeypatch, ("restricted", "Verification required"))
+    assert calls == []
+    assert (new.status_shot, new.status_shot_at) == (old.status_shot, old.status_shot_at), \
+        "живой Read отдаёт экрану прежний снимок"
+    sp._put(new)
+    got = sp.get_status(ACC)
+    assert got["status"] == "restricted"
+    assert (got["shot_id"], got["shot_at"]) == (old.status_shot, old.status_shot_at)
+
+
+def test_a_read_without_any_stored_shot_has_none(local, monkeypatch):
+    out, calls = _spy_read(monkeypatch, ("disabled", "Account disabled"))
+    assert calls == [] and out.status_shot == ""
+    sp._put(out)
+    assert sp.get_status(ACC)["shot_id"] == ""
+
+
+@pytest.mark.parametrize("failure", ["grid", "period", "total"])
+def test_by_default_a_failed_read_takes_no_screenshot(local, monkeypatch, failure):
+    """Снимок неудачи (`_shoot`) — тот же `page.screenshot`; по умолчанию его нет."""
+    fakes = {
+        "grid": {"_wait_for_grid": lambda _: False},
+        "period": {"_shown_period": lambda _: "2026-01-01"},
+        "total": {"_read_total": lambda _: (None, "no totals row")},
+    }[failure]
+    out, calls = _spy_read(monkeypatch, ("disabled", "Account disabled"), **fakes)
+    assert out.state == "failed" and out.error
+    assert calls == [], "снимок или CDP при неудачном чтении"
+    assert out.shot == "" and out.status_shot == ""
+
+
+def test_with_the_switch_on_a_failed_read_is_shot_as_before(local, monkeypatch):
+    monkeypatch.setenv("ACL_STATUS_SHOT", "1")
+    shots = []
+    page = NS(screenshot=lambda path, full_page=False: (shots.append(path), Path(path).write_bytes(PNG)))
+    assert sp._shoot(page, ACC, DAY) and len(shots) == 1
+
+
+def test_country_split_failure_shot_is_gated_too(local, monkeypatch):
+    """`country_split` берёт `_shoot` из account_spend — выключатель общий."""
+    from src.analysis_agent import country_split as cs
+
+    monkeypatch.delenv("ACL_STATUS_SHOT", raising=False)
+    calls = []
+    page = NS(screenshot=lambda *a, **k: calls.append("screenshot"),
+              new_cdp_session=lambda *a, **k: calls.append("new_cdp_session"))
+    assert cs._shoot(page, ACC, DAY) == "" and calls == []
+
+
 def test_only_the_last_few_shots_per_account_are_kept(local, monkeypatch):
     clock = iter(range(100))
     monkeypatch.setattr(sp, "_shot_stamp", lambda: f"20261001-1200{next(clock):02d}")
@@ -136,8 +251,8 @@ def test_only_the_last_few_shots_per_account_are_kept(local, monkeypatch):
 # ── отдача снимка: только по id и только из папки ────────────────────────
 
 @pytest.mark.parametrize("bad", [
-    "", "..", "../account_spend", "..\\account_spend", "status_x/../../account_spend",
-    "account_spend", "status_..", "status_a.png", "C:\\Windows\\win", "status_" + "a" * 300,
+    "", "..", "../account_spend", "..\\account_spend", "status_x/../../account_spend",  # linux-ok: a hostile id as data, never opened as a path on Linux
+    "account_spend", "status_..", "status_a.png", "C:\\Windows\\win", "status_" + "a" * 300,  # linux-ok: a hostile id as data, never opened as a path on Linux
 ])
 def test_a_shot_id_cannot_leave_the_folder(local, bad):
     (local / "account_spend.json").write_text("{}", encoding="utf-8")
@@ -204,12 +319,15 @@ def test_the_endpoint_refuses_unknown_ids_and_paths(local, client, bad):
 # папкой лежат настоящие снимки, и каждый маршрут сначала проверяет, что без
 # защит файл БЫЛ БЫ найден (`_naive`), — иначе тест ничего не доказывает.
 
-BS = "\\"
 OTHER_PNG = PNG + b"outside"  # отличимые байты: в ответе их быть не должно
 
 
 def _outside(local: Path) -> dict[str, str]:
-    """Разложить настоящие PNG вне папки снимков; вернуть id-маршрут → id."""
+    """Разложить настоящие PNG вне папки снимков; вернуть id-маршрут → id.
+
+    Маршруты с обратной косой («*-backslash») живут в
+    tests/test_status_screenshot_backslash_windows.py: `\` — разделитель
+    только на Windows (ACL-1582)."""
     (local / "spend_shots").mkdir(exist_ok=True)
     (local / "escape.png").write_bytes(OTHER_PNG)                       # родитель
     (local / "spend_shots_evil").mkdir(exist_ok=True)                   # сосед с похожим именем
@@ -220,20 +338,13 @@ def _outside(local: Path) -> dict[str, str]:
     far_id = str(far / "escape")
     return {
         "parent": "../escape",
-        "parent-backslash": ".." + BS + "escape",
         "parent-through-subdir": "status_x/../../escape",
-        "parent-through-subdir-backslash": "status_x" + BS + ".." + BS + ".." + BS + "escape",
         "sibling": "../spend_shots_evil/status_x",
-        "sibling-backslash": ".." + BS + "spend_shots_evil" + BS + "status_x",
         "absolute": far_id,
-        "absolute-forward-slashes": far_id.replace(BS, "/"),
     }
 
 
-ROUTES = [
-    "parent", "parent-backslash", "parent-through-subdir", "parent-through-subdir-backslash",
-    "sibling", "sibling-backslash", "absolute", "absolute-forward-slashes",
-]
+ROUTES = ["parent", "parent-through-subdir", "sibling", "absolute"]
 
 
 def _naive(local: Path, shot_id: str) -> Path:
@@ -321,7 +432,7 @@ def test_the_endpoint_is_local_only(local):
 
 # ── карта ────────────────────────────────────────────────────────────────
 
-def _render(status: dict) -> str:
+def _render(status: dict, show: bool = True) -> str:
     from jinja2 import Environment, FileSystemLoader
 
     from src.analysis_agent.money_format import fmt_currency
@@ -332,8 +443,10 @@ def _render(status: dict) -> str:
     country = {"country": "Kuwait", "key": "KW", "virtual": False,
                "rows": [{"account": ACC, "has_data": False, "ready": True,
                          "in_workbook": True, "status": status, "to_do": ""}]}
+    # ACL-1652 (owner, 07.10): the button is hidden by default; these tests check the
+    # markup it has when the flag is on, so they switch it on explicitly.
     html = env.get_template("_account_map_country.html").render(
-        mc=country, mlx={},
+        SHOW_COPY_FOR_GROUP=show, mc=country, mlx={},
         amap={"countries": [country], "available": [], "all_accounts": [], "live": {},
               "splits": {}, "fallback": {}, "dates": [], "date_from": "2026-09-01",
               "date_to": "2026-09-28", "span": ""})

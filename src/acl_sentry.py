@@ -236,6 +236,60 @@ def report_job_exception(exc: BaseException, *, job: str = "", account: str = ""
         return sentry_sdk.capture_exception(exc) or ""
 
 
+def report_step_stuck(step: str, idle_s: float, *, job: str = "", account: str = "",
+                      campaign: str = "") -> str:
+    """Робот не писал шагов дольше порога (ACL-1614, сигнал «завис»).
+
+    Отпечаток — по шагу, на котором встали: одно и то же зависание на одном
+    шаге у разных заданий складывается в один тикет, а не в событие на каждое.
+    """
+    if not init():
+        return ""
+    import sentry_sdk
+
+    step = str(step or "unknown")
+    with sentry_sdk.new_scope() as scope:
+        scope.fingerprint = ["acl-step-stuck", step]
+        scope.set_tag("failure_kind", "step_stuck")
+        scope.set_tag("step", step)
+        if account:
+            scope.set_tag("account", account_tag(account))
+        ctx = {"idle_s": round(float(idle_s), 1), "campaign": campaign}
+        if job:
+            ctx["job"] = str(job).replace("-", "")
+        scope.set_context("run", ctx)
+        return sentry_sdk.capture_message(f"step_stuck: {step}", level="error") or ""
+
+
+def report_tab_unblocked(step: str, method: str, stuck_s: float, *, ok: bool, job: str = "",
+                         account: str = "", campaign: str = "", api: str = "", where: str = "",
+                         tried: list | None = None) -> str:
+    """Сторож разблокировал зависшую вкладку (ACL-1702) — одно событие на случай.
+
+    Отпечаток — по шагу и месту вызова: одно и то же зависание у разных
+    заданий складывается в один тикет.
+    """
+    if not init():
+        return ""
+    import sentry_sdk
+
+    step = str(step or "unknown")
+    with sentry_sdk.new_scope() as scope:
+        scope.fingerprint = ["acl-tab-unblocked", step, str(where or "")]
+        scope.set_tag("failure_kind", "tab_hung")
+        scope.set_tag("step", step)
+        scope.set_tag("unblock_method", method or "none")
+        scope.set_tag("unblock_ok", "yes" if ok else "no")
+        if account:
+            scope.set_tag("account", account_tag(account))
+        ctx = {"stuck_s": round(float(stuck_s), 1), "campaign": campaign, "api": api,
+               "where": where, "tried": list(tried or [])}
+        if job:
+            ctx["job"] = str(job).replace("-", "")
+        scope.set_context("run", ctx)
+        return sentry_sdk.capture_message(f"tab_unblocked: {step}", level="error") or ""
+
+
 def account_tag(account: str) -> str:
     """Тег аккаунта — только короткий ярлык (первое слово: «FacebookDoc19»),
     без имени персоны после него (повторное ревью v3 PR #314)."""
@@ -496,12 +550,14 @@ _SUMMARY_LEVELS = {"clean": "info", "warnings": "info",
                    "do-not-publish": "warning", "stopped": "warning"}
 
 
-def report_run_summary(summary: dict) -> str:
+def report_run_summary(summary: dict, *, attachment: dict | None = None) -> str:
     """Итог одной кампании (ACL-1447) — собирает `run_summary.build`.
 
     Отпечаток — только вид итога: четыре тикета на весь парк машин, события
     внутри них. Имена аккаунта и кампании — тегами (решение владельца 01.10,
     см. докстроку модуля); всё событие проходит тот же `before_send`.
+    ACL-1554: `attachment` — строки телеметрии прогона
+    (`run_summary.telemetry_attachment`), уже вычищенные и ограниченные.
     """
     if not init():
         return ""
@@ -520,10 +576,37 @@ def report_run_summary(summary: dict) -> str:
         ctx = dict(summary)
         if ctx.get("run_id"):
             ctx["run_id"] = str(ctx["run_id"]).replace("-", "")
+        if attachment and not _attach_telemetry(scope, attachment):
+            ctx["telemetry_attachment"] = "error"
         scope.set_context("run_summary", ctx)
         return sentry_sdk.capture_message(
             f"Run summary: {result}", level=_SUMMARY_LEVELS.get(result, "info")
         ) or ""
+
+
+def _attach_telemetry(scope, attachment: dict) -> bool:
+    """Приложить строки телеметрии прогона (ACL-1554). Вернуть, приложилось ли.
+
+    Как и у `_attach_section`: `before_send` вложения не видит, поэтому
+    второй потолок стоит здесь, и не приложилось — итог уходит без вложения.
+    Только `.jsonl`: скриншот сюда не пролезет даже по ошибке.
+    """
+    try:
+        from src.fb_ads_rpa.run_summary import TELEMETRY_MAX_BYTES
+
+        payload = attachment.get("bytes") or b""
+        filename = str(attachment.get("filename") or "")
+        if (not isinstance(payload, (bytes, bytearray)) or not payload
+                or len(payload) > TELEMETRY_MAX_BYTES or not filename.endswith(".jsonl")):
+            return False
+        scope.add_attachment(
+            bytes=bytes(payload),
+            filename=filename,
+            content_type=str(attachment.get("content_type") or "application/x-ndjson"),
+        )
+        return True
+    except Exception:
+        return False
 
 
 def report_problem(text: str, *, context: dict | None = None) -> str:

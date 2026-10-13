@@ -456,7 +456,10 @@ def test_the_classic_wizard_is_unchanged(sim):
     assert sim["run"]() == ""
     calls = sim["calls"]
     assert calls.count(("next",)) == 2, "прежний мастер: Next к группе и к объявлению"
-    assert not [c for c in calls if c[0] in ("level", "card", "objective", "terms")]
+    assert not [c for c in calls if c[0] in ("level", "objective", "terms")]
+    # ACL-1611: карточку Audience пробуем в любой раскладке (нет сводки —
+    # "absent", ничего не нажимается); других карточек прежний мастер не касается.
+    assert [c for c in calls if c[0] == "card"] == [("card", "Audience")]
     assert not [r for r in sim["rows"] if r[0].startswith("simple_create")]
 
 

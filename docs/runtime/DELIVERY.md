@@ -21,7 +21,11 @@ After verified stage promotion, obtain successful full Windows CI on the exact m
 release commit. Record scope and limitations in the release ledger. Create the
 existing annotated acl-release-* tag with its genuine SHA/success/run URL under the
 project's release authorization. scripts/acl_publish_release.py verifies tag, HEAD,
-current main and the successful exact-main CI through GitHub. Never repoint tags,
+current main and the successful exact-main CI through GitHub. If that main run reused
+an earlier full run of the same tree (ACL-1565), it also requires a successful push or
+workflow_dispatch run with the full test matrix on a commit whose git tree equals the release tree. The full
+matrix is the ACL-1582 layout: every `linux tests (py, shard)` job, `windows tests (3.13)` and
+`ACL verification`; runs of the older all-Windows layout are refused. Never repoint tags,
 replace releases, accept stale evidence or treat a merge waiver as release authority.
 The release workflow builds/tests the package, stages its assets as a draft and
 publishes only verified complete artifacts. Preserve the existing checks.

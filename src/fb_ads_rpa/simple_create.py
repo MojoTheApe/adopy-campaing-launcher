@@ -33,6 +33,8 @@ import os
 import re
 import time
 
+from src.fb_ads_rpa import job_cancel
+
 #: Адрес нового редактора (в пути, не в параметрах).
 SIMPLE_CREATE_PATH = "/adsmanager/manage/simple_create"
 
@@ -196,11 +198,21 @@ _CARD_JS = r"""
       if (body) body.setAttribute('data-acl-card-body', '1');
       const btn = btns[0];
       btn.scrollIntoView({ block: 'center', behavior: 'instant' });
-      const r = bar.getBoundingClientRect();
-      const x = r.x + Math.min(r.width / 2, 120), y = r.y + r.height / 2;
+      // ACL-1611: жмём в заголовок карточки (слева), а не в центр шапки: в
+      // шапке Audience есть ссылка «About audiences», и центр мог попасть
+      // в неё. Попадание годится, только если под точкой нет ничего
+      // нажимаемого, кроме самой кнопки карточки.
+      const hr = h.getBoundingClientRect();
+      const r = (hr.width > 0 && hr.height > 0) ? hr : bar.getBoundingClientRect();
+      const x = r.x + Math.min(r.width / 2, 60), y = r.y + r.height / 2;
       const hit = document.elementFromPoint(x, y);
+      const inner = !!hit && !!hit.closest(
+        'a, button, input, select, textarea, label, [role=link], [role=checkbox], [role=switch], [role=combobox]');
+      const rb = hit && hit.closest('[role=button]');
+      const foreign = !!rb && !btns.includes(rb);
       btn.setAttribute('data-acl-card-button', bar.id);
-      return { found: true, pressed: false, x, y, hit: !!hit && btn.contains(hit), body: !!body, bar: bar.id };
+      return { found: true, pressed: false, x, y, hit: !!hit && btn.contains(hit) && !inner && !foreign,
+               body: !!body, bar: bar.id };
     }
     return { found: false };
   }
@@ -246,7 +258,40 @@ def _card_open(page, title: str, wait_s: float) -> bool:
         except Exception:
             return False
         time.sleep(0.25)
+        job_cancel.check()
     return False
+
+
+_CARD_CONTROLS_JS = r"""
+  () => {
+    // ACL-1611: тело раскрытой карточки (метка ставится в _CARD_JS) и число
+    // видимых управляющих элементов в нём: поля, комбобоксы, строки-кнопки.
+    const body = document.querySelector('[data-acl-card-body]');
+    if (!body) return { body: false, n: 0 };
+    if (body.hidden || !body.isConnected) return { body: true, shown: false, n: 0 };
+    const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const n = [...body.querySelectorAll(
+      'input, textarea, select, [role=combobox], [role=textbox], [role=button], [role=switch], [role=checkbox]')]
+      .filter(vis).length;
+    return { body: true, shown: true, n };
+  }
+"""
+"""Есть ли в раскрытой карточке управляющие элементы (а не пустая оболочка)."""
+
+
+def _card_controls(page, wait_s: float) -> dict:
+    md = _md()
+    got: dict = {}
+    for _ in range(max(1, int(wait_s / 0.25))):
+        try:
+            got = md._eval_bounded(page, _CARD_CONTROLS_JS) or {}
+        except Exception:
+            return {}
+        if not got.get("body") or got.get("n"):
+            break
+        time.sleep(0.25)
+        job_cancel.check()
+    return got
 
 
 def open_card(page, title: str) -> str:
@@ -254,8 +299,11 @@ def open_card(page, title: str) -> str:
 
     "absent" — такой карточки-сводки нет (прежний мастер или карточка без
     сворачивания — обработчик работает как раньше); "open" — уже раскрыта;
-    "opened" — раскрыли; "failed" — не раскрылась ни доверенным кликом по
-    шапке, ни DOM-кликом по кнопке. Строка телеметрии `simple_card`.
+    "opened" — раскрыли и в теле есть управляющие элементы; "no_controls" —
+    нажатие прошло, а тело пустое или скрыто (ACL-1611); "failed" — не
+    раскрылась ни доверенным кликом по шапке, ни DOM-кликом по кнопке.
+    Нажимается только сама карточка (заголовок), не кнопка или ссылка
+    внутри неё. Строка телеметрии `simple_card` (diag.how — чем раскрыли).
     """
     md = _md()
     try:
@@ -281,8 +329,15 @@ def open_card(page, title: str) -> str:
         if _card_open(page, title, 3.0):
             how = "dom"
     result = "opened" if how else "failed"
-    md._telemetry.record("simple_card", bool(how), note=f"{title}:{result}",
-                         diag={"how": how, "hit": bool(state.get("hit"))})
+    diag = {"how": how, "hit": bool(state.get("hit")), "target": "card_header"}
+    if how:
+        # ACL-1611: «раскрылась» — это ещё и управляющие элементы в теле.
+        # Тело не нашли (метки нет) — проверить нечем, считаем раскрытой.
+        ctl = _card_controls(page, 2.0)
+        diag["controls"] = ctl.get("n") if ctl.get("body") else None
+        if ctl.get("body") and not ctl.get("n"):
+            result = "no_controls"
+    md._telemetry.record("simple_card", result == "opened", note=f"{title}:{result}", diag=diag)
     return result
 
 
@@ -369,6 +424,7 @@ def ensure_leads_objective(page) -> str:
             except Exception:
                 pass
         time.sleep(0.25)
+        job_cancel.check()
     md._telemetry.record("simple_objective", False, note="not_set",
                          diag={"was": got.get("checked"), "hit": bool(where.get("hit"))})
     return "failed"
@@ -425,6 +481,7 @@ def lead_terms_block(page, *, wait_s: float = 4.0) -> str:
         if not text or time.time() >= deadline:
             return text if isinstance(text, str) else ""
         time.sleep(0.5)
+        job_cancel.check()
 
 
 # ── После перезагрузки ───────────────────────────────────────────────────
@@ -552,6 +609,10 @@ _WHY_TEXT = {
     "dialog_open_media_picker": ("Meta's media picker opened over the new ad after Create ad and "
                                  "could not be closed with its Cancel, so the robot did not fill the "
                                  "new ad; close it and fill the new ad in the draft by hand"),
+    # ACL-1551 (live 04.10): мастер медиа прошлого объявления остался открыт.
+    "creative_wizard_left_open": ("Meta's media wizard of the previous ad stayed open and could not be "
+                                  "closed with its own Close, so the ad set's Action menu could not "
+                                  "be used"),
 }
 
 
@@ -566,7 +627,68 @@ _CREATIVE_WHY_TEXT = {
     "story_not_placed:not_in_library": ("Story placement uses the post file: the story file is not "
                                         "in Meta's media library, so Replace was skipped (Original "
                                         "and no Meta AI expansion are set)."),
+    # ACL-1533: Replace on Vertical without evidence that the story is there.
+    "crop_vertical_replace_unconfirmed": ("The story file could not be confirmed on the Vertical "
+                                          "crop after Replace (the post may still be there); the "
+                                          "ad is left in the draft for review."),
+    "crop_vertical_changed_without_story": ("The Vertical crop changed although no story file was "
+                                            "picked; the ad is left in the draft for review."),
+    # ACL-1637 (live 06.10): the same video on several ads of one campaign.
+    "library_has_no_copy": ("This ad has no media: the same video was already used by an earlier "
+                            "ad, Meta's media library showed no copy of it and the file could not "
+                            "be uploaded again for this ad; the ad is left in the draft for review."),
+    "same_file_already_uploaded_this_run": ("This ad has no media: the same video was already "
+                                            "uploaded for an earlier ad, but it could not be "
+                                            "attached to this ad; the ad is left in the draft for "
+                                            "review."),
+    "same_file_already_failed_this_run": ("This ad has no media: the same video already failed to "
+                                          "upload for an earlier ad and was not accepted again for "
+                                          "this ad; the ad is left in the draft for review."),
+    # ACL-1669 (B97, 07.10): the library grid showed no selection counter.
+    "library_selection_unreadable": ("This ad has no media: Meta's media library showed no "
+                                     "selection counter, so the robot could not tell what is "
+                                     "selected and neither clicked a tile nor uploaded over it; "
+                                     "attach the media to this ad by hand (the ad is left in the "
+                                     "draft for review)."),
+    "library_not_searched_counter_unreadable": (
+        "This ad has no media: Meta's media library showed no selection counter, so the robot "
+        "did not search it for a copy of the video (this is not a 'no copy' answer) and did "
+        "not upload again; attach the media to this ad by hand (the ad is left in the draft for "
+        "review)."),
+    "file_not_landed": ("This ad has no media: the browser did not accept the video file in "
+                        "Meta's upload dialog; the ad is left in the draft for review."),
+    "wizard_not_opened": ("This ad has no media: Meta's 'Set up creative' wizard did not open "
+                          "for this ad; the ad is left in the draft for review."),
+    # ACL-1551 (live 04.10): Next on Crop did not move Meta's wizard on.
+    "crop_wizard_stuck": ("Meta's media wizard stayed on its Crop step (Next did not move it on), "
+                          "so the robot closed the wizard with its own Close; the ad's media is not "
+                          "confirmed and the ad is left in the draft for review."),
+    # ACL-1559 (live 04.10, 2f140fa687fa): Meta's media picker stayed on "Loading...".
+    "media_picker_loading": ("Meta's media wizard opened on its Media step, but the media picker "
+                             "kept showing 'Loading...' (no Upload, no media library), so the "
+                             "robot could not attach this ad's media; the ad is left in the "
+                             "draft for review."),
 }
+
+
+#: Причины отказа шага назначения — для человека (итог кампании, English).
+#: ACL-1543: Meta оставила объявление на «Instant form (suggested)».
+_DESTINATION_WHY_TEXT = {
+    "instant_form_not_switched": ("Meta kept this ad on Instant form (suggested) and the robot could "
+                                  "not switch it back to Website, so the website URL is not set. The "
+                                  "robot never accepts Lead Ads Terms or creates an instant form - "
+                                  "select Website (Browser add-ons: None) and enter the URL by hand."),
+    # ACL-1669 (B97, 07.10): no media on the ad, so Meta showed no URL field.
+    "url_field_missing_no_media": ("The website URL field is missing because this ad has no media "
+                                   "(Meta shows no destination fields without it) - a consequence "
+                                   "of the media step, not a separate destination problem; fix the "
+                                   "media first."),
+}
+
+
+def destination_why_text(why: str) -> str:
+    """Причина отказа шага назначения одной фразой; "" — фразы для неё нет."""
+    return _DESTINATION_WHY_TEXT.get(why or "", "")
 
 
 def creative_why_text(why: str) -> str:
@@ -796,6 +918,7 @@ def _wait_menu(page, wait_s: float) -> dict:
         if got.get("open") or time.time() >= deadline:
             return got
         time.sleep(0.3)
+        job_cancel.check()
 
 
 def _read_ads(page) -> dict:
@@ -885,6 +1008,7 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
                         _wv().wake_if_hidden(page, where="create_next_ad",
                                              waited_s=now - start, answered=False)
                     time.sleep(1.0)
+                    job_cancel.check()
                     continue
             busy_s += now - unanswered_at
             if not closed and _wv().woken_recently(page):
@@ -936,6 +1060,7 @@ def _wait_new_ad(page, ads_before: int, known: list[str], wait_s: float,
             _wv().wake_if_hidden(page, where="create_next_ad", waited_s=now - start,
                                  answered=True, probe=False)
         time.sleep(0.5)
+        job_cancel.check()
     got["dialog_first"] = dialog
     got["dialog_until_s"] = dialog_s if dialog else None
     got["waited_s"] = round(time.time() - start, 1)
@@ -1009,6 +1134,7 @@ def close_media_picker(page, *, wait_s: float = 6.0) -> dict:
             out["why"] = "still_open"
             return out
         time.sleep(0.4)
+        job_cancel.check()
 
 
 def create_next_ad(page, *, tag: str, known_names: list[str],
@@ -1060,10 +1186,101 @@ def create_next_ad(page, *, tag: str, known_names: list[str],
                                           "extra_shells", "dialog", "dialog_kind", "dialog_last",
                                           "waited_s", "busy_s",
                                           "progress_s", "media_picker", "tree", "menu",
-                                          "capture", "text")})
+                                          "wizard_cleared", "capture", "text")})
     except Exception:
         pass
     return out
+
+
+_ADSET_ROW_POINT_JS = r"""
+  () => {
+    const tree = document.querySelector('[data-surface="/am/editor_drawer"]');
+    const row = tree && tree.querySelector('[data-surface$="editor_tree:adset"] [role=rowheader]');
+    if (!row) return { why: 'no_row' };
+    row.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const r = row.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return { why: 'hidden' };
+    // Кнопки строки стоят справа; точка — внутри строки, левее края.
+    return { x: r.x + Math.max(10, r.width - 40), y: r.y + r.height / 2,
+             x0: r.x + Math.min(r.width / 2, 80) };
+  }
+"""
+"""Точка над строкой группы в дереве (движение мыши, не нажатие).
+
+Фокус клавиатуры на строку не ставится ни на одной попытке (ревью PR #632,
+F5): фокус строки дерева Meta может её выбрать и увести редактор на группу."""
+
+#: Сколько раз навести курсор на строку группы, прежде чем признать, что кнопок нет.
+#: Кнопки появились — наведение сразу прекращается.
+_WAKE_TRIES = 3
+
+
+def _wake_adset_row(page, tree: dict) -> dict:
+    """Навести курсор на строку группы, чтобы Meta нарисовала её кнопки.
+
+    ACL-1630 (06.10, Facebook_5265): в дереве у строк кампании, группы и
+    объявления на месте блока кнопок («default», «Action menu») пустой
+    `<div></div>` — Meta рисует их только под курсором (снимки 24.09 и 30.09
+    держали кнопки в DOM). Движение мыши — не нажатие и охраны не требует.
+    Только `mouse.move`: ни нажатия, ни фокуса (тесты это проверяют).
+    Возвращает дерево, перечитанное после наведения, с `hover` =
+    {"tries", "woke"}; не появились — прежний отказ `no_create_control`;
+    вкладка не ответила — дерево с `tree: False` и `error` (`tab_frozen`).
+    """
+    md = _md()
+    hover = {"tries": 0, "woke": False}
+    for n in range(_WAKE_TRIES):
+        try:
+            pt = md._eval_bounded(page, _ADSET_ROW_POINT_JS) or {}
+        except Exception:
+            pt = {}
+        if "x" not in pt:
+            hover["why"] = pt.get("why") or "no_point"
+            break
+        hover["tries"] = n + 1
+        try:
+            # Сначала в сторону, потом на строку: `mouseover` приходит при
+            # входе курсора, а не при стоянии над ней.
+            page.mouse.move(pt["x0"], pt["y"] + 90)
+            page.mouse.move(pt["x0"], pt["y"], steps=4)
+            page.mouse.move(pt["x"], pt["y"], steps=4)
+        except Exception:
+            hover["why"] = "mouse_error"
+            break
+        md._sleep_h(0.5)
+        try:
+            fresh = md._eval_bounded(page, _MORE_ADS_TREE_JS, [CREATE_AD_RE, _ADSET_MENU_SURFACE]) or {}
+        except Exception as exc:
+            fresh = {"tree": False, "error": type(exc).__name__}
+        if not fresh.get("tree"):
+            tree = fresh
+            break
+        tree = fresh
+        if tree.get("create") or tree.get("adset_menu"):
+            hover["woke"] = True
+            break
+    tree["hover"] = hover
+    return tree
+
+
+def clear_leftover_wizard(page) -> dict | None:
+    """Мастер медиа прошлого объявления ещё на экране — закрыть его своим Close.
+
+    ACL-1551 (232d398471bd, 04.10): мастер объявления 1 остался открытым на
+    Crop, и «Action menu» группы не открылось — объявления 2 и 3 не созданы.
+    Перед «Action menu» мастер закрывается его собственным Close (шапка
+    мастера; ни Next, ни Save — в объявление 1 ничего не сохраняется).
+    None — мастера не было; иначе {"closed_by", "closed", "dialog_left", "tried"}.
+    """
+    md = _md()
+    try:
+        present = md._eval_bounded(page, md._WIZARD_ROOT_JS.replace("return d;", "return true;")
+                                   .replace("return null;", "return false;"))
+    except Exception:
+        return None
+    if not present:
+        return None
+    return md._leave_wizard(page, allow_complete=False)
 
 
 def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
@@ -1073,6 +1290,13 @@ def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
         md.wait_editor_saved(page)
     except Exception:
         pass
+    # ACL-1551: открытый мастер медиа прошлого объявления перекрывает дерево.
+    cleared = clear_leftover_wizard(page)
+    if cleared is not None:
+        out["wizard_cleared"] = cleared
+        if not cleared.get("closed"):
+            out["why"] = "creative_wizard_left_open"
+            return
     try:
         tree = md._eval_bounded(page, _MORE_ADS_TREE_JS, [CREATE_AD_RE, _ADSET_MENU_SURFACE]) or {}
     except Exception as exc:
@@ -1081,6 +1305,15 @@ def _create_next_ad(page, out: dict, known: list[str], wait_s: float) -> None:
     if not tree.get("tree"):
         out["why"] = "tab_frozen" if tree.get("error") else "no_ad_list"
         return
+    if not tree.get("create") and not tree.get("adset_menu"):
+        # ACL-1630: кнопок строки в DOM нет, пока над ней нет курсора.
+        tree = _wake_adset_row(page, tree)
+        out["tree"] = tree
+        # Ревью PR #632 (F6): вкладка перестала отвечать во время наведения —
+        # это `tab_frozen`, а не «нет Action menu».
+        if not tree.get("tree"):
+            out["why"] = "tab_frozen" if tree.get("error") else "no_ad_list"
+            return
     ads_before = int((tree.get("levels") or {}).get("Ad") or 0)
     out["ads_before"] = ads_before
     if tree.get("create"):
@@ -1184,6 +1417,7 @@ def ad_listed(page, name: str, *, wait_s: float = 8.0) -> dict:
         if listed or time.time() >= deadline or got.get("error"):
             return {"listed": listed, "ads": got.get("ads"), "error": got.get("error")}
         time.sleep(0.5)
+        job_cancel.check()
 
 
 # ── Медиа нового объявления (ACL-1412) ───────────────────────────────────

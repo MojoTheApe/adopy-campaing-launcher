@@ -160,6 +160,32 @@ def draft_names(draft: Any) -> list[str]:
     return [n for n in names if n]
 
 
+def report_step_stuck(step: str, idle_s: float, *, job: str = "", account: str = "",
+                      campaign: str = "") -> str:
+    """Задание молчит дольше порога — одно событие на простой (ACL-1614)."""
+    try:
+        from src import acl_sentry
+
+        return acl_sentry.report_step_stuck(step, idle_s, job=job, account=account,
+                                            campaign=campaign) or ""
+    except Exception:
+        return ""
+
+
+def report_tab_unblocked(step: str, method: str, stuck_s: float, *, ok: bool, job: str = "",
+                         account: str = "", campaign: str = "", api: str = "", where: str = "",
+                         tried: list | None = None) -> str:
+    """Сторож разблокировал зависшую вкладку — одно событие (ACL-1702)."""
+    try:
+        from src import acl_sentry
+
+        return acl_sentry.report_tab_unblocked(step, method, stuck_s, ok=ok, job=job, account=account,
+                                               campaign=campaign, api=api, where=where,
+                                               tried=tried) or ""
+    except Exception:
+        return ""
+
+
 def report_campaign_stop(
     fail_step: str,
     *,

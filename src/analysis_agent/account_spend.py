@@ -8,10 +8,13 @@
 * **Только по нажатию.** Никаких таймеров и фоновых обходов: опрос Ads Manager
   по расписанию уже предшествовал чекпоинту на телефон. Нажатие человека —
   человеческое поведение, расписание — нет.
-* **Только прицепиться, никогда не перезапускать.** Профиль должен быть уже
-  открыт автоматизацией; читаем в этом же окне. Перезапуск ради одного числа
-  разлогинивает аккаунт — так и вышло на x01, — а ветка перезапуска вдобавок
-  умеет терять прокси. Обычный браузер не годится ни при каких обстоятельствах.
+* **Никогда не перезапускать открытое.** Открытый автоматизацией профиль
+  читаем в его же окне. Перезапуск ради одного числа разлогинивает аккаунт —
+  так и вышло на x01, — а ветка перезапуска вдобавок умеет терять прокси.
+  Закрытый профиль чтение запускает само (ACL-1580) тем же путём, что кнопка
+  «open profile» — это обычное открытие, не перезапуск, — и после чтения
+  мягко закрывает то, что запустило. Обычный браузер не годится ни при каких
+  обстоятельствах.
 * **Число без подтверждённого периода — не число.** Прежде чем вернуть спенд,
   на странице сверяется показанный диапазон дат. Иначе достаточно смены
   параметра в URL, чтобы получить чужой день с видом правильного ответа.
@@ -24,6 +27,7 @@ import re
 import tempfile
 import os
 import threading
+import uuid
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -40,6 +44,7 @@ from src.fb_ads_rpa.operations import (
     publish_lease,
     serialized_browser,
 )
+from src.fb_ads_rpa import profile_trouble as _profile_trouble
 
 _STORE_LOCK = threading.RLock()
 _UNSAVED: dict[str, "SpendReading"] = {}
@@ -647,25 +652,42 @@ class ProfileNotAttachable(RuntimeError):
 # Read у 1443/6540 сразу кончался «open by hand», а open-profile отвечал 409,
 # хотя Publish на 1443 через две минуты дождался тишины и переоткрыл окно.
 # Теперь эти пути просят у провайдера тот же путь (`reopen_hand_window`):
-# те же условия, никакого kill, окно на переднем плане не трогается.
+# только мягкая остановка через MLX API, никакого kill.
+#
+# ACL-1562 (решение владельца 04.10): без условий и без ожидания — окно,
+# открытое руками, переоткрывается сразу. Строка аккаунта говорит, почему
+# окно закрылось, пока идёт мягкая остановка и подъём.
 
 #: Код отказа, когда окно так и осталось открытым руками.
 HAND_OPEN_CODE = "open_by_hand"
 
-#: Строка на карте, пока ждём тишины ввода на машине.
-HAND_WAIT_NOTE = "Waiting for the computer to be idle to reopen the profile…"
+#: Строка на карте, пока окно, открытое руками, переоткрывается
+#: (тот же текст, что в панели задания Publish — `browser.HAND_WINDOW_NOTICE`).
+HAND_NOTE = "The {account} window was opened by hand — reopening it with automation"
 
 #: Простой текст отказа — вместо «failed · retry» / «countries failed».
-HAND_OPEN_MESSAGE = "The profile is open by hand — close its window in Multilogin, then Read again"
+#: ACL-1562: мягкая остановка через MLX API окно не закрыла — ничего не убивали.
+HAND_OPEN_MESSAGE = ("Multilogin did not close the hand-opened profile window — "
+                     "close it in Multilogin, then Read again")
 
-#: Аккаунт → строка ожидания. Живёт только в памяти и только пока ждём:
-#: опрос `/account-spend/status` отдаёт её строке аккаунта.
+#: Ревью PR #563 (F3): переоткрытие выключено на этой машине
+#: (`FB_RPA_REOPEN_HAND_WINDOW=0`) — Multilogin тут ни при чём.
+HAND_OFF_MESSAGE = ("The profile is open by hand and reopening it with automation is switched "
+                    "off on this computer — close its window in Multilogin, then Read again")
+
+#: Аккаунт → строка переоткрытия. Живёт только в памяти и только пока окно
+#: переоткрывается: опрос `/account-spend/status` отдаёт её строке аккаунта.
 _HAND_WAIT: dict[str, str] = {}
 _HAND_WAIT_LOCK = threading.Lock()
 
 
+def hand_note(account: str) -> str:
+    """Строка «окно открыто руками — переоткрываем» для этого аккаунта."""
+    return HAND_NOTE.format(account=str(account or "") or "profile")
+
+
 def hand_wait_note(account: str) -> str:
-    """Ждёт ли сейчас чтение этого аккаунта тишины ввода — строкой для экрана."""
+    """Переоткрывается ли сейчас окно этого аккаунта — строкой для экрана."""
     with _HAND_WAIT_LOCK:
         return _HAND_WAIT.get(str(account or ""), "")
 
@@ -673,7 +695,7 @@ def hand_wait_note(account: str) -> str:
 def _set_hand_wait(account: str, waiting: bool) -> None:
     with _HAND_WAIT_LOCK:
         if waiting:
-            _HAND_WAIT[str(account or "")] = HAND_WAIT_NOTE
+            _HAND_WAIT[str(account or "")] = hand_note(account)
         else:
             _HAND_WAIT.pop(str(account or ""), None)
 
@@ -694,12 +716,318 @@ def reopening_by_hand():
         _REOPEN_BY_HAND.reset(token)
 
 
+def _hand_open_message(exc: BaseException) -> str:
+    """Текст отказа «открыт руками» по причине (ревью PR #563, F3).
+
+    Мягкая остановка не закрыла окно — в `detail` остановки хвост
+    `browser.HAND_WINDOW_STOP_FAILED`; иначе переоткрытие выключено на машине.
+    """
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    detail = str(getattr(exc, "detail", "") or "")
+    if rpa_browser.HAND_WINDOW_STOP_FAILED in detail:
+        return HAND_OPEN_MESSAGE
+    return HAND_OFF_MESSAGE
+
+
 def _is_open_by_hand(exc: BaseException) -> bool:
     """Отказ провайдера — «окно открыто руками и закрыть его нельзя»."""
     from src.fb_ads_rpa import profile_trouble
 
     return (isinstance(exc, profile_trouble.ProfileStop)
             and exc.code == profile_trouble.OPEN_BY_HAND)
+
+
+# ── закрытый профиль: чтение открывает его само (ACL-1580) ────────────────
+#
+# До ACL-1580 чтение на закрытом профиле отказывало («the profile is not
+# open»), и человек жал «open profile» руками. Отказ защищал от перезапуска
+# ОТКРЫТОГО окна (разлогинил x01); запуск ЗАКРЫТОГО — обычное открытие, ровно
+# то, что делает «open profile». Решение владельца 05.10: чтения открывают
+# нужное сами.
+#
+# * Запуск — путём «open profile»: `multilogin_attach.open(allow_restart=False,
+#   allow_kill=False)` — только старт, открытое окно не перезапускается,
+#   простого браузера нет. Окно, открытое руками, переоткрывается как прежде
+#   (ACL-1562) и остаётся открытым.
+# * Место — из той же очереди профилей по памяти, что у Publish (ACL-1424):
+#   разом не больше, чем тянет машина; пока ждём, строка аккаунта говорит
+#   «Waiting for a free profile slot».
+# * После чтения профиль, который запустило само чтение, закрывается мягкой
+#   остановкой ЭТОГО профиля через MLX API (`allow_kill=False`) — и при
+#   упавшем чтении тоже. Уже открытый остаётся открытым.
+# * Удачный Read spend закрывает не сразу, а через `CLOSE_GRACE_S`: за ним
+#   тем же нажатием идёт чтение стран (ACL-1282), и закрыть профиль между
+#   ними значило бы открыть его второй раз. Чтение стран, пришедшее за это
+#   время, забирает профиль себе и закрывает его по своему концу.
+
+#: Код отказа «профиль разлогинен в Facebook» — тот же, что у Publish.
+LOGGED_OUT_CODE = _profile_trouble.LOGGED_OUT
+
+#: Строка на карте: разлогинен — войти может только человек, повторов нет.
+LOGGED_OUT_MESSAGE = ("The {account} profile is logged out of Facebook — "
+                      "log in inside Multilogin, then Read again")
+
+#: Строка на карте, пока чтение ждёт места в очереди профилей.
+SLOT_WAIT_NOTE = "Waiting for a free profile slot"
+
+#: Строка на карте, пока закрытый профиль поднимается.
+STARTING_NOTE = "Opening the {account} profile with automation"
+
+#: Сколько секунд удачный Read spend держит открытым запущенный им профиль —
+#: чтобы чтение стран (ACL-1282) пришло в то же окно. Страница просит страны
+#: через 3–6 с после конца спенда.
+CLOSE_GRACE_S = 30.0
+
+
+def logged_out_message(account: str) -> str:
+    return LOGGED_OUT_MESSAGE.format(account=str(account or "") or "profile")
+
+
+def _set_wait_note(account: str, note: str) -> None:
+    """Строка ожидания на карте (та же, что у переоткрытия окна, ACL-1518)."""
+    with _HAND_WAIT_LOCK:
+        if note:
+            _HAND_WAIT[str(account or "")] = note
+        else:
+            _HAND_WAIT.pop(str(account or ""), None)
+
+
+def _slot_queue():
+    """Очередь профилей по памяти — та же, что у Publish (ACL-1321/1424)."""
+    from src.web import publish_jobs
+
+    return publish_jobs._slots
+
+
+@dataclass
+class _ReadOpen:
+    """Что чтение сделало с профилем: запустило ли его само и чьё место держит."""
+
+    account: str
+    started: bool = False
+    slot_id: str = ""
+    profile_id: str = ""
+    entry: Any = None
+    started_mono: float = 0.0
+    #: Вкладка чтения — вкладка окна, которое чтение подняло: её не закрываем
+    #: (закрылось бы окно); профиль закроет мягкая остановка или Publish.
+    keep_tab: bool = False
+    #: Сколько мест очередь выдала профилю к моменту запуска (`grants`).
+    grants_seen: int = 0
+
+
+#: Чтение просит запускать закрытый профиль (`opening_closed_profile`). Флагом
+#: контекста, как `_REOPEN_BY_HAND`: `_attach_only` подменяют десятки тестов.
+_READ_OPEN: ContextVar["_ReadOpen | None"] = ContextVar("acl_read_open", default=None)
+
+#: Профиль → запуск чтения, ждущий закрытия по `CLOSE_GRACE_S`.
+_PENDING_CLOSE: dict[str, _ReadOpen] = {}
+_PENDING_LOCK = threading.Lock()
+
+
+@contextmanager
+def opening_closed_profile(opened: _ReadOpen):
+    """Внутри блока `_attach_only` запускает закрытый профиль (ACL-1580)."""
+    token = _READ_OPEN.set(opened)
+    try:
+        yield opened
+    finally:
+        _READ_OPEN.reset(token)
+
+
+def _record(step: str, ok: bool, duration_s: float, diag: dict) -> None:
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        _rt.record(step, ok, duration_s=round(float(duration_s), 1), diag=diag)
+    except Exception:
+        pass
+
+
+def _slot_wait_note(verdict: dict) -> str:
+    ahead = int((verdict or {}).get("ahead") or 0)
+    return SLOT_WAIT_NOTE + (f" ({ahead} ahead)" if ahead else "")
+
+
+def _take_over_pending(profile_id: str, opened: "_ReadOpen | None") -> None:
+    """Профиль, запущенный прошлым чтением и ждущий закрытия, — теперь наш."""
+    if opened is None or opened.started:
+        return
+    with _PENDING_LOCK:
+        prev = _PENDING_CLOSE.pop(profile_id, None)
+    if prev is None:
+        return
+    opened.started, opened.slot_id = True, prev.slot_id
+    opened.profile_id, opened.started_mono = prev.profile_id, prev.started_mono
+    opened.entry = opened.entry or prev.entry
+    opened.grants_seen = prev.grants_seen
+
+
+def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
+    """Запустить закрытый профиль для чтения путём «open profile» (ACL-1580).
+
+    Сначала место в очереди профилей Publish (строка ожидания на карте), потом
+    старт: `allow_restart=False` — открытое окно не перезапускается,
+    `allow_kill=False` — ничего не убивается. Не поднялся — место отпускаем.
+
+    Ревью PR #583:
+    * (F2) ожидание места бывает долгим, а `/mlx-profile-open` замок профиля
+      не берёт — профиль могли открыть автоматизацией, пока мы ждали.
+      `recheck()` после выдачи места: прицепились — профиль не наш, место
+      отпускаем и после чтения его не закрываем.
+    * (F1) место профиля держит Publish (`shared`) — профиль после чтения
+      остаётся Publish: чтение его не закрывает (ни сразу, ни по таймеру).
+    """
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    profile_id = (getattr(entry, "profile_id", "") or "").strip()
+    queue = _slot_queue()
+    slot_id = f"read:{account_label}:{uuid.uuid4().hex[:8]}"
+    waited_from = time.monotonic()
+    try:
+        grant = queue.acquire(
+            slot_id, profile_id,
+            on_wait=lambda verdict: _set_wait_note(account_label, _slot_wait_note(verdict)),
+            share_profile=True,
+        )
+    finally:
+        _set_wait_note(account_label, "")
+    shared = bool(grant and grant.get("shared"))
+    waited_s = time.monotonic() - waited_from
+    if recheck is not None:
+        try:
+            ready = recheck()
+        except Exception:
+            ready = None
+        if ready is not None:
+            if not shared:
+                queue.release(slot_id)
+            return ready
+    _set_wait_note(account_label, STARTING_NOTE.format(account=account_label))
+    began = time.monotonic()
+    try:
+        conn = rpa_browser.get_browser_provider("multilogin_attach").open(
+            entry, account_label, allow_missing_dir=True, allow_restart=False, allow_kill=False)
+    except Exception as exc:  # noqa: BLE001
+        if not shared:
+            queue.release(slot_id)
+        _record("spend_profile_started", False, time.monotonic() - began,
+                {"account": account_label, "slot_wait_s": round(waited_s, 1),
+                 "error": type(exc).__name__})
+        raise ProfileNotAttachable(
+            f"{account_label}: the profile is closed and could not be started with automation: {exc}"
+        ) from exc
+    finally:
+        _set_wait_note(account_label, "")
+    opened.keep_tab = True
+    # Место профиля держит Publish — после чтения профиль его, а не наш.
+    opened.started = not shared
+    opened.slot_id = "" if shared else slot_id
+    opened.profile_id = profile_id
+    opened.entry = entry
+    opened.started_mono = began
+    try:
+        opened.grants_seen = int(queue.grants(profile_id))
+    except Exception:
+        opened.grants_seen = 0
+    _record("spend_profile_started", True, time.monotonic() - began,
+            {"account": account_label, "slot_wait_s": round(waited_s, 1), "shared_slot": shared})
+    return conn
+
+
+def _close_started(opened: _ReadOpen) -> None:
+    """Мягко закрыть профиль, который запустило чтение, и отпустить его место.
+
+    Только MLX API этого профиля, `allow_kill=False` (`stop_profile_on_request`,
+    как у ACL-1444): не закрылся — окно остаётся, ничего не убиваем.
+    """
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    began = time.monotonic()
+    if _publish_touched(opened):
+        # Ревью PR #583 (F1): профилем пользуется (или воспользовалось) другое
+        # задание — окно его: Publish сам решает, закрывать ли (ACL-1444).
+        if opened.slot_id:
+            try:
+                _slot_queue().release(opened.slot_id)
+            except Exception:
+                log.exception("Could not release the profile slot of %s", opened.account)
+        _record("spend_profile_closed_after_read", None, 0.0,
+                {"account": opened.account, "skipped": "another_job"})
+        opened.started = False
+        return
+    ok, error = True, ""
+    try:
+        rpa_browser.stop_profile_on_request(opened.entry, opened.account)
+    except Exception as exc:  # noqa: BLE001 — закрытие не отменяет прочитанное
+        ok, error = False, type(exc).__name__
+        log.warning("%s: could not close the profile the read started (%s); its window stays open",
+                    opened.account, exc)
+    finally:
+        if opened.slot_id:
+            try:
+                _slot_queue().release(opened.slot_id)
+            except Exception:
+                log.exception("Could not release the profile slot of %s", opened.account)
+    diag = {"account": opened.account, "held_s": round(time.monotonic() - opened.started_mono, 1)}
+    if error:
+        diag["error"] = error
+    _record("spend_profile_closed_after_read", ok, time.monotonic() - began, diag)
+    opened.started = False
+
+
+def _publish_touched(opened: _ReadOpen) -> bool:
+    """Держит ли место профиля другое задание, ждёт ли его, или держало ли
+    после нашего запуска (`grants` вырос). Не прочиталось — считаем, что да:
+    оставить окно открытым безопаснее, чем закрыть чужое."""
+    try:
+        queue = _slot_queue()
+        return bool(queue.others_on(opened.profile_id, opened.slot_id)
+                    or int(queue.grants(opened.profile_id)) != opened.grants_seen)
+    except Exception:
+        log.exception("Could not ask the profile queue about %s", opened.account)
+        return True
+
+
+def _close_if_still_pending(opened: _ReadOpen) -> None:
+    """Конец `CLOSE_GRACE_S`: никто не забрал профиль — закрыть его."""
+    with browser_operation.reading(), profile_lock(opened.profile_id):
+        with _PENDING_LOCK:
+            if _PENDING_CLOSE.get(opened.profile_id) is not opened:
+                return
+            _PENDING_CLOSE.pop(opened.profile_id, None)
+        _close_started(opened)
+
+
+def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False) -> None:
+    """После чтения: закрыть то, что чтение запустило (сразу или после паузы)."""
+    if not opened.started:
+        return
+    if keep_for_next and CLOSE_GRACE_S > 0 and opened.profile_id:
+        with _PENDING_LOCK:
+            _PENDING_CLOSE[opened.profile_id] = opened
+        timer = threading.Timer(CLOSE_GRACE_S, _close_if_still_pending, args=(opened,))
+        timer.daemon = True
+        timer.start()
+        return
+    _close_started(opened)
+
+
+def _logged_out(page, *, deep: bool = False) -> bool:
+    """Вкладка на странице входа Facebook? `deep` — ещё и форма входа в разметке."""
+    try:
+        if _profile_trouble.login_url(page.url):
+            return True
+    except Exception:
+        return False
+    if not deep:
+        return False
+    try:
+        code, _ = _profile_trouble.classify_page(page, history=False)
+    except Exception:
+        return False
+    return code == _profile_trouble.LOGGED_OUT
 
 
 def _mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
@@ -795,6 +1123,19 @@ def _short_path(path: str) -> str:
         return ""
 
 
+def _attach_open(direct_cls, entry, profile_id: str):
+    """Прицепиться к профилю, если он уже открыт автоматизацией; иначе None."""
+    udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
+    if udd is None:
+        return None
+    direct = direct_cls()
+    for spelling in _dir_spellings(udd):
+        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
+        if conn is not None:
+            return conn
+    return None
+
+
 def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = None):
     """Подключиться к уже открытому профилю. Никогда его не перезапускать.
 
@@ -813,11 +1154,17 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
 
     ACL-1518: `reopen_by_hand=True` (или блок `reopening_by_hand()` — так
     читают спенд и страны) — окно, открытое руками, переоткрывается путём
-    Publish: условия и ожидание тишины ввода `hand_window`, мягкая остановка,
-    без kill. Не вышло — отказ с кодом `HAND_OPEN_CODE` и простым текстом.
+    Publish: сразу (ACL-1562), мягкая остановка, без kill. Не вышло — отказ
+    с кодом `HAND_OPEN_CODE` и простым текстом.
+
+    ACL-1580: внутри `opening_closed_profile(...)` (так читают спенд и
+    страны) закрытый профиль не отказ — он запускается путём «open profile»
+    с местом из очереди профилей Publish (`_start_closed`), и в переданной
+    записи отмечается, что его запустило чтение. Без блока — прежний отказ.
     """
     if reopen_by_hand is None:
         reopen_by_hand = _REOPEN_BY_HAND.get()
+    opening = _READ_OPEN.get()
     from src.fb_ads_rpa import browser as rpa_browser
 
     profile_id = (getattr(entry, "profile_id", "") or "").strip()
@@ -832,6 +1179,11 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
 
     udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
     if udd is None:
+        # Папку создаёт сам Multilogin при первом запуске — у профиля, ни разу
+        # не запускавшегося здесь, её нет; открытым он быть не может.
+        if opening is not None:
+            return _start_closed(entry, account_label, opening,
+                                 recheck=lambda: _attach_open(direct_cls, entry, profile_id))
         raise ProfileNotAttachable(
             f"Profile folder {profile_id} was not found. Is this profile open on this machine?"
         )
@@ -840,6 +1192,9 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
     for spelling in _dir_spellings(udd):
         conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
         if conn is not None:
+            # Профиль, который прошлое чтение запустило и ещё не закрыло
+            # (`CLOSE_GRACE_S`), закроет теперь это чтение.
+            _take_over_pending(profile_id, opening)
             return conn
 
     running = False
@@ -856,13 +1211,13 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
         options: dict[str, Any] = {"allow_restart": True, "allow_kill": False}
         if reopen_by_hand:
             options["reopen_hand_window"] = True
-            options["on_hand_wait"] = lambda: _set_hand_wait(account_label, True)
+            options["on_hand_reopen"] = lambda: _set_hand_wait(account_label, True)
         try:
             conn = rpa_browser.get_browser_provider("multilogin_attach").open(
                 entry, account_label, **options)
         except Exception as exc:  # noqa: BLE001
             if reopen_by_hand and _is_open_by_hand(exc):
-                raise ProfileNotAttachable(HAND_OPEN_MESSAGE, code=HAND_OPEN_CODE) from exc
+                raise ProfileNotAttachable(_hand_open_message(exc), code=HAND_OPEN_CODE) from exc
             raise ProfileNotAttachable(
                 f"{account_label}: the profile is open in MLX Desktop and could not be reopened "
                 f"with automation: {exc}"
@@ -877,6 +1232,9 @@ def _attach_only(entry, account_label: str, *, reopen_by_hand: bool | None = Non
         except Exception:
             pass
         return conn
+    if opening is not None:
+        return _start_closed(entry, account_label, opening,
+                             recheck=lambda: _attach_open(direct_cls, entry, profile_id))
     raise ProfileNotAttachable(
         f"{account_label}: the profile is not open. Open it through automation and leave the window open; "
         "the read will attach to it without restarting anything."
@@ -1032,7 +1390,7 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
 
     ACL-1518: `reopen_by_hand=True` (кнопка «open profile» на строке карты) —
     окно, открытое руками, переоткрывается путём Publish (`_attach_only`):
-    те же условия и ожидание тишины ввода, без kill. Не вышло — `(False,
+    сразу (ACL-1562), только мягкая остановка, без kill. Не вышло — `(False,
     HAND_OPEN_MESSAGE)`. Подключение нового профиля (`/mlx-profile-open`)
     по-прежнему такое окно не трогает.
     """
@@ -1160,16 +1518,25 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         return out
 
     conn = None
+    held = _ReadOpen(account)
     try:
         try:
-            with reopening_by_hand():
+            with reopening_by_hand(), opening_closed_profile(held):
                 conn = _attach_only(entry, account)
         except ProfileNotAttachable as exc:
             out.error = str(exc)
             out.error_code = getattr(exc, "code", "")
             return out
         page = conn.page
-        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        try:
+            page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        except Exception as exc:
+            # ACL-1580: переход сорвался на страницу входа — профиль разлогинен.
+            if _profile_trouble.classify_error(exc)[0] != LOGGED_OUT_CODE:
+                raise
+            return _logged_out_reading(out, account)
+        if _logged_out(page):
+            return _logged_out_reading(out, account)
 
         # Ads Manager рисуется скриптом, и `domcontentloaded` на нём не значит
         # почти ничего: первый прогон 2026-09-07 проверил период через четыре
@@ -1179,6 +1546,8 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         expected_act = act if act.startswith("act_") else "act_" + act
         opened = _act_from_url(page, tries=1)
         if opened != expected_act:
+            if _logged_out(page, deep=True):
+                return _logged_out_reading(out, account)
             # Оба номера помогают сверить карту и доступ профиля без нового чтения.
             out.error = (
                 f"Ads Manager opened ad account {opened or '(no act in the URL)'}, "
@@ -1187,6 +1556,8 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
             )
             return out
         if not grid_ready:
+            if _logged_out(page, deep=True):
+                return _logged_out_reading(out, account)
             # Статус спрашиваем и здесь: у отключённого кабинета таблицы может
             # не быть вовсе, а знать о нём надо именно тогда.
             out.status, out.status_text = _read_status(page)
@@ -1250,16 +1621,31 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         return out
     finally:
         if conn is not None:
-            try:
-                conn.page.close()
-            except Exception:
-                pass
+            # ACL-1580: у профиля, который чтение само подняло, это вкладка
+            # окна — её не закрываем (закрылось бы окно); профиль закроет
+            # мягкая остановка ниже.
+            if not held.keep_tab:
+                try:
+                    conn.page.close()
+                except Exception:
+                    pass
             # Окно остаётся открытым: профиль, закрытый сразу после захода,
             # выглядит хуже, чем человек, который посмотрел и ушёл.
             try:
                 conn.close(keep_browser_open=True)
             except Exception:
                 pass
+        # ACL-1580: запущенное чтением — закрыть (и при отказе). Удачное
+        # чтение ждёт `CLOSE_GRACE_S`: за ним может прийти чтение стран.
+        _finish_started(held, keep_for_next=out.state == "ok")
+
+
+def _logged_out_reading(out: "SpendReading", account: str) -> "SpendReading":
+    """Профиль разлогинен в Facebook: понятная строка, без повторов (ACL-1580)."""
+    out.state = "failed"
+    out.error = logged_out_message(account)
+    out.error_code = LOGGED_OUT_CODE
+    return out
 
 
 #: Что Ads Manager пишет человеку, когда с кабинетом что-то не так. Ищем его
@@ -1805,7 +2191,14 @@ def _safe_name(account: str) -> str:
 
 
 def _shoot(page, account: str, day: str) -> str:
-    """Снимок при неудаче: первый живой прогон стоит тестового аккаунта."""
+    """Снимок при неудаче: первый живой прогон стоит тестового аккаунта.
+
+    ACL-1535: тот же `page.screenshot`, что сбрасывал вьюпорт профиля
+    (ACL-1532), — поэтому только при `ACL_STATUS_SHOT=1`. Без него "" и
+    страница не трогается; HTML-снимки `page_capture` остаются как были.
+    """
+    if not status_shot_enabled():
+        return ""
     try:
         out = _shots_dir()
         out.mkdir(parents=True, exist_ok=True)
@@ -2151,10 +2544,40 @@ def _status_shot(page, account: str) -> tuple[str, str]:
         return "", ""
 
 
+def status_shot_enabled() -> bool:
+    """Снимать ли состояние (ACL-1535). По умолчанию — нет.
+
+    ACL-1532 измерил вживую: `page.screenshot` сбрасывал чужой (Multilogin)
+    override вьюпорта — 1919×1079 → 3837×2157 и так и оставалось, а размер окна
+    входит в отпечаток браузера. Решение владельца 03.10: выключить, пока способ
+    снимка не доказан безопасным. `ACL_STATUS_SHOT=1` в машинном .env
+    (serve.py грузит его через `paths.load_env`) — только для контролируемых
+    проверок.
+    """
+    return (os.environ.get("ACL_STATUS_SHOT") or "").strip() == "1"
+
+
+def _last_status_shot(account: str) -> tuple[str, str]:
+    """Последний сохранённый снимок аккаунта, если он ещё на диске."""
+    try:
+        got = get_status(account)
+    except Exception:  # noqa: BLE001 — без старого снимка чтение не хуже
+        return "", ""
+    return got.get("shot_id", ""), got.get("shot_at", "")
+
+
 def _shoot_status(page, out: "SpendReading") -> None:
-    """Снимок, если состояние — не «чисто». Чистая страница не снимается."""
+    """Снимок, если состояние — не «чисто». Чистая страница не снимается.
+
+    Без `ACL_STATUS_SHOT=1` страницу не трогаем вовсе (ACL-1535): ни
+    `page.screenshot`, ни CDP. Строке и Copy for group остаётся последний
+    сохранённый снимок, если он есть.
+    """
     if out.status and out.status != "clear":
-        out.status_shot, out.status_shot_at = _status_shot(page, out.account)
+        if status_shot_enabled():
+            out.status_shot, out.status_shot_at = _status_shot(page, out.account)
+        else:
+            out.status_shot, out.status_shot_at = _last_status_shot(out.account)
 
 
 # ══ Дерево аккаунта: кампании и объявления ════════════════════════════════

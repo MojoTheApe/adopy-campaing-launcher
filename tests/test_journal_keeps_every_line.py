@@ -26,6 +26,10 @@ sys.path.insert(0, str(ROOT))
 
 from src.acl_log import JournalWriteError, append_line
 
+# ACL-1582: файл идёт только в Windows-задание CI; причина — в маркере.
+pytestmark = pytest.mark.windows_only(
+    reason="concurrent appends under machine_file_lock, an msvcrt lock on Windows (fcntl elsewhere)")
+
 WRITERS = 12
 PER_WRITER = 60
 EXPECTED = WRITERS * PER_WRITER

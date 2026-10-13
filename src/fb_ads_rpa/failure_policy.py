@@ -76,8 +76,9 @@ POLICY: dict[str, tuple[str, str]] = {
     _profile.OPEN_BY_HAND: (
         BLOCKING,
         "the account's Multilogin profile was open by hand (without automation), and the "
-        "robot does not close such a window - it may hold a Facebook session Multilogin has "
-        "not saved yet; no draft was created - " + _profile.MESSAGES[_profile.OPEN_BY_HAND],
+        "robot could not reopen it with automation - either the graceful Multilogin stop did "
+        "not close the window, or reopening is switched off on this computer; nothing was "
+        "killed and no draft was created - " + _profile.MESSAGES[_profile.OPEN_BY_HAND],
     ),
     _profile.RESTART_FAILED: (
         BLOCKING,
@@ -101,6 +102,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "the Facebook Page has not accepted Meta's Lead Ads Terms; only a person can accept "
         "them in Meta, so the campaign was stopped and not retried - a partial draft is left "
         "in Ads Manager - " + _profile.MESSAGES[_profile.LEAD_TERMS],
+    ),
+    # ACL-1697: Ads Manager opened another ad account than the draft's.
+    _profile.WRONG_AD_ACCOUNT: (
+        BLOCKING,
+        "Ads Manager opened a different ad account than the one in the draft (or the opened "
+        "account could not be read), so the campaign was stopped before Create and nothing "
+        "was built - " + _profile.MESSAGES[_profile.WRONG_AD_ACCOUNT],
     ),
     # ACL-1327 (review of PR #340, F4): the draft already exists when the
     # objective is checked inside the single-screen editor.
@@ -132,6 +140,12 @@ POLICY: dict[str, tuple[str, str]] = {
         "building this campaign took longer than the robot's time limit, so it was stopped; "
         "the draft is incomplete and was not retried - check it in Ads Manager and finish or "
         "delete it",
+    ),
+    "tab_hung": (
+        BLOCKING,
+        "the profile's browser tab stopped answering inside one step for minutes, so the "
+        "robot closed that tab (the profile stays open) and stopped the campaign; the draft is "
+        "incomplete and was not retried - check it in Ads Manager and finish or delete it",
     ),
     "step_budget_exceeded": (
         BLOCKING,
@@ -169,6 +183,17 @@ POLICY: dict[str, tuple[str, str]] = {
         "the robot set it on a second pass at the end of the campaign and read it back "
         "from Locations",
     ),
+    "conversion_website_name_changed": (
+        BLOCKING,
+        "the ad set name changed while Conversion location was being set; the draft was "
+        "stopped so a changed name is not published - check the ad set name in Ads Manager",
+    ),
+    "next_to_ad_stuck_on_adset": (
+        BLOCKING,
+        "the editor stayed on the ad set after Next was pressed several times, so the ad was not "
+        "built; the draft was not retried (a retry would leave another partial draft) - open it in "
+        "Ads Manager and finish or delete it",
+    ),
     "conversion_event": (
         BLOCKING,
         "optimising for the wrong event spends the budget on the wrong people; "
@@ -203,6 +228,12 @@ POLICY: dict[str, tuple[str, str]] = {
         BLOCKING,
         "the requested manual placements were not verified; leaving Advantage+ "
         "changes where budget can be spent",
+    ),
+    "advantage_plus_off": (
+        BLOCKING,
+        "the Audience card stayed on the Advantage+ recommended setup before the age "
+        "step (no audience controls, 'Further limit the reach of your ads' still "
+        "offered): age, gender and languages are not applied as controls",
     ),
     "advantage_plus_audience": (
         BLOCKING,
@@ -291,7 +322,7 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     _profile.LOGGED_OUT: (
         "Facebook logged out in this profile",
         "Facebook showed its login page, so no draft was created.",
-        "Log in to Facebook in this Multilogin profile, close it, then publish again.",
+        "Log in to Facebook in the profile window that was brought to the front, then publish again.",
     ),
     _profile.NETWORK: (
         "Profile cannot reach Facebook",
@@ -300,7 +331,8 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     ),
     _profile.OPEN_BY_HAND: (
         "Profile window open by hand",
-        "The robot does not close a hand-opened window, so no draft was created.",
+        "The hand-opened window could not be reopened with automation (Multilogin did not "
+        "close it, or reopening is switched off on this computer), so no draft was created.",
         "Close the profile window so Multilogin saves the session, then publish again.",
     ),
     _profile.RESTART_FAILED: (
@@ -317,6 +349,12 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Lead Ads Terms not accepted on the Page",
         "Only a person can accept Meta's Lead Ads Terms, so the build stopped with a partial draft.",
         "Accept the Page's Lead Ads Terms in Meta, then publish again.",
+    ),
+    _profile.WRONG_AD_ACCOUNT: (
+        "Wrong ad account opened",
+        "Ads Manager showed another ad account than the draft's, so nothing was created.",
+        "Check the ad account id on the Accounts page and that the account is visible in "
+        "this profile, then publish again.",
     ),
     "objective_inline": (
         "Objective — not switched to Leads",
@@ -336,6 +374,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     "campaign_budget_exceeded": (
         "Campaign build took too long",
         "The build hit the robot's time limit, so the draft is incomplete.",
+        "Open the draft in Ads Manager and finish or delete it.",
+    ),
+    "tab_hung": (
+        "Browser tab hung during a step",
+        "The robot closed the frozen tab and stopped, so the draft is incomplete.",
         "Open the draft in Ads Manager and finish or delete it.",
     ),
     "step_budget_exceeded": (
@@ -369,6 +412,16 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Meta's location search stalled; the robot set the country at the end "
         "of the campaign and read it back.",
         "Check \"Locations\" on the ad set before publishing.",
+    ),
+    "conversion_website_name_changed": (
+        "Ad set name changed",
+        "The name changed while Conversion location was being set, so the build was stopped.",
+        "Check the ad set name in Ads Manager, then publish again.",
+    ),
+    "next_to_ad_stuck_on_adset": (
+        "Editor stayed on the ad set",
+        "Next was pressed several times but the ad was not opened, so the draft has no ad.",
+        "Open the draft in Ads Manager and finish or delete it.",
     ),
     "conversion_event": (
         "Conversion event — not verified",
@@ -404,6 +457,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Placements — not verified",
         "Budget may be spent on placements that were not requested.",
         "Check \"Placements\" on the ad set.",
+    ),
+    "advantage_plus_off": (
+        "Advantage+ audience — still on recommended setup",
+        "Age, gender and languages are not applied as controls, so Meta may deliver outside them.",
+        "Open the ad set audience, choose \"Further limit the reach of your ads\" and check Age.",
     ),
     "advantage_plus_audience": (
         "Advantage+ audience still on",
@@ -463,6 +521,145 @@ _PER_AD_NAME = re.compile(
 )
 
 
+# ── Per-ad details that change the explanation, not the verdict ────────────
+#
+# (per-ad step, reason at the start of the note) -> (why, title, impact, action).
+# ACL-1543: `<tag>_destination:instant_form_not_switched - <ad>: ...` — Meta kept
+# the ad on "Instant form (suggested)"; still BLOCKING, but the operator reads
+# that it is Instant form, not a generic "destination not verified".
+PER_AD_DETAIL: dict[tuple[str, str], tuple[str, str, str, str]] = {
+    ("destination", "instant_form_not_switched"): (
+        "Meta kept the ad on Instant form (suggested) and the robot could not switch it "
+        "back to Website, so the website URL is not set; the robot never accepts Lead Ads "
+        "Terms or creates an instant form",
+        "Ad destination - Instant form",
+        "Meta kept this ad on Instant form (suggested); the website URL is not set.",
+        "Open the ad, select Website (Browser add-ons: None) and enter the URL. "
+        "Do not accept Lead Ads Terms or create a form for it.",
+    ),
+    # ACL-1551 (live 04.10, 232d398471bd): Meta's media wizard stayed on its
+    # Crop step after Next; the robot left it with the wizard's own Close and
+    # went on with the other ads. Still BLOCKING: the creative is not confirmed.
+    ("creative_upload", "crop_wizard_stuck"): (
+        "Meta's media wizard stayed on its Crop step (Next did not move it on), so the robot "
+        "closed the wizard with its own Close; the ad's media is not confirmed",
+        "Ad media - Meta's media wizard stuck on Crop",
+        "The media wizard did not finish, so this ad's media and crops are not confirmed.",
+        "Open the ad in Ads Manager, check its media (and the Stories/Reels file) and fix it by hand.",
+    ),
+    # ACL-1559 (live 04.10, 2f140fa687fa): the wizard opened on its Media step and
+    # Meta's media picker never left its "Loading..." placeholders; the robot
+    # waited without clicking, reopened the wizard once, and gave up. Still
+    # BLOCKING: the ad has no media. The file itself is not blamed.
+    ("creative_upload", "media_picker_loading"): (
+        "Meta's media picker on the wizard's Media step kept loading (no Upload, no media "
+        "library), so the ad's media could not be attached",
+        "Ad media - Meta's media picker kept loading",
+        "Meta's media picker never finished loading, so this ad has no media.",
+        "Open the ad in Ads Manager, add its media by hand (Set up creative - Media), "
+        "or run the campaign again later.",
+    ),
+    # ACL-1637 (live 06.10): ads 2-4 of one campaign use the same video; the
+    # robot could neither take a copy from Meta's library nor upload it again.
+    # BLOCKING: the ad has no media, so the campaign is do-not-publish.
+    **{("creative_upload", why): (
+        reason,
+        "Ad media - " + title,
+        "This ad has no media, so the campaign must not be published.",
+        "Open the ad in Ads Manager, add its media by hand (Set up creative - Media), "
+        "or run the campaign again.",
+    ) for why, reason, title in (
+        ("library_has_no_copy",
+         "the same video was used by an earlier ad, Meta's media library showed no copy of it "
+         "and the robot's re-upload for this ad did not attach it",
+         "no library copy of the shared video"),
+        ("same_file_already_uploaded_this_run",
+         "the same video was uploaded for an earlier ad but could not be attached to this ad",
+         "shared video not attached"),
+        ("same_file_already_failed_this_run",
+         "the same video already failed to upload for an earlier ad and was not accepted again",
+         "shared video failed earlier"),
+        ("file_not_landed",
+         "the browser did not hand the video file to Meta's upload dialog for this ad",
+         "video file not accepted by the upload dialog"),
+        ("wizard_not_opened",
+         "Meta's 'Set up creative' wizard did not open for this ad",
+         "creative wizard did not open"),
+        # ACL-1669 (live 07.10, B97): the library grid showed no "N selected" counter.
+        ("library_selection_unreadable",
+         "Meta's media library showed no selection counter, so the robot could not tell what "
+         "is selected and neither clicked a tile nor uploaded over it; attach the media by hand",
+         "library selection unreadable"),
+        ("library_not_searched_counter_unreadable",
+         "Meta's media library showed no selection counter, so the robot did not search it "
+         "for a copy of the video; the library was not asked, it did not say it has no copy, "
+         "and the robot did not upload again - attach the media by hand",
+         "library not searched, counter unreadable"),
+    )},
+    # ACL-1669: no media on the ad, so Meta shows no URL field. Still BLOCKING.
+    ("destination", "url_field_missing_no_media"): (
+        "the website URL field is missing because this ad has no media (Meta shows no "
+        "destination fields without it); this follows from the media step, not from the "
+        "destination itself",
+        "Ad destination - no media on the ad",
+        "This ad has no media, so its website URL could not be set; fix the media first.",
+        "Open the ad in Ads Manager, add its media by hand, then check the website URL.",
+    ),
+    # ACL-1551: the wizard of the previous ad was still open and its own Close
+    # did not close it, so the ad set's Action menu could not be used.
+    ("create", "creative_wizard_left_open"): (
+        "Meta's media wizard of the previous ad stayed open and its own Close did not close it, "
+        "so the ad set's Action menu could not be used to create this ad",
+        "Ad not created - media wizard left open",
+        "The media wizard of the previous ad stayed on screen, so this ad was not created.",
+        "Close the media wizard in Ads Manager, then add the missing ad by hand.",
+    ),
+}
+
+
+# ── ACL-1573: шаг остановило незнакомое окно Meta ──────────────────────────
+#
+# `<шаг>:Unknown Meta window blocked the step: <title> (unknown_window)` —
+# сторож окон (`foreign_windows.attach_block`) не смог безопасно закрыть
+# окно, которого шаг не открывал. Вердикт шага не меняется (имя до «:»),
+# меняется объяснение: оператор читает заголовок окна.
+UNKNOWN_WINDOW_TOKEN = "(unknown_window)"
+UNKNOWN_WINDOW_PREFIX = "Unknown Meta window blocked the step: "
+
+
+def _window_detail(failure: str) -> tuple[str, str, str, str] | None:
+    raw = str(failure or "")
+    if ":" not in raw:
+        return None
+    note = raw.split(":", 1)[1].strip()
+    if not note.endswith(UNKNOWN_WINDOW_TOKEN) or not note.startswith(UNKNOWN_WINDOW_PREFIX):
+        return None
+    title = note[: -len(UNKNOWN_WINDOW_TOKEN)].strip()
+    return (
+        f"{title}; the robot only closes such a window with its own Close / Not now / Dismiss / "
+        "Cancel or Escape and never presses Publish, Confirm or Continue in it, so the step was "
+        "stopped - the draft may be incomplete",
+        title,
+        "A Meta window the robot does not know stayed over the editor, so this step was not done.",
+        "Open the draft in Ads Manager, close that window by hand and check this step.",
+    )
+
+
+def _detail(failure: str) -> tuple[str, str, str, str] | None:
+    raw = str(failure or "")
+    window = _window_detail(raw)
+    if window:
+        return window
+    per_ad = _PER_AD_NAME.fullmatch(base_name(raw))
+    if not per_ad or ":" not in raw:
+        return None
+    note = raw.split(":", 1)[1].strip()
+    for (step, why), entry in PER_AD_DETAIL.items():
+        if per_ad.group(1) == step and (note == why or note.startswith(why + " ")):
+            return entry
+    return None
+
+
 def _lookup(name: str) -> tuple[str, str] | None:
     known = POLICY.get(name)
     if known:
@@ -497,6 +694,9 @@ def severity(failure: str) -> str:
 def reason(failure: str) -> str:
     """Why this failure has the severity it has — for the operator, not a log."""
     name = base_name(failure)
+    detail = _detail(failure)
+    if detail:
+        return detail[0]
     known = _lookup(name)
     if known:
         return known[1]
@@ -577,6 +777,9 @@ def problem(failure: str) -> dict:
         label = (found.group("name") or found.group("name2") or "").strip() if found else ""
         if label and not _TAG_ONLY.match(label):
             ad_name = label
+    detail = _detail(raw)
+    if detail:
+        guide = detail[1:]
     title, impact, action = guide
     return {
         "step": name,

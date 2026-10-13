@@ -43,7 +43,7 @@ def build_payload(version: str, built_at_utc: str | None = None) -> dict[str, ob
     source_sha = _git_sha()
     return {
         "schema": 1,
-        "product": "Adopy Campaign Launcher",
+        "product": "Adopy Campaign Manager",
         "version": version,
         "channel": "windows-preview",
         "core_baseline_sha": source_sha if baseline.get("runtime_policy") == "integrated" else baseline["baseline_sha"],

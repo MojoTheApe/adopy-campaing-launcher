@@ -215,12 +215,12 @@ def test_a_narrow_screenshot_is_not_padded_to_960(browser):
 
 def test_without_a_shot_the_button_is_disabled_and_does_nothing(browser):
     btn = ('<button type="button" class="amap-btn amap-copy-group" disabled '
-           'title="No screenshot on the last read — read the account again">Copy for group</button>')
+           'title="Screenshots are switched off for safety">Copy for group</button>')
     ctx, page, sent = _page(browser, clipboard="ok", button=btn)
     try:
         b = page.locator(".amap-copy-group")
         assert b.is_disabled()
-        assert b.get_attribute("title") == "No screenshot on the last read — read the account again"
+        assert b.get_attribute("title") == "Screenshots are switched off for safety"
         b.click(force=True)
         page.wait_for_timeout(300)
         assert page.evaluate("window.__copied") == []
@@ -767,6 +767,7 @@ def test_a_failed_capture_is_reported_once_per_account_and_scrubbed(local, telem
 
 def test_the_status_shot_is_taken_before_scrolling_to_the_totals(local, monkeypatch):
     """Прокрутка к итогам (`_read_total`) увела бы баннер из кадра."""
+    monkeypatch.setenv("ACL_STATUS_SHOT", "1")  # ACL-1535: по умолчанию снимка нет
     order: list[str] = []
     page = NS(url="https://adsmanager.facebook.com/?act=111", goto=lambda *a, **k: None, close=lambda: None,
               screenshot=lambda path, full_page=False: (order.append("shot"), Path(path).write_bytes(PNG)))
@@ -781,3 +782,36 @@ def test_the_status_shot_is_taken_before_scrolling_to_the_totals(local, monkeypa
     out = sp.read_via_rpa("FacebookExample - Owner", "2026-10-01", "2026-10-01")
     assert out.status == "restricted" and out.status_shot
     assert order and order[0] == "shot", order
+
+
+# ── ACL-1652 (owner, 07.10): the button and its hint are hidden for now ────────
+
+def _status_cell(show=None):
+    from src.web.app import templates
+
+    country = {"country": "Kuwait", "key": "KW", "virtual": False,
+               "rows": [{"account": "FacebookDoc20 - x", "has_data": False, "ready": True, "in_workbook": True, "to_do": "",
+                         "status": {"status": "disabled", "status_text": "Account disabled", "at": "10:00",
+                                    "at_short": "10:00", "shot_id": "s1", "shot_at": "10:00", "stale": False}}]}
+    kw = {} if show is None else {"SHOW_COPY_FOR_GROUP": show}
+    html = templates.env.get_template("_account_map_country.html").render(
+        mc=country, mlx={}, amap={"countries": [country], "available": [], "all_accounts": [], "live": {}, "splits": {},
+                                  "fallback": {}, "dates": [], "date_from": "", "date_to": "", "span": "", "notes": {}}, **kw)
+    cell = html[html.index('<td class="amap-status">'):]
+    return cell[: cell.index("</td>")]
+
+
+def test_copy_for_group_is_hidden_by_default():
+    from src.web import app
+
+    assert app.SHOW_COPY_FOR_GROUP is False
+    cell = _status_cell()
+    assert "amap-copy-group" not in cell and "Copy for group" not in cell
+    assert "amap-st-hint" not in cell and "provider" not in cell
+    assert 'class="amap-st bad"' in cell, "статус остаётся"
+
+
+def test_the_flag_brings_the_button_and_its_hint_back():
+    cell = _status_cell(show=True)
+    assert 'class="amap-btn amap-copy-group"' in cell and 'data-shot="s1"' in cell
+    assert "Copy for group — paste it into the provider's group" in cell

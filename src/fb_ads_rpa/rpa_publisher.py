@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from typing import Any
 
 from config.paths import get_ad_account_map_path
 from src.fb_ads_rpa.ads_manager_flow import AdsManagerFlow
 from src.fb_ads_rpa.browser import (
+    ReopenCancelled,
     BrowserConnection,
     PlaywrightProfileProvider,
     get_browser_provider,
@@ -18,7 +20,7 @@ from src.fb_ads_rpa.config import get_browser_provider as get_browser_provider_n
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.operations import serialized_browser
 from src.fb_ads_rpa.enrich_draft import enrich_campaign_drafts
-from src.fb_ads_rpa import hand_window, profile_trouble
+from src.fb_ads_rpa import profile_trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
 
@@ -107,11 +109,21 @@ class RpaPublisher:
         self._conn: BrowserConnection | None = None
         self._entry = None
         self._cancelled = False
+        # ACL-1614: Stop только сигналит. Поток задания слышит Event в ожиданиях
+        # (`job_cancel.check`) и сам закрывает соединение на выходе.
+        self.cancel_event = threading.Event()
 
     def cancel(self) -> None:
-        """Stop RPA work; disconnect CDP but leave Multilogin window open."""
+        """Сигнал остановки; безопасно из любого потока.
+
+        Соединение Playwright и браузер отсюда НЕ закрываются (ACL-1614): sync
+        Playwright принадлежит потоку задания, а закрытие из чужого потока
+        оставляло его в бесконечном цикле с GIL в руках (05.10). Поток
+        задания увидит флаг, выйдет `JobCancelled` и вызовет `close` сам;
+        окно Multilogin остаётся открытым, как и раньше.
+        """
         self._cancelled = True
-        self.close(force=False)
+        self.cancel_event.set()
 
     def build_drafts(
         self,
@@ -145,6 +157,13 @@ class RpaPublisher:
         return resolve_account_entry(account_map, account_label)
 
     def _reset_browser(self, *, keep_browser_open: bool = False) -> None:
+        # ACL-1702 (ревью PR #704, m3): адрес CDP старого соединения сторожу больше не нужен.
+        try:
+            from src.fb_ads_rpa import tab_watchdog
+
+            tab_watchdog.forget_endpoint()
+        except Exception:
+            pass
         if self._conn:
             try:
                 self._conn.close(keep_browser_open=keep_browser_open)
@@ -298,16 +317,19 @@ class RpaPublisher:
                 self._reset_browser(keep_browser_open=True)
 
         try:
-            # ACL-1427: Stop задания прерывает ожидание тишины ввода перед
-            # закрытием окна, открытого руками (`cancel()` ставит флаг из
-            # другого потока).
-            with hand_window.watch_cancel(lambda: bool(getattr(self, "_cancelled", False))):
-                self._conn = self._provider.open(entry, account_label)
+            # ACL-1562: окно, открытое руками, провайдер переоткрывает сразу —
+            # ожидания тишины ввода (ACL-1427) и его Stop больше нет.
+            # ACL-1606: Stop слышен и между повторами запуска профиля.
+            try:
+                self._provider.cancel_check = lambda: bool(getattr(self, "_cancelled", False))
+            except Exception:
+                pass
+            self._conn = self._provider.open(entry, account_label)
             log.info("Browser opened via %s", self._provider.__class__.__name__)
         except Exception as exc:
             err_str = str(exc)
             self._reset_browser(keep_browser_open=soft)
-            if isinstance(exc, profile_trouble.ProfileStop):
+            if isinstance(exc, (profile_trouble.ProfileStop, ReopenCancelled)):
                 # ACL-1320: причина в профиле (вход, сеть, открыт руками) —
                 # её текст и есть сообщение; обходных путей нет.
                 raise
@@ -452,6 +474,21 @@ class RpaPublisher:
             pass
         return bool(meta_dom._all_edits_saved(page))
 
+    def _drop_hung_tab(self) -> None:
+        """Вкладку закрыл сторож (ACL-1702): снять метку и отпустить соединение.
+
+        Отключение Playwright — из ЭТОГО потока (потока задания), окно
+        профиля остаётся открытым (`keep_browser_open`). Следующая кампания
+        задания подключается заново (`_ensure_browser`) и берёт живую вкладку;
+        иначе страж «вкладки нет» отвечал бы `browser_closed` на каждую.
+        """
+        from src.fb_ads_rpa import tab_watchdog
+
+        conn = getattr(self, "_conn", None)
+        if conn is not None:
+            tab_watchdog.clear_page_mark(getattr(conn, "page", None))
+        self._reset_browser(keep_browser_open=True)
+
     def _flow(self, conn: BrowserConnection, account_label: str) -> AdsManagerFlow:
         """Поток кампании, который может сменить вкладку и перезапустить профиль."""
         return AdsManagerFlow(
@@ -511,9 +548,9 @@ class RpaPublisher:
         except Exception:
             pass
         if cancelled:
-            # ACL-1427, ревью PR #428 (F3): задание остановил человек (Stop во
-            # время ожидания тишины ввода) — это не сбой кампании, в Sentry
-            # не шлём (ACL-1318: туда — только настоящие сбои).
+            # Ревью PR #428 (F3): задание остановил человек (Stop) — это не
+            # сбой кампании, в Sentry не шлём (ACL-1318: туда — только
+            # настоящие сбои).
             return
         try:
             from src.fb_ads_rpa import sentry_signal
@@ -547,6 +584,14 @@ class RpaPublisher:
             _telemetry.clear_current_run()
             if job:
                 _telemetry.set_current_job(job)
+        except Exception:
+            pass
+        # ACL-1702 (ревью PR #704, B3): разблокировка, случившаяся вне кампании
+        # (уборка окна, шаги после потока), не клеймит `tab_hung` следующую.
+        try:
+            from src.fb_ads_rpa import tab_watchdog
+
+            tab_watchdog.take_hung()
         except Exception:
             pass
 
@@ -605,10 +650,41 @@ class RpaPublisher:
             self._report_profile_stop(stop, campaign_name, draft.account_label, "attach",
                                       cancelled=bool(getattr(self, "_cancelled", False)))
             return self._profile_stop_result(campaign_name, stop)
+        except ReopenCancelled:
+            # ACL-1606: Stop нажат, пока профиль ждали; профиль не поднят.
+            return RpaPublishResult(campaign_name=campaign_name, success=False,
+                                    error="Stopped by the user before the campaign started",
+                                    steps_completed=["cancelled_before_campaign"])
+        if getattr(self, "_cancelled", False):
+            # Ревью PR #563 (F2): Stop нажали, пока открывался браузер
+            # (переоткрытие окна, открытого руками, идёт секунды и не
+            # прерывается — ACL-1562). Кампанию не начинаем; окно остаётся
+            # открытым, отключаемся только от CDP.
+            self._reset_browser(keep_browser_open=True)
+            return RpaPublishResult(campaign_name=campaign_name, success=False,
+                                    error="Stopped by the user before the campaign started",
+                                    steps_completed=["cancelled_before_campaign"])
         flow = self._flow(conn, draft.account_label)
         try:
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
         except Exception as exc:
+            # ACL-1702: вкладку разблокировал сторож (зависла в одном вызове) —
+            # кампания кончена красным `tab_hung`, без переподключения и
+            # повтора: черновик частичный, повтор наплодил бы дубли.
+            from src.fb_ads_rpa import failure_policy, tab_watchdog
+
+            hung = tab_watchdog.take_hung()
+            if hung:
+                step = f"tab_hung:{hung}"
+                # Ревью PR #704 (B3): метку снять и соединение сбросить — вкладку
+                # сторож закрыл, следующая кампания задания подключится заново.
+                self._drop_hung_tab()
+                return RpaPublishResult(
+                    campaign_name=campaign_name, success=False,
+                    error=f"Recorded flow failed at: {step} - {failure_policy.reason(step)}",
+                    steps_completed=[f"recorded_flow_fail:{step}"],
+                    blocking_failures=[step],
+                    run_id=_telemetry.current_run_id() or None)
             if not self._browser_closed_error(exc):
                 raise
             # A dead PAGE usually does not mean a dead BROWSER — confirmed
@@ -628,6 +704,10 @@ class RpaPublisher:
                 raise self._mlx_fallback_error(exc, re_exc) from re_exc
             flow = self._flow(conn, draft.account_label)
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
+        # ACL-1702 (ревью PR #704, B3): кампания кончилась `tab_hung` — вкладку
+        # закрыл сторож; соединение сбросить, следующая кампания — заново.
+        if any(str(f).startswith("tab_hung") for f in (getattr(result, "blocking_failures", None) or [])):
+            self._drop_hung_tab()
         # ACL-1437: номер прогона — в «Technical details» карточки.
         if isinstance(result, RpaPublishResult) and not result.run_id:
             result.run_id = _telemetry.current_run_id() or None

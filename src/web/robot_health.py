@@ -86,6 +86,15 @@ def is_outcome_step(step: str, ok) -> bool:
     return True
 
 
+def abort_label(step: str, note, diag) -> str:
+    """Причина обрыва прогона по-человечески. ACL-1673: закрытая вкладка —
+    «tab closed» с шагом, на котором её не стало (`diag.where`)."""
+    where = diag.get("where") if isinstance(diag, dict) else ""
+    if step == "browser_closed" or note == "page_closed":
+        return "tab closed" + (f" at {where}" if where else "")
+    return ""
+
+
 def account_label(name: str) -> str:
     """Короткое имя аккаунта без id профиля: «Facebook_1443_6157…» → «Facebook_1443»,
     «FacebookDoc19 - Имя» → «FacebookDoc19»."""
@@ -212,6 +221,8 @@ class Run:
     outcomes: dict[str, tuple[bool, str]] = field(default_factory=dict)
     #: последний провал вне счёта шагов (обрыв по бюджету, профиль и т.п.)
     abort: str = ""
+    #: человекочитаемая причина обрыва («tab closed at ad3_destination»)
+    abort_label: str = ""
 
     @property
     def failed(self) -> list[str]:
@@ -260,10 +271,12 @@ def build_runs(rows: list[dict], job_builds: dict[str, str] | None = None,
         if is_outcome_step(step, ok):
             run.outcomes[step] = (ok, str(r.get("note") or ""))
             run.abort = ""
+            run.abort_label = ""
         elif ok is False and step != "job_phase":
             # Провал вне счёта шагов, после которого исходов больше не было, —
             # причина обрыва прогона (бюджет времени, профиль, вкладка).
             run.abort = step + (f" ({r.get('note')})" if r.get("note") else "")
+            run.abort_label = abort_label(step, r.get("note"), r.get("diag"))
 
     for run in runs.values():
         if run.job in job_account:
@@ -444,7 +457,7 @@ def run_summary(runs: list[Run], run_id: str, window: int = DEFAULT_WINDOW) -> d
         "run_id": run.run_id, "account": run.label, "build": run.build,
         "started": run.started, "ended": run.ended, "campaign": run.campaign,
         "n_steps": len(run.outcomes), "n_ok": len(run.outcomes) - len(run.failed),
-        "failures": failures, "abort": run.abort,
+        "failures": failures, "abort": run.abort, "abort_label": run.abort_label,
         "new_failures": sum(1 for f in failures if f["status"] == "new"),
     }
 

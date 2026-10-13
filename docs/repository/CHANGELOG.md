@@ -1,5 +1,108 @@
 # Repository process history
 
+## ACL-1874 — Activate five independent source reviews — 2026-10-13
+
+After ACL-1875's independently reviewed and fully verified old-v2 source/stage/main
+completion at main `72a2d2c21aa42f1a388d32ea27ba2c8253ee7854`, the maintained
+Tracker fallback publication at `57b1674d34049b88490908fc69c25747059a27d4` and
+supported owner-paused handoffs allowed idle schema-3 adoption at 14:52:32 UTC.
+Independent complete-state comparison and fresh protected projections at 14:52:52 UTC
+confirmed five implementations, five source reviews, one integration review and
+batches of five. The 37-item queue/order and full author/handoff/history/delivery
+records remain preserved; closed unmerged historical sources stay unfinished.
+The original cutover/recovery procedure and paused source checkouts remain intact.
+See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md) for exact integrated source, publication,
+migration and digest-covered board evidence. This entry claims no stable ACL release,
+employee rollout or live advertising/pilot verification.
+
+## ACL-1875 — Prepare five independent source reviews
+
+Select matching execution schema 3 limits implementation5/review5/batch5, keeping
+one separate integration Coordinator and one independent combined review. ACL-owned
+CI scope recognizes valid v2/v3 one-task sources while combined/stage/promotion,
+manual, unknown or drifted policies retain complete applicable checks. Batch assembly
+keeps frozen ownership/content proof and permits unrelated v3 source-review owners;
+an active integration review still blocks reassembly. Affected regressions exercise
+both the retained v2 route and the five-review v3 route.
+
+Shared source contracts belong to [MR-22](https://github.com/MojoTheApe/master-repo/issues/22)
+and [TT-97](https://github.com/MojoTheApe/task-tracker/issues/97). Select actual reviewed,
+merged Tracker `46283b8a6fe444065838e136c89ef4ed64bd1528` and its clean portable
+exports, preserving the ACL guarded client and relocated checker root. Reviewed
+merged Master/Action pin `8ce271dc289b6a7ef24498ed3d9d92cb78694a3d` supplies the
+matching schema-3 contract. This source-only child preserves the original ACL-1874
+author preparation through a supported stopped handoff and fresh genuine child claim;
+parent ACL-1874 retains actual activation and stays unfinished. This policy source
+finishes its genuine current v2 handoff/approval/batch/stage/main/Merged route before
+an idle queue-preserving v2-to-v3 migration. Compatible service publication is an
+independent parent prerequisite; source preparation does not publish it.
+Document the reviewed TT-89 fixed-engine recovery for GitHub-auto-merged source
+completion after a real main promotion, retaining genuine v2 policy/ownership and
+exact inclusion proof. Old-runtime patching or state editing remains forbidden;
+this bounded recovery is separate from schema-3 migration.
+See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md). Preparation grants no activation,
+package publication, employee update or live advertising/pilot receipt. Preserve
+pristine template ancestry, ACL identity/history, active owners and delivery controls.
+
+## ACL-1753 — Compatible pins for the preserved review queue
+
+Adopt reviewed merged Master `fe9241152cb466dfbafa3bcd3070f877c1b1b9c4` and
+Tracker `086aaa98f2e807d640105be2929714d0b7331f21`, retaining genuine template
+provenance, local controls and unchanged portable helpers. Document explicit
+`--preserve-review-queue --preserve-closed-review-handoffs` for the guarded cutover.
+Closed unmerged PR 407 / Task 406 and PR 439 / Task 433 stay unfinished; current
+open ready sources remain mandatory for review, approval and batch admission.
+This source uses its own old-policy Stage/Main/Merged handoff and does not perform
+state migration, VPS operations, extra tools, demonstration work or package rollout.
+The original nine handoffs, IDs, modules, historical completions and delivery
+fingerprint remain preserved.
+
+## ACL-1750 — Separate instruction-only main admission
+
+Prepare an explicit matching process-instruction opt-in. Normal AGENTS.md, CLAUDE.md
+and docs/repository Markdown source tasks use actual independent Review/checks ->
+main -> Merged. The portable pinned classifier verifies complete immutable Git data
+and base-policy opt-in; product/runtime/mixed/unknown/CI/config changes retain
+Approved/batch/stage and complete applicable checks. The named Process instructions
+check retains secret/tooling and local Markdown-link validation when application
+and installer jobs are inapplicable. Main pushes use the same closed proof;
+stage/batch/promotion/manual/release verification is preserved. A later stage
+candidate may prove its instruction-only gap to main through the pinned read-only
+stage_base_compatible receipt/first-parent/scope/policy/tree gate, without rewriting
+or force-updating permanent branches.
+
+This source adoption changes automation and policy and therefore uses ordinary
+stage delivery. It does not promote ACL-1747, deploy the shared Tracker, migrate
+state, release an employee package or complete parent ACL-1566. Preserve the nine
+queued Reviews, six modules, 71 aliases, +1000 namespace, 74-task historical manifest
+and delivery fingerprint. See [PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md).
+
+## ACL-1747 — Prepare independent approval and five-task batches
+
+Pin reviewed Master cd79a7699cb108c517e5729590a57cab85ab1083 and Tracker
+e6013f8ad641bd99061f7db82bceeb705f8c150a (MR-14/TT-77). Explicit mirrored
+execution schema2 selects implementation5, review1, batch5 and Approved between
+Review and Stage. Preserve genuine pristine legacy template ancestry and resolve
+only the draft Action/workflow conflicts; local machine/package/recovery controls,
+IDs, modules, historical completion and delivery fingerprint stay unchanged.
+
+Source review releases its lane at Approved. A separate Coordinator freezes
+intake/batch and assembles approved tips with merge commits using acl_batch.py;
+additional combined review and full applicable CI bind the final tree. V2 source
+PRs retain affected checks, while combined batch/actual stage/promotion requires
+the complete matrix and installer. Existing exact-tree reuse remains valid.
+Before-stage exclusion uses cancellation plus a smaller fixed-intake subset;
+after-stage recovery keeps the same members and Coordinator claim through actual
+author fixes, fresh approvals/review/reverification. No stage reset or fake authors.
+
+Source integration and actual activation are separate. Parent ACL-1566 retains
+supported queue-preserving migration, fresh shared-board proof and a real two-task
+batch. The nine existing Review handoffs and all source PRs/authors remain intact.
+See [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) for the old-v1 source cutover,
+large-state TT-73 operator support and explicit live rollout prerequisites.
+No stable release, employee update or live Multilogin/advertising action is claimed.
+
+
 ## Activate five implementation slots — 2026-09-29 / ACL-1382
 
 After reviewed source PR 384 and promotion 385, drain the old child claim and

@@ -319,7 +319,7 @@ def enrich_campaign_drafts(
 
                 if ad.creative_filename and not preview_mode:
                     try:
-                        ad.creative_path = str(find_creative_file(root, ad.creative_filename))
+                        ad.creative_path = str(find_creative_file(root, ad.creative_filename, fresh=True))
                     except (CreativeNotFoundError, AmbiguousCreativeError, FileNotFoundError) as exc:
                         draft.errors.append(str(exc))
                 elif ad.creative_filename:

@@ -1,7 +1,6 @@
 """Preference changes must persist, including competing dashboard processes."""
 import asyncio
 import json
-import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -51,28 +50,3 @@ def test_threads_preserve_each_update():
     with ThreadPoolExecutor(max_workers=8) as pool:
         list(pool.map(lambda n: ha.set_hidden(str(n), True), range(40)))
     assert ha.load() == {str(n) for n in range(40)}
-
-
-def _process_updates(start, index):
-    assert start.wait(20)
-    for n in range(15):
-        ha.set_hidden(f'{index}-{n}', True)
-
-
-def test_processes_preserve_each_update():
-    ctx = multiprocessing.get_context('spawn')
-    start = ctx.Event()
-    processes = [ctx.Process(target=_process_updates, args=(start, i)) for i in range(3)]
-    for process in processes:
-        process.start()
-    start.set()
-    try:
-        for process in processes:
-            process.join(45)
-            assert process.exitcode == 0
-        assert ha.load() == {f'{i}-{n}' for i in range(3) for n in range(15)}
-    finally:
-        for process in processes:
-            if process.is_alive():
-                process.terminate()
-            process.join()

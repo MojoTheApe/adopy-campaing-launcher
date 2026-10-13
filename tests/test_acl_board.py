@@ -488,4 +488,4 @@ def test_hook_finds_neighbor_worktree_with_spaces_and_unicode(tmp_path):
     result = subprocess.run([shell, str(Path(acl_board.__file__).parent / "hooks/post-commit")], cwd=primary,
                             env=dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ["PATH"]),
                             check=True, capture_output=True, text=True, encoding="utf-8")
-    assert "SCRIPT=" + str(neighbor / "scripts/acl_board.py").replace("\\", "/") in result.stdout.replace("\\", "/")
+    assert "SCRIPT=" + str(neighbor / "scripts/acl_board.py").replace("\\", "/") in result.stdout.replace("\\", "/")  # linux-ok: normalises a separator in the output, runs on any OS

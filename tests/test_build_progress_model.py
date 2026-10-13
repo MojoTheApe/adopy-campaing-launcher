@@ -53,6 +53,11 @@ def _robot_step_names() -> set[str]:
     for path in (ROOT / "src" / "fb_ads_rpa").rglob("*.py"):
         text = path.read_text(encoding="utf-8", errors="replace")
         names.update(re.findall(r"""\brecord\(\s*["']([a-z][a-z0-9_]*)["']""", text))
+    # ACL-1580: и шаги чтений спенда (`spend_profile_*`) — они в той же
+    # телеметрии; там их пишут и через обёртку `_record("…")`.
+    for path in (ROOT / "src" / "analysis_agent").rglob("*.py"):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        names.update(re.findall(r"""\b_?record\(\s*["']([a-z][a-z0-9_]*)["']""", text))
     from src.fb_ads_rpa import retry_policy as rp
 
     names |= set(rp.CAMPAIGN_RETRY_STEPS) | set(rp.NON_RETRYABLE_FLOW_STEPS) | set(rp.BLOCKING_REVIEW_STEPS)
@@ -79,7 +84,7 @@ def test_every_step_the_robot_names_maps_to_a_stage():
     ("ad_creative_reuse", "ad"), ("simple_create_more_ads", "ad"), ("ad_level_summary", "final"),
     ("simple_create_draft", "final"), ("destination_sweep_skipped", "final"),
     ("window_bounds", "hold"), ("window_hidden_woken", "hold"), ("tab_frozen", "hold"),
-    ("account_blocked", "hold"),
+    ("account_blocked", "hold"), ("destination_instant_form_off", "ad"),
     ("ad_copy:attempt2", "ad"),
 ])
 def test_stage_of_known_steps(step, stage):

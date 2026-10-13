@@ -226,3 +226,179 @@ def test_inside_a_step_record_the_stop_waits_for_the_row(clock, monkeypatch):
         md._flow_budget.defer = False
     with pytest.raises(md.FlowBudgetExceeded):
         md._flow_budget_check()
+
+
+
+#: Сколько висит неограниченный вызов (`evaluate`, `is_visible`) на зависшей вкладке.
+HANG_S = 1200.0
+
+
+class _Locator:
+    """`is_visible` на зависшей вкладке таймаута не соблюдает (ACL-1320)."""
+
+    def __init__(self, tab):
+        self.tab = tab
+        self.first = self
+
+    def is_visible(self, timeout=None):
+        self.tab.clock.now += HANG_S
+        raise TimeoutError("late")
+
+
+class _FrozenTab:
+    """Вкладка 573ab2cf3646: драйвер соблюдает таймаут `wait_for_function`,
+    а `evaluate` и вызовы локаторов висят 20 минут (ACL-1641)."""
+
+    url = "https://adsmanager.facebook.com/adsmanager/manage/adsets/edit/standalone"
+
+    def __init__(self, clock):
+        self.clock = clock
+
+    def wait_for_function(self, js, arg=None, timeout=0):
+        self.clock.now += timeout / 1000.0
+        raise TimeoutError("Timeout %dms exceeded" % timeout)
+
+    def evaluate(self, *a, **k):
+        self.clock.now += HANG_S
+        raise TimeoutError("late")
+
+    def get_by_text(self, *a, **k):
+        return _Locator(self)
+
+    def locator(self, *a, **k):
+        return _Locator(self)
+
+
+@pytest.fixture
+def stuck(clock, monkeypatch):
+    monkeypatch.setattr(md, "_reload_refused", lambda page, where: False)
+    monkeypatch.setattr(md, "_telemetry", SimpleNamespace(record=lambda *a, **k: None))
+    return _FrozenTab(clock)
+
+
+def _over(clock, start):
+    return clock.now - start - md.STEP_BUDGET_S
+
+
+def test_the_step_limit_fires_on_a_frozen_tab_after_a_failed_create(clock, stuck):
+    """573ab2cf3646 (06.10): отказ `create_additional_ad` на 81-й секунде шага,
+    дальше разбор отказа на вкладке, где `evaluate` и `is_visible` висят.
+    Срок шага (600 с) сработал на 1221-й; теперь — в пределах срока плюс запас."""
+    md._flow_budget_arm()
+    md._flow_budget_step("ad2_creative_upload")
+    start = clock.now
+    clock.now += 81
+    with pytest.raises(md.FlowBudgetExceeded) as stop:
+        for _ in range(1000):
+            md.recover_stuck_page(stuck, "ad2_create", editor=True)
+            try:
+                md._adopt_shell_or_recreate(stuck, "adset", frozenset())
+            except Exception:
+                pass                     # вызывающий пишет `fail_adN_create` и идёт дальше
+    assert stop.value.reason == "step_budget_exceeded"
+    assert 0 <= _over(clock, start) <= 30
+
+
+def test_bounded_reads_hear_the_step_limit_on_their_own(clock, stuck):
+    """Чтения страницы (`_eval_bounded`) сами проверяют срок шага: цикл из них
+    над зависшей вкладкой не тянет шаг. Голый `page.evaluate` здесь повис бы."""
+    md._flow_budget_arm()
+    md._flow_budget_step("ad2_creative_upload")
+    start = clock.now
+    with pytest.raises(md.FlowBudgetExceeded) as stop:
+        for _ in range(1000):
+            md._chrome_error_page(stuck)
+            md._tree_new_ad_shells(stuck)
+            md._tree_shell_ids(stuck)
+            md._open_tree_ad(stuck, "New Leads Ad")
+    assert stop.value.reason == "step_budget_exceeded"
+    assert 0 <= _over(clock, start) <= 30
+
+
+class _AnsweringTab:
+    """Вкладка отвечает, страница читается, ничего не найдено — ни одной
+    проверки срока по дороге, кроме входной."""
+
+    url = "https://adsmanager.facebook.com/adsmanager/manage/adsets/edit/standalone"
+
+    def wait_for_function(self, js, arg=None, timeout=0):
+        return SimpleNamespace(json_value=lambda: {"v": None}, dispose=lambda: None)
+
+    def get_by_text(self, *a, **k):
+        return SimpleNamespace(first=SimpleNamespace(is_visible=lambda timeout=None: False))
+
+
+def test_recover_stuck_page_checks_the_step_limit_on_entry(clock, stuck, monkeypatch):
+    monkeypatch.setattr(md, "_page_responsive", lambda page, timeout_s=5.0: True)
+    md._flow_budget_arm()
+    md._flow_budget_step("ad2_creative_upload")
+    assert md.recover_stuck_page(_AnsweringTab(), "ad2_create", editor=True) is False
+    clock.now += md.STEP_BUDGET_S + 1
+    with pytest.raises(md.FlowBudgetExceeded):
+        md.recover_stuck_page(_AnsweringTab(), "ad2_create", editor=True)
+
+
+def test_a_failed_tree_read_does_not_create_a_second_ad(monkeypatch):
+    """Ревью PR #664 (B3): дерево не прочиталось — повторное создание могло
+    добавить второе объявление рядом с заготовкой. ACL-1675: заготовка
+    опознаётся по id строки."""
+    created = []
+    opened = []
+    monkeypatch.setattr(md, "_open_shell_by_id", lambda page, rid: opened.append(rid) or False)
+    monkeypatch.setattr(md, "_tree_shell_ids", lambda page: None)
+    monkeypatch.setattr(md, "create_additional_ad", lambda page, name: created.append(1) or True)
+    with pytest.raises(RuntimeError):
+        md._adopt_shell_or_recreate(object(), "adset", frozenset())
+    assert created == []
+    monkeypatch.setattr(md, "_tree_shell_ids", lambda page: frozenset())   # дерево читается, заготовки нет
+    assert md._adopt_shell_or_recreate(object(), "adset", frozenset()) is True
+    assert created == [1]
+    # Ревью PR #664 (B3'): новая заготовка видна, но открыть её не вышло — не создавать.
+    created.clear()
+    new_row = md._SHELL_ROW_PREFIX + "7"
+    monkeypatch.setattr(md, "_tree_shell_ids", lambda page: frozenset({new_row}))
+    assert md._adopt_shell_or_recreate(object(), "adset", frozenset()) is False
+    assert created == [] and opened == [new_row]
+    # Заготовка была ещё до отказа (в снимке), новой нет — повтор безопасен.
+    assert md._adopt_shell_or_recreate(object(), "adset", frozenset({new_row})) is True
+    assert created == [1]
+
+
+def test_an_unreadable_chrome_error_page_is_still_an_error_page(clock):
+    class Tab:
+        url = "chrome-error://chromewebdata/"
+
+        def wait_for_function(self, *a, **k):
+            raise TimeoutError("Timeout")
+
+    assert md._chrome_error_page(Tab()) == "ERR_UNKNOWN"
+    Tab.url = "https://adsmanager.facebook.com/x"
+    assert md._chrome_error_page(Tab()) == ""
+
+
+def test_component_failed_and_all_edits_saved_skip_a_frozen_tab(clock, stuck):
+    start = clock.now
+    assert md._component_failed(stuck) is False
+    assert md._all_edits_saved(stuck) is False
+    assert clock.now - start < HANG_S           # до `is_visible` не дошли
+
+
+def test_create_additional_ad_refuses_at_once_on_a_frozen_tab(clock, stuck):
+    start = clock.now
+    assert md.create_additional_ad(stuck, "adset") is False
+    assert clock.now - start < HANG_S
+
+
+def test_eval_bounded_hears_stop_on_a_hung_tab(clock, stuck):
+    """ACL-1641 (N5): Stop (`JobCancelled`) слышен и на вкладке, что не отвечает."""
+    import threading
+    from src.fb_ads_rpa import job_cancel
+
+    event = threading.Event()
+    event.set()
+    job_cancel.bind(event)
+    try:
+        with pytest.raises(job_cancel.JobCancelled):
+            md._eval_bounded(stuck, "() => 1")
+    finally:
+        job_cancel.unbind()

@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
-"""Окно профиля, открытое руками, робот закрывает сам — когда безопасно (ACL-1388).
+"""Окно профиля, открытое руками, робот закрывает сам и поднимает заново (ACL-1388).
 
 30.09 06:49 UTC «Publish all» встал на Facebook_6540: «profile … is open by
 hand (no automation port) - not stopping it». С ACL-1320 такое окно робот не
-трогает (остановка однажды потеряла несохранённую сессию Facebook), и
-человек сам ищет окно и жмёт Publish заново.
+трогал (остановка однажды потеряла несохранённую сессию Facebook), и
+человек сам искал окно и жал Publish заново.
 
-Решение владельца: закрывать самому, но только когда ВСЁ сразу:
-* браузеру профиля не меньше 15 минут (Multilogin успел сохранить вход);
-* окно не на переднем плане и минуту не было ввода на машине;
+ACL-1388 закрывал окно только при условиях (возраст, передний план, тишина
+ввода). ACL-1562 (решение владельца 04.10): условий больше нет — сразу.
+Неизменно:
 * закрытие — мягкая остановка ЭТОГО профиля через MLX API, без kill;
-* после подъёма вход проверяет обычный путь: разлогинен — `profile_logged_out`.
-Любой провал/сбой — прежняя остановка `profile_open_by_hand` с прежним текстом.
-Win32, процессы и MLX здесь подменены.
+* остановка не прошла / окно не закрылось — `profile_open_by_hand` с причиной;
+* после подъёма вход проверяет обычный путь: разлогинен — `profile_logged_out`;
+* машинный выключатель `FB_RPA_REOPEN_HAND_WINDOW=0` — прежний стоп.
+Процессы и MLX здесь подменены.
 """
 from __future__ import annotations
 
@@ -32,141 +33,22 @@ from src.fb_ads_rpa import profile_trouble as pt  # noqa: E402
 PROFILE = "550e8400-e29b-41d4-a716-446655440000"
 MESSAGE = ("This Multilogin profile is open by hand. Close its window "
            "(so Multilogin saves the session), then press Publish again.")
-NOW = 1_800_000_000.0
 HAND_PID = 4242
 
 
-# ── Проверка безопасности (hand_window.assess) ─────────────────────────────
+# ── Решение: сразу, кроме выключателя машины ───────────────────────────────
 
-@pytest.fixture
-def machine(monkeypatch):
-    """Машина, на которой закрыть окно безопасно: окну 20 минут, на переднем
-    плане проводник, ввода не было 5 минут. Тест портит одно условие."""
+def test_a_hand_opened_window_is_reopened_without_conditions(monkeypatch):
     monkeypatch.setenv(hw.ENV_ENABLED, "1")
-    monkeypatch.delenv(hw.ENV_MIN_AGE, raising=False)
-    monkeypatch.delenv(hw.ENV_MIN_IDLE, raising=False)
-    state = SimpleNamespace(windows=True, created=[NOW - 20 * 60], fg=9999, parents={9999: [1]},
-                            idle=300.0)
-
-    def created(pids):
-        if isinstance(state.created, Exception):
-            raise state.created
-        return list(state.created)
-
-    def fg():
-        if isinstance(state.fg, Exception):
-            raise state.fg
-        return state.fg
-
-    def idle():
-        if isinstance(state.idle, Exception):
-            raise state.idle
-        return state.idle
-
-    def ancestors(pid):
-        if isinstance(state.parents, Exception):
-            raise state.parents
-        return state.parents.get(pid, [])
-
-    monkeypatch.setattr(hw, "_is_windows", lambda: state.windows)
-    monkeypatch.setattr(hw, "_process_create_times", created)
-    monkeypatch.setattr(hw, "_foreground_pid", fg)
-    monkeypatch.setattr(hw, "_idle_seconds", idle)
-    monkeypatch.setattr(hw, "_ancestors", ancestors)
-    return state
+    got = hw.assess({HAND_PID})
+    assert got.safe and got.reason == hw.REOPEN
+    assert hw.assess().safe, "решение зависит от процессов окна"
+    assert got.diag() == {"reason": hw.REOPEN}
 
 
-def _assess():
-    return hw.assess({HAND_PID}, now=NOW)
-
-
-def test_an_old_idle_background_window_is_safe(machine):
-    got = _assess()
-    assert got.safe and got.reason == hw.SAFE
-    assert got.age_s == pytest.approx(20 * 60)
-    assert got.idle_s == 300.0
-
-
-def test_the_thresholds_are_fifteen_minutes_and_sixty_seconds():
-    assert hw.MIN_AGE_S == 15 * 60
-    assert hw.MIN_IDLE_S == 60
-
-
-def test_a_young_window_is_not_safe(machine):
-    machine.created = [NOW - 14 * 60]
-    got = _assess()
-    assert not got.safe and got.reason == hw.TOO_YOUNG
-
-
-def test_the_youngest_main_process_decides(machine):
-    machine.created = [NOW - 3600, NOW - 60]
-    assert _assess().reason == hw.TOO_YOUNG
-
-
-def test_a_window_in_the_foreground_is_not_safe(machine):
-    machine.fg = HAND_PID
-    assert _assess().reason == hw.IN_FOREGROUND
-
-
-def test_a_foreground_child_process_of_the_profile_is_not_safe(machine):
-    machine.fg = 777
-    machine.parents = {777: [HAND_PID, 1]}
-    assert _assess().reason == hw.IN_FOREGROUND
-
-
-def test_no_foreground_window_at_all_is_not_the_profile(machine):
-    """Экран заблокирован — окна переднего плана нет."""
-    machine.fg = 0
-    assert _assess().safe
-
-
-def test_recent_input_is_not_safe(machine):
-    machine.idle = 59.0
-    got = _assess()
-    assert got.reason == hw.RECENT_INPUT and got.idle_s == 59.0
-
-
-@pytest.mark.parametrize("broken,reason", [
-    ("created", hw.AGE_UNKNOWN),
-    ("fg", hw.FOREGROUND_UNKNOWN),
-    ("parents", hw.FOREGROUND_UNKNOWN),
-    ("idle", hw.IDLE_UNKNOWN),
-])
-def test_a_failing_read_is_not_safe(machine, broken, reason):
-    if broken == "parents":
-        machine.fg = 777
-    setattr(machine, broken, OSError("Win32 said no"))
-    got = _assess()
-    assert not got.safe and got.reason == reason
-
-
-def test_no_process_or_not_windows_is_not_safe(machine):
-    assert hw.assess(set(), now=NOW).reason == hw.NO_PROCESS
-    machine.windows = False
-    assert _assess().reason == hw.NOT_WINDOWS
-
-
-def test_the_real_win32_layer_answers_or_fails_closed(monkeypatch):
-    """Настоящий ctypes-слой на этой машине отвечает числом. Сбой Win32 здесь —
-    падение теста; в работе его ловит `assess` и считает «не безопасно»."""
-    if sys.platform != "win32":
-        pytest.skip("Windows only")
-    assert hw._idle_seconds() >= 0
-    assert hw._foreground_pid() >= 0
-
-
-def test_thresholds_follow_the_machine_env(machine, monkeypatch):
-    monkeypatch.setenv(hw.ENV_MIN_AGE, "3600")
-    assert _assess().reason == hw.TOO_YOUNG
-    monkeypatch.setenv(hw.ENV_MIN_AGE, "garbage")
-    assert hw.min_age_s() == hw.MIN_AGE_S
-    monkeypatch.setenv(hw.ENV_MIN_IDLE, "600")
-    assert _assess().reason == hw.RECENT_INPUT
-
-
-def test_the_switch_turns_it_off(machine, monkeypatch):
+def test_the_switch_turns_it_off(monkeypatch):
     monkeypatch.setenv(hw.ENV_ENABLED, "0")
-    assert _assess().reason == hw.DISABLED
+    assert hw.assess({HAND_PID}).reason == hw.DISABLED
 
 
 # ── Провайдер: закрыть мягко и поднять, или остановиться как раньше ────────
@@ -200,9 +82,9 @@ def world(monkeypatch):
     import src.meta_campaign_agent.multilogin_launcher as launcher_mod
     from src.fb_ads_rpa import run_telemetry as rt
 
+    monkeypatch.setenv(hw.ENV_ENABLED, "1")
     w = SimpleNamespace(ev=[], pids=frozenset({HAND_PID}), stop_fails=False, keeps_running=False,
-                        start_error=None, verdict=hw.Verdict(True, hw.SAFE, age_s=1500.0, idle_s=300.0),
-                        rows=[], crumbs=[], notices=[])
+                        start_error=None, rows=[], crumbs=[], notices=[])
     monkeypatch.setattr(br, "_ROBOT_PROFILES", {})
     monkeypatch.setattr(br.time, "sleep", lambda s: None)
     monkeypatch.setattr(br, "_find_mlx_profile_dir", lambda pid: "C:/mlx/p")
@@ -210,9 +92,11 @@ def world(monkeypatch):
     monkeypatch.setattr(br, "_kill_chrome_for_user_data_dir", lambda *a, **k: w.ev.append("kill"))
     monkeypatch.setattr(cfg_mod, "get_multilogin_instance", lambda inst: SimpleNamespace(instance_id=inst))
     monkeypatch.setattr(launcher_mod, "MultiloginLauncher", lambda cfg: _Launcher(w))
-    seen_pids: list = []
-    monkeypatch.setattr(hw, "assess", lambda pids, **kw: seen_pids.append(frozenset(pids)) or w.verdict)
-    w.seen_pids = seen_pids
+    # Сколько раз провайдер спросил решение «переоткрывать ли окно руками».
+    seen: list = []
+    real_assess = hw.assess
+    monkeypatch.setattr(hw, "assess", lambda *a, **kw: seen.append(1) or real_assess(*a, **kw))
+    w.seen = seen
     monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: w.rows.append((step, ok, kw)))
     import sentry_sdk
     monkeypatch.setattr(sentry_sdk, "add_breadcrumb", lambda **kw: w.crumbs.append(kw))
@@ -237,44 +121,44 @@ def _open(world, **kw):
         return world.prov.open(_entry(), "Facebook_6540", **kw)
 
 
-def test_a_safe_hand_opened_window_is_closed_through_the_api_and_reopened(world):
+def test_a_hand_opened_window_is_closed_through_the_api_and_reopened(world):
     conn = _open(world)
     assert conn.page == "reopened-page"
     assert world.ev == [("stop", PROFILE), "start", "connect"], "не мягкая остановка этого профиля"
     assert "kill" not in world.ev
-    assert world.seen_pids == [frozenset({HAND_PID})]
+    assert world.seen == [1]
     assert br._robot_profile(PROFILE) is True
 
 
 def test_the_reopen_is_visible_in_the_job_panel_telemetry_and_sentry(world):
     _open(world)
-    assert world.notices == ["Closed the hand-opened window of Facebook_6540 and reopened it for the robot"]
+    # ACL-1562: строка — до остановки, почему окно закрылось.
+    assert world.notices == ["The Facebook_6540 window was opened by hand "
+                             "\u2014 reopening it with automation"]
     step, ok, kw = world.rows[-1]
     assert (step, ok, kw["note"]) == ("profile_hand_window", True, "reopened")
     assert kw["diag"]["where"] == "no_automation_port"
-    assert kw["diag"]["reason"] == hw.SAFE
-    assert kw["diag"]["age_s"] == 1500.0 and kw["diag"]["idle_s"] == 300.0
+    assert kw["diag"]["reason"] == hw.REOPEN
+    assert isinstance(kw["diag"]["stop_s"], float)
     assert PROFILE[:8] not in repr(world.rows)
     crumb = world.crumbs[-1]
     assert crumb["category"] == "profile" and crumb["message"] == "hand_window:reopened"
-    assert crumb["data"]["age_s"] == 1500.0 and crumb["data"]["idle_s"] == 300.0
+    assert "stop_s" in crumb["data"]
 
 
-# ACL-1427: RECENT_INPUT больше не стоп сразу — робот ждёт тишины ввода
-# (tests/test_a_hand_opened_window_waits_for_idle.py).
-@pytest.mark.parametrize("reason", [hw.TOO_YOUNG, hw.IN_FOREGROUND,
-                                    hw.FOREGROUND_UNKNOWN, hw.IDLE_UNKNOWN, hw.NO_PROCESS])
-def test_an_unsafe_window_still_stops_with_the_current_message(world, reason):
-    world.verdict = hw.Verdict(False, reason, age_s=120.0)
+# ACL-1562: возраст, передний план и тишина ввода больше не стоп; стоп до
+# остановки — только выключатель машины.
+def test_the_machine_switch_still_stops_with_the_current_message(world, monkeypatch):
+    monkeypatch.setenv(hw.ENV_ENABLED, "0")
     with pytest.raises(pt.ProfileStop) as stop:
         _open(world)
     assert stop.value.code == pt.OPEN_BY_HAND
     assert MESSAGE in str(stop.value)
     assert stop.value.detail == "no_automation_port"
-    assert world.ev == [], "окно, которое небезопасно закрывать, тронули"
+    assert world.ev == [], "окно тронули при выключенном переоткрытии"
     assert world.notices == []
     step, ok, kw = world.rows[-1]
-    assert (step, ok, kw["note"]) == ("profile_hand_window", False, reason)
+    assert (step, ok, kw["note"]) == ("profile_hand_window", False, hw.DISABLED)
 
 
 def test_a_failed_mlx_stop_kills_nothing_and_stops_as_before(world):
@@ -282,6 +166,7 @@ def test_a_failed_mlx_stop_kills_nothing_and_stops_as_before(world):
     with pytest.raises(pt.ProfileStop) as stop:
         _open(world)
     assert stop.value.code == pt.OPEN_BY_HAND
+    assert br.HAND_WINDOW_STOP_FAILED in stop.value.detail and "HTTP 500" in stop.value.detail
     assert world.ev == [("stop", PROFILE)], "после отказа API убили процесс или подняли профиль"
     assert world.rows[-1][2]["note"] == "mlx_stop_failed"
 
@@ -291,6 +176,7 @@ def test_a_window_that_outlives_the_stop_is_not_reopened(world):
     with pytest.raises(pt.ProfileStop) as stop:
         _open(world)
     assert stop.value.code == pt.OPEN_BY_HAND
+    assert br.HAND_WINDOW_STOP_FAILED in stop.value.detail
     assert "start" not in world.ev and "kill" not in world.ev
     assert world.rows[-1][2]["note"] == "still_running"
 
@@ -302,26 +188,22 @@ def test_a_failed_start_after_the_close_is_a_restart_failure(world):
     assert stop.value.code == pt.RESTART_FAILED
     assert "kill" not in world.ev
     assert world.rows[-1][2]["note"] == "restart_failed"
-    assert world.notices == []
+    # ACL-1562: строка уже сказана до остановки — окно ведь закрыли.
+    assert len(world.notices) == 1
 
 
-def test_an_unowned_silent_port_goes_through_the_same_gate(world, monkeypatch):
+def test_an_unowned_silent_port_goes_through_the_same_reopen(world, monkeypatch):
     def attach(*a, **kw):
         raise br.ProfileUnresponsive("silent")
 
     monkeypatch.setattr(world.prov._direct, "_try_attach_existing", attach)
     monkeypatch.setattr(world.prov._direct, "_discover_owned_debug_port", lambda udd: None)
-    world.verdict = hw.Verdict(False, hw.TOO_YOUNG, age_s=30.0)
-    with pytest.raises(pt.ProfileStop) as stop:
-        _open(world)
-    assert stop.value.code == pt.OPEN_BY_HAND and stop.value.detail == "unowned_port"
-    assert world.ev == []
-    world.verdict = hw.Verdict(True, hw.SAFE, age_s=1500.0, idle_s=300.0)
     assert _open(world).page == "reopened-page"
     assert world.ev == [("stop", PROFILE), "start", "connect"]
+    assert world.rows[-1][2]["diag"]["where"] == "unowned_port"
 
 
-def test_an_mlx_lock_without_a_visible_process_goes_through_the_gate(world, monkeypatch):
+def test_an_mlx_lock_without_a_visible_process_is_reopened_too(world, monkeypatch):
     """Процесса не видно, MLX говорит «browser process is running»."""
     from src.meta_campaign_agent.multilogin_launcher import MultiloginLauncherError
 
@@ -348,7 +230,7 @@ def test_reading_spend_never_closes_a_hand_opened_window(world):
     with pytest.raises(pt.ProfileStop) as stop:
         _open(world, allow_restart=True, allow_kill=False)
     assert stop.value.code == pt.OPEN_BY_HAND
-    assert world.ev == [] and world.seen_pids == []
+    assert world.ev == [] and world.seen == []
 
 
 def test_a_profile_the_robot_started_is_restarted_as_before_without_the_gate(world):
@@ -356,7 +238,7 @@ def test_a_profile_the_robot_started_is_restarted_as_before_without_the_gate(wor
     world.pids = frozenset()   # свой процесс робота не прочитан — решает членство
     world.prov._direct._profile_process_running = lambda *a: True
     _open(world)
-    assert world.seen_pids == [], "профиль робота прогнали через проверку окна руками"
+    assert world.seen == [], "профиль робота прогнали через решение об окне руками"
 
 
 # ── После подъёма: разлогинен — profile_logged_out, без повторов ───────────

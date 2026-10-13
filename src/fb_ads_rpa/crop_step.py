@@ -26,7 +26,14 @@ What `apply` does on the Crop step, before the walk presses Next:
 4. read-back: Original on both cards, no expansion checked, no other checked
    box or switch on the step (fail closed, `crop_unknown_toggle_on`) and, for a
    pair, the Vertical card's media changed to the picked tile (thumbnail ids)
-   while the Square card's did not.
+   while the Square card's did not (ACL-1533: both by positive evidence -
+   `card_changed`; a re-minted `blob:` src or missing ids are not a change;
+   Vertical without evidence blocks with `crop_vertical_replace_unconfirmed`).
+
+ACL-1533: Meta's in-wizard Replace picker (live 03.10) is left through the
+picker's own Save after the "Search media" box - after a pick and, for a story
+not in the library, with nothing picked. The step row's "Crop" is the current
+step there and does nothing.
 
 The step is recognised by the step row's "Crop" or by its heading.
 
@@ -54,6 +61,7 @@ import threading
 import time
 from typing import Any
 
+from src.fb_ads_rpa import job_cancel
 from src.fb_ads_rpa import run_telemetry as _telemetry
 
 #: Machine switch for the whole Crop step handling. Off → the walk presses Next
@@ -70,6 +78,11 @@ CARDS = ("Square", "Vertical")
 NO_CROP_STEP = "story_not_placed:no_crop_step"
 NOT_IN_LIBRARY = "story_not_placed:not_in_library"
 WARNINGS = (NO_CROP_STEP, NOT_IN_LIBRARY)
+
+#: ACL-1551 (live 04.10, 232d398471bd): Next on Crop did not take the wizard
+#: further (Meta busy, then the same Crop again), so the wizard was left with
+#: its own Close - the ad's creative is not confirmed; blocking.
+WIZARD_STUCK = "crop_wizard_stuck"
 
 #: Library picker's confirm labels, in order. Publish is never among them.
 _CONFIRM_LABELS = ("Done", "Select", "Confirm", "Next", "Save", "Continue")
@@ -247,13 +260,26 @@ PICKER_JS = r"""
   // ACL-1476 (a88e3789f7ab): Meta's "Replace media for Stories, Status,
   // Reels" opens INSIDE the wizard dialog - its buttons are the wizard's step
   // row and the wizard's Close/Save, no Cancel. Close there closes the whole
-  // wizard; the way back is the step row's own "Crop".
+  // wizard.
   const labels = new Set(buttons.map(b => b.label));
   const inWizard = ['Media', 'Text', 'Crop'].every(l => labels.has(l));
   out.in_wizard = inWizard;
+  // ACL-1533 (live 03.10, runs d54d68303e57/2e98a75f252d): the step row's
+  // "Crop" there is the current step (aria-current=step) - pressing it is a
+  // no-op, the picker stayed. The control that brings Crop back is the
+  // picker's own Save: the footer's primary button (where Crop has Next),
+  // AFTER the "Search media" box in the dialog; the header's Save before the
+  // box is the wizard's. Only a button labelled exactly "Save" - never Next,
+  // Done or Publish in that slot.
+  const after = (b) => !!(search.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const ownSave = inWizard
+    ? (buttons.filter(b => b.label === 'Save' && !b.disabled && after(b)).pop() || null) : null;
+  out.own_save = !!ownSave;
   const target = !scoped ? null
+               : inWizard ? ((args.want === 'confirm' || args.want === 'cancel') ? ownSave
+                             : args.want === 'close' ? pick(['Close']) : null)
                : args.want === 'confirm' ? pick(args.confirm)
-               : args.want === 'cancel' ? pick(inWizard ? ['Cancel', 'Crop'] : ['Cancel', 'Close'])
+               : args.want === 'cancel' ? pick(['Cancel', 'Close'])
                : args.want === 'close' ? pick(['Close']) : null;
   if (target) {
     target.el.scrollIntoView({ block: 'center', behavior: 'instant' });
@@ -283,6 +309,31 @@ def set_plan(plan) -> None:
     _tls.done = False
     _tls.unseen_said = False
     _tls.warning = ""
+    # ACL-1551: per ad, not per attempt - a Crop whose Next did not advance
+    # is not pressed again by a later walk of the same ad.
+    _tls.forward_stuck = False
+
+
+def note_forward_stuck() -> None:
+    """ACL-1551: Next on this ad's Crop did not move the wizard on."""
+    _tls.forward_stuck = True
+
+
+def forward_stuck() -> bool:
+    """Next on this ad's Crop already failed to move the wizard on."""
+    return bool(getattr(_tls, "forward_stuck", False))
+
+
+def mark_wizard_stuck() -> None:
+    """ACL-1551: the wizard was left on Crop with its own Close (or not at all).
+
+    A Crop failure named earlier stays (it is the more specific reason);
+    otherwise `WIZARD_STUCK`. The story warning is dropped - the ad blocks.
+    """
+    if not getattr(_tls, "failure", None):
+        _tls.failure = WIZARD_STUCK
+    _tls.warning = ""
+    _tls.done = True
 
 
 def current_plan():
@@ -334,6 +385,7 @@ def _wait(page, ok, wait_s: float = 3.0) -> dict:
     state = read(page)
     while not ok(state) and time.time() < deadline:
         time.sleep(0.25)
+        job_cancel.check()
         state = read(page)
     return state
 
@@ -353,6 +405,68 @@ def thumb_match(state: dict, picked: list[str] | None) -> str:
     if not shown or not picked_set:
         return "unconfirmed"
     return "match" if shown & picked_set else "mismatch"
+
+
+def media_key(src: str | None) -> str:
+    """A card media's identity that survives Meta re-rendering the card.
+
+    ACL-1533 (live 03.10): the video cards' media is a `blob:` URL, re-minted
+    whenever the Crop step is drawn again - after Replace both cards had a new
+    `blob:` src while Square still showed the post. Such a URL says nothing
+    about which file is shown: "" (no identity). A CDN URL without its query
+    (signed, rotating parameters) is the file.
+    """
+    s = (src or "").strip()
+    if not s or s.lower().startswith(("blob:", "data:")):
+        return ""
+    return s.split("#", 1)[0].split("?", 1)[0]
+
+
+def _ratios(card: dict) -> tuple:
+    """The card's aspect-ratio radios (label, disabled): which ratios Meta
+    offers depends on the shown file's own shape (1:1 is disabled on Square
+    while a square file is there)."""
+    return tuple((r.get("label"), bool(r.get("disabled"))) for r in card.get("radios") or ())
+
+
+def card_changed(before: dict, state: dict, name: str, picked: list[str] | None = None) -> str:
+    """Positive evidence that the card `name` shows another file now; "" = none.
+
+    ACL-1533: only evidence counts - missing ids or a re-minted `blob:` src
+    are not a change. Evidence: the picked tile's thumbnail id appeared on the
+    card; the card's thumbnail ids replaced by others; its media's stable
+    identity (`media_key`) changed; its ratio radios changed (another shape -
+    live 03.10: the story on Vertical made "9:16 (recommended)" disabled).
+    """
+    c0, c1 = _card(before, name), _card(state, name)
+    picked_set = set(picked or ())
+    t0, t1 = set(c0.get("thumbs") or ()), set(c1.get("thumbs") or ())
+    if picked_set & t1 and not picked_set & t0:
+        return "picked_thumb"
+    if t0 and t1 and not t0 & t1:
+        return "thumbs"
+    k0, k1 = media_key(c0.get("media")), media_key(c1.get("media"))
+    if k0 and k1 and k0 != k1:
+        return "media"
+    r0, r1 = _ratios(c0), _ratios(c1)
+    if r0 and r1 and r0 != r1:
+        return "ratios"
+    return ""
+
+
+def square_changed(before: dict, state: dict, picked: list[str] | None = None) -> str:
+    """Positive evidence that Replace changed the Square card; "" = none."""
+    return card_changed(before, state, "Square", picked)
+
+
+def vertical_replaced(before: dict, state: dict, picked: list[str] | None = None) -> str:
+    """Positive evidence that Replace put another file on Vertical; "" = none.
+
+    ACL-1533 review: the raw src comparison is vacuous for video (a `blob:`
+    src is re-minted on every redraw), so a Replace that left the post on
+    Vertical read like a success.
+    """
+    return card_changed(before, state, "Vertical", picked)
 
 
 def readback(state: dict, plan, before: dict | None = None, picked: list[str] | None = None) -> str:
@@ -375,20 +489,19 @@ def readback(state: dict, plan, before: dict | None = None, picked: list[str] | 
     if plan is not None and getattr(plan, "replace_vertical", False):
         if before is None:
             return "crop_replace_not_done"
-        sq0, sq1 = _card(before, "Square").get("media"), _card(state, "Square").get("media")
         v0, v1 = _card(before, "Vertical").get("media"), _card(state, "Vertical").get("media")
         if not v1 or v1 == v0:
             return "crop_vertical_not_replaced"
-        if sq0 and sq1 and sq0 != sq1:
+        if square_changed(before, state, picked):
             return "crop_square_changed"
         if thumb_match(state, picked) == "mismatch":
             # The Vertical card changed, but not to the tile we picked (another
             # tile of a multi-selection, a preselected post tile, ...).
             return "crop_vertical_not_story"
-        picked_set = set(picked or ())
-        if picked_set & set(_card(state, "Square").get("thumbs") or ()) \
-                and not picked_set & set(_card(before, "Square").get("thumbs") or ()):
-            return "crop_square_changed"
+        if not vertical_replaced(before, state, picked):
+            # Only a re-minted src (or nothing) says Vertical changed: the
+            # post may still be there - not reported as "as planned".
+            return "crop_vertical_replace_unconfirmed"
     return ""
 
 
@@ -406,13 +519,16 @@ def _cancel_picker(page) -> None:
     if pt:
         _md()._cdp_mouse_click(page, float(pt["x"]), float(pt["y"]))
         time.sleep(0.8)
+        job_cancel.check()
 
 
 def _back_to_crop(page, log: dict) -> bool:
     """ACL-1476: leave the picker for the Crop step without closing the wizard.
 
-    Cancel, or inside the wizard its step row's "Crop" (never the wizard's
-    Close first). True = the picker is gone and the Crop step reads again.
+    Cancel, or inside the wizard the picker's own Save (ACL-1533: the step
+    row's "Crop" is the current step there and did nothing live; never the
+    wizard's Close first, never Next). True = the picker is gone and the Crop
+    step reads again.
     """
     got = _picker(page, "cancel")
     pt = got.get("point")
@@ -426,6 +542,7 @@ def _back_to_crop(page, log: dict) -> bool:
         if time.time() >= deadline:
             break
         time.sleep(0.4)
+        job_cancel.check()
     if got.get("in_wizard"):
         # Still on the picker: the old way out (the wizard's Close), and the
         # step is blocked - the Crop cards can no longer be read back.
@@ -434,6 +551,7 @@ def _back_to_crop(page, log: dict) -> bool:
             log["picker_back"] = "Close"
             _md()._cdp_mouse_click(page, float(closing["x"]), float(closing["y"]))
             time.sleep(0.8)
+            job_cancel.check()
     return False
 
 
@@ -463,6 +581,7 @@ def _replace_vertical(page, filename: str, log: dict) -> str:
     picker = _picker(page)
     while not picker.get("open") and time.time() < deadline:
         time.sleep(0.4)
+        job_cancel.check()
         picker = _picker(page)
     log["picker_buttons"] = picker.get("buttons")
     _capture(page, "wizard_crop_replace", {"file": filename, "picker": picker})
@@ -483,6 +602,7 @@ def _replace_vertical(page, filename: str, log: dict) -> str:
         if available:
             break
         time.sleep(1.0)
+        job_cancel.check()
         tiles = md._library_tiles(page, filename)
     log["tiles"] = available
     if not available:
@@ -501,6 +621,7 @@ def _replace_vertical(page, filename: str, log: dict) -> str:
             continue
         for _ in range(10):
             time.sleep(0.3)
+            job_cancel.check()
             count = md._library_selected_count(page)
             if md._library_tile_selected(tile) or (count is not None and before is not None and count > before):
                 taken = True
@@ -523,10 +644,15 @@ def _replace_vertical(page, filename: str, log: dict) -> str:
     deadline = time.time() + 20.0
     while time.time() < deadline:
         time.sleep(0.5)
+        job_cancel.check()
         if not _picker(page).get("open") and read(page).get("found"):
             return ""
     _cancel_picker(page)
     return "crop_replace_not_confirmed"
+
+
+#: Сколько ждать карточки Crop, пока Meta показывает заглушки (ACL-1669).
+CARDS_RENDER_WAIT_S = 20.0
 
 
 def apply(page, plan) -> str:
@@ -540,6 +666,12 @@ def apply(page, plan) -> str:
     why = ""
     try:
         state = read(page)
+        if state.get("found") and not any(_card(state, n) for n in CARDS):
+            # ACL-1669 (B97, bc4302862ee7): шаг Crop открыт, а карточки ещё не
+            # дорисованы — Meta показывает заглушки загрузки (~13 с). Читали
+            # сразу, видели пустые карточки и отвечали crop_replace_button_missing.
+            state = _wait(page, lambda s: any(_card(s, n) for n in CARDS), CARDS_RENDER_WAIT_S)
+            log["cards_waited_s"] = round(time.time() - started, 1)
         if not state.get("found"):
             why = "crop_step_not_read"
         else:
@@ -580,6 +712,16 @@ def apply(page, plan) -> str:
                             _tls.warning = NOT_IN_LIBRARY
                             why = ""
                             state = read(page)
+                            # ACL-1533: the way back may be the picker's Save
+                            # with nothing picked - the Vertical card must
+                            # still show the same file (media there, no
+                            # evidence of another file: ids, stable media
+                            # identity, ratio radios), or the step blocks.
+                            v0, v1 = _card(before, "Vertical"), _card(state, "Vertical")
+                            if state.get("found") and v0 and (
+                                    (v0.get("media") and not v1.get("media"))
+                                    or vertical_replaced(before, state)):
+                                why = "crop_vertical_changed_without_story"
                         else:
                             why = "crop_replace_picker_not_closed"
                     elif not why:
@@ -650,6 +792,11 @@ def reset_attempt() -> None:
     _tls.done = False
     _tls.unseen_said = False
     _tls.warning = ""
+
+
+def reopen() -> None:
+    """ACL-1736: мастер вернулся на Crop через другой шаг - рамки проверить снова."""
+    _tls.done = False
 
 
 def failure_pending() -> bool:

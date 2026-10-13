@@ -56,6 +56,8 @@ _ACTIVE = frozenset({"pending", "queued", "running", "cancelling"})
 _BLOCKERS = {
     "account_blocked": "Account restricted by Meta — complete the verification in Ads Manager",
     "lead_terms_not_accepted": "Lead Generation terms are not accepted on the Page — accept them in Meta",
+    # ACL-1697: Ads Manager открыл не тот рекламный кабинет.
+    "wrong_ad_account": "Ads Manager opened a different ad account than the draft's — check the ad account id on the Accounts page",
     # ACL-1320: новый редактор Meta «в один экран».
     "simple_create_layout": "Meta opened its new single-screen campaign editor for this account; "
                             "the robot does not support it yet",
@@ -196,6 +198,10 @@ def job_progress(
             continue
         ts = _parse_ts(row.get("ts"))
         if ts is None or (since is not None and ts < since):
+            continue
+        # ACL-1614: сигнал «робот молчит» не шаг робота — его строка не должна
+        # обнулять тишину, о которой он сам сообщает.
+        if _base_step(row.get("step")) == "step_stuck":
             continue
         last[name] = row
         steps_seen.setdefault(name, []).append(str(row.get("step") or ""))

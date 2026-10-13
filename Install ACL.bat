@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions
-title Install Adopy Campaigns Launcher
+title Install Adopy Campaign Manager
 set "ACL_BOOTSTRAP_FILE=%~f0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$source = Get-Content -LiteralPath $env:ACL_BOOTSTRAP_FILE -Raw; & ([ScriptBlock]::Create(($source -split '(?m)^# ACL_POWERSHELL_BEGIN\r?$', 2)[1]))"
 set "ACL_INSTALL_RC=%ERRORLEVEL%"
@@ -247,7 +247,7 @@ function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
 function Install-Acl {
     $repo = 'https://github.com/MojoTheApe/adopy-campaing-launcher.git'
     $target = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'ACL'
-    Write-Host "Adopy Campaigns Launcher - installing into $target"
+    Write-Host "Adopy Campaign Manager - installing into $target"
     Assert-AclStopped
     $tools = Get-AclTools
     $fresh = !(Test-Path -LiteralPath (Join-Path $target '.git'))

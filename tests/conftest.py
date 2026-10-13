@@ -57,6 +57,17 @@ for _name in ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH"):
     os.environ[_name] = ""
 
 
+# Маркер файлов, которым нужен Windows (ACL-1582). Это метка отбора для CI
+# (scripts/acl_test_platform.py), а не пропуск: на Linux такие файлы просто не
+# попадают в задание. Причина обязательна — её требует guard
+# (tests/test_acl_test_platform.py).
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "windows_only(reason): the test file needs Windows; CI runs it only in the Windows job (ACL-1582)",
+    )
+
+
 # Тесты не пишут в живую машинную папку ACL (ревью v3 PR #314).
 #
 # `config.paths.get_local_config_dir()` — это `%LOCALAPPDATA%\ACL`: там
@@ -97,14 +108,13 @@ def _telemetry_off_the_live_journal(tmp_path_factory, monkeypatch):
     yield
 
 
-# Тесты не читают окна и ввод этой машины (ACL-1388).
+# Тесты не закрывают окна профилей этой машины (ACL-1388/1562).
 #
-# Окно профиля, открытое руками, робот закрывает сам, если ему больше 15
-# минут, оно не на переднем плане и минуту не было ввода — это читается из
-# процессов и Win32 API живой машины. Тест, который доходит до этой ветки
-# без своих заглушек, зависел бы от того, что открыто на компьютере
-# разработчика. Выключатель — штатный (`FB_RPA_REOPEN_HAND_WINDOW=0`,
-# прежнее поведение: всегда стоп); тесты ACL-1388 включают его сами.
+# Окно профиля, открытое руками, робот закрывает сам и сразу — мягкой
+# остановкой через MLX API (ACL-1562). Тест, который доходит до этой ветки
+# без своих заглушек, позвал бы Multilogin живой машины. Выключатель —
+# штатный (`FB_RPA_REOPEN_HAND_WINDOW=0`, прежнее поведение: всегда стоп);
+# тесты ACL-1388/1562 включают его сами.
 @pytest.fixture(autouse=True)
 def _hand_window_reopen_off(monkeypatch):
     monkeypatch.setenv("FB_RPA_REOPEN_HAND_WINDOW", "0")
@@ -120,6 +130,34 @@ def _hand_window_reopen_off(monkeypatch):
 @pytest.fixture(autouse=True)
 def _finished_profiles_stay_open(monkeypatch):
     monkeypatch.setenv("FB_RPA_KEEP_PROFILES_OPEN", "1")
+    yield
+
+
+# Тесты не читают настоящую память машины через очередь профилей (ACL-1603).
+#
+# С ACL-1603 даже первый профиль ждёт «профиль + запас» (6,5 ГБ свободных), и
+# задание, прошедшее через глобальную `publish_jobs._slots` с настоящим
+# `read_memory`, на занятом CI-раннере ждало бы вечно (Windows-набор упёрся в
+# 30 минут). Подставная память — много; тесту нужна своя — он ставит
+# `ProfileSlots(memory=...)` или `monkeypatch.setattr(pj._slots, "_memory", ...)`
+# позже этой фикстуры. Сам `profile_slots.read_memory` не трогаем: тесты
+# настоящей пробы проверяют именно его.
+@pytest.fixture(autouse=True)
+def _slot_queue_never_reads_the_host_memory(monkeypatch):
+    try:
+        from src.web import profile_slots as ps
+        from src.web import publish_jobs as pj
+    except Exception:
+        yield
+        return
+
+    def plenty():
+        return ps.MemoryReading(total_mb=64 * 1024, available_mb=48 * 1024)
+
+    monkeypatch.setitem(ps.ProfileSlots.__init__.__kwdefaults__, "memory", plenty)
+    # Свежая очередь на каждый тест: окна, оставленные прошлым тестом
+    # (`keep`), не должны занимать места следующему.
+    monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(memory=plenty))
     yield
 
 

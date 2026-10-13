@@ -644,3 +644,12 @@ def get_hidden_accounts_path() -> str:
     файл в гите означал бы, что вид одного человека становится видом всех.
     """
     return os.path.join(get_local_config_dir(), "hidden_accounts.json")
+
+
+def get_account_notes_path() -> str:
+    """Заметки менеджера к аккаунтам (ACL-1620) — только на ЭТОЙ машине.
+
+    Текст пишет человек про свои аккаунты; в гит он попасть не должен,
+    поэтому файл лежит в машинной папке, а не в репозитории.
+    """
+    return os.path.join(get_local_config_dir(), "account_notes.json")

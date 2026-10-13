@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <link rel="icon" href="/favicon.ico?v=acl" sizes="32x32">
+  <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   {#- ACL-1267: вкладку версии владельца не спутать со сборкой менеджеров. #}
-  <title>{% if (stage_status or {}).channel == 'stage' %}STAGE · {% endif %}Adopy Campaigns Launcher — {{ report.date }}</title>
+  <title>{% if (stage_status or {}).channel == 'stage' %}STAGE · {% endif %}Adopy Campaign Manager — {{ report.date }}</title>
   <script>
     // Apply before paint. Only a click pins the theme; otherwise follow the OS.
     (function () {
@@ -432,11 +432,18 @@
       gap: 0.7rem;
       min-width: 0;
     }
-    .brand-logo {
-      width: 36px;
-      height: 36px;
+    /* ACM: в шапке только метка, без подписи под ней (ACL-1723). Метка плоская
+       (#2563eb, без плитки), поэтому без скругления и фона — одинаково читается
+       на обеих темах. Название продукта живёт в alt у картинки. */
+    .brand-mark {
+      display: flex;
+      align-items: center;
       flex-shrink: 0;
-      border-radius: 9px;
+    }
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      flex-shrink: 0;
     }
     .brand-text {
       display: flex;
@@ -444,17 +451,6 @@
       gap: 0.15rem;
       min-width: 0;
     }
-    /* Начертание: «Adopy» несёт вес, остальное — спокойнее. Одно название, а
-       не два слова подряд одинаковой громкости. */
-    header.page-header h1 {
-      font-size: 1.02rem;
-      font-weight: 650;
-      letter-spacing: -0.012em;
-      margin: 0;
-      color: var(--text);
-      white-space: nowrap;
-    }
-    header.page-header h1 span { font-weight: 500; color: var(--muted); }
 
     /* Две подписанные величины. Подпись приглушена, значение — нет: читают
        здесь значение, а подпись только объясняет, какое именно. */
@@ -661,9 +657,24 @@
       font-size: 0.75rem;
     }
     td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    /* ACL-1652: Trends — последние дни жирным, период серым под ним. */
+    td.num.two { line-height: 1.25; }
+    td.num.two b { display: block; font-weight: 600; }
+    td.num.two small { display: block; color: var(--muted); font-size: 0.68rem; }
+    /* ACL-1652: Combos — одна ячейка на комбинацию, значок категории. */
+    td.combo-id { line-height: 1.3; min-width: 0; }
+    td.combo-id .l1 { font-weight: 600; font-size: 0.82rem; }
+    td.combo-id .l2 { font-size: 0.74rem; color: var(--muted); max-width: 22rem;
+                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .combo-chip { display: inline-block; font-size: 0.68rem; font-weight: 500; padding: 0.05rem 0.4rem;
+                  border-radius: 9px; margin-left: 0.25rem; }
+    .combo-chip.cat-strong { background: var(--good-soft); color: var(--good); }
+    .combo-chip.cat-interesting { background: var(--warn-soft); color: var(--warn); }
+    /* ACL-1652: раскрытие внутри таблицы листается по горизонтали, когда не
+       хватает ширины (ноутбук 1280px с открытым билдером). */
+    .drill-scroll { overflow-x: auto; max-width: 100%; }
     td.adset { font-size: 0.78rem; color: var(--muted); max-width: 320px;
                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    td.date { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
     td.good { color: var(--good); }
     td.bad  { color: var(--bad); }
 
@@ -702,6 +713,8 @@
     table.drill-table { font-size: 0.8125rem; background: transparent; box-shadow: none; border: none; }
     table.drill-table th { background: transparent; font-size: 0.75rem; }
     table.drill-table td { border-bottom: 1px solid var(--border); }
+    /* Числа не липнут друг к другу: у колонки CR был только общий отступ 0.75rem. */
+    table.drill-table th.num, table.drill-table td.num { padding-left: 1rem; }
 
     pre.text-block {
       background: var(--bg-elev);
@@ -1661,19 +1674,48 @@
        числа стоят столбиками, а не россыпью чипов. Первая колонка — под
        каретку ::before у summary. Ноль аккаунтов при живых деньгах — красным:
        спенд идёт, а картой не покрыт. ── */
-    .amap-grid-head, .amap-country > summary.amap-row {
+    /* ACL-1652: шесть метрик (Spend · Leads · FTDs · CPL · CPA · CR) вместо
+       пяти — на одну колонку больше. На 1280px таблица 984px, минимум по
+       ширине колонок ~969px. Строка Totals и менеджеры (ACL-1654/1656) стоят
+       на той же сетке, поэтому числа выровнены по построению. */
+    .amap-grid-head, .amap-country > summary.amap-row,
+    .amap-total-row, .amap-cm-row, .amap-cm > .amap-grid-head {
       display: grid;
       grid-template-columns: 1rem minmax(7rem, 1.1fr) minmax(9.5rem, 1.4fr)
-        repeat(5, minmax(4.2rem, 0.7fr)) minmax(4.5rem, 0.6fr) 4.2rem;
+        repeat(6, minmax(4.2rem, 0.7fr)) minmax(4.5rem, 0.6fr) 4.2rem;
       gap: 0 var(--space-md);
       align-items: center;
     }
     .amap-grid-head {
       padding: 0.45rem 0.85rem 0.3rem;
       font-size: 0.68rem; font-weight: 600; letter-spacing: 0.02em;
-      text-transform: uppercase; color: var(--muted);
+      text-transform: none; color: var(--muted);
       border-bottom: 1px solid var(--border);
     }
+    /* ACL-1654: итог. Тот же вид, что у свёрнутой страны, но отделён линией. */
+    .amap-total-row {
+      padding: 0.55rem 0.85rem; margin: 0 0 var(--space-md);
+      border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+      background: var(--bg-subtle); font-weight: 700; font-size: 0.9rem;
+    }
+    /* ACL-1656: Campaign managers — свёрнуто, как Available accounts. */
+    .amap-cm { margin-top: var(--space-lg); border: 1px solid var(--border);
+      border-radius: var(--radius-md); background: var(--bg-elev); overflow: hidden; }
+    .amap-cm > summary { display: flex; align-items: baseline; gap: var(--space-md);
+      padding: 0.55rem 0.85rem; cursor: pointer; user-select: none; background: var(--bg-subtle); }
+    .amap-cm > summary h3 { margin: 0; font-size: 0.95rem; }
+    .amap-cm > summary::before { content: '▸'; color: var(--muted); font-size: 0.75rem; }
+    .amap-cm[open] > summary::before { content: '▾'; }
+    .amap-cm-title .amap-note { font-size: 0.78rem; color: var(--muted); }
+    .amap-cm-country > summary.amap-cm-row { cursor: pointer; background: var(--bg-subtle);
+      font-weight: 600; font-size: 0.9rem; padding: 0.5rem 0.85rem; list-style: none; }
+    .amap-cm-country > summary::-webkit-details-marker { display: none; }
+    .amap-cm-country > summary::before { content: '▸'; color: var(--muted); font-size: 0.75rem; }
+    .amap-cm-country[open] > summary::before { content: '▾'; }
+    .amap-cm-person { padding: 0.35rem 0.85rem; font-size: 0.85rem; border-top: 1px solid var(--border); }
+    .amap-cm-row .amap-cell-name { grid-column: 2 / 4; }  /* имя менеджера занимает и пустую колонку Account read */
+    .amap-cm-person .amap-cell-name { padding-left: 0.2rem; }
+    .amap-cm-person.me .amap-cell-name { color: var(--good); font-weight: 600; }
     .amap-grid-head .num, .amap-row .num { text-align: right; }
     .amap-row .num b { color: var(--text); font-weight: 600; }
     .amap-cell-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1721,7 +1763,7 @@
     .amap table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
     .amap th {
       text-align: left; font-weight: 500; font-size: 0.7rem;
-      text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+      text-transform: none; letter-spacing: 0.02em; color: var(--muted);
       padding: 0.4rem 0.85rem; border-bottom: 1px solid var(--border);
     }
     /* Число под своим заголовком. Общее правило `th.num` есть с самого начала,
@@ -1801,7 +1843,37 @@
     /* Status и Setup отдали кнопкам по проценту; с прежними полями 0.85rem
        «needs setup» и «no warning» на 1280–1366px уходили в многоточие.
        Узкие поля возвращают им место; строка не растёт. */
-    .amap table.amap-grid td.amap-status, .amap table.amap-grid td.amap-setup { padding-left: 0.3rem; padding-right: 0.3rem; }
+    .amap table.amap-grid td.amap-status, .amap table.amap-grid td.amap-acct-note { padding-left: 0.3rem; padding-right: 0.3rem; }
+    /* ACL-1620 / ACL-1633: заметка к аккаунту и к стране. Пустая не рисует ничего;
+       карандаш появляется при наведении на строку или фокусе на ячейке.
+       Заполненная — первая строка с многоточием, весь текст в title. */
+    /* Заметка — поле ввода: рамка, фон, скругление, как у полей формы. Пустая
+       показывает ту же коробку без текста и той же высоты, так что «сюда можно
+       писать» видно всегда. Карандаш рисует ::after при наведении и фокусе. */
+    .amap-note-box {
+      position: relative; display: block; box-sizing: border-box; height: 1.7rem; line-height: calc(1.7rem - 2px);
+      padding: 0 1.4rem 0 0.4rem; border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+      background: var(--field-bg); color: var(--muted); font-weight: 400; cursor: text;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: border-color .12s;
+    }
+    .amap-note-box::after { content: '\270E'; position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); opacity: 0; color: var(--muted); }
+    .amap-acct-note:hover .amap-note-box,
+    .amap-acct-note:focus-visible .amap-note-box { border-color: var(--text, currentColor); }
+    .amap-acct-note:hover .amap-note-box::after,
+    .amap-acct-note:focus-visible .amap-note-box::after { opacity: 0.6; }
+    .amap table.amap-grid td.amap-acct-note { cursor: text; padding-top: 0.15rem; padding-bottom: 0.15rem; }
+    .amap-acct-note:focus-visible { outline: none; }
+    .amap-note-pop {
+      position: fixed; z-index: 1000; width: min(24rem, calc(100vw - 1rem));
+      background: var(--bg, #fff); color: inherit; border: 1px solid var(--field-border);
+      border-radius: var(--radius-sm); box-shadow: 0 6px 24px rgba(0,0,0,.25); padding: 0.5rem;
+    }
+    .amap-note-pop textarea { width: 100%; min-height: 6rem; resize: both; max-width: 100%; box-sizing: border-box; font: inherit; }
+    .amap-note-pop .amap-note-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 0.3rem; font-size: 0.72rem; }
+    .amap-note-pop .amap-note-del, .amap-note-toast button { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); text-decoration: underline; cursor: pointer; }
+    .amap-note-pop .amap-note-state { color: var(--muted); }
+    .amap-note-pop .amap-note-state.bad { color: var(--danger); }
+    .amap-note-toast { position: fixed; left: 1rem; bottom: 1rem; z-index: 1000; font-size: 0.8rem; background: var(--bg, #fff); border: 1px solid var(--field-border); border-radius: var(--radius-sm); padding: 0.35rem 0.6rem; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
     .amap .amap-x {
       background: none; border: 1px solid var(--field-border);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -2570,6 +2642,7 @@
     .acc-pill.ok   { background: var(--good-soft); color: var(--good); }
     .acc-pill.todo { background: var(--warn-soft); color: var(--warn); }
     .acc-pill.local{ background: var(--bg-subtle); color: var(--muted); }
+    .acc-owner-hint { font-size: 0.72rem; color: var(--muted); }
 
     .acc-btn {
       height: 28px; padding: 0 var(--space-md); font: inherit; font-size: 0.78rem;
@@ -2690,7 +2763,10 @@
       display: flex; align-items: baseline; gap: var(--space-sm);
       margin: var(--space-lg) 0 var(--space-xs);
       font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em;
-      text-transform: uppercase; color: var(--muted);
+      text-transform: uppercase;
+      /* ACL-1650: заголовок страны был --muted и терялся на фоне ящика;
+         акцентный синий держит 4.5:1+ в обеих темах. */
+      color: var(--accent);
     }
     .cbd-country:first-child { margin-top: 0; }
     .cbd-country::after {
@@ -3076,9 +3152,12 @@
 <div class="page-top">
 <header class="page-header">
   <div class="brand-lockup">
-    <img src="/static/logo.svg" alt="" class="brand-logo" width="36" height="36">
+    {#- ACM: только метка Adopy, без подписи (ACL-1723). Имя продукта для
+        скринридеров — в alt; h1 на странице не нужен. -#}
+    <div class="brand-mark">
+      <img src="/static/logo.svg" alt="Adopy Campaign Manager" class="brand-logo" width="34" height="34">
+    </div>
     <div class="brand-text">
-      <h1>Adopy <span>Campaigns Launcher</span></h1>
       {#- Две подписанные величины вместо ленты через точки. Обе нужны в один
           и тот же момент — когда обновление сломало работу и надо понять, что
           стоит и когда встало, чтобы откатиться. Без подписи «Updated 2026-09-08
@@ -3087,7 +3166,7 @@
         <dt>Last updated:</dt>
         <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd>
         <dt>Version:</dt>
-        <dd id="acl-version" title="Installed ACL release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd>
+        <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd>
         {%- set st = stage_status or {} %}
         {%- if st.channel == 'stage' %}
         <dd id="acl-stage" class="acl-stage{% if not st.known %} unknown{% endif %}"
@@ -3142,7 +3221,7 @@
     {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
         с Refresh намеренно: беда случается на экране, и идти за ней в другое
         место человек не станет. -#}
-    <button type="button" id="report-problem-btn" title="Tell us what went wrong — ACL attaches the machine's own facts">Report a problem</button>
+    <button type="button" id="report-problem-btn" title="Tell us what went wrong — ACM attaches the machine's own facts">Report a problem</button>
     <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
     <button type="submit" id="dash-refresh-btn">Refresh</button>
   </form>
@@ -3152,7 +3231,7 @@
     последние отказавшие шаги прикладывает ACL сам. -#}
 <dialog id="report-problem-box" class="report-box">
   <h3>Report a problem</h3>
-  <p class="report-hint">Write what happened in your own words. ACL attaches its
+  <p class="report-hint">Write what happened in your own words. ACM attaches its
      version, this machine, the dates on screen and the last failed steps —
      account and profile numbers are removed before sending.</p>
   <textarea id="report-problem-text" rows="6" maxlength="4000" placeholder="The campaign stopped at the creative and nothing happened for ten minutes…"></textarea>
@@ -3273,7 +3352,7 @@ async function dashRefresh(ev) {
         var fixed = (s.fixed || []).map(function (f) {
           return '• ' + f.issue + (f.notes && f.notes.length ? ' — ' + f.notes.join('; ') : '');
         });
-        btn.textContent = name && s.channel === 'release' ? 'Update to ' + name : 'Update ACL';
+        btn.textContent = name && s.channel === 'release' ? 'Update to ' + name : 'Update ACM';
         btn.title = 'A newer release is available' + (name ? ': ' + name : '')
           + (fixed.length ? '\n\nWhat changed:\n' + fixed.join('\n') : '')
           + '\n\nInstalling takes a few minutes and restarts the dashboard.';
@@ -3290,7 +3369,7 @@ async function dashRefresh(ev) {
     if (btn.disabled) return;
     var name = btn.dataset.target || 'the latest release';
     var fixed = btn.dataset.fixed || '';
-    if (!confirm('Update ACL to ' + name + '?\n\n'
+    if (!confirm('Update ACM to ' + name + '?\n\n'
       + (fixed ? 'What changed:\n' + fixed + '\n\n' : '')
       + 'The dashboard will restart and this page will reload by itself. '
       + 'It takes a few minutes. If the new version does not start, the current one comes back by itself.')) return;
@@ -3306,7 +3385,7 @@ async function dashRefresh(ev) {
       .then(function (data) {
         if (!data || data.ok !== true) {
           btn.disabled = false;
-          btn.textContent = 'Update ACL';
+          btn.textContent = 'Update ACM';
           alert('Update not started: ' + ((data && data.error) || 'unknown error'));
           return;
         }
@@ -3326,9 +3405,9 @@ async function dashRefresh(ev) {
     var key = 'acl-update-seen:' + a.finished_at;
     try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { /* без памяти — покажем снова */ }
     alert(a.result === 'rollback_failed'
-      ? 'The update failed and ACL could not fully restore the previous version. Open the previous installer or contact support.\n\n' + (a.reason || '')
+      ? 'The update failed and ACM could not fully restore the previous version. Open the previous installer or contact support.\n\n' + (a.reason || '')
       : a.result === 'rolled_back'
-      ? 'The update to ' + (a.to || 'the new version') + ' did not work, so ACL went back to '
+      ? 'The update to ' + (a.to || 'the new version') + ' did not work, so ACM went back to '
         + (a.from || 'the previous version') + '.\n\n' + (a.reason || '')
         + '\n\nNothing else changed. Use Report a problem so it gets fixed.'
       : 'The update to ' + (a.to || 'the new version') + ' did not start: ' + (a.reason || 'unknown reason'));
@@ -3346,8 +3425,8 @@ async function dashRefresh(ev) {
       btn.textContent = 'Updating… ' + secs + 's';
       if (Date.now() - started > LIMIT_MS) {
         btn.disabled = false;
-        btn.textContent = 'Update ACL';
-        alert('ACL did not come back within 10 minutes. Open it again from the desktop '
+        btn.textContent = 'Update ACM';
+        alert('ACM did not come back within 10 minutes. Open it again from the desktop '
           + 'shortcut. If the new version did not start, the previous one is restored '
           + 'automatically; use Report a problem if it still does not open.');
         return;
@@ -3381,6 +3460,8 @@ async function dashRefresh(ev) {
    filter, and place the notice before the dashboard rather than below it. #}
 {%- set book_covers_period = namespace(value=(not account_map) or
       (not account_map.date_from and not account_map.date_to)) %}
+{#- ACL-1652: шесть метрик (заголовки и ячейки) — из одного места. -#}
+{% import "_metrics.html" as mx %}
 {% if account_map %}
 {% for day in account_map.dates or [] %}
 {% if (not account_map.date_from or day >= account_map.date_from)
@@ -3471,7 +3552,7 @@ async function dashRefresh(ev) {
       дальше менеджер меняет их здесь, а не в .env. -#}
   <section class="acc-connect" id="mp-box">
     <h3>This computer</h3>
-    <p class="acc-sub">Where ACL reads your stats and looks for creatives. Paste a path from Explorer (Shift + right-click → Copy as path).</p>
+    <p class="acc-sub">Where ACM reads your stats and looks for creatives. Paste a path from Explorer (Shift + right-click → Copy as path).</p>
     <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:70ch">
       {#- ACL-1447: имя менеджера — тег `manager` у событий Sentry этой машины. -#}
       <label>
@@ -3732,11 +3813,8 @@ async function dashRefresh(ev) {
 <table>
   <thead><tr>
     <th>CM</th>
-    <th class="num">Deposits</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
+    {{ mx.headers() }}
     <th class="num">Net</th>
-    <th class="num">CPA</th>
     <th class="num">ROI</th>
     {# Пустой заголовок — над колонкой каретки «▸», а не над корзиной:
        строк восемь, и без него таблица съезжает на колонку. #}
@@ -3753,11 +3831,8 @@ async function dashRefresh(ev) {
         hx-trigger="click"
         {% endif %}>
       <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits) }}
       <td class="num">{{ row.net | fmt_usd }}</td>
-      <td class="num">{{ row.cpa | fmt_usd }}</td>
       <td class="num {% if row.roi > 1 %}roi-pos{% elif row.roi and row.roi < 1 %}roi-neg{% endif %}">
         {% if row.roi %}{{ '%.2f' % row.roi }}{% else %}—{% endif %}
       </td>
@@ -3880,6 +3955,9 @@ async function dashRefresh(ev) {
           <span class="cb-pf-err" style="font-size:0.7rem">⚠ missing: {{ pf.missing_map_fields | join(', ') }}</span>
         {% else %}
           <span style="font-size:0.7rem;color:var(--good)">✓ config ok</span>
+        {% endif %}
+        {% if pf.ad_account_note %}
+          <span class="cb-pf-err" style="font-size:0.7rem" title="{{ pf.ad_account_note }}">⚠ ad account differs from this profile's history</span>
         {% endif %}
         {% if ds and ds.state == 'ready' %}
           <span class="cb-draft-badge" title="{{ ds.campaign_names | join(', ') }}">
@@ -4098,20 +4176,15 @@ async function dashRefresh(ev) {
 <table>
   <thead><tr>
     <th>Ad Asset</th>
-    <th class="num">Leads</th>
-    <th class="num">Deposits</th>
-    <th class="num">CR</th>
+    {{ mx.headers() }}
     <th class="num">Player Value</th>
   </tr></thead>
   <tbody id="asset-tbody-{{ cid }}">
   {% for row in c.asset_summary %}
-    {% set cr = (row.deposits / row.leads * 100) if row.leads > 0 else 0 %}
     <tr class="asset-row" onclick="assetVariantToggle(this, '{{ cid }}')" data-offer="{{ row.offer | e }}"
         title="Show the breakdown by landing page">
       <td>{{ row.offer }} <span class="asset-caret">▸</span></td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ '%.1f' % cr }}%</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits) }}
       <td class="num">{{ row.net | fmt_usd }}</td>
     </tr>
   {% endfor %}
@@ -4127,24 +4200,14 @@ async function dashRefresh(ev) {
 <table>
   <thead><tr>
     <th>Landing</th>
-    <th class="num">Leads</th>
-    <th class="num">Deposits</th>
-    <th class="num">CR</th>
-    <th class="num">Spend</th>
-    <th class="num">CPL</th>
-    <th class="num">CPA</th>
+    {{ mx.headers() }}
     <th class="num">Net</th>
   </tr></thead>
   <tbody>
   {% for row in c.variants %}
     <tr{% if row.is_untagged %} class="lp-untagged"{% endif %}>
       <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num {% if row.deposits > 0 %}good{% elif row.spend > 0 %}bad{% endif %}">{{ row.deposits }}</td>
-      <td class="num">{% if row.cr is not none %}{{ '%.1f' % row.cr }}%{% else %}—{% endif %}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td class="num">{% if row.cpl is not none %}{{ row.cpl | fmt_usd }}{% else %}—{% endif %}</td>
-      <td class="num">{% if row.cpa is not none %}{{ row.cpa | fmt_usd }}{% else %}—{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, 'good' if row.deposits > 0 else ('bad' if row.spend > 0 else '')) }}
       <td class="num">{{ row.net | fmt_usd }}</td>
     </tr>
   {% endfor %}
@@ -4160,7 +4223,8 @@ async function dashRefresh(ev) {
 {% if c.trend.has_date %}
 <div id="view-country-{{ cid }}-trend" class="view-panel" data-country="{{ cid }}">
 <h2 class="view-title">{{ c.country }}: {{ n_trend }} Recent Trend <span class="hint">{{ c.trend.period_label }}</span></h2>
-{% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable')] %}
+<p class="hint" style="margin:0.2rem 0 0">Every number: last {{ report.trend_days | int }} days in bold, the whole period in grey underneath.</p>
+{% for label, key in [('Trending up', 'trending_up'), ('Stable', 'stable'), ('Trending down', 'trending_down')] %}
   {% set rows = c.trend[key] %}
   {% if rows %}
     <h3 class="section" style="margin-top:0.8rem">↪ {{ label }} ({{ rows|length }})</h3>
@@ -4170,8 +4234,7 @@ async function dashRefresh(ev) {
         <th>Device</th>
         <th>Interest</th>
         <th>Creative</th>
-        <th class="num">Total dep</th>
-        <th class="num">Recent dep</th>
+        {{ mx.headers() }}
       </tr></thead>
       <tbody>
       {% for row in rows %}
@@ -4180,8 +4243,7 @@ async function dashRefresh(ev) {
           <td>{{ row.device or '—' }}</td>
           <td>{{ row.interest or '—' }}</td>
           <td>{{ row.creative or '—' }}</td>
-          <td class="num">{{ row.deposits_total }}</td>
-          <td class="num">{{ row.deposits_recent }}</td>
+          {{ mx.pair_cells(metric_values(row.spend_recent, row.leads_recent, row.deposits_recent), metric_values(row.spend_total, row.leads_total, row.deposits_total)) }}
         </tr>
       {% endfor %}
       </tbody>
@@ -4196,28 +4258,20 @@ async function dashRefresh(ev) {
 <h2 class="view-title">{{ c.country }}: {{ n_combos }} Top Combos</h2>
 <table>
   <thead><tr>
-    <th>Offer</th>
-    <th>Device</th>
-    <th>Interest</th>
-    <th>Age</th>
-    <th>Creative</th>
-    <th>Cat</th>
-    <th class="num">Dep</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
+    <th>Combo</th>
+    {{ mx.headers() }}
   </tr></thead>
   <tbody>
   {% for row in c.top_combos %}
     <tr>
-      <td>{{ row.offer or '—' }}</td>
-      <td>{{ row.device or '—' }}</td>
-      <td>{{ row.interest or '—' }}</td>
-      <td>{{ row.age or '—' }}</td>
-      <td class="adset">{{ row.creative or '—' }}</td>
-      <td>{{ row.category }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
+      {#- ACL-1652 (вариант A): одна ячейка на всю комбинацию, чтобы шесть метрик
+          встали в стандартные колонки. Cat — значок рядом с именем. -#}
+      <td class="combo-id" title="{{ row.category }}">
+        <div class="l1">{{ row.offer or '—' }} · {{ row.device or '—' }} · {{ row.age or '—' }}
+          <span class="combo-chip {{ 'cat-strong' if row.category == 'Strong' else 'cat-interesting' }}">{{ row.category }}</span></div>
+        <div class="l2">{{ row.interest or '—' }} · {{ row.creative or '—' }}</div>
+      </td>
+      {{ mx.cells(row.spend, row.leads, row.deposits) }}
     </tr>
   {% endfor %}
   </tbody>
@@ -4231,19 +4285,13 @@ async function dashRefresh(ev) {
 <table class="table-targeting">
   <thead><tr>
     <th>Target</th>
-    <th class="num">Dep</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
-    <th class="num">CPA</th>
+    {{ mx.headers() }}
   </tr></thead>
   <tbody>
   {% for row in c.targeting %}
     <tr>
       <td class="interest-cell" title="{{ row.interest }}">{{ row.interest }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td class="num">{{ row.cpa | fmt_usd }}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits) }}
     </tr>
   {% endfor %}
   </tbody>
@@ -4259,21 +4307,25 @@ async function dashRefresh(ev) {
   <thead><tr>
     <th>Creative</th>
     <th>Text</th>
-    <th class="num">Deposits</th>
-    <th class="num">Leads</th>
-    <th class="num">Spend</th>
-    <th class="num">CPA</th>
+    {{ mx.headers() }}
   </tr></thead>
   <tbody>
   {% for row in c.creatives %}
-    <tr title="{{ row.ad_title }}">
-      <td>{{ row.creative_id or row.ad_title }}</td>
+    {# ACL-1593: группа раскрывается в строки вариантов (сумма = строка группы). #}
+    <tr title="{{ row.ad_title }}"{% if row.has_variants %} class="creative-group" style="cursor:pointer" onclick="var n=this.nextElementSibling;while(n&&n.classList.contains('creative-variant')){n.hidden=!n.hidden;n=n.nextElementSibling;}"{% endif %}>
+      <td>{% if row.has_variants %}&#9656; {% endif %}{{ row.creative_id or row.ad_title }}</td>
       <td>{{ row.text_name or '—' }}</td>
-      <td class="num">{{ row.deposits }}</td>
-      <td class="num">{{ row.leads }}</td>
-      <td class="num">{{ row.spend | fmt_usd }}</td>
-      <td class="num">{{ row.cpa | fmt_usd }}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits) }}
     </tr>
+    {% if row.has_variants %}
+    {% for v in row.variants %}
+    <tr class="creative-variant" hidden>
+      <td style="padding-left:1.5em">{{ v.label }}</td>
+      <td>{{ row.text_name or '—' }}</td>
+      {{ mx.cells(v.spend, v.leads, v.deposits) }}
+    </tr>
+    {% endfor %}
+    {% endif %}
   {% endfor %}
   </tbody>
 </table>
@@ -4294,11 +4346,7 @@ async function dashRefresh(ev) {
     <table>
       <thead><tr>
         <th>Ad set name</th>
-        <th class="num">Spend</th>
-        <th class="num">Leads</th>
-        <th class="num">FTDs</th>
-        <th class="num">CPL</th>
-        <th class="num">CPA</th>
+        {{ mx.headers() }}
         <th>Reason</th>
       </tr></thead>
       <tbody>
@@ -4312,11 +4360,7 @@ async function dashRefresh(ev) {
             hx-trigger="click"
             {% endif %}>
           <td class="adset">{{ r.adset_name[:60] }}</td>
-          <td class="num">{{ r.spend | fmt_usd }}</td>
-          <td class="num">{{ r.leads }}</td>
-          <td class="num {% if r.deposits == 0 and r.spend > 0 %}bad{% elif r.deposits > 0 %}good{% endif %}">{{ r.deposits }}</td>
-          <td class="num">{{ r.cpl | fmt_usd }}</td>
-          <td class="num">{{ r.cpa | fmt_usd }}</td>
+          {{ mx.cells(r.spend, r.leads, r.deposits, 'bad' if (r.deposits == 0 and r.spend > 0) else ('good' if r.deposits > 0 else '')) }}
           <td class="{% if r.reason %}bad{% endif %}">{{ r.reason or '' }}</td>
         </tr>
       {% endfor %}
@@ -5244,13 +5288,39 @@ window.cbTree = (function () {
     }
   }
 
+  /* ACL-1728: нижняя панель (страна / аккаунт / «new country…») не должна
+     перерисовываться под руками. Опрос заданий дёргает paintFoot каждые
+     пару секунд; innerHTML заменял открытый <select> новым узлом, и список
+     закрывался сам, а недопечатанная страна пропадала. Теперь:
+       - пока в панели фокус на поле или списке, перерисовка откладывается
+         и выполняется, когда фокус ушёл;
+       - если разметка не изменилась, узлы не трогаем вовсе;
+       - при настоящей перерисовке выбранный аккаунт и набранный текст
+         переносятся в новые узлы. */
+  var footPending = false, footHtml = '';
+
+  function footBusy() {
+    var a = document.activeElement;
+    return !!(a && a !== foot && foot.contains(a) && /^(SELECT|INPUT|TEXTAREA)$/.test(a.tagName));
+  }
+
+  foot.addEventListener('focusout', function (e) {
+    if (e.relatedTarget && foot.contains(e.relatedTarget)) return;
+    setTimeout(function () { if (footPending && !footBusy()) paintFoot(); }, 0);
+  });
+
   function paintFoot() {
+    if (footBusy()) { footPending = true; refreshTicks(); return; }
+    footPending = false;
     var list = places();
-    foot.hidden = false;
     var chosen = foot.querySelector('.cbd-pick-country');
     var keep = (chosen && chosen.value) || currentCountry();
+    var acctOld = foot.querySelector('.cbd-pick-account');
+    var keepAccount = acctOld ? acctOld.value : '';
+    var typedOld = foot.querySelector('.cbd-new-country');
+    var keepTyped = typedOld ? typedOld.value : '';
     var t = ticks();
-    foot.innerHTML = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
+    var html = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
         ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
           + aclEscHtml(publishLabel(t)) + '</button>'
           + '<div class="cbd-queue" hidden></div>'
@@ -5272,7 +5342,21 @@ window.cbTree = (function () {
       + '<button type="button" class="cbd-add" data-act="add-country">+ Country</button>'
       + '<span class="cbd-new-msg"></span>'
       + '</div>';
-    paintAccounts();
+    foot.hidden = false;
+    // Та же разметка, что и в прошлый раз, - узлы остаются теми же.
+    if (!(foot.firstChild && html === footHtml)) {
+      foot.innerHTML = html;
+      footHtml = html;
+      paintAccounts();
+      var acctNew = foot.querySelector('.cbd-pick-account');
+      if (acctNew && keepAccount) {
+        for (var i = 0; i < acctNew.options.length; i += 1) {
+          if (acctNew.options[i].value === keepAccount) { acctNew.value = keepAccount; break; }
+        }
+      }
+      var typedNew = foot.querySelector('.cbd-new-country');
+      if (typedNew && keepTyped) typedNew.value = keepTyped;
+    }
     if (window.CB_QUEUE && window.CB_QUEUE.progress) showQueue(window.CB_QUEUE.progress);
     refreshTicks();
   }
@@ -5403,7 +5487,10 @@ window.cbTree = (function () {
     box.hidden = false;
 
     var lines = (p.report || []).map(function (r) {
-      var mark = r.state === 'ok' ? '<span class="cbd-q-ok">✓</span>' : '<span class="cbd-q-bad">✕</span>';
+      // ACL-1603: аккаунт, у которого задание уже есть, пропущен как дубль.
+      var mark = r.state === 'ok' ? '<span class="cbd-q-ok">✓</span>'
+        : r.state === 'dup' ? '<span class="cbd-q-queued">⧉</span>'
+        : '<span class="cbd-q-bad">✕</span>';
       var tail = r.skipped ? ' · ' + r.skipped + ' skipped' : '';
       return '<div class="cbd-q-line">' + mark + ' ' + aclEscHtml(r.account) + tail
         + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '') + '</div>';
@@ -5415,6 +5502,12 @@ window.cbTree = (function () {
     if (p.done) {
       var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
       lines.unshift('<div class="cbd-q-head">Done — ' + ok + ' of ' + p.of + ' accounts</div>');
+      var dups = (p.report || []).filter(function (r) { return r.state === 'dup'; })
+        .map(function (r) { return aclEscHtml(r.account); });
+      if (dups.length) {
+        lines.splice(1, 0, '<div class="cbd-q-line cbd-q-dup">Skipped as duplicate (already in the queue): '
+          + dups.join(', ') + '</div>');
+      }
     } else if (p.live && p.live.length) {
       // Каждый неоконченный аккаунт своей строкой (ACL-1321): кто
       // проверяется, кто собирается, кто ждёт места в очереди профилей.
@@ -5431,6 +5524,8 @@ window.cbTree = (function () {
         var what = x.stage === 'checking' ? 'checking'
           : x.stage === 'queued'
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
+               : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
+               : q.state === 'waiting_memory' ? 'queued — waiting for memory'
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
           : 'building the draft';
@@ -5720,12 +5815,12 @@ window.cbTree = (function () {
   "derived": {"rows": 951, "attempts": 19, "until": "2026-09-28"},
   "stages": [["profile", 18], ["campaign", 57], ["adset", 178], ["ad", 175], ["final", 6]],
   "rules": [
-    ["^(window_|overlays_cleared$|stall_|tab_frozen$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
+    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
     ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error)", "profile"],
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
-    ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad$|simple_ad_section$)", "adset"],
+    ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad(_stuck_on_adset)?$|simple_ad_section$)", "adset"],
     ["^(ad_level_summary$|destination_sweep|simple_create_draft$)", "final"],
-    ["^(ad\\d*_|creative_|text_variations_off$|text_generation_off$|simple_create_more_ads$|simple_reentry$|loading_modal_reload$|destination_website_selected$)", "ad"]
+    ["^(ad\\d*_|creative_|text_variations_off$|text_generation_off$|simple_create_more_ads$|simple_reentry$|loading_modal_reload$|destination_website_selected$|destination_instant_form_off$)", "ad"]
   ],
   "steps": {
     "ad_copy": [1.0, 6],
@@ -6027,19 +6122,36 @@ window.cbBuild = (function () {
   function waiting(q) {
     q = q || {};
     var ahead = Math.max(0, parseInt(q.ahead, 10) || 0);
+    if (q.hold === 'stopped_robot') {
+      return { state: 'build-wait', sign: '',
+               why: 'Waiting for the stopped robot on this profile to let go' };
+    }
     if (q.reason === 'profile') {
       return { state: 'build-wait', sign: '',
                why: 'Waiting for the Multilogin profile — another run is using it' };
     }
     // ACL-1424: мало памяти — сколько свободно и сколько берёт профиль.
     var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
-    if (q.hold === 'memory_low' && q.available_mb != null && q.profile_mb) {
+    if (q.hold === 'review_windows') {
+      return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
+    }
+    if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
+      var reserve = Number(q.reserve_mb) || 0;
+      var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
       return { state: 'build-wait', sign: '',
-               why: 'Waiting: ' + gb(q.available_mb) + ' GB free, a profile uses ~' + gb(q.profile_mb) + ' GB'
+               why: 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, needs ' + gb(need) + ' GB (profile ~'
+                    + gb(q.profile_mb) + ' GB + ' + String(+gb(reserve)) + ' GB reserve)'
                     + (ahead ? ' (' + ahead + ' ahead)' : '') };
     }
     return { state: 'build-wait', sign: '',
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
+  }
+
+  /* ACL-1614: остановленное задание. Если робот завис и сервер бросил его по
+     сроку, в ошибках задания стоит причина («stuck in <шаг>») — показываем её. */
+  function stoppedText(p, plain) {
+    var stuck = (p.errors || []).filter(function (e) { return /stuck in/.test(String(e)); })[0];
+    return stuck ? String(stuck) : (plain || 'Stopped');
   }
 
   /* Состояние точки для одной кампании задания. */
@@ -6059,8 +6171,16 @@ window.cbBuild = (function () {
     var active = isActive(p);
     // ACL-1321: задание ждёт места (памяти машины на ещё один профиль) или
     // свой профиль — робот его не трогал, точка не дышит.
+    // ACL-1614: Stop нажат — точка говорит «Stopping…», а не «ждёт очереди» /
+    // «открывается»; кампания, у которой итог уже есть, остаётся с итогом.
+    if (p.status === 'cancelling' && !(c && c.result)) {
+      return { state: 'build-run', sign: '', why: 'Stopping…' };
+    }
     if (p.status === 'queued') return waiting(p.queue);
-    if (!c) return active ? { state: 'build-run', sign: '', why: 'Waiting for its turn' } : null;
+    if (!c) {
+      if (active) return { state: 'build-run', sign: '', why: 'Waiting for its turn' };
+      return p.status === 'cancelled' ? { state: 'build-bad', sign: '', why: stoppedText(p) } : null;
+    }
 
     var r = c.result;
     if (active && c.blocker) return { state: 'build-attn', sign: '', why: String(c.blocker) };
@@ -6074,7 +6194,7 @@ window.cbBuild = (function () {
     }
     if (!active) {
       return { state: 'build-bad', sign: '',
-               why: p.status === 'cancelled' ? 'Stopped before this campaign was built'
+               why: p.status === 'cancelled' ? stoppedText(p, 'Stopped before this campaign was built')
                  : ((p.errors || [])[0] || 'Not built') };
     }
     if (p.status === 'running' && c.name === p.current) {
@@ -6357,6 +6477,26 @@ function aclCountryBuilder(country) {
 // Aggregates are embedded per-country as JSON (offer x variant rows);
 // untagged history (variant "") shows as "— (no landing)" so the
 // breakdown always adds up to the asset's totals.
+// ── Шесть метрик (ACL-1652) ───────────────────────────────────────────
+// JS-двойник src/analysis_agent/metric_columns.py: те же заголовки, те же
+// формулы, тот же вид чисел. Сравнивает их tests/test_metric_columns.py —
+// правя одно, правь другое. Делитель ноль даёт «—», доллары целыми с
+// округлением вверх, CR с одним знаком (0.0% при лидах — настоящее число).
+var ACL_METRIC_HEADERS = ['Spend', 'Leads', 'FTDs', 'CPL', 'CPA', 'CR'];
+function acl6Metrics(spend, leads, ftds) {
+  var num = function(v) { v = Number(v); return isFinite(v) ? v : null; };
+  var s = num(spend) || 0, l = num(leads) || 0, f = num(ftds) || 0;
+  var money = function(v) { return v === null ? '—' : '$' + (Math.ceil(v) || 0).toLocaleString('en-US'); };
+  return [
+    money(s),
+    String(Math.trunc(l)),
+    String(Math.trunc(f)),
+    money(l > 0 ? s / l : null),
+    money(f > 0 ? s / f : null),
+    l > 0 ? (f / l * 100).toFixed(1) + '%' : '—'
+  ];
+}
+
 function assetVariantToggle(tr, cid) {
   var next = tr.nextElementSibling;
   if (next && next.classList.contains('asset-variant-detail')) {
@@ -6375,10 +6515,6 @@ function assetVariantToggle(tr, cid) {
     d.textContent = s == null ? '' : String(s);
     return d.innerHTML;
   };
-  var fmtUsd = function(v) {
-    if (v == null || isNaN(v)) return '—';
-    return '$' + Math.round(v).toLocaleString('en-US');
-  };
   // untagged last, then by deposits / leads / spend desc
   rows.sort(function(x, y) {
     if (!x.variant !== !y.variant) return x.variant ? -1 : 1;
@@ -6386,16 +6522,11 @@ function assetVariantToggle(tr, cid) {
   });
   var render = function(r, cls) {
     var name = r.variant ? esc(r.variant) : '— (no landing)';
-    var cr = r.leads > 0 ? (r.deposits / r.leads * 100).toFixed(1) + '%' : '—';
-    var cpl = r.leads > 0 ? fmtUsd(r.spend / r.leads) : '—';
-    var cpa = r.deposits > 0 ? fmtUsd(r.spend / r.deposits) : '—';
+    var m = acl6Metrics(r.spend, r.leads, r.deposits);
     return '<tr class="' + (cls || '') + '"><td>' + name + '</td>'
-      + '<td class="num">' + (r.leads || 0) + '</td>'
-      + '<td class="num' + (r.deposits > 0 ? ' good' : '') + '">' + (r.deposits || 0) + '</td>'
-      + '<td class="num">' + cr + '</td>'
-      + '<td class="num">' + fmtUsd(r.spend) + '</td>'
-      + '<td class="num">' + cpl + '</td>'
-      + '<td class="num">' + cpa + '</td></tr>';
+      + m.map(function(x, i) {
+          return '<td class="num' + (i === 2 && r.deposits > 0 ? ' good' : '') + '">' + x + '</td>';
+        }).join('') + '</tr>';
   };
   var total = rows.reduce(function(a, r) {
     a.leads += r.leads || 0; a.deposits += r.deposits || 0; a.spend += r.spend || 0;
@@ -6405,10 +6536,10 @@ function assetVariantToggle(tr, cid) {
     || '<tr><td colspan="7" style="color:var(--muted)">No landing data</td></tr>';
   var detail = document.createElement('tr');
   detail.className = 'asset-variant-detail';
-  detail.innerHTML = '<td colspan="5"><div class="asset-variant-inner">'
+  // colspan = число колонок таблицы Assets: имя, шесть метрик, Player Value.
+  detail.innerHTML = '<td colspan="8"><div class="asset-variant-inner">'
     + '<table class="asset-variant-table"><thead><tr>'
-    + '<th>Landing</th><th class="num">Leads</th><th class="num">Deposits</th>'
-    + '<th class="num">CR</th><th class="num">Spend</th><th class="num">CPL</th><th class="num">CPA</th>'
+    + '<th>Landing</th>' + ACL_METRIC_HEADERS.map(function(h) { return '<th class="num">' + h + '</th>'; }).join('')
     + '</tr></thead><tbody>' + body + (rows.length > 1 ? render(total, 'asset-variant-total') : '')
     + '</tbody></table>'
     + '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem">Landing tagging started on 30.07 — older rows fall into "— (no landing)".</div>'
@@ -6766,6 +6897,12 @@ function amapApply(from, to, span) {
    Блоки свёрнуты по умолчанию, но дешборд перезагружает себя сам, и человек,
    работающий внутри страны, терял бы её на каждом обновлении. Хранится только
    список раскрытых ключей и только в этом браузере. */
+/* Owner, 07.10: «Copy for group» скрыта флагом SHOW_COPY_FOR_GROUP (app.py). Тот же
+   флаг гасит и пересборку ячейки после живого Read (amapStatusTail ниже).
+   Флаг — отдельным присваиванием window и ВЫШЕ amapMoney: тестовые стенды
+   вырезают исходник кусками от неё, и Jinja-выражение в куске ломало бы им
+   разбор. */
+window.AMAP_SHOW_COPY_FOR_GROUP = {{ SHOW_COPY_FOR_GROUP | tojson }};
 var AMAP_OPEN_KEY = 'acl.amap.open';
 
 function amapOpenList() {
@@ -6780,7 +6917,7 @@ function amapOpenList() {
 
 function amapWatchOpen() {
   var known = amapOpenList();
-  var blocks = document.querySelectorAll('details.amap-country[data-country]');
+  var blocks = document.querySelectorAll('details.amap-country[data-country], details.amap-cm[data-country], details.amap-cm-country[data-country]');
   Array.prototype.forEach.call(blocks, function (d) {
     var key = d.getAttribute('data-country');
     if (known.indexOf(key) !== -1) d.open = true;
@@ -6903,9 +7040,11 @@ function amapSplitMark(account, why, code) {
     if (old) old.remove();
     if (!why) return;
     var mark = document.createElement('small');
-    mark.className = code === 'open_by_hand' ? 'amap-split-bad hand' : 'amap-split-bad';
-    /* ACL-1518: окно открыто руками — это не сбой чтения, а что сделать. */
-    mark.textContent = code === 'open_by_hand' ? why : 'countries failed';
+    /* ACL-1518: окно открыто руками — это не сбой чтения, а что сделать.
+       ACL-1580: разлогинен — тоже. */
+    var plain = code === 'open_by_hand' || code === 'profile_logged_out';
+    mark.className = plain ? 'amap-split-bad hand' : 'amap-split-bad';
+    mark.textContent = plain ? why : 'countries failed';
     mark.title = why + '. The spend reading is unaffected; read again to retry the countries.';
     cell.appendChild(mark);
   });
@@ -7001,7 +7140,7 @@ function amapAwaitSplit(account, per, tries) {
           if (!s) throw new Error('the reading disappeared before it finished');
           if (typeof amapHandWait === 'function') amapHandWait(account, s.state === 'running' ? (j.waiting || '') : '');
           if (s.state !== 'running') { resolve(s); return; }
-          if (tries > 120) throw new Error('no answer after six minutes — check the launcher window');
+          if (tries > 120) throw new Error('no answer after six minutes — check the Adopy Campaign Manager window');
           resolve(amapAwaitSplit(account, per, tries + 1));
         })
         .catch(reject);
@@ -7050,6 +7189,10 @@ function amapRefreshCountryLines(per) {
           if (previous) previous.remove();
         }
       });
+      // ACL-1654: Totals — число «Account read» меняется после чтения кабинетов.
+      var totWas = map.querySelector('#amap-totals .amap-cell-read');
+      var totNow = fresh.querySelector('#amap-totals .amap-cell-read');
+      if (totWas && totNow) totWas.innerHTML = totNow.innerHTML;
       var count = map.querySelector('.amap-head > .amap-note');
       if (count) count.textContent = map.querySelectorAll('details.amap-country[data-country]').length + ' countries · numbers from the stats workbook';
       if (typeof amapWatchOpen === 'function') amapWatchOpen();
@@ -7290,7 +7433,7 @@ function amapStatusTail(account, s) {
       + esc(s.status_shot_at) + '. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>';
   }
   var word = AMAP_STATUS_WORDS[s.status];
-  if (word) {
+  if (word && typeof window === 'object' && window.AMAP_SHOW_COPY_FOR_GROUP === true) {
     /* data-head — заголовок вкладки запасного пути; время — время чтения, как в шаблоне (st.at). */
     var at = s.finished_at || s.status_shot_at || '';
     var head = String(account || '').split(' - ')[0] + ' — ' + word + (at ? ' · ' + at : '');
@@ -7298,18 +7441,18 @@ function amapStatusTail(account, s) {
       ? '<button type="button" class="amap-btn amap-copy-group" data-shot="' + esc(s.status_shot) + '" data-head="'
         + esc(head) + '" title="Copies the screenshot taken '
         + esc(s.status_shot_at) + '" onclick="amapCopyGroup(this)">Copy for group</button>'
-      : '<button type="button" class="amap-btn amap-copy-group" disabled title="No screenshot on the last read — read the account again">Copy for group</button>')
+      : '<button type="button" class="amap-btn amap-copy-group" disabled title="Screenshots are switched off for safety">Copy for group</button>')
       + '<small class="amap-st-hint">Copy for group — paste it into the provider&#39;s group</small></div>';
   }
   return out;
 }
 
-/* ACL-1518: окно профиля, открытое руками, чтение переоткрывает путём
-   Publish — ждёт тишины ввода на машине. Пока ждёт, строка аккаунта говорит
-   об этом; не дождалось — простой текст вместо «failed · retry». */
+/* ACL-1518/1562: окно профиля, открытое руками, чтение переоткрывает путём
+   Publish — сразу, без условий. Пока переоткрывает, строка аккаунта говорит
+   почему окно закрылось; не вышло — простой текст вместо «failed · retry». */
 /* Код отказа — строкой прямо в функциях (`'open_by_hand'`), а не общей
    переменной: тестовые стенды вырезают функции по одной (ревью PR #519). */
-/* Чьи строки сейчас показывают ожидание — чтобы не искать его в каждой. */
+/* Чьи строки сейчас показывают переоткрытие — чтобы не искать его в каждой. */
 var amapHandWaitShown = {};
 function amapHandWait(account, note) {
   if (!note && !amapHandWaitShown[account]) return;
@@ -7324,8 +7467,16 @@ function amapHandWait(account, note) {
       cell.appendChild(old);
     }
     old.textContent = note;
-    old.title = 'The profile window was opened by hand. ACL closes and reopens it with automation '
-      + 'once the computer has been idle for a minute. Leave the mouse and keyboard alone.';
+    /* ACL-1580: та же строка говорит и про очередь профилей, и про запуск
+       закрытого профиля — подсказка по тому, что сейчас происходит. */
+    old.title = /^Waiting for a free profile slot/.test(note)
+      ? 'Read all opens closed profiles one after another: this one waits until the '
+        + 'computer has memory for another profile (the same queue as Publish).'
+      : /^Opening the /.test(note)
+      ? 'The profile was closed. ACM opens it with automation for this read and closes '
+        + 'it again afterwards; profiles that were already open stay open.'
+      : 'The profile window was opened by hand. ACM closes it through Multilogin '
+        + '(nothing is killed) and reopens it with automation.';
   });
 }
 
@@ -7516,7 +7667,7 @@ var AMAP_ATTR_COLS = ['spend', 'leads', 'deposits', 'cpl', 'cpa', 'cr'];
 
 /* Подписи для узкой раскладки — теми же словами, что в шапке таблицы
    (ACL-1277). В обычной раскладке они не видны: там слово стоит в шапке. */
-var AMAP_ATTR_LABELS = {spend: 'Spend', leads: 'Leads', deposits: 'FTD',
+var AMAP_ATTR_LABELS = {spend: 'Spend', leads: 'Leads', deposits: 'FTDs',
                         cpl: 'CPL', cpa: 'CPA', cr: 'CR'};
 
 function amapAttrCell(field) {
@@ -8335,7 +8486,7 @@ function amapPollSpend(account, cell, btn, tries, per, pressed) {
   per = per || amapPeriod();
   if (!per.from || per.span === 'all') return;
   if (tries > 120) {
-    amapApplyReading(account, {state: 'failed', error: 'no answer after six minutes — check the launcher window'});
+    amapApplyReading(account, {state: 'failed', error: 'no answer after six minutes — check the Adopy Campaign Manager window'});
     return;
   }
   setTimeout(function () {
@@ -8522,7 +8673,7 @@ async function amapQueueRead(job, per) {
     }
     return done.state;
   } catch (e) {
-    var message = e && e.name === 'AbortError' ? 'Read request timed out — check the launcher window' : String(e && e.message || e);
+    var message = e && e.name === 'AbortError' ? 'Read request timed out — check the Adopy Campaign Manager window' : String(e && e.message || e);
     amapApplyReading(job.account, {state: 'failed', error: message});
     return 'failed';
   }
@@ -8543,16 +8694,19 @@ async function amapAwaitReading(account, per, tries) {
       return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null};
     }
   }
-  throw new Error('no answer after six minutes — check the launcher window');
+  throw new Error('no answer after six minutes — check the Adopy Campaign Manager window');
 }
 
 function amapSpendFailed(btn, cell, why, shot, how, code) {
   var hand = code === 'open_by_hand';
+  /* ACL-1580: профиль разлогинен в Facebook — войти может только человек;
+     текст целиком, без «retry» и без кнопки «open profile». */
+  var out = code === 'profile_logged_out';
   btn.disabled = !!amapReadAllBusy;
   /* ACL-1518: окно открыто руками — не сбой, а что сделать человеку: кнопка
      остаётся обычной Read spend, текст — целиком в ячейке. */
-  btn.className = hand ? 'amap-btn amap-read' : 'amap-btn amap-read amap-live-bad';
-  btn.textContent = hand ? 'Read spend' : 'failed · retry';
+  btn.className = hand || out ? 'amap-btn amap-read' : 'amap-btn amap-read amap-live-bad';
+  btn.textContent = hand || out ? 'Read spend' : 'failed · retry';
   btn.title = why;
   /* Причина — в самой ячейке, а не только в подсказке к кнопке.
      8 сентября прогон упал, ячейка осталась прежней, и это читалось как «не
@@ -8566,16 +8720,18 @@ function amapSpendFailed(btn, cell, why, shot, how, code) {
     /* ACL-1282: отказ разбивки относится к этим же датам и переживает
        неудачу спенда — она его не опровергает. */
     var split = cell.querySelector('.amap-split-bad');
-    cell.innerHTML = hand ? '<span class="amap-live-hand"></span>' : '<span class="amap-live-bad"></span>';
+    cell.innerHTML = hand || out ? '<span class="amap-live-hand"></span>' : '<span class="amap-live-bad"></span>';
     if (old) cell.appendChild(old);
     if (split) cell.appendChild(split);
     var bad = cell.firstChild;
-    bad.textContent = hand || why.length <= 40 ? why : why.slice(0, 39) + '…';
+    bad.textContent = hand || out || why.length <= 40 ? why : why.slice(0, 39) + '…';
     bad.title = why + (how ? ' · ' + how : '') + (shot ? String.fromCharCode(10) + 'screenshot: ' + shot : '');
   }
   /* Если прицепиться не к чему, «retry» ничего не изменит: сначала нужно
-     поднять профиль автоматизацией. Кнопка появляется ровно в этом случае. */
-  if (/профил|profile/i.test(why || '') && !btn.parentNode.querySelector('.amap-openprof')) {
+     поднять профиль автоматизацией. Кнопка появляется ровно в этом случае.
+     ACL-1580: закрытый профиль чтение поднимает само — кнопка остаётся для
+     отказов запуска; разлогиненному она не поможет. */
+  if (!out && /профил|profile/i.test(why || '') && !btn.parentNode.querySelector('.amap-openprof')) {
     var open = document.createElement('button');
     open.type = 'button';
     open.className = 'amap-btn amap-openprof';
@@ -8594,8 +8750,8 @@ function amapOpenProfile(btn) {
   btn.textContent = 'opening…';
   var body = new FormData();
   body.append('account', account);
-  /* ACL-1518: окно, открытое руками, сервер переоткрывает после тишины ввода
-     (до двух минут) — пока запрос ждёт, строка говорит, чего ждём. */
+  /* ACL-1518/1562: окно, открытое руками, сервер переоткрывает сразу — пока
+     запрос идёт, строка говорит, почему окно закрылось. */
   var per = amapPeriod();
   var watch = (per.from && per.span !== 'all') ? setInterval(function () {
     fetch('/account-spend/status?account=' + encodeURIComponent(account)
@@ -8764,6 +8920,161 @@ async function amapSend(body, msgEl) {
   }
   return false;
 }
+
+/* ACL-1620 notes { */
+/* Заметка к аккаунту (ячейка таблицы).
+   Делегирование на document: строки дерева и ячейки, пришедшие через htmx или
+   перерисовку карты, работают без повторной подписки. Текст попадает в DOM
+   только через textContent/value. Заметки никуда не отправляются, кроме
+   локального POST /api/account-notes. */
+(function () {
+  var MAX = 10000, SEL = 'td.amap-acct-note';
+  var pop = null, toast = null, cur = null, saving = 0, hideTimer = null, toastTimer = null;
+  // cur: {kind, label, original, cell}; undo: то, что вернёт Undo (одна запись за раз)
+  var undo = null;
+
+  function hideToast() { clearTimeout(toastTimer); undo = null; if (toast) toast.hidden = true; }
+
+  function first(t) { var l = t.split('\n')[0].trim(); return l.length > 60 ? l.slice(0, 60) + '\u2026' : l; }
+
+  function paint(kind, key, text) {
+    // Одна заметка может стоять в нескольких местах (аккаунт в нескольких
+    // странах; страна под разными написаниями — «CR» и «Costa Rica»).
+    document.querySelectorAll(SEL).forEach(function (el) {
+      if (el.getAttribute('data-note-kind') !== kind || (el.getAttribute('data-key') || el.getAttribute('data-account')) !== key) return;
+      el.setAttribute('data-note', text);
+      el.title = text;
+      el.classList.toggle('empty', !text);
+      var box = el.querySelector('.amap-note-box');
+      if (box) box.textContent = text ? first(text) : '';
+    });
+  }
+
+  function post(kind, label, text, ifEmpty) {
+    var body = { text: text }; body[kind] = label;
+    if (ifEmpty) body.if_empty = true;
+    return fetch('/api/account-notes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, j: j, status: r.status }; }); })
+      .then(function (res) { if (!res.ok) { var e = new Error((res.j && res.j.error) || 'failed'); e.status = res.status; throw e; } return res.j; });
+  }
+
+  function build() {
+    pop = document.createElement('div');
+    pop.className = 'amap-note-pop';
+    pop.hidden = true;
+    pop.innerHTML = '<textarea maxlength="' + MAX + '" aria-label="Note"></textarea>' +
+      '<div class="amap-note-foot"><button type="button" class="amap-note-del">Delete</button><span class="amap-note-state" role="status"></span></div>';
+    document.body.appendChild(pop);
+    pop.querySelector('.amap-note-del').addEventListener('click', del);
+  }
+
+  function state(msg, bad) {
+    var el = pop.querySelector('.amap-note-state');
+    el.textContent = msg; el.className = 'amap-note-state' + (bad ? ' bad' : '');
+  }
+
+  function open(el) {
+    if (saving) return; // пока сохранение в пути, открывать нельзя: покажет старый текст
+    if (!pop) build();
+    if (cur) close();
+    clearTimeout(hideTimer);
+    hideToast(); // открыли редактор — Undo больше не про эту заметку
+    var text = el.getAttribute('data-note') || '';
+    cur = { kind: el.getAttribute('data-note-kind'), label: el.getAttribute('data-account') || '', key: el.getAttribute('data-key') || el.getAttribute('data-account') || '', original: text, cell: el };
+    var ta = pop.querySelector('textarea');
+    ta.setAttribute('aria-label', 'Note for ' + cur.label);
+    ta.value = text; state('', false);
+    pop.hidden = false;
+    var r = el.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    // Не закрываем строку, которую правят: ниже ячейки, а если не влезает — выше.
+    var below = r.bottom + 4, top = below + h + 8 > window.innerHeight && r.top - h - 4 > 4 ? r.top - h - 4 : below;
+    pop.style.left = Math.max(4, Math.min(r.left, window.innerWidth - w - 4)) + 'px';
+    pop.style.top = Math.max(4, top) + 'px';
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length); // курсор в конце
+  }
+
+  // Закрыть и сохранить. Успех — на миг «Saved» и окно прячется; неудача —
+  // окно остаётся с текстом и «Save failed».
+  function close() {
+    if (!cur || !pop) return Promise.resolve();
+    var c = cur, text = pop.querySelector('textarea').value;
+    if (text === c.original) { cur = null; pop.hidden = true; return Promise.resolve(); }
+    state('Saving', false);
+    saving += 1;
+    return post(c.kind, c.label, text).then(function (j) {
+      hideToast(); // заметка записана заново: старый Undo затёр бы её
+      paint(c.kind, j.key || c.key, j.text || '');
+      if (cur === c) {
+        cur = null; state('Saved', false);
+        hideTimer = setTimeout(function () { if (!cur) pop.hidden = true; }, 500);
+      }
+    }).catch(function () {
+      // Не закрываем: текст остаётся в поле, иначе заметка потерялась бы молча.
+      if (cur === c) state('Save failed', true);
+    }).then(function () { saving -= 1; });
+  }
+
+  function showToast(c, previous) {
+    if (!toast) { toast = document.createElement('div'); toast.className = 'amap-note-toast'; toast.setAttribute('role', 'status'); document.body.appendChild(toast); }
+    undo = { kind: c.kind, label: c.label, previous: previous };
+    toast.hidden = false; toast.textContent = 'Deleted \u2014 ';
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = 'Undo'; toast.appendChild(b);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 5000);
+    b.addEventListener('click', function () {
+      if (saving || !undo) return; // Undo идёт через тот же охранник «сохранение в пути»
+      var u = undo;
+      clearTimeout(toastTimer);
+      saving += 1;
+      // if_empty: сервер вернёт заметку, только если её по-прежнему нет.
+      post(u.kind, u.label, u.previous, true).then(function (j) {
+        paint(u.kind, j.key || u.label, j.text || ''); hideToast();
+      }).catch(function (err) {
+        if (err && err.status === 409) { hideToast(); return; } // успели написать заново — молча
+        toast.textContent = 'Undo failed'; toastTimer = setTimeout(hideToast, 3000);
+      }).then(function () { saving -= 1; });
+    });
+  }
+
+  function del() {
+    if (!cur) return;
+    var c = cur, previous = c.original || pop.querySelector('textarea').value;
+    saving += 1;
+    post(c.kind, c.label, '').then(function (j) {
+      paint(c.kind, j.key || c.key, '');
+      if (cur === c) { cur = null; pop.hidden = true; }
+      if (previous.trim()) showToast(c, previous);
+    }).catch(function () { if (cur === c) state('Save failed', true); })
+      .then(function () { saving -= 1; });
+  }
+
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest && e.target.closest(SEL);
+    if (!el) return;
+    e.preventDefault(); e.stopPropagation(); // заметка стоит внутри <summary>: строка не раскрывается
+    open(el);
+  }, true);
+  document.addEventListener('keydown', function (e) {
+    if (cur && e.key === 'Escape') { e.preventDefault(); close(); return; }
+    // ACL-1721: Enter сохраняет и закрывает, Shift+Enter — перенос строки (Ctrl/Cmd+Enter по-прежнему сохраняют).
+    if (cur && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); close(); return; }
+    // Простой Enter — только из textarea редактора: на кнопке Delete и других контролах он работает как обычно.
+    if (cur && e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && pop && e.target === pop.querySelector('textarea')) {
+      e.preventDefault(); if (!saving) close(); return;
+    }
+    var el = e.target.closest && e.target.closest(SEL);
+    if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(el); }
+  });
+  // mousedown, а не click: к моменту click фокус и выделение уже ушли.
+  document.addEventListener('mousedown', function (e) {
+    if (!cur || !pop || pop.hidden) return;
+    if (pop.contains(e.target)) return;
+    close();
+  }, true);
+})();
+/* } ACL-1620 notes */
 
 function amapLink(select, kind, value) {
   var account = select ? select.value : '';
@@ -9082,6 +9393,64 @@ function amapRenderHits(box, hits, profiles, inst) {
    Перечитать обязательно: пока профиль не открывали здесь, дешборд не знает
    его кабинета, а после открытия знает. Без этого человек нажал бы Open,
    получил «открыт» и увидел рядом ту же надпись «never opened here». */
+/* ACL-1588: ожидание ответа ограничено. 05.10 /mlx-profile-open не отвечал
+   минутами, и кнопка висела на «opening …» — подключение так и не начиналось.
+   Профиль при этом запущен и известен, поэтому по таймауту подключение
+   продолжается и пишет строку с его profile_id / folder_id / instance. */
+var AMAP_OPEN_WAIT_MS = 75000;
+var AMAP_PROBE_WAIT_MS = 60000;
+var AMAP_OPEN_TIMEOUT_MSG = 'The profile opened but did not answer \u2014 check its window in Multilogin '
+  + '(login, checkpoint), then press Connect again.';
+var AMAP_LAST_FOUND = null;   // профиль последнего нажатия Connect — для ручной формы
+
+/* Таймаут только перестаёт ждать — запрос не отменяется: сервер открывает
+   профиль дальше, и пока он не ответил, второе открытие того же профиля не
+   начинают (ACL-1588). `settled` вызывается, когда исходный запрос закончился. */
+var AMAP_OPEN_INFLIGHT = {};   // profile_id → Promise, который завершается с запросом
+
+function amapFetchJson(url, opts, ms, settled) {
+  var timer;
+  var limit = new Promise(function (_, reject) {
+    timer = setTimeout(function () {
+      var e = new Error('timeout'); e.timeout = true;
+      reject(e);
+    }, ms);
+  });
+  var work = fetch(url, opts || {}).then(function (r) { return r.json(); });
+  if (settled) work.then(settled, settled);
+  return Promise.race([work, limit]).then(
+    function (v) { clearTimeout(timer); return v; },
+    function (e) { clearTimeout(timer); throw e; });
+}
+
+/* Ручная форма (ACL-1588): профиль, найденный поиском, подставляется в список;
+   возвращает выбранный profile_id. */
+function amapPrefillSelect(ps, keep, openProfiles, lf) {
+  if (keep || !lf || !lf.profile_id) return keep;
+  if (!openProfiles.some(function (p) { return p.profile_id === lf.profile_id; })) {
+    var o = document.createElement('option');
+    o.value = lf.profile_id;
+    o.textContent = (lf.name || lf.profile_id.slice(0, 8)) + ' \u00b7 found by search';
+    ps.appendChild(o);
+  }
+  return lf.profile_id;
+}
+
+/* Что ручная форма берёт у найденного профиля, если он тот же, что выбран. */
+function amapManualExtras(pid, picked, lf) {
+  var out = {};
+  var same = lf && lf.profile_id && lf.profile_id === pid ? lf : null;
+  if (picked && picked.folder_id) out.folder_id = picked.folder_id;
+  else if (same && same.folder_id) out.folder_id = same.folder_id;
+  if (same && same.instance) out.multilogin_instance = same.instance;
+  out.ad_account_id = same ? (same.ad_account_id || '') : '';
+  return out;
+}
+
+function amapOwnerHint(a, esc) {
+  return a && a.owner_hint ? ' <span class="acc-owner-hint">' + esc(a.owner_hint) + '</span>' : '';
+}
+
 async function amapOpenFoundProfile(box, p, inst, btn, row) {
   var msg = box.querySelector('.amap-msg');
   btn.disabled = true;
@@ -9093,10 +9462,17 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
   body.append('instance', inst);
   body.append('name', p.name || '');
   var d = null;
+  p._openTimedOut = false;
   try {
-    var r = await fetch('/mlx-profile-open', { method: 'POST', body: body, credentials: 'same-origin' });
-    d = await r.json();
-  } catch (e) { d = { ok: false, message: String(e && e.message || e) }; }
+    var done;
+    AMAP_OPEN_INFLIGHT[p.profile_id] = new Promise(function (r) { done = r; });
+    d = await amapFetchJson('/mlx-profile-open', { method: 'POST', body: body, credentials: 'same-origin' },
+                            AMAP_OPEN_WAIT_MS, function () { delete AMAP_OPEN_INFLIGHT[p.profile_id]; done(); });
+    if (d && d.timeout) p._openTimedOut = true;
+  } catch (e) {
+    if (e && e.timeout) { p._openTimedOut = true; d = { ok: false, message: AMAP_OPEN_TIMEOUT_MSG }; }
+    else d = { ok: false, message: String(e && e.message || e) };
+  }
   /* Кнопку не включать здесь: впереди ещё /mlx-profile-details и подключение,
      и второе нажатие в этом окне начало бы второе открытие (ревью ACL-1457).
      Включает её только amapOpenAndConnect, когда всё закончилось. */
@@ -9119,13 +9495,27 @@ async function amapOpenFoundProfile(box, p, inst, btn, row) {
    x01), и тогда номер вписывают сами или оставляют на потом. */
 async function amapOpenAndConnect(box, p, inst, btn, row) {
   if (btn.disabled) return;
+  if (AMAP_OPEN_INFLIGHT[p.profile_id]) {
+    /* Первое открытие ещё идёт на сервере — второе не запускаем. */
+    box.querySelector('.amap-msg').textContent =
+      'This profile is still opening — wait for it to finish, then press Connect again.';
+    return;
+  }
   btn.disabled = true;
+  AMAP_LAST_FOUND = {
+    profile_id: p.profile_id, folder_id: p.folder_id || (p._details || {}).folder_id || '',
+    instance: inst, name: p.name || '', ad_account_id: (p._details || {}).ad_account_id || ''
+  };
   try {
     var opened = await amapOpenFoundProfile(box, p, inst, btn, row);
     if ((box.querySelector('.amap-inst').value || 'A') !== inst) return;
     await amapConnect(box, p, inst, btn, opened);
   } finally {
-    btn.disabled = false;
+    /* Кнопка остаётся выключенной, пока не закончился исходный запрос на
+       открытие, — а не только до таймаута. */
+    var pending = AMAP_OPEN_INFLIGHT[p.profile_id];
+    if (pending) pending.then(function () { btn.disabled = false; });
+    else btn.disabled = false;
   }
 }
 
@@ -9323,7 +9713,14 @@ async function amapConnect(box, profile, instance, btn, opened) {
   name = (prompt('Ad account name:', name) || '').trim();
   if (!name) return;
   var act = (d.ad_account_id || '').trim();
-  if (!act) {
+  if (!act && profile._openTimedOut) {
+    /* Профиль не ответил: второй раз спрашивать у него то же самое значит ждать
+       ещё минуту. Номер впишет человек — или останется пустым, как и раньше. */
+    var typed0 = prompt(AMAP_OPEN_TIMEOUT_MSG + '\n\nThe profile will still be saved here. '
+      + 'Paste the Ads Manager link or the account number \u2014 or leave this empty to fill it in later:', '');
+    if (typed0 === null) return;
+    act = (typed0 || '').trim();
+  } else if (!act) {
     /* Спрашивать в последнюю очередь. Номер знает сам кабинет: Ads Manager
        называет его в собственном адресе, и профиль всё равно приходится
        открыть, чтобы с аккаунтом что-то делать. Раньше здесь сразу просили
@@ -9341,9 +9738,11 @@ async function amapConnect(box, profile, instance, btn, opened) {
     probe.append('instance', instance);
     var found = null;
     try {
-      var pr = await fetch('/account-probe/ad-account', { method: 'POST', body: probe, credentials: 'same-origin' });
-      found = await pr.json();
-    } catch (e) { found = { ok: false, error: String(e && e.message || e) }; }
+      found = await amapFetchJson('/account-probe/ad-account',
+        { method: 'POST', body: probe, credentials: 'same-origin' }, AMAP_PROBE_WAIT_MS);
+    } catch (e) {
+      found = { ok: false, error: (e && e.timeout) ? AMAP_OPEN_TIMEOUT_MSG : String(e && e.message || e) };
+    }
     msg.textContent = '';
 
     var head, seed;
@@ -9383,9 +9782,25 @@ async function amapConnect(box, profile, instance, btn, opened) {
   });
   var pd = null; try { pd = await patch.json(); } catch (e) {}
   if (!pd || !pd.ok) {
-    btn.disabled = false;
+    /* кнопку включает amapOpenAndConnect: пока исходное открытие не закончилось, она выключена */
     msg.textContent = (pd && pd.error) ? pd.error : ('could not save (HTTP ' + patch.status + ')');
     msg.className = 'amap-msg bad';
+    return;
+  }
+  /* ACL-1588: страна необязательна. Пустая не ходит в /account-links — там
+     400 «A country or asset name is required», хотя строка в карте уже
+     записана и всё получилось. */
+  if (profile._openTimedOut) {
+    /* Строка записана с профилем, но человеку надо успеть прочитать, что
+       профиль не ответил, — страницу перезагружаем не сразу (и со страной,
+       и без неё). */
+    msg.className = 'amap-msg bad';
+    msg.textContent = 'Connected: ' + name + ' (saved with its profile). ' + AMAP_OPEN_TIMEOUT_MSG;
+    await new Promise(function (r) { setTimeout(r, 6000); });
+  }
+  if (!(country || '').trim()) {
+    if (!profile._openTimedOut) { msg.className = 'amap-msg'; msg.textContent = 'Connected: ' + name; }
+    location.reload();
     return;
   }
   amapSend({ action: 'link', kind: 'country', value: country, account: name }, msg);
@@ -11752,6 +12167,24 @@ window.cbPreview = function(form, done, onlySlot) {
  * собранную. Единственная ошибка, которая не держит, — пустая ссылка:
  * её добавляют и после сборки, так решил владелец.
  */
+/* ACL-1604: проверка аккаунтов — один запрос на нажатие, по тем, что идут в
+ * очередь. Любая неудача (сеть, не тот ответ) — null: тогда всё как раньше. */
+window.cbPreflightFetch = function (accounts) {
+  var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+  var timer = ctl ? setTimeout(function () { ctl.abort(); }, 8000) : null;
+  return fetch('/api/publish-preflight?accounts=' + encodeURIComponent(accounts.join(',')), ctl ? { signal: ctl.signal } : {})
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { return d && Array.isArray(d.accounts) ? d : null; })
+    .catch(function () { return null; })
+    .then(function (d) { if (timer) clearTimeout(timer); return d; });
+};
+window.cbPreflightDecision = function (queued, skipped, runAnyway) {
+  try {
+    fetch('/api/publish-preflight/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queued: queued, skipped: skipped, run_anyway: runAnyway }) }).catch(function () {});
+  } catch (e) { /* журнал — не условие запуска */ }
+};
+
 // The drawer checks real server diagnostics without opening a preview panel.
 function cbDrawerRefreshIndicators() {
   if (!window.cbTree) return;
@@ -11947,8 +12380,34 @@ window.cbPublishAll = function (onProgress, picked) {
 
   var names = forms.map(cbFormTitle);
 
+  // ACL-1604: до подтверждения — быстрая проверка аккаунтов по уже известным
+  // данным (профили не открываются). Не ответила — прежнее подтверждение.
+  // Помощник живёт на window: выдернутый из страницы кусок кода (тесты) его
+  // не видит — тогда проверки нет, и подтверждение открывается сразу, как раньше.
+  var pfAsk = function (pf) {
+  var bad = {}, badList = [];
+  ((pf && pf.accounts) || []).forEach(function (a) {
+    if (a && a.ready === false) { bad[String(a.account).toLowerCase()] = a; badList.push(a); }
+  });
+  var badForms = forms.filter(function (f) { return bad[cbFormAccount(f).toLowerCase()]; });
+  var anyway = false;
+  var pfHtml = '';
+  if (badList.length) {
+    pfHtml = '<div class="cb-preflight" style="border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin:0.5rem 0;font-size:0.82rem">'
+      + '<strong style="color:var(--bad)">Not ready (' + badList.length + ')</strong> — skipped unless you run them anyway:<br>'
+      + badList.map(function (a) {
+          return '<div>' + aclEscHtml(a.account) + ' — ' + aclEscHtml((a.reasons || []).map(function (r) {
+            return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
+          }).join('; ')) + '</div>';
+        }).join('')
+      + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway"> Run anyway</label></div>';
+  }
+  var notes = ((pf && pf.accounts) || []).filter(function (a) { return a.ready !== false && (a.notes || []).some(function (n) { return n.code === 'open_now'; }); });
+  if (notes.length) pfHtml += '<div class="cb-preflight-note" style="color:var(--muted);font-size:0.8rem">'
+    + aclEscHtml(notes.map(function (a) { return a.account; }).join(', ')) + ': profile is open — the robot will reuse or reopen it.</div>';
+
   _safeConfirm(only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?',
-    (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
+    pfHtml + (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
     + 'Accounts: <strong>' + forms.length + '</strong><br>'
     + (only
       ? '<div class="cb-selected-list" style="font-size:0.85rem;line-height:1.5">' + listed.join('<br>') + '</div>'
@@ -11967,11 +12426,19 @@ window.cbPublishAll = function (onProgress, picked) {
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
     + 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook</span>',
     function () {
-      var got = _runPublishQueue(forms, onProgress || function () {},
+      var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
+      if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
+      if (!go.length) { window.alert('No account is ready to run. Fix the listed accounts or tick "Run anyway".'); return; }
+      var got = _runPublishQueue(go, onProgress || function () {},
         only ? function (form) { return cbPickedIn(form, only); } : null);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     },
     { confirmLabel: only ? 'Publish selected → drafts' : 'Publish all → drafts' });
+  var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
+  if (box) box.addEventListener('change', function () { anyway = box.checked; });
+  };
+  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch(forms.map(cbFormAccount)).then(pfAsk);
+  else pfAsk(null);
 };
 
 /* Имя карточки для подтверждения. */
@@ -12023,6 +12490,28 @@ function cbSentCampaignNames(fd) {
  * Stop — только своё задание. Потерянный статус (дешборд перезапущен)
  * по-прежнему останавливает всю вкладку: неотправленные аккаунты не едут,
  * новые не принимаются, пока страницу не перезагрузят. */
+/* ACL-1603: потолок занят окнами, оставленными открытыми на проверку. */
+function cbReviewWait(q) {
+  var names = (q && q.kept_accounts) || [];
+  if (names.length) return 'waiting: review windows still open for ' + names.join(', ') + ' — close them to continue';
+  var n = Math.max(1, parseInt(q && q.kept, 10) || 1);
+  return 'waiting: ' + n + ' review window' + (n === 1 ? ' is' : 's are') + ' still open — close them to continue';
+}
+/* «Release» у каждого оставленного окна: снять место, не закрывая окно. */
+function cbReviewRelease(q) {
+  return ((q && q.kept_accounts) || []).map(function (a) {
+    return ' <a href="#" class="cbd-q-retry" data-cb-release-kept="' + aclEscHtml(a) + '">Release ' + aclEscHtml(a) + '</a>';
+  }).join('');
+}
+if (typeof document.addEventListener === 'function') document.addEventListener('click', function (ev) {   // в песочнице тестов страницы документа-события нет
+  var t = ev.target && ev.target.closest ? ev.target.closest('[data-cb-release-kept]') : null;
+  if (!t) return;
+  ev.preventDefault();
+  var fd = new FormData();
+  fd.set('account', t.getAttribute('data-cb-release-kept'));
+  fetch('/publish-jobs/kept/release', { method: 'POST', body: fd }).catch(function () { /* следующий опрос покажет */ });
+});
+
 /* Ключ одной отправки Publish (ACL-1399) — см. start_job(request_id). */
 function cbRequestId() {
   try {
@@ -12169,6 +12658,12 @@ function cbNewRun(notify) {
     cbPostPublish(fd)
       .then(function (data) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
+        if (data.error && data.duplicate) {
+          // ACL-1603: у аккаунта уже есть идущее или ждущее задание.
+          if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">' + aclEscHtml(data.error) + '</span>';
+          settle(e, { account: e.label, state: 'dup', why: data.error, skipped: skipped });
+          return;
+        }
         if (data.error) {
           if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
           settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped });
@@ -12796,8 +13291,8 @@ window.cbPublish = function(form) {
       : '<br>')
     + '<br>'
     + '<span style="color:var(--muted);font-size:0.85rem">The RPA attaches to the Multilogin profile through MLX automation '
-    + '(no need to open the profile first; if it is open by hand, close its window first — '
-    + 'the robot will not close it for you).</span><br>'
+    + '(no need to open the profile first; a window opened by hand is closed through Multilogin '
+    + 'and reopened with automation).</span><br>'
     // Заблокированный экран останавливает страницу так же, как свёрнутое
     // окно, только сильнее: система уходит на защищённый рабочий стол, и
     // загрузка встаёт. 10 сентября так вышло 42 минуты на файл, который
@@ -12841,13 +13336,30 @@ window.cbPublish = function(form) {
       + bodyHtml;
   }
 
+  // ACL-1604: та же проверка аккаунта, что у «Publish all», — один запрос на нажатие.
+  var pfAsk = function (pf) {
+  var mine = (((pf && pf.accounts) || []).filter(function (x) { return x && x.ready === false; }))[0];
+  var anyway = false;
+  if (mine) bodyHtml = '<div class="cb-preflight" style="border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin:0.5rem 0;font-size:0.82rem">'
+    + '<strong style="color:var(--bad)">Not ready</strong> — ' + aclEscHtml(mine.account) + ' — '
+    + aclEscHtml((mine.reasons || []).map(function (r) {
+        return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
+      }).join('; '))
+    + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway"> Run anyway</label></div>' + bodyHtml;
   _safeConfirm(ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?', bodyHtml, function() {
+    if (pf && window.cbPreflightDecision) window.cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
+    if (mine && !anyway) { window.alert(accLabel + ' is not ready — fix it, or tick "Run anyway".'); return; }
     if (onlySlot || ticked.length) {
       var got = _runPublishQueue([form], window.cbTree.showQueue, onlySlot || ticked);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     }
     else _doCbPublish(form);
   }, { confirmLabel: (warn || lostTargeting.length) ? 'Build anyway' : 'Publish → draft' });
+  var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
+  if (box) box.addEventListener('change', function () { anyway = box.checked; });
+  };
+  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch([accLabel]).then(pfAsk);
+  else pfAsk(null);
 };
 
 // Весь аккаунт без превью — кнопка Publish на странице страны. Идёт через
@@ -13029,8 +13541,12 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var doneLabel = isCancelled ? 'stopped'
       : (isCancelling ? 'stopping… (the Multilogin window stays open)'
       // ACL-1321: профилей разом — сколько тянет память машины; остальные ждут.
-      : isQueued ? (queue.reason === 'profile'
+      : isQueued ? (queue.hold === 'stopped_robot'
+          ? 'queued — waiting for the stopped robot on this profile to let go'
+          : queue.reason === 'profile'
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
+          : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
+          : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
@@ -13398,7 +13914,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   function addManual() {
     var pid = (el('ac-new-prof') || {}).value || '';
     var name = ((el('ac-new-label') || {}).value || '').trim() || accountForProfile(pid);
-    var ad = ((el('ac-new-adid') || {}).value || '').trim() || detectedFor(pid);
+    var extras = amapManualExtras(pid, openProfiles.filter(function (p) { return p.profile_id === pid; })[0], AMAP_LAST_FOUND);
+    var ad = ((el('ac-new-adid') || {}).value || '').trim() || detectedFor(pid) || extras.ad_account_id;
     var country = ((el('ac-new-country') || {}).value || '').trim();
 
     if (!name) { say('Name could not be worked out — enter it manually', 'err'); openManual(); return; }
@@ -13409,7 +13926,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var picked = openProfiles.filter(function (p) { return p.profile_id === pid; })[0];
     var payload = { account_name: name, ad_account_id: ad };
     if (pid) payload.profile_id = pid;
-    if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
+    if (extras.folder_id) payload.folder_id = extras.folder_id;
+    if (extras.multilogin_instance) payload.multilogin_instance = extras.multilogin_instance;
     if (country) payload.country = country;
 
     var btn = el('ac-add-btn');
@@ -13487,7 +14005,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         + '<input type="checkbox" class="ac-check" data-removable="' + (removable ? '1' : '0')
         + '" aria-label="select ' + esc(a.label) + '">' + '</td>'
         + '<td><div class="acc-name">' + esc(a.label) + '</div>'
-        + '<div class="acc-meta">' + pill + local + '</div></td>'
+        + '<div class="acc-meta">' + pill + local
+        + amapOwnerHint(a, esc)
+        + '</div></td>'
         + '<td>' + countryCell(a) + '</td>'
         + '<td><input class="ac-adid" type="text" style="width:12rem" value="'
         + esc(a.ad_account_id || detectedFor(a.suggested_profile))
@@ -13521,7 +14041,14 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     box.innerHTML = html + '</tbody></table>';
 
     var ps = el('ac-new-prof');
-    if (ps) { var keep = ps.value; ps.innerHTML = profileOptions('', ''); ps.value = keep; }
+    if (ps) {
+      var keep = ps.value;
+      ps.innerHTML = profileOptions('', '');
+      /* ACL-1588: профиль, найденный поиском, подставляется в ручную форму —
+         после таймаута Connect человек не должен выбирать его заново. */
+      keep = amapPrefillSelect(ps, keep, openProfiles, AMAP_LAST_FOUND);
+      ps.value = keep;
+    }
 
     var cdl = el('ac-countries');
     if (cdl) {
