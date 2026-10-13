@@ -162,6 +162,18 @@ with responsive light/dark styling, reduced motion and connection retry messages
 - Real-Chromium layout regressions cover three hosts, both themes and 280/720/1040 px
   with synthetic long values. This source change does not claim stable delivery.
 
+## Country campaign footer shares the connection-form inset — ACL-1840
+
+- The pending campaign table's per-country explanation and change journal receive
+  scoped padding from the country-card stylesheet, aligned with the workbook
+  notice and connection form. The footer has explicit space above and below;
+  long history text and disclosure labels wrap inside narrow cards.
+- This additive rule is dormant on main until ACL-1798's campaign footer mounts.
+  Verification uses sanitized markup/CSS from preview
+  `5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d`, real Chromium geometry and keyboard
+  disclosure at 1280, 1024 and 320 px in both themes. It does not import the
+  preview's unrelated changes or assert full integrated/installed verification.
+
 ## Account-label ID suffix keeps existing alias precedence — ACL-1824
 
 - A long numeric account-ID suffix is removed only after the existing tail lookup

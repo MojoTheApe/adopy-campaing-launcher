@@ -1,0 +1,31 @@
+<!-- ACL-1840 sanitized layout fixture. Source: preview 5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d,
+     _campaign_table.html hc_after() and affected CSS, mounted by
+     _account_map_country.html directly after the account table. All text is synthetic.
+     Main does not yet contain this component; this proves CSS/markup compatibility,
+     not the full preview JavaScript or an installed application's integration. -->
+<style>
+  .hc { --adopy-text: #202a39; --adopy-text-muted: #606c80;
+    --adopy-primary: #2563eb; --adopy-focus: #2563eb;
+    margin-top: 1.5rem; min-width: 0; max-width: 100%; color: var(--adopy-text);
+    font-family: ui-sans-serif, system-ui; font-size: 0.875rem; line-height: 1.45; }
+  :root[data-theme="dark"] .hc { --adopy-text: #edf2fa; --adopy-text-muted: #a4b3c8;
+    --adopy-primary: #83aaff; --adopy-focus: #83aaff; }
+  .hc *, .hc *::before, .hc *::after { box-sizing: border-box; }
+  .hc :is(button, select, input, summary, .hc-scroll):focus-visible { outline: 2px solid var(--adopy-focus); outline-offset: 2px; }
+  .hc-foot { padding: 0.5rem 0; color: var(--adopy-text-muted); font-size: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
+  .hc-hist { margin-top: 0.5rem; font-size: 0.8125rem; }
+  .hc-hist > summary { cursor: pointer; color: var(--adopy-primary); width: max-content; }
+  .hc-hist-body { padding: 0.375rem 0; color: var(--adopy-text-muted); }
+  .hc-hist-line { padding: 0.125rem 0; color: var(--adopy-text); }
+</style>
+<details class="amap-country" open>
+  <summary>Synthetic country</summary>
+  <table style="width:100%"><tbody><tr><td>Two synthetic accounts</td></tr></tbody></table>
+  <section class="hc hc-after" data-hc-after>
+    <div class="hc-foot" data-hc="foot"><span>Showing 0 campaigns. Reach and frequency are read per level from Meta and never summed up the tree.</span><span>Status shows the confirmed reading.</span></div>
+    <details class="hc-hist" data-hc="history"><summary>What was changed here</summary>
+      <div class="hc-hist-body" data-hc="history-body">Open to read the record.</div></details>
+  </section>
+  <div class="amap-empty">2 of 2 accounts have no rows in the workbook for this date.</div>
+  <div class="amap-add">Connection form</div>
+</details>
