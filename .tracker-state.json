@@ -34452,7 +34452,51 @@
         "session": "r1766f-20261014",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T17:10:37+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 766,
+          "pr": 794,
+          "branch": "codex/acl-1766-map-pixel",
+          "head_sha": "6ee6db04d5bff7b1551df279530f21d61e40bef6",
+          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "63ee8cf1c3003300f25675e2f4ce1c5fdfd90ad781cd39460e7806d8eeab8fac",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1766F",
+            "implementer": "Worker-RF1766",
+            "review_session": "r1766f-20261014",
+            "execution_lane": "f16050b41e3140beb5bf6fe3bdefd90f",
+            "head_sha": "6ee6db04d5bff7b1551df279530f21d61e40bef6",
+            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "tree_sha": "c875b7ef554e422f66a1895ac8ae267ca4f9bf58",
+            "report": "Independent source review of ACL-1766 / PR 794 at head 6ee6db04 against current main 73136acc (main is an ancestor of the head). Reviewer-R1766F implemented none of it.\n\nScope: full diff origin/main...head, 5 files (enrich_draft.py, fb_api/creator.py, web/publish_api.py, report.html, tests/test_acl1766_map_pixel.py), +248/-11.\n\nVerified by reading the code:\n- enrich_draft: a draft page/pixel wins, the account map is the next source; the source (draft/map) is kept in plain attributes read only by the API plan; RPA does not read pixel_id/page_source/pixel_source, so the RPA path is unchanged (one file, 7 lines).\n- resolve_page_pixel: a page or pixel that is set (draft or map) must be in the account lists UNCONDITIONALLY, including an empty list; a mismatch raises PlanError before any write and names the source and id; nothing is guessed or substituted. Without a map value: one account page/pixel is used and labelled \"account default\"; several pages/pixels keep the previous error. This does not contradict the 2026-10-14 Pages decision (ACL-1880): automatic still takes the first available Page; only an explicit draft/map Page is validated against the account.\n- Plan summary carries page_source/pixel_source and the dashboard shows them; strings are English and escaped.\n- Readback: CTA/locales checks; \"Not read\" only when Meta returned nothing for an expected field; ok is still strict equality, so nothing was loosened; an empty-language draft reads back ok.\n- All blocking items of the earlier out-of-tracker review (empty-list ownership hole, language-less false mismatch, repeated error text, missing tests) are fixed and pinned by tests.\n\nVerification:\n- CI on head 6ee6db04: all checks pass (Linux 1-3, Windows, tracker-link, process instructions, installer verification, descriptor); two build jobs skipped as expected.\n- Detached worktree at the head: tests/test_acl1766_map_pixel.py + tests/test_acl1761_*.py, PYTHONUTF8=1 pytest -k \"not browser\": 247 passed, 2 deselected.\n- Mutation: map page wins without the account check (replacing the check with `if False`) -> 2 failures in test_foreign_or_unlisted_map_page_writes_nothing; the milder variant keeping the non-empty-list guard -> 1 failure (NoPagesMeta). Reverted; worktree clean.\n- Tests are legitimate: new file only, no existing test edited.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Minor, non-blocking: adspixels is read with a single page of 50, so a valid map pixel on an account with more than 50 pixels would be refused (fails safe).",
+            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              766
+            ],
+            "recorded_at": "2026-10-14T21:27:04+00:00",
+            "issue_scopes": {
+              "766": "63ee8cf1c3003300f25675e2f4ce1c5fdfd90ad781cd39460e7806d8eeab8fac"
+            }
+          },
+          "lane": {
+            "id": "f16050b41e3140beb5bf6fe3bdefd90f",
+            "pr": 794,
+            "issues": [
+              766
+            ],
+            "actor": "Reviewer-R1766F",
+            "session": "r1766f-20261014",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-14T17:10:37+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T21:27:43+00:00"
+        }
       }
     }
   }
