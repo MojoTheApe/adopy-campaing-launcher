@@ -208,3 +208,30 @@ def test_warnings_are_listed_in_the_confirm_dialog(browser):
         assert not state["errors"], state["errors"]
     finally:
         state["ctx"].close()
+
+
+def test_a_renamed_campaign_is_matched_by_its_builder_name_and_only_warns(browser):
+    """ACL-1902: ответ keyed по имени из билдера; `published_as` не ломает привязку вердиктов."""
+    reply = {"account": "Demo", "results": [{"campaign_name": "x", "published_as": "x_2", "error": None, "audit": [
+        {"rule": "existing_diffs", "status": "warning", "ads": [],
+         "detail": "Will be published as 'x_2': 'x' (earlier campaign) is left as is."}]}],
+        "error": "", "account_audit": None}
+
+    def make_reply():
+        name = p.evaluate("() => document.querySelector('.cbd-host .cb-slot:not([hidden]) .cb-name-hidden').value")
+        reply["results"][0]["campaign_name"] = name
+        reply["results"][0]["published_as"] = name + "_2"
+        return reply
+
+    p, state = _open(browser, "api", make_reply)
+    try:
+        _first(p)
+        _fill_valid(p)
+        p.locator(".cbd-pf [data-act='pf-check']").click()
+        p.wait_for_function("document.querySelector('.cbd-pf-line[data-rule=\"existing_diffs\"]')"
+                            ".classList.contains('cbd-pf-warning')")
+        assert "Will be published as" in p.locator(".cbd-pf-line[data-rule='existing_diffs']").inner_text()
+        assert p.locator(".cbd-publish-all").is_enabled(), "переименование не блокирует публикацию"
+        assert not state["errors"], state["errors"]
+    finally:
+        state["ctx"].close()

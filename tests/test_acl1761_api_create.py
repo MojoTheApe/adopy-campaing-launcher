@@ -507,7 +507,9 @@ class FakeMeta:
                 return self._page(rows, params)
             want = params["filtering"][0]["value"]
             live = params.get("effective_status")      # как Meta: удалённые/архивные в выдачу не попадают
-            return {"data": [self._out(o) for o in self._of("campaign") if want in o.get("name", "")
+            equal = params["filtering"][0].get("operator") == "EQUAL"
+            return {"data": [self._out(o) for o in self._of("campaign")
+                             if (o.get("name", "") == want if equal else want in o.get("name", ""))
                              and (not live or o.get("status") in live)]}
         oid = parts[0]
         if len(parts) == 2:
@@ -515,6 +517,10 @@ class FakeMeta:
                 return {"data": [self._out(o) for o in self._of("adset", "campaign_id", oid)]}
             if parts[1] == "ads":
                 rows = []
+                parent = self.objects.get(oid, {})
+                if parent.get("_kind") == "campaign":      # /{campaign}/ads - объявления всех его групп
+                    sets = {a["id"] for a in self._of("adset", "campaign_id", oid)}
+                    return {"data": [self._out(o) for o in self._of("ad") if o.get("adset_id") in sets]}
                 for o in self._of("ad", "adset_id", oid):
                     row = self._out(o)
                     cre = self._out(self.objects[o["creative"]["creative_id"]])
@@ -690,7 +696,7 @@ def test_existing_campaign_with_the_same_name_but_not_ours_is_not_touched(tmp_pa
     foreign = meta._new("campaign", name="MX Leads 1", status="ACTIVE")
     out, _ = _run(meta, _draft(tmp_path, ads=1))
     # ACL-1902: чужую не трогаем и не блокируемся - публикуем под свободным именем.
-    assert out.error == "" and out.campaign_name == "MX Leads 1_2"
+    assert out.error == "" and out.published_as == "MX Leads 1_2"
     assert meta.objects[foreign]["status"] == "ACTIVE"
     assert not any(o.get("campaign_id") == foreign for o in meta.objects.values())
 
@@ -781,8 +787,8 @@ def test_children_of_our_campaign_are_matched_by_name_without_their_label(tmp_pa
     meta = FakeMeta()
     _run(meta, _draft(tmp_path, ads=2))
     for o in meta.objects.values():
-        if o["_kind"] in ("adset", "ad"):
-            o.pop("adlabels", None)            # Meta «потеряла» метки детей
+        if o["_kind"] == "ad":
+            o.pop("adlabels", None)            # Meta «потеряла» метки объявлений (потерю у групп ловит ACL-1902)
     n_posts = len(meta.posts)
     out, client = _run(meta, _draft(tmp_path, ads=2))
     assert client.writes == 0 and len(meta.posts) == n_posts

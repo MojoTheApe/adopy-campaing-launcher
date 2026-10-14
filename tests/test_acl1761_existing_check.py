@@ -41,7 +41,7 @@ def test_reused_adset_with_advantage_plus_goes_to_a_new_name(tmp_path):
     # В плане теперь два объявления: второе было бы создано в старой группе.
     out, client = _run(meta, _draft(tmp_path, ads=2))
     # ACL-1902: расхождение у своей старой группы - не блокировка, а новое имя; под старую ничего не пишем.
-    assert out.error == "" and out.campaign_name == "MX Leads 1_2"
+    assert out.error == "" and out.published_as == "MX Leads 1_2"
     assert any("ad set 'MX Leads 1': placements (Advantage+ vs manual list)" in w for w in out.warnings)
     old = next(o for o in meta.objects.values() if o["_kind"] == "campaign" and o["name"] == "MX Leads 1")
     assert len([o for o in meta.objects.values() if o["_kind"] == "ad"
@@ -55,7 +55,7 @@ def test_reused_campaign_with_other_budget_goes_to_a_new_name(tmp_path):
     camp["daily_budget"] = "999"
     before = _write_count(meta)
     out, _ = _run(meta, _draft(tmp_path, ads=2))
-    assert out.error == "" and out.campaign_name == "MX Leads 1_2"
+    assert out.error == "" and out.published_as == "MX Leads 1_2"
     assert any("daily budget" in w for w in out.warnings)
     assert camp["daily_budget"] == "999" and _write_count(meta) > before
 
@@ -76,7 +76,7 @@ def test_difference_in_a_later_adset_goes_to_a_new_name(tmp_path):
     second2.name = "MX Leads 1b"
     draft2.ad_sets.append(second2)
     out2, _ = _run(meta, draft2)
-    assert out2.error == "" and out2.campaign_name == "MX Leads 1_2"
+    assert out2.error == "" and out2.published_as == "MX Leads 1_2"
     assert any("'MX Leads 1b'" in w for w in out2.warnings)
     assert bad["targeting"]["age_max"] == 65 and _write_count(meta) > before
 
@@ -122,16 +122,12 @@ def test_check_plan_without_differences_has_an_empty_list(tmp_path):
     assert fresh["plan"]["summary"]["existing_differences"] == []
 
 
-def test_plan_panel_shows_the_warning_block():
+def test_plan_panel_shows_the_published_as_name():
     data = copy.deepcopy(_PLAN_DATA)
-    summ = data["results"][0]["plan"]["summary"]
-    summ["existing"] = True
-    summ["existing_differences"] = [{"object": "ad set 'MX <1>'", "kind": "adset",
-                                     "differences": ["placements (Advantage+ vs manual list)"]}]
+    data["results"][0]["published_as"] = "MX <1>_2"
     html = _run_plan_node(data)["html"]
-    assert "Already exists in Ads Manager — differs from the builder" in html
-    assert "placements (Advantage+ vs manual list)" in html and "MX &lt;1&gt;" in html
-    assert "Already exists in Ads Manager" not in _run_plan_node(_PLAN_DATA)["html"]
+    assert "published as" in html and "MX &lt;1&gt;_2" in html
+    assert "published as" not in _run_plan_node(_PLAN_DATA)["html"]
 
 
 def test_describe_diffs_names_manual_changes_too():
@@ -152,6 +148,6 @@ def test_active_reused_adset_or_campaign_goes_to_a_new_name(tmp_path):
         obj["status"] = "ACTIVE"
         before = _write_count(meta)
         out, client = _run(meta, _draft(tmp_path, ads=2))
-        assert out.error == "" and out.campaign_name == "MX Leads 1_2", kind
+        assert out.error == "" and out.published_as == "MX Leads 1_2", kind
         assert any("status (builder: PAUSED, Meta: ACTIVE)" in w for w in out.warnings), kind
         assert obj["status"] == "ACTIVE" and _write_count(meta) > before, kind

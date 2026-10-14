@@ -497,8 +497,6 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     elif renamed:
         # ACL-1902: имя занято другой кампанией - робот возьмёт свободное, это не блокирует публикацию.
         put("existing_diffs", WARNING, renamed)
-    elif existing:
-        put("existing_diffs", ERROR, cr._existing_message(existing))
     else:
         put("existing_diffs", OK)
 
