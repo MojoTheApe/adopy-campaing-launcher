@@ -8845,20 +8845,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "799": {
-        "actor": "Worker-RJ1799",
-        "session": "wrj1799-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1799-country-workbench",
-        "worktree": "C:\\wk-rj1799",
-        "id": "fdf4421919b24b229ba06f5ac8371b2a",
-        "issue": 799,
-        "state": "handoff",
-        "started_at": "2026-10-14T23:06:01+00:00",
-        "from_status": "status:todo",
-        "pr": 803,
-        "report": "# Refresh ACL-1799\n\nMerged origin/main (incl. 1760/1761/1798/1766/1778/1769) into codex/acl-1799-country-workbench. Head: 253bcac8.\n\nConflicts: none (clean merge). One follow-up fix commit: the workbench's applyCreative in report.html still picked the ad card by the old hidden-card class (cbd-ad-off), which 1769 removed (cards now stack, no Ad dropdown). It now takes the card by adIndex, and test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown passes again.\n\nTests (not browser): 1799 country workbench, 1769 two-column layout, builder_second_primary_text, the_builder drawer/tree, test_builder_* files, header, 1798 inventory: 181 passed after the fix (one failure before it, the 1769 one). Node harness tests/cw_harness.cjs against report.html: ok."
       }
     },
     "tasks": {
@@ -12569,25 +12555,25 @@
             "session": "wrj1799-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RJ1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-RG1799",
-          "session": "wrg1799-20261014",
+          "actor": "Worker-RJ1799",
+          "session": "wrj1799-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1799-country-workbench",
-          "worktree": "C:\\wk-rg1799",
-          "id": "c278dc6373d84ee493f781e0291839bf",
+          "worktree": "C:\\wk-rj1799",
+          "id": "fdf4421919b24b229ba06f5ac8371b2a",
           "issue": 799,
           "state": "handoff",
-          "started_at": "2026-10-14T17:06:32+00:00",
+          "started_at": "2026-10-14T23:06:01+00:00",
           "from_status": "status:todo",
           "pr": 803,
-          "report": "ACL-1799 refresh: merged origin/main (73136acc, incl. ACL-1760/1761) into codex/acl-1799-country-workbench. New head d3c4cb0a. Merge only.\nConflicts: none (clean automatic merge).\nTests (not browser): the branch's test files (test_acl1799_*, 1769, builder_*, drawer, the_builder_drawer) plus tests/test_acl1761_*.py and tests/test_acl1760_api_read.py: all passed (about 355 tests). No test edits."
+          "report": "# Refresh ACL-1799\n\nMerged origin/main (incl. 1760/1761/1798/1766/1778/1769) into codex/acl-1799-country-workbench. Head: 253bcac8.\n\nConflicts: none (clean merge). One follow-up fix commit: the workbench's applyCreative in report.html still picked the ad card by the old hidden-card class (cbd-ad-off), which 1769 removed (cards now stack, no Ad dropdown). It now takes the card by adIndex, and test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown passes again.\n\nTests (not browser): 1799 country workbench, 1769 two-column layout, builder_second_primary_text, the_builder drawer/tree, test_builder_* files, header, 1798 inventory: 181 passed after the fix (one failure before it, the 1769 one). Node harness tests/cw_harness.cjs against report.html: ok."
         },
         "pr": 803,
-        "queued_at": "2026-10-14T17:09:22+00:00",
+        "queued_at": "2026-10-14T23:10:45+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
         "return_operation": {
           "id": "c77332b6e397471b83fab1dfe1f3be8f",
@@ -18060,7 +18046,8 @@
       775,
       797,
       800,
-      815
+      815,
+      799
     ],
     "review": null,
     "history": [
@@ -34957,6 +34944,13 @@
         "issue": 815,
         "pr": 818,
         "actor": "Worker-RH1815"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T23:10:45+00:00",
+        "issue": 799,
+        "pr": 803,
+        "actor": "Worker-RJ1799"
       }
     ],
     "policy": {
