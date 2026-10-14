@@ -28344,6 +28344,26 @@
           ],
           "report": "The repository owner stated in this conversation that ACL-1529 is paused and is not currently being worked on. The owner has authorized proceeding with the ACL-1892 common workflow upgrade. This is explicit stopped-owner evidence, not a timeout inference.\n\nTransfer only the existing pre-stage ACL-1529 integration ownership to the actual Root Coordinator using the supported old pinned engine. Cancel that unmerged candidate and its remaining intake to release the single integration reservation. Preserve source/task author identities, source approval, status, code, PRs, branches, manifests and history. ACL-1529 remains unfinished and paused; none of its changes are merged or completed. The old Coordinator must reacquire a new supported integration before later resuming.\n\nDo not cancel an actual stage merge or reset any permanent branch. Cancel must independently check the candidate PR remains unmerged. Then freeze only the already independently Approved ACL-1892 source; no unrelated backlog is shipped.\n\nThe owner subsequently explicitly replied \u00ab\u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e\u00bb to transferring and releasing this reservation while preserving the task/code/PR/history. Supported takeover has succeeded."
         }
+      },
+      {
+        "event": "intake-cancelled",
+        "at": "2026-10-14T07:34:46+00:00",
+        "intake": {
+          "id": "995b275595744f35ba94cc61dbc96df1",
+          "actor": "Coordinator-BA4E69",
+          "session": "acl_upgrade_root_b13315d4c8acca4d15af2c75",
+          "state": "cancelled",
+          "issues": [
+            529
+          ],
+          "remaining": [
+            529
+          ],
+          "batches": [],
+          "started_at": "2026-10-13T22:16:51+00:00",
+          "ineligible": {},
+          "report": "The repository owner stated in this conversation that ACL-1529 is paused and is not currently being worked on. The owner has authorized proceeding with the ACL-1892 common workflow upgrade. This is explicit stopped-owner evidence, not a timeout inference.\n\nTransfer only the existing pre-stage ACL-1529 integration ownership to the actual Root Coordinator using the supported old pinned engine. Cancel that unmerged candidate and its remaining intake to release the single integration reservation. Preserve source/task author identities, source approval, status, code, PRs, branches, manifests and history. ACL-1529 remains unfinished and paused; none of its changes are merged or completed. The old Coordinator must reacquire a new supported integration before later resuming.\n\nDo not cancel an actual stage merge or reset any permanent branch. Cancel must independently check the candidate PR remains unmerged. Then freeze only the already independently Approved ACL-1892 source; no unrelated backlog is shipped.\n\nThe owner subsequently explicitly replied \u00ab\u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e\u00bb to transferring and releasing this reservation while preserving the task/code/PR/history. Supported takeover has succeeded."
+        }
       }
     ],
     "policy": {
@@ -29451,7 +29471,7 @@
       "id": "995b275595744f35ba94cc61dbc96df1",
       "actor": "Coordinator-BA4E69",
       "session": "acl_upgrade_root_b13315d4c8acca4d15af2c75",
-      "state": "running",
+      "state": "cancelled",
       "issues": [
         529
       ],
@@ -29460,7 +29480,8 @@
       ],
       "batches": [],
       "started_at": "2026-10-13T22:16:51+00:00",
-      "ineligible": {}
+      "ineligible": {},
+      "report": "The repository owner stated in this conversation that ACL-1529 is paused and is not currently being worked on. The owner has authorized proceeding with the ACL-1892 common workflow upgrade. This is explicit stopped-owner evidence, not a timeout inference.\n\nTransfer only the existing pre-stage ACL-1529 integration ownership to the actual Root Coordinator using the supported old pinned engine. Cancel that unmerged candidate and its remaining intake to release the single integration reservation. Preserve source/task author identities, source approval, status, code, PRs, branches, manifests and history. ACL-1529 remains unfinished and paused; none of its changes are merged or completed. The old Coordinator must reacquire a new supported integration before later resuming.\n\nDo not cancel an actual stage merge or reset any permanent branch. Cancel must independently check the candidate PR remains unmerged. Then freeze only the already independently Approved ACL-1892 source; no unrelated backlog is shipped.\n\nThe owner subsequently explicitly replied \u00ab\u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e\u00bb to transferring and releasing this reservation while preserving the task/code/PR/history. Supported takeover has succeeded."
     },
     "source_reviews": {
       "887": {
