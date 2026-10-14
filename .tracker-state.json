@@ -8296,9 +8296,11 @@
         "worktree": "C:\\wk-1907",
         "id": "6dc3522df35547dcb27b0fe5fd5cb7ab",
         "issue": 907,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T13:17:45+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 908,
+        "report": "\ufeffChecks: affected tests 632 passed (1761, 1767, 1768, 1774, 1776, 1896, 1907; -k \"not browser\"). New tests/test_acl1907_locale_groups.py: 6 tests with Doc120 numbers (1002 vs [7,23]; different language 6 still mismatch; expansion plus foreign locale mismatch; re-run reuses campaign/ad set; re-run still stops on different language; unknown members stay strict with honest message). Mutation (strict list compare) fails 3 of the 6.\nChange: TargetingResolver.locale_groups (members from the adlocale result), CampaignCreator._language_check used by readback and existing-object comparison. Read-only.\nRisks: members are inferred by name (X or \"X (...)\") from the search rows; if Meta names differ, compare stays strict. Live acceptance on test dashboard open.\nDurable reference: PR #908, commit fe9a0be7bc09a01a8359285b28eab3c6b87a5f5d, docs/system/PROJECT.md section ACL-1907 and docs/system/CHANGELOG.md."
       }
     },
     "tasks": {
