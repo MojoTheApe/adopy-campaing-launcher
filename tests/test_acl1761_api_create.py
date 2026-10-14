@@ -165,10 +165,17 @@ class StubTab:
             if self.call_exc:
                 raise self.call_exc
             return self.call_reply
+        if ".startCall(" in expr:
+            # ACL-1899: запись с файлом - задание в помощнике, опрос прогресса.
+            if self.call_exc:
+                raise self.call_exc
+            return {"job": "j1"}
+        if ".poll(" in expr:
+            return {"state": "done", "sent": 10, "total": 10, "result": self.call_reply}
         raise AssertionError(expr[:60])
 
     def calls(self):
-        return [e for e in self.exprs if ".call(" in e]
+        return [e for e in self.exprs if ".call(" in e or ".startCall(" in e]
 
 
 def test_read_mode_page_cannot_write():
@@ -238,7 +245,7 @@ def test_the_write_carries_the_expected_size_and_sha256():
     tab = StubTab(call_reply={"status": 200, "body": {"images": {"a.png": {"hash": "h"}}}})
     t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
     t.write(f"/{ACT}/adimages", {}, files={"filename": b"0123456789"}, filename="a.png")
-    spec = json.loads(tab.calls()[0].split(".call(", 1)[1].rsplit(")", 1)[0])
+    spec = json.loads(tab.calls()[0].split("(", 1)[1].rsplit(")", 1)[0])
     assert spec["expect"] == {"bytes": 10, "sha256": hashlib.sha256(b"0123456789").hexdigest()}
     assert list(spec["files"]) == ["filename"] and spec["files"]["filename"].startswith("f")
 
@@ -251,7 +258,7 @@ class ScriptedTransport:
         self.gets: list[tuple] = []
         self.reacquired = 0
 
-    def write(self, path, params, files=None, filename=""):
+    def write(self, path, params, files=None, filename="", **_k):
         self.writes.append((path, params))
         return self.replies.pop(0)
 
@@ -424,7 +431,7 @@ class FakeMeta:
             p.pop("adlabels", None)
         return self._new(kind, **p)
 
-    def write(self, path, params, files=None, filename="", on_ad=False):
+    def write(self, path, params, files=None, filename="", on_ad=False, **_k):
         wp.check(ACT, "POST", path, params, files, on_ad=on_ad)       # та же политика, что у страницы
         self.posts.append((path, dict(params)))
         self.on_ad_posts.append((path, bool(on_ad)))

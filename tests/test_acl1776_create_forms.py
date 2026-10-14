@@ -63,7 +63,7 @@ class FormsMeta(FormMeta):
         self.refuse: dict | None = None
         self.tamper_questions = False
 
-    def write(self, path, params, files=None, filename="", on_ad=False, form_page=""):
+    def write(self, path, params, files=None, filename="", on_ad=False, form_page="", **_k):
         if form_page:
             wp.check_form_create(form_page, "POST", path, params, files, PAGE)      # линия политики Python
             self.posts.append((path, dict(params)))

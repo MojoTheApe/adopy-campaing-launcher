@@ -452,7 +452,7 @@ def test_publisher_is_blocked_after_non_json_post_and_hung_page(monkeypatch, tmp
                 raise g.PageUnresponsive("the Ads Manager tab stopped answering")
             return super().state()
 
-        def write(self, path, params, files=None, filename=""):
+        def write(self, path, params, files=None, filename="", **_k):
             if path.endswith("/campaigns"):
                 self.hang = True
                 return {"status": 200, "body": {"non_json": "<html>"}}
