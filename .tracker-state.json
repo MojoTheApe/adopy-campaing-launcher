@@ -8857,6 +8857,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T23:11:11+00:00",
         "from_status": "status:todo"
+      },
+      "826": {
+        "actor": "Worker-RH1826",
+        "session": "wrh1826-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1826-mlx-session-lost",
+        "worktree": "C:\\wk-rh1826",
+        "id": "8e9044a0151543c786a59d692cd967ed",
+        "issue": 826,
+        "state": "implementing",
+        "started_at": "2026-10-14T23:11:53+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12949,10 +12961,14 @@
           {
             "actor": "Worker-S1826A",
             "session": "run_s1826a_1012"
+          },
+          {
+            "actor": "Worker-RH1826",
+            "session": "wrh1826-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1826A",
+        "state": "implementing",
+        "worker": "Worker-RH1826",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1826A",
@@ -12970,7 +12986,6 @@
         },
         "pr": 828,
         "queued_at": "2026-10-12T13:20:27+00:00",
-        "reviewer": "Reviewer-RRG826",
         "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "767": {
@@ -15432,6 +15447,10 @@
       },
       "Worker-RJ1814": {
         "session": "wrj1814-20261015",
+        "role": "Worker"
+      },
+      "Worker-RH1826": {
+        "session": "wrh1826-20261015",
         "role": "Worker"
       }
     },
@@ -34977,6 +34996,13 @@
         "issue": 814,
         "claim": "a6aa514dd69c450996ff211b44b5e922",
         "actor": "Worker-RJ1814"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T23:11:53+00:00",
+        "issue": 826,
+        "claim": "8e9044a0151543c786a59d692cd967ed",
+        "actor": "Worker-RH1826"
       }
     ],
     "policy": {
