@@ -8600,20 +8600,6 @@
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
       },
-      "775": {
-        "actor": "Worker-RG1775",
-        "session": "wrg1775-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1775-instant-forms",
-        "worktree": "C:\\wk-rg1775",
-        "id": "ab5224d3d70f4e3fb5e31bd39a8202aa",
-        "issue": 775,
-        "state": "handoff",
-        "started_at": "2026-10-14T16:57:53+00:00",
-        "from_status": "status:todo",
-        "pr": 809,
-        "report": "ACL-1775 refresh: merged origin/main (73136acc, incl. ACL-1760/1761) into codex/acl-1775-instant-forms. New head 8ab25c24. Merge only, no rebase.\nConflicts: one, docs/system/CHANGELOG.md (both sides added entries); kept both, removed markers. src/fb_api/graph.py, src/web/app.py, report.html auto-merged; main's 1760/1761 behaviour unchanged.\nTests (not browser): the 1775 branch test files (test_acl1775_*, 1769, builder_*, drawer, the_builder_drawer), tests/test_acl1761_*.py, tests/test_acl1760_api_read.py: 434 passed, 16 deselected. test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator passes. No test edits."
-      },
       "798": {
         "actor": "Worker-RF1798",
         "session": "wrf1798-20261014",
@@ -12357,25 +12343,25 @@
             "session": "wrg1775-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RG1775",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1775A",
-          "session": "run_s1775a_1011",
+          "actor": "Worker-RG1775",
+          "session": "wrg1775-20261014",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1775-instant-forms",
-          "worktree": "C:\\acl-1775-forms",
-          "id": "ce360b93d8e54a82866474221bd1ab9b",
+          "worktree": "C:\\wk-rg1775",
+          "id": "ab5224d3d70f4e3fb5e31bd39a8202aa",
           "issue": 775,
           "state": "handoff",
-          "started_at": "2026-10-11T20:33:28+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-14T16:57:53+00:00",
+          "from_status": "status:todo",
           "pr": 809,
-          "report": "## ACL-1775 execution report (Worker-S1775A)\n\nPR #809 `[ACL-1775] Instant Forms: use an existing Page form (API backend)`, branch `codex/acl-1775-instant-forms`, head 579fbc3 (one commit on 70f4862e). Stacked on #796 -> #765. CI blocked. Tracker issues: ACL-1775.\n\n### Done\n- Builder: Conversion location Website / Instant Form at ad set level; per-ad form picker (archived/deleted/draft hidden) + \"Refresh forms\" (explicit click only, no timers); Website-only values dormant, only the chosen destination's values serialized; rpa backend: disabled with reason \"API backend only\", stored choice refused out loud (409 on preview/publish).\n- Server: `src/fb_api/forms.py` (read-only `GET /{page}/leadgen_forms`, pure capability probe, clear texts for unreadable forms and for a Page without Lead Ads terms), `POST /api/page-forms` (API backend only, read session, no write rights).\n- Creator: ad set ON_AD / LEAD_GENERATION / promoted_object {page_id} (no pixel, no link); creative CTA value {lead_gen_form_id}; PAUSED only; forms never created, terms never accepted.\n- Ownership: form of another Page, archived form, unreadable forms, Page without terms -> stop before any write (0 writes, also in Check plan). Readback: ad set destination/goal/promoted Page, creative form id, form listed under the Page (re-read after writes). Check plan shows form name and id.\n- Write policy, both layers: `lead_gen_form_id` only in adcreatives object_story_spec.{link_data|video_data}.call_to_action.value, sole key, numeric id, and only with on_ad (ad set of the same plan is ON_AD). Forbidden everywhere else; `/{page}/leadgen_forms` and terms stay outside the allowlist.\n\n### Tests (affected only, no full suite, no browser tests: free RAM 5.4 GB < 6 GB)\n- New: 83 (`test_acl1775_instant_forms.py` 73, `test_acl1775_builder_forms.py` 10 + Node harness `builder_forms_harness.cjs`).\n- Affected run: 498 passed (builder, drawer, tree, plan check, api create, parity, hang/logout, fb_api, publish contracts, ACL-1769 layout, new files).\n- Website path unchanged: plan, posts and readback compared with a golden taken from the pre-ACL-1775 creator.\n- Not run: Playwright browser tests of the builder (RAM). They should run in CI.\n\n### Mutation checks (34 mutations, all killed after one test was added)\nPolicy Python (on_ad not required, key allowed anywhere, id not validated, extra keys, extra format), policy page helper (same five), creator flag handling (always on, planned check always on, flag dropped in GraphClient / InPageGraph), ownership (foreign form, archived form, check skipped, unreadable forms), readback (form_on_page, form id), forms probe (terms, empty), ad set params (pixel kept, wrong destination), rpa gate, slot/draft dormant form id, UI (hidden field submitted, picker visible for Website, archived shown, rpa select not disabled, option enabled, silent drop, duplicate forgets form, plan shows link). First pass had one survivor (draft-level dormant form id); a test was added and it is killed.\n\n### Open\n1. Forms read capability is UNKNOWN: whether the token captured in the profile can read `/{page_id}/leadgen_forms` (needs leads_retrieval, often a Page token) is not confirmed; code path and message are ready. Live check pending owner approval on 9095 test accounts.\n2. `link: https://fb.me/` in link_data and CTA type LEARN_MORE with lead_gen_form_id: Meta's acceptance is to be confirmed in the live check.\n3. Terms detection uses the error text and the Page field `leadgen_tos_accepted`; the real Meta wording is unverified."
+          "report": "ACL-1775 refresh: merged origin/main (73136acc, incl. ACL-1760/1761) into codex/acl-1775-instant-forms. New head 8ab25c24. Merge only, no rebase.\nConflicts: one, docs/system/CHANGELOG.md (both sides added entries); kept both, removed markers. src/fb_api/graph.py, src/web/app.py, report.html auto-merged; main's 1760/1761 behaviour unchanged.\nTests (not browser): the 1775 branch test files (test_acl1775_*, 1769, builder_*, drawer, the_builder_drawer), tests/test_acl1761_*.py, tests/test_acl1760_api_read.py: 434 passed, 16 deselected. test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator passes. No test edits."
         },
         "pr": 809,
-        "queued_at": "2026-10-11T21:22:10+00:00",
+        "queued_at": "2026-10-14T17:00:37+00:00",
         "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "806": {
@@ -17634,7 +17620,8 @@
       812,
       903,
       907,
-      891
+      891,
+      775
     ],
     "review": null,
     "history": [
@@ -32252,6 +32239,13 @@
         "issue": 798,
         "claim": "793d1b537aa04e5eb6c794e88830ec02",
         "actor": "Worker-RF1798"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T17:00:37+00:00",
+        "issue": 775,
+        "pr": 809,
+        "actor": "Worker-RG1775"
       }
     ],
     "policy": {
