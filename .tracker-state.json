@@ -8857,6 +8857,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T23:03:39+00:00",
         "from_status": "status:todo"
+      },
+      "799": {
+        "actor": "Worker-RJ1799",
+        "session": "wrj1799-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1799-country-workbench",
+        "worktree": "C:\\wk-rj1799",
+        "id": "fdf4421919b24b229ba06f5ac8371b2a",
+        "issue": 799,
+        "state": "implementing",
+        "started_at": "2026-10-14T23:06:01+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12561,10 +12573,14 @@
           {
             "actor": "Worker-RG1799",
             "session": "wrg1799-20261014"
+          },
+          {
+            "actor": "Worker-RJ1799",
+            "session": "wrj1799-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-RG1799",
+        "state": "implementing",
+        "worker": "Worker-RJ1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-RG1799",
@@ -12583,14 +12599,7 @@
         "pr": 803,
         "queued_at": "2026-10-14T17:09:22+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
-        "reviewer": "Reviewer-R1799G",
         "return_operation": {
-          "id": "c77332b6e397471b83fab1dfe1f3be8f",
-          "actor": "Coordinator-C0930A",
-          "session": "coord_c0930a_1009",
-          "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
-        },
-        "return": {
           "id": "c77332b6e397471b83fab1dfe1f3be8f",
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
@@ -15417,6 +15426,10 @@
       },
       "Worker-RH11800": {
         "session": "wrh11800-20261015",
+        "role": "Worker"
+      },
+      "Worker-RJ1799": {
+        "session": "wrj1799-20261015",
         "role": "Worker"
       }
     },
@@ -34917,6 +34930,13 @@
         "issue": 797,
         "pr": 810,
         "actor": "Worker-RJ1797"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T23:06:01+00:00",
+        "issue": 799,
+        "claim": "fdf4421919b24b229ba06f5ac8371b2a",
+        "actor": "Worker-RJ1799"
       }
     ],
     "policy": {
