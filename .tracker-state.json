@@ -11817,7 +11817,7 @@
             "session": "w1014f-20261014"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-W1014F",
         "coordinator": "Coordinator-T1014C",
         "handoff": {
@@ -11836,7 +11836,7 @@
         },
         "pr": 765,
         "queued_at": "2026-10-14T09:59:46+00:00",
-        "review_report": "# Review return: PR #765 (ACL-1761), head 443914460fcb\n\nStatus: no CI checks at all on the current head. Cause: PR is CONFLICTING with current origin/main, so the pull_request workflow did not trigger (no merge commit to test).\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; src/web/app.py and report.html auto-merge). Fix: merge current origin/main INTO the branch (no rebase/force), resolve the test file keeping both sides' tests, push, so CI starts.\n\n## Known failures that WILL hit this branch once CI runs (verified at this head)\n1. `tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- `tests/test_acl1761_hang_logout.py` lines 255, 256 [backslash-path], 268 [platform-branch], 275 [windll]. Fix: add `pytestmark = pytest.mark.windows_only(reason=\"...\")` for the Windows-path tests, or `# linux-ok: <why>` on those lines. This file originates in this branch, so fix it HERE (the descendants inherit it).\n2. Not applicable at this head: Cyrillic `[x\u0445\u00d7]` in report.html (no match), `tzdata` in requirements.txt (absent), so no change needed for (b)/(c).\n\n## Required fixes (stack order: this branch first)\nMerge main, resolve test_acl1756_fb_api.py, fix item 1, push. Then re-run the affected tests (test_acl_test_platform.py, test_acl1761_hang_logout.py, test_acl1756_fb_api.py) and wait for full CI green. Descendant PRs #796, #802, #813 must then merge this branch + main in order.",
+        "review_report": "\ufeff# Return ACL-1761 for a dependency refresh\n\nACL-1760 reached main (batch 0c5aecbd, PR 911 -> 912) with the review fixes P1 (newly_started: an already-running profile is never stopped) and P2 (truncation marking on a usage stop). PR 765 still carries the older copy of the 1760 commits. Required: merge current main into codex/acl-1761-api-create (merge, no rebase), keep main's fixed 1760 behaviour, re-run the 1761/1760/1756 tests, hand off again for fresh review. No other finding was examined in this return.",
         "reviewer": "Reviewer-R1761X"
       },
       "778": {
@@ -31455,6 +31455,24 @@
         "pr": 765,
         "lane": "f9debd934f224976870852b0a15bacb4",
         "actor": "Reviewer-R1761X"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-14T15:33:53+00:00",
+        "review": {
+          "id": "f9debd934f224976870852b0a15bacb4",
+          "pr": 765,
+          "issues": [
+            761
+          ],
+          "actor": "Reviewer-R1761X",
+          "session": "r1761x-20261014",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T15:33:39+00:00",
+          "state": "returning",
+          "report": "\ufeff# Return ACL-1761 for a dependency refresh\n\nACL-1760 reached main (batch 0c5aecbd, PR 911 -> 912) with the review fixes P1 (newly_started: an already-running profile is never stopped) and P2 (truncation marking on a usage stop). PR 765 still carries the older copy of the 1760 commits. Required: merge current main into codex/acl-1761-api-create (merge, no rebase), keep main's fixed 1760 behaviour, re-run the 1761/1760/1756 tests, hand off again for fresh review. No other finding was examined in this return.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -33360,21 +33378,6 @@
       "started_at": "2026-10-14T15:01:24+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "765": {
-        "id": "f9debd934f224976870852b0a15bacb4",
-        "pr": 765,
-        "issues": [
-          761
-        ],
-        "actor": "Reviewer-R1761X",
-        "session": "r1761x-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-14T15:33:39+00:00",
-        "state": "returning",
-        "report": "\ufeff# Return ACL-1761 for a dependency refresh\n\nACL-1760 reached main (batch 0c5aecbd, PR 911 -> 912) with the review fixes P1 (newly_started: an already-running profile is never stopped) and P2 (truncation marking on a usage stop). PR 765 still carries the older copy of the 1760 commits. Required: merge current main into codex/acl-1761-api-create (merge, no rebase), keep main's fixed 1760 behaviour, re-run the 1761/1760/1756 tests, hand off again for fresh review. No other finding was examined in this return.",
-        "keep_lane": false
-      }
-    }
+    "source_reviews": {}
   }
 }
