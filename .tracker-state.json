@@ -31177,6 +31177,72 @@
           "started_at": "2026-10-14T15:01:24+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "batch-frozen",
+        "at": "2026-10-14T15:02:40+00:00",
+        "batch": {
+          "id": "0c5aecbdf4f44c7f8e4a97272dced8d6",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "assembling",
+          "issues": [
+            760
+          ],
+          "members": [
+            {
+              "issue": 760,
+              "pr": 762,
+              "branch": "codex/acl-1760-api-read",
+              "head_sha": "e45418dfd5bc0eecdd553263ffce9bddc14c2768",
+              "base_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+              "main_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "c8553eaca5772bba5b0bbed87c2b7ab8cab6668956ecb4606703dc0106e20bc3",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1760F",
+                "implementer": "Worker-S1760E",
+                "review_session": "r1760f-20261014",
+                "execution_lane": "83aeb9f517b647ec962a58bdc5538fa2",
+                "head_sha": "e45418dfd5bc0eecdd553263ffce9bddc14c2768",
+                "base_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+                "tree_sha": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036",
+                "report": "Independent source re-review of ACL-1760 / PR 762 at head e45418df against current main 311700fd. Refresh of the approval by Reviewer-R1760D at c6b5856a, which went stale when PR 910 (ACL-1781/1782/1783/1786/1806) advanced main. Verified: main is an ancestor of the head (merge-base --is-ancestor). git diff c6b5856a e45418df has the same patch-id as git diff df6c2e8a origin/main, so the only change since the approval is the clean main merge; no author edits. Previous P1 (newly_started only on the real start path; read stops only profiles it started itself, gated by started_now) and P2 (GraphClient truncation recorded; partial country list refused) re-read in the new head: unchanged. Tests tests/test_acl1760_api_read.py, test_acl1756_fb_api.py, test_acl_test_platform.py in a detached worktree at the head: 279 passed, 2 deselected (browser). CI on the exact head: tracker-link re-run after handoff timing and passing; all jobs green (Linux 1-3, Windows, installer verification, descriptor, process instructions). No live Meta or Multilogin calls. Carried over from the earlier approval as outstanding owner acceptance, not claimed here: live three-account read had no human Ads Manager UI comparison; ad-set scope is covered by ACL-1798/1800.",
+                "main_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  760
+                ],
+                "recorded_at": "2026-10-14T14:59:11+00:00",
+                "issue_scopes": {
+                  "760": "c8553eaca5772bba5b0bbed87c2b7ab8cab6668956ecb4606703dc0106e20bc3"
+                }
+              },
+              "lane": {
+                "id": "83aeb9f517b647ec962a58bdc5538fa2",
+                "pr": 762,
+                "issues": [
+                  760
+                ],
+                "actor": "Reviewer-R1760F",
+                "session": "r1760f-20261014",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-14T14:39:19+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T14:59:27+00:00"
+            }
+          ],
+          "main_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+          "branch": "codex/batch-0c5aecbdf4f44c7f8e4a97272dced8d6",
+          "intake": "47d9615da3704a82a17c83ce915d36c6",
+          "started_at": "2026-10-14T15:02:40+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": []
+        }
       }
     ],
     "policy": {
@@ -32985,7 +33051,68 @@
         "sources_closed": true
       }
     },
-    "integration": null,
+    "integration": {
+      "id": "0c5aecbdf4f44c7f8e4a97272dced8d6",
+      "actor": "Coordinator-C1014I",
+      "session": "coord-c1014i-20261014",
+      "state": "assembling",
+      "issues": [
+        760
+      ],
+      "members": [
+        {
+          "issue": 760,
+          "pr": 762,
+          "branch": "codex/acl-1760-api-read",
+          "head_sha": "e45418dfd5bc0eecdd553263ffce9bddc14c2768",
+          "base_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+          "main_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "c8553eaca5772bba5b0bbed87c2b7ab8cab6668956ecb4606703dc0106e20bc3",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1760F",
+            "implementer": "Worker-S1760E",
+            "review_session": "r1760f-20261014",
+            "execution_lane": "83aeb9f517b647ec962a58bdc5538fa2",
+            "head_sha": "e45418dfd5bc0eecdd553263ffce9bddc14c2768",
+            "base_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+            "tree_sha": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036",
+            "report": "Independent source re-review of ACL-1760 / PR 762 at head e45418df against current main 311700fd. Refresh of the approval by Reviewer-R1760D at c6b5856a, which went stale when PR 910 (ACL-1781/1782/1783/1786/1806) advanced main. Verified: main is an ancestor of the head (merge-base --is-ancestor). git diff c6b5856a e45418df has the same patch-id as git diff df6c2e8a origin/main, so the only change since the approval is the clean main merge; no author edits. Previous P1 (newly_started only on the real start path; read stops only profiles it started itself, gated by started_now) and P2 (GraphClient truncation recorded; partial country list refused) re-read in the new head: unchanged. Tests tests/test_acl1760_api_read.py, test_acl1756_fb_api.py, test_acl_test_platform.py in a detached worktree at the head: 279 passed, 2 deselected (browser). CI on the exact head: tracker-link re-run after handoff timing and passing; all jobs green (Linux 1-3, Windows, installer verification, descriptor, process instructions). No live Meta or Multilogin calls. Carried over from the earlier approval as outstanding owner acceptance, not claimed here: live three-account read had no human Ads Manager UI comparison; ad-set scope is covered by ACL-1798/1800.",
+            "main_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              760
+            ],
+            "recorded_at": "2026-10-14T14:59:11+00:00",
+            "issue_scopes": {
+              "760": "c8553eaca5772bba5b0bbed87c2b7ab8cab6668956ecb4606703dc0106e20bc3"
+            }
+          },
+          "lane": {
+            "id": "83aeb9f517b647ec962a58bdc5538fa2",
+            "pr": 762,
+            "issues": [
+              760
+            ],
+            "actor": "Reviewer-R1760F",
+            "session": "r1760f-20261014",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-14T14:39:19+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T14:59:27+00:00"
+        }
+      ],
+      "main_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+      "branch": "codex/batch-0c5aecbdf4f44c7f8e4a97272dced8d6",
+      "intake": "47d9615da3704a82a17c83ce915d36c6",
+      "started_at": "2026-10-14T15:02:40+00:00",
+      "pr": null,
+      "entered_stage": false,
+      "history": []
+    },
     "intake": {
       "id": "47d9615da3704a82a17c83ce915d36c6",
       "actor": "Coordinator-C1014I",
