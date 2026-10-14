@@ -8599,20 +8599,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "799": {
-        "actor": "Worker-RG1799",
-        "session": "wrg1799-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1799-country-workbench",
-        "worktree": "C:\\wk-rg1799",
-        "id": "c278dc6373d84ee493f781e0291839bf",
-        "issue": 799,
-        "state": "handoff",
-        "started_at": "2026-10-14T17:06:32+00:00",
-        "from_status": "status:todo",
-        "pr": 803,
-        "report": "ACL-1799 refresh: merged origin/main (73136acc, incl. ACL-1760/1761) into codex/acl-1799-country-workbench. New head d3c4cb0a. Merge only.\nConflicts: none (clean automatic merge).\nTests (not browser): the branch's test files (test_acl1799_*, 1769, builder_*, drawer, the_builder_drawer) plus tests/test_acl1761_*.py and tests/test_acl1760_api_read.py: all passed (about 355 tests). No test edits."
       }
     },
     "tasks": {
@@ -12296,25 +12282,25 @@
             "session": "wrg1799-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RG1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1799A",
-          "session": "run_s1799a_1011",
+          "actor": "Worker-RG1799",
+          "session": "wrg1799-20261014",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1799-country-workbench",
-          "worktree": "C:\\acl-1799-cw",
-          "id": "fc0507bf0e0b48a4b98d8cc282743b52",
+          "worktree": "C:\\wk-rg1799",
+          "id": "c278dc6373d84ee493f781e0291839bf",
           "issue": 799,
           "state": "handoff",
-          "started_at": "2026-10-11T19:52:59+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-14T17:06:32+00:00",
+          "from_status": "status:todo",
           "pr": 803,
-          "report": "ACL-1799 handoff (Worker-S1799A, session run_s1799a_1011)\n\nPR: #803 (base main, stacked on #796 -> #765), head codex/acl-1799-country-workbench @ d9a641269160456519c407dcb4a8b408b8767f88. CI is blocked.\n\nChecks run locally (affected tests only, no full suite):\n- tests/test_acl1799_country_workbench.py: 22 passed (KPI formulas, peer exclusion, weighted peers, insufficient cohort, no peers/no buyer, version-preserving creative identity, split_ad_title unchanged, all old analytics views rendered and linked, .cw- CSS prefix, English strings, Node harness for page functions).\n- tests/test_acl1799_workbench_browser.py: 9 passed in offline Chromium (Country -> Asset, Use goes to the selected draft and not the last one, none selected adds nothing, asset mismatch confirmation, old views reachable).\n- Affected existing suites: 399 passed (includes the 22 above): english screens, report scripts parse, theme, field contrast, manage view, web drill, creative variants, metric columns, sidebar, header, builder two-column layout, builder tree/drawer, builder per account, goals, ci scope, review regressions.\n- Screenshots (light and dark, 1280 px, fixture data) in C:\\acl-notes\\acl-1799-shots\\.\n\nRemaining risks / deferred:\n- Per-country payload is inline (top 15 rows per tab, top 6 assets); lazy loading if it proves heavy on real data.\n- Landing \"Use\" is recorded as provenance on the draft only: the builder has no landing field.\n- Target/creative Use reuses the builder pickers with exact matches only; otherwise the list opens for the user to pick.\n- One read-only accessor cbTree.active() was added to the ACL-1769 builder code; the merge into that area is mechanical.\n- Advisory hints (section 9), sidebar asset tree, Observed setup -> incomplete draft are not done.\n- Not exercised against real workbook data or live Meta (fixtures only).\n\nDurable work reference: branch codex/acl-1799-country-workbench, PR #803."
+          "report": "ACL-1799 refresh: merged origin/main (73136acc, incl. ACL-1760/1761) into codex/acl-1799-country-workbench. New head d3c4cb0a. Merge only.\nConflicts: none (clean automatic merge).\nTests (not browser): the branch's test files (test_acl1799_*, 1769, builder_*, drawer, the_builder_drawer) plus tests/test_acl1761_*.py and tests/test_acl1760_api_read.py: all passed (about 355 tests). No test edits."
         },
         "pr": 803,
-        "queued_at": "2026-10-11T20:25:11+00:00",
+        "queued_at": "2026-10-14T17:09:22+00:00",
         "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "786": {
@@ -17655,7 +17641,8 @@
       798,
       769,
       797,
-      766
+      766,
+      799
     ],
     "review": null,
     "history": [
@@ -32335,6 +32322,13 @@
         "at": "2026-10-14T17:06:32+00:00",
         "issue": 799,
         "claim": "c278dc6373d84ee493f781e0291839bf",
+        "actor": "Worker-RG1799"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T17:09:22+00:00",
+        "issue": 799,
+        "pr": 803,
         "actor": "Worker-RG1799"
       }
     ],
