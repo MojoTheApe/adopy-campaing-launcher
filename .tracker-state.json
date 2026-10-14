@@ -12626,7 +12626,7 @@
             "session": "wrh1775-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RH1775",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12651,7 +12651,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
-        }
+        },
+        "reviewer": "Reviewer-R1775J"
       },
       "806": {
         "implementers": [
@@ -15428,6 +15429,10 @@
       "Worker-RH1826": {
         "session": "wrh1826-20261015",
         "role": "Worker"
+      },
+      "Reviewer-R1775J": {
+        "session": "r1775j-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18057,7 +18062,6 @@
       903,
       907,
       891,
-      775,
       797,
       800,
       815,
@@ -34995,6 +34999,13 @@
         "issue": 826,
         "pr": 828,
         "actor": "Worker-RH1826"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T23:24:38+00:00",
+        "pr": 809,
+        "lane": "b9ff97eb84de41a494a60bc54728078d",
+        "actor": "Reviewer-R1775J"
       }
     ],
     "policy": {
@@ -37864,6 +37875,19 @@
       "started_at": "2026-10-14T22:11:37+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "809": {
+        "id": "b9ff97eb84de41a494a60bc54728078d",
+        "pr": 809,
+        "issues": [
+          775
+        ],
+        "actor": "Reviewer-R1775J",
+        "session": "r1775j-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T23:24:38+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
