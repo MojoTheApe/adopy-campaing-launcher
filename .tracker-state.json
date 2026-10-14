@@ -8131,20 +8131,6 @@
         "state": "implementing",
         "started_at": "2026-10-13T21:34:57+00:00",
         "from_status": "status:backlog"
-      },
-      "761": {
-        "actor": "Worker-W1014F",
-        "session": "w1014f-20261014",
-        "coordinator": "Coordinator-T1014C",
-        "branch": "codex/acl-1761-api-create",
-        "worktree": "C:\\wkf-1761",
-        "id": "79189bfeda39447984f2d6e2975c4272",
-        "issue": 761,
-        "state": "handoff",
-        "started_at": "2026-10-14T09:30:02+00:00",
-        "from_status": "status:todo",
-        "pr": 765,
-        "report": "# Handoff ACL-1761 (PR #765)\nScope: fixes for the returned review. Merged origin/main into codex/acl-1761-api-create (conflict in tests/test_acl1756_fb_api.py resolved with main's log-filter fixture); marked the Windows-only lines in tests/test_acl1761_hang_logout.py with `# linux-ok:` comments.\nChecks: head afbe97b1; local test_acl_test_platform, test_acl1761_hang_logout, test_acl1756_fb_api 232 passed; GitHub CI all green except tracker-link, which requires Review status (this handoff).\nRemaining risks: none known; descendants #796/#802/#813 merge this branch next."
       }
     },
     "tasks": {
@@ -11471,25 +11457,25 @@
             "session": "w1014f-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1014F",
         "coordinator": "Coordinator-T1014C",
         "handoff": {
-          "actor": "Worker-O1761A",
-          "session": "run_o1761a_1010",
-          "coordinator": "Coordinator-C0930A",
+          "actor": "Worker-W1014F",
+          "session": "w1014f-20261014",
+          "coordinator": "Coordinator-T1014C",
           "branch": "codex/acl-1761-api-create",
-          "worktree": "C:\\acl-1761-api-create",
-          "id": "9769088ef77d4a5682a1710b4048b065",
+          "worktree": "C:\\wkf-1761",
+          "id": "79189bfeda39447984f2d6e2975c4272",
           "issue": 761,
           "state": "handoff",
-          "started_at": "2026-10-09T22:32:02+00:00",
+          "started_at": "2026-10-14T09:30:02+00:00",
           "from_status": "status:todo",
           "pr": 765,
-          "report": "ACL-1761 handoff (PR #765, branch codex/acl-1761-api-create)\n\nChecks and results:\n- Independent review rounds 1-11 are recorded in C:\\acl-notes\\review_765.md. Round 7 (Opus) approved d25f4f99. Round 8 approved the existing-object pre-check. Round 9 (Opus) requested changes for hang/logout handling; Round 10 approved them. Round 11 approved the country resolver and the currency display.\n- Affected test files pass locally: 426 across the fb_api, 1756, 1760 and 1761 files, plus test_acl1761_country_resolve (5) and test_acl1760_api_read (75). Mutation checks are recorded per round.\n- Live owner test on the 9095 test dashboard, 2026-10-10, account Facebook_5414: campaign SA_ARC_All_Video_GMB_35_10.10 was created PAUSED, readback 43/43, manual placements confirmed in Ads Manager. Owner verdict: \"\u043a\u0430\u043c\u043f\u0430\u043d\u0438\u044f \u0441\u043e\u0437\u0434\u0430\u043d\u0430 \u0438\u0434\u0435\u0430\u043b\u044c\u043d\u043e\".\n- Full CI last ran green on 1b01b79 (all Linux shards and Windows). Since 2026-10-10 ~17:55Z every GitHub Actions run fails with startup_failure because of an account billing block, so CI must be re-run before merge.\n\nRemaining risks:\n- Facebook logout after a hang on 5414 and 5265: the cause is unproven; hang handling now stops with a clear reason (F1-F4).\n- Restarting a profile right after it closed is a possible logout trigger; still open (F5), waiting for an owner decision.\n- An API job keeps the review window even when it wrote nothing (ACL-1784).\n\nDurable references: PR #765; C:\\acl-notes\\acl-1761-report.md; C:\\acl-notes\\acl-1761-hang-logout.md; C:\\acl-notes\\review_765.md.\nMerge plan: one batch with ACL-1760 (PR #762) into main behind ACL_FB_BACKEND=api (default rpa)."
+          "report": "# Handoff ACL-1761 (PR #765)\nScope: fixes for the returned review. Merged origin/main into codex/acl-1761-api-create (conflict in tests/test_acl1756_fb_api.py resolved with main's log-filter fixture); marked the Windows-only lines in tests/test_acl1761_hang_logout.py with `# linux-ok:` comments.\nChecks: head afbe97b1; local test_acl_test_platform, test_acl1761_hang_logout, test_acl1756_fb_api 232 passed; GitHub CI all green except tracker-link, which requires Review status (this handoff).\nRemaining risks: none known; descendants #796/#802/#813 merge this branch next."
         },
         "pr": 765,
-        "queued_at": "2026-10-11T18:13:47+00:00",
+        "queued_at": "2026-10-14T09:59:46+00:00",
         "review_report": "# Review return: PR #765 (ACL-1761), head 443914460fcb\n\nStatus: no CI checks at all on the current head. Cause: PR is CONFLICTING with current origin/main, so the pull_request workflow did not trigger (no merge commit to test).\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; src/web/app.py and report.html auto-merge). Fix: merge current origin/main INTO the branch (no rebase/force), resolve the test file keeping both sides' tests, push, so CI starts.\n\n## Known failures that WILL hit this branch once CI runs (verified at this head)\n1. `tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- `tests/test_acl1761_hang_logout.py` lines 255, 256 [backslash-path], 268 [platform-branch], 275 [windll]. Fix: add `pytestmark = pytest.mark.windows_only(reason=\"...\")` for the Windows-path tests, or `# linux-ok: <why>` on those lines. This file originates in this branch, so fix it HERE (the descendants inherit it).\n2. Not applicable at this head: Cyrillic `[x\u0445\u00d7]` in report.html (no match), `tzdata` in requirements.txt (absent), so no change needed for (b)/(c).\n\n## Required fixes (stack order: this branch first)\nMerge main, resolve test_acl1756_fb_api.py, fix item 1, push. Then re-run the affected tests (test_acl_test_platform.py, test_acl1761_hang_logout.py, test_acl1756_fb_api.py) and wait for full CI green. Descendant PRs #796, #802, #813 must then merge this branch + main in order."
       },
       "778": {
@@ -16752,7 +16738,8 @@
       845,
       840,
       841,
-      886
+      886,
+      761
     ],
     "review": null,
     "history": [
@@ -28949,6 +28936,13 @@
         "issue": 886,
         "pr": 887,
         "actor": "Worker-W1886M"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T09:59:46+00:00",
+        "issue": 761,
+        "pr": 765,
+        "actor": "Worker-W1014F"
       }
     ],
     "policy": {
