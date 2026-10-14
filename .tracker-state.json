@@ -8599,20 +8599,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "798": {
-        "actor": "Worker-RF1798",
-        "session": "wrf1798-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1798-home-campaigns",
-        "worktree": "C:\\wk-rf1798",
-        "id": "793d1b537aa04e5eb6c794e88830ec02",
-        "issue": 798,
-        "state": "handoff",
-        "started_at": "2026-10-14T16:58:25+00:00",
-        "from_status": "status:todo",
-        "pr": 801,
-        "report": "Merged current origin/main (73136acc) into codex/acl-1798-home-campaigns (merge only, no rebase). Result head: 6a41a506de355e9df2cee8ff736841b1c704aceb.\n\nConflicts: none (ort auto-merged src/web/app.py and src/web/templates/report.html). Main's ACL-1760/1761 behaviour is untouched.\n\nTests (-k 'not browser'): test_acl1798_campaign_inventory, test_acl1769_two_column_layout, test_builder_duplicate_buttons, test_builder_second_primary_text, test_the_builder_drawer, test_acl1760_api_read, test_acl1761_*, test_report_loading_stages, test_dashboard_review: 427 passed, 2 deselected, 0 failed. No test edits."
       }
     },
     "tasks": {
@@ -12194,25 +12180,25 @@
             "session": "wrf1798-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1798",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1798A",
-          "session": "run_s1798a_1011",
+          "actor": "Worker-RF1798",
+          "session": "wrf1798-20261014",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1798-home-campaigns",
-          "worktree": "C:\\acl-1798-home",
-          "id": "0d44629f3ec947c992e886efb9553052",
+          "worktree": "C:\\wk-rf1798",
+          "id": "793d1b537aa04e5eb6c794e88830ec02",
           "issue": 798,
           "state": "handoff",
-          "started_at": "2026-10-11T19:39:47+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-14T16:58:25+00:00",
+          "from_status": "status:todo",
           "pr": 801,
-          "report": "# ACL-1798 handoff (Worker-S1798A)\n\nPR: #801 (ready, base main, stacked on #796 -> #765, CI blocked). Head fed73a83edeaaa7ceaef9f45294095a9a2d85fb7.\n\n## Works\n- Home section \"Campaigns\" under goals and country overview; pinned identity, one shared horizontal scroll, sticky header, synced top scrollbar.\n- \"Read campaigns\" per account and per country (queue, GET only, Read spend session, call budget, cooldowns). Snapshot per account with read time, freshness shown.\n- Expand: ad sets and ads from the snapshot with loading, empty, failed+retry, partial, not-read states.\n- Presets (Optimization, Meta delivery, BI funnel, All metrics) and column manager, persisted in localStorage.\n- BI by exact name only; unmatched BI counted as evidence only; unknown values shown as a dash.\n- ACL_FB_BACKEND=rpa: notice, 409 on the read route, nothing started.\n\n## Disabled\nOn/off, bid -/+, budget, duplicate, more: \"Coming in ACL-1800\" (per coordinator update). Copy to accounts: \"ACL-1773\". Controls carry data-object-id, data-level, data-account, data-action.\n\n## Tests\n53 passed (campaign inventory, fakes) + 9 passed (browser, fixtures). Related tests run: ACL-1760 API read, account spend, account map, ACL-1769 layout, all green.\n\n## Screenshots\nC:\\acl-notes\\acl-1798-shots\\ (light/dark, collapsed/tree, scrolled, rpa notice, 1280 px).\n\n## Gaps\n- Budget values shown only for currencies with a confirmed minor-unit table (19 two-decimal and 4 zero-decimal currencies); others show a dash.\n- Call budget is the existing 24 per read; very large accounts can end partial (reported as partial, not hidden).\n- No Decision/Tracker/Audit groups, no sorting or delivery filter yet.\n- Live Meta read and Multilogin were not exercised (no live calls by instruction).\n- The page checks its own server every 3 s only while a read it started is running (local job state, not Meta)."
+          "report": "Merged current origin/main (73136acc) into codex/acl-1798-home-campaigns (merge only, no rebase). Result head: 6a41a506de355e9df2cee8ff736841b1c704aceb.\n\nConflicts: none (ort auto-merged src/web/app.py and src/web/templates/report.html). Main's ACL-1760/1761 behaviour is untouched.\n\nTests (-k 'not browser'): test_acl1798_campaign_inventory, test_acl1769_two_column_layout, test_builder_duplicate_buttons, test_builder_second_primary_text, test_the_builder_drawer, test_acl1760_api_read, test_acl1761_*, test_report_loading_stages, test_dashboard_review: 427 passed, 2 deselected, 0 failed. No test edits."
         },
         "pr": 801,
-        "queued_at": "2026-10-11T20:17:18+00:00",
+        "queued_at": "2026-10-14T17:01:19+00:00",
         "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "797": {
@@ -17623,7 +17609,8 @@
       903,
       907,
       891,
-      775
+      775,
+      798
     ],
     "review": null,
     "history": [
@@ -32248,6 +32235,13 @@
         "issue": 775,
         "pr": 809,
         "actor": "Worker-RG1775"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T17:01:19+00:00",
+        "issue": 798,
+        "pr": 801,
+        "actor": "Worker-RF1798"
       }
     ],
     "policy": {
