@@ -29927,7 +29927,8 @@
         "main_prs": [
           895
         ],
-        "finished_at": "2026-10-14T08:31:32+00:00"
+        "finished_at": "2026-10-14T08:31:32+00:00",
+        "closing_sources": true
       }
     },
     "integration": null,
