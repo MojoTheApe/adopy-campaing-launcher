@@ -303,6 +303,10 @@
       "title": "Campaign Facebook Page selection with automatic destination defaults",
       "state": "created",
       "issue": 880
+    },
+    "4b799e566a4e89a67149f3b2ad8576ee135c60160a4630d9e8a697bac3a45373": {
+      "title": "[Campaign creation] Auto-suffix the campaign name (_2, _3\u2026) when a different campaign with that name exists",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
