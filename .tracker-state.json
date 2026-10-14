@@ -8423,20 +8423,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "760": {
-        "actor": "Worker-S1760E",
-        "session": "ws1760e-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1760-api-read",
-        "worktree": "C:\\wk-1760c",
-        "id": "ee0d9d2a54304b0d9c1b4836c0abd1ca",
-        "issue": 760,
-        "state": "handoff",
-        "started_at": "2026-10-14T14:36:59+00:00",
-        "from_status": "status:todo",
-        "pr": 762,
-        "report": "# ACL-1760 refresh handoff\n\nWorker-S1760E / ws1760e-20261014. Only change since the approved head c6b5856a: merged current main (311700fd, batch e2b8b707: ACL-1781/1782/1783/1786/1806) into codex/acl-1760-api-read, clean merge, no conflicts. New head e45418dfd5bc0eecdd553263ffce9bddc14c2768.\n\nChecks: tests/test_acl1760_api_read.py, tests/test_acl1756_fb_api.py, tests/test_acl_test_platform.py passed (browser deselected). Earlier report: C:\u0007cl-notes\\handoff_760.md (P1/P2 fixes, spec decisions, 3-account live read)."
       }
     },
     "tasks": {
@@ -11726,25 +11712,25 @@
             "session": "ws1760e-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1760E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1760C",
-          "session": "ws1760c-20261014",
+          "actor": "Worker-S1760E",
+          "session": "ws1760e-20261014",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1760-api-read",
           "worktree": "C:\\wk-1760c",
-          "id": "2ed972b324a143c8b648a3a9d8be5ad0",
+          "id": "ee0d9d2a54304b0d9c1b4836c0abd1ca",
           "issue": 760,
           "state": "handoff",
-          "started_at": "2026-10-14T12:49:20+00:00",
+          "started_at": "2026-10-14T14:36:59+00:00",
           "from_status": "status:todo",
           "pr": 762,
-          "report": "# ACL-1760 handoff after the combined-review return (PR #762)\n\nWorker-S1760C / ws1760c-20261014, coordinator Coordinator-C0930A. Branch codex/acl-1760-api-read, head c6b5856ae2e7b5fed757fc3728e20683376dc586.\n\n## Fixes for the returned findings (review of batch PR 835)\n- P1 (profile ownership): `StartedProfile.newly_started` (multilogin_launcher.py) is True only on a real start; both HTTP 409 / ALREADY_RUNNING paths leave it False. `fb_api/profile.py` sets `started_now` only from that flag, so a reused, already-running or unknown profile is never stopped by a read. Test: `test_launcher_409_is_not_a_fresh_start_and_is_never_stopped`, `test_launcher_marks_only_a_real_start_as_new`.\n- P2 (partial pagination): `graph.get_all` marks truncation whenever a next page exists but is not fetched (usage stop, missing cursor, page cap). `_country_rows` checks only its own new markers; a truncated split is saved as failed (\"partial\"), never ok. Tests: `test_page_with_next_cursor_at_stop_usage_is_marked_truncated`, `test_graph_get_all_marks_truncation_when_the_next_page_is_not_taken`.\n- Mutations: unconditional `started_now=True` fails the 409 test; dropping the truncation marking fails four tests.\n- main merged in (no rebase); the only conflict was the log-filter fixture in tests/test_acl1756_fb_api.py, resolved to main's `_restore_log_handler_filters` (equivalent purpose).\n\n## Spec findings\n- Ad-set reads: the owner decided on 2026-10-14 that ad sets are delivered by ACL-1798 (campaign inventory: campaigns, ad sets, ads) and ACL-1800; ACL-1760 keeps the campaign/ad spend reads. Recorded scope decision, not a silent reduction.\n- Three-account acceptance: done live on 2026-10-14 through the authorized isolated test dashboard (9095, ACL_FB_BACKEND=api), owner-approved, period 2026-10-01..13, read only: FacebookDoc120 $978.99 (ok, graph api, account ACTIVE), FacebookDoc121 $225.22 (ok, 12 objects, country split ok), KLD_BFL_B90 $1156.19 (ok, 14 objects, split ok, 37 s). Profiles closed by the read afterwards. Comparison with the Ads Manager UI figure was not done by a human in this run.\n\n## Checks\n- tests/test_acl1760_api_read.py, tests/test_acl1756_fb_api.py, tests/test_acl_test_platform.py: 279 passed (browser deselected). Full suite: CI on the PR.\n\n## Remaining\n- ACL-1761 (PR #765) carries the old 1760 code and must merge this head; its descendants follow."
+          "report": "# ACL-1760 refresh handoff\n\nWorker-S1760E / ws1760e-20261014. Only change since the approved head c6b5856a: merged current main (311700fd, batch e2b8b707: ACL-1781/1782/1783/1786/1806) into codex/acl-1760-api-read, clean merge, no conflicts. New head e45418dfd5bc0eecdd553263ffce9bddc14c2768.\n\nChecks: tests/test_acl1760_api_read.py, tests/test_acl1756_fb_api.py, tests/test_acl_test_platform.py passed (browser deselected). Earlier report: C:\u0007cl-notes\\handoff_760.md (P1/P2 fixes, spec decisions, 3-account live read)."
         },
         "pr": 762,
-        "queued_at": "2026-10-14T12:52:58+00:00",
+        "queued_at": "2026-10-14T14:38:29+00:00",
         "review_report": "\ufeff# Return ACL-1760 for a main refresh\n\nMain advanced from df6c2e8a to 311700fd (batch e2b8b707 promoted, PR 910). The approval of PR 762 is bound to the old main, so the intake rejects it as stale. The author merges current main into codex/acl-1760-api-read (no other change), hands off again and gets a fresh independent approval.",
         "return_operation": {
           "id": "5be2b613acd049a4af2c997c8f1423f9",
@@ -17296,7 +17282,8 @@
       812,
       903,
       907,
-      891
+      891,
+      760
     ],
     "review": null,
     "history": [
@@ -31090,6 +31077,13 @@
         "at": "2026-10-14T14:36:59+00:00",
         "issue": 760,
         "claim": "ee0d9d2a54304b0d9c1b4836c0abd1ca",
+        "actor": "Worker-S1760E"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T14:38:29+00:00",
+        "issue": 760,
+        "pr": 762,
         "actor": "Worker-S1760E"
       }
     ],
