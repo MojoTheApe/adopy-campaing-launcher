@@ -37640,7 +37640,8 @@
         "main_prs": [
           916
         ],
-        "finished_at": "2026-10-14T22:51:27+00:00"
+        "finished_at": "2026-10-14T22:51:27+00:00",
+        "closing_sources": true
       }
     },
     "integration": null,
