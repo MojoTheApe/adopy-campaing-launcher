@@ -11708,7 +11708,7 @@
             "session": "ws1760c-20261014"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-S1760C",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11727,7 +11727,7 @@
         },
         "pr": 762,
         "queued_at": "2026-10-14T12:52:58+00:00",
-        "review_report": "# Independent combined review \u2014 ACL-1760 / PR 835\n\nReviewer: actual `source_reviewer` agent, Reviewer-RX1012A / rev_rx1012a_20261012. Coordinator: Coordinator-CX1012A. Review date: 2026-10-12. No source edits, advertising actions, live browser profiles or production configuration were used in this review.\n\nSupported combined review claim: 37b8b284b6bb41269e9e0b8fa15eaacb, acquired for PR 835 and this actual Reviewer/session.\n\n## Candidate and composition\n\nFrozen batch: 2eaa69c20cbf4d399cee65a6fa070f9c. Only member: issue 760 / ACL-1760, source PR 762, Worker-S1760A. Preserved source Reviewer: Reviewer-R1760S / rev_r1760s_1010, with genuine rounds 1\u20135 approval from the private execution snapshot.\n\nIntegration head: 1adea353c6894de08e3284095d25edca50e68b4f. First parent/main baseline: e8e59f8376458f2f73089c3f2a8d454837ff033f. Second parent/source head: 41d61e4b500e3787bf6ccf4ae2878694f6a12fee. Integration tree: 946c76993515972d9086ef00405cdfb99dc98681, identical to the frozen source tree. The clean batch checkout contains one generated merge and no extra implementation or conflict-resolution commit. `git diff --check BASE...HEAD` passes. The full eight-file diff was inspected, including its Graph/profile callers and unchanged cleanup/launcher helpers.\n\nThe previous source approval legitimately exists, but the independent combined review found issues below. The new review does not rewrite earlier identities or claim that a green source or identical tree guarantees complete task acceptance.\n\n## Standards\n\nThe parallel actual helper `standards780` independently inspected this candidate. The source Reviewer verified both findings against the full call chains.\n\n- **P1 \u2014 Retain explicit launch-versus-attach ownership before stopping profiles.** `src/fb_api/profile.py:265` sets `started_now=True` after every successful `launcher.start_profile()`. The unchanged launcher (`src/meta_campaign_agent/multilogin_launcher.py:89\u2013122`) also succeeds by returning the port of an **already-running** profile after HTTP 409 / PROFILE_ALREADY_RUNNING. When running-profile discovery misses that profile or a session opens it after the final probe, `account_spend_api.py:371\u2013378` treats this result as ownership. `_finish_started()` then reaches `stop_profile_on_request` and can close the other session's profile. Propagate a trustworthy newly-started result and leave reused/unknown outcomes unowned. This violates engineering context's one-owner/profile-preservation rules and its distinction between confirmed and unknown external outcomes.\n\n- **P2 \u2014 Report usage-limit pagination stops as incomplete.** `src/fb_api/graph.py:322\u2013327` exits on `self.stopped` before marking truncation. A successful page with `paging.next` and usage at/above STOP_PCT sets `stopped` in `get()` but returns its rows. `_country_rows()` at `account_spend_api.py:612\u2013624` sees no truncation marker and accepts them; `_split_in_session()` can save an incomplete breakdown as `state=\"ok\"`, associated with the full spend. Mark incomplete pagination whenever a next page exists but cannot be fetched and add a response-header stop regression. This violates engineering context's explicit partial-success rule.\n\nNo additional smell-only finding is reported.\n\n## Spec\n\n- **P2 \u2014 The requested ad-set read scope is absent.** The issue's Reads specification says \u201c`/act_X/campaigns`, adsets and ads: ids, names, statuses, effective_status.\u201d The implemented `_tree()` calls campaigns and ads, plus their spend insights, and `build_objects()` produces only campaign/ad rows. The source PR explicitly says \u201cAd sets are not read yet.\u201d There is no recorded owner-approved scope reduction in the issue or the latest handoff inspected by the Coordinator. Complete the requested scope or obtain and preserve an explicit scope decision; do not declare the whole task complete from the current two-level implementation.\n\n- **P2 \u2014 Three-account acceptance is not evidenced.** The issue requires Read spend to match Ads Manager for **3 accounts**, with the tree visible and reads taking seconds. The only issue comment verifies Facebook_5414 on 2026-10-10; the Coordinator's latest Obsidian search found no three-account parity evidence. Later creation evidence belongs to ACL-1761 and does not prove this read acceptance. Preserve this outstanding criterion and perform it only through its authorized isolated test-dashboard process. Do not substitute unit tests or an unrelated live pilot.\n\nThe default RPA switch, in-profile GET transport, reading data shape, cap/cooldown handling and source isolation are otherwise implemented in the inspected scope. No unrelated source was added by batch assembly.\n\n## Verification and disposition\n\nThe source's earlier review records 115 focused tests and its required CI passing at the exact source head. This review did not redundantly rerun the full suite. Current combined CI, full Windows installer/update/recovery and stage evidence are not claimed by this report.\n\nPrivate offline reproducer: `batch1760-reproduce-findings.py`. The Coordinator executed it against this exact candidate and it exited 0, confirming both current defective behaviors. It mocks the actual launcher's HTTP response and all profile-stop operations, and supplies a fake Graph page with a next cursor plus 85% usage. It does not touch live profiles or make actual network calls.\n\n- P1 observed: HTTP 409 / PROFILE_ALREADY_RUNNING; `started_by_us=false`, `started_now=true`, read claimed ownership, **one soft-stop call**. This proves a reused profile can be stopped by the read when initial discovery did not establish it was running.\n- P2 observed: one Graph call; `stop=rate_limited`, `truncated=[]`; country breakdown saved `state=ok` with one country spend **20** against the explained account total **100**, while `paging.next` exists. This proves a successful partial page can be stored as complete when exposed usage headers stop pagination.\n\nThe reproducer intentionally asserts the present bad behavior to provide deterministic review evidence; its zero exit status is not a product acceptance pass.\n\n**Verdict: changes required; no approval.** Do not record an approved review, merge PR 835 into stage, promote main, or mark ACL-1760 Merged. Use the supported held-batch review-return and Coordinator author-return/cancel workflow before source edits. Retain the frozen member set/Coordinator claim as required by current batch state, and obtain fresh author handoff, approval, rebuilt combined review and applicable CI after corrections. Any full-task completion must also account for the unresolved spec criteria.\n\nTotals: Standards 2 (worst P1); Spec 2 (worst P2). Composition checks pass; task admission does not.",
+        "review_report": "\ufeff# Return ACL-1760 for a main refresh\n\nMain advanced from df6c2e8a to 311700fd (batch e2b8b707 promoted, PR 910). The approval of PR 762 is bound to the old main, so the intake rejects it as stale. The author merges current main into codex/acl-1760-api-read (no other change), hands off again and gets a fresh independent approval.",
         "return_operation": {
           "id": "5be2b613acd049a4af2c997c8f1423f9",
           "actor": "Coordinator-C0930A",
@@ -31057,6 +31057,18 @@
           "ineligible": {},
           "report": "\ufeff# Intake 7192c0e6 cancelled by Coordinator-C1014I (2026-10-14)\n\nThe first batch of this intake (ACL-1781, 1782, 1783, 1786, 1806) reached main via PR 910 and is recorded merged. The remaining member ACL-1886 stays Approved; it is taken into a new intake together with ACL-1760 (approved after this intake froze), so one batch instead of two sequential ones moves the chain base. No task state other than the intake changes."
         }
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-14T14:36:27+00:00",
+        "issue": 760,
+        "operation": {
+          "id": "5be2b613acd049a4af2c997c8f1423f9",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "\ufeff# Return ACL-1760 for a main refresh\n\nMain advanced from df6c2e8a to 311700fd (batch e2b8b707 promoted, PR 910). The approval of PR 762 is bound to the old main, so the intake rejects it as stale. The author merges current main into codex/acl-1760-api-read (no other change), hands off again and gets a fresh independent approval."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -31753,50 +31765,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T11:24:10+00:00"
-      },
-      "760": {
-        "issue": 760,
-        "pr": 762,
-        "branch": "codex/acl-1760-api-read",
-        "head_sha": "c6b5856ae2e7b5fed757fc3728e20683376dc586",
-        "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-        "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "c8553eaca5772bba5b0bbed87c2b7ab8cab6668956ecb4606703dc0106e20bc3",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1760D",
-          "implementer": "Worker-S1760C",
-          "review_session": "r1760d-20261014",
-          "execution_lane": "afa9f2cdea4248ac930f71f5365207fb",
-          "head_sha": "c6b5856ae2e7b5fed757fc3728e20683376dc586",
-          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "tree_sha": "121d40aa352b9d1a18bf47748370f7498a865a87",
-          "report": "Independent source review of ACL-1760 / PR 762 at head c6b5856a against current main df6c2e8a (merge-base check: main is an ancestor of the head). Full 9-file diff read. P1 verified: StartedProfile.newly_started is set only on the real start path in multilogin_launcher.start_profile; both 409/ALREADY_RUNNING returns leave it False; fb_api/profile.open_profile sets started_now only when newly_started is True; account_spend_api._open_gated gives the _ReadOpen stop ownership only for gated+started_now, so an already-running or unknown profile is never stopped by a read. P2 verified: GraphClient.get_all records truncation whenever paging.next exists but the next page is not fetched (usage stop, missing cursor, page cap); _country_rows checks only markers added by its own call and refuses a partial country list, so _split_in_session saves it failed, never ok. Spec decisions: ad sets are delivered by open ACL-1798 (Campaign > Ad set > Ad table) and ACL-1800, recorded in the worker handoff as the owner decision of 2026-10-14; the three-account read run was done live read-only on the isolated 9095 dashboard (Doc120, Doc121, KLD_BFL_B90, spend/status/tree/split ok) but without a human Ads Manager UI comparison in that run, and the owner's earlier 5414 parity confirmation stands; these two points are preserved as outstanding acceptance for the owner, not claimed as proven here. Tests: tests/test_acl1760_api_read.py, test_acl1756_fb_api.py, test_acl_test_platform.py in a detached worktree, 279 passed (browser deselected). Own mutations: disabling the country truncation check fails test_partial_country_report_is_refused and test_page_with_next_cursor_at_stop_usage_is_marked_truncated; forcing started_now=True fails test_launcher_409_is_not_a_fresh_start_and_is_never_stopped. CI on the exact head: all jobs green (tracker-link re-run after the handoff, passing; Linux 1-3, Windows, installer verification, descriptor, process instructions). No source edits, no live Meta or Multilogin calls. Non-blocking: PR body still says ad sets are not read and currency is an ISO code (the latter is now the sign for USD/EUR/GBP/ILS); update it and record the ad-set scope decision as an issue comment.",
-          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            760
-          ],
-          "recorded_at": "2026-10-14T13:13:16+00:00",
-          "issue_scopes": {
-            "760": "c8553eaca5772bba5b0bbed87c2b7ab8cab6668956ecb4606703dc0106e20bc3"
-          }
-        },
-        "lane": {
-          "id": "afa9f2cdea4248ac930f71f5365207fb",
-          "pr": 762,
-          "issues": [
-            760
-          ],
-          "actor": "Reviewer-R1760D",
-          "session": "r1760d-20261014",
-          "coordinator": "Coordinator-C0930A",
-          "started_at": "2026-10-14T13:00:03+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-14T13:13:48+00:00"
       }
     },
     "batches": {
