@@ -8488,20 +8488,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "761": {
-        "actor": "Worker-S1761E",
-        "session": "ws1761e-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1761-api-create",
-        "worktree": "C:\\wk-1761e",
-        "id": "30ed346aa46344deb5dbccc13f85962f",
-        "issue": 761,
-        "state": "handoff",
-        "started_at": "2026-10-14T15:34:27+00:00",
-        "from_status": "status:todo",
-        "pr": 765,
-        "report": "# ACL-1761 refresh report\n- Merged origin/main (d9118413, carries fixed ACL-1760: StartedProfile.newly_started, truncation marker) into codex/acl-1761-api-create. Merge, no rebase/force.\n- Conflict: only tests/test_acl1760_api_read.py (end of file); kept both blocks (1761's old-reading currency test + main's new review tests). Source files (profile.py, graph.py, account_spend_api.py, publish_jobs.py) auto-merged; main's newly_started gating (started_now = newly_started is True) and truncation marking are intact, 1761 code (publish_api.py uses started_now) works with it.\n- One follow-up: tests/test_acl1761_hang_logout.py stub launcher returned a start result without newly_started; under the fixed semantics unknown start = not owned, so the stub now sets newly_started=True like a real fresh start. No source change.\n- Tests: tests/test_acl1761_*, test_acl1760_api_read, test_acl1756_fb_api, test_acl_test_platform, test_the_api_stop_is_asked_first (-k \"not browser\"): 522 passed, 4 deselected."
       }
     },
     "tasks": {
@@ -11835,25 +11821,25 @@
             "session": "ws1761e-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1761E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-W1014F",
-          "session": "w1014f-20261014",
-          "coordinator": "Coordinator-T1014C",
+          "actor": "Worker-S1761E",
+          "session": "ws1761e-20261014",
+          "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1761-api-create",
-          "worktree": "C:\\wkf-1761",
-          "id": "79189bfeda39447984f2d6e2975c4272",
+          "worktree": "C:\\wk-1761e",
+          "id": "30ed346aa46344deb5dbccc13f85962f",
           "issue": 761,
           "state": "handoff",
-          "started_at": "2026-10-14T09:30:02+00:00",
+          "started_at": "2026-10-14T15:34:27+00:00",
           "from_status": "status:todo",
           "pr": 765,
-          "report": "# Handoff ACL-1761 (PR #765)\nScope: fixes for the returned review. Merged origin/main into codex/acl-1761-api-create (conflict in tests/test_acl1756_fb_api.py resolved with main's log-filter fixture); marked the Windows-only lines in tests/test_acl1761_hang_logout.py with `# linux-ok:` comments.\nChecks: head afbe97b1; local test_acl_test_platform, test_acl1761_hang_logout, test_acl1756_fb_api 232 passed; GitHub CI all green except tracker-link, which requires Review status (this handoff).\nRemaining risks: none known; descendants #796/#802/#813 merge this branch next."
+          "report": "# ACL-1761 refresh report\n- Merged origin/main (d9118413, carries fixed ACL-1760: StartedProfile.newly_started, truncation marker) into codex/acl-1761-api-create. Merge, no rebase/force.\n- Conflict: only tests/test_acl1760_api_read.py (end of file); kept both blocks (1761's old-reading currency test + main's new review tests). Source files (profile.py, graph.py, account_spend_api.py, publish_jobs.py) auto-merged; main's newly_started gating (started_now = newly_started is True) and truncation marking are intact, 1761 code (publish_api.py uses started_now) works with it.\n- One follow-up: tests/test_acl1761_hang_logout.py stub launcher returned a start result without newly_started; under the fixed semantics unknown start = not owned, so the stub now sets newly_started=True like a real fresh start. No source change.\n- Tests: tests/test_acl1761_*, test_acl1760_api_read, test_acl1756_fb_api, test_acl_test_platform, test_the_api_stop_is_asked_first (-k \"not browser\"): 522 passed, 4 deselected."
         },
         "pr": 765,
-        "queued_at": "2026-10-14T09:59:46+00:00",
+        "queued_at": "2026-10-14T15:38:15+00:00",
         "review_report": "\ufeff# Return ACL-1761 for a dependency refresh\n\nACL-1760 reached main (batch 0c5aecbd, PR 911 -> 912) with the review fixes P1 (newly_started: an already-running profile is never stopped) and P2 (truncation marking on a usage stop). PR 765 still carries the older copy of the 1760 commits. Required: merge current main into codex/acl-1761-api-create (merge, no rebase), keep main's fixed 1760 behaviour, re-run the 1761/1760/1756 tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "778": {
@@ -17408,7 +17394,8 @@
       812,
       903,
       907,
-      891
+      891,
+      761
     ],
     "review": null,
     "history": [
@@ -31500,6 +31487,13 @@
         "at": "2026-10-14T15:34:27+00:00",
         "issue": 761,
         "claim": "30ed346aa46344deb5dbccc13f85962f",
+        "actor": "Worker-S1761E"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T15:38:15+00:00",
+        "issue": 761,
+        "pr": 765,
         "actor": "Worker-S1761E"
       }
     ],
