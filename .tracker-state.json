@@ -8845,20 +8845,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "826": {
-        "actor": "Worker-RH1826",
-        "session": "wrh1826-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1826-mlx-session-lost",
-        "worktree": "C:\\wk-rh1826",
-        "id": "8e9044a0151543c786a59d692cd967ed",
-        "issue": 826,
-        "state": "handoff",
-        "started_at": "2026-10-14T23:11:53+00:00",
-        "from_status": "status:todo",
-        "pr": 828,
-        "report": "# ACL-1826 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1826-mlx-session-lost; head b5e3088c.\nConflict: docs/system/CHANGELOG.md only (both sides added entries at top); kept both. Code (publish_api.py, publish_jobs.py, report.html) auto-merged.\nTests: all 23 test files differing from main plus test_acl1761_* with -k 'not browser': 830 passed, 2 skipped."
       }
     },
     "tasks": {
@@ -12957,25 +12943,25 @@
             "session": "wrh1826-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RH1826",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1826A",
-          "session": "run_s1826a_1012",
+          "actor": "Worker-RH1826",
+          "session": "wrh1826-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1826-mlx-session-lost",
-          "worktree": "C:\\acl-1826-mlx",
-          "id": "2b5298d7f62846d5a75b6d3d5ae1902c",
+          "worktree": "C:\\wk-rh1826",
+          "id": "8e9044a0151543c786a59d692cd967ed",
           "issue": 826,
           "state": "handoff",
-          "started_at": "2026-10-12T12:54:45+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-14T23:11:53+00:00",
+          "from_status": "status:todo",
           "pr": 828,
-          "report": "PR #828 (head 7340923, branch codex/acl-1826-mlx-session-lost), stacked on #813 -> #802.\nSlot-B 403 -> mlx_session_lost, proxy auth -> proxy_auth; batch skip (slot A unaffected) via new src/fb_api/mlx_session.py; telemetry + Sentry per occurrence; offline JWT pre-flight; banner + Retry for Read all / Read campaigns / Open profiles. Publish all: server skip + per-account line only (no banner/Retry).\nTests: tests/test_acl1826_mlx_session_lost.py 35 passed; affected suites 168 + 214 passed. Mutation checks on batch skip: 4/4 caught.\nRPA-track file touched: src/meta_campaign_agent/multilogin_launcher.py (error attributes only)."
+          "report": "# ACL-1826 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1826-mlx-session-lost; head b5e3088c.\nConflict: docs/system/CHANGELOG.md only (both sides added entries at top); kept both. Code (publish_api.py, publish_jobs.py, report.html) auto-merged.\nTests: all 23 test files differing from main plus test_acl1761_* with -k 'not browser': 830 passed, 2 skipped."
         },
         "pr": 828,
-        "queued_at": "2026-10-12T13:20:27+00:00",
+        "queued_at": "2026-10-14T23:17:10+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "767": {
@@ -18076,7 +18062,8 @@
       800,
       815,
       799,
-      814
+      814,
+      826
     ],
     "review": null,
     "history": [
@@ -35001,6 +34988,13 @@
         "issue": 814,
         "pr": 817,
         "actor": "Worker-RJ1814"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T23:17:10+00:00",
+        "issue": 826,
+        "pr": 828,
+        "actor": "Worker-RH1826"
       }
     ],
     "policy": {
