@@ -33488,6 +33488,33 @@
           "ineligible": {},
           "report": "# Batch d527fe66 cancelled before assembly\n\nACL-1769 was approved minutes after this batch was frozen with four members (798, 766, 778, 775). Nothing was assembled, pushed or reviewed. A new intake with the five approved members 798, 766, 778, 775, 769 replaces it, saving a separate integration cycle."
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-14T22:07:20+00:00",
+        "intake": {
+          "id": "7319727f5aa84c4ba73e08fd3d3981bd",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "running",
+          "issues": [
+            798,
+            766,
+            778,
+            775,
+            769
+          ],
+          "remaining": [
+            798,
+            766,
+            778,
+            775,
+            769
+          ],
+          "batches": [],
+          "started_at": "2026-10-14T22:07:20+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -36010,26 +36037,27 @@
     },
     "integration": null,
     "intake": {
-      "id": "041446df1508423499d3f0d2e694240b",
+      "id": "7319727f5aa84c4ba73e08fd3d3981bd",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "cancelled",
+      "state": "running",
       "issues": [
         798,
         766,
         778,
-        775
+        775,
+        769
       ],
       "remaining": [
         798,
         766,
         778,
-        775
+        775,
+        769
       ],
       "batches": [],
-      "started_at": "2026-10-14T22:02:40+00:00",
-      "ineligible": {},
-      "report": "# Batch d527fe66 cancelled before assembly\n\nACL-1769 was approved minutes after this batch was frozen with four members (798, 766, 778, 775). Nothing was assembled, pushed or reviewed. A new intake with the five approved members 798, 766, 778, 775, 769 replaces it, saving a separate integration cycle."
+      "started_at": "2026-10-14T22:07:20+00:00",
+      "ineligible": {}
     },
     "source_reviews": {}
   }
