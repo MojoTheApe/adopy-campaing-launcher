@@ -8131,6 +8131,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T21:34:57+00:00",
         "from_status": "status:backlog"
+      },
+      "769": {
+        "actor": "Worker-W1014F",
+        "session": "w1014f-20261014",
+        "coordinator": "Coordinator-T1014C",
+        "branch": "codex/acl-1769-two-column-builder",
+        "worktree": "C:\\wkf-1769",
+        "id": "6d83218a309a4b5dbcc5fdd99f3a8062",
+        "issue": 769,
+        "state": "implementing",
+        "started_at": "2026-10-14T10:00:37+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11520,11 +11532,15 @@
           {
             "actor": "Worker-S1769A",
             "session": "run_s1769a_1011"
+          },
+          {
+            "actor": "Worker-W1014F",
+            "session": "w1014f-20261014"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1769A",
-        "coordinator": "Coordinator-C0930A",
+        "state": "implementing",
+        "worker": "Worker-W1014F",
+        "coordinator": "Coordinator-T1014C",
         "handoff": {
           "actor": "Worker-S1769A",
           "session": "run_s1769a_1011",
@@ -11541,7 +11557,6 @@
         },
         "pr": 796,
         "queued_at": "2026-10-11T18:59:04+00:00",
-        "reviewer": "Reviewer-R1014S",
         "review_report": "# Review return: PR #796 (ACL-1769), head 70f4862ef04f\n\nStatus: no CI checks on the current head. Cause: PR is CONFLICTING with current origin/main, so the workflow did not trigger.\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; app.py, report.html auto-merge). Fix: after PR #765's branch is fixed, merge codex/acl-1761-api-create into this branch, then merge current origin/main, resolve the test file keeping both sides, push.\n\n## Known failures that will hit once CI runs (verified at this head)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- inherited `tests/test_acl1761_hang_logout.py` lines 255/256/268/275. Fixed at the source in #765; arrives via the parent merge.\n2. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt.\n\n## Required fixes (stack order: after #765)\nMerge fixed parent + main, resolve conflict, push. Re-run affected tests (platform, shard, test_acl1756_fb_api.py, builder tests of this branch) and wait for full CI green."
       },
       "783": {
@@ -28942,6 +28957,13 @@
         "at": "2026-10-14T09:59:46+00:00",
         "issue": 761,
         "pr": 765,
+        "actor": "Worker-W1014F"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T10:00:37+00:00",
+        "issue": 769,
+        "claim": "6d83218a309a4b5dbcc5fdd99f3a8062",
         "actor": "Worker-W1014F"
       }
     ],
