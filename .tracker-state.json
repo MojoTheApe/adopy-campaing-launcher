@@ -12890,7 +12890,7 @@
             "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-FIVE874",
         "coordinator": "Coordinator-BA4E69",
         "handoff": {
@@ -28168,6 +28168,73 @@
         "pr": 893,
         "lane": "dc809a3c42c6421990a5e6a218d5fc09",
         "actor": "Reviewer-825c445100a4"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-14T07:17:55+00:00",
+        "issue": 892,
+        "pr": 893,
+        "review": {
+          "id": "dc809a3c42c6421990a5e6a218d5fc09",
+          "pr": 893,
+          "issues": [
+            892
+          ],
+          "actor": "Reviewer-825c445100a4",
+          "session": "40ce9120c5cb47b5b34465fcca6bf44b",
+          "coordinator": "Coordinator-BA4E69",
+          "started_at": "2026-10-14T07:02:00+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 892,
+            "pr": 893,
+            "branch": "codex/acl-1892-efficient-verification",
+            "head_sha": "810649a21c5af3978a2ee69759f534036336e6c6",
+            "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+            "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "defd2baacbde46fde2abf94f6a8b47a55a77b307917327c9284ccda9c81e2f16",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-825c445100a4",
+              "implementer": "Worker-FIVE874",
+              "execution_lane": "dc809a3c42c6421990a5e6a218d5fc09",
+              "review_session": "40ce9120c5cb47b5b34465fcca6bf44b",
+              "head_sha": "810649a21c5af3978a2ee69759f534036336e6c6",
+              "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+              "tree_sha": "e8a6b4efae432d69118d3f003b92512907fe70ca",
+              "report": "/private/tmp/acl-standard-upgrade-20261014/independent-source-review.md",
+              "scope": "Full original/current ACL-1892 task and all16 changed paths; source content approved, source CI admission pending; no integration/stage/main/package acceptance.",
+              "actual_reviewer_agent": "/root/audit_reality",
+              "actual_implementer_agent": "/root/acl_five_review_source",
+              "reviewed_at": "2026-10-14T07:05:26.986190+00:00",
+              "findings": [],
+              "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                892
+              ],
+              "recorded_at": "2026-10-14T07:06:02+00:00",
+              "issue_scopes": {
+                "892": "defd2baacbde46fde2abf94f6a8b47a55a77b307917327c9284ccda9c81e2f16"
+              }
+            },
+            "lane": {
+              "id": "dc809a3c42c6421990a5e6a218d5fc09",
+              "pr": 893,
+              "issues": [
+                892
+              ],
+              "actor": "Reviewer-825c445100a4",
+              "session": "40ce9120c5cb47b5b34465fcca6bf44b",
+              "coordinator": "Coordinator-BA4E69",
+              "started_at": "2026-10-14T07:02:00+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T07:17:24+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -28531,6 +28598,55 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-13T21:25:03+00:00"
+      },
+      "892": {
+        "issue": 892,
+        "pr": 893,
+        "branch": "codex/acl-1892-efficient-verification",
+        "head_sha": "810649a21c5af3978a2ee69759f534036336e6c6",
+        "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+        "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "defd2baacbde46fde2abf94f6a8b47a55a77b307917327c9284ccda9c81e2f16",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-825c445100a4",
+          "implementer": "Worker-FIVE874",
+          "execution_lane": "dc809a3c42c6421990a5e6a218d5fc09",
+          "review_session": "40ce9120c5cb47b5b34465fcca6bf44b",
+          "head_sha": "810649a21c5af3978a2ee69759f534036336e6c6",
+          "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+          "tree_sha": "e8a6b4efae432d69118d3f003b92512907fe70ca",
+          "report": "/private/tmp/acl-standard-upgrade-20261014/independent-source-review.md",
+          "scope": "Full original/current ACL-1892 task and all16 changed paths; source content approved, source CI admission pending; no integration/stage/main/package acceptance.",
+          "actual_reviewer_agent": "/root/audit_reality",
+          "actual_implementer_agent": "/root/acl_five_review_source",
+          "reviewed_at": "2026-10-14T07:05:26.986190+00:00",
+          "findings": [],
+          "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            892
+          ],
+          "recorded_at": "2026-10-14T07:06:02+00:00",
+          "issue_scopes": {
+            "892": "defd2baacbde46fde2abf94f6a8b47a55a77b307917327c9284ccda9c81e2f16"
+          }
+        },
+        "lane": {
+          "id": "dc809a3c42c6421990a5e6a218d5fc09",
+          "pr": 893,
+          "issues": [
+            892
+          ],
+          "actor": "Reviewer-825c445100a4",
+          "session": "40ce9120c5cb47b5b34465fcca6bf44b",
+          "coordinator": "Coordinator-BA4E69",
+          "started_at": "2026-10-14T07:02:00+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-14T07:17:24+00:00"
       }
     },
     "batches": {
@@ -29240,67 +29356,6 @@
         "coordinator": "Coordinator-CR1012",
         "started_at": "2026-10-13T21:41:15+00:00",
         "state": "reviewing"
-      },
-      "893": {
-        "id": "dc809a3c42c6421990a5e6a218d5fc09",
-        "pr": 893,
-        "issues": [
-          892
-        ],
-        "actor": "Reviewer-825c445100a4",
-        "session": "40ce9120c5cb47b5b34465fcca6bf44b",
-        "coordinator": "Coordinator-BA4E69",
-        "started_at": "2026-10-14T07:02:00+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 892,
-          "pr": 893,
-          "branch": "codex/acl-1892-efficient-verification",
-          "head_sha": "810649a21c5af3978a2ee69759f534036336e6c6",
-          "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-          "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "defd2baacbde46fde2abf94f6a8b47a55a77b307917327c9284ccda9c81e2f16",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-825c445100a4",
-            "implementer": "Worker-FIVE874",
-            "execution_lane": "dc809a3c42c6421990a5e6a218d5fc09",
-            "review_session": "40ce9120c5cb47b5b34465fcca6bf44b",
-            "head_sha": "810649a21c5af3978a2ee69759f534036336e6c6",
-            "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-            "tree_sha": "e8a6b4efae432d69118d3f003b92512907fe70ca",
-            "report": "/private/tmp/acl-standard-upgrade-20261014/independent-source-review.md",
-            "scope": "Full original/current ACL-1892 task and all16 changed paths; source content approved, source CI admission pending; no integration/stage/main/package acceptance.",
-            "actual_reviewer_agent": "/root/audit_reality",
-            "actual_implementer_agent": "/root/acl_five_review_source",
-            "reviewed_at": "2026-10-14T07:05:26.986190+00:00",
-            "findings": [],
-            "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              892
-            ],
-            "recorded_at": "2026-10-14T07:06:02+00:00",
-            "issue_scopes": {
-              "892": "defd2baacbde46fde2abf94f6a8b47a55a77b307917327c9284ccda9c81e2f16"
-            }
-          },
-          "lane": {
-            "id": "dc809a3c42c6421990a5e6a218d5fc09",
-            "pr": 893,
-            "issues": [
-              892
-            ],
-            "actor": "Reviewer-825c445100a4",
-            "session": "40ce9120c5cb47b5b34465fcca6bf44b",
-            "coordinator": "Coordinator-BA4E69",
-            "started_at": "2026-10-14T07:02:00+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T07:17:24+00:00"
-        }
       }
     }
   }
