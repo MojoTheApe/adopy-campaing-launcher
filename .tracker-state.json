@@ -8488,20 +8488,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "778": {
-        "actor": "Worker-S1778E",
-        "session": "ws1778e-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1778-header-linear-toolbar",
-        "worktree": "C:\\wk-1778e",
-        "id": "f056313dad8842aeada56877c95c7b15",
-        "issue": 778,
-        "state": "handoff",
-        "started_at": "2026-10-14T16:07:13+00:00",
-        "from_status": "status:todo",
-        "pr": 780,
-        "report": "\ufeffACL-1778 refresh (Worker-S1778E). Previous head c671a602 had no code defect; required source CI never ran (startup_failure during billing outage). Fresh head 74128d1a = merge of origin/main d9118413 into the branch (merge only, no rebase).\nConflicts: none (auto-merge of src/web/templates/report.html and loading.html; main's loading stages ACL-1865 and stage badge preserved alongside the 1778 header).\nTests (PYTHONUTF8=1 pytest -k \"not browser\"): tests/test_header.py, tests/test_stage_badge.py, tests/test_acl_test_platform.py, tests/test_report_loading_stages.py -> 135 passed. Header browser tests not run: free RAM 4.0 GB < 6 GB. No live calls."
       }
     },
     "tasks": {
@@ -11875,25 +11861,25 @@
             "session": "ws1778e-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1778E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-H8D3",
-          "session": "Worker-H8D3",
-          "coordinator": "Coordinator-H8D3",
+          "actor": "Worker-S1778E",
+          "session": "ws1778e-20261014",
+          "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1778-header-linear-toolbar",
-          "worktree": "C:\\acl-header-design",
-          "id": "fd905cbebf444b9fb4294dfeb46ab06f",
+          "worktree": "C:\\wk-1778e",
+          "id": "f056313dad8842aeada56877c95c7b15",
           "issue": 778,
           "state": "handoff",
-          "started_at": "2026-10-11T05:51:20+00:00",
+          "started_at": "2026-10-14T16:07:13+00:00",
           "from_status": "status:todo",
           "pr": 780,
-          "report": "## Fix handoff \u00b7 ACL-1778\n\n- Head c671a6022618032777cd8151f2ae825d5870bd81 on base e8e59f83, same branch codex/acl-1778-header-linear-toolbar, PR #780.\n- Fixed review findings: (1) amapApply closes the picker through _amapClose, so aria-expanded resets on a same-URL hash navigation; (3) the picker popup carries role=\"dialog\" and aria-label \"Date range\".\n- Added tests: picker close path and role, half-open period (\"Oct 1, 2026 \u2013 \u2026\", \"\u2026 \u2013 Oct 9, 2026\"), escaping of a malformed value.\n- Checks: tests/test_header.py 14 passed; header/stage/calendar set 33 passed earlier on the fix.\n- Known, not in scope: below 760 px the open builder drawer covers the header (unchanged from base)."
+          "report": "\ufeffACL-1778 refresh (Worker-S1778E). Previous head c671a602 had no code defect; required source CI never ran (startup_failure during billing outage). Fresh head 74128d1a = merge of origin/main d9118413 into the branch (merge only, no rebase).\nConflicts: none (auto-merge of src/web/templates/report.html and loading.html; main's loading stages ACL-1865 and stage badge preserved alongside the 1778 header).\nTests (PYTHONUTF8=1 pytest -k \"not browser\"): tests/test_header.py, tests/test_stage_badge.py, tests/test_acl_test_platform.py, tests/test_report_loading_stages.py -> 135 passed. Header browser tests not run: free RAM 4.0 GB < 6 GB. No live calls."
         },
         "pr": 780,
-        "queued_at": "2026-10-11T05:53:03+00:00",
+        "queued_at": "2026-10-14T16:09:24+00:00",
         "review_report": "# PR 780 independent review return \u2014 2026-10-12\n\nReviewer: Reviewer-RX1012A (actual independent source_reviewer agent), session rev_rx1012a_20261012. Coordinator: Coordinator-CX1012A. Held source-review claim: 0dabb1148ba346e493b90c626603b938.\n\nTask: ACL-1778 / issue 778. PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/780. Exact inspected head: c671a6022618032777cd8151f2ae825d5870bd81. Current main/base supplied and independently resolved locally: e8e59f8376458f2f73089c3f2a8d454837ff033f. Diff: `git diff e8e59f8376458f2f73089c3f2a8d454837ff033f...c671a6022618032777cd8151f2ae825d5870bd81`. Four files: report/loading templates, header/stage-badge tests; two commits ae127e86 and c671a602. Source was not edited by this Reviewer.\n\n## Standards\n\nNo approval is recorded. Read AGENTS.md, delivery.json, WORKFLOW.md, BATCH_INTEGRATION.md, STAGING.md, engineering context, tracker/config.json and the exact pinned Tracker guide. Required source CI remains mandatory under WORKFLOW.md and the v2 batch contract. The Coordinator's fresh GitHub read found `statusCheckRollup: []` on this head. The prior run 38116203727 ended in startup_failure; GitHub refuses its rerun and its check suite is not rerequestable. This is unavailable verification, not a code test failure and not evidence of success. The parallel offline Standards inspection is still in progress and will be appended separately.\n\n## Spec\n\nRead the complete issue body from the Coordinator's fresh `issue-778.json`. The inspected diff implements the requested two-rail layout, framed date control, English ISO-derived labels, preserved control IDs/routes, Adopy tab title, theme tokens and responsive rows. The c671a602 fix routes Update through the common picker close function and sets dialog role, addressing the prior ARIA close concerns in code. Actual browser regression and screenshot evidence have not yet been independently verified in this resumed review. No completed full-scope acceptance or approval is claimed.\n\n## Required next action\n\nReturn source review using the supported `execution review-return` command, retaining the real Worker and original source branch. A fresh implementation claim is required before a Worker changes even the source head to restore workflow triggers. Restore required source CI legitimately, preserve the design acceptance and screenshots, then hand off and acquire fresh independent exact-head/base/scope review. Do not approve or directly merge this ordinary source PR, waive checks, modify the pinned client, or treat local tests as required CI.\n\nThis return releases a CI-blocked source lane while preserving all source work. The offline inspection may continue read-only, but any later approval must bind current head/base and completed required checks."
       },
       "769": {
@@ -17416,7 +17402,8 @@
       903,
       907,
       891,
-      761
+      761,
+      778
     ],
     "review": null,
     "history": [
@@ -31522,6 +31509,13 @@
         "at": "2026-10-14T16:07:13+00:00",
         "issue": 778,
         "claim": "f056313dad8842aeada56877c95c7b15",
+        "actor": "Worker-S1778E"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T16:09:24+00:00",
+        "issue": 778,
+        "pr": 780,
         "actor": "Worker-S1778E"
       }
     ],
