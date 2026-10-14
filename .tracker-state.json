@@ -8131,6 +8131,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T21:34:57+00:00",
         "from_status": "status:backlog"
+      },
+      "761": {
+        "actor": "Worker-W1014F",
+        "session": "w1014f-20261014",
+        "coordinator": "Coordinator-T1014C",
+        "branch": "codex/acl-1761-api-create",
+        "worktree": "C:\\wkf-1761",
+        "id": "79189bfeda39447984f2d6e2975c4272",
+        "issue": 761,
+        "state": "implementing",
+        "started_at": "2026-10-14T09:30:02+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11451,11 +11463,15 @@
           {
             "actor": "Worker-O1761A",
             "session": "run_o1761a_1010"
+          },
+          {
+            "actor": "Worker-W1014F",
+            "session": "w1014f-20261014"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-O1761A",
-        "coordinator": "Coordinator-C0930A",
+        "state": "implementing",
+        "worker": "Worker-W1014F",
+        "coordinator": "Coordinator-T1014C",
         "handoff": {
           "actor": "Worker-O1761A",
           "session": "run_o1761a_1010",
@@ -11472,7 +11488,6 @@
         },
         "pr": 765,
         "queued_at": "2026-10-11T18:13:47+00:00",
-        "reviewer": "Reviewer-R1014S",
         "review_report": "# Review return: PR #765 (ACL-1761), head 443914460fcb\n\nStatus: no CI checks at all on the current head. Cause: PR is CONFLICTING with current origin/main, so the pull_request workflow did not trigger (no merge commit to test).\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; src/web/app.py and report.html auto-merge). Fix: merge current origin/main INTO the branch (no rebase/force), resolve the test file keeping both sides' tests, push, so CI starts.\n\n## Known failures that WILL hit this branch once CI runs (verified at this head)\n1. `tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- `tests/test_acl1761_hang_logout.py` lines 255, 256 [backslash-path], 268 [platform-branch], 275 [windll]. Fix: add `pytestmark = pytest.mark.windows_only(reason=\"...\")` for the Windows-path tests, or `# linux-ok: <why>` on those lines. This file originates in this branch, so fix it HERE (the descendants inherit it).\n2. Not applicable at this head: Cyrillic `[x\u0445\u00d7]` in report.html (no match), `tzdata` in requirements.txt (absent), so no change needed for (b)/(c).\n\n## Required fixes (stack order: this branch first)\nMerge main, resolve test_acl1756_fb_api.py, fix item 1, push. Then re-run the affected tests (test_acl_test_platform.py, test_acl1761_hang_logout.py, test_acl1756_fb_api.py) and wait for full CI green. Descendant PRs #796, #802, #813 must then merge this branch + main in order."
       },
       "778": {
@@ -14199,6 +14214,10 @@
       "Reviewer-R1014S": {
         "session": "r1014s-20261014",
         "role": "Reviewer"
+      },
+      "Worker-W1014F": {
+        "session": "w1014f-20261014",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -28858,6 +28877,13 @@
           "report": "# Review return: PR #813 (ACL-1812), head 519e07dd6b30 (CI run 38224895456/\u2026405 from 2026-10-12 08:39, for this head)\n\nRed: Classify and check project tooling, Process instructions, Verify build inputs, Installer verification (build job skipped), linux tests (3.11 shards 2,3; 3.13 shards 2,3), windows tests, ACL verification (aggregate).\n\n## Root causes (from logs)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- `tests/test_acl1761_hang_logout.py:255,256,268,275` (backslash-path, platform-branch, windll). Fix from #765 arrives via the parent merge.\n2. `test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards` -- `AssertionError: [34, 38, 37]` (spread must be <= 3). Rebalance shard assignment after merging parents and main.\n3. Verify build inputs (hence Installer verification): `tests/test_acl1800_campaign_commands.py:720  ad account id: act_9999999999` found as a real-looking identifier in tracked files. This branch is based on an older #802 head; #802's current head no longer contains it, so merging the fixed #802 clears it. If it remains after merge, replace the id with an obviously fake placeholder.\n4. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt, tracker-link (green).\n5. Note: the #802 failure `test_poll_resumes_and_updates_all_copies_and_status` (window is not defined) is not in this old run but will appear once #802's base is merged; it needs the #802 fix.\n\n## Conflict with main\nCONFLICTING: `docs/system/CHANGELOG.md`, `tests/test_acl1756_fb_api.py`. Merge fixed #802 (which contains #765/#796), then current origin/main; resolve keeping both sides; push.\n\n## Required fixes (stack order: last)\nMerge fixed #802 + main, resolve conflicts, rebalance shards, confirm no act_ id remains. Re-run affected tests (platform, shard, review_ui_regressions, test_acl1812_*) and full CI.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T09:30:02+00:00",
+        "issue": 761,
+        "claim": "79189bfeda39447984f2d6e2975c4272",
+        "actor": "Worker-W1014F"
       }
     ],
     "policy": {
