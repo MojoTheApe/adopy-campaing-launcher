@@ -8497,9 +8497,11 @@
         "worktree": "C:\\wk-1778e",
         "id": "f056313dad8842aeada56877c95c7b15",
         "issue": 778,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T16:07:13+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 780,
+        "report": "\ufeffACL-1778 refresh (Worker-S1778E). Previous head c671a602 had no code defect; required source CI never ran (startup_failure during billing outage). Fresh head 74128d1a = merge of origin/main d9118413 into the branch (merge only, no rebase).\nConflicts: none (auto-merge of src/web/templates/report.html and loading.html; main's loading stages ACL-1865 and stage badge preserved alongside the 1778 header).\nTests (PYTHONUTF8=1 pytest -k \"not browser\"): tests/test_header.py, tests/test_stage_badge.py, tests/test_acl_test_platform.py, tests/test_report_loading_stages.py -> 135 passed. Header browser tests not run: free RAM 4.0 GB < 6 GB. No live calls."
       }
     },
     "tasks": {
