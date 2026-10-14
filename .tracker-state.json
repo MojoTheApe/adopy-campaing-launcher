@@ -11859,7 +11859,7 @@
             "session": "run_s1812a_1012"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1812A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11877,7 +11877,8 @@
           "report": "# ACL-1812 report (Worker-S1812A)\n\nPR #813, head f3d337f, branch codex/acl-1812-warm-sessions, stacked on #802 -> #796 -> #765. CI is blocked.\n\n## Design\n- src/fb_api/warm.py: registry of warm profiles (persisted in warm_sessions.json in the machine config dir), one robot tab per profile, per-profile lock, HeavyGate, Open/Close logic, restart-stop log.\n- _session (reads, inventory, commands) and ApiPublisher.open (creation) use the registry only for profiles in it. Other profiles: old path, unchanged.\n- Liveness before each action: Target.getTargetInfo + helper state; dead or hung tab replaced once; login/checkpoint stop with existing reasons; existing cooldowns apply; budget per action.\n- Gate counts only running actions; default 1; ACL_WARM_MAX_HEAVY 1-3; 2nd/3rd also need free memory (measured size when available).\n- Open profiles for today: background job, one profile at a time, 5-10 s between real starts, existing memory queue, 3 min restart cooldown. Close profiles: confirm, only dashboard_started and same port, never hand-opened.\n- UI: chip + tick + Open/Close per row, two toolbar buttons per country; GET /warm/state is local only. report.html: one script tag.\n\n## Tests\ntests/test_acl1812_warm_sessions.py: 53 passed. Affected suites run together: 686 passed (1756, 1760, 1761 api_create/hang_logout/plan_check, 1798 inventory, 1800 commands + wiring, static scripts, 1812). Playwright not run (free RAM 5 GB < 6 GB).\n\n## Mutations (all killed)\ncooldown always zero; open ignores cooldown; close ignores dashboard_started; close ignores port match; close stops hand-opened; dead tab not replaced; gate counts idle (hang); tab never reused; login URL not a stop; per-profile lock not taken.\n\n## Open risks for the live check\n1. Hours-long responsiveness of a background tab is unproven (liveness check only replaces after the fact).\n2. Resource Timing buffer fills over hours: token then comes from page HTML via probe(); if absent the tab is replaced (one reload-equivalent).\n3. Ads Manager SPA may change URL host (business.facebook.com): such a tab is treated as foreign and replaced once.\n4. Registry after a dashboard restart: the old robot tab is closed by target id when the new tab opens; first action verifies the process port before trusting the record.\n5. Restart-stop log lives in warm_sessions.json; only stops seen by the registry (Close, or profile seen gone) are recorded. Read-started stops (_close_started) and publish stops are NOT recorded, so ACL-1811 must adopt/replace this log for full coverage.\n6. Two gates exist (publish slots for jobs, HeavyGate for API actions); they only meet through free memory.\n7. Rows tick-box selection UI is untested in a browser (Playwright skipped for RAM)."
         },
         "pr": 813,
-        "queued_at": "2026-10-12T07:05:42+00:00"
+        "queued_at": "2026-10-12T07:05:42+00:00",
+        "reviewer": "Reviewer-R1014S"
       },
       "814": {
         "implementers": [
@@ -16702,7 +16703,6 @@
       806,
       775,
       797,
-      812,
       814,
       815,
       816,
@@ -28832,6 +28832,13 @@
           "report": "# Review return: PR #802 (ACL-1800), head 11f7c46c6ba1 (CI run 38258688981 is for this head)\n\nRed: Classify and check project tooling, Process instructions, linux tests (3.11 shards 1,2; 3.13 shards 1,2), windows tests, ACL verification (aggregate). Green: descriptor, tracker-link, Verify build inputs, Installer verification, Build/install.\n\n## Root causes (from logs)\n1. `tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` (fails in classify, process instructions, linux and windows jobs) -- `tests/test_acl1761_hang_logout.py:255,256 [backslash-path], :268 [platform-branch], :275 [windll]`. Fix: `pytestmark = pytest.mark.windows_only(reason=...)` or `# linux-ok:` comments (fix originates in #765).\n2. `tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards` -- `AssertionError: [35, 41, 33]`, max-min must be <= 3. Browser test files added by the stack unbalance the shards; adjust the shard assignment / weights so the spread is <= 3 (check after merging main, counts change).\n3. `tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` -- node `ReferenceError: window is not defined` at report.html (compiled line 1384): `if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE)`. In the test VM `document` is stubbed but `window` is not. Fix in template: guard with `typeof window !== 'undefined'` (preferred, product code) or add `window` to the test harness.\n4. Not applicable at this head: Cyrillic `[x\u0445\u00d7]` in report.html, `tzdata` in requirements.txt, tracker-link (green).\n\n## Conflict with main\nCONFLICTING: `docs/system/CHANGELOG.md` and `tests/test_acl1756_fb_api.py` (content). Merge parents in stack order (#765, #796 fixed) and then current origin/main into this branch; resolve both files keeping both sides; push.\n\n## Required fixes (stack order)\nAfter #765 and #796 are fixed and merged in: merge origin/main, resolve conflicts, fix items 2 and 3 (item 1 comes from #765). Re-run the affected tests (test_acl_test_platform, test_acl_test_shard, test_review_ui_regressions, test_acl1800_*) and full CI.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T09:27:18+00:00",
+        "pr": 813,
+        "lane": "a21c26b488a744b9bb6086622a343f25",
+        "actor": "Reviewer-R1014S"
       }
     ],
     "policy": {
@@ -30047,6 +30054,18 @@
         "session": "connection_review_rs1012",
         "coordinator": "Coordinator-CR1012",
         "started_at": "2026-10-13T21:41:15+00:00",
+        "state": "reviewing"
+      },
+      "813": {
+        "id": "a21c26b488a744b9bb6086622a343f25",
+        "pr": 813,
+        "issues": [
+          812
+        ],
+        "actor": "Reviewer-R1014S",
+        "session": "r1014s-20261014",
+        "coordinator": "Coordinator-T1014C",
+        "started_at": "2026-10-14T09:27:18+00:00",
         "state": "reviewing"
       }
     }
