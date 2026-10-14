@@ -38149,7 +38149,51 @@
         "session": "r1797j-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T23:35:41+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 797,
+          "pr": 810,
+          "branch": "codex/acl-1797-design-system",
+          "head_sha": "ea925cfc6defd5834d4d5cc85f64b55613ede3f0",
+          "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+          "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1797J",
+            "implementer": "Worker-RJ1797",
+            "review_session": "r1797j-20261015",
+            "execution_lane": "848e802205894b719e0f5390bb5f6f88",
+            "head_sha": "ea925cfc6defd5834d4d5cc85f64b55613ede3f0",
+            "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+            "tree_sha": "37444908174083f36ff23a016e7bf00638d820b5",
+            "report": "Independent re-review of ACL-1797 / PR 810 at head ea925cfc6defd5834d4d5cc85f64b55613ede3f0 against current main a4e38b7c (main is an ancestor of the head). Reviewer-R1797J implemented none of it. Previous approval (R1797G, 52d3ecdc) was returned only because main moved (1798, 1766, 1778, 1769).\n\nDelta check: I reproduced the merge independently (git merge-tree origin/main 52d3ecdc) and diffed it with the pushed head. The ONLY difference is src/web/templates/report.html, and only inside the 7 conflict regions: main's redesigned header won everywhere (framed period range, stage badge, no old refresh form/buyer-pick/period-pick), plus the 1797 token font size var(--adopy-text-sm) on the plan meta line, which keeps main's page_source/pixel_source labels (1766). No extra hunk outside the conflicts; no conflict markers left. Everything else (1769 stacked cards, 1798 inventory/home campaigns, tokens css, all templates and tests) is the automatic merge result.\n\nVerification:\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\" on the 1797 design-system/token/theme/contrast/buttons/account-tree/notes/read-fallback tests plus 1769, 1766, header, stage badge and all builder tests (33 files): 434 passed, 39 deselected.\n- CI on the head: Linux 1-3, Windows tests, Windows installer, process instructions, descriptor all pass; tracker-link failed only because the task was in the returned state and passed after review-acquire (rerun).\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues.",
+            "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              797
+            ],
+            "recorded_at": "2026-10-14T23:46:49+00:00",
+            "issue_scopes": {
+              "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
+            }
+          },
+          "lane": {
+            "id": "848e802205894b719e0f5390bb5f6f88",
+            "pr": 810,
+            "issues": [
+              797
+            ],
+            "actor": "Reviewer-R1797J",
+            "session": "r1797j-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-14T23:35:41+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T23:47:23+00:00"
+        }
       },
       "802": {
         "id": "1c1e7c8703d14377a22d75dcd7750b69",
