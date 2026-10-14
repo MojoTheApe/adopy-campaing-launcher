@@ -111,7 +111,6 @@ def _read_context(path: str, params: dict | None) -> dict[str, str]:
     return context
 
 
-
 class GraphStop(RuntimeError):
     """Остановка: дальше этот клиент не зовёт Graph вовсе."""
 
