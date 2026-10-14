@@ -113,6 +113,16 @@ a clear refusal.
   becomes a clear English stop that points to "Use existing form". The robot never asks for or stores
   another token.
 
+## Builder: clearing a file box removes the file from the plan - ACL-1903
+
+- The "File" and "Stories / Reels file" boxes of an ad are search inputs; the chosen file lives in a hidden
+  field that the plan and the server read. Erasing the text used to leave the old file in the hidden field:
+  the box looked empty but publish still uploaded it (live on TEST9095, 2026-10-14).
+- Now any edit that makes the text differ from the chosen file (including an empty box) clears the choice,
+  and the plan, pre-flight audit and preview show the field as empty. Picking a file again works as before.
+- A value placed without typing (Send-to-Builder prefill, Duplicate ad) is not touched.
+- Regression browser test: `tests/test_acl1903_builder_file_clear_browser.py`.
+
 ## Builder: pre-flight audit card that blocks Publish - ACL-1819
 
 - Every check is defined once in `src/fb_api/preflight_rules.py` (id, label, severity, field, hint,
