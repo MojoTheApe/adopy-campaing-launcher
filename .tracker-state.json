@@ -8854,9 +8854,11 @@
         "worktree": "C:\\wk-rh11800",
         "id": "e145e7a176074f6e8846f7361ee45f87",
         "issue": 800,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T23:03:39+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 802,
+        "report": "# ACL-1800 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1800-campaign-commands; head fa2dab06. No conflicts (clean auto-merge).\nTests: all test files changed by the branch (1798 inventory/browser, 1800 x5, review_ui_regressions, static_scripts_from_disk) plus test_acl1761_* with -k 'not browser': 588 passed, 2 skipped."
       },
       "799": {
         "actor": "Worker-RJ1799",
