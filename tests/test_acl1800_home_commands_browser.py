@@ -1,6 +1,6 @@
 """ACL-1800 в браузере: команды Home-таблицы на настоящем шаблоне и настоящих маршрутах.
 
-Таблица — шаблон `_home_campaigns.html` ACL-1798; `/campaign-commands/*` — настоящие
+Таблица — компонент `_campaign_table.html` в выпадашке аккаунта (ACL-1798/1800); `/campaign-commands/*` — настоящие
 обработчики поверх `FakeMeta` в памяти (Meta и Multilogin не трогаются). Тест
 пропускается, если свободной памяти меньше 6 ГБ. Снимки экрана пишутся, если задан
 `ACL_SHOTS_DIR`.
@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 pytest.importorskip("playwright.sync_api")
-from tests.test_acl1798_home_campaigns_browser import Site, sync_playwright  # noqa: E402,F401
+from tests.test_acl1798_home_campaigns_browser import Site, open_acc, sync_playwright  # noqa: E402,F401
 from tests._retry_once import goto, launch_chromium  # noqa: E402
 from tests.test_acl1798_campaign_inventory import adset, camp, ad, snapshot  # noqa: E402
 from tests.test_acl1800_campaign_commands import (  # noqa: E402
@@ -129,8 +129,9 @@ def open_page(world, monkeypatch, tmp_path):
         pg.on("pageerror", lambda e: errors.append(str(e)))
         pg.errors = errors
         goto(pg, "http://acl.test/")
-        pg.wait_for_selector("#hc-table tbody tr", timeout=10000)
-        pg.wait_for_function("window.__hc && window.__hc.state.avail !== null")
+        open_acc(pg, "Acc")
+        pg.wait_for_selector(".hc-table tbody tr", timeout=10000)
+        pg.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.avail !== null")
         state.update(pw=pw, browser=browser)
         return pg, site
 
@@ -161,7 +162,8 @@ def test_switch_flow_end_to_end_row_comes_from_the_readback(open_page, world):
     assert world.meta.posts == []
     page.click('dialog.acm-confirm [data-acm="confirm"]')
     page.wait_for_selector(f'.hc-switch[data-object-id="{CAMP_A}"][aria-checked="true"]', timeout=15000)
-    assert "Confirmed" in page.inner_text(f'tr[data-key="campaign:{CAMP_A}"]')
+    assert "Confirmed" in page.inner_text(f'tr[data-msg="row:campaign:{CAMP_A}"]')           # итог — строкой под строкой, не в ячейке Status
+    assert "Confirmed" not in page.inner_text(f'tr[data-key="campaign:{CAMP_A}"] td.p2')
     assert world.meta.posts == [(f"/{CAMP_A}", {"status": "ACTIVE"})]
     assert world.meta.objs[CAMP_A]["status"] == "ACTIVE"
     shot(page, "02-switch-confirmed")
@@ -262,7 +264,7 @@ def test_budget_editor_appears_only_on_budget_owners(open_page, world):
     page.wait_for_selector("dialog.acm-confirm[open]")
     assert "50.00 USD → 60.00 USD" in page.inner_text("dialog.acm-confirm")
     page.click('dialog.acm-confirm [data-acm="confirm"]')
-    page.wait_for_selector(f'tr[data-key="campaign:{CAMP_CBO}"]:has-text("Daily $60.00")', timeout=15000)
+    page.wait_for_selector(f'tr[data-key="campaign:{CAMP_CBO}"]:has-text("$60.00 / day")', timeout=15000)
     assert world.meta.posts == [(f"/{CAMP_CBO}", {"daily_budget": "6000"})]
     shot(page, "07-budget-confirmed")
 
@@ -323,8 +325,52 @@ def test_commands_are_disabled_with_a_reason_when_not_on_loopback(open_page, wor
 
 def test_duplicate_and_copy_stay_disabled(open_page, world):
     page, site = open_page()
-    page.select_option("#hc-preset", "all")
+    page.select_option("[data-hc=preset]", "all")
     info = page.evaluate("""() => [...document.querySelectorAll('.hc-cmd[data-action=duplicate], .hc-cmd[data-action=copy], .hc-cmd[data-action=more]')]
         .map(b => ({a: b.dataset.action, d: b.disabled, t: b.title}))""")
     assert info and all(i["d"] for i in info)
     assert {i["t"] for i in info if i["a"] in ("duplicate", "copy")} == {"ACL-1773"}
+
+
+@pytest.mark.skipif(not SHOTS, reason="снимки экрана пишутся только при заданном ACL_SHOTS_DIR")
+def test_country_table_screenshots_light_and_dark(open_page, monkeypatch, world):
+    """Снимки для сравнения с макетом (Campaigns в блоке страны): светлая и тёмная темы, цель и BI подставлены."""
+    from src.web import app as web
+
+    page, site = open_page()
+    bi = {"campaigns": {"Set bid cap": {"spend": 790.0, "leads": 64, "deposits": 1},
+                        "Set auto": {"spend": 1200.0, "leads": 140, "deposits": 5},
+                        "Set under CBO": {"spend": 1990.0, "leads": 204, "deposits": 6}}, "ads": {}}
+    monkeypatch.setattr(web, "_inventory_bi", lambda a, c, f, t, s: (bi, ""))
+    monkeypatch.setattr(web, "_inventory_goal_context", lambda c: {
+        "country": "Kuwait", "goal_cpa": 500.0, "goal_ftd": 12, "benchmark_cpa": 650.0, "goal_note": "", "benchmark_note": ""})
+    page.set_viewport_size({"width": 1500, "height": 1000})
+    page.reload()
+    open_acc(page, "Acc")
+    page.wait_for_selector(".hc-table tbody tr")
+    page.click("[data-hc=expand-all]")
+    page.wait_for_selector(f'tr[data-key="ad:{AD_1}"]', timeout=15000)
+    block = page.locator(".amap")
+    for theme in ("light", "dark"):
+        page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
+        page.evaluate("document.querySelector('.hc-scroll').scrollLeft = 0")
+        page.wait_for_timeout(150)
+        block.screenshot(path=str(Path(SHOTS) / f"account-tree-controls-{theme}.png"))
+        page.click("[data-jump=bi]")
+        page.wait_for_timeout(150)
+        block.screenshot(path=str(Path(SHOTS) / f"account-tree-bi-{theme}.png"))
+        page.click("[data-jump=meta]")
+        page.wait_for_timeout(150)
+        block.screenshot(path=str(Path(SHOTS) / f"account-tree-meta-{theme}.png"))
+    page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
+    page.evaluate("document.querySelector('.hc-scroll').scrollLeft = 0")
+    box = page.locator(".hc-resize").bounding_box()
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + 180, y, steps=6)
+    page.mouse.up()
+    page.wait_for_timeout(150)
+    block.screenshot(path=str(Path(SHOTS) / "account-tree-pinned-widened-light.png"))
+    page.evaluate("localStorage.removeItem('acl.hc.pinw.v1')")
+    assert page.errors == []

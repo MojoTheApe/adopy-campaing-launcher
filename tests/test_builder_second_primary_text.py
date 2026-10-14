@@ -204,3 +204,24 @@ def test_publish_all_sends_primary_text_2_with_the_ad(ui):
     assert "camp_0_ad_0_cta" not in sent
     # Проверка перед публикацией видит то же значение.
     assert any(f.get("camp_0_ad_0_copy2") == "Text7" for f in state["previews"])
+
+
+def test_primary_text_1_names_the_library_pick_and_shows_its_headline(ui):
+    """ACL-1769: прежний «Ad Title» подписан «Primary text 1»; заголовок записи
+    виден строкой под ним, а имя поля, уходящего на сервер, не изменилось."""
+    p, _ = ui
+    add(p)
+    _show(p)
+    row = p.locator(".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0']")
+    text = row.inner_text()
+    assert "Primary text 1" in text and "Ad Title" not in text
+    assert "Primary text 2" in text and "+ Primary text 3–5" in text
+    expect(row.locator("[data-headline]")).to_be_hidden()
+    box = row.locator(".cb-adtitle-search")
+    box.click()
+    box.fill("text7")
+    opt = p.locator(".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0'] .cb-adtitle-sel-wrap .cb-sel-opt[data-val='Text7']")
+    expect(opt).to_be_visible()
+    opt.evaluate("e => e.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}))")
+    expect(row.locator("[data-headline]")).to_have_text("Headline: Otro, from the ad-title library")
+    assert p.input_value("[name='camp_0_ad_0_copy']") == "Text7", "имя поля или значение изменились"

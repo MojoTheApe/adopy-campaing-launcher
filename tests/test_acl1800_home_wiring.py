@@ -26,7 +26,7 @@ from tests.test_acl1800_campaign_commands import (  # noqa: E402
     CAMP_A, CAMP_CBO, SET_BID, World, t)
 
 JS = ROOT / "src" / "web" / "static" / "acm_commands.js"
-TEMPLATE = (ROOT / "src" / "web" / "templates" / "_home_campaigns.html").read_text(encoding="utf-8")
+TEMPLATE = (ROOT / "src" / "web" / "templates" / "_campaign_table.html").read_text(encoding="utf-8")
 
 
 # ───────────────────────── сервер: доступность и поля описи ─────────────────────────
@@ -81,7 +81,7 @@ def test_inventory_rows_carry_the_bid_fields_the_editor_needs():
 
 def test_template_loads_the_helper_first_and_keeps_one_post_path():
     assert TEMPLATE.index('<script src="/static/acm_commands.js"></script>') < TEMPLATE.index("(function () {")
-    assert re.findall(r"fetch\('([^']+)'", TEMPLATE) == ["/campaign-inventory/read"]   # команды ходят через помощник
+    assert re.findall(r"fetch\('([^']+)'", TEMPLATE) == ["/warm/state?", "/warm/open", "/warm/job/", "/campaign-inventory/read"]   # команды ходят через помощник; Meta читает только первый
     assert "data-batch" in TEMPLATE and "Duplicate here" in TEMPLATE and "REASON_COPY" in TEMPLATE
     assert "setInterval" not in TEMPLATE
 
