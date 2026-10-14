@@ -5,7 +5,8 @@
   <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   {#- ACL-1267: вкладку версии владельца не спутать со сборкой менеджеров. #}
-  <title>{% if (stage_status or {}).channel == 'stage' %}STAGE · {% endif %}Adopy Campaign Manager — {{ report.date }}</title>
+  {#- ACL-1778: во вкладке — просто Adopy; период и дата обновления есть в шапке. #}
+  <title>{% if (stage_status or {}).channel == 'stage' %}STAGE · {% endif %}Adopy</title>
   <script>
     // Apply before paint. Only a click pins the theme; otherwise follow the OS.
     (function () {
@@ -421,83 +422,201 @@
       line-height: 1.55;
       box-shadow: var(--shadow-sm);
     }
+    /* ── Шапка: Linear toolbar (ACL-1778) ─────────────────────────────────
+       Две плоские полки. Верхняя — с чем работают: метка, период в рамке,
+       под кем смотрим, служебные кнопки, тема и Refresh. Нижняя — техника:
+       когда обновлено, версия, STAGE. Раскладка зависит от ширины самой
+       шапки, а не окна: открытый билдер отнимает 400px, и шапка должна
+       перестроиться так же, как в узком окне, — ничего не теряя. */
+    .head-top { container: acl-head / inline-size; }
     header.page-header {
-      display: flex;
+      --stage-ink: #92400e;
+      display: grid;
+      grid-template-columns: auto 328px minmax(140px, 1fr) auto auto;
+      grid-template-areas: 'logo period buyer support actions' 'meta meta meta meta meta';
       align-items: center;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-      margin-bottom: 1rem;
-      padding-bottom: 1rem;
+      gap: 9px 16px;
+      padding: 2px 0 9px;
     }
-    .brand-lockup {
-      display: flex;
-      align-items: center;
-      gap: 0.7rem;
-      min-width: 0;
-    }
-    /* ACM: в шапке только метка, без подписи под ней (ACL-1723). Метка плоская
-       (#2563eb, без плитки), поэтому без скругления и фона — одинаково читается
-       на обеих темах. Название продукта живёт в alt у картинки. */
-    .brand-mark {
-      display: flex;
-      align-items: center;
-      flex-shrink: 0;
-    }
-    .brand-logo {
-      width: 34px;
-      height: 34px;
-      flex-shrink: 0;
-    }
-    .brand-text {
-      display: flex;
-      flex-direction: column;
-      gap: 0.15rem;
-      min-width: 0;
-    }
+    :root[data-theme="dark"] header.page-header { --stage-ink: var(--warn); }
+    header.page-header > * { min-width: 0; }
+    .brand-mark { grid-area: logo; display: flex; align-items: center; justify-content: center; width: 35px; }
+    .brand-logo { width: 29px; height: 29px; flex-shrink: 0; display: block; }
 
-    /* Две подписанные величины. Подпись приглушена, значение — нет: читают
-       здесь значение, а подпись только объясняет, какое именно. */
-    .brand-meta {
-      display: flex;
-      align-items: baseline;
-      gap: 0.3rem 0.5rem;
-      margin: 0;
-      font-size: 0.735rem;
-      line-height: 1.3;
-      flex-wrap: wrap;
+    /* Период: рамка с подписью, вписанной в верхнюю границу. Под подписью
+       тот же фон, что у поля и шапки, — иначе в тёмной теме проступило бы
+       светлое пятно. */
+    .period-pick { grid-area: period; display: flex; align-items: center; }
+    .period-btn {
+      position: relative;
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; height: 46px; padding: 2px 13px 0;
+      background: var(--bg-elev); color: var(--text);
+      border: 1px solid var(--border-strong); border-radius: 7px;
+      font: inherit; text-align: left; cursor: pointer;
+      transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
     }
-    .brand-meta dt { color: var(--muted); }
-    .brand-meta dd {
-      margin: 0 0.55rem 0 0;
-      color: var(--text);
-      font-weight: 500;
+    .period-btn:hover, .period-btn[aria-expanded="true"] {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+    .period-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+    .period-label {
+      position: absolute; top: -7px; left: 10px;
+      padding: 0 5px; background: var(--bg-elev);
+      font-size: 10px; line-height: 13px; font-weight: 500; letter-spacing: 0.15px;
+      color: var(--accent); white-space: nowrap;
+    }
+    .period-cal {
+      flex-shrink: 0; color: var(--accent);
+      fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .period-text {
+      flex: 1; min-width: 0;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0 5px;
+      font-size: 15px; line-height: 1.25; font-weight: 600; letter-spacing: -0.4px;
       font-variant-numeric: tabular-nums;
     }
-    .brand-meta dd:last-child { margin-right: 0; }
+    .period-day { white-space: nowrap; }
+    .period-caret { flex-shrink: 0; fill: var(--muted); transition: transform 150ms var(--ease-out); }
+    .period-btn[aria-expanded="true"] .period-caret { transform: rotate(180deg); }
+
+    /* Под кем смотрим. Тонкая черта слева отделяет зрителя от периода. */
+    .buyer-pick {
+      grid-area: buyer;
+      display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px;
+      padding: 5px 0 5px 15px; border-left: 1px solid var(--border);
+    }
+    .buyer-pick label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .buyer-pick select {
+      min-width: 0; max-width: 100%; flex: 0 1 auto;
+      font: inherit; font-size: 0.8rem; font-weight: 500; color: var(--text);
+      padding: 4px 6px; border: 1px solid transparent; border-radius: var(--radius-sm);
+      background: transparent; text-overflow: ellipsis; cursor: pointer;
+    }
+    .buyer-pick select:hover { border-color: var(--border); background: var(--bg-hover); }
+    .buyer-pick select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+    .buyer-pick select option { background: var(--bg-elev); color: var(--text); }
+    .buyer-pick #buyer-msg { flex-basis: 100%; font-size: 0.75rem; color: var(--muted); }
+    .buyer-pick #buyer-msg:empty { display: none; }
+
+    /* Служебные кнопки и главные действия. Robot health — ссылка, но
+       выглядит как соседние кнопки: человек не должен гадать, что из этого
+       нажимается. */
+    .head-support { grid-area: support; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+    .head-actions { grid-area: actions; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+    .head-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: 32px; padding: 6px 10px;
+      background: var(--bg-elev); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      font: inherit; font-size: 0.75rem; font-weight: 500; line-height: 1.2;
+      white-space: nowrap; text-decoration: none; cursor: pointer;
+      transition: background 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 100ms var(--ease-out);
+    }
+    .head-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+    .head-btn:active { transform: scale(0.97); }
+    .head-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+    .head-btn:disabled { cursor: wait; opacity: 0.65; }
+    .head-btn[hidden] { display: none; }
+    .head-btn.quiet { background: transparent; border-color: transparent; color: var(--muted); }
+    .head-btn.quiet:hover { background: var(--bg-hover); color: var(--text); }
+    /* Есть только когда новый выпуск действительно ждёт: в обычный день
+       лишней кнопки в шапке нет. От Refresh отдельно — та обновляет данные,
+       эта перезапускает сам ACM. */
+    .head-btn.acl-update { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+    .head-btn.acl-update:hover { background: var(--accent-soft); border-color: var(--accent); }
+    form.refresh { display: flex; margin: 0; }
+    .head-refresh {
+      min-height: 36px; padding: 7px 13px;
+      background: var(--accent-soft); color: var(--accent);
+      border-color: transparent; font-size: 0.78rem;
+    }
+    .head-refresh:hover { background: var(--accent-soft); border-color: var(--accent); }
+    /* Значок рисуется маской, а не вложенным svg: dashRefresh() пишет в
+       кнопку textContent, и вложенный значок пропадал бы при каждом нажатии. */
+    .head-refresh::before {
+      content: ""; width: 15px; height: 15px; flex-shrink: 0;
+      background: currentColor;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 8a8.5 8.5 0 0 0-14-3L3 8m0-5v5h5M4 16a8.5 8.5 0 0 0 14 3l3-3m0 5v-5h-5'/%3E%3C/svg%3E") center / contain no-repeat;
+              mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 8a8.5 8.5 0 0 0-14-3L3 8m0-5v5h5M4 16a8.5 8.5 0 0 0 14 3l3-3m0 5v-5h-5'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+
+    /* Нижняя полка: две подписанные величины и STAGE. Подпись приглушена,
+       значение — нет: читают здесь значение, а подпись только объясняет,
+       какое именно. */
+    .head-meta { grid-area: meta; border-top: 1px solid var(--border); padding-top: 9px; }
+    .brand-meta {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 6px 23px;
+      margin: 0; font-size: 0.6875rem; line-height: 1.5; color: var(--muted);
+    }
+    .brand-meta > div { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .brand-meta dt { color: var(--muted); }
+    .brand-meta dd {
+      margin: 0; color: var(--text); font-weight: 500;
+      font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+    }
     /* ACL-1267: версия владельца (запуск из исходников) — STAGE и сколько
        правок в ней ещё нет в ветке stage. У сборки менеджеров значка нет. */
     .brand-meta dd.acl-stage {
-      display: inline-flex; align-items: baseline; gap: 0.35rem;
-      padding: 0.05rem 0.45rem; border-radius: 4px;
-      border: 1px solid var(--warn); color: var(--warn);
-      font-weight: 700; letter-spacing: 0.06em; font-size: 0.72rem;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 1px 6px; border-radius: 5px;
+      border: 1px solid transparent;
+      background: var(--warn-soft); color: var(--stage-ink);
     }
+    .brand-meta dd.acl-stage b { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; }
     .brand-meta dd.acl-stage .acl-stage-gap { font-weight: 500; letter-spacing: 0; }
-    .brand-meta dd.acl-stage.unknown { border-style: dashed; }
+    .brand-meta dd.acl-stage.unknown { border: 1px dashed var(--stage-ink); }
 
-    /* Правый угол шапки: период, под кем смотрим, место под тему. Отделён от
-       названия автоматическим отступом, а не пустотой на глаз. */
-    .head-tools {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-left: auto;
-      flex-wrap: wrap;
+    /* Средняя ширина (открытый билдер на ноутбуке): служебные кнопки уходят
+       на нижнюю полку, справа от техники. */
+    @container acl-head (max-width: 1180px) {
+      header.page-header {
+        grid-template-columns: auto 328px minmax(170px, 1fr) auto;
+        grid-template-areas: 'logo period buyer actions' 'meta meta support support';
+        gap: 9px 12px;
+      }
+      .head-meta { border-top: 0; padding-top: 0; }
     }
-    .buyer-pick { display: flex; align-items: center; gap: 0.45rem; }
-    .buyer-pick label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
-    .buyer-pick select { font-size: 0.82rem; max-width: 14rem; }
-    .buyer-pick #buyer-msg { font-size: 0.75rem; color: var(--muted); }
+    @container acl-head (max-width: 850px) {
+      header.page-header {
+        grid-template-columns: 35px minmax(260px, 328px) minmax(140px, 1fr);
+        grid-template-areas: 'logo period buyer' 'meta meta meta' 'support support actions';
+        gap: 12px;
+      }
+      .head-meta { border-top: 1px solid var(--border); padding-top: 8px; }
+      .head-support { justify-content: flex-start; }
+      .period-text { font-size: 14px; }
+    }
+    /* Узко: каждая группа — своей строкой, ничего не обрезается. */
+    @container acl-head (max-width: 570px) {
+      header.page-header {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas: 'logo actions' 'period period' 'buyer buyer' 'meta meta' 'support support';
+        gap: 13px;
+      }
+      .brand-mark { justify-content: flex-start; }
+      .period-btn { max-width: 360px; }
+      .buyer-pick { padding-left: 0; border-left: 0; }
+      .head-support { justify-content: flex-start; }
+      .period-text { font-size: 14px; }
+    }
+    @container acl-head (max-width: 345px) {
+      .period-btn { padding-left: 9px; padding-right: 9px; gap: 7px; }
+      .period-text { font-size: 13px; gap: 0 4px; }
+    }
+    /* Ящик билдера уже 1100px не раздвигает страницу, а ложится поверх неё.
+       Шапку всё равно сдвигаем из-под него, пока есть куда: иначе Refresh и
+       тема прятались бы под панелью. */
+    @media (max-width: 1100px) and (min-width: 760px) {
+      body.cbd-open .head-top { padding-right: calc(var(--cbd-w) + var(--cbd-handle-w) + 1.5rem); }
+    }
+    @media (pointer: coarse) {
+      .head-btn, .head-refresh { min-height: 44px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .period-btn, .period-caret, .head-btn { transition: none; }
+    }
     /* Manage: четыре бывших экрана на одной странице. Разделены воздухом и
        линией, а не рамками: рамка вокруг каждого превратила бы страницу в
        четыре карточки, то есть в те же четыре экрана, только сразу. */
@@ -568,39 +687,6 @@
     :root[data-theme="dark"] .ts-knob { transform: translateX(22px); }
     @media (prefers-reduced-motion: reduce) {
       .ts-knob, .ts-track, .ts-ico { transition: none; }
-    }
-
-    form.refresh { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
-    /* Shown only when a promoted release is actually waiting, so an ordinary
-       day's header carries no extra control at all. */
-    form.refresh button.acl-update {
-      background: var(--accent);
-      color: var(--on-accent);
-      border-color: var(--accent);
-    }
-    form.refresh button.acl-update:hover {
-      background: var(--accent);
-      border-color: var(--accent);
-      filter: brightness(1.1);
-    }
-    form.refresh button[hidden] { display: none; }
-    form.refresh button {
-      background: var(--bg-elev);
-      color: var(--accent);
-      border: 1px solid var(--border-strong);
-      padding: 0.4rem 0.9rem;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      font-family: inherit;
-      font-size: 0.8125rem;
-      font-weight: 500;
-      transition: background 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 100ms var(--ease-out);
-    }
-    form.refresh button:hover { background: var(--accent-soft); border-color: var(--accent); }
-    form.refresh button:active { transform: scale(0.97); }
-    form.refresh button:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
     }
 
     .warnings {
@@ -1991,8 +2077,6 @@
       padding: 0 0.35rem;
     }
     .amap-cal-x:hover { border-color: var(--border-strong); color: var(--text); }
-    .period-pick { display: flex; align-items: center; }
-    .period-pick .amap-cal-btn { font-size: 0.78rem; padding: 0.18rem 0.6rem; }
     .amap-cal-nav {
       background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
       color: var(--muted); cursor: pointer; font: inherit; padding: 0 0.45rem;
@@ -3304,13 +3388,6 @@
     .cbd-seg button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
     .cbd-seg .cbd-lv-bad::after { content: " !"; color: var(--bad); font-weight: 700; }
     .cbd-ed-pick { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
-    .cbd-ed-pick label { color: var(--muted); font-size: var(--adopy-text-sm); }
-    .cbd-ed-pick select {
-      min-height: var(--adopy-control-sm); padding: 0.2rem 0.4rem;
-      font: inherit; font-size: var(--adopy-text-body);
-      background: var(--field-bg); color: var(--text);
-      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
-    }
     .cbd-ed-empty {
       color: var(--muted); font-size: var(--adopy-text-body); line-height: 1.6;
       text-align: center; padding: var(--space-xl) var(--space-md);
@@ -3323,7 +3400,6 @@
     .cbd-host[data-level="campaign"] .cb-lvl:not(.cb-lvl-campaign),
     .cbd-host[data-level="adset"] .cb-lvl:not(.cb-lvl-adset),
     .cbd-host[data-level="ad"] .cb-lvl:not(.cb-lvl-ad) { display: none; }
-    .cbd-host .cb-ad-row.cbd-ad-off { display: none; }
     /* Настройка аккаунта (ссылка, поля карты) — контекст кампании, не набора и не объявления. */
     .cbd-host[data-level="adset"] .cb-preflight, .cbd-host[data-level="ad"] .cb-preflight { display: none; }
     .cbd-host .cb-lvl { padding-top: var(--space-xs); }
@@ -3431,53 +3507,76 @@
 {%- set gv = goals or {'rows': [], 'target': 0, 'deposits': 0, 'pct': none,
                        'cm': '', 'team_lead': false} %}
 
-<div class="page-top">
+<div class="page-top head-top">
+{#- ACL-1778: шапка — «Linear toolbar» с полем периода в рамке (вариант 5,
+    «Framed label»). Две полки: сверху то, с чем работают (период, под кем
+    смотрим, служебные кнопки, тема и Refresh), снизу техника — когда
+    обновлено, какая версия, STAGE. Id и обработчики прежние: на них
+    завязаны скрипты ниже и тесты. -#}
+{%- macro day_label(iso) -%}
+  {#- «Oct 1, 2026» прямо из строки ГГГГ-ММ-ДД, без Date в браузере: часовой
+      пояс не сдвинет день. Нечитаемое значение показываем как есть. -#}
+  {%- set mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] -%}
+  {%- if iso and iso|length >= 10 and iso[4] == '-' and iso[7] == '-' and iso[5:7]|int(0) in range(1, 13) and iso[8:10]|int(0) > 0 -%}
+    {{ mon[iso[5:7]|int - 1] }} {{ iso[8:10]|int }}, {{ iso[:4] }}
+  {%- else -%}{{ iso or '…' }}{%- endif -%}
+{%- endmacro -%}
+{%- if pd.span == 'all' or not (pd.date_from or pd.date_to) %}
+  {%- set period_parts = ['All dates'] %}
+{%- elif pd.date_from and pd.date_from == pd.date_to %}
+  {%- set period_parts = [day_label(pd.date_from)] %}
+{%- else %}
+  {%- set period_parts = [day_label(pd.date_from), day_label(pd.date_to)] %}
+{%- endif %}
+{%- set period_text = period_parts | join(' – ') %}
 <header class="page-header">
-  <div class="brand-lockup">
-    {#- ACM: только метка Adopy, без подписи (ACL-1723). Имя продукта для
-        скринридеров — в alt; h1 на странице не нужен. -#}
-    <div class="brand-mark">
-      <img src="/static/logo.svg" alt="Adopy Campaign Manager" class="brand-logo" width="34" height="34">
-    </div>
-    <div class="brand-text">
-      {#- Две подписанные величины вместо ленты через точки. Обе нужны в один
-          и тот же момент — когда обновление сломало работу и надо понять, что
-          стоит и когда встало, чтобы откатиться. Без подписи «Updated 2026-09-08
-          · acl-release-2026-09-03e» читается как одно смазанное сообщение. -#}
-      <dl class="brand-meta">
-        <dt>Last updated:</dt>
-        <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd>
-        <dt>Version:</dt>
-        <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd>
-        {%- set st = stage_status or {} %}
-        {%- if st.channel == 'stage' %}
-        <dd id="acl-stage" class="acl-stage{% if not st.known %} unknown{% endif %}"
-            title="{% if st.known %}This is the stage version you work on, run from source. {{ st.ahead }} change(s) here are not on {{ st.ref }} yet. Campaign managers get updates only from a release.{% else %}This is the stage version you work on, run from source. How far it is from stage is unknown: {{ st.why }}.{% endif %}">STAGE
-          <span class="acl-stage-gap">{% if st.known %}+{{ st.ahead }} not on stage{% else %}stage unknown{% endif %}</span></dd>
-        {%- endif %}
-      </dl>
-    </div>
+  {#- ACM: только метка Adopy, без подписи (ACL-1723). Имя продукта для
+      скринридеров — в alt; h1 на странице не нужен. -#}
+  <div class="brand-mark">
+    <img src="/static/logo.svg" alt="Adopy Campaign Manager" class="brand-logo" width="29" height="29">
   </div>
   {#- Период стоит в шапке, а не над секцией: он меняет каждое число на
-      странице, а элемент внутри блока читался бы как принадлежащий блоку. -#}
-  <div class="head-tools">
-    <div class="period-pick">
-      <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
-              title="Which days every number on this page counts">
-        📅 {% if pd.span == 'all' %}all dates{% elif pd.date_from and pd.date_from == pd.date_to %}{{ pd.date_from }}{% elif pd.date_from or pd.date_to %}{{ pd.date_from or '…' }} → {{ pd.date_to or '…' }}{% else %}all dates{% endif %}
-      </button>
-      <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
-    </div>
-    {#- «Под кем смотрим» — отдельный элемент, а не строчка под логотипом.
-        Это не свойство продукта, а положение зрителя, и меняется оно чаще,
-        чем всё остальное в шапке. -#}
-    <div class="buyer-pick">
-      <label for="buyer-select">Logged as</label>
-      <select id="buyer-select" title="Whose view to show: accounts, optimization, team comparison">
-        <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
-      </select>
-      <span id="buyer-msg"></span>
-    </div>
+      странице, а элемент внутри блока читался бы как принадлежащий блоку.
+      Выбранный период и «Last updated» — разные величины: первое — какие дни
+      считаются, второе — когда данные обновлялись. -#}
+  <div class="period-pick">
+    <button type="button" class="period-btn amap-cal-btn" id="period-btn" onclick="amapCalendar(this)"
+            aria-haspopup="dialog" aria-expanded="false" aria-label="Date range: {{ period_text }}"
+            title="Which days every number on this page counts">
+      <span class="period-label" aria-hidden="true">Date range</span>
+      <svg class="period-cal" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18M7 15h2m6 0h2m-10 3h2"/>
+      </svg>
+      <span class="period-text">
+        {%- for part in period_parts -%}
+          {%- if not loop.first %}<span class="period-dash" aria-hidden="true">–</span>{% endif -%}
+          <span class="period-day">{{ part }}</span>
+        {%- endfor -%}
+      </span>
+      <svg class="period-caret" viewBox="0 0 12 8" width="11" height="8" aria-hidden="true"><path d="M1 1.5h10L6 6.5Z"/></svg>
+    </button>
+    <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
+  </div>
+  {#- «Под кем смотрим» — отдельный элемент, а не строчка под логотипом.
+      Это не свойство продукта, а положение зрителя, и меняется оно чаще,
+      чем всё остальное в шапке. -#}
+  <div class="buyer-pick">
+    <label for="buyer-select">Logged as</label>
+    <select id="buyer-select" title="Whose view to show: accounts, optimization, team comparison">
+      <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
+    </select>
+    <span id="buyer-msg"></span>
+  </div>
+  <div class="head-support">
+    {#- ACL-1434: здоровье робота — отдельная страница, только чтение телеметрии. -#}
+    <a href="/robot-health" id="robot-health-link" class="head-btn quiet" title="Success rate of every robot step per account and build">Robot health</a>
+    {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
+        с Refresh намеренно: беда случается на экране, и идти за ней в другое
+        место человек не станет. -#}
+    <button type="button" id="report-problem-btn" class="head-btn" title="Tell us what went wrong — ACM attaches the machine's own facts">Report a problem</button>
+    <button type="button" class="head-btn acl-update" id="acl-update-btn" hidden>Update</button>
+  </div>
+  <div class="head-actions">
     {#- Переключатель, а не иконка. Иконка сообщала состояние одним знаком, и
         какое именно — приходилось угадывать. У дорожки с бегунком положение
         видно сразу: слева день, справа ночь. -#}
@@ -3496,17 +3595,28 @@
         <span class="ts-knob"></span>
       </span>
     </button>
+    <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
+      <button type="submit" id="dash-refresh-btn" class="head-btn head-refresh">Refresh</button>
+    </form>
   </div>
-  <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
-    {#- ACL-1434: здоровье робота — отдельная страница, только чтение телеметрии. -#}
-    <a href="/robot-health" id="robot-health-link" title="Success rate of every robot step per account and build" style="font-size:0.85rem;color:var(--muted);text-decoration:none;">Robot health</a>
-    {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
-        с Refresh намеренно: беда случается на экране, и идти за ней в другое
-        место человек не станет. -#}
-    <button type="button" id="report-problem-btn" title="Tell us what went wrong — ACM attaches the machine's own facts">Report a problem</button>
-    <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
-    <button type="submit" id="dash-refresh-btn">Refresh</button>
-  </form>
+  {#- Две подписанные величины вместо ленты через точки. Обе нужны в один и тот
+      же момент — когда обновление сломало работу и надо понять, что стоит и
+      когда встало, чтобы откатиться. Без подписи «Updated 2026-09-08 ·
+      acl-release-2026-09-03e» читается как одно смазанное сообщение. -#}
+  <div class="head-meta">
+    <dl class="brand-meta">
+      <div><dt>Last updated:</dt>
+      <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
+      <div><dt>Version:</dt>
+      <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd></div>
+      {%- set st = stage_status or {} %}
+      {%- if st.channel == 'stage' %}
+      <div><dd id="acl-stage" class="acl-stage{% if not st.known %} unknown{% endif %}"
+          title="{% if st.known %}This is the stage version you work on, run from source. {{ st.ahead }} change(s) here are not on {{ st.ref }} yet. Campaign managers get updates only from a release.{% else %}This is the stage version you work on, run from source. How far it is from stage is unknown: {{ st.why }}.{% endif %}"><b>STAGE</b>
+        <span class="acl-stage-gap">{% if st.known %}+{{ st.ahead }} not on stage{% else %}stage unknown{% endif %}</span></dd></div>
+      {%- endif %}
+    </dl>
+  </div>
 </header>
 
 {#- Окно жалобы. Человек пишет только то, что видел; версию, машину, период и
@@ -4052,6 +4162,8 @@ async function dashRefresh(ev) {
      тоталы страны теперь стоят в свёрнутой строке карты, а страна с деньгами
      без размещённых аккаунтов приходит туда красной «виртуальной» строкой. #}
   <div id="amap-slot">{% include "_account_map.html" %}</div>
+  {#- ACL-1798: командная таблица кампаний (только чтение) — под целями и картой стран. -#}
+  {% include "_home_campaigns.html" %}
 </div>
 
 {% for c in report.countries %}
@@ -5457,7 +5569,6 @@ window.cbTree = (function () {
   var level = L.level(store(LEVEL_KEY));
   var namesOnly = store(NAMES_KEY) === '1';
   var folded = L.parseList(store(FOLD_KEY));
-  var adIdx = 0, lastAdFor = '', lastAdCount = 0;
 
   var openId = '';
   try { openId = localStorage.getItem(OPEN_KEY) || ''; } catch (e) { openId = ''; }
@@ -6000,13 +6111,6 @@ window.cbTree = (function () {
     return false;
   }
 
-  function adNames(slot) {
-    var rows = slot.querySelectorAll('.cb-ad-row');
-    var out = [];
-    for (var i = 0; i < rows.length; i += 1) out.push('Ad ' + (i + 1));
-    return out;
-  }
-
   function headHtml(found) {
     var c = found.camp, slot = c.slot;
     var seg = L.LEVELS.map(function (lv) {
@@ -6017,14 +6121,9 @@ window.cbTree = (function () {
         + L.LEVEL_LABEL[lv] + '</button>';
     }).join('');
     var pick = '';
-    if (level === 'ad') {
-      pick = '<div class="cbd-ed-pick"><label for="cbd-ed-ad">Ad</label>'
-        + '<select id="cbd-ed-ad" class="cbd-ed-ad">'
-        + adNames(slot).map(function (n, i) {
-            return '<option value="' + i + '"' + (i === adIdx ? ' selected' : '') + '>' + n + '</option>';
-          }).join('')
-        + '</select></div>';
-    } else if (level === 'adset') {
+    /* Вкладка Ad без выбора объявления: все карточки набора идут одним
+       вертикальным списком (владелец, 13.10), добавление и копия видны сразу. */
+    if (level === 'adset') {
       /* Сегодня у кампании один набор объявлений; несколько — ACL-1768. */
       pick = '<div class="cbd-ed-pick"><span class="cbd-ed-fixed">Ad set 1 · the only ad set of this campaign</span>'
         + L.futureHtml('adsets', 'button', '+ Ad set') + L.futureHtml('copyAdset', 'button', 'Copy ad set') + '</div>';
@@ -6038,15 +6137,9 @@ window.cbTree = (function () {
   function syncHost(found) {
     host.dataset.level = level;
     var rows = found.camp.slot.querySelectorAll('.cb-ad-row');
-    if (lastAdFor !== openId) { adIdx = 0; lastAdFor = openId; lastAdCount = rows.length; }
-    /* Добавили объявление — открыть его: ради него и нажимали «+ Ad». */
-    if (rows.length > lastAdCount) adIdx = rows.length - 1;
-    lastAdCount = rows.length;
-    adIdx = L.clampAd(rows.length, adIdx);
     var api = window.ACL_FB_BACKEND === 'api';
     if (window.cbSyncDestination) window.cbSyncDestination(found.camp.slot);
     for (var i = 0; i < rows.length; i += 1) {
-      rows[i].classList.toggle('cbd-ad-off', i !== adIdx);
       /* Создатель по API второй основной текст не принимает: пустое поле
          выключено с причиной, непустое остаётся рабочим (иначе набранное
          молча пропало бы из отправки) и проверка покажет ошибку на нём. */
@@ -6096,11 +6189,6 @@ window.cbTree = (function () {
     if (again && again.focus) again.focus();
   }
 
-  editor.addEventListener('change', function (e) {
-    if (!e.target.classList || !e.target.classList.contains('cbd-ed-ad')) return;
-    adIdx = parseInt(e.target.value, 10) || 0;
-    paintEditor();
-  });
   editor.addEventListener('scroll', function () { cbdPlaceDropdowns(); });
 
   /* Дублирование кампании живёт в её карточке (ACL-1459). Ящик отвечает за
@@ -7438,7 +7526,7 @@ var AMAP_MONTHS = ['January','February','March','April','May','June',
 
 function amapCalendar(btn) {
   var open = document.querySelector('.amap-cal');
-  if (open) { open.remove(); return; }
+  if (open) { if (open._amapClose) open._amapClose(true); else open.remove(); return; }
   var have = amapDates();
   if (!have.length) { alert('The workbook has no dates to choose from.'); return; }
 
@@ -7457,26 +7545,37 @@ function amapCalendar(btn) {
 
   var box = document.createElement('div');
   box.className = 'amap-cal';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-label', 'Date range');
   document.body.appendChild(box);
   var r = btn.getBoundingClientRect();
-  box.style.left = Math.max(8, Math.min(r.left - 260, innerWidth - 700)) + 'px';
+  box.style.left = Math.max(8, Math.min(r.left, innerWidth - 700)) + 'px';
   box.style.top = (r.bottom + window.scrollY + 6) + 'px';
 
   /* Клик мимо окна закрывает его, как Cancel; Esc — тоже (19.09, просьба
      пользователя). mousedown, а не click: окно перерисовывается на каждый
-     клик по дате, и к моменту click цель уже вынута из разметки. */
+     клик по дате, и к моменту click цель уже вынута из разметки.
+     ACL-1778: кнопка периода знает, открыто ли окно (aria-expanded), а
+     закрытие с клавиатуры возвращает фокус на неё. */
+  btn.setAttribute('aria-expanded', 'true');
   function amapCalOutside(e) {
     if (!document.body.contains(box)) { amapCalStop(); return; }
     if (box.contains(e.target) || btn.contains(e.target)) return;
-    box.remove(); amapCalStop();
+    amapCalClose(false);
   }
   function amapCalEsc(e) {
-    if (e.key === 'Escape' && document.body.contains(box)) { box.remove(); amapCalStop(); }
+    if (e.key === 'Escape' && document.body.contains(box)) amapCalClose(true);
   }
   function amapCalStop() {
     document.removeEventListener('mousedown', amapCalOutside, true);
     document.removeEventListener('keydown', amapCalEsc, true);
+    btn.setAttribute('aria-expanded', 'false');
   }
+  function amapCalClose(refocus) {
+    box.remove(); amapCalStop();
+    if (refocus && document.body.contains(btn)) btn.focus();
+  }
+  box._amapClose = amapCalClose;
   document.addEventListener('mousedown', amapCalOutside, true);
   document.addEventListener('keydown', amapCalEsc, true);
 
@@ -7605,8 +7704,8 @@ function amapCalendar(btn) {
         draw();
       };
     });
-    box.querySelector('[data-close]').onclick = function () { box.remove(); };
-    box.querySelector('[data-cancel]').onclick = function () { box.remove(); };
+    box.querySelector('[data-close]').onclick = function () { amapCalClose(true); };
+    box.querySelector('[data-cancel]').onclick = function () { amapCalClose(true); };
     box.querySelector('[data-apply]').onclick = function () {
       // Начали период и не закончили — концом считается его начало: один день.
       amapApply(draft.from, draft.to || draft.from, draft.span);
@@ -7621,7 +7720,9 @@ function amapCalendar(btn) {
    момент любые два соседних блока выглядели бы одинаково достоверно. */
 function amapApply(from, to, span) {
   var cal = document.querySelector('.amap-cal');
-  if (cal) cal.remove();
+  /* Тем же закрытием, что Cancel: тот же адрес с якорем — это переход по
+     якорю без перезагрузки, и кнопка осталась бы «открытой» (ACL-1778). */
+  if (cal) { if (cal._amapClose) cal._amapClose(false); else cal.remove(); }
   _amapPick = { from: from, to: to, span: span || '' };
   var q = [];
   if (span === 'all') q.push('span=all');
@@ -13569,7 +13670,8 @@ function cbPlanHtml(data) {
     if (s) {
       var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:0.72rem;color:var(--muted)">page '
-        + aclEscHtml(s.page_id || '—') + (allForms ? '' : ' · pixel ' + aclEscHtml(s.pixel_id || '—'))
+        + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
+        + (allForms ? '' : ' · pixel ' + aclEscHtml(s.pixel_id || '—') + (s.pixel_source ? ' (' + aclEscHtml(s.pixel_source) + ')' : ''))
         + ' · ' + aclEscHtml(s.objective || '') + '</div>';
       (s.ad_sets || []).forEach(function (a) {
         var interests = (a.interests || []).map(function (g) { return g.join(', '); }).join(' AND ');
@@ -14744,7 +14846,7 @@ function cbApiReadbackHtml(r) {
     (rb.checks || []).forEach(function(c) {
       h += '<tr' + (c.ok ? '' : ' style="color:var(--bad)"') + '><td>' + aclEscHtml(c.object)
         + '</td><td>' + aclEscHtml(c.field) + '</td><td>' + aclEscHtml(JSON.stringify(c.expected))
-        + '</td><td>' + aclEscHtml(JSON.stringify(c.actual)) + '</td><td>' + (c.ok ? '✓' : '✗')
+        + '</td><td>' + (c.not_read ? 'Not read' : aclEscHtml(JSON.stringify(c.actual))) + '</td><td>' + (c.ok ? '✓' : '✗')
         + '</td></tr>';
     });
     h += '</table></details>';
