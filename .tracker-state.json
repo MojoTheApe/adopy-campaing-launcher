@@ -8497,9 +8497,11 @@
         "worktree": "C:\\wk-1761e",
         "id": "30ed346aa46344deb5dbccc13f85962f",
         "issue": 761,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T15:34:27+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 765,
+        "report": "# ACL-1761 refresh report\n- Merged origin/main (d9118413, carries fixed ACL-1760: StartedProfile.newly_started, truncation marker) into codex/acl-1761-api-create. Merge, no rebase/force.\n- Conflict: only tests/test_acl1760_api_read.py (end of file); kept both blocks (1761's old-reading currency test + main's new review tests). Source files (profile.py, graph.py, account_spend_api.py, publish_jobs.py) auto-merged; main's newly_started gating (started_now = newly_started is True) and truncation marking are intact, 1761 code (publish_api.py uses started_now) works with it.\n- One follow-up: tests/test_acl1761_hang_logout.py stub launcher returned a start result without newly_started; under the fixed semantics unknown start = not owned, so the stub now sets newly_started=True like a real fresh start. No source change.\n- Tests: tests/test_acl1761_*, test_acl1760_api_read, test_acl1756_fb_api, test_acl_test_platform, test_the_api_stop_is_asked_first (-k \"not browser\"): 522 passed, 4 deselected."
       }
     },
     "tasks": {
