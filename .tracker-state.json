@@ -8845,6 +8845,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
+      },
+      "814": {
+        "actor": "Worker-RJ1814",
+        "session": "wrj1814-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1814-rules-store",
+        "worktree": "C:\\wk-rj1814",
+        "id": "a6aa514dd69c450996ff211b44b5e922",
+        "issue": 814,
+        "state": "implementing",
+        "started_at": "2026-10-14T23:11:11+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12719,10 +12731,14 @@
           {
             "actor": "Worker-S1814A",
             "session": "run_s1814a_1012"
+          },
+          {
+            "actor": "Worker-RJ1814",
+            "session": "wrj1814-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1814A",
+        "state": "implementing",
+        "worker": "Worker-RJ1814",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1814A",
@@ -12740,7 +12756,6 @@
         },
         "pr": 817,
         "queued_at": "2026-10-12T07:37:59+00:00",
-        "reviewer": "Reviewer-RRG814",
         "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "815": {
@@ -15413,6 +15428,10 @@
       },
       "Worker-RH1815": {
         "session": "wrh1815-20261015",
+        "role": "Worker"
+      },
+      "Worker-RJ1814": {
+        "session": "wrj1814-20261015",
         "role": "Worker"
       }
     },
@@ -34951,6 +34970,13 @@
         "issue": 799,
         "pr": 803,
         "actor": "Worker-RJ1799"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T23:11:11+00:00",
+        "issue": 814,
+        "claim": "a6aa514dd69c450996ff211b44b5e922",
+        "actor": "Worker-RJ1814"
       }
     ],
     "policy": {
