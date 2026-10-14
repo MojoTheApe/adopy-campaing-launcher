@@ -42,7 +42,7 @@
   ],
   "standard": {
     "repository": "https://github.com/MojoTheApe/master-repo",
-    "revision": "fe9241152cb466dfbafa3bcd3070f877c1b1b9c4",
+    "revision": "eca8a857d9f7f81160bf248f9f9e3109a21ade49",
     "version": "1.0.0"
   },
   "adoption": "draft",
@@ -57,9 +57,9 @@
       "Installer verification"
     ],
     "execution": {
-      "schema_version": 2,
+      "schema_version": 3,
       "implementation_limit": 5,
-      "review_limit": 1,
+      "review_limit": 5,
       "batch_limit": 5
     },
     "process_instructions": {
@@ -74,7 +74,7 @@
   "tracker": {
     "repository": "MojoTheApe/task-tracker",
     "workspace_id": "acl",
-    "revision": "086aaa98f2e807d640105be2929714d0b7331f21",
+    "revision": "0d1fad44f5fdbef64b061324e9a1292fb77fb725",
     "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248.",
     "registration": "verified"
   },
