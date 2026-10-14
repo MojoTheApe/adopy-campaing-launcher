@@ -1,8 +1,8 @@
-"""ACL-1774: до 5 текстов на поле и вертикальный 9:16 файл Stories/Reels (только API-бэкенд).
+"""ACL-1774: вертикальный 9:16 файл Stories/Reels (только API-бэкенд); несколько текстов - отказ.
 
-Один текст и один файл идут прежним `object_story_spec`. Несколько текстов или вертикальный
-файл — `asset_feed_spec`: тексты (до 5), один или два файла с метками и два правила по
-площадкам. Всё PAUSED, ни одного живого вызова: Graph — поддельная Meta из теста ACL-1761.
+Один текст и один файл идут прежним `object_story_spec`. Вертикальный файл с ОДНИМ текстом -
+`asset_feed_spec`: два файла с метками и два правила по площадкам. Несколько текстов: с вертикальным
+файлом Meta отказала вживую (100/1885878), без него это Dynamic Creative - оба случая отказ в плане. Всё PAUSED, ни одного живого вызова: Graph — поддельная Meta из теста ACL-1761.
 """
 from __future__ import annotations
 
@@ -61,25 +61,26 @@ def test_one_text_and_one_file_keep_the_old_creative(tmp_path):
     assert "asset_feed_spec" not in cre and "link_data" in cre["object_story_spec"]
 
 
-def test_three_texts_become_an_asset_feed_with_every_text(tmp_path):
-    meta = FakeMeta()
-    out, _ = _run(meta, _ad_with(tmp_path, vertical=None, texts=2))
-    assert out.error == "" and out.readback["ok"], out.mismatches
-    cre = _creative(meta)
-    assert cre["object_story_spec"] == {"page_id": "111"}
-    fs = cre["asset_feed_spec"]
-    assert [x["text"] for x in fs["bodies"]] == ["Body 0", "Body variant 2", "Body variant 3"]
-    assert [x["text"] for x in fs["titles"]] == ["Head 0", "Head variant 2", "Head variant 3"]
-    assert [x["text"] for x in fs["descriptions"]] == ["Desc", "Desc variant 2", "Desc variant 3"]
-    assert len(fs["images"]) == 1 and "asset_customization_rules" not in fs
-    assert fs["ad_formats"] == ["SINGLE_IMAGE"] and fs["call_to_action_types"] == ["LEARN_MORE"]
+def test_several_texts_are_refused_before_any_write_dynamic_creative_is_not_supported(tmp_path):
+    for texts in (1, 2, 4):
+        meta = FakeMeta()
+        with pytest.raises(cr.PlanError, match="Several texts need Dynamic Creative, which isn't supported yet"):
+            cr.plan_from_draft(_ad_with(tmp_path, vertical=None, texts=texts))
+        try:
+            _run(meta, _ad_with(tmp_path, vertical=None, texts=texts))
+        except cr.PlanError:
+            pass
+        assert meta.posts == []
 
 
-def test_repeats_and_blanks_collapse_and_a_sixth_text_is_refused_before_any_write(tmp_path):
-    d = _ad_with(tmp_path, vertical=None, texts=2)
-    d.ad_sets[0].ads[0].text_variants.append({"body": "Body variant 2 ", "headline": "", "description": ""})
+def test_repeats_and_blanks_collapse_to_one_text_and_pass(tmp_path):
+    d = _ad_with(tmp_path, vertical=None)
+    d.ad_sets[0].ads[0].text_variants = [{"body": "Body 0 ", "headline": "", "description": ""}]
     ad = cr.plan_from_draft(d).ad_sets[0].ads[0]
-    assert len(ad.bodies) == 3 and len(ad.titles) == 3
+    assert len(ad.bodies) == 1 and len(ad.titles) == 1 and not ad.uses_feed
+
+
+def test_a_sixth_text_is_refused_before_any_write(tmp_path):
     six = _ad_with(tmp_path, vertical=None, texts=5)           # основной + 5 = 6 текстов
     with pytest.raises(cr.PlanError, match="up to 5 primary texts"):
         cr.plan_from_draft(six)
@@ -89,13 +90,6 @@ def test_repeats_and_blanks_collapse_and_a_sixth_text_is_refused_before_any_writ
     except cr.PlanError:
         pass
     assert meta.posts == []
-
-
-def test_five_texts_are_the_limit_and_pass(tmp_path):
-    meta = FakeMeta()
-    out, _ = _run(meta, _ad_with(tmp_path, vertical=None, texts=4))
-    assert out.error == "" and out.readback["ok"]
-    assert len(_creative(meta)["asset_feed_spec"]["bodies"]) == 5
 
 
 def test_an_instant_form_ad_with_several_texts_is_refused_not_guessed(tmp_path):
@@ -123,12 +117,28 @@ def test_a_vertical_file_goes_up_with_two_labelled_files_and_two_rules(tmp_path)
     assert all(p["status"] == "PAUSED" for path, p in meta.posts if path.endswith(("/campaigns", "/adsets", "/ads")))
 
 
-def test_texts_and_the_vertical_file_together(tmp_path):
+def test_texts_and_the_vertical_file_together_are_refused_before_any_write(tmp_path):
+    """Живой прогон 2026-10-14 (Doc120): Meta отказала 100/1885878 - правило берёт один текст."""
+    for texts in (1, 3):
+        meta = FakeMeta()
+        with pytest.raises(cr.PlanError) as e:
+            cr.plan_from_draft(_ad_with(tmp_path, texts=texts))
+        assert wp.MSG_TEXTS_VERTICAL in str(e.value)
+        try:
+            _run(meta, _ad_with(tmp_path, texts=texts))
+        except cr.PlanError:
+            pass
+        assert meta.posts == []
+
+
+def test_a_vertical_file_with_one_text_has_one_body_and_labelled_rules(tmp_path):
     meta = FakeMeta()
-    out, _ = _run(meta, _ad_with(tmp_path, texts=1))
+    out, _ = _run(meta, _ad_with(tmp_path))
     assert out.error == "" and out.readback["ok"], out.mismatches
     fs = _creative(meta)["asset_feed_spec"]
-    assert len(fs["bodies"]) == 2 and len(fs["images"]) == 2 and len(fs["asset_customization_rules"]) == 2
+    assert len(fs["bodies"]) == len(fs["titles"]) == len(fs["descriptions"]) == 1
+    assert [r["image_label"]["name"] for r in fs["asset_customization_rules"]] == ["acl_vertical", "acl_main"]
+    assert {i["adlabels"][0]["name"] for i in fs["images"]} == {"acl_main", "acl_vertical"}
 
 
 @pytest.mark.parametrize("main,vertical,message", [
@@ -176,37 +186,39 @@ def test_a_vertical_file_without_a_main_file_and_a_kind_mismatch_are_plan_errors
         cr.plan_from_draft(d)
 
 
-def test_the_check_plan_shows_texts_and_files_without_writing(tmp_path):
+def test_the_check_plan_shows_the_vertical_file_and_refuses_the_combination_without_writing(tmp_path):
     from tests.test_acl1819_preflight import _audit
 
     meta = FakeMeta()
-    out = _audit(meta, _ad_with(tmp_path, texts=1))
+    out = _audit(meta, _ad_with(tmp_path))
     assert meta.posts == []
-    ad = out.plan["ad_sets"][0]["ads"][0] if "ad_sets" in out.plan else None
-    assert ad is not None
+    ad = out.plan["ad_sets"][0]["ads"][0]
+    assert ad["vertical_file"] and len(ad["creative"]["asset_feed_spec"]["bodies"]) == 1
+    assert len(ad["creative"]["asset_feed_spec"]["asset_customization_rules"]) == 2
+    for texts, msg in ((1, wp.MSG_TEXTS_VERTICAL),):
+        meta = FakeMeta()
+        try:
+            out = _audit(meta, _ad_with(tmp_path, texts=texts))
+        except cr.PlanError as e:
+            assert msg in str(e)
+        else:
+            assert msg in json.dumps(out.__dict__, default=str)
+        assert meta.posts == []
 
 
 # ───────────────────────── сверка ─────────────────────────
 
 @pytest.mark.parametrize("key,value,field", [
-    ("creative.asset_feed_spec.bodies", [{"text": "Body 0"}], "primary_texts"),
-    ("creative.asset_feed_spec.titles", [{"text": "Head 0"}], "headlines"),
+    ("creative.asset_feed_spec.bodies", [{"text": "Other body"}], "primary_texts"),
+    ("creative.asset_feed_spec.titles", [{"text": "Other head"}], "headlines"),
     ("creative.asset_feed_spec.descriptions", [{"text": "Other"}], "descriptions"),
     ("creative.asset_feed_spec.call_to_action_types", ["SIGN_UP"], "call_to_action"),
 ])
 def test_readback_checks_every_text_field(tmp_path, key, value, field):
     meta = FakeMeta()
     meta.mutate_ads[key] = value
-    out, _ = _run(meta, _ad_with(tmp_path, vertical=None, texts=2))
+    out, _ = _run(meta, _ad_with(tmp_path))
     assert field in {m["field"] for m in out.mismatches}, out.mismatches
-
-
-def test_readback_accepts_the_texts_in_another_order(tmp_path):
-    meta = FakeMeta()
-    meta.mutate_ads["creative.asset_feed_spec.bodies"] = [
-        {"text": "Body variant 3"}, {"text": "Body 0"}, {"text": "Body variant 2"}]
-    out, _ = _run(meta, _ad_with(tmp_path, vertical=None, texts=2))
-    assert "primary_texts" not in {m["field"] for m in out.mismatches}
 
 
 def test_readback_checks_both_files_and_their_placements(tmp_path):
@@ -248,14 +260,14 @@ def test_a_repeated_run_does_not_upload_the_pair_twice(tmp_path):
 
 def test_the_creator_never_sends_what_its_own_policy_would_refuse(tmp_path):
     meta = FakeMeta()
-    out, _ = _run(meta, _ad_with(tmp_path, texts=3))     # FakeMeta зовёт политику на каждой записи
+    out, _ = _run(meta, _ad_with(tmp_path))     # FakeMeta зовёт политику на каждой записи
     assert out.error == "" and out.readback["ok"]
 
 
 # ───────────────────────── политика записи: Python и страница ─────────────────────────
 
 def _feed(**over) -> dict:
-    spec = {"bodies": [{"text": "b1"}, {"text": "b2"}], "titles": [{"text": "t1"}],
+    spec = {"bodies": [{"text": "b1"}], "titles": [{"text": "t1"}],
             "descriptions": [{"text": "d1"}], "images": [{"hash": "a" * 32}],
             "link_urls": [{"website_url": "https://x.invalid/l"}], "call_to_action_types": ["LEARN_MORE"],
             "ad_formats": ["SINGLE_IMAGE"]}
@@ -297,7 +309,12 @@ def _mut(spec, fn):
 
 POLICY_CASES = [
     ("texts_ok", _cre(_feed()), True),
-    ("five_texts_ok", _cre(_feed(bodies=[{"text": f"b{i}"} for i in range(5)])), True),
+    # Несколько текстов в ленте - отказ (живой 2026-10-14; без правил это Dynamic Creative).
+    ("two_bodies", _cre(_feed(bodies=[{"text": "b1"}, {"text": "b2"}])), False),
+    ("five_texts", _cre(_feed(bodies=[{"text": f"b{i}"} for i in range(5)])), False),
+    ("two_titles", _cre(_feed(titles=[{"text": "t1"}, {"text": "t2"}])), False),
+    ("two_descriptions", _cre(_feed(descriptions=[{"text": "d1"}, {"text": "d2"}])), False),
+    ("pair_two_bodies", _cre(_pair(bodies=[{"text": "b1"}, {"text": "b2"}])), False),
     ("six_bodies", _cre(_feed(bodies=[{"text": f"b{i}"} for i in range(6)])), False),
     ("six_titles", _cre(_feed(titles=[{"text": f"t{i}"} for i in range(6)])), False),
     ("six_descriptions", _cre(_feed(descriptions=[{"text": f"d{i}"} for i in range(6)])), False),
@@ -369,13 +386,13 @@ def test_nothing_else_was_loosened():
     assert wp.EDGE_KEYS["ads"] == frozenset({"name", "adset_id", "creative", "status", "adlabels"})
     assert wp.EDGE_KEYS["adimages"] == frozenset() and wp.EDGE_KEYS["advideos"] == frozenset({"name", "title"})
     assert "is_dynamic_creative" not in wp.EDGE_KEYS["adsets"]
-    assert wp.ASSET_FEED_MAX_TEXTS == 5 and wp.ASSET_FEED_MAX_MEDIA == 2
+    assert wp.ASSET_FEED_MAX_TEXTS == 5 and wp.ASSET_FEED_TEXTS_PER_FEED == 1 and wp.ASSET_FEED_MAX_MEDIA == 2
 
 
 def test_the_policy_export_carries_the_asset_feed_rules():
     p = wp.policy_for_page(ACT)
     af = p["asset_feed"]
-    assert af["key"] == "asset_feed_spec" and af["max_texts"] == 5 and af["max_media"] == 2
+    assert af["key"] == "asset_feed_spec" and af["max_texts"] == 1 and af["max_media"] == 2
     assert af["text_max"] == {"bodies": 1024, "titles": 255, "descriptions": 255}
     assert "asset_feed_spec" in p["edges"]["adcreatives"] and "asset_feed_spec" in p["json_keys"]
     assert set(af["facebook_positions"]) >= {"feed", "story", "facebook_reels"}
@@ -568,7 +585,7 @@ def test_the_page_has_the_controls_not_the_placeholders():
 def test_the_page_routes_errors_to_the_new_fields():
     p = _page()
     assert "[/primary text [3-5]/i, '.cb-textx-search', 'ad']" in p
-    assert "[/stories \\/ reels/i, '.cb-vertical-search', 'ad']" in p
+    assert r"[/stories ?\/ ?reels/i, '.cb-vertical-search', 'ad']" in p
 
 
 def test_the_texts_and_the_vertical_file_are_copied_with_the_ad():
