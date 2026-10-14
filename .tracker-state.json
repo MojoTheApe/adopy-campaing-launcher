@@ -28383,6 +28383,77 @@
           "started_at": "2026-10-14T07:36:55+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "batch-frozen",
+        "at": "2026-10-14T07:37:24+00:00",
+        "batch": {
+          "id": "07aa28148c8c4544b3c0077f47d58503",
+          "actor": "Coordinator-BA4E69",
+          "session": "acl_upgrade_root_b13315d4c8acca4d15af2c75",
+          "state": "assembling",
+          "issues": [
+            892
+          ],
+          "members": [
+            {
+              "issue": 892,
+              "pr": 893,
+              "branch": "codex/acl-1892-efficient-verification",
+              "head_sha": "810649a21c5af3978a2ee69759f534036336e6c6",
+              "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+              "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "defd2baacbde46fde2abf94f6a8b47a55a77b307917327c9284ccda9c81e2f16",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-825c445100a4",
+                "implementer": "Worker-FIVE874",
+                "execution_lane": "dc809a3c42c6421990a5e6a218d5fc09",
+                "review_session": "40ce9120c5cb47b5b34465fcca6bf44b",
+                "head_sha": "810649a21c5af3978a2ee69759f534036336e6c6",
+                "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+                "tree_sha": "e8a6b4efae432d69118d3f003b92512907fe70ca",
+                "report": "/private/tmp/acl-standard-upgrade-20261014/independent-source-review.md",
+                "scope": "Full original/current ACL-1892 task and all16 changed paths; source content approved, source CI admission pending; no integration/stage/main/package acceptance.",
+                "actual_reviewer_agent": "/root/audit_reality",
+                "actual_implementer_agent": "/root/acl_five_review_source",
+                "reviewed_at": "2026-10-14T07:05:26.986190+00:00",
+                "findings": [],
+                "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  892
+                ],
+                "recorded_at": "2026-10-14T07:06:02+00:00",
+                "issue_scopes": {
+                  "892": "defd2baacbde46fde2abf94f6a8b47a55a77b307917327c9284ccda9c81e2f16"
+                }
+              },
+              "lane": {
+                "id": "dc809a3c42c6421990a5e6a218d5fc09",
+                "pr": 893,
+                "issues": [
+                  892
+                ],
+                "actor": "Reviewer-825c445100a4",
+                "session": "40ce9120c5cb47b5b34465fcca6bf44b",
+                "coordinator": "Coordinator-BA4E69",
+                "started_at": "2026-10-14T07:02:00+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T07:17:24+00:00"
+            }
+          ],
+          "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+          "branch": "codex/batch-07aa28148c8c4544b3c0077f47d58503",
+          "intake": "147e1c8728684150bfc22ed391f88942",
+          "started_at": "2026-10-14T07:37:24+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": []
+        }
       }
     ],
     "policy": {
@@ -29485,7 +29556,73 @@
         "report": "The repository owner stated in this conversation that ACL-1529 is paused and is not currently being worked on. The owner has authorized proceeding with the ACL-1892 common workflow upgrade. This is explicit stopped-owner evidence, not a timeout inference.\n\nTransfer only the existing pre-stage ACL-1529 integration ownership to the actual Root Coordinator using the supported old pinned engine. Cancel that unmerged candidate and its remaining intake to release the single integration reservation. Preserve source/task author identities, source approval, status, code, PRs, branches, manifests and history. ACL-1529 remains unfinished and paused; none of its changes are merged or completed. The old Coordinator must reacquire a new supported integration before later resuming.\n\nDo not cancel an actual stage merge or reset any permanent branch. Cancel must independently check the candidate PR remains unmerged. Then freeze only the already independently Approved ACL-1892 source; no unrelated backlog is shipped.\n\nThe owner subsequently explicitly replied \u00ab\u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e\u00bb to transferring and releasing this reservation while preserving the task/code/PR/history. Supported takeover has succeeded."
       }
     },
-    "integration": null,
+    "integration": {
+      "id": "07aa28148c8c4544b3c0077f47d58503",
+      "actor": "Coordinator-BA4E69",
+      "session": "acl_upgrade_root_b13315d4c8acca4d15af2c75",
+      "state": "assembling",
+      "issues": [
+        892
+      ],
+      "members": [
+        {
+          "issue": 892,
+          "pr": 893,
+          "branch": "codex/acl-1892-efficient-verification",
+          "head_sha": "810649a21c5af3978a2ee69759f534036336e6c6",
+          "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+          "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "defd2baacbde46fde2abf94f6a8b47a55a77b307917327c9284ccda9c81e2f16",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-825c445100a4",
+            "implementer": "Worker-FIVE874",
+            "execution_lane": "dc809a3c42c6421990a5e6a218d5fc09",
+            "review_session": "40ce9120c5cb47b5b34465fcca6bf44b",
+            "head_sha": "810649a21c5af3978a2ee69759f534036336e6c6",
+            "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+            "tree_sha": "e8a6b4efae432d69118d3f003b92512907fe70ca",
+            "report": "/private/tmp/acl-standard-upgrade-20261014/independent-source-review.md",
+            "scope": "Full original/current ACL-1892 task and all16 changed paths; source content approved, source CI admission pending; no integration/stage/main/package acceptance.",
+            "actual_reviewer_agent": "/root/audit_reality",
+            "actual_implementer_agent": "/root/acl_five_review_source",
+            "reviewed_at": "2026-10-14T07:05:26.986190+00:00",
+            "findings": [],
+            "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              892
+            ],
+            "recorded_at": "2026-10-14T07:06:02+00:00",
+            "issue_scopes": {
+              "892": "defd2baacbde46fde2abf94f6a8b47a55a77b307917327c9284ccda9c81e2f16"
+            }
+          },
+          "lane": {
+            "id": "dc809a3c42c6421990a5e6a218d5fc09",
+            "pr": 893,
+            "issues": [
+              892
+            ],
+            "actor": "Reviewer-825c445100a4",
+            "session": "40ce9120c5cb47b5b34465fcca6bf44b",
+            "coordinator": "Coordinator-BA4E69",
+            "started_at": "2026-10-14T07:02:00+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T07:17:24+00:00"
+        }
+      ],
+      "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+      "branch": "codex/batch-07aa28148c8c4544b3c0077f47d58503",
+      "intake": "147e1c8728684150bfc22ed391f88942",
+      "started_at": "2026-10-14T07:37:24+00:00",
+      "pr": null,
+      "entered_stage": false,
+      "history": []
+    },
     "intake": {
       "id": "147e1c8728684150bfc22ed391f88942",
       "actor": "Coordinator-BA4E69",
