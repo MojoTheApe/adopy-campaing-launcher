@@ -8152,20 +8152,6 @@
         "state": "implementing",
         "started_at": "2026-10-13T21:34:57+00:00",
         "from_status": "status:backlog"
-      },
-      "800": {
-        "actor": "Worker-W1014F",
-        "session": "w1014f-20261014",
-        "coordinator": "Coordinator-T1014C",
-        "branch": "codex/acl-1800-campaign-commands",
-        "worktree": "C:\\wkf-1800",
-        "id": "0e0774604ab24866942f0e9d3efe8058",
-        "issue": 800,
-        "state": "handoff",
-        "started_at": "2026-10-14T10:24:36+00:00",
-        "from_status": "status:todo",
-        "pr": 802,
-        "report": "# Handoff ACL-1800 (PR #802)\nScope: returned-review fixes. Merged fixed parent codex/acl-1769-two-column-builder (046c27b2; CHANGELOG conflict resolved keeping both entries; main already included). Guarded the campaign-table mount in report.html with typeof window; updated test_acl1800_account_scoped_table and gave the poll test harness a window stub (test_review_ui_regressions). Shard-spread test passes after merge (main's browser-count balancing). Head 7efcc856.\nChecks: local test_acl_test_shard, test_acl_test_platform, test_review_ui_regressions, test_acl1800_* 410 passed; GitHub CI all green except tracker-link (needs Review status, this handoff).\nRemaining: #813 merges this branch next."
       }
     },
     "tasks": {
@@ -11767,25 +11753,25 @@
             "session": "w1014f-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1014F",
         "coordinator": "Coordinator-T1014C",
         "handoff": {
-          "actor": "Worker-S1800A",
-          "session": "run_s1800a_1011",
-          "coordinator": "Coordinator-C0930A",
+          "actor": "Worker-W1014F",
+          "session": "w1014f-20261014",
+          "coordinator": "Coordinator-T1014C",
           "branch": "codex/acl-1800-campaign-commands",
-          "worktree": "C:\\acl-1800-cmd",
-          "id": "414c09a2e4bc4d208f31e3ebdfbe204d",
+          "worktree": "C:\\wkf-1800",
+          "id": "0e0774604ab24866942f0e9d3efe8058",
           "issue": 800,
           "state": "handoff",
-          "started_at": "2026-10-11T19:50:20+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-14T10:24:36+00:00",
+          "from_status": "status:todo",
           "pr": 802,
-          "report": "# ACL-1800 handoff report\n\nPR 802, head ee2ce4af4c7961aeaf770bc09091972861f755b0, stacked on 796 -> 765 (base main). CI is blocked.\n\nEndpoints: POST /campaign-commands/preview, POST /campaign-commands/execute, GET /campaign-commands/{op_id}; acmCommands JS helper (src/web/static/acm_commands.js). Only with ACL_FB_BACKEND=api; rpa answers 409.\n\nWrite policy: write_policy.check_object_update, POST to an existing object id, exactly one of status (ACTIVE/PAUSED), daily_budget, bid_amount (positive minor units); no edges, no creation, no DELETE. Mirrored in the page helper (separate InPageGraph(allow_object_updates=True) mode).\n\nTests: tests/test_acl1800_campaign_commands.py 181 passed (fake Meta, node); existing 1756/1760/1761 suites 389 passed; full suite not run (CI only).\nMutation checks: 20 mutants (Python and JS policy, stale check, idempotency, blind retry, readback compare), 20 killed, 0 survived.\n\nLive check pending owner approval on 9095 test accounts. Nothing live was touched."
+          "report": "# Handoff ACL-1800 (PR #802)\nScope: returned-review fixes. Merged fixed parent codex/acl-1769-two-column-builder (046c27b2; CHANGELOG conflict resolved keeping both entries; main already included). Guarded the campaign-table mount in report.html with typeof window; updated test_acl1800_account_scoped_table and gave the poll test harness a window stub (test_review_ui_regressions). Shard-spread test passes after merge (main's browser-count balancing). Head 7efcc856.\nChecks: local test_acl_test_shard, test_acl_test_platform, test_review_ui_regressions, test_acl1800_* 410 passed; GitHub CI all green except tracker-link (needs Review status, this handoff).\nRemaining: #813 merges this branch next."
         },
         "pr": 802,
-        "queued_at": "2026-10-11T20:21:48+00:00",
+        "queued_at": "2026-10-14T10:59:17+00:00",
         "review_report": "# Review return: PR #802 (ACL-1800), head 11f7c46c6ba1 (CI run 38258688981 is for this head)\n\nRed: Classify and check project tooling, Process instructions, linux tests (3.11 shards 1,2; 3.13 shards 1,2), windows tests, ACL verification (aggregate). Green: descriptor, tracker-link, Verify build inputs, Installer verification, Build/install.\n\n## Root causes (from logs)\n1. `tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` (fails in classify, process instructions, linux and windows jobs) -- `tests/test_acl1761_hang_logout.py:255,256 [backslash-path], :268 [platform-branch], :275 [windll]`. Fix: `pytestmark = pytest.mark.windows_only(reason=...)` or `# linux-ok:` comments (fix originates in #765).\n2. `tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards` -- `AssertionError: [35, 41, 33]`, max-min must be <= 3. Browser test files added by the stack unbalance the shards; adjust the shard assignment / weights so the spread is <= 3 (check after merging main, counts change).\n3. `tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` -- node `ReferenceError: window is not defined` at report.html (compiled line 1384): `if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE)`. In the test VM `document` is stubbed but `window` is not. Fix in template: guard with `typeof window !== 'undefined'` (preferred, product code) or add `window` to the test harness.\n4. Not applicable at this head: Cyrillic `[x\u0445\u00d7]` in report.html, `tzdata` in requirements.txt, tracker-link (green).\n\n## Conflict with main\nCONFLICTING: `docs/system/CHANGELOG.md` and `tests/test_acl1756_fb_api.py` (content). Merge parents in stack order (#765, #796 fixed) and then current origin/main into this branch; resolve both files keeping both sides; push.\n\n## Required fixes (stack order)\nAfter #765 and #796 are fixed and merged in: merge origin/main, resolve conflicts, fix items 2 and 3 (item 1 comes from #765). Re-run the affected tests (test_acl_test_platform, test_acl_test_shard, test_review_ui_regressions, test_acl1800_*) and full CI."
       },
       "799": {
@@ -16781,7 +16767,8 @@
       840,
       841,
       761,
-      769
+      769,
+      800
     ],
     "review": null,
     "history": [
@@ -29074,6 +29061,13 @@
         "at": "2026-10-14T10:24:36+00:00",
         "issue": 800,
         "claim": "0e0774604ab24866942f0e9d3efe8058",
+        "actor": "Worker-W1014F"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T10:59:17+00:00",
+        "issue": 800,
+        "pr": 802,
         "actor": "Worker-W1014F"
       }
     ],
