@@ -12939,7 +12939,7 @@
             "session": "run_s1826a_1012"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1826A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12957,7 +12957,8 @@
           "report": "PR #828 (head 7340923, branch codex/acl-1826-mlx-session-lost), stacked on #813 -> #802.\nSlot-B 403 -> mlx_session_lost, proxy auth -> proxy_auth; batch skip (slot A unaffected) via new src/fb_api/mlx_session.py; telemetry + Sentry per occurrence; offline JWT pre-flight; banner + Retry for Read all / Read campaigns / Open profiles. Publish all: server skip + per-account line only (no banner/Retry).\nTests: tests/test_acl1826_mlx_session_lost.py 35 passed; affected suites 168 + 214 passed. Mutation checks on batch skip: 4/4 caught.\nRPA-track file touched: src/meta_campaign_agent/multilogin_launcher.py (error attributes only)."
         },
         "pr": 828,
-        "queued_at": "2026-10-12T13:20:27+00:00"
+        "queued_at": "2026-10-12T13:20:27+00:00",
+        "reviewer": "Reviewer-RRG826"
       },
       "767": {
         "implementers": [
@@ -15390,6 +15391,10 @@
       },
       "Reviewer-RRG815": {
         "session": "rrg815-20261015",
+        "role": "Reviewer"
+      },
+      "Reviewer-RRG826": {
+        "session": "rrg826-20261015",
         "role": "Reviewer"
       }
     },
@@ -18007,7 +18012,6 @@
       816,
       819,
       822,
-      826,
       827,
       767,
       776,
@@ -34829,6 +34833,13 @@
           "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T22:57:46+00:00",
+        "pr": 828,
+        "lane": "98f9198c8206456e810d5f14a5e6d906",
+        "actor": "Reviewer-RRG826"
       }
     ],
     "policy": {
@@ -37698,6 +37709,19 @@
       "started_at": "2026-10-14T22:11:37+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "828": {
+        "id": "98f9198c8206456e810d5f14a5e6d906",
+        "pr": 828,
+        "issues": [
+          826
+        ],
+        "actor": "Reviewer-RRG826",
+        "session": "rrg826-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T22:57:46+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
