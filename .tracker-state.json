@@ -8854,9 +8854,11 @@
         "worktree": "C:\\wk-rj1799",
         "id": "fdf4421919b24b229ba06f5ac8371b2a",
         "issue": 799,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T23:06:01+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 803,
+        "report": "# Refresh ACL-1799\n\nMerged origin/main (incl. 1760/1761/1798/1766/1778/1769) into codex/acl-1799-country-workbench. Head: 253bcac8.\n\nConflicts: none (clean merge). One follow-up fix commit: the workbench's applyCreative in report.html still picked the ad card by the old hidden-card class (cbd-ad-off), which 1769 removed (cards now stack, no Ad dropdown). It now takes the card by adIndex, and test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown passes again.\n\nTests (not browser): 1799 country workbench, 1769 two-column layout, builder_second_primary_text, the_builder drawer/tree, test_builder_* files, header, 1798 inventory: 181 passed after the fix (one failure before it, the 1769 one). Node harness tests/cw_harness.cjs against report.html: ok."
       }
     },
     "tasks": {
