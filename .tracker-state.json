@@ -8152,6 +8152,18 @@
         "state": "implementing",
         "started_at": "2026-10-13T21:34:57+00:00",
         "from_status": "status:backlog"
+      },
+      "800": {
+        "actor": "Worker-W1014F",
+        "session": "w1014f-20261014",
+        "coordinator": "Coordinator-T1014C",
+        "branch": "codex/acl-1800-campaign-commands",
+        "worktree": "C:\\wkf-1800",
+        "id": "0e0774604ab24866942f0e9d3efe8058",
+        "issue": 800,
+        "state": "implementing",
+        "started_at": "2026-10-14T10:24:36+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11747,11 +11759,15 @@
           {
             "actor": "Worker-S1800A",
             "session": "run_s1800a_1011"
+          },
+          {
+            "actor": "Worker-W1014F",
+            "session": "w1014f-20261014"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1800A",
-        "coordinator": "Coordinator-C0930A",
+        "state": "implementing",
+        "worker": "Worker-W1014F",
+        "coordinator": "Coordinator-T1014C",
         "handoff": {
           "actor": "Worker-S1800A",
           "session": "run_s1800a_1011",
@@ -11768,7 +11784,6 @@
         },
         "pr": 802,
         "queued_at": "2026-10-11T20:21:48+00:00",
-        "reviewer": "Reviewer-R1014S",
         "review_report": "# Review return: PR #802 (ACL-1800), head 11f7c46c6ba1 (CI run 38258688981 is for this head)\n\nRed: Classify and check project tooling, Process instructions, linux tests (3.11 shards 1,2; 3.13 shards 1,2), windows tests, ACL verification (aggregate). Green: descriptor, tracker-link, Verify build inputs, Installer verification, Build/install.\n\n## Root causes (from logs)\n1. `tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` (fails in classify, process instructions, linux and windows jobs) -- `tests/test_acl1761_hang_logout.py:255,256 [backslash-path], :268 [platform-branch], :275 [windll]`. Fix: `pytestmark = pytest.mark.windows_only(reason=...)` or `# linux-ok:` comments (fix originates in #765).\n2. `tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards` -- `AssertionError: [35, 41, 33]`, max-min must be <= 3. Browser test files added by the stack unbalance the shards; adjust the shard assignment / weights so the spread is <= 3 (check after merging main, counts change).\n3. `tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` -- node `ReferenceError: window is not defined` at report.html (compiled line 1384): `if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE)`. In the test VM `document` is stubbed but `window` is not. Fix in template: guard with `typeof window !== 'undefined'` (preferred, product code) or add `window` to the test harness.\n4. Not applicable at this head: Cyrillic `[x\u0445\u00d7]` in report.html, `tzdata` in requirements.txt, tracker-link (green).\n\n## Conflict with main\nCONFLICTING: `docs/system/CHANGELOG.md` and `tests/test_acl1756_fb_api.py` (content). Merge parents in stack order (#765, #796 fixed) and then current origin/main into this branch; resolve both files keeping both sides; push.\n\n## Required fixes (stack order)\nAfter #765 and #796 are fixed and merged in: merge origin/main, resolve conflicts, fix items 2 and 3 (item 1 comes from #765). Re-run the affected tests (test_acl_test_platform, test_acl_test_shard, test_review_ui_regressions, test_acl1800_*) and full CI."
       },
       "799": {
@@ -29050,6 +29065,13 @@
         "at": "2026-10-14T10:24:08+00:00",
         "issue": 769,
         "pr": 796,
+        "actor": "Worker-W1014F"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T10:24:36+00:00",
+        "issue": 800,
+        "claim": "0e0774604ab24866942f0e9d3efe8058",
         "actor": "Worker-W1014F"
       }
     ],
