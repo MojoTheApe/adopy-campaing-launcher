@@ -34036,6 +34036,31 @@
           "ineligible": {},
           "report": "# Batch c8d57f23 cancelled at assembly\n\nAssembly merged 798, 766 and 778 cleanly, then stopped on ACL-1775: content conflicts with ACL-1766 in src/fb_api/creator.py and src/web/templates/report.html (sibling tasks, both stacked on 1761). Per the runbook no conflict resolution happens in the batch branch. A new batch carries 798, 766, 778, 769 (769 merges cleanly on top); ACL-1775 stays approved and will be refreshed against main after this batch lands, resolving the 1766 overlap on its own branch."
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-14T22:11:37+00:00",
+        "intake": {
+          "id": "6e7ecadec3c1497a83db37cb4fac467f",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "running",
+          "issues": [
+            798,
+            766,
+            778,
+            769
+          ],
+          "remaining": [
+            798,
+            766,
+            778,
+            769
+          ],
+          "batches": [],
+          "started_at": "2026-10-14T22:11:37+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -36801,28 +36826,25 @@
     },
     "integration": null,
     "intake": {
-      "id": "7319727f5aa84c4ba73e08fd3d3981bd",
+      "id": "6e7ecadec3c1497a83db37cb4fac467f",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "cancelled",
+      "state": "running",
       "issues": [
         798,
         766,
         778,
-        775,
         769
       ],
       "remaining": [
         798,
         766,
         778,
-        775,
         769
       ],
       "batches": [],
-      "started_at": "2026-10-14T22:07:20+00:00",
-      "ineligible": {},
-      "report": "# Batch c8d57f23 cancelled at assembly\n\nAssembly merged 798, 766 and 778 cleanly, then stopped on ACL-1775: content conflicts with ACL-1766 in src/fb_api/creator.py and src/web/templates/report.html (sibling tasks, both stacked on 1761). Per the runbook no conflict resolution happens in the batch branch. A new batch carries 798, 766, 778, 769 (769 merges cleanly on top); ACL-1775 stays approved and will be refreshed against main after this batch lands, resolving the 1766 overlap on its own branch."
+      "started_at": "2026-10-14T22:11:37+00:00",
+      "ineligible": {}
     },
     "source_reviews": {}
   }
