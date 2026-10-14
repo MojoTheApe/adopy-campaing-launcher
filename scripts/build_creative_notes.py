@@ -27,15 +27,13 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, OSError):  # pragma: no cover
         pass
 
+from config import paths  # noqa: E402
 from src.analysis_agent import creative_archive as ca  # noqa: E402
 from src.analysis_agent import creative_notes as cn  # noqa: E402
 from src.analysis_agent import creative_verdicts as cv  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_DEFAULT = os.path.join(REPO, "data", "creative_archive.sqlite3")
-VAULT_DEFAULT = os.path.join(
-    os.path.expanduser("~"), "Desktop", "Obsidian", "Kuwait Forms", "дешборд"
-)
 
 
 def _write(path: str, text: str, *, overwrite: bool, dry: bool) -> str:
@@ -64,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Заметки дневника креативов в Obsidian")
     ap.add_argument("--country", action="append", help="страна (можно несколько раз)")
     ap.add_argument("--db", default=DB_DEFAULT)
-    ap.add_argument("--vault", default=VAULT_DEFAULT, help="папка заметок в vault")
+    ap.add_argument("--vault", default=None,
+                    help="папка заметок в vault (по умолчанию ACL_OBSIDIAN_DIR или известные места)")
     ap.add_argument(
         "--min-spend", type=float, default=50_000,
         help="порог спенда для авто-выбора стран (по умолчанию 50000)",
@@ -72,13 +71,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--as-of", help="дата отсчёта зрелости (по умолчанию макс. в архиве)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
+    if not args.vault:
+        found = paths.get_obsidian_dashboard_dir()
+        args.vault = str(found) if found else ""
+        if not found:
+            print(paths.OBSIDIAN_MISSING_WARNING, file=sys.stderr)
 
     if not os.path.exists(args.db):
         print(f"нет архива: {args.db}\nсначала: python scripts/sync_creative_archive.py --backfill",
               file=sys.stderr)
         return 2
     if not args.dry_run and not os.path.isdir(args.vault):
-        print(f"нет папки vault: {args.vault}", file=sys.stderr)
+        print(f"нет папки vault: {args.vault or '(не найдена)'}", file=sys.stderr)
         return 2
 
     conn = ca.connect(args.db)

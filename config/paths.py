@@ -83,6 +83,31 @@ def get_local_config_dir() -> str:
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
 
 
+def get_obsidian_dashboard_dir() -> Path | None:
+    """The team's Obsidian "дешборд" folder, or None when this machine has none.
+
+    ACL_OBSIDIAN_DIR wins when it points at an existing folder. Otherwise the
+    known locations are tried in order: the owner's machine keeps the vault at
+    ~/Desktop/Obsidian/дешборд, other machines still use the older
+    ~/Desktop/Obsidian/Kuwait Forms/дешборд. Callers must handle None (warn
+    and carry on) instead of writing into a folder that does not exist.
+    """
+    candidates: list[Path] = []
+    explicit = os.environ.get("ACL_OBSIDIAN_DIR", "").strip()
+    if explicit:
+        candidates.append(Path(explicit))
+    obsidian = Path.home() / "Desktop" / "Obsidian"
+    candidates.append(obsidian / "дешборд")
+    candidates.append(obsidian / "Kuwait Forms" / "дешборд")
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+OBSIDIAN_MISSING_WARNING = "Obsidian vault not found; set ACL_OBSIDIAN_DIR"
+
+
 def get_runtime_workspace() -> Path:
     """Writable runtime data survives replacement of a frozen installation."""
     import sys
