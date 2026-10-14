@@ -8857,20 +8857,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T23:06:01+00:00",
         "from_status": "status:todo"
-      },
-      "815": {
-        "actor": "Worker-RH1815",
-        "session": "wrh1815-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1815-rules-evidence",
-        "worktree": "C:\\wk-rh1815",
-        "id": "f2ebb2bb8d41450ea2ffb678bae3161d",
-        "issue": 815,
-        "state": "handoff",
-        "started_at": "2026-10-14T23:07:31+00:00",
-        "from_status": "status:todo",
-        "pr": 818,
-        "report": "# ACL-1815 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1815-rules-evidence; head 0ff5cea6.\nConflict: docs/system/CHANGELOG.md only (both sides added entries at top); kept both (main's 1879 and 1824 entries plus the branch's 1800 entry). Code auto-merged.\nTests: all test files changed by the branch (conftest-dependent 1798/1800/1815, static_scripts_from_disk) plus test_acl1761_* with -k 'not browser': 553 passed, 2 skipped."
       }
     },
     "tasks": {
@@ -12780,25 +12766,25 @@
             "session": "wrh1815-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RH1815",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1815A",
-          "session": "run_s1815a_1012",
+          "actor": "Worker-RH1815",
+          "session": "wrh1815-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1815-rules-evidence",
-          "worktree": "C:\\acl-1815-evidence",
-          "id": "f1e875f880a74ded8f885c99f28c4de5",
+          "worktree": "C:\\wk-rh1815",
+          "id": "f2ebb2bb8d41450ea2ffb678bae3161d",
           "issue": 815,
           "state": "handoff",
-          "started_at": "2026-10-12T07:31:45+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-14T23:07:31+00:00",
+          "from_status": "status:todo",
           "pr": 818,
-          "report": "ACL-1815 done. PR #818 (stacked on #802, CI blocked), head 540a4cf.\nEvidence join moved to src/analysis_agent/rules/evidence.py with 9 identity verdicts, asymmetric maturity windows (LATAM/GCC D=2 config), freshness, reconciliation, coverage. Inventory reads adlabels{name}, updated_time, ISO UTC read time (no extra calls).\nTests: new 30 pass; affected set 247 pass (1798 inventory tests unchanged, 57). Mutation (no rows => FTD=0) fails 2 tests; reverted."
+          "report": "# ACL-1815 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1815-rules-evidence; head 0ff5cea6.\nConflict: docs/system/CHANGELOG.md only (both sides added entries at top); kept both (main's 1879 and 1824 entries plus the branch's 1800 entry). Code auto-merged.\nTests: all test files changed by the branch (conftest-dependent 1798/1800/1815, static_scripts_from_disk) plus test_acl1761_* with -k 'not browser': 553 passed, 2 skipped."
         },
         "pr": 818,
-        "queued_at": "2026-10-12T07:41:09+00:00",
+        "queued_at": "2026-10-14T23:10:11+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "819": {
@@ -18071,7 +18057,8 @@
       891,
       775,
       797,
-      800
+      800,
+      815
     ],
     "review": null,
     "history": [
@@ -34960,6 +34947,13 @@
         "at": "2026-10-14T23:07:31+00:00",
         "issue": 815,
         "claim": "f2ebb2bb8d41450ea2ffb678bae3161d",
+        "actor": "Worker-RH1815"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T23:10:11+00:00",
+        "issue": 815,
+        "pr": 818,
         "actor": "Worker-RH1815"
       }
     ],
