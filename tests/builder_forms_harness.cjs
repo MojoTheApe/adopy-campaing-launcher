@@ -5,7 +5,7 @@
 // трогают проверяемые функции. Правила Meta (чья форма, какой статус годен)
 // проверяет сервер; тут - что показать и что уходит.
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
-const html = fs.readFileSync(process.argv[2], 'utf8');
+const html = fs.readFileSync(process.argv[2], 'utf8').replace(/\r\n/g, '\n');  // CRLF чекаута Windows
 
 function slice(from, to) {
   const i = html.indexOf(from);
@@ -88,6 +88,7 @@ function build(opts) {
   const optInstant = el({});
   const select = el({ value: o.dest, querySelector: (s) => (s === 'option[value="instant_form"]' ? optInstant : null) });
   const note = el({ hidden: true });
+  let slot;
   const rows = o.formIds.map((id) => {
     const hid = el({ value: id, disabled: true });
     const only = [el({ hidden: true }), el({ hidden: true })];
@@ -97,13 +98,15 @@ function build(opts) {
       querySelector: (s) => (s === '.cb-form-select' ? picker : s === 'input[name$="_form_id"]' ? hid
         : s === '[data-form-note]' ? fnote : null),
       querySelectorAll: (s) => (s === '.cb-form-only' ? only : []),
-      closest: (s) => (s === 'form' ? form : null),
+      closest: (s) => (s === 'form' ? form : s === '.cb-slot' ? slot : null),
     });
     row._ = { hid, only, picker, fnote };
     return row;
   });
-  const slot = el({
-    querySelector: (s) => (s === '.cb-destination' ? select : s === '[data-forms-api-only]' ? note : null),
+  slot = el({
+    // ACL-1880: форма читается по ключу «аккаунт|страница», страница лежит в скрытом поле слота.
+    querySelector: (s) => (s === '.cb-destination' ? select : s === '[data-forms-api-only]' ? note
+      : s === 'input[name$="_page_id"]' ? { value: '123' } : null),
     querySelectorAll: (s) => (s === '.cb-ad-row' ? rows : []),
     closest: (s) => (s === 'form' ? form : null),
   });
@@ -160,7 +163,7 @@ assert.equal(t.note.hidden, false);
 // Повторная синхронизация ничего не пишет (форму слушает наблюдатель дерева).
 setBackend('api');
 t = build({ dest: 'instant_form', formIds: ['7000001'] });
-W.cbForms.Acc = { ok: true, forms: forms, message: '' };
+W.cbForms['Acc|123'] = { ok: true, forms: forms, message: '' };
 W.cbSyncDestination(t.slot);
 const firstSig = t.rows[0]._.picker.dataset.sig;
 let writes = 0;
@@ -173,7 +176,7 @@ assert.equal(t.rows[0]._.picker.dataset.sig, firstSig);
 
 // Список: пригодные формы, выбранная выбрана, подпись про число форм.
 t = build({ dest: 'instant_form', formIds: ['7000003'] });
-W.cbForms.Acc = { ok: true, forms: forms, message: '' };
+W.cbForms['Acc|123'] = { ok: true, forms: forms, message: '' };
 W.cbSyncDestination(t.slot);
 const picker = t.rows[0]._.picker;
 const ids = (picker.innerHTML.match(/value="([^"]*)"/g) || []).map((x) => x.slice(7, -1));
@@ -205,7 +208,7 @@ assert.equal(fetched.length, 1, 'второе нажатие во время ч�
 setTimeout(() => {
   assert.deepEqual(fetched, [{ url: '/api/page-forms', account: 'Acc', method: 'POST' }]);
   assert.equal(btn.disabled, false);
-  assert.equal(W.cbForms.Acc.forms.length, 1);
+  assert.equal(W.cbForms['Acc|123'].forms.length, 1);
   assert.equal(row0._.fnote.textContent, '1 form of the Page');
   // Сбой сети - подпись, а не немой отказ.
   sandbox.fetch = () => Promise.reject(new Error('down'));
