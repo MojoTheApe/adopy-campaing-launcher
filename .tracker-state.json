@@ -11974,7 +11974,7 @@
             "session": "ws1778e-20261014"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-S1778E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11994,7 +11994,19 @@
         "pr": 780,
         "queued_at": "2026-10-14T16:09:24+00:00",
         "review_report": "# PR 780 independent review return \u2014 2026-10-12\n\nReviewer: Reviewer-RX1012A (actual independent source_reviewer agent), session rev_rx1012a_20261012. Coordinator: Coordinator-CX1012A. Held source-review claim: 0dabb1148ba346e493b90c626603b938.\n\nTask: ACL-1778 / issue 778. PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/780. Exact inspected head: c671a6022618032777cd8151f2ae825d5870bd81. Current main/base supplied and independently resolved locally: e8e59f8376458f2f73089c3f2a8d454837ff033f. Diff: `git diff e8e59f8376458f2f73089c3f2a8d454837ff033f...c671a6022618032777cd8151f2ae825d5870bd81`. Four files: report/loading templates, header/stage-badge tests; two commits ae127e86 and c671a602. Source was not edited by this Reviewer.\n\n## Standards\n\nNo approval is recorded. Read AGENTS.md, delivery.json, WORKFLOW.md, BATCH_INTEGRATION.md, STAGING.md, engineering context, tracker/config.json and the exact pinned Tracker guide. Required source CI remains mandatory under WORKFLOW.md and the v2 batch contract. The Coordinator's fresh GitHub read found `statusCheckRollup: []` on this head. The prior run 38116203727 ended in startup_failure; GitHub refuses its rerun and its check suite is not rerequestable. This is unavailable verification, not a code test failure and not evidence of success. The parallel offline Standards inspection is still in progress and will be appended separately.\n\n## Spec\n\nRead the complete issue body from the Coordinator's fresh `issue-778.json`. The inspected diff implements the requested two-rail layout, framed date control, English ISO-derived labels, preserved control IDs/routes, Adopy tab title, theme tokens and responsive rows. The c671a602 fix routes Update through the common picker close function and sets dialog role, addressing the prior ARIA close concerns in code. Actual browser regression and screenshot evidence have not yet been independently verified in this resumed review. No completed full-scope acceptance or approval is claimed.\n\n## Required next action\n\nReturn source review using the supported `execution review-return` command, retaining the real Worker and original source branch. A fresh implementation claim is required before a Worker changes even the source head to restore workflow triggers. Restore required source CI legitimately, preserve the design acceptance and screenshots, then hand off and acquire fresh independent exact-head/base/scope review. Do not approve or directly merge this ordinary source PR, waive checks, modify the pinned client, or treat local tests as required CI.\n\nThis return releases a CI-blocked source lane while preserving all source work. The offline inspection may continue read-only, but any later approval must bind current head/base and completed required checks.",
-        "reviewer": "Reviewer-R1778F"
+        "reviewer": "Reviewer-R1778F",
+        "return_operation": {
+          "id": "1b69298ec1ec4bdda08dbb9317e6dc75",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
+        },
+        "return": {
+          "id": "1b69298ec1ec4bdda08dbb9317e6dc75",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
+        }
       },
       "769": {
         "implementers": [
