@@ -12007,7 +12007,7 @@
             "session": "w1014f-20261014"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1014F",
         "coordinator": "Coordinator-T1014C",
         "handoff": {
@@ -12026,7 +12026,8 @@
         },
         "pr": 796,
         "queued_at": "2026-10-14T10:24:08+00:00",
-        "review_report": "# Review return: PR #796 (ACL-1769), head 70f4862ef04f\n\nStatus: no CI checks on the current head. Cause: PR is CONFLICTING with current origin/main, so the workflow did not trigger.\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; app.py, report.html auto-merge). Fix: after PR #765's branch is fixed, merge codex/acl-1761-api-create into this branch, then merge current origin/main, resolve the test file keeping both sides, push.\n\n## Known failures that will hit once CI runs (verified at this head)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- inherited `tests/test_acl1761_hang_logout.py` lines 255/256/268/275. Fixed at the source in #765; arrives via the parent merge.\n2. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt.\n\n## Required fixes (stack order: after #765)\nMerge fixed parent + main, resolve conflict, push. Re-run affected tests (platform, shard, test_acl1756_fb_api.py, builder tests of this branch) and wait for full CI green."
+        "review_report": "# Review return: PR #796 (ACL-1769), head 70f4862ef04f\n\nStatus: no CI checks on the current head. Cause: PR is CONFLICTING with current origin/main, so the workflow did not trigger.\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; app.py, report.html auto-merge). Fix: after PR #765's branch is fixed, merge codex/acl-1761-api-create into this branch, then merge current origin/main, resolve the test file keeping both sides, push.\n\n## Known failures that will hit once CI runs (verified at this head)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- inherited `tests/test_acl1761_hang_logout.py` lines 255/256/268/275. Fixed at the source in #765; arrives via the parent merge.\n2. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt.\n\n## Required fixes (stack order: after #765)\nMerge fixed parent + main, resolve conflict, push. Re-run affected tests (platform, shard, test_acl1756_fb_api.py, builder tests of this branch) and wait for full CI green.",
+        "reviewer": "Reviewer-RRF769"
       },
       "783": {
         "implementers": [
@@ -14953,6 +14954,10 @@
       "Reviewer-RRF14": {
         "session": "rrf798-20261014",
         "role": "Reviewer"
+      },
+      "Reviewer-RRF769": {
+        "session": "rrf769-20261014",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -17553,7 +17558,6 @@
       845,
       840,
       841,
-      769,
       800,
       812,
       903,
@@ -32025,6 +32029,13 @@
           "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T16:53:47+00:00",
+        "pr": 796,
+        "lane": "02b7676d5364449d9aacc3116a8174a5",
+        "actor": "Reviewer-RRF769"
       }
     ],
     "policy": {
@@ -34099,6 +34110,19 @@
       "started_at": "2026-10-14T16:14:28+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "796": {
+        "id": "02b7676d5364449d9aacc3116a8174a5",
+        "pr": 796,
+        "issues": [
+          769
+        ],
+        "actor": "Reviewer-RRF769",
+        "session": "rrf769-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T16:53:47+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
