@@ -11519,7 +11519,7 @@
             "session": "run_s1769a_1011"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1769A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11538,7 +11538,8 @@
         },
         "pr": 796,
         "queued_at": "2026-10-11T18:59:04+00:00",
-        "reviewer": "Reviewer-R1014S"
+        "reviewer": "Reviewer-R1014S",
+        "review_report": "# Review return: PR #796 (ACL-1769), head 70f4862ef04f\n\nStatus: no CI checks on the current head. Cause: PR is CONFLICTING with current origin/main, so the workflow did not trigger.\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; app.py, report.html auto-merge). Fix: after PR #765's branch is fixed, merge codex/acl-1761-api-create into this branch, then merge current origin/main, resolve the test file keeping both sides, push.\n\n## Known failures that will hit once CI runs (verified at this head)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- inherited `tests/test_acl1761_hang_logout.py` lines 255/256/268/275. Fixed at the source in #765; arrives via the parent merge.\n2. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt.\n\n## Required fixes (stack order: after #765)\nMerge fixed parent + main, resolve conflict, push. Re-run affected tests (platform, shard, test_acl1756_fb_api.py, builder tests of this branch) and wait for full CI green."
       },
       "783": {
         "implementers": [
@@ -28787,6 +28788,24 @@
         "pr": 796,
         "lane": "2fc2a7f01d9649e7b20ebf846fc6f69b",
         "actor": "Reviewer-R1014S"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-14T09:25:33+00:00",
+        "review": {
+          "id": "2fc2a7f01d9649e7b20ebf846fc6f69b",
+          "pr": 796,
+          "issues": [
+            769
+          ],
+          "actor": "Reviewer-R1014S",
+          "session": "r1014s-20261014",
+          "coordinator": "Coordinator-T1014C",
+          "started_at": "2026-10-14T09:25:13+00:00",
+          "state": "returning",
+          "report": "# Review return: PR #796 (ACL-1769), head 70f4862ef04f\n\nStatus: no CI checks on the current head. Cause: PR is CONFLICTING with current origin/main, so the workflow did not trigger.\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; app.py, report.html auto-merge). Fix: after PR #765's branch is fixed, merge codex/acl-1761-api-create into this branch, then merge current origin/main, resolve the test file keeping both sides, push.\n\n## Known failures that will hit once CI runs (verified at this head)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- inherited `tests/test_acl1761_hang_logout.py` lines 255/256/268/275. Fixed at the source in #765; arrives via the parent merge.\n2. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt.\n\n## Required fixes (stack order: after #765)\nMerge fixed parent + main, resolve conflict, push. Re-run affected tests (platform, shard, test_acl1756_fb_api.py, builder tests of this branch) and wait for full CI green.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -30003,20 +30022,6 @@
         "coordinator": "Coordinator-CR1012",
         "started_at": "2026-10-13T21:41:15+00:00",
         "state": "reviewing"
-      },
-      "796": {
-        "id": "2fc2a7f01d9649e7b20ebf846fc6f69b",
-        "pr": 796,
-        "issues": [
-          769
-        ],
-        "actor": "Reviewer-R1014S",
-        "session": "r1014s-20261014",
-        "coordinator": "Coordinator-T1014C",
-        "started_at": "2026-10-14T09:25:13+00:00",
-        "state": "returning",
-        "report": "# Review return: PR #796 (ACL-1769), head 70f4862ef04f\n\nStatus: no CI checks on the current head. Cause: PR is CONFLICTING with current origin/main, so the workflow did not trigger.\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; app.py, report.html auto-merge). Fix: after PR #765's branch is fixed, merge codex/acl-1761-api-create into this branch, then merge current origin/main, resolve the test file keeping both sides, push.\n\n## Known failures that will hit once CI runs (verified at this head)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- inherited `tests/test_acl1761_hang_logout.py` lines 255/256/268/275. Fixed at the source in #765; arrives via the parent merge.\n2. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt.\n\n## Required fixes (stack order: after #765)\nMerge fixed parent + main, resolve conflict, push. Re-run affected tests (platform, shard, test_acl1756_fb_api.py, builder tests of this branch) and wait for full CI green.",
-        "keep_lane": false
       }
     }
   }
