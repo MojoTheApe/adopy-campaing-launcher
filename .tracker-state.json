@@ -8629,9 +8629,11 @@
         "worktree": "C:\\wk-rg1778",
         "id": "6823e6524b984b8481cbf00b53f2064e",
         "issue": 778,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T17:10:01+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 780,
+        "report": "# ACL-1778 refresh handoff\n\nWorker-RG1778 / wrg1778-20261014. Only change since the approved head 74128d1a (Reviewer-R1778F): merged current main 73136acc (ACL-1761 promotion, PR 914) into codex/acl-1778-header-linear-toolbar, clean merge. New head 0ef06b4c0a637b7c98f0936ab3499ca5e706ce67.\n\nChecks: tests/test_header.py, tests/test_stage_badge.py, tests/test_report_loading_stages.py, tests/test_acl_test_platform.py passed (browser deselected)."
       }
     },
     "tasks": {
