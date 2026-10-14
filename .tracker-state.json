@@ -13015,7 +13015,7 @@
             "session": "wk_w1886m_1014"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1886M",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -13034,7 +13034,8 @@
         },
         "pr": 887,
         "queued_at": "2026-10-14T09:56:34+00:00",
-        "review_report": "# ACL-1886 / PR887 review return - refresh branch only\n\nContent review of head 8f3b07ac5e86e6a29f1a53da89477b88f54d4660 (tree 7ce8602fb78ee5e8603e33a727c85ab407b9ff2f, base 7cee2857d4b374bc564c5ca84b9f6ede69f96430): approved, no blocking findings. Affected tests 159 passed; current-head GitHub checks green.\n\nReturn reason is ONLY the baseline: record-review refused with \"Source review must use the current main baseline\". Main is now df6c2e8ac491aa1d03b10ba87641d1d785685c92. The 4 newer commits (ACL-1892 process tooling: delivery-check.yml, .workflow/**, AGENTS.md, delivery.json, docs/repository/*, scripts/tracker_ci_evidence.py, tracker/engine.json, two process tests) do not overlap the PR's 8 files. Please merge/refresh current main into the branch, re-run affected checks, and hand off again; the reviewer will re-review only the delta.\n\nOptional non-blocking nits: add a blank line before the new \"## Safe operation context for Graph read failures\" heading in docs/system/CHANGELOG.md; reduce the 3 blank lines after _read_context in src/fb_api/graph.py to 2. Optionally name account_spend_api._failure in the PROJECT.md limitation."
+        "review_report": "# ACL-1886 / PR887 review return - refresh branch only\n\nContent review of head 8f3b07ac5e86e6a29f1a53da89477b88f54d4660 (tree 7ce8602fb78ee5e8603e33a727c85ab407b9ff2f, base 7cee2857d4b374bc564c5ca84b9f6ede69f96430): approved, no blocking findings. Affected tests 159 passed; current-head GitHub checks green.\n\nReturn reason is ONLY the baseline: record-review refused with \"Source review must use the current main baseline\". Main is now df6c2e8ac491aa1d03b10ba87641d1d785685c92. The 4 newer commits (ACL-1892 process tooling: delivery-check.yml, .workflow/**, AGENTS.md, delivery.json, docs/repository/*, scripts/tracker_ci_evidence.py, tracker/engine.json, two process tests) do not overlap the PR's 8 files. Please merge/refresh current main into the branch, re-run affected checks, and hand off again; the reviewer will re-review only the delta.\n\nOptional non-blocking nits: add a blank line before the new \"## Safe operation context for Graph read failures\" heading in docs/system/CHANGELOG.md; reduce the 3 blank lines after _read_context in src/fb_api/graph.py to 2. Optionally name account_spend_api._failure in the PROJECT.md limitation.",
+        "reviewer": "Reviewer-R1886M"
       },
       "888": {
         "implementers": [
@@ -16753,7 +16754,6 @@
       845,
       840,
       841,
-      886,
       761
     ],
     "review": null,
@@ -28965,6 +28965,13 @@
         "issue": 769,
         "claim": "6d83218a309a4b5dbcc5fdd99f3a8062",
         "actor": "Worker-W1014F"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T10:01:32+00:00",
+        "pr": 887,
+        "lane": "2b781db97eb347d4a8728baaabf1758b",
+        "actor": "Reviewer-R1886M"
       }
     ],
     "policy": {
@@ -30169,6 +30176,19 @@
       "started_at": "2026-10-14T07:36:55+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "887": {
+        "id": "2b781db97eb347d4a8728baaabf1758b",
+        "pr": 887,
+        "issues": [
+          886
+        ],
+        "actor": "Reviewer-R1886M",
+        "session": "rev_r1886m_1014",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-14T10:01:32+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
