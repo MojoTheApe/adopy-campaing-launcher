@@ -400,7 +400,7 @@ class GraphClient:
     # -- одна запись (ACL-1761)
     def post(self, path: str, params: dict | None = None, *, files: dict | None = None,
              filename: str = "", on_ad: bool = False, form_page: str = "",
-             progress: Callable[[int, int], None] | None = None,
+             progress: Callable[[float], None] | None = None,
              cancelled: Callable[[], bool] | None = None) -> dict:
         """POST ровно один раз. Никаких повторов, пересъёмки токена и т.п.
 

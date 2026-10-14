@@ -60,8 +60,11 @@ a clear refusal.
   `upload.onprogress`); Python polls it ~once per second with a short per-poll CDP timeout and no overall
   deadline. Network, HTTP and Meta errors, a lost page, or Stop end the wait. Writes without a file are
   unchanged (short timeout). The write policy and the size + SHA-256 check before sending are unchanged.
-- Dashboard: the job panel shows `ad 1: uploading video 45% (90 of 200 MB)` (images too), at most once per
-  second.
+- Dashboard: the job panel shows `ad 1: uploading video (180 MB), 1m 20s` (images too), at most once per
+  second. There is no byte progress: a listener on `xhr.upload` makes the browser send a CORS preflight,
+  Graph answers it with `Access-Control-Allow-Origin: *` and no `Allow-Credentials`, and the credentialed
+  request is blocked (live failure on TEST9095: `network`, body never sent). So the helper registers no
+  upload listener; a real percentage comes with chunked upload (ACL-891).
 - Stop during an upload aborts the request in the page, reads back once and stops; a re-run reuses an
   already uploaded video and never uploads twice.
 - After an unknown upload result the readback is repeated (6 reads with waits of 5, 10, 20, 30, 30, 30 s,

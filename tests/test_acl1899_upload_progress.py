@@ -69,8 +69,8 @@ class JobTab:
             if self.fail_poll_at is not None and self.polls == self.fail_poll_at:
                 raise CdpError("target closed")
             if self.polls <= self.running_polls:
-                return {"state": "running", "sent": self.polls * 10, "total": 100}
-            return {"state": "done", "sent": 100, "total": 100, "result": self.result}
+                return {"state": "running"}
+            return {"state": "done", "result": self.result}
         if ".abort(" in expr:
             return {"ok": True}
         if ".call(" in expr:
@@ -82,7 +82,12 @@ class JobTab:
 
 def _transport(tab):
     slept: list[float] = []
-    t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT, sleep=slept.append)
+    now = [0.0]
+
+    def sleep(s):
+        slept.append(s)
+        now[0] += s
+    t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT, sleep=sleep, clock=lambda: now[0])
     return t, slept
 
 
@@ -105,14 +110,14 @@ def test_a_file_write_has_no_overall_deadline():
     assert all(tmo <= 20 for _n, tmo in tab.timeouts), tab.timeouts
 
 
-def test_progress_is_forwarded_for_each_poll():
+def test_elapsed_seconds_are_forwarded_for_each_poll():
     seen = []
-    _wr(_transport(JobTab(running_polls=3))[0], progress=lambda s, tot: seen.append((s, tot)))
-    assert seen == [(10, 100), (20, 100), (30, 100)]
+    _wr(_transport(JobTab(running_polls=3))[0], progress=seen.append)
+    assert seen == [0.0, 1.0, 2.0]
 
 
 def test_a_failing_progress_callback_does_not_break_the_write():
-    def boom(_s, _t):
+    def boom(_s):
         raise RuntimeError("ui")
     assert _wr(_transport(JobTab(running_polls=2))[0], progress=boom)["body"] == {"id": "77"}
 
@@ -206,8 +211,8 @@ def test_the_client_passes_progress_and_cancel_only_for_files():
             return {"has_token": True}
     tr = T()
     c = g.GraphClient(tr, allow_writes=True, min_interval_s=0, sleep=lambda s: None)
-    c.post("/p", {}, progress=lambda a, b: None, cancelled=lambda: False)
-    c.post("/p", {}, files={"source": b"x"}, progress=lambda a, b: None, cancelled=lambda: False)
+    c.post("/p", {}, progress=lambda e: None, cancelled=lambda: False)
+    c.post("/p", {}, files={"source": b"x"}, progress=lambda e: None, cancelled=lambda: False)
     assert tr.kw[0] == {} and set(tr.kw[1]) == {"progress", "cancelled"}
 
 
@@ -225,22 +230,22 @@ def _creator(meta, **kw):
     return creator, client, slept
 
 
-def test_progress_text_is_throttled_and_in_english():
+def test_progress_text_is_elapsed_time_throttled_and_in_english():
     texts: list[str] = []
     now = [0.0]
     creator = cr.CampaignCreator(None, None, None, clock=lambda: now[0], live_progress=texts.append)
-    show = creator._upload_progress(1, "video", 200 * 1024 * 1024)
-    total = 205_000_000
-    show(total * 45 // 100, total)
+    show = creator._upload_progress(1, "video", 180 * 1024 * 1024)
+    show(80.0)
     now[0] += 0.4
-    show(total * 50 // 100, total)             # слишком рано - не показываем
+    show(80.4)                                  # слишком рано - не показываем
     now[0] += 1.0
-    show(total * 90 // 100, total)
+    show(45.0)
     now[0] += 1.0
-    show(total, total)                          # 100% не обещаем до ответа Meta
-    assert texts[0].startswith("ad 1: uploading video 45% (")
-    assert texts[0].endswith(" of 200 MB)") and len(texts) == 3
-    assert "90%" in texts[1] and "99%" in texts[2]
+    show(3725.0)
+    assert texts == ["ad 1: uploading video (180 MB), 1m 20s",
+                     "ad 1: uploading video (180 MB), 45s",
+                     "ad 1: uploading video (180 MB), 1h 02m"]
+    assert "%" not in "".join(texts)
 
 
 class LateMeta(FakeMeta):
@@ -390,7 +395,13 @@ def test_publish_api_wires_live_progress_to_the_job_panel():
 
 _PRELUDE = r"""
 class FakeXhr {
-  constructor() { this.upload = {}; }
+  constructor() {
+    // Любой слушатель на `.upload` включает CORS-preflight - его Graph не пропускает с куками.
+    const bad = (name) => { FakeXhr.upload_listeners.push(name); };
+    this.upload = new Proxy({}, { set(t, k, v) { bad('set:' + String(k)); return true; },
+                                  get(t, k) { return k === 'addEventListener' ? () => bad('addEventListener') : undefined; } });
+  }
+  set withCredentials(v) { this._wc = v; FakeXhr.last_cred = v; }
   open(m, u) { this.method = m; this.url = u; this.responseURL = u; }
   send(body) {
     FakeXhr.sent.push({ url: this.url, keys: [...body.keys()] });
@@ -406,7 +417,6 @@ class FakeXhr {
     }
     if (MODE === 'error') { setTimeout(() => this.onerror(), 5); return; }
     if (MODE === 'ok') {
-      setTimeout(() => { this.upload.onprogress({ lengthComputable: true, loaded: 5, total: 10 }); }, 5);
       setTimeout(() => { this.status = 200; this.responseText = '{"id":"9"}'; this.onload(); }, 60);
     }
     // MODE === 'hang': ни ответа, ни ошибки - у помощника нет собственного срока
@@ -414,6 +424,7 @@ class FakeXhr {
   abort() { FakeXhr.aborts = (FakeXhr.aborts || 0) + 1; setTimeout(() => this.onabort(), 1); }
 }
 FakeXhr.sent = [];
+FakeXhr.upload_listeners = [];
 globalThis.XMLHttpRequest = FakeXhr;
 const fakeFetch = async () => { throw new Error('fetch must not be used for file jobs'); };
 const loc = { href: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1',
@@ -439,7 +450,7 @@ _MAIN_OK = r"""
   const out = {};
   h.stage('fx', hello.toString('base64'));
   out.start = h.startCall(spec());
-  for (let i = 0; i < 100 && !(h.poll(out.start.job).sent > 0); i++) await sleep(5);
+  await sleep(20);
   out.mid = h.poll(out.start.job);
   await sleep(150);
   out.end = h.poll(out.start.job);
@@ -455,6 +466,8 @@ _MAIN_OK = r"""
   await sleep(30);
   out.wrongedge = h.poll(wrong.job);
   out.aborts = FakeXhr.aborts || 0;
+  out.upload_listeners = FakeXhr.upload_listeners;
+  out.with_credentials = FakeXhr.last_cred;
   out.sent_count = FakeXhr.sent.length;
   out.sent_keys = FakeXhr.sent[0].keys;
   out.sent_has_token_in_url = FakeXhr.sent[0].url.includes('access_token');
@@ -503,7 +516,9 @@ def _node(mode, main):
 def test_the_page_helper_reports_progress_and_the_result():
     out = _node("ok", _MAIN_OK)
     assert out["start"]["job"].startswith("j")
-    assert out["mid"]["state"] == "running" and out["mid"]["sent"] == 5 and out["mid"]["total"] == 10
+    assert out["mid"] == {"state": "running"}                  # байтов нет: прогресс - время на стороне Python
+    assert out["upload_listeners"] == []                        # ни одного слушателя на xhr.upload (CORS-preflight)
+    assert out["with_credentials"] is True                      # куки как прежде
     assert out["end"]["state"] == "done" and out["end"]["result"]["body"] == {"id": "9"}
     assert out["sent_keys"] == ["name", "title", "access_token", "source"]
     assert out["sent_has_token_in_url"] is False and out["token_in_output"] is False
