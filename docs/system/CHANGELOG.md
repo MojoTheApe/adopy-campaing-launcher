@@ -1,5 +1,10 @@
 # System history
 
+## Instagram identity for Instagram placements - ACL-1896
+
+Check plan now refuses a plan with Instagram placements when the chosen Facebook Page has no Instagram account (Doc120 live finding: Meta 100/1772103 after the campaign, ad set and creative were already written). New server rule `instagram_identity`; at most two read-only Graph calls per Page, cached for the run and counted in the call estimate; a failed read is a refusal, not a pass. When an account exists it is sent as `object_story_spec.instagram_user_id` and read back. The write policy allows that one numeric field in both layers (Python and page helper), refuses `instagram_actor_id`, and creates no Page-backed account. Details and the live-check list: `docs/system/PROJECT.md`, ACL-1896 ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/896)).
+
+
 ## Campaign commands: human-confirmed on/off, budget and bid with readback - ACL-1800
 
 Campaigns are created published and PAUSED through the API; a person switches them on or off and

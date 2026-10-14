@@ -72,7 +72,7 @@ class FormMeta(FakeMeta):
             if self.drop_forms_after_creative and self._of("creative"):
                 rows = []
             return self._page(rows, params)
-        if parts == [PAGE]:
+        if parts == [PAGE] and "connected_instagram_account" not in str(params.get("fields")):
             return {"id": PAGE, "leadgen_tos_accepted": self.tos}
         if parts == [ACT, "adspixels"] and self.pixels is not None:
             return {"data": self.pixels}

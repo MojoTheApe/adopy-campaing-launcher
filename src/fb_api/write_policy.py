@@ -48,12 +48,18 @@ FILE_FIELDS = {"adimages": "filename", "advideos": "source"}
 #: Ключи, которых не должно быть нигде, на любой глубине.
 FORBIDDEN_ANYWHERE = frozenset({"effective_status", "configured_status", "execution_options",
                                 "access_token", "method", "_method", "batch",
-                                "suppress_http_code", "lead_gen_form_id", "tos_accepted"})
+                                "suppress_http_code", "lead_gen_form_id", "tos_accepted",
+                                "instagram_actor_id"})
 PAUSED = "PAUSED"
 #: Ключ существующей формы лидов: разрешён только в `_without_lead_form` (ACL-1775).
 LEAD_FORM_KEY = "lead_gen_form_id"
 #: Форматы креатива, в `call_to_action.value` которых форма может стоять.
 LEAD_FORM_FORMATS = ("link_data", "video_data")
+#: Instagram-идентичность креатива (ACL-1896): ОДНО числовое поле, и только прямым ключом
+#: `object_story_spec`. Справочник Meta: `object_story_spec.instagram_user_id` - строка из цифр.
+#: Старое `instagram_actor_id` не разрешено нигде.
+INSTAGRAM_KEY = "instagram_user_id"
+INSTAGRAM_ID_RE = re.compile(r"^[0-9]{5,25}$")
 #: Id формы — только цифры; всё прочее не форма.
 LEAD_FORM_ID_RE = re.compile(r"^[0-9]{5,25}$")
 #: Ключи, которые Graph читает как JSON. Строку в них Graph разберёт сам —
@@ -158,6 +164,7 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "cta_form": list(CTA_FORM),
         "targeting": {"keys": sorted(TARGETING_KEYS), "genders": sorted(GENDER_VALUES),
                       "devices": sorted(DEVICE_PLATFORMS), "user_os_re": USER_OS_RE.pattern},
+        "instagram": {"key": INSTAGRAM_KEY, "id_re": INSTAGRAM_ID_RE.pattern},
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
         "form_create": policy_for_form_create(page),
@@ -257,7 +264,8 @@ def _check_asset_feed(spec: Any, creative: dict) -> None:
     if extra:
         refuse(f"key {extra[0]!r} is not allowed")
     story = creative.get("object_story_spec")
-    if not (isinstance(story, dict) and set(story) == {"page_id"} and isinstance(story["page_id"], str)):
+    if not (isinstance(story, dict) and set(story) - {INSTAGRAM_KEY} == {"page_id"}
+            and isinstance(story["page_id"], str)):
         refuse("needs object_story_spec with page_id only")
     if not _is_text_list(spec.get("bodies"), "bodies", required=True):
         refuse("bodies must be exactly one non-empty text")
@@ -335,6 +343,27 @@ def _check_asset_feed(spec: Any, creative: dict) -> None:
                 refuse(f"{key} value is not allowed")
     if sorted(used) != sorted(names):
         refuse("each file needs its own rule")
+
+
+def _count_key(value: Any, key: str) -> int:
+    if isinstance(value, dict):
+        return sum((1 if k == key else 0) + _count_key(v, key) for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return sum(_count_key(v, key) for v in value)
+    return 0
+
+
+def _check_instagram(edge: str, checked: dict) -> None:
+    """`instagram_user_id` - ровно один раз, прямым ключом object_story_spec креатива, строка из цифр (ACL-1896)."""
+    seen = _count_key(checked, INSTAGRAM_KEY)
+    if not seen:
+        return
+    story = checked.get("object_story_spec") if edge == "adcreatives" else None
+    value = story.get(INSTAGRAM_KEY) if isinstance(story, dict) else None
+    if seen != 1 or not isinstance(story, dict) or INSTAGRAM_KEY not in story:
+        raise WriteRefused(f"write refused: {INSTAGRAM_KEY} is allowed only in object_story_spec of a creative")
+    if not (isinstance(value, str) and INSTAGRAM_ID_RE.fullmatch(value)):
+        raise WriteRefused(f"write refused: {INSTAGRAM_KEY} must be the numeric id of an Instagram account")
 
 
 def _check_cta(spec: Any, on_ad: bool = False) -> None:
@@ -444,6 +473,7 @@ def check(act: str, method: str, path: str, params: dict | None,
         _check_multi_ads(checked[MULTI_ADS_KEY])
     if ASSET_FEED_KEY in checked:
         _check_asset_feed(checked[ASSET_FEED_KEY], checked)
+    _check_instagram(edge, checked)
     if edge == "adcreatives":
         _check_cta(checked.get("object_story_spec"), on_ad)
     if edge == "adsets" and "targeting" in checked:
