@@ -11974,7 +11974,7 @@
             "session": "ws1778e-20261014"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-S1778E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11993,7 +11993,7 @@
         },
         "pr": 780,
         "queued_at": "2026-10-14T16:09:24+00:00",
-        "review_report": "# PR 780 independent review return \u2014 2026-10-12\n\nReviewer: Reviewer-RX1012A (actual independent source_reviewer agent), session rev_rx1012a_20261012. Coordinator: Coordinator-CX1012A. Held source-review claim: 0dabb1148ba346e493b90c626603b938.\n\nTask: ACL-1778 / issue 778. PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/780. Exact inspected head: c671a6022618032777cd8151f2ae825d5870bd81. Current main/base supplied and independently resolved locally: e8e59f8376458f2f73089c3f2a8d454837ff033f. Diff: `git diff e8e59f8376458f2f73089c3f2a8d454837ff033f...c671a6022618032777cd8151f2ae825d5870bd81`. Four files: report/loading templates, header/stage-badge tests; two commits ae127e86 and c671a602. Source was not edited by this Reviewer.\n\n## Standards\n\nNo approval is recorded. Read AGENTS.md, delivery.json, WORKFLOW.md, BATCH_INTEGRATION.md, STAGING.md, engineering context, tracker/config.json and the exact pinned Tracker guide. Required source CI remains mandatory under WORKFLOW.md and the v2 batch contract. The Coordinator's fresh GitHub read found `statusCheckRollup: []` on this head. The prior run 38116203727 ended in startup_failure; GitHub refuses its rerun and its check suite is not rerequestable. This is unavailable verification, not a code test failure and not evidence of success. The parallel offline Standards inspection is still in progress and will be appended separately.\n\n## Spec\n\nRead the complete issue body from the Coordinator's fresh `issue-778.json`. The inspected diff implements the requested two-rail layout, framed date control, English ISO-derived labels, preserved control IDs/routes, Adopy tab title, theme tokens and responsive rows. The c671a602 fix routes Update through the common picker close function and sets dialog role, addressing the prior ARIA close concerns in code. Actual browser regression and screenshot evidence have not yet been independently verified in this resumed review. No completed full-scope acceptance or approval is claimed.\n\n## Required next action\n\nReturn source review using the supported `execution review-return` command, retaining the real Worker and original source branch. A fresh implementation claim is required before a Worker changes even the source head to restore workflow triggers. Restore required source CI legitimately, preserve the design acceptance and screenshots, then hand off and acquire fresh independent exact-head/base/scope review. Do not approve or directly merge this ordinary source PR, waive checks, modify the pinned client, or treat local tests as required CI.\n\nThis return releases a CI-blocked source lane while preserving all source work. The offline inspection may continue read-only, but any later approval must bind current head/base and completed required checks.",
+        "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
         "reviewer": "Reviewer-R1778F",
         "return_operation": {
           "id": "1b69298ec1ec4bdda08dbb9317e6dc75",
@@ -32186,6 +32186,18 @@
           "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-14T16:56:51+00:00",
+        "issue": 778,
+        "operation": {
+          "id": "1b69298ec1ec4bdda08dbb9317e6dc75",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -32970,50 +32982,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T16:13:04+00:00"
-      },
-      "778": {
-        "issue": 778,
-        "pr": 780,
-        "branch": "codex/acl-1778-header-linear-toolbar",
-        "head_sha": "74128d1a865b11ae44c900af0cc27e4d48fb3a4a",
-        "base_sha": "d911841316925665b53af7c59b7acba352773a1b",
-        "main_sha": "d911841316925665b53af7c59b7acba352773a1b",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "f7ba65b41d297f82e266165d04c49a67f5adc1f0c97c8f32a399bd77edc687ae",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1778F",
-          "implementer": "Worker-S1778E",
-          "review_session": "r1778f-20261014",
-          "execution_lane": "386271487d114214a21ee8322e167847",
-          "head_sha": "74128d1a865b11ae44c900af0cc27e4d48fb3a4a",
-          "base_sha": "d911841316925665b53af7c59b7acba352773a1b",
-          "tree_sha": "04a0314485dbf52f4c135a062dfe8729a8db5612",
-          "report": "Independent source review of ACL-1778 / PR 780 at head 74128d1a against current main d9118413 (main is an ancestor of the head). Reviewer-R1778F implemented none of it.\n\nScope: full diff origin/main...head, 4 files (report.html, loading.html, test_header.py, test_stage_badge.py), +379/-160.\n\nRead by eye:\n- Two-rail header: top rail has logo, framed Date range button (328x46, 7px radius, label set into the border on the same bg-elev so no patch in dark), buyer select, support buttons, theme switch and Refresh; lower rail has Last updated, Version and the STAGE badge with \"+N not on stage\". Container queries rebuild the layout by header width, so the open builder drawer gets the same fallback rows as a narrow window; a media rule offsets the header under the drawer at 760-1100px.\n- Date text is built in Jinja from the ISO string (no browser Date): \"Oct 1, 2026 \u2013 Oct 9, 2026\", single day shows one date, span=all or empty shows \"All dates\", half-open and unreadable values are shown as-is.\n- Accessibility: button has aria-haspopup=dialog, aria-expanded driven by the picker, aria-label \"Date range: <text>\", decorative svg and label are aria-hidden, picker has role=dialog and aria-label, Escape and Cancel return focus to the button, outside click and Update close without stealing focus, focus-visible rings on all header controls, coarse-pointer 44px targets, reduced-motion respected. Refresh icon is a CSS mask so dashRefresh() textContent writes do not delete it.\n- IDs and handlers intact: theme-toggle, buyer-select, buyer-msg, robot-health-link (still a link to /robot-health), report-problem-btn, acl-update-btn (still hidden by default), dash-refresh-btn (form action /refresh and onsubmit dashRefresh kept), acl-version, acl-stage, amap-dates JSON. The JS that uses them (dashRefresh, update, report dialog, theme) is untouched. No stale selectors (head-tools, brand-lockup, brand-text, form.refresh button) remain anywhere in src/ or tests/.\n- Nothing from main lost: loading.html differs from main only in the title (\"Adopy \u2014 loading\"), so ACL-1865 loading stages are untouched; the stage badge markup keeps id/class/title and the unknown variant, with its tests moved to the new tab title; the report.html diff is confined to header CSS, header markup, <title> and the amapCalendar/amapApply close path, so the ACL-1838-1845 changes elsewhere in the file are not in the diff. Tab title is \"Adopy\" (prefixed \"STAGE \u00b7 \" on a stage build). No prototype switcher, demo data or stubs. Campaign/builder logic untouched.\n- amapApply now closes via the same path (cal._amapClose(false)) so aria-expanded is reset after Update.\n\nVerification:\n- CI on head 74128d1a: all required checks green (per Coordinator read).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\" tests/test_header.py tests/test_stage_badge.py tests/test_report_loading_stages.py tests/test_acl_test_platform.py: 135 passed.\n- Mutation: amapApply reverted to a bare cal.remove() -> tests/test_header.py::test_the_picker_closes_through_one_path fails (1 failed, 13 passed); reverted, worktree clean.\n- Header browser tests and screenshots were NOT run: free RAM 3.9 GB, below the 6 GB threshold. The layout/responsive behaviour is therefore reviewed from the CSS and the author's earlier screenshots only, not seen by this reviewer.\n- No live Meta or Multilogin calls.\n\nFindings: no blocking issues. Minor, non-blocking: error.html still has the old \"Adopy Campaign Manager \u2014 {{ title }}\" tab title (out of the issue's scope, which covers the dashboard report tab); the period button no longer carries the .amap-btn class, which is intended since it has its own styling.",
-          "main_sha": "d911841316925665b53af7c59b7acba352773a1b",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            778
-          ],
-          "recorded_at": "2026-10-14T16:33:19+00:00",
-          "issue_scopes": {
-            "778": "f7ba65b41d297f82e266165d04c49a67f5adc1f0c97c8f32a399bd77edc687ae"
-          }
-        },
-        "lane": {
-          "id": "386271487d114214a21ee8322e167847",
-          "pr": 780,
-          "issues": [
-            778
-          ],
-          "actor": "Reviewer-R1778F",
-          "session": "r1778f-20261014",
-          "coordinator": "Coordinator-C0930A",
-          "started_at": "2026-10-14T16:30:57+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-14T16:33:36+00:00"
       }
     },
     "batches": {
