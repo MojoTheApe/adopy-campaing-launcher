@@ -11936,7 +11936,7 @@
             "session": "922f523d07564d18961d4f57e3ea4337"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-M1786A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -29399,6 +29399,72 @@
         "issue": 812,
         "pr": 813,
         "actor": "Worker-W1014F"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-14T11:22:59+00:00",
+        "issue": 786,
+        "pr": 804,
+        "review": {
+          "id": "3e865c82d6434e5a8abf3e30c83090d7",
+          "pr": 804,
+          "issues": [
+            786
+          ],
+          "actor": "Reviewer-R1786X",
+          "session": "claude-subagent-a17b179a06c97c3af",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-14T11:04:33+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 786,
+            "pr": 804,
+            "branch": "work/acl-1786-meta-error-messages",
+            "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
+            "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+            "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-M1786A",
+              "reviewer": "Reviewer-R1786X",
+              "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "tree_sha": "12a60c97520e6ea488fe9498550f99aa95f33076",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "verdict": "approved",
+              "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-804.md",
+              "scope": "Full ACL-1786 scope: src/fb_api/error_catalog.py and its test; approved on current main df6c2e8a",
+              "execution_lane": "3e865c82d6434e5a8abf3e30c83090d7",
+              "review_session": "claude-subagent-a17b179a06c97c3af",
+              "actual_reviewer_agent": "claude-subagent-a17b179a06c97c3af",
+              "actual_implementer_agent": "Worker-M1786A",
+              "findings": [],
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                786
+              ],
+              "recorded_at": "2026-10-14T11:06:27+00:00",
+              "issue_scopes": {
+                "786": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6"
+              }
+            },
+            "lane": {
+              "id": "3e865c82d6434e5a8abf3e30c83090d7",
+              "pr": 804,
+              "issues": [
+                786
+              ],
+              "actor": "Reviewer-R1786X",
+              "session": "claude-subagent-a17b179a06c97c3af",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-14T11:04:33+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T11:22:23+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -29951,6 +30017,54 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T11:19:24+00:00"
+      },
+      "786": {
+        "issue": 786,
+        "pr": 804,
+        "branch": "work/acl-1786-meta-error-messages",
+        "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
+        "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+        "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6",
+        "review": {
+          "kind": "independent-review",
+          "implementer": "Worker-M1786A",
+          "reviewer": "Reviewer-R1786X",
+          "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
+          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+          "tree_sha": "12a60c97520e6ea488fe9498550f99aa95f33076",
+          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+          "verdict": "approved",
+          "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-804.md",
+          "scope": "Full ACL-1786 scope: src/fb_api/error_catalog.py and its test; approved on current main df6c2e8a",
+          "execution_lane": "3e865c82d6434e5a8abf3e30c83090d7",
+          "review_session": "claude-subagent-a17b179a06c97c3af",
+          "actual_reviewer_agent": "claude-subagent-a17b179a06c97c3af",
+          "actual_implementer_agent": "Worker-M1786A",
+          "findings": [],
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            786
+          ],
+          "recorded_at": "2026-10-14T11:06:27+00:00",
+          "issue_scopes": {
+            "786": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6"
+          }
+        },
+        "lane": {
+          "id": "3e865c82d6434e5a8abf3e30c83090d7",
+          "pr": 804,
+          "issues": [
+            786
+          ],
+          "actor": "Reviewer-R1786X",
+          "session": "claude-subagent-a17b179a06c97c3af",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-14T11:04:33+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-14T11:22:23+00:00"
       }
     },
     "batches": {
@@ -30744,66 +30858,6 @@
       "ineligible": {}
     },
     "source_reviews": {
-      "804": {
-        "id": "3e865c82d6434e5a8abf3e30c83090d7",
-        "pr": 804,
-        "issues": [
-          786
-        ],
-        "actor": "Reviewer-R1786X",
-        "session": "claude-subagent-a17b179a06c97c3af",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-14T11:04:33+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 786,
-          "pr": 804,
-          "branch": "work/acl-1786-meta-error-messages",
-          "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
-          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-M1786A",
-            "reviewer": "Reviewer-R1786X",
-            "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
-            "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "tree_sha": "12a60c97520e6ea488fe9498550f99aa95f33076",
-            "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "verdict": "approved",
-            "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-804.md",
-            "scope": "Full ACL-1786 scope: src/fb_api/error_catalog.py and its test; approved on current main df6c2e8a",
-            "execution_lane": "3e865c82d6434e5a8abf3e30c83090d7",
-            "review_session": "claude-subagent-a17b179a06c97c3af",
-            "actual_reviewer_agent": "claude-subagent-a17b179a06c97c3af",
-            "actual_implementer_agent": "Worker-M1786A",
-            "findings": [],
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              786
-            ],
-            "recorded_at": "2026-10-14T11:06:27+00:00",
-            "issue_scopes": {
-              "786": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6"
-            }
-          },
-          "lane": {
-            "id": "3e865c82d6434e5a8abf3e30c83090d7",
-            "pr": 804,
-            "issues": [
-              786
-            ],
-            "actor": "Reviewer-R1786X",
-            "session": "claude-subagent-a17b179a06c97c3af",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-14T11:04:33+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T11:22:23+00:00"
-        }
-      },
       "795": {
         "id": "84f35dd6fc8e417490049f79c44601f5",
         "pr": 795,
