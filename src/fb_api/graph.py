@@ -132,6 +132,48 @@ class PageFailed(GraphStop):
     kind = "page_failed"
 
 
+class PageUnresponsive(GraphStop):
+    """Вкладка Ads Manager перестала отвечать (ACL-1761): не логин и не checkpoint.
+
+    Охлаждение профиля 10 минут, повторов нет.
+    """
+
+    kind = "page_unresponsive"
+
+
+class WriteUnknown(RuntimeError):
+    """Запись ушла (или могла уйти), а ответа нет (ACL-1761).
+
+    Не повторяется никогда. Пока вызывающий не сверит чтением (`reconciled`),
+    клиент не делает НИ ОДНОЙ новой записи; чтения разрешены — ими и сверяют.
+    """
+
+    def __init__(self, message: str, *, path: str = ""):
+        super().__init__(scrub(message))
+        self.path = path
+
+
+class WritesBlocked(RuntimeError):
+    """Новая запись не отправлена: у прошлой результат неизвестен и не сверен (ревью M4).
+
+    Отдельно от `WriteUnknown`: эта запись к Meta точно НЕ уходила, сверять её
+    нечего, и снимать флаг прошлой записи нельзя.
+    """
+
+    def __init__(self, path: str = ""):
+        super().__init__(scrub("an earlier write has an unknown result and was not reconciled; "
+                               "no further writes until it is"))
+        self.path = path
+
+
+#: Ответы Graph, после которых неизвестно, создан ли объект: «неизвестная
+#: ошибка», «сервис временно недоступен», 5xx.
+UNKNOWN_RESULT_CODES = {1, 2}
+#: Отказы помощника страницы ДО отправки: к Meta ничего не ушло.
+_NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", "retired",
+             "bad_path", "forbidden_param"}
+
+
 def classify(code: int | None) -> str:
     if code in TOKEN_CODES:
         return "token"
@@ -192,7 +234,7 @@ class GraphClient:
     """Чтения Graph API для пилота. Одна вкладка — один клиент."""
 
     def __init__(self, transport: Any, *, min_interval_s: float = 2.0, max_calls: int = 40,
-                 reacquire_timeout_s: float = 60.0,
+                 reacquire_timeout_s: float = 60.0, allow_writes: bool = False,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic):
         self.transport = transport
@@ -211,6 +253,33 @@ class GraphClient:
         self.last_usage: dict = {}
         #: Видел ли клиент хоть раз заголовки лимитов (CORS может их прятать).
         self.usage_headers_seen = False
+        #: ACL-1761: запись разрешена только явно (создатель кампаний).
+        self.allow_writes = bool(allow_writes)
+        #: Путь записи с неизвестным результатом; пока не `None`, записей нет.
+        self.unreconciled: str | None = None
+        self.writes = 0
+
+    def reset_budget(self, max_calls: int) -> None:
+        """Новый потолок вызовов (на одну кампанию).
+
+        Снимается только стоп по СВОЕМУ потолку (`CallBudget`, Meta молчала):
+        он не должен кончать следующие кампании задания (ревью, minor 5).
+        Стопы Meta (190/368/лимит/checkpoint) остаются.
+        """
+        self.max_calls = int(max_calls)
+        self.calls = 0
+        if type(self.stopped) is CallBudget:
+            self.stopped = None
+
+    def reconciled(self, path: str) -> bool:
+        """Сверка чтением нашла объект ИМЕННО этой записи — снять её флаг.
+
+        Флаг другой записи не трогается (ревью M4). True — снят.
+        """
+        if self.unreconciled is not None and self.unreconciled == path:
+            self.unreconciled = None
+            return True
+        return False
 
     # -- служебное
     def _stop(self, exc: GraphStop) -> GraphStop:
@@ -226,7 +295,11 @@ class GraphClient:
             self._sleep(wait)
 
     def _check_page(self) -> None:
-        state = self.transport.state() or {}
+        try:
+            state = self.transport.state() or {}
+        except GraphStop as exc:
+            # Транспорт сам распознал причину зависания вкладки (логин/checkpoint/молчит).
+            raise self._stop(exc) from exc
         kind = state.get("kind")
         if kind == "checkpoint":
             raise self._stop(Checkpoint("the profile is on a Facebook checkpoint"))
@@ -242,7 +315,10 @@ class GraphClient:
         self._pace()
         self.calls += 1
         self._last_call = self._clock()
-        reply = self.transport.request("GET", path, params or {})
+        try:
+            reply = self.transport.request("GET", path, params or {})
+        except GraphStop as exc:
+            raise self._stop(exc) from exc
         self._last_call = self._clock()
 
         err = reply.get("error")
@@ -297,6 +373,97 @@ class GraphClient:
         elif pct is not None and pct >= SLOW_PCT:
             self._slow = True
         return body
+
+    # -- одна запись (ACL-1761)
+    def post(self, path: str, params: dict | None = None, *, files: dict | None = None,
+             filename: str = "") -> dict:
+        """POST ровно один раз. Никаких повторов, пересъёмки токена и т.п.
+
+        - отказ до отправки (политика, нет токена) — стоп, к Meta ничего не ушло;
+        - сбой после отправки, 5xx, код 1/2, не-JSON — `WriteUnknown`: сверить чтением;
+        - 190/368/лимит/checkpoint — стоп, как у чтений, но без повтора;
+        - прочая ошибка Graph — `GraphError`: Meta отказала, объекта нет.
+        """
+        if not self.allow_writes:
+            raise ValueError("read-only client: writes are not enabled")
+        if self.stopped is not None:
+            raise self.stopped
+        if self.unreconciled is not None:
+            raise WritesBlocked(self.unreconciled)
+        if self.calls >= self.max_calls:
+            raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
+        self._pace()
+        self.calls += 1
+        self.writes += 1
+        self._last_call = self._clock()
+        try:
+            reply = self.transport.write(path, params or {}, files=files, filename=filename)
+        except ValueError as exc:
+            # Политика Python: ничего не отправлено.
+            raise self._stop(PageFailed(f"write refused before sending: {exc}")) from exc
+        except GraphStop as exc:
+            # Вкладка не отвечала ДО отправки (мир готовится до самого POST).
+            raise self._stop(exc) from exc
+        self._last_call = self._clock()
+
+        err = reply.get("error") if isinstance(reply, dict) else "bad_reply"
+        if isinstance(err, str):
+            if err in _NOT_SENT:
+                why = reply.get("why") if isinstance(reply, dict) else ""
+                raise self._stop(PageFailed(f"the page refused the write ({err}{': ' + str(why) if why else ''})"))
+            if err == "no_token":
+                self._check_page()
+                raise self._stop(LoggedOut("no session token in the page; the write was not sent"))
+            self.unreconciled = path
+            raise WriteUnknown(f"the write result is unknown ({err})", path=path)
+
+        body = reply.get("body") if isinstance(reply.get("body"), dict) else {}
+        status = reply.get("status")
+        gerr = body.get("error") if isinstance(body, dict) else None
+        if isinstance(gerr, dict):
+            code = _int(gerr.get("code"))
+            sub = _int(gerr.get("error_subcode"))
+            details = error_details(gerr, reply)
+            msg = _with_details(str(gerr.get("message") or "Graph API error"), details)
+            kind = classify(code)
+            if kind == "policy":
+                raise self._stop(PolicyBlocked(f"Graph API refused (368): {msg}", code=code, subcode=sub))
+            if kind == "rate_limit":
+                raise self._stop(RateLimited(f"Graph API rate limit ({code}): {msg}", code=code, subcode=sub))
+            if kind == "token":
+                if sub in CHECKPOINT_SUBCODES:
+                    raise self._stop(Checkpoint(f"the session is on a Facebook checkpoint ({code}/{sub})",
+                                                code=code, subcode=sub))
+                self._check_page()
+                raise self._stop(LoggedOut("the session token is no longer valid; the write was not retried",
+                                           code=code, subcode=sub))
+            if code in UNKNOWN_RESULT_CODES or (isinstance(status, int) and status >= 500):
+                self.unreconciled = path
+                raise WriteUnknown(f"Graph API error {code} — the write result is unknown: {msg}", path=path)
+            raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status,
+                             details=details)
+        if "non_json" in body or (isinstance(status, int) and status >= 500):
+            # Запись могла дойти до Meta: метку ставим ДО любой проверки страницы,
+            # которая теперь может сама кинуть стоп (вкладка молчит, ACL-1761 B1).
+            self.unreconciled = path
+            self._check_page_after_write(path)
+            raise WriteUnknown("Graph API did not answer the write with JSON; the result is unknown", path=path)
+        return body
+
+    def _check_page_after_write(self, path: str) -> None:
+        """Проверка страницы после записи с неизвестным результатом.
+
+        Стоп страницы не превращает запись в «не отправлена»: остаётся
+        `unreconciled`, наружу — `WriteUnknown` (сверка чтением и отчёт
+        «проверьте Ads Manager»), а клиент остановлен честным текстом.
+        """
+        try:
+            self._check_page()
+        except GraphStop as exc:
+            stop = type(exc)(f"the page stopped ({exc.kind}) after a write whose result is unknown; "
+                             "check Ads Manager before publishing again")
+            self.stopped = stop
+            raise WriteUnknown(str(stop), path=path) from exc
 
     def _token_dead(self, path: str, params: dict | None, code: int | None, sub: int | None) -> dict:
         if self._reacquired:

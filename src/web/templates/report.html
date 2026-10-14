@@ -49,6 +49,9 @@
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
           crossorigin="anonymous"></script>
   <script>
+    // ACL-1761: создатель кампаний через Graph API — «Check plan (no writes)» и
+    // «PAUSED campaigns» вместо «drafts». Раньше любого кода билдера.
+    try { window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}; } catch(e) {}
     function aclEscHtml(value) {
       return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
         return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
@@ -3181,6 +3184,22 @@
       padding: var(--space-sm) var(--space-md);
       border-top: 1px solid var(--border);
     }
+    /* ACL-1761: план «Check plan» живёт в подвале ящика и не закрывает билдер:
+       своя прокрутка, ширина ящика, кнопка «Close plan». */
+    .cbd-plan-out {
+      position: relative; box-sizing: border-box; width: 100%; max-width: 100%;
+      max-height: 40vh; overflow: auto; margin: 0.4rem 0;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--surface, transparent); overflow-wrap: anywhere;
+    }
+    .cbd-plan-out[hidden] { display: none; }
+    .cbd-plan-bar {
+      position: sticky; top: 0; z-index: 1; display: flex; align-items: center;
+      justify-content: space-between; gap: 0.5rem; padding: 0.25rem 0.5rem;
+      background: var(--bg); border-bottom: 1px solid var(--border); font-size: 0.75rem;
+    }
+    .cbd-plan-body { padding: 0.3rem 0.5rem; }
+    .cbd-plan-body[hidden] { display: none; }
 
     /* Открытый ящик раздвигает страницу, а не накрывает её: читать нужно
        ровно то, что сейчас закрыто панелью. Язычок входит в отступ — он
@@ -5246,8 +5265,10 @@ window.cbTree = (function () {
   function publishLabel(t) {
     // K — сколько кампаний уйдёт сейчас: отмеченные у идущей формы не едут
     // (их пропустит и подтверждение), и считать их было бы неправдой.
-    return t.some ? 'Publish selected → drafts (' + t.send.length + ')'
-                  : 'Publish all → drafts (' + t.total + ')';
+    // ACL-1761: через Graph API создаются кампании на паузе, а не черновики.
+    var what = window.ACL_FB_BACKEND === 'api' ? 'PAUSED campaigns' : 'drafts';
+    return t.some ? 'Publish selected → ' + what + ' (' + t.send.length + ')'
+                  : 'Publish all → ' + what + ' (' + t.total + ')';
   }
 
   /* Отметки, кнопка и «Select all» — на месте, без перерисовки дерева:
@@ -5441,6 +5462,12 @@ window.cbTree = (function () {
     var html = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
         ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
           + aclEscHtml(publishLabel(t)) + '</button>'
+          // ACL-1761: план без записей — только при ACL_FB_BACKEND=api.
+          + (window.ACL_FB_BACKEND === 'api' && t.total
+            ? '<button type="button" class="cbd-add cbd-plan" data-act="check-plan"'
+              + ' title="Preflight and plan through the Graph API; nothing is created">'
+              + 'Check plan (no writes)</button><div class="cbd-plan-out" hidden></div>'
+            : '')
           + '<div class="cbd-queue" hidden></div>'
         : '')
       + '<div class="cbd-pick">'
@@ -5758,6 +5785,9 @@ window.cbTree = (function () {
       window.amapSend({ action: 'add', kind: 'country', value: name }, msg);
     } else if (act === 'publish-all') {
       window.cbPublishAll(showQueue, selectedForPublish());
+    } else if (act === 'check-plan') {
+      window.cbCheckPlan(selectedForPublish(), foot.querySelector('.cbd-plan-out'),
+                         foot.querySelector('.cbd-plan'));
     } else if (act === 'tick-all') {
       var t = ticks();
       // Всё отмечено — тот же переключатель снимает; иначе отмечает всё, что можно.
@@ -12638,7 +12668,9 @@ window.cbPublishAll = function (onProgress, picked) {
   if (notes.length) pfHtml += '<div class="cb-preflight-note" style="color:var(--muted);font-size:0.8rem">'
     + aclEscHtml(notes.map(function (a) { return a.account; }).join(', ')) + ': profile is open — the robot will reuse or reopen it.</div>';
 
-  _safeConfirm(only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?',
+  _safeConfirm(cbApiMode()
+      ? (only ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?')
+      : (only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
     pfHtml + (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
     + 'Accounts: <strong>' + forms.length + '</strong><br>'
     + (only
@@ -12656,7 +12688,10 @@ window.cbPublishAll = function (onProgress, picked) {
     + '<span style="color:var(--warn);font-size:0.85rem">Do not lock the screen while the build runs — '
     + 'creative uploads stall on a locked screen.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
-    + 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook</span>',
+    + (cbApiMode() ? aclEscHtml(cbPublishMode())
+       // Режим робота — дословно здесь: вопрос обязан сказать «черновик» и «Publish не нажимается».
+       : 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook')
+    + '</span>',
     function () {
       var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
       if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
@@ -12665,12 +12700,159 @@ window.cbPublishAll = function (onProgress, picked) {
         only ? function (form) { return cbPickedIn(form, only); } : null);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     },
-    { confirmLabel: only ? 'Publish selected → drafts' : 'Publish all → drafts' });
+    { confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget() });
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };
   if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch(forms.map(cbFormAccount)).then(pfAsk);
   else pfAsk(null);
+};
+
+/* ── ACL-1761: «Check plan (no writes)» ─────────────────────────────────
+ * Те же отмеченные (или все) кампании, что ушли бы в Publish, — на
+ * /publish-plan с dry_run=1. Сервер делает предпроверку и план через Graph
+ * API путём чтения: ни одной записи, задания публикации нет. Здесь —
+ * только отправка и отрисовка плана. */
+function cbPlanFormData(form, only) {
+  var fd;
+  if (only) {
+    var names = only.map(cbSlotTitle);
+    var total = parseInt(((form.querySelector('[name="camp_count"]') || {}).value || '0'), 10) || 0;
+    var skip = {};
+    for (var i = 0; i < total; i += 1) {
+      var f = form.querySelector('[name="camp_' + i + '_name"]');
+      if (names.indexOf(String(f ? f.value || '' : '').trim()) === -1) skip[i] = true;
+    }
+    fd = cbFormDataSkipping(form, skip).body;
+  } else {
+    fd = new FormData(form);
+  }
+  fd.set('dry_run', '1');
+  fd.set('activate', '0');
+  return fd;
+}
+
+function cbPlanMoney(s) {
+  var n = Number(s && s.daily_budget);
+  return (isFinite(n) ? n.toFixed(2) : '?') + ' ' + ((s && s.currency) || '') + ' / day';
+}
+
+/* Ответ /publish-plan → HTML (чистая функция: её проверяют тесты). */
+function cbPlanHtml(data) {
+  var h = '<div class="cbd-plan-acc"><div class="cbd-plan-head">Plan for <strong>'
+    + aclEscHtml((data && data.account) || '?') + '</strong> — nothing was created</div>';
+  if (data && data.error) {
+    h += '<div class="cbd-plan-err" style="color:var(--bad)">' + aclEscHtml(data.error) + '</div>';
+  }
+  ((data && data.results) || []).forEach(function (r) {
+    var s = (r.plan && r.plan.summary) || null;
+    h += '<div class="cbd-plan-camp" style="margin:0.4rem 0;padding-left:0.4rem;border-left:2px solid '
+      + (r.error ? 'var(--bad)' : 'var(--good)') + '">';
+    h += '<div><strong>' + aclEscHtml(r.campaign_name || '?') + '</strong>'
+      + (s ? ' · PAUSED · ' + aclEscHtml(cbPlanMoney(s))
+           + (s.existing ? ' · <em>already exists; a publish would reuse it</em>' : '') : '')
+      + '</div>';
+    if (r.error) h += '<div class="cbd-plan-err" style="color:var(--bad)">✕ ' + aclEscHtml(r.error) + '</div>';
+    (r.warnings || []).forEach(function (w) {
+      if (w === 'Dry run: nothing was created') return;
+      h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
+    });
+    if (s && (s.existing_differences || []).length) {
+      h += '<div class="cbd-plan-diff" style="color:#b45309;margin:0.2rem 0">⚠ Already exists in Ads Manager — differs from the builder:<ul style="margin:0.1rem 0 0 1.1rem">';
+      s.existing_differences.forEach(function (d) {
+        h += '<li><strong>' + aclEscHtml(d.object) + '</strong>: ' + aclEscHtml((d.differences || []).join('; ')) + '</li>';
+      });
+      h += '</ul>A publish would stop before writing anything. Delete or rename the old campaign in Ads Manager, or rename the campaign in the builder.</div>';
+    }
+    if (s) {
+      h += '<div class="cbd-plan-meta" style="font-size:0.72rem;color:var(--muted)">page '
+        + aclEscHtml(s.page_id || '—') + ' · pixel ' + aclEscHtml(s.pixel_id || '—')
+        + ' · ' + aclEscHtml(s.objective || '') + '</div>';
+      (s.ad_sets || []).forEach(function (a) {
+        var interests = (a.interests || []).map(function (g) { return g.join(', '); }).join(' AND ');
+        h += '<div class="cbd-plan-set" style="font-size:0.75rem;margin-top:0.2rem">Ad set <strong>'
+          + aclEscHtml(a.name) + '</strong> · ' + aclEscHtml((a.countries || []).join(', '))
+          + ' · age ' + aclEscHtml(a.age) + ' · language ' + aclEscHtml(a.language || 'any')
+          + ' · interests ' + aclEscHtml(interests || 'none') + ' · placements '
+          + aclEscHtml(a.placements || '') + '</div><ol class="cbd-plan-ads" style="font-size:0.72rem;margin:0.1rem 0 0 1rem">';
+        (a.ads || []).forEach(function (ad) {
+          h += '<li><strong>' + aclEscHtml(ad.name) + '</strong> · ' + aclEscHtml(ad.format) + ' '
+            + aclEscHtml(ad.file) + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
+            + aclEscHtml(ad.primary_text) + (ad.description ? ' · description: '
+            + aclEscHtml(ad.description) : '') + '<br>link ' + aclEscHtml(ad.link)
+            + ' · CTA ' + aclEscHtml(ad.cta) + '</li>';
+        });
+        h += '</ol>';
+      });
+    }
+    h += '</div>';
+  });
+  return h + '</div>';
+}
+
+/* Рамка плана: полоса с «Hide/Show» и «Close plan ×», тело прокручивается само. */
+function cbPlanFrame(inner) {
+  return '<div class="cbd-plan-bar"><span>Plan (no writes)</span><span>'
+    + '<button type="button" class="cbd-add cbd-plan-fold" data-act="fold-plan" aria-expanded="true">Hide</button> '
+    + '<button type="button" class="cbd-add cbd-plan-close" data-act="close-plan" aria-label="Close plan"'
+    + ' title="Close plan">Close plan ×</button></span></div>'
+    + '<div class="cbd-plan-body">' + inner + '</div>';
+}
+
+/* Кнопки рамки (полоса — внутри `out`, обработчик один на `out`). */
+function cbPlanBindFrame(out) {
+  if (!out || out._cbPlanBound || typeof out.addEventListener !== 'function') return;
+  out._cbPlanBound = true;
+  out.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
+    if (!b) return;
+    var act = b.getAttribute('data-act');
+    if (act === 'close-plan') {
+      ev.stopPropagation();
+      out.hidden = true;
+      out.innerHTML = '';
+    } else if (act === 'fold-plan') {
+      ev.stopPropagation();
+      var body = out.querySelector('.cbd-plan-body');
+      if (!body) return;
+      body.hidden = !body.hidden;
+      b.textContent = body.hidden ? 'Show' : 'Hide';
+      b.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
+    }
+  });
+}
+
+window.cbCheckPlan = function (picked, out, btn) {
+  if (!out) return;
+  cbPlanBindFrame(out);
+  var only = picked && picked.length ? picked : null;
+  var forms = [];
+  document.querySelectorAll('form.open-account-form').forEach(function (form) {
+    if (!form.querySelectorAll('.cb-slot').length) return;
+    var mine = only ? cbPickedIn(form, only) : null;
+    if (mine && !mine.length) return;
+    forms.push({ form: form, only: mine });
+  });
+  out.hidden = false;
+  if (!forms.length) { out.innerHTML = cbPlanFrame('<div class="cbd-plan-err">Nothing is being assembled yet.</div>'); return; }
+  out.innerHTML = cbPlanFrame('<div class="cbd-plan-head">Checking the plan through the Graph API; nothing is written…</div>');
+  if (btn) btn.disabled = true;
+  var parts = new Array(forms.length);
+  var left = forms.length;
+  forms.forEach(function (x, i) {
+    fetch('/publish-plan', { method: 'POST', body: cbPlanFormData(x.form, x.only) })
+      .then(function (r) { return r.json(); })
+      .catch(function () { return { account: cbFormTitle(x.form), error: 'The server did not answer' }; })
+      .then(function (data) {
+        if (!data.account) data.account = cbFormTitle(x.form);
+        parts[i] = cbPlanHtml(data);
+        left -= 1;
+        if (!left && btn) btn.disabled = false;
+        if (out.hidden) return;   // закрыли, пока ждали: не открывать заново
+        out.innerHTML = cbPlanFrame(parts.filter(Boolean).join('')
+          + (left ? '<div class="cbd-plan-head">Still checking ' + left + ' account(s)…</div>' : ''));
+      });
+  });
 };
 
 /* Имя карточки для подтверждения. */
@@ -13497,6 +13679,18 @@ function cbSayAlreadyBuilding(labels) {
     + (labels.length > 1 ? 'these accounts' : 'this account') + ' again.');
 }
 
+/* Помощники режима — здесь, рядом с cbPublish: тестовые срезы билдера берут
+ * этот кусок страницы целиком (ревью #765, R5-B1). Имена маркеров срезов
+ * в этом комментарии не писать — срез ищет их по тексту. */
+/* ACL-1761: что создаёт Publish — черновики робота или кампании на паузе через API. */
+function cbApiMode() { return typeof window !== 'undefined' && window.ACL_FB_BACKEND === 'api'; }
+function cbPublishTarget() { return cbApiMode() ? 'PAUSED campaigns' : 'drafts'; }
+function cbPublishMode() {
+  return cbApiMode()
+    ? 'PAUSED — created through the Graph API; nothing is activated, a person turns it on in Ads Manager'
+    : 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook';
+}
+
 window.cbPublish = function(form) {
   if (cbQueueUncertain()) return;
   var onlySlot = form.classList.contains('cb-in-drawer') ? Array.from(form.querySelectorAll('.cb-slot')).find(function(s) { return !s.hidden; }) : null;
@@ -13533,7 +13727,9 @@ window.cbPublish = function(form) {
     + '<span style="color:var(--warn);font-size:0.85rem">Do not lock the screen while the build runs — '
     + 'creative uploads stall on a locked screen.</span><br><br>'
     + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
-    + 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)</span>';
+    + (cbApiMode() ? aclEscHtml(cbPublishMode())
+       : 'Draft — the RPA fills the campaign in and leaves a draft in Ads Manager (it never clicks Publish in Facebook)')
+    + '</span>';
 
   // Таргетинг, набранный руками и не доведённый до выбора, — это кампания
   // без детального таргетинга. Имя при этом выглядит правильным: оно
@@ -13578,7 +13774,9 @@ window.cbPublish = function(form) {
         return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
       }).join('; '))
     + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway"> Run anyway</label></div>' + bodyHtml;
-  _safeConfirm(ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?', bodyHtml, function() {
+  _safeConfirm(cbApiMode()
+      ? (ticked.length ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create this campaign as a PAUSED campaign?')
+      : (ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?'), bodyHtml, function() {
     if (pf && window.cbPreflightDecision) window.cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
     if (mine && !anyway) { window.alert(accLabel + ' is not ready — fix it, or tick "Run anyway".'); return; }
     if (onlySlot || ticked.length) {
@@ -13586,7 +13784,8 @@ window.cbPublish = function(form) {
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     }
     else _doCbPublish(form);
-  }, { confirmLabel: (warn || lostTargeting.length) ? 'Build anyway' : 'Publish → draft' });
+  }, { confirmLabel: (warn || lostTargeting.length) ? 'Build anyway'
+         : (cbApiMode() ? 'Publish → PAUSED campaign' : 'Publish → draft') });
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };
@@ -13702,6 +13901,45 @@ function cbProblemsHtml(r) {
   return h + '</div>';
 }
 
+// ACL-1761: итог кампании, созданной через Graph API: статус PAUSED, что
+// создано/найдено с прошлого запуска и сверка чтением (расхождения — красным).
+function cbApiReadbackHtml(r) {
+  var rb = r.readback || {};
+  var h = '<div class="cb-status-steps" style="font-size:0.72rem;margin-top:0.2rem">';
+  if (r.dry_run && r.plan && Object.keys(r.plan).length) {
+    h += '<details open><summary>Dry-run plan (nothing was created)</summary><pre style="'
+      + 'font-size:0.66rem;white-space:pre-wrap;max-height:24rem;overflow:auto">'
+      + aclEscHtml(JSON.stringify(r.plan, null, 2)) + '</pre></details>';
+  }
+  if (r.status === 'PAUSED') {
+    h += '<span style="font-weight:600">Status: PAUSED</span> — nothing was activated. ';
+  }
+  var counts = function(o) {
+    return Object.keys(o || {}).map(function(k) { return o[k] + ' ' + k; }).join(', ');
+  };
+  if (r.created && Object.keys(r.created).length) h += 'Created: ' + aclEscHtml(counts(r.created)) + '. ';
+  if (r.reused && Object.keys(r.reused).length) {
+    h += 'Already there from a previous run: ' + aclEscHtml(counts(r.reused)) + '. ';
+  }
+  if (rb.checked) {
+    var bad = rb.mismatches || [];
+    h += bad.length
+      ? '<span style="color:var(--bad);font-weight:600">Readback: ' + bad.length + ' of ' + rb.checked
+        + ' fields differ from the builder — do not activate before checking.</span>'
+      : '<span style="color:var(--ok)">Readback: all ' + rb.checked + ' fields match the builder.</span>';
+    h += '<details><summary>Readback report</summary><table style="font-size:0.68rem">'
+      + '<tr><th>Object</th><th>Field</th><th>Builder</th><th>Meta</th><th></th></tr>';
+    (rb.checks || []).forEach(function(c) {
+      h += '<tr' + (c.ok ? '' : ' style="color:var(--bad)"') + '><td>' + aclEscHtml(c.object)
+        + '</td><td>' + aclEscHtml(c.field) + '</td><td>' + aclEscHtml(JSON.stringify(c.expected))
+        + '</td><td>' + aclEscHtml(JSON.stringify(c.actual)) + '</td><td>' + (c.ok ? '✓' : '✗')
+        + '</td></tr>';
+    });
+    h += '</table></details>';
+  }
+  return h + '</div>';
+}
+
 // ACL-1444: «Close profile» на панели закончившегося задания. Чистое задание
 // закрывает профиль само; остальные окна (есть что проверить) человек
 // закрывает отсюда. Сервер закрывает мягко, через MLX API, и отказывает
@@ -13783,11 +14021,20 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
         ? (jobPublishable
-          ? 'draft ready — the campaign is in Ads Manager, Publish was not clicked'
-          : (hasFatal ? 'errors — do not publish'
+          ? (job.fb_backend === 'api'
+            ? 'created PAUSED via the API — readback matches; a person activates it in Ads Manager'
+            : 'draft ready — the campaign is in Ads Manager, Publish was not clicked')
+          : (job.fb_backend === 'api' && job.dry_run && !hasFatal
+            ? 'dry run via the API — nothing was created; see the plan below'
+            : hasFatal ? 'errors — do not publish'
             : 'draft blocked — do not publish'))
         : 'running… (can take 1–3 min)'));
     var html = '<div class="cb-status-title">' + statusIcon + ' ' + done + '/' + total + ' — ' + doneLabel + '</div>';
+    // ACL-1761: шаг создателя кампаний через API (профиль, проверка, запись, сверка).
+    if (isRunning && job.fb_backend === 'api' && job.progress) {
+      html += '<div class="cb-status-steps" style="font-size:0.7rem;color:var(--muted)">API: '
+        + aclEscHtml(job.progress) + '</div>';
+    }
     // An observed lock is context, not proof that it caused every failure.
     if (job.screen_was_locked === true && !jobPublishable && job.status === 'done') {
       html += '<div class="cb-status-cause">🔒 The screen was locked during the build. '
@@ -13830,6 +14077,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         html += '<span class="cb-status-id">campaign_id: ' + aclEscHtml(r.campaign_id) + '</span>';
       }
       html += '</div>';
+      if (r.backend === 'api') html += cbApiReadbackHtml(r);
       if (r.error) {
         // Green is reserved for a finished, publishable draft — an
         // informational note such as the dry-run message. Anything blocking

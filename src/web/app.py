@@ -1924,8 +1924,19 @@ def _render_report(
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
             "goals": _build_goals_view(report, goal_seed),
+            # ACL-1761: кнопка «Check plan (no writes)» в билдере — только при api.
+            "fb_backend": _fb_backend(),
         },
     )
+
+
+def _fb_backend() -> str:
+    try:
+        from src.web import publish_api
+
+        return publish_api.backend()
+    except Exception:  # pragma: no cover - кнопка не важнее страницы
+        return "rpa"
 
 
 
@@ -5006,6 +5017,30 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     except (RuntimeError, ValueError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse({"job_id": job_id, "total": total})
+
+
+@app.post("/publish-plan")
+async def publish_plan(request: Request) -> JSONResponse:
+    """ACL-1761: «Check plan (no writes)» — предпроверка и план, ни одной записи.
+
+    Только при `ACL_FB_BACKEND=api` и только с явным `dry_run=1`. Задания
+    публикации не заводит: путь чтения ACL-1760 (свой замок чтения, профиль —
+    как у Read spend), клиент без права записи.
+    """
+    from src.web import publish_api
+
+    form = await request.form()
+    if (form.get("dry_run") or "").strip() != "1":
+        return JSONResponse({"error": "Check plan only runs as a dry run (dry_run=1)."}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"error": "Check plan needs the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    country, account_label, slots = _parse_build_upload_form(form)
+    if not country or not account_label or not slots:
+        return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
+    result = await asyncio.to_thread(publish_api.check_plan, slots, account_label=account_label,
+                                     country=country)
+    return JSONResponse(result)
 
 
 @app.get("/publish-jobs/slots")
