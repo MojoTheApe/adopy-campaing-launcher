@@ -8846,20 +8846,6 @@
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
       },
-      "797": {
-        "actor": "Worker-RJ1797",
-        "session": "wrj1797-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1797-design-system",
-        "worktree": "C:\\wk-rj1797",
-        "id": "89074383253b41bf90f627ac7029f87c",
-        "issue": 797,
-        "state": "handoff",
-        "started_at": "2026-10-14T22:59:32+00:00",
-        "from_status": "status:todo",
-        "pr": 810,
-        "report": "# Refresh ACL-1797\n\nMerged origin/main (a4e38b7c, incl. 1760/1761/1798/1766/1778/1769) into codex/acl-1797-design-system. Head: ea925cfc.\n\nConflicts: src/web/templates/report.html, 7 hunks, all in the header (period picker, brand-meta stage badge, buyer-pick, refresh form, amap period-pick) and one plan-meta line. Main's redesigned header won (the old refresh form and buyer-pick are gone there). Main's page/pixel source labels in the plan meta were kept, with 1797's token font-size var(--adopy-text-sm) applied. The 1769 builder behaviour (stacked ad cards, no Ad dropdown) comes from main untouched.\n\nTests (not browser): 340 passed. Covered 1797 tests (design system, tokens, theme, field contrast, buttons, account tree, notes, read fallback), 1769 two-column layout, the_builder_* and test_builder_* files, header and stage badge."
-      },
       "800": {
         "actor": "Worker-RH11800",
         "session": "wrh11800-20261015",
@@ -12503,25 +12489,25 @@
             "session": "wrj1797-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RJ1797",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-RG1797",
-          "session": "wrg1797-20261014",
+          "actor": "Worker-RJ1797",
+          "session": "wrj1797-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1797-design-system",
-          "worktree": "C:\\wk-rg1797",
-          "id": "c0d95771e6734355977accee35b526ae",
+          "worktree": "C:\\wk-rj1797",
+          "id": "89074383253b41bf90f627ac7029f87c",
           "issue": 797,
           "state": "handoff",
-          "started_at": "2026-10-14T17:01:32+00:00",
+          "started_at": "2026-10-14T22:59:32+00:00",
           "from_status": "status:todo",
           "pr": 810,
-          "report": "ACL-1797 refresh: merged origin/main (73136acc, incl. ACL-1760/1761) into codex/acl-1797-design-system. New head 52d3ecdc. Merge only.\nConflicts: one, src/web/templates/loading.html (main redesigned the loading page: logo, steps, footer; this branch moved colours to Adopy tokens). Resolution: took main's new markup and CSS, kept the branch's adopy-tokens include and replaced main's hard-coded colours with tokens (--bg/--fg/--muted/--accent/--line via --adopy-*, --soft = --adopy-selected-bg, error colour = --adopy-danger, font = --adopy-font-sans); dropped main's separate dark-mode colour rules since tokens switch by theme. No hex colours remain. report.html auto-merged.\nTests (not browser): the 17 test files changed on the branch plus tests/test_acl1761_*.py and tests/test_acl1760_api_read.py: all passed (457 tests). No test edits."
+          "report": "# Refresh ACL-1797\n\nMerged origin/main (a4e38b7c, incl. 1760/1761/1798/1766/1778/1769) into codex/acl-1797-design-system. Head: ea925cfc.\n\nConflicts: src/web/templates/report.html, 7 hunks, all in the header (period picker, brand-meta stage badge, buyer-pick, refresh form, amap period-pick) and one plan-meta line. Main's redesigned header won (the old refresh form and buyer-pick are gone there). Main's page/pixel source labels in the plan meta were kept, with 1797's token font-size var(--adopy-text-sm) applied. The 1769 builder behaviour (stacked ad cards, no Ad dropdown) comes from main untouched.\n\nTests (not browser): 340 passed. Covered 1797 tests (design system, tokens, theme, field contrast, buttons, account tree, notes, read fallback), 1769 two-column layout, the_builder_* and test_builder_* files, header and stage badge."
         },
         "pr": 810,
-        "queued_at": "2026-10-14T17:05:29+00:00",
+        "queued_at": "2026-10-14T23:05:24+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
         "return_operation": {
           "id": "eaf531126ac5427b9e3de32be737b8c4",
@@ -18061,7 +18047,8 @@
       903,
       907,
       891,
-      775
+      775,
+      797
     ],
     "review": null,
     "history": [
@@ -34923,6 +34910,13 @@
         "issue": 800,
         "claim": "e145e7a176074f6e8846f7361ee45f87",
         "actor": "Worker-RH11800"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T23:05:24+00:00",
+        "issue": 797,
+        "pr": 810,
+        "actor": "Worker-RJ1797"
       }
     ],
     "policy": {
