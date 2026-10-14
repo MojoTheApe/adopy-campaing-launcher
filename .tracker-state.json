@@ -11842,7 +11842,7 @@
             "session": "ws1761e-20261014"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-S1761E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -31549,6 +31549,68 @@
         "pr": 765,
         "lane": "1d10aaabe2604db69c4fe9db944c8594",
         "actor": "Reviewer-R1761F"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-14T16:13:32+00:00",
+        "issue": 761,
+        "pr": 765,
+        "review": {
+          "id": "1d10aaabe2604db69c4fe9db944c8594",
+          "pr": 765,
+          "issues": [
+            761
+          ],
+          "actor": "Reviewer-R1761F",
+          "session": "r1761f-20261014",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T16:09:49+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 761,
+            "pr": 765,
+            "branch": "codex/acl-1761-api-create",
+            "head_sha": "e68a38d99f7e3425093e6948cfdb6434b2a1b4d9",
+            "base_sha": "d911841316925665b53af7c59b7acba352773a1b",
+            "main_sha": "d911841316925665b53af7c59b7acba352773a1b",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "bf4fb58b9f0057d5098ac960d50a4b3c8fd79998b6d9a188be263743a4e8e9df",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1761F",
+              "implementer": "Worker-S1761E",
+              "review_session": "r1761f-20261014",
+              "execution_lane": "1d10aaabe2604db69c4fe9db944c8594",
+              "head_sha": "e68a38d99f7e3425093e6948cfdb6434b2a1b4d9",
+              "base_sha": "d911841316925665b53af7c59b7acba352773a1b",
+              "tree_sha": "c8abd728be94f9dd2f5ff6c6c9a00e4ad8ed7f4d",
+              "report": "Independent source review of ACL-1761 / PR 765 at head e68a38d9 against current main d9118413 (main is an ancestor of the head; merge-base == main). Reviewer-R1761F implemented none of it.\n\nScope: full diff origin/main...head, 22 files, +5820/-37.\n\nSafety verified by reading the code:\n- Closed write policy in both layers (src/fb_api/write_policy.py and the page helper in src/fb_api/token_capture.py): POST only, path /act_<id>/<edge> of the verified account only, six edges, per-edge key allowlist, status PAUSED required on campaigns/adsets/ads, any *status* key anywhere must be PAUSED, effective_status/configured_status/execution_options/access_token/method/batch/tos forbidden at any depth, degrees_of_freedom_spec only as OPT_OUT of text_optimizations at top level, ad creative only by creative_id, file fields only on adimages/advideos with size and SHA-256 checked in the page. The JS policy mirrors the Python one rule for rule (tests/test_acl1761_parity.py).\n- No DELETE or ACTIVE anywhere in the write path.\n- GraphClient.post sends once: no retry or token re-capture; refused-before-send is a stop; 5xx, code 1/2, non-JSON, network or call_unknown become WriteUnknown and set unreconciled, which blocks every further write (WritesBlocked) until a readback finds that very object; the creator reconciles by tag/name readback and otherwise stops with kind unknown. Publisher also blocks the following campaigns of the job.\n- Idempotency: the campaign is found by exact name plus ACL tag; same name without the tag stops (name_taken); children are matched under the owned parent; a re-run reuses and reads back.\n- Call budget: per campaign (default 140, env bounded 20-250) with reset_budget, which clears only the client's own CallBudget stop, not Meta stops.\n- Profile lifecycle: finish_job closes only our tab, and stops the profile only if opened.started_now (OpenedProfile.started_now = StartedProfile.newly_started is True from fixed ACL-1760), the job was clean, nobody else waits, the user did not ask to keep profiles open, and it was not a dry run. A profile we did not start is never stopped. Check plan (dry run) uses a client and helper without write policy; writes counter asserted zero.\n- Tokens: the token stays in the page world, goes in the POST body not the URL, strip_tokens/scrub on replies and errors, host_and_path drops the query in errors; no token is logged or returned.\n- RPA default unchanged: ACL_FB_BACKEND defaults to rpa; the api branch in publish_jobs is taken only when it equals api.\n- Test changes are legitimate: test_acl1756 expectation (\"closing\", port) follows the deliberate new probe semantics for a non-listening port; test_acl1761_hang_logout stub start now reports newly_started=True, matching the fixed 1760 contract (started_now = newly_started is True); the 1760 file only gains an added currency test.\n\nVerification:\n- CI on head e68a38d9: all checks pass (Linux 1-3, Windows, tracker-link, installer verification, descriptor, process instructions, ACL verification).\n- Tests in a detached worktree at the head: tests/test_acl1761_*.py + test_acl1760_api_read.py + test_acl1756_fb_api.py, PYTHONUTF8=1 pytest -k \"not browser\": 410 passed, 4 deselected.\n- Mutation 1: PAUSED requirement removed from write_policy.check -> 3 tests fail (test_policy_requires_status_on_objects_that_can_run for campaigns/adsets/ads). Mutation 2: POST-only method check removed -> 4 tests fail (test_policy_is_post_only_and_never_delete DELETE/GET/PUT/post). Both reverted; worktree clean.\n- No live Meta or Multilogin calls by this reviewer. Earlier Doc120 live PAUSED runs (publish4-result.json) are the author evidence, not claimed here.\n\nFindings: no blocking issues. Minor, non-blocking: the write policy rejects any key containing \"status\" with a non-PAUSED value even in free text keys of nested specs, which is conservative by design.",
+              "main_sha": "d911841316925665b53af7c59b7acba352773a1b",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                761
+              ],
+              "recorded_at": "2026-10-14T16:12:47+00:00",
+              "issue_scopes": {
+                "761": "bf4fb58b9f0057d5098ac960d50a4b3c8fd79998b6d9a188be263743a4e8e9df"
+              }
+            },
+            "lane": {
+              "id": "1d10aaabe2604db69c4fe9db944c8594",
+              "pr": 765,
+              "issues": [
+                761
+              ],
+              "actor": "Reviewer-R1761F",
+              "session": "r1761f-20261014",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-14T16:09:49+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T16:13:04+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -32289,6 +32351,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T14:59:27+00:00"
+      },
+      "761": {
+        "issue": 761,
+        "pr": 765,
+        "branch": "codex/acl-1761-api-create",
+        "head_sha": "e68a38d99f7e3425093e6948cfdb6434b2a1b4d9",
+        "base_sha": "d911841316925665b53af7c59b7acba352773a1b",
+        "main_sha": "d911841316925665b53af7c59b7acba352773a1b",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "bf4fb58b9f0057d5098ac960d50a4b3c8fd79998b6d9a188be263743a4e8e9df",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1761F",
+          "implementer": "Worker-S1761E",
+          "review_session": "r1761f-20261014",
+          "execution_lane": "1d10aaabe2604db69c4fe9db944c8594",
+          "head_sha": "e68a38d99f7e3425093e6948cfdb6434b2a1b4d9",
+          "base_sha": "d911841316925665b53af7c59b7acba352773a1b",
+          "tree_sha": "c8abd728be94f9dd2f5ff6c6c9a00e4ad8ed7f4d",
+          "report": "Independent source review of ACL-1761 / PR 765 at head e68a38d9 against current main d9118413 (main is an ancestor of the head; merge-base == main). Reviewer-R1761F implemented none of it.\n\nScope: full diff origin/main...head, 22 files, +5820/-37.\n\nSafety verified by reading the code:\n- Closed write policy in both layers (src/fb_api/write_policy.py and the page helper in src/fb_api/token_capture.py): POST only, path /act_<id>/<edge> of the verified account only, six edges, per-edge key allowlist, status PAUSED required on campaigns/adsets/ads, any *status* key anywhere must be PAUSED, effective_status/configured_status/execution_options/access_token/method/batch/tos forbidden at any depth, degrees_of_freedom_spec only as OPT_OUT of text_optimizations at top level, ad creative only by creative_id, file fields only on adimages/advideos with size and SHA-256 checked in the page. The JS policy mirrors the Python one rule for rule (tests/test_acl1761_parity.py).\n- No DELETE or ACTIVE anywhere in the write path.\n- GraphClient.post sends once: no retry or token re-capture; refused-before-send is a stop; 5xx, code 1/2, non-JSON, network or call_unknown become WriteUnknown and set unreconciled, which blocks every further write (WritesBlocked) until a readback finds that very object; the creator reconciles by tag/name readback and otherwise stops with kind unknown. Publisher also blocks the following campaigns of the job.\n- Idempotency: the campaign is found by exact name plus ACL tag; same name without the tag stops (name_taken); children are matched under the owned parent; a re-run reuses and reads back.\n- Call budget: per campaign (default 140, env bounded 20-250) with reset_budget, which clears only the client's own CallBudget stop, not Meta stops.\n- Profile lifecycle: finish_job closes only our tab, and stops the profile only if opened.started_now (OpenedProfile.started_now = StartedProfile.newly_started is True from fixed ACL-1760), the job was clean, nobody else waits, the user did not ask to keep profiles open, and it was not a dry run. A profile we did not start is never stopped. Check plan (dry run) uses a client and helper without write policy; writes counter asserted zero.\n- Tokens: the token stays in the page world, goes in the POST body not the URL, strip_tokens/scrub on replies and errors, host_and_path drops the query in errors; no token is logged or returned.\n- RPA default unchanged: ACL_FB_BACKEND defaults to rpa; the api branch in publish_jobs is taken only when it equals api.\n- Test changes are legitimate: test_acl1756 expectation (\"closing\", port) follows the deliberate new probe semantics for a non-listening port; test_acl1761_hang_logout stub start now reports newly_started=True, matching the fixed 1760 contract (started_now = newly_started is True); the 1760 file only gains an added currency test.\n\nVerification:\n- CI on head e68a38d9: all checks pass (Linux 1-3, Windows, tracker-link, installer verification, descriptor, process instructions, ACL verification).\n- Tests in a detached worktree at the head: tests/test_acl1761_*.py + test_acl1760_api_read.py + test_acl1756_fb_api.py, PYTHONUTF8=1 pytest -k \"not browser\": 410 passed, 4 deselected.\n- Mutation 1: PAUSED requirement removed from write_policy.check -> 3 tests fail (test_policy_requires_status_on_objects_that_can_run for campaigns/adsets/ads). Mutation 2: POST-only method check removed -> 4 tests fail (test_policy_is_post_only_and_never_delete DELETE/GET/PUT/post). Both reverted; worktree clean.\n- No live Meta or Multilogin calls by this reviewer. Earlier Doc120 live PAUSED runs (publish4-result.json) are the author evidence, not claimed here.\n\nFindings: no blocking issues. Minor, non-blocking: the write policy rejects any key containing \"status\" with a non-PAUSED value even in free text keys of nested specs, which is conservative by design.",
+          "main_sha": "d911841316925665b53af7c59b7acba352773a1b",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            761
+          ],
+          "recorded_at": "2026-10-14T16:12:47+00:00",
+          "issue_scopes": {
+            "761": "bf4fb58b9f0057d5098ac960d50a4b3c8fd79998b6d9a188be263743a4e8e9df"
+          }
+        },
+        "lane": {
+          "id": "1d10aaabe2604db69c4fe9db944c8594",
+          "pr": 765,
+          "issues": [
+            761
+          ],
+          "actor": "Reviewer-R1761F",
+          "session": "r1761f-20261014",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T16:09:49+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-14T16:13:04+00:00"
       }
     },
     "batches": {
@@ -33454,63 +33560,6 @@
       "started_at": "2026-10-14T15:01:24+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "765": {
-        "id": "1d10aaabe2604db69c4fe9db944c8594",
-        "pr": 765,
-        "issues": [
-          761
-        ],
-        "actor": "Reviewer-R1761F",
-        "session": "r1761f-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-14T16:09:49+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 761,
-          "pr": 765,
-          "branch": "codex/acl-1761-api-create",
-          "head_sha": "e68a38d99f7e3425093e6948cfdb6434b2a1b4d9",
-          "base_sha": "d911841316925665b53af7c59b7acba352773a1b",
-          "main_sha": "d911841316925665b53af7c59b7acba352773a1b",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "bf4fb58b9f0057d5098ac960d50a4b3c8fd79998b6d9a188be263743a4e8e9df",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1761F",
-            "implementer": "Worker-S1761E",
-            "review_session": "r1761f-20261014",
-            "execution_lane": "1d10aaabe2604db69c4fe9db944c8594",
-            "head_sha": "e68a38d99f7e3425093e6948cfdb6434b2a1b4d9",
-            "base_sha": "d911841316925665b53af7c59b7acba352773a1b",
-            "tree_sha": "c8abd728be94f9dd2f5ff6c6c9a00e4ad8ed7f4d",
-            "report": "Independent source review of ACL-1761 / PR 765 at head e68a38d9 against current main d9118413 (main is an ancestor of the head; merge-base == main). Reviewer-R1761F implemented none of it.\n\nScope: full diff origin/main...head, 22 files, +5820/-37.\n\nSafety verified by reading the code:\n- Closed write policy in both layers (src/fb_api/write_policy.py and the page helper in src/fb_api/token_capture.py): POST only, path /act_<id>/<edge> of the verified account only, six edges, per-edge key allowlist, status PAUSED required on campaigns/adsets/ads, any *status* key anywhere must be PAUSED, effective_status/configured_status/execution_options/access_token/method/batch/tos forbidden at any depth, degrees_of_freedom_spec only as OPT_OUT of text_optimizations at top level, ad creative only by creative_id, file fields only on adimages/advideos with size and SHA-256 checked in the page. The JS policy mirrors the Python one rule for rule (tests/test_acl1761_parity.py).\n- No DELETE or ACTIVE anywhere in the write path.\n- GraphClient.post sends once: no retry or token re-capture; refused-before-send is a stop; 5xx, code 1/2, non-JSON, network or call_unknown become WriteUnknown and set unreconciled, which blocks every further write (WritesBlocked) until a readback finds that very object; the creator reconciles by tag/name readback and otherwise stops with kind unknown. Publisher also blocks the following campaigns of the job.\n- Idempotency: the campaign is found by exact name plus ACL tag; same name without the tag stops (name_taken); children are matched under the owned parent; a re-run reuses and reads back.\n- Call budget: per campaign (default 140, env bounded 20-250) with reset_budget, which clears only the client's own CallBudget stop, not Meta stops.\n- Profile lifecycle: finish_job closes only our tab, and stops the profile only if opened.started_now (OpenedProfile.started_now = StartedProfile.newly_started is True from fixed ACL-1760), the job was clean, nobody else waits, the user did not ask to keep profiles open, and it was not a dry run. A profile we did not start is never stopped. Check plan (dry run) uses a client and helper without write policy; writes counter asserted zero.\n- Tokens: the token stays in the page world, goes in the POST body not the URL, strip_tokens/scrub on replies and errors, host_and_path drops the query in errors; no token is logged or returned.\n- RPA default unchanged: ACL_FB_BACKEND defaults to rpa; the api branch in publish_jobs is taken only when it equals api.\n- Test changes are legitimate: test_acl1756 expectation (\"closing\", port) follows the deliberate new probe semantics for a non-listening port; test_acl1761_hang_logout stub start now reports newly_started=True, matching the fixed 1760 contract (started_now = newly_started is True); the 1760 file only gains an added currency test.\n\nVerification:\n- CI on head e68a38d9: all checks pass (Linux 1-3, Windows, tracker-link, installer verification, descriptor, process instructions, ACL verification).\n- Tests in a detached worktree at the head: tests/test_acl1761_*.py + test_acl1760_api_read.py + test_acl1756_fb_api.py, PYTHONUTF8=1 pytest -k \"not browser\": 410 passed, 4 deselected.\n- Mutation 1: PAUSED requirement removed from write_policy.check -> 3 tests fail (test_policy_requires_status_on_objects_that_can_run for campaigns/adsets/ads). Mutation 2: POST-only method check removed -> 4 tests fail (test_policy_is_post_only_and_never_delete DELETE/GET/PUT/post). Both reverted; worktree clean.\n- No live Meta or Multilogin calls by this reviewer. Earlier Doc120 live PAUSED runs (publish4-result.json) are the author evidence, not claimed here.\n\nFindings: no blocking issues. Minor, non-blocking: the write policy rejects any key containing \"status\" with a non-PAUSED value even in free text keys of nested specs, which is conservative by design.",
-            "main_sha": "d911841316925665b53af7c59b7acba352773a1b",
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              761
-            ],
-            "recorded_at": "2026-10-14T16:12:47+00:00",
-            "issue_scopes": {
-              "761": "bf4fb58b9f0057d5098ac960d50a4b3c8fd79998b6d9a188be263743a4e8e9df"
-            }
-          },
-          "lane": {
-            "id": "1d10aaabe2604db69c4fe9db944c8594",
-            "pr": 765,
-            "issues": [
-              761
-            ],
-            "actor": "Reviewer-R1761F",
-            "session": "r1761f-20261014",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-14T16:09:49+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T16:13:04+00:00"
-        }
-      }
-    }
+    "source_reviews": {}
   }
 }
