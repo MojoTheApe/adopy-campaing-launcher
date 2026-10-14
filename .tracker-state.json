@@ -8299,19 +8299,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:42:31+00:00",
         "from_status": "status:todo"
-      },
-      "880": {
-        "actor": "Worker-T880R",
-        "session": "t880r-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/facebook-page-selection",
-        "worktree": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\facebook-page-selection",
-        "id": "7b0fb36cfdb4465497a95e3dcd5203dd",
-        "issue": 880,
-        "state": "stopping",
-        "started_at": "2026-10-14T12:48:16+00:00",
-        "from_status": "status:todo",
-        "report": "# Release of the ACL-1880 implementation claim\n\nReleased by Coordinator-C0930A on the owner's explicit instruction in chat on 2026-10-14 (\"\u043e\u0441\u0432\u043e\u0431\u043e\u0434\u0438 \u0437\u0430\u0445\u0432\u0430\u0442 1880\").\n\n- Claim: Worker-PG86 / session 01a135aa-a82d-77d2-8057-5116cc969c86, coordinator Coordinator-PG86, branch codex/facebook-page-selection, started 2026-10-13T16:13:25Z.\n- Reason: the claim has been idle since 2026-10-13; the owner decided the Page behaviour on 2026-10-14 (Automatic takes the first Page; #888/#889 closed). An implementation slot is needed for ACL-1760, the base of the API chain.\n- Work preserved: branch origin/codex/facebook-page-selection (ae54e234, fb6b6e6f) is untouched; nothing was deleted. The task can be resumed by a new claim."
       }
     },
     "tasks": {
@@ -13171,21 +13158,21 @@
             "session": "t880r-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-T880R",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-FIVE874",
-          "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
-          "coordinator": "Coordinator-FLOW513",
+          "actor": "Worker-T880R",
+          "session": "t880r-20261014",
+          "coordinator": "Coordinator-C0930A",
           "branch": "codex/facebook-page-selection",
-          "worktree": "/private/tmp/flow-five-reviews-20261013/acl1880-stop-only",
-          "id": "9574523969754e78a26b8700b43128d2",
+          "worktree": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\facebook-page-selection",
+          "id": "7b0fb36cfdb4465497a95e3dcd5203dd",
           "issue": 880,
           "state": "stopping",
-          "started_at": "2026-10-13T14:43:06+00:00",
-          "from_status": "status:backlog",
-          "report": "# ACL-1880 bounded administrative stop\n\nHuman confirmation received via Coordinator: \"all acl tasks stopped please finish implementation asap\" and \"\u0412\u0441\u044f \u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430 ACL \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0430\". This is a stopped-owner administrative transfer followed by immediate owned stop only. No feature implementation, source recovery, push, review, approval, merge, delivery or completion is authorized or asserted here.\n\nThe full original Issue880 body and metadata are preserved in acl1880-original-issue.json. Actual fresh exact462 engine state is acl1880-exact462-before-admin-stop.json, genuine unchanged schema2 5/1/5 config is acl-old-config.json.\n\nOriginal ownership/private locator (do not publish):\n{\n  \"actor\": \"Worker-PG86\",\n  \"session\": \"01a135aa-a82d-77d2-8057-5116cc969c86\",\n  \"coordinator\": \"Coordinator-PG86\",\n  \"branch\": \"codex/facebook-page-selection\",\n  \"worktree\": \"C:\\\\Users\\\\EvgeniSedin\\\\fb_agents\\\\output\\\\facebook-page-selection\",\n  \"id\": \"69a7d5c37ae34427a55bed3bd25b7230\",\n  \"issue\": 880,\n  \"state\": \"implementing\",\n  \"started_at\": \"2026-10-13T14:33:53+00:00\",\n  \"from_status\": \"status:backlog\"\n}\n\nThe recorded original working branch remains unchanged. Official remote branch returned404. The original Windows worktree is inaccessible on this host. Its unpublished commits/uncommitted files have not been recovered, read, copied, backed up, reset, stashed or modified. This report preserves only the locator, actual claim, recorded source refs/history and complete task scope; it does not claim backup of inaccessible Windows contents. Original Worker-PG86 authorship remains in implementers and the supported takeover audit retains the full previous claim.\n\nThe actual Worker-FIVE874 run performs takeover with --previous-claim and --stopped, preserving the original branch, in a distinct empty administrative directory acl1880-stop-only. Immediate own execution stop leaves ToDo+Blocked and releases only that actual transferred claim. Follow-up public blocker records actual pause and source limitation without exposing private identity/session/path strings. Original task acceptance stays unfinished.\n\nChecks: exact reviewed462 runtime clean; unchanged genuine old policy; original claim freshly verified; only880 implementing before action; queue37. Fresh private after-state must verify stopped/no claim, original author+takeover history retained, queue/reviews/integration/intake/other tasks unchanged and all ownership idle."
+          "started_at": "2026-10-14T12:48:16+00:00",
+          "from_status": "status:todo",
+          "report": "# Release of the ACL-1880 implementation claim\n\nReleased by Coordinator-C0930A on the owner's explicit instruction in chat on 2026-10-14 (\"\u043e\u0441\u0432\u043e\u0431\u043e\u0434\u0438 \u0437\u0430\u0445\u0432\u0430\u0442 1880\").\n\n- Claim: Worker-PG86 / session 01a135aa-a82d-77d2-8057-5116cc969c86, coordinator Coordinator-PG86, branch codex/facebook-page-selection, started 2026-10-13T16:13:25Z.\n- Reason: the claim has been idle since 2026-10-13; the owner decided the Page behaviour on 2026-10-14 (Automatic takes the first Page; #888/#889 closed). An implementation slot is needed for ACL-1760, the base of the API chain.\n- Work preserved: branch origin/codex/facebook-page-selection (ae54e234, fb6b6e6f) is untouched; nothing was deleted. The task can be resumed by a new claim."
         }
       },
       "886": {
@@ -30079,6 +30066,13 @@
         },
         "claim": "7b0fb36cfdb4465497a95e3dcd5203dd",
         "reason": "Owner instruction 2026-10-14 in chat: release the idle ACL-1880 claim (Worker-PG86, idle since 2026-10-13 16:13) so ACL-1760 can be claimed; transferred only to stop it, branch untouched"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-14T12:48:50+00:00",
+        "issue": 880,
+        "actor": "Worker-T880R",
+        "report": "# Release of the ACL-1880 implementation claim\n\nReleased by Coordinator-C0930A on the owner's explicit instruction in chat on 2026-10-14 (\"\u043e\u0441\u0432\u043e\u0431\u043e\u0434\u0438 \u0437\u0430\u0445\u0432\u0430\u0442 1880\").\n\n- Claim: Worker-PG86 / session 01a135aa-a82d-77d2-8057-5116cc969c86, coordinator Coordinator-PG86, branch codex/facebook-page-selection, started 2026-10-13T16:13:25Z.\n- Reason: the claim has been idle since 2026-10-13; the owner decided the Page behaviour on 2026-10-14 (Automatic takes the first Page; #888/#889 closed). An implementation slot is needed for ACL-1760, the base of the API chain.\n- Work preserved: branch origin/codex/facebook-page-selection (ae54e234, fb6b6e6f) is untouched; nothing was deleted. The task can be resumed by a new claim."
       }
     ],
     "policy": {
