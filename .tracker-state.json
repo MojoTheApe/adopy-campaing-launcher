@@ -2963,31 +2963,6 @@
           "879": "bfea5187d29d4a3a75e346ac8632d054d4dd3d24b9cc2465a8d7a20013584e63"
         }
       },
-      "890": {
-        "kind": "independent-review",
-        "verdict": "approved",
-        "reviewer": "Reviewer-CLR1014",
-        "review_session": "claude-reviewer-cl1014-890",
-        "execution_lane": "02e618a2240b4925ab570b9f04b89550",
-        "implementer": "Coordinator-CL1014",
-        "head_sha": "33b0a2b2e2849616b6aa25bee61c864251723841",
-        "base_sha": "87f604758d15367cb396b12cfb5437f9d453126a",
-        "tree_sha": "d93e985f3f1cd4695c2d138589bba604d7bb4138",
-        "batch_id": "2bbd7b7e22c44323bab273af8002ee47",
-        "source_heads": [
-          "bcbe152e5b1bcbb595f23760f5334d7b89058e36"
-        ],
-        "report": "Integration review of batch candidate PR #890 (ACL-1529). Composition: head 33b0a2b2 is a single merge commit with parents main 7cee2857 and frozen source tip bcbe152e only; no extra commits. Candidate tree d93e985f equals the frozen source tree; stage 87f60475 tree 06e60120 equals main 7cee2857 tree. PR title [ACL-1529], body has exactly one 'Tracker issues: ACL-1529' and one 'Tracker batch: 2bbd7b7e22c44323bab273af8002ee47' line, base stage. Scope vs Issue 529: header band removed (amapTrimShot replaces amapComposeGroup; Copy for group copies the stored shot, old shots trimmed of white right/bottom margins); status shot captured via bare CDP Page.captureScreenshot with only format=png and captureBeyondViewport=false (no clip, no scale, no device-metrics override), framed and white-trimmed in Python with Pillow, capped at 2600 px; hidden pages are not captured; all CDP calls bounded by a 10 s deadline; CDP session detached in finally; no page.screenshot fallback for Chromium. The 'scale 2 or equivalent clip' wording in the acceptance criteria is superseded by the documented owner fingerprint-safety decision (B2) and recorded in the Issue handoff. Default-off guards intact: _shoot_status only captures when ACL_STATUS_SHOT=1; SHOW_COPY_FOR_GROUP stays False; disabled button and new-tab fallback preserved. status_shot telemetry maps to hold stage in both test and report.html rules; Linux shard browser-count skew repair keeps all files and is deterministic. Pillow 12.2.0 moved to requirements.txt (optional at runtime: missing Pillow keeps the shot uncropped). Tests (Windows, Python 3.13, -n 2, owned basetemp): tests/test_copy_for_group.py, tests/test_status_screenshot.py, tests/test_acl_test_shard.py, tests/test_build_progress_model.py -> first run 157 passed, 5 failed solely with ModuleNotFoundError PIL because the local venv predates the new requirement; rerun with pinned Pillow 12.2.0 on PYTHONPATH -> 162 passed, 0 failed. Outstanding and not claimed: owner readability acceptance of a pasted 9943/Doc20/6540 picture and live Multilogin capture verification; complete combined CI is for the Coordinator.",
-        "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "issues": [
-          529
-        ],
-        "recorded_at": "2026-10-13T22:26:05+00:00",
-        "issue_scopes": {
-          "529": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac"
-        }
-      },
       "893": {
         "kind": "independent-review",
         "verdict": "approved",
@@ -16551,19 +16526,7 @@
       840,
       841
     ],
-    "review": {
-      "id": "02e618a2240b4925ab570b9f04b89550",
-      "batch_id": "2bbd7b7e22c44323bab273af8002ee47",
-      "pr": 890,
-      "issues": [
-        529
-      ],
-      "actor": "Reviewer-CLR1014",
-      "session": "claude-reviewer-cl1014-890",
-      "coordinator": "Coordinator-BA4E69",
-      "state": "reviewing",
-      "started_at": "2026-10-13T22:20:15+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -28307,6 +28270,80 @@
         },
         "actor": "Coordinator-BA4E69",
         "reason": "Repository owner explicitly authorized transferring and releasing only the paused ACL-1529 integration reservation in this chat (reply: \u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e). Preserve unfinished task, code, PRs and history; continue only authorized ACL-1892."
+      },
+      {
+        "event": "batch-cancelled",
+        "at": "2026-10-14T07:34:22+00:00",
+        "batch": {
+          "id": "2bbd7b7e22c44323bab273af8002ee47",
+          "actor": "Coordinator-BA4E69",
+          "session": "acl_upgrade_root_b13315d4c8acca4d15af2c75",
+          "state": "cancelled",
+          "issues": [
+            529
+          ],
+          "members": [
+            {
+              "issue": 529,
+              "pr": 530,
+              "branch": "codex/acl-1529-sharp-shot",
+              "head_sha": "bcbe152e5b1bcbb595f23760f5334d7b89058e36",
+              "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+              "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac",
+              "review": {
+                "kind": "independent-review",
+                "reviewer": "Reviewer-C530",
+                "implementer": "Worker-W530R",
+                "verdict": "approved",
+                "head_sha": "bcbe152e5b1bcbb595f23760f5334d7b89058e36",
+                "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+                "tree_sha": "d93e985f3f1cd4695c2d138589bba604d7bb4138",
+                "execution_lane": "7270033898de4ad799d859a6b2cd2b59",
+                "review_session": "codex-source530-20261013",
+                "report": "Independent source review by actual /root/source_review_530, Reviewer-C530, of PR530 headbcbe152e5b1bcbb595f23760f5334d7b89058e36 treed93e985f3f1cd4695c2d138589bba604d7bb4138 currentmain/base7cee2857d4b374bc564c5ca84b9f6ede69f96430. Reviewed complete original issue529 requirements, preserved author history/owner no-clip-no-scale exception, fresh genuine Worker main7cee handoff, full eleven-path currentmain scope and clean merge parentsc459+7cee. Own isolated clean review worktree ACL-Review-530-main7cee; no source edits. Screenshot implementation and three related fixture/template files byte-identical to prior independent113passing fixtures, retain plain CDP formatpng/captureBeyondViewportfalse only, no clip/scale/metrics mutation, Pillow postcrop2600cap, bounded error/hidden/timeout handling and detach. Defaultoff screenshot guards and owner-hidden CopyGroup flags unchanged. status_shot model remains hold diagnostic. Currentmain882 browser-first allocation composed with preserved deterministic cost-postpass: no file omissions/duplicates, no changed platform policy or testthresholds; prior independent146model/shard/platformpassed. Current own compatibility rerun was launched but has not reported completion at review recording, so no local current-run pass claimed. Worker reports181assertionspassed with explicit owned syntheticChrome teardown intervention plus23opt-in/defaultofftests; not represented as unassisted cleanup. Actual fresh hosted required CI independently confirmed all16 current effective checks SUCCESS by ghprchecks: sixLinux3.11/3.13shards, Windows3.13, ACLverification run38466991847; build/install/repair/uninstall and Installerverification run38466991917; descriptor, current reruntrackerlink38466991840, classifiers/process/buildinputs. Earlier prehandoff tracker failure replaced by actual successful samehead rerun, no waiver/historicaltree reuse. No blocking findings, exact-source approval accepted. Owner readability/liveMultilogin/package receipt remains pending/unclaimed. No liveMeta/profile/clipboard/ad/deploy/otherbatch mutation.",
+                "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  529
+                ],
+                "recorded_at": "2026-10-13T21:22:44+00:00",
+                "issue_scopes": {
+                  "529": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac"
+                }
+              },
+              "lane": {
+                "id": "7270033898de4ad799d859a6b2cd2b59",
+                "pr": 530,
+                "issues": [
+                  529
+                ],
+                "actor": "Reviewer-C530",
+                "session": "codex-source530-20261013",
+                "coordinator": "Coordinator-DLV13",
+                "started_at": "2026-10-13T21:16:59+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-13T21:25:03+00:00"
+            }
+          ],
+          "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+          "branch": "codex/batch-2bbd7b7e22c44323bab273af8002ee47",
+          "intake": "995b275595744f35ba94cc61dbc96df1",
+          "started_at": "2026-10-13T22:17:27+00:00",
+          "pr": 890,
+          "entered_stage": false,
+          "history": [
+            {
+              "coordinator": "Coordinator-CL1014",
+              "session": "claude-788bdf25-coord-20261014",
+              "reason": "Repository owner explicitly authorized transferring and releasing only the paused ACL-1529 integration reservation in this chat (reply: \u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e). Preserve unfinished task, code, PRs and history; continue only authorized ACL-1892.",
+              "at": "2026-10-14T07:32:54+00:00"
+            }
+          ],
+          "report": "The repository owner stated in this conversation that ACL-1529 is paused and is not currently being worked on. The owner has authorized proceeding with the ACL-1892 common workflow upgrade. This is explicit stopped-owner evidence, not a timeout inference.\n\nTransfer only the existing pre-stage ACL-1529 integration ownership to the actual Root Coordinator using the supported old pinned engine. Cancel that unmerged candidate and its remaining intake to release the single integration reservation. Preserve source/task author identities, source approval, status, code, PRs, branches, manifests and history. ACL-1529 remains unfinished and paused; none of its changes are merged or completed. The old Coordinator must reacquire a new supported integration before later resuming.\n\nDo not cancel an actual stage merge or reset any permanent branch. Cancel must independently check the candidate PR remains unmerged. Then freeze only the already independently Approved ACL-1892 source; no unrelated backlog is shipped.\n\nThe owner subsequently explicitly replied \u00ab\u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e\u00bb to transferring and releasing this reservation while preserving the task/code/PR/history. Supported takeover has succeeded."
+        }
       }
     ],
     "policy": {
@@ -29337,77 +29374,79 @@
         "finished_at": "2026-10-13T21:58:39+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "2bbd7b7e22c44323bab273af8002ee47",
-      "actor": "Coordinator-BA4E69",
-      "session": "acl_upgrade_root_b13315d4c8acca4d15af2c75",
-      "state": "reviewing",
-      "issues": [
-        529
-      ],
-      "members": [
-        {
-          "issue": 529,
-          "pr": 530,
-          "branch": "codex/acl-1529-sharp-shot",
-          "head_sha": "bcbe152e5b1bcbb595f23760f5334d7b89058e36",
-          "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-          "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac",
-          "review": {
-            "kind": "independent-review",
-            "reviewer": "Reviewer-C530",
-            "implementer": "Worker-W530R",
-            "verdict": "approved",
+      },
+      "2bbd7b7e22c44323bab273af8002ee47": {
+        "id": "2bbd7b7e22c44323bab273af8002ee47",
+        "actor": "Coordinator-BA4E69",
+        "session": "acl_upgrade_root_b13315d4c8acca4d15af2c75",
+        "state": "cancelled",
+        "issues": [
+          529
+        ],
+        "members": [
+          {
+            "issue": 529,
+            "pr": 530,
+            "branch": "codex/acl-1529-sharp-shot",
             "head_sha": "bcbe152e5b1bcbb595f23760f5334d7b89058e36",
             "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-            "tree_sha": "d93e985f3f1cd4695c2d138589bba604d7bb4138",
-            "execution_lane": "7270033898de4ad799d859a6b2cd2b59",
-            "review_session": "codex-source530-20261013",
-            "report": "Independent source review by actual /root/source_review_530, Reviewer-C530, of PR530 headbcbe152e5b1bcbb595f23760f5334d7b89058e36 treed93e985f3f1cd4695c2d138589bba604d7bb4138 currentmain/base7cee2857d4b374bc564c5ca84b9f6ede69f96430. Reviewed complete original issue529 requirements, preserved author history/owner no-clip-no-scale exception, fresh genuine Worker main7cee handoff, full eleven-path currentmain scope and clean merge parentsc459+7cee. Own isolated clean review worktree ACL-Review-530-main7cee; no source edits. Screenshot implementation and three related fixture/template files byte-identical to prior independent113passing fixtures, retain plain CDP formatpng/captureBeyondViewportfalse only, no clip/scale/metrics mutation, Pillow postcrop2600cap, bounded error/hidden/timeout handling and detach. Defaultoff screenshot guards and owner-hidden CopyGroup flags unchanged. status_shot model remains hold diagnostic. Currentmain882 browser-first allocation composed with preserved deterministic cost-postpass: no file omissions/duplicates, no changed platform policy or testthresholds; prior independent146model/shard/platformpassed. Current own compatibility rerun was launched but has not reported completion at review recording, so no local current-run pass claimed. Worker reports181assertionspassed with explicit owned syntheticChrome teardown intervention plus23opt-in/defaultofftests; not represented as unassisted cleanup. Actual fresh hosted required CI independently confirmed all16 current effective checks SUCCESS by ghprchecks: sixLinux3.11/3.13shards, Windows3.13, ACLverification run38466991847; build/install/repair/uninstall and Installerverification run38466991917; descriptor, current reruntrackerlink38466991840, classifiers/process/buildinputs. Earlier prehandoff tracker failure replaced by actual successful samehead rerun, no waiver/historicaltree reuse. No blocking findings, exact-source approval accepted. Owner readability/liveMultilogin/package receipt remains pending/unclaimed. No liveMeta/profile/clipboard/ad/deploy/otherbatch mutation.",
             "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              529
-            ],
-            "recorded_at": "2026-10-13T21:22:44+00:00",
-            "issue_scopes": {
-              "529": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac"
-            }
-          },
-          "lane": {
-            "id": "7270033898de4ad799d859a6b2cd2b59",
-            "pr": 530,
-            "issues": [
-              529
-            ],
-            "actor": "Reviewer-C530",
-            "session": "codex-source530-20261013",
-            "coordinator": "Coordinator-DLV13",
-            "started_at": "2026-10-13T21:16:59+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-13T21:25:03+00:00"
-        }
-      ],
-      "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-      "branch": "codex/batch-2bbd7b7e22c44323bab273af8002ee47",
-      "intake": "995b275595744f35ba94cc61dbc96df1",
-      "started_at": "2026-10-13T22:17:27+00:00",
-      "pr": 890,
-      "entered_stage": false,
-      "history": [
-        {
-          "coordinator": "Coordinator-CL1014",
-          "session": "claude-788bdf25-coord-20261014",
-          "reason": "Repository owner explicitly authorized transferring and releasing only the paused ACL-1529 integration reservation in this chat (reply: \u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e). Preserve unfinished task, code, PRs and history; continue only authorized ACL-1892.",
-          "at": "2026-10-14T07:32:54+00:00"
-        }
-      ]
+            "scope": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac",
+            "review": {
+              "kind": "independent-review",
+              "reviewer": "Reviewer-C530",
+              "implementer": "Worker-W530R",
+              "verdict": "approved",
+              "head_sha": "bcbe152e5b1bcbb595f23760f5334d7b89058e36",
+              "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+              "tree_sha": "d93e985f3f1cd4695c2d138589bba604d7bb4138",
+              "execution_lane": "7270033898de4ad799d859a6b2cd2b59",
+              "review_session": "codex-source530-20261013",
+              "report": "Independent source review by actual /root/source_review_530, Reviewer-C530, of PR530 headbcbe152e5b1bcbb595f23760f5334d7b89058e36 treed93e985f3f1cd4695c2d138589bba604d7bb4138 currentmain/base7cee2857d4b374bc564c5ca84b9f6ede69f96430. Reviewed complete original issue529 requirements, preserved author history/owner no-clip-no-scale exception, fresh genuine Worker main7cee handoff, full eleven-path currentmain scope and clean merge parentsc459+7cee. Own isolated clean review worktree ACL-Review-530-main7cee; no source edits. Screenshot implementation and three related fixture/template files byte-identical to prior independent113passing fixtures, retain plain CDP formatpng/captureBeyondViewportfalse only, no clip/scale/metrics mutation, Pillow postcrop2600cap, bounded error/hidden/timeout handling and detach. Defaultoff screenshot guards and owner-hidden CopyGroup flags unchanged. status_shot model remains hold diagnostic. Currentmain882 browser-first allocation composed with preserved deterministic cost-postpass: no file omissions/duplicates, no changed platform policy or testthresholds; prior independent146model/shard/platformpassed. Current own compatibility rerun was launched but has not reported completion at review recording, so no local current-run pass claimed. Worker reports181assertionspassed with explicit owned syntheticChrome teardown intervention plus23opt-in/defaultofftests; not represented as unassisted cleanup. Actual fresh hosted required CI independently confirmed all16 current effective checks SUCCESS by ghprchecks: sixLinux3.11/3.13shards, Windows3.13, ACLverification run38466991847; build/install/repair/uninstall and Installerverification run38466991917; descriptor, current reruntrackerlink38466991840, classifiers/process/buildinputs. Earlier prehandoff tracker failure replaced by actual successful samehead rerun, no waiver/historicaltree reuse. No blocking findings, exact-source approval accepted. Owner readability/liveMultilogin/package receipt remains pending/unclaimed. No liveMeta/profile/clipboard/ad/deploy/otherbatch mutation.",
+              "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                529
+              ],
+              "recorded_at": "2026-10-13T21:22:44+00:00",
+              "issue_scopes": {
+                "529": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac"
+              }
+            },
+            "lane": {
+              "id": "7270033898de4ad799d859a6b2cd2b59",
+              "pr": 530,
+              "issues": [
+                529
+              ],
+              "actor": "Reviewer-C530",
+              "session": "codex-source530-20261013",
+              "coordinator": "Coordinator-DLV13",
+              "started_at": "2026-10-13T21:16:59+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-13T21:25:03+00:00"
+          }
+        ],
+        "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
+        "branch": "codex/batch-2bbd7b7e22c44323bab273af8002ee47",
+        "intake": "995b275595744f35ba94cc61dbc96df1",
+        "started_at": "2026-10-13T22:17:27+00:00",
+        "pr": 890,
+        "entered_stage": false,
+        "history": [
+          {
+            "coordinator": "Coordinator-CL1014",
+            "session": "claude-788bdf25-coord-20261014",
+            "reason": "Repository owner explicitly authorized transferring and releasing only the paused ACL-1529 integration reservation in this chat (reply: \u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e). Preserve unfinished task, code, PRs and history; continue only authorized ACL-1892.",
+            "at": "2026-10-14T07:32:54+00:00"
+          }
+        ],
+        "report": "The repository owner stated in this conversation that ACL-1529 is paused and is not currently being worked on. The owner has authorized proceeding with the ACL-1892 common workflow upgrade. This is explicit stopped-owner evidence, not a timeout inference.\n\nTransfer only the existing pre-stage ACL-1529 integration ownership to the actual Root Coordinator using the supported old pinned engine. Cancel that unmerged candidate and its remaining intake to release the single integration reservation. Preserve source/task author identities, source approval, status, code, PRs, branches, manifests and history. ACL-1529 remains unfinished and paused; none of its changes are merged or completed. The old Coordinator must reacquire a new supported integration before later resuming.\n\nDo not cancel an actual stage merge or reset any permanent branch. Cancel must independently check the candidate PR remains unmerged. Then freeze only the already independently Approved ACL-1892 source; no unrelated backlog is shipped.\n\nThe owner subsequently explicitly replied \u00ab\u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e\u00bb to transferring and releasing this reservation while preserving the task/code/PR/history. Supported takeover has succeeded."
+      }
     },
+    "integration": null,
     "intake": {
       "id": "995b275595744f35ba94cc61dbc96df1",
       "actor": "Coordinator-BA4E69",
