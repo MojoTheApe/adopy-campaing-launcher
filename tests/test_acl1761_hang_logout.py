@@ -301,7 +301,7 @@ def test_open_profile_goes_on_when_the_closing_profile_is_gone(monkeypatch):
         config = None
 
         def start_profile(self, folder, pid, headless=False):
-            return SimpleNamespace(port=7777, folder_id="f", ws_endpoint=None)
+            return SimpleNamespace(port=7777, folder_id="f", ws_endpoint=None, newly_started=True)
 
     monkeypatch.setattr(prof, "running_state", lambda launcher, pid: ("not_running", None))
     got = prof.open_profile(PID, "", "A", local_probe=lambda pid: next(answers),
