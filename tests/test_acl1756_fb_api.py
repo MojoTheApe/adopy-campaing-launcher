@@ -39,6 +39,20 @@ ACT_ID_RE = re.compile(r"act_[0-9]")
 LONG_ID_RE = re.compile(r"[0-9]{8,}")
 
 
+@pytest.fixture(autouse=True)
+def _restore_log_handler_filters(caplog):
+    """Pilot CLI tests must not leave redaction on pytest's shared handlers."""
+    handlers = set(logging.getLogger().handlers) | {caplog.handler}
+    before = {handler: list(handler.filters) for handler in handlers}
+    try:
+        yield
+    finally:
+        # Restore the existing filters and their order, including on handlers
+        # detached during a test. Production pilot redaction stays unchanged.
+        for handler, filters in before.items():
+            handler.filters[:] = filters
+
+
 # ───────────────────────── поддельный браузер ─────────────────────────
 
 class FakePage:
@@ -720,9 +734,13 @@ def test_mask_id_keeps_last_four():
 def test_scrub_filter_cleans_log_records(caplog):
     log = logging.getLogger("acl1756.test")
     caplog.set_level(logging.INFO)
-    caplog.handler.addFilter(tm.ScrubFilter())
-    log.info("token %s act %s", TOKEN, ACT)
-    assert TOKEN not in caplog.text and ACT not in caplog.text
+    scrub = tm.ScrubFilter()
+    caplog.handler.addFilter(scrub)
+    try:
+        log.info("token %s act %s", TOKEN, ACT)
+        assert TOKEN not in caplog.text and ACT not in caplog.text
+    finally:
+        caplog.handler.removeFilter(scrub)
 
 
 def test_journal_line_is_scrubbed(tmp_path):
@@ -788,7 +806,8 @@ class FakeLauncher:
         self.started.append(profile_id)
         from src.meta_campaign_agent.multilogin_launcher import StartedProfile
 
-        return StartedProfile(profile_id, folder_id or "F", port=self.start_port)
+        return StartedProfile(profile_id, folder_id or "F", port=self.start_port,
+                              newly_started=True)
 
     def stop_profile(self, profile_id, folder_id=None):
         self.stopped.append(profile_id)
