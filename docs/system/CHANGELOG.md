@@ -44,6 +44,7 @@ Crop where Next hung and closed the wizard with Close, leaving the ad without me
   ends in the honest `crop_wizard_stuck`, with the exit reason `looped_back`.
 - The wizard telemetry row gets `looped_back_to` (first earlier step the wizard went back to, e.g.
   `Media`), also inside `exit`. No new clicks: only the existing Next on a Crop that is on screen.
+
 ## Safe operation context for Graph read failures — ACL-1886
 
 - Two Plan check permission errors showed the same Graph10/OAuthException/HTTP400
