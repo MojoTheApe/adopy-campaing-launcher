@@ -30542,7 +30542,55 @@
         "session": "claude-subagent-a020ec1d6f47f8d61",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-14T11:07:31+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 783,
+          "pr": 790,
+          "branch": "work/acl-1783-graph-api-version",
+          "head_sha": "a10c9d3559d680fedb3e558513bacb0ae0e5869a",
+          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "32812425f874b864a0047a5ca04b3e229598be077ef1c08859f349985a384d99",
+          "review": {
+            "kind": "independent-review",
+            "implementer": "Worker-M1783B",
+            "reviewer": "Reviewer-R783X",
+            "head_sha": "a10c9d3559d680fedb3e558513bacb0ae0e5869a",
+            "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+            "tree_sha": "712f293e53aa90beb1712b170c0125d716f21a52",
+            "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+            "verdict": "approved",
+            "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-790.md",
+            "scope": "Full ACL-783 scope (Graph API default v26.0); approved on current main df6c2e8a",
+            "execution_lane": "40426c3a9ee54a2cb92ebfc2d91f0da9",
+            "review_session": "claude-subagent-a020ec1d6f47f8d61",
+            "actual_reviewer_agent": "claude-subagent-a020ec1d6f47f8d61",
+            "actual_implementer_agent": "Worker-M1783B",
+            "findings": [],
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              783
+            ],
+            "recorded_at": "2026-10-14T11:08:03+00:00",
+            "issue_scopes": {
+              "783": "32812425f874b864a0047a5ca04b3e229598be077ef1c08859f349985a384d99"
+            }
+          },
+          "lane": {
+            "id": "40426c3a9ee54a2cb92ebfc2d91f0da9",
+            "pr": 790,
+            "issues": [
+              783
+            ],
+            "actor": "Reviewer-R783X",
+            "session": "claude-subagent-a020ec1d6f47f8d61",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-14T11:07:31+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T11:18:20+00:00"
+        }
       },
       "793": {
         "id": "3cd6a5616f104408930e8a7a1edf3bda",
