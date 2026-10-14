@@ -11712,7 +11712,7 @@
             "session": "ws1760e-20261014"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1760E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11737,7 +11737,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "\ufeff# Return ACL-1760 for a main refresh\n\nMain advanced from df6c2e8a to 311700fd (batch e2b8b707 promoted, PR 910). The approval of PR 762 is bound to the old main, so the intake rejects it as stale. The author merges current main into codex/acl-1760-api-read (no other change), hands off again and gets a fresh independent approval."
-        }
+        },
+        "reviewer": "Reviewer-R1760F"
       },
       "761": {
         "implementers": [
@@ -14727,6 +14728,10 @@
       "Worker-S1760E": {
         "session": "ws1760e-20261014",
         "role": "Worker"
+      },
+      "Reviewer-R1760F": {
+        "session": "r1760f-20261014",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -17282,8 +17287,7 @@
       812,
       903,
       907,
-      891,
-      760
+      891
     ],
     "review": null,
     "history": [
@@ -31085,6 +31089,13 @@
         "issue": 760,
         "pr": 762,
         "actor": "Worker-S1760E"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T14:39:19+00:00",
+        "pr": 762,
+        "lane": "83aeb9f517b647ec962a58bdc5538fa2",
+        "actor": "Reviewer-R1760F"
       }
     ],
     "policy": {
@@ -32873,6 +32884,19 @@
       "ineligible": {},
       "report": "\ufeff# Intake 7192c0e6 cancelled by Coordinator-C1014I (2026-10-14)\n\nThe first batch of this intake (ACL-1781, 1782, 1783, 1786, 1806) reached main via PR 910 and is recorded merged. The remaining member ACL-1886 stays Approved; it is taken into a new intake together with ACL-1760 (approved after this intake froze), so one batch instead of two sequential ones moves the chain base. No task state other than the intake changes."
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "762": {
+        "id": "83aeb9f517b647ec962a58bdc5538fa2",
+        "pr": 762,
+        "issues": [
+          760
+        ],
+        "actor": "Reviewer-R1760F",
+        "session": "r1760f-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T14:39:19+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
