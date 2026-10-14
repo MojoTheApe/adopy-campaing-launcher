@@ -3117,9 +3117,27 @@
       "source_sha": "3cd7fdb50180107163294f3bcc5567e60f30e3ed",
       "main_tree": "06e60120c55379d776152c76d6f337b252c18d7b",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
+      "state": "passed",
       "recorded_at": "2026-10-14T08:23:05+00:00",
-      "batch_id": "07aa28148c8c4544b3c0077f47d58503"
+      "batch_id": "07aa28148c8c4544b3c0077f47d58503",
+      "verification": {
+        "kind": "stage-verification",
+        "target": "ACL isolated Windows stage installation",
+        "result": "passed",
+        "source_sha": "3cd7fdb50180107163294f3bcc5567e60f30e3ed",
+        "tree_sha": "e8a6b4efae432d69118d3f003b92512907fe70ca",
+        "checks": [
+          "Actual permanent stage commit/tree and generated merge parents verified against the frozen single ACL-1892 member and independently reviewed integration.",
+          "Actual stage product and installer aggregates succeeded with explicit same-tree reuse proofs of all six Linux 3.11/3.13 shards, Windows 3.13 and package jobs; stage descriptor succeeded.",
+          "Previous actual package installs and starts with isolated data",
+          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+          "Updated installed application restarts with preserved machine/workspace/creative data",
+          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+          "Recovered application restarts and synthetic data remains byte-identical"
+        ],
+        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/894#issuecomment-6164140898"
+      },
+      "verified_at": "2026-10-14T08:25:43+00:00"
     },
     "tasks": {
       "248": {
