@@ -8266,19 +8266,6 @@
         "started_at": "2026-10-13T20:56:19+00:00",
         "from_status": "status:todo"
       },
-      "888": {
-        "actor": "Worker-S1880B",
-        "session": "S1880B-run",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1880-page-no-guess",
-        "worktree": "C:\\wk-1880b",
-        "id": "5a020102694e4e3c92d2cd071a6e29c8",
-        "issue": 888,
-        "state": "stopping",
-        "started_at": "2026-10-13T21:34:57+00:00",
-        "from_status": "status:backlog",
-        "report": "Coordinator stop on owner decision 2026-10-14: #888 closed as not planned, PR #889 closed unmerged. Worktree C:\\wk-1880b is gone; no further work on this claim. Releasing the implementation slot."
-      },
       "899": {
         "actor": "Worker-V1899A",
         "session": "w1899a-20261014",
@@ -13202,9 +13189,22 @@
             "session": "S1880B-run"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-S1880B",
-        "coordinator": "Coordinator-C0930A"
+        "coordinator": "Coordinator-C0930A",
+        "handoff": {
+          "actor": "Worker-S1880B",
+          "session": "S1880B-run",
+          "coordinator": "Coordinator-C0930A",
+          "branch": "codex/acl-1880-page-no-guess",
+          "worktree": "C:\\wk-1880b",
+          "id": "5a020102694e4e3c92d2cd071a6e29c8",
+          "issue": 888,
+          "state": "stopping",
+          "started_at": "2026-10-13T21:34:57+00:00",
+          "from_status": "status:backlog",
+          "report": "Coordinator stop on owner decision 2026-10-14: #888 closed as not planned, PR #889 closed unmerged. Worktree C:\\wk-1880b is gone; no further work on this claim. Releasing the implementation slot."
+        }
       },
       "892": {
         "implementers": [
@@ -29632,6 +29632,13 @@
         "issue": 899,
         "claim": "bbdb63d6cd7b48e2aa3cffc723021004",
         "actor": "Worker-V1899A"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-14T11:41:02+00:00",
+        "issue": 888,
+        "actor": "Worker-S1880B",
+        "report": "Coordinator stop on owner decision 2026-10-14: #888 closed as not planned, PR #889 closed unmerged. Worktree C:\\wk-1880b is gone; no further work on this claim. Releasing the implementation slot."
       }
     ],
     "policy": {
