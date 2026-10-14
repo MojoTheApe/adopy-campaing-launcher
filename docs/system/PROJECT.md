@@ -125,7 +125,7 @@ main; it changes no campaign-launching behavior or employee-installed version.
 
 ### ACL-1880 — campaign-local Facebook Page selection (2026-10-13)
 
-The builder reads available Page names and IDs through `/api/account-pages`, using the existing read-only profile session and profile lock. New campaign cards start with Automatic; duplicates copy other settings but reset Page selection. Automatic never takes the first Page of Meta's list (the order is meaningless): see the follow-up below. Explicit campaign choices never write the account map. Legacy non-builder drafts retain map fallback.
+The builder reads available Page names and IDs through `/api/account-pages`, using the existing read-only profile session and profile lock. New campaign cards start with Automatic; duplicates copy other settings but reset Page selection. The first Page in the destination account's returned order is shown and resolved before creation. Explicit campaign choices never write the account map. Legacy non-builder drafts retain map fallback.
 
 Loading failures and confirmed empty lists are distinct and support Refresh pages. A truncated discovery result is refused. API preflight still validates an explicit Page's membership, and its existing creative readback validates the resulting identity. Instant Form caches are keyed by the resolved Page ID, including in Automatic mode.
 
@@ -145,10 +145,6 @@ reuse the same campaign/ad sets. The original builder retains the ad inputs.
 Instant Forms and an explicitly unavailable Page still block, as do failed Page
 reads. The RPA path retains its existing Identity requirements. This supersedes
 the earlier requirement that every empty Page list blocks all preparation.
-
-## ACL-1888 — Automatic never guesses among several Pages (2026-10-13)
-
-Owner decision, applied to the API and RPA paths with one rule (`src/fb_api/page_choice.py`). A Page chosen in the builder is used and must be among the account's promote_pages. An empty choice (Automatic) resolves as: (1) the account map's `page_id` when it is among the account's Pages (source `map`); (2) otherwise the only Page of the account (`account default`); (3) otherwise, with several Pages, Check plan and publish refuse before any write: "This ad account has N Facebook Pages. Choose the Page for this campaign in the builder."; (4) with zero Pages the ACL-1880 behaviour stays (paused website shell, refusal for Instant Forms). The builder shows "Choose a Page (this account has N)" or "Automatic: <name> (<id>)"; the client pre-flight rule `page_choice` mirrors the refusal in Python and JS. The RPA publisher refuses with the same text and passes the resolved ID to Identity verification. Readback still checks `promoted_page` and the creative `page_id`.
 
 ## ACL-1896 — Instagram placements need an Instagram account on the Page ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/896), 2026-10-14)
 

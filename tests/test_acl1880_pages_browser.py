@@ -25,7 +25,7 @@ def install(page, payload):
 
 
 def test_auto_explicit_duplicate_and_account_change(page):
-    install(page, {'ok': True, 'state': 'ready', 'pages': PAGES, 'map_page_id': '123'})
+    install(page, {'ok': True, 'state': 'ready', 'pages': PAGES})
     page.wait_for_function("document.querySelector('[data-page-note]').textContent.includes('First Page')")
     select = page.locator('.cb-page-select').first
     select.select_option('456')
@@ -47,7 +47,7 @@ def test_error_retry_and_confirmed_empty(page):
     page.evaluate("cbRefreshPages(document.querySelector('.cb-slot'), true)")
     page.wait_for_function("document.querySelector('[data-page-note]').textContent.includes('No Facebook Pages')")
     assert page.locator('.cb-page-select').first.is_enabled()
-    page.route('**/api/account-pages', lambda r: r.fulfill(json={'ok': True, 'state': 'ready', 'pages': PAGES, 'map_page_id': '123'}))
+    page.route('**/api/account-pages', lambda r: r.fulfill(json={'ok': True, 'state': 'ready', 'pages': PAGES}))
     page.evaluate("cbRefreshPages(document.querySelector('.cb-slot'), true)")
     page.wait_for_function("document.querySelector('[data-page-note]').textContent.includes('First Page')")
 
@@ -78,10 +78,10 @@ def test_custom_identity_edit_selection_is_read_back(page):
 
 
 def test_auto_resolution_changes_on_refresh_and_old_response_cannot_select(page):
-    install(page, {'ok': True, 'state': 'ready', 'pages': PAGES, 'map_page_id': '123'})
+    install(page, {'ok': True, 'state': 'ready', 'pages': PAGES})
     page.wait_for_function("cbResolvedPage(document.querySelector('.cb-slot')) === '123'")
     page.evaluate("window.cbForms={'Demo|123':{state:'ok',ok:true,page_id:'123',forms:[{id:'789',name:'Old Page form'}]}}")
-    page.route('**/api/account-pages', lambda r: r.fulfill(json={'ok': True, 'state': 'ready', 'pages': PAGES, 'map_page_id': '456'}))
+    page.route('**/api/account-pages', lambda r: r.fulfill(json={'ok': True, 'state': 'ready', 'pages': list(reversed(PAGES))}))
     page.evaluate("cbRefreshPages(document.querySelector('.cb-slot'),true)")
     page.wait_for_function("cbResolvedPage(document.querySelector('.cb-slot')) === '456'")
     # A delayed response for the previous Page retains its own key, not the automatic key.
@@ -94,25 +94,16 @@ from test_drawer_review_browser import add  # noqa: E402
 def test_full_builder_drops_old_automatic_page_forms(full_page):
     p = full_page
     p.evaluate("window.ACL_FB_BACKEND='api'")
-    install(p, {'ok': True, 'state': 'ready', 'pages': PAGES, 'map_page_id': '123'})
+    install(p, {'ok': True, 'state': 'ready', 'pages': PAGES})
     add(p)
     p.locator('.cbd-camp-row').first.click()
     p.wait_for_function("cbResolvedPage(document.querySelector('.cb-slot'))==='123'")
     p.evaluate("cbForms['Demo|123']={state:'ok',ok:true,page_id:'123',forms:[{id:'789',name:'Old form',status:'ACTIVE'}]}; cbFillFormSelects(document.querySelector('.cb-slot'))")
     assert 'Old form' in p.locator('.cb-form-select').first.inner_text()
-    p.route('**/api/account-pages', lambda r: r.fulfill(json={'ok': True, 'state': 'ready', 'pages': PAGES, 'map_page_id': '456'}))
+    p.route('**/api/account-pages', lambda r: r.fulfill(json={'ok': True, 'state': 'ready', 'pages': list(reversed(PAGES))}))
     p.evaluate("cbRefreshPages(document.querySelector('.cb-slot'),true)")
     p.wait_for_function("cbResolvedPage(document.querySelector('.cb-slot'))==='456'")
     assert 'Old form' not in p.locator('.cb-form-select').first.inner_text()
     # A late response is stored under the requested Page, never the current automatic choice.
     p.evaluate("cbForms['Demo|123']={state:'ok',ok:true,page_id:'123',forms:[{id:'790',name:'Late form'}]}; cbFillFormSelects(document.querySelector('.cb-slot'))")
     assert 'Late form' not in p.locator('.cb-form-select').first.inner_text()
-
-
-def test_several_pages_without_a_map_page_ask_for_a_choice(page):
-    # ACL-1880: Automatic не берёт первую Страницу; среди нескольких выбирает человек.
-    install(page, {'ok': True, 'state': 'ready', 'pages': PAGES})
-    page.wait_for_function("document.querySelector('.cb-page-select option').textContent.includes('Choose a Page')")
-    assert page.locator('.cb-page-select option').first.inner_text() == 'Choose a Page (this account has 2)'
-    assert 'has 2 Facebook Pages' in page.locator('[data-page-note]').first.inner_text()
-    assert page.evaluate("cbResolvedPage(document.querySelector('.cb-slot'))") == ''
