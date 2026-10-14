@@ -1,5 +1,93 @@
 # Repository process history
 
+## ACL-1892 — Adopt common efficient verification — 2026-10-14
+
+Select reviewed merged Master `eca8a857d9f7f81160bf248f9f9e3109a21ade49`
+([MR-26 / PR27](https://github.com/MojoTheApe/master-repo/pull/27)) and compatible
+Tracker `0d1fad44f5fdbef64b061324e9a1292fb77fb725`
+([TT-107 / PR108](https://github.com/MojoTheApe/task-tracker/pull/108)). The maintained
+three-way upgrade reproduces the actual 38-file old pristine template and retains
+the actual 41-file new pristine baseline, separate from explicit ACL resolutions.
+Keep the guarded client, relocated checker, configuration bytes, aliases/IDs,
+six modules, historical completion and all current ownership/delivery policies.
+
+Add the pinned verification/coordinated-upgrade reading map and optional direct
+CI producer export. Preserve ACL's bounded collector and full applicable
+Linux/Windows/installer checks; common native V1 cannot cover those environments,
+and no CI evidence policy is enabled. The descriptor Action keeps the local draft
+flag and compatibility-master trigger, adds PR-only cancellation with unique push
+identities and a bounded five-minute setup job. Product CI and its matrices remain
+unchanged. Extend existing CI concurrency regressions to the descriptor workflow.
+
+Current repository instructions now describe the actually active schema-3 5/5/5
+policy and completed ACL-1874/1875 cutover; dated migration and recovery evidence
+remain intact. Compatible service publication already exists at
+`bcb59dfb0e4c5066d891207b49f690f29d9f9ef4`; this upgrade reserves no maintenance
+interval, changes no capacity and performs no state migration. Source review,
+batch integration and exact-tree isolated stage acceptance still use the genuine
+current old-policy handoff before unchanged main promotion. Adoption remains draft.
+
+No system/runtime behavior, product code/skills, employee data, installer/updater,
+credentials, release/pilot authorization or production operation changes, so those
+project-owned files are preserved. Required stable-package delivery remains
+separate and pending until genuine publication and installation evidence exists.
+
+## ACL-1879 — Preserve Linux browser-file balance when diagnostic tests join CI
+
+Adding the official-token diagnostic test file deterministically changed the
+cost-only split's browser counts from `[35,36,36]` to `[33,37,37]`, failing the
+existing maximum-spread assertion. Linux now assigns browser files first by
+browser count, current estimated cost and stable index, then fills remaining files
+by the existing minimum-cost rule. Cost weights, platform selection and other
+sharding modes remain unchanged. Synthetic public-shards coverage reproduces the
+costly non-browser trigger and checks browser/cost balance, determinism and
+exact-once selection; existing real-tree assertions remain in force. This bounded
+CI compatibility repair does not relax source review/check or deployment gates.
+
+## ACL-1874 — Activate five independent source reviews — 2026-10-13
+
+After ACL-1875's independently reviewed and fully verified old-v2 source/stage/main
+completion at main `72a2d2c21aa42f1a388d32ea27ba2c8253ee7854`, the maintained
+Tracker fallback publication at `57b1674d34049b88490908fc69c25747059a27d4` and
+supported owner-paused handoffs allowed idle schema-3 adoption at 14:52:32 UTC.
+Independent complete-state comparison and fresh protected projections at 14:52:52 UTC
+confirmed five implementations, five source reviews, one integration review and
+batches of five. The 37-item queue/order and full author/handoff/history/delivery
+records remain preserved; closed unmerged historical sources stay unfinished.
+The original cutover/recovery procedure and paused source checkouts remain intact.
+See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md) for exact integrated source, publication,
+migration and digest-covered board evidence. This entry claims no stable ACL release,
+employee rollout or live advertising/pilot verification.
+
+## ACL-1875 — Prepare five independent source reviews
+
+Select matching execution schema 3 limits implementation5/review5/batch5, keeping
+one separate integration Coordinator and one independent combined review. ACL-owned
+CI scope recognizes valid v2/v3 one-task sources while combined/stage/promotion,
+manual, unknown or drifted policies retain complete applicable checks. Batch assembly
+keeps frozen ownership/content proof and permits unrelated v3 source-review owners;
+an active integration review still blocks reassembly. Affected regressions exercise
+both the retained v2 route and the five-review v3 route.
+
+Shared source contracts belong to [MR-22](https://github.com/MojoTheApe/master-repo/issues/22)
+and [TT-97](https://github.com/MojoTheApe/task-tracker/issues/97). Select actual reviewed,
+merged Tracker `46283b8a6fe444065838e136c89ef4ed64bd1528` and its clean portable
+exports, preserving the ACL guarded client and relocated checker root. Reviewed
+merged Master/Action pin `8ce271dc289b6a7ef24498ed3d9d92cb78694a3d` supplies the
+matching schema-3 contract. This source-only child preserves the original ACL-1874
+author preparation through a supported stopped handoff and fresh genuine child claim;
+parent ACL-1874 retains actual activation and stays unfinished. This policy source
+finishes its genuine current v2 handoff/approval/batch/stage/main/Merged route before
+an idle queue-preserving v2-to-v3 migration. Compatible service publication is an
+independent parent prerequisite; source preparation does not publish it.
+Document the reviewed TT-89 fixed-engine recovery for GitHub-auto-merged source
+completion after a real main promotion, retaining genuine v2 policy/ownership and
+exact inclusion proof. Old-runtime patching or state editing remains forbidden;
+this bounded recovery is separate from schema-3 migration.
+See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md). Preparation grants no activation,
+package publication, employee update or live advertising/pilot receipt. Preserve
+pristine template ancestry, ACL identity/history, active owners and delivery controls.
+
 ## ACL-1753 — Compatible pins for the preserved review queue
 
 Adopt reviewed merged Master `fe9241152cb466dfbafa3bcd3070f877c1b1b9c4` and
