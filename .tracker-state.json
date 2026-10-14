@@ -311,7 +311,8 @@
     },
     "71ab9d61e210a934cef6b9cf18c42e283ee0e979b57c0edede0c590b55d4e374": {
       "title": "[Builder] Clearing the creative or Stories/Reels file box leaves the old file in the plan",
-      "state": "creating"
+      "state": "created",
+      "issue": 903
     }
   },
   "delivery_workflow": {
