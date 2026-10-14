@@ -314,7 +314,9 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
         # Только для сообщения человеку: остановки всё равно нет.
         started_by_us=(state == "not_running"),
         launcher=launcher,
-        started_now=True,
+        # Владелец — только при настоящем старте: ответ «уже запущен» (409) или
+        # неизвестный исход остаётся чужим и нами не закрывается (ревью ACL-1760, P1).
+        started_now=getattr(started, "newly_started", False) is True,
     )
 
 
