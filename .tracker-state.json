@@ -3401,34 +3401,17 @@
       }
     },
     "stage": {
-      "pr": 911,
+      "pr": 913,
       "issues": [
-        760
+        761
       ],
-      "tree_sha": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036",
-      "source_sha": "9d086716f00e07d146e5142e21866ede90bd25e0",
-      "main_tree": "a0d4b48243c44a6d3990e8594a586577aa020902",
+      "tree_sha": "c8abd728be94f9dd2f5ff6c6c9a00e4ad8ed7f4d",
+      "source_sha": "9235846e862ec7bf40e80eaee06df9eabbd2a2e4",
+      "main_tree": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-14T15:26:18+00:00",
-      "batch_id": "0c5aecbdf4f44c7f8e4a97272dced8d6",
-      "verification": {
-        "checks": [
-          "Actual permanent stage commit/tree and merge parents verified against the frozen batch 0c5aecbd (ACL-1760) and the independently reviewed integration.",
-          "Stage CI, Windows installer and delivery setup runs succeeded on 9d086716 with explicit same-tree reuse of the full green runs 38586016525 and 38586016443 (all Linux 3.11/3.13 shards, Windows 3.13, package jobs).",
-          "Previous actual package installs and starts with isolated data",
-          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
-          "Updated installed application restarts with preserved machine/workspace/creative data",
-          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts"
-        ],
-        "source_sha": "9d086716f00e07d146e5142e21866ede90bd25e0",
-        "result": "passed",
-        "kind": "stage-verification",
-        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/911#issuecomment-6171923547",
-        "target": "ACL isolated Windows stage installation",
-        "tree_sha": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036"
-      },
-      "verified_at": "2026-10-14T15:28:16+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-14T16:43:37+00:00",
+      "batch_id": "65c0be2f589f497ca3b5fe5a96e08cda"
     },
     "tasks": {
       "248": {
@@ -11890,7 +11873,7 @@
             "session": "ws1761e-20261014"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-S1761E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -33831,7 +33814,7 @@
       "id": "65c0be2f589f497ca3b5fe5a96e08cda",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "reviewing",
+      "state": "stage",
       "issues": [
         761
       ],
@@ -33886,7 +33869,7 @@
       "intake": "6ca57030d9b24dd2aee48166c83d3d3f",
       "started_at": "2026-10-14T16:14:58+00:00",
       "pr": 913,
-      "entered_stage": false,
+      "entered_stage": true,
       "history": []
     },
     "intake": {
