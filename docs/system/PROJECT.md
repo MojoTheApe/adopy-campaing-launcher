@@ -26,6 +26,17 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   After an unknown upload result the readback is repeated up to 6 times over about 2 minutes, counted in
   the per-campaign call budget. Writes without a file keep the short timeout. The write policy is
   unchanged and identical in Python and in the page helper.
+  Campaign name (ACL-1902): before any write, in the run and in Check plan, the creator picks the first
+  free name of `NAME`, `NAME_2` ... `NAME_20`. No live campaign with that name (deleted/archived do not
+  count) -> use it; our own (ACL tag of that name) and identical to the builder -> reuse it (resume of a
+  partial run, no duplicate); our own but different, or the same name without our tag -> next suffix. The
+  suffix is always appended to the full name (`X_2` becomes `X_2_2`; the user's own numbers are not
+  parsed). Ad set and ad names stay as built. The tag is computed from the chosen name, so `NAME_2` has
+  its own tag and its own creatives. All 20 taken -> stop before any write (`name_taken`). The rule
+  `existing_diffs` shows a WARNING with the chosen name when a suffix is used and an ERROR only when all
+  20 are taken. One campaigns search on the base name serves all candidates (a second per-name search
+  only if the first returns the maximum 200 rows); each own candidate costs the diff reads that existed
+  before; no extra writes, no new lock.
 - `src/creative_agent`, `src/knowledge_agent`: creative analysis and domain references.
 - `src/analysis_agent/team_library.py` and related library modules: shared targets/ad texts in
   the separately provisioned private team library; PR #244 replaced Google Sheets

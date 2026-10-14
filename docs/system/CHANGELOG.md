@@ -1,5 +1,20 @@
 # System history
 
+## API backend: campaign name gets _2, _3 ... when a different campaign has that name - ACL-1902
+
+- Owner request: instead of blocking when a campaign with the same name already exists (for example a
+  PAUSED leftover of a failed run with other settings), pick a free name automatically.
+- The creator resolves the name before any write, in the publish run and in Check plan, with one function:
+  `NAME`, `NAME_2` ... `NAME_20`. Free -> use; ours and identical -> reuse (resume, no duplicate); ours
+  but different or same name without our tag -> next. Suffix goes on the full name (`X_2` -> `X_2_2`).
+  Ad set and ad names are unchanged; the tag is derived from the chosen name. All 20 taken -> stop
+  before any write with a clear message.
+- Check plan: the preflight rule `existing_diffs` is now a WARNING ("Will be published as 'NAME_2': ...")
+  when a suffix is chosen, an ERROR only when all 20 names are taken. The job result, panel and draft
+  status show the chosen name.
+- Reads: one campaigns search on the base name for all candidates, plus the previous diff reads per own
+  candidate. No extra writes.
+
 ## API backend: no time limit on file uploads, upload progress on the dashboard - ACL-1899
 
 - Bug (live 2026-10-14): a video upload hit the generic 120 s write timeout, Python stopped waiting
