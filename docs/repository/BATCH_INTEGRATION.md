@@ -1,5 +1,11 @@
 # Approved tasks and batches of at most five
 
+The prepared [ACL-1875 source-review pool](SOURCE_REVIEWS.md) selects execution
+schema 3 with five independent source reviews and the same single integration
+Coordinator/Reviewer. Its own source finishes the current v2 route before actual
+live migration retained in parent ACL-1874. The dated v1-to-v2 adoption evidence
+and commands below remain historical; they are not the v2-to-v3 migration procedure.
+
 Parent [ACL-1566](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/566)
 records actual migration, fresh shared-board verification and remaining deferred scope.
 Source child [ACL-1747](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/747)
@@ -26,8 +32,8 @@ the source to reviewed, merged Master `d24db185ebdff2cadcecf89f5b28061d6cd19564`
 reviewed merged Master `fe9241152cb466dfbafa3bcd3070f877c1b1b9c4` (MR-18 / PR19)
 and Tracker `086aaa98f2e807d640105be2929714d0b7331f21` (TT-85 / PR86), adding the
 explicit preserved-closed-handoff cutover option without changing live approval guards.
-Both ACL
-execution objects explicitly select schema 2, implementation_limit 5,
+At the ACL-1753 source cutover both ACL
+execution objects explicitly selected schema 2, implementation_limit 5,
 review_limit 1 and batch_limit 5. The shared skill was installed locally from
 Master `d24db185ebdff2cadcecf89f5b28061d6cd19564` with a backup; each other agent environment needs
 its own installation. Installing the skill does not migrate project state.
@@ -35,7 +41,7 @@ its own installation. Installing the skill does not migrate project state.
 Read the pinned Tracker's `docs/BATCH_INTEGRATION.md` and `guide` for exact commands.
 `python scripts/task_tracker.py` is the guarded project client. Exported portable
 admission helpers remain in `.workflow/tools/` with `scripts/` compatibility paths.
-The newly required batch helper travels with the reviewed pin; v2 validation
+The required batch helper travels with the reviewed pin; v2/v3 validation
 refuses a missing implementation or compatibility entry point.
 
 Each task keeps one source PR, its actual Worker/branch and independent Reviewer.
@@ -78,6 +84,10 @@ candidate head/tree; it never pushes, merges into stage/main, publishes or deplo
 An existing unrelated directory/branch is preserved. A conflict aborts only its own
 unfinished merge, retaining prior assembled work and the claim. Return the affected
 task to its author; no unreviewed conflict resolution belongs in the batch branch.
+The helper accepts matching v2/v3 batch policy. In v3 unrelated source-review
+owners may continue during assembly; an existing integration review still blocks
+reassembly. Exact composition, frozen membership and guarded rebuild proof remain
+required.
 
 Push the reviewed candidate branch and create its PR into stage with all member IDs
 in the title, one `Tracker issues: ID, ID` line and one `Tracker batch: BATCH_ID` line.
