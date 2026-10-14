@@ -8854,9 +8854,11 @@
         "worktree": "C:\\wk-rj1814",
         "id": "a6aa514dd69c450996ff211b44b5e922",
         "issue": 814,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T23:11:11+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 817,
+        "report": "# Refresh ACL-1814\n\nMerged origin/main (incl. 1760/1761/1798/1766/1778/1769) into codex/acl-1814-rules-store. Head: 57ef3da6.\n\nConflicts: docs/system/CHANGELOG.md only (two new entries at the top). Kept both: the branch's ACL-1800 entry and main's ACL-1879 entry. No code conflicts.\n\nTests (not browser): 455 passed, 1 deselected. Covered rules_store, goals, static_scripts_from_disk, 1798 inventory, 1800 commands and home wiring, 1769 two-column layout, builder_second_primary_text, the_builder drawer/tree, and the test_builder_* files."
       },
       "826": {
         "actor": "Worker-RH1826",
