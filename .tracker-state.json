@@ -8611,6 +8611,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T16:57:53+00:00",
         "from_status": "status:todo"
+      },
+      "798": {
+        "actor": "Worker-RF1798",
+        "session": "wrf1798-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1798-home-campaigns",
+        "worktree": "C:\\wk-rf1798",
+        "id": "793d1b537aa04e5eb6c794e88830ec02",
+        "issue": 798,
+        "state": "implementing",
+        "started_at": "2026-10-14T16:58:25+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12186,10 +12198,14 @@
           {
             "actor": "Worker-S1798A",
             "session": "run_s1798a_1011"
+          },
+          {
+            "actor": "Worker-RF1798",
+            "session": "wrf1798-20261014"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1798A",
+        "state": "implementing",
+        "worker": "Worker-RF1798",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1798A",
@@ -12207,7 +12223,6 @@
         },
         "pr": 801,
         "queued_at": "2026-10-11T20:17:18+00:00",
-        "reviewer": "Reviewer-RRF14",
         "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "797": {
@@ -15012,6 +15027,10 @@
       },
       "Worker-RG1775": {
         "session": "wrg1775-20261014",
+        "role": "Worker"
+      },
+      "Worker-RF1798": {
+        "session": "wrf1798-20261014",
         "role": "Worker"
       }
     },
@@ -32224,6 +32243,13 @@
         "issue": 775,
         "claim": "ab5224d3d70f4e3fb5e31bd39a8202aa",
         "actor": "Worker-RG1775"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T16:58:25+00:00",
+        "issue": 798,
+        "claim": "793d1b537aa04e5eb6c794e88830ec02",
+        "actor": "Worker-RF1798"
       }
     ],
     "policy": {
