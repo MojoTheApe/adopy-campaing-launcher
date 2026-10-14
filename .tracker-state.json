@@ -31158,6 +31158,25 @@
             "approved_at": "2026-10-14T14:59:27+00:00"
           }
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-14T15:01:24+00:00",
+        "intake": {
+          "id": "47d9615da3704a82a17c83ce915d36c6",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "running",
+          "issues": [
+            760
+          ],
+          "remaining": [
+            760
+          ],
+          "batches": [],
+          "started_at": "2026-10-14T15:01:24+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -32968,27 +32987,19 @@
     },
     "integration": null,
     "intake": {
-      "id": "7192c0e6149f48febbf422a0b5c591c9",
+      "id": "47d9615da3704a82a17c83ce915d36c6",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "cancelled",
+      "state": "running",
       "issues": [
-        781,
-        782,
-        783,
-        786,
-        806,
-        886
+        760
       ],
       "remaining": [
-        886
+        760
       ],
-      "batches": [
-        "e2b8b7079a31457bb2cc23294dabdd46"
-      ],
-      "started_at": "2026-10-14T11:44:18+00:00",
-      "ineligible": {},
-      "report": "\ufeff# Intake 7192c0e6 cancelled by Coordinator-C1014I (2026-10-14)\n\nThe first batch of this intake (ACL-1781, 1782, 1783, 1786, 1806) reached main via PR 910 and is recorded merged. The remaining member ACL-1886 stays Approved; it is taken into a new intake together with ACL-1760 (approved after this intake froze), so one batch instead of two sequential ones moves the chain base. No task state other than the intake changes."
+      "batches": [],
+      "started_at": "2026-10-14T15:01:24+00:00",
+      "ineligible": {}
     },
     "source_reviews": {}
   }
