@@ -12963,7 +12963,7 @@
             "session": "wrh1826-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-RH1826",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12982,7 +12982,7 @@
         },
         "pr": 828,
         "queued_at": "2026-10-14T23:17:10+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
+        "review_report": "\ufeff# Review PR 828 (ACL-1826), head b5e3088c - CHANGES REQUESTED (CI red on the secret scan only)\nReviewer-R1826J.\n\nBlocker: scripts/acl_scan_secrets.py fails (job \"Classify and check project tooling\" -> \"Process instructions\" red):\n  tests/test_acl1826_mlx_session_lost.py:388  Multilogin profile id: 0f43865d-0000-4000-8000-...  (WS = \"0f43865d-0000-4000-8000-0000000051db\")\n  tests/test_acl1826_mlx_session_lost.py:404  Multilogin profile id: 3ef7f42d-0000-4000-8000-...  (foreign workspaceID in test_token_preflight_rejects_expired_and_foreign_workspace)\nThe first 8 hex digits look like real Multilogin workspace ids. Fix: use obviously fake ids (e.g. 11111111-1111-4111-8111-111111111111 and 22222222-2222-4222-8222-222222222222, or the allowed placeholders in _PLACEHOLDERS); the tests only need two different ids. Reproduced locally by running the scanner in the worktree; nothing else flagged.\n\nChecked, no findings:\n- Merge with main kept 1798's read flow and 1761's publish flow: publish_api.py / publish_jobs.py / report.html auto-merged cleanly; 1761 suites (7 files, 203 passed), 1798 inventory + 1760 api read (163 passed), 1812 warm, 1800 account-scoped table, account_spend, 1826 = 252 passed (not browser).\n- Banner shows once per run (first instance; BATCH_STOPS / AMLX_STOPS / AMAP_BATCH_STOPS paths); Retry re-sends only the stopped keys (onlyKeys / lost.map); the Node retry harness test is in the passing set. Batch id is created per run (cbNewRun, queueRun, amap run), Retry creates a new one.\n- UI text English (banner, Retry button, mlx_session messages); textContent used, no innerHTML.\n- Mutation: Retry without the stopped-keys argument (cbPublishAll(showQueue, selectedForPublish())) -> test_retry_resends_exactly_the_stopped_forms_with_one_batch_id_per_run fails (killed); 36 others pass.\nNote for integration: ACL-1819 gate must wrap cbPublishAll(onlyKeys) (unchanged note from round 2).",
         "reviewer": "Reviewer-R1826J"
       },
       "767": {
@@ -35123,6 +35123,24 @@
         "pr": 828,
         "lane": "302fdec0f98f419dbf3aedad36ed80e3",
         "actor": "Reviewer-R1826J"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-14T23:42:43+00:00",
+        "review": {
+          "id": "302fdec0f98f419dbf3aedad36ed80e3",
+          "pr": 828,
+          "issues": [
+            826
+          ],
+          "actor": "Reviewer-R1826J",
+          "session": "r1826j-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T23:41:48+00:00",
+          "state": "returning",
+          "report": "\ufeff# Review PR 828 (ACL-1826), head b5e3088c - CHANGES REQUESTED (CI red on the secret scan only)\nReviewer-R1826J.\n\nBlocker: scripts/acl_scan_secrets.py fails (job \"Classify and check project tooling\" -> \"Process instructions\" red):\n  tests/test_acl1826_mlx_session_lost.py:388  Multilogin profile id: 0f43865d-0000-4000-8000-...  (WS = \"0f43865d-0000-4000-8000-0000000051db\")\n  tests/test_acl1826_mlx_session_lost.py:404  Multilogin profile id: 3ef7f42d-0000-4000-8000-...  (foreign workspaceID in test_token_preflight_rejects_expired_and_foreign_workspace)\nThe first 8 hex digits look like real Multilogin workspace ids. Fix: use obviously fake ids (e.g. 11111111-1111-4111-8111-111111111111 and 22222222-2222-4222-8222-222222222222, or the allowed placeholders in _PLACEHOLDERS); the tests only need two different ids. Reproduced locally by running the scanner in the worktree; nothing else flagged.\n\nChecked, no findings:\n- Merge with main kept 1798's read flow and 1761's publish flow: publish_api.py / publish_jobs.py / report.html auto-merged cleanly; 1761 suites (7 files, 203 passed), 1798 inventory + 1760 api read (163 passed), 1812 warm, 1800 account-scoped table, account_spend, 1826 = 252 passed (not browser).\n- Banner shows once per run (first instance; BATCH_STOPS / AMLX_STOPS / AMAP_BATCH_STOPS paths); Retry re-sends only the stopped keys (onlyKeys / lost.map); the Node retry harness test is in the passing set. Batch id is created per run (cbNewRun, queueRun, amap run), Retry creates a new one.\n- UI text English (banner, Retry button, mlx_session messages); textContent used, no innerHTML.\n- Mutation: Retry without the stopped-keys argument (cbPublishAll(showQueue, selectedForPublish())) -> test_retry_resends_exactly_the_stopped_forms_with_one_batch_id_per_run fails (killed); 36 others pass.\nNote for integration: ACL-1819 gate must wrap cbPublishAll(onlyKeys) (unchanged note from round 2).",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -38072,20 +38090,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T23:36:45+00:00",
         "state": "reviewing"
-      },
-      "828": {
-        "id": "302fdec0f98f419dbf3aedad36ed80e3",
-        "pr": 828,
-        "issues": [
-          826
-        ],
-        "actor": "Reviewer-R1826J",
-        "session": "r1826j-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-14T23:41:48+00:00",
-        "state": "returning",
-        "report": "\ufeff# Review PR 828 (ACL-1826), head b5e3088c - CHANGES REQUESTED (CI red on the secret scan only)\nReviewer-R1826J.\n\nBlocker: scripts/acl_scan_secrets.py fails (job \"Classify and check project tooling\" -> \"Process instructions\" red):\n  tests/test_acl1826_mlx_session_lost.py:388  Multilogin profile id: 0f43865d-0000-4000-8000-...  (WS = \"0f43865d-0000-4000-8000-0000000051db\")\n  tests/test_acl1826_mlx_session_lost.py:404  Multilogin profile id: 3ef7f42d-0000-4000-8000-...  (foreign workspaceID in test_token_preflight_rejects_expired_and_foreign_workspace)\nThe first 8 hex digits look like real Multilogin workspace ids. Fix: use obviously fake ids (e.g. 11111111-1111-4111-8111-111111111111 and 22222222-2222-4222-8222-222222222222, or the allowed placeholders in _PLACEHOLDERS); the tests only need two different ids. Reproduced locally by running the scanner in the worktree; nothing else flagged.\n\nChecked, no findings:\n- Merge with main kept 1798's read flow and 1761's publish flow: publish_api.py / publish_jobs.py / report.html auto-merged cleanly; 1761 suites (7 files, 203 passed), 1798 inventory + 1760 api read (163 passed), 1812 warm, 1800 account-scoped table, account_spend, 1826 = 252 passed (not browser).\n- Banner shows once per run (first instance; BATCH_STOPS / AMLX_STOPS / AMAP_BATCH_STOPS paths); Retry re-sends only the stopped keys (onlyKeys / lost.map); the Node retry harness test is in the passing set. Batch id is created per run (cbNewRun, queueRun, amap run), Retry creates a new one.\n- UI text English (banner, Retry button, mlx_session messages); textContent used, no innerHTML.\n- Mutation: Retry without the stopped-keys argument (cbPublishAll(showQueue, selectedForPublish())) -> test_retry_resends_exactly_the_stopped_forms_with_one_batch_id_per_run fails (killed); 36 others pass.\nNote for integration: ACL-1819 gate must wrap cbPublishAll(onlyKeys) (unchanged note from round 2).",
-        "keep_lane": false
       }
     }
   }
