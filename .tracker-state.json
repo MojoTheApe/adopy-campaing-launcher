@@ -12756,7 +12756,7 @@
             "session": "run_s1815a_1012"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1815A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12774,7 +12774,8 @@
           "report": "ACL-1815 done. PR #818 (stacked on #802, CI blocked), head 540a4cf.\nEvidence join moved to src/analysis_agent/rules/evidence.py with 9 identity verdicts, asymmetric maturity windows (LATAM/GCC D=2 config), freshness, reconciliation, coverage. Inventory reads adlabels{name}, updated_time, ISO UTC read time (no extra calls).\nTests: new 30 pass; affected set 247 pass (1798 inventory tests unchanged, 57). Mutation (no rows => FTD=0) fails 2 tests; reverted."
         },
         "pr": 818,
-        "queued_at": "2026-10-12T07:41:09+00:00"
+        "queued_at": "2026-10-12T07:41:09+00:00",
+        "reviewer": "Reviewer-RRG815"
       },
       "819": {
         "implementers": [
@@ -15384,6 +15385,10 @@
       },
       "Reviewer-RRG814": {
         "session": "rrg814-20261015",
+        "role": "Reviewer"
+      },
+      "Reviewer-RRG815": {
+        "session": "rrg815-20261015",
         "role": "Reviewer"
       }
     },
@@ -17998,7 +18003,6 @@
       526,
       642,
       739,
-      815,
       816,
       819,
       822,
@@ -34799,6 +34803,13 @@
           "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T22:57:02+00:00",
+        "pr": 818,
+        "lane": "ddfc1cab76dd4ab99fda4e4b015f951a",
+        "actor": "Reviewer-RRG815"
       }
     ],
     "policy": {
@@ -37668,6 +37679,19 @@
       "started_at": "2026-10-14T22:11:37+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "818": {
+        "id": "ddfc1cab76dd4ab99fda4e4b015f951a",
+        "pr": 818,
+        "issues": [
+          815
+        ],
+        "actor": "Reviewer-RRG815",
+        "session": "rrg815-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T22:57:02+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
