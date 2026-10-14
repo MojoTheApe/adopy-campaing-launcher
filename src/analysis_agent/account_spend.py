@@ -378,9 +378,17 @@ def get_reading(account: str, date_from: str, date_to: str) -> SpendReading:
         return _restore_reading(key, raw)
 
 
+#: Те же четыре знака, что `account_spend_api._SIGNS` (импорт оттуда — цикл).
+_API_SIGNS = {"USD": "$", "EUR": "€", "GBP": "£", "ILS": "₪"}
+
+
 def _restore_reading(key: str, raw: dict) -> SpendReading:
     known = SpendReading.__dataclass_fields__
     reading = SpendReading(**{k: v for k, v in raw.items() if k in known})
+    if reading.source == "api":
+        # API-чтения до 10.10 сохраняли ISO-код («USD 179.47» не влезал в ячейку);
+        # показываем знаком, как новые чтения (`account_spend_api.display_currency`).
+        reading.currency = _API_SIGNS.get(str(reading.currency or "").strip().upper(), reading.currency)
     if reading.state == "running" and key not in _RUNNING:
         reading.state = "failed"
         reading.error = "Reading was interrupted. You can retry."
