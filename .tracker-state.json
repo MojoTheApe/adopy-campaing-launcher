@@ -12939,7 +12939,7 @@
             "session": "run_s1826a_1012"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1826A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12958,7 +12958,8 @@
         },
         "pr": 828,
         "queued_at": "2026-10-12T13:20:27+00:00",
-        "reviewer": "Reviewer-RRG826"
+        "reviewer": "Reviewer-RRG826",
+        "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "767": {
         "implementers": [
@@ -34840,6 +34841,24 @@
         "pr": 828,
         "lane": "98f9198c8206456e810d5f14a5e6d906",
         "actor": "Reviewer-RRG826"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-14T22:58:04+00:00",
+        "review": {
+          "id": "98f9198c8206456e810d5f14a5e6d906",
+          "pr": 828,
+          "issues": [
+            826
+          ],
+          "actor": "Reviewer-RRG826",
+          "session": "rrg826-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T22:57:46+00:00",
+          "state": "returning",
+          "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -37709,21 +37728,6 @@
       "started_at": "2026-10-14T22:11:37+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "828": {
-        "id": "98f9198c8206456e810d5f14a5e6d906",
-        "pr": 828,
-        "issues": [
-          826
-        ],
-        "actor": "Reviewer-RRG826",
-        "session": "rrg826-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-14T22:57:46+00:00",
-        "state": "returning",
-        "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
-        "keep_lane": false
-      }
-    }
+    "source_reviews": {}
   }
 }
