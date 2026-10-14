@@ -8620,20 +8620,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "778": {
-        "actor": "Worker-RG1778",
-        "session": "wrg1778-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1778-header-linear-toolbar",
-        "worktree": "C:\\wk-rg1778",
-        "id": "6823e6524b984b8481cbf00b53f2064e",
-        "issue": 778,
-        "state": "handoff",
-        "started_at": "2026-10-14T17:10:01+00:00",
-        "from_status": "status:todo",
-        "pr": 780,
-        "report": "# ACL-1778 refresh handoff\n\nWorker-RG1778 / wrg1778-20261014. Only change since the approved head 74128d1a (Reviewer-R1778F): merged current main 73136acc (ACL-1761 promotion, PR 914) into codex/acl-1778-header-linear-toolbar, clean merge. New head 0ef06b4c0a637b7c98f0936ab3499ca5e706ce67.\n\nChecks: tests/test_header.py, tests/test_stage_badge.py, tests/test_report_loading_stages.py, tests/test_acl_test_platform.py passed (browser deselected)."
       }
     },
     "tasks": {
@@ -12013,25 +11999,25 @@
             "session": "wrg1778-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RG1778",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1778E",
-          "session": "ws1778e-20261014",
+          "actor": "Worker-RG1778",
+          "session": "wrg1778-20261014",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1778-header-linear-toolbar",
-          "worktree": "C:\\wk-1778e",
-          "id": "f056313dad8842aeada56877c95c7b15",
+          "worktree": "C:\\wk-rg1778",
+          "id": "6823e6524b984b8481cbf00b53f2064e",
           "issue": 778,
           "state": "handoff",
-          "started_at": "2026-10-14T16:07:13+00:00",
+          "started_at": "2026-10-14T17:10:01+00:00",
           "from_status": "status:todo",
           "pr": 780,
-          "report": "\ufeffACL-1778 refresh (Worker-S1778E). Previous head c671a602 had no code defect; required source CI never ran (startup_failure during billing outage). Fresh head 74128d1a = merge of origin/main d9118413 into the branch (merge only, no rebase).\nConflicts: none (auto-merge of src/web/templates/report.html and loading.html; main's loading stages ACL-1865 and stage badge preserved alongside the 1778 header).\nTests (PYTHONUTF8=1 pytest -k \"not browser\"): tests/test_header.py, tests/test_stage_badge.py, tests/test_acl_test_platform.py, tests/test_report_loading_stages.py -> 135 passed. Header browser tests not run: free RAM 4.0 GB < 6 GB. No live calls."
+          "report": "# ACL-1778 refresh handoff\n\nWorker-RG1778 / wrg1778-20261014. Only change since the approved head 74128d1a (Reviewer-R1778F): merged current main 73136acc (ACL-1761 promotion, PR 914) into codex/acl-1778-header-linear-toolbar, clean merge. New head 0ef06b4c0a637b7c98f0936ab3499ca5e706ce67.\n\nChecks: tests/test_header.py, tests/test_stage_badge.py, tests/test_report_loading_stages.py, tests/test_acl_test_platform.py passed (browser deselected)."
         },
         "pr": 780,
-        "queued_at": "2026-10-14T16:09:24+00:00",
+        "queued_at": "2026-10-14T21:29:03+00:00",
         "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
         "return_operation": {
           "id": "1b69298ec1ec4bdda08dbb9317e6dc75",
@@ -17686,7 +17672,8 @@
       775,
       798,
       797,
-      799
+      799,
+      778
     ],
     "review": null,
     "history": [
@@ -32475,6 +32462,13 @@
             "approved_at": "2026-10-14T21:27:43+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T21:29:03+00:00",
+        "issue": 778,
+        "pr": 780,
+        "actor": "Worker-RG1778"
       }
     ],
     "policy": {
