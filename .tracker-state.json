@@ -3371,6 +3371,33 @@
         "issue_scopes": {
           "778": "f7ba65b41d297f82e266165d04c49a67f5adc1f0c97c8f32a399bd77edc687ae"
         }
+      },
+      "913": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R913B",
+        "implementer": "Coordinator-C1014I",
+        "head_sha": "2b730cb64426a4e855d273afa1483def1ba7fdf5",
+        "base_sha": "9d086716f00e07d146e5142e21866ede90bd25e0",
+        "tree_sha": "c8abd728be94f9dd2f5ff6c6c9a00e4ad8ed7f4d",
+        "execution_lane": "5988678bc34d4807b53129b46e64eb53",
+        "review_session": "r913b-20261014",
+        "batch_id": "65c0be2f589f497ca3b5fe5a96e08cda",
+        "source_heads": [
+          "e68a38d99f7e3425093e6948cfdb6434b2a1b4d9"
+        ],
+        "scope": "Combined batch 65c0be2f: ACL-1761 (PR 913 into stage); main d9118413 still current",
+        "findings": [],
+        "report": "Composition: first parent is main d9118413 (still origin/main), exactly one merge of e68a38d9 (source PR 765 head), no extra commits; batch tree c8abd728 equals source tree. PR base stage (9d086716) has the same tree as main (1b17cfeb). Source approval by Reviewer-R1761F at e68a38d9 on main d9118413 present in tracker state. CI on PR 913 (full, run on the exact head, runs 38596544418 and 38596544190): Linux 3.11 and 3.13 shards 1-3, Windows 3.13, Build/install/repair/uninstall, Verify build inputs, Installer verification, ACL verification, descriptor, tracker-link (run 38596731094, after the PR body BOM fix), Process instructions all pass; nothing reused. No live calls. Reviewer implemented nothing and is a different run from the Coordinator.",
+        "main_sha": "d911841316925665b53af7c59b7acba352773a1b",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          761
+        ],
+        "recorded_at": "2026-10-14T16:42:24+00:00",
+        "issue_scopes": {
+          "761": "bf4fb58b9f0057d5098ac960d50a4b3c8fd79998b6d9a188be263743a4e8e9df"
+        }
       }
     },
     "stage": {
