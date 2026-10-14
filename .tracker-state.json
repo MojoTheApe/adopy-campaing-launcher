@@ -14575,6 +14575,10 @@
       "Coordinator-C1014I": {
         "session": "coord-c1014i-20261014",
         "role": "Coordinator"
+      },
+      "Reviewer-R901B": {
+        "session": "r901b-20261014",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -17098,7 +17102,23 @@
       907,
       891
     ],
-    "review": null,
+    "review": {
+      "id": "f982c7cf184040cca87f98498cffd33e",
+      "batch_id": "e2b8b7079a31457bb2cc23294dabdd46",
+      "pr": 901,
+      "issues": [
+        781,
+        782,
+        783,
+        786,
+        806
+      ],
+      "actor": "Reviewer-R901B",
+      "session": "r901b-20261014",
+      "coordinator": "Coordinator-C1014I",
+      "state": "reviewing",
+      "started_at": "2026-10-14T14:10:21+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -30525,6 +30545,27 @@
         },
         "actor": "Coordinator-C1014I",
         "reason": "Owner instruction 2026-10-14: drive all approved work to main without stopping. Coordinator-S43F9A0 session idle since 13:15 UTC+3 with the batch in assembling since 11:46 and PR 901 CI green; informed by message. Frozen membership and evidence unchanged."
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-14T14:10:21+00:00",
+        "review": {
+          "id": "f982c7cf184040cca87f98498cffd33e",
+          "batch_id": "e2b8b7079a31457bb2cc23294dabdd46",
+          "pr": 901,
+          "issues": [
+            781,
+            782,
+            783,
+            786,
+            806
+          ],
+          "actor": "Reviewer-R901B",
+          "session": "r901b-20261014",
+          "coordinator": "Coordinator-C1014I",
+          "state": "reviewing",
+          "started_at": "2026-10-14T14:10:21+00:00"
+        }
       }
     ],
     "policy": {
@@ -32045,7 +32086,7 @@
       "id": "e2b8b7079a31457bb2cc23294dabdd46",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         781,
         782,
@@ -32299,7 +32340,7 @@
       "branch": "codex/batch-e2b8b7079a31457bb2cc23294dabdd46",
       "intake": "7192c0e6149f48febbf422a0b5c591c9",
       "started_at": "2026-10-14T11:46:01+00:00",
-      "pr": null,
+      "pr": 901,
       "entered_stage": false,
       "history": [
         {
