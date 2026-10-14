@@ -8611,6 +8611,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T17:01:32+00:00",
         "from_status": "status:todo"
+      },
+      "766": {
+        "actor": "Worker-RF1766",
+        "session": "wrf1766-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1766-map-pixel",
+        "worktree": "C:\\wk-rf1766",
+        "id": "b1c4e888964a45e593da0b270a53cf71",
+        "issue": 766,
+        "state": "implementing",
+        "started_at": "2026-10-14T17:04:27+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12160,10 +12172,14 @@
           {
             "actor": "Worker-S1766A",
             "session": "run_s1766a_1011"
+          },
+          {
+            "actor": "Worker-RF1766",
+            "session": "wrf1766-20261014"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1766A",
+        "state": "implementing",
+        "worker": "Worker-RF1766",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1766A",
@@ -12181,7 +12197,6 @@
         },
         "pr": 794,
         "queued_at": "2026-10-11T18:25:16+00:00",
-        "reviewer": "Reviewer-RRF766",
         "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "798": {
@@ -15033,6 +15048,10 @@
       },
       "Worker-RF1769": {
         "session": "wrf1769-20261014",
+        "role": "Worker"
+      },
+      "Worker-RF1766": {
+        "session": "wrf1766-20261014",
         "role": "Worker"
       }
     },
@@ -32290,6 +32309,13 @@
         "issue": 769,
         "pr": 796,
         "actor": "Worker-RF1769"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T17:04:27+00:00",
+        "issue": 766,
+        "claim": "b1c4e888964a45e593da0b270a53cf71",
+        "actor": "Worker-RF1766"
       }
     ],
     "policy": {
