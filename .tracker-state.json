@@ -8140,9 +8140,11 @@
         "worktree": "C:\\wkf-1761",
         "id": "79189bfeda39447984f2d6e2975c4272",
         "issue": 761,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T09:30:02+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 765,
+        "report": "# Handoff ACL-1761 (PR #765)\nScope: fixes for the returned review. Merged origin/main into codex/acl-1761-api-create (conflict in tests/test_acl1756_fb_api.py resolved with main's log-filter fixture); marked the Windows-only lines in tests/test_acl1761_hang_logout.py with `# linux-ok:` comments.\nChecks: head afbe97b1; local test_acl_test_platform, test_acl1761_hang_logout, test_acl1756_fb_api 232 passed; GitHub CI all green except tracker-link, which requires Review status (this handoff).\nRemaining risks: none known; descendants #796/#802/#813 merge this branch next."
       }
     },
     "tasks": {
