@@ -50,6 +50,7 @@ from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.web.publish_jobs import DuplicateJobError, get_job, start_job, cancel_job
 from src.web.cache import (
     background_build_state,
+    background_progress_callback,
     cache_built_at,
     cache_clear,
     forget_background_error,
@@ -702,7 +703,7 @@ def _build_account_map_view(
                 # account_name_rules.json), а не угадано по хвосту
                 "workbook_alias_exact": alias_exact,
                 # страны, под которыми числа этого аккаунта лежат на самом деле
-                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, label),
+                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, alias or label),
                 # состояние кабинета — без периода: спенд отвечает «сколько за
                 # эти дни», состояние — «что с ним сейчас»
                 "status": _account_status(label),
@@ -767,9 +768,9 @@ def _build_account_map_view(
             "country": country_name,
             "key": stored,
             "rows": rows,
-            "spend": sum(r["spend"] or 0 for r in rows),
-            "leads": sum(r["leads"] or 0 for r in rows),
-            "deposits": sum(r["deposits"] or 0 for r in rows),
+            "spend": sum(r["spend"] or 0 for r in _rows_counted_once(rows)),
+            "leads": sum(r["leads"] or 0 for r in _rows_counted_once(rows)),
+            "deposits": sum(r["deposits"] or 0 for r in _rows_counted_once(rows)),
             "live_read": live_read,
             "live_sums": [
                 {"currency": c, "spend": s} for c, s in sorted(live_sums.items())
@@ -1964,6 +1965,47 @@ def _account_tail(name: str) -> str:
     return core[-3:].upper() if len(core) >= 3 else ""
 
 
+#: ACL-1824: id рекламного кабинета в конце подписи — не короче 8 цифр.
+#: Короткий числовой хвост (`Acme_123`) — часть имени, а не id кабинета.
+_ID_SUFFIX_MIN_DIGITS = 8
+_ID_SUFFIX_RE = re.compile(r"^(?P<alias>.+?)_(?P<digits>\d{%d,})$" % _ID_SUFFIX_MIN_DIGITS)
+
+
+def _rows_counted_once(rows: list) -> list:
+    """Строки страны для итогов: один алиас книги — один раз.
+
+    ACL-1824: `Facebook_5265_<id>` и `Facebook_5265` оба сводятся к одному
+    алиасу книги и показывают одни и те же числа. Строки остаются обе, а в
+    итог страны идёт только одна — предпочтительно та, что названа алиасом.
+    """
+    seen: dict = {}
+    for r in rows:
+        if not r.get("has_data"):
+            continue
+        key = _account_key(r.get("workbook_alias") or r.get("account"))
+        cur = seen.get(key)
+        if cur is None or (cur.get("workbook_alias") and not r.get("workbook_alias")):
+            seen[key] = r
+    keep = {id(r) for r in seen.values()}
+    return [r for r in rows if not r.get("has_data") or id(r) in keep]
+
+
+def _alias_without_id_suffix(label: str, known) -> str:
+    """Имя из книги для подписи `<имя>_<id кабинета>` — или пусто.
+
+    Берётся только единственное имя: два разных алиаса в книге — это не
+    «выберем первое», а отказ, как и у хвостовой догадки.
+    """
+    m = _ID_SUFFIX_RE.match((label or "").strip())
+    if not m:
+        return ""
+    want = _account_key(m.group("alias"))
+    if not want:
+        return ""
+    hits = {str(a).strip() for a in known if _account_key(a) == want}
+    return next(iter(hits)) if len(hits) == 1 else ""
+
+
 def _alias_by_tail(label: str, known: dict) -> str:
     """Имя из книги для подключённого аккаунта — или пусто.
 
@@ -1989,7 +2031,11 @@ def _alias_by_tail(label: str, known: dict) -> str:
         a for a in known
         if _account_tail(a) == tail and a.casefold() != (label or "").casefold()
     ]
-    return hits[0] if len(hits) == 1 else ""
+    if hits:
+        return hits[0] if len(hits) == 1 else ""
+    # ACL-1824: суффикс id — только последняя попытка; прежнее совпадение
+    # по хвосту и отказ при его неоднозначности сохраняют приоритет.
+    return _alias_without_id_suffix(label, known)
 
 
 #: ACL-1729: индекс алиасов книги по странам — один слот на одну книгу.
@@ -2217,17 +2263,22 @@ def _page_ready(date_from: str, date_to: str, span: str) -> bool:
         return False
 
 
-def _warm_page(date_from: str, date_to: str, span: str) -> None:
+def _warm_page(date_from: str, date_to: str, span: str, my_cm: str) -> None:
     """Фоновая сборка ровно того, что нужно странице: отчёт и её период."""
-    report, df, _warnings = get_cached_report()
+    progress = background_progress_callback()
+    report, df, _warnings = get_cached_report(my_cm=my_cm, progress=progress)
+    progress("preparing")
     date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
     report_for_period(report, df, date_from, date_to)
 
 
 def _start_warm(date_from: str, date_to: str, span: str) -> None:
+    from src.web.buyer import get_selected_cm
+
+    my_cm = get_selected_cm()
     start_background_build(
-        functools.partial(_warm_page, date_from, date_to, span),
-        token=(date_from, date_to, span),
+        functools.partial(_warm_page, date_from, date_to, span, my_cm),
+        token=(date_from, date_to, span, my_cm),
     )
 
 
@@ -2255,16 +2306,25 @@ async def report_status(date_from: str = "", date_to: str = "", span: str = "") 
     Отвечает сразу — ничего не собирает и не ждёт. Если ни готово, ни идёт
     (например, сборку начал другой период), запускает фоновую сборку сам.
     """
+    from src.web.buyer import get_selected_cm
+
+    token = (date_from, date_to, span, get_selected_cm())
     ready = _page_ready(date_from, date_to, span)
     state = background_build_state()
-    if not ready and not state["building"] and not state["error"]:
+    own_build = state["token"] == token
+    error = state["error"] if own_build else None
+    if not ready and not state["building"] and not error:
         _start_warm(date_from, date_to, span)
         state = background_build_state()
+        own_build = state["token"] == token
+        error = state["error"] if own_build else None
     return JSONResponse({
         "ready": ready,
         "building": state["building"],
-        "error": state["error"],
+        "error": error,
         "built_at": cache_built_at(),
+        "stage": "ready" if ready else state["stage"] if own_build else None,
+        "waiting": not ready and state["building"] and not own_build,
     })
 
 

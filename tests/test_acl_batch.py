@@ -9,8 +9,8 @@ import pytest
 from scripts import acl_batch
 
 
-@pytest.fixture
-def fixture(tmp_path, monkeypatch):
+@pytest.fixture(params=[2, 3], ids=["v2", "v3-five-reviews"])
+def fixture(tmp_path, monkeypatch, request):
     root = tmp_path / "checkout"
     root.mkdir()
     def git(*args):
@@ -18,10 +18,13 @@ def fixture(tmp_path, monkeypatch):
     git("init", "-q", "-b", "main")
     git("config", "user.name", "Independent source fixture")
     git("config", "user.email", "batch@example.invalid")
-    policy = {"schema_version": 2, "implementation_limit": 5, "review_limit": 1, "batch_limit": 5}
+    policy = {"schema_version": request.param, "implementation_limit": 5,
+              "review_limit": 5 if request.param == 3 else 1, "batch_limit": 5}
     (root / "tracker").mkdir()
     (root / "tracker/config.json").write_text(json.dumps({"execution_policy": policy,
-        "project": {"repository": acl_batch.REPOSITORY, "id_prefix": "ACL", "id_offset": 1000}}))
+        "delivery_policy": {"schema_version": 1, "staging": {"enabled": True, "branch": "stage", "target": "test stage"},
+            "completion": "verified-stable-package", "required_checks": ["ACL verification"], "delivery_target": "test installer"},
+        "project": {"repository": acl_batch.REPOSITORY, "base_branch": "main", "id_prefix": "ACL", "id_offset": 1000}}))
     (root / "app.py").write_text("base\n")
     git("add", "."); git("commit", "-qm", "base")
     baseline = git("rev-parse", "HEAD")
@@ -48,6 +51,9 @@ def fixture(tmp_path, monkeypatch):
     batch = {"id": "a"*32, "actor": "Coordinator-TEST", "session": "coordinator_test", "state": "assembling",
         "branch": "codex/batch-" + "a"*32, "main_sha": baseline, "issues": [1,2], "members": sources, "pr": None}
     section = {"policy": policy, "integration": batch, "review": None}
+    if request.param == 3:
+        section["source_reviews"] = {str(100+n): {"id": str(n) * 32, "actor": "Reviewer-POOL" + str(n),
+            "session": "source_review_" + str(n), "pr": 100+n, "issues": [100+n]} for n in range(1, 6)}
     prs = {m["pr"]: {"state": "open", "merged": False, "draft": False,
         "head": {"sha": m["head_sha"], "ref": m["branch"], "repo": {"full_name": acl_batch.REPOSITORY}}} for m in sources}
     def request(path):
@@ -65,6 +71,7 @@ def fixture(tmp_path, monkeypatch):
 def test_real_two_author_assembly_preserves_exact_source_commits(fixture):
     root, _, section, _, assemble = fixture
     original = acl_batch.git(root, "rev-parse", "main")
+    original_owners = copy.deepcopy(section.get("source_reviews"))
     plan = assemble()
     assert not plan["applied"] and "Tracker issues: ACL-1001, ACL-1002" in plan["body"]
     result = assemble(apply=True)
@@ -75,6 +82,15 @@ def test_real_two_author_assembly_preserves_exact_source_commits(fixture):
         subprocess.run(["git", "-C", str(worktree), "merge-base", "--is-ancestor", member["head_sha"], "HEAD"], check=True)
         assert acl_batch.git(root, "rev-parse", member["branch"]) == member["head_sha"]
     assert len(acl_batch.git(worktree, "rev-list", "--merges", original + "..HEAD").splitlines()) == 2
+    assert section.get("source_reviews") == original_owners
+
+
+def test_held_integration_review_still_blocks_assembly(fixture):
+    root, _, section, _, assemble = fixture
+    section["review"] = {"id": "b" * 32, "batch_id": section["integration"]["id"]}
+    with pytest.raises(ValueError, match="Finish the active review"):
+        assemble(apply=True)
+    assert not (root.parent / "integration").exists()
 
 
 def test_foreign_or_changed_claim_stops_before_any_worktree(fixture):
