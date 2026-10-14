@@ -1,0 +1,24 @@
+{
+  "api_version_current": "v26.0",
+  "api_versions": [
+    {
+      "version": "v26.0",
+      "released": "2026-07-29",
+      "end_of_support": null
+    },
+    {
+      "version": "v25.0",
+      "released": "2026-02-18",
+      "end_of_support": null
+    },
+    {
+      "version": "v24.0",
+      "released": "2025-10-08",
+      "end_of_support": "2026-10-06"
+    }
+  ],
+  "checked_date": "2026-10-11",
+  "sources": [
+    "https://developers.facebook.com/docs/graph-api/changelog"
+  ]
+}

@@ -21,6 +21,9 @@ class StartedProfile:
     folder_id: str
     port: str | None = None
     ws_endpoint: str | None = None
+    # Аддитивный признак (ACL-1760): True только когда запуск был настоящим стартом.
+    # Ответ 409 / «уже запущен» его не ставит: профиль чужой, закрывать его нельзя.
+    newly_started: bool = False
 
 
 class MultiloginLauncher:
@@ -133,6 +136,7 @@ class MultiloginLauncher:
             folder_id=resolved_folder or "",
             port=str(port) if port else None,
             ws_endpoint=str(ws).strip() if ws else None,
+            newly_started=True,
         )
 
     def _get_running_profile_port(self, profile_id: str) -> str | None:
