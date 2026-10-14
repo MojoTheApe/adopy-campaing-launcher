@@ -8866,20 +8866,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "826": {
-        "actor": "Worker-S1826K",
-        "session": "ws1826k-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1826-mlx-session-lost",
-        "worktree": "C:\\wk-1826k",
-        "id": "a9b121ebe3a64f90aca6b572fd28a034",
-        "issue": 826,
-        "state": "handoff",
-        "started_at": "2026-10-14T23:44:51+00:00",
-        "from_status": "status:todo",
-        "pr": 828,
-        "report": "# Return 826 r1826j: fixed\n\nPR 828, branch codex/acl-1826-mlx-session-lost.\nFinding: acl_scan_secrets flagged test_acl1826_mlx_session_lost.py:388 and :404 (workspace ids that looked real).\nFix: replaced with the scanner's allowlisted placeholder UUIDs (RFC 4122 examples); the tests only need two distinct values.\nChecks: scripts/acl_scan_secrets.py on the whole branch: clean (rc=0), including tests/test_acl1800_campaign_commands.py.\nTests: tests/test_acl1826_mlx_session_lost.py -k \"not browser\": 37 passed."
       }
     },
     "tasks": {
@@ -12990,25 +12976,25 @@
             "session": "ws1826k-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1826K",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-RH1826",
-          "session": "wrh1826-20261015",
+          "actor": "Worker-S1826K",
+          "session": "ws1826k-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1826-mlx-session-lost",
-          "worktree": "C:\\wk-rh1826",
-          "id": "8e9044a0151543c786a59d692cd967ed",
+          "worktree": "C:\\wk-1826k",
+          "id": "a9b121ebe3a64f90aca6b572fd28a034",
           "issue": 826,
           "state": "handoff",
-          "started_at": "2026-10-14T23:11:53+00:00",
+          "started_at": "2026-10-14T23:44:51+00:00",
           "from_status": "status:todo",
           "pr": 828,
-          "report": "# ACL-1826 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1826-mlx-session-lost; head b5e3088c.\nConflict: docs/system/CHANGELOG.md only (both sides added entries at top); kept both. Code (publish_api.py, publish_jobs.py, report.html) auto-merged.\nTests: all 23 test files differing from main plus test_acl1761_* with -k 'not browser': 830 passed, 2 skipped."
+          "report": "# Return 826 r1826j: fixed\n\nPR 828, branch codex/acl-1826-mlx-session-lost.\nFinding: acl_scan_secrets flagged test_acl1826_mlx_session_lost.py:388 and :404 (workspace ids that looked real).\nFix: replaced with the scanner's allowlisted placeholder UUIDs (RFC 4122 examples); the tests only need two distinct values.\nChecks: scripts/acl_scan_secrets.py on the whole branch: clean (rc=0), including tests/test_acl1800_campaign_commands.py.\nTests: tests/test_acl1826_mlx_session_lost.py -k \"not browser\": 37 passed."
         },
         "pr": 828,
-        "queued_at": "2026-10-14T23:17:10+00:00",
+        "queued_at": "2026-10-14T23:50:19+00:00",
         "review_report": "\ufeff# Review PR 828 (ACL-1826), head b5e3088c - CHANGES REQUESTED (CI red on the secret scan only)\nReviewer-R1826J.\n\nBlocker: scripts/acl_scan_secrets.py fails (job \"Classify and check project tooling\" -> \"Process instructions\" red):\n  tests/test_acl1826_mlx_session_lost.py:388  Multilogin profile id: 0f43865d-0000-4000-8000-...  (WS = \"0f43865d-0000-4000-8000-0000000051db\")\n  tests/test_acl1826_mlx_session_lost.py:404  Multilogin profile id: 3ef7f42d-0000-4000-8000-...  (foreign workspaceID in test_token_preflight_rejects_expired_and_foreign_workspace)\nThe first 8 hex digits look like real Multilogin workspace ids. Fix: use obviously fake ids (e.g. 11111111-1111-4111-8111-111111111111 and 22222222-2222-4222-8222-222222222222, or the allowed placeholders in _PLACEHOLDERS); the tests only need two different ids. Reproduced locally by running the scanner in the worktree; nothing else flagged.\n\nChecked, no findings:\n- Merge with main kept 1798's read flow and 1761's publish flow: publish_api.py / publish_jobs.py / report.html auto-merged cleanly; 1761 suites (7 files, 203 passed), 1798 inventory + 1760 api read (163 passed), 1812 warm, 1800 account-scoped table, account_spend, 1826 = 252 passed (not browser).\n- Banner shows once per run (first instance; BATCH_STOPS / AMLX_STOPS / AMAP_BATCH_STOPS paths); Retry re-sends only the stopped keys (onlyKeys / lost.map); the Node retry harness test is in the passing set. Batch id is created per run (cbNewRun, queueRun, amap run), Retry creates a new one.\n- UI text English (banner, Retry button, mlx_session messages); textContent used, no innerHTML.\n- Mutation: Retry without the stopped-keys argument (cbPublishAll(showQueue, selectedForPublish())) -> test_retry_resends_exactly_the_stopped_forms_with_one_batch_id_per_run fails (killed); 36 others pass.\nNote for integration: ACL-1819 gate must wrap cbPublishAll(onlyKeys) (unchanged note from round 2)."
       },
       "767": {
@@ -18137,7 +18123,8 @@
       907,
       891,
       799,
-      814
+      814,
+      826
     ],
     "review": null,
     "history": [
@@ -35310,6 +35297,13 @@
             "approved_at": "2026-10-14T23:47:23+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T23:50:19+00:00",
+        "issue": 826,
+        "pr": 828,
+        "actor": "Worker-S1826K"
       }
     ],
     "policy": {
