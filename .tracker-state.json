@@ -8252,18 +8252,6 @@
   },
   "execution": {
     "claims": {
-      "880": {
-        "actor": "Worker-PG86",
-        "session": "01a135aa-a82d-77d2-8057-5116cc969c86",
-        "coordinator": "Coordinator-PG86",
-        "branch": "codex/facebook-page-selection",
-        "worktree": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\facebook-page-selection",
-        "id": "d42467eff1cd4f759bcc0f07fd77c4c6",
-        "issue": 880,
-        "state": "implementing",
-        "started_at": "2026-10-13T16:13:25+00:00",
-        "from_status": "status:todo"
-      },
       "872": {
         "actor": "Worker-IS1013",
         "session": "isolated_app_sol_20261013",
@@ -8310,6 +8298,18 @@
         "issue": 903,
         "state": "implementing",
         "started_at": "2026-10-14T12:42:31+00:00",
+        "from_status": "status:todo"
+      },
+      "880": {
+        "actor": "Worker-T880R",
+        "session": "t880r-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/facebook-page-selection",
+        "worktree": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\facebook-page-selection",
+        "id": "7b0fb36cfdb4465497a95e3dcd5203dd",
+        "issue": 880,
+        "state": "implementing",
+        "started_at": "2026-10-14T12:48:16+00:00",
         "from_status": "status:todo"
       }
     },
@@ -13164,11 +13164,15 @@
           {
             "actor": "Worker-PG86",
             "session": "01a135aa-a82d-77d2-8057-5116cc969c86"
+          },
+          {
+            "actor": "Worker-T880R",
+            "session": "t880r-20261014"
           }
         ],
         "state": "implementing",
-        "worker": "Worker-PG86",
-        "coordinator": "Coordinator-PG86",
+        "worker": "Worker-T880R",
+        "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-FIVE874",
           "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
@@ -14515,6 +14519,10 @@
       },
       "Worker-W1903X": {
         "session": "wk_w1903x_1014",
+        "role": "Worker"
+      },
+      "Worker-T880R": {
+        "session": "t880r-20261014",
         "role": "Worker"
       }
     },
@@ -30051,6 +30059,25 @@
         "issue": 903,
         "claim": "b72ed854b54740e698bb4509d6b03c09",
         "actor": "Worker-W1903X"
+      },
+      {
+        "event": "takeover",
+        "at": "2026-10-14T12:48:16+00:00",
+        "issue": 880,
+        "previous": {
+          "actor": "Worker-PG86",
+          "session": "01a135aa-a82d-77d2-8057-5116cc969c86",
+          "coordinator": "Coordinator-PG86",
+          "branch": "codex/facebook-page-selection",
+          "worktree": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\facebook-page-selection",
+          "id": "d42467eff1cd4f759bcc0f07fd77c4c6",
+          "issue": 880,
+          "state": "implementing",
+          "started_at": "2026-10-13T16:13:25+00:00",
+          "from_status": "status:todo"
+        },
+        "claim": "7b0fb36cfdb4465497a95e3dcd5203dd",
+        "reason": "Owner instruction 2026-10-14 in chat: release the idle ACL-1880 claim (Worker-PG86, idle since 2026-10-13 16:13) so ACL-1760 can be claimed; transferred only to stop it, branch untouched"
       }
     ],
     "policy": {
