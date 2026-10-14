@@ -8854,9 +8854,11 @@
         "worktree": "C:\\wk-1814k",
         "id": "4f5c4fa92de2484380f20414b5454594",
         "issue": 814,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T23:34:52+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 817,
+        "report": "# ACL-1814 return fix - Worker-S1814K, head 760d20d3 (was 57ef3da6)\n\nChanged: src/analysis_agent/rules/store.py, tests/test_rules_store.py. No ACL-1800 files touched.\n\n1. Automatic gate. Module constant AUTOMATIC_AVAILABLE = False; overridable only by env ACL_RULES_AUTOMATIC=1 (exactly \"1\"). grant_automatic() raises RuleValidationError and set_automatic_enabled(True) raises RulesStoreError, both with \"Automatic mode is not available yet.\" A stored rule with mode automatic loads as Suggest (grant dropped, persisted, logged) while the gate is off; a stored automatic_enabled=true reads as False. Disabling the flag is still allowed.\n2. schema_version 1 written on save to rules.json and rules_settings.json. Missing -> treated as 1 and persisted (grants are not lost). Newer -> SchemaTooNew, file never overwritten; invalid values (0, -1, \"1\", true, 1.5) refused too.\n3. Malformed rule (no versions, bad/missing current_version, empty versions) is skipped by list_rules, reported in store.problems and via list_rules_checked() -> (rules, problems), id logged as a warning. get_rule names the rule in the error. The bad rule stays on disk.\n\nTests: tests/test_rules_store.py + tests/test_goals.py, 101 passed (-k \"not browser\"). Existing grant tests run with an autouse fixture setting the env gate; new tests cover gate refusal (grant, enable, env value), stored automatic -> Suggest, flag reads off, schema cases (missing, newer rules, newer settings, invalid), quarantine x4.\n\nMutations (each reverted, each caught):\n- allow grant_automatic with gate off: test_gate_refuses_grant fails.\n- allow enable with gate off: 2 tests fail.\n- skip load downgrade: test_stored_automatic_loads_as_suggest_while_gate_off fails.\n- disable newer-schema refusal: 2 tests fail.\n\nNot done: CI secret-scan finding act_9999999999 in tests/test_acl1800_campaign_commands.py:720 belongs to PR 802 stack. No CHANGELOG entry added (no 1814 entry exists in the changelogs)."
       },
       "826": {
         "actor": "Worker-S1826K",
