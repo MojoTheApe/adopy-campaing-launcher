@@ -11821,7 +11821,7 @@
             "session": "ws1761e-20261014"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1761E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11840,7 +11840,8 @@
         },
         "pr": 765,
         "queued_at": "2026-10-14T15:38:15+00:00",
-        "review_report": "\ufeff# Return ACL-1761 for a dependency refresh\n\nACL-1760 reached main (batch 0c5aecbd, PR 911 -> 912) with the review fixes P1 (newly_started: an already-running profile is never stopped) and P2 (truncation marking on a usage stop). PR 765 still carries the older copy of the 1760 commits. Required: merge current main into codex/acl-1761-api-create (merge, no rebase), keep main's fixed 1760 behaviour, re-run the 1761/1760/1756 tests, hand off again for fresh review. No other finding was examined in this return."
+        "review_report": "\ufeff# Return ACL-1761 for a dependency refresh\n\nACL-1760 reached main (batch 0c5aecbd, PR 911 -> 912) with the review fixes P1 (newly_started: an already-running profile is never stopped) and P2 (truncation marking on a usage stop). PR 765 still carries the older copy of the 1760 commits. Required: merge current main into codex/acl-1761-api-create (merge, no rebase), keep main's fixed 1760 behaviour, re-run the 1761/1760/1756 tests, hand off again for fresh review. No other finding was examined in this return.",
+        "reviewer": "Reviewer-R1761F"
       },
       "778": {
         "implementers": [
@@ -14821,6 +14822,10 @@
       "Worker-S1778E": {
         "session": "ws1778e-20261014",
         "role": "Worker"
+      },
+      "Reviewer-R1761F": {
+        "session": "r1761f-20261014",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -17402,7 +17407,6 @@
       903,
       907,
       891,
-      761,
       778
     ],
     "review": null,
@@ -31517,6 +31521,13 @@
         "issue": 778,
         "pr": 780,
         "actor": "Worker-S1778E"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T16:09:49+00:00",
+        "pr": 765,
+        "lane": "1d10aaabe2604db69c4fe9db944c8594",
+        "actor": "Reviewer-R1761F"
       }
     ],
     "policy": {
@@ -33422,6 +33433,19 @@
       "started_at": "2026-10-14T15:01:24+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "765": {
+        "id": "1d10aaabe2604db69c4fe9db944c8594",
+        "pr": 765,
+        "issues": [
+          761
+        ],
+        "actor": "Reviewer-R1761F",
+        "session": "r1761f-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T16:09:49+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
