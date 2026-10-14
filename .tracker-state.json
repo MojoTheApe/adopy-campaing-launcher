@@ -8620,9 +8620,11 @@
         "worktree": "C:\\wk-rf1769",
         "id": "f9f0c3b613bf4bf5905aed2b6ef4e17d",
         "issue": 769,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T17:01:49+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 796,
+        "report": "Merged current origin/main (73136acc) into codex/acl-1769-two-column-builder (merge only). Result head: da368fcfebe45d0d57ecbedc3368f8efed852013.\n\nConflicts: none (ort auto-merge). Main's ACL-1760/1761 behaviour untouched.\n\nTests (-k 'not browser'): test_acl1769_two_column_layout, test_builder_duplicate_buttons, test_builder_second_primary_text, test_the_builder_drawer, test_acl1760_api_read, test_acl1761_*: 338 passed, 2 deselected, 0 failed. No test edits."
       }
     },
     "tasks": {
