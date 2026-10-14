@@ -8857,6 +8857,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T22:59:32+00:00",
         "from_status": "status:todo"
+      },
+      "800": {
+        "actor": "Worker-RH11800",
+        "session": "wrh11800-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1800-campaign-commands",
+        "worktree": "C:\\wk-rh11800",
+        "id": "e145e7a176074f6e8846f7361ee45f87",
+        "issue": 800,
+        "state": "implementing",
+        "started_at": "2026-10-14T23:03:39+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12525,11 +12537,15 @@
           {
             "actor": "Worker-W1014F",
             "session": "w1014f-20261014"
+          },
+          {
+            "actor": "Worker-RH11800",
+            "session": "wrh11800-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-W1014F",
-        "coordinator": "Coordinator-T1014C",
+        "state": "implementing",
+        "worker": "Worker-RH11800",
+        "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-W1014F",
           "session": "w1014f-20261014",
@@ -12546,8 +12562,7 @@
         },
         "pr": 802,
         "queued_at": "2026-10-14T10:59:17+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
-        "reviewer": "Reviewer-RRG800"
+        "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "799": {
         "implementers": [
@@ -15410,6 +15425,10 @@
       },
       "Worker-RJ1797": {
         "session": "wrj1797-20261015",
+        "role": "Worker"
+      },
+      "Worker-RH11800": {
+        "session": "wrh11800-20261015",
         "role": "Worker"
       }
     },
@@ -34895,6 +34914,13 @@
         "issue": 775,
         "pr": 809,
         "actor": "Worker-RH1775"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T23:03:39+00:00",
+        "issue": 800,
+        "claim": "e145e7a176074f6e8846f7361ee45f87",
+        "actor": "Worker-RH11800"
       }
     ],
     "policy": {
