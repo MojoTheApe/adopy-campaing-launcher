@@ -12518,7 +12518,7 @@
             "session": "w1014f-20261014"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1014F",
         "coordinator": "Coordinator-T1014C",
         "handoff": {
@@ -12537,7 +12537,8 @@
         },
         "pr": 802,
         "queued_at": "2026-10-14T10:59:17+00:00",
-        "review_report": "# Review return: PR #802 (ACL-1800), head 11f7c46c6ba1 (CI run 38258688981 is for this head)\n\nRed: Classify and check project tooling, Process instructions, linux tests (3.11 shards 1,2; 3.13 shards 1,2), windows tests, ACL verification (aggregate). Green: descriptor, tracker-link, Verify build inputs, Installer verification, Build/install.\n\n## Root causes (from logs)\n1. `tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` (fails in classify, process instructions, linux and windows jobs) -- `tests/test_acl1761_hang_logout.py:255,256 [backslash-path], :268 [platform-branch], :275 [windll]`. Fix: `pytestmark = pytest.mark.windows_only(reason=...)` or `# linux-ok:` comments (fix originates in #765).\n2. `tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards` -- `AssertionError: [35, 41, 33]`, max-min must be <= 3. Browser test files added by the stack unbalance the shards; adjust the shard assignment / weights so the spread is <= 3 (check after merging main, counts change).\n3. `tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` -- node `ReferenceError: window is not defined` at report.html (compiled line 1384): `if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE)`. In the test VM `document` is stubbed but `window` is not. Fix in template: guard with `typeof window !== 'undefined'` (preferred, product code) or add `window` to the test harness.\n4. Not applicable at this head: Cyrillic `[x\u0445\u00d7]` in report.html, `tzdata` in requirements.txt, tracker-link (green).\n\n## Conflict with main\nCONFLICTING: `docs/system/CHANGELOG.md` and `tests/test_acl1756_fb_api.py` (content). Merge parents in stack order (#765, #796 fixed) and then current origin/main into this branch; resolve both files keeping both sides; push.\n\n## Required fixes (stack order)\nAfter #765 and #796 are fixed and merged in: merge origin/main, resolve conflicts, fix items 2 and 3 (item 1 comes from #765). Re-run the affected tests (test_acl_test_platform, test_acl_test_shard, test_review_ui_regressions, test_acl1800_*) and full CI."
+        "review_report": "# Review return: PR #802 (ACL-1800), head 11f7c46c6ba1 (CI run 38258688981 is for this head)\n\nRed: Classify and check project tooling, Process instructions, linux tests (3.11 shards 1,2; 3.13 shards 1,2), windows tests, ACL verification (aggregate). Green: descriptor, tracker-link, Verify build inputs, Installer verification, Build/install.\n\n## Root causes (from logs)\n1. `tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` (fails in classify, process instructions, linux and windows jobs) -- `tests/test_acl1761_hang_logout.py:255,256 [backslash-path], :268 [platform-branch], :275 [windll]`. Fix: `pytestmark = pytest.mark.windows_only(reason=...)` or `# linux-ok:` comments (fix originates in #765).\n2. `tests/test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards` -- `AssertionError: [35, 41, 33]`, max-min must be <= 3. Browser test files added by the stack unbalance the shards; adjust the shard assignment / weights so the spread is <= 3 (check after merging main, counts change).\n3. `tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status` -- node `ReferenceError: window is not defined` at report.html (compiled line 1384): `if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE)`. In the test VM `document` is stubbed but `window` is not. Fix in template: guard with `typeof window !== 'undefined'` (preferred, product code) or add `window` to the test harness.\n4. Not applicable at this head: Cyrillic `[x\u0445\u00d7]` in report.html, `tzdata` in requirements.txt, tracker-link (green).\n\n## Conflict with main\nCONFLICTING: `docs/system/CHANGELOG.md` and `tests/test_acl1756_fb_api.py` (content). Merge parents in stack order (#765, #796 fixed) and then current origin/main into this branch; resolve both files keeping both sides; push.\n\n## Required fixes (stack order)\nAfter #765 and #796 are fixed and merged in: merge origin/main, resolve conflicts, fix items 2 and 3 (item 1 comes from #765). Re-run the affected tests (test_acl_test_platform, test_acl_test_shard, test_review_ui_regressions, test_acl1800_*) and full CI.",
+        "reviewer": "Reviewer-RRG800"
       },
       "799": {
         "implementers": [
@@ -15374,6 +15375,10 @@
       "Reviewer-R915B": {
         "session": "r915b-20261015",
         "role": "Reviewer"
+      },
+      "Reviewer-RRG800": {
+        "session": "rrg800-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18002,7 +18007,6 @@
       845,
       840,
       841,
-      800,
       812,
       903,
       907,
@@ -34740,6 +34744,13 @@
           "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
         },
         "batch_id": null
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T22:55:33+00:00",
+        "pr": 802,
+        "lane": "f2e518978b5c45e19293736e1b54ff26",
+        "actor": "Reviewer-RRG800"
       }
     ],
     "policy": {
@@ -37609,6 +37620,19 @@
       "started_at": "2026-10-14T22:11:37+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "802": {
+        "id": "f2e518978b5c45e19293736e1b54ff26",
+        "pr": 802,
+        "issues": [
+          800
+        ],
+        "actor": "Reviewer-RRG800",
+        "session": "rrg800-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T22:55:33+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
