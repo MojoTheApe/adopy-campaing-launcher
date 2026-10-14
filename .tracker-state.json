@@ -8629,9 +8629,11 @@
         "worktree": "C:\\wk-1769g",
         "id": "7730a02547054ae2903a0abf04c3f7a8",
         "issue": 769,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T21:30:37+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 796,
+        "report": "# ACL-1769 / PR 796 - handoff after review return (head 038d9e45)\n\nImplemented the owner correction of 2026-10-13 (stacked ad cards).\n\n## Changes\n- src/web/templates/report.html: removed the Ad / Ad 2 dropdown (#cbd-ed-ad, adNames, its change handler, adIdx state, .cbd-ad-off toggling and CSS). Campaign / Ad set / Ad tabs kept. The Ad tab now shows every ad card of the ad set as one vertical list; Add and Duplicate insert a card that is visible at once. Field names camp_N_ad_M_*, order, numbering, removal, draft restore are untouched.\n- tests/builder_tree_harness.cjs: replaced the dropdown scenario with: no dropdown in the head, all cards visible, add and remove keep all visible.\n- tests/test_builder_second_primary_text.py: removed the dropdown call; added browser tests (docked, expanded, narrow 420px): add, duplicate, delete, and restore of several ads after reload, checking vertical stacking, order, numbering and field names.\n- tests/test_acl1769_two_column_layout.py: new non-browser test test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown; asserts the \"Primary text 1\" label (and Primary text 2, no \"Ad Title\") in buildAdRowHTML, plus field names, so the label no longer depends on the browser test only.\n\n## Tests\n- Non-browser (-k \"not browser\") on two_column_layout, duplicate_buttons, second_primary_text, the_builder_*, builder_tree, acl1761_parity, acl1761_plan_check: 112 passed before the last test fix; the new test passes after it.\n- NOT run locally: browser tests (free RAM 4.7 GB < 6 GB). The new browser tests were only collected (13 collected, import OK). Reviewer: please rely on CI browser run / run them.\n- Merged current origin/main: already up to date."
       }
     },
     "tasks": {
