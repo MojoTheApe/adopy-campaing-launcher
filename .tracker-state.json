@@ -8152,9 +8152,11 @@
         "worktree": "C:\\acl-1886-refresh",
         "id": "d6f3381c92694833a241a6507968e600",
         "issue": 886,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T09:52:30+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 887,
+        "report": "# ACL-1886 handoff (Worker-W1886M)\n\n- PR: #887, base main df6c2e8ac491aa1d03b10ba87641d1d785685c92\n- New head: d2e9a26a3c3a25cb3371f0be8a1f34d328ba7f9d (tree d139c733118cfc23538926229ffe92195f8b1381)\n- Previous head: 8f3b07ac5e86e6a29f1a53da89477b88f54d4660\n- Change: merge of current main (20726b2a, no conflicts, main-only content from ACL-1892) plus two spacing nits requested in review:\n  blank line before the ACL-1886 heading in docs/system/CHANGELOG.md; two blank lines after `_read_context` in src/fb_api/graph.py. No other code change.\n- Tests run: tests/test_acl1886_graph_error_context.py, test_acl1756_fb_api.py, test_the_api_stop_is_asked_first.py, test_bench_catalogue.py, test_acl_ci_workflows.py, test_master_adoption.py: 229 passed, 2 skipped.\n- scripts/acl_scan_secrets.py: clean. scripts/acl_smoke.py: OK. Full suite left to CI."
       }
     },
     "tasks": {
