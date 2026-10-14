@@ -12020,7 +12020,7 @@
             "session": "wrg1778-20261014"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RG1778",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12045,7 +12045,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
-        }
+        },
+        "reviewer": "Reviewer-R1778G"
       },
       "769": {
         "implementers": [
@@ -15111,6 +15112,10 @@
       "Reviewer-R1797G": {
         "session": "r1797g-20261015",
         "role": "Reviewer"
+      },
+      "Reviewer-R1778G": {
+        "session": "r1778g-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -17713,7 +17718,6 @@
       907,
       891,
       799,
-      778,
       769
     ],
     "review": null,
@@ -32607,6 +32611,13 @@
         "pr": 810,
         "lane": "b434b9111df1480590167bf18fab5884",
         "actor": "Reviewer-R1797G"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T21:41:52+00:00",
+        "pr": 780,
+        "lane": "2a2cae0777ea471b983e9eec3f7611d0",
+        "actor": "Reviewer-R1778G"
       }
     ],
     "policy": {
@@ -34748,6 +34759,18 @@
         "session": "r1797g-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T21:41:09+00:00",
+        "state": "reviewing"
+      },
+      "780": {
+        "id": "2a2cae0777ea471b983e9eec3f7611d0",
+        "pr": 780,
+        "issues": [
+          778
+        ],
+        "actor": "Reviewer-R1778G",
+        "session": "r1778g-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T21:41:52+00:00",
         "state": "reviewing"
       }
     }
