@@ -56,22 +56,9 @@
       "applies": "always",
       "field": {
         "level": "campaign",
-        "sel": ".cb-page-select"
-      },
-      "hint": "this ad account has several Facebook Pages: choose the Page for this campaign in the builder",
-      "id": "page_choice",
-      "label": "Facebook Page chosen",
-      "severity": "error",
-      "side": "client",
-      "unit": "campaign"
-    },
-    {
-      "applies": "always",
-      "field": {
-        "level": "campaign",
         "sel": ""
       },
-      "hint": "choose a Facebook Page in this campaign (Automatic needs one Page on the account or the account map's Page); Refresh pages to retry loading",
+      "hint": "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading",
       "id": "page_ok",
       "label": "Facebook Page",
       "severity": "error",
