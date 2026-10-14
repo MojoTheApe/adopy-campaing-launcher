@@ -8296,9 +8296,11 @@
         "worktree": "C:\\wk-1891",
         "id": "54670b196fa843fc821a0312b2b1508f",
         "issue": 891,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T13:25:34+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 909,
+        "report": "# ACL-1891 handoff (PR #909, head 433838ef, stacked on ACL-1907 / PR #908)\n\nWorker-S1891A / ws1891a-20261014, coordinator Coordinator-C0930A, branch codex/acl-1891-video-chunks.\n\n## What\n- Videos up to 200 MB keep the one-request upload; larger ones use Meta's resumable upload on /act_X/advideos (upload_phase start, transfer, finish). VIDEO_MAX_BYTES = 1536 MB (= write_policy.UPLOAD_FILE_MAX), chunks at most 8 MB.\n- creator.LargeFile reads chunk-sized slices from disk (never the whole file); the title-tag hash is streamed in 1 MB blocks; the page-helper staging bridge holds one chunk at a time.\n- Resume by Meta's offsets; backwards/non-digit/out-of-range offsets stop before finish; an offset named in error_data resumes; an unknown chunk is re-sent at the same offset (max 2), then the run stops as unknown; an unknown finish is reconciled by reading the library by title tag; a re-run reuses the finished video.\n- estimate_create_calls adds ceil(size/8 MB)+3 per large video; plans over the 250 ceiling are refused up front.\n- Write policy in both layers: exactly the three phases, closed key sets, numeric session/offset/file_size, file only on transfer as video_file_chunk (1 B..8 MB); cancel, end_offset and everything else refused.\n- media_limits pre-flight hint now says video 1536 MB (Python, JSON).\n\n## Checks\n- tests/test_acl1891_video_chunks.py plus 1761, 1768, 1774, 1819, 1896, 1907, 1756, 1776 (-k \"not browser\"): 774 passed, 0 failed. Node parity 19 cases.\n- Mutations caught: wrong phase allowed, oversized chunk allowed, offset check skipped, page-helper relaxation.\n\n## Remaining / live checks (Doc120, PAUSED)\nstart returns video_id and range; Meta's real chunk size; multipart chunk in one page request; offset error_data shape; finish title; 250 MB and 1 GB processing and readback; profile memory; Meta's max size. Docs: docs/system/PROJECT.md (ACL-1891), docs/system/CHANGELOG.md."
       }
     },
     "tasks": {
