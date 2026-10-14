@@ -31024,6 +31024,33 @@
         "event": "included-sources-closed",
         "at": "2026-10-14T14:33:53+00:00",
         "batch_id": "e2b8b7079a31457bb2cc23294dabdd46"
+      },
+      {
+        "event": "intake-cancelled",
+        "at": "2026-10-14T14:35:10+00:00",
+        "intake": {
+          "id": "7192c0e6149f48febbf422a0b5c591c9",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "cancelled",
+          "issues": [
+            781,
+            782,
+            783,
+            786,
+            806,
+            886
+          ],
+          "remaining": [
+            886
+          ],
+          "batches": [
+            "e2b8b7079a31457bb2cc23294dabdd46"
+          ],
+          "started_at": "2026-10-14T11:44:18+00:00",
+          "ineligible": {},
+          "report": "\ufeff# Intake 7192c0e6 cancelled by Coordinator-C1014I (2026-10-14)\n\nThe first batch of this intake (ACL-1781, 1782, 1783, 1786, 1806) reached main via PR 910 and is recorded merged. The remaining member ACL-1886 stays Approved; it is taken into a new intake together with ACL-1760 (approved after this intake froze), so one batch instead of two sequential ones moves the chain base. No task state other than the intake changes."
+        }
       }
     ],
     "policy": {
@@ -32837,7 +32864,7 @@
       "id": "7192c0e6149f48febbf422a0b5c591c9",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "running",
+      "state": "cancelled",
       "issues": [
         781,
         782,
@@ -32853,7 +32880,8 @@
         "e2b8b7079a31457bb2cc23294dabdd46"
       ],
       "started_at": "2026-10-14T11:44:18+00:00",
-      "ineligible": {}
+      "ineligible": {},
+      "report": "\ufeff# Intake 7192c0e6 cancelled by Coordinator-C1014I (2026-10-14)\n\nThe first batch of this intake (ACL-1781, 1782, 1783, 1786, 1806) reached main via PR 910 and is recorded merged. The remaining member ACL-1886 stays Approved; it is taken into a new intake together with ACL-1760 (approved after this intake froze), so one batch instead of two sequential ones moves the chain base. No task state other than the intake changes."
     },
     "source_reviews": {}
   }
