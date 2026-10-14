@@ -13369,7 +13369,8 @@ function cbPlanHtml(data) {
     }
     if (s) {
       h += '<div class="cbd-plan-meta" style="font-size:0.72rem;color:var(--muted)">page '
-        + aclEscHtml(s.page_id || '—') + ' · pixel ' + aclEscHtml(s.pixel_id || '—')
+        + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
+        + ' · pixel ' + aclEscHtml(s.pixel_id || '—') + (s.pixel_source ? ' (' + aclEscHtml(s.pixel_source) + ')' : '')
         + ' · ' + aclEscHtml(s.objective || '') + '</div>';
       (s.ad_sets || []).forEach(function (a) {
         var interests = (a.interests || []).map(function (g) { return g.join(', '); }).join(' AND ');
@@ -14537,7 +14538,7 @@ function cbApiReadbackHtml(r) {
     (rb.checks || []).forEach(function(c) {
       h += '<tr' + (c.ok ? '' : ' style="color:var(--bad)"') + '><td>' + aclEscHtml(c.object)
         + '</td><td>' + aclEscHtml(c.field) + '</td><td>' + aclEscHtml(JSON.stringify(c.expected))
-        + '</td><td>' + aclEscHtml(JSON.stringify(c.actual)) + '</td><td>' + (c.ok ? '✓' : '✗')
+        + '</td><td>' + (c.not_read ? 'Not read' : aclEscHtml(JSON.stringify(c.actual))) + '</td><td>' + (c.ok ? '✓' : '✗')
         + '</td></tr>';
     });
     h += '</table></details>';
