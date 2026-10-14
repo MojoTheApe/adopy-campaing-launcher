@@ -618,9 +618,12 @@ def _country_rows(client: GraphClient, act: str, date_from: str, date_to: str,
     Неполный или нечитаемый список — отказ, как у RPA: половина стран выглядела
     бы целой.
     """
+    before = len(getattr(client, "truncated", []) or [])
     rows = client.insights_range(act, date_from, date_to, breakdowns="country",
                                  fields="spend,account_currency", max_pages=3)
-    if "level=account" in _truncated(client):
+    # Только пометки этого чтения: страница, не взятая из-за usage или лимита, — «неполно».
+    fresh = " ".join((getattr(client, "truncated", []) or [])[before:])
+    if "level=account" in fresh:
         raise ApiReadError("The country list is partial (page limit reached); nothing was taken.")
     parsed = []
     for row in rows:
