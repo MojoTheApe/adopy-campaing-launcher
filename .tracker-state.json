@@ -3340,7 +3340,7 @@
       "source_sha": "9d086716f00e07d146e5142e21866ede90bd25e0",
       "main_tree": "a0d4b48243c44a6d3990e8594a586577aa020902",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-14T15:26:18+00:00",
       "batch_id": "0c5aecbdf4f44c7f8e4a97272dced8d6",
       "verification": {
@@ -5074,6 +5074,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-14T14:30:59+00:00"
+      },
+      "760": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 912,
+            "merge_sha": "d911841316925665b53af7c59b7acba352773a1b",
+            "tree_sha": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-14T15:31:09+00:00"
       }
     },
     "promotions": {
@@ -8331,6 +8343,36 @@
           "tree_sha": "a0d4b48243c44a6d3990e8594a586577aa020902"
         },
         "verified_at": "2026-10-14T14:22:12+00:00"
+      },
+      "912": {
+        "pr": 911,
+        "issues": [
+          760
+        ],
+        "tree_sha": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036",
+        "source_sha": "9d086716f00e07d146e5142e21866ede90bd25e0",
+        "main_tree": "a0d4b48243c44a6d3990e8594a586577aa020902",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-14T15:26:18+00:00",
+        "batch_id": "0c5aecbdf4f44c7f8e4a97272dced8d6",
+        "verification": {
+          "checks": [
+            "Actual permanent stage commit/tree and merge parents verified against the frozen batch 0c5aecbd (ACL-1760) and the independently reviewed integration.",
+            "Stage CI, Windows installer and delivery setup runs succeeded on 9d086716 with explicit same-tree reuse of the full green runs 38586016525 and 38586016443 (all Linux 3.11/3.13 shards, Windows 3.13, package jobs).",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts"
+          ],
+          "source_sha": "9d086716f00e07d146e5142e21866ede90bd25e0",
+          "result": "passed",
+          "kind": "stage-verification",
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/911#issuecomment-6171923547",
+          "target": "ACL isolated Windows stage installation",
+          "tree_sha": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036"
+        },
+        "verified_at": "2026-10-14T15:28:16+00:00"
       }
     },
     "acceptances": {
