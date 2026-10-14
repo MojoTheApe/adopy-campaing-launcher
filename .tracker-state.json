@@ -8875,9 +8875,11 @@
         "worktree": "C:\\wk-1826k",
         "id": "a9b121ebe3a64f90aca6b572fd28a034",
         "issue": 826,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T23:44:51+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 828,
+        "report": "# Return 826 r1826j: fixed\n\nPR 828, branch codex/acl-1826-mlx-session-lost.\nFinding: acl_scan_secrets flagged test_acl1826_mlx_session_lost.py:388 and :404 (workspace ids that looked real).\nFix: replaced with the scanner's allowlisted placeholder UUIDs (RFC 4122 examples); the tests only need two distinct values.\nChecks: scripts/acl_scan_secrets.py on the whole branch: clean (rc=0), including tests/test_acl1800_campaign_commands.py.\nTests: tests/test_acl1826_mlx_session_lost.py -k \"not browser\": 37 passed."
       }
     },
     "tasks": {
