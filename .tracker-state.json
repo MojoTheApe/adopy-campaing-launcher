@@ -8287,20 +8287,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "903": {
-        "actor": "Worker-W1903X",
-        "session": "wk_w1903x_1014",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1903-builder-file-clear",
-        "worktree": "C:\\acl-1903-file-clear",
-        "id": "b72ed854b54740e698bb4509d6b03c09",
-        "issue": 903,
-        "state": "handoff",
-        "started_at": "2026-10-14T12:42:31+00:00",
-        "from_status": "status:todo",
-        "pr": 906,
-        "report": "Head 678397ec on work/acl-1903-builder-file-clear, stacked on ACL-1774 (c419ab68, PR #834). Clearing the builder File / Stories-Reels box now clears the hidden file so the plan has no stale file. Tests: 105 passed (new test_acl1903_builder_file_clear_browser plus 1774 builder, duplicate buttons, 1774 texts/vertical) and 27 passed (review, publish-selected, two-column layout). Independent pre-review approved with no blocking issues. PR #906."
       }
     },
     "tasks": {
@@ -13293,22 +13279,25 @@
             "session": "wk_w1903x_1014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1903X",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W1903V",
-          "session": "wk_w1903v_1014",
+          "actor": "Worker-W1903X",
+          "session": "wk_w1903x_1014",
           "coordinator": "Coordinator-M1011A",
-          "branch": "work/acl-PENDING-builder-file-clear",
-          "worktree": "C:\\acl-PENDING-file-clear",
-          "id": "c0f3432ed53c423f9b8f786300b10754",
+          "branch": "work/acl-1903-builder-file-clear",
+          "worktree": "C:\\acl-1903-file-clear",
+          "id": "b72ed854b54740e698bb4509d6b03c09",
           "issue": 903,
-          "state": "stopping",
-          "started_at": "2026-10-14T12:37:33+00:00",
-          "from_status": "status:backlog",
-          "report": "Claim recorded a placeholder branch name before the issue number was known; stopping with no code changes to re-claim with the real branch work/acl-1903-builder-file-clear."
-        }
+          "state": "handoff",
+          "started_at": "2026-10-14T12:42:31+00:00",
+          "from_status": "status:todo",
+          "pr": 906,
+          "report": "Head 678397ec on work/acl-1903-builder-file-clear, stacked on ACL-1774 (c419ab68, PR #834). Clearing the builder File / Stories-Reels box now clears the hidden file so the plan has no stale file. Tests: 105 passed (new test_acl1903_builder_file_clear_browser plus 1774 builder, duplicate buttons, 1774 texts/vertical) and 27 passed (review, publish-selected, two-column layout). Independent pre-review approved with no blocking issues. PR #906."
+        },
+        "pr": 906,
+        "queued_at": "2026-10-14T12:57:52+00:00"
       }
     },
     "actors": {
@@ -17034,7 +17023,8 @@
       769,
       800,
       812,
-      760
+      760,
+      903
     ],
     "review": null,
     "history": [
@@ -30091,6 +30081,13 @@
         "issue": 760,
         "pr": 762,
         "actor": "Worker-S1760C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T12:57:52+00:00",
+        "issue": 903,
+        "pr": 906,
+        "actor": "Worker-W1903X"
       }
     ],
     "policy": {
