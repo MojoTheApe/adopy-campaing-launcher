@@ -34210,7 +34210,9 @@
         "session": "rrf799-20261014",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T16:55:30+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
+        "keep_lane": false
       }
     }
   }
