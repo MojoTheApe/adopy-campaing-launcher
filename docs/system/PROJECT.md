@@ -37,10 +37,10 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   20 are taken. One campaigns search on the base name serves all candidates; if it returns the maximum
   200 rows it is not trusted and each name is looked up with an exact (EQUAL) search, and if that is
   also full the run stops before any write. At most 6 of our own earlier campaigns are diffed per
-  resolution (call budget); a longer name than Meta's 400 characters stops. A NAME_k (k>1) of ours is
+  resolution (call budget); a name over 400 characters stops (conservative guard, the Meta limit is unverified). A NAME_k (k>1) of ours is
   reused only if its ads are a subset of the plan's ad names (a builder campaign literally named `X_2`
-  is not taken for our suffix). If our campaign differs only because an ad set lost its ACL tag, the
-  run stops (robot failure, not a builder change). No extra writes, no new lock.
+  is not taken for our suffix). Ad sets and ads under our tagged campaign are matched by name,
+  so a lost child tag does not make the campaign "different" and a re-run resumes it. No extra writes, no new lock.
   Names in the app: `campaign_name` in every result, job progress and draft status stays the builder
   name (the dashboard keys its dots and verdicts by it); the chosen name is the separate field
   `published_as` (empty when no suffix), shown as "-> published as NAME_2" in the plan and job panels.

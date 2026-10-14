@@ -15,9 +15,8 @@
   keep matching); the chosen name is the new field `published_as`, shown next to the name in the plan and
   job panels. Statistics and reports in Meta show `NAME_2`; each NAME_k has its own tag (creatives are
   recreated, a video may be uploaded again); an older partial campaign stays PAUSED, untouched.
-- Safety: a full (200 rows) search is not trusted (exact lookup, else stop); a campaign of ours that
-  differs only by a lost ad set tag still stops; `X_2` reuse requires matching ads; at most 6 own
-  candidates are diffed; names over 400 characters stop. Removed the dead "A publish would stop" block.
+- Safety: a full (200 rows) search is not trusted (exact lookup, else stop); `X_2` reuse requires matching ads; at most 6 own
+  candidates are diffed; names over 400 characters stop (conservative guard). Removed the dead "A publish would stop" block.
 - Reads: one campaigns search on the base name for all candidates, plus the previous diff reads per own
   candidate. No extra writes.
 

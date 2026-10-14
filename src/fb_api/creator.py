@@ -117,7 +117,7 @@ NAME_SUFFIX_MAX = 20
 CAMPAIGN_SEARCH_ROWS = 200
 #: Не больше стольких своих кампаний с похожими именами сверяем с билдером (потолок чтений).
 NAME_SCAN_MAX_OURS = 6
-#: Предел длины имени кампании в Meta.
+#: Консервативная защита от слишком длинного имени (точный предел Meta не проверен).
 CAMPAIGN_NAME_MAX = 400
 
 #: Что таблица показывает (архив и удалённое не считаем «существующим»).
@@ -854,13 +854,6 @@ class CampaignCreator:
             campaign_id = str(ours[0]["id"])
             found_sets = self._find_sets(cand, campaign_id)
             bad = self._existing_differences(cand, targetings, campaign_id, found_sets)
-            lost = [str(r.get("name")) for r in found_sets if r and cand.label not in _labels(r)]
-            if lost and not bad:
-                # Робот потерял метку группы (сбой, не правка билдера): не прячем это новым именем.
-                raise CreationStopped(
-                    f"Existing ad set(s) {', '.join(map(repr, lost))} of the campaign {name!r} from an earlier "
-                    "run lost the ACL tag. Nothing was written and nothing in Meta was changed. Check the "
-                    "campaign in Ads Manager, or rename the campaign in the builder.", kind="existing_differs")
             if not bad and n > 1 and not self._ad_names_fit(cand, campaign_id):
                 skipped.append({"name": name, "reason": "other_ads", "differences": []})
                 continue

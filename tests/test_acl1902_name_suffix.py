@@ -259,15 +259,15 @@ def test_truncated_search_that_stays_unsure_stops_before_any_write(tmp_path):
     assert out.stop_kind == "name_unsure" and meta.posts == [] and client.writes == 0
 
 
-def test_adset_that_lost_its_tag_stops_but_with_other_differences_it_suffixes(tmp_path):
+def test_adset_that_lost_its_tag_is_resumed_and_with_a_real_diff_it_suffixes(tmp_path):
     meta = FakeMeta()
     assert _run(meta, _draft(tmp_path, ads=1))[0].error == ""
     adset = next(o for o in meta.objects.values() if o["_kind"] == "adset")
     adset["adlabels"] = []
     n = _writes(meta)
     out, client = _run(meta, _draft(tmp_path, ads=1))
-    assert out.stop_kind == "existing_differs" and "lost the ACL tag" in out.error
-    assert _writes(meta) == n and client.writes == 0
+    assert out.error == "" and out.published_as == BASE and out.reused["campaign"]
+    assert _writes(meta) == n and client.writes == 0 and _names(meta) == [BASE]
     _campaign(meta, BASE)["daily_budget"] = "999"
     out2, _ = _run(meta, _draft(tmp_path, ads=1))
     assert out2.error == "" and out2.published_as == BASE + "_2"

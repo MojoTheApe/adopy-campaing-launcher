@@ -787,8 +787,8 @@ def test_children_of_our_campaign_are_matched_by_name_without_their_label(tmp_pa
     meta = FakeMeta()
     _run(meta, _draft(tmp_path, ads=2))
     for o in meta.objects.values():
-        if o["_kind"] == "ad":
-            o.pop("adlabels", None)            # Meta «потеряла» метки объявлений (потерю у групп ловит ACL-1902)
+        if o["_kind"] in ("adset", "ad"):
+            o.pop("adlabels", None)            # Meta «потеряла» метки детей
     n_posts = len(meta.posts)
     out, client = _run(meta, _draft(tmp_path, ads=2))
     assert client.writes == 0 and len(meta.posts) == n_posts
