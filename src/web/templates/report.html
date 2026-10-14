@@ -5,7 +5,8 @@
   <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   {#- ACL-1267: вкладку версии владельца не спутать со сборкой менеджеров. #}
-  <title>{% if (stage_status or {}).channel == 'stage' %}STAGE · {% endif %}Adopy Campaign Manager — {{ report.date }}</title>
+  {#- ACL-1778: во вкладке — просто Adopy; период и дата обновления есть в шапке. #}
+  <title>{% if (stage_status or {}).channel == 'stage' %}STAGE · {% endif %}Adopy</title>
   <script>
     // Apply before paint. Only a click pins the theme; otherwise follow the OS.
     (function () {
@@ -97,7 +98,7 @@
          и отступ страницы, который освобождает место под него. Язычку
          ширина задана, а не оставлена на содержимое, — иначе отступ
          пришлось бы угадывать. */
-      --cbd-w: 360px;
+      --cbd-w: 480px;
       --cbd-handle-w: 40px;
       --radius-sm: 6px;
       --radius-md: 8px;
@@ -421,83 +422,201 @@
       line-height: 1.55;
       box-shadow: var(--shadow-sm);
     }
+    /* ── Шапка: Linear toolbar (ACL-1778) ─────────────────────────────────
+       Две плоские полки. Верхняя — с чем работают: метка, период в рамке,
+       под кем смотрим, служебные кнопки, тема и Refresh. Нижняя — техника:
+       когда обновлено, версия, STAGE. Раскладка зависит от ширины самой
+       шапки, а не окна: открытый билдер отнимает 400px, и шапка должна
+       перестроиться так же, как в узком окне, — ничего не теряя. */
+    .head-top { container: acl-head / inline-size; }
     header.page-header {
-      display: flex;
+      --stage-ink: #92400e;
+      display: grid;
+      grid-template-columns: auto 328px minmax(140px, 1fr) auto auto;
+      grid-template-areas: 'logo period buyer support actions' 'meta meta meta meta meta';
       align-items: center;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-      margin-bottom: 1rem;
-      padding-bottom: 1rem;
+      gap: 9px 16px;
+      padding: 2px 0 9px;
     }
-    .brand-lockup {
-      display: flex;
-      align-items: center;
-      gap: 0.7rem;
-      min-width: 0;
-    }
-    /* ACM: в шапке только метка, без подписи под ней (ACL-1723). Метка плоская
-       (#2563eb, без плитки), поэтому без скругления и фона — одинаково читается
-       на обеих темах. Название продукта живёт в alt у картинки. */
-    .brand-mark {
-      display: flex;
-      align-items: center;
-      flex-shrink: 0;
-    }
-    .brand-logo {
-      width: 34px;
-      height: 34px;
-      flex-shrink: 0;
-    }
-    .brand-text {
-      display: flex;
-      flex-direction: column;
-      gap: 0.15rem;
-      min-width: 0;
-    }
+    :root[data-theme="dark"] header.page-header { --stage-ink: var(--warn); }
+    header.page-header > * { min-width: 0; }
+    .brand-mark { grid-area: logo; display: flex; align-items: center; justify-content: center; width: 35px; }
+    .brand-logo { width: 29px; height: 29px; flex-shrink: 0; display: block; }
 
-    /* Две подписанные величины. Подпись приглушена, значение — нет: читают
-       здесь значение, а подпись только объясняет, какое именно. */
-    .brand-meta {
-      display: flex;
-      align-items: baseline;
-      gap: 0.3rem 0.5rem;
-      margin: 0;
-      font-size: 0.735rem;
-      line-height: 1.3;
-      flex-wrap: wrap;
+    /* Период: рамка с подписью, вписанной в верхнюю границу. Под подписью
+       тот же фон, что у поля и шапки, — иначе в тёмной теме проступило бы
+       светлое пятно. */
+    .period-pick { grid-area: period; display: flex; align-items: center; }
+    .period-btn {
+      position: relative;
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; height: 46px; padding: 2px 13px 0;
+      background: var(--bg-elev); color: var(--text);
+      border: 1px solid var(--border-strong); border-radius: 7px;
+      font: inherit; text-align: left; cursor: pointer;
+      transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
     }
-    .brand-meta dt { color: var(--muted); }
-    .brand-meta dd {
-      margin: 0 0.55rem 0 0;
-      color: var(--text);
-      font-weight: 500;
+    .period-btn:hover, .period-btn[aria-expanded="true"] {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+    .period-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+    .period-label {
+      position: absolute; top: -7px; left: 10px;
+      padding: 0 5px; background: var(--bg-elev);
+      font-size: 10px; line-height: 13px; font-weight: 500; letter-spacing: 0.15px;
+      color: var(--accent); white-space: nowrap;
+    }
+    .period-cal {
+      flex-shrink: 0; color: var(--accent);
+      fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .period-text {
+      flex: 1; min-width: 0;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0 5px;
+      font-size: 15px; line-height: 1.25; font-weight: 600; letter-spacing: -0.4px;
       font-variant-numeric: tabular-nums;
     }
-    .brand-meta dd:last-child { margin-right: 0; }
+    .period-day { white-space: nowrap; }
+    .period-caret { flex-shrink: 0; fill: var(--muted); transition: transform 150ms var(--ease-out); }
+    .period-btn[aria-expanded="true"] .period-caret { transform: rotate(180deg); }
+
+    /* Под кем смотрим. Тонкая черта слева отделяет зрителя от периода. */
+    .buyer-pick {
+      grid-area: buyer;
+      display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px;
+      padding: 5px 0 5px 15px; border-left: 1px solid var(--border);
+    }
+    .buyer-pick label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .buyer-pick select {
+      min-width: 0; max-width: 100%; flex: 0 1 auto;
+      font: inherit; font-size: 0.8rem; font-weight: 500; color: var(--text);
+      padding: 4px 6px; border: 1px solid transparent; border-radius: var(--radius-sm);
+      background: transparent; text-overflow: ellipsis; cursor: pointer;
+    }
+    .buyer-pick select:hover { border-color: var(--border); background: var(--bg-hover); }
+    .buyer-pick select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+    .buyer-pick select option { background: var(--bg-elev); color: var(--text); }
+    .buyer-pick #buyer-msg { flex-basis: 100%; font-size: 0.75rem; color: var(--muted); }
+    .buyer-pick #buyer-msg:empty { display: none; }
+
+    /* Служебные кнопки и главные действия. Robot health — ссылка, но
+       выглядит как соседние кнопки: человек не должен гадать, что из этого
+       нажимается. */
+    .head-support { grid-area: support; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+    .head-actions { grid-area: actions; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+    .head-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: 32px; padding: 6px 10px;
+      background: var(--bg-elev); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      font: inherit; font-size: 0.75rem; font-weight: 500; line-height: 1.2;
+      white-space: nowrap; text-decoration: none; cursor: pointer;
+      transition: background 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 100ms var(--ease-out);
+    }
+    .head-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+    .head-btn:active { transform: scale(0.97); }
+    .head-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+    .head-btn:disabled { cursor: wait; opacity: 0.65; }
+    .head-btn[hidden] { display: none; }
+    .head-btn.quiet { background: transparent; border-color: transparent; color: var(--muted); }
+    .head-btn.quiet:hover { background: var(--bg-hover); color: var(--text); }
+    /* Есть только когда новый выпуск действительно ждёт: в обычный день
+       лишней кнопки в шапке нет. От Refresh отдельно — та обновляет данные,
+       эта перезапускает сам ACM. */
+    .head-btn.acl-update { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+    .head-btn.acl-update:hover { background: var(--accent-soft); border-color: var(--accent); }
+    form.refresh { display: flex; margin: 0; }
+    .head-refresh {
+      min-height: 36px; padding: 7px 13px;
+      background: var(--accent-soft); color: var(--accent);
+      border-color: transparent; font-size: 0.78rem;
+    }
+    .head-refresh:hover { background: var(--accent-soft); border-color: var(--accent); }
+    /* Значок рисуется маской, а не вложенным svg: dashRefresh() пишет в
+       кнопку textContent, и вложенный значок пропадал бы при каждом нажатии. */
+    .head-refresh::before {
+      content: ""; width: 15px; height: 15px; flex-shrink: 0;
+      background: currentColor;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 8a8.5 8.5 0 0 0-14-3L3 8m0-5v5h5M4 16a8.5 8.5 0 0 0 14 3l3-3m0 5v-5h-5'/%3E%3C/svg%3E") center / contain no-repeat;
+              mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 8a8.5 8.5 0 0 0-14-3L3 8m0-5v5h5M4 16a8.5 8.5 0 0 0 14 3l3-3m0 5v-5h-5'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+
+    /* Нижняя полка: две подписанные величины и STAGE. Подпись приглушена,
+       значение — нет: читают здесь значение, а подпись только объясняет,
+       какое именно. */
+    .head-meta { grid-area: meta; border-top: 1px solid var(--border); padding-top: 9px; }
+    .brand-meta {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 6px 23px;
+      margin: 0; font-size: 0.6875rem; line-height: 1.5; color: var(--muted);
+    }
+    .brand-meta > div { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .brand-meta dt { color: var(--muted); }
+    .brand-meta dd {
+      margin: 0; color: var(--text); font-weight: 500;
+      font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+    }
     /* ACL-1267: версия владельца (запуск из исходников) — STAGE и сколько
        правок в ней ещё нет в ветке stage. У сборки менеджеров значка нет. */
     .brand-meta dd.acl-stage {
-      display: inline-flex; align-items: baseline; gap: 0.35rem;
-      padding: 0.05rem 0.45rem; border-radius: 4px;
-      border: 1px solid var(--warn); color: var(--warn);
-      font-weight: 700; letter-spacing: 0.06em; font-size: 0.72rem;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 1px 6px; border-radius: 5px;
+      border: 1px solid transparent;
+      background: var(--warn-soft); color: var(--stage-ink);
     }
+    .brand-meta dd.acl-stage b { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; }
     .brand-meta dd.acl-stage .acl-stage-gap { font-weight: 500; letter-spacing: 0; }
-    .brand-meta dd.acl-stage.unknown { border-style: dashed; }
+    .brand-meta dd.acl-stage.unknown { border: 1px dashed var(--stage-ink); }
 
-    /* Правый угол шапки: период, под кем смотрим, место под тему. Отделён от
-       названия автоматическим отступом, а не пустотой на глаз. */
-    .head-tools {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-left: auto;
-      flex-wrap: wrap;
+    /* Средняя ширина (открытый билдер на ноутбуке): служебные кнопки уходят
+       на нижнюю полку, справа от техники. */
+    @container acl-head (max-width: 1180px) {
+      header.page-header {
+        grid-template-columns: auto 328px minmax(170px, 1fr) auto;
+        grid-template-areas: 'logo period buyer actions' 'meta meta support support';
+        gap: 9px 12px;
+      }
+      .head-meta { border-top: 0; padding-top: 0; }
     }
-    .buyer-pick { display: flex; align-items: center; gap: 0.45rem; }
-    .buyer-pick label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
-    .buyer-pick select { font-size: 0.82rem; max-width: 14rem; }
-    .buyer-pick #buyer-msg { font-size: 0.75rem; color: var(--muted); }
+    @container acl-head (max-width: 850px) {
+      header.page-header {
+        grid-template-columns: 35px minmax(260px, 328px) minmax(140px, 1fr);
+        grid-template-areas: 'logo period buyer' 'meta meta meta' 'support support actions';
+        gap: 12px;
+      }
+      .head-meta { border-top: 1px solid var(--border); padding-top: 8px; }
+      .head-support { justify-content: flex-start; }
+      .period-text { font-size: 14px; }
+    }
+    /* Узко: каждая группа — своей строкой, ничего не обрезается. */
+    @container acl-head (max-width: 570px) {
+      header.page-header {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas: 'logo actions' 'period period' 'buyer buyer' 'meta meta' 'support support';
+        gap: 13px;
+      }
+      .brand-mark { justify-content: flex-start; }
+      .period-btn { max-width: 360px; }
+      .buyer-pick { padding-left: 0; border-left: 0; }
+      .head-support { justify-content: flex-start; }
+      .period-text { font-size: 14px; }
+    }
+    @container acl-head (max-width: 345px) {
+      .period-btn { padding-left: 9px; padding-right: 9px; gap: 7px; }
+      .period-text { font-size: 13px; gap: 0 4px; }
+    }
+    /* Ящик билдера уже 1100px не раздвигает страницу, а ложится поверх неё.
+       Шапку всё равно сдвигаем из-под него, пока есть куда: иначе Refresh и
+       тема прятались бы под панелью. */
+    @media (max-width: 1100px) and (min-width: 760px) {
+      body.cbd-open .head-top { padding-right: calc(var(--cbd-w) + var(--cbd-handle-w) + 1.5rem); }
+    }
+    @media (pointer: coarse) {
+      .head-btn, .head-refresh { min-height: 44px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .period-btn, .period-caret, .head-btn { transition: none; }
+    }
     /* Manage: четыре бывших экрана на одной странице. Разделены воздухом и
        линией, а не рамками: рамка вокруг каждого превратила бы страницу в
        четыре карточки, то есть в те же четыре экрана, только сразу. */
@@ -568,39 +687,6 @@
     :root[data-theme="dark"] .ts-knob { transform: translateX(22px); }
     @media (prefers-reduced-motion: reduce) {
       .ts-knob, .ts-track, .ts-ico { transition: none; }
-    }
-
-    form.refresh { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
-    /* Shown only when a promoted release is actually waiting, so an ordinary
-       day's header carries no extra control at all. */
-    form.refresh button.acl-update {
-      background: var(--accent);
-      color: var(--on-accent);
-      border-color: var(--accent);
-    }
-    form.refresh button.acl-update:hover {
-      background: var(--accent);
-      border-color: var(--accent);
-      filter: brightness(1.1);
-    }
-    form.refresh button[hidden] { display: none; }
-    form.refresh button {
-      background: var(--bg-elev);
-      color: var(--accent);
-      border: 1px solid var(--border-strong);
-      padding: 0.4rem 0.9rem;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      font-family: inherit;
-      font-size: 0.8125rem;
-      font-weight: 500;
-      transition: background 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 100ms var(--ease-out);
-    }
-    form.refresh button:hover { background: var(--accent-soft); border-color: var(--accent); }
-    form.refresh button:active { transform: scale(0.97); }
-    form.refresh button:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
     }
 
     .warnings {
@@ -1991,8 +2077,6 @@
       padding: 0 0.35rem;
     }
     .amap-cal-x:hover { border-color: var(--border-strong); color: var(--text); }
-    .period-pick { display: flex; align-items: center; }
-    .period-pick .amap-cal-btn { font-size: 0.78rem; padding: 0.18rem 0.6rem; }
     .amap-cal-nav {
       background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
       color: var(--muted); cursor: pointer; font: inherit; padding: 0 0.45rem;
@@ -2729,7 +2813,9 @@
     }
 
     .cbd-panel {
-      width: var(--cbd-w); flex-shrink: 0;
+      /* ACL-1769: две колонки, поэтому уже не 360. На узком окне панель не
+         шире окна за вычетом язычка. */
+      width: min(var(--cbd-w), calc(100vw - var(--cbd-handle-w))); flex-shrink: 0;
       display: flex; flex-direction: column;
       background: var(--bg-elev);
       border-left: 1px solid var(--border);
@@ -2752,6 +2838,14 @@
       border-radius: var(--radius-sm); padding: 0.1rem 0.35rem;
     }
     .cbd-close:hover { color: var(--bad); border-color: var(--bad); }
+    .cbd-expand {
+      align-self: center;
+      background: none; border: 1px solid var(--border-strong); color: var(--text);
+      font: inherit; font-size: 0.75rem; font-weight: 600; line-height: 1.2;
+      border-radius: var(--radius-sm); padding: 0.2rem 0.55rem; cursor: pointer;
+    }
+    .cbd-expand:hover { color: var(--accent); border-color: var(--accent); }
+    .cbd-expand:focus-visible, .cbd-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
     .cbd-body { flex: 1; overflow-y: auto; padding: var(--space-md); }
     .cbd-empty {
       color: var(--muted); font-size: 0.78rem; line-height: 1.6;
@@ -3117,6 +3211,242 @@
     .cbd-plan-body { padding: 0.3rem 0.5rem; }
     .cbd-plan-body[hidden] { display: none; }
 
+    /* ── ACL-1769: две колонки и токены Adopy — только внутри билдера ─────
+       Значения взяты из adopy-design-tokens.css как есть, но объявлены на
+       `.cbd-root`, а не на `:root`: остальной дешборд перекрашивает отдельная
+       задача, и подключённые целиком токены сделали бы это втихую. Старые
+       имена (`--bg`, `--accent`…) внутри билдера переназначены на токены, так
+       что и прежняя форма кампании в редакторе берёт цвета оттуда же. */
+    .cbd-root {
+      --adopy-bg: #f4f5f7; --adopy-surface: #ffffff; --adopy-surface-subtle: #f7f8fa;
+      --adopy-surface-hover: #eef0f4; --adopy-border: #dfe3ea; --adopy-border-strong: #c6cfdc;
+      --adopy-control-border: #7c899d; --adopy-text: #202a39; --adopy-text-muted: #606c80;
+      --adopy-primary: #2563eb; --adopy-on-primary: #ffffff; --adopy-selected-bg: #edf3ff;
+      --adopy-selected-text: #245ace; --adopy-focus: #2563eb;
+      --adopy-success: #216e4e; --adopy-success-bg: #edf7f1;
+      --adopy-warning: #855812; --adopy-warning-bg: #fcf5e9;
+      --adopy-danger: #b42318; --adopy-danger-bg: #fff0ed;
+      --adopy-text-sm: 0.75rem; --adopy-text-table: 0.8125rem; --adopy-text-body: 0.875rem;
+      --adopy-control-sm: 32px;
+      --adopy-shadow-drawer: -8px 0 28px rgb(24 44 76 / 12%);
+    }
+    :root[data-theme="dark"] .cbd-root {
+      --adopy-bg: #111720; --adopy-surface: #19222e; --adopy-surface-subtle: #202b39;
+      --adopy-surface-hover: #263446; --adopy-border: #354459; --adopy-border-strong: #4b5e76;
+      --adopy-control-border: #75869d; --adopy-text: #edf2fa; --adopy-text-muted: #a4b3c8;
+      --adopy-primary: #83aaff; --adopy-on-primary: #10233f; --adopy-selected-bg: #223957;
+      --adopy-selected-text: #a9c7ff; --adopy-focus: #83aaff;
+      --adopy-success: #8ad1ad; --adopy-success-bg: #1e3c32;
+      --adopy-warning: #e5bd78; --adopy-warning-bg: #3c3223;
+      --adopy-danger: #ffb4aa; --adopy-danger-bg: #462a2e;
+      --adopy-shadow-drawer: -8px 0 28px rgb(0 0 0 / 28%);
+    }
+    .cbd-root {
+      --bg: var(--adopy-bg); --bg-elev: var(--adopy-surface); --bg-hover: var(--adopy-surface-hover);
+      --border: var(--adopy-border); --border-strong: var(--adopy-border-strong);
+      --text: var(--adopy-text); --muted: var(--adopy-text-muted);
+      --accent: var(--adopy-primary); --accent-soft: var(--adopy-selected-bg);
+      --on-accent: var(--adopy-on-primary); --focus-ring: var(--adopy-focus);
+      --field-bg: var(--adopy-surface); --field-border: var(--adopy-control-border);
+      --good: var(--adopy-success); --good-soft: var(--adopy-success-bg);
+      --warn: var(--adopy-warning); --warn-soft: var(--adopy-warning-bg);
+      --bad: var(--adopy-danger); --bad-soft: var(--adopy-danger-bg);
+      color: var(--adopy-text);
+    }
+    :root[data-theme="dark"] .cbd-root { --field-bg: var(--adopy-surface-subtle); }
+    .cbd-panel { box-shadow: var(--adopy-shadow-drawer); }
+
+    /* Растянутая панель: та же панель на ширину окна, страница под ней не
+       сдвигается (двигать её некуда). Закрытая — снова у края, шириной в
+       обычную. */
+    .cbd-root[data-expanded="1"][data-open="1"] .cbd-panel {
+      width: min(1100px, calc(100vw - var(--cbd-handle-w)));
+    }
+    body.cbd-open.cbd-expanded { padding-right: 0; }
+
+    .cbd-cols {
+      flex: 1; min-height: 0; display: grid;
+      grid-template-columns: minmax(10.5rem, 38%) minmax(0, 1fr);
+    }
+    .cbd-root[data-expanded="1"] .cbd-cols { grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr); }
+    /* Растянутая панель: подписи слева от полей, как в дизайне, а не столбиком. */
+    .cbd-root[data-expanded="1"] .cbd-host .cb-fields {
+      grid-template-columns: 11rem minmax(0, 1fr); gap: 0.4rem 0.75rem; max-width: 46rem;
+    }
+    .cbd-root[data-expanded="1"] .cbd-host .cb-fields .cb-label { margin-top: 0; align-self: center; }
+    /* Объявление в узкой панели: подпись над полем, а не слева в 140 пикселях. */
+    .cbd-root:not([data-expanded="1"]) .cbd-host .cb-ad-fields { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }
+    .cbd-root:not([data-expanded="1"]) .cbd-host .cb-ad-fields .cb-label { margin-top: 0.35rem; }
+    .cbd-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+    .cbd-col-tree { border-right: 1px solid var(--border); background: var(--adopy-surface-subtle); }
+    .cbd-col-tree .cbd-body { padding: var(--space-sm); }
+    .cbd-col-edit { overflow-y: auto; }
+    .cbd-foot { max-height: 45vh; overflow-y: auto; }
+
+    /* Левая колонка: дерево только из имён. */
+    .cbd-treebar {
+      display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+      margin-bottom: var(--space-sm);
+    }
+    .cbd-treebar .cbd-ticks { margin-bottom: 0; flex: 1 1 auto; flex-wrap: wrap; }
+    .cbd-names-only {
+      background: none; border: 1px solid var(--border-strong); color: var(--muted);
+      border-radius: var(--radius-sm); padding: 0.15rem 0.5rem;
+      font: inherit; font-size: var(--adopy-text-sm); font-weight: 600; cursor: pointer;
+    }
+    .cbd-names-only[aria-pressed="true"] { color: var(--adopy-selected-text); background: var(--adopy-selected-bg); border-color: var(--accent); }
+    .cbd-names-only:hover { color: var(--accent); border-color: var(--accent); }
+    .cbd-names-only:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+    .cbd-tick-all, .cbd-tick-none { font-size: var(--adopy-text-sm); }
+    .cbd-tick-count { font-size: var(--adopy-text-sm); }
+    .cbd-root .cbd-country { font-size: var(--adopy-text-sm); margin-top: var(--space-md); }
+    .cbd-country-add { font-size: var(--adopy-text-sm); }
+    .cbd-acc { margin: var(--space-xs) 0 var(--space-sm); }
+    .cbd-root .cbd-account {
+      display: flex; align-items: center; gap: var(--space-xs);
+      margin: 0 0 var(--space-xs); font-size: var(--adopy-text-table); font-weight: 600;
+    }
+    .cbd-acc-toggle {
+      flex-shrink: 0; width: 1.5rem; height: 1.5rem; padding: 0;
+      background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+      color: var(--muted); font: inherit; font-size: var(--adopy-text-sm); line-height: 1; cursor: pointer;
+      transition: transform 160ms var(--ease-out);
+    }
+    .cbd-acc-toggle:hover { color: var(--accent); border-color: var(--border-strong); }
+    .cbd-acc-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+    .cbd-acc[data-collapsed="1"] .cbd-acc-toggle { transform: rotate(-90deg); }
+    .cbd-acc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cbd-acc-count { flex-shrink: 0; color: var(--muted); font-size: var(--adopy-text-sm); font-weight: 400; font-variant-numeric: tabular-nums; }
+    .cbd-acc-add {
+      flex-shrink: 0; width: 1.5rem; height: 1.5rem; padding: 0;
+      background: none; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
+      color: var(--muted); font: inherit; font-size: 1rem; line-height: 1; cursor: pointer;
+    }
+    .cbd-acc-add:hover { color: var(--accent); border-color: var(--accent); }
+    .cbd-acc-add:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+    .cbd-acc[data-collapsed="1"] .cbd-acc-body { display: none; }
+    /* Значок аккаунта: тот же рисунок, что у кампании (цвет + форма + знак),
+       но свои имена классов — `cbd-ind-*` принадлежат кампаниям. */
+    .cbd-acc-state { flex-shrink: 0; width: 0.9rem; height: 0.9rem; }
+    .cbd-acc-st-ok { color: var(--good); border-radius: 50%; }
+    .cbd-acc-st-warn { color: var(--warn); transform: rotate(45deg); }
+    .cbd-acc-st-warn > span { transform: rotate(-45deg); }
+    .cbd-acc-st-wait { color: var(--muted); border-radius: 50%; border-style: dashed; }
+    .cbd-acc-st-busy { color: var(--muted); border: none; border-radius: 50%; }
+    .cbd-acc-st-busy > span {
+      display: block; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: currentColor;
+      animation: cbd-build-pulse 1.4s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cbd-acc-st-busy > span { animation: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px currentColor; }
+    }
+
+    .cbd-root .cbd-camp { background: var(--adopy-surface); }
+    .cbd-root .cbd-camp[data-open="1"] { background: var(--adopy-selected-bg); border-color: var(--accent); }
+    .cbd-root .cbd-camp-row { align-items: flex-start; padding: 0.4rem 0.4rem; min-height: 2rem; }
+    .cbd-root .cbd-camp-row .cbd-ind { margin-top: 0.1rem; }
+    .cbd-root .cbd-camp-name {
+      font-size: var(--adopy-text-table); line-height: 1.3;
+      white-space: normal; overflow-wrap: anywhere;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .cbd-camp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+    .cbd-root .cbd-camp-ads { font-size: var(--adopy-text-sm); }
+    .cbd-camp-sub { color: var(--muted); font-size: var(--adopy-text-sm); display: flex; gap: var(--space-sm); }
+    /* «Names only», как в дизайне: редакторы свёрнуты — остаётся одно дерево
+       из имён и значков на всю ширину. Выбор кампании выходит из режима. */
+    #cbd-panel[data-names-only="1"] .cbd-camp-sub { display: none; }
+    #cbd-panel[data-names-only="1"] .cbd-cols { grid-template-columns: minmax(0, 1fr); }
+    #cbd-panel[data-names-only="1"] .cbd-col-edit { display: none; }
+    #cbd-panel[data-names-only="1"] .cbd-col-tree { border-right: 0; }
+    .cbd-root .cbd-add { font-size: var(--adopy-text-sm); }
+
+    /* Правая колонка: редактор выбранного объекта. */
+    .cbd-ed-head {
+      position: sticky; top: 0; z-index: 2;
+      padding: var(--space-sm) var(--space-md);
+      background: var(--bg-elev); border-bottom: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: var(--space-sm);
+    }
+    .cbd-ed-head[hidden] { display: none; }
+    .cbd-ed-crumb {
+      color: var(--muted); font-size: var(--adopy-text-sm);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cbd-ed-crumb strong { color: var(--text); font-weight: 600; }
+    .cbd-seg {
+      display: flex; border: 1px solid var(--border-strong); border-radius: var(--radius-md); overflow: hidden;
+    }
+    .cbd-seg button {
+      flex: 1; min-height: var(--adopy-control-sm); padding: 0.25rem 0.5rem;
+      background: none; border: 0; color: var(--text); cursor: pointer;
+      font: inherit; font-size: var(--adopy-text-body);
+    }
+    .cbd-seg button + button { border-left: 1px solid var(--border); }
+    .cbd-seg button:hover { background: var(--bg-hover); }
+    .cbd-seg button[aria-selected="true"] { background: var(--adopy-selected-bg); color: var(--adopy-selected-text); font-weight: 600; }
+    .cbd-seg button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+    .cbd-seg .cbd-lv-bad::after { content: " !"; color: var(--bad); font-weight: 700; }
+    .cbd-ed-pick { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+    .cbd-ed-empty {
+      color: var(--muted); font-size: var(--adopy-text-body); line-height: 1.6;
+      text-align: center; padding: var(--space-xl) var(--space-md);
+    }
+    .cbd-ed-empty[hidden] { display: none; }
+    .cbd-col-edit .cbd-host { border-top: 0; }
+
+    /* Уровни редактора: форма одна, показывается нужный раздел. Правила
+       только для формы в ящике — на странице страны разделы видны все. */
+    .cbd-host[data-level="campaign"] .cb-lvl:not(.cb-lvl-campaign),
+    .cbd-host[data-level="adset"] .cb-lvl:not(.cb-lvl-adset),
+    .cbd-host[data-level="ad"] .cb-lvl:not(.cb-lvl-ad) { display: none; }
+    /* Настройка аккаунта (ссылка, поля карты) — контекст кампании, не набора и не объявления. */
+    .cbd-host[data-level="adset"] .cb-preflight, .cbd-host[data-level="ad"] .cb-preflight { display: none; }
+    .cbd-host .cb-lvl { padding-top: var(--space-xs); }
+    .cbd-host .cb-label { font-size: var(--adopy-text-sm); }
+    .cbd-host .cb-input, .cbd-host .cb-select, .cbd-host .cb-sel-text {
+      font-size: var(--adopy-text-body); min-height: var(--adopy-control-sm);
+    }
+    .cbd-host .cb-lvl-campaign .cb-input { width: 100%; box-sizing: border-box; }
+    .cb-name-auto { font-size: var(--adopy-text-sm); color: var(--muted); overflow-wrap: anywhere; margin-bottom: 0.25rem; }
+    .cb-name-auto b { color: var(--text); font-weight: 600; }
+
+    /* Что ещё не работает: показано, но выключено, и подпись называет задачу.
+       Ни у одного такого поля нет `name`, так что в форму оно не попадает и
+       ничего не подменяет. */
+    .cb-future-wrap { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; max-width: 100%; }
+    .cb-future { opacity: 1; cursor: not-allowed; }
+    /* Выключенный список не должен выглядеть живым: без стрелки, приглушён,
+       пунктирная рамка — читается как подпись, а не как выбор. */
+    select.cb-future {
+      -webkit-appearance: none; appearance: none; background-image: none;
+      background: var(--bg-hover); color: var(--muted);
+      border: 1px dashed var(--border-strong); padding-right: 0.5rem;
+    }
+    button.cb-future { background: var(--bg-hover); }
+    .cb-future-tag {
+      font-size: var(--adopy-text-sm); color: var(--muted);
+      border: 1px solid var(--border-strong); border-radius: 999px; padding: 0 0.4rem;
+    }
+    .cb-future-btn {
+      background: none; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
+      color: var(--muted); font: inherit; font-size: var(--adopy-text-sm); padding: 0.25rem 0.5rem;
+    }
+    .cb-lvl-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-sm); }
+    .cb-headline-line { color: var(--muted); font-size: var(--adopy-text-sm); margin-top: 0.2rem; overflow-wrap: anywhere; }
+    .cb-headline-line[hidden] { display: none; }
+    .cb-api-note { color: var(--warn); font-size: var(--adopy-text-sm); margin-top: 0.15rem; }
+
+    /* Подвал: выбор «страна / аккаунт» и «новая страна» в две колонки, чтобы
+       высота подвала не съедала редактор на невысоком окне. */
+    .cbd-foot-add { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-sm); align-items: start; }
+    .cbd-foot-add > .cbd-add { grid-column: 1 / -1; }
+    .cbd-foot-add .cbd-pick.cbd-newc { align-self: stretch; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cbd-acc-toggle { transition: none; }
+    }
+
     /* Открытый ящик раздвигает страницу, а не накрывает её: читать нужно
        ровно то, что сейчас закрыто панелью. Язычок входит в отступ — он
        торчит слева от панели и иначе ложится поверх таблицы. На узком
@@ -3168,53 +3498,76 @@
 {%- set gv = goals or {'rows': [], 'target': 0, 'deposits': 0, 'pct': none,
                        'cm': '', 'team_lead': false} %}
 
-<div class="page-top">
+<div class="page-top head-top">
+{#- ACL-1778: шапка — «Linear toolbar» с полем периода в рамке (вариант 5,
+    «Framed label»). Две полки: сверху то, с чем работают (период, под кем
+    смотрим, служебные кнопки, тема и Refresh), снизу техника — когда
+    обновлено, какая версия, STAGE. Id и обработчики прежние: на них
+    завязаны скрипты ниже и тесты. -#}
+{%- macro day_label(iso) -%}
+  {#- «Oct 1, 2026» прямо из строки ГГГГ-ММ-ДД, без Date в браузере: часовой
+      пояс не сдвинет день. Нечитаемое значение показываем как есть. -#}
+  {%- set mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] -%}
+  {%- if iso and iso|length >= 10 and iso[4] == '-' and iso[7] == '-' and iso[5:7]|int(0) in range(1, 13) and iso[8:10]|int(0) > 0 -%}
+    {{ mon[iso[5:7]|int - 1] }} {{ iso[8:10]|int }}, {{ iso[:4] }}
+  {%- else -%}{{ iso or '…' }}{%- endif -%}
+{%- endmacro -%}
+{%- if pd.span == 'all' or not (pd.date_from or pd.date_to) %}
+  {%- set period_parts = ['All dates'] %}
+{%- elif pd.date_from and pd.date_from == pd.date_to %}
+  {%- set period_parts = [day_label(pd.date_from)] %}
+{%- else %}
+  {%- set period_parts = [day_label(pd.date_from), day_label(pd.date_to)] %}
+{%- endif %}
+{%- set period_text = period_parts | join(' – ') %}
 <header class="page-header">
-  <div class="brand-lockup">
-    {#- ACM: только метка Adopy, без подписи (ACL-1723). Имя продукта для
-        скринридеров — в alt; h1 на странице не нужен. -#}
-    <div class="brand-mark">
-      <img src="/static/logo.svg" alt="Adopy Campaign Manager" class="brand-logo" width="34" height="34">
-    </div>
-    <div class="brand-text">
-      {#- Две подписанные величины вместо ленты через точки. Обе нужны в один
-          и тот же момент — когда обновление сломало работу и надо понять, что
-          стоит и когда встало, чтобы откатиться. Без подписи «Updated 2026-09-08
-          · acl-release-2026-09-03e» читается как одно смазанное сообщение. -#}
-      <dl class="brand-meta">
-        <dt>Last updated:</dt>
-        <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd>
-        <dt>Version:</dt>
-        <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd>
-        {%- set st = stage_status or {} %}
-        {%- if st.channel == 'stage' %}
-        <dd id="acl-stage" class="acl-stage{% if not st.known %} unknown{% endif %}"
-            title="{% if st.known %}This is the stage version you work on, run from source. {{ st.ahead }} change(s) here are not on {{ st.ref }} yet. Campaign managers get updates only from a release.{% else %}This is the stage version you work on, run from source. How far it is from stage is unknown: {{ st.why }}.{% endif %}">STAGE
-          <span class="acl-stage-gap">{% if st.known %}+{{ st.ahead }} not on stage{% else %}stage unknown{% endif %}</span></dd>
-        {%- endif %}
-      </dl>
-    </div>
+  {#- ACM: только метка Adopy, без подписи (ACL-1723). Имя продукта для
+      скринридеров — в alt; h1 на странице не нужен. -#}
+  <div class="brand-mark">
+    <img src="/static/logo.svg" alt="Adopy Campaign Manager" class="brand-logo" width="29" height="29">
   </div>
   {#- Период стоит в шапке, а не над секцией: он меняет каждое число на
-      странице, а элемент внутри блока читался бы как принадлежащий блоку. -#}
-  <div class="head-tools">
-    <div class="period-pick">
-      <button type="button" class="amap-btn amap-cal-btn" onclick="amapCalendar(this)"
-              title="Which days every number on this page counts">
-        📅 {% if pd.span == 'all' %}all dates{% elif pd.date_from and pd.date_from == pd.date_to %}{{ pd.date_from }}{% elif pd.date_from or pd.date_to %}{{ pd.date_from or '…' }} → {{ pd.date_to or '…' }}{% else %}all dates{% endif %}
-      </button>
-      <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
-    </div>
-    {#- «Под кем смотрим» — отдельный элемент, а не строчка под логотипом.
-        Это не свойство продукта, а положение зрителя, и меняется оно чаще,
-        чем всё остальное в шапке. -#}
-    <div class="buyer-pick">
-      <label for="buyer-select">Logged as</label>
-      <select id="buyer-select" title="Whose view to show: accounts, optimization, team comparison">
-        <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
-      </select>
-      <span id="buyer-msg"></span>
-    </div>
+      странице, а элемент внутри блока читался бы как принадлежащий блоку.
+      Выбранный период и «Last updated» — разные величины: первое — какие дни
+      считаются, второе — когда данные обновлялись. -#}
+  <div class="period-pick">
+    <button type="button" class="period-btn amap-cal-btn" id="period-btn" onclick="amapCalendar(this)"
+            aria-haspopup="dialog" aria-expanded="false" aria-label="Date range: {{ period_text }}"
+            title="Which days every number on this page counts">
+      <span class="period-label" aria-hidden="true">Date range</span>
+      <svg class="period-cal" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18M7 15h2m6 0h2m-10 3h2"/>
+      </svg>
+      <span class="period-text">
+        {%- for part in period_parts -%}
+          {%- if not loop.first %}<span class="period-dash" aria-hidden="true">–</span>{% endif -%}
+          <span class="period-day">{{ part }}</span>
+        {%- endfor -%}
+      </span>
+      <svg class="period-caret" viewBox="0 0 12 8" width="11" height="8" aria-hidden="true"><path d="M1 1.5h10L6 6.5Z"/></svg>
+    </button>
+    <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
+  </div>
+  {#- «Под кем смотрим» — отдельный элемент, а не строчка под логотипом.
+      Это не свойство продукта, а положение зрителя, и меняется оно чаще,
+      чем всё остальное в шапке. -#}
+  <div class="buyer-pick">
+    <label for="buyer-select">Logged as</label>
+    <select id="buyer-select" title="Whose view to show: accounts, optimization, team comparison">
+      <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
+    </select>
+    <span id="buyer-msg"></span>
+  </div>
+  <div class="head-support">
+    {#- ACL-1434: здоровье робота — отдельная страница, только чтение телеметрии. -#}
+    <a href="/robot-health" id="robot-health-link" class="head-btn quiet" title="Success rate of every robot step per account and build">Robot health</a>
+    {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
+        с Refresh намеренно: беда случается на экране, и идти за ней в другое
+        место человек не станет. -#}
+    <button type="button" id="report-problem-btn" class="head-btn" title="Tell us what went wrong — ACM attaches the machine's own facts">Report a problem</button>
+    <button type="button" class="head-btn acl-update" id="acl-update-btn" hidden>Update</button>
+  </div>
+  <div class="head-actions">
     {#- Переключатель, а не иконка. Иконка сообщала состояние одним знаком, и
         какое именно — приходилось угадывать. У дорожки с бегунком положение
         видно сразу: слева день, справа ночь. -#}
@@ -3233,17 +3586,28 @@
         <span class="ts-knob"></span>
       </span>
     </button>
+    <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
+      <button type="submit" id="dash-refresh-btn" class="head-btn head-refresh">Refresh</button>
+    </form>
   </div>
-  <form class="refresh" method="post" action="/refresh" onsubmit="return dashRefresh(event)">
-    {#- ACL-1434: здоровье робота — отдельная страница, только чтение телеметрии. -#}
-    <a href="/robot-health" id="robot-health-link" title="Success rate of every robot step per account and build" style="font-size:0.85rem;color:var(--muted);text-decoration:none;">Robot health</a>
-    {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
-        с Refresh намеренно: беда случается на экране, и идти за ней в другое
-        место человек не станет. -#}
-    <button type="button" id="report-problem-btn" title="Tell us what went wrong — ACM attaches the machine's own facts">Report a problem</button>
-    <button type="button" class="acl-update" id="acl-update-btn" hidden>Update</button>
-    <button type="submit" id="dash-refresh-btn">Refresh</button>
-  </form>
+  {#- Две подписанные величины вместо ленты через точки. Обе нужны в один и тот
+      же момент — когда обновление сломало работу и надо понять, что стоит и
+      когда встало, чтобы откатиться. Без подписи «Updated 2026-09-08 ·
+      acl-release-2026-09-03e» читается как одно смазанное сообщение. -#}
+  <div class="head-meta">
+    <dl class="brand-meta">
+      <div><dt>Last updated:</dt>
+      <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
+      <div><dt>Version:</dt>
+      <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd></div>
+      {%- set st = stage_status or {} %}
+      {%- if st.channel == 'stage' %}
+      <div><dd id="acl-stage" class="acl-stage{% if not st.known %} unknown{% endif %}"
+          title="{% if st.known %}This is the stage version you work on, run from source. {{ st.ahead }} change(s) here are not on {{ st.ref }} yet. Campaign managers get updates only from a release.{% else %}This is the stage version you work on, run from source. How far it is from stage is unknown: {{ st.why }}.{% endif %}"><b>STAGE</b>
+        <span class="acl-stage-gap">{% if st.known %}+{{ st.ahead }} not on stage{% else %}stage unknown{% endif %}</span></dd></div>
+      {%- endif %}
+    </dl>
+  </div>
 </header>
 
 {#- Окно жалобы. Человек пишет только то, что видел; версию, машину, период и
@@ -3789,6 +4153,8 @@ async function dashRefresh(ev) {
      тоталы страны теперь стоят в свёрнутой строке карты, а страна с деньгами
      без размещённых аккаунтов приходит туда красной «виртуальной» строкой. #}
   <div id="amap-slot">{% include "_account_map.html" %}</div>
+  {#- ACL-1798: командная таблица кампаний (только чтение) — под целями и картой стран. -#}
+  {% include "_home_campaigns.html" %}
 </div>
 
 {% for c in report.countries %}
@@ -4610,11 +4976,26 @@ async function dashRefresh(ev) {
     <div class="cbd-head">
       <span class="cbd-title">Builder</span>
       <span class="cbd-sub" id="cbd-sub"></span>
+      {#- ACL-1769: «Expand» растягивает ту же панель, «Dock right» возвращает
+          её к краю. Закрытие по-прежнему только прячет: черновики и идущие
+          задания остаются. -#}
+      <button type="button" class="cbd-expand" id="cbd-expand"
+              aria-pressed="false" aria-controls="cbd-panel"
+              title="Make the builder wider">Expand</button>
       <button type="button" class="cbd-close" id="cbd-close"
               title="Close the builder" aria-label="Close the builder">×</button>
     </div>
-    <div class="cbd-body" id="cbd-body">
-      <p class="cbd-empty">Nothing is being assembled yet.</p>
+    {#- ACL-1769: две колонки. Слева дерево «страна → аккаунт → кампании»
+        (только имена), справа редактор выбранного. Форма аккаунта — по-прежнему
+        единственный источник данных: редактор лишь показывает её нужный
+        уровень, а не хранит копию. -#}
+    <div class="cbd-cols">
+      <div class="cbd-col cbd-col-tree" aria-label="Campaigns">
+        <div class="cbd-body" id="cbd-body">
+          <p class="cbd-empty">Nothing is being assembled yet.</p>
+        </div>
+      </div>
+      <section class="cbd-col cbd-col-edit" id="cbd-editor" aria-label="Campaign editor"></section>
     </div>
     <div class="cbd-foot" id="cbd-foot" hidden></div>
   </aside>
@@ -4632,6 +5013,8 @@ async function dashRefresh(ev) {
  */
 window.cbDrawer = (function () {
   var KEY = 'acl.builder.open';
+  /* ACL-1769: растянутая панель — отдельное запоминаемое состояние. */
+  var WIDE_KEY = 'acl.builder.expanded';
 
   var root = document.getElementById('cbd-root');
   if (!root) return null;
@@ -4639,6 +5022,7 @@ window.cbDrawer = (function () {
   var handle = document.getElementById('cbd-handle');
   var countEl = document.getElementById('cbd-count');
   var subEl = document.getElementById('cbd-sub');
+  var expandBtn = document.getElementById('cbd-expand');
   var count = 0;
 
   /* Хранилище бывает закрыто: приватное окно, запрет на данные сайта.
@@ -4651,6 +5035,32 @@ window.cbDrawer = (function () {
   }
 
   function isOpen() { return root.getAttribute('data-open') === '1'; }
+
+  function rememberedWide() {
+    try { return localStorage.getItem(WIDE_KEY) === '1'; } catch (e) { return false; }
+  }
+  function isExpanded() { return root.getAttribute('data-expanded') === '1'; }
+
+  /* Expand / Dock right: та же панель, те же две колонки, выбор и данные —
+     меняется только ширина. Закрытие панели состояние не сбрасывает. */
+  function applyWide(wide) {
+    root.setAttribute('data-expanded', wide ? '1' : '0');
+    document.body.classList.toggle('cbd-expanded', wide);
+    if (expandBtn) {
+      expandBtn.textContent = wide ? 'Dock right' : 'Expand';
+      expandBtn.setAttribute('aria-pressed', wide ? 'true' : 'false');
+      expandBtn.title = wide ? 'Dock the builder on the right' : 'Make the builder wider';
+    }
+  }
+
+  function setExpanded(wide, save) {
+    wide = !!wide;
+    if (wide === isExpanded()) return wide;
+    applyWide(wide);
+    if (save !== false) { try { localStorage.setItem(WIDE_KEY, wide ? '1' : '0'); } catch (e) { /* не помним */ } }
+    document.dispatchEvent(new CustomEvent('acl:builder-expanded', { detail: { expanded: wide } }));
+    return wide;
+  }
 
   function apply(open) {
     root.setAttribute('data-open', open ? '1' : '0');
@@ -4683,7 +5093,9 @@ window.cbDrawer = (function () {
 
   handle.addEventListener('click', function () { set(!isOpen()); });
   document.getElementById('cbd-close').addEventListener('click', function () { set(false); });
+  if (expandBtn) expandBtn.addEventListener('click', function () { setExpanded(!isExpanded()); });
 
+  applyWide(rememberedWide());
   apply(remembered());
   setCount(0);
 
@@ -4692,6 +5104,9 @@ window.cbDrawer = (function () {
     close: function () { return set(false); },
     toggle: function () { return set(!isOpen()); },
     isOpen: isOpen,
+    expand: function () { return setExpanded(true); },
+    dock: function () { return setExpanded(false); },
+    isExpanded: isExpanded,
     setCount: setCount,
     count: function () { return count; },
     body: function () { return document.getElementById('cbd-body'); },
@@ -4784,6 +5199,10 @@ window.cbKeep = (function () {
       var f = field(hidden);
       if (f) shown[f] = text.value;
     });
+    /* ACL-1769: своё имя кампании — только в черновике, без `name`: форма
+       уходит на сервер ровно с теми полями, что и раньше. */
+    var ov = slot.querySelector('.cb-name-override');
+    if (ov) fields.name_override = ov.value;
     var hint = slot.querySelector('.cb-targeting-hint');
     var out = {
       fields: fields,
@@ -4820,6 +5239,8 @@ window.cbKeep = (function () {
       if (wrap.classList.contains('cb-text2-sel-wrap'))
         text.classList.toggle('cb-text2-unmatched', !!text.value.trim() && !hidden.value);
     });
+    var ov = slot.querySelector('.cb-name-override');
+    if (ov && typeof data.fields.name_override === 'string') ov.value = data.fields.name_override;
     var hint = slot.querySelector('.cb-targeting-hint');
     if (hint) hint.textContent = data.hint || '';
     slot._cbdPick = data.picked === true;
@@ -4938,6 +5359,136 @@ window.cbKeep = (function () {
 </script>
 
 <script>
+/* Раскладка билдера (ACL-1769): чистые функции, без DOM.
+ *
+ * Здесь всё, что решает «что показать и как назвать», отдельно от рисования:
+ * так это проверяется в Node (tests/builder_layout_harness.cjs), а страница
+ * только вызывает. Ничего из этого не знает правил Meta и создателя кампаний
+ * (src/fb_api/creator.py): правила живут на сервере, а здесь только то, как
+ * его ответ ложится на поля редактора.
+ */
+window.cbLayout = (function () {
+  /* Объект редактора. Сегодня у кампании ровно один набор объявлений —
+     уровень «Ad set» показывает его отдельно; несколько наборов — ACL-1768. */
+  var LEVELS = ['campaign', 'adset', 'ad'];
+  var LEVEL_LABEL = { campaign: 'Campaign', adset: 'Ad set', ad: 'Ad' };
+
+  function level(v) { return LEVELS.indexOf(v) === -1 ? 'campaign' : v; }
+
+  /* Что в дизайне есть, а бэкенда под ним пока нет. Такой элемент рисуется
+     выключенным, без `name` (в форму не попадает, значения не подменяет), с
+     подсказкой, называющей задачу. Подставлять ему состояние нельзя. */
+  var FUTURE = {
+    adsets:     { task: 'ACL-1768', what: 'Multiple ad sets' },
+    copyAdset:  { task: 'ACL-1768', what: 'Copy ad set' },
+    forms:      { task: 'ACL-1775', what: 'Instant Forms' },
+    texts:      { task: 'ACL-1774', what: 'Up to 5 primary texts' },
+    placements: { task: 'ACL-1772', what: 'Placement editor' },
+    media:      { task: 'ACL-1772', what: 'Separate Stories / Reels file' },
+    gender:     { task: 'ACL-1767', what: 'Gender' },
+    languages:  { task: 'ACL-1767', what: 'Several languages' },
+    cta:        { task: 'ACL-1767', what: 'CTA list' },
+    copyTo:     { task: 'ACL-1773', what: 'Copy to accounts' }
+  };
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function futureTip(key, extra) {
+    var f = FUTURE[key];
+    if (!f) return '';
+    return f.what + ' — coming in ' + f.task + (extra ? '. ' + extra : '');
+  }
+
+  /* Выключенный элемент. kind: 'button' | 'select' (с одним показанным
+     значением — тем, что создатель шлёт на самом деле). */
+  function futureHtml(key, kind, text, extra) {
+    var f = FUTURE[key];
+    if (!f) return '';
+    var tip = esc(futureTip(key, extra));
+    var ctl = kind === 'select'
+      ? '<select class="cb-input cb-select cb-future" disabled aria-disabled="true" aria-label="' + esc(f.what) + '"'
+        + ' title="' + tip + '"><option>' + esc(text || '') + '</option></select>'
+      : '<button type="button" class="cb-future-btn cb-future" disabled aria-disabled="true"'
+        + ' title="' + tip + '">' + esc(text || f.what) + '</button>';
+    return '<span class="cb-future-wrap" data-future="' + esc(key) + '" title="' + tip + '">' + ctl
+      + '<span class="cb-future-tag">' + esc(f.task) + '</span></span>';
+  }
+
+  /* Кампания: имя. Ручное имя используется, только если заполнено. */
+  function effectiveName(auto, override) {
+    var o = String(override == null ? '' : override).trim();
+    return o || String(auto == null ? '' : auto);
+  }
+
+  /* Статус аккаунта из того, что страница знает сегодня: идёт ли сборка и
+     что говорит сохранённая настройка аккаунта (ссылка, поля карты). */
+  function accountState(pf, busy) {
+    if (busy) return { state: 'busy', sign: '', why: 'Being built now' };
+    if (!pf) return { state: 'wait', sign: '·', why: 'Account settings are not loaded' };
+    var missing = [];
+    if (pf.link_status !== 'tracking') missing.push('tracking link');
+    (pf.missing_map_fields || []).forEach(function (f) { missing.push(f); });
+    if (missing.length) return { state: 'warn', sign: '!', why: 'Needs setup: ' + missing.join(', ') };
+    return { state: 'ok', sign: '✓', why: 'Account is configured' };
+  }
+
+  function clampAd(count, idx) {
+    var n = Math.max(1, count | 0), i = idx | 0;
+    return i < 0 ? 0 : i > n - 1 ? n - 1 : i;
+  }
+
+  /* Какие поля подсветить на сообщение сервера. Правила здесь не
+     дублируются: сервер решает, ошибка ли это (preview-publish и
+     creator.plan_from_draft), а здесь только куда её показать. */
+  var ROUTES = [
+    [/primary text 2/i, '.cb-text2-search', 'ad'],
+    [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text 2'],
+    [/creative|file|image|video/i, '.cb-creative-search', 'ad'],
+    [/would all be named|names must differ/i, '.cb-creative-search, .cb-adtitle-search', 'ad'],
+    [/budget/i, '[name$="_budget"]', 'campaign'],
+    [/detailed targeting|interest|target/i, '.cb-targeting-search', 'adset'],
+    [/language/i, '[name$="_language"]', 'adset'],
+    [/tracking link/i, 'input[name="tracking_link"]', 'form']
+  ];
+
+  function routes(message) {
+    var m = String(message || ''), out = [];
+    ROUTES.forEach(function (r) {
+      if (!r[0].test(m)) return;
+      /* Ошибка про второй текст подсвечивает его поле, а не Ad Title (ACL-1344). */
+      if (r[3] && new RegExp(r[3], 'i').test(m)) return;
+      out.push({ sel: r[1], level: r[2] });
+    });
+    return out;
+  }
+
+  /* Строка кампании в дереве: что показывать под именем. */
+  function campMeta(c) {
+    var bits = [];
+    if (c && c.budget) bits.push('$' + c.budget + '/day');
+    return bits.join(' · ');
+  }
+
+  function parseList(raw) {
+    try {
+      var v = JSON.parse(raw || '[]');
+      return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : [];
+    } catch (e) { return []; }
+  }
+
+  return {
+    LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE,
+    level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
+    accountState: accountState, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
+  };
+})();
+</script>
+
+<script>
 /* Дерево в ящике: страна → аккаунт → кампания → объявление.
  *
  * Подписями, а не лесенкой: два уровня отступов в панели шириной в 360
@@ -4956,6 +5507,26 @@ window.cbTree = (function () {
   var body = document.getElementById('cbd-body');
   var foot = document.getElementById('cbd-foot');
   if (!body || !foot) return null;
+  /* ACL-1769: правая колонка. Без неё (чужая разметка) дерево всё равно
+     работает — редактору просто негде стоять на экране. */
+  var editor = document.getElementById('cbd-editor') || document.createElement('div');
+  var L = window.cbLayout;
+
+  function store(key, value) {
+    try {
+      if (value === undefined) return localStorage.getItem(key);
+      localStorage.setItem(key, value);
+    } catch (e) { /* хранилище закрыто — не помним, но работаем */ }
+    return null;
+  }
+  var LEVEL_KEY = 'acl.builder.level';
+  var NAMES_KEY = 'acl.builder.names-only';
+  var FOLD_KEY = 'acl.builder.folded-accounts';
+  /* Какой уровень редактора открыт, свёрнуты ли кампании до имён, какие
+     аккаунты схлопнуты: интерфейс, не данные — в форму не попадает. */
+  var level = L.level(store(LEVEL_KEY));
+  var namesOnly = store(NAMES_KEY) === '1';
+  var folded = L.parseList(store(FOLD_KEY));
 
   var openId = '';
   try { openId = localStorage.getItem(OPEN_KEY) || ''; } catch (e) { openId = ''; }
@@ -4989,6 +5560,15 @@ window.cbTree = (function () {
     return shown ? (shown.textContent || '').trim() : '';
   }
 
+  /* Бюджет кампании (CBO, на уровне кампании) — для строки дерева. */
+  function slotBudget(slot) {
+    var inputs = slot.querySelectorAll('input');
+    for (var i = 0; i < inputs.length; i += 1) {
+      if (/_budget$/.test(inputs[i].name || '')) return inputs[i].value ? String(inputs[i].value).trim() : '';
+    }
+    return '';
+  }
+
   function realTree() {
     var out = [], byCountry = Object.create(null);
     document.querySelectorAll('.view-panel[data-country]').forEach(function (panel) {
@@ -5009,7 +5589,8 @@ window.cbTree = (function () {
             id: slotId(slot),
             slot: slot,
             name: slotName(slot),
-            ads: slot.querySelectorAll('.cb-ad-row').length
+            ads: slot.querySelectorAll('.cb-ad-row').length,
+            budget: slotBudget(slot)
           };
         });
         /* Сервер собирает кампании по имени: две карточки с одинаковым
@@ -5180,6 +5761,28 @@ window.cbTree = (function () {
     }
     var btn = foot.querySelector('.cbd-publish-all');
     if (btn) btn.textContent = publishLabel(t);
+    refreshAccountStates();
+  }
+
+  /* Значок аккаунта (идёт ли сборка, настроен ли) обновляется на месте, как и
+     галочки: сборка стартует и кончается без перерисовки дерева. */
+  function refreshAccountStates() {
+    var boxes = body.querySelectorAll('.cbd-acc');
+    if (!boxes.length) return;
+    var map = Object.create(null);
+    realTree().forEach(function (g) {
+      g.accounts.forEach(function (a) { map[g.country + '|' + a.account] = a; });
+    });
+    boxes.forEach(function (box) {
+      var a = map[box.dataset.acc];
+      var dot = box.querySelector('.cbd-acc-state');
+      if (!a || !dot) return;
+      var st = L.accountState(window.ACCOUNT_PREFLIGHT && window.ACCOUNT_PREFLIGHT[a.account], tickLocked(a));
+      dot.className = 'cbd-ind cbd-acc-state cbd-acc-st-' + st.state;
+      dot.title = st.why;
+      var sign = dot.querySelector('span');
+      if (sign) sign.textContent = st.sign;
+    });
   }
 
   function keepTicks() {
@@ -5206,6 +5809,7 @@ window.cbTree = (function () {
     var open = c.id === openId;
     var locked = tickLocked(a);
     var tip = aclEscHtml(tickTitle(locked, picked(c.slot)));
+    var meta = L.campMeta(c);
     return '<div class="cbd-camp" data-camp="' + aclEscHtml(c.id) + '" data-open="' + (open ? '1' : '0') + '">'
       + '<div class="cbd-camp-head">'
       + '<label class="cbd-tick" title="' + tip + '">'
@@ -5214,19 +5818,49 @@ window.cbTree = (function () {
       + (picked(c.slot) ? ' checked' : '') + (tickDisabled(c.slot, locked) ? ' disabled' : '') + '>'
       + '</label>'
       + '<button type="button" class="cbd-camp-row" data-act="toggle"'
-      + ' aria-expanded="' + (open ? 'true' : 'false') + '">'
-      + '<span class="cbd-caret" aria-hidden="true">▸</span>'
+      + ' aria-current="' + (open ? 'true' : 'false') + '">'
       + '<span class="cbd-ind cbd-ind-' + r.state + '" title="' + aclEscHtml(r.why) + '"'
       + (r.pct != null ? ' data-pct="' + Math.floor(r.pct) + '%"' : '') + '>'
       + '<span>' + r.sign + '</span></span>'
+      + '<span class="cbd-camp-main">'
       + (c.name
           ? '<span class="cbd-camp-name">' + aclEscHtml(c.name) + '</span>'
           : '<span class="cbd-camp-name cbd-camp-name-empty">Untitled campaign</span>')
-      + '<span class="cbd-camp-ads">' + c.ads + (c.ads === 1 ? ' ad' : ' ads') + '</span>'
+      /* Под именем — то, что «Names only» прячет: счётчик объявлений и бюджет. */
+      + '<span class="cbd-camp-sub"><span class="cbd-camp-ads">' + c.ads + (c.ads === 1 ? ' ad' : ' ads') + '</span>'
+      + '<span class="cbd-camp-meta">' + aclEscHtml(meta) + '</span></span>'
+      + '</span>'
       + '</button>'
       + '<button type="button" class="cbd-camp-drop" data-act="drop"'
       + ' title="Remove this campaign" aria-label="Remove this campaign">×</button>'
       + '</div>'
+      + '</div>';
+  }
+
+  /* Аккаунт в дереве: стрелка сворачивает его кампании до одной строки,
+     `+` заводит кампанию именно в нём, значок — статус аккаунта (идёт ли
+     сборка, настроен ли он) из того, что страница знает сегодня. */
+  function accountHtml(g, a) {
+    var key = g.country + '|' + a.account;
+    var closed = folded.indexOf(key) !== -1;
+    var pf = window.ACCOUNT_PREFLIGHT && window.ACCOUNT_PREFLIGHT[a.account];
+    var st = L.accountState(pf, tickLocked(a));
+    var name = aclEscHtml(a.account);
+    return '<div class="cbd-acc" data-acc="' + aclEscHtml(key) + '" data-collapsed="' + (closed ? '1' : '0') + '">'
+      + '<div class="cbd-account">'
+      + '<button type="button" class="cbd-acc-toggle" data-act="acc-toggle" data-key="' + aclEscHtml(key) + '"'
+      + ' aria-expanded="' + (closed ? 'false' : 'true') + '"'
+      + ' aria-label="' + (closed ? 'Expand' : 'Collapse') + ' account ' + name + '"'
+      + ' title="' + (closed ? 'Expand' : 'Collapse') + ' this account">▾</button>'
+      + '<span class="cbd-acc-name" title="' + name + '">' + name + '</span>'
+      + '<span class="cbd-ind cbd-acc-state cbd-acc-st-' + st.state + '" title="' + aclEscHtml(st.why) + '">'
+      + '<span>' + st.sign + '</span></span>'
+      + '<span class="cbd-acc-count">' + a.campaigns.length + '</span>'
+      + '<button type="button" class="cbd-acc-add" data-act="add-here"'
+      + ' data-country="' + aclEscHtml(g.country) + '" data-account="' + name + '"'
+      + ' title="Add a campaign to ' + name + '" aria-label="Add a campaign to ' + name + '">+</button>'
+      + '</div>'
+      + '<div class="cbd-acc-body">' + a.campaigns.map(function (c) { return campaignHtml(c, a); }).join('') + '</div>'
       + '</div>';
   }
 
@@ -5236,9 +5870,8 @@ window.cbTree = (function () {
     var keepFocus = focused && (host.contains(focused) || connectHost.contains(focused));
     var selection = keepFocus ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
     var tree = realTree();
-    /* Узел с гостящей формой держим в переменной и вынимаем ДО перерисовки:
-       иначе innerHTML снёс бы вместе с разметкой и саму форму. */
-    if (host.parentNode) host.parentNode.removeChild(host);
+    /* ACL-1769: форма гостит в правой колонке, а не в карточке дерева, —
+       перерисовка дерева её больше не задевает (и фокус в её полях цел). */
 
     /* В ящике — то, что собирается, а не список всех аккаунтов. Аккаунтов
        два десятка; показанные все, они делают стену пустых строк, в
@@ -5267,7 +5900,12 @@ window.cbTree = (function () {
     if (!busy.length) {
       body.innerHTML = '<p class="cbd-empty">Nothing is being assembled yet.</p>';
     } else {
-      body.innerHTML = (countTotal(tree) ? '<div class="cbd-ticks"></div>' : '') + busy.map(function (g) {
+      body.dataset.namesOnly = namesOnly ? '1' : '0';
+      var panelEl = document.getElementById('cbd-panel');
+      if (panelEl && panelEl.dataset) panelEl.dataset.namesOnly = namesOnly ? '1' : '0';
+      body.innerHTML = '<div class="cbd-treebar">' + (countTotal(tree) ? '<div class="cbd-ticks"></div>' : '')
+        + '<button type="button" class="cbd-names-only" data-act="names-only" aria-pressed="' + (namesOnly ? 'true' : 'false') + '"'
+        + ' title="Show campaign names only">Names only</button></div>' + busy.map(function (g) {
         return '<div class="cbd-country">' + aclEscHtml(g.countryName || g.country)
           + '<button type="button" class="cbd-country-add" data-act="connect"'
           + ' data-country="' + aclEscHtml(g.country) + '"'
@@ -5279,20 +5917,15 @@ window.cbTree = (function () {
              самая, показанная в другом месте. */
           + ' title="Link an account here">+ Account</button></div>'
           + (g.country === openConnect ? '<div class="cbd-connect-slot"></div>' : '')
-          + g.accounts.map(function (a) {
-              return '<div class="cbd-account">' + aclEscHtml(a.account) + '</div>'
-                + a.campaigns.map(function (c) { return campaignHtml(c, a); }).join('')
-                + '<button type="button" class="cbd-add" data-act="add-here"'
-                + ' data-country="' + aclEscHtml(g.country) + '"'
-                + ' data-account="' + aclEscHtml(a.account) + '">+ Campaign</button>';
-            }).join('');
+          + g.accounts.map(function (a) { return accountHtml(g, a); }).join('');
       }).join('');
     }
 
-    /* Раскрытая карточка получает настоящую форму — ту самую, а не копию. */
+    /* Выбранная кампания получает настоящую форму — ту самую, а не копию, —
+       но живёт она в правой колонке. Карточки в дереве нет — отпускаем. */
     var card = openId ? body.querySelector('.cbd-camp[data-camp="' + openId + '"]') : null;
-    if (card) card.appendChild(host);
-    else if (openId) release();
+    if (!card && openId) release();
+    paintEditor();
 
     var slotEl = openConnect ? body.querySelector('.cbd-connect-slot') : null;
     if (slotEl) slotEl.appendChild(connectHost);
@@ -5352,7 +5985,7 @@ window.cbTree = (function () {
             : '')
           + '<div class="cbd-queue" hidden></div>'
         : '')
-      + '<div class="cbd-pick">'
+      + '<div class="cbd-foot-add"><div class="cbd-pick">'
       + '<select class="cbd-pick-country" aria-label="Country">'
       + list.map(function (p) {
           return '<option value="' + aclEscHtml(p.country) + '"'
@@ -5363,11 +5996,12 @@ window.cbTree = (function () {
       + '<select class="cbd-pick-account" aria-label="Account"></select>'
       + '<button type="button" class="cbd-add" data-act="add-picked">+ Campaign</button>'
       + '</div>'
-      + '<button type="button" class="cbd-add" data-act="connect-picked">+ Account in selected country</button>'
       + '<div class="cbd-pick cbd-newc">'
       + '<input type="text" class="cbd-new-country" placeholder="new country…" autocomplete="off">'
       + '<button type="button" class="cbd-add" data-act="add-country">+ Country</button>'
       + '<span class="cbd-new-msg"></span>'
+      + '</div>'
+      + '<button type="button" class="cbd-add" data-act="connect-picked">+ Account in selected country</button>'
       + '</div>';
     foot.hidden = false;
     // Та же разметка, что и в прошлый раз, - узлы остаются теми же.
@@ -5408,6 +6042,111 @@ window.cbTree = (function () {
   var host = document.createElement('div');
   host.className = 'cbd-camp-body cbd-host';
   var BORROWED = null;
+
+  /* ── правая колонка: редактор выбранного объекта (ACL-1769) ─────────────
+     Форма одна и лежит в `host`; здесь только переключатель Campaign /
+     Ad set / Ad над ней и выбор объявления. Уровень — это атрибут на `host`
+     и CSS: показан нужный раздел формы, остальные скрыты, но на месте и
+     уходят в публикацию как раньше. */
+  var edHead = document.createElement('div');
+  edHead.className = 'cbd-ed-head';
+  edHead.hidden = true;
+  var edEmpty = document.createElement('p');
+  edEmpty.className = 'cbd-ed-empty';
+  edEmpty.textContent = 'Select a campaign on the left to edit it. Use + next to an account to add one.';
+  editor.appendChild(edHead);
+  editor.appendChild(edEmpty);
+  var lastHead = '';
+
+  /* Есть ли в разделе подсвеченная ошибка — тогда на вкладке уровня «!». */
+  function levelHasError(slot, lv) {
+    var bad = slot.querySelectorAll('.cb-field-error');
+    for (var i = 0; i < bad.length; i += 1) {
+      if (bad[i].closest('.cb-lvl-' + lv)) return true;
+      // Ошибка в настройке аккаунта (ссылка) показана на вкладке Campaign.
+      if (lv === 'campaign' && bad[i].closest('.cb-preflight')) return true;
+    }
+    return false;
+  }
+
+  function headHtml(found) {
+    var c = found.camp, slot = c.slot;
+    var seg = L.LEVELS.map(function (lv) {
+      var bad = levelHasError(slot, lv);
+      return '<button type="button" role="tab" data-act="level" data-level="' + lv + '"'
+        + ' aria-selected="' + (lv === level ? 'true' : 'false') + '"'
+        + (bad ? ' class="cbd-lv-bad" title="Something in this section needs fixing"' : '') + '>'
+        + L.LEVEL_LABEL[lv] + '</button>';
+    }).join('');
+    var pick = '';
+    /* Вкладка Ad без выбора объявления: все карточки набора идут одним
+       вертикальным списком (владелец, 13.10), добавление и копия видны сразу. */
+    if (level === 'adset') {
+      /* Сегодня у кампании один набор объявлений; несколько — ACL-1768. */
+      pick = '<div class="cbd-ed-pick"><span class="cbd-ed-fixed">Ad set 1 · the only ad set of this campaign</span>'
+        + L.futureHtml('adsets', 'button', '+ Ad set') + L.futureHtml('copyAdset', 'button', 'Copy ad set') + '</div>';
+    }
+    return '<div class="cbd-ed-crumb" title="' + aclEscHtml(found.account.account + ' › ' + (c.name || 'Untitled campaign')) + '">'
+      + '<strong>' + aclEscHtml(found.account.account) + '</strong> › ' + aclEscHtml(c.name || 'Untitled campaign') + '</div>'
+      + '<div class="cbd-seg" role="tablist" aria-label="Object to edit">' + seg + '</div>' + pick;
+  }
+
+  /* Привести форму в `host` к выбранному уровню и объявлению. */
+  function syncHost(found) {
+    host.dataset.level = level;
+    var rows = found.camp.slot.querySelectorAll('.cb-ad-row');
+    var api = window.ACL_FB_BACKEND === 'api';
+    for (var i = 0; i < rows.length; i += 1) {
+      /* Создатель по API второй основной текст не принимает: пустое поле
+         выключено с причиной, непустое остаётся рабочим (иначе набранное
+         молча пропало бы из отправки) и проверка покажет ошибку на нём. */
+      var t2 = rows[i].querySelector('.cb-text2-search');
+      var note = rows[i].querySelector('[data-api-only]');
+      if (t2) {
+        t2.disabled = api && !t2.value;
+        if (t2.disabled) t2.title = 'API backend: a second primary text is not supported yet (ACL-1774)';
+      }
+      if (note) note.hidden = !api;
+      /* Заголовок выбранной записи — под Primary text 1, только для чтения. */
+      var line = rows[i].querySelector('[data-headline]');
+      var pick = rows[i].querySelector('.cb-adtitle-sel-wrap input[type="hidden"]');
+      if (line) {
+        var entry = pick && pick.value && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(pick.value) : null;
+        line.hidden = !entry;
+        /* Только при изменении: запись в textContent — мутация формы, её слушает
+           наблюдатель дерева, и безусловная запись зациклила бы страницу. */
+        var want = entry ? 'Headline: ' + (entry.headline || entry.ad_title) + ', from the ad-title library' : '';
+        if (line.textContent !== want) line.textContent = want;
+      }
+    }
+  }
+
+  function paintEditor() {
+    var found = (openId && BORROWED) ? findCampaign(openId) : null;
+    if (!found) {
+      if (host.parentNode === editor) editor.removeChild(host);
+      edHead.hidden = true;
+      edEmpty.hidden = false;
+      lastHead = '';
+      return;
+    }
+    edEmpty.hidden = true;
+    edHead.hidden = false;
+    if (host.parentNode !== editor) editor.appendChild(host);
+    syncHost(found);
+    var html = headHtml(found);
+    if (html !== lastHead) { edHead.innerHTML = html; lastHead = html; }
+  }
+
+  function setLevel(next) {
+    level = L.level(next);
+    store(LEVEL_KEY, level);
+    paintEditor();
+    var again = edHead.querySelector('[data-level="' + level + '"]');
+    if (again && again.focus) again.focus();
+  }
+
+  editor.addEventListener('scroll', function () { cbdPlaceDropdowns(); });
 
   /* Дублирование кампании живёт в её карточке (ACL-1459). Ящик отвечает за
      то, что после копии: раскрыть её, ведь её и пришли править — тем одним
@@ -5598,6 +6337,13 @@ window.cbTree = (function () {
     paint();
   }
 
+  function toggleFold(key) {
+    var i = folded.indexOf(key);
+    if (i === -1) folded.push(key); else folded.splice(i, 1);
+    store(FOLD_KEY, JSON.stringify(folded));
+    paint();
+  }
+
   function closeCampaign() {
     rememberOpen('');
     release();
@@ -5629,7 +6375,19 @@ window.cbTree = (function () {
     var id = card ? card.dataset.camp : '';
 
     if (act === 'toggle') {
-      if (id === openId) closeCampaign(); else openCampaign(id);   // одна за раз
+      if (namesOnly) {   // выбор кампании выводит из «Names only»: редактору нужно место
+        namesOnly = false;
+        store(NAMES_KEY, '0');
+        openCampaign(id);
+      } else if (id === openId) closeCampaign(); else openCampaign(id);   // одна за раз
+    } else if (act === 'level') {
+      setLevel(hit.dataset.level);
+    } else if (act === 'acc-toggle') {
+      toggleFold(hit.dataset.key || '');
+    } else if (act === 'names-only') {
+      namesOnly = !namesOnly;
+      store(NAMES_KEY, namesOnly ? '1' : '0');
+      paint();
     } else if (act === 'drop') {
       var found = findCampaign(id);
       if (!found) return;
@@ -5777,6 +6535,9 @@ window.cbTree = (function () {
     }
     var adsEl = card.querySelector('.cbd-camp-ads');
     if (adsEl) adsEl.textContent = c.ads + (c.ads === 1 ? ' ad' : ' ads');
+    var metaEl = card.querySelector('.cbd-camp-meta');
+    if (metaEl) metaEl.textContent = L.campMeta(c);
+    paintEditor();
     var ind = card.querySelector('.cbd-ind');
     if (ind) {
       var r = readiness(c);
@@ -5828,6 +6589,9 @@ window.cbTree = (function () {
     places: places,
     readiness: readiness,
     refresh: refreshOpenRow,
+    refreshEditor: paintEditor,
+    setLevel: setLevel,
+    level: function () { return level; },
     showQueue: showQueue,
     refreshTicks: refreshTicks,
     // Кампании, ушедшие роботу, больше не отмечены (ACL-1360).
@@ -6719,7 +7483,7 @@ var AMAP_MONTHS = ['January','February','March','April','May','June',
 
 function amapCalendar(btn) {
   var open = document.querySelector('.amap-cal');
-  if (open) { open.remove(); return; }
+  if (open) { if (open._amapClose) open._amapClose(true); else open.remove(); return; }
   var have = amapDates();
   if (!have.length) { alert('The workbook has no dates to choose from.'); return; }
 
@@ -6738,26 +7502,37 @@ function amapCalendar(btn) {
 
   var box = document.createElement('div');
   box.className = 'amap-cal';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-label', 'Date range');
   document.body.appendChild(box);
   var r = btn.getBoundingClientRect();
-  box.style.left = Math.max(8, Math.min(r.left - 260, innerWidth - 700)) + 'px';
+  box.style.left = Math.max(8, Math.min(r.left, innerWidth - 700)) + 'px';
   box.style.top = (r.bottom + window.scrollY + 6) + 'px';
 
   /* Клик мимо окна закрывает его, как Cancel; Esc — тоже (19.09, просьба
      пользователя). mousedown, а не click: окно перерисовывается на каждый
-     клик по дате, и к моменту click цель уже вынута из разметки. */
+     клик по дате, и к моменту click цель уже вынута из разметки.
+     ACL-1778: кнопка периода знает, открыто ли окно (aria-expanded), а
+     закрытие с клавиатуры возвращает фокус на неё. */
+  btn.setAttribute('aria-expanded', 'true');
   function amapCalOutside(e) {
     if (!document.body.contains(box)) { amapCalStop(); return; }
     if (box.contains(e.target) || btn.contains(e.target)) return;
-    box.remove(); amapCalStop();
+    amapCalClose(false);
   }
   function amapCalEsc(e) {
-    if (e.key === 'Escape' && document.body.contains(box)) { box.remove(); amapCalStop(); }
+    if (e.key === 'Escape' && document.body.contains(box)) amapCalClose(true);
   }
   function amapCalStop() {
     document.removeEventListener('mousedown', amapCalOutside, true);
     document.removeEventListener('keydown', amapCalEsc, true);
+    btn.setAttribute('aria-expanded', 'false');
   }
+  function amapCalClose(refocus) {
+    box.remove(); amapCalStop();
+    if (refocus && document.body.contains(btn)) btn.focus();
+  }
+  box._amapClose = amapCalClose;
   document.addEventListener('mousedown', amapCalOutside, true);
   document.addEventListener('keydown', amapCalEsc, true);
 
@@ -6886,8 +7661,8 @@ function amapCalendar(btn) {
         draw();
       };
     });
-    box.querySelector('[data-close]').onclick = function () { box.remove(); };
-    box.querySelector('[data-cancel]').onclick = function () { box.remove(); };
+    box.querySelector('[data-close]').onclick = function () { amapCalClose(true); };
+    box.querySelector('[data-cancel]').onclick = function () { amapCalClose(true); };
     box.querySelector('[data-apply]').onclick = function () {
       // Начали период и не закончили — концом считается его начало: один день.
       amapApply(draft.from, draft.to || draft.from, draft.span);
@@ -6902,7 +7677,9 @@ function amapCalendar(btn) {
    момент любые два соседних блока выглядели бы одинаково достоверно. */
 function amapApply(from, to, span) {
   var cal = document.querySelector('.amap-cal');
-  if (cal) cal.remove();
+  /* Тем же закрытием, что Cancel: тот же адрес с якорем — это переход по
+     якорю без перезагрузки, и кнопка осталась бы «открытой» (ACL-1778). */
+  if (cal) { if (cal._amapClose) cal._amapClose(false); else cal.remove(); }
   _amapPick = { from: from, to: to, span: span || '' };
   var q = [];
   if (span === 'all') q.push('span=all');
@@ -10759,6 +11536,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // ── Ad Title: the local library is shared with RPA draft enrichment.
   var AD_TITLES = [];  // [{ad_title, headline, body, description, asset, language}]
   var AD_TITLES_ERROR = '', adTitlesVersion = 0;
+  /* ACL-1769: заголовок записи библиотеки для строки под «Primary text 1».
+     Пусто — записи нет (библиотека не загружена или имя набрано не из списка). */
+  window.cbAdLibraryEntry = function (name) {
+    var hit = AD_TITLES.filter(function (t) { return t.ad_title === name; });
+    return hit.length === 1 ? hit[0] : null;
+  };
   function replaceAdTitles(rows) {
     AD_TITLES = rows.map(function(t) {
       return {ad_title:t.ad_title || t.name, headline:t.headline, body:t.body,
@@ -11122,13 +11905,19 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var form   = slot.closest('form');
     var country = form ? ((form.querySelector('[name="country"]')||{}).value||'') : '';
     var parts  = [countryCode(country), abbrevAsset(asset), os||'All', ctype, tgt, age, todayDDMM()].filter(Boolean);
-    var name   = parts.join('_');
+    var auto   = parts.join('_');
+    /* ACL-1769: своё имя — только если заполнено; иначе собранное, как раньше.
+       Сервер получает одно поле `camp_N_name`, контракт не менялся. */
+    var override = (slot.querySelector('.cb-name-override') || {}).value || '';
+    var name   = window.cbLayout ? window.cbLayout.effectiveName(auto, override) : auto;
     // Update hidden name input
     var nameHidden = slot.querySelector('.cb-name-hidden');
     if (nameHidden) nameHidden.value = name;
     // Update visible name display
     var nameDisplay = slot.querySelector('[data-name-display]');
     if (nameDisplay) nameDisplay.textContent = name;
+    var autoEl = slot.querySelector('[data-auto-name]');
+    if (autoEl) autoEl.textContent = auto;
   };
 
   // ── Searchable select ─────────────────────────────────────────────────
@@ -11347,6 +12136,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (slot) cbUpdateName(slot);
   };
 
+  /* ACL-1769: выключенный элемент «пока без бэкенда» (cbLayout.FUTURE). Если
+     раскладка не загружена (срез страницы в тесте) — просто нет элемента. */
+  function future(key, kind, text, extra) {
+    return window.cbLayout ? window.cbLayout.futureHtml(key, kind, text, extra) : '';
+  }
+
   // ── Ad row HTML builder ───────────────────────────────────────────────
   function buildAdRowHTML(cIdx, aIdx) {
     var pfx = 'camp_' + cIdx + '_ad_' + aIdx + '_';
@@ -11368,11 +12163,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'creative_file" value="">' +
       '</div>' +
-      '<span class="cb-label">Ad Title</span>' +
+      /* ACL-1769: прежний «Ad Title» — это выбор записи библиотеки, из которой
+         в черновик идёт основной текст (body), заголовок (headline) и описание.
+         Подписан по главному, что он даёт: «Primary text 1». Имя поля `copy`
+         не менялось. Заголовок записи показан строкой ниже, чтобы он не прятался. */
+      '<span class="cb-label">Primary text 1</span>' +
       '<div class="cb-sel-wrap cb-adtitle-sel-wrap">' +
-      '<input type="text" class="cb-sel-text cb-adtitle-search" placeholder="— type to search ad title —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)">' +
+      '<input type="text" class="cb-sel-text cb-adtitle-search" placeholder="— type to search primary text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Pick a text from the ad-title library: it gives the primary text, the headline and the description">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy" value="">' +
+      '<div class="cb-headline-line" data-headline hidden></div>' +
       '</div>' +
       // ACL-1344: на месте прежнего «CTA (preview only)» — необязательный
       // второй вариант основного текста. Выбирается так же, как Ad Title, из
@@ -11382,7 +12182,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="text" class="cb-sel-text cb-text2-search" placeholder="— optional: search ad text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Optional second primary text: the body of the chosen ad text is added as a second text option">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy2" value="">' +
+      /* ACL-1769: создатель по Graph API второй текст не принимает (ошибка
+         «Primary text 2 is not supported by the API backend yet»), поэтому при
+         бэкенде API поле гасится, пока пусто, и подпись говорит почему.
+         Набранное не теряется: непустое поле остаётся рабочим, а проверка
+         покажет ошибку на нём. Гасит cbTree.syncHost. */
+      '<div class="cb-api-note" data-api-only hidden>Primary text 2 is not supported by the API backend yet (ACL-1774). Leave it empty.</div>' +
       '</div>' +
+      '<span class="cb-label">More primary texts</span>' + future('texts', 'button', '+ Primary text 3–5') +
+      '<span class="cb-label">CTA</span>' + future('cta', 'select', 'Learn more', 'Every ad uses Learn more today') +
+      '<span class="cb-label">Stories / Reels file</span>' + future('media', 'button', 'Choose a vertical file') +
       '</div></div>';
   }
 
@@ -11555,6 +12364,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         if (a && b) b.value = a.value;
       }
     });
+    // ACL-1769: своё имя живёт вне `name` — копируется отдельно.
+    var srcOv = srcSlot.querySelector('.cb-name-override');
+    var newOv = newSlot.querySelector('.cb-name-override');
+    if (srcOv && newOv) newOv.value = srcOv.value;
     // Пустой язык подсвечивается сразу, а не после первой правки.
     var dupLang = newSlot.querySelector('[name="camp_' + idx + '_language"]');
     if (dupLang && typeof cbLanguageChanged === 'function') cbLanguageChanged(dupLang);
@@ -11670,6 +12483,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '</div>';
   }
 
+  /* ACL-1769: карточка кампании поделена на три раздела — Campaign, Ad set,
+     Ad. Это та же карточка и те же поля `camp_N_*`; разделы лишь позволяют
+     редактору показать нужный. Всё, что дизайн рисует, а бэкенда под чем нет,
+     выключено, без `name` и с подписью, называющей задачу (cbLayout.FUTURE). */
   function buildBlankSlotHTML(idx) {
     return '<div class="cb-slot" data-idx="' + idx + '">' +
       '<div class="cb-slot-header">' +
@@ -11677,6 +12494,29 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>' +
       '</div>' +
       '<div class="cb-slot-name" data-name-display></div>' +
+      '<section class="cb-lvl cb-lvl-campaign">' +
+      '<div class="cb-fields">' +
+      /* Имя: собранное, как раньше, плюс необязательное своё. Своё берётся,
+         только если заполнено (cbUpdateName). */
+      '<span class="cb-label">Campaign name</span>' +
+      '<div class="cb-name-box">' +
+      '<div class="cb-name-auto">Auto name: <b data-auto-name></b></div>' +
+      '<input type="text" data-keep="name_override" class="cb-input cb-name-override" value="" placeholder="Optional: your own name" autocomplete="off" oninput="cbUpdateName(this.closest(\'.cb-slot\'))" title="Used instead of the auto name only if you fill it in">' +
+      '</div>' +
+      '<span class="cb-label">Asset / Offer</span>' +
+      '<input type="text" name="camp_' + idx + '_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
+      /* Бюджет — на кампании (CBO): выбор ABO/CBO владелец снял. */
+      '<span class="cb-label">Campaign budget ($/day)</span>' +
+      '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign">' +
+      '<input type="hidden" name="camp_' + idx + '_name" class="cb-name-hidden" value="">' +
+      '</div>' +
+      /* Дублирование кампании живёт в её карточке (ACL-1459). */
+      '<div class="cb-lvl-actions">' +
+      '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateCampaign(this)" title="Duplicate this campaign with its ads">⧉ Duplicate campaign</button>' +
+      future('copyTo', 'button', 'Copy to accounts') +
+      '</div>' +
+      '</section>' +
+      '<section class="cb-lvl cb-lvl-adset">' +
       '<div class="cb-fields">' +
       '<span class="cb-label">Targeting</span>' +
       '<div class="cb-sel-wrap cb-targeting-wrap">' +
@@ -11685,23 +12525,22 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="hidden" name="camp_' + idx + '_targeting" class="cb-targeting-hidden" value="">' +
       '<div class="cb-targeting-hint" style="font-size:0.67rem;color:var(--muted);margin-top:0.15rem;word-break:break-word"></div>' +
       '</div>' +
-      '<span class="cb-label">OS / Age / Budget / Language</span>' +
+      '<span class="cb-label">OS / Age / Language</span>' +
       '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS'], 'OS') +
       '<input type="number" name="camp_' + idx + '_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
-      '<span style="color:var(--muted);font-size:0.72rem">$/day</span>' +
-      '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50">' +
-      /* Язык — и здесь тоже. Карточку строят два места: шаблон на сервере и
-         эта функция по «+ Add Campaign». Поле, добавленное только в одно из
-         них, выглядит добавленным — а на той половине, которой человек
-         пользуется, его нет. Так и вышло 9 сентября. Значение подставляется
+      /* Язык — и здесь тоже. Карточку строит одно место — эта функция по
+         «+ Add Campaign»; поле, добавленное не сюда, выглядит добавленным, а
+         на половине, которой человек пользуется, его нет. Значение подставляется
          из `data-language` формы, чтобы правило считалось в одном месте. */
       '<input type="text" name="camp_' + idx + '_language" class="cb-input cb-input-sm cb-language" value="" placeholder="Language" oninput="cbLanguageChanged(this)" title="Audience language. Leave empty to skip the Language step in Ads Manager.">' +
       '</div>' +
-      '<span class="cb-label">Asset / Offer</span>' +
-      '<input type="text" name="camp_' + idx + '_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
-      '<input type="hidden" name="camp_' + idx + '_name" class="cb-name-hidden" value="">' +
+      '<span class="cb-label">Gender</span>' + future('gender', 'select', 'All') +
+      '<span class="cb-label">Several languages</span>' + future('languages', 'button', 'Choose languages') +
+      '<span class="cb-label">Conversion location</span>' + future('forms', 'select', 'Website', 'Website is the only destination today') +
+      '<span class="cb-label">Placements</span>' + future('placements', 'button', 'Configure placements', 'Today every ad set gets the same fixed manual Facebook and Instagram list') +
       '</div>' +
-      '<div class="cb-slot-grid">' +
+      '</section>' +
+      '<div class="cb-slot-grid cb-lvl cb-lvl-ad">' +
       '<div class="cb-slot-main">' +
       '<div class="cb-ads-section">' +
       '<div class="cb-ads-divider">Ads</div>' +
@@ -11709,10 +12548,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="hidden" name="camp_' + idx + '_ad_count" class="cb-ad-count" value="1">' +
       '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Ad</button>' +
       '</div>' +
-      /* Дублирование кампании — внутри её карточки, под объявлениями
-         (ACL-1459): раньше значок в шапке, которую ящик прячет, и запасная
-         кнопка внизу ящика, вдали от того, что она копирует. */
-      '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateCampaign(this)" title="Duplicate this campaign with its ads">⧉ Duplicate campaign</button>' +
       '</div>' +
       '<div class="cb-preview-col" data-preview-col></div>' +
       '</div>' +
@@ -12334,7 +13169,38 @@ function cbDrawerRefreshIndicators() {
   });
   // Опрос задания сказал, что аккаунт кончил собираться, — галочки свободны (ACL-1360).
   if (cbTree.refreshTicks) cbTree.refreshTicks();
+  // ACL-1769: на вкладке уровня редактора — «!», если в разделе ошибка.
+  if (cbTree.refreshEditor) cbTree.refreshEditor();
 }
+/* ACL-1769: сообщение сервера → поле в редакторе. Правила (что ошибка) на
+ * сервере: /preview-publish и план создателя (creator.plan_from_draft);
+ * какое поле показать — cbLayout.routes, одно место для проверки на лету и
+ * для «Check plan». Дубль правил в JS не заводим. */
+function cbMarkFields(slot, errors) {
+  var form = slot.closest ? slot.closest('form') : null;
+  (errors || []).forEach(function (e) {
+    window.cbLayout.routes(e).forEach(function (r) {
+      var scope = r.level === 'form' ? form : slot;
+      if (!scope) return;
+      scope.querySelectorAll(r.sel).forEach(function (el) {
+        el.classList.add('cb-field-error');
+        el.setAttribute('aria-invalid', 'true');
+      });
+    });
+  });
+  if (window.cbTree && window.cbTree.refreshEditor) window.cbTree.refreshEditor();
+}
+
+/* Ответ /publish-plan → поля: ошибка плана кампании ложится на её карточку. */
+function cbApplyPlanResults(form, data) {
+  var byName = Object.create(null);
+  ((data && data.results) || []).forEach(function (r) { byName[String(r.campaign_name || '')] = r; });
+  form.querySelectorAll('.cb-slot').forEach(function (slot) {
+    var r = byName[String((slot.querySelector('.cb-name-hidden') || {}).value || '')];
+    if (r && r.error) cbMarkFields(slot, [r.error]);
+  });
+}
+
 function cbDrawerClearFields(form) {
   form.querySelectorAll('.cb-field-error').forEach(function(el) { el.classList.remove('cb-field-error'); el.removeAttribute('aria-invalid'); });
   form.querySelectorAll('.cb-check-message').forEach(function(el) { el.remove(); });
@@ -12356,16 +13222,7 @@ function cbDrawerApplyPlan(form, plan, error) {
     slot._drawerResult = errors.length ? {state:'bad',sign:'✕',why:errors.join('; ')} : warnings.length ? {state:'warn',sign:'△',why:warnings.join('; ')} : {state:'ok',sign:'✓',why:'Checked — ready to build a draft'};
     if (errors.length) {
       var message = document.createElement('div'); message.className='cb-check-message'; message.textContent=errors.join('; '); slot.appendChild(message);
-      var selectors=[];
-      errors.forEach(function(e) {
-        if (/creative|file|image|video/i.test(e)) selectors.push('.cb-creative-search');
-        // ACL-1344: ошибка второго текста подсвечивает его поле, не Ad Title.
-        if (/primary text 2/i.test(e)) selectors.push('.cb-text2-search');
-        else if (/text|copy|headline/i.test(e)) selectors.push('.cb-adtitle-search');
-        if (/budget/i.test(e)) selectors.push('[name$="_budget"]');
-        if (/target/i.test(e)) selectors.push('.cb-targeting-search');
-      });
-      selectors.forEach(function(sel) { slot.querySelectorAll(sel).forEach(function(el) { el.classList.add('cb-field-error');el.setAttribute('aria-invalid','true'); }); });
+      cbMarkFields(slot, errors);
     }
   });
   var publish = form.querySelector('.cb-publish-btn');
@@ -12635,7 +13492,8 @@ function cbPlanHtml(data) {
     }
     if (s) {
       h += '<div class="cbd-plan-meta" style="font-size:0.72rem;color:var(--muted)">page '
-        + aclEscHtml(s.page_id || '—') + ' · pixel ' + aclEscHtml(s.pixel_id || '—')
+        + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
+        + ' · pixel ' + aclEscHtml(s.pixel_id || '—') + (s.pixel_source ? ' (' + aclEscHtml(s.pixel_source) + ')' : '')
         + ' · ' + aclEscHtml(s.objective || '') + '</div>';
       (s.ad_sets || []).forEach(function (a) {
         var interests = (a.interests || []).map(function (g) { return g.join(', '); }).join(' AND ');
@@ -12714,6 +13572,8 @@ window.cbCheckPlan = function (picked, out, btn) {
       .catch(function () { return { account: cbFormTitle(x.form), error: 'The server did not answer' }; })
       .then(function (data) {
         if (!data.account) data.account = cbFormTitle(x.form);
+        // ACL-1769: ошибка плана кампании ложится на её поле в редакторе.
+        if (typeof cbApplyPlanResults === 'function') cbApplyPlanResults(x.form, data);
         parts[i] = cbPlanHtml(data);
         left -= 1;
         if (!left && btn) btn.disabled = false;
@@ -13801,7 +14661,7 @@ function cbApiReadbackHtml(r) {
     (rb.checks || []).forEach(function(c) {
       h += '<tr' + (c.ok ? '' : ' style="color:var(--bad)"') + '><td>' + aclEscHtml(c.object)
         + '</td><td>' + aclEscHtml(c.field) + '</td><td>' + aclEscHtml(JSON.stringify(c.expected))
-        + '</td><td>' + aclEscHtml(JSON.stringify(c.actual)) + '</td><td>' + (c.ok ? '✓' : '✗')
+        + '</td><td>' + (c.not_read ? 'Not read' : aclEscHtml(JSON.stringify(c.actual))) + '</td><td>' + (c.ok ? '✓' : '✗')
         + '</td></tr>';
     });
     h += '</table></details>';
