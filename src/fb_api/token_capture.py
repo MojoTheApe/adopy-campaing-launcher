@@ -263,7 +263,8 @@ _HELPER_JS = r"""
                      'call_to_action_types', 'ad_formats', 'asset_customization_rules'];
     for (const k of Object.keys(spec)) if (allowed.indexOf(k) < 0) return false;
     const story = creative.object_story_spec;
-    if (!(isObj(story) && Object.keys(story).length === 1 && typeof story.page_id === 'string')) return false;
+    if (!(isObj(story) && Object.keys(story).filter((k) => k !== IGK()).length === 1
+          && typeof story.page_id === 'string')) return false;
     if (!textListOk(spec.bodies, 'bodies', true) || !textListOk(spec.titles, 'titles', true)) return false;
     if ('descriptions' in spec && !textListOk(spec.descriptions, 'descriptions', true)) return false;
     const hasImages = Array.isArray(spec.images) && spec.images.length > 0;
@@ -326,6 +327,21 @@ _HELPER_JS = r"""
 
   // ACL-1767: зеркало write_policy._check_multi_ads / _check_cta / _check_targeting.
   function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+  // ACL-1896: зеркало write_policy._check_instagram — одно числовое поле, прямой ключ object_story_spec.
+  function IGK() { return (WRITE.instagram || {}).key || 'instagram_user_id'; }
+  function countKey(v, key) {
+    if (Array.isArray(v)) return v.reduce((n, x) => n + countKey(x, key), 0);
+    if (isObj(v)) return Object.keys(v).reduce((n, k) => n + (k === key ? 1 : 0) + countKey(v[k], key), 0);
+    return 0;
+  }
+  function instagramOk(edge, checked) {
+    const key = IGK();
+    const seen = countKey(checked, key);
+    if (!seen) return true;
+    const story = edge === 'adcreatives' ? checked.object_story_spec : null;
+    if (seen !== 1 || !isObj(story) || !(key in story)) return false;
+    return typeof story[key] === 'string' && new RegExp((WRITE.instagram || {}).id_re || '^$').test(story[key]);
+  }
   function multiAdsOk(v) {
     return isObj(v) && Object.keys(v).length === 1 && v.enroll_status === 'OPT_OUT';
   }
@@ -499,6 +515,7 @@ _HELPER_JS = r"""
         if (ik.length !== 1 || ik[0] !== 'enroll_status' || it.enroll_status !== 'OPT_OUT') return refused('dof');
       }
     }
+    if (!instagramOk(edge, checked)) return refused('instagram');
     if ('contextual_multi_ads' in checked && !multiAdsOk(checked.contextual_multi_ads)) return refused('multi_ads');
     if (WRITE.asset_feed.key in checked && !assetFeedOk(checked[WRITE.asset_feed.key], checked)) return refused('asset_feed');
     if (edge === 'adcreatives' && !ctaOk(checked.object_story_spec, spec.on_ad === true)) return refused('cta');
