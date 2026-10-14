@@ -7,7 +7,7 @@ The target is not provisioned or verified by this migration's draft descriptor.
 1. Obtain an actual stage merge after independent review and required checks. Build
    from that exact stage content; keep the commit/tree and artifact identity.
 2. Run the existing Windows Python 3.11/3.13 suite and packaged build/install/repair/
-   uninstall workflows against it. Execution-v2 combined batch and actual stage/main contexts require the full
+   uninstall workflows against it. Execution-v2/v3 combined batch and actual stage/main contexts require the full
    applicable matrix/installer; successful exact-tree jobs may be reused with the
    verified links from the scope summary. Do not treat a metadata PR's skipped Windows jobs as an installation test.
 3. Use a separate Windows test account/machine or isolated runner. Give the application

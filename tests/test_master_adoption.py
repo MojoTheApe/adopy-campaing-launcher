@@ -131,7 +131,21 @@ def test_existing_ids_and_modules_are_preserved():
     assert new['project'] == dict(old['project'], base_branch='main')
     assert new['modules'] == old['modules']
     assert new['workflow'] == old['workflow'][:-1] + ['approved', 'stage', 'merged']
-    assert new['execution_policy'] == {'schema_version':2, 'implementation_limit':5, 'review_limit':1, 'batch_limit':5}
+    assert new['execution_policy'] == {'schema_version':3, 'implementation_limit':5, 'review_limit':5, 'batch_limit':5}
+
+
+def test_five_review_policy_keeps_descriptor_engine_and_delivery_contract_consistent():
+    from scripts import tracker_delivery_policy as rules
+    config = json.loads((ROOT / 'tracker/config.json').read_text())
+    descriptor = json.loads((ROOT / 'delivery.json').read_text())
+    lock = json.loads((ROOT / 'tracker/engine.json').read_text())
+    assert descriptor['workflow']['execution'] == rules.execution_policy(config)
+    assert lock['revision'] == descriptor['tracker']['revision']
+    assert 'ci_evidence_policy' not in config  # Exported support cannot opt ACL into the native V1 protocol.
+    action = yaml.safe_load((ROOT / '.github/workflows/delivery-check.yml').read_text())
+    steps = action['jobs']['descriptor']['steps']
+    assert any(step.get('uses') == 'MojoTheApe/master-repo@' + descriptor['standard']['revision'] for step in steps)
+    assert rules.fingerprint(config) == '302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21'
 
 
 @pytest.mark.parametrize('workflow,success_fields', [
