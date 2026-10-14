@@ -3409,7 +3409,7 @@
       "source_sha": "9235846e862ec7bf40e80eaee06df9eabbd2a2e4",
       "main_tree": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-14T16:43:37+00:00",
       "batch_id": "65c0be2f589f497ca3b5fe5a96e08cda",
       "verification": {
@@ -5155,6 +5155,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-14T15:31:09+00:00"
+      },
+      "761": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 914,
+            "merge_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "tree_sha": "c8abd728be94f9dd2f5ff6c6c9a00e4ad8ed7f4d"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-14T16:48:40+00:00"
       }
     },
     "promotions": {
@@ -8442,6 +8454,36 @@
           "tree_sha": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036"
         },
         "verified_at": "2026-10-14T15:28:16+00:00"
+      },
+      "914": {
+        "pr": 913,
+        "issues": [
+          761
+        ],
+        "tree_sha": "c8abd728be94f9dd2f5ff6c6c9a00e4ad8ed7f4d",
+        "source_sha": "9235846e862ec7bf40e80eaee06df9eabbd2a2e4",
+        "main_tree": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-14T16:43:37+00:00",
+        "batch_id": "65c0be2f589f497ca3b5fe5a96e08cda",
+        "verification": {
+          "kind": "stage-verification",
+          "target": "ACL isolated Windows stage installation",
+          "result": "passed",
+          "source_sha": "9235846e862ec7bf40e80eaee06df9eabbd2a2e4",
+          "tree_sha": "c8abd728be94f9dd2f5ff6c6c9a00e4ad8ed7f4d",
+          "checks": [
+            "Actual permanent stage commit/tree and merge parents verified against the frozen batch 65c0be2f (ACL-1761) and the independently reviewed integration.",
+            "Stage CI, Windows installer and delivery setup runs succeeded on 9235846e with explicit same-tree reuse of the full green runs 38596544418 and 38596544190 (all Linux 3.11/3.13 shards, Windows 3.13, package jobs).",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts"
+          ],
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/913#issuecomment-6173466879"
+        },
+        "verified_at": "2026-10-14T16:45:32+00:00"
       }
     },
     "acceptances": {
