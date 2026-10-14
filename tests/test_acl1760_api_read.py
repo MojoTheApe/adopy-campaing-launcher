@@ -1020,6 +1020,26 @@ def test_status_cell_text_is_the_same_word_set_as_rpa_and_the_long_text_is_only_
         assert word in {"clear", "disabled", "restricted", "review", "unknown"}
 
 
+def test_old_api_reading_with_iso_code_is_shown_with_a_sign(tmp_path, monkeypatch):
+    """Чтение 10.10 сохранило «USD» — карта показывала «USD 179…» и обрезала сумму."""
+    store = tmp_path / "account_spend.json"
+    monkeypatch.setattr(sp, "_store_path", lambda: store)
+    key = "Acc_1|2026-10-09|2026-10-09"
+    base = {"account": "Acc_1", "date_from": "2026-10-09", "date_to": "2026-10-09",
+            "spend": 179.47, "state": "ok", "finished_at": "2026-10-10 10:18:48"}
+    store.write_text(json.dumps({
+        key: {**base, "source": "api", "currency": "USD"},
+        "Acc_2|2026-10-09|2026-10-09": {**base, "account": "Acc_2", "source": "api", "currency": "BRL"},
+        "Acc_3|2026-10-09|2026-10-09": {**base, "account": "Acc_3", "source": "rpa", "currency": "USD"},
+    }), encoding="utf-8")
+    got = sp.all_readings("2026-10-09", "2026-10-09")
+    assert got["Acc_1"].currency == "$"
+    assert got["Acc_2"].currency == "BRL"   # без знака остаётся кодом
+    assert got["Acc_3"].currency == "USD"   # RPA-записи не трогаем
+    assert sp.latest_readings()["Acc_1"].currency == "$"
+    assert sp._API_SIGNS == api._SIGNS      # одна таблица знаков на оба модуля
+
+
 # ───────────────────────── ревью ACL-1760: владение профилем и неполные страницы ─────────────────────────
 
 class _Resp:
