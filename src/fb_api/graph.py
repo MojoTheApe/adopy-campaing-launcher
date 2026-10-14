@@ -40,6 +40,12 @@ SLOW_PCT = 50.0
 STOP_PCT = 80.0
 
 _ACT_RE = re.compile(r"^(?:act_)?(\d{5,})$")
+_DAY_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+#: Что показывает таблица Ads Manager по умолчанию: всё, кроме архива и удалённого.
+SHOWN_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED",
+                "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS",
+                "WITH_ISSUES"]
 
 
 class GraphError(RuntimeError):
@@ -106,6 +112,16 @@ class Checkpoint(GraphStop):
 
 class RateLimited(GraphStop):
     kind = "rate_limited"
+
+
+class CallBudget(RateLimited):
+    """Свой потолок вызовов на одно чтение исчерпан (ACL-1760).
+
+    Meta ничего не говорила: это не её лимит, охлаждения профиля нет. Наследует
+    `RateLimited`, чтобы прежние `except RateLimited` продолжали ловить стоп.
+    """
+
+    kind = "call_budget"
 
 
 class PolicyBlocked(GraphStop):
@@ -189,6 +205,8 @@ class GraphClient:
         self._slow = False
         self._reacquired = False
         self.calls = 0
+        #: Пути, чей список не влез в лимит страниц (ACL-1760).
+        self.truncated: list[str] = []
         self.stopped: GraphStop | None = None
         self.last_usage: dict = {}
         #: Видел ли клиент хоть раз заголовки лимитов (CORS может их прятать).
@@ -220,7 +238,7 @@ class GraphClient:
         if self.stopped is not None:
             raise self.stopped
         if self.calls >= self.max_calls:
-            raise self._stop(RateLimited(f"call budget of {self.max_calls} reached"))
+            raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
         self._pace()
         self.calls += 1
         self._last_call = self._clock()
@@ -297,11 +315,18 @@ class GraphClient:
     def get_all(self, path: str, params: dict | None = None, *, max_pages: int = 5) -> list[dict]:
         rows: list[dict] = []
         query = dict(params or {})
-        for _ in range(max_pages):
+        for page in range(max_pages):
             body = self.get(path, query)
             rows += [r for r in (body.get("data") or []) if isinstance(r, dict)]
-            after = ((body.get("paging") or {}).get("cursors") or {}).get("after")
-            if not after or not (body.get("paging") or {}).get("next") or self.stopped is not None:
+            paging = body.get("paging") or {}
+            after = (paging.get("cursors") or {}).get("after")
+            if not paging.get("next"):
+                break  # следующей страницы нет — список полный
+            if not after or self.stopped is not None or page == max_pages - 1:
+                # Следующая страница есть, но взять её нельзя (лимит страниц, остановка
+                # по usage или нет курсора): вызывающий должен сказать «неполно» (ACL-1760).
+                level = (params or {}).get("level")
+                self.truncated.append(path + (f"?level={level}" if level else ""))
                 break
             query = {**query, "after": after}
         return rows
@@ -328,6 +353,48 @@ class GraphClient:
             "fields": "spend,impressions,clicks,actions,account_currency",
         }, max_pages=1)
         return rows[0] if rows else {}
+
+
+    # -- чтения дешборда (ACL-1760)
+    def account(self, act_id: str) -> dict:
+        """Сам кабинет: состояние, причина отключения, валюта."""
+        return self.get(f"/{normalize_act(act_id)}", {
+            "fields": "account_id,name,account_status,disable_reason,currency",
+        })
+
+    def insights_range(self, act_id: str, date_from: str, date_to: str, *, level: str = "account",
+                       breakdowns: str = "", fields: str = "spend,account_currency",
+                       max_pages: int = 1) -> list[dict]:
+        """Insights за период экрана, `date_from`…`date_to` включительно."""
+        if level not in {"account", "campaign", "adset", "ad"}:
+            raise ValueError("level must be account, campaign, adset or ad")
+        if not (_DAY_RE.fullmatch(date_from or "") and _DAY_RE.fullmatch(date_to or "")):
+            raise ValueError("dates must look like YYYY-MM-DD")
+        params: dict[str, Any] = {
+            "level": level,
+            "time_range": {"since": date_from, "until": date_to},
+            "fields": fields,
+            "limit": 500,
+        }
+        if breakdowns:
+            if breakdowns != "country":
+                raise ValueError("only the country breakdown is allowed")
+            params["breakdowns"] = breakdowns
+        return self.get_all(f"/{normalize_act(act_id)}/insights", params, max_pages=max_pages)
+
+    def ads(self, act_id: str, *, max_pages: int = 5) -> list[dict]:
+        return self.get_all(f"/{normalize_act(act_id)}/ads", {
+            "fields": "name,status,effective_status,campaign_id",
+            "effective_status": SHOWN_STATES,
+            "limit": 200,
+        }, max_pages=max_pages)
+
+    def shown_campaigns(self, act_id: str, *, max_pages: int = 5) -> list[dict]:
+        return self.get_all(f"/{normalize_act(act_id)}/campaigns", {
+            "fields": "name,status,effective_status",
+            "effective_status": SHOWN_STATES,
+            "limit": 200,
+        }, max_pages=max_pages)
 
 
 def _int(value: Any) -> int | None:

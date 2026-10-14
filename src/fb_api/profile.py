@@ -33,7 +33,15 @@ from typing import Any, Callable, Iterable
 
 
 class ProfileError(RuntimeError):
-    """Профиль не поднят и не найден работающим с портом отладки."""
+    """Профиль не поднят и не найден работающим с портом отладки.
+
+    `code` — устойчивое имя отказа для экрана (ACL-1760): "open_by_hand" —
+    окно открыто руками, порта нет, ничего не остановлено.
+    """
+
+    def __init__(self, message: str = "", code: str = ""):
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass
@@ -45,6 +53,9 @@ class OpenedProfile:
     ws_endpoint: str | None
     started_by_us: bool
     launcher: Any = None
+    #: Мы вызывали MLX `start` (ACL-1760): профиль поднят этим заходом, и пока
+    #: он открыт, его место в очереди по памяти должно оставаться занятым.
+    started_now: bool = False
 
     @property
     def cdp_url(self) -> str:
@@ -223,7 +234,8 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     if kind == "no_port":
         raise ProfileError(
             "the profile is open but has no automation port (opened by hand in MLX Desktop?). "
-            "Close it in MLX Desktop or open it from the dashboard, then retry. Nothing was stopped."
+            "Close it in MLX Desktop or open it from the dashboard, then retry. Nothing was stopped.",
+            code="open_by_hand",
         )
 
     # 2. Процесса нет — спрашиваем MLX и поднимаем.
@@ -233,7 +245,8 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
         if not port:
             raise ProfileError(
                 "the profile is open but has no automation port (opened by hand in MLX Desktop?). "
-                "Close it in MLX Desktop or open it from the dashboard, then retry. Nothing was stopped."
+                "Close it in MLX Desktop or open it from the dashboard, then retry. Nothing was stopped.",
+                code="open_by_hand",
             )
         return OpenedProfile(profile_id, folder_id, instance, port, None, False, launcher)
 
@@ -249,6 +262,9 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
         # Только для сообщения человеку: остановки всё равно нет.
         started_by_us=(state == "not_running"),
         launcher=launcher,
+        # Владелец — только при настоящем старте: ответ «уже запущен» (409) или
+        # неизвестный исход остаётся чужим и нами не закрывается (ревью ACL-1760, P1).
+        started_now=getattr(started, "newly_started", False) is True,
     )
 
 
