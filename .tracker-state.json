@@ -3444,20 +3444,20 @@
       "810": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "Reviewer-R1797G",
-        "implementer": "Worker-RG1797",
-        "review_session": "r1797g-20261015",
-        "execution_lane": "b434b9111df1480590167bf18fab5884",
-        "head_sha": "52d3ecdc7702e6efc58af1d9dd8ed4273e98af50",
-        "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
-        "tree_sha": "6f0774cb834e631c9b8b9e8f0bfe6156266bf09a",
-        "report": "Independent source review of ACL-1797 / PR 810 at head 52d3ecdc against current main 73136acc (main is an ancestor of the head). Reviewer-R1797G implemented none of it. The branch is stacked on ACL-1769 (two-column builder); the design delta is 135ff5fe, db59f883, 9fe48a50 plus the main merge.\n\nVerified:\n- Tokens on every route: src/web/templates/adopy-tokens.css is included once, as style id adopy-tokens, in report, brief, error, loading and robot_health. Dark and light themes: one data-theme attribute on html, storage key acl.theme unchanged, standalone pages get the same theme bootstrap; tokens switch under :root[data-theme=dark]. Contrast was computed by the tests (test_field_contrast, test_theme); earlier follow-ups (darker light group wells, tokens in fixture tests, docstring path) are in 9fe48a50.\n- No functionality removed: scripted comparison of the five templates (outside style blocks) between origin/main and the head: no id, name, onclick/onchange/oninput/onsubmit/onkeydown handler, href/action, data-* attribute, function name or fetch URL is lost; hidden/disabled counts equal against the pre-merge base. The only added attributes are the id of the tokens style tag and data-theme on html. loading.html equals main's redesigned markup, script and strings; only colours and font moved to tokens.\n- English UI: no visible string was added or changed; all added Cyrillic lines are CSS/JS/Jinja comments.\n- Layout/browser tests passed in CI, including no horizontal overflow per route in both themes.\n\nVerification:\n- CI on head: all checks pass (Linux 1-3, Windows, tracker-link, build/install/repair/uninstall, verify build inputs, process instructions, installer verification, descriptor).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": test_acl1797_design_system, test_theme, test_field_contrast, test_buttons_do_not_look_like_fields, test_the_account_tree_on_screen, test_acl1633_country_notes, test_acl1620_account_notes, test_read_fallback, test_connecting_an_account_is_one_place: 224 passed; all tests matching loading: 84 passed.\n- Mutation: removing the tokens style tag from error.html -> test_the_standalone_pages_use_the_same_tokens[error.html] fails. Reverted; worktree clean.\n- No live calls.\n\nFindings: no blocking issues. Non-blocking: Facebook feed mock-up keeps sub-11px fonts (documented exception); field-vs-card ratio in test_field_contrast::test_the_dark_greys_climb_in_steps was relaxed (1.25 to 1.15) while the 3:1 border test still guards fields; the standalone pages were checked by rendering in tests, not by screenshots.",
-        "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+        "reviewer": "Reviewer-R1797J",
+        "implementer": "Worker-RJ1797",
+        "review_session": "r1797j-20261015",
+        "execution_lane": "848e802205894b719e0f5390bb5f6f88",
+        "head_sha": "ea925cfc6defd5834d4d5cc85f64b55613ede3f0",
+        "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+        "tree_sha": "37444908174083f36ff23a016e7bf00638d820b5",
+        "report": "Independent re-review of ACL-1797 / PR 810 at head ea925cfc6defd5834d4d5cc85f64b55613ede3f0 against current main a4e38b7c (main is an ancestor of the head). Reviewer-R1797J implemented none of it. Previous approval (R1797G, 52d3ecdc) was returned only because main moved (1798, 1766, 1778, 1769).\n\nDelta check: I reproduced the merge independently (git merge-tree origin/main 52d3ecdc) and diffed it with the pushed head. The ONLY difference is src/web/templates/report.html, and only inside the 7 conflict regions: main's redesigned header won everywhere (framed period range, stage badge, no old refresh form/buyer-pick/period-pick), plus the 1797 token font size var(--adopy-text-sm) on the plan meta line, which keeps main's page_source/pixel_source labels (1766). No extra hunk outside the conflicts; no conflict markers left. Everything else (1769 stacked cards, 1798 inventory/home campaigns, tokens css, all templates and tests) is the automatic merge result.\n\nVerification:\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\" on the 1797 design-system/token/theme/contrast/buttons/account-tree/notes/read-fallback tests plus 1769, 1766, header, stage badge and all builder tests (33 files): 434 passed, 39 deselected.\n- CI on the head: Linux 1-3, Windows tests, Windows installer, process instructions, descriptor all pass; tracker-link failed only because the task was in the returned state and passed after review-acquire (rerun).\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues.",
+        "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
           797
         ],
-        "recorded_at": "2026-10-14T21:50:00+00:00",
+        "recorded_at": "2026-10-14T23:46:49+00:00",
         "issue_scopes": {
           "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
         }
