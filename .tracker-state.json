@@ -12286,7 +12286,7 @@
             "session": "wrg1797-20261014"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RG1797",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -32650,6 +32650,68 @@
         "pr": 796,
         "lane": "075f9847329d457b94d1e71f112256a4",
         "actor": "Reviewer-R1769H"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-14T21:51:03+00:00",
+        "issue": 797,
+        "pr": 810,
+        "review": {
+          "id": "b434b9111df1480590167bf18fab5884",
+          "pr": 810,
+          "issues": [
+            797
+          ],
+          "actor": "Reviewer-R1797G",
+          "session": "r1797g-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T21:41:09+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 797,
+            "pr": 810,
+            "branch": "codex/acl-1797-design-system",
+            "head_sha": "52d3ecdc7702e6efc58af1d9dd8ed4273e98af50",
+            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1797G",
+              "implementer": "Worker-RG1797",
+              "review_session": "r1797g-20261015",
+              "execution_lane": "b434b9111df1480590167bf18fab5884",
+              "head_sha": "52d3ecdc7702e6efc58af1d9dd8ed4273e98af50",
+              "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "tree_sha": "6f0774cb834e631c9b8b9e8f0bfe6156266bf09a",
+              "report": "Independent source review of ACL-1797 / PR 810 at head 52d3ecdc against current main 73136acc (main is an ancestor of the head). Reviewer-R1797G implemented none of it. The branch is stacked on ACL-1769 (two-column builder); the design delta is 135ff5fe, db59f883, 9fe48a50 plus the main merge.\n\nVerified:\n- Tokens on every route: src/web/templates/adopy-tokens.css is included once, as style id adopy-tokens, in report, brief, error, loading and robot_health. Dark and light themes: one data-theme attribute on html, storage key acl.theme unchanged, standalone pages get the same theme bootstrap; tokens switch under :root[data-theme=dark]. Contrast was computed by the tests (test_field_contrast, test_theme); earlier follow-ups (darker light group wells, tokens in fixture tests, docstring path) are in 9fe48a50.\n- No functionality removed: scripted comparison of the five templates (outside style blocks) between origin/main and the head: no id, name, onclick/onchange/oninput/onsubmit/onkeydown handler, href/action, data-* attribute, function name or fetch URL is lost; hidden/disabled counts equal against the pre-merge base. The only added attributes are the id of the tokens style tag and data-theme on html. loading.html equals main's redesigned markup, script and strings; only colours and font moved to tokens.\n- English UI: no visible string was added or changed; all added Cyrillic lines are CSS/JS/Jinja comments.\n- Layout/browser tests passed in CI, including no horizontal overflow per route in both themes.\n\nVerification:\n- CI on head: all checks pass (Linux 1-3, Windows, tracker-link, build/install/repair/uninstall, verify build inputs, process instructions, installer verification, descriptor).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": test_acl1797_design_system, test_theme, test_field_contrast, test_buttons_do_not_look_like_fields, test_the_account_tree_on_screen, test_acl1633_country_notes, test_acl1620_account_notes, test_read_fallback, test_connecting_an_account_is_one_place: 224 passed; all tests matching loading: 84 passed.\n- Mutation: removing the tokens style tag from error.html -> test_the_standalone_pages_use_the_same_tokens[error.html] fails. Reverted; worktree clean.\n- No live calls.\n\nFindings: no blocking issues. Non-blocking: Facebook feed mock-up keeps sub-11px fonts (documented exception); field-vs-card ratio in test_field_contrast::test_the_dark_greys_climb_in_steps was relaxed (1.25 to 1.15) while the 3:1 border test still guards fields; the standalone pages were checked by rendering in tests, not by screenshots.",
+              "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                797
+              ],
+              "recorded_at": "2026-10-14T21:50:00+00:00",
+              "issue_scopes": {
+                "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
+              }
+            },
+            "lane": {
+              "id": "b434b9111df1480590167bf18fab5884",
+              "pr": 810,
+              "issues": [
+                797
+              ],
+              "actor": "Reviewer-R1797G",
+              "session": "r1797g-20261015",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-14T21:41:09+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T21:50:25+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -33522,6 +33584,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T21:39:40+00:00"
+      },
+      "797": {
+        "issue": 797,
+        "pr": 810,
+        "branch": "codex/acl-1797-design-system",
+        "head_sha": "52d3ecdc7702e6efc58af1d9dd8ed4273e98af50",
+        "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+        "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1797G",
+          "implementer": "Worker-RG1797",
+          "review_session": "r1797g-20261015",
+          "execution_lane": "b434b9111df1480590167bf18fab5884",
+          "head_sha": "52d3ecdc7702e6efc58af1d9dd8ed4273e98af50",
+          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "tree_sha": "6f0774cb834e631c9b8b9e8f0bfe6156266bf09a",
+          "report": "Independent source review of ACL-1797 / PR 810 at head 52d3ecdc against current main 73136acc (main is an ancestor of the head). Reviewer-R1797G implemented none of it. The branch is stacked on ACL-1769 (two-column builder); the design delta is 135ff5fe, db59f883, 9fe48a50 plus the main merge.\n\nVerified:\n- Tokens on every route: src/web/templates/adopy-tokens.css is included once, as style id adopy-tokens, in report, brief, error, loading and robot_health. Dark and light themes: one data-theme attribute on html, storage key acl.theme unchanged, standalone pages get the same theme bootstrap; tokens switch under :root[data-theme=dark]. Contrast was computed by the tests (test_field_contrast, test_theme); earlier follow-ups (darker light group wells, tokens in fixture tests, docstring path) are in 9fe48a50.\n- No functionality removed: scripted comparison of the five templates (outside style blocks) between origin/main and the head: no id, name, onclick/onchange/oninput/onsubmit/onkeydown handler, href/action, data-* attribute, function name or fetch URL is lost; hidden/disabled counts equal against the pre-merge base. The only added attributes are the id of the tokens style tag and data-theme on html. loading.html equals main's redesigned markup, script and strings; only colours and font moved to tokens.\n- English UI: no visible string was added or changed; all added Cyrillic lines are CSS/JS/Jinja comments.\n- Layout/browser tests passed in CI, including no horizontal overflow per route in both themes.\n\nVerification:\n- CI on head: all checks pass (Linux 1-3, Windows, tracker-link, build/install/repair/uninstall, verify build inputs, process instructions, installer verification, descriptor).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": test_acl1797_design_system, test_theme, test_field_contrast, test_buttons_do_not_look_like_fields, test_the_account_tree_on_screen, test_acl1633_country_notes, test_acl1620_account_notes, test_read_fallback, test_connecting_an_account_is_one_place: 224 passed; all tests matching loading: 84 passed.\n- Mutation: removing the tokens style tag from error.html -> test_the_standalone_pages_use_the_same_tokens[error.html] fails. Reverted; worktree clean.\n- No live calls.\n\nFindings: no blocking issues. Non-blocking: Facebook feed mock-up keeps sub-11px fonts (documented exception); field-vs-card ratio in test_field_contrast::test_the_dark_greys_climb_in_steps was relaxed (1.25 to 1.15) while the 3:1 border test still guards fields; the standalone pages were checked by rendering in tests, not by screenshots.",
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            797
+          ],
+          "recorded_at": "2026-10-14T21:50:00+00:00",
+          "issue_scopes": {
+            "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
+          }
+        },
+        "lane": {
+          "id": "b434b9111df1480590167bf18fab5884",
+          "pr": 810,
+          "issues": [
+            797
+          ],
+          "actor": "Reviewer-R1797G",
+          "session": "r1797g-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T21:41:09+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-14T21:50:25+00:00"
       }
     },
     "batches": {
@@ -34780,62 +34886,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T21:31:53+00:00",
         "state": "reviewing"
-      },
-      "810": {
-        "id": "b434b9111df1480590167bf18fab5884",
-        "pr": 810,
-        "issues": [
-          797
-        ],
-        "actor": "Reviewer-R1797G",
-        "session": "r1797g-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-14T21:41:09+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 797,
-          "pr": 810,
-          "branch": "codex/acl-1797-design-system",
-          "head_sha": "52d3ecdc7702e6efc58af1d9dd8ed4273e98af50",
-          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
-          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1797G",
-            "implementer": "Worker-RG1797",
-            "review_session": "r1797g-20261015",
-            "execution_lane": "b434b9111df1480590167bf18fab5884",
-            "head_sha": "52d3ecdc7702e6efc58af1d9dd8ed4273e98af50",
-            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
-            "tree_sha": "6f0774cb834e631c9b8b9e8f0bfe6156266bf09a",
-            "report": "Independent source review of ACL-1797 / PR 810 at head 52d3ecdc against current main 73136acc (main is an ancestor of the head). Reviewer-R1797G implemented none of it. The branch is stacked on ACL-1769 (two-column builder); the design delta is 135ff5fe, db59f883, 9fe48a50 plus the main merge.\n\nVerified:\n- Tokens on every route: src/web/templates/adopy-tokens.css is included once, as style id adopy-tokens, in report, brief, error, loading and robot_health. Dark and light themes: one data-theme attribute on html, storage key acl.theme unchanged, standalone pages get the same theme bootstrap; tokens switch under :root[data-theme=dark]. Contrast was computed by the tests (test_field_contrast, test_theme); earlier follow-ups (darker light group wells, tokens in fixture tests, docstring path) are in 9fe48a50.\n- No functionality removed: scripted comparison of the five templates (outside style blocks) between origin/main and the head: no id, name, onclick/onchange/oninput/onsubmit/onkeydown handler, href/action, data-* attribute, function name or fetch URL is lost; hidden/disabled counts equal against the pre-merge base. The only added attributes are the id of the tokens style tag and data-theme on html. loading.html equals main's redesigned markup, script and strings; only colours and font moved to tokens.\n- English UI: no visible string was added or changed; all added Cyrillic lines are CSS/JS/Jinja comments.\n- Layout/browser tests passed in CI, including no horizontal overflow per route in both themes.\n\nVerification:\n- CI on head: all checks pass (Linux 1-3, Windows, tracker-link, build/install/repair/uninstall, verify build inputs, process instructions, installer verification, descriptor).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": test_acl1797_design_system, test_theme, test_field_contrast, test_buttons_do_not_look_like_fields, test_the_account_tree_on_screen, test_acl1633_country_notes, test_acl1620_account_notes, test_read_fallback, test_connecting_an_account_is_one_place: 224 passed; all tests matching loading: 84 passed.\n- Mutation: removing the tokens style tag from error.html -> test_the_standalone_pages_use_the_same_tokens[error.html] fails. Reverted; worktree clean.\n- No live calls.\n\nFindings: no blocking issues. Non-blocking: Facebook feed mock-up keeps sub-11px fonts (documented exception); field-vs-card ratio in test_field_contrast::test_the_dark_greys_climb_in_steps was relaxed (1.25 to 1.15) while the 3:1 border test still guards fields; the standalone pages were checked by rendering in tests, not by screenshots.",
-            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              797
-            ],
-            "recorded_at": "2026-10-14T21:50:00+00:00",
-            "issue_scopes": {
-              "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
-            }
-          },
-          "lane": {
-            "id": "b434b9111df1480590167bf18fab5884",
-            "pr": 810,
-            "issues": [
-              797
-            ],
-            "actor": "Reviewer-R1797G",
-            "session": "r1797g-20261015",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-14T21:41:09+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T21:50:25+00:00"
-        }
       },
       "780": {
         "id": "2a2cae0777ea471b983e9eec3f7611d0",
