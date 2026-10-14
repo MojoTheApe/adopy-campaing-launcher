@@ -8611,6 +8611,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T17:01:32+00:00",
         "from_status": "status:todo"
+      },
+      "769": {
+        "actor": "Worker-RF1769",
+        "session": "wrf1769-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1769-two-column-builder",
+        "worktree": "C:\\wk-rf1769",
+        "id": "f9f0c3b613bf4bf5905aed2b6ef4e17d",
+        "issue": 769,
+        "state": "implementing",
+        "started_at": "2026-10-14T17:01:49+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12029,11 +12041,15 @@
           {
             "actor": "Worker-W1014F",
             "session": "w1014f-20261014"
+          },
+          {
+            "actor": "Worker-RF1769",
+            "session": "wrf1769-20261014"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-W1014F",
-        "coordinator": "Coordinator-T1014C",
+        "state": "implementing",
+        "worker": "Worker-RF1769",
+        "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-W1014F",
           "session": "w1014f-20261014",
@@ -12050,8 +12066,7 @@
         },
         "pr": 796,
         "queued_at": "2026-10-14T10:24:08+00:00",
-        "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
-        "reviewer": "Reviewer-RRF769"
+        "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "783": {
         "implementers": [
@@ -15026,6 +15041,10 @@
       },
       "Worker-RG1797": {
         "session": "wrg1797-20261014",
+        "role": "Worker"
+      },
+      "Worker-RF1769": {
+        "session": "wrf1769-20261014",
         "role": "Worker"
       }
     },
@@ -32268,6 +32287,13 @@
         "issue": 797,
         "claim": "c0d95771e6734355977accee35b526ae",
         "actor": "Worker-RG1797"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T17:01:49+00:00",
+        "issue": 769,
+        "claim": "f9f0c3b613bf4bf5905aed2b6ef4e17d",
+        "actor": "Worker-RF1769"
       }
     ],
     "policy": {
