@@ -272,3 +272,7 @@ reuse the same campaign/ad sets. The original builder retains the ad inputs.
 Instant Forms and an explicitly unavailable Page still block, as do failed Page
 reads. The RPA path retains its existing Identity requirements. This supersedes
 the earlier requirement that every empty Page list blocks all preparation.
+
+## ACL-1907 — Language groups equal their expansion ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/907), 2026-10-14)
+
+Live finding on Doc120: readback reported ad set `languages` expected `[1002]` ("Spanish (All)") vs Meta `[7, 23]`, and a re-run stopped with "Existing ad set ... differs from the builder: languages (builder: 1002, Meta: 7, 23)". `TargetingResolver.locale()` now records, for a pick named "X (All)", the members seen in the same `adlocale` result (`locale_groups`: names equal to X or starting "X (", never hard-coded). `CampaignCreator._language_check` (used by both readback and `_existing_differences` through `_adset_checks`) treats a group id absent from Meta's list as equal to the Meta locales that are members of it; any locale outside the group, or a group with no member in Meta's list, stays a mismatch. When the search listed no members, the compare is strict and the difference text adds "compared strictly: Meta's search did not list the locales it expands into". Read-only change. Live acceptance on the test dashboard is still open.
