@@ -8488,6 +8488,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
+      },
+      "761": {
+        "actor": "Worker-S1761E",
+        "session": "ws1761e-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1761-api-create",
+        "worktree": "C:\\wk-1761e",
+        "id": "30ed346aa46344deb5dbccc13f85962f",
+        "issue": 761,
+        "state": "implementing",
+        "started_at": "2026-10-14T15:34:27+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11815,11 +11827,15 @@
           {
             "actor": "Worker-W1014F",
             "session": "w1014f-20261014"
+          },
+          {
+            "actor": "Worker-S1761E",
+            "session": "ws1761e-20261014"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-W1014F",
-        "coordinator": "Coordinator-T1014C",
+        "state": "implementing",
+        "worker": "Worker-S1761E",
+        "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-W1014F",
           "session": "w1014f-20261014",
@@ -11836,8 +11852,7 @@
         },
         "pr": 765,
         "queued_at": "2026-10-14T09:59:46+00:00",
-        "review_report": "\ufeff# Return ACL-1761 for a dependency refresh\n\nACL-1760 reached main (batch 0c5aecbd, PR 911 -> 912) with the review fixes P1 (newly_started: an already-running profile is never stopped) and P2 (truncation marking on a usage stop). PR 765 still carries the older copy of the 1760 commits. Required: merge current main into codex/acl-1761-api-create (merge, no rebase), keep main's fixed 1760 behaviour, re-run the 1761/1760/1756 tests, hand off again for fresh review. No other finding was examined in this return.",
-        "reviewer": "Reviewer-R1761X"
+        "review_report": "\ufeff# Return ACL-1761 for a dependency refresh\n\nACL-1760 reached main (batch 0c5aecbd, PR 911 -> 912) with the review fixes P1 (newly_started: an already-running profile is never stopped) and P2 (truncation marking on a usage stop). PR 765 still carries the older copy of the 1760 commits. Required: merge current main into codex/acl-1761-api-create (merge, no rebase), keep main's fixed 1760 behaviour, re-run the 1761/1760/1756 tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "778": {
         "implementers": [
@@ -14807,6 +14822,10 @@
       "Reviewer-R1761X": {
         "session": "r1761x-20261014",
         "role": "Reviewer"
+      },
+      "Worker-S1761E": {
+        "session": "ws1761e-20261014",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -31473,6 +31492,13 @@
           "report": "\ufeff# Return ACL-1761 for a dependency refresh\n\nACL-1760 reached main (batch 0c5aecbd, PR 911 -> 912) with the review fixes P1 (newly_started: an already-running profile is never stopped) and P2 (truncation marking on a usage stop). PR 765 still carries the older copy of the 1760 commits. Required: merge current main into codex/acl-1761-api-create (merge, no rebase), keep main's fixed 1760 behaviour, re-run the 1761/1760/1756 tests, hand off again for fresh review. No other finding was examined in this return.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T15:34:27+00:00",
+        "issue": 761,
+        "claim": "30ed346aa46344deb5dbccc13f85962f",
+        "actor": "Worker-S1761E"
       }
     ],
     "policy": {
