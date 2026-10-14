@@ -8423,6 +8423,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
+      },
+      "760": {
+        "actor": "Worker-S1760E",
+        "session": "ws1760e-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1760-api-read",
+        "worktree": "C:\\wk-1760c",
+        "id": "ee0d9d2a54304b0d9c1b4836c0abd1ca",
+        "issue": 760,
+        "state": "implementing",
+        "started_at": "2026-10-14T14:36:59+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11706,10 +11718,14 @@
           {
             "actor": "Worker-S1760C",
             "session": "ws1760c-20261014"
+          },
+          {
+            "actor": "Worker-S1760E",
+            "session": "ws1760e-20261014"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1760C",
+        "state": "implementing",
+        "worker": "Worker-S1760E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1760C",
@@ -11729,13 +11745,6 @@
         "queued_at": "2026-10-14T12:52:58+00:00",
         "review_report": "\ufeff# Return ACL-1760 for a main refresh\n\nMain advanced from df6c2e8a to 311700fd (batch e2b8b707 promoted, PR 910). The approval of PR 762 is bound to the old main, so the intake rejects it as stale. The author merges current main into codex/acl-1760-api-read (no other change), hands off again and gets a fresh independent approval.",
         "return_operation": {
-          "id": "5be2b613acd049a4af2c997c8f1423f9",
-          "actor": "Coordinator-C0930A",
-          "session": "coord_c0930a_1009",
-          "report": "\ufeff# Return ACL-1760 for a main refresh\n\nMain advanced from df6c2e8a to 311700fd (batch e2b8b707 promoted, PR 910). The approval of PR 762 is bound to the old main, so the intake rejects it as stale. The author merges current main into codex/acl-1760-api-read (no other change), hands off again and gets a fresh independent approval."
-        },
-        "reviewer": "Reviewer-R1760D",
-        "return": {
           "id": "5be2b613acd049a4af2c997c8f1423f9",
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
@@ -14726,6 +14735,10 @@
       "Reviewer-R901B": {
         "session": "r901b-20261014",
         "role": "Reviewer"
+      },
+      "Worker-S1760E": {
+        "session": "ws1760e-20261014",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -31069,6 +31082,13 @@
           "report": "\ufeff# Return ACL-1760 for a main refresh\n\nMain advanced from df6c2e8a to 311700fd (batch e2b8b707 promoted, PR 910). The approval of PR 762 is bound to the old main, so the intake rejects it as stale. The author merges current main into codex/acl-1760-api-read (no other change), hands off again and gets a fresh independent approval."
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T14:36:59+00:00",
+        "issue": 760,
+        "claim": "ee0d9d2a54304b0d9c1b4836c0abd1ca",
+        "actor": "Worker-S1760E"
       }
     ],
     "policy": {
