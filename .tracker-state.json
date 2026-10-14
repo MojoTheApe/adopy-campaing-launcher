@@ -11991,7 +11991,7 @@
             "session": "4b214c77a7e14ef0937301c56af0fb88"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-M1806A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -29531,6 +29531,72 @@
             "approved_at": "2026-10-14T11:20:34+00:00"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-14T11:24:48+00:00",
+        "issue": 806,
+        "pr": 808,
+        "review": {
+          "id": "890bc6a071344778bcfc6ddf285610f8",
+          "pr": 808,
+          "issues": [
+            806
+          ],
+          "actor": "Reviewer-R806X",
+          "session": "claude-subagent-a999be02700977375",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-14T11:11:13+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 806,
+            "pr": 808,
+            "branch": "work/acl-1806-obsidian-path",
+            "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
+            "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+            "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-M1806A",
+              "reviewer": "Reviewer-R806X",
+              "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "tree_sha": "6e01044a723ac5f3ed42b7e368a5c1eeb4d64f4d",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "verdict": "approved",
+              "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-808.md",
+              "scope": "Full ACL-806 scope (Obsidian folder through one setting); approved on current main df6c2e8a",
+              "execution_lane": "890bc6a071344778bcfc6ddf285610f8",
+              "review_session": "claude-subagent-a999be02700977375",
+              "actual_reviewer_agent": "claude-subagent-a999be02700977375",
+              "actual_implementer_agent": "Worker-M1806A",
+              "findings": [],
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                806
+              ],
+              "recorded_at": "2026-10-14T11:11:40+00:00",
+              "issue_scopes": {
+                "806": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9"
+              }
+            },
+            "lane": {
+              "id": "890bc6a071344778bcfc6ddf285610f8",
+              "pr": 808,
+              "issues": [
+                806
+              ],
+              "actor": "Reviewer-R806X",
+              "session": "claude-subagent-a999be02700977375",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-14T11:11:13+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T11:24:10+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -30179,6 +30245,54 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T11:20:34+00:00"
+      },
+      "806": {
+        "issue": 806,
+        "pr": 808,
+        "branch": "work/acl-1806-obsidian-path",
+        "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
+        "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+        "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9",
+        "review": {
+          "kind": "independent-review",
+          "implementer": "Worker-M1806A",
+          "reviewer": "Reviewer-R806X",
+          "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
+          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+          "tree_sha": "6e01044a723ac5f3ed42b7e368a5c1eeb4d64f4d",
+          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+          "verdict": "approved",
+          "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-808.md",
+          "scope": "Full ACL-806 scope (Obsidian folder through one setting); approved on current main df6c2e8a",
+          "execution_lane": "890bc6a071344778bcfc6ddf285610f8",
+          "review_session": "claude-subagent-a999be02700977375",
+          "actual_reviewer_agent": "claude-subagent-a999be02700977375",
+          "actual_implementer_agent": "Worker-M1806A",
+          "findings": [],
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            806
+          ],
+          "recorded_at": "2026-10-14T11:11:40+00:00",
+          "issue_scopes": {
+            "806": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9"
+          }
+        },
+        "lane": {
+          "id": "890bc6a071344778bcfc6ddf285610f8",
+          "pr": 808,
+          "issues": [
+            806
+          ],
+          "actor": "Reviewer-R806X",
+          "session": "claude-subagent-a999be02700977375",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-14T11:11:13+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-14T11:24:10+00:00"
       }
     },
     "batches": {
@@ -30971,67 +31085,6 @@
       "started_at": "2026-10-14T07:36:55+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "808": {
-        "id": "890bc6a071344778bcfc6ddf285610f8",
-        "pr": 808,
-        "issues": [
-          806
-        ],
-        "actor": "Reviewer-R806X",
-        "session": "claude-subagent-a999be02700977375",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-14T11:11:13+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 806,
-          "pr": 808,
-          "branch": "work/acl-1806-obsidian-path",
-          "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
-          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-M1806A",
-            "reviewer": "Reviewer-R806X",
-            "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
-            "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "tree_sha": "6e01044a723ac5f3ed42b7e368a5c1eeb4d64f4d",
-            "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "verdict": "approved",
-            "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-808.md",
-            "scope": "Full ACL-806 scope (Obsidian folder through one setting); approved on current main df6c2e8a",
-            "execution_lane": "890bc6a071344778bcfc6ddf285610f8",
-            "review_session": "claude-subagent-a999be02700977375",
-            "actual_reviewer_agent": "claude-subagent-a999be02700977375",
-            "actual_implementer_agent": "Worker-M1806A",
-            "findings": [],
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              806
-            ],
-            "recorded_at": "2026-10-14T11:11:40+00:00",
-            "issue_scopes": {
-              "806": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9"
-            }
-          },
-          "lane": {
-            "id": "890bc6a071344778bcfc6ddf285610f8",
-            "pr": 808,
-            "issues": [
-              806
-            ],
-            "actor": "Reviewer-R806X",
-            "session": "claude-subagent-a999be02700977375",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-14T11:11:13+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T11:24:10+00:00"
-        }
-      }
-    }
+    "source_reviews": {}
   }
 }
