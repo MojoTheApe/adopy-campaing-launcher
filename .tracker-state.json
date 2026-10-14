@@ -12161,7 +12161,7 @@
             "session": "run_s1798a_1011"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1798A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12179,7 +12179,8 @@
           "report": "# ACL-1798 handoff (Worker-S1798A)\n\nPR: #801 (ready, base main, stacked on #796 -> #765, CI blocked). Head fed73a83edeaaa7ceaef9f45294095a9a2d85fb7.\n\n## Works\n- Home section \"Campaigns\" under goals and country overview; pinned identity, one shared horizontal scroll, sticky header, synced top scrollbar.\n- \"Read campaigns\" per account and per country (queue, GET only, Read spend session, call budget, cooldowns). Snapshot per account with read time, freshness shown.\n- Expand: ad sets and ads from the snapshot with loading, empty, failed+retry, partial, not-read states.\n- Presets (Optimization, Meta delivery, BI funnel, All metrics) and column manager, persisted in localStorage.\n- BI by exact name only; unmatched BI counted as evidence only; unknown values shown as a dash.\n- ACL_FB_BACKEND=rpa: notice, 409 on the read route, nothing started.\n\n## Disabled\nOn/off, bid -/+, budget, duplicate, more: \"Coming in ACL-1800\" (per coordinator update). Copy to accounts: \"ACL-1773\". Controls carry data-object-id, data-level, data-account, data-action.\n\n## Tests\n53 passed (campaign inventory, fakes) + 9 passed (browser, fixtures). Related tests run: ACL-1760 API read, account spend, account map, ACL-1769 layout, all green.\n\n## Screenshots\nC:\\acl-notes\\acl-1798-shots\\ (light/dark, collapsed/tree, scrolled, rpa notice, 1280 px).\n\n## Gaps\n- Budget values shown only for currencies with a confirmed minor-unit table (19 two-decimal and 4 zero-decimal currencies); others show a dash.\n- Call budget is the existing 24 per read; very large accounts can end partial (reported as partial, not hidden).\n- No Decision/Tracker/Audit groups, no sorting or delivery filter yet.\n- Live Meta read and Multilogin were not exercised (no live calls by instruction).\n- The page checks its own server every 3 s only while a read it started is running (local job state, not Meta)."
         },
         "pr": 801,
-        "queued_at": "2026-10-11T20:17:18+00:00"
+        "queued_at": "2026-10-11T20:17:18+00:00",
+        "reviewer": "Reviewer-RRF14"
       },
       "797": {
         "implementers": [
@@ -14947,6 +14948,10 @@
       "Reviewer-R1778F": {
         "session": "r1778f-20261014",
         "role": "Reviewer"
+      },
+      "Reviewer-RRF14": {
+        "session": "rrf798-20261014",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -17529,7 +17534,6 @@
       642,
       739,
       766,
-      798,
       799,
       775,
       797,
@@ -31995,6 +31999,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-14T16:49:33+00:00",
         "batch_id": "65c0be2f589f497ca3b5fe5a96e08cda"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T16:51:43+00:00",
+        "pr": 801,
+        "lane": "f041c49405224d938337157875cde67c",
+        "actor": "Reviewer-RRF14"
       }
     ],
     "policy": {
@@ -34069,6 +34080,19 @@
       "started_at": "2026-10-14T16:14:28+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "801": {
+        "id": "f041c49405224d938337157875cde67c",
+        "pr": 801,
+        "issues": [
+          798
+        ],
+        "actor": "Reviewer-RRF14",
+        "session": "rrf798-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T16:51:43+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
