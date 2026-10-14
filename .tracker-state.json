@@ -11859,7 +11859,7 @@
             "session": "run_s1812a_1012"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1812A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11878,7 +11878,8 @@
         },
         "pr": 813,
         "queued_at": "2026-10-12T07:05:42+00:00",
-        "reviewer": "Reviewer-R1014S"
+        "reviewer": "Reviewer-R1014S",
+        "review_report": "# Review return: PR #813 (ACL-1812), head 519e07dd6b30 (CI run 38224895456/\u2026405 from 2026-10-12 08:39, for this head)\n\nRed: Classify and check project tooling, Process instructions, Verify build inputs, Installer verification (build job skipped), linux tests (3.11 shards 2,3; 3.13 shards 2,3), windows tests, ACL verification (aggregate).\n\n## Root causes (from logs)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- `tests/test_acl1761_hang_logout.py:255,256,268,275` (backslash-path, platform-branch, windll). Fix from #765 arrives via the parent merge.\n2. `test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards` -- `AssertionError: [34, 38, 37]` (spread must be <= 3). Rebalance shard assignment after merging parents and main.\n3. Verify build inputs (hence Installer verification): `tests/test_acl1800_campaign_commands.py:720  ad account id: act_9999999999` found as a real-looking identifier in tracked files. This branch is based on an older #802 head; #802's current head no longer contains it, so merging the fixed #802 clears it. If it remains after merge, replace the id with an obviously fake placeholder.\n4. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt, tracker-link (green).\n5. Note: the #802 failure `test_poll_resumes_and_updates_all_copies_and_status` (window is not defined) is not in this old run but will appear once #802's base is merged; it needs the #802 fix.\n\n## Conflict with main\nCONFLICTING: `docs/system/CHANGELOG.md`, `tests/test_acl1756_fb_api.py`. Merge fixed #802 (which contains #765/#796), then current origin/main; resolve keeping both sides; push.\n\n## Required fixes (stack order: last)\nMerge fixed #802 + main, resolve conflicts, rebalance shards, confirm no act_ id remains. Re-run affected tests (platform, shard, review_ui_regressions, test_acl1812_*) and full CI."
       },
       "814": {
         "implementers": [
@@ -28839,6 +28840,24 @@
         "pr": 813,
         "lane": "a21c26b488a744b9bb6086622a343f25",
         "actor": "Reviewer-R1014S"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-14T09:27:45+00:00",
+        "review": {
+          "id": "a21c26b488a744b9bb6086622a343f25",
+          "pr": 813,
+          "issues": [
+            812
+          ],
+          "actor": "Reviewer-R1014S",
+          "session": "r1014s-20261014",
+          "coordinator": "Coordinator-T1014C",
+          "started_at": "2026-10-14T09:27:18+00:00",
+          "state": "returning",
+          "report": "# Review return: PR #813 (ACL-1812), head 519e07dd6b30 (CI run 38224895456/\u2026405 from 2026-10-12 08:39, for this head)\n\nRed: Classify and check project tooling, Process instructions, Verify build inputs, Installer verification (build job skipped), linux tests (3.11 shards 2,3; 3.13 shards 2,3), windows tests, ACL verification (aggregate).\n\n## Root causes (from logs)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- `tests/test_acl1761_hang_logout.py:255,256,268,275` (backslash-path, platform-branch, windll). Fix from #765 arrives via the parent merge.\n2. `test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards` -- `AssertionError: [34, 38, 37]` (spread must be <= 3). Rebalance shard assignment after merging parents and main.\n3. Verify build inputs (hence Installer verification): `tests/test_acl1800_campaign_commands.py:720  ad account id: act_9999999999` found as a real-looking identifier in tracked files. This branch is based on an older #802 head; #802's current head no longer contains it, so merging the fixed #802 clears it. If it remains after merge, replace the id with an obviously fake placeholder.\n4. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt, tracker-link (green).\n5. Note: the #802 failure `test_poll_resumes_and_updates_all_copies_and_status` (window is not defined) is not in this old run but will appear once #802's base is merged; it needs the #802 fix.\n\n## Conflict with main\nCONFLICTING: `docs/system/CHANGELOG.md`, `tests/test_acl1756_fb_api.py`. Merge fixed #802 (which contains #765/#796), then current origin/main; resolve keeping both sides; push.\n\n## Required fixes (stack order: last)\nMerge fixed #802 + main, resolve conflicts, rebalance shards, confirm no act_ id remains. Re-run affected tests (platform, shard, review_ui_regressions, test_acl1812_*) and full CI.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -30055,20 +30074,6 @@
         "coordinator": "Coordinator-CR1012",
         "started_at": "2026-10-13T21:41:15+00:00",
         "state": "reviewing"
-      },
-      "813": {
-        "id": "a21c26b488a744b9bb6086622a343f25",
-        "pr": 813,
-        "issues": [
-          812
-        ],
-        "actor": "Reviewer-R1014S",
-        "session": "r1014s-20261014",
-        "coordinator": "Coordinator-T1014C",
-        "started_at": "2026-10-14T09:27:18+00:00",
-        "state": "returning",
-        "report": "# Review return: PR #813 (ACL-1812), head 519e07dd6b30 (CI run 38224895456/\u2026405 from 2026-10-12 08:39, for this head)\n\nRed: Classify and check project tooling, Process instructions, Verify build inputs, Installer verification (build job skipped), linux tests (3.11 shards 2,3; 3.13 shards 2,3), windows tests, ACL verification (aggregate).\n\n## Root causes (from logs)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- `tests/test_acl1761_hang_logout.py:255,256,268,275` (backslash-path, platform-branch, windll). Fix from #765 arrives via the parent merge.\n2. `test_acl_test_shard.py::test_the_browser_files_are_spread_evenly_over_the_linux_shards` -- `AssertionError: [34, 38, 37]` (spread must be <= 3). Rebalance shard assignment after merging parents and main.\n3. Verify build inputs (hence Installer verification): `tests/test_acl1800_campaign_commands.py:720  ad account id: act_9999999999` found as a real-looking identifier in tracked files. This branch is based on an older #802 head; #802's current head no longer contains it, so merging the fixed #802 clears it. If it remains after merge, replace the id with an obviously fake placeholder.\n4. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt, tracker-link (green).\n5. Note: the #802 failure `test_poll_resumes_and_updates_all_copies_and_status` (window is not defined) is not in this old run but will appear once #802's base is merged; it needs the #802 fix.\n\n## Conflict with main\nCONFLICTING: `docs/system/CHANGELOG.md`, `tests/test_acl1756_fb_api.py`. Merge fixed #802 (which contains #765/#796), then current origin/main; resolve keeping both sides; push.\n\n## Required fixes (stack order: last)\nMerge fixed #802 + main, resolve conflicts, rebalance shards, confirm no act_ id remains. Re-run affected tests (platform, shard, review_ui_regressions, test_acl1812_*) and full CI.",
-        "keep_lane": false
       }
     }
   }
