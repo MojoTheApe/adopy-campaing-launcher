@@ -11519,7 +11519,7 @@
             "session": "run_s1769a_1011"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1769A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11537,7 +11537,8 @@
           "report": "ACL-1769 handoff (PR #796, branch codex/acl-1769-two-column-builder, head 3bf6a52e, stacked on #765)\n\nChecks and results:\n- Only src/web/templates/report.html and tests changed. The server contract and the payload sent to Meta are unchanged. Publish all, Check plan, the plan panel and the RPA/API texts are preserved.\n- New tests/test_acl1769_two_column_layout.py: 11 tests, driven by tests/builder_layout_harness.cjs. Extended the tree, drawer and keep harnesses (names-only, fold, levels, ad picker, expand, restoring an old draft).\n- 231 non-browser tests passed. 42 affected Playwright tests passed (run with free RAM above 6 GB).\n- Creator parity: real plan_from_draft errors are routed to the right fields; the UI is tied to the creator's constants (no ACTIVE, ABO, extra CTA or placements outside the list).\n- Screenshots at 1280x800, light and dark: C:\\acl-notes\\acl-1769-shots\\.\n\nRemaining risks:\n- Controls without a backend are disabled and name their task: ACL-1767, 1768, 1772, 1773, 1774, 1775.\n- Deferred: the ad-text compliance warning, which needs an endpoint and a product decision.\n- Full CI is blocked by the GitHub Actions billing outage; re-run before merge.\n\nDurable reference: PR #796."
         },
         "pr": 796,
-        "queued_at": "2026-10-11T18:59:04+00:00"
+        "queued_at": "2026-10-11T18:59:04+00:00",
+        "reviewer": "Reviewer-R1014S"
       },
       "783": {
         "implementers": [
@@ -16692,7 +16693,6 @@
       766,
       782,
       781,
-      769,
       798,
       800,
       799,
@@ -28780,6 +28780,13 @@
           "report": "# Review return: PR #765 (ACL-1761), head 443914460fcb\n\nStatus: no CI checks at all on the current head. Cause: PR is CONFLICTING with current origin/main, so the pull_request workflow did not trigger (no merge commit to test).\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; src/web/app.py and report.html auto-merge). Fix: merge current origin/main INTO the branch (no rebase/force), resolve the test file keeping both sides' tests, push, so CI starts.\n\n## Known failures that WILL hit this branch once CI runs (verified at this head)\n1. `tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- `tests/test_acl1761_hang_logout.py` lines 255, 256 [backslash-path], 268 [platform-branch], 275 [windll]. Fix: add `pytestmark = pytest.mark.windows_only(reason=\"...\")` for the Windows-path tests, or `# linux-ok: <why>` on those lines. This file originates in this branch, so fix it HERE (the descendants inherit it).\n2. Not applicable at this head: Cyrillic `[x\u0445\u00d7]` in report.html (no match), `tzdata` in requirements.txt (absent), so no change needed for (b)/(c).\n\n## Required fixes (stack order: this branch first)\nMerge main, resolve test_acl1756_fb_api.py, fix item 1, push. Then re-run the affected tests (test_acl_test_platform.py, test_acl1761_hang_logout.py, test_acl1756_fb_api.py) and wait for full CI green. Descendant PRs #796, #802, #813 must then merge this branch + main in order.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T09:25:13+00:00",
+        "pr": 796,
+        "lane": "2fc2a7f01d9649e7b20ebf846fc6f69b",
+        "actor": "Reviewer-R1014S"
       }
     ],
     "policy": {
@@ -29995,6 +30002,18 @@
         "session": "connection_review_rs1012",
         "coordinator": "Coordinator-CR1012",
         "started_at": "2026-10-13T21:41:15+00:00",
+        "state": "reviewing"
+      },
+      "796": {
+        "id": "2fc2a7f01d9649e7b20ebf846fc6f69b",
+        "pr": 796,
+        "issues": [
+          769
+        ],
+        "actor": "Reviewer-R1014S",
+        "session": "r1014s-20261014",
+        "coordinator": "Coordinator-T1014C",
+        "started_at": "2026-10-14T09:25:13+00:00",
         "state": "reviewing"
       }
     }
