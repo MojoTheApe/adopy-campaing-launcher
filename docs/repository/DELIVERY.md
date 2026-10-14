@@ -12,13 +12,15 @@ registration before changing adoption from draft to ready.
 For ordinary/application work, execution schemas 2/3 select Review -> Approved -> Stage -> Merged.
 Independent source approval releases the review lane; one separate Coordinator
 integration claim covers a frozen batch of 1..batch_limit tasks. The recommended
-limit is five, independent of Worker capacity. Preserve each member's author,
+limit is five, independent of Worker capacity. ACL's active schema-3 limits are
+implementation5/source-review5/batch5, plus one separate integration review.
+Preserve each member's author,
 source PR/current approval and scope; verify the combined stage candidate before
 unchanged promotion. Ship-all snapshots intake and processes sequential batches,
 rechecking remaining approvals after each main change. A single task may ship
-without filling the batch. Execution-v1 commands remain in force only through the guarded source cutover;
-follow the old pinned guide for that route. Source child ACL-1875 completes the current
-v2 source/batch/stage/main route before [v3 migration](SOURCE_REVIEWS.md).
+without filling the batch. The old-policy source routes and completed
+[v3 migration](SOURCE_REVIEWS.md) retain their historical evidence; current
+compatible pin upgrades preserve ownership without another state migration.
 Five source-review slots leave one combined review and one stage owner; completion
 and runtime authorization remain project-specific.
 
@@ -76,6 +78,12 @@ A partially implemented ticket stays active. Never substitute a closed Issue or
 non-code completion for missing code/delivery evidence.
 
 ## Procedure references
+
+Follow [VERIFICATION.md](VERIFICATION.md) for common check selection and coordinated
+upgrades, while preserving ACL's affected-source selection, actual required names,
+full applicable integration/platform/installer gates and bounded local collector.
+TT-107's optional native protocol cannot replace those Windows/matrix/installer
+proofs. No optional CI evidence policy or maintenance interval is enabled here.
 
 Use `docs/runtime/DELIVERY.md` for actual environment identities, access,
 release authorization, rollback and backup. The descriptor links those procedures. A disabled
