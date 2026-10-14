@@ -8299,19 +8299,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "903": {
-        "actor": "Worker-W1903V",
-        "session": "wk_w1903v_1014",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-PENDING-builder-file-clear",
-        "worktree": "C:\\acl-PENDING-file-clear",
-        "id": "c0f3432ed53c423f9b8f786300b10754",
-        "issue": 903,
-        "state": "stopping",
-        "started_at": "2026-10-14T12:37:33+00:00",
-        "from_status": "status:backlog",
-        "report": "Claim recorded a placeholder branch name before the issue number was known; stopping with no code changes to re-claim with the real branch work/acl-1903-builder-file-clear."
       }
     },
     "tasks": {
@@ -13299,9 +13286,22 @@
             "session": "wk_w1903v_1014"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-W1903V",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-W1903V",
+          "session": "wk_w1903v_1014",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-PENDING-builder-file-clear",
+          "worktree": "C:\\acl-PENDING-file-clear",
+          "id": "c0f3432ed53c423f9b8f786300b10754",
+          "issue": 903,
+          "state": "stopping",
+          "started_at": "2026-10-14T12:37:33+00:00",
+          "from_status": "status:backlog",
+          "report": "Claim recorded a placeholder branch name before the issue number was known; stopping with no code changes to re-claim with the real branch work/acl-1903-builder-file-clear."
+        }
       }
     },
     "actors": {
@@ -30017,6 +30017,13 @@
         "issue": 903,
         "claim": "c0f3432ed53c423f9b8f786300b10754",
         "actor": "Worker-W1903V"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-14T12:39:00+00:00",
+        "issue": 903,
+        "actor": "Worker-W1903V",
+        "report": "Claim recorded a placeholder branch name before the issue number was known; stopping with no code changes to re-claim with the real branch work/acl-1903-builder-file-clear."
       }
     ],
     "policy": {
