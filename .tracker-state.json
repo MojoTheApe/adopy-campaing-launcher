@@ -8432,9 +8432,11 @@
         "worktree": "C:\\wk-1760c",
         "id": "ee0d9d2a54304b0d9c1b4836c0abd1ca",
         "issue": 760,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T14:36:59+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 762,
+        "report": "# ACL-1760 refresh handoff\n\nWorker-S1760E / ws1760e-20261014. Only change since the approved head c6b5856a: merged current main (311700fd, batch e2b8b707: ACL-1781/1782/1783/1786/1806) into codex/acl-1760-api-read, clean merge, no conflicts. New head e45418dfd5bc0eecdd553263ffce9bddc14c2768.\n\nChecks: tests/test_acl1760_api_read.py, tests/test_acl1756_fb_api.py, tests/test_acl_test_platform.py passed (browser deselected). Earlier report: C:\u0007cl-notes\\handoff_760.md (P1/P2 fixes, spec decisions, 3-account live read)."
       }
     },
     "tasks": {
