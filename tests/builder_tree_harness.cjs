@@ -392,20 +392,23 @@ assert.equal(t.stored['acl.builder.level'], 'adset', 'уровень не зап
 assert.ok(/data-future="adsets"[^>]*title="Multiple ad sets — coming in ACL-1768"/.test(head.innerHTML), '«+ Ad set» не выключен с задачей');
 assert.ok(/data-future="copyAdset"/.test(head.innerHTML) && (head.innerHTML.match(/ disabled /g) || []).length >= 2);
 
-// Ad: выбор объявления прячет остальные строки, но не убирает их из формы.
+// Ad: выбора объявления нет, все карточки набора идут одним списком (владелец, 13.10).
 clickAct(t, 'level', { level: 'ad' });
 head = t.editor.children.find((c) => c.matches('.cbd-ed-head'));
-assert.equal((head.innerHTML.match(/<option /g) || []).length, 2, 'в выборе не два объявления');
-const rows = t.p.forms[0].querySelectorAll('.cb-slot')[0].querySelectorAll('.cb-ad-row');
-assert.deepEqual(rows.map((r) => r.classList.contains('cbd-ad-off')), [false, true]);
-t.editor.fire('change', { target: { classList: { contains: (c) => c === 'cbd-ed-ad' }, value: '1' } });
-assert.deepEqual(rows.map((r) => r.classList.contains('cbd-ad-off')), [true, false], 'выбор объявления не сработал');
-assert.equal(rows.length, 2, 'строка объявления выброшена из формы');
-// Добавили объявление — открыто новое.
+assert.ok(!head.innerHTML.includes('cbd-ed-ad') && !head.innerHTML.includes('<select'), 'выбор объявления остался');
+assert.ok(!head.innerHTML.includes('<option '), 'в шапке остался список объявлений');
 const slotNode = t.p.forms[0].querySelectorAll('.cb-slot')[0];
+const rows = slotNode.querySelectorAll('.cb-ad-row');
+assert.equal(rows.length, 2, 'строка объявления выброшена из формы');
+assert.deepEqual(rows.map((r) => r.classList.contains('cbd-ad-off')), [false, false], 'карточка скрыта');
+// Добавили объявление — карточка в списке, ни одна не скрыта.
 slotNode.appendChild(el('div', { classes: ['cb-ad-row'] }));
 t.api.refreshEditor();
-assert.equal(slotNode.querySelectorAll('.cb-ad-row')[2].classList.contains('cbd-ad-off'), false, 'новое объявление не открыто');
+assert.deepEqual(slotNode.querySelectorAll('.cb-ad-row').map((r) => r.classList.contains('cbd-ad-off')), [false, false, false], 'после добавления часть карточек скрыта');
+// Убрали объявление — остальные на месте и видны.
+slotNode.querySelectorAll('.cb-ad-row')[1].remove();
+t.api.refreshEditor();
+assert.deepEqual(slotNode.querySelectorAll('.cb-ad-row').map((r) => r.classList.contains('cbd-ad-off')), [false, false]);
 
 // Мусорный уровень — кампания; запомненный уровень поднимается при загрузке.
 t.api.setLevel('nonsense');

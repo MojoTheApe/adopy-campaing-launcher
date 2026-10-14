@@ -99,6 +99,15 @@ const sels = (m) => L.routes(m).map((r) => r.sel);
 assert.deepEqual(sels('Ad 1: Primary text 2 is not supported by the API backend yet'), ['.cb-text2-search'],
   'ошибка второго текста ушла и в Ad Title');
 assert.deepEqual(sels('Ad 1: no creative file'), ['.cb-creative-search']);
+// Тексты ошибок сервера и робота, где поле раньше называлось «Ad Title» / «ad text»:
+// все они ложатся на поле Primary text 1.
+["Ad text 'Text9': The ad text “Text9” is missing or its title is ambiguous.",
+ "Ad title empty for creative 2403",
+ "ad text 'Text9' has no body — check it in Ad titles",
+ "Ads 1, 2 would all be named 'x'; give them different creatives or ad texts"].forEach((m) =>
+  assert.ok(sels(m).includes('.cb-adtitle-search'), 'не ложится на Primary text 1: ' + m));
+assert.deepEqual(sels("Primary text 2 'T' needs an Ad Title with a primary text — ignored"), ['.cb-text2-search'],
+  'ошибка второго текста ушла в Primary text 1');
 assert.deepEqual(sels('Daily budget missing'), ['[name$="_budget"]']);
 assert.ok(sels('Detailed targeting not found by Meta: Foo').includes('.cb-targeting-search'));
 assert.ok(sels('Tracking link is empty; the API backend needs it for the ads').includes('input[name="tracking_link"]'));

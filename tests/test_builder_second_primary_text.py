@@ -189,8 +189,6 @@ def test_publish_all_sends_primary_text_2_with_the_ad(ui):
     add(p)
     _show(p)
     p.evaluate("() => cbAddAd(document.querySelector('.cb-slot .cb-add-btn-sm'))")
-    # ACL-1769: редактор открывает только что добавленное объявление; нужное — первое.
-    p.locator(".cbd-ed-ad").select_option("0")
     _pick(p, ".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0']", "Text7", "Text7")
     p.evaluate("() => document.querySelector('form.open-account-form')"
                ".dispatchEvent(new Event('input', {bubbles: true}))")
@@ -204,3 +202,99 @@ def test_publish_all_sends_primary_text_2_with_the_ad(ui):
     assert "camp_0_ad_0_cta" not in sent
     # Проверка перед публикацией видит то же значение.
     assert any(f.get("camp_0_ad_0_copy2") == "Text7" for f in state["previews"])
+
+
+def test_primary_text_1_names_the_library_pick_and_shows_its_headline(ui):
+    """ACL-1769: прежний «Ad Title» подписан «Primary text 1»; заголовок записи
+    виден строкой под ним, а имя поля, уходящего на сервер, не изменилось."""
+    p, _ = ui
+    add(p)
+    _show(p)
+    row = p.locator(".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0']")
+    text = row.inner_text()
+    assert "Primary text 1" in text and "Ad Title" not in text
+    assert "Primary text 2" in text and "+ Primary text 3–5" in text
+    expect(row.locator("[data-headline]")).to_be_hidden()
+    box = row.locator(".cb-adtitle-search")
+    box.click()
+    box.fill("text7")
+    opt = p.locator(".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0'] .cb-adtitle-sel-wrap .cb-sel-opt[data-val='Text7']")
+    expect(opt).to_be_visible()
+    opt.evaluate("e => e.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}))")
+    expect(row.locator("[data-headline]")).to_have_text("Headline: Otro, from the ad-title library")
+    assert p.input_value("[name='camp_0_ad_0_copy']") == "Text7", "имя поля или значение изменились"
+
+
+# ── ACL-1769, правка владельца 13.10: объявления набора — стопкой карточек ──
+
+MODES = ["docked", "expanded", "narrow"]
+
+
+def _mode(p, mode):
+    if mode == "narrow":
+        p.set_viewport_size({"width": 420, "height": 900})
+    elif mode == "expanded":
+        p.locator("#cbd-expand").click()
+
+
+def _cards(p):
+    return p.locator(".cb-slot:not([hidden]) .cb-ad-row")
+
+
+def _assert_stack(p, count):
+    """Все карточки видны и идут одним вертикальным списком в порядке номеров."""
+    cards = _cards(p)
+    assert cards.count() == count
+    assert p.locator(".cbd-ed-ad, .cbd-ed-head select").count() == 0, "выбор объявления остался"
+    boxes = []
+    for i in range(count):
+        expect(cards.nth(i)).to_be_visible()
+        boxes.append(cards.nth(i).bounding_box())
+    for a, b in zip(boxes, boxes[1:]):
+        assert b["y"] >= a["y"] + a["height"] - 1, "карточки перекрываются или стоят в ряд"
+    assert [cards.nth(i).get_attribute("data-ad-idx") for i in range(count)] == [str(i) for i in range(count)]
+    labels = [cards.nth(i).locator(".cb-ad-row-label").inner_text() for i in range(count)]
+    assert labels == [f"Ad {i + 1}" for i in range(count)]
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_ad_tab_lists_every_ad_and_add_duplicate_delete_keep_them_visible(ui, mode):
+    p, _ = ui
+    add(p)
+    _mode(p, mode)
+    _show(p)
+    _assert_stack(p, 1)
+    _pick(p, ".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0']", "Text7", "Text7")
+    # Add: новая карточка сразу в списке, первая на месте.
+    p.evaluate("() => cbAddAd(document.querySelector('.cb-slot:not([hidden]) .cb-add-btn-sm'))")
+    _assert_stack(p, 2)
+    # Duplicate: копия вставлена следом и видна, значения скопированы.
+    _cards(p).nth(0).locator(".cb-dup-ad-btn").click()
+    _assert_stack(p, 3)
+    assert _text2(p, "camp_0_ad_0_copy2") == ["Text7", "Text7"]
+    assert _text2(p, "camp_0_ad_2_copy2") == ["Text7", "Text7"] or _text2(p, "camp_0_ad_1_copy2") == ["Text7", "Text7"]
+    # Delete: остальные остаются, нумерация и имена полей идут подряд.
+    _cards(p).nth(1).locator(".cb-remove-ad-btn").click()
+    _assert_stack(p, 2)
+    names = p.evaluate("() => Array.from(document.querySelectorAll('.cb-slot:not([hidden]) .cb-ad-row [name$=\"_copy2\"]')).map(e => e.name)")
+    assert names == ["camp_0_ad_0_copy2", "camp_0_ad_1_copy2"]
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_several_ads_are_restored_from_the_draft_as_a_stack(ui, mode):
+    p, _ = ui
+    add(p)
+    _mode(p, mode)
+    _show(p)
+    p.evaluate("() => cbAddAd(document.querySelector('.cb-slot:not([hidden]) .cb-add-btn-sm'))")
+    _pick(p, ".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0']", "Text6", "Text6")
+    _pick(p, ".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='1']", "Text7", "Text7")
+    p.evaluate("() => { cbKeep.save(); location.reload(); }")
+    p.wait_for_load_state("load")
+    p.wait_for_function("document.querySelector('[name=\"camp_0_ad_1_copy2\"]')")
+    assert _text2(p, "camp_0_ad_0_copy2") == ["Text6", "Text6"]
+    assert _text2(p, "camp_0_ad_1_copy2") == ["Text7", "Text7"]
+    p.evaluate("cbDrawer.open()")
+    _mode(p, mode)
+    _show(p)
+    _assert_stack(p, 2)
