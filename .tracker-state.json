@@ -8854,9 +8854,11 @@
         "worktree": "C:\\wk-rh1775",
         "id": "7f52d19d351943f8b29f9b5d8dd474a5",
         "issue": 775,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T22:59:01+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 809,
+        "report": "# ACL-1775 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1775-instant-forms; head e2714db8.\nConflicts: src/fb_api/creator.py (resolve_page_pixel) and src/web/templates/report.html (cbPlanHtml meta line). Both resolved keeping both sides:\n- creator.py: Instant-Form-only plans skip the pixel check (1775); otherwise 1766 pixel check with pixel_source message.\n- report.html: page (page_source) and pixel (pixel_source) shown; pixel hidden for all-Instant-Form plans.\nGolden test: website plan now legitimately carries page_source='draft' and pixel_source='account default' (ACL-1766) plus not_read=false on readback checks (main readback). Golden fixture updated ONLY for those fields; nothing else differs.\nTests: test_acl1775_instant_forms, test_acl1775_builder_forms, test_acl1769_two_column_layout, test_acl1761_* (-k \"not browser\"): 338 passed after golden update."
       },
       "797": {
         "actor": "Worker-RJ1797",
