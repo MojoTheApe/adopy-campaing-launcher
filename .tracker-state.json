@@ -8608,9 +8608,11 @@
         "worktree": "C:\\wk-rg1775",
         "id": "ab5224d3d70f4e3fb5e31bd39a8202aa",
         "issue": 775,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T16:57:53+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 809,
+        "report": "ACL-1775 refresh: merged origin/main (73136acc, incl. ACL-1760/1761) into codex/acl-1775-instant-forms. New head 8ab25c24. Merge only, no rebase.\nConflicts: one, docs/system/CHANGELOG.md (both sides added entries); kept both, removed markers. src/fb_api/graph.py, src/web/app.py, report.html auto-merged; main's 1760/1761 behaviour unchanged.\nTests (not browser): the 1775 branch test files (test_acl1775_*, 1769, builder_*, drawer, the_builder_drawer), tests/test_acl1761_*.py, tests/test_acl1760_api_read.py: 434 passed, 16 deselected. test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator passes. No test edits."
       },
       "798": {
         "actor": "Worker-RF1798",
