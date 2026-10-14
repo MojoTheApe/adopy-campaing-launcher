@@ -8161,9 +8161,11 @@
         "worktree": "C:\\wkf-1800",
         "id": "0e0774604ab24866942f0e9d3efe8058",
         "issue": 800,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T10:24:36+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 802,
+        "report": "# Handoff ACL-1800 (PR #802)\nScope: returned-review fixes. Merged fixed parent codex/acl-1769-two-column-builder (046c27b2; CHANGELOG conflict resolved keeping both entries; main already included). Guarded the campaign-table mount in report.html with typeof window; updated test_acl1800_account_scoped_table and gave the poll test harness a window stub (test_review_ui_regressions). Shard-spread test passes after merge (main's browser-count balancing). Head 7efcc856.\nChecks: local test_acl_test_shard, test_acl_test_platform, test_review_ui_regressions, test_acl1800_* 410 passed; GitHub CI all green except tracker-link (needs Review status, this handoff).\nRemaining: #813 merges this branch next."
       }
     },
     "tasks": {
