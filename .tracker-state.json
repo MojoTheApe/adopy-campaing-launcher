@@ -8620,20 +8620,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "769": {
-        "actor": "Worker-S1769G",
-        "session": "ws1769g-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1769-two-column-builder",
-        "worktree": "C:\\wk-1769g",
-        "id": "7730a02547054ae2903a0abf04c3f7a8",
-        "issue": 769,
-        "state": "handoff",
-        "started_at": "2026-10-14T21:30:37+00:00",
-        "from_status": "status:todo",
-        "pr": 796,
-        "report": "# ACL-1769 / PR 796 - handoff after review return (head 038d9e45)\n\nImplemented the owner correction of 2026-10-13 (stacked ad cards).\n\n## Changes\n- src/web/templates/report.html: removed the Ad / Ad 2 dropdown (#cbd-ed-ad, adNames, its change handler, adIdx state, .cbd-ad-off toggling and CSS). Campaign / Ad set / Ad tabs kept. The Ad tab now shows every ad card of the ad set as one vertical list; Add and Duplicate insert a card that is visible at once. Field names camp_N_ad_M_*, order, numbering, removal, draft restore are untouched.\n- tests/builder_tree_harness.cjs: replaced the dropdown scenario with: no dropdown in the head, all cards visible, add and remove keep all visible.\n- tests/test_builder_second_primary_text.py: removed the dropdown call; added browser tests (docked, expanded, narrow 420px): add, duplicate, delete, and restore of several ads after reload, checking vertical stacking, order, numbering and field names.\n- tests/test_acl1769_two_column_layout.py: new non-browser test test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown; asserts the \"Primary text 1\" label (and Primary text 2, no \"Ad Title\") in buildAdRowHTML, plus field names, so the label no longer depends on the browser test only.\n\n## Tests\n- Non-browser (-k \"not browser\") on two_column_layout, duplicate_buttons, second_primary_text, the_builder_*, builder_tree, acl1761_parity, acl1761_plan_check: 112 passed before the last test fix; the new test passes after it.\n- NOT run locally: browser tests (free RAM 4.7 GB < 6 GB). The new browser tests were only collected (13 collected, import OK). Reviewer: please rely on CI browser run / run them.\n- Merged current origin/main: already up to date."
       }
     },
     "tasks": {
@@ -12059,25 +12045,25 @@
             "session": "ws1769g-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1769G",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-RF1769",
-          "session": "wrf1769-20261014",
+          "actor": "Worker-S1769G",
+          "session": "ws1769g-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1769-two-column-builder",
-          "worktree": "C:\\wk-rf1769",
-          "id": "f9f0c3b613bf4bf5905aed2b6ef4e17d",
+          "worktree": "C:\\wk-1769g",
+          "id": "7730a02547054ae2903a0abf04c3f7a8",
           "issue": 769,
           "state": "handoff",
-          "started_at": "2026-10-14T17:01:49+00:00",
+          "started_at": "2026-10-14T21:30:37+00:00",
           "from_status": "status:todo",
           "pr": 796,
-          "report": "Merged current origin/main (73136acc) into codex/acl-1769-two-column-builder (merge only). Result head: da368fcfebe45d0d57ecbedc3368f8efed852013.\n\nConflicts: none (ort auto-merge). Main's ACL-1760/1761 behaviour untouched.\n\nTests (-k 'not browser'): test_acl1769_two_column_layout, test_builder_duplicate_buttons, test_builder_second_primary_text, test_the_builder_drawer, test_acl1760_api_read, test_acl1761_*: 338 passed, 2 deselected, 0 failed. No test edits."
+          "report": "# ACL-1769 / PR 796 - handoff after review return (head 038d9e45)\n\nImplemented the owner correction of 2026-10-13 (stacked ad cards).\n\n## Changes\n- src/web/templates/report.html: removed the Ad / Ad 2 dropdown (#cbd-ed-ad, adNames, its change handler, adIdx state, .cbd-ad-off toggling and CSS). Campaign / Ad set / Ad tabs kept. The Ad tab now shows every ad card of the ad set as one vertical list; Add and Duplicate insert a card that is visible at once. Field names camp_N_ad_M_*, order, numbering, removal, draft restore are untouched.\n- tests/builder_tree_harness.cjs: replaced the dropdown scenario with: no dropdown in the head, all cards visible, add and remove keep all visible.\n- tests/test_builder_second_primary_text.py: removed the dropdown call; added browser tests (docked, expanded, narrow 420px): add, duplicate, delete, and restore of several ads after reload, checking vertical stacking, order, numbering and field names.\n- tests/test_acl1769_two_column_layout.py: new non-browser test test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown; asserts the \"Primary text 1\" label (and Primary text 2, no \"Ad Title\") in buildAdRowHTML, plus field names, so the label no longer depends on the browser test only.\n\n## Tests\n- Non-browser (-k \"not browser\") on two_column_layout, duplicate_buttons, second_primary_text, the_builder_*, builder_tree, acl1761_parity, acl1761_plan_check: 112 passed before the last test fix; the new test passes after it.\n- NOT run locally: browser tests (free RAM 4.7 GB < 6 GB). The new browser tests were only collected (13 collected, import OK). Reviewer: please rely on CI browser run / run them.\n- Merged current origin/main: already up to date."
         },
         "pr": 796,
-        "queued_at": "2026-10-14T17:04:00+00:00",
+        "queued_at": "2026-10-14T21:37:32+00:00",
         "review_report": "# ACL-1769 / PR 796 (head da368fcf) - returned by Reviewer-R1769F\n\n## Blocking\n1. The owner correction of 2026-10-13 (issue 769, \"stacked ad cards\") is not implemented. The Ad editor still has the Ad/Ad 2 object dropdown (`#cbd-ed-ad` / `.cbd-ed-ad`, `headHtml` in src/web/templates/report.html ~line 5979, its change handler ~6057, and `adNames`; tests/test_builder_second_primary_text.py:193 and tests/builder_tree_harness.cjs:401 still drive it). The issue says this supersedes the ad-object-switcher part and that implementation waits for this source to return to its author. Required: remove the dropdown (keep the Campaign / Ad set / Ad tabs); show every ad card of the selected ad set in one vertical list with editable fields; add/duplicate inserts a visible card; keep each ad's values, order, numbering, removal, draft restore (localStorage migration) and submission payload (camp_N_ad_M_* names unchanged); no publishing change. Add tests: add, duplicate, delete, restore of several ads, docked and expanded, narrow width.\n\n## Checked, no defects\n- Diff vs main (11 files, report.html + tests): create/publish preview/cbPublishAll, drafts and acl.builder.* keys (try/catch), copy/Duplicate, existing camp_N_* names unchanged; camp_N_name_override has no name attribute any more.\n- English UI, disabled future controls carry tooltip + ACL-17xx tag, no name so cannot submit; labels via aclEscHtml/textContent; tokens scoped to .cbd-root; Primary text 1 / Primary text 2 naming present.\n- Merge da368fcf of main is clean; ACL-1760/1761 untouched.\n- CI on head: all green (tracker-link failed on handoff timing, rerun passed; Linux 1-3, Windows, installer, descriptor, process, ACL verification pass).\n- Tests in detached worktree: 100 passed (-k \"not browser\"): two_column_layout, duplicate_buttons, second_primary_text, the_builder_drawer, the_builder_tree, acl1761_parity, acl1761_plan_check. Browser tests not run (free RAM 5.3 GB < 6 GB).\n- Mutation: renamed \"Primary text 1\" label in report.html: survives the non-browser tests (35 passed); it is asserted only by the browser test test_builder_second_primary_text.py:217, so CI browser run is the guard. Suggest also asserting the label in the non-browser layout test.\n\n## Re-review\nAfter the stacked-cards change: re-run the same test files plus browser tests for multi-ad add/duplicate/delete/restore."
       },
       "783": {
@@ -17702,7 +17688,8 @@
       891,
       797,
       799,
-      778
+      778,
+      769
     ],
     "review": null,
     "history": [
@@ -32519,6 +32506,13 @@
         "pr": 801,
         "lane": "6c479d8b508146cf97a278f0ac9c62e6",
         "actor": "Reviewer-R1798G"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T21:37:32+00:00",
+        "issue": 769,
+        "pr": 796,
+        "actor": "Worker-S1769G"
       }
     ],
     "policy": {
