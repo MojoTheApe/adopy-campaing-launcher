@@ -11673,7 +11673,7 @@
             "session": "a0247198fa5445808b9c6400851e6a62"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-M1782B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -11691,7 +11691,8 @@
           "report": "PR #793 (work/acl-1782-meta-docs-watcher, commits 3f40da19 + 02b052f2). Added scripts/meta_docs_watch.py, config/meta_rules/sources.json (74 official URLs), tests/test_meta_docs_watch_1782.py (12 passed, affected tests only) and .claude/skills/meta-builder-sync/SKILL.md (force-added: .claude is gitignored and existing skills are not tracked). Added --obsidian (appends dated section to \u0434\u0435\u0448\u0431\u043e\u0440\u0434/ACL \u2014 Meta \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f.md; default on only if the vault exists; no-op on empty digest). 9 facebook.com/business/help sources marked weak:true and flagged in the digest (JS shells). Real run: ok 74, failed 0, 74 baselines; one 404 URL dropped. Scheduled task not registered (Coordinator; instructions in PR body)."
         },
         "pr": 793,
-        "queued_at": "2026-10-11T18:38:42+00:00"
+        "queued_at": "2026-10-11T18:38:42+00:00",
+        "reviewer": "Reviewer-R782X"
       },
       "781": {
         "implementers": [
@@ -14321,6 +14322,10 @@
       "Reviewer-R783X": {
         "session": "claude-subagent-a020ec1d6f47f8d61",
         "role": "Reviewer"
+      },
+      "Reviewer-R782X": {
+        "session": "claude-subagent-ad5af5387f60319c6",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -16817,7 +16822,6 @@
       642,
       739,
       766,
-      782,
       781,
       798,
       799,
@@ -29163,6 +29167,13 @@
         "pr": 790,
         "lane": "40426c3a9ee54a2cb92ebfc2d91f0da9",
         "actor": "Reviewer-R783X"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T11:08:45+00:00",
+        "pr": 793,
+        "lane": "3cd6a5616f104408930e8a7a1edf3bda",
+        "actor": "Reviewer-R782X"
       }
     ],
     "policy": {
@@ -30434,6 +30445,18 @@
         "session": "claude-subagent-a020ec1d6f47f8d61",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-14T11:07:31+00:00",
+        "state": "reviewing"
+      },
+      "793": {
+        "id": "3cd6a5616f104408930e8a7a1edf3bda",
+        "pr": 793,
+        "issues": [
+          782
+        ],
+        "actor": "Reviewer-R782X",
+        "session": "claude-subagent-ad5af5387f60319c6",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-14T11:08:45+00:00",
         "state": "reviewing"
       }
     }
