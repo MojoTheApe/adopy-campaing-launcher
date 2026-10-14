@@ -3304,13 +3304,6 @@
     .cbd-seg button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
     .cbd-seg .cbd-lv-bad::after { content: " !"; color: var(--bad); font-weight: 700; }
     .cbd-ed-pick { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
-    .cbd-ed-pick label { color: var(--muted); font-size: var(--adopy-text-sm); }
-    .cbd-ed-pick select {
-      min-height: var(--adopy-control-sm); padding: 0.2rem 0.4rem;
-      font: inherit; font-size: var(--adopy-text-body);
-      background: var(--field-bg); color: var(--text);
-      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
-    }
     .cbd-ed-empty {
       color: var(--muted); font-size: var(--adopy-text-body); line-height: 1.6;
       text-align: center; padding: var(--space-xl) var(--space-md);
@@ -3323,7 +3316,6 @@
     .cbd-host[data-level="campaign"] .cb-lvl:not(.cb-lvl-campaign),
     .cbd-host[data-level="adset"] .cb-lvl:not(.cb-lvl-adset),
     .cbd-host[data-level="ad"] .cb-lvl:not(.cb-lvl-ad) { display: none; }
-    .cbd-host .cb-ad-row.cbd-ad-off { display: none; }
     /* Настройка аккаунта (ссылка, поля карты) — контекст кампании, не набора и не объявления. */
     .cbd-host[data-level="adset"] .cb-preflight, .cbd-host[data-level="ad"] .cb-preflight { display: none; }
     .cbd-host .cb-lvl { padding-top: var(--space-xs); }
@@ -5415,7 +5407,6 @@ window.cbTree = (function () {
   var level = L.level(store(LEVEL_KEY));
   var namesOnly = store(NAMES_KEY) === '1';
   var folded = L.parseList(store(FOLD_KEY));
-  var adIdx = 0, lastAdFor = '', lastAdCount = 0;
 
   var openId = '';
   try { openId = localStorage.getItem(OPEN_KEY) || ''; } catch (e) { openId = ''; }
@@ -5958,13 +5949,6 @@ window.cbTree = (function () {
     return false;
   }
 
-  function adNames(slot) {
-    var rows = slot.querySelectorAll('.cb-ad-row');
-    var out = [];
-    for (var i = 0; i < rows.length; i += 1) out.push('Ad ' + (i + 1));
-    return out;
-  }
-
   function headHtml(found) {
     var c = found.camp, slot = c.slot;
     var seg = L.LEVELS.map(function (lv) {
@@ -5975,14 +5959,9 @@ window.cbTree = (function () {
         + L.LEVEL_LABEL[lv] + '</button>';
     }).join('');
     var pick = '';
-    if (level === 'ad') {
-      pick = '<div class="cbd-ed-pick"><label for="cbd-ed-ad">Ad</label>'
-        + '<select id="cbd-ed-ad" class="cbd-ed-ad">'
-        + adNames(slot).map(function (n, i) {
-            return '<option value="' + i + '"' + (i === adIdx ? ' selected' : '') + '>' + n + '</option>';
-          }).join('')
-        + '</select></div>';
-    } else if (level === 'adset') {
+    /* Вкладка Ad без выбора объявления: все карточки набора идут одним
+       вертикальным списком (владелец, 13.10), добавление и копия видны сразу. */
+    if (level === 'adset') {
       /* Сегодня у кампании один набор объявлений; несколько — ACL-1768. */
       pick = '<div class="cbd-ed-pick"><span class="cbd-ed-fixed">Ad set 1 · the only ad set of this campaign</span>'
         + L.futureHtml('adsets', 'button', '+ Ad set') + L.futureHtml('copyAdset', 'button', 'Copy ad set') + '</div>';
@@ -5996,14 +5975,8 @@ window.cbTree = (function () {
   function syncHost(found) {
     host.dataset.level = level;
     var rows = found.camp.slot.querySelectorAll('.cb-ad-row');
-    if (lastAdFor !== openId) { adIdx = 0; lastAdFor = openId; lastAdCount = rows.length; }
-    /* Добавили объявление — открыть его: ради него и нажимали «+ Ad». */
-    if (rows.length > lastAdCount) adIdx = rows.length - 1;
-    lastAdCount = rows.length;
-    adIdx = L.clampAd(rows.length, adIdx);
     var api = window.ACL_FB_BACKEND === 'api';
     for (var i = 0; i < rows.length; i += 1) {
-      rows[i].classList.toggle('cbd-ad-off', i !== adIdx);
       /* Создатель по API второй основной текст не принимает: пустое поле
          выключено с причиной, непустое остаётся рабочим (иначе набранное
          молча пропало бы из отправки) и проверка покажет ошибку на нём. */
@@ -6053,11 +6026,6 @@ window.cbTree = (function () {
     if (again && again.focus) again.focus();
   }
 
-  editor.addEventListener('change', function (e) {
-    if (!e.target.classList || !e.target.classList.contains('cbd-ed-ad')) return;
-    adIdx = parseInt(e.target.value, 10) || 0;
-    paintEditor();
-  });
   editor.addEventListener('scroll', function () { cbdPlaceDropdowns(); });
 
   /* Дублирование кампании живёт в её карточке (ACL-1459). Ящик отвечает за
