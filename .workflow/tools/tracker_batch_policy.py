@@ -22,7 +22,7 @@ def scope(issue):
                                    | {'labels': labels}, sort_keys=True).encode()).hexdigest()
 
 
-def source(request, config, approval, baseline, *, phases=('approved',), pending=False, completed=False, frozen=False):
+def source(request, config, approval, baseline, *, phases=('approved',), pending=False, completed=False, frozen=False, included_in=None):
     root = 'repos/' + config['project']['repository']
     number = approval['issue']
     issue = request(root + f'/issues/{number}')
@@ -43,7 +43,9 @@ def source(request, config, approval, baseline, *, phases=('approved',), pending
         raise ValueError(f'#{number}: approved scope/status changed; return to its author and review again')
     pr = request(root + f'/pulls/{approval["pr"]}')
     review = approval.get('review', {})
-    if (pr.get('merged') or pr.get('draft') or pr.get('state') != 'open' and not completed
+    included_merge = bool(pr.get('merged') and included_in)
+    if (pr.get('merged') and not included_merge or pr.get('draft')
+            or pr.get('state') != 'open' and not (completed or included_merge)
             or rules.route(config, pr, request) != 'approval'
             or pr_checks.linked_numbers(pr.get('body'), config) != [number]
             or pr['head']['ref'] != approval.get('branch')
@@ -52,6 +54,14 @@ def source(request, config, approval, baseline, *, phases=('approved',), pending
             or approval.get('main_sha') != baseline
             or approval.get('policy') != rules.fingerprint(config)):
         raise ValueError(f'#{number}: source approval is stale for its PR, main or policy')
+    # GitHub auto-marks main-targeted sources merged when promotion contains their
+    # tips. Only post-main proof (or a completed batch's archived stage proof)
+    # may accept that state. Its merge_commit_sha is not the batch admission
+    # evidence. Bind inclusion to the frozen head instead.
+    if included_in:
+        comparison = request(root + '/compare/' + approval['head_sha'] + '...' + included_in)
+        if comparison.get('status') not in ('ahead', 'identical'):
+            raise ValueError(f'#{number}: approved source head is not included in the batch main merge')
     rules.naming(config, pr, [number], request)
     content = rules.tree(request, root, pr['head']['sha'])
     # A PR's live base follows main after promotion. Frozen member proof retains
@@ -125,7 +135,8 @@ def validate_candidate(request, config, pr, numbers, batch, shared, *, completed
                 raise ValueError('Main changed; refresh member approvals and rebuild the held batch')
     for member in batch['members']:
         source(request, config, member, baseline, phases=('approved', 'stage', 'merged'),
-               pending=bool(pr.get('merged')), completed=completed, frozen=True)
+               pending=bool(pr.get('merged')), completed=completed, frozen=True,
+               included_in=pr['merge_commit_sha'] if pr.get('merged') and (direction == 'promotion' or completed) else None)
     if not completed:
         dependencies_ready(request, config, numbers, shared)
     if direction == 'stage':

@@ -178,7 +178,7 @@ def test_the_api_backend_second_text_note_matches_the_creator_rule(tmp_path):
     message = _problems(tmp_path, body2="Second text")
     assert "Primary text 2 is not supported by the API backend" in message
     page = _page()
-    assert "a second primary text is not supported yet (ACL-1774)" in page
+    assert "Primary text 2 is not supported by the API backend yet (ACL-1774). Leave it empty." in page
     sync = page[page.index("function syncHost(found)"):]
     sync = sync[: sync.index("function paintEditor")]
     assert "window.ACL_FB_BACKEND === 'api'" in sync
