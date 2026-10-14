@@ -141,6 +141,7 @@ def test_five_review_policy_keeps_descriptor_engine_and_delivery_contract_consis
     lock = json.loads((ROOT / 'tracker/engine.json').read_text())
     assert descriptor['workflow']['execution'] == rules.execution_policy(config)
     assert lock['revision'] == descriptor['tracker']['revision']
+    assert 'ci_evidence_policy' not in config  # Exported support cannot opt ACL into the native V1 protocol.
     action = yaml.safe_load((ROOT / '.github/workflows/delivery-check.yml').read_text())
     steps = action['jobs']['descriptor']['steps']
     assert any(step.get('uses') == 'MojoTheApe/master-repo@' + descriptor['standard']['revision'] for step in steps)
