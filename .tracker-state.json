@@ -8286,9 +8286,11 @@
         "worktree": "C:\\wkf-1812",
         "id": "de7c45331fa64b759374e96a922b8a19",
         "issue": 812,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T10:59:52+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 813,
+        "report": "# Handoff ACL-1812 (PR #813)\nScope: returned-review fixes. Merged fixed parent codex/acl-1800-campaign-commands (7efcc856, includes #765/#796 and current main); no conflicts, no code changes needed on this branch. Shard spread, platform guard, poll test and the act_ id finding are all resolved by the merge (no act_9999999999 remains). Head aa4247c7.\nChecks: local test_acl_test_shard, test_acl_test_platform, test_review_ui_regressions, test_acl1812_* 213 passed; GitHub CI all green except tracker-link (needs Review status, this handoff)."
       }
     },
     "tasks": {
