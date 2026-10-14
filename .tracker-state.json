@@ -8846,20 +8846,6 @@
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
       },
-      "775": {
-        "actor": "Worker-RH1775",
-        "session": "wrh1775-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1775-instant-forms",
-        "worktree": "C:\\wk-rh1775",
-        "id": "7f52d19d351943f8b29f9b5d8dd474a5",
-        "issue": 775,
-        "state": "handoff",
-        "started_at": "2026-10-14T22:59:01+00:00",
-        "from_status": "status:todo",
-        "pr": 809,
-        "report": "# ACL-1775 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1775-instant-forms; head e2714db8.\nConflicts: src/fb_api/creator.py (resolve_page_pixel) and src/web/templates/report.html (cbPlanHtml meta line). Both resolved keeping both sides:\n- creator.py: Instant-Form-only plans skip the pixel check (1775); otherwise 1766 pixel check with pixel_source message.\n- report.html: page (page_source) and pixel (pixel_source) shown; pixel hidden for all-Instant-Form plans.\nGolden test: website plan now legitimately carries page_source='draft' and pixel_source='account default' (ACL-1766) plus not_read=false on readback checks (main readback). Golden fixture updated ONLY for those fields; nothing else differs.\nTests: test_acl1775_instant_forms, test_acl1775_builder_forms, test_acl1769_two_column_layout, test_acl1761_* (-k \"not browser\"): 338 passed after golden update."
-      },
       "797": {
         "actor": "Worker-RJ1797",
         "session": "wrj1797-20261015",
@@ -12652,25 +12638,25 @@
             "session": "wrh1775-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RH1775",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-RG1775",
-          "session": "wrg1775-20261014",
+          "actor": "Worker-RH1775",
+          "session": "wrh1775-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1775-instant-forms",
-          "worktree": "C:\\wk-rg1775",
-          "id": "ab5224d3d70f4e3fb5e31bd39a8202aa",
+          "worktree": "C:\\wk-rh1775",
+          "id": "7f52d19d351943f8b29f9b5d8dd474a5",
           "issue": 775,
           "state": "handoff",
-          "started_at": "2026-10-14T16:57:53+00:00",
+          "started_at": "2026-10-14T22:59:01+00:00",
           "from_status": "status:todo",
           "pr": 809,
-          "report": "ACL-1775 refresh: merged origin/main (73136acc, incl. ACL-1760/1761) into codex/acl-1775-instant-forms. New head 8ab25c24. Merge only, no rebase.\nConflicts: one, docs/system/CHANGELOG.md (both sides added entries); kept both, removed markers. src/fb_api/graph.py, src/web/app.py, report.html auto-merged; main's 1760/1761 behaviour unchanged.\nTests (not browser): the 1775 branch test files (test_acl1775_*, 1769, builder_*, drawer, the_builder_drawer), tests/test_acl1761_*.py, tests/test_acl1760_api_read.py: 434 passed, 16 deselected. test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator passes. No test edits."
+          "report": "# ACL-1775 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1775-instant-forms; head e2714db8.\nConflicts: src/fb_api/creator.py (resolve_page_pixel) and src/web/templates/report.html (cbPlanHtml meta line). Both resolved keeping both sides:\n- creator.py: Instant-Form-only plans skip the pixel check (1775); otherwise 1766 pixel check with pixel_source message.\n- report.html: page (page_source) and pixel (pixel_source) shown; pixel hidden for all-Instant-Form plans.\nGolden test: website plan now legitimately carries page_source='draft' and pixel_source='account default' (ACL-1766) plus not_read=false on readback checks (main readback). Golden fixture updated ONLY for those fields; nothing else differs.\nTests: test_acl1775_instant_forms, test_acl1775_builder_forms, test_acl1769_two_column_layout, test_acl1761_* (-k \"not browser\"): 338 passed after golden update."
         },
         "pr": 809,
-        "queued_at": "2026-10-14T17:00:37+00:00",
+        "queued_at": "2026-10-14T23:03:06+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
         "return_operation": {
           "id": "f1274992c53549d1b2d217b5ef8fa50f",
@@ -18053,7 +18039,8 @@
       812,
       903,
       907,
-      891
+      891,
+      775
     ],
     "review": null,
     "history": [
@@ -34901,6 +34888,13 @@
         "issue": 797,
         "claim": "89074383253b41bf90f627ac7029f87c",
         "actor": "Worker-RJ1797"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T23:03:06+00:00",
+        "issue": 775,
+        "pr": 809,
+        "actor": "Worker-RH1775"
       }
     ],
     "policy": {
