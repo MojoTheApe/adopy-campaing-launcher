@@ -12388,7 +12388,7 @@
             "session": "wrg1775-20261014"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RG1775",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -32534,6 +32534,68 @@
         "issue": 769,
         "pr": 796,
         "actor": "Worker-S1769G"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-14T21:40:21+00:00",
+        "issue": 775,
+        "pr": 809,
+        "review": {
+          "id": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+          "pr": 809,
+          "issues": [
+            775
+          ],
+          "actor": "Reviewer-R1775G",
+          "session": "r1775g-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T21:31:16+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 775,
+            "pr": 809,
+            "branch": "codex/acl-1775-instant-forms",
+            "head_sha": "8ab25c24ef37c869515478abc7ac6f8a9acdc8bd",
+            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1775G",
+              "implementer": "Worker-RG1775",
+              "review_session": "r1775g-20261015",
+              "execution_lane": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+              "head_sha": "8ab25c24ef37c869515478abc7ac6f8a9acdc8bd",
+              "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "tree_sha": "1f38598bdf5f162857ab5270c0eaabef42540e68",
+              "report": "Independent source review of ACL-1775 / PR 809 at head 8ab25c24 against current main 73136acc (main is an ancestor of the head). Reviewer-R1775G implemented none of it.\n\nVerified by reading the diff (27 files):\n- Forms must belong to the plan's Page and be readable: CampaignCreator._check_forms reads /{page}/leadgen_forms before any write (Publish and Check plan); a form that is not on that Page, is not ACTIVE (allow-list, earlier minor m1 fixed), or cannot be read raises PlanError with an English message and nothing is written. GraphStop is not swallowed.\n- No form is created: forms.py is read-only (GET leadgen_forms, GET leadgen_tos_accepted only when the list is empty/unreadable); /{page}/leadgen_forms POST stays refused by the path/edge rule.\n- tos_accepted is never sent: it stays in FORBIDDEN_ANYWHERE in write_policy and is not referenced anywhere else in src.\n- PAUSED only: ad set, creative and ad paths still go through the policy status check; the Instant Form ad set is built with status PAUSED.\n- Write policy closed in both layers: lead_gen_form_id is allowed only in adcreatives -> object_story_spec.{link_data|video_data}.call_to_action.value, value exactly {lead_gen_form_id: digits 5-25}, and only with on_ad=True (default False in check, GraphClient.post, InPageGraph.write). The Python layer (_without_lead_form) and the page helper (withoutLeadForm) mirror each other from one policy table; anywhere else the key stays and _walk refuses it.\n- Website path unchanged: golden fixture tests/fixtures/acl1775_website_golden.json.\n\nVerification:\n- CI on head 8ab25c24: all checks pass (Linux 1-3, Windows, tracker-link after rerun - it had failed only on timing before the review lane existed, process instructions, installer verification, descriptor); two build jobs skipped as expected.\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": tests/test_acl1775_instant_forms.py + test_acl1775_builder_forms.py 96 passed; test_acl1761_api_create/parity/plan_check, builder duplicate/second-primary-text/drawer, test_acl1769_two_column_layout 211 passed.\n- Golden test test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator passed 3 of 3 runs alone and in the full file (86 passed). It was flaky in combined builds only; it does not fail on this branch.\n- Mutation: ownership check skipped (if form is None -> if False) -> test_a_form_of_another_page_is_refused_before_any_write and test_dry_run_refuses_a_foreign_form_too_and_still_writes_nothing fail. Reverted; worktree clean.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Non-blocking: INSTANT_FORM_LINK https://fb.me/ is an unverified live assumption (needs the live check on 9095 after owner approval); a combined valid-CTA-form plus second lead_gen_form_id matrix case is not pinned by a test (earlier note m2).",
+              "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                775
+              ],
+              "recorded_at": "2026-10-14T21:39:15+00:00",
+              "issue_scopes": {
+                "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
+              }
+            },
+            "lane": {
+              "id": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+              "pr": 809,
+              "issues": [
+                775
+              ],
+              "actor": "Reviewer-R1775G",
+              "session": "r1775g-20261015",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-14T21:31:16+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T21:39:40+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -33362,6 +33424,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T21:27:43+00:00"
+      },
+      "775": {
+        "issue": 775,
+        "pr": 809,
+        "branch": "codex/acl-1775-instant-forms",
+        "head_sha": "8ab25c24ef37c869515478abc7ac6f8a9acdc8bd",
+        "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+        "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1775G",
+          "implementer": "Worker-RG1775",
+          "review_session": "r1775g-20261015",
+          "execution_lane": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+          "head_sha": "8ab25c24ef37c869515478abc7ac6f8a9acdc8bd",
+          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "tree_sha": "1f38598bdf5f162857ab5270c0eaabef42540e68",
+          "report": "Independent source review of ACL-1775 / PR 809 at head 8ab25c24 against current main 73136acc (main is an ancestor of the head). Reviewer-R1775G implemented none of it.\n\nVerified by reading the diff (27 files):\n- Forms must belong to the plan's Page and be readable: CampaignCreator._check_forms reads /{page}/leadgen_forms before any write (Publish and Check plan); a form that is not on that Page, is not ACTIVE (allow-list, earlier minor m1 fixed), or cannot be read raises PlanError with an English message and nothing is written. GraphStop is not swallowed.\n- No form is created: forms.py is read-only (GET leadgen_forms, GET leadgen_tos_accepted only when the list is empty/unreadable); /{page}/leadgen_forms POST stays refused by the path/edge rule.\n- tos_accepted is never sent: it stays in FORBIDDEN_ANYWHERE in write_policy and is not referenced anywhere else in src.\n- PAUSED only: ad set, creative and ad paths still go through the policy status check; the Instant Form ad set is built with status PAUSED.\n- Write policy closed in both layers: lead_gen_form_id is allowed only in adcreatives -> object_story_spec.{link_data|video_data}.call_to_action.value, value exactly {lead_gen_form_id: digits 5-25}, and only with on_ad=True (default False in check, GraphClient.post, InPageGraph.write). The Python layer (_without_lead_form) and the page helper (withoutLeadForm) mirror each other from one policy table; anywhere else the key stays and _walk refuses it.\n- Website path unchanged: golden fixture tests/fixtures/acl1775_website_golden.json.\n\nVerification:\n- CI on head 8ab25c24: all checks pass (Linux 1-3, Windows, tracker-link after rerun - it had failed only on timing before the review lane existed, process instructions, installer verification, descriptor); two build jobs skipped as expected.\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": tests/test_acl1775_instant_forms.py + test_acl1775_builder_forms.py 96 passed; test_acl1761_api_create/parity/plan_check, builder duplicate/second-primary-text/drawer, test_acl1769_two_column_layout 211 passed.\n- Golden test test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator passed 3 of 3 runs alone and in the full file (86 passed). It was flaky in combined builds only; it does not fail on this branch.\n- Mutation: ownership check skipped (if form is None -> if False) -> test_a_form_of_another_page_is_refused_before_any_write and test_dry_run_refuses_a_foreign_form_too_and_still_writes_nothing fail. Reverted; worktree clean.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Non-blocking: INSTANT_FORM_LINK https://fb.me/ is an unverified live assumption (needs the live check on 9095 after owner approval); a combined valid-CTA-form plus second lead_gen_form_id matrix case is not pinned by a test (earlier note m2).",
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            775
+          ],
+          "recorded_at": "2026-10-14T21:39:15+00:00",
+          "issue_scopes": {
+            "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
+          }
+        },
+        "lane": {
+          "id": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+          "pr": 809,
+          "issues": [
+            775
+          ],
+          "actor": "Reviewer-R1775G",
+          "session": "r1775g-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T21:31:16+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-14T21:39:40+00:00"
       }
     },
     "batches": {
@@ -34609,62 +34715,6 @@
       "ineligible": {}
     },
     "source_reviews": {
-      "809": {
-        "id": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
-        "pr": 809,
-        "issues": [
-          775
-        ],
-        "actor": "Reviewer-R1775G",
-        "session": "r1775g-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-14T21:31:16+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 775,
-          "pr": 809,
-          "branch": "codex/acl-1775-instant-forms",
-          "head_sha": "8ab25c24ef37c869515478abc7ac6f8a9acdc8bd",
-          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
-          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1775G",
-            "implementer": "Worker-RG1775",
-            "review_session": "r1775g-20261015",
-            "execution_lane": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
-            "head_sha": "8ab25c24ef37c869515478abc7ac6f8a9acdc8bd",
-            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
-            "tree_sha": "1f38598bdf5f162857ab5270c0eaabef42540e68",
-            "report": "Independent source review of ACL-1775 / PR 809 at head 8ab25c24 against current main 73136acc (main is an ancestor of the head). Reviewer-R1775G implemented none of it.\n\nVerified by reading the diff (27 files):\n- Forms must belong to the plan's Page and be readable: CampaignCreator._check_forms reads /{page}/leadgen_forms before any write (Publish and Check plan); a form that is not on that Page, is not ACTIVE (allow-list, earlier minor m1 fixed), or cannot be read raises PlanError with an English message and nothing is written. GraphStop is not swallowed.\n- No form is created: forms.py is read-only (GET leadgen_forms, GET leadgen_tos_accepted only when the list is empty/unreadable); /{page}/leadgen_forms POST stays refused by the path/edge rule.\n- tos_accepted is never sent: it stays in FORBIDDEN_ANYWHERE in write_policy and is not referenced anywhere else in src.\n- PAUSED only: ad set, creative and ad paths still go through the policy status check; the Instant Form ad set is built with status PAUSED.\n- Write policy closed in both layers: lead_gen_form_id is allowed only in adcreatives -> object_story_spec.{link_data|video_data}.call_to_action.value, value exactly {lead_gen_form_id: digits 5-25}, and only with on_ad=True (default False in check, GraphClient.post, InPageGraph.write). The Python layer (_without_lead_form) and the page helper (withoutLeadForm) mirror each other from one policy table; anywhere else the key stays and _walk refuses it.\n- Website path unchanged: golden fixture tests/fixtures/acl1775_website_golden.json.\n\nVerification:\n- CI on head 8ab25c24: all checks pass (Linux 1-3, Windows, tracker-link after rerun - it had failed only on timing before the review lane existed, process instructions, installer verification, descriptor); two build jobs skipped as expected.\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": tests/test_acl1775_instant_forms.py + test_acl1775_builder_forms.py 96 passed; test_acl1761_api_create/parity/plan_check, builder duplicate/second-primary-text/drawer, test_acl1769_two_column_layout 211 passed.\n- Golden test test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator passed 3 of 3 runs alone and in the full file (86 passed). It was flaky in combined builds only; it does not fail on this branch.\n- Mutation: ownership check skipped (if form is None -> if False) -> test_a_form_of_another_page_is_refused_before_any_write and test_dry_run_refuses_a_foreign_form_too_and_still_writes_nothing fail. Reverted; worktree clean.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Non-blocking: INSTANT_FORM_LINK https://fb.me/ is an unverified live assumption (needs the live check on 9095 after owner approval); a combined valid-CTA-form plus second lead_gen_form_id matrix case is not pinned by a test (earlier note m2).",
-            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              775
-            ],
-            "recorded_at": "2026-10-14T21:39:15+00:00",
-            "issue_scopes": {
-              "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
-            }
-          },
-          "lane": {
-            "id": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
-            "pr": 809,
-            "issues": [
-              775
-            ],
-            "actor": "Reviewer-R1775G",
-            "session": "r1775g-20261015",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-14T21:31:16+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T21:39:40+00:00"
-        }
-      },
       "801": {
         "id": "6c479d8b508146cf97a278f0ac9c62e6",
         "pr": 801,
