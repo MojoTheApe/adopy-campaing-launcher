@@ -308,6 +308,10 @@
       "title": "[Campaign creation] Auto-suffix the campaign name (_2, _3\u2026) when a different campaign with that name exists",
       "state": "created",
       "issue": 902
+    },
+    "71ab9d61e210a934cef6b9cf18c42e283ee0e979b57c0edede0c590b55d4e374": {
+      "title": "[Builder] Clearing the creative or Stories/Reels file box leaves the old file in the plan",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
