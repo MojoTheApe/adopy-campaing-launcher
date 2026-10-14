@@ -12252,7 +12252,7 @@
             "session": "run_s1799a_1011"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1799A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12270,7 +12270,8 @@
           "report": "ACL-1799 handoff (Worker-S1799A, session run_s1799a_1011)\n\nPR: #803 (base main, stacked on #796 -> #765), head codex/acl-1799-country-workbench @ d9a641269160456519c407dcb4a8b408b8767f88. CI is blocked.\n\nChecks run locally (affected tests only, no full suite):\n- tests/test_acl1799_country_workbench.py: 22 passed (KPI formulas, peer exclusion, weighted peers, insufficient cohort, no peers/no buyer, version-preserving creative identity, split_ad_title unchanged, all old analytics views rendered and linked, .cw- CSS prefix, English strings, Node harness for page functions).\n- tests/test_acl1799_workbench_browser.py: 9 passed in offline Chromium (Country -> Asset, Use goes to the selected draft and not the last one, none selected adds nothing, asset mismatch confirmation, old views reachable).\n- Affected existing suites: 399 passed (includes the 22 above): english screens, report scripts parse, theme, field contrast, manage view, web drill, creative variants, metric columns, sidebar, header, builder two-column layout, builder tree/drawer, builder per account, goals, ci scope, review regressions.\n- Screenshots (light and dark, 1280 px, fixture data) in C:\\acl-notes\\acl-1799-shots\\.\n\nRemaining risks / deferred:\n- Per-country payload is inline (top 15 rows per tab, top 6 assets); lazy loading if it proves heavy on real data.\n- Landing \"Use\" is recorded as provenance on the draft only: the builder has no landing field.\n- Target/creative Use reuses the builder pickers with exact matches only; otherwise the list opens for the user to pick.\n- One read-only accessor cbTree.active() was added to the ACL-1769 builder code; the merge into that area is mechanical.\n- Advisory hints (section 9), sidebar asset tree, Observed setup -> incomplete draft are not done.\n- Not exercised against real workbook data or live Meta (fixtures only).\n\nDurable work reference: branch codex/acl-1799-country-workbench, PR #803."
         },
         "pr": 803,
-        "queued_at": "2026-10-11T20:25:11+00:00"
+        "queued_at": "2026-10-11T20:25:11+00:00",
+        "reviewer": "Reviewer-RRF799"
       },
       "786": {
         "implementers": [
@@ -14970,6 +14971,10 @@
       "Reviewer-RRF797": {
         "session": "rrf797-20261014",
         "role": "Reviewer"
+      },
+      "Reviewer-RRF799": {
+        "session": "rrf799-20261014",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -17552,7 +17557,6 @@
       642,
       739,
       766,
-      799,
       814,
       815,
       816,
@@ -32114,6 +32118,13 @@
           "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T16:55:30+00:00",
+        "pr": 803,
+        "lane": "ce03fc293dfc414c82106f42ce3b48ee",
+        "actor": "Reviewer-RRF799"
       }
     ],
     "policy": {
@@ -34188,6 +34199,19 @@
       "started_at": "2026-10-14T16:14:28+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "803": {
+        "id": "ce03fc293dfc414c82106f42ce3b48ee",
+        "pr": 803,
+        "issues": [
+          799
+        ],
+        "actor": "Reviewer-RRF799",
+        "session": "rrf799-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T16:55:30+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
