@@ -11848,7 +11848,7 @@
             "session": "c18fd7986a28447daada00e6d2b99f57"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-M1783B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -11867,7 +11867,8 @@
         },
         "pr": 790,
         "queued_at": "2026-10-11T18:24:50+00:00",
-        "reviewer": "Reviewer-R783X"
+        "reviewer": "Reviewer-R783X",
+        "batch_id": "e2b8b7079a31457bb2cc23294dabdd46"
       },
       "782": {
         "implementers": [
@@ -11880,7 +11881,7 @@
             "session": "a0247198fa5445808b9c6400851e6a62"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-M1782B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -11899,7 +11900,8 @@
         },
         "pr": 793,
         "queued_at": "2026-10-11T18:38:42+00:00",
-        "reviewer": "Reviewer-R782X"
+        "reviewer": "Reviewer-R782X",
+        "batch_id": "e2b8b7079a31457bb2cc23294dabdd46"
       },
       "781": {
         "implementers": [
@@ -11912,7 +11914,7 @@
             "session": "a9f3467038d4400d80d0727275ae2ff4"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-M1781B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -11931,7 +11933,8 @@
         },
         "pr": 795,
         "queued_at": "2026-10-11T18:46:57+00:00",
-        "reviewer": "Reviewer-R781X"
+        "reviewer": "Reviewer-R781X",
+        "batch_id": "e2b8b7079a31457bb2cc23294dabdd46"
       },
       "766": {
         "implementers": [
@@ -12080,7 +12083,7 @@
             "session": "922f523d07564d18961d4f57e3ea4337"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-M1786A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -12099,7 +12102,8 @@
         },
         "pr": 804,
         "queued_at": "2026-10-11T20:36:07+00:00",
-        "reviewer": "Reviewer-R1786X"
+        "reviewer": "Reviewer-R1786X",
+        "batch_id": "e2b8b7079a31457bb2cc23294dabdd46"
       },
       "775": {
         "implementers": [
@@ -12135,7 +12139,7 @@
             "session": "4b214c77a7e14ef0937301c56af0fb88"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-M1806A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -12154,7 +12158,8 @@
         },
         "pr": 808,
         "queued_at": "2026-10-11T20:45:46+00:00",
-        "reviewer": "Reviewer-R806X"
+        "reviewer": "Reviewer-R806X",
+        "batch_id": "e2b8b7079a31457bb2cc23294dabdd46"
       },
       "812": {
         "implementers": [
@@ -17202,6 +17207,40 @@
         "coordinator": "Coordinator-BA4E69",
         "state": "reviewing",
         "started_at": "2026-10-14T07:42:25+00:00"
+      },
+      "901": {
+        "id": "f982c7cf184040cca87f98498cffd33e",
+        "batch_id": "e2b8b7079a31457bb2cc23294dabdd46",
+        "pr": 901,
+        "issues": [
+          781,
+          782,
+          783,
+          786,
+          806
+        ],
+        "actor": "Reviewer-R901B",
+        "session": "r901b-20261014",
+        "coordinator": "Coordinator-C1014I",
+        "state": "reviewing",
+        "started_at": "2026-10-14T14:10:21+00:00"
+      },
+      "910": {
+        "id": "f982c7cf184040cca87f98498cffd33e",
+        "batch_id": "e2b8b7079a31457bb2cc23294dabdd46",
+        "pr": 901,
+        "issues": [
+          781,
+          782,
+          783,
+          786,
+          806
+        ],
+        "actor": "Reviewer-R901B",
+        "session": "r901b-20261014",
+        "coordinator": "Coordinator-C1014I",
+        "state": "reviewing",
+        "started_at": "2026-10-14T14:10:21+00:00"
       }
     },
     "review_queue": [
@@ -17238,23 +17277,7 @@
       907,
       891
     ],
-    "review": {
-      "id": "f982c7cf184040cca87f98498cffd33e",
-      "batch_id": "e2b8b7079a31457bb2cc23294dabdd46",
-      "pr": 901,
-      "issues": [
-        781,
-        782,
-        783,
-        786,
-        806
-      ],
-      "actor": "Reviewer-R901B",
-      "session": "r901b-20261014",
-      "coordinator": "Coordinator-C1014I",
-      "state": "reviewing",
-      "started_at": "2026-10-14T14:10:21+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -30702,6 +30725,300 @@
           "state": "reviewing",
           "started_at": "2026-10-14T14:10:21+00:00"
         }
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-14T14:31:31+00:00",
+        "batch": {
+          "id": "e2b8b7079a31457bb2cc23294dabdd46",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "merged",
+          "issues": [
+            781,
+            782,
+            783,
+            786,
+            806
+          ],
+          "members": [
+            {
+              "issue": 781,
+              "pr": 795,
+              "branch": "work/acl-1781-meta-rules-registry",
+              "head_sha": "8eb4b3982ad7c95d0ced59484c026078cc9c6a13",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "2fd4175268db471979a070ad87531a130f967818fef460f8cccc447ba618e456",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-M1781B",
+                "reviewer": "Reviewer-R781X",
+                "head_sha": "8eb4b3982ad7c95d0ced59484c026078cc9c6a13",
+                "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+                "tree_sha": "9a71ca759cbaa2ec4b8aad8eaa2e6fb957704d71",
+                "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+                "verdict": "approved",
+                "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-795.md",
+                "scope": "Full ACL-781 scope (Meta rules registry and pre-upload check); approved on current main df6c2e8a",
+                "execution_lane": "84f35dd6fc8e417490049f79c44601f5",
+                "review_session": "claude-subagent-a8efac19b017fde9c",
+                "actual_reviewer_agent": "claude-subagent-a8efac19b017fde9c",
+                "actual_implementer_agent": "Worker-M1781B",
+                "findings": [],
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  781
+                ],
+                "recorded_at": "2026-10-14T11:10:27+00:00",
+                "issue_scopes": {
+                  "781": "2fd4175268db471979a070ad87531a130f967818fef460f8cccc447ba618e456"
+                }
+              },
+              "lane": {
+                "id": "84f35dd6fc8e417490049f79c44601f5",
+                "pr": 795,
+                "issues": [
+                  781
+                ],
+                "actor": "Reviewer-R781X",
+                "session": "claude-subagent-a8efac19b017fde9c",
+                "coordinator": "Coordinator-M1011A",
+                "started_at": "2026-10-14T11:09:57+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T11:20:34+00:00"
+            },
+            {
+              "issue": 782,
+              "pr": 793,
+              "branch": "work/acl-1782-meta-docs-watcher",
+              "head_sha": "75f063ac1496b6e2791b0dfe2e6b3b6aedd2e25c",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "03d20398df8df7f5c451f9456c2a7b7e71b39f515ab520c73b90dfa271b20abf",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-M1782B",
+                "reviewer": "Reviewer-R782X",
+                "head_sha": "75f063ac1496b6e2791b0dfe2e6b3b6aedd2e25c",
+                "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+                "tree_sha": "2d8763cf9a90f79229c23d7a3943ec3379f92388",
+                "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+                "verdict": "approved",
+                "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-793.md",
+                "scope": "Full ACL-782 scope (Meta docs watcher and meta-builder-sync skill); approved on current main df6c2e8a",
+                "execution_lane": "3cd6a5616f104408930e8a7a1edf3bda",
+                "review_session": "claude-subagent-ad5af5387f60319c6",
+                "actual_reviewer_agent": "claude-subagent-ad5af5387f60319c6",
+                "actual_implementer_agent": "Worker-M1782B",
+                "findings": [],
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  782
+                ],
+                "recorded_at": "2026-10-14T11:09:16+00:00",
+                "issue_scopes": {
+                  "782": "03d20398df8df7f5c451f9456c2a7b7e71b39f515ab520c73b90dfa271b20abf"
+                }
+              },
+              "lane": {
+                "id": "3cd6a5616f104408930e8a7a1edf3bda",
+                "pr": 793,
+                "issues": [
+                  782
+                ],
+                "actor": "Reviewer-R782X",
+                "session": "claude-subagent-ad5af5387f60319c6",
+                "coordinator": "Coordinator-M1011A",
+                "started_at": "2026-10-14T11:08:45+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T11:19:24+00:00"
+            },
+            {
+              "issue": 783,
+              "pr": 790,
+              "branch": "work/acl-1783-graph-api-version",
+              "head_sha": "a10c9d3559d680fedb3e558513bacb0ae0e5869a",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "32812425f874b864a0047a5ca04b3e229598be077ef1c08859f349985a384d99",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-M1783B",
+                "reviewer": "Reviewer-R783X",
+                "head_sha": "a10c9d3559d680fedb3e558513bacb0ae0e5869a",
+                "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+                "tree_sha": "712f293e53aa90beb1712b170c0125d716f21a52",
+                "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+                "verdict": "approved",
+                "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-790.md",
+                "scope": "Full ACL-783 scope (Graph API default v26.0); approved on current main df6c2e8a",
+                "execution_lane": "40426c3a9ee54a2cb92ebfc2d91f0da9",
+                "review_session": "claude-subagent-a020ec1d6f47f8d61",
+                "actual_reviewer_agent": "claude-subagent-a020ec1d6f47f8d61",
+                "actual_implementer_agent": "Worker-M1783B",
+                "findings": [],
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  783
+                ],
+                "recorded_at": "2026-10-14T11:08:03+00:00",
+                "issue_scopes": {
+                  "783": "32812425f874b864a0047a5ca04b3e229598be077ef1c08859f349985a384d99"
+                }
+              },
+              "lane": {
+                "id": "40426c3a9ee54a2cb92ebfc2d91f0da9",
+                "pr": 790,
+                "issues": [
+                  783
+                ],
+                "actor": "Reviewer-R783X",
+                "session": "claude-subagent-a020ec1d6f47f8d61",
+                "coordinator": "Coordinator-M1011A",
+                "started_at": "2026-10-14T11:07:31+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T11:18:20+00:00"
+            },
+            {
+              "issue": 786,
+              "pr": 804,
+              "branch": "work/acl-1786-meta-error-messages",
+              "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-M1786A",
+                "reviewer": "Reviewer-R1786X",
+                "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
+                "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+                "tree_sha": "12a60c97520e6ea488fe9498550f99aa95f33076",
+                "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+                "verdict": "approved",
+                "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-804.md",
+                "scope": "Full ACL-1786 scope: src/fb_api/error_catalog.py and its test; approved on current main df6c2e8a",
+                "execution_lane": "3e865c82d6434e5a8abf3e30c83090d7",
+                "review_session": "claude-subagent-a17b179a06c97c3af",
+                "actual_reviewer_agent": "claude-subagent-a17b179a06c97c3af",
+                "actual_implementer_agent": "Worker-M1786A",
+                "findings": [],
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  786
+                ],
+                "recorded_at": "2026-10-14T11:06:27+00:00",
+                "issue_scopes": {
+                  "786": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6"
+                }
+              },
+              "lane": {
+                "id": "3e865c82d6434e5a8abf3e30c83090d7",
+                "pr": 804,
+                "issues": [
+                  786
+                ],
+                "actor": "Reviewer-R1786X",
+                "session": "claude-subagent-a17b179a06c97c3af",
+                "coordinator": "Coordinator-M1011A",
+                "started_at": "2026-10-14T11:04:33+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T11:22:23+00:00"
+            },
+            {
+              "issue": 806,
+              "pr": 808,
+              "branch": "work/acl-1806-obsidian-path",
+              "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-M1806A",
+                "reviewer": "Reviewer-R806X",
+                "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
+                "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+                "tree_sha": "6e01044a723ac5f3ed42b7e368a5c1eeb4d64f4d",
+                "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+                "verdict": "approved",
+                "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-808.md",
+                "scope": "Full ACL-806 scope (Obsidian folder through one setting); approved on current main df6c2e8a",
+                "execution_lane": "890bc6a071344778bcfc6ddf285610f8",
+                "review_session": "claude-subagent-a999be02700977375",
+                "actual_reviewer_agent": "claude-subagent-a999be02700977375",
+                "actual_implementer_agent": "Worker-M1806A",
+                "findings": [],
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  806
+                ],
+                "recorded_at": "2026-10-14T11:11:40+00:00",
+                "issue_scopes": {
+                  "806": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9"
+                }
+              },
+              "lane": {
+                "id": "890bc6a071344778bcfc6ddf285610f8",
+                "pr": 808,
+                "issues": [
+                  806
+                ],
+                "actor": "Reviewer-R806X",
+                "session": "claude-subagent-a999be02700977375",
+                "coordinator": "Coordinator-M1011A",
+                "started_at": "2026-10-14T11:11:13+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T11:24:10+00:00"
+            }
+          ],
+          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+          "branch": "codex/batch-e2b8b7079a31457bb2cc23294dabdd46",
+          "intake": "7192c0e6149f48febbf422a0b5c591c9",
+          "started_at": "2026-10-14T11:46:01+00:00",
+          "pr": 901,
+          "entered_stage": true,
+          "history": [
+            {
+              "coordinator": "Coordinator-S43F9A0",
+              "session": "claude-session-43f9a0-coordinator",
+              "reason": "Owner instruction 2026-10-14: drive all approved work to main without stopping. Coordinator-S43F9A0 session idle since 13:15 UTC+3 with the batch in assembling since 11:46 and PR 901 CI green; informed by message. Frozen membership and evidence unchanged.",
+              "at": "2026-10-14T14:08:16+00:00"
+            }
+          ],
+          "review": {
+            "id": "f982c7cf184040cca87f98498cffd33e",
+            "batch_id": "e2b8b7079a31457bb2cc23294dabdd46",
+            "pr": 901,
+            "issues": [
+              781,
+              782,
+              783,
+              786,
+              806
+            ],
+            "actor": "Reviewer-R901B",
+            "session": "r901b-20261014",
+            "coordinator": "Coordinator-C1014I",
+            "state": "reviewing",
+            "started_at": "2026-10-14T14:10:21+00:00"
+          },
+          "main_prs": [
+            910
+          ],
+          "finished_at": "2026-10-14T14:31:31+00:00"
+        }
       }
     ],
     "policy": {
@@ -32216,277 +32533,299 @@
         "finished_at": "2026-10-14T08:31:32+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "e2b8b7079a31457bb2cc23294dabdd46",
-      "actor": "Coordinator-C1014I",
-      "session": "coord-c1014i-20261014",
-      "state": "stage",
-      "issues": [
-        781,
-        782,
-        783,
-        786,
-        806
-      ],
-      "members": [
-        {
-          "issue": 781,
-          "pr": 795,
-          "branch": "work/acl-1781-meta-rules-registry",
-          "head_sha": "8eb4b3982ad7c95d0ced59484c026078cc9c6a13",
-          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "2fd4175268db471979a070ad87531a130f967818fef460f8cccc447ba618e456",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-M1781B",
-            "reviewer": "Reviewer-R781X",
+      },
+      "e2b8b7079a31457bb2cc23294dabdd46": {
+        "id": "e2b8b7079a31457bb2cc23294dabdd46",
+        "actor": "Coordinator-C1014I",
+        "session": "coord-c1014i-20261014",
+        "state": "merged",
+        "issues": [
+          781,
+          782,
+          783,
+          786,
+          806
+        ],
+        "members": [
+          {
+            "issue": 781,
+            "pr": 795,
+            "branch": "work/acl-1781-meta-rules-registry",
             "head_sha": "8eb4b3982ad7c95d0ced59484c026078cc9c6a13",
             "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "tree_sha": "9a71ca759cbaa2ec4b8aad8eaa2e6fb957704d71",
             "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "verdict": "approved",
-            "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-795.md",
-            "scope": "Full ACL-781 scope (Meta rules registry and pre-upload check); approved on current main df6c2e8a",
-            "execution_lane": "84f35dd6fc8e417490049f79c44601f5",
-            "review_session": "claude-subagent-a8efac19b017fde9c",
-            "actual_reviewer_agent": "claude-subagent-a8efac19b017fde9c",
-            "actual_implementer_agent": "Worker-M1781B",
-            "findings": [],
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              781
-            ],
-            "recorded_at": "2026-10-14T11:10:27+00:00",
-            "issue_scopes": {
-              "781": "2fd4175268db471979a070ad87531a130f967818fef460f8cccc447ba618e456"
-            }
+            "scope": "2fd4175268db471979a070ad87531a130f967818fef460f8cccc447ba618e456",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-M1781B",
+              "reviewer": "Reviewer-R781X",
+              "head_sha": "8eb4b3982ad7c95d0ced59484c026078cc9c6a13",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "tree_sha": "9a71ca759cbaa2ec4b8aad8eaa2e6fb957704d71",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "verdict": "approved",
+              "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-795.md",
+              "scope": "Full ACL-781 scope (Meta rules registry and pre-upload check); approved on current main df6c2e8a",
+              "execution_lane": "84f35dd6fc8e417490049f79c44601f5",
+              "review_session": "claude-subagent-a8efac19b017fde9c",
+              "actual_reviewer_agent": "claude-subagent-a8efac19b017fde9c",
+              "actual_implementer_agent": "Worker-M1781B",
+              "findings": [],
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                781
+              ],
+              "recorded_at": "2026-10-14T11:10:27+00:00",
+              "issue_scopes": {
+                "781": "2fd4175268db471979a070ad87531a130f967818fef460f8cccc447ba618e456"
+              }
+            },
+            "lane": {
+              "id": "84f35dd6fc8e417490049f79c44601f5",
+              "pr": 795,
+              "issues": [
+                781
+              ],
+              "actor": "Reviewer-R781X",
+              "session": "claude-subagent-a8efac19b017fde9c",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-14T11:09:57+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T11:20:34+00:00"
           },
-          "lane": {
-            "id": "84f35dd6fc8e417490049f79c44601f5",
-            "pr": 795,
-            "issues": [
-              781
-            ],
-            "actor": "Reviewer-R781X",
-            "session": "claude-subagent-a8efac19b017fde9c",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-14T11:09:57+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T11:20:34+00:00"
-        },
-        {
-          "issue": 782,
-          "pr": 793,
-          "branch": "work/acl-1782-meta-docs-watcher",
-          "head_sha": "75f063ac1496b6e2791b0dfe2e6b3b6aedd2e25c",
-          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "03d20398df8df7f5c451f9456c2a7b7e71b39f515ab520c73b90dfa271b20abf",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-M1782B",
-            "reviewer": "Reviewer-R782X",
+          {
+            "issue": 782,
+            "pr": 793,
+            "branch": "work/acl-1782-meta-docs-watcher",
             "head_sha": "75f063ac1496b6e2791b0dfe2e6b3b6aedd2e25c",
             "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "tree_sha": "2d8763cf9a90f79229c23d7a3943ec3379f92388",
             "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "verdict": "approved",
-            "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-793.md",
-            "scope": "Full ACL-782 scope (Meta docs watcher and meta-builder-sync skill); approved on current main df6c2e8a",
-            "execution_lane": "3cd6a5616f104408930e8a7a1edf3bda",
-            "review_session": "claude-subagent-ad5af5387f60319c6",
-            "actual_reviewer_agent": "claude-subagent-ad5af5387f60319c6",
-            "actual_implementer_agent": "Worker-M1782B",
-            "findings": [],
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              782
-            ],
-            "recorded_at": "2026-10-14T11:09:16+00:00",
-            "issue_scopes": {
-              "782": "03d20398df8df7f5c451f9456c2a7b7e71b39f515ab520c73b90dfa271b20abf"
-            }
+            "scope": "03d20398df8df7f5c451f9456c2a7b7e71b39f515ab520c73b90dfa271b20abf",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-M1782B",
+              "reviewer": "Reviewer-R782X",
+              "head_sha": "75f063ac1496b6e2791b0dfe2e6b3b6aedd2e25c",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "tree_sha": "2d8763cf9a90f79229c23d7a3943ec3379f92388",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "verdict": "approved",
+              "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-793.md",
+              "scope": "Full ACL-782 scope (Meta docs watcher and meta-builder-sync skill); approved on current main df6c2e8a",
+              "execution_lane": "3cd6a5616f104408930e8a7a1edf3bda",
+              "review_session": "claude-subagent-ad5af5387f60319c6",
+              "actual_reviewer_agent": "claude-subagent-ad5af5387f60319c6",
+              "actual_implementer_agent": "Worker-M1782B",
+              "findings": [],
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                782
+              ],
+              "recorded_at": "2026-10-14T11:09:16+00:00",
+              "issue_scopes": {
+                "782": "03d20398df8df7f5c451f9456c2a7b7e71b39f515ab520c73b90dfa271b20abf"
+              }
+            },
+            "lane": {
+              "id": "3cd6a5616f104408930e8a7a1edf3bda",
+              "pr": 793,
+              "issues": [
+                782
+              ],
+              "actor": "Reviewer-R782X",
+              "session": "claude-subagent-ad5af5387f60319c6",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-14T11:08:45+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T11:19:24+00:00"
           },
-          "lane": {
-            "id": "3cd6a5616f104408930e8a7a1edf3bda",
-            "pr": 793,
-            "issues": [
-              782
-            ],
-            "actor": "Reviewer-R782X",
-            "session": "claude-subagent-ad5af5387f60319c6",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-14T11:08:45+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T11:19:24+00:00"
-        },
-        {
-          "issue": 783,
-          "pr": 790,
-          "branch": "work/acl-1783-graph-api-version",
-          "head_sha": "a10c9d3559d680fedb3e558513bacb0ae0e5869a",
-          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "32812425f874b864a0047a5ca04b3e229598be077ef1c08859f349985a384d99",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-M1783B",
-            "reviewer": "Reviewer-R783X",
+          {
+            "issue": 783,
+            "pr": 790,
+            "branch": "work/acl-1783-graph-api-version",
             "head_sha": "a10c9d3559d680fedb3e558513bacb0ae0e5869a",
             "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "tree_sha": "712f293e53aa90beb1712b170c0125d716f21a52",
             "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "verdict": "approved",
-            "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-790.md",
-            "scope": "Full ACL-783 scope (Graph API default v26.0); approved on current main df6c2e8a",
-            "execution_lane": "40426c3a9ee54a2cb92ebfc2d91f0da9",
-            "review_session": "claude-subagent-a020ec1d6f47f8d61",
-            "actual_reviewer_agent": "claude-subagent-a020ec1d6f47f8d61",
-            "actual_implementer_agent": "Worker-M1783B",
-            "findings": [],
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              783
-            ],
-            "recorded_at": "2026-10-14T11:08:03+00:00",
-            "issue_scopes": {
-              "783": "32812425f874b864a0047a5ca04b3e229598be077ef1c08859f349985a384d99"
-            }
+            "scope": "32812425f874b864a0047a5ca04b3e229598be077ef1c08859f349985a384d99",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-M1783B",
+              "reviewer": "Reviewer-R783X",
+              "head_sha": "a10c9d3559d680fedb3e558513bacb0ae0e5869a",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "tree_sha": "712f293e53aa90beb1712b170c0125d716f21a52",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "verdict": "approved",
+              "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-790.md",
+              "scope": "Full ACL-783 scope (Graph API default v26.0); approved on current main df6c2e8a",
+              "execution_lane": "40426c3a9ee54a2cb92ebfc2d91f0da9",
+              "review_session": "claude-subagent-a020ec1d6f47f8d61",
+              "actual_reviewer_agent": "claude-subagent-a020ec1d6f47f8d61",
+              "actual_implementer_agent": "Worker-M1783B",
+              "findings": [],
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                783
+              ],
+              "recorded_at": "2026-10-14T11:08:03+00:00",
+              "issue_scopes": {
+                "783": "32812425f874b864a0047a5ca04b3e229598be077ef1c08859f349985a384d99"
+              }
+            },
+            "lane": {
+              "id": "40426c3a9ee54a2cb92ebfc2d91f0da9",
+              "pr": 790,
+              "issues": [
+                783
+              ],
+              "actor": "Reviewer-R783X",
+              "session": "claude-subagent-a020ec1d6f47f8d61",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-14T11:07:31+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T11:18:20+00:00"
           },
-          "lane": {
-            "id": "40426c3a9ee54a2cb92ebfc2d91f0da9",
-            "pr": 790,
-            "issues": [
-              783
-            ],
-            "actor": "Reviewer-R783X",
-            "session": "claude-subagent-a020ec1d6f47f8d61",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-14T11:07:31+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T11:18:20+00:00"
-        },
-        {
-          "issue": 786,
-          "pr": 804,
-          "branch": "work/acl-1786-meta-error-messages",
-          "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
-          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-M1786A",
-            "reviewer": "Reviewer-R1786X",
+          {
+            "issue": 786,
+            "pr": 804,
+            "branch": "work/acl-1786-meta-error-messages",
             "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
             "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "tree_sha": "12a60c97520e6ea488fe9498550f99aa95f33076",
             "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "verdict": "approved",
-            "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-804.md",
-            "scope": "Full ACL-1786 scope: src/fb_api/error_catalog.py and its test; approved on current main df6c2e8a",
-            "execution_lane": "3e865c82d6434e5a8abf3e30c83090d7",
-            "review_session": "claude-subagent-a17b179a06c97c3af",
-            "actual_reviewer_agent": "claude-subagent-a17b179a06c97c3af",
-            "actual_implementer_agent": "Worker-M1786A",
-            "findings": [],
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              786
-            ],
-            "recorded_at": "2026-10-14T11:06:27+00:00",
-            "issue_scopes": {
-              "786": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6"
-            }
+            "scope": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-M1786A",
+              "reviewer": "Reviewer-R1786X",
+              "head_sha": "6b272d3e9e76a264e485eb97a002f641c49fbe35",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "tree_sha": "12a60c97520e6ea488fe9498550f99aa95f33076",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "verdict": "approved",
+              "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-804.md",
+              "scope": "Full ACL-1786 scope: src/fb_api/error_catalog.py and its test; approved on current main df6c2e8a",
+              "execution_lane": "3e865c82d6434e5a8abf3e30c83090d7",
+              "review_session": "claude-subagent-a17b179a06c97c3af",
+              "actual_reviewer_agent": "claude-subagent-a17b179a06c97c3af",
+              "actual_implementer_agent": "Worker-M1786A",
+              "findings": [],
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                786
+              ],
+              "recorded_at": "2026-10-14T11:06:27+00:00",
+              "issue_scopes": {
+                "786": "2c4b7d49547966020ac0774463ddf7f1b87637ac35eaa9e4686bac79767541d6"
+              }
+            },
+            "lane": {
+              "id": "3e865c82d6434e5a8abf3e30c83090d7",
+              "pr": 804,
+              "issues": [
+                786
+              ],
+              "actor": "Reviewer-R1786X",
+              "session": "claude-subagent-a17b179a06c97c3af",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-14T11:04:33+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T11:22:23+00:00"
           },
-          "lane": {
-            "id": "3e865c82d6434e5a8abf3e30c83090d7",
-            "pr": 804,
-            "issues": [
-              786
-            ],
-            "actor": "Reviewer-R1786X",
-            "session": "claude-subagent-a17b179a06c97c3af",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-14T11:04:33+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T11:22:23+00:00"
-        },
-        {
-          "issue": 806,
-          "pr": 808,
-          "branch": "work/acl-1806-obsidian-path",
-          "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
-          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-M1806A",
-            "reviewer": "Reviewer-R806X",
+          {
+            "issue": 806,
+            "pr": 808,
+            "branch": "work/acl-1806-obsidian-path",
             "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
             "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "tree_sha": "6e01044a723ac5f3ed42b7e368a5c1eeb4d64f4d",
             "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-            "verdict": "approved",
-            "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-808.md",
-            "scope": "Full ACL-806 scope (Obsidian folder through one setting); approved on current main df6c2e8a",
-            "execution_lane": "890bc6a071344778bcfc6ddf285610f8",
-            "review_session": "claude-subagent-a999be02700977375",
-            "actual_reviewer_agent": "claude-subagent-a999be02700977375",
-            "actual_implementer_agent": "Worker-M1806A",
-            "findings": [],
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              806
-            ],
-            "recorded_at": "2026-10-14T11:11:40+00:00",
-            "issue_scopes": {
-              "806": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9"
-            }
-          },
-          "lane": {
-            "id": "890bc6a071344778bcfc6ddf285610f8",
-            "pr": 808,
-            "issues": [
-              806
-            ],
-            "actor": "Reviewer-R806X",
-            "session": "claude-subagent-a999be02700977375",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-14T11:11:13+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T11:24:10+00:00"
-        }
-      ],
-      "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-      "branch": "codex/batch-e2b8b7079a31457bb2cc23294dabdd46",
-      "intake": "7192c0e6149f48febbf422a0b5c591c9",
-      "started_at": "2026-10-14T11:46:01+00:00",
-      "pr": 901,
-      "entered_stage": true,
-      "history": [
-        {
-          "coordinator": "Coordinator-S43F9A0",
-          "session": "claude-session-43f9a0-coordinator",
-          "reason": "Owner instruction 2026-10-14: drive all approved work to main without stopping. Coordinator-S43F9A0 session idle since 13:15 UTC+3 with the batch in assembling since 11:46 and PR 901 CI green; informed by message. Frozen membership and evidence unchanged.",
-          "at": "2026-10-14T14:08:16+00:00"
-        }
-      ]
+            "scope": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-M1806A",
+              "reviewer": "Reviewer-R806X",
+              "head_sha": "24626885b8dd3f195a2518ed67a7234544d28eaa",
+              "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "tree_sha": "6e01044a723ac5f3ed42b7e368a5c1eeb4d64f4d",
+              "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+              "verdict": "approved",
+              "report": "C:/Users/EVGENI~1/AppData/Local/Temp/claude/C--fb-agents/bcd55270-b125-477f-ba3b-728fa702fad9/scratchpad/report-808.md",
+              "scope": "Full ACL-806 scope (Obsidian folder through one setting); approved on current main df6c2e8a",
+              "execution_lane": "890bc6a071344778bcfc6ddf285610f8",
+              "review_session": "claude-subagent-a999be02700977375",
+              "actual_reviewer_agent": "claude-subagent-a999be02700977375",
+              "actual_implementer_agent": "Worker-M1806A",
+              "findings": [],
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                806
+              ],
+              "recorded_at": "2026-10-14T11:11:40+00:00",
+              "issue_scopes": {
+                "806": "6ec1d537005be8958a731b3c241f71f62c9f109520eea6eb94833ac7ab72e4a9"
+              }
+            },
+            "lane": {
+              "id": "890bc6a071344778bcfc6ddf285610f8",
+              "pr": 808,
+              "issues": [
+                806
+              ],
+              "actor": "Reviewer-R806X",
+              "session": "claude-subagent-a999be02700977375",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-14T11:11:13+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T11:24:10+00:00"
+          }
+        ],
+        "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+        "branch": "codex/batch-e2b8b7079a31457bb2cc23294dabdd46",
+        "intake": "7192c0e6149f48febbf422a0b5c591c9",
+        "started_at": "2026-10-14T11:46:01+00:00",
+        "pr": 901,
+        "entered_stage": true,
+        "history": [
+          {
+            "coordinator": "Coordinator-S43F9A0",
+            "session": "claude-session-43f9a0-coordinator",
+            "reason": "Owner instruction 2026-10-14: drive all approved work to main without stopping. Coordinator-S43F9A0 session idle since 13:15 UTC+3 with the batch in assembling since 11:46 and PR 901 CI green; informed by message. Frozen membership and evidence unchanged.",
+            "at": "2026-10-14T14:08:16+00:00"
+          }
+        ],
+        "review": {
+          "id": "f982c7cf184040cca87f98498cffd33e",
+          "batch_id": "e2b8b7079a31457bb2cc23294dabdd46",
+          "pr": 901,
+          "issues": [
+            781,
+            782,
+            783,
+            786,
+            806
+          ],
+          "actor": "Reviewer-R901B",
+          "session": "r901b-20261014",
+          "coordinator": "Coordinator-C1014I",
+          "state": "reviewing",
+          "started_at": "2026-10-14T14:10:21+00:00"
+        },
+        "main_prs": [
+          910
+        ],
+        "finished_at": "2026-10-14T14:31:31+00:00"
+      }
     },
+    "integration": null,
     "intake": {
       "id": "7192c0e6149f48febbf422a0b5c591c9",
       "actor": "Coordinator-C1014I",
@@ -32501,14 +32840,11 @@
         886
       ],
       "remaining": [
-        781,
-        782,
-        783,
-        786,
-        806,
         886
       ],
-      "batches": [],
+      "batches": [
+        "e2b8b7079a31457bb2cc23294dabdd46"
+      ],
       "started_at": "2026-10-14T11:44:18+00:00",
       "ineligible": {}
     },
