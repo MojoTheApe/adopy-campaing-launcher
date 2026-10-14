@@ -8599,6 +8599,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
+      },
+      "775": {
+        "actor": "Worker-RG1775",
+        "session": "wrg1775-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1775-instant-forms",
+        "worktree": "C:\\wk-rg1775",
+        "id": "ab5224d3d70f4e3fb5e31bd39a8202aa",
+        "issue": 775,
+        "state": "implementing",
+        "started_at": "2026-10-14T16:57:53+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12322,10 +12334,14 @@
           {
             "actor": "Worker-S1775A",
             "session": "run_s1775a_1011"
+          },
+          {
+            "actor": "Worker-RG1775",
+            "session": "wrg1775-20261014"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1775A",
+        "state": "implementing",
+        "worker": "Worker-RG1775",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1775A",
@@ -12343,7 +12359,6 @@
         },
         "pr": 809,
         "queued_at": "2026-10-11T21:22:10+00:00",
-        "reviewer": "Reviewer-RRF775",
         "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "806": {
@@ -14994,6 +15009,10 @@
       "Reviewer-RRF766": {
         "session": "rrf766-20261014",
         "role": "Reviewer"
+      },
+      "Worker-RG1775": {
+        "session": "wrg1775-20261014",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -32198,6 +32217,13 @@
           "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T16:57:53+00:00",
+        "issue": 775,
+        "claim": "ab5224d3d70f4e3fb5e31bd39a8202aa",
+        "actor": "Worker-RG1775"
       }
     ],
     "policy": {
