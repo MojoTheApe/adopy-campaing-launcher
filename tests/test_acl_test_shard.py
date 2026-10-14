@@ -98,3 +98,54 @@ def test_the_browser_files_are_spread_evenly_over_the_linux_shards():
     counts = [sum(1 for p in part if shard._BROWSER.search(p.read_text(encoding="utf-8", errors="replace")))
               for part in shard.shards(3, "linux")]
     assert max(counts) - min(counts) <= 3, counts
+
+
+def test_costly_nonbrowser_addition_preserves_browser_balance(tmp_path, monkeypatch):
+    # The cost-only greedy rule gives [5, 5, 5] before the addition and
+    # [5, 7, 3] after it. These source fixtures are inspected, never executed.
+    browser_costs = [60, 60, 90, 60, 46, 90, 75, 55, 47, 46, 90, 200, 90, 200, 60]
+    plain_costs = [2, 100, 120, 60, 100, 80]
+    files = []
+    browser_files = set()
+    for browser, costs in ((True, browser_costs), (False, plain_costs)):
+        for index, value in enumerate(costs):
+            path = tmp_path / f"test_{'browser' if browser else 'plain'}_{index:02}.py"
+            extra = shard.BROWSER_EXTRA if browser else 0
+            prefix = "from playwright.sync_api import sync_playwright\n" if browser else ""
+            path.write_text(prefix + "".join(f"def test_{i}():\n    pass\n" for i in range(value-extra)), encoding="utf-8")
+            assert shard.cost(path) == value
+            files.append(path)
+            if browser:
+                browser_files.add(path)
+    monkeypatch.setattr(platforms, "select", lambda platform: sorted(files))
+    for added in (False, True):
+        if added:
+            diagnostic = tmp_path / "test_new_diagnostic.py"
+            diagnostic.write_text("import subprocess\nsubprocess.run(['synthetic'])\n" +
+                                  "".join(f"def test_{i}():\n    pass\n" for i in range(47)), encoding="utf-8")
+            assert shard.cost(diagnostic) == 72
+            files.append(diagnostic)
+        parts = shard.shards(3, "linux")
+        counts = [len(browser_files & set(part)) for part in parts]
+        assert max(counts)-min(counts) <= 1, counts
+        assert sorted(p for part in parts for p in part) == sorted(files)
+        assert parts == shard.shards(3, "linux")
+        loads = [sum(shard.cost(p) for p in part) for part in parts]
+        assert max(loads)-min(loads) <= max(shard.cost(p) for p in files)
+
+
+@pytest.mark.parametrize("platform", [None, "windows"])
+def test_other_modes_keep_cost_only_assignment(tmp_path, monkeypatch, platform):
+    # An expensive browser fixture deliberately differs from the Linux count
+    # objective. Retained modes continue their existing minimum-cost split.
+    files = []
+    for name, tests, browser in (("large", 100, True), ("small_a", 1, True),
+                                 ("small_b", 1, True), ("plain", 60, False)):
+        path = tmp_path / f"test_{name}.py"
+        path.write_text(("from playwright.sync_api import sync_playwright\n" if browser else "") +
+                        "".join(f"def test_{i}():\n    pass\n" for i in range(tests)), encoding="utf-8")
+        files.append(path)
+    monkeypatch.setattr(shard, "test_files", lambda: sorted(files))
+    monkeypatch.setattr(platforms, "select", lambda selected: sorted(files))
+    # Largest cost145 -> bucket0; cost60 and both cost46 files -> bucket1.
+    assert shard.shards(2, platform) == [sorted([files[0]]), sorted(files[1:])]

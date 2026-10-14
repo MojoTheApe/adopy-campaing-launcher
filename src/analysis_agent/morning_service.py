@@ -17,7 +17,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -112,14 +112,20 @@ def _resolve_my_cm(my_cm: Optional[str]) -> str:
     return (my_cm or "").strip() or os.environ.get("MY_CM_NAME", "Evgeni Sedin").strip()
 
 
-def _load_enriched_df(excel_path: str) -> pd.DataFrame:
+def _load_enriched_df(
+    excel_path: str, *, progress: Callable[[str], None] | None = None
+) -> pd.DataFrame:
     """Read Excel + run the same enrichment pipeline.
 
     The web layer's drilldown filters need the enriched DataFrame
     (Country Final, Offer, Device, Interest, Age, Creative, TextSegment
     columns), not the raw Excel rows.
     """
+    if progress is not None:
+        progress("reading")
     df_raw = pd.read_excel(excel_path)
+    if progress is not None:
+        progress("processing")
     required_cols = [
         "Country", "Account Alias", "Adset Name", "Ad Title",
         "# Leads", "# FTDs", "$ Spend", "CM", "Ad Asset", "$ Net",
@@ -144,6 +150,7 @@ def load_morning_report(
     news_fetcher: Optional[NewsFetcher] = None,
     enriched_df: Optional[pd.DataFrame] = None,
     account_rows_cached: Optional[List[Dict[str, Any]]] = None,
+    progress: Callable[[str], None] | None = None,
 ) -> Tuple[Dict[str, Any], pd.DataFrame, List[str]]:
     """Build the full morning report from current Excel + GSheet state.
 
@@ -154,6 +161,10 @@ def load_morning_report(
     Pass ``enriched_df`` to skip re-reading Excel (Refresh reuses the DF when
     the file mtime is unchanged). GSheet fetch runs in parallel with Excel
     load when both are needed.
+
+    ``progress`` observes actual reading, processing and preparation boundaries.
+    The Excel callback runs on the loader's worker thread when Sheets is fetched
+    concurrently; callers own synchronization and job identity.
 
     Returns:
         (report_dict, enriched_df, warnings)
@@ -184,7 +195,7 @@ def load_morning_report(
     if skip_gsheet:
         warnings.append("GSheet skipped (skip_gsheet=True)")
         if enriched_df is None:
-            enriched_df = _load_enriched_df(resolved_excel)
+            enriched_df = _load_enriched_df(resolved_excel, progress=progress)
     elif account_rows_cached is not None:
         # Строки GSheet не зависят от дат. Пересобирая тот же отчёт за другой
         # период, ходить за ними второй раз незачем — а с пропуском GSheet
@@ -198,7 +209,7 @@ def load_morning_report(
     else:
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             fut_gsheet = pool.submit(_fetch_gsheet)
-            fut_df = pool.submit(_load_enriched_df, resolved_excel)
+            fut_df = pool.submit(_load_enriched_df, resolved_excel, progress=progress)
             try:
                 account_rows = fut_gsheet.result()
             except Exception as e:  # noqa: BLE001
@@ -246,6 +257,8 @@ def load_morning_report(
 
     assert enriched_df is not None
 
+    if progress is not None:
+        progress("preparing")
     report = build_morning_report(
         df=enriched_df,
         account_rows=account_rows,

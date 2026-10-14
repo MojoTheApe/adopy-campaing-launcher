@@ -11257,12 +11257,110 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // превью показывает одну постоянную кнопку.
   var CB_PREVIEW_CTA = 'Learn More';
 
-  // ── Creatives from folder (loaded once) ──────────────────────────────
+  // ── Creatives from folder ────────────────────────────────────────────
+  // ACL-1651: список больше не «загружается один раз». Файл, положенный в папку
+  // после открытия страницы, раньше находился только после перезагрузки.
+  // Обновляем при фокусе в поиске (не чаще раза в 10 с), один раз при промахе
+  // поиска и при возврате в окно (тот же троттлинг). Старый список остаётся,
+  // пока не придёт новый, а запрос идёт в фоне — набор текста не блокируется.
   var CREATIVES = [];  // [{filename, rel_path, folder, type}]
-  fetch('/api/creatives')
-    .then(function(r){ return r.json(); })
-    .then(function(d){ CREATIVES = d.files || []; cbpRenderAll(); })
-    .catch(function(){});
+  var CB_CREATIVES_THROTTLE_MS = 10000;
+  var CB_CREATIVES_MISS_THROTTLE_MS = 2000;  // промах: свой, короткий порог
+  var _cbMissLatched = false;  // защёлка: один запрос на серию промахов
+  var _cbCreativesInflight = null;
+  var _cbCreativesMissPending = null;
+  var _cbCreativesLastAt = 0;
+  var _cbCreativesSig = '';
+  window.CB_CREATIVES_REFRESH_COUNT = 0;  // счётчик запросов (для тестов)
+
+  // minGapMs — минимальный интервал с прошлого запроса; 0 = без троттлинга.
+  window.cbRefreshCreatives = function(minGapMs) {
+    if (_cbCreativesInflight) return _cbCreativesInflight;
+    var now = Date.now();
+    if (_cbCreativesLastAt && now - _cbCreativesLastAt < minGapMs) {
+      return Promise.resolve(false);
+    }
+    _cbCreativesLastAt = now;
+    window.CB_CREATIVES_REFRESH_COUNT++;
+    _cbCreativesInflight = fetch('/api/creatives', {cache: 'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        // Ответ с ошибкой (папка недоступна) не затирает рабочий список.
+        if (d.error && !(d.files || []).length && CREATIVES.length) return false;
+        var files = d.files || [];
+        var sig = JSON.stringify(files.map(function(f){ return cbCreativeSig(f); }));
+        var changed = sig !== _cbCreativesSig;
+        _cbCreativesSig = sig;
+        var prev = CREATIVES;
+        CREATIVES = files;
+        if (changed) cbpRenderChangedSlots(prev, files);
+        return changed;
+      })
+      .catch(function(){ return false; })
+      .then(function(changed){ _cbCreativesInflight = null; return changed; });
+    return _cbCreativesInflight;
+  };
+  // Хук для тестов: «состарить» последний запрос, не ожидая 10 секунд.
+  window.cbCreativesAge = function(ms) { _cbCreativesLastAt = Date.now() - ms; };
+  window.cbRefreshCreatives(0);
+
+  // A miss consumes its one refresh only when a request can actually start.
+  // Wait out the short gap in the background, coalescing repeated misses.
+  function cbRefreshCreativesOnMiss() {
+    if (_cbCreativesMissPending) return _cbCreativesMissPending;
+    function refreshWhenReady() {
+      if (_cbCreativesInflight) return _cbCreativesInflight.then(refreshWhenReady);
+      var wait = CB_CREATIVES_MISS_THROTTLE_MS - (Date.now() - _cbCreativesLastAt);
+      if (wait > 0) {
+        return new Promise(function(resolve) { setTimeout(resolve, wait); }).then(refreshWhenReady);
+      }
+      return window.cbRefreshCreatives(CB_CREATIVES_MISS_THROTTLE_MS);
+    }
+    _cbCreativesMissPending = Promise.resolve().then(refreshWhenReady).then(function(changed) {
+      _cbCreativesMissPending = null;
+      return changed;
+    });
+    return _cbCreativesMissPending;
+  }
+
+  function cbCreativeSig(f) {
+    return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file] : null;
+  }
+
+  // Карточки перерисовываем только там, где изменился выбранный файл:
+  // иначе играющее превью-видео перезапускается от чужого файла в папке.
+  function cbpRenderChangedSlots(prev, next) {
+    function find(list, v) {
+      return list.find(function(f) { return f.filename === v || f.rel_path === v; });
+    }
+    document.querySelectorAll('.cb-slot').forEach(function(slot) {
+      var dirty = false;
+      slot.querySelectorAll('.cb-ad-row').forEach(function(row) {
+        var hid = row.querySelector('input[type="hidden"][name$="_creative_file"]');
+        var box = row.querySelector('.cb-creative-search');
+        var v = ((hid && hid.value) || (box && box.value) || '').trim();
+        if (v && JSON.stringify(cbCreativeSig(find(prev, v))) !== JSON.stringify(cbCreativeSig(find(next, v)))) dirty = true;
+      });
+      if (dirty) cbRenderPreviews(slot);
+    });
+  }
+
+  // Возврат из Проводника: окно снова в фокусе, а папка могла измениться.
+  window.addEventListener('focus', function() {
+    window.cbRefreshCreatives(CB_CREATIVES_THROTTLE_MS).then(cbCreativesRedraw);
+  });
+
+  // Перерисовать открытый выпадающий список по новому списку файлов.
+  function cbCreativesRedraw(changed) {
+    if (!changed) return;
+    var a = document.activeElement;
+    if (a && a.classList && a.classList.contains('cb-creative-search')) {
+      // Закрытый список не открываем: пользователь мог выбрать файл или уйти.
+      var wrap = a.closest('.cb-creative-sel-wrap');
+      var dd = wrap && wrap.querySelector('.cb-sel-dropdown');
+      if (dd && !dd.hidden) cbCreativeSearch(a, true);
+    }
+  }
 
   // Вес файла рядом с его именем — видно при выборе, а не через десять минут
   // загрузки. 10 сентября в одной папке лежали креативы от 30 КБ до 1.5 ГБ, и
@@ -11284,7 +11382,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
          + (heavy ? ';font-weight:600' : '') + '">' + text + '</span>';
   };
 
-  window.cbCreativeSearch = function(input) {
+  window.cbCreativeSearch = function(input, noRefresh) {
     var wrap = input.closest('.cb-creative-sel-wrap');
     if (!wrap) return;
     var dropdown = wrap.querySelector('.cb-sel-dropdown');
@@ -11304,7 +11402,21 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
     if (!matches.length && !query) {
       dropdown.hidden = true;
+      _cbMissLatched = false;
       return;
+    }
+    if (matches.length) _cbMissLatched = false;  // попадание сбрасывает защёлку
+
+    // Промах поиска: возможно, файл только что положили в папку. Один фоновый
+    // запрос, затем повторный поиск; старое «No files found» не мигает.
+    // Защёлка: первый промах серии обновляет список, следующие символы — нет,
+    // пока запрос не станет попаданием или поле не потеряет фокус.
+    if (!matches.length && query && !noRefresh && !_cbMissLatched) {
+      _cbMissLatched = true;
+      cbRefreshCreativesOnMiss().then(function(changed) {
+        // Список мог закрыться или фокус уйти, пока шёл запрос.
+        if (changed && document.activeElement === input && !dropdown.hidden) cbCreativeSearch(input, true);
+      });
     }
 
     // Detect duplicate basenames so we can store rel_path for disambiguation
@@ -11352,9 +11464,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // show matching results, not require re-typing first — cbCreativeSearch()
   // otherwise only ever fires on oninput. focusin bubbles (plain focus
   // doesn't), so this works via delegation for dynamically-added ad rows too.
+  document.addEventListener('focusout', function(e) {
+    if (e.target.classList && e.target.classList.contains('cb-creative-search')) _cbMissLatched = false;
+  });
   document.addEventListener('focusin', function(e) {
-    if (e.target.classList && e.target.classList.contains('cb-creative-search') && e.target.value) {
-      cbCreativeSearch(e.target);
+    if (e.target.classList && e.target.classList.contains('cb-creative-search')) {
+      // ACL-1651: фокус в поиске обновляет список (не чаще раза в 10 с).
+      window.cbRefreshCreatives(CB_CREATIVES_THROTTLE_MS).then(cbCreativesRedraw);
+      if (e.target.value) cbCreativeSearch(e.target);
     }
   });
 
