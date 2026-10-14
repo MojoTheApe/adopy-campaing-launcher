@@ -3305,35 +3305,21 @@
       }
     },
     "stage": {
-      "pr": 894,
+      "pr": 901,
       "issues": [
-        892
+        781,
+        782,
+        783,
+        786,
+        806
       ],
-      "tree_sha": "e8a6b4efae432d69118d3f003b92512907fe70ca",
-      "source_sha": "3cd7fdb50180107163294f3bcc5567e60f30e3ed",
-      "main_tree": "06e60120c55379d776152c76d6f337b252c18d7b",
+      "tree_sha": "a0d4b48243c44a6d3990e8594a586577aa020902",
+      "source_sha": "7c3af7a603e14ab78329e34daa1c9a8a8b0f7035",
+      "main_tree": "e8a6b4efae432d69118d3f003b92512907fe70ca",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-14T08:23:05+00:00",
-      "batch_id": "07aa28148c8c4544b3c0077f47d58503",
-      "verification": {
-        "kind": "stage-verification",
-        "target": "ACL isolated Windows stage installation",
-        "result": "passed",
-        "source_sha": "3cd7fdb50180107163294f3bcc5567e60f30e3ed",
-        "tree_sha": "e8a6b4efae432d69118d3f003b92512907fe70ca",
-        "checks": [
-          "Actual permanent stage commit/tree and generated merge parents verified against the frozen single ACL-1892 member and independently reviewed integration.",
-          "Actual stage product and installer aggregates succeeded with explicit same-tree reuse proofs of all six Linux 3.11/3.13 shards, Windows 3.13 and package jobs; stage descriptor succeeded.",
-          "Previous actual package installs and starts with isolated data",
-          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
-          "Updated installed application restarts with preserved machine/workspace/creative data",
-          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
-          "Recovered application restarts and synthetic data remains byte-identical"
-        ],
-        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/894#issuecomment-6164140898"
-      },
-      "verified_at": "2026-10-14T08:25:43+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-14T14:19:17+00:00",
+      "batch_id": "e2b8b7079a31457bb2cc23294dabdd46"
     },
     "tasks": {
       "248": {
@@ -11751,7 +11737,7 @@
             "session": "c18fd7986a28447daada00e6d2b99f57"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-M1783B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -11783,7 +11769,7 @@
             "session": "a0247198fa5445808b9c6400851e6a62"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-M1782B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -11815,7 +11801,7 @@
             "session": "a9f3467038d4400d80d0727275ae2ff4"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-M1781B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -11983,7 +11969,7 @@
             "session": "922f523d07564d18961d4f57e3ea4337"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-M1786A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -12038,7 +12024,7 @@
             "session": "4b214c77a7e14ef0937301c56af0fb88"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-M1806A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -32125,7 +32111,7 @@
       "id": "e2b8b7079a31457bb2cc23294dabdd46",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "reviewing",
+      "state": "stage",
       "issues": [
         781,
         782,
@@ -32380,7 +32366,7 @@
       "intake": "7192c0e6149f48febbf422a0b5c591c9",
       "started_at": "2026-10-14T11:46:01+00:00",
       "pr": 901,
-      "entered_stage": false,
+      "entered_stage": true,
       "history": [
         {
           "coordinator": "Coordinator-S43F9A0",
