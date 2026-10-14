@@ -3461,6 +3461,27 @@
         "issue_scopes": {
           "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
         }
+      },
+      "801": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1798G",
+        "implementer": "Worker-RF1798",
+        "review_session": "r1798g-20261015",
+        "execution_lane": "6c479d8b508146cf97a278f0ac9c62e6",
+        "head_sha": "6a41a506de355e9df2cee8ff736841b1c704aceb",
+        "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+        "tree_sha": "10c9dd2248913277b7f4cd85ba78892b66203827",
+        "report": "Independent source review of ACL-1798 / PR 801 at head 6a41a506 against current main 73136acc (main is an ancestor of the head). Reviewer-R1798G implemented none of it.\n\nScope: diff origin/main...head, 16 files (campaign_inventory.py, web/app.py, _home_campaigns.html, report.html, builder harnesses, tests), +4121/-66.\n\nRead-only and click-only, verified by reading the code:\n- Meta reads use GET only (Graph client get_all / insights_range); the module and tests state no writes. The one POST in the template is /campaign-inventory/read to our own server; it runs only from the Read campaigns click handlers (readQueue from data-read / data-read-country). start_read refuses with 409 NeedsApiBackend unless ACL_FB_BACKEND=api and starts nothing (RPA default untouched: no change to src/fb_ads_rpa, the RPA path is not read; on rpa the page shows the notice and makes only the local status GET).\n- Page load (init) calls only local GETs: /campaign-inventory/status, then /tree for accounts that already have a snapshot. tree, children and status routes use the saved snapshot and workbook only, never Meta. The only timers are a setTimeout poll of the local status route AFTER a human click, waiting for that job (no setInterval, bounded at 240 tries); it does not touch Meta.\n- Reads go through the same queue and profile lock as Read spend (browser_operation.reading, per-account lock); a second press joins the running job.\n- UI strings are English; Russian appears only in code comments. Command buttons (pause/copy etc.) are disabled with a reason and send nothing.\n\nVerification:\n- CI on head 6a41a506: all checks green (tracker-link and the installer build failed on handoff timing / 25 min installer timeout and passed on rerun).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": test_acl1798_campaign_inventory, test_acl1769_two_column_layout, test_builder_duplicate_buttons, test_builder_second_primary_text, test_the_builder_drawer 85 passed; test_acl1760_api_read, test_acl1761_*, test_report_loading_stages, test_dashboard_review 342 passed.\n- Browser tests of the new page (test_acl1798_home_campaigns_browser.py) were run with the RAM guard lowered locally (free RAM 5 GB < 6): 9 passed on the head.\n- Mutation: init() made to call readQueue(accounts.slice(0,1)) after the status load, so a Meta read starts without a click -> test_commands_are_disabled_with_reason_and_send_nothing fails (browser test; the non-browser suite does not catch it). Reverted; worktree clean.\n- Tests are legitimate: new test files, existing tests only adjusted by small edits (builder_duplicate_buttons +13, second_primary_text +9, the_builder_drawer 4) that follow the layout change; I read each edit: they only follow the ACL-1769 layout (extra level click, moved selectors, width 480); the one relaxed line (CTA not in row text) is replaced by a stricter check that the CTA select is disabled with an ACL-1767 title.\n- No live Meta or Multilogin calls.\n\nFindings: no blocking issues. Minor: the no-auto-read guard for page load exists only in the browser tests, which skip below 6 GB free RAM and run in CI.",
+        "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          798
+        ],
+        "recorded_at": "2026-10-14T21:55:43+00:00",
+        "issue_scopes": {
+          "798": "3b6bdc34a28591559ae5fc3c542ed84331c26816dcbfb41f82adbf3b759ba9c7"
+        }
       }
     },
     "stage": {
