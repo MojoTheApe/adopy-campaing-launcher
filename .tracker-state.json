@@ -12727,7 +12727,7 @@
             "session": "run_s1814a_1012"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1814A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12745,7 +12745,8 @@
           "report": "PR #817 (head 903b697), branch codex/acl-1814-rules-store, stacked on #802.\nAdded src/analysis_agent/rules/model.py and store.py plus tests/test_rules_store.py (55 tests passed locally).\nMutation check: removing the grant revocation on edit fails 4 tests; dropping caps from the grant hash fails 2.\nNo UI, no Meta calls."
         },
         "pr": 817,
-        "queued_at": "2026-10-12T07:37:59+00:00"
+        "queued_at": "2026-10-12T07:37:59+00:00",
+        "reviewer": "Reviewer-RRG814"
       },
       "815": {
         "implementers": [
@@ -15379,6 +15380,10 @@
       "Reviewer-RRG800": {
         "session": "rrg800-20261015",
         "role": "Reviewer"
+      },
+      "Reviewer-RRG814": {
+        "session": "rrg814-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -17992,7 +17997,6 @@
       526,
       642,
       739,
-      814,
       815,
       816,
       819,
@@ -34769,6 +34773,13 @@
           "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T22:56:17+00:00",
+        "pr": 817,
+        "lane": "c59d72b46bc541a39200ba9027c888e3",
+        "actor": "Reviewer-RRG814"
       }
     ],
     "policy": {
@@ -37638,6 +37649,19 @@
       "started_at": "2026-10-14T22:11:37+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "817": {
+        "id": "c59d72b46bc541a39200ba9027c888e3",
+        "pr": 817,
+        "issues": [
+          814
+        ],
+        "actor": "Reviewer-RRG814",
+        "session": "rrg814-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T22:56:17+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
