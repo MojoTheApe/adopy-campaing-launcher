@@ -12306,7 +12306,7 @@
             "session": "run_s1775a_1011"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1775A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12325,7 +12325,8 @@
         },
         "pr": 809,
         "queued_at": "2026-10-11T21:22:10+00:00",
-        "reviewer": "Reviewer-RRF775"
+        "reviewer": "Reviewer-RRF775",
+        "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "806": {
         "implementers": [
@@ -32065,6 +32066,24 @@
         "pr": 809,
         "lane": "e7b1204defe24de1846751333a37f773",
         "actor": "Reviewer-RRF775"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-14T16:54:34+00:00",
+        "review": {
+          "id": "e7b1204defe24de1846751333a37f773",
+          "pr": 809,
+          "issues": [
+            775
+          ],
+          "actor": "Reviewer-RRF775",
+          "session": "rrf775-20261014",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T16:54:20+00:00",
+          "state": "returning",
+          "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -34139,21 +34158,6 @@
       "started_at": "2026-10-14T16:14:28+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "809": {
-        "id": "e7b1204defe24de1846751333a37f773",
-        "pr": 809,
-        "issues": [
-          775
-        ],
-        "actor": "Reviewer-RRF775",
-        "session": "rrf775-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-14T16:54:20+00:00",
-        "state": "returning",
-        "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
-        "keep_lane": false
-      }
-    }
+    "source_reviews": {}
   }
 }
