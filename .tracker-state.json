@@ -12378,7 +12378,7 @@
             "session": "wrg1775-20261014"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RG1775",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12397,7 +12397,8 @@
         },
         "pr": 809,
         "queued_at": "2026-10-14T17:00:37+00:00",
-        "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
+        "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
+        "reviewer": "Reviewer-R1775G"
       },
       "806": {
         "implementers": [
@@ -15087,6 +15088,10 @@
       "Worker-S1769G": {
         "session": "ws1769g-20261015",
         "role": "Worker"
+      },
+      "Reviewer-R1775G": {
+        "session": "r1775g-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -17688,7 +17693,6 @@
       903,
       907,
       891,
-      775,
       798,
       797,
       799,
@@ -32495,6 +32499,13 @@
         "issue": 769,
         "claim": "7730a02547054ae2903a0abf04c3f7a8",
         "actor": "Worker-S1769G"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T21:31:16+00:00",
+        "pr": 809,
+        "lane": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+        "actor": "Reviewer-R1775G"
       }
     ],
     "policy": {
@@ -34569,6 +34580,19 @@
       "started_at": "2026-10-14T16:14:28+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "809": {
+        "id": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+        "pr": 809,
+        "issues": [
+          775
+        ],
+        "actor": "Reviewer-R1775G",
+        "session": "r1775g-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T21:31:16+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
