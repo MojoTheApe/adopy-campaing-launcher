@@ -33515,6 +33515,252 @@
           "started_at": "2026-10-14T22:07:20+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "batch-frozen",
+        "at": "2026-10-14T22:08:40+00:00",
+        "batch": {
+          "id": "c8d57f23a0064de995e094f874416007",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "assembling",
+          "issues": [
+            798,
+            766,
+            778,
+            775,
+            769
+          ],
+          "members": [
+            {
+              "issue": 798,
+              "pr": 801,
+              "branch": "codex/acl-1798-home-campaigns",
+              "head_sha": "6a41a506de355e9df2cee8ff736841b1c704aceb",
+              "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "3b6bdc34a28591559ae5fc3c542ed84331c26816dcbfb41f82adbf3b759ba9c7",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1798G",
+                "implementer": "Worker-RF1798",
+                "review_session": "r1798g-20261015",
+                "execution_lane": "6c479d8b508146cf97a278f0ac9c62e6",
+                "head_sha": "6a41a506de355e9df2cee8ff736841b1c704aceb",
+                "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+                "tree_sha": "10c9dd2248913277b7f4cd85ba78892b66203827",
+                "report": "Independent source review of ACL-1798 / PR 801 at head 6a41a506 against current main 73136acc (main is an ancestor of the head). Reviewer-R1798G implemented none of it.\n\nScope: diff origin/main...head, 16 files (campaign_inventory.py, web/app.py, _home_campaigns.html, report.html, builder harnesses, tests), +4121/-66.\n\nRead-only and click-only, verified by reading the code:\n- Meta reads use GET only (Graph client get_all / insights_range); the module and tests state no writes. The one POST in the template is /campaign-inventory/read to our own server; it runs only from the Read campaigns click handlers (readQueue from data-read / data-read-country). start_read refuses with 409 NeedsApiBackend unless ACL_FB_BACKEND=api and starts nothing (RPA default untouched: no change to src/fb_ads_rpa, the RPA path is not read; on rpa the page shows the notice and makes only the local status GET).\n- Page load (init) calls only local GETs: /campaign-inventory/status, then /tree for accounts that already have a snapshot. tree, children and status routes use the saved snapshot and workbook only, never Meta. The only timers are a setTimeout poll of the local status route AFTER a human click, waiting for that job (no setInterval, bounded at 240 tries); it does not touch Meta.\n- Reads go through the same queue and profile lock as Read spend (browser_operation.reading, per-account lock); a second press joins the running job.\n- UI strings are English; Russian appears only in code comments. Command buttons (pause/copy etc.) are disabled with a reason and send nothing.\n\nVerification:\n- CI on head 6a41a506: all checks green (tracker-link and the installer build failed on handoff timing / 25 min installer timeout and passed on rerun).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": test_acl1798_campaign_inventory, test_acl1769_two_column_layout, test_builder_duplicate_buttons, test_builder_second_primary_text, test_the_builder_drawer 85 passed; test_acl1760_api_read, test_acl1761_*, test_report_loading_stages, test_dashboard_review 342 passed.\n- Browser tests of the new page (test_acl1798_home_campaigns_browser.py) were run with the RAM guard lowered locally (free RAM 5 GB < 6): 9 passed on the head.\n- Mutation: init() made to call readQueue(accounts.slice(0,1)) after the status load, so a Meta read starts without a click -> test_commands_are_disabled_with_reason_and_send_nothing fails (browser test; the non-browser suite does not catch it). Reverted; worktree clean.\n- Tests are legitimate: new test files, existing tests only adjusted by small edits (builder_duplicate_buttons +13, second_primary_text +9, the_builder_drawer 4) that follow the layout change; I read each edit: they only follow the ACL-1769 layout (extra level click, moved selectors, width 480); the one relaxed line (CTA not in row text) is replaced by a stricter check that the CTA select is disabled with an ACL-1767 title.\n- No live Meta or Multilogin calls.\n\nFindings: no blocking issues. Minor: the no-auto-read guard for page load exists only in the browser tests, which skip below 6 GB free RAM and run in CI.",
+                "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  798
+                ],
+                "recorded_at": "2026-10-14T21:55:43+00:00",
+                "issue_scopes": {
+                  "798": "3b6bdc34a28591559ae5fc3c542ed84331c26816dcbfb41f82adbf3b759ba9c7"
+                }
+              },
+              "lane": {
+                "id": "6c479d8b508146cf97a278f0ac9c62e6",
+                "pr": 801,
+                "issues": [
+                  798
+                ],
+                "actor": "Reviewer-R1798G",
+                "session": "r1798g-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-14T21:31:53+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T21:56:07+00:00"
+            },
+            {
+              "issue": 766,
+              "pr": 794,
+              "branch": "codex/acl-1766-map-pixel",
+              "head_sha": "6ee6db04d5bff7b1551df279530f21d61e40bef6",
+              "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "63ee8cf1c3003300f25675e2f4ce1c5fdfd90ad781cd39460e7806d8eeab8fac",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1766F",
+                "implementer": "Worker-RF1766",
+                "review_session": "r1766f-20261014",
+                "execution_lane": "f16050b41e3140beb5bf6fe3bdefd90f",
+                "head_sha": "6ee6db04d5bff7b1551df279530f21d61e40bef6",
+                "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+                "tree_sha": "c875b7ef554e422f66a1895ac8ae267ca4f9bf58",
+                "report": "Independent source review of ACL-1766 / PR 794 at head 6ee6db04 against current main 73136acc (main is an ancestor of the head). Reviewer-R1766F implemented none of it.\n\nScope: full diff origin/main...head, 5 files (enrich_draft.py, fb_api/creator.py, web/publish_api.py, report.html, tests/test_acl1766_map_pixel.py), +248/-11.\n\nVerified by reading the code:\n- enrich_draft: a draft page/pixel wins, the account map is the next source; the source (draft/map) is kept in plain attributes read only by the API plan; RPA does not read pixel_id/page_source/pixel_source, so the RPA path is unchanged (one file, 7 lines).\n- resolve_page_pixel: a page or pixel that is set (draft or map) must be in the account lists UNCONDITIONALLY, including an empty list; a mismatch raises PlanError before any write and names the source and id; nothing is guessed or substituted. Without a map value: one account page/pixel is used and labelled \"account default\"; several pages/pixels keep the previous error. This does not contradict the 2026-10-14 Pages decision (ACL-1880): automatic still takes the first available Page; only an explicit draft/map Page is validated against the account.\n- Plan summary carries page_source/pixel_source and the dashboard shows them; strings are English and escaped.\n- Readback: CTA/locales checks; \"Not read\" only when Meta returned nothing for an expected field; ok is still strict equality, so nothing was loosened; an empty-language draft reads back ok.\n- All blocking items of the earlier out-of-tracker review (empty-list ownership hole, language-less false mismatch, repeated error text, missing tests) are fixed and pinned by tests.\n\nVerification:\n- CI on head 6ee6db04: all checks pass (Linux 1-3, Windows, tracker-link, process instructions, installer verification, descriptor); two build jobs skipped as expected.\n- Detached worktree at the head: tests/test_acl1766_map_pixel.py + tests/test_acl1761_*.py, PYTHONUTF8=1 pytest -k \"not browser\": 247 passed, 2 deselected.\n- Mutation: map page wins without the account check (replacing the check with `if False`) -> 2 failures in test_foreign_or_unlisted_map_page_writes_nothing; the milder variant keeping the non-empty-list guard -> 1 failure (NoPagesMeta). Reverted; worktree clean.\n- Tests are legitimate: new file only, no existing test edited.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Minor, non-blocking: adspixels is read with a single page of 50, so a valid map pixel on an account with more than 50 pixels would be refused (fails safe).",
+                "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  766
+                ],
+                "recorded_at": "2026-10-14T21:27:04+00:00",
+                "issue_scopes": {
+                  "766": "63ee8cf1c3003300f25675e2f4ce1c5fdfd90ad781cd39460e7806d8eeab8fac"
+                }
+              },
+              "lane": {
+                "id": "f16050b41e3140beb5bf6fe3bdefd90f",
+                "pr": 794,
+                "issues": [
+                  766
+                ],
+                "actor": "Reviewer-R1766F",
+                "session": "r1766f-20261014",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-14T17:10:37+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T21:27:43+00:00"
+            },
+            {
+              "issue": 778,
+              "pr": 780,
+              "branch": "codex/acl-1778-header-linear-toolbar",
+              "head_sha": "0ef06b4c0a637b7c98f0936ab3499ca5e706ce67",
+              "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "f7ba65b41d297f82e266165d04c49a67f5adc1f0c97c8f32a399bd77edc687ae",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1778G",
+                "implementer": "Worker-RG1778",
+                "review_session": "r1778g-20261015",
+                "execution_lane": "2a2cae0777ea471b983e9eec3f7611d0",
+                "head_sha": "0ef06b4c0a637b7c98f0936ab3499ca5e706ce67",
+                "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+                "tree_sha": "ea4767630829b27a2fa21f59b27c8bb2f0a0d4bc",
+                "report": "Re-review of ACL-1778 / PR 780 at head 0ef06b4c against current main 73136acc (main is an ancestor of the head). Reviewer-R1778G implemented none of it. Earlier approval: Reviewer-R1778F at 74128d1a (evidence evidence778-r1778f.json, lane 386271487d114214a21ee8322e167847).\n\nThe only change since 74128d1a is the clean merge of main 73136acc. Verified: git patch-id --stable of diff 74128d1a..0ef06b4c equals that of diff d9118413..73136acc (b89ac820b7a42a3176c9ec49771122a1f8513a2c for both), so the delta is exactly what main brought and nothing else (no conflict edits).\n\nVerification:\n- CI on head 0ef06b4c: all checks green (tracker-link failed on handoff timing and passed on rerun; build jobs skipped as expected).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\" tests/test_header.py tests/test_stage_badge.py tests/test_report_loading_stages.py tests/test_acl_test_platform.py: 135 passed.\n- The prior review's scope and mutation result (amapApply bare remove fails test_the_picker_closes_through_one_path) stand, because the PR's own diff vs main is unchanged by the merge.\n- No live calls.\n\nFindings: no blocking issues.",
+                "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  778
+                ],
+                "recorded_at": "2026-10-14T21:57:59+00:00",
+                "issue_scopes": {
+                  "778": "f7ba65b41d297f82e266165d04c49a67f5adc1f0c97c8f32a399bd77edc687ae"
+                }
+              },
+              "lane": {
+                "id": "2a2cae0777ea471b983e9eec3f7611d0",
+                "pr": 780,
+                "issues": [
+                  778
+                ],
+                "actor": "Reviewer-R1778G",
+                "session": "r1778g-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-14T21:41:52+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T21:58:21+00:00"
+            },
+            {
+              "issue": 775,
+              "pr": 809,
+              "branch": "codex/acl-1775-instant-forms",
+              "head_sha": "8ab25c24ef37c869515478abc7ac6f8a9acdc8bd",
+              "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1775G",
+                "implementer": "Worker-RG1775",
+                "review_session": "r1775g-20261015",
+                "execution_lane": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+                "head_sha": "8ab25c24ef37c869515478abc7ac6f8a9acdc8bd",
+                "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+                "tree_sha": "1f38598bdf5f162857ab5270c0eaabef42540e68",
+                "report": "Independent source review of ACL-1775 / PR 809 at head 8ab25c24 against current main 73136acc (main is an ancestor of the head). Reviewer-R1775G implemented none of it.\n\nVerified by reading the diff (27 files):\n- Forms must belong to the plan's Page and be readable: CampaignCreator._check_forms reads /{page}/leadgen_forms before any write (Publish and Check plan); a form that is not on that Page, is not ACTIVE (allow-list, earlier minor m1 fixed), or cannot be read raises PlanError with an English message and nothing is written. GraphStop is not swallowed.\n- No form is created: forms.py is read-only (GET leadgen_forms, GET leadgen_tos_accepted only when the list is empty/unreadable); /{page}/leadgen_forms POST stays refused by the path/edge rule.\n- tos_accepted is never sent: it stays in FORBIDDEN_ANYWHERE in write_policy and is not referenced anywhere else in src.\n- PAUSED only: ad set, creative and ad paths still go through the policy status check; the Instant Form ad set is built with status PAUSED.\n- Write policy closed in both layers: lead_gen_form_id is allowed only in adcreatives -> object_story_spec.{link_data|video_data}.call_to_action.value, value exactly {lead_gen_form_id: digits 5-25}, and only with on_ad=True (default False in check, GraphClient.post, InPageGraph.write). The Python layer (_without_lead_form) and the page helper (withoutLeadForm) mirror each other from one policy table; anywhere else the key stays and _walk refuses it.\n- Website path unchanged: golden fixture tests/fixtures/acl1775_website_golden.json.\n\nVerification:\n- CI on head 8ab25c24: all checks pass (Linux 1-3, Windows, tracker-link after rerun - it had failed only on timing before the review lane existed, process instructions, installer verification, descriptor); two build jobs skipped as expected.\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": tests/test_acl1775_instant_forms.py + test_acl1775_builder_forms.py 96 passed; test_acl1761_api_create/parity/plan_check, builder duplicate/second-primary-text/drawer, test_acl1769_two_column_layout 211 passed.\n- Golden test test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator passed 3 of 3 runs alone and in the full file (86 passed). It was flaky in combined builds only; it does not fail on this branch.\n- Mutation: ownership check skipped (if form is None -> if False) -> test_a_form_of_another_page_is_refused_before_any_write and test_dry_run_refuses_a_foreign_form_too_and_still_writes_nothing fail. Reverted; worktree clean.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Non-blocking: INSTANT_FORM_LINK https://fb.me/ is an unverified live assumption (needs the live check on 9095 after owner approval); a combined valid-CTA-form plus second lead_gen_form_id matrix case is not pinned by a test (earlier note m2).",
+                "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  775
+                ],
+                "recorded_at": "2026-10-14T21:39:15+00:00",
+                "issue_scopes": {
+                  "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
+                }
+              },
+              "lane": {
+                "id": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+                "pr": 809,
+                "issues": [
+                  775
+                ],
+                "actor": "Reviewer-R1775G",
+                "session": "r1775g-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-14T21:31:16+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T21:39:40+00:00"
+            },
+            {
+              "issue": 769,
+              "pr": 796,
+              "branch": "codex/acl-1769-two-column-builder",
+              "head_sha": "038d9e45e79d786a00005ed0fd6d9b0088249dbc",
+              "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "6638343f7c66a91866938e5a9b30615c29d09cf06216267a17640ff8d2b1dcda",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1769H",
+                "implementer": "Worker-S1769G",
+                "review_session": "r1769h-20261015",
+                "execution_lane": "075f9847329d457b94d1e71f112256a4",
+                "head_sha": "038d9e45e79d786a00005ed0fd6d9b0088249dbc",
+                "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+                "tree_sha": "94d0c651503a06561441e32b56df1fef5a449cc2",
+                "report": "Independent source review of ACL-1769 / PR 796 at head 038d9e45 against current main 73136acc (main is an ancestor of the head). Reviewer-R1769H implemented none of it. Second review: the first (R1769F) returned it only for the owner's 2026-10-13 correction (stacked ad cards instead of the Ad / Ad 2 dropdown); this review covers that fix, diff da368fcf..038d9e45 (4 files, +105/-46).\n\nVerified by reading the code against the issue comment:\n- The Ad / Ad 2 dropdown is gone (select, adNames, change handler, adIdx/lastAdCount state, cbd-ad-off toggling, CSS); no leftover references.\n- Campaign / Ad set / Ad tabs kept; the Ad set pick-row (single ad set, future-flag buttons) is unchanged.\n- Every ad card of the ad set is shown as a vertical list; add and duplicate insert a card that is visible at once (nothing hides cards any more).\n- Field names camp_N_ad_M_*, order, numbering, removal and draft restore are untouched (only editor visibility code was removed; the API second-primary-text gating in syncHost stays).\n- Nothing else regressed in the diff: no publish/backend code touched.\n\nVerification:\n- CI on head 038d9e45: Linux shards 1-3 (2408 / 2278 / 2382 passed, 1 skipped in shard 3, unrelated), Windows, process instructions, installer verification, descriptor pass. test_builder_second_primary_text.py is in Linux shard 1, which installs Chromium and runs the browser tests (no skips there), so the new docked / expanded / narrow browser tests ran green in CI. tracker-link was red only because the task was not yet in Review at the time of the run (state, not code).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k 'not browser' on 27 files (acl1769, builder, second_primary_text, duplicate_buttons, acl1761): 357 passed, 42 deselected.\n- Mutation: renaming the 'Primary text 1' label in buildAdRowHTML -> test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown fails (1 failed, 11 passed); reverted, worktree clean.\n- Browser tests not run locally (free RAM 4.5 GB < 6 GB); CI covers them.\n- No live calls.\n\nFindings: no blocking issues. Minor: the duplicate browser test has a loose either-or assertion on which index holds the copy (still checks both values).",
+                "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  769
+                ],
+                "recorded_at": "2026-10-14T22:01:08+00:00",
+                "issue_scopes": {
+                  "769": "6638343f7c66a91866938e5a9b30615c29d09cf06216267a17640ff8d2b1dcda"
+                }
+              },
+              "lane": {
+                "id": "075f9847329d457b94d1e71f112256a4",
+                "pr": 796,
+                "issues": [
+                  769
+                ],
+                "actor": "Reviewer-R1769H",
+                "session": "r1769h-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-14T21:45:29+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T22:03:01+00:00"
+            }
+          ],
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "branch": "codex/batch-c8d57f23a0064de995e094f874416007",
+          "intake": "7319727f5aa84c4ba73e08fd3d3981bd",
+          "started_at": "2026-10-14T22:08:40+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": []
+        }
       }
     ],
     "policy": {
@@ -36035,7 +36281,248 @@
         "report": "# Batch d527fe66 cancelled before assembly\n\nACL-1769 was approved minutes after this batch was frozen with four members (798, 766, 778, 775). Nothing was assembled, pushed or reviewed. A new intake with the five approved members 798, 766, 778, 775, 769 replaces it, saving a separate integration cycle."
       }
     },
-    "integration": null,
+    "integration": {
+      "id": "c8d57f23a0064de995e094f874416007",
+      "actor": "Coordinator-C1014I",
+      "session": "coord-c1014i-20261014",
+      "state": "assembling",
+      "issues": [
+        798,
+        766,
+        778,
+        775,
+        769
+      ],
+      "members": [
+        {
+          "issue": 798,
+          "pr": 801,
+          "branch": "codex/acl-1798-home-campaigns",
+          "head_sha": "6a41a506de355e9df2cee8ff736841b1c704aceb",
+          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "3b6bdc34a28591559ae5fc3c542ed84331c26816dcbfb41f82adbf3b759ba9c7",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1798G",
+            "implementer": "Worker-RF1798",
+            "review_session": "r1798g-20261015",
+            "execution_lane": "6c479d8b508146cf97a278f0ac9c62e6",
+            "head_sha": "6a41a506de355e9df2cee8ff736841b1c704aceb",
+            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "tree_sha": "10c9dd2248913277b7f4cd85ba78892b66203827",
+            "report": "Independent source review of ACL-1798 / PR 801 at head 6a41a506 against current main 73136acc (main is an ancestor of the head). Reviewer-R1798G implemented none of it.\n\nScope: diff origin/main...head, 16 files (campaign_inventory.py, web/app.py, _home_campaigns.html, report.html, builder harnesses, tests), +4121/-66.\n\nRead-only and click-only, verified by reading the code:\n- Meta reads use GET only (Graph client get_all / insights_range); the module and tests state no writes. The one POST in the template is /campaign-inventory/read to our own server; it runs only from the Read campaigns click handlers (readQueue from data-read / data-read-country). start_read refuses with 409 NeedsApiBackend unless ACL_FB_BACKEND=api and starts nothing (RPA default untouched: no change to src/fb_ads_rpa, the RPA path is not read; on rpa the page shows the notice and makes only the local status GET).\n- Page load (init) calls only local GETs: /campaign-inventory/status, then /tree for accounts that already have a snapshot. tree, children and status routes use the saved snapshot and workbook only, never Meta. The only timers are a setTimeout poll of the local status route AFTER a human click, waiting for that job (no setInterval, bounded at 240 tries); it does not touch Meta.\n- Reads go through the same queue and profile lock as Read spend (browser_operation.reading, per-account lock); a second press joins the running job.\n- UI strings are English; Russian appears only in code comments. Command buttons (pause/copy etc.) are disabled with a reason and send nothing.\n\nVerification:\n- CI on head 6a41a506: all checks green (tracker-link and the installer build failed on handoff timing / 25 min installer timeout and passed on rerun).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": test_acl1798_campaign_inventory, test_acl1769_two_column_layout, test_builder_duplicate_buttons, test_builder_second_primary_text, test_the_builder_drawer 85 passed; test_acl1760_api_read, test_acl1761_*, test_report_loading_stages, test_dashboard_review 342 passed.\n- Browser tests of the new page (test_acl1798_home_campaigns_browser.py) were run with the RAM guard lowered locally (free RAM 5 GB < 6): 9 passed on the head.\n- Mutation: init() made to call readQueue(accounts.slice(0,1)) after the status load, so a Meta read starts without a click -> test_commands_are_disabled_with_reason_and_send_nothing fails (browser test; the non-browser suite does not catch it). Reverted; worktree clean.\n- Tests are legitimate: new test files, existing tests only adjusted by small edits (builder_duplicate_buttons +13, second_primary_text +9, the_builder_drawer 4) that follow the layout change; I read each edit: they only follow the ACL-1769 layout (extra level click, moved selectors, width 480); the one relaxed line (CTA not in row text) is replaced by a stricter check that the CTA select is disabled with an ACL-1767 title.\n- No live Meta or Multilogin calls.\n\nFindings: no blocking issues. Minor: the no-auto-read guard for page load exists only in the browser tests, which skip below 6 GB free RAM and run in CI.",
+            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              798
+            ],
+            "recorded_at": "2026-10-14T21:55:43+00:00",
+            "issue_scopes": {
+              "798": "3b6bdc34a28591559ae5fc3c542ed84331c26816dcbfb41f82adbf3b759ba9c7"
+            }
+          },
+          "lane": {
+            "id": "6c479d8b508146cf97a278f0ac9c62e6",
+            "pr": 801,
+            "issues": [
+              798
+            ],
+            "actor": "Reviewer-R1798G",
+            "session": "r1798g-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-14T21:31:53+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T21:56:07+00:00"
+        },
+        {
+          "issue": 766,
+          "pr": 794,
+          "branch": "codex/acl-1766-map-pixel",
+          "head_sha": "6ee6db04d5bff7b1551df279530f21d61e40bef6",
+          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "63ee8cf1c3003300f25675e2f4ce1c5fdfd90ad781cd39460e7806d8eeab8fac",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1766F",
+            "implementer": "Worker-RF1766",
+            "review_session": "r1766f-20261014",
+            "execution_lane": "f16050b41e3140beb5bf6fe3bdefd90f",
+            "head_sha": "6ee6db04d5bff7b1551df279530f21d61e40bef6",
+            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "tree_sha": "c875b7ef554e422f66a1895ac8ae267ca4f9bf58",
+            "report": "Independent source review of ACL-1766 / PR 794 at head 6ee6db04 against current main 73136acc (main is an ancestor of the head). Reviewer-R1766F implemented none of it.\n\nScope: full diff origin/main...head, 5 files (enrich_draft.py, fb_api/creator.py, web/publish_api.py, report.html, tests/test_acl1766_map_pixel.py), +248/-11.\n\nVerified by reading the code:\n- enrich_draft: a draft page/pixel wins, the account map is the next source; the source (draft/map) is kept in plain attributes read only by the API plan; RPA does not read pixel_id/page_source/pixel_source, so the RPA path is unchanged (one file, 7 lines).\n- resolve_page_pixel: a page or pixel that is set (draft or map) must be in the account lists UNCONDITIONALLY, including an empty list; a mismatch raises PlanError before any write and names the source and id; nothing is guessed or substituted. Without a map value: one account page/pixel is used and labelled \"account default\"; several pages/pixels keep the previous error. This does not contradict the 2026-10-14 Pages decision (ACL-1880): automatic still takes the first available Page; only an explicit draft/map Page is validated against the account.\n- Plan summary carries page_source/pixel_source and the dashboard shows them; strings are English and escaped.\n- Readback: CTA/locales checks; \"Not read\" only when Meta returned nothing for an expected field; ok is still strict equality, so nothing was loosened; an empty-language draft reads back ok.\n- All blocking items of the earlier out-of-tracker review (empty-list ownership hole, language-less false mismatch, repeated error text, missing tests) are fixed and pinned by tests.\n\nVerification:\n- CI on head 6ee6db04: all checks pass (Linux 1-3, Windows, tracker-link, process instructions, installer verification, descriptor); two build jobs skipped as expected.\n- Detached worktree at the head: tests/test_acl1766_map_pixel.py + tests/test_acl1761_*.py, PYTHONUTF8=1 pytest -k \"not browser\": 247 passed, 2 deselected.\n- Mutation: map page wins without the account check (replacing the check with `if False`) -> 2 failures in test_foreign_or_unlisted_map_page_writes_nothing; the milder variant keeping the non-empty-list guard -> 1 failure (NoPagesMeta). Reverted; worktree clean.\n- Tests are legitimate: new file only, no existing test edited.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Minor, non-blocking: adspixels is read with a single page of 50, so a valid map pixel on an account with more than 50 pixels would be refused (fails safe).",
+            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              766
+            ],
+            "recorded_at": "2026-10-14T21:27:04+00:00",
+            "issue_scopes": {
+              "766": "63ee8cf1c3003300f25675e2f4ce1c5fdfd90ad781cd39460e7806d8eeab8fac"
+            }
+          },
+          "lane": {
+            "id": "f16050b41e3140beb5bf6fe3bdefd90f",
+            "pr": 794,
+            "issues": [
+              766
+            ],
+            "actor": "Reviewer-R1766F",
+            "session": "r1766f-20261014",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-14T17:10:37+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T21:27:43+00:00"
+        },
+        {
+          "issue": 778,
+          "pr": 780,
+          "branch": "codex/acl-1778-header-linear-toolbar",
+          "head_sha": "0ef06b4c0a637b7c98f0936ab3499ca5e706ce67",
+          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "f7ba65b41d297f82e266165d04c49a67f5adc1f0c97c8f32a399bd77edc687ae",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1778G",
+            "implementer": "Worker-RG1778",
+            "review_session": "r1778g-20261015",
+            "execution_lane": "2a2cae0777ea471b983e9eec3f7611d0",
+            "head_sha": "0ef06b4c0a637b7c98f0936ab3499ca5e706ce67",
+            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "tree_sha": "ea4767630829b27a2fa21f59b27c8bb2f0a0d4bc",
+            "report": "Re-review of ACL-1778 / PR 780 at head 0ef06b4c against current main 73136acc (main is an ancestor of the head). Reviewer-R1778G implemented none of it. Earlier approval: Reviewer-R1778F at 74128d1a (evidence evidence778-r1778f.json, lane 386271487d114214a21ee8322e167847).\n\nThe only change since 74128d1a is the clean merge of main 73136acc. Verified: git patch-id --stable of diff 74128d1a..0ef06b4c equals that of diff d9118413..73136acc (b89ac820b7a42a3176c9ec49771122a1f8513a2c for both), so the delta is exactly what main brought and nothing else (no conflict edits).\n\nVerification:\n- CI on head 0ef06b4c: all checks green (tracker-link failed on handoff timing and passed on rerun; build jobs skipped as expected).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\" tests/test_header.py tests/test_stage_badge.py tests/test_report_loading_stages.py tests/test_acl_test_platform.py: 135 passed.\n- The prior review's scope and mutation result (amapApply bare remove fails test_the_picker_closes_through_one_path) stand, because the PR's own diff vs main is unchanged by the merge.\n- No live calls.\n\nFindings: no blocking issues.",
+            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              778
+            ],
+            "recorded_at": "2026-10-14T21:57:59+00:00",
+            "issue_scopes": {
+              "778": "f7ba65b41d297f82e266165d04c49a67f5adc1f0c97c8f32a399bd77edc687ae"
+            }
+          },
+          "lane": {
+            "id": "2a2cae0777ea471b983e9eec3f7611d0",
+            "pr": 780,
+            "issues": [
+              778
+            ],
+            "actor": "Reviewer-R1778G",
+            "session": "r1778g-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-14T21:41:52+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T21:58:21+00:00"
+        },
+        {
+          "issue": 775,
+          "pr": 809,
+          "branch": "codex/acl-1775-instant-forms",
+          "head_sha": "8ab25c24ef37c869515478abc7ac6f8a9acdc8bd",
+          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1775G",
+            "implementer": "Worker-RG1775",
+            "review_session": "r1775g-20261015",
+            "execution_lane": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+            "head_sha": "8ab25c24ef37c869515478abc7ac6f8a9acdc8bd",
+            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "tree_sha": "1f38598bdf5f162857ab5270c0eaabef42540e68",
+            "report": "Independent source review of ACL-1775 / PR 809 at head 8ab25c24 against current main 73136acc (main is an ancestor of the head). Reviewer-R1775G implemented none of it.\n\nVerified by reading the diff (27 files):\n- Forms must belong to the plan's Page and be readable: CampaignCreator._check_forms reads /{page}/leadgen_forms before any write (Publish and Check plan); a form that is not on that Page, is not ACTIVE (allow-list, earlier minor m1 fixed), or cannot be read raises PlanError with an English message and nothing is written. GraphStop is not swallowed.\n- No form is created: forms.py is read-only (GET leadgen_forms, GET leadgen_tos_accepted only when the list is empty/unreadable); /{page}/leadgen_forms POST stays refused by the path/edge rule.\n- tos_accepted is never sent: it stays in FORBIDDEN_ANYWHERE in write_policy and is not referenced anywhere else in src.\n- PAUSED only: ad set, creative and ad paths still go through the policy status check; the Instant Form ad set is built with status PAUSED.\n- Write policy closed in both layers: lead_gen_form_id is allowed only in adcreatives -> object_story_spec.{link_data|video_data}.call_to_action.value, value exactly {lead_gen_form_id: digits 5-25}, and only with on_ad=True (default False in check, GraphClient.post, InPageGraph.write). The Python layer (_without_lead_form) and the page helper (withoutLeadForm) mirror each other from one policy table; anywhere else the key stays and _walk refuses it.\n- Website path unchanged: golden fixture tests/fixtures/acl1775_website_golden.json.\n\nVerification:\n- CI on head 8ab25c24: all checks pass (Linux 1-3, Windows, tracker-link after rerun - it had failed only on timing before the review lane existed, process instructions, installer verification, descriptor); two build jobs skipped as expected.\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": tests/test_acl1775_instant_forms.py + test_acl1775_builder_forms.py 96 passed; test_acl1761_api_create/parity/plan_check, builder duplicate/second-primary-text/drawer, test_acl1769_two_column_layout 211 passed.\n- Golden test test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator passed 3 of 3 runs alone and in the full file (86 passed). It was flaky in combined builds only; it does not fail on this branch.\n- Mutation: ownership check skipped (if form is None -> if False) -> test_a_form_of_another_page_is_refused_before_any_write and test_dry_run_refuses_a_foreign_form_too_and_still_writes_nothing fail. Reverted; worktree clean.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Non-blocking: INSTANT_FORM_LINK https://fb.me/ is an unverified live assumption (needs the live check on 9095 after owner approval); a combined valid-CTA-form plus second lead_gen_form_id matrix case is not pinned by a test (earlier note m2).",
+            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              775
+            ],
+            "recorded_at": "2026-10-14T21:39:15+00:00",
+            "issue_scopes": {
+              "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
+            }
+          },
+          "lane": {
+            "id": "3e459ea27bcf4a00b9b2f8cf75aa95e4",
+            "pr": 809,
+            "issues": [
+              775
+            ],
+            "actor": "Reviewer-R1775G",
+            "session": "r1775g-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-14T21:31:16+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T21:39:40+00:00"
+        },
+        {
+          "issue": 769,
+          "pr": 796,
+          "branch": "codex/acl-1769-two-column-builder",
+          "head_sha": "038d9e45e79d786a00005ed0fd6d9b0088249dbc",
+          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "6638343f7c66a91866938e5a9b30615c29d09cf06216267a17640ff8d2b1dcda",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1769H",
+            "implementer": "Worker-S1769G",
+            "review_session": "r1769h-20261015",
+            "execution_lane": "075f9847329d457b94d1e71f112256a4",
+            "head_sha": "038d9e45e79d786a00005ed0fd6d9b0088249dbc",
+            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "tree_sha": "94d0c651503a06561441e32b56df1fef5a449cc2",
+            "report": "Independent source review of ACL-1769 / PR 796 at head 038d9e45 against current main 73136acc (main is an ancestor of the head). Reviewer-R1769H implemented none of it. Second review: the first (R1769F) returned it only for the owner's 2026-10-13 correction (stacked ad cards instead of the Ad / Ad 2 dropdown); this review covers that fix, diff da368fcf..038d9e45 (4 files, +105/-46).\n\nVerified by reading the code against the issue comment:\n- The Ad / Ad 2 dropdown is gone (select, adNames, change handler, adIdx/lastAdCount state, cbd-ad-off toggling, CSS); no leftover references.\n- Campaign / Ad set / Ad tabs kept; the Ad set pick-row (single ad set, future-flag buttons) is unchanged.\n- Every ad card of the ad set is shown as a vertical list; add and duplicate insert a card that is visible at once (nothing hides cards any more).\n- Field names camp_N_ad_M_*, order, numbering, removal and draft restore are untouched (only editor visibility code was removed; the API second-primary-text gating in syncHost stays).\n- Nothing else regressed in the diff: no publish/backend code touched.\n\nVerification:\n- CI on head 038d9e45: Linux shards 1-3 (2408 / 2278 / 2382 passed, 1 skipped in shard 3, unrelated), Windows, process instructions, installer verification, descriptor pass. test_builder_second_primary_text.py is in Linux shard 1, which installs Chromium and runs the browser tests (no skips there), so the new docked / expanded / narrow browser tests ran green in CI. tracker-link was red only because the task was not yet in Review at the time of the run (state, not code).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k 'not browser' on 27 files (acl1769, builder, second_primary_text, duplicate_buttons, acl1761): 357 passed, 42 deselected.\n- Mutation: renaming the 'Primary text 1' label in buildAdRowHTML -> test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown fails (1 failed, 11 passed); reverted, worktree clean.\n- Browser tests not run locally (free RAM 4.5 GB < 6 GB); CI covers them.\n- No live calls.\n\nFindings: no blocking issues. Minor: the duplicate browser test has a loose either-or assertion on which index holds the copy (still checks both values).",
+            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              769
+            ],
+            "recorded_at": "2026-10-14T22:01:08+00:00",
+            "issue_scopes": {
+              "769": "6638343f7c66a91866938e5a9b30615c29d09cf06216267a17640ff8d2b1dcda"
+            }
+          },
+          "lane": {
+            "id": "075f9847329d457b94d1e71f112256a4",
+            "pr": 796,
+            "issues": [
+              769
+            ],
+            "actor": "Reviewer-R1769H",
+            "session": "r1769h-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-14T21:45:29+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T22:03:01+00:00"
+        }
+      ],
+      "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+      "branch": "codex/batch-c8d57f23a0064de995e094f874416007",
+      "intake": "7319727f5aa84c4ba73e08fd3d3981bd",
+      "started_at": "2026-10-14T22:08:40+00:00",
+      "pr": null,
+      "entered_stage": false,
+      "history": []
+    },
     "intake": {
       "id": "7319727f5aa84c4ba73e08fd3d3981bd",
       "actor": "Coordinator-C1014I",
