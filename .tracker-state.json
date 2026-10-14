@@ -2588,20 +2588,20 @@
       "762": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "Reviewer-R1760D",
-        "implementer": "Worker-S1760C",
-        "review_session": "r1760d-20261014",
-        "execution_lane": "afa9f2cdea4248ac930f71f5365207fb",
-        "head_sha": "c6b5856ae2e7b5fed757fc3728e20683376dc586",
-        "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-        "tree_sha": "121d40aa352b9d1a18bf47748370f7498a865a87",
-        "report": "Independent source review of ACL-1760 / PR 762 at head c6b5856a against current main df6c2e8a (merge-base check: main is an ancestor of the head). Full 9-file diff read. P1 verified: StartedProfile.newly_started is set only on the real start path in multilogin_launcher.start_profile; both 409/ALREADY_RUNNING returns leave it False; fb_api/profile.open_profile sets started_now only when newly_started is True; account_spend_api._open_gated gives the _ReadOpen stop ownership only for gated+started_now, so an already-running or unknown profile is never stopped by a read. P2 verified: GraphClient.get_all records truncation whenever paging.next exists but the next page is not fetched (usage stop, missing cursor, page cap); _country_rows checks only markers added by its own call and refuses a partial country list, so _split_in_session saves it failed, never ok. Spec decisions: ad sets are delivered by open ACL-1798 (Campaign > Ad set > Ad table) and ACL-1800, recorded in the worker handoff as the owner decision of 2026-10-14; the three-account read run was done live read-only on the isolated 9095 dashboard (Doc120, Doc121, KLD_BFL_B90, spend/status/tree/split ok) but without a human Ads Manager UI comparison in that run, and the owner's earlier 5414 parity confirmation stands; these two points are preserved as outstanding acceptance for the owner, not claimed as proven here. Tests: tests/test_acl1760_api_read.py, test_acl1756_fb_api.py, test_acl_test_platform.py in a detached worktree, 279 passed (browser deselected). Own mutations: disabling the country truncation check fails test_partial_country_report_is_refused and test_page_with_next_cursor_at_stop_usage_is_marked_truncated; forcing started_now=True fails test_launcher_409_is_not_a_fresh_start_and_is_never_stopped. CI on the exact head: all jobs green (tracker-link re-run after the handoff, passing; Linux 1-3, Windows, installer verification, descriptor, process instructions). No source edits, no live Meta or Multilogin calls. Non-blocking: PR body still says ad sets are not read and currency is an ISO code (the latter is now the sign for USD/EUR/GBP/ILS); update it and record the ad-set scope decision as an issue comment.",
-        "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+        "reviewer": "Reviewer-R1760F",
+        "implementer": "Worker-S1760E",
+        "review_session": "r1760f-20261014",
+        "execution_lane": "83aeb9f517b647ec962a58bdc5538fa2",
+        "head_sha": "e45418dfd5bc0eecdd553263ffce9bddc14c2768",
+        "base_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
+        "tree_sha": "1b17cfeb3c359d77dcbddf9b3149d4632fa73036",
+        "report": "Independent source re-review of ACL-1760 / PR 762 at head e45418df against current main 311700fd. Refresh of the approval by Reviewer-R1760D at c6b5856a, which went stale when PR 910 (ACL-1781/1782/1783/1786/1806) advanced main. Verified: main is an ancestor of the head (merge-base --is-ancestor). git diff c6b5856a e45418df has the same patch-id as git diff df6c2e8a origin/main, so the only change since the approval is the clean main merge; no author edits. Previous P1 (newly_started only on the real start path; read stops only profiles it started itself, gated by started_now) and P2 (GraphClient truncation recorded; partial country list refused) re-read in the new head: unchanged. Tests tests/test_acl1760_api_read.py, test_acl1756_fb_api.py, test_acl_test_platform.py in a detached worktree at the head: 279 passed, 2 deselected (browser). CI on the exact head: tracker-link re-run after handoff timing and passing; all jobs green (Linux 1-3, Windows, installer verification, descriptor, process instructions). No live Meta or Multilogin calls. Carried over from the earlier approval as outstanding owner acceptance, not claimed here: live three-account read had no human Ads Manager UI comparison; ad-set scope is covered by ACL-1798/1800.",
+        "main_sha": "311700fd8eed4f6b497a9be21b23d0bcc36d275a",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
           760
         ],
-        "recorded_at": "2026-10-14T13:13:16+00:00",
+        "recorded_at": "2026-10-14T14:59:11+00:00",
         "issue_scopes": {
           "760": "c8553eaca5772bba5b0bbed87c2b7ab8cab6668956ecb4606703dc0106e20bc3"
         }
