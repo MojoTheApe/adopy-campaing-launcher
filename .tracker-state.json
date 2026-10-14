@@ -12956,7 +12956,7 @@
             "session": "ws1826k-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1826K",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12975,7 +12975,8 @@
         },
         "pr": 828,
         "queued_at": "2026-10-14T23:50:19+00:00",
-        "review_report": "\ufeff# Review PR 828 (ACL-1826), head b5e3088c - CHANGES REQUESTED (CI red on the secret scan only)\nReviewer-R1826J.\n\nBlocker: scripts/acl_scan_secrets.py fails (job \"Classify and check project tooling\" -> \"Process instructions\" red):\n  tests/test_acl1826_mlx_session_lost.py:388  Multilogin profile id: 0f43865d-0000-4000-8000-...  (WS = \"0f43865d-0000-4000-8000-0000000051db\")\n  tests/test_acl1826_mlx_session_lost.py:404  Multilogin profile id: 3ef7f42d-0000-4000-8000-...  (foreign workspaceID in test_token_preflight_rejects_expired_and_foreign_workspace)\nThe first 8 hex digits look like real Multilogin workspace ids. Fix: use obviously fake ids (e.g. 11111111-1111-4111-8111-111111111111 and 22222222-2222-4222-8222-222222222222, or the allowed placeholders in _PLACEHOLDERS); the tests only need two different ids. Reproduced locally by running the scanner in the worktree; nothing else flagged.\n\nChecked, no findings:\n- Merge with main kept 1798's read flow and 1761's publish flow: publish_api.py / publish_jobs.py / report.html auto-merged cleanly; 1761 suites (7 files, 203 passed), 1798 inventory + 1760 api read (163 passed), 1812 warm, 1800 account-scoped table, account_spend, 1826 = 252 passed (not browser).\n- Banner shows once per run (first instance; BATCH_STOPS / AMLX_STOPS / AMAP_BATCH_STOPS paths); Retry re-sends only the stopped keys (onlyKeys / lost.map); the Node retry harness test is in the passing set. Batch id is created per run (cbNewRun, queueRun, amap run), Retry creates a new one.\n- UI text English (banner, Retry button, mlx_session messages); textContent used, no innerHTML.\n- Mutation: Retry without the stopped-keys argument (cbPublishAll(showQueue, selectedForPublish())) -> test_retry_resends_exactly_the_stopped_forms_with_one_batch_id_per_run fails (killed); 36 others pass.\nNote for integration: ACL-1819 gate must wrap cbPublishAll(onlyKeys) (unchanged note from round 2)."
+        "review_report": "\ufeff# Review PR 828 (ACL-1826), head b5e3088c - CHANGES REQUESTED (CI red on the secret scan only)\nReviewer-R1826J.\n\nBlocker: scripts/acl_scan_secrets.py fails (job \"Classify and check project tooling\" -> \"Process instructions\" red):\n  tests/test_acl1826_mlx_session_lost.py:388  Multilogin profile id: 0f43865d-0000-4000-8000-...  (WS = \"0f43865d-0000-4000-8000-0000000051db\")\n  tests/test_acl1826_mlx_session_lost.py:404  Multilogin profile id: 3ef7f42d-0000-4000-8000-...  (foreign workspaceID in test_token_preflight_rejects_expired_and_foreign_workspace)\nThe first 8 hex digits look like real Multilogin workspace ids. Fix: use obviously fake ids (e.g. 11111111-1111-4111-8111-111111111111 and 22222222-2222-4222-8222-222222222222, or the allowed placeholders in _PLACEHOLDERS); the tests only need two different ids. Reproduced locally by running the scanner in the worktree; nothing else flagged.\n\nChecked, no findings:\n- Merge with main kept 1798's read flow and 1761's publish flow: publish_api.py / publish_jobs.py / report.html auto-merged cleanly; 1761 suites (7 files, 203 passed), 1798 inventory + 1760 api read (163 passed), 1812 warm, 1800 account-scoped table, account_spend, 1826 = 252 passed (not browser).\n- Banner shows once per run (first instance; BATCH_STOPS / AMLX_STOPS / AMAP_BATCH_STOPS paths); Retry re-sends only the stopped keys (onlyKeys / lost.map); the Node retry harness test is in the passing set. Batch id is created per run (cbNewRun, queueRun, amap run), Retry creates a new one.\n- UI text English (banner, Retry button, mlx_session messages); textContent used, no innerHTML.\n- Mutation: Retry without the stopped-keys argument (cbPublishAll(showQueue, selectedForPublish())) -> test_retry_resends_exactly_the_stopped_forms_with_one_batch_id_per_run fails (killed); 36 others pass.\nNote for integration: ACL-1819 gate must wrap cbPublishAll(onlyKeys) (unchanged note from round 2).",
+        "reviewer": "Reviewer-R1826L"
       },
       "767": {
         "implementers": [
@@ -15476,6 +15477,10 @@
       },
       "Reviewer-R1799J": {
         "session": "r1799j-20261015",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1826L": {
+        "session": "r1826l-20261015",
         "role": "Reviewer"
       }
     },
@@ -18106,8 +18111,7 @@
       903,
       907,
       891,
-      814,
-      826
+      814
     ],
     "review": null,
     "history": [
@@ -35374,6 +35378,13 @@
           "report": "Independent re-review of ACL-1799 / PR 803 at head 253bcac8e676b9bcaee2ac7c5cfeeb0f537c2369 against main a4e38b7c. Verdict: RETURNED, one blocking defect, red CI.\n\nWhat is fine: the merge commit d0ca3389 equals an independent merge-tree of origin/main and the old approved head d3c4cb0a (no extra hunks, no markers). The 1778 header, 1769 stacked cards, 1766 page/pixel labels are all intact. The fix commit's change to applyCreative (pick the card by index) is correct in itself. Local non-browser tests: 216 passed; cw_harness ok.\n\nBLOCKING: the 1769 change removed the `adIdx` variable (the Ad dropdown state) from the builder-drawer script, but Country Workbench still reads it in `active()` of the drawer's public API, src/web/templates/report.html line 6720: `adIndex: adIdx`. `adIdx` is no longer defined anywhere in that scope, so every call to `window.<drawer>.active()` throws `ReferenceError: adIdx is not defined`. That function is how the workbench \"Use\" finds the selected draft, so the whole \"Use\" flow is broken on this head. The fix commit patched the consumer (applyCreative) but not this producer.\n\nCI proves it: run 38652391782, linux shard 3, 4 failed + 4 errors, all tests/test_acl1799_workbench_browser.py (test_use_target_goes_to_the_selected_draft_and_not_to_the_last_one, test_selecting_the_other_draft_moves_the_destination, test_landing_is_noted_not_written_into_a_field_that_does_not_exist, test_an_asset_mismatch_is_confirmed_before_use): \"ReferenceError: adIdx is not defined\" / pageerror. Windows and the other shards pass; ACL verification fails as a consequence. The non-browser tests do not cover this path, so the worker's 181-passed run could not see it.\n\nTo fix: stop reading adIdx in active(). With stacked cards there is no selected ad; return adIndex: 0 (or drop the field and let applyCreative default to the first card, or put the ad index in the call that targets a specific card). Keep applyCreative's rows[a.adIndex || 0]. Then run tests/test_acl1799_workbench_browser.py locally (browser) and confirm CI on the new head: all green incl. Linux shard 3.\n\ntracker-link on this PR also failed only because the task was in the returned state; it will pass after the task is back in Review (rerun then).",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T23:55:10+00:00",
+        "pr": 828,
+        "lane": "438c600e456f48bb8fd958585ac1efc5",
+        "actor": "Reviewer-R1826L"
       }
     ],
     "policy": {
@@ -38375,6 +38386,19 @@
       "started_at": "2026-10-14T22:11:37+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "828": {
+        "id": "438c600e456f48bb8fd958585ac1efc5",
+        "pr": 828,
+        "issues": [
+          826
+        ],
+        "actor": "Reviewer-R1826L",
+        "session": "r1826l-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T23:55:10+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
