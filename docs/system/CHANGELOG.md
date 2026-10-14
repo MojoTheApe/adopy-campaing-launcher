@@ -15,6 +15,14 @@
   already uploaded video and never uploads twice.
 - After an unknown upload result the readback is repeated (6 reads with waits of 5, 10, 20, 30, 30, 30 s,
   about 2 minutes), counted in the per-campaign call budget; other writes keep one readback.
+- Redirects: the old `fetch` used `redirect: 'error'`; XHR follows redirects. The helper aborts the
+  request as soon as the response URL differs from the requested one and reports `redirected`, which
+  counts as an unknown result (reconcile), never as not sent. Residual risk: the browser may already have
+  re-sent the body to the redirect target before the check. Graph hosts do not redirect.
+- Review fixes: up to 3 consecutive poll timeouts are tolerated (never a re-send); Stop during the
+  readback ends the run as cancelled and keeps the write marked unreconciled; Stop during an upload reads
+  back twice (5 s, 20 s) and tells the buyer to wait a few minutes before publishing again; repeated
+  readbacks read at most 3 pages.
 - Stacked on ACL-1776 (depends on the ACL-1761...1776 stack). Chunked upload for files over 200 MB
   (ACL-891) can reuse the job / progress plumbing.
 

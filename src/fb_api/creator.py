@@ -103,6 +103,8 @@ RECONCILE_WAIT_S = 5.0
 UPLOAD_RECONCILE_FACTORS = (1, 2, 4, 6, 6, 6)
 #: Не чаще раза в секунду показываем процент загрузки файла.
 UPLOAD_PROGRESS_EVERY_S = 1.0
+#: Страниц списка в ПОВТОРНЫХ чтениях сверки загрузки (поиск до загрузки и первое чтение - полные).
+UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
 CREATIVE_LOOKUP_PAGES = 3
 #: Цель кампании из билдера, которую умеет API-путь (как у RPA: Leads → сайт).
@@ -671,16 +673,31 @@ class CampaignCreator:
             self._step(out, f"{what}: result unknown — reconciling by readback")
             # Файл мог долететь позже: несколько чтений с растущими паузами (≈ 2 мин).
             # После Stop загрузка оборвана — одно чтение без ожидания.
-            if upload and not stopped:
+            if upload and stopped:
+                # Тело могло уйти целиком, а Meta ещё обрабатывает: два чтения (5 и 20 с).
+                waits = [self.reconcile_wait_s, self.reconcile_wait_s * 4]
+            elif upload:
                 waits = [self.reconcile_wait_s * f for f in UPLOAD_RECONCILE_FACTORS]
             else:
                 waits = [self.reconcile_wait_s]
             found = None
             try:
-                for wait in waits:
+                for n, wait in enumerate(waits):
+                    # Stop посреди сверки: останавливаемся; метка `unreconciled` остаётся.
+                    if upload and not stopped and self.cancelled():
+                        raise CreationStopped(
+                            f"Stopped by the user while checking the {what} result. Meta may still be "
+                            "processing the upload: wait a few minutes before publishing again.",
+                            created=out.created, kind="cancelled")
                     if wait > 0:
                         self.sleep(wait)
-                    found = find()
+                    if upload and not stopped and self.cancelled():
+                        raise CreationStopped(
+                            f"Stopped by the user while checking the {what} result. Meta may still be "
+                            "processing the upload: wait a few minutes before publishing again.",
+                            created=out.created, kind="cancelled")
+                    # Повторные чтения дешевле: свежий файл в первых страницах списка.
+                    found = find(pages=UPLOAD_RECONCILE_PAGES) if (upload and n > 0) else find()
                     if found:
                         break
             except (GraphStop, GraphError) as rexc:
@@ -691,7 +708,8 @@ class CampaignCreator:
             if not found:
                 if stopped:
                     raise CreationStopped("Stopped by the user during the upload; nothing was found "
-                                          "in the ad account. Publish again to retry.",
+                                          "in the ad account yet. Meta may still be processing the "
+                                          "upload: wait a few minutes before publishing again.",
                                           created=out.created, kind="cancelled") from exc
                 raise CreationStopped(
                     f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
@@ -785,9 +803,9 @@ class CampaignCreator:
     def _image_hash(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes) -> str:
         md5 = _md5(data)
 
-        def find() -> str | None:
+        def find(pages: int = 1) -> str | None:
             rows = self.client.get_all(f"/{plan.act}/adimages", {"hashes": [md5], "fields": "hash"},
-                                       max_pages=1)
+                                       max_pages=min(1, pages))
             return md5 if any(str(r.get("hash")) == md5 for r in rows) else None
 
         if find():
@@ -811,9 +829,9 @@ class CampaignCreator:
     def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes) -> tuple[str, str]:
         title = video_title(plan.tag, data)
 
-        def find() -> str | None:
+        def find(pages: int = 10) -> str | None:
             rows = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id,title", "limit": 100},
-                                       max_pages=10)
+                                       max_pages=pages)
             hit = next((r for r in rows if str(r.get("title") or "") == title), None)
             return str(hit["id"]) if hit else None
 

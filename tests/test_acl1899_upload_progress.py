@@ -29,7 +29,9 @@ from tests.test_acl1761_api_create import ACT, TOKEN, FakeMeta, _camp, _draft  #
 class JobTab:
     """Вкладка: startCall -> job, poll отдаёт `running` заданное число раз, потом итог."""
 
-    def __init__(self, running_polls=3, result=None, fail_poll_at=None, start_reply=None, call_exc=None):
+    def __init__(self, running_polls=3, result=None, fail_poll_at=None, start_reply=None, call_exc=None,
+                 timeout_polls=()):
+        self.timeout_polls = set(timeout_polls)
         self.running_polls = running_polls
         self.result = result if result is not None else {"status": 200, "body": {"id": "77"}}
         self.fail_poll_at = fail_poll_at
@@ -62,6 +64,8 @@ class JobTab:
             return self.start_reply if self.start_reply is not None else {"job": "j1"}
         if ".poll(" in expr:
             self.polls += 1
+            if self.polls in self.timeout_polls:
+                raise CdpTimeout("poll slow")
             if self.fail_poll_at is not None and self.polls == self.fail_poll_at:
                 raise CdpError("target closed")
             if self.polls <= self.running_polls:
@@ -117,6 +121,37 @@ def test_lost_page_while_polling_is_call_unknown_and_not_resent():
     tab = JobTab(running_polls=10, fail_poll_at=3)
     got = _wr(_transport(tab)[0])
     assert got == {"error": "call_unknown"} and tab.names.count("startCall") == 1
+
+
+def test_a_few_poll_timeouts_in_a_row_are_tolerated_without_resending():
+    tab = JobTab(running_polls=5, timeout_polls={2, 3, 4})
+    got = _wr(_transport(tab)[0])
+    assert got == {"status": 200, "body": {"id": "77"}} and tab.names.count("startCall") == 1
+
+
+def test_four_poll_timeouts_in_a_row_end_the_wait_as_unknown():
+    tab = JobTab(running_polls=50, timeout_polls={2, 3, 4, 5})
+    got = _wr(_transport(tab)[0])
+    assert got == {"error": "call_unknown"} and tab.names.count("startCall") == 1
+
+
+def test_a_success_between_poll_timeouts_resets_the_count():
+    tab = JobTab(running_polls=20, timeout_polls={2, 3, 4, 6, 7, 8, 10, 11, 12})
+    assert _wr(_transport(tab)[0])["body"] == {"id": "77"}
+
+
+def test_a_stale_world_or_page_error_ends_the_wait_at_once():
+    for exc in (tc.StaleContextError("gone"), tc.PageError("boom"), CdpError("closed")):
+        tab = JobTab(running_polls=50)
+        orig = tab.evaluate_in
+
+        def ev(ctx, expr, timeout=60.0, _o=orig, _e=exc, _t=tab):
+            if ".poll(" in expr and _t.polls >= 1:
+                raise _e
+            return _o(ctx, expr, timeout=timeout)
+        tab.evaluate_in = ev
+        assert _wr(_transport(tab)[0]) == {"error": "call_unknown"}
+        assert tab.names.count("startCall") == 1
 
 
 def test_a_refused_start_is_reported_as_not_sent():
@@ -268,7 +303,7 @@ def test_other_writes_keep_one_readback(tmp_path):
     assert out.stop_kind == "unknown" and slept.count(5.0) == 1
 
 
-def test_stop_during_the_upload_reads_back_once_and_stops(tmp_path):
+def test_stop_during_the_upload_reads_back_twice_and_stops(tmp_path):
     meta = LateMeta(visible_on_read=999)
     meta.fail_next["advideos"] = "unsent"
     stop = {"on": False}
@@ -276,8 +311,67 @@ def test_stop_during_the_upload_reads_back_once_and_stops(tmp_path):
     creator, client, slept = _creator(meta, cancelled=lambda: stop["on"])
     out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
     assert out.stop_kind == "cancelled"
-    assert meta.reads_after == 1 and 30.0 not in slept
+    assert meta.reads_after == 2 and slept[:2] == [5.0, 20.0] and 30.0 not in slept
+    assert "wait a few minutes before publishing again" in out.error
     assert len([p for p, _ in meta.posts if p.endswith("/advideos")]) == 1
+
+
+def test_stop_found_video_during_the_stop_readback_is_recorded(tmp_path):
+    meta = LateMeta(visible_on_read=2)
+    stop = {"on": False}
+    meta.on_video_write = lambda: stop.__setitem__("on", True)
+    creator, client, _slept = _creator(meta, cancelled=lambda: stop["on"])
+    out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
+    assert out.stop_kind == "cancelled" and meta.reads_after == 2 and client.unreconciled is None
+
+
+def test_stop_during_the_readback_stops_at_once_and_keeps_the_marker(tmp_path):
+    meta = LateMeta(visible_on_read=999)
+    state = {"reconciling": False}
+    creator, client, slept = _creator(meta, cancelled=lambda: state["reconciling"] and len(slept) >= 2)
+    orig_find_reads = []
+
+    def watch(method, path, params=None, _o=meta.request):
+        if meta.written and path.endswith("/advideos"):
+            orig_find_reads.append(1)
+        return _o(method, path, params)
+    meta.request = watch
+    state["reconciling"] = True
+    out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
+    assert out.stop_kind == "cancelled"
+    assert len(orig_find_reads) == 1 and client.unreconciled is not None      # после Stop не читаем
+    assert "wait a few minutes before publishing again" in out.error
+
+
+def test_repeated_readbacks_read_fewer_pages_than_the_first_lookup(tmp_path):
+    meta = LateMeta(visible_on_read=999)
+    creator, client, _slept = _creator(meta)
+    pages = []
+    orig = client.get_all
+
+    def spy(path, params=None, *, max_pages=5, _o=orig):
+        if path.endswith("/advideos"):
+            pages.append(max_pages)
+        return _o(path, params, max_pages=max_pages)
+    client.get_all = spy
+    creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
+    # поиск до загрузки - 10 страниц, первое чтение сверки - 10, остальные пять - по 3
+    assert pages == [10, 10, 3, 3, 3, 3, 3]
+
+
+def test_several_videos_run_out_of_budget_during_readback_and_stop_safely(tmp_path):
+    meta = LateMeta(visible_on_read=999)
+    creator, client, _slept = _creator(meta)
+    meta.on_video_write = lambda: setattr(client, "max_calls", client.calls + 3)
+    draft = _draft(tmp_path, video=True, ads=2)
+    first = draft.ad_sets[0].ads[0]
+    clip = tmp_path / "1000_clip.mp4"
+    clip.write_bytes(b"creative-0")
+    first.creative_type, first.creative_filename, first.creative_path = "Video", clip.name, str(clip)
+    out = creator.run(cr.plan_from_draft(draft))
+    assert out.stop_kind == "unknown"
+    assert "readback failed" in out.error and "publish again" in out.error
+    assert client.unreconciled is not None
 
 
 def test_the_creator_hands_progress_and_cancel_to_file_writes(tmp_path):
@@ -300,6 +394,16 @@ class FakeXhr {
   open(m, u) { this.method = m; this.url = u; this.responseURL = u; }
   send(body) {
     FakeXhr.sent.push({ url: this.url, keys: [...body.keys()] });
+    if (MODE === 'redirect_headers') {
+      setTimeout(() => { this.readyState = 2; this.responseURL = 'https://evil.example.com/x';
+                         this.onreadystatechange(); }, 5);
+      return;
+    }
+    if (MODE === 'redirect_load') {
+      setTimeout(() => { this.status = 200; this.responseText = '{"id":"9"}';
+                         this.responseURL = 'https://evil.example.com/x'; this.onload(); }, 5);
+      return;
+    }
     if (MODE === 'error') { setTimeout(() => this.onerror(), 5); return; }
     if (MODE === 'ok') {
       setTimeout(() => { this.upload.onprogress({ lengthComputable: true, loaded: 5, total: 10 }); }, 5);
@@ -307,7 +411,7 @@ class FakeXhr {
     }
     // MODE === 'hang': ни ответа, ни ошибки - у помощника нет собственного срока
   }
-  abort() { setTimeout(() => this.onabort(), 1); }
+  abort() { FakeXhr.aborts = (FakeXhr.aborts || 0) + 1; setTimeout(() => this.onabort(), 1); }
 }
 FakeXhr.sent = [];
 globalThis.XMLHttpRequest = FakeXhr;
@@ -350,6 +454,7 @@ _MAIN_OK = r"""
   const wrong = h.startCall(spec({ path: '/' + ACT + '/adcreatives', files: { source: 'fz' } }));
   await sleep(30);
   out.wrongedge = h.poll(wrong.job);
+  out.aborts = FakeXhr.aborts || 0;
   out.sent_count = FakeXhr.sent.length;
   out.sent_keys = FakeXhr.sent[0].keys;
   out.sent_has_token_in_url = FakeXhr.sent[0].url.includes('access_token');
@@ -425,3 +530,14 @@ def test_the_page_helper_has_no_deadline_and_abort_stops_the_upload():
 def test_the_page_helper_network_error_ends_the_wait():
     out = _node("error", _MAIN_OK)
     assert out["end"]["state"] == "error" and out["end"]["result"]["error"] == "network"
+
+
+@pytest.mark.parametrize("mode", ["redirect_headers", "redirect_load"])
+def test_a_redirected_upload_is_aborted_and_reported_as_unknown(mode):
+    out = _node(mode, _MAIN_OK)
+    assert out["end"]["state"] == "error" and out["end"]["result"]["error"] == "redirected"
+    assert "body" not in out["end"]["result"]
+    if mode == "redirect_headers":
+        assert out["aborts"] >= 1                          # запрос оборван сразу
+    from src.fb_api.graph import _NOT_SENT
+    assert "redirected" not in _NOT_SENT                   # неизвестный результат -> сверка, не "не ушло"

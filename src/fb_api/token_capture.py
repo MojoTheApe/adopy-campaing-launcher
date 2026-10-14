@@ -403,8 +403,20 @@ _HELPER_JS = r"""
           if (ev && ev.lengthComputable) { job.sent = ev.loaded; job.total = ev.total; }
         };
       }
-      xhr.onload = () => resolve({ status: xhr.status, text: String(xhr.responseText || ''),
-                                   url: xhr.responseURL || '' });
+      // Остаточный риск: XHR сам идёт по 307/308 и мог УЖЕ переотправить тело (с токеном)
+      // по новому адресу до этой проверки. Рвём запрос, как только заголовки пришли не с
+      // нашего адреса, и считаем результат НЕИЗВЕСТНЫМ. Graph-хосты не перенаправляют.
+      const wrongUrl = () => !!xhr.responseURL && xhr.responseURL !== url;
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === 2 && wrongUrl()) {
+          reject(new Error('redirect'));
+          try { xhr.abort(); } catch (e) {}
+        }
+      };
+      xhr.onload = () => {
+        if (wrongUrl()) { reject(new Error('redirect')); return; }
+        resolve({ status: xhr.status, text: String(xhr.responseText || ''), url: xhr.responseURL || '' });
+      };
       xhr.onerror = () => reject(new Error('network'));
       xhr.onabort = () => reject(new Error('aborted'));
       xhr.send(body);
@@ -488,10 +500,10 @@ _HELPER_JS = r"""
       try { got = await sendXhr(url, body, cred, job); }
       catch (e) {
         unstage(files[want]);
-        return { error: job.aborted ? 'aborted' : 'network', state: state(), endpoint: endpoint };
+        const why = job.aborted ? 'aborted' : (e && e.message === 'redirect' ? 'redirected' : 'network');
+        return { error: why, state: state(), endpoint: endpoint };
       }
       unstage(files[want]);
-      if (got.url && got.url !== url) return { error: 'network', status: got.status };
       resp = { status: got.status };
       text = got.text;
     } else {
@@ -931,6 +943,8 @@ class InPageGraph:
     UPLOAD_POLL_S = 1.0
     #: Срок ОДНОГО локального опроса/старта/обрыва; общего срока у загрузки нет.
     UPLOAD_CDP_TIMEOUT_S = 15.0
+    #: Сколько таймаутов ОПРОСА подряд терпим (повторно файл не шлём никогда).
+    MAX_POLL_TIMEOUTS = 3
 
     def _write_file_job(self, ctx: int, spec: dict, progress, cancelled) -> dict:
         """Запись с файлом без общего срока: старт, опрос раз в секунду, обрыв по Stop."""
@@ -949,6 +963,7 @@ class InPageGraph:
         job = started.get("job")
         if not isinstance(job, str) or not re.fullmatch(r"j[0-9]{1,6}", job):
             return {"error": "call_unknown"}
+        poll_timeouts = 0
         while True:
             if cancelled is not None and cancelled():
                 try:
@@ -959,8 +974,16 @@ class InPageGraph:
                 return {"error": "call_unknown", "why": "cancelled"}
             try:
                 got = run("poll", json.dumps(job))
-            except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+            except (CdpTimeout, TimeoutError):
+                # Один опрос не ответил - не конец загрузки: терпим подряд до MAX_POLL_TIMEOUTS.
+                poll_timeouts += 1
+                if poll_timeouts > self.MAX_POLL_TIMEOUTS:
+                    return {"error": "call_unknown"}
+                self._sleep(self.UPLOAD_POLL_S)
+                continue
+            except (StaleContextError, PageError, CdpError):
                 return {"error": "call_unknown"}
+            poll_timeouts = 0
             if not isinstance(got, dict):
                 return {"error": "call_unknown"}
             state = got.get("state")
