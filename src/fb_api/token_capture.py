@@ -390,7 +390,7 @@ _HELPER_JS = r"""
     return post(path, params, want, blob, spec, files, job || null);
   }
 
-  // ACL-1899: отправка файла с прогрессом. Без собственного таймаута: ждём ответ,
+  // ACL-1899: отправка файла (XHR: abort и проверка перенаправления). Без собственного таймаута: ждём ответ,
   // сетевую ошибку или `abort()` (Stop у покупателя).
   function sendXhr(url, body, cred, job) {
     return new Promise((resolve, reject) => {
@@ -398,11 +398,11 @@ _HELPER_JS = r"""
       job.xhr = xhr;
       xhr.open('POST', url, true);
       xhr.withCredentials = (cred === 'include');
-      if (xhr.upload) {
-        xhr.upload.onprogress = (ev) => {
-          if (ev && ev.lengthComputable) { job.sent = ev.loaded; job.total = ev.total; }
-        };
-      }
+      // ВАЖНО: на `xhr.upload` НЕ вешаем ни одного слушателя (ни onprogress, ни addEventListener).
+      // Любой слушатель загрузки по спецификации включает CORS-preflight; Graph отвечает на
+      // OPTIONS с `Access-Control-Allow-Origin: *` без `Allow-Credentials`, и запрос с
+      // куками (`withCredentials`) браузер режет: тело не уходит, приходит `network`.
+      // Поэтому байтового прогресса нет - Python показывает прошедшее время.
       // Остаточный риск: XHR сам идёт по 307/308 и мог УЖЕ переотправить тело (с токеном)
       // по новому адресу до этой проверки. Рвём запрос, как только заголовки пришли не с
       // нашего адреса, и считаем результат НЕИЗВЕСТНЫМ. Graph-хосты не перенаправляют.
@@ -437,7 +437,7 @@ _HELPER_JS = r"""
     }
     for (const k of Object.keys(jobs)) if (jobs[k].state === 'running') return { error: 'bad_option' };
     const id = 'j' + (++jobSeq);
-    const job = { state: 'running', sent: 0, total: 0, xhr: null, aborted: false, result: null };
+    const job = { state: 'running', xhr: null, aborted: false, result: null };
     jobs[id] = job;
     write(spec, job).then(
       (r) => { job.result = r; job.state = (r && r.error) ? 'error' : 'done'; },
@@ -447,8 +447,8 @@ _HELPER_JS = r"""
   function poll(id) {
     const j = jobs[String(id)];
     if (!j) return { state: 'error', result: { error: 'no_job' } };
-    if (j.state === 'running') return { state: 'running', sent: j.sent, total: j.total };
-    return { state: j.state, sent: j.sent, total: j.total, result: j.result };
+    if (j.state === 'running') return { state: 'running' };
+    return { state: j.state, result: j.result };
   }
   function abort(id) {
     const j = jobs[String(id)];
@@ -880,7 +880,7 @@ class InPageGraph:
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
               filename: str = "", timeout: float = 120.0, on_ad: bool = False,
-              form_page: str = "", progress: Callable[[int, int], None] | None = None,
+              form_page: str = "", progress: Callable[[float], None] | None = None,
               cancelled: Callable[[], bool] | None = None) -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
@@ -891,8 +891,9 @@ class InPageGraph:
 
         ACL-1899: запись С ФАЙЛОМ не имеет общего срока (`timeout` к ней не
         относится): задание стартует в помощнике, а Python раз в `UPLOAD_POLL_S`
-        спрашивает прогресс (только локальный CDP, к Meta не ходит) и отдаёт
-        `(отправлено, всего)` в `progress`. Кончается ответом, ошибкой сети или
+        спрашивает состояние (только локальный CDP, к Meta не ходит) и отдаёт
+        прошедшие секунды в `progress` (байтового прогресса нет: слушатель
+        `xhr.upload` включил бы CORS-preflight, который Graph не пропускает). Кончается ответом, ошибкой сети или
         пропажей страницы (`call_unknown`); на `cancelled()` рвём отправку.
         Запись без файла — прежний короткий `timeout`.
         """
@@ -964,6 +965,7 @@ class InPageGraph:
         if not isinstance(job, str) or not re.fullmatch(r"j[0-9]{1,6}", job):
             return {"error": "call_unknown"}
         poll_timeouts = 0
+        began = self._clock()
         while True:
             if cancelled is not None and cancelled():
                 try:
@@ -990,7 +992,7 @@ class InPageGraph:
             if state == "running":
                 if progress is not None:
                     try:
-                        progress(int(got.get("sent") or 0), int(got.get("total") or 0))
+                        progress(max(0.0, self._clock() - began))
                     except Exception:                    # noqa: BLE001 — показ не должен ронять запись
                         pass
                 self._sleep(self.UPLOAD_POLL_S)

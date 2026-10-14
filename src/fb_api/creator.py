@@ -627,21 +627,27 @@ class CampaignCreator:
         if self.cancelled():
             raise CreationStopped("Stopped by the user", created=out.created, kind="cancelled")
 
-    def _upload_progress(self, ad_index: int, kind: str, size: int) -> Callable[[int, int], None]:
-        """Показ «ad 1: uploading video 45% (90 of 200 MB)» — не чаще раза в секунду."""
+    def _upload_progress(self, ad_index: int, kind: str, size: int) -> Callable[[float], None]:
+        """Показ «ad 1: uploading video (180 MB), 1m 20s» - не чаще раза в секунду.
+
+        Байтового прогресса нет (слушатель `xhr.upload` включает CORS-preflight): размер
+        известен из складирования, время - от старта загрузки. Процент придёт с кусками (ACL-891).
+        """
         last = [None]
 
-        def show(sent: int, total: int) -> None:
-            if total <= 0 or size <= 0:
-                return
+        def show(elapsed_s: float) -> None:
             now = self.clock()
             if last[0] is not None and now - last[0] < UPLOAD_PROGRESS_EVERY_S:
                 return
             last[0] = now
-            pct = min(99, max(0, int(sent * 100 / total)))       # 100% - только когда ответ пришёл
-            done_mb = min(size, int(size * pct / 100)) // (1024 * 1024)
-            self.live_progress(f"ad {ad_index}: uploading {kind} {pct}% "
-                               f"({done_mb} of {size // (1024 * 1024)} MB)")
+            secs = int(max(0, elapsed_s))
+            if secs >= 3600:
+                span = f"{secs // 3600}h {secs % 3600 // 60:02d}m"
+            elif secs >= 60:
+                span = f"{secs // 60}m {secs % 60:02d}s"
+            else:
+                span = f"{secs}s"
+            self.live_progress(f"ad {ad_index}: uploading {kind} ({max(1, size // (1024 * 1024))} MB), {span}")
         return show
 
     def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
