@@ -365,9 +365,9 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             out.append(_per_ad(rid, inp, lambda a, st: any(
                 len(_distinct(a.get(k))) > MAX_TEXTS for k in ("bodies", "headlines", "descriptions"))))
         elif rid == "texts_vertical":
-            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and bool(_s(a.get("vertical_file")))))
+            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and bool(_s(a.get("vertical_file")))))
         elif rid == "texts_dynamic":
-            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and not _s(a.get("vertical_file"))))
+            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and not _s(a.get("vertical_file"))))
         elif rid == "primary_text":
             out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body"))))
         elif rid == "headline":
