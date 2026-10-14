@@ -3574,7 +3574,7 @@
       "source_sha": "6ff7aa988530610e6a631b986cbd5b1b4f0a3403",
       "main_tree": "c8abd728be94f9dd2f5ff6c6c9a00e4ad8ed7f4d",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-14T22:43:46+00:00",
       "batch_id": "152fbc7b7e4e45b8b9a01b3b79c30bf3",
       "verification": {
@@ -5332,6 +5332,54 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-14T16:48:40+00:00"
+      },
+      "766": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 916,
+            "merge_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+            "tree_sha": "618ed14c6847d30cc5d8ea66248b90b9f864a9a7"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-14T22:50:54+00:00"
+      },
+      "769": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 916,
+            "merge_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+            "tree_sha": "618ed14c6847d30cc5d8ea66248b90b9f864a9a7"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-14T22:50:55+00:00"
+      },
+      "778": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 916,
+            "merge_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+            "tree_sha": "618ed14c6847d30cc5d8ea66248b90b9f864a9a7"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-14T22:50:55+00:00"
+      },
+      "798": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 916,
+            "merge_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+            "tree_sha": "618ed14c6847d30cc5d8ea66248b90b9f864a9a7"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-14T22:50:56+00:00"
       }
     },
     "promotions": {
@@ -8649,6 +8697,39 @@
           "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/913#issuecomment-6173466879"
         },
         "verified_at": "2026-10-14T16:45:32+00:00"
+      },
+      "916": {
+        "pr": 915,
+        "issues": [
+          798,
+          766,
+          778,
+          769
+        ],
+        "tree_sha": "618ed14c6847d30cc5d8ea66248b90b9f864a9a7",
+        "source_sha": "6ff7aa988530610e6a631b986cbd5b1b4f0a3403",
+        "main_tree": "c8abd728be94f9dd2f5ff6c6c9a00e4ad8ed7f4d",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-14T22:43:46+00:00",
+        "batch_id": "152fbc7b7e4e45b8b9a01b3b79c30bf3",
+        "verification": {
+          "kind": "stage-verification",
+          "target": "ACL isolated Windows stage installation",
+          "result": "passed",
+          "source_sha": "6ff7aa988530610e6a631b986cbd5b1b4f0a3403",
+          "tree_sha": "618ed14c6847d30cc5d8ea66248b90b9f864a9a7",
+          "checks": [
+            "Actual permanent stage commit/tree and merge parents verified against the frozen batch 152fbc7b (ACL-1798, 1766, 1778, 1769) and the independently reviewed integration.",
+            "Stage CI, Windows installer and delivery setup runs succeeded on 6ff7aa98 with explicit same-tree reuse of the full green runs 38646187683 and 38646187670 (all Linux 3.11/3.13 shards with browser tests, Windows 3.13, package jobs).",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts"
+          ],
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/915#issuecomment-6180166501"
+        },
+        "verified_at": "2026-10-14T22:45:10+00:00"
       }
     },
     "acceptances": {
