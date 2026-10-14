@@ -8287,6 +8287,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
+      },
+      "891": {
+        "actor": "Worker-S1891A",
+        "session": "ws1891a-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1891-video-chunks",
+        "worktree": "C:\\wk-1891",
+        "id": "54670b196fa843fc821a0312b2b1508f",
+        "issue": 891,
+        "state": "implementing",
+        "started_at": "2026-10-14T13:25:34+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -13326,6 +13338,17 @@
         },
         "pr": 908,
         "queued_at": "2026-10-14T13:23:48+00:00"
+      },
+      "891": {
+        "implementers": [
+          {
+            "actor": "Worker-S1891A",
+            "session": "ws1891a-20261014"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1891A",
+        "coordinator": "Coordinator-C0930A"
       }
     },
     "actors": {
@@ -14539,6 +14562,10 @@
       },
       "Worker-S1907A": {
         "session": "ws1907a-20261014",
+        "role": "Worker"
+      },
+      "Worker-S1891A": {
+        "session": "ws1891a-20261014",
         "role": "Worker"
       }
     },
@@ -30207,6 +30234,13 @@
         "issue": 907,
         "pr": 908,
         "actor": "Worker-S1907A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T13:25:34+00:00",
+        "issue": 891,
+        "claim": "54670b196fa843fc821a0312b2b1508f",
+        "actor": "Worker-S1891A"
       }
     ],
     "policy": {
