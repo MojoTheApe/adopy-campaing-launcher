@@ -8846,20 +8846,6 @@
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
       },
-      "800": {
-        "actor": "Worker-RH11800",
-        "session": "wrh11800-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1800-campaign-commands",
-        "worktree": "C:\\wk-rh11800",
-        "id": "e145e7a176074f6e8846f7361ee45f87",
-        "issue": 800,
-        "state": "handoff",
-        "started_at": "2026-10-14T23:03:39+00:00",
-        "from_status": "status:todo",
-        "pr": 802,
-        "report": "# ACL-1800 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1800-campaign-commands; head fa2dab06. No conflicts (clean auto-merge).\nTests: all test files changed by the branch (1798 inventory/browser, 1800 x5, review_ui_regressions, static_scripts_from_disk) plus test_acl1761_* with -k 'not browser': 588 passed, 2 skipped."
-      },
       "799": {
         "actor": "Worker-RJ1799",
         "session": "wrj1799-20261015",
@@ -12545,25 +12531,25 @@
             "session": "wrh11800-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RH11800",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-W1014F",
-          "session": "w1014f-20261014",
-          "coordinator": "Coordinator-T1014C",
+          "actor": "Worker-RH11800",
+          "session": "wrh11800-20261015",
+          "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1800-campaign-commands",
-          "worktree": "C:\\wkf-1800",
-          "id": "0e0774604ab24866942f0e9d3efe8058",
+          "worktree": "C:\\wk-rh11800",
+          "id": "e145e7a176074f6e8846f7361ee45f87",
           "issue": 800,
           "state": "handoff",
-          "started_at": "2026-10-14T10:24:36+00:00",
+          "started_at": "2026-10-14T23:03:39+00:00",
           "from_status": "status:todo",
           "pr": 802,
-          "report": "# Handoff ACL-1800 (PR #802)\nScope: returned-review fixes. Merged fixed parent codex/acl-1769-two-column-builder (046c27b2; CHANGELOG conflict resolved keeping both entries; main already included). Guarded the campaign-table mount in report.html with typeof window; updated test_acl1800_account_scoped_table and gave the poll test harness a window stub (test_review_ui_regressions). Shard-spread test passes after merge (main's browser-count balancing). Head 7efcc856.\nChecks: local test_acl_test_shard, test_acl_test_platform, test_review_ui_regressions, test_acl1800_* 410 passed; GitHub CI all green except tracker-link (needs Review status, this handoff).\nRemaining: #813 merges this branch next."
+          "report": "# ACL-1800 refresh handoff\nMerged origin/main (a4e38b7c) into codex/acl-1800-campaign-commands; head fa2dab06. No conflicts (clean auto-merge).\nTests: all test files changed by the branch (1798 inventory/browser, 1800 x5, review_ui_regressions, static_scripts_from_disk) plus test_acl1761_* with -k 'not browser': 588 passed, 2 skipped."
         },
         "pr": 802,
-        "queued_at": "2026-10-14T10:59:17+00:00",
+        "queued_at": "2026-10-14T23:06:58+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "799": {
@@ -18063,7 +18049,8 @@
       907,
       891,
       775,
-      797
+      797,
+      800
     ],
     "review": null,
     "history": [
@@ -34939,6 +34926,13 @@
         "issue": 799,
         "claim": "fdf4421919b24b229ba06f5ac8371b2a",
         "actor": "Worker-RJ1799"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T23:06:58+00:00",
+        "issue": 800,
+        "pr": 802,
+        "actor": "Worker-RH11800"
       }
     ],
     "policy": {
