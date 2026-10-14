@@ -35308,7 +35308,51 @@
         "session": "r1769h-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T21:45:29+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 769,
+          "pr": 796,
+          "branch": "codex/acl-1769-two-column-builder",
+          "head_sha": "038d9e45e79d786a00005ed0fd6d9b0088249dbc",
+          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "6638343f7c66a91866938e5a9b30615c29d09cf06216267a17640ff8d2b1dcda",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1769H",
+            "implementer": "Worker-S1769G",
+            "review_session": "r1769h-20261015",
+            "execution_lane": "075f9847329d457b94d1e71f112256a4",
+            "head_sha": "038d9e45e79d786a00005ed0fd6d9b0088249dbc",
+            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "tree_sha": "94d0c651503a06561441e32b56df1fef5a449cc2",
+            "report": "Independent source review of ACL-1769 / PR 796 at head 038d9e45 against current main 73136acc (main is an ancestor of the head). Reviewer-R1769H implemented none of it. Second review: the first (R1769F) returned it only for the owner's 2026-10-13 correction (stacked ad cards instead of the Ad / Ad 2 dropdown); this review covers that fix, diff da368fcf..038d9e45 (4 files, +105/-46).\n\nVerified by reading the code against the issue comment:\n- The Ad / Ad 2 dropdown is gone (select, adNames, change handler, adIdx/lastAdCount state, cbd-ad-off toggling, CSS); no leftover references.\n- Campaign / Ad set / Ad tabs kept; the Ad set pick-row (single ad set, future-flag buttons) is unchanged.\n- Every ad card of the ad set is shown as a vertical list; add and duplicate insert a card that is visible at once (nothing hides cards any more).\n- Field names camp_N_ad_M_*, order, numbering, removal and draft restore are untouched (only editor visibility code was removed; the API second-primary-text gating in syncHost stays).\n- Nothing else regressed in the diff: no publish/backend code touched.\n\nVerification:\n- CI on head 038d9e45: Linux shards 1-3 (2408 / 2278 / 2382 passed, 1 skipped in shard 3, unrelated), Windows, process instructions, installer verification, descriptor pass. test_builder_second_primary_text.py is in Linux shard 1, which installs Chromium and runs the browser tests (no skips there), so the new docked / expanded / narrow browser tests ran green in CI. tracker-link was red only because the task was not yet in Review at the time of the run (state, not code).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k 'not browser' on 27 files (acl1769, builder, second_primary_text, duplicate_buttons, acl1761): 357 passed, 42 deselected.\n- Mutation: renaming the 'Primary text 1' label in buildAdRowHTML -> test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown fails (1 failed, 11 passed); reverted, worktree clean.\n- Browser tests not run locally (free RAM 4.5 GB < 6 GB); CI covers them.\n- No live calls.\n\nFindings: no blocking issues. Minor: the duplicate browser test has a loose either-or assertion on which index holds the copy (still checks both values).",
+            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              769
+            ],
+            "recorded_at": "2026-10-14T22:01:08+00:00",
+            "issue_scopes": {
+              "769": "6638343f7c66a91866938e5a9b30615c29d09cf06216267a17640ff8d2b1dcda"
+            }
+          },
+          "lane": {
+            "id": "075f9847329d457b94d1e71f112256a4",
+            "pr": 796,
+            "issues": [
+              769
+            ],
+            "actor": "Reviewer-R1769H",
+            "session": "r1769h-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-14T21:45:29+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T22:03:01+00:00"
+        }
       }
     }
   }
