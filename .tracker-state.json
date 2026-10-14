@@ -12578,7 +12578,7 @@
             "session": "wrj1799-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RJ1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12603,7 +12603,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
-        }
+        },
+        "reviewer": "Reviewer-R1799J"
       },
       "786": {
         "implementers": [
@@ -15493,6 +15494,10 @@
       "Worker-S1826K": {
         "session": "ws1826k-20261015",
         "role": "Worker"
+      },
+      "Reviewer-R1799J": {
+        "session": "r1799j-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18122,7 +18127,6 @@
       903,
       907,
       891,
-      799,
       814,
       826
     ],
@@ -35366,6 +35370,13 @@
             "approved_at": "2026-10-14T23:50:40+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T23:52:45+00:00",
+        "pr": 803,
+        "lane": "0737b32b2e694e9d8f203d3d31c3d3d4",
+        "actor": "Reviewer-R1799J"
       }
     ],
     "policy": {
@@ -38367,6 +38378,19 @@
       "started_at": "2026-10-14T22:11:37+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "803": {
+        "id": "0737b32b2e694e9d8f203d3d31c3d3d4",
+        "pr": 803,
+        "issues": [
+          799
+        ],
+        "actor": "Reviewer-R1799J",
+        "session": "r1799j-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T23:52:45+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
