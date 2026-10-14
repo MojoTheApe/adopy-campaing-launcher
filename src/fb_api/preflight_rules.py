@@ -143,6 +143,11 @@ RULES: list[dict[str, Any]] = [
     _r("texts_limit", "Up to 5 texts per field", ERROR, "client",
        "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("texts_vertical", "Several texts and a Stories / Reels file", ERROR, "client",
+       _wp.MSG_TEXTS_VERTICAL, sel=".cb-vertical-search", level="ad", unit="ad"),
+    _r("texts_dynamic", "Several texts per ad", ERROR, "client",
+       _wp.MSG_TEXTS_DYNAMIC + ": use one text per ad (or one text with the Stories / Reels file)",
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_text", "Primary text", ERROR, "client", "choose a primary text in each ad",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline", "Headline", ERROR, "client", "the chosen text has no headline: pick another library entry",
@@ -215,6 +220,11 @@ def load_json() -> dict[str, Any]:
 #    ACL-1880 (необязательные): "page_id": выбранная страница или "", "page_count": число страниц кабинета
 #    (None - не загружены), "page_map_ok": страница карты есть среди них,
 #    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
+
+def _multi_text(a: dict) -> bool:
+    """Больше одного разного текста/заголовка/описания (Meta: это Dynamic Creative, у нас не поддержан)."""
+    return any(len(_distinct(a.get(k))) > 1 for k in ("bodies", "headlines", "descriptions"))
+
 
 def _s(v: Any) -> str:
     return str(v if v is not None else "").strip()
@@ -354,6 +364,10 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "texts_limit":
             out.append(_per_ad(rid, inp, lambda a, st: any(
                 len(_distinct(a.get(k))) > MAX_TEXTS for k in ("bodies", "headlines", "descriptions"))))
+        elif rid == "texts_vertical":
+            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and bool(_s(a.get("vertical_file")))))
+        elif rid == "texts_dynamic":
+            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and not _s(a.get("vertical_file"))))
         elif rid == "primary_text":
             out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body"))))
         elif rid == "headline":

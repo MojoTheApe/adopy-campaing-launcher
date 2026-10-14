@@ -94,6 +94,15 @@ CTA_TYPES = frozenset(CTA_WEBSITE) | frozenset(CTA_FORM)
 #: ссылка сайта, кнопка, формат и (при двух файлах) ровно два правила по площадкам.
 ASSET_FEED_KEY = "asset_feed_spec"
 ASSET_FEED_MAX_TEXTS = 5
+#: Живой прогон 2026-10-14 (Doc120): Meta отказала (100/1885878) на ленте с 3 bodies и двумя правилами
+#: площадок - правило применяет по ОДНОМУ ассету каждого типа. Несколько текстов - это Dynamic Creative
+#: (по справочнику у такой ленты не должно быть правил кастомизации), а `is_dynamic_creative` у групп
+#: запрещён. Поэтому в ленту идёт ровно по одному тексту каждого вида.
+ASSET_FEED_TEXTS_PER_FEED = 1
+#: Тексты отказов (один источник для плана, предпроверки и страницы).
+MSG_TEXTS_VERTICAL = ("Several primary texts and a Stories/Reels file can't be combined: Meta applies one "
+                      "text per placement group. Use several texts without the vertical file, or one text with it.")
+MSG_TEXTS_DYNAMIC = "Several texts need Dynamic Creative, which isn't supported yet"
 ASSET_FEED_TEXT_MAX = {"bodies": 1024, "titles": 255, "descriptions": 255}
 ASSET_FEED_MAX_MEDIA = 2
 ASSET_FEED_FORMATS = ("SINGLE_IMAGE", "SINGLE_VIDEO")
@@ -137,7 +146,7 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "opt_out_keys": sorted(OPT_OUT_KEYS),
         "dof_features": sorted(DOF_FEATURES),
         "multi_ads_key": MULTI_ADS_KEY,
-        "asset_feed": {"key": ASSET_FEED_KEY, "max_texts": ASSET_FEED_MAX_TEXTS,
+        "asset_feed": {"key": ASSET_FEED_KEY, "max_texts": ASSET_FEED_TEXTS_PER_FEED,
                        "text_max": dict(ASSET_FEED_TEXT_MAX), "max_media": ASSET_FEED_MAX_MEDIA,
                        "formats": list(ASSET_FEED_FORMATS), "label_re": ASSET_LABEL_RE.pattern,
                        "hash_re": IMAGE_HASH_RE.pattern, "video_id_re": VIDEO_ID_RE.pattern,
@@ -211,7 +220,7 @@ def _check_multi_ads(value: Any) -> None:
 
 
 def _is_text_list(items: Any, kind: str, *, required: bool) -> bool:
-    if not isinstance(items, list) or len(items) > ASSET_FEED_MAX_TEXTS or (required and not items):
+    if not isinstance(items, list) or len(items) > ASSET_FEED_TEXTS_PER_FEED or (required and not items):
         return False
     limit = ASSET_FEED_TEXT_MAX[kind]
     return all(isinstance(x, dict) and set(x) == {"text"} and isinstance(x["text"], str)
@@ -251,11 +260,11 @@ def _check_asset_feed(spec: Any, creative: dict) -> None:
     if not (isinstance(story, dict) and set(story) == {"page_id"} and isinstance(story["page_id"], str)):
         refuse("needs object_story_spec with page_id only")
     if not _is_text_list(spec.get("bodies"), "bodies", required=True):
-        refuse("bodies must be 1-5 non-empty texts")
+        refuse("bodies must be exactly one non-empty text")
     if not _is_text_list(spec.get("titles"), "titles", required=True):
-        refuse("titles must be 1-5 non-empty texts")
+        refuse("titles must be exactly one non-empty text")
     if "descriptions" in spec and not _is_text_list(spec["descriptions"], "descriptions", required=True):
-        refuse("descriptions must be 1-5 non-empty texts")
+        refuse("descriptions must be exactly one non-empty text")
     has_images, has_videos = bool(spec.get("images")), bool(spec.get("videos"))
     if has_images == has_videos or ("images" in spec and "videos" in spec):
         refuse("needs either images or videos")

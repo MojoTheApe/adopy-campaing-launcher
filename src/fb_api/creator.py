@@ -385,6 +385,11 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
                          ("descriptions", plan_ad.descriptions)):
         if len(items) > MAX_TEXTS:
             problems.append(f"Ad {i}: up to {MAX_TEXTS} {label} per ad (got {len(items)})")
+    if any(len(x) > 1 for x in (plan_ad.bodies, plan_ad.titles, plan_ad.descriptions)):
+        # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
+        # без правил это Dynamic Creative, а он не поддержан. Отказ до любой записи.
+        vert = bool(str(getattr(src, "vertical_path", "") or "").strip())
+        problems.append(f"Ad {i}: " + (_wpol.MSG_TEXTS_VERTICAL if vert else _wpol.MSG_TEXTS_DYNAMIC))
     if plan_ad.bodies and not plan_ad.body:
         problems.append(f"Ad {i}: choose Primary text 1 first, the other texts come after it")
     vertical = str(getattr(src, "vertical_path", "") or "").strip()

@@ -6020,8 +6020,8 @@ window.cbLayout = (function () {
     [/primary text 2/i, '.cb-text2-search', 'ad'],
     [/primary text [3-5]/i, '.cb-textx-search', 'ad'],
     [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text [2-5]'],
-    [/stories \/ reels/i, '.cb-vertical-search', 'ad'],
-    [/creative|file|image|video/i, '.cb-creative-search', 'ad', 'stories \/ reels'],
+    [/stories ?\/ ?reels/i, '.cb-vertical-search', 'ad'],
+    [/creative|file|image|video/i, '.cb-creative-search', 'ad', 'stories ?\/ ?reels|dynamic creative'],
     [/would all be named|names must differ/i, '.cb-creative-search, .cb-adtitle-search', 'ad'],
     [/budget/i, '[name$="_budget"]', 'campaign'],
     [/detailed targeting|interest|target/i, '.cb-targeting-search', 'adset'],
@@ -6273,6 +6273,10 @@ window.cbPreflight = (function () {
       else if (id === 'vertical_needs_main') out.push(perAd(id, inp, function (a) { return !!s(a.vertical_file) && !s(a.file); }));
       else if (id === 'texts_limit') out.push(perAd(id, inp, function (a) {
         return ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > (C.max_texts || 5); });
+      }));
+      else if (id === 'texts_vertical' || id === 'texts_dynamic') out.push(perAd(id, inp, function (a) {
+        var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
+        return multi && (id === 'texts_vertical') === !!s(a.vertical_file);
       }));
       else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }));
       else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }));

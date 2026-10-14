@@ -189,7 +189,8 @@ def test_the_api_backend_second_text_is_supported_and_the_rpa_gates_texts_3_to_5
 
     with tempfile.TemporaryDirectory() as tmp:
         d = _draft(Path(tmp), ads=1, body2="Second text")
-        assert cr.plan_from_draft(d).ad_sets[0].ads[0].bodies[-1] == "Second text"
+        with pytest.raises(cr.PlanError, match="Dynamic Creative"):   # живой 2026-10-14: несколько текстов - отказ
+            cr.plan_from_draft(d)
     page = _page()
     assert "Primary text 2 is not supported by the API backend" not in page
     assert "t2.disabled = api && !t2.value" not in page, "текст 2 больше не API-ограничен"
