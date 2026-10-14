@@ -12135,7 +12135,7 @@
             "session": "run_s1766a_1011"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1766A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12153,7 +12153,8 @@
           "report": "ACL-1766 handoff (PR #794, branch codex/acl-1766-map-pixel, head f851999f, stacked on #765)\n\nChecks and results:\n- New tests/test_acl1766_map_pixel.py: 9 passed. Covered: map pixel with 2 account pixels, map pixel not on the account (clear error, nothing created), 1 account pixel, 2 account pixels without a map value (previous error), plan_summary pixel/page source, readback \"Not read\" for CTA and locales.\n- Affected suites (fakes only): 174 passed together with test_acl1761_api_create and test_acl1761_plan_check; RPA suites test_second_primary_text_reaches_the_robot, test_september_review, test_account_link_sources and test_rpa_job_start_is_measured: 59 passed.\n- Mutations: removing the enrich pixel line fails test_enrich_carries_map_pixel_and_page; letting the map override the draft fails test_enrich_keeps_what_the_draft_already_has.\n\nRemaining risks:\n- src/fb_ads_rpa/enrich_draft.py is RPA-owned; the change is minimal (two fields set via getattr). No RPA code reads draft.pixel_id. A draft page_id now wins over the map, and the builder never supplies one.\n- The plan-line source text in report.html has no browser test.\n- Full CI is blocked by the GitHub Actions billing outage; re-run before merge.\n\nDurable reference: PR #794."
         },
         "pr": 794,
-        "queued_at": "2026-10-11T18:25:16+00:00"
+        "queued_at": "2026-10-11T18:25:16+00:00",
+        "reviewer": "Reviewer-RRF766"
       },
       "798": {
         "implementers": [
@@ -14976,6 +14977,10 @@
       "Reviewer-RRF799": {
         "session": "rrf799-20261014",
         "role": "Reviewer"
+      },
+      "Reviewer-RRF766": {
+        "session": "rrf766-20261014",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -17557,7 +17562,6 @@
       526,
       642,
       739,
-      766,
       814,
       815,
       816,
@@ -32144,6 +32148,13 @@
           "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T16:56:12+00:00",
+        "pr": 794,
+        "lane": "226b3ae1b7704ccfbc1cdbaf16912b1b",
+        "actor": "Reviewer-RRF766"
       }
     ],
     "policy": {
@@ -34218,6 +34229,19 @@
       "started_at": "2026-10-14T16:14:28+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "794": {
+        "id": "226b3ae1b7704ccfbc1cdbaf16912b1b",
+        "pr": 794,
+        "issues": [
+          766
+        ],
+        "actor": "Reviewer-RRF766",
+        "session": "rrf766-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T16:56:12+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
