@@ -16581,9 +16581,8 @@ window.cwWorkbench = (function () {
 
   function applyCreative(a, ev) {
     var rows = a.slot.querySelectorAll('.cb-ad-row');
-    var row = null;
-    Array.prototype.forEach.call(rows, function (r) { if (!row && !r.classList.contains('cbd-ad-off')) row = r; });
-    if (!row) row = rows[a.adIndex || 0] || rows[0];
+    // 1769: карточки объявлений стоят стопкой, скрытых нет — берём нужную по номеру.
+    var row = rows[a.adIndex || 0] || rows[0];
     if (!row) return { done: false, text: 'This draft has no ad to put a creative on.' };
     var msgs = [], done = true;
 
