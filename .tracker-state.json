@@ -33462,6 +33462,32 @@
           "history": [],
           "report": "# Batch d527fe66 cancelled before assembly\n\nACL-1769 was approved minutes after this batch was frozen with four members (798, 766, 778, 775). Nothing was assembled, pushed or reviewed. A new intake with the five approved members 798, 766, 778, 775, 769 replaces it, saving a separate integration cycle."
         }
+      },
+      {
+        "event": "intake-cancelled",
+        "at": "2026-10-14T22:05:46+00:00",
+        "intake": {
+          "id": "041446df1508423499d3f0d2e694240b",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "cancelled",
+          "issues": [
+            798,
+            766,
+            778,
+            775
+          ],
+          "remaining": [
+            798,
+            766,
+            778,
+            775
+          ],
+          "batches": [],
+          "started_at": "2026-10-14T22:02:40+00:00",
+          "ineligible": {},
+          "report": "# Batch d527fe66 cancelled before assembly\n\nACL-1769 was approved minutes after this batch was frozen with four members (798, 766, 778, 775). Nothing was assembled, pushed or reviewed. A new intake with the five approved members 798, 766, 778, 775, 769 replaces it, saving a separate integration cycle."
+        }
       }
     ],
     "policy": {
@@ -35987,7 +36013,7 @@
       "id": "041446df1508423499d3f0d2e694240b",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "running",
+      "state": "cancelled",
       "issues": [
         798,
         766,
@@ -36002,7 +36028,8 @@
       ],
       "batches": [],
       "started_at": "2026-10-14T22:02:40+00:00",
-      "ineligible": {}
+      "ineligible": {},
+      "report": "# Batch d527fe66 cancelled before assembly\n\nACL-1769 was approved minutes after this batch was frozen with four members (798, 766, 778, 775). Nothing was assembled, pushed or reviewed. A new intake with the five approved members 798, 766, 778, 775, 769 replaces it, saving a separate integration cycle."
     },
     "source_reviews": {}
   }
