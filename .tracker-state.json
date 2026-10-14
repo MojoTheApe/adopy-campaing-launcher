@@ -8152,20 +8152,6 @@
         "state": "implementing",
         "started_at": "2026-10-13T21:34:57+00:00",
         "from_status": "status:backlog"
-      },
-      "769": {
-        "actor": "Worker-W1014F",
-        "session": "w1014f-20261014",
-        "coordinator": "Coordinator-T1014C",
-        "branch": "codex/acl-1769-two-column-builder",
-        "worktree": "C:\\wkf-1769",
-        "id": "6d83218a309a4b5dbcc5fdd99f3a8062",
-        "issue": 769,
-        "state": "handoff",
-        "started_at": "2026-10-14T10:00:37+00:00",
-        "from_status": "status:todo",
-        "pr": 796,
-        "report": "# Handoff ACL-1769 (PR #796)\nScope: returned-review fixes. Merged fixed parent codex/acl-1761-api-create (which already contains current main) into codex/acl-1769-two-column-builder; no conflicts. Head 5a4df795.\nChecks: local test_acl_test_platform, test_acl_test_shard, test_acl1756_fb_api, test_acl1769_* all pass; GitHub CI green except tracker-link, which needs Review status (this handoff).\nRemaining: descendants #802/#813 merge this branch next."
       }
     },
     "tasks": {
@@ -11561,25 +11547,25 @@
             "session": "w1014f-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1014F",
         "coordinator": "Coordinator-T1014C",
         "handoff": {
-          "actor": "Worker-S1769A",
-          "session": "run_s1769a_1011",
-          "coordinator": "Coordinator-C0930A",
+          "actor": "Worker-W1014F",
+          "session": "w1014f-20261014",
+          "coordinator": "Coordinator-T1014C",
           "branch": "codex/acl-1769-two-column-builder",
-          "worktree": "C:\\acl-1769-builder",
-          "id": "243acd22b5ba4425a72b1d193afb9d00",
+          "worktree": "C:\\wkf-1769",
+          "id": "6d83218a309a4b5dbcc5fdd99f3a8062",
           "issue": 769,
           "state": "handoff",
-          "started_at": "2026-10-11T18:04:36+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-14T10:00:37+00:00",
+          "from_status": "status:todo",
           "pr": 796,
-          "report": "ACL-1769 handoff (PR #796, branch codex/acl-1769-two-column-builder, head 3bf6a52e, stacked on #765)\n\nChecks and results:\n- Only src/web/templates/report.html and tests changed. The server contract and the payload sent to Meta are unchanged. Publish all, Check plan, the plan panel and the RPA/API texts are preserved.\n- New tests/test_acl1769_two_column_layout.py: 11 tests, driven by tests/builder_layout_harness.cjs. Extended the tree, drawer and keep harnesses (names-only, fold, levels, ad picker, expand, restoring an old draft).\n- 231 non-browser tests passed. 42 affected Playwright tests passed (run with free RAM above 6 GB).\n- Creator parity: real plan_from_draft errors are routed to the right fields; the UI is tied to the creator's constants (no ACTIVE, ABO, extra CTA or placements outside the list).\n- Screenshots at 1280x800, light and dark: C:\\acl-notes\\acl-1769-shots\\.\n\nRemaining risks:\n- Controls without a backend are disabled and name their task: ACL-1767, 1768, 1772, 1773, 1774, 1775.\n- Deferred: the ad-text compliance warning, which needs an endpoint and a product decision.\n- Full CI is blocked by the GitHub Actions billing outage; re-run before merge.\n\nDurable reference: PR #796."
+          "report": "# Handoff ACL-1769 (PR #796)\nScope: returned-review fixes. Merged fixed parent codex/acl-1761-api-create (which already contains current main) into codex/acl-1769-two-column-builder; no conflicts. Head 5a4df795.\nChecks: local test_acl_test_platform, test_acl_test_shard, test_acl1756_fb_api, test_acl1769_* all pass; GitHub CI green except tracker-link, which needs Review status (this handoff).\nRemaining: descendants #802/#813 merge this branch next."
         },
         "pr": 796,
-        "queued_at": "2026-10-11T18:59:04+00:00",
+        "queued_at": "2026-10-14T10:24:08+00:00",
         "review_report": "# Review return: PR #796 (ACL-1769), head 70f4862ef04f\n\nStatus: no CI checks on the current head. Cause: PR is CONFLICTING with current origin/main, so the workflow did not trigger.\n\n## Conflict with main\n- `tests/test_acl1756_fb_api.py` (content conflict; app.py, report.html auto-merge). Fix: after PR #765's branch is fixed, merge codex/acl-1761-api-create into this branch, then merge current origin/main, resolve the test file keeping both sides, push.\n\n## Known failures that will hit once CI runs (verified at this head)\n1. `test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` -- inherited `tests/test_acl1761_hang_logout.py` lines 255/256/268/275. Fixed at the source in #765; arrives via the parent merge.\n2. Not applicable at this head: Cyrillic regex in report.html, `tzdata` in requirements.txt.\n\n## Required fixes (stack order: after #765)\nMerge fixed parent + main, resolve conflict, push. Re-run affected tests (platform, shard, test_acl1756_fb_api.py, builder tests of this branch) and wait for full CI green."
       },
       "783": {
@@ -16777,7 +16763,8 @@
       845,
       840,
       841,
-      761
+      761,
+      769
     ],
     "review": null,
     "history": [
@@ -29057,6 +29044,13 @@
             "approved_at": "2026-10-14T10:18:59+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T10:24:08+00:00",
+        "issue": 769,
+        "pr": 796,
+        "actor": "Worker-W1014F"
       }
     ],
     "policy": {
