@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import json
+import logging
 import os
 import threading
 import time
@@ -29,6 +30,8 @@ from config.paths import get_local_config_dir
 
 from . import model
 
+log = logging.getLogger(__name__)
+
 RULES_FILE = "rules.json"
 SETTINGS_FILE = "rules_settings.json"
 EVALUATIONS_FILE = "rule_evaluations.jsonl"
@@ -36,8 +39,21 @@ ACTIONS_FILE = "rule_actions.jsonl"
 HOLDS_FILE = "rule_holds.jsonl"
 LOCK_FILE = "rules.lock"
 
+SCHEMA_VERSION = 1
+
+# Жёсткий замок Automatic (решение владельца: Automatic выключен, пока он не ответит на
+# вопросы T5). Менять только после этого решения; тесты включают замок через env.
+AUTOMATIC_AVAILABLE = False
+AUTOMATIC_ENV = "ACL_RULES_AUTOMATIC"
+AUTOMATIC_UNAVAILABLE_MESSAGE = "Automatic mode is not available yet."
+
+
+def automatic_available() -> bool:
+    return AUTOMATIC_AVAILABLE or os.environ.get(AUTOMATIC_ENV) == "1"
+
 DEFAULT_SETTINGS: dict = {
     # Глобальный kill switch (дизайн 5.1, п.2). Включается только осознанно.
+    "schema_version": SCHEMA_VERSION,
     "automatic_enabled": False,
     "limits": {"per_account_day": 3, "per_machine_day": 10, "per_rule_day": 5},
     "freshness": {"bi_max_age_hours": 36, "snapshot_max_age_hours": 24},
@@ -48,6 +64,10 @@ DEFAULT_SETTINGS: dict = {
 
 class RulesStoreError(Exception):
     pass
+
+
+class SchemaTooNew(RulesStoreError):
+    """Файл записан более новой версией программы: не читаем вслепую и не перезаписываем."""
 
 
 class RuleNotFound(RulesStoreError):
@@ -182,6 +202,20 @@ def _read_json(path: Path, default: Callable[[], dict]) -> dict:
     return _read_json_src(path, default)[0]
 
 
+def _file_schema(data: dict, path: Path) -> bool:
+    """Проверяет schema_version. Возвращает True, если поле отсутствует (считаем 1, надо дописать)."""
+    if "schema_version" not in data:
+        return True
+    ver = data["schema_version"]
+    if isinstance(ver, bool) or not isinstance(ver, int) or ver < 1:
+        raise RulesStoreError(f"{path.name}: invalid schema_version {ver!r}; file left untouched")
+    if ver > SCHEMA_VERSION:
+        raise SchemaTooNew(
+            f"{path.name} has schema_version {ver}, this build supports up to {SCHEMA_VERSION}; "
+            "file left untouched - update the app")
+    return False
+
+
 def _repair_tail(path: Path) -> bool:
     """Если файл кончается не на перевод строки: валидный хвост дополняем, битый обрезаем.
 
@@ -253,6 +287,7 @@ class RulesStore:
                  now: Callable[[], str] = _utc_now):
         self._dir = Path(directory) if directory else None
         self._now = now
+        self.problems: list[dict] = []   # битые правила с последнего list_rules
 
     @property
     def directory(self) -> Path:
@@ -267,18 +302,42 @@ class RulesStore:
 
     # -- правила --
 
-    def _read_rules(self) -> tuple[dict, bool]:
-        data, fallback = _read_json_src(self._p(RULES_FILE), lambda: {})
+    def _read_rules(self) -> tuple[dict, bool, bool]:
+        path = self._p(RULES_FILE)
+        existed = path.is_file()
+        data, fallback = _read_json_src(path, lambda: {})
+        unversioned = _file_schema(data, path)
         rules = data.get("rules")
-        return {"rules": rules if isinstance(rules, dict) else {}}, fallback
+        out = {"schema_version": SCHEMA_VERSION, "rules": rules if isinstance(rules, dict) else {}}
+        # файл без версии (или восстановленный из копии) надо перезаписать с версией
+        return out, fallback, unversioned and existed and not fallback and bool(data)
+
+    @staticmethod
+    def rule_problem(rule: Any) -> str | None:
+        """Почему правило нельзя использовать (None - всё в порядке)."""
+        if not isinstance(rule, dict):
+            return "rule is not an object"
+        versions = rule.get("versions")
+        if not isinstance(versions, list) or not versions or \
+                not all(isinstance(v, dict) and "version" in v for v in versions):
+            return "missing or invalid versions"
+        if not any(v["version"] == rule.get("current_version") for v in versions):
+            return f"current_version {rule.get('current_version')!r} not in versions"
+        if not isinstance(rule.get("id"), str):
+            return "missing id"
+        return None
 
     def _normalise(self, data: dict, restored: bool) -> list[dict]:
         """Automatic без действующего гранта - это Suggest. После восстановления из
         копии все гранты снимаются: старая копия не должна заново включать автоматику."""
         notes: list[dict] = []
         for rule in data["rules"].values():
+            if self.rule_problem(rule):
+                continue
             if restored and (rule.get("grant") or rule.get("mode") == "automatic"):
                 reason = "restored_from_backup"
+            elif rule.get("mode") == "automatic" and not automatic_available():
+                reason = "automatic is not available"
             elif rule.get("mode") == "automatic" and self.active_grant(rule) is None:
                 reason = "automatic without a valid grant on load"
             else:
@@ -289,36 +348,58 @@ class RulesStore:
         return notes
 
     def _load(self) -> dict:
-        data, fallback = self._read_rules()
-        if not fallback and not any(r.get("mode") == "automatic" and self.active_grant(r) is None
-                                    for r in data["rules"].values()):
+        data, fallback, unversioned = self._read_rules()
+        if not fallback and not unversioned and not any(
+                r.get("mode") == "automatic" and not self.rule_problem(r)
+                and (not automatic_available() or self.active_grant(r) is None)
+                for r in data["rules"].values()):
             return data
         with self.lock():
-            data, fallback = self._read_rules()
+            data, fallback, unversioned = self._read_rules()
             notes = self._normalise(data, fallback)
-            if notes or fallback:
+            if notes or fallback or unversioned:
                 self._save(data)
                 for note in notes:
                     self._append(ACTIONS_FILE, note)
         return data
 
     def _save(self, data: dict) -> None:
-        _atomic_write_json(self._p(RULES_FILE), data)
+        _atomic_write_json(self._p(RULES_FILE), {**data, "schema_version": SCHEMA_VERSION})
 
     def get_rule(self, rule_id: str) -> dict:
         rule = self._load()["rules"].get(rule_id)
         if rule is None:
             raise RuleNotFound(rule_id)
+        problem = self.rule_problem(rule)
+        if problem:
+            raise RulesStoreError(f"rule {rule_id} is malformed: {problem}")
         return rule
 
+    def list_rules_checked(self, owner_cm: str | None = None) -> tuple[list[dict], list[dict]]:
+        """(правила, проблемы): битое правило пропускается и попадает в problems, остальные живут.
+        Файл при этом не трогаем - битое правило остаётся на диске для ручного разбора."""
+        rules: list[dict] = []
+        problems: list[dict] = []
+        for key, rule in self._load()["rules"].items():
+            problem = self.rule_problem(rule)
+            if problem:
+                rid = rule.get("id", key) if isinstance(rule, dict) else key
+                log.warning("rules: malformed rule %s skipped: %s", rid, problem)
+                problems.append({"rule_id": rid, "error": problem})
+            elif owner_cm is None or rule.get("owner_cm") == owner_cm:
+                rules.append(rule)
+        return sorted(rules, key=lambda r: (r.get("created_at") or "", r["id"])), problems
+
     def list_rules(self, owner_cm: str | None = None) -> list[dict]:
-        rules = list(self._load()["rules"].values())
-        if owner_cm is not None:
-            rules = [r for r in rules if r.get("owner_cm") == owner_cm]
-        return sorted(rules, key=lambda r: (r.get("created_at") or "", r["id"]))
+        rules, self.problems = self.list_rules_checked(owner_cm)
+        return rules
 
     @staticmethod
     def current_version(rule: dict) -> dict:
+        problem = RulesStore.rule_problem(rule)
+        if problem:
+            rid = rule.get("id") if isinstance(rule, dict) else None
+            raise RulesStoreError(f"rule {rid} is malformed: {problem}")
         for v in rule["versions"]:
             if v["version"] == rule["current_version"]:
                 return v
@@ -422,6 +503,8 @@ class RulesStore:
 
     def grant_automatic(self, rule_id: str, *, by: str) -> dict:
         """Явный opt-in Automatic для ТЕКУЩЕЙ версии (дизайн 5.8)."""
+        if not automatic_available():
+            raise model.RuleValidationError([AUTOMATIC_UNAVAILABLE_MESSAGE])
         if not str(by or "").strip():
             raise model.RuleValidationError(["grant needs a name of who grants it"])
         with self.lock():
@@ -477,17 +560,25 @@ class RulesStore:
     # -- настройки и kill switch --
 
     def load_settings(self) -> dict:
-        raw, fallback = _read_json_src(self._p(SETTINGS_FILE), lambda: {})
+        path = self._p(SETTINGS_FILE)
+        existed = path.is_file()
+        raw, fallback = _read_json_src(path, lambda: {})
+        unversioned = _file_schema(raw, path)
+        if unversioned and existed and raw and not fallback:
+            with self.lock():  # файл без версии: считаем 1 и дописываем
+                _atomic_write_json(path, {**raw, "schema_version": SCHEMA_VERSION})
         if fallback:
             # копия .bak отстаёт на одну запись и могла бы включить автоматику заново
             raw = dict(raw, automatic_enabled=False)
             with self.lock():
-                _atomic_write_json(self._p(SETTINGS_FILE), {**raw, "changed_at": self._now()})
+                _atomic_write_json(self._p(SETTINGS_FILE),
+                                   {**raw, "schema_version": SCHEMA_VERSION, "changed_at": self._now()})
         out = copy.deepcopy(DEFAULT_SETTINGS)
         for k, v in raw.items():
             out[k] = _merge(out.get(k), v) if k in out else v
-        # любое нечитаемое значение флага = выключено
-        if out.get("automatic_enabled") is not True:
+        out["schema_version"] = SCHEMA_VERSION
+        # любое нечитаемое значение флага = выключено; пока замок Automatic закрыт - тоже
+        if out.get("automatic_enabled") is not True or not automatic_available():
             out["automatic_enabled"] = False
         return out
 
@@ -501,6 +592,8 @@ class RulesStore:
             return settings
 
     def set_automatic_enabled(self, enabled: bool, *, by: str = "") -> dict:
+        if enabled and not automatic_available():
+            raise RulesStoreError(AUTOMATIC_UNAVAILABLE_MESSAGE)
         return self.update_settings({"automatic_enabled": bool(enabled)}, by=by)
 
     # -- журналы --
