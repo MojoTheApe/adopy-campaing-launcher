@@ -12532,7 +12532,7 @@
             "session": "wrh11800-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RH11800",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12551,7 +12551,8 @@
         },
         "pr": 802,
         "queued_at": "2026-10-14T23:06:58+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
+        "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
+        "reviewer": "Reviewer-R1800J"
       },
       "799": {
         "implementers": [
@@ -15462,6 +15463,10 @@
       "Reviewer-R1797J": {
         "session": "r1797j-20261015",
         "role": "Reviewer"
+      },
+      "Reviewer-R1800J": {
+        "session": "r1800j-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18091,7 +18096,6 @@
       903,
       907,
       891,
-      800,
       815,
       799,
       826
@@ -35072,6 +35076,13 @@
         "pr": 810,
         "lane": "848e802205894b719e0f5390bb5f6f88",
         "actor": "Reviewer-R1797J"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T23:36:45+00:00",
+        "pr": 802,
+        "lane": "1c1e7c8703d14377a22d75dcd7750b69",
+        "actor": "Reviewer-R1800J"
       }
     ],
     "policy": {
@@ -37964,6 +37975,18 @@
         "session": "r1797j-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T23:35:41+00:00",
+        "state": "reviewing"
+      },
+      "802": {
+        "id": "1c1e7c8703d14377a22d75dcd7750b69",
+        "pr": 802,
+        "issues": [
+          800
+        ],
+        "actor": "Reviewer-R1800J",
+        "session": "r1800j-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-14T23:36:45+00:00",
         "state": "reviewing"
       }
     }
