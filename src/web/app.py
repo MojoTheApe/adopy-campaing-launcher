@@ -4134,6 +4134,146 @@ async def account_spend_status(
     )
 
 
+# ───────────────────────── опись кампаний для Home (ACL-1798) ─────────────────────────
+# Только чтение. Чтение Meta запускает ТОЛЬКО POST /campaign-inventory/read (по
+# нажатию человека, через ту же очередь, что Read spend). Остальные маршруты —
+# локальные: берут сохранённый снимок и книгу статистики, Meta не трогают.
+
+
+def _inventory_bi(account: str, countries: list[str], date_from: str, date_to: str, span: str):
+    """BI из книги для аккаунта: `(данные | None, пометка)`. Сбой книги — не сбой описи."""
+    from src.analysis_agent.campaign_inventory import merge_attribution
+    from src.analysis_agent.morning_report import build_tree_attribution
+
+    names = [c.strip() for c in countries if c and c.strip()]
+    if not names:
+        return None, "This account is not placed in a country, so no workbook rows can be matched"
+    try:
+        _report, df, _warnings = get_cached_report()
+    except Exception as exc:  # noqa: BLE001
+        return None, f"Could not read the workbook: {exc}"
+    if df is None:
+        return None, "The stats workbook has no data"
+    date_from, date_to, span = date_from.strip(), date_to.strip(), span.strip()
+    if not date_from and not date_to and span != "all":
+        date_from, date_to = _month_to_date(_workbook_dates(df))
+    frame = _filter_by_period(df, date_from, date_to) if (date_from or date_to) else df
+    parts = []
+    for country in dict.fromkeys(names):
+        try:
+            alias = workbook_alias_for(df, country, account)
+            got = build_tree_attribution(frame, country, alias)
+        except Exception as exc:  # noqa: BLE001
+            return None, f"Workbook numbers failed: {exc}"
+        if got.get("has_data"):
+            parts.append(got)
+    if not parts:
+        return {"campaigns": {}, "ads": {}}, "The workbook has no rows for this account in the period"
+    return merge_attribution(parts), ""
+
+
+def _inventory_context(request: Request, account: str):
+    """Снимок аккаунта, BI и сводка соединения — для маршрутов описи (без Meta)."""
+    from src.analysis_agent import campaign_inventory as ci
+
+    q = request.query_params
+    snap = ci.get_snapshot(account)
+    if snap is None:
+        return None, {}, {"available": False, "note": ""}, {}
+    bi, note = _inventory_bi(account, q.getlist("country"), q.get("date_from", ""),
+                             q.get("date_to", ""), q.get("span", ""))
+    joined, bi_summary = ci.join_bi(snap, bi)
+    bi_summary["note"] = note
+    return snap, joined, bi_summary, {}
+
+
+@app.post("/campaign-inventory/read")
+async def campaign_inventory_read(request: Request) -> JSONResponse:
+    """Прочитать опись кампаний аккаунта. Только по нажатию, только `ACL_FB_BACKEND=api`.
+
+    Тот же принцип, что у /account-spend/read: никакого расписания и опроса
+    Meta. С бэкендом `rpa` отвечает отказом и не запускает ничего.
+    """
+    from src.analysis_agent import campaign_inventory as ci
+
+    form = await request.form()
+    account = (form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    try:
+        date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""),
+                                           str(form.get("span") or ""))
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    try:
+        job = ci.start_read(account, date_from, date_to)
+    except ci.NeedsApiBackend:
+        return JSONResponse({"ok": False, "code": ci.NEEDS_API_CODE, "error": ci.NEEDS_API_MESSAGE},
+                            status_code=409)
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": "Could not start the campaign read. Retry."},
+                            status_code=503)
+    return JSONResponse({"ok": True, **job})
+
+
+@app.get("/campaign-inventory/status")
+@_off_loop
+def campaign_inventory_status(request: Request) -> JSONResponse:
+    """Какие аккаунты читаются сейчас и что сохранено по каждому (сводки, без объектов)."""
+    from src.analysis_agent import campaign_inventory as ci
+
+    backend_ok = ci.backend_ready()
+    accounts = [a for a in request.query_params.getlist("account") if a.strip()]
+    return JSONResponse({
+        "ok": True,
+        "backend": "api" if backend_ok else "rpa",
+        "needs_api": not backend_ok,
+        "message": "" if backend_ok else ci.NEEDS_API_MESSAGE,
+        "running": ci.running_now(),
+        "accounts": ci.summaries(accounts),
+    })
+
+
+@app.get("/campaign-inventory/tree")
+@_off_loop
+def campaign_inventory_tree(request: Request) -> JSONResponse:
+    """Кампании аккаунта из снимка с BI по точному имени. Дети — отдельным запросом."""
+    from src.analysis_agent import campaign_inventory as ci
+
+    account = request.query_params.get("account", "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    snap, joined, bi_summary, _x = _inventory_context(request, account)
+    if snap is None:
+        return JSONResponse({"ok": True, "has_snapshot": False, "summary": ci.summary(None, ci.get_attempt(account)),
+                             "rows": []})
+    return JSONResponse({
+        "ok": True,
+        "has_snapshot": True,
+        "summary": ci.summary(snap, ci.get_attempt(account)),
+        "bi": bi_summary,
+        "rows": ci.campaign_rows(snap, joined),
+    })
+
+
+@app.get("/campaign-inventory/children")
+@_off_loop
+def campaign_inventory_children(request: Request) -> JSONResponse:
+    """Дети одного объекта из снимка: ad sets кампании или объявления ad set."""
+    from src.analysis_agent import campaign_inventory as ci
+
+    q = request.query_params
+    account, level, parent = q.get("account", "").strip(), q.get("level", "").strip(), q.get("parent", "").strip()
+    if not account or not parent or level not in ("adset", "ad"):
+        return JSONResponse({"ok": False, "error": "account, parent and level (adset|ad) are required"},
+                            status_code=400)
+    snap, joined, _bi_summary, _x = _inventory_context(request, account)
+    if snap is None:
+        return JSONResponse({"ok": True, "state": "not_read", "rows": [],
+                             "note": "This account has not been read yet"})
+    return JSONResponse({"ok": True, **ci.child_rows(snap, level, parent, joined)})
+
+
 @app.get("/account-attribution")
 def account_attribution(
     account: str = "", country: str = "", date_from: str = "", date_to: str = "", span: str = ""
