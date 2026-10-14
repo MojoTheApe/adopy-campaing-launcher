@@ -8608,9 +8608,11 @@
         "worktree": "C:\\wk-rf1766",
         "id": "b1c4e888964a45e593da0b270a53cf71",
         "issue": 766,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T17:04:27+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 794,
+        "report": "Merged current origin/main (73136acc) into codex/acl-1766-map-pixel (merge only). Result head: 6ee6db04d5bff7b1551df279530f21d61e40bef6.\n\nConflicts: none (ort auto-merge). Main's ACL-1760/1761 behaviour untouched.\n\nTests (-k 'not browser'): test_acl1766_map_pixel, test_acl1760_api_read, test_acl1761_*: 326 passed, 2 deselected, 0 failed. No test edits."
       }
     },
     "tasks": {
