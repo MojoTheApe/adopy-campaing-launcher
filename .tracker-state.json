@@ -8599,20 +8599,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "766": {
-        "actor": "Worker-RF1766",
-        "session": "wrf1766-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1766-map-pixel",
-        "worktree": "C:\\wk-rf1766",
-        "id": "b1c4e888964a45e593da0b270a53cf71",
-        "issue": 766,
-        "state": "handoff",
-        "started_at": "2026-10-14T17:04:27+00:00",
-        "from_status": "status:todo",
-        "pr": 794,
-        "report": "Merged current origin/main (73136acc) into codex/acl-1766-map-pixel (merge only). Result head: 6ee6db04d5bff7b1551df279530f21d61e40bef6.\n\nConflicts: none (ort auto-merge). Main's ACL-1760/1761 behaviour untouched.\n\nTests (-k 'not browser'): test_acl1766_map_pixel, test_acl1760_api_read, test_acl1761_*: 326 passed, 2 deselected, 0 failed. No test edits."
       }
     },
     "tasks": {
@@ -12168,25 +12154,25 @@
             "session": "wrf1766-20261014"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1766",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1766A",
-          "session": "run_s1766a_1011",
+          "actor": "Worker-RF1766",
+          "session": "wrf1766-20261014",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1766-map-pixel",
-          "worktree": "C:\\acl-1766-pixel",
-          "id": "7870855184e44f9388f67ea928445f6b",
+          "worktree": "C:\\wk-rf1766",
+          "id": "b1c4e888964a45e593da0b270a53cf71",
           "issue": 766,
           "state": "handoff",
-          "started_at": "2026-10-11T18:14:37+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-14T17:04:27+00:00",
+          "from_status": "status:todo",
           "pr": 794,
-          "report": "ACL-1766 handoff (PR #794, branch codex/acl-1766-map-pixel, head f851999f, stacked on #765)\n\nChecks and results:\n- New tests/test_acl1766_map_pixel.py: 9 passed. Covered: map pixel with 2 account pixels, map pixel not on the account (clear error, nothing created), 1 account pixel, 2 account pixels without a map value (previous error), plan_summary pixel/page source, readback \"Not read\" for CTA and locales.\n- Affected suites (fakes only): 174 passed together with test_acl1761_api_create and test_acl1761_plan_check; RPA suites test_second_primary_text_reaches_the_robot, test_september_review, test_account_link_sources and test_rpa_job_start_is_measured: 59 passed.\n- Mutations: removing the enrich pixel line fails test_enrich_carries_map_pixel_and_page; letting the map override the draft fails test_enrich_keeps_what_the_draft_already_has.\n\nRemaining risks:\n- src/fb_ads_rpa/enrich_draft.py is RPA-owned; the change is minimal (two fields set via getattr). No RPA code reads draft.pixel_id. A draft page_id now wins over the map, and the builder never supplies one.\n- The plan-line source text in report.html has no browser test.\n- Full CI is blocked by the GitHub Actions billing outage; re-run before merge.\n\nDurable reference: PR #794."
+          "report": "Merged current origin/main (73136acc) into codex/acl-1766-map-pixel (merge only). Result head: 6ee6db04d5bff7b1551df279530f21d61e40bef6.\n\nConflicts: none (ort auto-merge). Main's ACL-1760/1761 behaviour untouched.\n\nTests (-k 'not browser'): test_acl1766_map_pixel, test_acl1760_api_read, test_acl1761_*: 326 passed, 2 deselected, 0 failed. No test edits."
         },
         "pr": 794,
-        "queued_at": "2026-10-11T18:25:16+00:00",
+        "queued_at": "2026-10-14T17:06:08+00:00",
         "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
       },
       "798": {
@@ -17647,7 +17633,8 @@
       775,
       798,
       769,
-      797
+      797,
+      766
     ],
     "review": null,
     "history": [
@@ -32314,6 +32301,13 @@
         "issue": 797,
         "pr": 810,
         "actor": "Worker-RG1797"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-14T17:06:08+00:00",
+        "issue": 766,
+        "pr": 794,
+        "actor": "Worker-RF1766"
       }
     ],
     "policy": {
