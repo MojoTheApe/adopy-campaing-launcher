@@ -13027,7 +13027,7 @@
         },
         "pr": 887,
         "queued_at": "2026-10-13T21:34:00+00:00",
-        "reviewer": "Reviewer-RS1012"
+        "reviewer": "Reviewer-R1886M"
       },
       "888": {
         "implementers": [
@@ -14218,6 +14218,10 @@
       "Worker-W1014F": {
         "session": "w1014f-20261014",
         "role": "Worker"
+      },
+      "Reviewer-R1886M": {
+        "session": "rev_r1886m_1014",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -28884,6 +28888,24 @@
         "issue": 761,
         "claim": "79189bfeda39447984f2d6e2975c4272",
         "actor": "Worker-W1014F"
+      },
+      {
+        "event": "review-takeover",
+        "at": "2026-10-14T09:35:25+00:00",
+        "previous": {
+          "id": "c86db5aaf19247be8c986c051c79d601",
+          "pr": 887,
+          "issues": [
+            886
+          ],
+          "actor": "Reviewer-RS1012",
+          "session": "connection_review_rs1012",
+          "coordinator": "Coordinator-CR1012",
+          "started_at": "2026-10-13T21:41:15+00:00",
+          "state": "reviewing"
+        },
+        "claim": "a0e02e10f98a4486bb617a65f75b0759",
+        "reason": "Owner reassigned ACL-1886 to Coordinator-M1011A on 2026-10-14; prior Reviewer run idle 12h with no recorded review"
       }
     ],
     "policy": {
@@ -30090,14 +30112,14 @@
     },
     "source_reviews": {
       "887": {
-        "id": "c86db5aaf19247be8c986c051c79d601",
+        "id": "a0e02e10f98a4486bb617a65f75b0759",
         "pr": 887,
         "issues": [
           886
         ],
-        "actor": "Reviewer-RS1012",
-        "session": "connection_review_rs1012",
-        "coordinator": "Coordinator-CR1012",
+        "actor": "Reviewer-R1886M",
+        "session": "rev_r1886m_1014",
+        "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-13T21:41:15+00:00",
         "state": "reviewing"
       }
