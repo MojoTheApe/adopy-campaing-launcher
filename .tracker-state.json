@@ -11978,7 +11978,7 @@
             "session": "4b214c77a7e14ef0937301c56af0fb88"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-M1806A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -11996,7 +11996,8 @@
           "report": "Scope: config/paths.py get_obsidian_dashboard_dir() (own commit b7e08234; ACL_OBSIDIAN_DIR, then ~/Desktop/Obsidian/\u0434\u0435\u0448\u0431\u043e\u0440\u0434, then legacy Kuwait Forms path) and OBSIDIAN_MISSING_WARNING. scripts/acl_board.py, acl_telemetry_report.py and build_creative_notes.py now use the resolver and warn when no vault is found. PR 808, branch work/acl-1806-obsidian-path, base main.\nBehavior change (documented in PR): when no vault exists, acl_telemetry_report no longer auto-creates the legacy folder; it prints to stdout and returns 1. No scheduled, CI or packaging callers.\nReview: Sonnet APPROVE (vault present: same files and folders; config change isolated; UTF-8 intact). Tests: test_acl1806_obsidian_path, test_acl_board, test_board_snapshot: 77 passed. Full suite in CI.\nFollow-up: scripts/meta_docs_watch.py (ACL-1782) switches to the resolver in its review fix."
         },
         "pr": 808,
-        "queued_at": "2026-10-11T20:45:46+00:00"
+        "queued_at": "2026-10-11T20:45:46+00:00",
+        "reviewer": "Reviewer-R806X"
       },
       "812": {
         "implementers": [
@@ -14380,6 +14381,10 @@
       },
       "Reviewer-R781X": {
         "session": "claude-subagent-a8efac19b017fde9c",
+        "role": "Reviewer"
+      },
+      "Reviewer-R806X": {
+        "session": "claude-subagent-a999be02700977375",
         "role": "Reviewer"
       }
     },
@@ -16879,7 +16884,6 @@
       766,
       798,
       799,
-      806,
       775,
       797,
       814,
@@ -29235,6 +29239,13 @@
         "pr": 795,
         "lane": "84f35dd6fc8e417490049f79c44601f5",
         "actor": "Reviewer-R781X"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T11:11:13+00:00",
+        "pr": 808,
+        "lane": "890bc6a071344778bcfc6ddf285610f8",
+        "actor": "Reviewer-R806X"
       }
     ],
     "policy": {
@@ -30530,6 +30541,18 @@
         "session": "claude-subagent-a8efac19b017fde9c",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-14T11:09:57+00:00",
+        "state": "reviewing"
+      },
+      "808": {
+        "id": "890bc6a071344778bcfc6ddf285610f8",
+        "pr": 808,
+        "issues": [
+          806
+        ],
+        "actor": "Reviewer-R806X",
+        "session": "claude-subagent-a999be02700977375",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-14T11:11:13+00:00",
         "state": "reviewing"
       }
     }
